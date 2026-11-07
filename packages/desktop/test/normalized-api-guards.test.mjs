@@ -90,7 +90,7 @@ for (const [path, kind] of routes) test(`${path}: valid aliases preserve workspa
     const { url, init } = f.calls[0]; assert.equal(url.pathname, path); assert.equal(url.origin, base); assert.equal(init.body, body);
     if (kind === 'lifecycle' || kind === 'readiness' || path === '/api/instance-forge') assert.equal(url.searchParams.get('ws'), 'team');
     if (kind === 'forge') {
-      assert.deepEqual(Object.entries(init.headers).filter(([k]) => k.toLowerCase() === FORGE_EPOCH_HEADER), [[FORGE_EPOCH_HEADER, 'fixture:0']]);
+      assert.deepEqual([...new Headers(init.headers)].filter(([k]) => k.toLowerCase() === FORGE_EPOCH_HEADER), [[FORGE_EPOCH_HEADER, 'fixture:0']]);
       assert.equal(init.signal.timeout, ['/api/instance-forge', '/api/forge-roster', '/api/instance-review-threads'].includes(path) ? 50000 : 25000);
     } else if (kind !== 'readiness') assert.equal(init.signal.timeout, kind === 'lifecycle' || kind === 'instance-git' || kind === 'instance-color' || kind === 'instance-background' ? 50000 : kind === 'capabilities' ? 310000 : kind === 'automations' ? 90000 : 20000);
     if (kind === 'panel') assert.deepEqual([...f.context.allowedWs], ['team', 'other']);
