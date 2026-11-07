@@ -174,20 +174,36 @@ export function createTokenOutputCapture(token) {
   };
 }
 
-/** Inspect only renderer PIDs supplied by the owned browser's CDP SystemInfo response.
+/** Inspect only CDP renderer PIDs whose /proc ancestry reaches the owned CDP browser.
  * No environment bytes or values leave this function, including on read failures. */
 export function rendererControlEnvironment(processInfo, token, read = readFileSync) {
   if (!Array.isArray(processInfo)) throw new Error("renderer process information is unavailable");
+  const validPid = pid => Number.isSafeInteger(pid) && pid > 0;
+  const browsers = processInfo.filter(process => process?.type === "browser");
+  if (browsers.length !== 1 || !validPid(browsers[0].id)) throw new Error("the owned browser PID is unavailable");
+  const browserPid = browsers[0].id;
   const renderers = processInfo.filter(process => process?.type === "renderer");
   if (!renderers.length) throw new Error("the owned browser reported no renderer process");
   const pids = [...new Set(renderers.map(process => process.id))];
-  if (pids.some(pid => !Number.isSafeInteger(pid) || pid <= 0)) throw new Error("the owned browser reported an invalid renderer PID");
+  if (pids.some(pid => !validPid(pid) || pid === browserPid)) throw new Error("the owned browser reported an invalid renderer PID");
+  const ancestryFailure = () => new Error("the owned renderer ancestry could not be confirmed");
+  for (const pid of pids) {
+    const seen = new Set();
+    let ancestor = pid;
+    for (let depth = 0; ancestor !== browserPid; depth++) {
+      if (depth >= 128 || !validPid(ancestor) || seen.has(ancestor)) throw ancestryFailure();
+      seen.add(ancestor);
+      let stat;
+      try { stat = String(read(`/proc/${ancestor}/stat`, "utf8")); }
+      catch { throw ancestryFailure(); }
+      // comm can contain whitespace and parentheses; PPID follows its final closing parenthesis.
+      const fields = /^(\d+) \([\s\S]*\) [A-Za-z] (\d+)(?:\s|$)/.exec(stat);
+      if (!fields || Number(fields[1]) !== ancestor || !Number.isSafeInteger(Number(fields[2]))) throw ancestryFailure();
+      ancestor = Number(fields[2]);
+    }
+  }
   let tokenNameAbsent = true, tokenValueAbsent = true;
   for (const pid of pids) {
-    let cmdline;
-    try { cmdline = String(read(`/proc/${pid}/cmdline`, "utf8")); }
-    catch { throw new Error("the owned renderer identity could not be read"); }
-    if (!cmdline.split("\0").includes("--type=renderer")) throw new Error("the owned renderer identity did not match");
     let environment;
     try { environment = String(read(`/proc/${pid}/environ`, "utf8")); }
     catch { throw new Error("the owned renderer environment could not be read"); }

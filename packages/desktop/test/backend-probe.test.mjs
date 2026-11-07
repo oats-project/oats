@@ -102,43 +102,75 @@ test("success: the backend answers, exits when its stdin closes, and the collect
   assertReaped(r, reaper, ["backend", "collector"]);
 });
 
-test("renderer environment evidence reads only the browser's renderer PIDs and returns booleans", () => {
+test("renderer environment evidence proves browser ancestry before reading renderer environments", () => {
   const token = "private-token-".repeat(4), reads = [];
   const information = [{ type: "browser", id: 10 }, { type: "GPU", id: 11 }, { type: "renderer", id: 12 }];
+  const stats = { "/proc/12/stat": "12 (OATS renderer (main)) S 13 0 0", "/proc/13/stat": "13 (zygote) S 10 0 0" };
   const read = path => {
     reads.push(path);
-    return path.endsWith("/cmdline") ? "/app\0--type=renderer\0" : "HOME=/private\0PATH=/bin\0";
+    if (path in stats) return stats[path];
+    assert.equal(path, "/proc/12/environ", "only a proven CDP renderer's environment is read");
+    return "HOME=/private\0PATH=/bin\0";
   };
   assert.deepEqual(rendererControlEnvironment(information, token, read), {
     renderersObserved: true, tokenNameAbsent: true, tokenValueAbsent: true,
   });
-  assert.deepEqual(reads, ["/proc/12/cmdline", "/proc/12/environ"]);
-  const present = rendererControlEnvironment(information, token, path =>
-    path.endsWith("/cmdline") ? "/app\0--type=renderer\0" : `OATS_DESKTOP_TOKEN=${token}\0`);
-  assert.deepEqual(present, { renderersObserved: true, tokenNameAbsent: false, tokenValueAbsent: false });
-  assert.equal(JSON.stringify(present).includes(token), false);
+  assert.deepEqual(reads, ["/proc/12/stat", "/proc/13/stat", "/proc/12/environ"]);
   for (const [environment, tokenNameAbsent, tokenValueAbsent] of [
+    [`OATS_DESKTOP_TOKEN=${token}\0`, false, false],
     ["OATS_DESKTOP_TOKEN=other\0", false, true], [`OTHER=${token}\0`, true, false],
   ]) {
-    assert.deepEqual(rendererControlEnvironment(information, token, path =>
-      path.endsWith("/cmdline") ? "/app\0--type=renderer\0" : environment),
-    { renderersObserved: true, tokenNameAbsent, tokenValueAbsent });
+    const observed = rendererControlEnvironment(information, token, path => path in stats ? stats[path] : environment);
+    assert.deepEqual(observed, { renderersObserved: true, tokenNameAbsent, tokenValueAbsent });
+    assert.equal(JSON.stringify(observed).includes(token), false);
   }
 });
 
-test("renderer environment evidence refuses missing, malformed or non-renderer identities before reading an environment", () => {
-  const token = "private-token-".repeat(4);
-  for (const info of [null, [], [{ type: "renderer", id: "12" }], [{ type: "renderer", id: -1 }]]) {
-    assert.throws(() => rendererControlEnvironment(info, token, () => assert.fail("no /proc reads")));
+test("renderer environment evidence requires one valid browser PID and valid renderer IDs", () => {
+  const token = "private-token-".repeat(4), browser = { type: "browser", id: 10 }, renderer = { type: "renderer", id: 12 };
+  for (const info of [null, [], [renderer], [browser], [browser, browser, renderer],
+    [{ type: "browser", id: "10" }, renderer], [browser, { type: "renderer", id: "12" }],
+    [browser, { type: "renderer", id: -1 }], [browser, { type: "renderer", id: 10 }]]) {
+    let reads = 0;
+    assert.throws(() => rendererControlEnvironment(info, token, () => { reads++; throw new Error("unexpected read"); }));
+    assert.equal(reads, 0, "invalid CDP identities cause no /proc reads");
   }
-  const reads = [];
-  assert.throws(() => rendererControlEnvironment([{ type: "renderer", id: 12 }], token, path => {
-    reads.push(path); return "/app\0--type=gpu-process\0";
-  }), /renderer identity did not match/);
-  assert.deepEqual(reads, ["/proc/12/cmdline"]);
-  assert.throws(() => rendererControlEnvironment([{ type: "renderer", id: 12 }], token, () => {
+});
+
+test("renderer environment evidence refuses foreign, unreachable, cyclic, malformed and overlong ancestry", () => {
+  const token = "private-token-".repeat(4), info = [{ type: "browser", id: 10 }, { type: "renderer", id: 12 }];
+  const paths = [
+    { "/proc/12/stat": "12 (renderer) S 1 0", "/proc/1/stat": "1 (init) S 0 0" },
+    { "/proc/12/stat": "12 (renderer) S 13 0" },
+    { "/proc/12/stat": "12 (renderer) S 13 0", "/proc/13/stat": "13 (zygote) S 12 0" },
+    { "/proc/12/stat": "malformed" },
+    { "/proc/12/stat": "99 (replaced) S 10 0" },
+  ];
+  for (const stats of paths) {
+    const reads = [];
+    assert.throws(() => rendererControlEnvironment(info, token, path => {
+      reads.push(path);
+      if (!(path in stats)) throw new Error(token);
+      return stats[path];
+    }), error => error.message === "the owned renderer ancestry could not be confirmed" && !error.message.includes(token));
+    assert.ok(reads.every(path => path.endsWith("/stat")), "no environment is read without ancestry proof");
+  }
+  let reads = 0;
+  assert.throws(() => rendererControlEnvironment(info, token, path => {
+    reads++;
+    const pid = Number(/^\/proc\/(\d+)\/stat$/.exec(path)?.[1]);
+    assert.ok(Number.isInteger(pid), "the bounded walk reads stat only");
+    return `${pid} (ancestor) S ${pid + 1} 0`;
+  }), /renderer ancestry could not be confirmed/);
+  assert.equal(reads, 128, "ancestry walks have a fixed bound");
+});
+
+test("renderer environment evidence suppresses environment read errors after ancestry proof", () => {
+  const token = "private-token-".repeat(4), info = [{ type: "browser", id: 10 }, { type: "renderer", id: 12 }];
+  assert.throws(() => rendererControlEnvironment(info, token, path => {
+    if (path === "/proc/12/stat") return "12 (renderer) S 10 0";
     throw new Error(token);
-  }), error => !error.message.includes(token) && /renderer identity could not be read/.test(error.message));
+  }), error => error.message === "the owned renderer environment could not be read" && !error.message.includes(token));
 });
 
 test("browser process information uses the browser CDP command and closes its socket", async () => {
