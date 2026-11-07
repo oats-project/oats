@@ -143,8 +143,10 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 const [specUrl, bin, dir, deployment, oatsBin, port, desktop] = process.argv.slice(2);
 const { serverSpawnSpec } = await import(specUrl);
+const controlToken = process.env.OATS_DESKTOP_TOKEN;
+delete process.env.OATS_DESKTOP_TOKEN;
 const spec = serverSpawnSpec({ execPath: process.execPath, bin, dirs: [deployment], port: Number(port), oatsBin,
-  pathSource: "inherited", pathError: null, remoteIdentityFile: dir + "/remote-identity.json", home: dir, controlToken: process.env.OATS_DESKTOP_TOKEN, env: process.env });
+  pathSource: "inherited", pathError: null, remoteIdentityFile: dir + "/remote-identity.json", home: dir, controlToken, env: process.env });
 const server = spawn(spec.command, spec.args, spec.options);
 server.stdin.on("error", () => {});
 server.stdout.resume(); server.stderr.resume();
