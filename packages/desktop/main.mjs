@@ -9,7 +9,7 @@
 //   * integrated terminal: node-pty running `tmux attach-session` per
 //     terminal tab, bytes streamed to xterm.js over IPC. Closing a tab kills
 //     the pty ONLY — the tmux session is the durable host and must survive.
-import { controlToken } from "./main-control-token.mjs";
+import { controlToken, reuseAllowed } from "./main-control-token.mjs";
 import { createControlFetch } from "./control-fetch.mjs";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, screen, shell } from "electron";
 import { spawn, execFileSync } from "node:child_process";
@@ -34,7 +34,7 @@ import { tmuxSocketArgs } from "./local-tmux-io.mjs";
 import { createTerminalOwnerBroker, installTerminalHandlers } from './terminal-owner.mjs';
 import { createTerminalIo } from './terminal-io.mjs';
 import { ensureServerOnPort, serverCompatible } from "./server-compat.mjs";
-import { createServerHost, createServerAdapter, serverSpawnSpec } from "./server-host.mjs";
+import { createServerHost, createServerAdapter, serverSpawnSpec, trackServerBinding } from "./server-host.mjs";
 import { cliWorkspace, validWorkspaceRef } from "../client/workspace-cli.mjs";
 import { onboardData } from "../client/deployment-data.mjs";
 import { validateWorkspace } from "../client/workspace-admission.mjs";
@@ -68,7 +68,17 @@ const pty = require("node-pty");
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 let port = Number(process.env.OATS_DESKTOP_PORT || 4820);
-const controlFetch = createControlFetch(controlToken);
+const serverBindings = new WeakMap();
+let acceptedOperatorPort = null;
+let ownServerStarted = false;
+let versionProbeIntent = 0;
+const controlFetch = createControlFetch(controlToken, globalThis.fetch, {
+  authorize: url => {
+    const child = serverHost.current();
+    const allowedPort = child ? serverBindings.get(child)?.boundPort() : reuseAllowed && !ownServerStarted ? acceptedOperatorPort : null;
+    return allowedPort !== null && allowedPort !== undefined && Number(url.port) === allowedPort;
+  },
+});
 const base = () => `http://127.0.0.1:${port}`;
 // Window activity → backend refresh cadence: the server backs its kernel
 // polling off while every window is blurred/hidden and refreshes promptly
@@ -155,7 +165,10 @@ const serverHost = createServerHost({
     const spec = serverSpawnSpec({ execPath: process.execPath, bin, dirs, port: onPort, oatsBin: chosen,
       pathSource: loginPath.source, pathError: loginPath.error, remoteIdentityFile: REMOTE_IDENTITY_FILE(),
       home: homedir(), env: process.env, controlToken });
+    acceptedOperatorPort = null;
+    ownServerStarted = true;
     const child = spawn(spec.command, spec.args, spec.options);
+    serverBindings.set(child, trackServerBinding(child));
     // The lifeline's write end: held, never written, never ended (server-host.mjs).
     child.stdin.on("error", () => { /* the server is gone; its exit is reported */ });
     child.stdout.on("data", (d) => process.stdout.write(`[oats-desktop-server] ${d}`));
@@ -212,11 +225,15 @@ function localServerIdentity() {
 
 /** Probe GET /api/version on the current port; null on network failure. */
 async function probeVersion() {
+  const intent = ++versionProbeIntent, onPort = port;
   try {
     const r = await controlFetch(`${base()}/api/version`, { signal: AbortSignal.timeout(1500) });
     let body = null; try { body = await r.json(); } catch { /* non-JSON */ }
-    return { ok: r.ok, status: r.status, body };
-  } catch { return null; }
+    if (intent !== versionProbeIntent || port !== onPort) return null;
+    const response = { ok: r.ok, status: r.status, body };
+    acceptedOperatorPort = reuseAllowed && !ownServerStarted && serverCompatible(response, localServerIdentity()).compatible ? port : null;
+    return response;
+  } catch { if (intent === versionProbeIntent && port === onPort) acceptedOperatorPort = null; return null; }
 }
 
 /** The backend must cover every restored workspace before it can be reused. */
@@ -253,12 +270,24 @@ async function ensureServer() {
   // as this checkout via /api/version; otherwise leave it alone and spawn
   // our own — on the next free port when the current one is occupied.
   const r = await ensureServerOnPort({
-    panelWorkspaces: () => panelWorkspaces({ probe: true }), probeVersion, matchWorkspace, local: localServerIdentity(),
+    reuseAllowed, panelWorkspaces: () => panelWorkspaces({ probe: true }), probeVersion, matchWorkspace, local: localServerIdentity(),
     port, freePort: (from) => freePort(from), spawnServer: (p) => spawnServer(p),
     log: (m) => console.log(`oats-desktop: ${m}`),
   });
   port = r.port;
   if (!r.spawned) { wsId = r.wsId; return { spawned: false }; }
+  // The owned child reports the port it actually bound before any authenticated read.
+  const child = serverHost.current();
+  const binding = child && serverBindings.get(child);
+  if (!binding) throw new Error("Desktop backend ended before reporting a binding");
+  let reportedPort;
+  try { reportedPort = await binding.wait(); }
+  catch (error) {
+    if (serverHost.current() !== child) throw new Error("Desktop backend changed while waiting for its binding");
+    throw error;
+  }
+  if (serverHost.current() !== child || binding.boundPort() !== reportedPort) throw new Error("Desktop backend changed while waiting for its binding");
+  port = reportedPort;
   // wait for the server to come up (max ~10s) and verify its workspace
   for (let i = 0; i < 40; i++) {
     const ws = await panelWorkspaces();

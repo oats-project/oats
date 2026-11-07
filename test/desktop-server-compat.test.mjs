@@ -13,6 +13,8 @@ import { serverCompatible, selectServer, ensureServerOnPort } from "../packages/
 import { matchWorkspaceDirs } from "../packages/desktop/workspace-registry.mjs";
 import { buildViews } from "../packages/client/workspace-views.mjs";
 import { spawn } from "node:child_process";
+import { createControlFetch } from "../packages/desktop/control-fetch.mjs";
+import { trackServerBinding } from "../packages/desktop/server-host.mjs";
 
 const CONTROL_TOKEN = "desktop-compat-test-token-1234567890123456";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -43,9 +45,12 @@ test("network failure, wrong capability, and version mismatch are incompatible",
 // ensureServer runs) against fake servers — re-implementing the decision in
 // the test would leave the real gate unprotected (review srvcompat).
 async function selectAgainst(url, matchWorkspace = (ws) => ws[0]?.id || null) {
+  let acceptedVersion = false;
+  const controlFetch = createControlFetch(CONTROL_TOKEN, globalThis.fetch, { authorize: target => acceptedVersion && new URL(target).origin === url });
   const panelWorkspaces = async () => {
+    assert.equal(acceptedVersion, true, "identity is checked before a panel read");
     try {
-      const r = await fetch(`${url}/api/panel`, { headers: { "x-oats-desktop-token": CONTROL_TOKEN } });
+      const r = await controlFetch(`${url}/api/panel`);
       if (r.status === 403) return { forbidden: true };
       return r.ok ? (await r.json()).workspaces || [] : null;
     } catch { return null; }
@@ -54,14 +59,18 @@ async function selectAgainst(url, matchWorkspace = (ws) => ws[0]?.id || null) {
     try {
       const r = await fetch(`${url}/api/version`);
       let body = null; try { body = await r.json(); } catch { /* non-JSON */ }
-      return { ok: r.ok, status: r.status, body };
+      const version = { ok: r.ok, status: r.status, body };
+      acceptedVersion = serverCompatible(version, LOCAL).compatible;
+      return version;
     } catch { return null; }
   };
-  return selectServer({ panelWorkspaces, probeVersion, matchWorkspace, local: LOCAL });
+  return selectServer({ reuseAllowed: true, panelWorkspaces, probeVersion, matchWorkspace, local: LOCAL });
 }
 
 test("fake older server: /api/panel answers, /api/version 404s → selectServer says spawn", async () => {
+  const seen = [];
   const server = createServer((req, res) => {
+    seen.push({ path: req.url, token: req.headers["x-oats-desktop-token"] });
     if (req.url.startsWith("/api/panel")) {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ workspaces: [{ id: "/tmp/ws", name: "ws" }], instances: [] }));
@@ -75,11 +84,14 @@ test("fake older server: /api/panel answers, /api/version 404s → selectServer 
     const choice = await selectAgainst(`http://127.0.0.1:${server.address().port}`);
     assert.equal(choice.action, "spawn", "older server must not be reused");
     assert.match(choice.reason, /older server/);
+    assert.deepEqual(seen, [{ path: "/api/version", token: undefined }], "an older identity receives no panel probe");
   } finally { server.close(); }
 });
 
 test("fake matching server → selectServer says reuse with the matched workspace", async () => {
+  const seen = [];
   const server = createServer((req, res) => {
+    seen.push({ path: req.url, token: req.headers["x-oats-desktop-token"] });
     res.writeHead(200, { "content-type": "application/json" });
     if (req.url.startsWith("/api/panel")) {
       res.end(JSON.stringify({ workspaces: [{ id: "/tmp/ws", name: "ws" }], instances: [] }));
@@ -91,8 +103,39 @@ test("fake matching server → selectServer says reuse with the matched workspac
   try {
     const choice = await selectAgainst(`http://127.0.0.1:${server.address().port}`);
     assert.deepEqual(choice, { action: "reuse", wsId: "/tmp/ws" });
+    assert.deepEqual(seen, [{ path: "/api/version", token: undefined }, { path: "/api/panel", token: CONTROL_TOKEN }]);
   } finally { server.close(); }
 });
+
+
+test("a minted launch token skips every reuse probe and chooses a free port from the configured port", async () => {
+  const calls = [];
+  const result = await ensureServerOnPort({
+    reuseAllowed: false, port: 4820, local: LOCAL,
+    panelWorkspaces: () => assert.fail("a minted launch does not read the existing panel"),
+    probeVersion: () => assert.fail("a minted launch does not probe the existing identity"),
+    matchWorkspace: () => assert.fail("a minted launch has no reuse workspace facts"),
+    freePort: async from => { calls.push(["freePort", from]); return 4824; },
+    spawnServer: port => calls.push(["spawn", port]),
+  });
+  assert.deepEqual(result, { spawned: true, port: 4824, wsId: null });
+  assert.deepEqual(calls, [["freePort", 4820], ["spawn", 4824]]);
+});
+
+for (const [label, version] of [["wrong capability", { ok: true, body: { capability: "another.app", version: LOCAL.version } }],
+  ["malformed identity", { ok: true, body: null }], ["missing identity route", { ok: false, status: 404 }]]) {
+  test(`operator reuse: ${label} never reaches the authenticated panel probe`, async () => {
+    const calls = [];
+    const choice = await selectServer({ reuseAllowed: true, local: LOCAL,
+      probeVersion: async () => { calls.push("version"); return version; },
+      panelWorkspaces: () => assert.fail("an incompatible identity cannot receive the launch token"),
+      matchWorkspace: () => assert.fail("an incompatible identity has no workspace facts"),
+    });
+    assert.equal(choice.action, "spawn");
+    assert.equal(choice.portOccupied, true);
+    assert.deepEqual(calls, ["version"]);
+  });
+}
 
 test("no server on the port → spawn", async () => {
   const choice = await selectAgainst("http://127.0.0.1:1"); // nothing listens
@@ -124,7 +167,7 @@ const OTHER_VERSION = "0.0.1-older";
 async function otherVersionServer(workspaces) {
   const seen = [];
   const server = createServer((req, res) => {
-    seen.push(`${req.method} ${req.url}`);
+    seen.push({ method: req.method, path: req.url, token: req.headers["x-oats-desktop-token"] });
     res.writeHead(200, { "content-type": "application/json" });
     req.url.startsWith("/api/panel")
       ? res.end(JSON.stringify({ workspaces, instances: [] }))
@@ -147,7 +190,7 @@ for (const [label, matchWorkspace] of [["not covering our workspace", () => null
       assert.match(choice.reason, /not started by this app/);
       assert.match(choice.reason, /left running/);
       assert.doesNotMatch(choice.reason, /not the requested workspace/);
-      assert.ok(seen.every((r) => r.startsWith("GET ")), "only read: nothing is posted to it");
+      assert.deepEqual(seen, [{ method: "GET", path: "/api/version", token: undefined }], "a different version receives no panel probe");
       assert.equal((await fetch(`${url}/api/panel`)).ok, true, "still answering");
     } finally { server.close(); }
   });
@@ -158,7 +201,7 @@ test("ensureServerOnPort: the startup log names both versions, that the server i
   const logs = [], calls = [];
   try {
     const r = await ensureServerOnPort({
-      panelWorkspaces: async () => (await (await fetch(`${url}/api/panel`)).json()).workspaces,
+      panelWorkspaces: async () => assert.fail("an incompatible identity cannot receive a panel probe"),
       probeVersion: async () => { const v = await fetch(`${url}/api/version`); return { ok: v.ok, status: v.status, body: await v.json() }; },
       matchWorkspace: () => null,
       local: LOCAL,
@@ -286,8 +329,12 @@ test("REAL bundled server serves /api/version matching its package identity → 
   // login shell runs; identity and workspace advertisement need neither.
   const child = spawn(process.execPath, [bin, "start", "--port", String(free), "--dir", ROOT], { stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, OATS_DESKTOP_TOKEN: CONTROL_TOKEN, OATS_DESKTOP_OATS_BIN: "", PATH: "/nonexistent", SHELL: "/bin/false" } });
-  const url = `http://127.0.0.1:${free}`;
+  const binding = trackServerBinding(child);
+  let url;
   try {
+    const boundPort = await binding.wait();
+    assert.equal(boundPort, free);
+    url = `http://127.0.0.1:${boundPort}`;
     // wait for the server to answer (max ~10s) — readiness via /api/panel,
     // NOT /api/version: the route under test must not gate the skip, or
     // removing it would skip this test instead of failing it.
@@ -296,7 +343,7 @@ test("REAL bundled server serves /api/version matching its package identity → 
       try { up = (await fetch(`${url}/api/panel`, { headers: { "x-oats-desktop-token": CONTROL_TOKEN }, signal: AbortSignal.timeout(500) })).ok; }
       catch { await new Promise((ok) => setTimeout(ok, 250)); }
     }
-    if (!up) return t.skip("server did not come up (environment)");
+    assert.equal(up, true, "the owned server answers after reporting its binding");
     const v = await fetch(`${url}/api/version`);
     assert.equal(v.ok, true, "real /api/version answers");
     assert.deepEqual(await v.json(), LOCAL, "identity matches the desktop package");
@@ -322,10 +369,10 @@ test("another launch's token leaves its server running and selects the next port
   await new Promise(ok => server.listen(0, '127.0.0.1', ok));
   try {
     const port = server.address().port, base = `http://127.0.0.1:${port}`;
-    const fetch = createControlFetch(CONTROL_TOKEN);
+    const fetch = createControlFetch(CONTROL_TOKEN, globalThis.fetch, { authorize: url => new URL(url).origin === base });
     const spawns = [], logs = [];
     const result = await ensureServerOnPort({
-      port, local: LOCAL,
+      reuseAllowed: true, port, local: LOCAL,
       probeVersion: async () => { const r = await fetch(`${base}/api/version`); return { ok: r.ok, body: await r.json() }; },
       panelWorkspaces: async () => { const r = await fetch(`${base}/api/panel`); return r.status === 403 ? { forbidden: true } : (await r.json()).workspaces; },
       matchWorkspace: () => assert.fail('a refused read has no workspace facts'),

@@ -43,7 +43,7 @@
 // any other module loads. Every program started below receives the user's environment.
 import { controlToken } from "../server-control-token.mjs";
 import { launchEnvironment } from "../../client/own-environment.mjs";
-import { checkControlRequest, controlRequestHeaders } from "../control-request.mjs";
+import { checkControlRequest, controlRequestHeaders, loopbackHost } from "../control-request.mjs";
 import { withoutControlToken } from "../../client/control-environment.mjs";
 import { createServer } from "node:http";
 import { execFile, spawn } from "node:child_process";
@@ -1152,14 +1152,14 @@ const readStrictBody = (req, limit = 65536, measured = false) => new Promise((ok
 });
 
 const server = createServer(async (req, res) => {
-  const url = new URL(req.url, "http://localhost");
+  let url;
+  try { url = new URL(req.url, "http://localhost"); }
+  catch { return send(res, 400, { error: "bad request" }); }
   const path = url.pathname;
   // DNS-rebinding guard: EVERY request must carry a loopback Host — a hostile
   // page rebinding its hostname to 127.0.0.1 must neither type into terminals
   // (POST) nor read workspace files via the GET API (/api/file).
-  const host = String(req.headers.host || "").replace(/:\d+$/, "");
-  const okHost = (h) => h === "127.0.0.1" || h === "localhost" || h === "[::1]" || h === "::1";
-  if (!okHost(host)) return send(res, 403, { error: "forbidden origin" });
+  if (!loopbackHost(req.headers)) return send(res, 403, { error: "forbidden origin" });
   const control = checkControlRequest({ method: req.method, path, headers: controlRequestHeaders(req) }, controlToken);
   if (!control.ok) return send(res, 403, { error: "forbidden" });
   try {
@@ -1649,8 +1649,7 @@ const server = createServer(async (req, res) => {
 
 // No upgrade transport is supported. Refuse before a future protocol handler can accept it.
 server.on("upgrade", (req, socket) => {
-  const host = String(req.headers.host || "").replace(/:\d+$/, "");
-  const loopback = host === "127.0.0.1" || host === "localhost" || host === "[::1]" || host === "::1";
+  const loopback = loopbackHost(req.headers);
   const control = checkControlRequest({ method: req.method, path: req.url, headers: controlRequestHeaders(req) }, controlToken);
   // Even an authenticated upgrade has no supported route.
   socket.end(`HTTP/1.1 ${loopback && control.ok ? '404 Not Found' : '403 Forbidden'}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
@@ -1665,7 +1664,7 @@ server.on("error", (e) => {
   throw e;
 });
 server.listen(port, "127.0.0.1", () => {
-  const addr = `http://127.0.0.1:${port}`;
+  const addr = `http://127.0.0.1:${server.address().port}`;
   console.log(`oats-desktop server — API at ${addr}  (workspaces: ${deployments(held()).map((w) => w.name).join(", ") || "none"})`);
   console.log("Bound to 127.0.0.1 only. This process can type into your agent terminals — do not expose it.");
 });

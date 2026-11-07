@@ -27,8 +27,11 @@ Flags/env:
   minting a token for this launch. Required when starting the backend or dev
   harness by hand; export the same value for all three processes. It must
   contain at least 32 characters. Main supplies `x-oats-desktop-token` in its
-  requests and API proxy; the renderer and preload receive no token. A server
-  is reused only when it accepts this token and matches the app and workspaces.
+  control requests and API proxy; public version probes carry no token.
+  The renderer and preload receive no token. Only an operator-supplied token
+  permits server reuse, after a matching public
+  version probe and authenticated workspace read. A newly minted token starts
+  a dedicated server; main uses the port reported by that live child.
   See [starting a backend by hand](../../docs/desktop.md#starting-a-backend-by-hand).
 
 ## Brand artwork

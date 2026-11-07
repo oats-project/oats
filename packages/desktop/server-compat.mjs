@@ -43,6 +43,7 @@ export function serverCompatible(versionResponse, local) {
  * the production gate unprotected).
  *
  * @param {object} io
+ * @param {boolean} [io.reuseAllowed]  false for a newly minted launch token
  * @param {() => Promise<Array<{id:string,name:string}>|{forbidden:true}|null>} io.panelWorkspaces
  * @param {() => Promise<{ok:boolean,status?:number,body?:any}|null>} io.probeVersion
  * @param {(workspaces: Array<{id:string}>) => string|null} io.matchWorkspace
@@ -53,28 +54,23 @@ export function serverCompatible(versionResponse, local) {
  *   incompatible) — the caller must pick another port; reason is for logs.
  */
 export async function selectServer(io) {
+  if (io.reuseAllowed === false) return { action: "spawn", portOccupied: false, chooseFreePort: true, reason: "new launch token" };
   const version = await io.probeVersion();
-  const existing = await io.panelWorkspaces();
-  if (existing?.forbidden) return { action: "spawn", portOccupied: true, reason: "another token" };
-  if (!existing) return { action: "spawn", portOccupied: false, reason: "no server on the port" };
-  // Identity first, so the log names the real cause (#698): this app's own
-  // server at another version (another installed Desktop, a dev checkout, or
-  // one an earlier Desktop left running) is reported as that, whatever it
-  // serves. It is never stopped: HTTP cannot tell a live owner from an orphan.
-  const found = version?.ok ? version.body : null;
+  if (!version) return { action: "spawn", portOccupied: false, chooseFreePort: true, reason: "no server identity on the port" };
+  const found = version.ok ? version.body : null;
   if (found?.capability === io.local.capability && found.version !== io.local.version) {
     return { action: "spawn", portOccupied: true,
       reason: `this app's server at version ${found.version} (this app is ${io.local.version}), not started by this app — left running` };
   }
+  const compat = serverCompatible(version, io.local);
+  if (!compat.compatible) return { action: "spawn", portOccupied: true, reason: `incompatible (${compat.reason})` };
+  const existing = await io.panelWorkspaces();
+  if (existing?.forbidden) return { action: "spawn", portOccupied: true, reason: "another token" };
+  if (!existing) return { action: "spawn", portOccupied: false, reason: "no server on the port" };
   const wsId = io.matchWorkspace(existing);
   if (!wsId) {
     return { action: "spawn", portOccupied: true, reason: `serves ${existing.map((w) => w.name).join(", ")} — not the requested workspace` };
   }
-  // Workspace coverage is necessary but NOT sufficient: an older installed
-  // server answers /api/panel yet lacks the desktop endpoints. Reuse only a
-  // server that identifies as THIS checkout via /api/version.
-  const compat = serverCompatible(version, io.local);
-  if (!compat.compatible) return { action: "spawn", portOccupied: true, reason: `incompatible (${compat.reason})` };
   return { action: "reuse", wsId };
 }
 
@@ -101,6 +97,7 @@ export async function ensureServerOnPort(io) {
   const choice = await (io.select || selectServer)(io);
   if (choice.action === "reuse") return { spawned: false, port: io.port, wsId: choice.wsId };
   let port = io.port;
+  if (choice.chooseFreePort) port = await io.freePort(port);
   if (choice.portOccupied) {
     const said = `server on ${port} — ${choice.reason}`;
     try { port = await io.freePort(port + 1); } catch (e) { io.log?.(`${said} — no free port for a dedicated one`); throw e; }

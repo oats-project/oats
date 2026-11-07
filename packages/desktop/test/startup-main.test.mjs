@@ -5,6 +5,7 @@ import { TEST_CONTROL_TOKEN } from './helpers/control-auth.mjs';
 // the real serverSpawnSpec), the
 // window it opens and what is written to workspace-open.json and windows.json are asserted.
 import { test } from 'node:test';
+import { EventEmitter } from 'node:events';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, existsSync, realpathSync, lstatSync, rmSync, opendirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -18,7 +19,7 @@ import { trustedForgeFrame } from '../forge-proxy.mjs';
 import { validWorkspaceId } from '../renderer/workspace-id.mjs';
 import { workspaceHash, trustedRendererUrl } from '../renderer/window-binding.mjs';
 import { fakeWindowClass } from './helpers/fake-window.mjs';
-import { serverSpawnSpec, LIFELINE_FLAG } from '../server-host.mjs';
+import { serverSpawnSpec, trackServerBinding, LIFELINE_FLAG } from '../server-host.mjs';
 import { launchInstance, createLaunchReporter } from '../single-instance.mjs';
 
 const RENDERER = 'file:///app/renderer/index.html';
@@ -63,12 +64,16 @@ async function launch(m, { launch: WORKSPACE = '/', argv = ['/app/OATS Desktop']
     ipcMain: { handle: (name, fn) => handlers.set(name, fn) }, screen: { getAllDisplays: () => [{ workArea: { x: 0, y: 25, width: 1440, height: 875 } }] },
     Menu: {}, shell: {}, console: { log: (m) => logs.push(m), error: (m) => logs.push(m) },
     // The backend process, at its boundary: what main spawns it with is recorded. The spec is the real one.
-    serverSpawnSpec, controlToken: TEST_CONTROL_TOKEN,
+    serverSpawnSpec, trackServerBinding, controlToken: TEST_CONTROL_TOKEN,
+    serverBindings: new WeakMap(), acceptedOperatorPort: null, ownServerStarted: false,
     spawn: (bin, args, options) => {
-      spawned.push({ bin, args: [...args], cwd: options.cwd, stdio: [...options.stdio] });
-      return { stdin: { on() {} }, stdout: { on() {} }, stderr: { on() {} } };
+      const child = Object.assign(new EventEmitter(), { stdin: new EventEmitter(), stdout: new EventEmitter(), stderr: new EventEmitter(),
+        killed: false, exitCode: null, signalCode: null });
+      spawned.push({ bin, args: [...args], cwd: options.cwd, stdio: [...options.stdio], child });
+      queueMicrotask(() => child.stdout.emit('data', Buffer.from(`oats-desktop server — API at http://127.0.0.1:${args[args.indexOf('--port') + 1]}  (workspaces: none)\n`)));
+      return child;
     },
-    process: { execPath: '/app/OATS Desktop', env: {}, argv }, homedir: () => m.home, readCliChoice: () => null, loginPath: { source: 'login-shell', error: null },
+    process: { execPath: '/app/OATS Desktop', env: {}, argv, stdout: { write() {} }, stderr: { write() {} } }, homedir: () => m.home, readCliChoice: () => null, loginPath: { source: 'login-shell', error: null },
     REMOTE_IDENTITY_FILE: () => join(m.userData, 'remote-identity.json'), HERE,
     // The real code main runs at startup.
     WORKSPACE, workspaceDirs: [], openDirs: [], join, existsSync, readFileSync, realpathSync, lstatSync, validateWorkspace,
@@ -105,7 +110,7 @@ ${windowBlock}
 ${noteServedBlock}
 /* The backend serves the local deployments it was spawned with (and here no remote one). */
 let serving = [];
-async function ensureServer() { spawnChild([...workspaceDirs], 4821); serving = [...workspaceDirs]; await panelWorkspaces(); }
+async function ensureServer() { const child = spawnChild([...workspaceDirs], 4821); await serverBindings.get(child).wait(); serving = [...workspaceDirs]; await panelWorkspaces(); }
 async function panelWorkspaces() {
   const list = serving.map((dir) => ({ id: dir, name: dir.split('/').pop(), deployments: [dir] }));
   allowedWs = new Set(list.map((w) => w.id)); noteServed(list); return list;
@@ -117,7 +122,7 @@ async function panelWorkspaces() {
   const read = (name) => { try { return JSON.parse(readFileSync(join(m.userData, name), 'utf8')); } catch { return undefined; } };
   const claim = async (win, id) => JSON.parse(JSON.stringify(await handlers.get('window:claim-workspace')(
     { sender: Object.assign(win.webContents, { isDestroyed: () => false }), senderFrame: win.webContents.mainFrame }, id, { focus: false, initial: true })));
-  return { spawned, windows: FakeWindow.all, main, claim, logs, noted, listedAtStartup, kernel, resumeLaunches, selects, openFile: read('workspace-open.json'), windowsFile: read('windows.json') };
+  return { spawned, bindings: context.serverBindings, windows: FakeWindow.all, main, claim, logs, noted, listedAtStartup, kernel, resumeLaunches, selects, openFile: read('workspace-open.json'), windowsFile: read('windows.json') };
 }
 
 test('every served-list update tells main to post the window set (#1124): a new server, or a post that failed, gets it again', async () => {
@@ -137,7 +142,8 @@ test('main spawns the backend with its stdin as the owner lifeline: a pipe, and 
   try {
     const r = await launch(m, { launch: m.deployment });
     assert.equal(r.spawned.length, 1, 'one backend');
-    const { bin, args, stdio } = r.spawned[0];
+    const { bin, args, stdio, child } = r.spawned[0];
+    assert.equal(r.bindings.get(child).boundPort(), 4821, 'the real binding tracker consumed the child ready line');
     assert.equal(bin, '/app/OATS Desktop', 'the executable, run as Node');
     assert.deepEqual(args.slice(0, 4), [join(HERE, 'server', 'oats-web.mjs'), 'start', '--port', '4821']);
     assert.ok(args.includes(LIFELINE_FLAG), `the server is told stdin is its lifeline: ${args.join(' ')}`);

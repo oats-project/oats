@@ -1,5 +1,5 @@
 import { controlHeaders, TEST_CONTROL_TOKEN } from './control-auth.mjs';
-import { checkControlRequest, controlRequestHeaders } from '../../control-request.mjs';
+import { checkControlRequest, controlRequestHeaders, loopbackHost } from '../../control-request.mjs';
 // Workspace views (#482) over held observations, for the server tests: the shared views
 // (packages/client/panel-views.mjs) called as the server calls them, with the server's own `held`
 // cut out of server/oats-web.mjs, and Juan's deployments as fixtures.
@@ -103,7 +103,7 @@ export const HANDLER = between('const send = (res, code, body, type', '\n// No u
 export async function loadServer(state = {}, extra = {}) {
   const { EventEmitter } = await import('node:events');
   // The handler names the shared functions as the server imports them; `held` is the server's own, over these values.
-  const deps = { checkControlRequest, controlRequestHeaders, controlToken: TEST_CONTROL_TOKEN, ...viewDeps(state), ...shared, createServer: fn => fn, ...extra };
+  const deps = { checkControlRequest, controlRequestHeaders, loopbackHost, controlToken: TEST_CONTROL_TOKEN, ...viewDeps(state), ...shared, createServer: fn => fn, ...extra };
   const { server, held } = new Function(...Object.keys(deps),
     `${HELD}\n${FINDINST_BLOCK}\n${SPAWNERR_BLOCK}\n${HANDLER}\nreturn { server, held };`)(...Object.values(deps));
   const views = bound(held);

@@ -13,3 +13,9 @@ export function takeControlToken(env, mint) {
   delete env.OATS_DESKTOP_TOKEN;
   return requireControlToken(value === undefined && mint ? mint() : value);
 }
+
+/** Only an operator-supplied token can authorize reuse of an existing server. */
+export function takeLaunchControlToken(env, mint) {
+  const reuseAllowed = env.OATS_DESKTOP_TOKEN !== undefined;
+  return { token: takeControlToken(env, mint), reuseAllowed };
+}

@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
-import { checkControlRequest, controlTokenMatches, controlRequestHeaders } from '../control-request.mjs';
-import { takeControlToken } from '../control-token.mjs';
+import { checkControlRequest, controlTokenMatches, controlRequestHeaders, loopbackHost } from '../control-request.mjs';
+import { takeControlToken, takeLaunchControlToken } from '../control-token.mjs';
 import { createControlFetch } from '../control-fetch.mjs';
 import { serverSpawnSpec } from '../server-host.mjs';
-import { ensureServerOnPort } from '../server-compat.mjs';
+import { ensureServerOnPort, serverCompatible } from '../server-compat.mjs';
 
 const token = 'control-unit-token-12345678901234567890';
 const headers = { host: '127.0.0.1:4820', 'x-oats-desktop-token': token };
@@ -126,4 +126,94 @@ test('the exposed preload API has no control credential or header getter', () =>
     assert.notEqual(value, token);
     if (typeof value === 'function') assert.doesNotMatch(value.toString(), /OATS_DESKTOP_TOKEN|x-oats-desktop-token/);
   }
+});
+
+
+test('the shared Host policy preserves loopback addresses and refuses other hosts', () => {
+  for (const host of ['127.0.0.1:4820', 'localhost', '[::1]:4820', '[::1]']) assert.equal(loopbackHost({ host }), true);
+  for (const host of ['', 'foreign.invalid', '127.0.0.1.invalid', 'localhost.invalid:4820', '::1', undefined]) assert.equal(loopbackHost({ host }), false);
+});
+
+test('only an operator token permits a reuse probe', async () => {
+  assert.deepEqual(takeLaunchControlToken({ OATS_DESKTOP_TOKEN: token }, () => assert.fail('already configured')),
+    { token, reuseAllowed: true });
+  assert.deepEqual(takeLaunchControlToken({}, () => token), { token, reuseAllowed: false });
+  const calls = [];
+  const result = await ensureServerOnPort({ port: 4820, reuseAllowed: false,
+    probeVersion: () => assert.fail('minted launches do not probe'), panelWorkspaces: () => assert.fail('minted launches do not authenticate an existing listener'),
+    freePort: async from => { calls.push(['freePort', from]); return 4823; }, spawnServer: port => calls.push(['spawn', port]),
+  });
+  assert.deepEqual(result, { spawned: true, port: 4823, wsId: null });
+  assert.deepEqual(calls, [['freePort', 4820], ['spawn', 4823]]);
+});
+
+test('public version reads carry no token and control reads require an authorized binding', async () => {
+  const calls = [];
+  let live = false;
+  const fetch = createControlFetch(token, async (...args) => { calls.push(args); return { ok: true }; }, { authorize: () => live });
+  await fetch('http://127.0.0.1:4820/api/version', { headers: { 'x-oats-desktop-token': token } });
+  assert.equal(calls[0][1].headers.has('x-oats-desktop-token'), false);
+  await assert.rejects(fetch('http://127.0.0.1:4820/api/panel'), /live binding/);
+  assert.equal(calls.length, 1);
+  live = true;
+  await fetch('http://127.0.0.1:4820/api/panel');
+  assert.equal(calls[1][1].headers.get('x-oats-desktop-token'), token);
+});
+
+
+for (const completion of ['success', 'rejection']) test(`an older version probe ${completion} cannot replace a newer authorization`, async () => {
+  const source = readFileSync(new URL('../main.mjs', import.meta.url), 'utf8');
+  const code = source.match(/async function probeVersion\(\) \{[^]*?\n\}/)[0];
+  const pending = [];
+  const identity = { capability: 'desktop', version: '1' };
+  const context = { versionProbeIntent: 0, port: 4820, acceptedOperatorPort: null, ownServerStarted: false,
+    reuseAllowed: true, base: () => 'http://127.0.0.1:4820', AbortSignal,
+    serverCompatible, localServerIdentity: () => identity,
+    controlFetch: () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
+  };
+  const probe = runInNewContext(`(${code})`, context);
+  const first = probe(), second = probe();
+  pending[1].resolve({ ok: true, status: 200, json: async () => identity });
+  await second;
+  assert.equal(context.acceptedOperatorPort, 4820);
+  if (completion === 'success') pending[0].resolve({ ok: true, status: 200, json: async () => ({ ...identity, version: 'old' }) });
+  else pending[0].reject(new Error('probe ended'));
+  await first;
+  assert.equal(context.acceptedOperatorPort, 4820);
+});
+
+test('a version probe cannot authorize a port changed while it was waiting', async () => {
+  const source = readFileSync(new URL('../main.mjs', import.meta.url), 'utf8');
+  const code = source.match(/async function probeVersion\(\) \{[^]*?\n\}/)[0];
+  const identity = { capability: 'desktop', version: '1' };
+  let complete;
+  const context = { versionProbeIntent: 0, port: 4820, acceptedOperatorPort: null, ownServerStarted: false,
+    reuseAllowed: true, base: () => 'http://127.0.0.1:4820', AbortSignal, serverCompatible,
+    localServerIdentity: () => identity, controlFetch: () => new Promise(resolve => { complete = resolve; }),
+  };
+  const read = runInNewContext(`(${code})`, context)();
+  context.port = 4821;
+  complete({ ok: true, status: 200, json: async () => identity });
+  assert.equal(await read, null);
+  assert.equal(context.acceptedOperatorPort, null);
+});
+
+
+for (const completion of ['success', 'rejection']) test(`an owned binding ${completion} belongs only to its captured child`, async () => {
+  const source = readFileSync(new URL('../main.mjs', import.meta.url), 'utf8');
+  const code = source.match(/async function ensureServer\(\) \{[^]*?\n\}/)[0];
+  let current = {}, complete, fail, reads = 0, waiting;
+  const started = new Promise(resolve => { waiting = resolve; });
+  const bindings = new WeakMap([[current, { wait: () => new Promise((resolve, reject) => { complete = resolve; fail = reject; waiting(); }), boundPort: () => 4820 }]]);
+  const context = { ensureServerOnPort: async () => ({ spawned: true, port: 4820 }), reuseAllowed: false,
+    port: 4820, workspaceDirs: [], panelWorkspaces: async () => { reads++; return []; }, probeVersion() {}, matchWorkspace() {},
+    localServerIdentity: () => ({}), freePort() {}, spawnServer() {}, console: { log() {} },
+    serverHost: { current: () => current }, serverBindings: bindings,
+  };
+  const read = runInNewContext(`(${code})`, context)();
+  await started;
+  current = {};
+  if (completion === 'success') complete(4820); else fail(new Error('child ended'));
+  await assert.rejects(read, /changed while waiting/);
+  assert.equal(reads, 0);
 });

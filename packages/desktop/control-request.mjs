@@ -15,6 +15,12 @@ export function controlRequestHeaders(req) {
     [key, values.length === 1 ? values[0] : values]));
 }
 
+/** The existing loopback Host policy, shared by HTTP and unsupported upgrades. */
+export function loopbackHost(headers) {
+  const host = String(headers.host || '').replace(/:\d+$/, '');
+  return host === '127.0.0.1' || host === 'localhost' || host === '[::1]' || host === '::1';
+}
+
 /** Host has already passed the server's loopback check. No body or route work precedes this. */
 export function checkControlRequest({ method, path, headers }, token) {
   const forbidden = { ok: false, status: 403, error: 'forbidden' };

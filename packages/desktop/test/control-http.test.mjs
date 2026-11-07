@@ -7,6 +7,7 @@ import { startLoadPathServer } from './helpers/load-path-server.mjs';
 import { TEST_CONTROL_TOKEN } from './helpers/control-auth.mjs';
 
 const HEADER = 'x-oats-desktop-token';
+const MAIN_TOKEN = fileURLToPath(new URL('../main-control-token.mjs', import.meta.url));
 const SERVER = fileURLToPath(new URL('../server/oats-web.mjs', import.meta.url));
 
 function raw(base, path, { method = 'GET', headers = {}, body } = {}) {
@@ -65,12 +66,29 @@ test('real server refuses upgrade requests before accepting a transport', async 
 test('real server refuses missing, empty and short launch tokens without printing a value', () => {
   for (const token of [undefined, '', 'short-private-value']) {
     const env = { ...process.env, OATS_DESKTOP_TOKEN: token, OATS_DESKTOP_OATS_BIN: '', PATH: '/nonexistent', SHELL: '/bin/false' };
-    const result = spawnSync(process.execPath, [SERVER, 'start', '--port', '0'], { env, encoding: 'utf8', timeout: 5000 });
-    assert.notEqual(result.status, 0);
-    const output = result.stdout + result.stderr;
-    assert.match(output, /OATS_DESKTOP_TOKEN/);
-    assert.match(output, /32/);
-    if (token) assert.equal(output.includes(token), false);
-    assert.equal(output.includes(TEST_CONTROL_TOKEN), false);
+    for (const [entry, args] of [[SERVER, ['start', '--port', '0']], ...(token === undefined ? [] : [[MAIN_TOKEN, []]])]) {
+      const result = spawnSync(process.execPath, [entry, ...args], { env, encoding: 'utf8', timeout: 5000 });
+      assert.notEqual(result.status, 0);
+      const output = result.stdout + result.stderr;
+      assert.match(output, /OATS_DESKTOP_TOKEN/);
+      assert.match(output, /32/);
+      if (entry === MAIN_TOKEN) assert.match(output, /^oats-desktop: OATS_DESKTOP_TOKEN must be set to at least 32 characters\n$/);
+      if (token) assert.equal(output.includes(token), false);
+      assert.equal(output.includes(TEST_CONTROL_TOKEN), false);
+    }
   }
+});
+
+
+test('an unparsable request target is refused and the server remains available', async t => {
+  const s = await startLoadPathServer(); t.after(() => s.stop());
+  const base = new URL(s.base);
+  const status = await new Promise((resolve, reject) => {
+    const req = request({ hostname: base.hostname, port: base.port, path: 'http://',
+      headers: { host: 'unserved.invalid' } }, res => { res.resume(); res.on('end', () => resolve(res.statusCode)); });
+    req.on('error', reject); req.end();
+  });
+  assert.equal(status, 400);
+  assert.equal((await s.getStatus('/api/panel')).status, 200);
+  assert.equal(s.output().includes(TEST_CONTROL_TOKEN), false);
 });

@@ -1122,12 +1122,15 @@ unknown or unreported harness shows "?". Sources and licences are in
   agent terminals.
 - Main mints a token for each launch, or uses `OATS_DESKTOP_TOKEN` when the
   operator sets it. A configured token must contain at least 32 characters;
-  empty and shorter values are refused. Main adds the header to its own
-  requests and the API proxy in main. The renderer and preload receive no
+  empty and shorter values are refused. Main adds the header to control
+  requests and the API proxy in main; its public version probes carry no token. The renderer and preload receive no
   token. Main, the server and the dev harness keep it in memory and remove it
   from their inherited environments; CLI, tmux, SSH and terminal viewer
   children receive none.
-- A server is reused only when its identity, workspaces and token match.
+- A newly minted token starts a dedicated server without reuse probes. An
+  operator-supplied token permits reuse only after a compatible public version
+  response and a successful authenticated workspace read. For an owned child,
+  control requests wait for its reported bound port while the child is alive.
   An earlier launch's server is left running and Desktop starts its own on
   the next free port, unless both launches were explicitly configured with
   the same `OATS_DESKTOP_TOKEN`.

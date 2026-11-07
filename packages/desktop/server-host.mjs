@@ -1,3 +1,4 @@
+import { StringDecoder } from "node:string_decoder";
 import { withoutControlToken } from "../client/control-environment.mjs";
 import { requireControlToken } from "./control-token.mjs";
 // Server host — owns the app's backend-server child process lifecycle and the
@@ -148,6 +149,49 @@ export function createServerHost(io) {
       child = null;
       if (c) { try { c.kill(); } catch { /* best-effort */ } }
       return c;
+    },
+  };
+}
+
+/** Observe only the owned child's complete ready line; never infer its binding from HTTP. */
+export function trackServerBinding(child) {
+  let pending = '', port = null, ended = false;
+  const decoder = new StringDecoder('utf8');
+  const waiters = new Set();
+  const alive = () => !ended && !child.killed && child.exitCode == null && child.signalCode == null;
+  const boundPort = () => alive() ? port : null;
+  const notify = () => { for (const notify of [...waiters]) notify(); };
+  const onData = bytes => {
+    pending += typeof bytes === 'string' ? bytes : decoder.write(bytes);
+    const lines = pending.split('\n'); pending = lines.pop().slice(-4096);
+    for (const line of lines) {
+      const match = /^oats-desktop server — API at http:\/\/127\.0\.0\.1:(\d+)  \(workspaces:.*\)\r?$/.exec(line);
+      const reported = Number(match?.[1]);
+      if (match && Number.isInteger(reported) && reported > 0 && reported <= 65535) port = reported;
+    }
+    notify();
+  };
+  const onEnd = () => { ended = true; child.stdout?.removeListener('data', onData); notify(); };
+  child.stdout?.on('data', onData);
+  child.once('exit', onEnd); child.once('error', onEnd);
+  return {
+    boundPort,
+    wait({ timeout = 10000 } = {}) {
+      return new Promise((resolve, reject) => {
+        let timer;
+        const check = () => {
+          if (alive() && port === null) return;
+          clearTimeout(timer); waiters.delete(check);
+          if (alive()) resolve(port);
+          else reject(new Error('Desktop backend ended before a live binding was available'));
+        };
+        waiters.add(check);
+        timer = setTimeout(() => {
+          waiters.delete(check);
+          reject(new Error('Desktop backend did not report a binding'));
+        }, timeout);
+        check();
+      });
     },
   };
 }
