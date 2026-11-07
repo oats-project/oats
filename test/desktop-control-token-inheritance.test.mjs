@@ -113,13 +113,17 @@ process.stdout.write('CONTROL_ENVIRONMENT_READY\\n');
       const home = join(fx.root, 'dev', 'instances', name);
       if (!existsSync(home)) continue;
       try {
-        const stopped = fx.cli(['instance', 'stop', name, '--home', home, '--dir', fx.dep, '--json']);
-        if (stopped.status !== 0) cleanupErrors.push(new Error(`fixture instance stop failed: ${name}`));
+        const target = ['instance', 'stop', name, '--home', home, '--dir', fx.dep];
+        const plan = fx.cli([...target, '--plan', '--json']).json();
+        if (!plan.ok || !plan.result?.planRevision) throw new Error(`fixture stop plan failed: ${name}`);
+        const stopped = fx.cli([...target, '--apply', '--plan-revision', plan.result.planRevision,
+          '--idempotency-key', `control-cleanup-${name}`, '--json']);
+        if (stopped.status !== 0 || stopped.json().result?.ok !== true) cleanupErrors.push(new Error(`fixture instance stop failed: ${name}`));
       } catch (error) { cleanupErrors.push(error); }
     }
     try { fx.cleanup(); } catch (error) { cleanupErrors.push(error); }
     if (cleanupErrors.length) {
-      if (!failure) throw new AggregateError(cleanupErrors, 'control environment fixture cleanup failed');
+      if (!failure) throw new AggregateError(cleanupErrors, `control environment fixture cleanup failed: ${cleanupErrors.map(error => error.message).join('; ')}`);
       t.diagnostic(`control environment fixture cleanup also failed (${cleanupErrors.length} operations)`);
     }
   }

@@ -24,6 +24,11 @@ module.exports = {
   // and builder config itself stay out of the package (inventory-tested).
   files: [
     "main.mjs",
+    "main-control-token.mjs",
+    "server-control-token.mjs",
+    "control-token.mjs",
+    "control-request.mjs",
+    "control-fetch.mjs",
     "preload.cjs",
     "api-url.mjs",
     "app-menu.mjs",

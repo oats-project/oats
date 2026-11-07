@@ -122,7 +122,7 @@ test("the login shell is spawned with the environment resolveLoginPath is given,
     return child;
   };
   await resolveLoginPath({ env, platform: "linux", spawn });
-  assert.equal(calls.length, 1); assert.equal(calls[0].env, env);
+  assert.equal(calls.length, 1); assert.deepEqual(calls[0].env, env);
   assert.ok(main.includes("await resolveLoginPath({ env: cliEnvironment(process.env) })"), "main.mjs: applyLoginPath");
 });
 
