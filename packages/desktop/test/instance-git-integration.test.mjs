@@ -1,3 +1,4 @@
+import { controlHeaders } from './helpers/control-auth.mjs';
 // Real HTTP callback, proxy URL, host and shipped shell composition, with inert
 // executors/DOM. No listener, CLI, terminal process, browser or Electron launch.
 import test from 'node:test';
@@ -31,7 +32,7 @@ const wrapped = (i = instance(), workspace = '/A') => ({ instanceGitApi: 1, mini
   target: { ...selector(i), home: i.home, workspace }, data: state(i) });
 function http({ exec = (_b, _a, _o, done) => done(null, JSON.stringify(envelope(state()))), snapshots, transform = s => s } = {}) {
   const source = transform(readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8'));
-  const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\nserver.on("error",');
+  const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\n// No upgrade transport');
   assert.ok(start > 0 && end > start);
   let executions = 0, lookups = 0; const seen = [];
   const read = createInstanceGitBoundary({ invoke: (bin, opts) => cliInstanceGit(bin, opts, { exec(...args) { executions++; seen.push({ bin: args[0], argv: args[1], opts: args[2] }); return exec(...args); } }) });
@@ -42,8 +43,8 @@ function http({ exec = (_b, _a, _o, done) => done(null, JSON.stringify(envelope(
   };
   const handler = new Function(...Object.keys(deps), `${source.slice(start, end)}\nreturn server;`)(...Object.values(deps));
   return { seen, counts: () => ({ executions, lookups }), async request({ url = '/api/instance-git?ws=%2FA', method = 'POST', body = JSON.stringify({ action: 'git', selector: selector(instance()) }), chunks,
-    headers = { host: '127.0.0.1:4820', origin: 'http://localhost:4820' } } = {}) {
-    const req = new EventEmitter(); Object.assign(req, { url, method, headers }); let result;
+    headers = { host: '127.0.0.1:4820', origin: 'http://127.0.0.1:4820' } } = {}) {
+    const req = new EventEmitter(); Object.assign(req, { url, method, headers: controlHeaders(headers) }); let result;
     const res = { writeHead(status, headers) { result = { status, headers }; }, end(raw) { result.body = JSON.parse(raw); } };
     const waiting = handler(req, res); for (const chunk of chunks || [Buffer.from(body)]) req.emit('data', chunk); req.emit('end'); await waiting;
     assert.ok(result); return result;

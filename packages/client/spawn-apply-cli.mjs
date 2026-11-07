@@ -1,6 +1,7 @@
 /** Private K6e transport. Only the server broker supplies an admitted immutable intent.
  * started is conservative dispatch evidence, NOT a creation/rollback receipt.
  * The broker must qualify a success receipt before exposing it or handing off. */
+import { withoutControlToken } from "./control-environment.mjs";
 import { retainedSpawnDetails } from './launch-prompt-outcome.mjs';
 import { parseEnvelope, writeTaskFile, execFileInSession } from './cli-adapter.mjs';
 import { absolute, record, previewTarget, choiceArgv } from './spawn-preview-contract.mjs';
@@ -69,7 +70,7 @@ export async function cliSpawnApply(cli, options = {}, io = {}) {
     argv.push('--expect-decision', decision.revision, ...reuse, '--idempotency-key', options.key, '--task-file', taskFile.file);
     if (wakeFile) argv.push('--wake-file', wakeFile.file);
     argv.push('--json');
-    const env = { ...(io.env ?? process.env) };
+    const env = withoutControlToken(io.env);
     for (const k of ['PI_AGENTS_ROOT', 'OATS_DEPLOYMENT', 'OATS_RESOLUTION', 'OATS_PREVIEW_PREFLIGHT_BUDGET_MS']) delete env[k];
     // File construction is synchronous; repeat immediately at the process owner
     // too, so even a re-entrant injected dependency cannot downgrade the mode.

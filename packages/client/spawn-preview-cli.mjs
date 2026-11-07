@@ -1,4 +1,5 @@
 /** Fixed read-only API2 argv. Never dispatch API1 or fall back to spawn. */
+import { withoutControlToken } from "./control-environment.mjs";
 import { execFile } from 'node:child_process';
 import { parseEnvelope, writeTaskFile } from './cli-adapter.mjs';
 import { previewChoices, previewTarget, previewSupported, previewFailure, choiceArgv, suggestSupported, suggestTask, absolute,
@@ -36,7 +37,7 @@ export function cliSpawnPreview(cli, options = {}, io = {}) {
   if (suggest) { try { taskFile = writeTaskFile(options.task, io); } catch { return Promise.resolve(failure('E_CLI_FAILED')); } }
   const naming = taskFile ? ['--suggest-name', '--task-file', taskFile.file] : [];
   const argv = ['spawn', target.selector.soul, '--dir', target.context, '--agents-root', target.selector.agentsRoot, '--preview', ...naming, ...choiceArgv(choices, cli), ...reuse, '--json'];
-  const env = { ...(io.env ?? process.env) };
+  const env = withoutControlToken(io.env);
   for (const k of ['PI_AGENTS_ROOT', 'OATS_DEPLOYMENT', 'OATS_RESOLUTION', 'OATS_PREVIEW_PREFLIGHT_BUDGET_MS']) delete env[k];
   return new Promise(done => {
     const resolve = v => { taskFile?.cleanup(); done(v); };
@@ -69,7 +70,7 @@ export function cliInstanceSuggestName(cli, { request, dir, signal } = {}, io = 
   try { taskFile = writeTaskFile(asked.task, io); } catch { return Promise.resolve(failure('E_CLI_FAILED')); }
   const argv = ['instance', 'suggest-name', '--soul', asked.soul, '--task-file', taskFile.file,
     ...(asked.harness ? ['--harness', asked.harness] : []), ...(asked.model ? ['--model', asked.model] : []), '--dir', dir, '--json'];
-  const env = { ...(io.env ?? process.env) };
+  const env = withoutControlToken(io.env);
   for (const k of ['PI_AGENTS_ROOT', 'OATS_DEPLOYMENT', 'OATS_RESOLUTION', 'OATS_PREVIEW_PREFLIGHT_BUDGET_MS']) delete env[k];
   return new Promise(done => {
     const resolve = v => { taskFile.cleanup(); done(v); };

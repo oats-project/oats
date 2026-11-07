@@ -1,3 +1,4 @@
+import { TEST_CONTROL_TOKEN, controlFetch as fetch } from '../packages/desktop/test/helpers/control-auth.mjs';
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync, symlinkSync, realpathSync } from "node:fs";
@@ -91,7 +92,7 @@ async function startServer(dir, { env = {}, drop = [], observed = true } = {}) {
   const port = await freePort();
   const proc = startGroup(process.execPath, [SRV, "start", "--port", String(port), "--dir", dir], {
     stdio: "ignore",
-    env: { ...process.env, TMUX_TMPDIR: tmuxTmpdir(), OATS_DESKTOP_OATS_BIN: bin, FAKE_OATS_LOG: log, FAKE_OATS_DROP_FEATURES: drop.join(","), ...env },
+    env: { ...process.env, OATS_DESKTOP_TOKEN: TEST_CONTROL_TOKEN, TMUX_TMPDIR: tmuxTmpdir(), OATS_DESKTOP_OATS_BIN: bin, FAKE_OATS_LOG: log, FAKE_OATS_DROP_FEATURES: drop.join(","), ...env },
   });
   servers.push(proc);
   let panel = null;
@@ -118,7 +119,7 @@ function extractBlock(file, marker) {
 }
 
 test("desktop server: the retired collect helper is refused; no deployment reader ships", () => {
-  const r = spawnSync(process.execPath, [SRV, "collect", "--dir", ROOT], { encoding: "utf8", timeout: 30000 });
+  const r = spawnSync(process.execPath, [SRV, "collect", "--dir", ROOT], { env: { ...process.env, OATS_DESKTOP_TOKEN: TEST_CONTROL_TOKEN }, encoding: "utf8", timeout: 30000 });
   assert.equal(r.status, 1); assert.match(r.stderr, /usage: oats-web\.mjs start/);
   const server = join(ROOT, "packages", "desktop", "server");
   for (const retired of ["deployment.mjs", "model.mjs", "catalog.mjs"]) assert.ok(!readdirSync(server).includes(retired), retired);
@@ -136,7 +137,7 @@ test("desktop server: POST origin guard rejects hostile/null origins without cra
     // fetch can't override Host — use a raw request for the rebinding case
     const hostStatus = await new Promise((resolve, reject) => {
       const rq = httpRequest({ host: "127.0.0.1", port, path: "/api/start/x", method: "POST",
-        headers: { "content-type": "application/json", host: "evil.com" } }, (rs) => resolve(rs.statusCode));
+        headers: { "x-oats-desktop-token": TEST_CONTROL_TOKEN, "content-type": "application/json", host: "evil.com" } }, (rs) => resolve(rs.statusCode));
       rq.on("error", reject); rq.end("{}");
     });
     assert.equal(hostStatus, 403, "non-loopback Host is rejected");
@@ -181,7 +182,7 @@ test("desktop server: no route reads a pane, types into it or reads its session 
     }
     for (const path of [`/api/chat/${INSTANCE}`, "/api/no-such-route"]) {
       const hostStatus = await new Promise((resolve, reject) => {
-        const rq = httpRequest({ host: "127.0.0.1", port, path, method: "GET", headers: { host: "evil.com" } }, (rs) => { rs.resume(); resolve(rs.statusCode); });
+        const rq = httpRequest({ host: "127.0.0.1", port, path, method: "GET", headers: { "x-oats-desktop-token": TEST_CONTROL_TOKEN, host: "evil.com" } }, (rs) => { rs.resume(); resolve(rs.statusCode); });
         rq.on("error", reject); rq.end();
       });
       assert.equal(hostStatus, 403, `${path}: a non-loopback Host is refused before routing`);
@@ -217,7 +218,7 @@ test("desktop server: no dedicated harvest route: POST /api/harvest/<name> answe
     assert.equal((await post(`/api/harvest/${INSTANCE}`, {}, { origin: "http://evil.com" })).status, 403);
     const hostStatus = await new Promise((resolve, reject) => {
       const rq = httpRequest({ host: "127.0.0.1", port, path: `/api/harvest/${INSTANCE}`, method: "POST",
-        headers: { "content-type": "application/json", host: "evil.com" } }, (rs) => { rs.resume(); resolve(rs.statusCode); });
+        headers: { "x-oats-desktop-token": TEST_CONTROL_TOKEN, "content-type": "application/json", host: "evil.com" } }, (rs) => { rs.resume(); resolve(rs.statusCode); });
       rq.on("error", reject); rq.end("{}");
     });
     assert.equal(hostStatus, 403, "a non-loopback Host is refused before routing");
@@ -581,7 +582,7 @@ test("desktop server: hostile Host header is rejected on GET file APIs (DNS rebi
   try {
     const rawGet = (path) => new Promise((resolve, reject) => {
       const rq = httpRequest({ host: "127.0.0.1", port, path, method: "GET",
-        headers: { host: "attacker.example" } }, (rs) => resolve(rs.statusCode));
+        headers: { "x-oats-desktop-token": TEST_CONTROL_TOKEN, host: "attacker.example" } }, (rs) => resolve(rs.statusCode));
       rq.on("error", reject); rq.end();
     });
     assert.equal(await rawGet(`/api/file?path=${encodeURIComponent(join(scope, "agents", "release-manager", "soul", "AGENTS.md"))}`), 403, "rebinding host cannot read files");
@@ -598,7 +599,7 @@ test("desktop server: started with no --dir it serves no local deployment, never
   const cwd = realpathSync(tempDir("oatsweb-not-a-deployment-"));
   const port = await freePort();
   const proc = startGroup(process.execPath, [SRV, "start", "--port", String(port)], {
-    cwd, stdio: "ignore", env: { ...process.env, TMUX_TMPDIR: tmuxTmpdir(), OATS_DESKTOP_OATS_BIN: bin },
+    cwd, stdio: "ignore", env: { ...process.env, OATS_DESKTOP_TOKEN: TEST_CONTROL_TOKEN, TMUX_TMPDIR: tmuxTmpdir(), OATS_DESKTOP_OATS_BIN: bin },
   });
   servers.push(proc);
   try {

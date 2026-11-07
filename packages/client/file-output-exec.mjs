@@ -22,6 +22,7 @@
  *   gives one; a caller ends its own wait, never the child). `shell` and `killSignal` are not read.
  * The TUI's `changeExec` (packages/tui/lib/read.mjs) keeps the same promise with its own lifecycle bookkeeping
  * (its run's directory, its let-go on the way out). */
+import { withoutControlToken } from "./control-environment.mjs";
 import { spawn } from 'node:child_process';
 import { chmodSync, closeSync, fstatSync, mkdtempSync, openSync, readSync, rmdirSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -66,7 +67,7 @@ export function execFileToFiles(bin, argv, options = {}, callback = () => {}) {
       paths[name] = path;
       read[name] = openSync(path, 'r');
     }
-    child = spawn(bin, argv, { cwd, env, detached: true, stdio: ['ignore', write.stdout, write.stderr], shell: false, windowsHide: true });
+    child = spawn(bin, argv, { cwd, env: withoutControlToken(env), detached: true, stdio: ['ignore', write.stdout, write.stderr], shell: false, windowsHide: true });
   } catch (error) {
     closeAll(write); closeAll(read); removeFiles();
     throw error;

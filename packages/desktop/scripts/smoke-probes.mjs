@@ -10,6 +10,8 @@
 // primitive in this module, and the tests import it to assert the probes go
 // through the reaper.
 import { mkdtempSync, rmSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { withoutControlToken } from "../../client/control-environment.mjs";
 import { createConnection, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -60,7 +62,7 @@ export async function runAbiProbe(reaper, appExe, asarMainPath, {
   const { exe, args, rosetta } = packagedNode(appExe, ["-e", abiProbeSource(asarMainPath)], { targetArch, platform, hostArch });
   const r = await reaper.runTracked(exe, args, {
     timeout,
-    env: { ...env, ELECTRON_RUN_AS_NODE: "1" },
+    env: { ...withoutControlToken(env), ELECTRON_RUN_AS_NODE: "1" },
   });
   const mode = rosetta ? " under Rosetta x86_64" : "";
   if (r.timedOut) return { ok: false, detail: `node-pty ABI probe${mode} timed out (group killed)` };
@@ -141,7 +143,7 @@ export async function runMainImportsProbe(reaper, appExe, entry, {
     return { ok: false, detail: "probe runner requires a reaper with runTracked (async group-tracked execution is the contract)" };
   }
   const { exe, args, rosetta } = packagedNode(appExe, ["-e", mainImportsSource(entry)], { targetArch, platform, hostArch });
-  const r = await reaper.runTracked(exe, args, { timeout, env: { ...env, ELECTRON_RUN_AS_NODE: "1" } });
+  const r = await reaper.runTracked(exe, args, { timeout, env: { ...withoutControlToken(env), ELECTRON_RUN_AS_NODE: "1" } });
   const mode = rosetta ? " under Rosetta x86_64" : "";
   if (r.timedOut) return { ok: false, detail: `main-imports probe${mode} timed out (group killed)` };
   const line = String(r.stdout).split("\n").find((l) => l.startsWith("MAIN_IMPORTS_OK "));
@@ -155,6 +157,20 @@ export async function runMainImportsProbe(reaper, appExe, entry, {
   return {
     ok: true, imports,
     detail: `the ${imports.length} modules main imports by a relative path load, with the names main takes from each, as Node under the packaged executable${mode}: ${shared.length} directly from the shared home (${shared.join(", ")}), the rest from the asar, each with its own imports`,
+  };
+}
+
+/** Keep bounded diagnostics, refusing to return output that contains the probe's token. */
+export function createTokenOutputCapture(token) {
+  let tail = "", leaked = false;
+  return {
+    append(chunk) {
+      const next = tail + String(chunk);
+      leaked ||= next.includes(token);
+      tail = boundedTail("", next);
+    },
+    get leaked() { return leaked; },
+    text(max = 1500) { return leaked ? "(output suppressed: control token present)" : tail.trim().slice(-max); },
   };
 }
 
@@ -195,8 +211,9 @@ const seconds = (ms) => `${Math.round(ms / 100) / 10}s`;
  *  1. the backend (`bin`, app.asar/server/oats-web.mjs) is started THROUGH
  *     THE PRODUCTION SPEC (`serverSpawnSpec`, as main starts it) with the
  *     packaged executable as execPath, no deployment, a free port, a
- *     temporary home and no CLI discoverable, and must answer GET /api/cli
- *     (any HTTP answer) within `readyMs`;
+ *     temporary home and no CLI discoverable. It must answer token-carrying
+ *     GET /api/cli with 200 and a request without the token with 403 within
+ *     `readyMs`;
  *  2. its stdin is then closed, as the kernel closes it when main ends, and
  *     it must exit 0 with its port closed within `exitMs` (#698's lifeline);
  *  3. the collector (`collector`, client/liveness-main.mjs beside app.asar,
@@ -220,22 +237,24 @@ export async function runBackendProbe(reaper, appExe, {
   const how = { targetArch, platform, hostArch };
   const mode = packagedNode(appExe, [], how).rosetta ? " under Rosetta x86_64" : "";
   const home = mkdtempSync(join(tmpdir(), "oats-smoke-backend-"));
-  let child = null, exited = null, tail = "";
+  const controlToken = randomBytes(32).toString("hex");
+  const captured = createTokenOutputCapture(controlToken);
+  let child = null, exited = null;
   let settle;
   const exit = new Promise((ok) => { settle = ok; });
   const fail = (detail) => ({ ok: false, detail, pids });
-  const output = () => tail.trim().slice(-1500) || "(no output)";
+  const output = () => captured.text() || "(no output)";
   try {
     const port = await freePort();
     const s = spec({ execPath: appExe, bin, dirs: [], port, oatsBin: null, pathSource: "inherited", pathError: null,
-      remoteIdentityFile: join(home, "remote-identity.json"), home, env: { ...env, ...NO_CLI_ENV, HOME: home } });
+      remoteIdentityFile: join(home, "remote-identity.json"), home, controlToken, env: { ...withoutControlToken(env), ...NO_CLI_ENV, HOME: home } });
     const run = packagedNode(s.command, s.args, how);
     child = reaper.spawnTracked(run.exe, run.args, s.options);
     pids.backend = child.pid;
     child.on("exit", (code, signal) => { exited = { code, signal }; settle(exited); });
-    child.on("error", (e) => { tail = boundedTail(tail, `\nspawn error: ${e.message}`); exited ??= { code: -1, signal: null }; settle(exited); });
-    child.stdout?.on("data", (d) => { tail = boundedTail(tail, d); });
-    child.stderr?.on("data", (d) => { tail = boundedTail(tail, d); });
+    child.on("error", (e) => { captured.append(`\nspawn error: ${e.message}`); exited ??= { code: -1, signal: null }; settle(exited); });
+    child.stdout?.on("data", (d) => { captured.append(d); });
+    child.stderr?.on("data", (d) => { captured.append(d); });
     child.stdin?.on("error", () => { /* the server is gone; its exit is reported */ });
 
     // 1. The backend answers.
@@ -246,11 +265,18 @@ export async function runBackendProbe(reaper, appExe, {
       const left = readyBy - Date.now();
       if (left <= 0) return fail(`backend${mode} never answered GET /api/cli within ${seconds(readyMs)} (reaped); output tail:\n${output()}`);
       try {
-        const res = await fetch(`http://127.0.0.1:${port}/api/cli`, { signal: AbortSignal.timeout(Math.min(2000, left)) });
+        const res = await fetch(`http://127.0.0.1:${port}/api/cli`, { headers: { "x-oats-desktop-token": controlToken }, signal: AbortSignal.timeout(Math.min(2000, left)) });
         status = res.status;
         await res.body?.cancel();
       } catch { await sleep(Math.min(200, Math.max(0, readyBy - Date.now()))); }
     }
+
+    if (status !== 200) return fail(`backend${mode} refused the token-carrying GET /api/cli (HTTP ${status})`);
+    const unauthenticated = await fetch(`http://127.0.0.1:${port}/api/cli`, {
+      signal: AbortSignal.timeout(Math.max(1, Math.min(2000, readyBy - Date.now()))),
+    });
+    await unauthenticated.body?.cancel();
+    if (unauthenticated.status !== 403) return fail(`backend${mode} must refuse GET /api/cli without the token (HTTP ${unauthenticated.status})`);
 
     // 2. The lifeline: stdin closes, as when main ends; the server must go, port and all.
     child.stdin?.end();
@@ -261,9 +287,12 @@ export async function runBackendProbe(reaper, appExe, {
 
     // 3. The collector: rows on stdin, one liveness per row on stdout; none in, none out.
     const col = packagedNode(s.command, [collector], how);
-    const r = await reaper.runTracked(col.exe, col.args, { timeout: collectorMs, env: s.options.env, cwd: home, input: "[]" });
+    const r = await reaper.runTracked(col.exe, col.args, { timeout: collectorMs, env: withoutControlToken(s.options.env), cwd: home, input: "[]" });
     pids.collector = r.pid;
-    const said = `${String(r.stdout)}\n${String(r.stderr || "")}`.trim().slice(-500) || "(no output)";
+    const collectorOutput = `${String(r.stdout)}\n${String(r.stderr || "")}`;
+    if (collectorOutput.includes(controlToken)) return fail("collector output contained the control token (suppressed)");
+    if (captured.leaked) return fail("backend output contained the control token (suppressed)");
+    const said = collectorOutput.trim().slice(-500) || "(no output)";
     if (r.timedOut) return fail(`collector${mode} did not answer within ${seconds(collectorMs)} (group killed): ${said}`);
     if (r.code !== 0) return fail(`collector${mode} failed (exit ${r.code}): ${said}`);
     if (String(r.stdout).trim() !== "[]") return fail(`collector${mode} answered ${JSON.stringify(String(r.stdout).slice(0, 200))} to [], expected []`);
@@ -277,6 +306,7 @@ export async function runBackendProbe(reaper, appExe, {
         `lifeline (#698): closing the backend's stdin ended it (exit 0) and closed port ${port}`,
         `collector: ${collector} run as Node under the packaged executable${mode} answered [] to []`,
         `not exercised by this phase: the GUI (phase 5)${appImage}`,
+        "control token: authenticated GET /api/cli answered 200; a direct request without it answered 403; backend output contains no token",
       ],
     };
   } finally {

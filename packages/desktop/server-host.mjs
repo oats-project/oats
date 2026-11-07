@@ -1,3 +1,5 @@
+import { withoutControlToken } from "../client/control-environment.mjs";
+import { requireControlToken } from "./control-token.mjs";
 // Server host — owns the app's backend-server child process lifecycle and the
 // ownership/trust-state transitions. Extracted from main.mjs so the REAL
 // production seam is importable in tests (review wsadd3: regressions that
@@ -39,6 +41,7 @@ export const LIFELINE_FLAG = "--exit-on-stdin-close";
  * @param {string|null} [o.pathError]
  * @param {string} o.remoteIdentityFile
  * @param {string} o.home              cwd when no deployment is served
+ * @param {string} o.controlToken     this launch's token (server only)
  * @param {object} o.env               this process's environment
  * @returns {{ command: string, args: string[], options: object }}
  */
@@ -65,7 +68,7 @@ export function serverSpawnSpec(o) {
       // added before it loads anything else (packages/client/own-environment.mjs).
       // Every other program main starts gets cliEnvironment(process.env),
       // computed when it starts.
-      env: { ...o.env, ELECTRON_RUN_AS_NODE: "1" },
+      env: { ...withoutControlToken(o.env), ELECTRON_RUN_AS_NODE: "1", OATS_DESKTOP_TOKEN: requireControlToken(o.controlToken) },
     },
   };
 }

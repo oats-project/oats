@@ -1,5 +1,6 @@
 /** Bounded fixed-argv native deployment reads. Private producer documents are
  * projected by the owning observer, never forwarded wholesale to a renderer. */
+import { withoutControlToken } from "./control-environment.mjs";
 import { execFile } from 'node:child_process';
 import { isAbsolute, resolve } from 'node:path';
 import { deploymentReadGate, deploymentFailure, deploymentRecord, deploymentErrorCode, validMaxAge, maxAgeArgv, remoteFailureCause } from './deployment-contract.mjs';
@@ -17,7 +18,7 @@ export function cliDeploymentRead(cli, options, io = {}) {
   if (refused) return Promise.resolve(refused);
   const context = options.context, bin = cli.bin, action = options.action;
   const argv = deploymentReadArgv(cli, options);
-  const env = withoutInstanceVariables(io.env ?? process.env);
+  const env = withoutInstanceVariables(withoutControlToken(io.env));
   return new Promise(done => {
     const fail = code => done(deploymentFailure(code));
     try {

@@ -36,6 +36,7 @@
  * `status()` is a diagnostic for the client's own logs and API ({ state, code }), never a fact a page
  * shows: refusal and fallback are silent. `spawn` is `node:child_process` `spawn` or a stand-in with its
  * signature; the module starts nothing itself, so a client keeps the custody of its children. */
+import { withoutControlToken } from "./control-environment.mjs";
 import { isAbsolute, resolve } from 'node:path';
 import { cliDeploymentRead, deploymentReadRefusal, deploymentReadArgv, deploymentReadAnswer, DEPLOYMENT_READ_TIMEOUT, DEPLOYMENT_READ_MAX_BUFFER } from './deployment-read-cli.mjs';
 import { maxAgeArgv } from './deployment-contract.mjs';
@@ -98,7 +99,7 @@ export function createWarmReader({ spawn, onStale = null } = {}) {
     const c = { binding: b, version: cli.version, proc: null, trusted: false, reads: new Set(), pending: new Map(),
       chunks: [], bytes: 0, helloTimer: null, headId: undefined, headTimer: null, done: false };
     try {
-      c.proc = spawn(cli.bin, ['reader', '--stdio'], { env, stdio: ['pipe', 'pipe', 'ignore'], shell: false });
+      c.proc = spawn(cli.bin, ['reader', '--stdio'], { env: withoutControlToken(env), stdio: ['pipe', 'pipe', 'ignore'], shell: false });
     } catch { b.code = 'E_READER_EXIT'; return countFailure(b); }
     child = c;
     c.proc.stdin?.on?.('error', () => { /* a dead reader: its close says so */ });

@@ -1,3 +1,4 @@
+import { TEST_CONTROL_TOKEN } from './helpers/control-auth.mjs';
 // A Finder launch (cwd `/`, no --dir) runs main's shipped startup in a vm (#518): the real registry,
 // records and window code over a real userData folder and real deployment folders, with Electron and
 // the backend process faked at their boundary. What the backend is spawned with (argv, cwd and stdio, through
@@ -62,7 +63,7 @@ async function launch(m, { launch: WORKSPACE = '/', argv = ['/app/OATS Desktop']
     ipcMain: { handle: (name, fn) => handlers.set(name, fn) }, screen: { getAllDisplays: () => [{ workArea: { x: 0, y: 25, width: 1440, height: 875 } }] },
     Menu: {}, shell: {}, console: { log: (m) => logs.push(m), error: (m) => logs.push(m) },
     // The backend process, at its boundary: what main spawns it with is recorded. The spec is the real one.
-    serverSpawnSpec,
+    serverSpawnSpec, controlToken: TEST_CONTROL_TOKEN,
     spawn: (bin, args, options) => {
       spawned.push({ bin, args: [...args], cwd: options.cwd, stdio: [...options.stdio] });
       return { stdin: { on() {} }, stdout: { on() {} }, stderr: { on() {} } };

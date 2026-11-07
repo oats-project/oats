@@ -1,3 +1,5 @@
+import { controlHeaders, TEST_CONTROL_TOKEN } from './control-auth.mjs';
+import { checkControlRequest, controlRequestHeaders } from '../../control-request.mjs';
 // Workspace views (#482) over held observations, for the server tests: the shared views
 // (packages/client/panel-views.mjs) called as the server calls them, with the server's own `held`
 // cut out of server/oats-web.mjs, and Juan's deployments as fixtures.
@@ -95,18 +97,18 @@ export const tag = (id, machine, path) => ({ id, machine, path });
 /* The shipped HTTP handler over the shared views, the server's `held`, the instance lookup and the error shaping. */
 export const FINDINST_BLOCK = between('/* OATSWEB_FINDINST_BEGIN', '/* OATSWEB_FINDINST_END */');
 export const SPAWNERR_BLOCK = between('function spawnErrorPayload(e)', '/* OATSWEB_SPAWNERR_END */');
-export const HANDLER = between('const send = (res, code, body, type', '\nserver.on("error",');
+export const HANDLER = between('const send = (res, code, body, type', '\n// No upgrade transport');
 /** `{ views, request }`: `request({ url, method, body, headers })` resolves `{ status, headers, body }`.
  * `extra` supplies the handler's other free names (doubles); the views' state comes from `state`. */
 export async function loadServer(state = {}, extra = {}) {
   const { EventEmitter } = await import('node:events');
   // The handler names the shared functions as the server imports them; `held` is the server's own, over these values.
-  const deps = { ...viewDeps(state), ...shared, createServer: fn => fn, ...extra };
+  const deps = { checkControlRequest, controlRequestHeaders, controlToken: TEST_CONTROL_TOKEN, ...viewDeps(state), ...shared, createServer: fn => fn, ...extra };
   const { server, held } = new Function(...Object.keys(deps),
     `${HELD}\n${FINDINST_BLOCK}\n${SPAWNERR_BLOCK}\n${HANDLER}\nreturn { server, held };`)(...Object.values(deps));
   const views = bound(held);
-  async function request({ url, method = 'GET', body, headers = { host: '127.0.0.1:4820', origin: 'http://localhost:4820' } }) {
-    const req = new EventEmitter(); Object.assign(req, { url, method, headers }); let result;
+  async function request({ url, method = 'GET', body, headers = { host: '127.0.0.1:4820', origin: 'http://127.0.0.1:4820' } }) {
+    const req = new EventEmitter(); Object.assign(req, { url, method, headers: controlHeaders(headers) }); let result;
     const res = { writeHead(status, h) { result = { status, headers: h }; }, end(text) { result.body = JSON.parse(text); } };
     const done = server(req, res);
     if (body !== undefined) req.emit('data', Buffer.from(typeof body === 'string' ? body : JSON.stringify(body)));

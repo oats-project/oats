@@ -12,6 +12,7 @@
  * Every tmux call goes to the tmux server the instance's row records (`tmux.socket`), through the
  * helper the terminals use; the socket is read from the row only. A recorded socket that fails
  * validation is refused before any tmux call: the paste never tries the default server instead. */
+import { withoutControlToken } from "../../client/control-environment.mjs";
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { tmuxSocketArgs } from '../local-tmux-io.mjs';
@@ -57,14 +58,14 @@ export function createReviewPaste({ exec = execFileSync, find, tmuxTarget, inspe
     let loaded = false, server;
     try {
       server = tmuxSocketArgs(inst.tmux?.socket);
-      const panes = exec('tmux', [...server, 'list-panes', '-t', tmuxTarget(inst), '-F', '#{pane_id}'], { encoding: 'utf8', timeout: 4000 });
+      const panes = exec('tmux', [...server, 'list-panes', '-t', tmuxTarget(inst), '-F', '#{pane_id}'], { encoding: 'utf8', timeout: 4000, env: withoutControlToken() });
       if (!String(panes).split('\n').includes(pane)) return 'E_TERMINAL_UNSUPPORTED';
-      exec('tmux', [...server, 'load-buffer', '-b', name, '-'], { input: text, timeout: 4000 });
+      exec('tmux', [...server, 'load-buffer', '-b', name, '-'], { input: text, timeout: 4000, env: withoutControlToken() });
       loaded = true;
-      exec('tmux', [...server, 'paste-buffer', '-p', '-r', '-d', '-b', name, '-t', pane], { timeout: 4000 });
+      exec('tmux', [...server, 'paste-buffer', '-p', '-r', '-d', '-b', name, '-t', pane], { timeout: 4000, env: withoutControlToken() });
       return null;
     } catch {
-      if (loaded) { try { exec('tmux', [...server, 'delete-buffer', '-b', name], { timeout: 4000 }); } catch { /* gone already */ } }
+      if (loaded) { try { exec('tmux', [...server, 'delete-buffer', '-b', name], { timeout: 4000, env: withoutControlToken() }); } catch { /* gone already */ } }
       return 'E_PASTE_FAILED';
     }
   }

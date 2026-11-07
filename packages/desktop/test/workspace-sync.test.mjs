@@ -1,3 +1,4 @@
+import { controlHeaders } from './helpers/control-auth.mjs';
 // Workspace model v2 verbs (F2, without package approval): fixed argv, exit
 // semantics, refusal projection, projectors and the server's sync boundary —
 // against kernel-captured fixtures (test/fixtures/workspace-v2/f2,
@@ -184,7 +185,7 @@ test('remote, unknown, pre-v2 or pre-no-approval contexts never dispatch', async
 function httpHarness(workspaceSyncRequest) {
   const source = readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8');
   const start = source.indexOf('const send = (res, code, body, type');
-  const end = source.indexOf('\nserver.on("error",');
+  const end = source.indexOf('\n// No upgrade transport');
   const errorStart = source.indexOf('function spawnErrorPayload(e)');
   const errorEnd = source.indexOf('/* OATSWEB_SPAWNERR_END */', errorStart);
   const { syncFailure } = { syncFailure: code => ({ workspaceSyncApi: 1, status: 'unavailable', reason: { code } }) };
@@ -196,8 +197,8 @@ function httpHarness(workspaceSyncRequest) {
   const handler = new Function(...Object.keys(dependencies), `${source.slice(errorStart, errorEnd)}\n${source.slice(start, end)}\nreturn server;`)(...Object.values(dependencies));
   return {
     refreshes: () => refreshes,
-    async request({ url = `/api/workspace-sync?ws=${encodeURIComponent(deployment)}`, body = '{}', headers = { host: '127.0.0.1:4820', origin: 'http://localhost:4820' } } = {}) {
-      const req = new EventEmitter(); req.url = url; req.method = 'POST'; req.headers = headers;
+    async request({ url = `/api/workspace-sync?ws=${encodeURIComponent(deployment)}`, body = '{}', headers = { host: '127.0.0.1:4820', origin: 'http://127.0.0.1:4820' } } = {}) {
+      const req = new EventEmitter(); req.url = url; req.method = 'POST'; req.headers = controlHeaders(headers);
       let result;
       const res = { writeHead(status) { result = { status }; }, end(raw) { result.body = JSON.parse(raw); } };
       const completion = handler(req, res);

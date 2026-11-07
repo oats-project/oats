@@ -1,3 +1,4 @@
+import { controlFetch as fetch } from './helpers/control-auth.mjs';
 // A client never ends a start. Main's api proxy gives up on a start or restart at its deadline (and gave up
 // at 20 s before it had one of its own): this runs the shipped server over a scripted fake kernel
 // (helpers/load-path-server.mjs) and aborts the request while the CLI call is in flight. The call is held

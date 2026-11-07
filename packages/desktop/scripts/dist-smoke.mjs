@@ -42,16 +42,20 @@
 // smoke a second time that way on the Linux leg, under xvfb-run. No macOS leg
 // runs it (the workflows say why).
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { existsSync, readdirSync, statSync, readFileSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createLaunchFixtureSource } from "../test/helpers/launch-fixture.mjs";
 import { createReaper } from "./proc-reaper.mjs";
-import { runAbiProbe, runBackendProbe, runMainImportsProbe, sharedHomeInventory } from "./smoke-probes.mjs";
+import { runAbiProbe, runBackendProbe, runMainImportsProbe, sharedHomeInventory, createTokenOutputCapture } from "./smoke-probes.mjs";
 import { verifyAppSignature } from "./codesign-verify.mjs";
 import { checkLinuxFloor } from "./linux-floor.mjs";
 import { WATCHDOG_MS, PHASE_BUDGET_MS, boundedTail, readDevToolsPort, awaitClose } from "./launch-probe.mjs";
+
+// Each probe supplies its own token only to the app or backend it owns.
+delete process.env.OATS_DESKTOP_TOKEN;
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG = join(HERE, "..");
@@ -256,6 +260,7 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
     const running = instance === "running";
     const root = mkdtempSync(join(tmpdir(), "oats-desktop-smoke-"));
     const userData = join(root, "profile");
+    const controlToken = randomBytes(32).toString("hex");
     const env = { ...process.env };
     for (const key of Object.keys(env)) {
       if (/^(OATS_|AWEB_)/.test(key) || ["TMUX", "TMUX_PANE", "WAYLAND_DISPLAY", "ELECTRON_RUN_AS_NODE", "APPIMAGE", "APPDIR"].includes(key)) delete env[key];
@@ -384,23 +389,29 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
       }
       const viewerBaseline = await oatsdeskViewerCount(); // 0 when tmux is absent/no-server (ENOENT/nonzero → empty stdout → 0); null only on a tmux timeout
       if (running && viewerBaseline === null) throw new Error("fixture viewer baseline could not be read");
+      const appEnv = { ...env, OATS_DESKTOP_TOKEN: controlToken };
       const child = spawnTracked(instance ? artifacts.AppImage : app.exe, args,
-        { cwd: env.HOME, stdio: ["ignore", "pipe", "pipe"], env });
-      let childLog = "", childExit = null, startupLog = "", stdoutPending = "";
+        { cwd: env.HOME, stdio: ["ignore", "pipe", "pipe"], env: appEnv });
+      const captured = createTokenOutputCapture(controlToken);
+      let childExit = null, startupLog = "", stdoutPending = "", serverPort = null;
       child.stdout?.on("data", (d) => {
-        childLog = boundedTail(childLog, d);
+        captured.append(d);
         stdoutPending += String(d);
         const lines = stdoutPending.split("\n"); stdoutPending = boundedTail("", lines.pop());
-        for (const line of lines) if (line.startsWith("oats-desktop: launch --instance")) startupLog = boundedTail(startupLog, line + "\n");
+        for (const line of lines) {
+          if (line.startsWith("oats-desktop: launch --instance")) startupLog = boundedTail(startupLog, line + "\n");
+          const api = /oats-desktop server — API at http:\/\/127\.0\.0\.1:(\d+)/.exec(line);
+          if (api) serverPort = Number(api[1]);
+        }
       });
-      child.stderr?.on("data", (d) => { childLog = boundedTail(childLog, d); });
+      child.stderr?.on("data", (d) => { captured.append(d); });
       child.on("exit", (code, sig) => { childExit = { code, sig }; });
       // drainTail: return the current bounded output tail. Only wait for a
       // final flush when the child has ALREADY EXITED (a live child's tail is
       // already current, and awaiting its 'close' would block until the
       // watchdog — review 7bdaf1e-r2 finding 2). awaitClose is total-bounded
       // regardless, so even the exited path cannot hang.
-      const drainTail = async () => { if (childExit !== null) await awaitClose(child, { drainMs: 2000 }); return childLog.slice(-1500); };
+      const drainTail = async () => { if (childExit !== null) await awaitClose(child, { drainMs: 2000 }); return captured.text(); };
       try {
         // ONE shared launchReady deadline across the port wait AND the /json
         // poll (review 7bdaf1e-r2 finding 1: spending launchReady twice made
@@ -455,10 +466,22 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
         });
         ws.close();
         if (!String(result).startsWith("SHELL_OK")) throw new Error(`renderer did not reach the shell: ${result}`);
+        if (captured.leaked) throw new Error("packaged app output contained the control token (suppressed)");
+        if (!serverPort) throw new Error("packaged app did not report its backend port");
+        const withoutToken = await fetch(`http://127.0.0.1:${serverPort}/api/panel`, { signal: AbortSignal.timeout(2000) });
+        await withoutToken.body?.cancel();
+        if (withoutToken.status !== 403) throw new Error(`packaged backend must refuse a direct request without the token (HTTP ${withoutToken.status})`);
+        const withToken = await fetch(`http://127.0.0.1:${serverPort}/api/panel`, {
+          headers: { "x-oats-desktop-token": controlToken }, signal: AbortSignal.timeout(2000),
+        });
+        await withToken.body?.cancel();
+        if (withToken.status !== 200) throw new Error(`packaged backend refused this launch's token (HTTP ${withToken.status})`);
+        ok("packaged backend accepts this launch's token and refuses a direct request without it");
         if (instance) {
           const expected = `oats-desktop: launch --instance smoke-probe: selecting it in ${deployment}`;
           // did-finish-load sends the request; allow its stdout pipe to drain after the shell appears.
           while (!startupLog && !childExit && Date.now() < launchDeadline) await new Promise((r) => setTimeout(r, 100));
+          if (captured.leaked) throw new Error("packaged app output contained the control token (suppressed)");
           console.log(startupLog.trim() || "dist:smoke launch disposition missing");
           // Sample beyond the pending bound. Native key input is sent as soon as the running
           // terminal is visible, without a focus command; its raw-input harness must receive none.
@@ -565,7 +588,8 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
             }
           }
           const first = await observeRenderer("first");
-          const repeated = await runTracked(artifacts.AppImage, args, { cwd: env.HOME, env, timeout: PHASE_BUDGET_MS.repeatedLaunch });
+          const repeated = await runTracked(artifacts.AppImage, args, { cwd: env.HOME, env: appEnv, timeout: PHASE_BUDGET_MS.repeatedLaunch });
+          if (`${repeated.stdout}${repeated.stderr}`.includes(controlToken)) throw new Error("repeated app output contained the control token (suppressed)");
           if (repeated.timedOut || repeated.code !== 0) throw new Error(`second AppImage launch failed: ${boundedTail(repeated.stderr, repeated.stdout)}`);
           const repeatedDeadline = Date.now() + 5000;
           while (startupLog.trim().split("\n").length < 2 && !childExit && Date.now() < repeatedDeadline)
@@ -576,6 +600,7 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
             throw new Error("AppImage extraction did not survive the repeated launch");
           ok("private AppImage extraction retained through the repeated launch");
           const lines = startupLog.trim().split("\n");
+          if (captured.leaked) throw new Error("packaged app output contained the control token (suppressed)");
           console.log(`dist:smoke launch dispositions: ${JSON.stringify(lines)}`);
           if (lines.length !== 2 || lines.some(line => line !== expected)) throw new Error(`AppImage launch disposition: ${startupLog.trim() || "missing"}; output tail:\n${await drainTail()}`);
           const expectedRow = join(deployment, "agents", "smoke", "instances", "smoke-probe");
@@ -602,6 +627,7 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
         await awaitClose(child, { drainMs: 5000 });
         reapGroup(child);
         await awaitClose(child);
+        if (captured.leaked) launchError ||= new Error("packaged app output contained the control token (suppressed)");
         // Baseline restoration assertion — runs on success AND failure (the
         // catch above converted every launch failure to a caught error so this
         // finally always executes; no fail()/process.exit skips it).

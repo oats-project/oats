@@ -1,3 +1,4 @@
+import { controlHeaders } from './helpers/control-auth.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -12,14 +13,14 @@ import { context, selector, target, data, view, envelope, deferred, tick } from 
 import { deploymentDoubles } from './helpers/deployment-doubles.mjs';
 function http() {
   const source = readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8');
-  const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\nserver.on("error",');
+  const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\n// No upgrade transport');
   const c = context(), calls = [];
   const deps = { createServer: fn => fn, readinessFailure, readinessRequest: createReadinessBoundary({ invoke: async (bin, args) => { calls.push({ bin, args }); return envelope(data(args.target)); } }),
     cliState: c.cli, ...deploymentDoubles(() => [c.workspace]), ctxs: ['/Users/me/work'], agentsData: () => ({ agents: c.agents }), snapshot: { byWs: new Map([['team', { instances: c.instances }]]) },
     panelData: assert.fail, collectNow: assert.fail };
   const handler = new Function(...Object.keys(deps), `${source.slice(start, end)}\nreturn server;`)(...Object.values(deps));
-  return { calls, c, async request({ url = '/api/workspace-readiness?ws=team', method = 'POST', body = JSON.stringify({ action: 'read', selector }), headers = { host: '127.0.0.1:4820', origin: 'http://localhost:4820' } } = {}) {
-    const req = new EventEmitter(); Object.assign(req, { url, method, headers }); let result;
+  return { calls, c, async request({ url = '/api/workspace-readiness?ws=team', method = 'POST', body = JSON.stringify({ action: 'read', selector }), headers = { host: '127.0.0.1:4820', origin: 'http://127.0.0.1:4820' } } = {}) {
+    const req = new EventEmitter(); Object.assign(req, { url, method, headers: controlHeaders(headers) }); let result;
     const res = { writeHead(status, headers) { result = { status, headers }; }, end(text) { result.body = JSON.parse(text); } };
     const done = handler(req, res); req.emit('data', Buffer.from(body)); req.emit('end'); await done; return result;
   } };

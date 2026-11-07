@@ -1,3 +1,4 @@
+import { TEST_CONTROL_TOKEN, controlFetch as fetch } from './control-auth.mjs';
 // A real `server/oats-web.mjs` process driven by a scripted fake `oats` CLI, for
 // tests of the load path (parallel cycle, held catalogs, inspect cache, focus
 // reprobe, --max-age). The fake answers every verb from the desktop-facts kernel
@@ -128,10 +129,11 @@ export async function startLoadPathServer({ probe = v => v, gated = [], extra = 
   writeFileSync(join(temp, 'package.json'), '{"type":"module"}'); // the extensionless fake is ESM whatever the temp path
   const port = await freePort();
   const proc = spawn(process.execPath, [SERVER, 'start', '--port', String(port), ...deployments.flatMap(dir => ['--dir', dir])], {
-    detached: true, stdio: ['ignore', 'ignore', 'pipe'],
-    env: { ...process.env, OATS_DESKTOP_OATS_BIN: fake, FAKE_SCRIPT_DIR: script, FAKE_LOG: log, PATH: '/nonexistent', SHELL: '/bin/false',
+    detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, OATS_DESKTOP_TOKEN: TEST_CONTROL_TOKEN, OATS_DESKTOP_OATS_BIN: fake, FAKE_SCRIPT_DIR: script, FAKE_LOG: log, PATH: '/nonexistent', SHELL: '/bin/false',
       OATS_INSTANCE_HOME: undefined, OATS_INSTANCE: undefined, OATS_DEPLOYMENT: undefined, ...env({ dir: temp }) },
   });
+  let stdout = ''; proc.stdout.on('data', data => { stdout += data; });
   let stderr = ''; proc.stderr.on('data', data => { stderr += data; });
   const base = `http://127.0.0.1:${port}`;
   const ws = `?ws=${encodeURIComponent(deployment)}`;
@@ -184,6 +186,7 @@ export async function startLoadPathServer({ probe = v => v, gated = [], extra = 
     panel: () => get(`/api/panel${ws}`),
     agents: () => get(`/api/agents${ws}`),
     stderr: () => stderr,
+    output: () => stdout + stderr,
     async stop() {
       const exited = proc.exitCode !== null || proc.signalCode !== null ? Promise.resolve() : once(proc, 'exit');
       try { process.kill(-proc.pid, 'SIGTERM'); } catch { /* already stopped */ }

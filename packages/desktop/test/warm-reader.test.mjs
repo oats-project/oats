@@ -87,7 +87,7 @@ for (const [name, record] of [['no warm-reader feature', cli({ features: FEATURE
 
 // Rule 1: spawned as spawn(cli.bin, ['reader','--stdio'], { env: withoutInstanceVariables(io.env ?? process.env), stdio, shell: false }).
 test('start: binary, argv, environment without instance variables, stdio and no shell', async () => {
-  const env = { KEEP: '1', ...Object.fromEntries(INSTANCE_VARIABLES.map(name => [name, '/foreign'])) };
+  const env = { KEEP: '1', OATS_DESKTOP_TOKEN: 'fixture-control-token-not-for-reader', ...Object.fromEntries(INSTANCE_VARIABLES.map(name => [name, '/foreign'])) };
   const h = harness({ env });
   await h.read();
   assert.equal(h.children.length, 1);

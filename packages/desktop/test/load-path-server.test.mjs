@@ -1,3 +1,4 @@
+import { controlFetch as fetch } from './helpers/control-auth.mjs';
 // The load path against the shipped server and a scripted fake kernel (helpers/load-path-server.mjs):
 // the roster never waits on souls, the held catalogs answer without a kernel run, identical
 // inspections coalesce, an unchanged focus reprobe cancels and wipes nothing, every answer carries

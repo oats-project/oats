@@ -1,3 +1,4 @@
+import { controlHeaders } from './helpers/control-auth.mjs';
 // Shipped HTTP callback with inert K3 executors: no listener or live lifecycle.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,7 +17,7 @@ import { context, request, stopPlan, retirePlan, stopReceipt, retireReceipt, env
 import { deploymentDoubles } from './helpers/deployment-doubles.mjs';
 function http({ remote = false, missing = false, routed = false, entries = ['lifecycle-plans'], apply = null } = {}) {
   const source = readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8');
-  const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\nserver.on("error",');
+  const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\n// No upgrade transport');
   const ctx = context(); ctx.workspace.remote = remote; if (missing) delete ctx.cli.lifecycleApi;
   // `routed`: a remote workspace whose addressable row is reached by --server and --home.
   if (routed) {
@@ -34,8 +35,8 @@ function http({ remote = false, missing = false, routed = false, entries = ['lif
     resolveInstanceOr: assert.fail, panelData: assert.fail, snapshotPanel: assert.fail, collectNow: assert.fail };
   const handler = new Function(...Object.keys(deps), `${source.slice(start, end)}\nreturn server;`)(...Object.values(deps));
   return { calls, refreshed, async request({ url = '/api/instance-lifecycle?ws=team', method = 'POST', body = JSON.stringify(request()),
-    headers = { host: '127.0.0.1:4820', origin: 'http://localhost:4820' } } = {}) {
-    const req = new EventEmitter(); Object.assign(req, { url, method, headers }); let result;
+    headers = { host: '127.0.0.1:4820', origin: 'http://127.0.0.1:4820' } } = {}) {
+    const req = new EventEmitter(); Object.assign(req, { url, method, headers: controlHeaders(headers) }); let result;
     const res = { writeHead(status, headers) { result = { status, headers }; }, end(text) { result.body = JSON.parse(text); } };
     const done = handler(req, res); req.emit('data', Buffer.from(body)); req.emit('end'); await done; return result;
   } };
@@ -126,7 +127,7 @@ test('remote lifecycle over HTTP: no remote entry on this machine refuses and sp
 });
 test('remote lifecycle over HTTP: a row of another group of the same server is never admitted, and nothing is sent', async () => {
   const source = readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8');
-  const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\nserver.on("error",');
+  const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\n// No upgrade transport');
   const ctx = context(), calls = [];
   const groupA = { id: 'remote:build:aaaa', name: 'Build box', scope: '/srv/a', remote: true, server: 'build' };
   const groupB = { id: 'remote:build:bbbb', name: 'Build box', scope: '/srv/b', remote: true, server: 'build' };
@@ -138,7 +139,7 @@ test('remote lifecycle over HTTP: a row of another group of the same server is n
   const handler = new Function(...Object.keys(deps), `${source.slice(start, end)}\nreturn server;`)(...Object.values(deps));
   const ask = async ws => {
     const req = new EventEmitter(); let result;
-    Object.assign(req, { url: `/api/instance-lifecycle?ws=${encodeURIComponent(ws)}`, method: 'POST', headers: { host: '127.0.0.1:4820', origin: 'http://localhost:4820' } });
+    Object.assign(req, { url: `/api/instance-lifecycle?ws=${encodeURIComponent(ws)}`, method: 'POST', headers: controlHeaders({ host: '127.0.0.1:4820', origin: 'http://127.0.0.1:4820' }) });
     const res = { writeHead(status) { result = { status }; }, end(text) { result.body = JSON.parse(text); } };
     const done = handler(req, res); req.emit('data', Buffer.from(JSON.stringify({ ...request(), selector: { ...request().selector, server: 'build' } }))); req.emit('end'); await done; return result;
   };

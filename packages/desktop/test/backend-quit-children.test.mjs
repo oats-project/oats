@@ -1,3 +1,4 @@
+import { TEST_CONTROL_TOKEN } from './helpers/control-auth.mjs';
 // The quit path sends the backend's CLI children no signal (server/oats-web.mjs, the owner-lifeline
 // block): a command in flight when the app ends finishes whole. The real server/oats-web.mjs is
 // started through serverSpawnSpec, as main starts it, with a fixture CLI named by
@@ -65,7 +66,7 @@ setInterval(() => {}, 1000);
 `);
   chmodSync(cli, 0o755);
   const s = serverSpawnSpec({ execPath: process.execPath, bin: BIN, dirs: [], port: await freePort(), oatsBin: null, pathSource: "inherited", pathError: null,
-    remoteIdentityFile: join(dir, "remote-identity.json"), home: dir, env: { ...process.env, OATS_DESKTOP_OATS_BIN: cli, PATH: "/nonexistent", SHELL: "/bin/false", HOME: dir } });
+    remoteIdentityFile: join(dir, "remote-identity.json"), home: dir, controlToken: TEST_CONTROL_TOKEN, env: { ...process.env, OATS_DESKTOP_OATS_BIN: cli, PATH: "/nonexistent", SHELL: "/bin/false", HOME: dir } });
   const backend = reaper.spawnTracked(s.command, s.args, s.options);
   let tail = "";
   backend.stdout.on("data", (d) => { tail = (tail + d).slice(-2000); });

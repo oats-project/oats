@@ -1,3 +1,4 @@
+import { controlHeaders } from './control-auth.mjs';
 // The Start and Restart dialog over a scripted server, and the shipped HTTP handler over doubles, for the
 // tests of the bare-harness choice (start-bare-harness.test.mjs) and of the sentence for a refused start
 // (start-refusal-sentence.test.mjs). No kernel sentence is written here: SAID and LONG are texts of the tests' own.
@@ -42,7 +43,7 @@ export function http({ invoke = assert.fail, spawnAgent = assert.fail } = {}) {
     launchConfigRequest: (request, context) => launchConfigRequest(request, { ...context, invoke }) };
   const handler = new Function(...Object.keys(deps), `${HANDLER}\nreturn server;`)(...Object.values(deps));
   return async ({ url = '/api/launch-configs?ws=%2Fteam', body }) => {
-    const req = new EventEmitter(); Object.assign(req, { url, method: 'POST', headers: { host: 'localhost:4820', origin: 'http://localhost:4820' } }); let result;
+    const req = new EventEmitter(); Object.assign(req, { url, method: 'POST', headers: controlHeaders({ host: 'localhost:4820', origin: 'http://localhost:4820' }) }); let result;
     const res = { writeHead(status) { result = { status }; }, end(text) { result.body = JSON.parse(text); } };
     const done = handler(req, res); req.emit('data', Buffer.from(JSON.stringify(body))); req.emit('end'); await done; return result;
   };

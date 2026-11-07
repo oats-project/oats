@@ -1,3 +1,4 @@
+import { controlHeaders } from './helpers/control-auth.mjs';
 // The shipped HTTP callback and real boundary, with inert injected executors.
 // No listener, native CLI, OAuth, tmux, Electron or browser is started.
 import test from 'node:test';
@@ -12,7 +13,7 @@ import { cli, oats, context, target, selector, state, envelope, output, status, 
 import { deploymentDoubles } from './helpers/deployment-doubles.mjs';
 function http({ remote = false, run, discover, raw = state(), transform = source => source } = {}) {
   const source = transform(readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8'));
-  const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\nserver.on("error",');
+  const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\n// No upgrade transport');
   assert.ok(start > 0 && end > start);
   let executions = 0;
   const service = createForgeBoundary({
@@ -34,8 +35,8 @@ function http({ remote = false, run, discover, raw = state(), transform = source
   const handler = new Function(...Object.keys(deps), `${source.slice(start, end)}\nreturn server;`)(...Object.values(deps));
   const requestBody = { selector, observationKey: forgeObservation(raw, target, oats).observationKey };
   return { count: () => executions, async request({ url = '/api/instance-forge?ws=team', method = 'POST', body = JSON.stringify(requestBody),
-    headers = { host: '127.0.0.1:4820', origin: 'http://localhost:4820', [FORGE_EPOCH_HEADER]: 'client:0' } } = {}) {
-    const req = new EventEmitter(); Object.assign(req, { url, method, headers }); let result;
+    headers = { host: '127.0.0.1:4820', origin: 'http://127.0.0.1:4820', [FORGE_EPOCH_HEADER]: 'client:0' } } = {}) {
+    const req = new EventEmitter(); Object.assign(req, { url, method, headers: controlHeaders(headers) }); let result;
     const res = { writeHead(code, responseHeaders) { result = { code, headers: responseHeaders }; }, end(text) { result.body = JSON.parse(text); } };
     const waiting = handler(req, res); req.emit('data', Buffer.from(body)); req.emit('end'); await waiting;
     return result;

@@ -1,3 +1,4 @@
+import { TEST_CONTROL_TOKEN, controlFetch as fetch } from '../packages/desktop/test/helpers/control-auth.mjs';
 // Desktop server ↔ CLI integration: discovery status endpoint, re-probe,
 // and the two v1 mutations routed through a FAKE compatible `oats` binary — a
 // fixture that speaks the exact contract, so acceptance, the band edges and
@@ -142,7 +143,7 @@ function tempDir(t, prefix) {
 async function startServer(env) {
   const port = await freePort();
   const proc = startGroup(process.execPath, [SRV, "start", "--port", String(port), "--dir", ROOT],
-    { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, ...env } });
+    { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, OATS_DESKTOP_TOKEN: TEST_CONTROL_TOKEN, ...env } });
   servers.push(proc);
   let stderr = ""; proc.stderr.on("data", (d) => { stderr += d; });
   let exited = null; proc.on("exit", (code, sig) => { exited = { code, sig }; });
@@ -342,7 +343,7 @@ test("desktop server: a kernel-reported home outside the soul's instances direct
   const { bin, calls } = fakeCli(cliDir, { features: ["operations"], operationsApi: 2, status: hostile });
   const port = await freePort();
   const proc = startGroup(process.execPath, [SRV, "start", "--port", String(port), "--dir", scope],
-    { stdio: "ignore", env: { ...process.env, OATS_DESKTOP_OATS_BIN: bin, PATH: "/nonexistent", SHELL: "/bin/false" } });
+    { stdio: "ignore", env: { ...process.env, OATS_DESKTOP_TOKEN: TEST_CONTROL_TOKEN, OATS_DESKTOP_OATS_BIN: bin, PATH: "/nonexistent", SHELL: "/bin/false" } });
   servers.push(proc);
   try {
     let pd;

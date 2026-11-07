@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createReaper } from "../scripts/proc-reaper.mjs";
-import { runBackendProbe, runMainImportsProbe, relativeImportsOf, sharedHomeInventory, packagedNode, NO_CLI_ENV } from "../scripts/smoke-probes.mjs";
+import { runBackendProbe, runMainImportsProbe, relativeImportsOf, sharedHomeInventory, packagedNode, NO_CLI_ENV, createTokenOutputCapture } from "../scripts/smoke-probes.mjs";
 import { serverSpawnSpec, LIFELINE_FLAG } from "../server-host.mjs";
 
 const SERVER = fileURLToPath(new URL("../server/", import.meta.url));
@@ -63,17 +63,22 @@ function fixtures(t, files) {
 const EXITS_3 = `
 import { createServer } from "node:http";
 const port = Number(process.argv[process.argv.indexOf("--port") + 1]);
-createServer((req, res) => res.end("{}")).listen(port, "127.0.0.1");
+createServer((req, res) => { res.statusCode = req.headers["x-oats-desktop-token"] ? 200 : 403; res.end("{}"); }).listen(port, "127.0.0.1");
 process.stdin.on("data", () => {});
 process.stdin.on("end", () => process.exit(3));
 `;
 const NEVER_LISTENS = `process.stderr.write("fixture: up, never listening\\n"); setInterval(() => {}, 1000);`;
 
 test("success: the backend answers, exits when its stdin closes, and the collector answers [] to []", async (t) => {
-  const reaper = reaperFor(t);
+  const real = reaperFor(t), collectorEnvs = [];
+  const reaper = { ...real, runTracked: (bin, args, options) => {
+    collectorEnvs.push(options.env);
+    return real.runTracked(bin, args, options);
+  } };
   const given = [];
   const spec = (o) => { given.push(o); return serverSpawnSpec(o); };
-  const r = await runBackendProbe(reaper, EXE, { bin: BIN, collector: COLLECTOR, spec, platform: "linux", readyMs: 20_000, exitMs: 5000, collectorMs: 20_000 });
+  const r = await runBackendProbe(reaper, EXE, { bin: BIN, collector: COLLECTOR, spec, platform: "linux",
+    env: { ...process.env, OATS_DESKTOP_TOKEN: "ambient-token-".repeat(4) }, readyMs: 20_000, exitMs: 5000, collectorMs: 20_000 });
   assert.equal(r.ok, true, r.detail);
   assert.equal(given.length, 1, "the backend is started once, through the spec");
   const [o] = given;
@@ -82,6 +87,12 @@ test("success: the backend answers, exits when its stdin closes, and the collect
   assert.deepEqual(o.dirs, [], "no deployment");
   for (const [name, value] of Object.entries(NO_CLI_ENV)) assert.equal(o.env[name], value, `${name}: no CLI discoverable`);
   assert.equal(o.env.HOME, o.home, "a temporary home");
+  assert.equal(o.env.OATS_DESKTOP_TOKEN, undefined, "the ambient environment carries no token");
+  assert.match(o.controlToken, /^[a-f0-9]{64}$/, "the backend has its own private token");
+  assert.equal(collectorEnvs.length, 1);
+  assert.equal(collectorEnvs[0].OATS_DESKTOP_TOKEN, undefined, "the collector receives no token");
+  assert.equal(JSON.stringify(r).includes(o.controlToken), false, "probe results never contain the token");
+  assert.match(r.lines[4], /without it answered 403/);
   assert.equal(existsSync(o.home), false, "the temporary home is removed");
   assert.match(r.lines[0], /^backend: .*oats-web\.mjs started through serverSpawnSpec .* answered GET \/api\/cli \(HTTP \d{3}\)$/);
   assert.match(r.lines[1], /^lifeline \(#698\): closing the backend's stdin ended it \(exit 0\) and closed port \d+$/);
@@ -89,6 +100,40 @@ test("success: the backend answers, exits when its stdin closes, and the collect
   assert.match(r.lines[3], /^not exercised by this phase: the GUI \(phase 5\), nor the AppImage's launcher and runtime \(APPDIR, its PATH and library-path entries\)/,
     "what the phase does not prove is said");
   assertReaped(r, reaper, ["backend", "collector"]);
+});
+
+test("output capture detects a split token before trimming and suppresses its diagnostics", () => {
+  const token = "a1".repeat(32), captured = createTokenOutputCapture(token);
+  captured.append("ordinary startup\n");
+  assert.equal(captured.text(), "ordinary startup");
+  assert.equal(captured.leaked, false);
+  captured.append(token.slice(0, 30));
+  captured.append(token.slice(30) + "x".repeat(5000));
+  assert.equal(captured.leaked, true);
+  assert.equal(captured.text(), "(output suppressed: control token present)");
+  assert.equal(captured.text().includes(token), false);
+});
+
+test("a backend that prints its token fails without exposing it in diagnostics", async (t) => {
+  const reaper = reaperFor(t);
+  const at = fixtures(t, { "prints-token.mjs": `process.stderr.write(process.env.OATS_DESKTOP_TOKEN); process.exit(1);` });
+  let token;
+  const spec = o => { token = o.controlToken; return serverSpawnSpec(o); };
+  const r = await runBackendProbe(reaper, EXE, { bin: at("prints-token.mjs"), collector: COLLECTOR, spec, readyMs: 20_000 });
+  assert.equal(r.ok, false);
+  assert.match(r.detail, /output suppressed: control token present/);
+  assert.equal(r.detail.includes(token), false);
+  assertReaped(r, reaper, ["backend"]);
+});
+
+test("a backend that accepts a request without a token fails the smoke", async (t) => {
+  const reaper = reaperFor(t);
+  const source = EXITS_3.replace('res.statusCode = req.headers["x-oats-desktop-token"] ? 200 : 403;', 'res.statusCode = 200;');
+  const at = fixtures(t, { "unguarded.mjs": source });
+  const r = await runBackendProbe(reaper, EXE, { bin: at("unguarded.mjs"), collector: COLLECTOR, readyMs: 20_000 });
+  assert.equal(r.ok, false);
+  assert.match(r.detail, /must refuse GET \/api\/cli without the token \(HTTP 200\)/);
+  assertReaped(r, reaper, ["backend"]);
 });
 
 test("a bin that never listens: a bounded failure with the output tail, and the backend reaped", async (t) => {
@@ -139,7 +184,7 @@ test("a server whose port stays open after it exits (a child holds the listener)
   const at = fixtures(t, { "leaks.mjs": `
 import { spawn } from "node:child_process";
 const port = process.argv[process.argv.indexOf("--port") + 1];
-const listener = spawn(process.execPath, ["-e", \`require("node:http").createServer((q, s) => s.end("{}")).listen(\${port}, "127.0.0.1")\`], { stdio: "ignore" });
+const listener = spawn(process.execPath, ["-e", \`require("node:http").createServer((q, s) => { s.statusCode = q.headers["x-oats-desktop-token"] ? 200 : 403; s.end("{}"); }).listen(\${port}, "127.0.0.1")\`], { stdio: "ignore" });
 process.stdout.write("listener pid " + listener.pid + "\\n");
 process.stdin.on("data", () => {});
 process.stdin.on("end", () => process.exit(0));

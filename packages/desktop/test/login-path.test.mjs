@@ -1,3 +1,4 @@
+import { TEST_CONTROL_TOKEN, controlFetch as fetch } from './helpers/control-auth.mjs';
 // The login shell's PATH for a Desktop opened from Finder (awebai/oats#468):
 // the pure parse/merge helpers, resolveLoginPath against real fake shells,
 // and the original failure end to end: a `#!/usr/bin/env node` CLI whose node
@@ -138,7 +139,7 @@ async function startServer(t, { dir, path, pathSource, pathError, oatsBin }) {
   const proc = spawn(process.execPath, [SERVER, "start", "--port", String(port), "--dir", deployment, "--oats-bin", oatsBin,
     "--path-source", pathSource, ...(pathError ? ["--path-error", pathError] : [])], {
     detached: true, stdio: ["ignore", "ignore", "pipe"],
-    env: { ...process.env, PATH: path, SHELL: "/bin/false", FAKE_DEPLOYMENT: deployment, TMUX_TMPDIR: tmuxTmpdir,
+    env: { ...process.env, OATS_DESKTOP_TOKEN: TEST_CONTROL_TOKEN, PATH: path, SHELL: "/bin/false", FAKE_DEPLOYMENT: deployment, TMUX_TMPDIR: tmuxTmpdir,
       OATS_DESKTOP_OATS_BIN: undefined, OATS_INSTANCE_HOME: undefined, OATS_INSTANCE: undefined, OATS_DEPLOYMENT: undefined },
   });
   let stderr = ""; proc.stderr.on("data", (d) => { stderr += d; });

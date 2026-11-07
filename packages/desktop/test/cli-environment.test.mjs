@@ -157,9 +157,9 @@ function requests(source) {
 
 // The collector's entry, own-environment.mjs and its leaf are in the shared home (packages/client,
 // ../client/ from here); the backend's entry is here and imports own-environment.mjs from there.
-test("scan 1: the first statement of each Node-mode entry module is the import of own-environment.mjs", () => {
+test("scan 1: the backend takes its token before cleaning; the collector cleans first", () => {
   // Reads: server/oats-web.mjs and ../client/liveness-main.mjs, from their first statement.
-  assert.ok(fromFirstStatement(read("server/oats-web.mjs")).startsWith('import { launchEnvironment } from "../../client/own-environment.mjs";\n'), "server/oats-web.mjs");
+  assert.ok(fromFirstStatement(read("server/oats-web.mjs")).startsWith('import { controlToken } from "../server-control-token.mjs";\nimport { launchEnvironment } from "../../client/own-environment.mjs";\n'), "server/oats-web.mjs");
   assert.ok(fromFirstStatement(read("../client/liveness-main.mjs")).startsWith('import "./own-environment.mjs";\n'), "../client/liveness-main.mjs");
 });
 
@@ -168,9 +168,9 @@ test("scan 2: own-environment.mjs imports only ./cli-environment.mjs", () => {
   assert.deepEqual(requests(read("../client/own-environment.mjs")), { specifiers: ["./cli-environment.mjs"], dynamic: false });
 });
 
-test("scan 3: cli-environment.mjs imports nothing", () => {
-  // Reads: the same, of ../client/cli-environment.mjs.
-  assert.deepEqual(requests(read("../client/cli-environment.mjs")), { specifiers: [], dynamic: false });
+test("scan 3: cli-environment.mjs imports only the control scrub leaf, which imports nothing", () => {
+  assert.deepEqual(requests(read("../client/cli-environment.mjs")), { specifiers: ["./control-environment.mjs"], dynamic: false });
+  assert.deepEqual(requests(read("../client/control-environment.mjs")), { specifiers: [], dynamic: false });
 });
 
 test("scan 4: the launch environment goes to the collector and to nothing else", () => {
@@ -190,7 +190,7 @@ test("scan 4: the launch environment goes to the collector and to nothing else",
   const backend = read("server/oats-web.mjs");
   assert.equal(backend.match(/\blaunchEnvironment\b/g).length, 2, "in the backend: its import and one use");
   // assert.ok, not assert.match: a failure must not print the whole server source.
-  assert.ok(/execFile\(process\.execPath, \[LIVENESS\], \{[^{}]*\benv: launchEnvironment\b[^{}]*\}/.test(backend), "the one use is the collector's env");
+  assert.ok(/execFile\(process\.execPath, \[LIVENESS\], \{[^{}]*\benv: withoutControlToken\(launchEnvironment\)[^{}]*\}/.test(backend), "the one use is the collector's env");
   assert.ok(/^const LIVENESS = join\(HERE, "\.\.", "\.\.", "client", "liveness-main\.mjs"\);$/m.test(backend), "the collector is the entry module");
 });
 

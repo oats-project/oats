@@ -1,3 +1,4 @@
+import { TEST_CONTROL_TOKEN, controlFetch as fetch } from '../packages/desktop/test/helpers/control-auth.mjs';
 // #1630 (option C): the warm reader dies with the bundled server that started it, however the server ends.
 // The server holds the only write end of the reader's stdin (packages/client/warm-reader.mjs) and the reader
 // exits on its EOF, so a SIGKILLed server (no cleanup code runs) ends it, and so does a SIGKILLed app: the
@@ -88,7 +89,7 @@ function hermetic(dir) {
 
 function spec(dir, deployment, oatsBin, port, env) {
   return serverSpawnSpec({ execPath: process.execPath, bin: BIN, dirs: [deployment], port, oatsBin,
-    pathSource: "inherited", pathError: null, remoteIdentityFile: join(dir, "remote-identity.json"), home: dir, env });
+    pathSource: "inherited", pathError: null, remoteIdentityFile: join(dir, "remote-identity.json"), home: dir, controlToken: TEST_CONTROL_TOKEN, env });
 }
 
 /** A deployment, its stub CLI, and the reaping of every pid this test learns. */
@@ -143,7 +144,7 @@ import { createRequire } from "node:module";
 const [specUrl, bin, dir, deployment, oatsBin, port, desktop] = process.argv.slice(2);
 const { serverSpawnSpec } = await import(specUrl);
 const spec = serverSpawnSpec({ execPath: process.execPath, bin, dirs: [deployment], port: Number(port), oatsBin,
-  pathSource: "inherited", pathError: null, remoteIdentityFile: dir + "/remote-identity.json", home: dir, env: process.env });
+  pathSource: "inherited", pathError: null, remoteIdentityFile: dir + "/remote-identity.json", home: dir, controlToken: process.env.OATS_DESKTOP_TOKEN, env: process.env });
 const server = spawn(spec.command, spec.args, spec.options);
 server.stdin.on("error", () => {});
 server.stdout.resume(); server.stderr.resume();
@@ -163,7 +164,7 @@ test("…and when the app that started the server is SIGKILLed, with long-lived 
   const script = join(dir, "parent.mjs");
   writeFileSync(script, PARENT);
   const parent = spawn(process.execPath, [script, pathToFileURL(join(DESKTOP, "server-host.mjs")).href, BIN, dir, deployment, oatsBin, String(port), DESKTOP],
-    { stdio: ["ignore", "pipe", "inherit"], env: { ...process.env, ...hermetic(dir) } });
+    { stdio: ["ignore", "pipe", "inherit"], env: { ...process.env, OATS_DESKTOP_TOKEN: TEST_CONTROL_TOKEN, ...hermetic(dir) } });
   pids.add(parent.pid);
   let line = "";
   for await (const chunk of parent.stdout) { line += chunk; if (line.includes("\n")) break; }

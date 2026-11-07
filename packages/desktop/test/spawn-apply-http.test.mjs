@@ -1,3 +1,4 @@
+import { controlHeaders } from './helpers/control-auth.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -16,7 +17,7 @@ const prepared = () => ({ spawnApplyViewApi: 1, status: 'prepared', target, spaw
 const draft = () => ({ action: 'prepare', selector, choices: {}, task: 'PRIVATE task' });
 function http({ invoke, timer, awaitSpawned, ctxs = ['northwind'] } = {}) {
   const source = readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8');
-  const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\nserver.on("error",');
+  const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\n// No upgrade transport');
   const c = applyContext(), reads = [], calls = [], serverSpawns = [], order = []; let nonce = 0;
   const broker = createSpawnApplyBoundary({ mint: () => (++nonce).toString(16).padStart(64, '0'),
     read: request => { reads.push(request); return { status: 'available', data: applyPreview(target) }; },
@@ -32,7 +33,7 @@ function http({ invoke, timer, awaitSpawned, ctxs = ['northwind'] } = {}) {
     agentsData: () => ({ agents: c.agents }), snapshot: { byWs: new Map([['northwind', { instances: c.instances }]]) } };
   const handler = new Function(...Object.keys(deps), `${source.slice(start, end)}\nreturn server;`)(...Object.values(deps));
   return { c, reads, calls, serverSpawns, order, async request({ url = '/api/spawn?ws=northwind', method = 'POST', body = draft(), headers = { host: 'localhost:4820', origin: 'http://localhost:4820' } } = {}) {
-    const req = new EventEmitter(); Object.assign(req, { url, method, headers }); let result;
+    const req = new EventEmitter(); Object.assign(req, { url, method, headers: controlHeaders(headers) }); let result;
     const res = { writeHead(status, headers) { result = { status, headers }; }, end(text) { result.body = JSON.parse(text); } };
     const done = handler(req, res); req.emit('data', Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))); req.emit('end'); await done; return result;
   } };

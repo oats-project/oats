@@ -12,6 +12,8 @@
  * takes terms: a route that forgot either fails here, not only where the real function runs.
  * Tests that need real views use test/helpers/workspace-views-fixture.mjs instead. */
 import assert from 'node:assert/strict';
+import { checkControlRequest, controlRequestHeaders } from '../../control-request.mjs';
+import { TEST_CONTROL_TOKEN } from './control-auth.mjs';
 import { DESKTOP_TERMS } from '../../renderer/desktop-terms.mjs';
 
 export function deploymentDoubles(deployments) {
@@ -21,6 +23,7 @@ export function deploymentDoubles(deployments) {
   const first = id => (id ? exact(id) : deployments()[0]) ?? null;
   const namesInstance = request => request?.selector?.home !== undefined || request?.spec?.home !== undefined;
   return {
+    checkControlRequest, controlRequestHeaders, controlToken: TEST_CONTROL_TOKEN,
     held: () => HELD,
     DESKTOP_TERMS,
     deployments: held => { passed(held, passed); return deployments(); },

@@ -160,13 +160,13 @@ test("main starts the backend with its whole environment and the Node-mode flag:
   assert.ok(start >= 0 && end > start, "main.mjs defines spawnChild");
   const block = main.slice(start, end);
   assert.ok(block.includes("serverSpawnSpec({ execPath: process.execPath, bin, "), "the backend is started by the executable's absolute path");
-  assert.ok(block.includes("env: process.env });"), "with main's whole environment");
+  assert.ok(block.includes("env: process.env, controlToken });"), "with main's whole environment");
   assert.ok(block.includes("spawn(spec.command, spec.args, spec.options)"), "exactly as the spec says");
   const env = desktopEnvironment();
-  const spec = serverSpawnSpec({ execPath: "/opt/OATS/oats-desktop", bin: "/opt/OATS/server/oats-web.mjs", dirs: [], port: 4820,
+  const spec = serverSpawnSpec({ controlToken: "main-environment-test-token-123456789012345", execPath: "/opt/OATS/oats-desktop", bin: "/opt/OATS/server/oats-web.mjs", dirs: [], port: 4820,
     pathSource: "login-shell", remoteIdentityFile: "/fixture/remote.json", home: "/home/fixture", env });
   assert.equal(spec.command, "/opt/OATS/oats-desktop");
-  assert.deepEqual(spec.options.env, { ...env, ELECTRON_RUN_AS_NODE: "1" }, "whole, plus the Node-mode flag");
+  assert.deepEqual(spec.options.env, { ...env, ELECTRON_RUN_AS_NODE: "1", OATS_DESKTOP_TOKEN: "main-environment-test-token-123456789012345" }, "whole, plus Node mode and the server-only token");
 });
 
 test("main's own tmux calls (the orphan-viewer sweep) pass the cleaned environment, computed at the call", () => {

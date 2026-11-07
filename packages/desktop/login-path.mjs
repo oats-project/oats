@@ -9,6 +9,7 @@
 // /api/cli (pathSource, pathError). The shell is spawned with the `env` it is
 // given, which main cleans first (cli-environment.mjs); the shell's entries are
 // merged in front of that env's PATH.
+import { withoutControlToken } from "../client/control-environment.mjs";
 import { spawn as nodeSpawn } from "node:child_process";
 import { posix } from "node:path";
 
@@ -96,7 +97,7 @@ export function resolveLoginPath({ env = process.env, platform = process.platfor
       if (final) finish(keep(parsed.reason));
     };
     try {
-      child = spawn(shell, loginShellArgs(), { env, stdio: ["ignore", "pipe", "ignore"], detached: true });
+      child = spawn(shell, loginShellArgs(), { env: withoutControlToken(env), stdio: ["ignore", "pipe", "ignore"], detached: true });
     } catch (e) {
       finish(keep(`the login shell (${shell}) could not start: ${e.message}`));
       return;

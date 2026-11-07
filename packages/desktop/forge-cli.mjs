@@ -1,5 +1,6 @@
 /** gh's native store is the custody. Never read it, inherit credential overrides,
  * request a token, or let a child-process error escape as renderer diagnostics. */
+import { withoutControlToken } from "../client/control-environment.mjs";
 import { spawn } from 'node:child_process';
 import { accessSync, constants, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -59,7 +60,7 @@ export function createGhRunner({ launch = spawn, env = forgeEnvironment(), cwd =
         try { child.kill('SIGKILL'); } catch { /* owned child already exited */ }
       };
       try {
-        child = launch(bin, argv, { shell: false, cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+        child = launch(bin, argv, { shell: false, cwd, env: withoutControlToken(env), stdio: ['ignore', 'pipe', 'pipe'] });
         timer = setTimeout(() => stop('E_GH_TIMEOUT'), Math.min(timeout, 10_000));
         child.stdout.on('data', value => {
           if (finished || stopped) return; const chunk = Buffer.from(value); outBytes += chunk.length;

@@ -1112,9 +1112,25 @@ unknown or unreported harness shows "?". Sources and licences are in
 
 ## Security posture
 
-- The bundled backend binds **127.0.0.1 only** and guards against DNS
-  rebinding (loopback Host on every request, loopback Origin on POSTs).
-  Do not expose it: it can type into your agent terminals.
+- The bundled backend binds **127.0.0.1 only**. Every request requires a
+  loopback Host. Every route except `GET /api/version` also requires this
+  launch's token in `x-oats-desktop-token`; a missing or incorrect token gets
+  403 before routing or reading a body. A supplied browser Origin must equal
+  `http://<the request's Host>` exactly, including scheme and port.
+  `/api/version` returns only `{capability, version}`: no paths, deployment
+  data or workspace content. Do not expose the backend: it can type into your
+  agent terminals.
+- Main mints a token for each launch, or uses `OATS_DESKTOP_TOKEN` when the
+  operator sets it. A configured token must contain at least 32 characters;
+  empty and shorter values are refused. Main adds the header to its own
+  requests and the API proxy in main. The renderer and preload receive no
+  token. Main, the server and the dev harness keep it in memory and remove it
+  from their inherited environments; CLI, tmux, SSH and terminal viewer
+  children receive none.
+- A server is reused only when its identity, workspaces and token match.
+  An earlier launch's server is left running and Desktop starts its own on
+  the next free port, unless both launches were explicitly configured with
+  the same `OATS_DESKTOP_TOKEN`.
 - The app never imports framework code from a checkout and accepts no
   framework-root environment override; deployments are read with an
   app-owned read-only reader. Lifecycle actions run the installed `oats` CLI
@@ -1129,6 +1145,23 @@ unknown or unreported harness shows "?". Sources and licences are in
 - Workspace content is treated as untrusted: symlinked directories never
   widen the file API, and capability packages cannot read outside their
   own tree.
+
+### Starting a backend by hand
+
+For development, or a backend reached through your own SSH forward, set the
+same `OATS_DESKTOP_TOKEN` for the server, dev harness and Desktop. Keep the
+forward bound to loopback. For example, from the repository root:
+
+```sh
+export OATS_DESKTOP_TOKEN="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
+node packages/desktop/server/oats-web.mjs start --port 4821 --dir <workspace>
+```
+
+In another terminal, export that same value before starting the harness or
+Desktop (`OATS_DESKTOP_PORT=4821 npm start` from `packages/desktop`). The server
+and harness refuse to start without a token; they never generate or print one.
+The harness checks its own exact Origin and adds the backend's token in its
+server-side proxy. See the [renderer development recipe](../packages/desktop/renderer/README.md#developing-without-the-shell).
 
 ## Troubleshooting
 

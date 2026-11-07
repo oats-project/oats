@@ -1,3 +1,4 @@
+import { withoutControlToken } from "./control-environment.mjs";
 import { execFileSync } from "node:child_process";
 import { basename } from "node:path";
 
@@ -35,7 +36,7 @@ export function createTmuxStatusReader({ exec = execFileSync } = {}) {
   const sockets = new Map();
   let processes;
   const run = (bin, args) => exec(bin, args, {
-    encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 4000, maxBuffer: 4 * 1024 * 1024,
+    env: withoutControlToken(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 4000, maxBuffer: 4 * 1024 * 1024,
   });
   function readSocket(socket) {
     if (!sockets.has(socket)) {

@@ -23,6 +23,7 @@
 //   * A provider operation names its instance by --home: the home of
 //     exactly one row the server reports (packages/desktop/server/capabilities.mjs), never
 //     a caller path.
+import { withoutControlToken } from "./control-environment.mjs";
 import { execFile, spawn } from "node:child_process";
 import { mkdtempSync, openSync, writeSync, closeSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -181,7 +182,7 @@ function runJson(bin, argv, { cwd, exec, timeout = ENVELOPE_TIMEOUT_MS, parse = 
   const run = exec ?? (detached ? execFileInSession : execFile);
   return new Promise((resolveP, rejectP) => {
     try {
-      run(bin, argv, { cwd, encoding: "utf8", timeout, maxBuffer, shell: false, ...(detached ? { detached: true } : {}) },
+      run(bin, argv, { cwd, env: withoutControlToken(), encoding: "utf8", timeout, maxBuffer, shell: false, ...(detached ? { detached: true } : {}) },
         (err, stdout) => {
           // New reads require a clean exit for success. Keep the historical
           // envelope-wins policy for existing mutations unless opted in.
@@ -546,7 +547,7 @@ export function launchChoiceArgv({ launchConfig, harness, model, yolo, harnessFl
  * destroys them first). stdin is a pipe, as `execFile`'s, that nobody writes. */
 export function execFileInSession(bin, argv, options = {}, callback = () => {}) {
   const { cwd, env, encoding = "utf8", timeout = 0, maxBuffer = 1024 * 1024, killSignal = "SIGTERM" } = options;
-  const child = spawn(bin, argv, { cwd, env, shell: false, detached: true, windowsHide: true });
+  const child = spawn(bin, argv, { cwd, env: withoutControlToken(env), shell: false, detached: true, windowsHide: true });
   const chunks = { stdout: [], stderr: [] }, sizes = { stdout: 0, stderr: 0 };
   let ex = null, killed = false, timer = null, exited = false;
   const text = name => { const all = Buffer.concat(chunks[name]); return encoding && encoding !== "buffer" ? all.toString(encoding) : all; };

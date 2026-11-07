@@ -3,15 +3,14 @@
 // and then drops what the Desktop and its packaging added: everything it starts inherits the
 // user's environment, with no change at the places that start a program.
 //
-// This must happen before anything else is loaded, because modules take their environment when
-// they are loaded. So it is not a statement in a body: it is the FIRST import of the program's
-// entry module (packages/desktop/server/oats-web.mjs, liveness-main.mjs). A module's imports are evaluated
-// in source order, each one completely before the next. This module and the leaf it imports must
-// have no other imports, so that nothing can load ahead of the step. A library must never import
-// this: it changes the environment of whoever does.
+// Clean before loading modules that snapshot the environment: the backend first captures and removes
+// its control token, then imports this module; the liveness collector imports this first. Imports
+// are evaluated in source order, each completely before the next. The cleaner imports only
+// cli-environment.mjs and its control-environment leaf, so no effectful code can run ahead of it.
+// A library must never import this: it changes the environment of whoever does.
 import { cliEnvironment } from "./cli-environment.mjs";
 
-/** The environment this process was started with. Its one use: the backend starts the collector with it. */
+/** The launch environment after token capture. Its one use: the backend starts the collector with it. */
 export const launchEnvironment = Object.freeze({ ...process.env });
 
 // In place: process.env is never reassigned.

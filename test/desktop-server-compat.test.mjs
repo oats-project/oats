@@ -14,6 +14,7 @@ import { matchWorkspaceDirs } from "../packages/desktop/workspace-registry.mjs";
 import { buildViews } from "../packages/client/workspace-views.mjs";
 import { spawn } from "node:child_process";
 
+const CONTROL_TOKEN = "desktop-compat-test-token-1234567890123456";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const LOCAL = (() => {
   const m = JSON.parse(readFileSync(join(ROOT, "packages", "desktop", "package.json"), "utf8"));
@@ -44,7 +45,8 @@ test("network failure, wrong capability, and version mismatch are incompatible",
 async function selectAgainst(url, matchWorkspace = (ws) => ws[0]?.id || null) {
   const panelWorkspaces = async () => {
     try {
-      const r = await fetch(`${url}/api/panel`);
+      const r = await fetch(`${url}/api/panel`, { headers: { "x-oats-desktop-token": CONTROL_TOKEN } });
+      if (r.status === 403) return { forbidden: true };
       return r.ok ? (await r.json()).workspaces || [] : null;
     } catch { return null; }
   };
@@ -283,7 +285,7 @@ test("REAL bundled server serves /api/version matching its package identity → 
   // Hermetic: no CLI candidate is discoverable, so no installed kernel or
   // login shell runs; identity and workspace advertisement need neither.
   const child = spawn(process.execPath, [bin, "start", "--port", String(free), "--dir", ROOT], { stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, OATS_DESKTOP_OATS_BIN: "", PATH: "/nonexistent", SHELL: "/bin/false" } });
+    env: { ...process.env, OATS_DESKTOP_TOKEN: CONTROL_TOKEN, OATS_DESKTOP_OATS_BIN: "", PATH: "/nonexistent", SHELL: "/bin/false" } });
   const url = `http://127.0.0.1:${free}`;
   try {
     // wait for the server to answer (max ~10s) — readiness via /api/panel,
@@ -291,7 +293,7 @@ test("REAL bundled server serves /api/version matching its package identity → 
     // removing it would skip this test instead of failing it.
     let up = false;
     for (let i = 0; i < 40 && !up; i++) {
-      try { up = (await fetch(`${url}/api/panel`, { signal: AbortSignal.timeout(500) })).ok; }
+      try { up = (await fetch(`${url}/api/panel`, { headers: { "x-oats-desktop-token": CONTROL_TOKEN }, signal: AbortSignal.timeout(500) })).ok; }
       catch { await new Promise((ok) => setTimeout(ok, 250)); }
     }
     if (!up) return t.skip("server did not come up (environment)");
@@ -303,4 +305,37 @@ test("REAL bundled server serves /api/version matching its package identity → 
   } finally {
     child.kill();
   }
+});
+
+
+test("another launch's token leaves its server running and selects the next port", async () => {
+  const { createControlFetch } = await import('../packages/desktop/control-fetch.mjs');
+  const { checkControlRequest, controlRequestHeaders } = await import('../packages/desktop/control-request.mjs');
+  const token = 'another-launch-token-12345678901234567890';
+  let refused = 0;
+  const server = createServer((req, res) => {
+    const guard = checkControlRequest({ method: req.method, path: req.url, headers: controlRequestHeaders(req) }, token);
+    res.writeHead(guard.ok ? 200 : 403, { 'content-type': 'application/json' });
+    if (!guard.ok) { refused++; return res.end(JSON.stringify({ error: 'forbidden' })); }
+    res.end(JSON.stringify(req.url === '/api/version' ? LOCAL : { workspaces: [] }));
+  });
+  await new Promise(ok => server.listen(0, '127.0.0.1', ok));
+  try {
+    const port = server.address().port, base = `http://127.0.0.1:${port}`;
+    const fetch = createControlFetch(CONTROL_TOKEN);
+    const spawns = [], logs = [];
+    const result = await ensureServerOnPort({
+      port, local: LOCAL,
+      probeVersion: async () => { const r = await fetch(`${base}/api/version`); return { ok: r.ok, body: await r.json() }; },
+      panelWorkspaces: async () => { const r = await fetch(`${base}/api/panel`); return r.status === 403 ? { forbidden: true } : (await r.json()).workspaces; },
+      matchWorkspace: () => assert.fail('a refused read has no workspace facts'),
+      freePort: async from => { assert.equal(from, port + 1); return from; },
+      spawnServer: selected => spawns.push(selected), log: line => logs.push(line),
+    });
+    assert.equal(result.port, port + 1);
+    assert.deepEqual(spawns, [port + 1]);
+    assert.match(logs[0], /another token/);
+    assert.equal(refused, 1);
+    assert.equal((await globalThis.fetch(`${base}/api/version`)).status, 200);
+  } finally { server.closeAllConnections(); await new Promise(ok => server.close(ok)); }
 });

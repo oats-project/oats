@@ -1,3 +1,4 @@
+import { controlFetch as fetch } from './helpers/control-auth.mjs';
 // The capability-show boundary (server/capability-show.mjs): the renderer's selector must match one
 // held catalog row, the verb runs through the fixed-argv adapter with that row's coordinates,
 // refusals pass verbatim, undecodable answers are protocol failures, and successful answers are

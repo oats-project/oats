@@ -23,6 +23,13 @@ Flags/env:
   roster, opening its terminal when running while keyboard focus stays on the row
   ([docs/desktop.md](../../docs/desktop.md#opening-on-an-instance)).
 - `OATS_DESKTOP_PORT` — backend server port (default 4820).
+- `OATS_DESKTOP_TOKEN` — optional for Desktop: uses this value instead of
+  minting a token for this launch. Required when starting the backend or dev
+  harness by hand; export the same value for all three processes. It must
+  contain at least 32 characters. Main supplies `x-oats-desktop-token` in its
+  requests and API proxy; the renderer and preload receive no token. A server
+  is reused only when it accepts this token and matches the app and workspaces.
+  See [starting a backend by hand](../../docs/desktop.md#starting-a-backend-by-hand).
 
 ## Brand artwork
 
@@ -429,16 +436,21 @@ and Quick Open and the TUI's palette and switcher.
 A program Desktop starts gets the user's environment: nothing Desktop or its
 packaging added reaches it. The backend and its liveness collector, which are
 the packaged executable running as Node, are started with their parent's
-environment and clean their own before anything else. The main process keeps
-its environment and gives each child the cleaned one when it starts it.
+environment and clean their own before loading their workers. Main removes
+the control token, keeps its packaging environment and gives each child the
+cleaned one when it starts it.
 
 It matters because a tmux server takes its environment from the program that
 creates it (the oats CLI on a spawn or a start, or `tmux` itself), and every
 pane on that server then has it.
 
 The rule is one function, `cliEnvironment(source)` in
-`packages/client/cli-environment.mjs`, which imports nothing:
+`packages/client/cli-environment.mjs`, using the leaf
+`withoutControlToken(source)` from `packages/client/control-environment.mjs`:
 
+- `OATS_DESKTOP_TOKEN` is removed. Only the backend child receives it,
+  explicitly through `serverSpawnSpec`; main and the backend hold their own
+  tokens in memory, and no other child receives it.
 - `ELECTRON_RUN_AS_NODE` (main sets it for the backend) and `CHROME_DESKTOP`
   (Electron sets it on Linux) are removed.
 - `MallocNanoZone` is removed when it is exactly `0`: the launch environment
@@ -451,24 +463,26 @@ The rule is one function, `cliEnvironment(source)` in
 
 Where it is applied:
 
-- **A process that runs as Node cleans itself first.** The first import of
-  `server/oats-web.mjs` and of `packages/client/liveness-main.mjs` is
-  `packages/client/own-environment.mjs`, which changes `process.env` in place. It has
-  to be an import, and the first one: modules take their environment when they
-  are loaded (`server/forge.mjs`, `packages/client/tmux-status.mjs`), and a module's
-  imports are evaluated in order, each completely before the next. So
-  `own-environment.mjs` and `cli-environment.mjs` must keep no other imports
-  and no top-level `await`, and nothing may import an entry module or be
-  preloaded ahead of one. After that no place in `server/` that starts a
-  program needs the function, and none has it.
+- **A process that runs as Node cleans itself first.** The backend first
+  imports `server-control-token.mjs` to capture and remove its token, then
+  `packages/client/own-environment.mjs` to clean `process.env` in place.
+  The collector's first import is `own-environment.mjs`. These steps must be
+  imports before worker imports: modules take their environment when loaded
+  (`server/forge.mjs`, `packages/client/tmux-status.mjs`), and imports are
+  evaluated in order, each completely before the next. This import chain
+  must stay limited to environment capture and cleaning,
+  with no top-level `await`, and nothing may import an entry module or be
+  preloaded ahead of one. Spawn and exec sites also explicitly remove the
+  control token through `withoutControlToken`.
 - **Such a process is started with its parent's environment**, so the
   executable starts as it always did (on an AppImage that includes the library
   path into the mount). Main starts the backend with
-  `{ ...process.env, ELECTRON_RUN_AS_NODE: "1" }`; the backend starts the
-  collector with `launchEnvironment`, the copy `own-environment.mjs` took
-  before cleaning. No other child receives either.
-- **Main cleans nothing of its own** (Electron and the AppImage's machinery
-  read it). Every program it starts gets `cliEnvironment(<the environment at
+  `{ ...process.env, ELECTRON_RUN_AS_NODE: "1", OATS_DESKTOP_TOKEN: token }`;
+  the backend starts the collector with the captured `launchEnvironment`
+  after removing the token. No other child receives either launch environment.
+- **Main removes the control token from its own environment**, while retaining
+  the packaging variables Electron and the AppImage's machinery read. Every
+  other program it starts gets `cliEnvironment(<the environment at
   that moment>)`, computed at the call: the login shell, `oats` workspace
   verbs, the terminal viewers' `tmux` calls and PTY, the remote terminal and
   its `oats session` calls, the orphan-viewer sweep. `gh`'s allow-list
@@ -478,8 +492,9 @@ Where it is applied:
   not assumed clean (a profile can print anything), and main's own `PATH` is
   whatever the merge returns; children are filtered when they start.
 
-A new child of the main process needs `cliEnvironment`; a new child of the
-backend or the collector needs nothing.
+A new child of the main process needs `cliEnvironment`; every spawn or exec
+environment must also remove the control token. Only `serverSpawnSpec` adds
+the in-memory token to the backend's environment.
 
 Limits, known and not fixed:
 

@@ -39,10 +39,12 @@
  * `observedAt` (the kernel's observation time when reported, else the read's completion) and
  * `refreshing` (a read for that data is in flight).
  */
-// FIRST, above every other import: this process drops what the Desktop and its packaging added
-// to its environment (own-environment.mjs), so each module below, and every program this
-// process starts, sees the user's. Nothing here passes the cleaning function to a child.
+// Take the launch token before snapshots, then drop Desktop packaging variables before
+// any other module loads. Every program started below receives the user's environment.
+import { controlToken } from "../server-control-token.mjs";
 import { launchEnvironment } from "../../client/own-environment.mjs";
+import { checkControlRequest, controlRequestHeaders } from "../control-request.mjs";
+import { withoutControlToken } from "../../client/control-environment.mjs";
 import { createServer } from "node:http";
 import { execFile, spawn } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync, realpathSync, accessSync, constants as fsConstants } from "node:fs";
@@ -196,7 +198,7 @@ const MODELS_TTL_MS = 60_000;
 const modelsCache = new Map(); // harness → { at, models }
 function execCapture(cmd, cmdArgs) {
   return new Promise((ok) => {
-    execFile(cmd, cmdArgs, { encoding: "utf8", timeout: 10_000, shell: false, maxBuffer: 4 * 1024 * 1024 },
+    execFile(cmd, cmdArgs, { env: withoutControlToken(process.env), encoding: "utf8", timeout: 10_000, shell: false, maxBuffer: 4 * 1024 * 1024 },
       (err, stdout) => ok(err ? null : String(stdout)));
   });
 }
@@ -425,19 +427,19 @@ const cliIo = {
   // 53a20c7) and evaluated lazily/at-most-once by the locator's source
   // ordering (they only run when every earlier candidate failed).
   npmGlobalBin: () => new Promise((ok) => {
-    execFile("npm", ["prefix", "-g"], { encoding: "utf8", timeout: 5000, shell: false },
+    execFile("npm", ["prefix", "-g"], { env: withoutControlToken(process.env), encoding: "utf8", timeout: 5000, shell: false },
       (err, stdout) => ok(err ? null : (String(stdout).trim() ? join(String(stdout).trim(), "bin") : null)));
   }),
   loginShellWhich: () => new Promise((ok) => {
     const sh = process.env.SHELL || "/bin/sh";
-    execFile(sh, ["-l", "-c", "command -v oats"], { encoding: "utf8", timeout: 5000, shell: false },
+    execFile(sh, ["-l", "-c", "command -v oats"], { env: withoutControlToken(process.env), encoding: "utf8", timeout: 5000, shell: false },
       (err, stdout) => { const out = String(stdout || "").trim(); ok(!err && out.startsWith("/") ? out : null); });
   }),
 };
 // Probe: REJECT on any execFile error — nonzero exit or timeout with
 // plausible stdout must never yield the mutation binary (review 53a20c7).
 const probeBin = (path) => new Promise((ok, bad) => {
-  execFile(path, ["version", "--json"], { encoding: "utf8", timeout: 8000, shell: false, killSignal: "SIGKILL" },
+  execFile(path, ["version", "--json"], { env: withoutControlToken(process.env), encoding: "utf8", timeout: 8000, shell: false, killSignal: "SIGKILL" },
     (err, stdout) => (err ? bad(err) : ok({ stdout })));
 });
 async function reprobeCli(chosen) {
@@ -576,7 +578,7 @@ function runLivenessCollector(input) {
     try {
       // The collector is this executable as Node too: it gets the environment this process was
       // started with (the Node-mode flag is in it) and cleans its own. No other child gets it.
-      child = execFile(process.execPath, [LIVENESS], { encoding: "utf8", timeout: 30000, maxBuffer: 16 * 1024 * 1024, env: launchEnvironment },
+      child = execFile(process.execPath, [LIVENESS], { encoding: "utf8", timeout: 30000, maxBuffer: 16 * 1024 * 1024, env: withoutControlToken(launchEnvironment) },
         (err, stdout) => done(err ? null : stdout));
       child.stdin.on("error", () => { /* reported through the exit callback */ });
       child.stdin.end(JSON.stringify(input));
@@ -1158,15 +1160,8 @@ const server = createServer(async (req, res) => {
   const host = String(req.headers.host || "").replace(/:\d+$/, "");
   const okHost = (h) => h === "127.0.0.1" || h === "localhost" || h === "[::1]" || h === "::1";
   if (!okHost(host)) return send(res, 403, { error: "forbidden origin" });
-  // CSRF guard: mutating requests must also come from a loopback origin.
-  if (req.method === "POST") {
-    let originOk = true;
-    if (req.headers.origin !== undefined) {
-      // "Origin: null" (sandboxed pages) and malformed origins must 403, not throw.
-      try { originOk = okHost(new URL(String(req.headers.origin)).hostname); } catch { originOk = false; }
-    }
-    if (!originOk) return send(res, 403, { error: "forbidden origin" });
-  }
+  const control = checkControlRequest({ method: req.method, path, headers: controlRequestHeaders(req) }, controlToken);
+  if (!control.ok) return send(res, 403, { error: "forbidden" });
   try {
     if (req.method === "GET" && path === "/api/version") {
       return send(res, 200, { capability: MANIFEST.capability, version: MANIFEST.version });
@@ -1283,7 +1278,7 @@ const server = createServer(async (req, res) => {
       } catch { return send(res, 400, readinessFailure('E_BAD_ARGS')); }
     }
     // Team model v2: the deployment's teams and a soul's teams, through the kernel verbs (the
-    // only writer of oats-local.yaml). POST, so the Origin guard above covers every action.
+    // only writer of oats-local.yaml). The control guard above covers every action.
     if ((path === '/api/workspace-teams' || path === '/api/workspace-soul-teams') && req.method === 'POST') {
       try {
         if (url.searchParams.getAll('ws').length !== 1 || !url.searchParams.get('ws') || [...url.searchParams.keys()].some(k => k !== 'ws')) throw new Error('bad query');
@@ -1302,7 +1297,7 @@ const server = createServer(async (req, res) => {
     }
     // A field of an instance's own record (instance-record.mjs): its colour (feature instance-color, #1421 §2:
     // `oats instance color`) and whether it runs in the background (feature instance-background, #1579: `oats
-    // instance background`), local or routed to the row's host. POST, so the Origin guard above covers them. A change,
+    // instance background`), local or routed to the row's host. The control guard above covers them. A change,
     // or an outcome not known, re-reads the roster at once, so every dot and section follows.
     // Each route its boundary and its "nothing ran" answer, for a request that is not even a request. Resolved here, in
     // the handler, by path: the handler is the unit tests evaluate (workspace-views-fixture.mjs HANDLER), and only the
@@ -1450,7 +1445,7 @@ const server = createServer(async (req, res) => {
       return d ? send(res, 200, d) : send(res, 404, { error: `unknown agent "${bm[1]}"` });
     }
     if (req.method === "POST" && path === "/api/models") {
-      // POST (not GET) so the CSRF Origin guard above covers this
+      // The control guard above covers this
       // command-running route — see the model-catalog SECURITY note.
       const body = await readBody(req);
       const harness = typeof body.harness === "string" && body.harness ? body.harness : "pi";
@@ -1650,6 +1645,15 @@ const server = createServer(async (req, res) => {
     if (e.code === "unsupported-remote-operation") return send(res, 409, { error: e.message, code: e.code });
     return send(res, 500, { error: String(e.message || e).slice(0, 300) });
   }
+});
+
+// No upgrade transport is supported. Refuse before a future protocol handler can accept it.
+server.on("upgrade", (req, socket) => {
+  const host = String(req.headers.host || "").replace(/:\d+$/, "");
+  const loopback = host === "127.0.0.1" || host === "localhost" || host === "[::1]" || host === "::1";
+  const control = checkControlRequest({ method: req.method, path: req.url, headers: controlRequestHeaders(req) }, controlToken);
+  // Even an authenticated upgrade has no supported route.
+  socket.end(`HTTP/1.1 ${loopback && control.ok ? '404 Not Found' : '403 Forbidden'}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
 });
 
 server.on("error", (e) => {

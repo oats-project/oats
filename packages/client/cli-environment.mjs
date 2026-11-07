@@ -2,8 +2,9 @@
 // packaging added to the Desktop's own (#602). A tmux server takes its environment from the
 // program that creates it, so whatever leaks here ends up in every agent's pane.
 //
-// This module is a leaf and must stay one: a Desktop process that runs as Node cleans its own
-// environment with it before any other module is loaded (own-environment.mjs).
+// This module imports only the control-environment leaf: a Desktop process that runs as Node
+// cleans its own environment through it before loading any other module (own-environment.mjs).
+import { withoutControlToken } from "./control-environment.mjs";
 
 /** Set by main for its Node-mode children, and by Electron at startup on Linux. */
 const DESKTOP_NAMES = ["ELECTRON_RUN_AS_NODE", "CHROME_DESKTOP"];
@@ -19,7 +20,7 @@ function mountOf(source) {
 
 /**
  * A new object; `source` is never changed.
- *  1. ELECTRON_RUN_AS_NODE and CHROME_DESKTOP are removed.
+ *  1. OATS_DESKTOP_TOKEN, ELECTRON_RUN_AS_NODE and CHROME_DESKTOP are removed.
  *  2. MallocNanoZone is removed when it is exactly "0" (the launch environment Electron's
  *     Info.plist declares on macOS; a user's own "0" cannot be told from it).
  *  3. With a mount: APPIMAGE, APPDIR, ARGV0 and OWD are removed, and every other value is read
@@ -34,7 +35,7 @@ function mountOf(source) {
  * result changes nothing.
  */
 export function cliEnvironment(source = process.env) {
-  const env = { ...source };
+  const env = withoutControlToken(source);
   for (const name of DESKTOP_NAMES) delete env[name];
   if (env.MallocNanoZone === "0") delete env.MallocNanoZone;
   const mount = mountOf(source);

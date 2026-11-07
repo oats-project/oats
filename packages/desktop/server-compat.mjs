@@ -43,7 +43,7 @@ export function serverCompatible(versionResponse, local) {
  * the production gate unprotected).
  *
  * @param {object} io
- * @param {() => Promise<Array<{id:string,name:string}>|null>} io.panelWorkspaces
+ * @param {() => Promise<Array<{id:string,name:string}>|{forbidden:true}|null>} io.panelWorkspaces
  * @param {() => Promise<{ok:boolean,status?:number,body?:any}|null>} io.probeVersion
  * @param {(workspaces: Array<{id:string}>) => string|null} io.matchWorkspace
  * @param {{capability:string,version:string}} io.local
@@ -53,13 +53,14 @@ export function serverCompatible(versionResponse, local) {
  *   incompatible) — the caller must pick another port; reason is for logs.
  */
 export async function selectServer(io) {
+  const version = await io.probeVersion();
   const existing = await io.panelWorkspaces();
+  if (existing?.forbidden) return { action: "spawn", portOccupied: true, reason: "another token" };
   if (!existing) return { action: "spawn", portOccupied: false, reason: "no server on the port" };
   // Identity first, so the log names the real cause (#698): this app's own
   // server at another version (another installed Desktop, a dev checkout, or
   // one an earlier Desktop left running) is reported as that, whatever it
   // serves. It is never stopped: HTTP cannot tell a live owner from an orphan.
-  const version = await io.probeVersion();
   const found = version?.ok ? version.body : null;
   if (found?.capability === io.local.capability && found.version !== io.local.version) {
     return { action: "spawn", portOccupied: true,

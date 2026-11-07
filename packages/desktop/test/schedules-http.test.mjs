@@ -1,3 +1,4 @@
+import { TEST_CONTROL_TOKEN, controlFetch as fetch } from './helpers/control-auth.mjs';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, realpathSync, readFileSync } from "node:fs";
@@ -25,7 +26,7 @@ console.log(JSON.stringify(a[0]==='version'?{schemaVersion:1,name:'@awebai/oats'
   const port = socket.address().port; await new Promise(resolve => socket.close(resolve));
   const proc = spawn(process.execPath, [fileURLToPath(new URL("../server/oats-web.mjs", import.meta.url)), "start", "--port", String(port), "--dir", ws], {
     detached: true, stdio: ["ignore", "ignore", "pipe"],
-    env: { ...process.env, OATS_HOME_DIR: join(temp, ".oats"), OATS_DESKTOP_OATS_BIN: fake, PATH: "/nonexistent", SHELL: "/bin/false" },
+    env: { ...process.env, OATS_DESKTOP_TOKEN: TEST_CONTROL_TOKEN, OATS_HOME_DIR: join(temp, ".oats"), OATS_DESKTOP_OATS_BIN: fake, PATH: "/nonexistent", SHELL: "/bin/false" },
   });
   let stderr = ""; proc.stderr.on("data", data => { stderr += data; });
   const base = `http://127.0.0.1:${port}`;

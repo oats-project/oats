@@ -19,7 +19,7 @@ const ok = { schemaVersion: 1, ok: true, result: { transportFixture: true } };
 function fixture({ fail = null, exec, onWrite } = {}) {
   const dirs = [], files = [], removed = [], calls = [], byFd = new Map();
   const failAt = (stage, n) => { if (fail === `${stage}:${n}`) throw Error('PRIVATE I/O failure'); };
-  const io = { env: { PATH: '/inert/bin', HOME: '/inert/home', PI_AGENTS_ROOT: '/other', OATS_DEPLOYMENT: '/D', OATS_RESOLUTION: '/R', OATS_PREVIEW_PREFLIGHT_BUDGET_MS: '1' },
+  const io = { env: { OATS_DESKTOP_TOKEN: 'fixture-control-token-not-for-apply', PATH: '/inert/bin', HOME: '/inert/home', PI_AGENTS_ROOT: '/other', OATS_DEPLOYMENT: '/D', OATS_RESOLUTION: '/R', OATS_PREVIEW_PREFLIGHT_BUDGET_MS: '1' },
     tmpdir: () => '/inert/tmp',
     mkdtempSync: prefix => { failAt('mkdir', dirs.length + 1); const dir = `${prefix}${dirs.length + 1}`; dirs.push(dir); return dir; },
     openSync: (file, flags, mode) => { failAt('open', dirs.length); const f = { file, flags, mode, index: dirs.length, fd: files.length + 10, closed: false }; files.push(f); byFd.set(f.fd, f); return f.fd; },

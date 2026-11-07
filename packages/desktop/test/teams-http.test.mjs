@@ -1,3 +1,4 @@
+import { controlHeaders } from './helpers/control-auth.mjs';
 // Team model v2 routes (0.30 D1b): /api/workspace-teams and /api/workspace-soul-teams, through the
 // SHIPPED server handler (sliced from server/oats-web.mjs), the real boundary and the real argv
 // adapters, with only the kernel process faked: it answers with the REAL K1 kernel documents
@@ -13,10 +14,10 @@ import { deploymentDoubles } from './helpers/deployment-doubles.mjs';
 
 const read = path => JSON.parse(readFileSync(new URL(`./fixtures/${path}.json`, import.meta.url), 'utf8'));
 const DEPLOYMENT = '/fixture/base/northwind-workspace';
-const HEADERS = { host: '127.0.0.1:4820', origin: 'http://localhost:4820' };
+const HEADERS = { host: '127.0.0.1:4820', origin: 'http://127.0.0.1:4820' };
 function http({ reply } = {}) {
   const source = readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8');
-  const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\nserver.on("error",');
+  const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\n// No upgrade transport');
   const calls = [], workspace = { id: 'team', name: 'team', scope: DEPLOYMENT, roots: [DEPLOYMENT] };
   const cliState = { bin: '/oats', version: '0.30.0', features: ['team-model-2'] };
   // The kernel process: records argv, answers with the stand-in document (or `reply(argv)`).
@@ -33,7 +34,7 @@ function http({ reply } = {}) {
     panelData: assert.fail, collectNow: assert.fail };
   const handler = new Function(...Object.keys(deps), `${source.slice(start, end)}\nreturn server;`)(...Object.values(deps));
   return { calls, workspace, cliState, invalidated, previewsInvalidated, async request({ url = '/api/workspace-teams?ws=team', method = 'POST', body = { action: 'list' }, headers = HEADERS } = {}) {
-    const req = new EventEmitter(); Object.assign(req, { url, method, headers }); let result;
+    const req = new EventEmitter(); Object.assign(req, { url, method, headers: controlHeaders(headers) }); let result;
     const res = { writeHead(status, h) { result = { status, headers: h }; }, end(text) { result.body = JSON.parse(text); } };
     const done = handler(req, res); req.emit('data', Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))); req.emit('end'); await done; return result;
   } };

@@ -1,3 +1,4 @@
+import { TEST_CONTROL_TOKEN, controlFetch as fetch } from '../packages/desktop/test/helpers/control-auth.mjs';
 // #698: the bundled server ends with the app that started it. Main starts the server through
 // serverSpawnSpec (server-host.mjs) with its stdin as a pipe only main holds and
 // --exit-on-stdin-close; when main ends by ANY path the kernel closes that pipe and the server
@@ -47,8 +48,8 @@ async function until(probe, ms) {
 /** The spec main uses, for a hermetic server on `port` serving nothing. */
 function productionSpec(dir, port) {
   return serverSpawnSpec({ execPath: process.execPath, bin: BIN, dirs: [], port, oatsBin: null,
-    pathSource: "inherited", pathError: null, remoteIdentityFile: join(dir, "remote-identity.json"), home: dir,
-    env: { ...process.env, ...HERMETIC } });
+    pathSource: "inherited", pathError: null, remoteIdentityFile: join(dir, "remote-identity.json"), home: dir, controlToken: TEST_CONTROL_TOKEN,
+    env: { ...process.env, OATS_DESKTOP_TOKEN: TEST_CONTROL_TOKEN, ...HERMETIC } });
 }
 
 // The stand-in for main: starts the server exactly as serverSpawnSpec says (and drains its output,
@@ -60,7 +61,7 @@ import { createRequire } from "node:module";
 const [specUrl, bin, dir, port, extra, desktop] = process.argv.slice(2);
 const { serverSpawnSpec } = await import(specUrl);
 const spec = serverSpawnSpec({ execPath: process.execPath, bin, dirs: [], port: Number(port), oatsBin: null,
-  pathSource: "inherited", pathError: null, remoteIdentityFile: dir + "/remote-identity.json", home: dir, env: process.env });
+  pathSource: "inherited", pathError: null, remoteIdentityFile: dir + "/remote-identity.json", home: dir, controlToken: process.env.OATS_DESKTOP_TOKEN, env: process.env });
 const server = spawn(spec.command, spec.args, spec.options);
 server.stdin.on("error", () => {});
 server.stdout.resume(); server.stderr.resume();
@@ -84,7 +85,7 @@ async function startParent(t, { extra = false } = {}) {
   writeFileSync(script, PARENT);
   const port = await freePort();
   const parent = spawn(process.execPath, [script, pathToFileURL(join(DESKTOP, "server-host.mjs")).href, BIN, dir, String(port),
-    extra ? "1" : "0", DESKTOP], { stdio: ["ignore", "pipe", "inherit"], env: { ...process.env, ...HERMETIC } });
+    extra ? "1" : "0", DESKTOP], { stdio: ["ignore", "pipe", "inherit"], env: { ...process.env, OATS_DESKTOP_TOKEN: TEST_CONTROL_TOKEN, ...HERMETIC } });
   const pids = { parent: parent.pid };
   t.after(() => {
     for (const pid of new Set(Object.values(pids).filter(Number.isInteger))) if (alive(pid)) { try { process.kill(pid, "SIGKILL"); } catch { /* gone */ } }

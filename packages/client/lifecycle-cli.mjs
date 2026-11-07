@@ -1,4 +1,5 @@
 /** Fixed-argv installed-CLI K3 adapter. No kernel import, fallback or raw errors. */
+import { withoutControlToken } from "./control-environment.mjs";
 import { execFile } from 'node:child_process';
 import { isAbsolute } from 'node:path';
 import { parseEnvelope, parseRetireEnvelope, execFileInSession } from './cli-adapter.mjs';
@@ -41,7 +42,7 @@ export function cliLifecycle(bin, options, { exec, timeout } = {}) {
   const run = exec ?? (apply ? execFileInSession : execFile);
   return new Promise(resolve => {
     try {
-      run(bin, argv, { cwd: options.context, encoding: 'utf8', shell: false,
+      run(bin, argv, { cwd: options.context, env: withoutControlToken(), encoding: 'utf8', shell: false,
         ...(apply ? { detached: true } : { timeout: Number.isFinite(timeout) && timeout > 0 ? Math.min(timeout, limit) : limit }),
         maxBuffer: (apply ? 4 : 1) * 1024 * 1024 }, (error, stdout) => {
         if (error?.killed) return resolve(failure('E_CLI_TIMEOUT'));

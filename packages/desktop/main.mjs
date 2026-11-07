@@ -9,6 +9,8 @@
 //   * integrated terminal: node-pty running `tmux attach-session` per
 //     terminal tab, bytes streamed to xterm.js over IPC. Closing a tab kills
 //     the pty ONLY — the tmux session is the durable host and must survive.
+import { controlToken } from "./main-control-token.mjs";
+import { createControlFetch } from "./control-fetch.mjs";
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, screen, shell } from "electron";
 import { spawn, execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -66,6 +68,7 @@ const pty = require("node-pty");
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 let port = Number(process.env.OATS_DESKTOP_PORT || 4820);
+const controlFetch = createControlFetch(controlToken);
 const base = () => `http://127.0.0.1:${port}`;
 // Window activity → backend refresh cadence: the server backs its kernel
 // polling off while every window is blurred/hidden and refreshes promptly
@@ -74,7 +77,7 @@ const base = () => `http://127.0.0.1:${port}`;
 // new IPC surface for a fact main already holds. Edge-triggered in
 // window-activity.mjs so an event burst is one POST.
 const activity = createActivityNotifier({
-  post: body => fetch(`${base()}/api/window-state`, {
+  post: body => controlFetch(`${base()}/api/window-state`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify(body), signal: AbortSignal.timeout(1500),
   }),
@@ -85,7 +88,7 @@ const noteWindowActivity = () => { activity.update(BrowserWindow.getAllWindows()
 // and again for each server main learns (serverEpoch), and retried at the next served-list update
 // (noteServed, which every panel read reaches) when a post failed. One post at a time, in order.
 const windowViewsNotifier = createViewsNotifier({
-  post: async (body) => (await fetch(`${base()}/api/windows`, {
+  post: async (body) => (await controlFetch(`${base()}/api/windows`, {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify(body), signal: AbortSignal.timeout(1500),
   })).ok,
@@ -151,7 +154,7 @@ const serverHost = createServerHost({
     // The argv and options, including the stdin owner lifeline (#698), are serverSpawnSpec's.
     const spec = serverSpawnSpec({ execPath: process.execPath, bin, dirs, port: onPort, oatsBin: chosen,
       pathSource: loginPath.source, pathError: loginPath.error, remoteIdentityFile: REMOTE_IDENTITY_FILE(),
-      home: homedir(), env: process.env });
+      home: homedir(), env: process.env, controlToken });
     const child = spawn(spec.command, spec.args, spec.options);
     // The lifeline's write end: held, never written, never ended (server-host.mjs).
     child.stdin.on("error", () => { /* the server is gone; its exit is reported */ });
@@ -188,9 +191,10 @@ function noteServed(list) {
 /** What the server advertises, or while a restart is in flight what the outgoing one did. */
 const advertisedNow = () => (allowedWs.size ? allowedWs : advertisedBefore);
 
-async function panelWorkspaces() {
+async function panelWorkspaces({ probe = false } = {}) {
   try {
-    const r = await fetch(`${base()}/api/panel`, { signal: AbortSignal.timeout(1500) });
+    const r = await controlFetch(`${base()}/api/panel`, { signal: AbortSignal.timeout(1500) });
+    if (r.status === 403) return probe ? { forbidden: true } : null;
     if (!r.ok) return null;
     const d = await r.json();
     const list = d.workspaces || [];
@@ -209,7 +213,7 @@ function localServerIdentity() {
 /** Probe GET /api/version on the current port; null on network failure. */
 async function probeVersion() {
   try {
-    const r = await fetch(`${base()}/api/version`, { signal: AbortSignal.timeout(1500) });
+    const r = await controlFetch(`${base()}/api/version`, { signal: AbortSignal.timeout(1500) });
     let body = null; try { body = await r.json(); } catch { /* non-JSON */ }
     return { ok: r.ok, status: r.status, body };
   } catch { return null; }
@@ -249,7 +253,7 @@ async function ensureServer() {
   // as this checkout via /api/version; otherwise leave it alone and spawn
   // our own — on the next free port when the current one is occupied.
   const r = await ensureServerOnPort({
-    panelWorkspaces, probeVersion, matchWorkspace, local: localServerIdentity(),
+    panelWorkspaces: () => panelWorkspaces({ probe: true }), probeVersion, matchWorkspace, local: localServerIdentity(),
     port, freePort: (from) => freePort(from), spawnServer: (p) => spawnServer(p),
     log: (m) => console.log(`oats-desktop: ${m}`),
   });
@@ -345,7 +349,7 @@ const wsValidate = (p) => validateWorkspace(p, {
 
 // This computer's deployments list (#1390): every call a kernel verb, through the server's accepted CLI
 // (the binary every other kernel verb uses). Gated on its deployments-list feature; nothing falls back.
-const readServedCli = async () => (await fetch(`${base()}/api/cli`, { signal: AbortSignal.timeout(10_000) })).json();
+const readServedCli = async () => (await controlFetch(`${base()}/api/cli`, { signal: AbortSignal.timeout(10_000) })).json();
 async function deploymentList(options) {
   let cli;
   try { cli = await readServedCli(); } catch { cli = null; }
@@ -565,7 +569,7 @@ function writeCliChoice(bin) {
 }
 // The CLI the backend resolved, for the picker's starting directory only.
 async function resolvedCliBin() {
-  try { const bin = (await (await fetch(`${base()}/api/cli`, { signal: AbortSignal.timeout(1500) })).json()).bin; return typeof bin === "string" ? bin : null; }
+  try { const bin = (await (await controlFetch(`${base()}/api/cli`, { signal: AbortSignal.timeout(1500) })).json()).bin; return typeof bin === "string" ? bin : null; }
   catch { return null; }
 }
 ipcMain.handle("cli:pick", async (e) => {
@@ -624,10 +628,10 @@ ipcMain.handle("api", async (e, pathname, opts) => {
   // aliases cannot bypass frame/epoch guards, deadlines or typed failures.
   const route = classifyApiRoute(pathname, base());
   const connection = () => ({ base: base(), wsId: windowWs ?? wsId, allowedWs, bound: windowWs !== null, epoch: serverEpoch, transition: serverHost.inTransition() });
-  if (route === 'spawn-apply') return proxySpawnApply(e, pathname, opts, { rendererURL: RENDERER_URL, connection });
-  if (route === 'spawn-preview') return proxySpawnPreview(e, pathname, opts, { rendererURL: RENDERER_URL, connection });
-  if (route === 'instance-events') return proxyInstanceEvents(e, pathname, opts, { rendererURL: RENDERER_URL, connection });
-  if (route === 'readiness') return proxyReadiness(e, pathname, opts, { rendererURL: RENDERER_URL, connection });
+  if (route === 'spawn-apply') return proxySpawnApply(e, pathname, opts, { rendererURL: RENDERER_URL, connection, fetch: controlFetch });
+  if (route === 'spawn-preview') return proxySpawnPreview(e, pathname, opts, { rendererURL: RENDERER_URL, connection, fetch: controlFetch });
+  if (route === 'instance-events') return proxyInstanceEvents(e, pathname, opts, { rendererURL: RENDERER_URL, connection, fetch: controlFetch });
+  if (route === 'readiness') return proxyReadiness(e, pathname, opts, { rendererURL: RENDERER_URL, connection, fetch: controlFetch });
   const lifecycle = route === 'lifecycle';
   const forgeRequest = lifecycle || route === 'forge';
   const failure = lifecycle ? (code, extra) => lifecycleFailure(code, DESKTOP_TERMS, extra) : forgeFailure;
@@ -670,7 +674,7 @@ ipcMain.handle("api", async (e, pathname, opts) => {
     : route === 'automations' ? 90_000 : route === 'instance-git' || route === 'instance-color' || route === 'instance-background' ? 50_000 : route === 'machine-connect' ? 980_000 : route === 'machines' ? 130_000
     : route === 'instance-start' || route === 'remote-roster' ? 70_000 : 20_000);
   const init = { ...(forge?.init ?? apiInit(opts)), signal: AbortSignal.timeout(timeout) };
-  const r = await fetch(url, init);
+  const r = await controlFetch(url, init);
   const text = await r.text();
   if ((forge || lifecycle) && !ownsForgeFrame()) return { ok: false, status: 403, body: forbidden() };
   let json; try { json = JSON.parse(text); } catch { json = lifecycle ? failure(mutation ? 'E_OUTCOME_UNKNOWN' : 'E_CLI_PROTOCOL', { status: mutation ? 'unknown' : 'unavailable' })
@@ -709,7 +713,7 @@ const forgeAuth = createForgeAuthBroker({
     const serverLease = serverEpoch, readEpoch = currentForgeEpoch();
     if (serverHost.inTransition()) return forgeFailure('E_CONNECTION_CHANGED');
     try {
-      const response = await fetch(`${base()}/api/forge-connections`, {
+      const response = await controlFetch(`${base()}/api/forge-connections`, {
         method: 'POST', headers: { 'content-type': 'application/json', [FORGE_EPOCH_HEADER]: readEpoch },
         body: JSON.stringify({ hostRef: connectionRef }), signal: AbortSignal.timeout(25_000),
       });
@@ -761,7 +765,7 @@ const terminalFrame = (e) => {
   return typeof id === "string" && holdsHash(win, id);
 };
 const terminalBroker = createTerminalOwnerBroker({ rendererUrl: RENDERER_URL, context: terminalContext, admitFrame: terminalFrame,
-  io: createTerminalIo({ base, context: terminalContext,
+  io: createTerminalIo({ base, context: terminalContext, fetch: controlFetch,
     attachmentDirectory: () => join(app.getPath('userData'), 'attachments'),
     spawnPty: (...args) => pty.spawn(...args), execFileSync, sweep: sweepOrphanViewers,
   }),
