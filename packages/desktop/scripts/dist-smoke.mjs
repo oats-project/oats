@@ -49,7 +49,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createLaunchFixtureSource } from "../test/helpers/launch-fixture.mjs";
 import { createReaper } from "./proc-reaper.mjs";
-import { runAbiProbe, runBackendProbe, runMainImportsProbe, sharedHomeInventory, createTokenOutputCapture } from "./smoke-probes.mjs";
+import { runAbiProbe, runBackendProbe, runMainImportsProbe, sharedHomeInventory, createTokenOutputCapture, browserProcessInfo, rendererControlEnvironment } from "./smoke-probes.mjs";
 import { verifyAppSignature } from "./codesign-verify.mjs";
 import { checkLinuxFloor } from "./linux-floor.mjs";
 import { WATCHDOG_MS, PHASE_BUDGET_MS, boundedTail, readDevToolsPort, awaitClose } from "./launch-probe.mjs";
@@ -466,6 +466,15 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
         });
         ws.close();
         if (!String(result).startsWith("SHELL_OK")) throw new Error(`renderer did not reach the shell: ${result}`);
+        if (process.platform === "linux") {
+          if (typeof portRes.wsPath !== "string" || !/^\/devtools\/browser\/[a-zA-Z0-9-]+$/.test(portRes.wsPath))
+            throw new Error("the owned browser debugging endpoint is unavailable");
+          const processInfo = await browserProcessInfo(`ws://127.0.0.1:${port}${portRes.wsPath}`);
+          const rendererEnvironment = rendererControlEnvironment(processInfo, controlToken);
+          console.log(`dist:smoke renderer environment: ${JSON.stringify(rendererEnvironment)}`);
+          if (!rendererEnvironment.tokenNameAbsent || !rendererEnvironment.tokenValueAbsent)
+            throw new Error("the packaged renderer inherited the operator control token");
+        }
         if (captured.leaked) throw new Error("packaged app output contained the control token (suppressed)");
         if (!serverPort) throw new Error("packaged app did not report its backend port");
         const withoutToken = await fetch(`http://127.0.0.1:${serverPort}/api/panel`, { signal: AbortSignal.timeout(2000) });

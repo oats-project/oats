@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createReaper } from "../scripts/proc-reaper.mjs";
-import { runBackendProbe, runMainImportsProbe, relativeImportsOf, sharedHomeInventory, packagedNode, NO_CLI_ENV, createTokenOutputCapture } from "../scripts/smoke-probes.mjs";
+import { runBackendProbe, runMainImportsProbe, relativeImportsOf, sharedHomeInventory, packagedNode, NO_CLI_ENV, createTokenOutputCapture, rendererControlEnvironment, browserProcessInfo } from "../scripts/smoke-probes.mjs";
 import { serverSpawnSpec, LIFELINE_FLAG } from "../server-host.mjs";
 
 const SERVER = fileURLToPath(new URL("../server/", import.meta.url));
@@ -100,6 +100,60 @@ test("success: the backend answers, exits when its stdin closes, and the collect
   assert.match(r.lines[3], /^not exercised by this phase: the GUI \(phase 5\), nor the AppImage's launcher and runtime \(APPDIR, its PATH and library-path entries\)/,
     "what the phase does not prove is said");
   assertReaped(r, reaper, ["backend", "collector"]);
+});
+
+test("renderer environment evidence reads only the browser's renderer PIDs and returns booleans", () => {
+  const token = "private-token-".repeat(4), reads = [];
+  const information = [{ type: "browser", id: 10 }, { type: "GPU", id: 11 }, { type: "renderer", id: 12 }];
+  const read = path => {
+    reads.push(path);
+    return path.endsWith("/cmdline") ? "/app\0--type=renderer\0" : "HOME=/private\0PATH=/bin\0";
+  };
+  assert.deepEqual(rendererControlEnvironment(information, token, read), {
+    renderersObserved: true, tokenNameAbsent: true, tokenValueAbsent: true,
+  });
+  assert.deepEqual(reads, ["/proc/12/cmdline", "/proc/12/environ"]);
+  const present = rendererControlEnvironment(information, token, path =>
+    path.endsWith("/cmdline") ? "/app\0--type=renderer\0" : `OATS_DESKTOP_TOKEN=${token}\0`);
+  assert.deepEqual(present, { renderersObserved: true, tokenNameAbsent: false, tokenValueAbsent: false });
+  assert.equal(JSON.stringify(present).includes(token), false);
+  for (const [environment, tokenNameAbsent, tokenValueAbsent] of [
+    ["OATS_DESKTOP_TOKEN=other\0", false, true], [`OTHER=${token}\0`, true, false],
+  ]) {
+    assert.deepEqual(rendererControlEnvironment(information, token, path =>
+      path.endsWith("/cmdline") ? "/app\0--type=renderer\0" : environment),
+    { renderersObserved: true, tokenNameAbsent, tokenValueAbsent });
+  }
+});
+
+test("renderer environment evidence refuses missing, malformed or non-renderer identities before reading an environment", () => {
+  const token = "private-token-".repeat(4);
+  for (const info of [null, [], [{ type: "renderer", id: "12" }], [{ type: "renderer", id: -1 }]]) {
+    assert.throws(() => rendererControlEnvironment(info, token, () => assert.fail("no /proc reads")));
+  }
+  const reads = [];
+  assert.throws(() => rendererControlEnvironment([{ type: "renderer", id: 12 }], token, path => {
+    reads.push(path); return "/app\0--type=gpu-process\0";
+  }), /renderer identity did not match/);
+  assert.deepEqual(reads, ["/proc/12/cmdline"]);
+  assert.throws(() => rendererControlEnvironment([{ type: "renderer", id: 12 }], token, () => {
+    throw new Error(token);
+  }), error => !error.message.includes(token) && /renderer identity could not be read/.test(error.message));
+});
+
+test("browser process information uses the browser CDP command and closes its socket", async () => {
+  let closed = false, request;
+  class Socket {
+    constructor(url) { assert.equal(url, "ws://127.0.0.1:1234/devtools/browser/probe"); queueMicrotask(() => this.onopen()); }
+    send(value) { request = JSON.parse(value); queueMicrotask(() => this.onmessage({ data: JSON.stringify({
+      id: 1, result: { processInfo: [{ type: "renderer", id: 12 }] },
+    }) })); }
+    close() { closed = true; }
+  }
+  const result = await browserProcessInfo("ws://127.0.0.1:1234/devtools/browser/probe", { WebSocketCtor: Socket });
+  assert.deepEqual(request, { id: 1, method: "SystemInfo.getProcessInfo" });
+  assert.deepEqual(result, [{ type: "renderer", id: 12 }]);
+  assert.equal(closed, true);
 });
 
 test("output capture detects a split token before trimming and suppresses its diagnostics", () => {

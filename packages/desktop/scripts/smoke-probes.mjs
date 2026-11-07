@@ -9,7 +9,7 @@
 // its exit in a finally, on every path. There is NO synchronous execution
 // primitive in this module, and the tests import it to assert the probes go
 // through the reaper.
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { withoutControlToken } from "../../client/control-environment.mjs";
 import { createConnection, createServer } from "node:net";
@@ -172,6 +172,50 @@ export function createTokenOutputCapture(token) {
     get leaked() { return leaked; },
     text(max = 1500) { return leaked ? "(output suppressed: control token present)" : tail.trim().slice(-max); },
   };
+}
+
+/** Inspect only renderer PIDs supplied by the owned browser's CDP SystemInfo response.
+ * No environment bytes or values leave this function, including on read failures. */
+export function rendererControlEnvironment(processInfo, token, read = readFileSync) {
+  if (!Array.isArray(processInfo)) throw new Error("renderer process information is unavailable");
+  const renderers = processInfo.filter(process => process?.type === "renderer");
+  if (!renderers.length) throw new Error("the owned browser reported no renderer process");
+  const pids = [...new Set(renderers.map(process => process.id))];
+  if (pids.some(pid => !Number.isSafeInteger(pid) || pid <= 0)) throw new Error("the owned browser reported an invalid renderer PID");
+  let tokenNameAbsent = true, tokenValueAbsent = true;
+  for (const pid of pids) {
+    let cmdline;
+    try { cmdline = String(read(`/proc/${pid}/cmdline`, "utf8")); }
+    catch { throw new Error("the owned renderer identity could not be read"); }
+    if (!cmdline.split("\0").includes("--type=renderer")) throw new Error("the owned renderer identity did not match");
+    let environment;
+    try { environment = String(read(`/proc/${pid}/environ`, "utf8")); }
+    catch { throw new Error("the owned renderer environment could not be read"); }
+    tokenNameAbsent &&= !environment.split("\0").some(entry => entry.startsWith("OATS_DESKTOP_TOKEN="));
+    tokenValueAbsent &&= !environment.includes(token);
+  }
+  return { renderersObserved: true, tokenNameAbsent, tokenValueAbsent };
+}
+
+/** Browser-level CDP is used only to identify this launch's renderer processes. */
+export async function browserProcessInfo(webSocketUrl, { WebSocketCtor = globalThis.WebSocket, timeoutMs = 2000 } = {}) {
+  const socket = new WebSocketCtor(webSocketUrl);
+  try {
+    return await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("browser process information timed out")), timeoutMs);
+      const fail = () => { clearTimeout(timer); reject(new Error("browser process information is unavailable")); };
+      socket.onopen = () => socket.send(JSON.stringify({ id: 1, method: "SystemInfo.getProcessInfo" }));
+      socket.onerror = fail;
+      socket.onclose = fail;
+      socket.onmessage = message => {
+        let reply; try { reply = JSON.parse(message.data); } catch { fail(); return; }
+        if (reply.id !== 1) return;
+        clearTimeout(timer);
+        if (reply.error || !Array.isArray(reply.result?.processInfo)) fail();
+        else resolve(reply.result.processInfo);
+      };
+    });
+  } finally { socket.close(); }
 }
 
 /** As the hermetic tests start the backend: no oats CLI is discoverable, no login shell runs. */
