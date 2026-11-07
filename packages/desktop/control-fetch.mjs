@@ -7,7 +7,7 @@ export function createControlFetch(token, fetch = globalThis.fetch, { authorize 
   return (url, init = {}) => {
     const headers = new Headers(init.headers);
     const target = new URL(url);
-    if ((init.method ?? 'GET') === 'GET' && target.pathname === '/api/version') {
+    if (String(init.method ?? 'GET').toUpperCase() === 'GET' && target.pathname === '/api/version') {
       headers.delete(CONTROL_TOKEN_HEADER);
     } else {
       if (!authorize(target)) return Promise.reject(new Error('Desktop backend has not reported a live binding'));

@@ -76,7 +76,7 @@ const controlFetch = createControlFetch(controlToken, globalThis.fetch, {
   authorize: url => {
     const child = serverHost.current();
     const allowedPort = child ? serverBindings.get(child)?.boundPort() : reuseAllowed && !ownServerStarted ? acceptedOperatorPort : null;
-    return allowedPort !== null && allowedPort !== undefined && Number(url.port) === allowedPort;
+    return allowedPort !== null && allowedPort !== undefined && url.protocol === 'http:' && url.hostname === '127.0.0.1' && Number(url.port || 80) === allowedPort;
   },
 });
 const base = () => `http://127.0.0.1:${port}`;

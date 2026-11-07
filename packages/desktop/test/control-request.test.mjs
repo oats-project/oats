@@ -217,3 +217,37 @@ for (const completion of ['success', 'rejection']) test(`an owned binding ${comp
   await assert.rejects(read, /changed while waiting/);
   assert.equal(reads, 0);
 });
+
+
+test('main authorizes the owned binding origin or an explicitly accepted operator port', () => {
+  const source = readFileSync(new URL('../main.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf('const controlFetch = createControlFetch('), end = source.indexOf('\n});', start) + 4;
+  let current = null, reported = null;
+  const bindings = new WeakMap();
+  const context = { controlToken: token, globalThis: { fetch() {} }, serverHost: { current: () => current }, serverBindings: bindings,
+    reuseAllowed: false, acceptedOperatorPort: 80, ownServerStarted: false,
+    createControlFetch: (_token, _fetch, options) => options.authorize,
+  };
+  const authorize = runInNewContext(`${source.slice(start, end)}; controlFetch`, context);
+  assert.equal(authorize(new URL('http://127.0.0.1:80/api/panel')), false);
+  context.reuseAllowed = true;
+  assert.equal(authorize(new URL('http://127.0.0.1:80/api/panel')), true);
+  for (const url of ['http://localhost:80/api/panel', 'https://127.0.0.1:80/api/panel', 'http://other.invalid:80/api/panel'])
+    assert.equal(authorize(new URL(url)), false);
+  current = {}; context.ownServerStarted = true;
+  bindings.set(current, { boundPort: () => reported });
+  assert.equal(authorize(new URL('http://127.0.0.1:80/api/panel')), false);
+  reported = 80;
+  assert.equal(authorize(new URL('http://127.0.0.1:80/api/panel')), true);
+  reported = null;
+  assert.equal(authorize(new URL('http://127.0.0.1:80/api/panel')), false);
+  current = null;
+  assert.equal(authorize(new URL('http://127.0.0.1:80/api/panel')), false, 'an owned server loss does not restore operator authorization');
+});
+
+test('fetch method normalization keeps public version requests free of the token', async () => {
+  let sent;
+  const fetch = createControlFetch(token, async (_url, init) => { sent = init; return {}; }, { authorize: () => assert.fail('public') });
+  await fetch('http://127.0.0.1:4820/api/version', { method: 'get', headers: { 'x-oats-desktop-token': token } });
+  assert.equal(sent.headers.has('x-oats-desktop-token'), false);
+});
