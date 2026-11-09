@@ -15,6 +15,8 @@ your tasks layer), and kept to:
 - **An entry per maintainer** (Your entry).
 - **How a PR shows its lane:** its description names it. Every effort and PR is in exactly
   one lane: that of the effort that produced it.
+  <!-- OATS: the lane map shows a PR's lane by its `lane:` label, and holds by the `hold` label. -->
+  Here its `lane:<name>` label shows it too, as the lane map says.
 - **Which maintainer a PR calls,** where its lane's landing rules need one: the maintainer,
   in that lane, of the human who owns it; where several humans own it, the one of the human
   whose effort produced the PR when they are among them, else the one the line names. Never

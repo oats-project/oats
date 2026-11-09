@@ -18,13 +18,13 @@ to fix. Again for a branch your expert returns, and for a fix on your PR where
 ## A fresh reviewer each round
 Each round's reviewer is fresh: a new `code-reviewer` instance, your OATS child, never the
 previous round's. It reads the change as it is, without the earlier rounds.
+<!-- OATS: no skill names a harness or a model; a machine's souls.launch picks the model. -->
 - **An OATS child:** a review is proper work, so its reviewer is an OATS child, not a
   native subagent of your harness. An OATS child is
   visible to your person (its status, the Desktop), has its own messaging and knowledge,
   and is retired on record; a native subagent is invisible to everyone but you. A native
   reviewer only where your person asks for one, or in your harness's multi-agent workflow
   mode when it is in use.
-  <!-- OATS: no skill names a harness or a model; a machine's souls.launch picks the model. -->
 - **On a different model from yours** where the organisation has one (Pick a different
   model): agents of one model share blind spots, so their agreement is not independent.
 

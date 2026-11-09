@@ -2,6 +2,7 @@
 name: prove-it-works
 description: Prove a change works the way the repository runs it - build, run locally, the checks the repository's own gate names, the QA steps the spec names - using the repository's own instructions and dev skills first, keeping the evidence, and saying what you could not run. Use before you hand back any branch, and after each round of fixes on your PR.
 ---
+<!-- OATS: the description names the repository's own gate, not "the checks CI runs": CI is the gate in the oats repository (step 3). -->
 
 # Prove it works
 

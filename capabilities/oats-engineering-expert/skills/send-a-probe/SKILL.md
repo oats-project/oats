@@ -72,11 +72,13 @@ knowledge, and is retired on record; a native subagent of your harness is invisi
 everyone but you.
 <!-- OATS: no skill names a harness or a model; a machine's souls.launch picks the model. -->
 
+<!-- OATS: no skill names a harness or a model (the template's example harness is dropped here). -->
 **Not a probe:** a small investigation or task that directly helps you and needs no soul's
 knowledge and no testing capability (where something is defined, what a file says) may go
 to a native subagent. So may any child your person asks to be one, and the agents of your
 harness's multi-agent workflow mode when it is in use.
 
+<!-- OATS: the workspace's direction (recorded 2026-10-31, for every team) rules certain models out and names none in any text, and a machine's souls.launch picks a soul's model; so diversity compares model families, never names a model, and picks only a model this workspace allows. -->
 **On a different model from the author's,** where the organisation has one: every kind of
 probe checks work or validates an idea, and agents of one model share blind spots, so their
 agreement is not independent. The author is whoever made the work or the idea being

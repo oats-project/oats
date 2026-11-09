@@ -107,6 +107,7 @@ merging its own PR follows its own landing skill.
   can still break each other (one changes a text, the other's test reads it). So:
   1. on a trial merge onto the default branch, run the test files changed or added by this
      PR and by what merged since its base;
+  <!-- OATS: the oats repository's Gates rule (AGENTS.md): at most one or two test files locally, never the kernel's or the Desktop's suites. -->
   2. if those are more than one or two (the oats repository's limit), need what your host lacks, or are code you haven't
      read and trusted (an outside contributor's), bring the branch up to date and let CI
      be the run.

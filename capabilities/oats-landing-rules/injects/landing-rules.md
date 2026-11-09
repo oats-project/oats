@@ -48,7 +48,8 @@ the developer asks the bot for at that head where it doesn't review each push by
   reader's verdict at that head, or carried to it (`/pr-review`); the direct go of the
   person whose maintainer holds the PR, for that PR, is the only fallback.
 - **The release lane's sign-off,** where the lane's line asks for it, is its verdict at the
-  exact head being merged. A lane whose line doesn't say yet signs off every merge.
+  exact head being merged. Where a lane's line doesn't say yet, the release lane signs off
+  every merge.
 - **Never merge over a RETURN or a hold.**
 - **Who merges** is the lane's arrangement on the map: the maintainer it names, or the
   release lane where the line hands it the merge; a lead or a developer merges only where
