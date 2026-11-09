@@ -21,9 +21,9 @@ description: >-
 2. **Per lane, name the agreements that merge a change, and who merges.**
    Default: CI green and the approval of the developer's last fresh reviewer
    at the head (on a different model where the organisation has one), plus the
-   expert's verification note at that head; the expert merges. Where the organisation
-   keeps the merge for its people, say so: agents then hand them a PR at an
-   exact head.
+   expert's verification note at that head; the expert merges. Where the
+   organisation keeps the merge for its people, say so: agents then hand them
+   a PR at an exact head.
 3. **Every lane names a merge path a lead can reach.** A lead with no
    agreement it can meet stacks up PRs, specs and mail. Where today nobody but
    a person can merge, propose the smallest agreement that lets an agent
@@ -32,8 +32,10 @@ description: >-
    - A developer builds every change that needs review rounds, and launches a
      fresh reviewer for each round; the expert verifies the converged head
      once and never runs rounds. A lane may let a lead make a one-line docs
-     fix with no review loop; write it as that exception, not as a lead that
-     builds.
+     fix, or a maintainer its release prep, with no review loop; write each
+     as that exception, not as a lead that builds. Where every commit must
+     pass a review round (commits signed under a shared account, a
+     repository's own pre-PR review), there is no such exception.
    - Who gives the green light to open a PR at the verified head: the
      expert's verification where that is enough, otherwise whoever holds the
      lane. The developer then opens it and works its reviews.

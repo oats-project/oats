@@ -22,7 +22,7 @@ description: >-
 | A person keeps answering the same kind of card | Move that decision into a rule or to the agents, with their yes |
 | A person asks for a read they don't get | Add that agreement to their lane's landing rules |
 | Two parts of the organisation keep drifting copies of one capability | Merge them into one capability they both compose |
-| OATS's template has a release worth having | Read what changed since the version the capability notes, and port what fits |
+| OATS's template has a release worth having | Read the template's CHANGELOG.md from the release `capabilities/TEMPLATE-RELEASE` records, port what fits by its `ADAPTING.md` section 6, and update that file and each ported capability's release sentence |
 
 Propose each change as a card with your recommendation. Never add a station to
 the path of every change.

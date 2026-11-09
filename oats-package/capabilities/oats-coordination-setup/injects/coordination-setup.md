@@ -29,9 +29,9 @@ runs agents, owns a lane, or merges in one today.
   ownership record and the across-people rules. A dispatcher goes to each
   person who wants one, however many there are.
 - The workspace gets coordination capabilities of its own, one per role the
-  roster keeps, copied from the closest template and adapted with these practices,
-  and one small capability with its landing rules and ownership record that
-  every coordinating soul composes.
+  roster keeps, copied from the closest template and adapted with these
+  practices, and one small capability with its landing rules and ownership
+  record that every coordinating soul composes.
   Every part of the organisation (each group of people, each repository)
   composes those same capabilities; none keeps a copy of its own.
 - NEVER put a station in the path of every change (a standing gate, a relay)

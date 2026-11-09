@@ -6,9 +6,9 @@ description: >-
   1's one round), design the roster and landing rules, propose each person's
   part as a card, and on each yes have one sub-agent write the workspace's
   coordination capabilities from the closest of OATS's coordination templates
-  (or from the coordination an organisation already on OATS has). Load it at `/oats-tailor-workspace` step
-  1, or when an organisation already running OATS asks to move to these
-  practices. Part of oats.coordination-setup.
+  (or from the coordination an organisation already on OATS has). Load it at
+  `/oats-tailor-workspace` step 1, or when an organisation already running
+  OATS asks to move to these practices. Part of oats.coordination-setup.
 ---
 
 # Adapt to the organisation
@@ -61,11 +61,22 @@ your recommendation.
    - **Start** from the template closest to each group's way of working: one
      of OATS's template repositories, listed in the installed kernel's
      `docs/official-catalog.md` ("Coordination templates"), copied at its
-     latest `template-v*` tag. Follow its `ADAPTING.md` in order; each
-     `<!-- adapt: ... -->` marker comes out once its point is adapted. One
+     latest `template-v*` tag. Follow its `ADAPTING.md` in order. One
      organisation can start different groups from different templates, with
-     one dispatcher for each person who wants one. For an organisation already
-     on OATS, start from its own coordination capabilities instead.
+     one dispatcher for each person who wants one.
+   - **Check the ids first,** as `ADAPTING.md` section 1 says: run
+     `oats capabilities` and settle each id the template brings that is
+     already listed, before copying anything. A pin of the frozen package
+     `oats.engineering` is copied over, then removed by the template
+     CHANGELOG's "From v1.18.0". An earlier copy of the template is taken up
+     to the new release in place, never copied a second time. Anything else
+     with the same id gets a new id in the copy, or that capability is left
+     out. An organisation already on OATS with coordination of its own, not
+     from a template, starts from those capabilities instead.
+   - **Adapt each marker:** each `<!-- adapt: ... -->` comes out once its
+     point is answered or keeps its default. A point that waits on a person
+     who hasn't answered (step 4) keeps its marker until their yes; the
+     markers left are the copy's open points.
    - **Keep** one capability per role the roster keeps, as in the template,
      plus one for each way of working whose skills differ, composed by that
      expert soul. Where the roster has a dispatcher and the template has no
@@ -89,9 +100,15 @@ your recommendation.
      instructions, propose them as a PR to that repository, by its rules;
      otherwise add a run-and-test skill to the workspace's developer
      capability.
-   - **Record** in each capability's `oats.json` description the template and
-     the release it was copied from, as the template's `ADAPTING.md` says, so
-     the next port is a diff.
+   - **Copy the notices:** the template's `LICENSE` notice, and its
+     `THIRD-PARTY-NOTICES.md` beside the copied capabilities while any skill
+     that points to it stays.
+   - **Record the release,** as `ADAPTING.md` section 4 says, so the next
+     port is a diff: each copied capability keeps the template's sentence
+     naming its release at the end of its `oats.json` description and
+     numbers its `version` its own way from then on, and the host repository
+     gets `capabilities/TEMPLATE-RELEASE`: the template, its release, the
+     commit that tag points to, and the capabilities and souls copied.
    A part whose owner hasn't answered is written later, the same way, on their
    yes.
 6. **Say** what was set up and what is still open: in the brief at

@@ -60,16 +60,17 @@ findings and its starting point:
 
 - **Coordination**, from the closest of OATS's coordination templates:
   the template repositories listed in the installed kernel's
-  `docs/official-catalog.md` ("Coordination templates"), each copied at a
-  `template-v*` tag and adapted by its `ADAPTING.md`, never pinned. With
+  `docs/official-catalog.md` ("Coordination templates"), each copied at its
+  latest `template-v*` tag and adapted by its `ADAPTING.md`, never pinned. With
   `oats.coordination-setup`, `/adapt-to-the-organisation` chooses and adapts
   them: its roster of souls (`/design-the-roster`) and its landing rules
   (`/set-landing-rules`). Its reads and questions were step 1's. Here, design,
   and send each person their proposal card (a message to that person with
   your recommendation); on each yes, the sub-agent writes the coordination
   capabilities. Without `oats.coordination-setup`, adapt the engineering
-  template yourself, by its `ADAPTING.md`. With or without it, the
-  capabilities must cover:
+  template yourself, by its `ADAPTING.md` in order: its id check before you
+  copy, its notices, and its `capabilities/TEMPLATE-RELEASE` record. With or
+  without it, the capabilities must cover:
   - the roles the roster keeps (`/design-the-roster`), or without it the
     template's roles, adapted to their review and merge rules and to their
     size;

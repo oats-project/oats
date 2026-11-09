@@ -39,18 +39,21 @@ OATS's coordination ships as templates, not packages. A template is a
 repository that a setup expert copies into a workspace's own capabilities and
 adapts to the organisation by the repository's `ADAPTING.md`
 (`/adapt-to-the-organisation`, in `oats.framework`); nobody pins it. Template
-releases are tagged `template-v<version>`, and each copied capability records
-the release it came from.
+releases are tagged `template-v<version>`. Each copied capability records the
+release it came from in its description, and the copy records it as a whole in
+`capabilities/TEMPLATE-RELEASE`.
 
-- `oats-project/oats-engineering-coordination`: work that lands as pull requests. A
-  dispatcher, a lead for each effort, developers who own their pull requests,
-  reviewers on call, and a maintainer where a lane needs one.
+| Template | Latest release | Way of working |
+| --- | --- | --- |
+| `oats-project/oats-engineering-coordination` | `template-v2.1.0` | Work that lands as pull requests: a dispatcher, a lead for each effort, developers who own their pull requests, a fresh reviewer each round, and a maintainer where a lane needs one. |
 
 The package `oats.engineering` is frozen at `v1.18.0`. Its entry and its four
 aliases stay, so existing pins keep resolving, and its repository,
 `oats-project/oats-engineering`, gets no further releases. The engineering
-template that replaces it lives in its own repository, above. Open: retiring the entry and moving the aliases, a
-later decision once no workspace we know of pins it.
+template that replaces it lives in its own repository, above; a workspace that
+pins the package moves to it by the template's `ADAPTING.md` and the "From
+v1.18.0" steps in its CHANGELOG. Open: retiring the entry and moving the
+aliases, a later decision once no workspace we know of pins it.
 
 ## Find and use packages
 

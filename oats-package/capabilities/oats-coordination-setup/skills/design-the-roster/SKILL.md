@@ -45,8 +45,10 @@ node, not a soul.
    need a maintainer's read or reserve its merges; no maintainer instance is
    started at setup. One is started for the person who owns that lane when
    first needed (`/set-landing-rules`).
-7. **Reviewers.** The forge's review bot if the organisation runs one,
-   otherwise a reviewer soul, fresh per change.
+7. **Reviewers.** A reviewer soul, fresh each round and launched by the
+   developer, whose `launch:` names a model this organisation can launch,
+   from a family different from the developers'; on the PR, the forge's
+   review bot as well, where the organisation runs one.
 8. **Automations.** Only the organisation's scheduled jobs and the events that
    should start work (schedules and triggers, `/oats-automations`).
 9. **Retire rules.** Every short-lived soul says when its instance retires:
