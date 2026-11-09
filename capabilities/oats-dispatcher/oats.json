@@ -1,0 +1,13 @@
+{
+  "capability": "oats.dispatcher",
+  "version": "2.1.0",
+  "compatibility": {
+    "oats": ">=0.69.7"
+  },
+  "description": "A person's front door: the dispatcher reads each request against the record, asks one question back when a request can't be meant as written, starts one fresh instance of the right expert soul per effort, introduces its lead once and steps aside. It starts a role another person's agents ask for in its person's area, and answers what is open from the record. It never relays cards, answers or progress, and never plans, builds, reviews or merges. Assigned to the dispatcher soul, one standing instance for each person who wants one. Copied from the engineering template, template-v2.1.0.",
+  "requires": [],
+  "inject": "injects/dispatcher.md",
+  "skills": [
+    "skills/dispatch"
+  ]
+}

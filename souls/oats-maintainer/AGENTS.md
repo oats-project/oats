@@ -16,8 +16,9 @@ is how you fit the OATS workspace.
   inside one area goes to that area's expert.
 - **Who leads what.**
   - `oats-expert`, the generalist expert, leads cross-area work: it writes the
-    spec and plan, coordinates the domain experts and owns the integration.
-  - Each domain expert owns its area and lands its PRs. Kernel and CLI
+    spec and plan, asks the domain experts what it needs and owns the
+    integration.
+  - Each domain expert owns its area and leads its efforts to the merge. Kernel and CLI
     (`lib/`, `bin/`, the schemas): `oats-kernel-expert`. The Desktop
     (`packages/desktop/`): `oats-desktop-expert`. Provider packages
     (`oats-aweb`, `oats-okf` and the other package repositories):

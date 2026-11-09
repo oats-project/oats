@@ -1,0 +1,11 @@
+{
+  "capability": "oats.landing-rules",
+  "version": "2.1.0",
+  "compatibility": {
+    "oats": ">=0.69.7"
+  },
+  "description": "This organisation's landing rules and ownership record, in one place: per lane, the agreements that merge a change and who merges, who gives the green light to open a PR, who builds a change (a developer, which iterates with fresh reviewers; a lead only a one-line docs fix, where allowed), where a maintainer's read is needed, the one-way doors kept for people, who owns which paths, and where the records, the lane map and holds are kept. Composed by every coordinating soul (dispatcher, experts, developers, maintainers). The template's rules are an example to adapt. Copied from the engineering template, template-v2.1.0.",
+  "requires": [],
+  "inject": "injects/landing-rules.md",
+  "skills": []
+}
