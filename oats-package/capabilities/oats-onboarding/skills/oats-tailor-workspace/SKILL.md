@@ -58,18 +58,20 @@ sub-agent per capability you author**, on the strongest model available
 (one for the coordination capabilities together), each with step 1's
 findings and its starting point:
 
-- **Coordination**, from the engineering package `oats.engineering`
-  (`oats.maintainer`, `oats.engineering-expert`, `oats.developer`,
-  `oats.code-review`) as the template, adapted by
-  `/adapt-to-the-organisation` (`oats.coordination-setup`): its roster of
-  souls (`/design-the-roster`) and its landing rules (`/set-landing-rules`).
-  Its reads and questions were step 1's. Here, design, and send each person
-  their proposal card (a message to that person with your recommendation); on
-  each yes, the sub-agent writes the coordination capabilities. Without
-  `oats.coordination-setup`, adapt the template yourself. With or without
-  it, the capabilities must cover:
+- **Coordination**, from the closest of OATS's coordination templates:
+  the template repositories listed in the installed kernel's
+  `docs/official-catalog.md` ("Coordination templates"), each copied at a
+  `template-v*` tag and adapted by its `ADAPTING.md`, never pinned. With
+  `oats.coordination-setup`, `/adapt-to-the-organisation` chooses and adapts
+  them: its roster of souls (`/design-the-roster`) and its landing rules
+  (`/set-landing-rules`). Its reads and questions were step 1's. Here, design,
+  and send each person their proposal card (a message to that person with
+  your recommendation); on each yes, the sub-agent writes the coordination
+  capabilities. Without `oats.coordination-setup`, adapt the engineering
+  template yourself, by its `ADAPTING.md`. With or without it, the
+  capabilities must cover:
   - the roles the roster keeps (`/design-the-roster`), or without it the
-    template's four, adapted to their review and merge rules and to their
+    template's roles, adapted to their review and merge rules and to their
     size;
   - the Desktop's grouping (from OATS 0.69.2): a top-level agent is spawned
     without `--same-work`, a feature's agents with it, and each group has one

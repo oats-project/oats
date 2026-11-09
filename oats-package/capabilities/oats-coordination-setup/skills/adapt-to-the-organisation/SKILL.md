@@ -5,8 +5,8 @@ description: >-
   organisation, in one order: read and ask (in `/oats-tailor-workspace` step
   1's one round), design the roster and landing rules, propose each person's
   part as a card, and on each yes have one sub-agent write the workspace's
-  coordination capabilities from OATS's template (or from the coordination an
-  organisation already on OATS has). Load it at `/oats-tailor-workspace` step
+  coordination capabilities from the closest of OATS's coordination templates
+  (or from the coordination an organisation already on OATS has). Load it at `/oats-tailor-workspace` step
   1, or when an organisation already running OATS asks to move to these
   practices. Part of oats.coordination-setup.
 ---
@@ -58,10 +58,14 @@ your recommendation.
 5. **Write, on each yes.** Run one sub-agent for all the coordination
    capabilities together, so they agree with each other. Give it the agreed
    design and these rules:
-   - **Start** from the template: the engineering package's release in the
-     catalog (the installed kernel's `docs/official-catalog.md`), copied from
-     its repository at that tag. For an organisation already on OATS, start
-     from its own coordination capabilities instead.
+   - **Start** from the template closest to each group's way of working: one
+     of OATS's template repositories, listed in the installed kernel's
+     `docs/official-catalog.md` ("Coordination templates"), copied at its
+     latest `template-v*` tag. Follow its `ADAPTING.md` in order; each
+     `<!-- adapt: ... -->` marker comes out once its point is adapted. One
+     organisation can start different groups from different templates, with
+     one dispatcher for each person who wants one. For an organisation already
+     on OATS, start from its own coordination capabilities instead.
    - **Keep** one capability per role the roster keeps, as in the template,
      plus one for each way of working whose skills differ, composed by that
      expert soul. Where the roster has a dispatcher and the template has no
@@ -85,7 +89,9 @@ your recommendation.
      instructions, propose them as a PR to that repository, by its rules;
      otherwise add a run-and-test skill to the workspace's developer
      capability.
-   - **Note** in each capability which template release it started from.
+   - **Record** in each capability's `oats.json` description the template and
+     the release it was copied from, as the template's `ADAPTING.md` says, so
+     the next port is a diff.
    A part whose owner hasn't answered is written later, the same way, on their
    yes.
 6. **Say** what was set up and what is still open: in the brief at

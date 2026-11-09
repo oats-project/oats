@@ -12,7 +12,7 @@ or workspace membership alone does not make a package official.
 | `oats.framework` | `oats-framework/v1.22.1` (this repository) | `oats.core`, `oats.setup`, `oats.onboarding`, `oats.support`, `oats.knowledge-theory` | `knowledge-theory-expert`, `oats-setup-expert` |
 | `oats.okf` | `v5.8.0` | `oats.okf` (knowledge), `oats.okf-harvest`, `oats.okf-maintenance` | `knowledge-harvester`, `knowledge-maintainer` |
 | `oats.aweb` | `v1.37.0` | `oats.aweb` (messaging), `oats.aweb-tasks` (tasks) | |
-| `oats.engineering` | `v1.18.0` | `oats.engineering-expert`, `oats.developer`, `oats.code-review`, `oats.maintainer` | `code-reviewer` |
+| `oats.engineering` | `v1.18.0` (frozen: see Coordination templates) | `oats.engineering-expert`, `oats.developer`, `oats.code-review`, `oats.maintainer` | `code-reviewer` |
 | `oats.authoring` | `v1.0.3` | `oats.authoring` | |
 | `oats.cloning` | `v1.1.0` | `oats.cloning` | `cloner` |
 | `oats.jira` | `v1.0.1` | `oats.jira` (tasks) | |
@@ -32,6 +32,25 @@ package ships each capability (and a renamed capability's current name:
 deployment's package (the one that ships `oats.core`). This catalog ships with
 the CLI: an older installed CLI keeps its own copy, and a change here rewrites
 no lock and adds nothing to an existing workspace.
+
+## Coordination templates
+
+OATS's coordination ships as templates, not packages. A template is a
+repository that a setup expert copies into a workspace's own capabilities and
+adapts to the organisation by the repository's `ADAPTING.md`
+(`/adapt-to-the-organisation`, in `oats.framework`); nobody pins it. Template
+releases are tagged `template-v<version>`, and each copied capability records
+the release it came from.
+
+- `oats-project/oats-engineering`: work that lands as pull requests. A
+  dispatcher, a lead for each effort, developers who own their pull requests,
+  reviewers on call, and a maintainer where a lane needs one.
+
+The package `oats.engineering` is frozen at `v1.18.0`. Its entry and its four
+aliases stay, so existing pins keep resolving; its repository's later releases
+are templates, and a pin to one of them finds no package manifest
+(`E_PACKAGE_MANIFEST`). Open: retiring the entry and moving the aliases, a
+later decision once no workspace we know of pins it.
 
 ## Find and use packages
 
