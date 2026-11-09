@@ -1,14 +1,15 @@
 ## Upgrade
 
 - **A deployment of OATS's own workspace takes four hand steps, in this order.** Names written for the package's reviewer, `oats.engineering/code-reviewer`, now name the workspace's `code-reviewer` soul.
-  1. **`souls.launch`.** Pin the new key with the value the old one had, then remove the old one:
+  1. **`souls.launch`.** Remove the old key:
 
      ```sh
-     oats soul launch set code-reviewer --harness <harness> --model <model>   # or --launch-config <name>
      oats soul launch remove oats.engineering/code-reviewer
      ```
 
-     Left in place, the old key stops spawns. `oats doctor` shows `E_LAUNCH_PREFERENCE_UNMATCHED: oats-local.yaml souls.launch names "oats.engineering/code-reviewer" (nearest: code-reviewer)`, with these two commands. Every spawn that names no launch, of a soul with no `souls.launch` entry of its own, is refused with that code, and nothing is created or started. A spawn that names its launch (`--harness` or `--launch-config`) still runs.
+     The soul's own launch, pi with `github-copilot/gpt-6.1-sol`, then applies. Only to choose another launch, add the new key: `oats soul launch set code-reviewer --harness <harness> --model <model>` (or `--launch-config <name>`). A reviewer runs on a model family other than its developers'.
+
+     Left in place, the old key stops spawns. `oats doctor` shows `E_LAUNCH_PREFERENCE_UNMATCHED: oats-local.yaml souls.launch names "oats.engineering/code-reviewer" (nearest: code-reviewer)`. Its fix line pins a soul first, then removes the key; here removing the key is enough. Every spawn that names no launch, of a soul with no `souls.launch` entry of its own, is refused with that code, and nothing is created or started. A spawn that names its launch (`--harness` or `--launch-config`) still runs.
   2. **`souls.disabled`.** No command writes it. In `oats-local.yaml`, change `oats.engineering/code-reviewer` to `code-reviewer`. Left in place, nothing warns: `oats doctor` and the spawn are silent, and the new `code-reviewer` runs on this machine.
   3. **Team patterns.** They are the workspace's `souls:`, and OATS's has only `"*"`, which covers `code-reviewer`. Nothing to change. `oats soul teams code-reviewer` shows the `oats` team, from `"*"`.
   4. **Schedules and triggers.** Find any that spawns the old soul with `oats schedule list` and `oats trigger list`. `oats schedule test <id>` reports `soul oats.engineering/code-reviewer does NOT resolve (E_SOUL_UNKNOWN)`, and the job spawns nothing; `oats trigger test <id>` checks its soul the same way. Change each to `code-reviewer`:
