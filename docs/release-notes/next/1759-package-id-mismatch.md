@@ -16,10 +16,9 @@
 ## Fixed
 
 - **A package pinned under another package's id is no longer locked
-  silently** (oats-project/oats#1759). `oats.engineering: v2.0.0`, whose
-  manifest names `oats.engineering-coordination`, was locked under
-  `oats.engineering`, and its souls were named `oats.engineering/<soul>`.
-  `sync` now refuses it, and names the line to write under
-  `oats.engineering-coordination`: that id at the same version when the
-  catalog lists it, else
-  `git:https://github.com/awebai/oats-engineering.git@v2.0.0`.
+  silently** (oats-project/oats#1759). A pin such as `acme.tools: v2.0.0`,
+  whose release's manifest names `acme.tools-next`, was locked under
+  `acme.tools`, and its souls were named `acme.tools/<soul>`. `sync` now
+  refuses it, and names the line to write under `acme.tools-next`: that id
+  at the same version when the catalog lists it, else
+  `git:<the catalog's repository for acme.tools>@<the resolved tag>`.
