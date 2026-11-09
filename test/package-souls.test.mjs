@@ -331,7 +331,8 @@ test("readiness: a package soul's member check is its package (locked, integrity
   it = rd.checks.member.items[0];
   assert.deepEqual([it.subject, it.status], ["package acme.pkg/keeper", "fail"], JSON.stringify(it));
   assert.match(it.reason, /acme\.pkg is not locked in this workspace's packages:/);
-  assert.match(it.remedy, /packages:.*oats sync/);
+  // A home cannot be moved by declaring the package again: the remedy is a respawn (no successor is known).
+  assert.match(it.remedy, /^spawn a new instance from a soul this workspace offers \(oats souls lists them\), then retire this one$/);
   ws.packages = pinned;
   fx.commit({ "oats-workspace.yaml": YAML.stringify(ws) }, "declare acme.pkg again");
 

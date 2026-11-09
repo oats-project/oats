@@ -87,3 +87,7 @@ an entry. State the reason, affected releases and supported replacement or hold,
 and assess existing locks before changing discovery. Preserve immutable
 release history. A list change is not permission to rewrite a deployment's
 lock or change what a workspace declares.
+
+Renaming an official package is an entry in the kernel's table of renamed
+packages: the old and the new id then name one package, and nothing a
+deployment wrote is rewritten ([Renamed packages](workspaces.md#renamed-packages)).
