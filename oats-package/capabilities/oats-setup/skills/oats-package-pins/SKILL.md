@@ -76,6 +76,12 @@ request). Once it is on the default branch, run `oats sync` on each
 deployment. A bump affects only new spawns; running instances keep what they
 were given (`oats status` shows them as moved).
 
+After removing or renaming a pin, or any soul it provided, run `oats doctor`
+on each deployment and fix what it reports. Check `souls.disabled` in
+`oats-local.yaml` by hand too: an older kernel's doctor doesn't report it. An
+entry that names a soul that no longer exists fails open: it disables nothing,
+so the soul it was meant to keep off spawns again under its new name.
+
 ## Sync and the lock
 
 ```bash

@@ -273,7 +273,12 @@ oats-package/
   { id, version, commit, digest, path }` and the soul id `package:<id>#<soul>`;
   in `oats status` the soul is `moved` once the package pin moves.
 - **Disabled** by `oats-local.yaml` `souls.disabled` by its qualified or bare
-  name (`E_SOUL_DISABLED` at spawn).
+  name (`E_SOUL_DISABLED` at spawn). An entry is matched by name only, so an
+  entry naming a soul that no longer exists fails open: after a pin's removal
+  or rename, the soul it was meant to keep off spawns again under its new
+  name. After removing or renaming a pin, or a soul it provided, run
+  `oats doctor` and fix what it reports, and check `souls.disabled` by hand: an
+  older kernel's doctor doesn't report such an entry.
 - **Trusted** as the package's capabilities are: declaring the package is the
   trust decision.
 
