@@ -4,7 +4,7 @@ description: >-
   Propose an organisation's souls and standing instances: an expert soul per
   way of working (areas become its knowledge nodes), developer souls by
   environment, reviewers, maintainers per person per lane when needed, a
-  dispatcher per person who wants one, and routines; each with its reason, as
+  dispatcher per person who wants one, and automations; each with its reason, as
   few as the clear ways of working allow. Use at onboarding, and when the
   setup is reviewed. Part of oats.coordination-setup.
 ---
@@ -44,7 +44,8 @@ node, not a soul.
    first needed (`/set-landing-rules`).
 7. **Reviewers.** The forge's review bot if the organisation runs one,
    otherwise a reviewer soul, fresh per change.
-8. **Routines.** Only the organisation's scheduled jobs.
+8. **Automations.** Only the organisation's scheduled jobs and the events that
+   should start work (schedules and triggers, `/oats-automations`).
 9. **Retire rules.** Every short-lived soul says when its instance retires:
    reviewers and probes when they have answered, developers once their PR has
    merged or closed, experts when their effort is done.

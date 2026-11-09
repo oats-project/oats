@@ -9,9 +9,9 @@ you. A **card**, in these skills, is one message to a person with the
 question, the options and your recommendation.
 
 **IMPORTANT: LOAD THE SKILL FOR EACH STEP. DO NOT GUESS.**
-- At onboarding, inside `/oats-tailor-workspace` step 2:
-  `/adapt-to-the-organisation`, which runs `/design-the-roster` and
-  `/set-landing-rules`
+- At onboarding, from `/oats-tailor-workspace` step 1:
+  `/adapt-to-the-organisation` (ask, design, propose, write), which runs
+  `/design-the-roster` and `/set-landing-rules`
 - When a signal says the setup no longer fits, or a person asks:
   `/review-the-setup`
 
@@ -24,12 +24,12 @@ question, the options and your recommendation.
 - IMPORTANT: as few souls as the clear ways of working allow. Split knowledge
   before souls, and skills before souls.
 - IMPORTANT: with more than one person, set up their coordination too: the
-  ownership record, a dispatcher each who wants one, and the across-people
-  rules.
-- The workspace gets coordination capabilities of its own, one per role as in
-  the template, copied from it and adapted with these practices. Every part of
-  the organisation (each group of people, each repository) composes those same
-  capabilities; none keeps a copy of its own.
+  ownership record and the across-people rules. A dispatcher goes to each
+  person who wants one, however many there are.
+- The workspace gets coordination capabilities of its own, one per role the
+  roster keeps, copied from the template and adapted with these practices.
+  Every part of the organisation (each group of people, each repository)
+  composes those same capabilities; none keeps a copy of its own.
 - NEVER put a station in the path of every change (a standing gate, a relay)
   unless one of the organisation's own rules requires that read. NEVER set a
   deadline or a default-if-silent.

@@ -8,7 +8,8 @@ description: >-
   to the workspace's messaging account, tie the agents to the person where
   the messaging capability offers it, offer the approved channel route, and
   brief the person. Procedure only; the setup
-  and config procedures it points to are oats.setup's. Part of
+  and config procedures it points to are oats.setup's, and the coordination
+  practices it adapts with are oats.coordination-setup's. Part of
   oats.onboarding.
 ---
 
@@ -38,6 +39,10 @@ This is discovery, not configuration. Change nothing yet. Read:
 - one repository or several;
 - Slack, if it is connected and the person allows you to read it.
 
+When you carry `oats.coordination-setup`, load `/adapt-to-the-organisation`
+now: its reads (step 1) join these, and its questions (step 2) join this
+round.
+
 Then ask the person only what that leaves open, in one round.
 
 ## 2. Author the core capabilities
@@ -49,24 +54,27 @@ package pins, and they need no packaging. The manifest's shape is in the
 installed kernel's `docs/capabilities.md`.
 
 Copy each from OATS's default and adapt it to what step 1 found. Run **one
-sub-agent per capability you author**, on the strongest model available,
-each with step 1's findings and its starting point:
+sub-agent per capability you author**, on the strongest model available
+(one for the coordination capabilities together), each with step 1's
+findings and its starting point:
 
 - **Coordination**, from the engineering package `oats.engineering`
   (`oats.maintainer`, `oats.engineering-expert`, `oats.developer`,
   `oats.code-review`) as the template, adapted by
   `/adapt-to-the-organisation` (`oats.coordination-setup`): its roster of
   souls (`/design-the-roster`) and its landing rules (`/set-landing-rules`).
-  You do that skill's reads, questions and card yourself, folded into step 1's
-  one round; the sub-agent writes the adapted capabilities from the design the
-  people agreed. It must cover:
-  - the roles (maintainer, expert, developer, reviewer), adapted to their
+  Its reads and questions were step 1's. Here, design, and send each person
+  their proposal card (a message to that person with your recommendation); on
+  each yes, the sub-agent writes the coordination capabilities. Without
+  `oats.coordination-setup`, adapt the template by the rest of this bullet. It
+  must cover:
+  - the roles the roster keeps (`/design-the-roster`), adapted to their
     review and merge rules and to their size;
   - the Desktop's grouping (from OATS 0.69.2): a top-level agent is spawned
     without `--same-work`, a feature's agents with it, and each group has one
     colour (`oats instance color`, from OATS 0.67.0);
-  - coordination across humans: taught to the agents, and explained to the
-    people.
+  - with several people, coordination across humans: taught to the agents,
+    and explained to the people.
 - **Knowledge**, from the knowledge theory (`oats.knowledge-theory`'s
   `/knowledge-capability-authoring`). If they use OKF, start from `oats.okf`;
   otherwise write a capability over what they already have. It must cover
@@ -197,7 +205,7 @@ In the session, plainly:
   written down, said plainly ("in your project on GitHub");
 - how to work with the agents: who to talk to first, and how the roles hand
   work to each other;
-- how coordination across humans will run;
+- with several people, how coordination across humans will run;
 - whether the account is theirs, waiting on their email, or unattached
   (step 3);
 - whether their agents are tied to them yet (step 4); if not, why (it

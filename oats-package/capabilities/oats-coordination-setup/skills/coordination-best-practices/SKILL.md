@@ -26,8 +26,9 @@ version, and that expert then owns it.
 
 **Who stands, who is fresh.** Expertise lives in souls and their knowledge, so
 instances start fresh.
-- A dispatcher per person, standing: the front door that starts work and
-  introduces its lead. It never relays cards, answers or progress.
+- A dispatcher for each person who wants one, standing: the front door that
+  starts their work and introduces its lead. It never relays cards, answers or
+  progress.
 - An expert soul per way of working, not per area: a fresh instance per
   effort, compacting and never respawning, then retiring. Areas that differ
   only in what they read are knowledge nodes of one soul, read per task.
@@ -40,8 +41,8 @@ instances start fresh.
 - A maintainer per person per lane, called by message where a lane's rules
   need its read or reserve its merge; spawned when first needed, never a
   second while one is active.
-- Routines for scheduled jobs, and for waking work that waits on a date or an
-  event.
+- Automations (schedules and triggers, `/oats-automations`) for scheduled
+  jobs, and for waking work that waits on a date or an event.
 - Every short-lived instance has a retire rule.
 
 **Hand-offs.** A message to a role about a finished artefact at its exact

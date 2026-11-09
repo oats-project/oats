@@ -41,7 +41,8 @@ description: >-
    today, such as a release's contents, publishing outside the company, money,
    and deleting what others use. Nothing else goes to a person by rule.
 7. **No deadlines and no defaults.** A request waits for its answer.
-8. **Write them** in the workspace's coordination capabilities, and as lane
-   arrangements on the lane map where the workspace keeps one, in plain words,
-   each rule with its reason. Propose them to the people as one card each, for
-   their own lanes.
+8. **Hand them on.** From `/adapt-to-the-organisation`, the rules go into its
+   card for each person and its write step; write nothing here. From
+   `/review-the-setup`, propose the change as one card to the person who owns
+   the lane, and on their yes write it into the landing-rules skill (and the
+   lane map where the workspace keeps one), with its reason.
