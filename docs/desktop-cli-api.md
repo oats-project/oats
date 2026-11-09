@@ -2290,6 +2290,39 @@ shows the drift as `launch-changed`.
   home, `--reselect-launch` included, is never refused this way.
 - `E_WORKSPACE_SCHEMA`: a malformed `launch` or `souls.launch`, path named.
 
+**A `souls.disabled` entry that names no soul** (oats-project/oats#1772) keeps
+no soul off this machine, and spawn does not refuse because of it: a stale
+entry fails open, where a stale `souls.launch` key fails closed. `oats doctor`
+reports it with the launch check's discipline, offline, from the same read of
+this machine's cache:
+- An entry matches when spawn's own rule (`E_SOUL_DISABLED`) holds for a soul
+  the workspace offers: its bare name, or its qualified name (`<package>/<soul>`
+  or `<member>/<soul>`). A disabled soul is still offered. Spawn's rule is
+  exact: `<member>/<soul>` for a soul that only another member offers does not
+  match.
+- `problems[]` gains `{code: "disabled-soul-unmatched", entry, at,
+  suggestions, message, remedy}` per entry that matches nothing, in file
+  order (text: `! disabled-soul-unmatched: <message>`, then the remedy). `at`
+  is `oats-local.yaml#/souls/disabled/<index>`. `suggestions` holds at most
+  three qualified names of offered souls, ranked as the launch rows rank
+  theirs: the same bare name first, then a bare name within two edits. The
+  message says that it speaks about this machine's last read and that a spawn
+  reads the workspace itself and is the authority. The remedy is the hand
+  edit, replace the entry with the soul it was meant for or remove it: no
+  command writes `souls.disabled`.
+- An entry is *not checked*, and gets an `information[]` line that starts
+  `disabled-soul-unchecked:` instead of a row, when the source that could
+  hold its soul was not read, for the reasons of the launch check: an entry
+  under a package that is declared and not locked, or one of whose souls was
+  skipped; any entry not under the package of an offered package soul while
+  a member is not confirmed or a member's or an external soul was skipped (a
+  bare name, `<member>/<soul>`, or a prefix that may be a member's name);
+  every entry in the standalone view of a workspace whose host cannot be
+  read, or a read that kept no record of what it skipped. When the cache
+  cannot answer at all, one such line names the entries.
+- Doctor still exits 0. With no `souls.disabled`, or an empty list, nothing is
+  added. Spawn, `oats souls`, readiness and inspect do not change.
+
 ### The launch report (`Launch`)
 
 ```json

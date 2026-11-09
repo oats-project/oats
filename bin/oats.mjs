@@ -64,9 +64,9 @@ const { previewLaunchEnvironment, previewPaneEnvironment } = await kernelImport(
 const { PI_BRIDGE, piBridgeFolders, piBridgeSkewWarnings, planPiBridges, piBridgePlanLines, piBridgeStepProblem, piBridgeFailure, kernelLookup, kernelLookupResult, planCliUpdate, desktopFirstLine, bridgeLookup, bridgeLookupProblem } = await kernelImport("pi-bridge", () => import("../lib/pi-bridge.mjs"));
 const { loadLocal, validateWorkspace, validateLocal, discoverPackageSouls, unlockedPackages, workspaceWarnings, memberRowByKey } = await kernelImport("workspace", () => import("../lib/workspace.mjs"));
 const { discoveredTeamKeys, isTeamRefusal, localTeamsClosedProblem, recordedTeams, reportRows, soulKeyOf, soulTeams, teamKeyOf, teamModel } = await kernelImport("teams", () => import("../lib/teams.mjs"));
-const { LAUNCH_KEY_UNCHECKED, LAUNCH_PREFERENCE_UNMATCHED, launchKeyQuoted, launchKeysUnmatched, launchLayers, soulLaunchCommand, unmatchedKeyMessage } = await kernelImport("launch-preference", () => import("../lib/launch-preference.mjs"));
-const { terminalText } = await kernelImport("refused-text", () => import("../lib/refused-text.mjs"));
-const { qualifiedSoulName, soulCandidates, soulsOffered } = await kernelImport("instance-resolution", () => import("../lib/instance-resolution.mjs"));
+const { LAUNCH_KEY_UNCHECKED, LAUNCH_PREFERENCE_UNMATCHED, LAUNCH_PROBLEM_TEXT_MAX, launchKeyQuoted, launchKeysUnmatched, launchLayers, soulLaunchCommand, uncheckedSentences, unmatchedKeyMessage } = await kernelImport("launch-preference", () => import("../lib/launch-preference.mjs"));
+const { safeText, terminalText } = await kernelImport("refused-text", () => import("../lib/refused-text.mjs"));
+const { disabledEntriesUnmatched, qualifiedSoulName, soulCandidates, soulsOffered } = await kernelImport("instance-resolution", () => import("../lib/instance-resolution.mjs"));
 const { parseConfigData } = await kernelImport("config-data", () => import("../lib/config-data.mjs"));
 const remoteModule = await kernelImport("remote", () => import("../lib/remote.mjs"));
 const { sameRepo } = await kernelImport("repo-moves", () => import("../lib/repo-moves.mjs"));
@@ -306,6 +306,24 @@ async function doctorOperator(ws) {
   return { problems: found.map(({ code, label, message, remedy }) => ({ code, ...(label ? { label } : {}), message, remedy })), information: [] };
 }
 
+/** This machine's last read of the workspace, for doctor's checks of the soul names in oats-local.yaml:
+ *  discovered OFFLINE like doctorOperator, from this machine's cache only (cacheOnlyRemote), once per
+ *  doctor run however many checks ask, and only when one asks. A cache that cannot answer rejects, for
+ *  each check to say as information (doctorCacheWhy). */
+const doctorReads = new WeakMap();
+function doctorDiscovery(ws) {
+  if (!doctorReads.has(ws)) doctorReads.set(ws, (async () => {
+    const { cacheOnlyRemote } = await import("../lib/operator-coverage.mjs");
+    const { discoverOrStandalone } = await import("../lib/instance-resolution.mjs");
+    const deployment = dirname(ws.local.path);
+    return discoverOrStandalone(ws.local.value, { lock: readLockIfPresent(deployment), deployment, remoteOptions: remoteOptionsFromEnv(), remote: cacheOnlyRemote() });
+  })());
+  return doctorReads.get(ws);
+}
+/** Why doctorDiscovery could not answer, as a doctor line says it: a cache miss is the cache's; anything
+ *  else is named as itself. */
+const doctorCacheWhy = (e) => (e?.code === "E_REMOTE_UNREADABLE" ? `this machine's cache cannot answer (${e.message})` : `${e?.code ? `${e.code}: ` : ""}${e?.message ?? e}`);
+
 /** The keys of oats-local.yaml souls.launch that name no soul (awebai/oats#989), in doctor, OFFLINE like
  *  doctorOperator: the souls are discovered from this machine's cache only, and the one function
  *  (launchKeysUnmatched) decides. A problem per unmatched key, which speaks about this machine's last
@@ -321,13 +339,9 @@ async function doctorLaunchPreferences(ws) {
   const shown = (list) => (list.length > 3 ? `${list.slice(0, 3).map(launchKeyQuoted).join(", ")} and ${list.length - 3} more` : list.map(launchKeyQuoted).join(", "));
   let found;
   try {
-    const { cacheOnlyRemote } = await import("../lib/operator-coverage.mjs");
-    const { discoverOrStandalone } = await import("../lib/instance-resolution.mjs");
-    const deployment = dirname(ws.local.path);
-    const discovery = await discoverOrStandalone(local, { lock: readLockIfPresent(deployment), deployment, remoteOptions: remoteOptionsFromEnv(), remote: cacheOnlyRemote() });
-    found = launchKeysUnmatched({ local, offered: soulsOffered(discovery) });
+    found = launchKeysUnmatched({ local, offered: soulsOffered(await doctorDiscovery(ws)) });
   } catch (e) {
-    const why = e?.code === "E_REMOTE_UNREADABLE" ? `this machine's cache cannot answer (${e.message})` : `${e?.code ? `${e.code}: ` : ""}${e?.message ?? e}`;
+    const why = doctorCacheWhy(e);
     return { problems: [], information: [`launch-preference-unchecked: the keys of oats-local.yaml souls.launch (${shown(keys)}) were not checked against the souls this workspace offers: ${why}; oats sync, then oats souls, then run doctor again (a spawn reads the workspace itself and refuses a key that names no soul)`] };
   }
   return {
@@ -335,6 +349,38 @@ async function doctorLaunchPreferences(ws) {
       message: unmatchedKeyMessage(row, { lastRead: true }),
       remedy: `pin the soul it was meant for (${soulLaunchCommand("set")}), then: ${soulLaunchCommand("remove", { key: row.key })}` })),
     information: found.unchecked.map((row) => `launch-preference-unchecked: oats-local.yaml souls.launch ${launchKeyQuoted(row.key)} was not checked against the souls this workspace offers: ${LAUNCH_KEY_UNCHECKED[row.reason] ?? row.reason}; this is this machine's last read, and a spawn reads the workspace itself`),
+  };
+}
+
+/** The entries of oats-local.yaml souls.disabled that name no soul (oats-project/oats#1772), in doctor,
+ *  OFFLINE from the read doctorLaunchPreferences uses (doctorDiscovery), and the one function
+ *  (disabledEntriesUnmatched) decides. Such an entry keeps no soul off this machine: it fails open. A
+ *  problem per unmatched entry, which speaks about this machine's last read of the souls: a spawn reads
+ *  the workspace itself and is the authority. An entry that could not be checked, or a cache that cannot
+ *  answer, is an information line (`disabled-soul-unchecked`), never silence and never a failure of
+ *  doctor. No command writes souls.disabled, so the remedy is the hand edit. The entry and the nearest
+ *  souls are said through the launch texts' bound (launchKeyQuoted, safeText).
+ *  → { problems: [{ code, entry, at, suggestions, message, remedy }], information: [string] } */
+async function doctorDisabledSouls(ws) {
+  const local = ws.local.value;
+  const entries = Array.isArray(local?.souls?.disabled) ? local.souls.disabled.filter((e) => typeof e === "string") : [];
+  if (!entries.length) return { problems: [], information: [] };
+  let found;
+  try {
+    found = disabledEntriesUnmatched({ local, discovery: await doctorDiscovery(ws) });
+  } catch (e) {
+    const shown = entries.length > 3 ? `${entries.slice(0, 3).map(launchKeyQuoted).join(", ")} and ${entries.length - 3} more` : entries.map(launchKeyQuoted).join(", ");
+    return { problems: [], information: [`disabled-soul-unchecked: the entries of oats-local.yaml souls.disabled (${shown}) were not checked against the souls this workspace offers: ${doctorCacheWhy(e)}; oats sync, then oats souls, then run doctor again`] };
+  }
+  const reasons = uncheckedSentences("entry");
+  return {
+    problems: found.unmatched.map(({ entry, at, suggestions }) => {
+      const near = suggestions.map((name) => safeText(name, LAUNCH_PROBLEM_TEXT_MAX)).join(", ");
+      return { code: "disabled-soul-unmatched", entry, at, suggestions,
+        message: `oats-local.yaml souls.disabled names ${launchKeyQuoted(entry)}${near ? ` (nearest: ${near})` : ""}, which is no soul in this machine's last read of the souls this workspace offers, so it keeps no soul off this machine. A spawn reads the workspace itself and is the authority`,
+        remedy: `in oats-local.yaml souls.disabled, replace ${launchKeyQuoted(entry)} with the soul it was meant to keep off this machine (${near ? `nearest: ${near}; ` : ""}oats souls lists them), or remove it` };
+    }),
+    information: found.unchecked.map(({ entry, reason }) => `disabled-soul-unchecked: oats-local.yaml souls.disabled ${launchKeyQuoted(entry)} was not checked against the souls this workspace offers: ${reasons[reason] ?? reason}; this is this machine's last read, and a spawn reads the workspace itself`),
   };
 }
 
@@ -833,14 +879,15 @@ async function doctorWorkspaceJson(ctx, soulName, ws) {
   const schedules = unresolvedScheduleAttempts(dirname(ws.local.path));
   const operator = await doctorOperator(ws);
   const launchPreferences = await doctorLaunchPreferences(ws);
+  const disabledSouls = await doctorDisabledSouls(ws);
   // With --soul, the soul's composition; without, the deployment's capabilities (doctorHookWarnings).
   const hookEvents = composition ? { warnings: composition.warnings, information: [] } : await doctorHookWarnings(ws);
-  const problems = [...legacyLayoutProblems(agentsRoot), readableInstanceHomes(agentsRoot), ...localTeams.problems, ...schedules.problems, ...operator.problems, ...launchPreferences.problems, ...retireIncompleteProblems(agentsRoot)].filter(Boolean);
+  const problems = [...legacyLayoutProblems(agentsRoot), readableInstanceHomes(agentsRoot), ...localTeams.problems, ...schedules.problems, ...operator.problems, ...launchPreferences.problems, ...disabledSouls.problems, ...retireIncompleteProblems(agentsRoot)].filter(Boolean);
   return {
     schemaVersion: 1, workspaceApi: 2, context: ctx,
     workspace: { file: ws.local.path, ref: ws.local.workspace },
     workspaceError: ws.localError, lockFile: ws.lockFile, packages: ws.packages, lockError: ws.lockError,
-    information: [...(operationalKnowledgeNote(composition, soulName) ? [operationalKnowledgeNote(composition, soulName)] : []), ...localTeams.information, ...schedules.information, ...operator.information, ...launchPreferences.information, ...hookEvents.information, ...processScanInformation(), ...doctorRetained(ws).flat()],
+    information: [...(operationalKnowledgeNote(composition, soulName) ? [operationalKnowledgeNote(composition, soulName)] : []), ...localTeams.information, ...schedules.information, ...operator.information, ...launchPreferences.information, ...disabledSouls.information, ...hookEvents.information, ...processScanInformation(), ...doctorRetained(ws).flat()],
     machineLaunchConfigs: doctorMachineLaunchConfigs(),
     composedInstructions: composition?.text, instructionBlocks: composition?.blocks,
     ...(problems.length ? { problems } : {}),
@@ -892,12 +939,14 @@ async function doctor(dir) {
   for (const p of operator.problems) console.log(`\n! ${p.code}: ${p.message}\n  ${p.remedy}`);
   const launchPreferences = await doctorLaunchPreferences(ws);
   for (const p of launchPreferences.problems) console.log(`\n! ${p.code}: ${p.message}\n  ${p.remedy}`);
+  const disabledSouls = await doctorDisabledSouls(ws);
+  for (const p of disabledSouls.problems) console.log(`\n! ${p.code}: ${p.message}\n  ${p.remedy}`);
   // Retirements left open (#1747): the command that finishes each, and whose hook failed last.
   for (const p of retireIncompleteProblems(agentsRoot)) console.log(`\n! ${p.code}: ${terminalText(p.message)}\n  ${terminalText(p.remedy)}`);
   const hookEvents = composition ? { warnings: composition.warnings, information: [] } : await doctorHookWarnings(ws);
   for (const w of hookEvents.warnings) console.log(`\nwarning  ${w.code}  ${w.message}`);
   if (!soulName) for (const w of doctorCaptureWarnings()) console.log(`\nwarning  ${w.code}  ${terminalText(w.message)}`);
-  for (const line of [...localTeams.information, ...schedules.information, ...operator.information, ...launchPreferences.information, ...hookEvents.information, ...processScanInformation()]) console.log(`\nINFO: ${line}`);
+  for (const line of [...localTeams.information, ...schedules.information, ...operator.information, ...launchPreferences.information, ...disabledSouls.information, ...hookEvents.information, ...processScanInformation()]) console.log(`\nINFO: ${line}`);
   for (const block of doctorRetained(ws)) console.log(`\n${block.map((line) => `INFO: ${line}`).join("\n")}`);
   if (soulName) {
     const information = operationalKnowledgeNote(composition, soulName);
