@@ -24,16 +24,18 @@ investigate an alternative), reports what it found and retires; the plan stays
 the lead's. A finished part can be handed to another expert at an exact
 version, and that expert then owns it.
 
-**Children are OATS instances, on a different model when they check work.**
-A probe, a developer or a reviewer is spawned as an OATS child (`--parent`),
-not as the harness's own subagent (in Claude Code, pi or Codex alike): an OATS
-child shows in status and the Desktop, has its own messaging and knowledge,
-and is retired on record, while a native subagent is visible only to its
-parent. The exception is a harness's multi-agent workflow mode, such as
-Claude Code's ultracode, when it is in use. A child that reviews adversarially,
-investigates or validates a theory or an approach runs on a different model
-from the agent whose work it checks, wherever the organisation has one:
-agents of one model share blind spots, so their agreement is not independent.
+**Proper work goes to OATS children; checking work goes to another model.**
+An investigation or test the plan rests on, a review, and any work that needs a
+soul's knowledge or an environment to run and test in go to an OATS child
+(`--parent`): it shows in status and the Desktop, has its own messaging and
+knowledge, and is retired on record. A small investigation or task that
+directly helps the lead, and needs neither, can be the harness's own subagent
+(in Claude Code, pi or Codex), as can anything the person asks to run that way
+or that runs in a multi-agent workflow mode such as Claude Code's ultracode.
+A child that reviews adversarially, investigates or validates a theory or an
+approach runs on a different model from the agent whose work it checks,
+wherever the organisation has one: agents of one model share blind spots, so
+their agreement is not independent.
 
 **Who stands, who is fresh.** Expertise lives in souls and their knowledge, so
 instances start fresh.
