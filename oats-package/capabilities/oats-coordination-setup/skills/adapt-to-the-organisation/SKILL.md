@@ -4,8 +4,8 @@ description: >-
   The onboarding pass that shapes OATS's coordination practices to one
   organisation: read its workspace, repositories, rules and docs first; ask
   each person only what reading can't tell; set up across-people coordination
-  when there is more than one person; pin and compose the coordination package
-  rather than copying it; and propose the setup for each person's yes. Use
+  when there is more than one person; adapt OATS's coordination template into
+  the workspace's own; and propose the setup for each person's yes. Use
   when onboarding a workspace (`/oats-tailor-workspace`, step 2), or when an
   organisation already running OATS asks to move to these practices. Part of
   oats.coordination-setup.
@@ -29,16 +29,17 @@ description: >-
    With one person, leave these out.
 4. **Design** the roster (`/design-the-roster`) and the landing rules
    (`/set-landing-rules`).
-5. **Compose, don't copy.** Pin the coordination package and name its
-   capabilities from the souls. Author as this workspace's own only what is
-   its own:
-   - the souls;
-   - the landing rules and the ownership record;
-   - each repository's run-and-test skills, where the repository doesn't
-     carry them.
-   A copy of a package skill is for changing what it does. Keep a note in it
-   of what changed and from which version, so the next package release is a
-   small port.
+5. **Adapt the template.** Copy the engineering package's capabilities as
+   this workspace's own coordination (`/oats-tailor-workspace`, step 2), then
+   shape them with steps 3 and 4:
+   - take out the template's assumptions this organisation doesn't share;
+   - write in its roster, its landing rules and, with several people, its
+     ownership record;
+   - add the run-and-test skills its repositories don't carry.
+   Note in the capability which version of the template it started from, so a
+   later template release can be read for what is worth taking. Within the
+   organisation, its groups and repositories compose this one capability; none
+   keeps a copy of its own.
 6. **Propose** the whole setup to each person, for their own part, as one card
    with your recommendation. Apply it on their yes. Record each choice and its
    reason in your knowledge node.

@@ -10,4 +10,4 @@
 
 ## Changed
 
-- **Onboarding composes the engineering package instead of copying it.** `/oats-tailor-workspace`'s coordination step now runs `/adapt-to-the-organisation`. It pins the engineering package and authors only the workspace's own parts: its souls, its landing rules and ownership record, and any run-and-test skills its repositories lack. A package skill is copied only to change what it does, with a note of what changed, so a new package release is a small port.
+- **Onboarding adapts the coordination template with these practices.** `/oats-tailor-workspace` still starts a workspace's coordination from the engineering package as a template. It now shapes it with `/adapt-to-the-organisation`: the roster of souls (`/design-the-roster`), the landing rules (`/set-landing-rules`) and, with several people, the ownership record. The capability notes the template version it started from.

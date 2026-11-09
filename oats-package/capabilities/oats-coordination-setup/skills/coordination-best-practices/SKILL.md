@@ -76,4 +76,5 @@ about it.
 - long specs where a short one would do;
 - a seat that only relays or tracks;
 - knowledge PRs an agent must shepherd alone;
-- copies of shared skills that drift.
+- copies of one capability kept by each group or repository of an
+  organisation, which drift apart.

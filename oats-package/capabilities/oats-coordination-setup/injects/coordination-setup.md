@@ -23,10 +23,10 @@ and their rules can't tell you.
 - IMPORTANT: with more than one person, set up their coordination too: the
   ownership record, a dispatcher each when they want one, and the
   across-people rules.
-- Pin the coordination package and compose it. Author only what is this
-  organisation's own: its souls, its landing rules, its ownership record and
-  its repositories' run-and-test skills. Copy a package skill only to change
-  what it does, and keep a note of what changed.
+- OATS's engineering package is the template, not the answer. The workspace
+  gets coordination of its own, copied from the template and adapted with
+  these practices to how it works. Within the organisation, its groups and
+  repositories share that one capability by composition, never a copy each.
 - NEVER put a station in the path of every change (a standing gate, a relay)
   unless one of the organisation's own rules requires that read. NEVER set a
   deadline or a default-if-silent.

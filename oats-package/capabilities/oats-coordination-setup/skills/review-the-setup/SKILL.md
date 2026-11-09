@@ -21,7 +21,8 @@ description: >-
 | A maintainer keeps making the same special judgment | Write it into the landing rules |
 | A person keeps answering the same kind of card | Move that decision into a rule or to the agents, with their yes |
 | A person asks for a read they don't get | Add that agreement to their lane's landing rules |
-| A copied skill has drifted from its package | Port the package's change, or compose the package's skill again |
+| Two groups or repositories keep drifting copies of one capability | Merge them into one capability they both compose |
+| OATS's template has a release worth having | Read what changed since the version the capability notes, and port what fits |
 
 Propose each change as a card with your recommendation. Never add a station to
 the path of every change.
