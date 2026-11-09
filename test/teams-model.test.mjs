@@ -137,6 +137,31 @@ test("a soul's problems: only what concerns it; `default` marks ITS default", ()
   assert.deepEqual(teamProblems(model(ws({ souls: { "a/*": { default: "docs" } } })), { key: "a/dev", messaging: true }).map((p) => [p.code, p.default]), [["team-unmapped", true]]);
 });
 
+test("team-soul-unknown: a souls: key that is no discovered soul, or a <prefix>/* pattern that matches none, warns; \"*\" never does", () => {
+  const SOULS = new Set(["platform/dev", "oats.engineering/code-reviewer"]);
+  const unknownOf = (m, opts) => teamProblems(m, opts).filter((p) => p.code === "team-soul-unknown");
+  const keysOf = (souls) => unknownOf(model(ws({ souls })), { soulKeys: SOULS }).map((p) => p.key);
+  const at = (key) => `github.com/acme/agents:oats-workspace.yaml#/souls/${key.replace(/\//g, "~1")}`;
+  const exact = (key) => ({ code: "team-soul-unknown", severity: "warning", key, at: at(key),
+    message: `souls: ${key} names no soul of this workspace (a pattern is "*" or <member|package>/*)`, fix: "correct the key to a soul's qualified name (oats souls lists them), or remove it" });
+  const pattern = (key) => ({ code: "team-soul-unknown", severity: "warning", key, at: at(key),
+    message: `souls: ${key} is a pattern that matches no soul of this workspace`, fix: "correct the prefix to a member's or package's name (oats souls lists them), or remove the key" });
+  // A typo'd (or renamed, or dropped) prefix: the same code and fields as an exact key; exact keys keep their text.
+  assert.deepEqual(unknownOf(model(ws({ souls: { "platfrom/*": {}, "platfrom/dev": {} } })), { soulKeys: SOULS }), [pattern("platfrom/*"), exact("platfrom/dev")]);
+  // A pattern that matches at least one discovered soul, and "*", are silent.
+  assert.deepEqual(keysOf({ "*": {}, "platform/*": {}, "oats.engineering/*": { teams: "any" }, "platform/dev": {} }), []);
+  // The slash is compared: a prefix of another name matches none of its souls.
+  assert.deepEqual(keysOf({ "oats.eng/*": {}, "plat/*": {} }), ["oats.eng/*", "plat/*"]);
+  // A prefix with a slash, or an empty one, matches no soul key.
+  assert.deepEqual(keysOf({ "platform/dev/*": {}, "/*": {} }), ["/*", "platform/dev/*"]);
+  // An unconfirmed member has no discovered souls: its pattern warns, as its exact keys do.
+  assert.deepEqual(keysOf({ "unconfirmed/*": {}, "unconfirmed/dev": {} }), ["unconfirmed/*", "unconfirmed/dev"]);
+  // Souls not known (soulKeys null): no key warns.
+  assert.deepEqual(unknownOf(model(ws({ souls: { "platfrom/*": {}, "platfrom/dev": {} } }))), []);
+  // A soul's problems (readiness) carry the same warnings.
+  assert.deepEqual(unknownOf(model(ws({ souls: { "platfrom/*": {} } })), { key: "platform/dev", soulKeys: SOULS }), [pattern("platfrom/*")]);
+});
+
 test("every reference to a local label, as `oats teams remove` names them: the local default only", () => {
   const m = model(ws({ localTeams: true }), { teams: { mine: { team: "mine:me.aweb.ai" }, spare: { team: "spare:me.aweb.ai" } }, defaultTeam: "mine" });
   assert.deepEqual(teamReferences(m, "mine"), ["defaultTeam"]);

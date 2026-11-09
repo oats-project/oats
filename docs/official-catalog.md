@@ -21,9 +21,15 @@ or workspace membership alone does not make a package official.
 | `oats.machine` | `v0.1.1` | `oats.machine-care` | `steward`, `technician` |
 
 Each package lives in its own `awebai/oats-*` repository except
-`oats.framework`, whose payload root is `oats-package/` here. A capability id
-names the package that supplies it through the catalog's aliases, so
-`oats.developer: { from: package }` selects `oats.engineering`. This catalog ships with
+`oats.framework`, whose payload root is `oats-package/` here. A capability
+written `{ from: package }` resolves through the workspace's lock, to the one
+locked package whose capability list holds it: `oats.developer: { from: package }`
+selects `oats.engineering` when that package is pinned and synced. Two locked
+packages providing the same capability are refused with `E_PACKAGE_MISSING`,
+which names both. The catalog's `capabilities` map records which official
+package ships each capability (and a renamed capability's current name:
+`oas.okf` is `oats.okf`); the kernel reads it only to pick a standalone
+deployment's package (the one that ships `oats.core`). This catalog ships with
 the CLI: an older installed CLI keeps its own copy, and a change here rewrites
 no lock and adds nothing to an existing workspace.
 
