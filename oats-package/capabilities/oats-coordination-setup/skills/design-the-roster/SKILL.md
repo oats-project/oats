@@ -37,7 +37,10 @@ node, not a soul.
      provide: a browser or display, a local service stack, warehouse access, a
      tool rig.
 5. **Dispatchers.** One per person who wants a front door that starts their
-   work and introduces its lead. Introducing one is that person's call.
+   work and introduces its lead. Introducing one is that person's call. On
+   their yes, start it once its soul has synced, on their machine (by that
+   machine's setup expert when it isn't yours); the brief names it as who to
+   talk to first.
 6. **Maintainers.** A maintainer soul exists where a lane's landing rules
    need a maintainer's read or reserve its merges; no maintainer instance is
    started at setup. One is started for the person who owns that lane when

@@ -36,7 +36,9 @@ description: >-
      lane. The developer then opens it and works its reviews.
 5. **A maintainer's read** only where the organisation already requires a
    second read for a lane, or reserves its merges. It is the maintainer of the
-   person who owns the lane. Say whether the maintainer reads or merges.
+   person who owns the lane. Say whether the maintainer reads or merges. When
+   first needed, the lead starts it for its own person; for another person's
+   lane, through that person's dispatcher, or that person.
 6. **The one-way doors** a person must open: those the organisation keeps
    today, such as a release's contents, publishing outside the company, money,
    and deleting what others use. Nothing else goes to a person by rule.
@@ -44,5 +46,5 @@ description: >-
 8. **Hand them on.** From `/adapt-to-the-organisation`, the rules go into its
    card for each person and its write step; write nothing here. From
    `/review-the-setup`, propose the change as one card to the person who owns
-   the lane, and on their yes write it into the landing-rules skill (and the
-   lane map where the workspace keeps one), with its reason.
+   the lane, and on their yes write it into the landing-rules capability, with
+   its reason.

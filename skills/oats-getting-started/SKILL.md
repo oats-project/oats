@@ -33,8 +33,8 @@ A **workspace** is one Git repository declaring which repositories belong to
 an organisation and which packages it trusts. A **soul** is a durable agent
 role defined in Git; an **instance** is a soul at work, in its own home and
 terminal. A new workspace's setup expert is `oats.framework`'s soul
-`oats-setup-expert` (capabilities `oats.setup`, `oats.onboarding` and
-`oats.coordination-setup`),
+`oats-setup-expert` (capabilities `oats.setup` and `oats.onboarding`, and
+`oats.coordination-setup` from the oats.framework release after 1.22.1),
 spawned as `<workspace>-oats-setup-expert`.
 
 **A machine found-list** is a JSON file in your prompt whose

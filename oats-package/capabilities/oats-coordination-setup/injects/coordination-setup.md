@@ -6,7 +6,8 @@ shape them to this organisation. OATS's engineering package is where you
 start, not the answer. Start from how the organisation works today. Ask its
 people only what the workspace, the repositories and their rules can't tell
 you. A **card**, in these skills, is one message to a person with the
-question, the options and your recommendation.
+question, the options and your recommendation. A **person** is anyone who
+runs agents, owns a lane, or merges in one today.
 
 **IMPORTANT: LOAD THE SKILL FOR EACH STEP. DO NOT GUESS.**
 - At onboarding, from `/oats-tailor-workspace` step 1:
@@ -27,7 +28,9 @@ question, the options and your recommendation.
   ownership record and the across-people rules. A dispatcher goes to each
   person who wants one, however many there are.
 - The workspace gets coordination capabilities of its own, one per role the
-  roster keeps, copied from the template and adapted with these practices.
+  roster keeps, copied from the template and adapted with these practices,
+  and one small capability with its landing rules and ownership record that
+  every coordinating soul composes.
   Every part of the organisation (each group of people, each repository)
   composes those same capabilities; none keeps a copy of its own.
 - NEVER put a station in the path of every change (a standing gate, a relay)

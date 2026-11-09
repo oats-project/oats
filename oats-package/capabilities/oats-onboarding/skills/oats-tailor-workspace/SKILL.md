@@ -66,10 +66,11 @@ findings and its starting point:
   Its reads and questions were step 1's. Here, design, and send each person
   their proposal card (a message to that person with your recommendation); on
   each yes, the sub-agent writes the coordination capabilities. Without
-  `oats.coordination-setup`, adapt the template by the rest of this bullet. It
-  must cover:
-  - the roles the roster keeps (`/design-the-roster`), adapted to their
-    review and merge rules and to their size;
+  `oats.coordination-setup`, adapt the template yourself. With or without
+  it, the capabilities must cover:
+  - the roles the roster keeps (`/design-the-roster`), or without it the
+    template's four, adapted to their review and merge rules and to their
+    size;
   - the Desktop's grouping (from OATS 0.69.2): a top-level agent is spawned
     without `--same-work`, a feature's agents with it, and each group has one
     colour (`oats instance color`, from OATS 0.67.0);
@@ -206,6 +207,7 @@ In the session, plainly:
 - how to work with the agents: who to talk to first, and how the roles hand
   work to each other;
 - with several people, how coordination across humans will run;
+- who merges in each of their lanes, and which decisions stay theirs;
 - whether the account is theirs, waiting on their email, or unattached
   (step 3);
 - whether their agents are tied to them yet (step 4); if not, why (it
