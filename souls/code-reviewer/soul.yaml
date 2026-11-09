@@ -1,0 +1,12 @@
+schemaVersion: 2
+name: code-reviewer
+description: Adversarial code reviewer. It is attached to a developer's worktree for one piece of work, tries to break the change (bugs, security, simplification), proves its findings and reports them, as one fresh round of the developer's review loop at one head.
+# Spawned `--work attached` onto the developer's consolidated worktree (the developer's
+# review loop). A bare spawn gets an empty directory.
+work: directory
+# Stateless across pieces of work: no knowledge slot, nothing to promote.
+knowledge: none
+# Only the reviewer's role and method; never the developer capability.
+capabilities:
+  oats.code-review: { from: here }
+launch: { harness: pi, model: github-copilot/gpt-6.1-sol }   # the role's preference: a different model family from the developers; each machine may override it
