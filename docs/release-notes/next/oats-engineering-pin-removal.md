@@ -7,7 +7,7 @@
      oats soul launch remove oats.engineering/code-reviewer
      ```
 
-     The soul's own launch, pi with `github-copilot/gpt-6.1-sol`, then applies. Only to choose another launch, add the new key: `oats soul launch set code-reviewer --harness <harness> --model <model>` (or `--launch-config <name>`). A reviewer runs on a model family other than its developers'.
+     The soul's own launch, pi with `github-copilot/gpt-6.1-sol`, then applies, unless the machine has a `souls.launch."*"` entry: that one wins over the soul's own launch, for the reviewer as for every soul without an entry of its own. Check what the reviewer will run on with `oats spawn code-reviewer --preview`. A reviewer runs on a model family other than its developers'. Where the `"*"` entry, or any other choice, would put it on theirs, give the reviewer its own key: `oats soul launch set code-reviewer --harness <harness> --model <model>` (or `--launch-config <name>`).
 
      Left in place, the old key stops spawns. `oats doctor` shows `E_LAUNCH_PREFERENCE_UNMATCHED: oats-local.yaml souls.launch names "oats.engineering/code-reviewer" (nearest: code-reviewer)`. Its fix line pins a soul first, then removes the key; here removing the key is enough. Every spawn that names no launch, of a soul with no `souls.launch` entry of its own, is refused with that code, and nothing is created or started. A spawn that names its launch (`--harness` or `--launch-config`) still runs.
   2. **`souls.disabled`.** No command writes it. In `oats-local.yaml`, change `oats.engineering/code-reviewer` to `code-reviewer`. Left in place, nothing warns: `oats doctor` and the spawn are silent, and the new `code-reviewer` runs on this machine.
