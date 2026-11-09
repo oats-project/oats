@@ -1,5 +1,7 @@
 # Third-party notices
 
+In OATS's copy, the template's `capabilities/developer/` is `capabilities/oats-developer/`.
+
 Three of the developer's skills adapt rules from MIT-licensed skill collections. The rules
 were rewritten in this template's words; no file was copied. Each source's copyright notice
 and licence follow, as the MIT licence asks. Keep this file with any copy of those skills

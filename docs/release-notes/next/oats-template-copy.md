@@ -36,3 +36,18 @@
     - **`/keep-it-clean`:** also checks the docs and notes of what merged in its sweep, and asks a stale PR's author or lead about it.
     - **`/ship-release`:** publishes on every release owner's yes, and hands a release-workflow fix to a lead.
     - **`/support-maintainer`:** removed; OATS runs no support desk.
+- **The support desk's hand-off brief works with or without `/support-maintainer`.** In oats.support's `/support-handoff`, a maintainer the desk spawns loads `/support-maintainer` where its briefing has it. Otherwise it works the tickets as the hand-off gives them: it triages each one and routes it to one expert lead. OATS's maintainer copy has no `/support-maintainer`.
+- **Old → new skills,** from `oats.engineering` v1.18.0 to OATS's copy:
+
+  | v1.18.0 | OATS's copy (template-v2.1.0) |
+  |---|---|
+  | `/land-your-prs` (expert) | `/land-on-agreement`; the developer opens and works the PR (`/work-the-reviews`) |
+  | `/coordinate-experts` (expert) | `/send-a-probe`, `/hand-off`, `/find-the-maintainer`, `/across-people`, `/ask-a-person` |
+  | `/plan-and-spec`, `/coordinate-developers`, `/verify-developer-work` (expert) | the same names, the template's text |
+  | (expert, new) | `/findings-and-blocks` |
+  | `/understand-the-spec`, `/execution-strategy`, `/worktrees`, `/run-the-review-loop`, `/maintain-dev-docs` (developer) | the same names, the template's text |
+  | (developer, new) | `/prove-it-works`, `/work-the-reviews`, `/test-first`, `/diagnose-before-fixing`, `/design-while-writing` |
+  | `/pr-review`, `/direction-gate`, `/launch-work`, `/cross-review-peer`, `/plan-release`, `/ship-release`, `/keep-it-clean`, `/maintainer-intake` (maintainer) | the same names; what changes is listed per skill above |
+  | `/support-maintainer` (maintainer) | removed |
+  | (dispatcher, new; no soul composes it yet) | `/dispatch` |
+  | `/adversarial-review`, `/security-review`, `/simplification-review`, `/review-dev-docs` (code review) | the same names, the template's text |
