@@ -2154,7 +2154,7 @@ Every object shape here is closed.
   souls:
     launch:
       "*": opus                                          # every soul on this machine
-      oats-expert: opus                                  # a launch configuration
+      oats-engineering-expert: opus                      # a launch configuration
       oats.engineering/code-reviewer: {harness: codex}   # an inline preference
   ```
 - **Migration.** 0.29.x refuses an unknown soul.yaml key, and members are read

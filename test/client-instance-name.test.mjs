@@ -9,7 +9,7 @@ import { explicitInstanceName, MAX_INSTANCE_NAME } from "../lib/core.mjs";
 /** [soul name, role]: the last `-` word, after a package qualifier (the last `/` or `--`). */
 export const ROLE_CASES = Object.freeze([
   ["oats-desktop-expert", "expert"],
-  ["oats-kernel-developer", "developer"],
+  ["oats-developer", "developer"],
   ["oats-maintainer", "maintainer"],
   ["code-reviewer", "reviewer"],
   ["cloner", "cloner"],
@@ -27,7 +27,7 @@ export const NAME_CASES = Object.freeze([
   ["desktop-improvements", "oats-desktop-expert", "desktop-improvements-expert"],
   ["desktop-improvements-expert", "oats-desktop-expert", "desktop-improvements-expert"],
   ["expert", "oats-desktop-expert", "expert"],
-  ["api-v2", "oats-kernel-developer", "api-v2-developer"],
+  ["api-v2", "oats-developer", "api-v2-developer"],
   ["release", "oats-maintainer", "release-maintainer"],
   ["pr-42", "code-reviewer", "pr-42-reviewer"],
   ["cloner", "cloner", "cloner"],

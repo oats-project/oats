@@ -450,7 +450,7 @@ launch: { harness: claude, model: claude-opus-5-5 }
 souls:
   launch:
     "*": personal                                    # a launch configuration, for every soul here
-    oats-expert: { harness: claude, model: claude-opus-5-5 }
+    oats-engineering-expert: { harness: claude, model: claude-opus-5-5 }
     oats.engineering/code-reviewer: { harness: codex }   # a package soul
 ```
 

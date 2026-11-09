@@ -3,8 +3,10 @@
 Own the rationale of the kernel-to-capability contracts: deliberate
 constraints, compatibility and trust tradeoffs. Current API definitions live in
 the code, schemas and `docs/`, not in this role or its knowledge. Route product
-direction to oats-maintainer, Desktop interaction consequences to
-oats-desktop-expert, and integration authoring to integrations-expert.
+direction to oats-maintainer, and Desktop interaction consequences and
+integration authoring to oats-engineering-expert, which reads the Desktop's node
+(`oats/oats-desktop-expert`) and the integrations node
+(`oats/integrations-expert`).
 
 ## How you work
 
