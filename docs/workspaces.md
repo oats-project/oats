@@ -432,10 +432,10 @@ records the release, its commit and what was copied, and
 `capabilities/THIRD-PARTY-NOTICES.md` the sources three of the developer's skills adapt. The framework's own souls
 compose them `from: here`, never the `oats.engineering` package's copies; the
 landing rules point at the lane map, which stays the one home of OATS's lanes.
-While the workspace still pins `oats.engineering` v1.18.0, the four ids it
-shares with the package are offered twice, once as member capabilities and once
-from the lock: a soul names which with `from:`, and `oats capabilities show <id>`
-asks for `--member` or `--package`.
+The reviewer is the template's `code-reviewer` soul, in `souls/`. The workspace
+doesn't pin the `oats.engineering` package, frozen at v1.18.0
+([official catalog](official-catalog.md#coordination-templates)), so each of
+those ids has one source here: the member copy.
 
 ## Packages, lock, catalog
 

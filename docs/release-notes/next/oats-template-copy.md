@@ -12,7 +12,7 @@
     - a person's word relayed by an agent grants no authority until they confirm it directly.
 
     Where a template text says otherwise, the OATS rule wins, marked beside it in the copy.
-  - **While `oats.engineering` v1.18.0 stays pinned,** the four ids it shares with the copy (`oats.engineering-expert`, `oats.developer`, `oats.code-review`, `oats.maintainer`) are listed twice by `oats capabilities`. `oats capabilities show <id>` then needs `--member` or `--package` to choose. The `mirrors/` copies of v1.18.0 stay until the pin is removed.
+  - **The workspace no longer pins `oats.engineering` v1.18.0** (its own entry, "OATS's workspace stops pinning `oats.engineering`."), so each id it shared with the copy (`oats.engineering-expert`, `oats.developer`, `oats.code-review`, `oats.maintainer`) has one source, the member copy.
 - **What an agent now does differently,** per skill (the template's v2.0.0 and v2.1.0 rules):
   - **The developer iterates with fresh reviewers.** `/run-the-review-loop` spawns a new `code-reviewer` each round, never the previous round's, until a round finds nothing to fix. v1.18.0 kept one reviewer for the whole loop. The reviewer is an OATS child on a model of another family where the machine has one. A machine's `souls.launch` picks the model.
   - **The developer opens and works its PR.** Once its expert has verified the branch (`VERIFIED at <head>`), the developer opens the PR and works its reviews, bots and CI with the new `/work-the-reviews`. v1.18.0's expert opened it with `/land-your-prs`.

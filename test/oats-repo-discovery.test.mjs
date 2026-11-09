@@ -77,14 +77,15 @@ test("member discovery over this repository lists its two private member capabil
   const catalog = JSON.parse(readFileSync(join(ROOT, "package-catalog.json"), "utf8"));
   const declared = YAML.parse(readFileSync(join(ROOT, "oats-workspace.yaml"), "utf8")).packages;
   const mirrors = execFileSync("git", ["ls-files", "--", "mirrors/*/oats.json"], { cwd: ROOT, encoding: "utf8" }).split("\n").filter(Boolean);
-  assert.equal(mirrors.length, 14, `the fourteen official package mirrors, saw ${mirrors.join(", ")}`);
+  assert.equal(mirrors.length, 10, `the ten official package mirrors, saw ${mirrors.join(", ")}`);
   for (const file of mirrors) {
     const id = JSON.parse(readFileSync(join(ROOT, file), "utf8")).capability;
     const alias = catalog.capabilities[id];
     const pkg = typeof alias === "string" ? alias : catalog.packages[id] ? id : null;
     assert.ok(pkg && Object.hasOwn(declared, pkg), `${file}: ${id} is supplied by a package oats-workspace.yaml declares (catalog says ${pkg})`);
-    // A mirrored id is a member capability only as the template copy's own folder, never the mirror.
-    const members = d.capabilities.filter((c) => c.name === id).map((c) => c.path);
-    assert.deepEqual(members, TEMPLATE_COPY.includes(id) ? [`capabilities/oats-${id.slice("oats.".length)}`] : [], `${id}: the member capabilities of that name`);
+    // No mirrored id is a member capability: the template copy's ids have no mirror,
+    // since this workspace doesn't pin the frozen oats.engineering package.
+    assert.ok(!TEMPLATE_COPY.includes(id), `${file}: ${id} is the template copy's own id, never mirrored`);
+    assert.deepEqual(d.capabilities.filter((c) => c.name === id).map((c) => c.path), [], `${id}: no member capability of that name`);
   }
 });

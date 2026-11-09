@@ -19,6 +19,8 @@ members:
 # The only versioned things. Bare versions resolve through the official catalog
 # (package-catalog.json in this repository). Declaring a package here is the
 # decision to trust it; oats-lock.json records its commit and integrity.
+# Coordination is not pinned: the framework's souls compose the repository's own
+# copy of the engineering template (capabilities/, TEMPLATE-RELEASE).
 packages:
   oats.framework: v1.22.1
   oats.okf: v5.8.0
@@ -26,7 +28,6 @@ packages:
   oats.jira: v1.0.1
   oats.linear: v1.0.1
   oats.authoring: v1.0.3
-  oats.engineering: v1.18.0
   oats.apps: git:github.com/awebai/oats-apps@v1.0.0   # bare version once every deployment's CLI carries the catalog entry
 
 # Shared teams: the same provider team for everyone.
