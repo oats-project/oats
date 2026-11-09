@@ -2353,7 +2353,16 @@ serves it and proxies `/api/*` to a running backend server (same-origin, so
 GETs and guarded POSTs both work exactly as in the real shell):
 
 ```sh
+export OATS_DESKTOP_TOKEN="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
 node packages/desktop/server/oats-web.mjs start --port 4821 --dir <workspace>
+# In another terminal, export the same OATS_DESKTOP_TOKEN before starting:
 node packages/desktop/renderer/harness-server.mjs --port 4899 --api http://127.0.0.1:4821
 open "http://127.0.0.1:4899/"
 ```
+
+Both processes require the same token, at least 32 characters. The harness
+checks the browser's exact Origin, then adds the token and removes Origin in
+its backend request. The page receives no token. A Desktop connecting to this
+backend also needs the same `OATS_DESKTOP_TOKEN` and `OATS_DESKTOP_PORT=4821`.
+While the harness runs, local programs that can reach its port act with the
+backend's authority; run it only while developing and stop it afterwards.

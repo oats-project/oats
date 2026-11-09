@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { request as httpRequest } from "node:http";
+import { TEST_CONTROL_TOKEN } from "./helpers/control-auth.mjs";
 import { createHarnessServer } from "../renderer/harness-server.mjs";
 
 // The harness page resolves marked/dompurify via /node_modules/* — the route
 // must serve browser-ready ESM and stay traversal-guarded.
 test("harness-server: serves renderer files and /node_modules ESM, guards traversal", async () => {
-  const server = createHarnessServer(new URL("http://127.0.0.1:1")); // api unused here
+  const server = createHarnessServer(new URL("http://127.0.0.1:1"), TEST_CONTROL_TOKEN); // api unused here
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const port = server.address().port;
   const get = (p, headers = {}) => fetch(`http://127.0.0.1:${port}${p}`, { headers });

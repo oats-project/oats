@@ -6,8 +6,9 @@ CLI command asks the Desktop to open a file.
 
 ## Reading a file: `GET /api/file?path=<absolute>`
 
-`server/oats-web.mjs` (`fileData`, `resolveGuardedFile`, `fileRoots`). The server-wide Host guard
-applies (loopback only). A GET carries no Origin check, so the guards below are what keep it narrow.
+`server/oats-web.mjs` (`fileData`, `resolveGuardedFile`, `fileRoots`). The server-wide
+[control admission](../../../docs/desktop.md#security-posture) requires the launch token and
+checks any supplied Origin. The file guards below further restrict authorized reads.
 
 **Allowed roots** (`fileRoots`), canonicalized with `realpath` once, when the request is admitted:
 - every root of every known workspace;

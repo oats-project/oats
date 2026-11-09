@@ -1,46 +1,49 @@
 #!/usr/bin/env node
-/* oats desktop — dev harness server (NOT part of the app).
-   Serves the renderer directory and proxies /api/* to a running backend
-   server, so the harness page is same-origin with the API (the server sends no
-   CORS headers, and its loopback origin guard governs POSTs — same-origin
-   keeps both happy, exactly like the real shell's ctx.api).
+/* Development renderer host and API proxy. It validates its own browser origin
+   and keeps the backend control token in this server process.
 
-     node packages/desktop/renderer/harness-server.mjs [--port 4899] [--api http://127.0.0.1:4820]
-
-   Exports createHarnessServer(api) so tests can exercise the security
-   boundary behaviorally (started only when run as a script, below). */
+   node harness-server.mjs [--port 4899] [--api http://127.0.0.1:4820]
+   OATS_DESKTOP_TOKEN must match the backend's token. */
 import { createServer, request as httpRequest } from "node:http";
 import { readFileSync, existsSync, realpathSync } from "node:fs";
 import { dirname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { CONTROL_TOKEN_HEADER, controlRequestHeaders, loopbackHost } from "../control-request.mjs";
+import { requireControlToken, takeControlToken } from "../control-token.mjs";
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json" };
 
-export function createHarnessServer(api) {
-  return createServer((req, res) => {
-    const url = new URL(req.url, "http://localhost");
-    // Same DNS-rebinding guard as the backend itself: the harness can reach
-    // mutating endpoints upstream, so a hostile page resolving to 127.0.0.1
-    // must be rejected HERE — never launder a forged origin into a trusted one.
-    const okHost = (h) => h === "127.0.0.1" || h === "localhost" || h === "[::1]" || h === "::1";
-    const host = String(req.headers.host || "").replace(/:\d+$/, "");
-    let originOk = true;
-    if (req.headers.origin !== undefined) {
-      try { originOk = okHost(new URL(String(req.headers.origin)).hostname); } catch { originOk = false; }
-    }
-    if (!okHost(host) || !originOk) { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "forbidden origin" })); return; }
+export function createHarnessServer(api, token) {
+  requireControlToken(token);
+  api = new URL(api);
+  if (api.protocol !== "http:" || !loopbackHost({ host: api.host }) || api.username || api.password || api.pathname !== "/" || api.search || api.hash)
+    throw new Error("harness backend must be a loopback HTTP origin");
+  const server = createServer((req, res) => {
+    const headers = controlRequestHeaders(req);
+    const deny = () => { res.writeHead(403, { "content-type": "application/json" }); res.end(JSON.stringify({ error: "forbidden" })); };
+    // Accept the bound port under the loopback names used by a browser.
+    const port = server.address()?.port;
+    const hostOk = typeof headers.host === "string" && ["127.0.0.1", "localhost", "[::1]"].some(host =>
+      headers.host === `${host}:${port}` || port === 80 && headers.host === host);
+    if (!hostOk || !loopbackHost(headers) || headers.origin !== undefined &&
+      (typeof headers.origin !== "string" || headers.origin !== `http://${headers.host}`)) return deny();
+    let url;
+    try { url = new URL(req.url, "http://localhost"); }
+    catch { res.writeHead(400); res.end("bad request"); return; }
     if (url.pathname.startsWith("/api/")) {
-      // Proxy to the backend server, preserving method/body AND the browser's
-      // own Origin header (already validated loopback above — the upstream
-      // loopback guard understands it; forging a trusted origin would defeat
-      // the guard). Host is rewritten only so the request routes upstream.
+      // The harness has checked the browser origin. Only this process supplies the backend header.
+      const forwarded = { ...req.headers, host: api.host, [CONTROL_TOKEN_HEADER]: token };
+      delete forwarded.origin;
       const p = httpRequest({
-        hostname: api.hostname, port: api.port, path: url.pathname + url.search,
-        method: req.method,
-        headers: { ...req.headers, host: `${api.hostname}:${api.port}` },
+        hostname: api.hostname.replace(/^\[|\]$/g, ""), port: api.port, path: url.pathname + url.search,
+        method: req.method, headers: forwarded,
       }, (up) => { res.writeHead(up.statusCode, up.headers); up.pipe(res); });
-      p.on("error", (e) => { res.writeHead(502, { "content-type": "application/json" }); res.end(JSON.stringify({ error: `backend unreachable at ${api}: ${e.message}` })); });
+      p.on("error", () => {
+        if (!res.headersSent) res.writeHead(502, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "backend unavailable" }));
+      });
       req.pipe(p);
       return;
     }
@@ -61,10 +64,17 @@ export function createHarnessServer(api) {
     res.writeHead(200, { "content-type": `${TYPES[ext] || "application/octet-stream"}; charset=utf-8`, "cache-control": "no-store" });
     res.end(readFileSync(file));
   });
+  server.on("upgrade", (_req, socket) => {
+    socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+  });
+  return server;
 }
 
 // script mode: `node harness-server.mjs [--port n] [--api url]`
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  let token;
+  try { token = takeControlToken(process.env); }
+  catch (error) { console.error(`oats-desktop harness: ${error.message}`); process.exit(1); }
   const args = process.argv.slice(2);
   const flag = (name, dflt) => {
     const i = args.indexOf(`--${name}`);
@@ -72,7 +82,7 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   };
   const port = Number(flag("port", 4899));
   const api = new URL(flag("api", "http://127.0.0.1:4820"));
-  createHarnessServer(api).listen(port, "127.0.0.1", () => {
-    console.log(`harness at http://127.0.0.1:${port}/  (API proxied to ${api})`);
+  createHarnessServer(api, token).listen(port, "127.0.0.1", () => {
+    console.log(`harness at http://127.0.0.1:${port}/  (API proxied to ${api.origin})`);
   });
 }

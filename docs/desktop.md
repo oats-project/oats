@@ -1164,7 +1164,9 @@ In another terminal, export that same value before starting the harness or
 Desktop (`OATS_DESKTOP_PORT=4821 npm start` from `packages/desktop`). The server
 and harness refuse to start without a token; they never generate or print one.
 The harness checks its own exact Origin and adds the backend's token in its
-server-side proxy. See the [renderer development recipe](../packages/desktop/renderer/README.md#developing-without-the-shell).
+server-side proxy. While the harness runs, local programs that can reach its
+port act with the backend's authority; run it only while developing and stop
+it afterwards. See the [renderer development recipe](../packages/desktop/renderer/README.md#developing-without-the-shell).
 
 ## Troubleshooting
 
