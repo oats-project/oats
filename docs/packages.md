@@ -28,7 +28,11 @@ A Git repository **contains** a package at `oats-package/`:
 ```
 
 `oats-package.json` must declare `package` and `capabilities` (a list of
-directories relative to the package root, each holding an `oats.json`). It may
+directories relative to the package root, each holding an `oats.json`). The
+`package` must equal the `packages:` key the package is pinned under: a
+package is locked under its own id, and its souls are named after it
+(`<package>/<soul>`). `sync` refuses a pin whose manifest names another id
+(`E_PACKAGE_INTEGRITY { why: "package-id" }`, see [`oats sync`](#oats-sync--the-one-command-for-the-common-path)). It may
 also declare `souls`: soul directories the package ships, see
 [Package souls](#package-souls). A
 directory entry need not equal the capability's name
@@ -117,12 +121,29 @@ lock       oats-lock.json
 
 1. discovers the workspace over the remotes and confirms every member;
 2. resolves each `packages:` entry to a commit (`observeRemote`), reads its
-   manifests, computes the **integrity** (content digest of the package tree)
-   and records `url`, `path`, `version`, `commit`, `integrity`, `capabilities`;
+   manifests, checks that `oats-package.json` names the `packages:` key it is
+   pinned under, computes the **integrity** (content digest of the package
+   tree) and records `url`, `path`, `version`, `commit`, `integrity`,
+   `capabilities`. A manifest naming another package is refused before
+   anything is written: `E_PACKAGE_INTEGRITY { why: "package-id", id,
+   manifestPackage, commit }`, whose message names the line to write instead:
+   - a catalog version whose named package is in the catalog: `<named>: <the
+     same version>`;
+   - a catalog version whose named package is not: `<named>:
+     git:<the catalog entry's repo>@<the resolved tag>` (no line when the
+     catalog entry reads another `path` than `oats-package/`, which a `git:`
+     pin cannot reach);
+   - a `git:` pin: `<named>: <the same git: value>`.
+
+   The other way out is a version of the key's package whose manifest names
+   that key;
 3. for an entry already locked at the same version/source/path: the commit must
    be unchanged (else `E_PACKAGE_INTEGRITY` — "the tag moved; a version string
-   must change when its content does") and the integrity must match
-   (`E_PACKAGE_INTEGRITY`);
+   must change when its content does"), the integrity must match
+   (`E_PACKAGE_INTEGRITY`), and the manifest must still name the key
+   (`why: "package-id"`, as in step 2: a lock an older kernel wrote under
+   another package's id is refused at the next sync; spawns from it keep
+   working until then);
 4. writes `oats-lock.json` and reports the diff. Entries dropped from
    `packages:` are dropped from the lock.
 
@@ -202,9 +223,10 @@ Member capabilities are trusted by membership; **a package is trusted by its
 declaration in the workspace's `packages:`**. People declare a package only
 when they trust it, so there is no second, per-version approval step. The lock is reproducibility, not approval: it pins
 the exact commit and the content integrity, a moved tag or drifted content is
-`E_PACKAGE_INTEGRITY`, and at spawn the lock's capability list must match what
-the package declares at the locked commit (`E_PACKAGE_INTEGRITY { why:
-"capabilities" }`).
+`E_PACKAGE_INTEGRITY`, a package pinned under another package's id is
+`E_PACKAGE_INTEGRITY { why: "package-id" }` at sync, and at spawn the lock's
+capability list must match what the package declares at the locked commit
+(`E_PACKAGE_INTEGRITY { why: "capabilities" }`).
 
 ## Materialization from a package
 
