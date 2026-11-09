@@ -133,6 +133,15 @@ entry with its declared harness before its first spawn, by the row's
 then without `--plan`. A declared harness that isn't installed here stays
 under `'*'`, so the soul can run; tell the person.
 
+Check the reviewer soul by its model too, since `'*'` replaces the model as
+well as the harness: where it declares the same harness as `'*'` but another
+model, give it its own entry the same way, with `--harness <its harness>
+--model <its model>`. Then `oats spawn <reviewer soul> --preview --json`
+must show a `launch.effective` model from a family other than the
+developers'. Where its declared model can't run here, set one that can, from
+another family; with none, tell the person its reviews share the
+developers' model.
+
 ## 3. Attach the person to the messaging account
 
 This is a normal step, not an option. When getting started created the
