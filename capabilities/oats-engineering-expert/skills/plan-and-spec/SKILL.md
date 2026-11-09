@@ -51,8 +51,9 @@ Delivery:        <branch, PR target, the reviews the lane counts>
 ## 5. Check the plan before launching
 - Every "done when" is covered by some spec's tests.
 - No two developers edit the same files without an agreed order.
-- The riskiest assumption is tested first (a probe: a spike, a real run, `/send-a-probe`),
-  not last.
+- The riskiest assumption is tested first, not last: a probe that tests a theory the plan
+  rests on, a spike or a real run, or, where the plan can go more than one way, one probe per
+  competing approach (`/send-a-probe`).
 - Each spec has a developer to build it (`/coordinate-developers`), which iterates with
   fresh reviewers until a round finds nothing to fix. You build none of it, and you verify
   each converged branch once.

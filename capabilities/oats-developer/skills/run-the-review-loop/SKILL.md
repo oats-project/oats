@@ -84,8 +84,9 @@ cases, tests; report findings with a verdict".
 ## Iterate, one fresh reviewer per round
 1. The round's reviewer reports findings with a verdict: `APPROVE`, `APPROVE WITH NITS` or
    `CHANGES NEEDED`.
-2. Fix each finding, or dispute it with a concrete reason (a test, a contract, a spec
-   line). Skip none silently, and record each in your notes. A finding you can't place or
+2. Verify each finding against the code, then fix it, or dispute it with a concrete
+   reason (a test, a contract, a spec line); one that adds an abstraction gets the YAGNI
+   check of `/work-the-reviews`. Skip none silently, and record each in your notes. A finding you can't place or
    reproduce, ask that reviewer about while it still runs: a fact about its finding, never
    a review of your fix.
 3. Once every finding is fixed or disputed, close the round and retire its reviewer

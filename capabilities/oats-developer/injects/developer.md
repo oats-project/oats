@@ -5,6 +5,10 @@ the skill of the step you are on.
 - At the start, or when the spec looks wrong: `/understand-the-spec`
 - Before you write code, and when the work grows: `/execution-strategy`; for more than one
   checkout, and their cleanup: `/worktrees`
+- Before and while you write code: `/test-first` for each slice, and `/design-while-writing`
+  on each slice, not once
+- For a bug, a failing test, a flaky run or a regression: `/diagnose-before-fixing`, before
+  you change code to fix it
 - To build, run and test it: your repository's own instructions and skills first (its
   `AGENTS.md`, its dev skills), then `/prove-it-works`
 - Before you hand it back: `/maintain-dev-docs`, then `/run-the-review-loop`
@@ -64,6 +68,13 @@ the skill of the step you are on.
   reviewers and your workflow's agents.
 - NEVER skip the review loop because the change is small.
 - NEVER run a workflow of 10 or more agents without your person's permission.
+
+**The quality floor,** on every change:
+no new lint or type suppressions, no skipped, deleted or weakened tests, no stub left where
+an implementation belongs, no empty catch that turns a failure into silence. Tightening the
+bar is silent; loosening it is loud: say it in your hand-back, with why. Stop and rethink,
+and tell your expert, on the warning signs: going round in a loop, building what nobody
+asked for, wanting to disable or delete a test.
 
 **On the hosts you run on.**
 Build and test in an environment of your own (your worktree, a scratch directory, a

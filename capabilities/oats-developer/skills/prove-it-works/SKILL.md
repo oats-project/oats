@@ -21,3 +21,9 @@ description: Prove a change works the way the repository runs it - build, run lo
 5. **Say what you could not run,** and why: a missing service, a credential, a device. That
    gap goes in your hand-back. If it recurs, your expert raises it, because it is the signal
    for a developer soul with that environment.
+6. **Each claim names its evidence.** In your hand-back, every claim (the tests pass, the
+   bug is fixed, the build succeeds, a spec item is met) names the command you ran at that
+   head and what it printed. "Should pass" is not evidence, and neither is a subagent's or a
+   workflow agent's report of success: rerun what it reports, and read its diff.
+
+Adapted from sources listed in THIRD-PARTY-NOTICES.md
