@@ -11,9 +11,9 @@
   - A soul named `oats.engineering/<soul>` reaches
     `oats.engineering-coordination/<soul>` in `oats spawn` and its preview,
     `oats soul teams`, `oats soul launch`, `oats capabilities show --package`,
-    schedules and triggers. The command prints one `note:` line saying so,
-    and its `--json` answer carries it in `notes` (spawn preview and apply,
-    `oats soul teams`, `oats soul launch`). A new spawn records the new id.
+    schedules and triggers. Spawn (preview and apply), `oats soul teams` and
+    `oats soul launch` also print one `note:` line saying so, and their
+    `--json` answer carries it in `notes`. A new spawn records the new id.
   - A `souls.launch` key or `souls.disabled` entry in `oats-local.yaml`, and
     a `souls:` key or `<package>/*` pattern in `oats-workspace.yaml`, spelled
     with the old id apply to the renamed package's souls. Neither is reported

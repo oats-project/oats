@@ -5,7 +5,8 @@
 // and instance.json); no network, no Git, no files written.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { currentPackageId, samePackage } from "../lib/package-moves.mjs";
@@ -17,6 +18,7 @@ import { selectCapabilityRow } from "../lib/capability-show.mjs";
 import { driftOf, lockedPackageEntry, soulDriftOf } from "../lib/drift.mjs";
 import { packageRespawnWarning, packageUpgradeDrift } from "../lib/upgrade-state.mjs";
 import { resolvePackages } from "../lib/packages.mjs";
+import { soulLaunch } from "../lib/soul-launch-verbs.mjs";
 import { packageSoulAgentName } from "../lib/workspace.mjs";
 
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -140,6 +142,25 @@ test("soulTeams: with both spellings of a pattern, exactly one applies (the key'
     key: `${OLD}/code-reviewer`, match: `${OLD}/*`, defaultMatch: `${OLD}/*`,
     defaultTeam: { label: "eng", team: "acme:eng", from: "soul" }, teams: [row("eng", ["default", "workspace"], true)],
   });
+});
+
+test("soulTeams: a shadowed spelling gives nothing, its default included; a level without a default passes it on", () => {
+  // Only the old spelling sets a default: the new soul's own spelling shadows it, so the default falls
+  // through to the workspace's (none here), never to the shadowed key.
+  const oldDefault = model({ [`${OLD}/*`]: { teams: ["eng"], default: "eng" }, [`${NEW}/*`]: { teams: ["coord"] } });
+  assert.deepEqual(soulTeams(oldDefault, `${NEW}/code-reviewer`),
+    { key: `${NEW}/code-reviewer`, match: `${NEW}/*`, defaultMatch: null, defaultTeam: null, teams: [row("coord")] });
+  // The other way round: an old home's key, only the new spelling sets a default.
+  const newDefault = model({ [`${OLD}/*`]: { teams: ["eng"] }, [`${NEW}/*`]: { teams: ["coord"], default: "coord" } });
+  assert.deepEqual(soulTeams(newDefault, `${OLD}/code-reviewer`),
+    { key: `${OLD}/code-reviewer`, match: `${OLD}/*`, defaultMatch: null, defaultTeam: null, teams: [row("eng")] });
+  // Exact keys the same way; and a selected key without a default passes it to the next level (the pattern).
+  const exacts = model({ [`${OLD}/code-reviewer`]: { teams: ["eng"], default: "eng" }, [`${NEW}/code-reviewer`]: { teams: ["coord"] }, [`${NEW}/*`]: { default: "all" } });
+  assert.deepEqual(soulTeams(exacts, `${NEW}/code-reviewer`), {
+    key: `${NEW}/code-reviewer`, match: `${NEW}/code-reviewer`, defaultMatch: `${NEW}/*`,
+    defaultTeam: { label: "all", team: "acme:all", from: "soul" }, teams: [row("all", ["default"], true), row("coord")],
+  });
+  assert.deepEqual(soulTeams(exacts, `${OLD}/code-reviewer`).defaultMatch, `${OLD}/code-reviewer`, "the old home's own spelling sets its default");
 });
 
 test("soulTeams: an exact key beats a pattern whatever their spellings", () => {
@@ -438,4 +459,38 @@ test("resolvePackages: either id alone is not that refusal", async () => {
     assert.equal(rec.calls.length, 1);
     assert.equal(rec.calls[0][0], "observeRemote");
   }
+});
+
+// ---------- lib/soul-launch-verbs.mjs: remove through a rename ----------
+
+/** An oats-local.yaml with `launch` as its souls.launch, in a temp deployment; the discovery offers the new id's code-reviewer. */
+function launchFile(t, launch) {
+  const dir = mkdtempSync(join(tmpdir(), "oats-package-moves-")); t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const localPath = join(dir, "oats-local.yaml");
+  writeFileSync(localPath, `schemaVersion: 2\nworkspace: git:github.com/acme/agents\nsouls:\n  launch:\n${Object.entries(launch).map(([k, v]) => `    ${JSON.stringify(k)}: { harness: ${v} }`).join("\n")}\n`);
+  return { ctx: { deployment: dir, localPath }, text: () => readFileSync(localPath, "utf8") };
+}
+const offering = { readSouls: async () => discoveryOf([packageSoul(NEW, "code-reviewer")]) };
+const launchRemove = (fx, name) => soulLaunch(fx.ctx, { action: "remove", name, plan: true }, offering);
+
+test("soul launch remove: a named soul removes the key that applies to it, the old spelling included; the answer names the soul", async (t) => {
+  // Only the old key: the bare name and the new qualified name both remove it, and say whose it was.
+  for (const name of ["code-reviewer", `${NEW}/code-reviewer`]) {
+    const fx = launchFile(t, { [`${OLD}/code-reviewer`]: "pi" });
+    const r = await launchRemove(fx, name);
+    assert.deepEqual([r.key, r.before, r.after, r.changed, r.souls], [`${OLD}/code-reviewer`, { harness: "pi", model: null }, null, true, [`${NEW}/code-reviewer`]], name);
+    assert.equal(r.launch.from, "host", `${name}: after the removal no layer is left (the soul declares no launch)`);
+  }
+  // The old key by its exact text: it applies to the renamed soul, and the report says so.
+  const fx = launchFile(t, { [`${OLD}/code-reviewer`]: "pi" });
+  const exact = await launchRemove(fx, `${OLD}/code-reviewer`);
+  assert.deepEqual([exact.key, exact.souls, exact.launch?.from], [`${OLD}/code-reviewer`, [`${NEW}/code-reviewer`], "host"]);
+  // Both spellings: the soul's own key goes first, and the old one still applies after it.
+  const both = launchFile(t, { [`${OLD}/code-reviewer`]: "pi", [`${NEW}/code-reviewer`]: "codex" });
+  const r = await launchRemove(both, "code-reviewer");
+  assert.deepEqual([r.key, r.before, r.launch.from, r.launch.at], [`${NEW}/code-reviewer`, { harness: "codex", model: null }, "local", "oats-local.yaml#/souls/launch/oats.engineering~1code-reviewer"]);
+  // set keeps writing the soul's own key.
+  const setFx = launchFile(t, { [`${OLD}/code-reviewer`]: "pi" });
+  const written = await soulLaunch(setFx.ctx, { action: "set", name: `${OLD}/code-reviewer`, value: { harness: "codex" }, plan: true }, offering);
+  assert.deepEqual([written.key, written.notes], [`${NEW}/code-reviewer`, [renamedSelectorNote(`${OLD}/code-reviewer`, packageSoul(NEW, "code-reviewer"))]]);
 });

@@ -404,8 +404,9 @@ package id is compared.** That covers:
 - **A soul named `oats.engineering/<soul>`**, in `oats spawn` and its preview,
   `oats soul teams`, `oats soul launch set|remove`, `oats capabilities show
   --package`, and the schedules and triggers that spawn through them. The
-  name reaches `oats.engineering-coordination/<soul>`, and the command prints
-  one line, `note: package oats.engineering was renamed to
+  name reaches `oats.engineering-coordination/<soul>`. `oats spawn` (and its
+  preview), `oats soul teams` and `oats soul launch` also print one line,
+  `note: package oats.engineering was renamed to
   oats.engineering-coordination: oats.engineering/<soul> is
   oats.engineering-coordination/<soul>`, which `--json` carries in `notes`. A
   new spawn records the new id. A soul the new package does not ship is
@@ -413,7 +414,9 @@ package id is compared.** That covers:
 - **`oats-local.yaml`.** A `souls.launch` key or a `souls.disabled` entry
   naming `oats.engineering/<soul>` applies to the renamed soul, and is not
   reported as naming no soul. When both spellings are keys, the soul's own
-  spelling wins. `oats soul launch set` through the old id writes the new key.
+  spelling wins. `oats soul launch set` through the old id writes the new key;
+  `oats soul launch remove <soul>` removes the key that applies to the soul,
+  whichever id it spells.
 - **`souls:` in `oats-workspace.yaml`.** Exact keys and `<package>/*`
   patterns spelled with either id apply to the package's souls and to homes
   recorded under the old id. The soul's own spelling is tried first, and one
