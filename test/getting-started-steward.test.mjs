@@ -506,6 +506,12 @@ test("a soul whose declared harness differs from this machine's '*' gets its own
     assert.match(text, /differs from [^.]*and is installed and logged in on this machine/, `${name} keeps a declared harness only when it is installed here`);
     assert.ok(text.includes("A declared harness that isn't installed here stays under `'*'`, so the soul can run; tell the person."), `${name} leaves a missing harness under '*'`);
   }
+  // '*' replaces the model too: a reviewer on the developers' harness with another model keeps it, and its preview proves it.
+  for (const [name, text] of [["oats-package-pins", pins], ["oats-getting-started", skill.replace(/\s+/g, " ")]]) {
+    assert.match(text, /Check a (new )?reviewer soul by its model too, since `'\*'` replaces the model as well as the harness/, `${name} checks the reviewer's model`);
+    assert.ok(text.includes("`--harness <its harness> --model <its model>`"), `${name} gives the reviewer its own entry with its model`);
+    assert.ok(text.includes("must show a `launch.effective` model from a family other than the developers'"), `${name} checks the reviewer's preview`);
+  }
 });
 
 test("getting-started: a person with no GitHub account is helped to make one, and gh is installed for them", () => {
