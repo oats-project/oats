@@ -11,6 +11,7 @@ import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import * as packages from "../lib/packages.mjs";
 import { APPROVED_HOOKS } from "../lib/capability-contract.mjs";
+import { parseRepoRef as remoteParseRepoRef } from "../lib/remote.mjs";
 import { DISPOSABLE_HOME_ACCEPTED, DISPOSABLE_HOME_REFUSED, disposableHomeRefusal } from "./helpers/disposable-home.mjs";
 import {
   classifyPackageValue, packageProviding, parsePackageRequest,
@@ -322,6 +323,30 @@ test("#1759: a catalog url's user information never reaches the refusal or its f
     assert.ok(!e.message.includes("tok") && !JSON.stringify(e.details).includes("tok"), e.message);
     assert.ok(e.message.includes("declare oats.engineering-coordination: git:https://github.com/awebai/oats-engineering.git@v2.0.0 in packages:"), e.message);
     assert.match(e.message, /its user information is not shown/);
+  }));
+});
+
+test("#1759: a catalog url in the git@host: ssh form gives a fix line that parses, written as the catalog has it", async () => {
+  const f = renamedFixture({ catalogHasNamed: false, url: "git@github.com:awebai/oats-engineering.git" });
+  const remote = { ...f.remote };
+  for (const name of ["observeRemote", "readRemoteFile", "listRemoteTree", "fetchRemoteTree"]) remote[name] = (ref, ...rest) => f.remote[name](String(ref).replace(/^git@github\.com:/, "https://github.com/"), ...rest);
+  const fix = "git:git@github.com:awebai/oats-engineering.git@v2.0.0";
+  await assert.rejects(resolvePackages(workspace({ "oats.engineering": "v2.0.0" }), { catalog: f.catalog, remote }), packageIdRefusal((e) => {
+    assert.ok(e.message.includes(`resolves to git@github.com:awebai/oats-engineering.git@v2.0.0 (`), e.message);
+    assert.ok(e.message.includes(`declare oats.engineering-coordination: ${fix} in packages:`), e.message);
+    assert.ok(!/user information/.test(e.message), e.message);
+  }));
+  const c = classifyPackageValue(fix);
+  assert.equal(c.kind, "git");
+  assert.doesNotThrow(() => remoteParseRepoRef(c.repo), "the fix line's repo is a repository reference");
+});
+
+test("#1759: a long valid package id is named whole in the fix line", async () => {
+  const named = `a${"b".repeat(99)}`;
+  const f = renamedFixture({ named });
+  await assert.rejects(resolvePackages(workspace({ "oats.engineering": "v2.0.0" }), { catalog: f.catalog, remote: f.remote }), packageIdRefusal((e) => {
+    assert.equal(e.details.manifestPackage, named);
+    assert.ok(e.message.includes(`names package "${named}", not`) && e.message.includes(`declare ${named}: v2.0.0 in packages:`), e.message);
   }));
 });
 
