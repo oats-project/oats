@@ -19,11 +19,12 @@ to fix. Again for a branch your expert returns, and for a fix on your PR where
 Each round's reviewer is fresh: a new `code-reviewer` instance, your OATS child, never the
 previous round's. It reads the change as it is, without the earlier rounds.
 - **An OATS child:** a review is proper work, so its reviewer is an OATS child, not a
-  native subagent of your harness (Claude Code's, pi's or Codex's). An OATS child is
+  native subagent of your harness. An OATS child is
   visible to your person (its status, the Desktop), has its own messaging and knowledge,
   and is retired on record; a native subagent is invisible to everyone but you. A native
   reviewer only where your person asks for one, or in your harness's multi-agent workflow
-  mode (Claude Code's ultracode, say) when it is in use.
+  mode when it is in use.
+  <!-- OATS: no skill names a harness or a model; a machine's souls.launch picks the model. -->
 - **On a different model from yours** where the organisation has one (Pick a different
   model): agents of one model share blind spots, so their agreement is not independent.
 
@@ -47,16 +48,18 @@ A reviewer on your model shares your blind spots. Before spawning, compare:
   `launch.from` is `local`, the machine's `oats-local.yaml` `souls.launch` entry named by
   `launch.at` overrides the default).
 
-<!-- adapt: Which harnesses and models does this organisation have for model diversity? -->
-Compare the models, not the harnesses: a provider prefix names a route to a model, not
-another model, so `github-copilot/gpt-6-astra` on pi and `gpt-6-astra` on Codex are one
-model. When the effective reviewer's model is known and differs from yours, spawn without
-`--harness`/`--model`, so the machine's override applies; don't force the soul's default
-over it. When it would run on your model, on any harness, spawn it on another
-state-of-the-art model, on another harness when you can: currently Codex with Astra, Claude Code with Opus 5.5, Fable, or the latest Grok,
-through a launch configuration this host defines (`oats launch-config list`) or
-`--harness`/`--model`. If none is available, use the effective one and say so in your
-handback.
+Compare model families, not harnesses or versions: OATS's machines launch Claude models and
+models of other families (GPT's among them) through more than one harness. A provider
+prefix names a route to a model, not another model, so one model reached through two
+harnesses is one model, and two versions of one family share its blind spots. Each
+machine's `souls.launch` in `oats-local.yaml` picks the model a soul runs on there, so the
+soul's own `launch:` is only its default. When the effective reviewer's model is known and
+of another family than yours, spawn without `--harness`/`--model`, so the machine's choice
+applies; don't force the soul's default over it. When it would run in your family, on any
+harness, spawn it on a state-of-the-art model of another family, on another harness when
+you can, through a launch configuration this host defines (`oats launch-config list`) or
+`--harness`/`--model`, choosing only a model this workspace allows. If none is available,
+use the effective one and say so in your handback.
 
 If either model is unknown (`null`, absent, or a harness's native default), the comparison
 proves nothing: spawn the reviewer with `--harness`/`--model` (or a launch configuration) on

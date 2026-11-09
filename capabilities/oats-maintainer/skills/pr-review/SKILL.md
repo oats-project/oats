@@ -10,6 +10,9 @@ description: Read a PR at the exact head an author names, when your lane's landi
   lane's landing rules need from you (`/cross-review-peer`, "A lane's arrangement"). You are
   never a station every PR passes: a PR nobody calls you for lands on its lane's other
   agreements, and you read it only if your sweep finds a reason to (`/keep-it-clean`).
+  <!-- OATS: on the lane map every PR names its maintainer and needs a second reader, so no PR lands without a maintainer's read. -->
+  Here no PR lands without its maintainer: one your sweep finds that nobody called you
+  for, ask its lead for the call.
 - **The call names:** the exact head, CI green on it, the lead's verification note at that
   head, and the reviews the lane counts, where they are in. Before CI is green at that head,
   no read: tell the author what is missing, in one line.
@@ -81,6 +84,10 @@ outside contributor's) is yours to merge where your landing rules say so: at its
 every agreement they name for it holds. You forward nothing to
 another maintainer and ask no one else for a read: where a PR also needs another lane's
 read, its author asks that lane's maintainer.
+<!-- OATS: the lane map: the PR's maintainer asks its second reader and the release lane's sign-off. -->
+Here you do ask: once you approve a PR of your lane at a head, ask its second reader (the
+one its lane's line names) and, where the line asks, the release lane's sign-off, at that
+head with CI green. Never merge, or let it merge, over a RETURN.
 
 **As the release lane's maintainer,** read what the landing rules give you the same way,
 with all four gates. Your APPROVE on the PR at that head is the release lane's agreement.
@@ -100,7 +107,7 @@ merging its own PR follows its own landing skill.
   can still break each other (one changes a text, the other's test reads it). So:
   1. on a trial merge onto the default branch, run the test files changed or added by this
      PR and by what merged since its base;
-  2. if those are more than a couple, need what your host lacks, or are code you haven't
+  2. if those are more than one or two (the oats repository's limit), need what your host lacks, or are code you haven't
      read and trusted (an outside contributor's), bring the branch up to date and let CI
      be the run.
 

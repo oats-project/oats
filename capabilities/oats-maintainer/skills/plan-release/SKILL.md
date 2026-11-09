@@ -64,7 +64,9 @@ where it is and doesn't repeat it.
 A release's contents are approved by the owners your landing rules name for it: each person
 whose lane has changes in it. Send each of them one card: what goes in from their lane, the
 head to tag, and your recommendation. Tag only on every such yes, each from that person
-directly or relayed as `/cross-review-peer` accepts ("Decisions passed on from a human"). A
+directly or relayed as `/cross-review-peer` accepts ("Decisions passed on from a human").
+<!-- OATS: a tag is a safeguard; a relayed yes approves the contents, and the tag waits for a direct one. -->
+A relayed yes approves the contents; the tag itself waits for each owner's direct go. A
 peer whose lane has PRs in the plan, or left out of it, is told once where the plan is, and
 answers there. A freeze before the tag is a hold on the default branch
 (`/cross-review-peer`), not a message.

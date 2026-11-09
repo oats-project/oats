@@ -422,6 +422,20 @@ So the framework's own souls say `oats.okf: { from: package }` even though
 member soul that is the expert in that capability (`oats-okf-expert`,
 `oats-aweb-expert`, …), discoverable at latest state like any member soul.
 
+**OATS's coordination is a member copy of the engineering template.** The
+`oats` repository keeps its own copy of
+[oats-project/oats-engineering-coordination](https://github.com/oats-project/oats-engineering-coordination)
+at template-v2.0.0, adapted to OATS: `oats.engineering-expert`,
+`oats.developer`, `oats.code-review`, `oats.maintainer`, `oats.landing-rules`
+and `oats.dispatcher`, in `capabilities/oats-<name>/`. `capabilities/TEMPLATE-RELEASE`
+records the release, its commit and what was copied. The framework's own souls
+compose them `from: here`, never the `oats.engineering` package's copies; the
+landing rules point at the lane map, which stays the one home of OATS's lanes.
+While the workspace still pins `oats.engineering` v1.18.0, the four ids it
+shares with the package are offered twice, once as member capabilities and once
+from the lock: a soul names which with `from:`, and `oats capabilities show <id>`
+asks for `--member` or `--package`.
+
 ## Packages, lock, catalog
 
 `packages:` values have two forms, a **bare version** resolved through the

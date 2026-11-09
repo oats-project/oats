@@ -31,26 +31,27 @@ environment or a testing capability:
 - the code reviewer (`code-reviewer`), for an adversarial read of a plan or a design.
 
 An OATS child is visible to your person (its status, the Desktop), has its own messaging and
-knowledge, and is retired on record; a native subagent of your harness (Claude Code's, pi's
-or Codex's) is invisible to everyone but you.
+knowledge, and is retired on record; a native subagent of your harness is invisible to
+everyone but you.
+<!-- OATS: no skill names a harness or a model; a machine's souls.launch picks the model. -->
 
 **Not a probe:** a small investigation or task that directly helps you and needs no soul's
 knowledge and no testing capability (where something is defined, what a file says) may go
 to a native subagent. So may any child your person asks to be one, and the agents of your
-harness's multi-agent workflow mode (Claude Code's ultracode, say) when it is in use.
+harness's multi-agent workflow mode when it is in use.
 
 **On a different model from yours,** where the organisation has one: every kind of probe
 checks work or validates an idea, and agents of one model share blind spots, so their
 agreement is not independent. Preview the soul first (`oats spawn <soul> --preview
 --json`) and compare its `launch.effective.model`, what this machine will launch (a
 `launch.from` of `local` is this machine's override of the soul's preference), with yours,
-`launch.model` in your `instance.json`. Compare the models, not the harnesses: a provider
-prefix names a route to a model, not another model, so `github-copilot/gpt-6-astra` and
-`gpt-6-astra` are one. A model that is unknown (`null`, absent, or a harness's native
+`launch.model` in your `instance.json`. Compare model families, not harnesses or versions:
+a provider prefix names a route to a model, not another model, so one model reached through
+two harnesses is one, and two versions of one family count as a match. A model that is unknown (`null`, absent, or a harness's native
 default) proves nothing, so treat it as a match. When both are known and differ, spawn
 without `--harness`/`--model`, so the effective launch applies. When they match, spawn it
-on a model you know differs from the one you run (your harness reports yours: its status
-line, or its model command), with `--harness <h> --model <m>` or a launch configuration
+on a model of another family that this workspace allows (your harness reports yours: its
+status line, or its model command), with `--harness <h> --model <m>` or a launch configuration
 this host defines (`oats launch-config list`). If none is available, or you can't
 establish a difference, use the effective one and say so where you use its answer.
 

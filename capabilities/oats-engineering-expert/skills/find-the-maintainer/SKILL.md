@@ -10,12 +10,17 @@ IMPORTANT: after a compaction, reload this skill before you continue the step.
 A maintainer is called by message at an exact reference, where a lane's landing rules need
 its read (of a PR, or of a contract change before it is built) or reserve its merge. It is
 never a station every change passes, and you look for one only then.
+<!-- OATS: on the lane map every PR has a maintainer and a second reader, and most lanes need the release lane's sign-off. -->
+Here the landing rules need one on every PR: the maintainer of your person in the PR's
+lane. Call that one; it brings in the second reader and the release lane.
 
 1. **The lane** your work is in, from your landing rules; for a release, the release lane
    they name. When you can't tell, ask your person; meanwhile plan and build, but call and
    start no maintainer.
 2. **Whose lane:** the person who owns it, from your landing rules' ownership record. With
    one person, it is yours.
+   <!-- OATS: a project lane has one maintainer per person; a PR's is the one of the effort's person (the lane map). -->
+   Here a project lane has one maintainer per person: the PR's is your person's there.
 3. **Their maintainer there:** the lane map's `active` entry for that person in that lane,
    with your messaging layer's presence (its roster; without one, the entry alone).
    - **Running:** hand it the PR at its head, or the question at its commit (`/hand-off`).

@@ -15,7 +15,6 @@ direction.
    implements, what you ran, your review loop's final verdict and rounds, how to undo it.
    Name your expert as its owner, and tell it the PR's number and head in one line.
 2. **Watch it** for new reviews, comments and CI results.
-   <!-- adapt: What wakes a developer here on a new review, comment or CI result on its PR? -->
    Use what your harness or your forge offers: a notification, a subscription, a watch that
    wakes you once per event. Arm a watch for one event at a time and re-arm it after each:
    a background watch left running across a compaction can crash a harness. Between
@@ -62,6 +61,9 @@ direction.
    note alone. Before you merge, check that no hold is recorded on the PR or the default
    branch where your landing rules keep holds; then merge with the forge's merge guarded by
    that head, and tell your expert in one line.
+   <!-- OATS: the lane map's agreements bind every merge, whoever presses the button. -->
+   Never merge over a RETURN, nor before the PR's second reader's verdict and, where its
+   lane asks, the release lane's sign-off are on the PR at that head.
 8. **Until it merges,** keep watching: a new finding, one your expert returns, or a moved
    default branch is another round, and another hand-back. Once it is merged or closed,
    finish (`/run-the-review-loop`, "Finish").

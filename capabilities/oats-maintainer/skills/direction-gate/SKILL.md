@@ -9,6 +9,10 @@ An author calls it: an expert asks you, by message at an exact reference, before
 a contract or structural change, or a read your lane's landing rules need includes it.
 Answer in that thread. It is never a gate every change passes: a change nobody brings you
 lands on its lane's other agreements. In a read, run it against the full diff.
+<!-- OATS: the lane map's "Contract changes" line. -->
+A contract change is the exception: none lands undecided. It is decided by the two sides
+the lane map's "Contract changes" line names, together, before it is built; one you find in
+a read that wasn't goes back as a RETURN.
 
 ## Read before you judge
 - **The recorded decisions:** your knowledge's accepted decisions, the living roadmap, and

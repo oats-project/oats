@@ -51,11 +51,18 @@ decides it.
 Where the lane requires one: the maintainer of the person who owns that lane
 (`/find-the-maintainer`). Hand it the PR at its head (`/hand-off`) and wait for its verdict
 by message. A new head goes back to it for the delta.
+<!-- OATS: the lane map gives every PR a maintainer and one second reader, and most lanes the release lane's sign-off. -->
+Here every lane requires one: the PR's maintainer, the one of your person in its lane. It
+asks the PR's second reader and the release lane's sign-off as the lane's line says; you
+don't. A RETURN from any of them goes to your developer like a finding of yours.
 
 ## 5. Merge
 When every agreement holds at the same head (CI, the reviews the lane counts, your note,
 the maintainer's verdict where needed) and nothing holds the PR or the default branch (your
 landing rules say how holds are recorded), the one your landing rules name merges it:
+<!-- OATS: the lane map's agreements: the second reader's verdict, the release lane's sign-off where the lane asks, and no RETURN. -->
+(here the agreements include the second reader's verdict and, where the lane asks, the
+release lane's sign-off, all at that head, with no RETURN outstanding)
 - **you:** merge at that head, guarded by it (the forge's merge-at-head option), and say so
   in one line in the effort's thread;
 - **the developer:** give it the go in one line, at that head, once you have checked every

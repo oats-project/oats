@@ -1,0 +1,7 @@
+template: oats-project/oats-engineering-coordination
+release: template-v2.0.0
+commit: 1032ec8030ce375987cebf2be62e9f9f1806dc04
+capabilities: oats.dispatcher, oats.engineering-expert, oats.developer, oats.code-review, oats.maintainer, oats.landing-rules
+souls: none yet (the dispatcher and code-reviewer souls come with the roster change and the pin removal)
+license: MIT, the template's notice in TEMPLATE-LICENSE beside this file
+adapted: each capability is the template's text, changed only at its adapt markers, in its oats.json description and where an OATS rule wins, each such place marked <!-- OATS: <reason> -->; oats.maintainer drops support-maintainer (no support desk)

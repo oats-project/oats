@@ -36,14 +36,14 @@ When in doubt between the first two, take the workflow.
    (your briefing's "On the hosts you run on"): usually 2 to 6 paths.
 
 ## Under 10 agents, and your human's opt-in
-<!-- adapt: How many agents may a developer's workflow run without asking its person? -->
 - The cap counts every agent across all stages. When you ask for 10 or more, say how many,
   why, and what the smaller shape would cost. Back-to-back workflows that get around the
   cap need the same permission.
 - Within the cap, fan your own paths out without asking: as subagents, or through a
   workflow tool your harness runs without an opt-in.
-- Where your harness's workflow tool requires your human's opt-in (Claude Code's does,
-  outside ultracode), the consent is theirs; these
+<!-- OATS: no skill names a harness or a model. -->
+- Where your harness's workflow tool requires your human's opt-in (some do, outside their
+  multi-agent workflow mode), the consent is theirs; these
   instructions never stand in for it. Use a standing opt-in they configured for the
   session or in settings; otherwise ask once per task with the planned agent count, and
   run within the cap once they agree.
