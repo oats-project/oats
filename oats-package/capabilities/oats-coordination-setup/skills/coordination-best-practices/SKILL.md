@@ -19,10 +19,34 @@ a fresh window, a cleaner read, an area's knowledge, an environment.
 **One lead per effort.** One expert owns the effort from plan to merge: it
 reads the knowledge the task needs, and only that, then plans, specifies,
 verifies and lands. Its children are probes, not co-planners. Each probe has
-one question (test an approach, test a use case, review adversarially,
-investigate an alternative), reports what it found and retires; the plan stays
-the lead's. A finished part can be handed to another expert at an exact
-version, and that expert then owns it.
+one question (test an approach, test a theory on small, concrete cases, test a
+use case, review adversarially, investigate an alternative), reports what it
+found and retires; the plan stays the lead's. A finished part can be handed to
+another expert at an exact version, and that expert then owns it.
+
+**Probes test theories and approaches before anyone builds on them.** Where
+the plan can go more than one way and the choice matters, the lead lists the
+approaches first, including the one it doubts and "this already exists", and
+sends one probe per approach in parallel, each building the smallest spike
+that settles it. The lead compares them on evidence, carries what one round
+found to the next, drops dead ends early and records every approach tried,
+not only the winner. A probe never checks its own claim: a claim the plan
+rests on is checked by another probe with fresh context, against a check the
+lead wrote, never the probe. Most decisions need one probe; the fan-out fits
+what the decision is worth.
+
+**Proper work goes to OATS children; checking work goes to another model.**
+An investigation or test the plan rests on, a review, and any work that needs a
+soul's knowledge or an environment to run and test in go to an OATS child
+(`--parent`): it shows in status and the Desktop, has its own messaging and
+knowledge, and is retired on record. A small investigation or task that
+directly helps the lead, and needs neither, can be the harness's own subagent
+(in Claude Code, pi or Codex), as can anything the person asks to run that way
+or that runs in a multi-agent workflow mode such as Claude Code's ultracode.
+A child that reviews adversarially, investigates or validates a theory or an
+approach runs on a different model from the agent whose work it checks,
+wherever the organisation has one: agents of one model share blind spots, so
+their agreement is not independent.
 
 **Who stands, who is fresh.** Expertise lives in souls and their knowledge, so
 instances start fresh.
@@ -37,7 +61,8 @@ instances start fresh.
   that built a change opens its PR once the lane's green light is given at the
   verified head, works its reviews (bots, reviewers, CI), and raises to its
   expert only what needs product or architecture direction.
-- A reviewer, fresh per change: the forge's review bot or a reviewer soul.
+- A reviewer, fresh per round and launched by the developer, never by the
+  expert: the forge's review bot or a reviewer soul, on a different model.
 - A maintainer per person per lane, called by message where a lane's rules
   need its read or reserve its merge; spawned when first needed, never a
   second while one is active.
