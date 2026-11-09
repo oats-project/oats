@@ -48,13 +48,21 @@ repository, committed by the briefing's rule for shared files. They are the work
 package pins, and they need no packaging. The manifest's shape is in the
 installed kernel's `docs/capabilities.md`.
 
-Copy each from OATS's default and adapt it to what step 1 found. Run **one
-sub-agent per capability you author**, on the strongest model available,
-each with step 1's findings and its starting point:
+The workspace's coordination capability holds only what is its own (its
+landing rules and ownership record), and its souls compose the engineering
+package beside it, as the Coordination bullet says. Copy knowledge and tasks from OATS's default and adapt them
+to what step 1 found. Run **one sub-agent per capability you author**, on the
+strongest model available, each with step 1's findings and its starting
+point:
 
-- **Coordination**, from the engineering package `oats.engineering`
+- **Coordination**, by `/adapt-to-the-organisation`
+  (`oats.coordination-setup`): pin the engineering package `oats.engineering`
   (`oats.maintainer`, `oats.engineering-expert`, `oats.developer`,
-  `oats.code-review`). It must cover:
+  `oats.code-review`) and compose it. Author as this workspace's own only its
+  souls (`/design-the-roster`), its landing rules and ownership record
+  (`/set-landing-rules`), and any run-and-test skills its repositories lack.
+  Copy a package skill only to change what it does, with a note of what
+  changed. It must cover:
   - the roles (maintainer, expert, developer, reviewer), adapted to their
     review and merge rules and to their size;
   - the Desktop's grouping (from OATS 0.69.2): a top-level agent is spawned

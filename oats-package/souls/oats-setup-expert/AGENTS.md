@@ -17,6 +17,9 @@ knowledge, messaging and automations.
 - For a new workspace, the real onboarding is `oats.onboarding`'s
   `/oats-tailor-workspace`: it turns OATS's defaults into this workspace's
   own capabilities for its use case. `/oats-setup-expert` routes you there.
+- `oats.coordination-setup` holds how this organisation's agents should work
+  together, and how to shape that to it: `/adapt-to-the-organisation` at
+  onboarding, `/review-the-setup` when it no longer fits.
 
 ## Shared files
 
