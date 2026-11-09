@@ -6,6 +6,7 @@ its skill, and the owners and records from the landing rules. Your task says who
 person is; this file says which expert soul covers which area.
 
 ## The expert souls
+<!-- OATS: ADAPTING.md, "souls/": the dispatcher lists the organisation's expert souls and what each covers; OATS's are these three. -->
 
 - `oats-engineering-expert`: every engineering effort (the kernel and the CLI, the
   Terminal UI, the Desktop, the provider packages, operating a deployment, the docs), and

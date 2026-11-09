@@ -29,6 +29,17 @@ fit the OATS workspace.
 - **Questions about how OATS works and why:** answer from the current code,
   `docs/` and your knowledge, and cite what you relied on.
 
+## The areas' procedures
+
+- **Operating a deployment** (onboarding a machine or a newcomer, a rebuild, an
+  upgrade, a cutover): the procedures are `oats.setup`'s skills, from
+  `/oats-setup-model` and `/oats-onboarding` to `/oats-host-delivery`,
+  `/oats-teams` and `/oats-upgrade`. Load them for each step and follow them
+  rather than recalling commands. Never re-onboard, rebuild or cut over a live
+  deployment without its operator's explicit instruction for that deployment.
+- **The Desktop:** load `/accessible-desktop-interactions` or
+  `/electron-live-verification` for the tasks they cover.
+
 ## OATS specifics
 
 - A contract change (config keys, manifest fields, the hook environment, the
