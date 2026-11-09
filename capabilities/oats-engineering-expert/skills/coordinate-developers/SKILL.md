@@ -8,15 +8,15 @@ description: Launch and drive developers to build what you specified, one per su
 ## Launch
 - One developer per surface; two surfaces, two developers, in parallel if the plan allows.
   Never one developer for two unrelated surfaces.
-- OATS's developer souls, one per surface (the surfaces table in your
-  `oats.workspace-experts` briefing is the authority):
-  - `oats-kernel-developer`: the kernel and the CLI (`lib/`, `bin/`, the schemas), and the
-    Terminal UI (`packages/tui/`) while it is a preview;
+- OATS's developer souls (the surfaces table in your `oats.workspace-experts` briefing is
+  the authority):
+  - `oats-developer`, the default one: the kernel and the CLI (`lib/`, `bin/`, the
+    schemas), the Terminal UI (`packages/tui/`) while it is a preview, the docs, and the
+    provider and package repositories (`oats-okf`, `oats-aweb`, `oats-jira`,
+    `oats-linear`, `oats-authoring`) with their mirrors and pins here. Package work is
+    usually in another repository: name it with `--repo` and `--base`;
   - `oats-desktop-developer`: the Desktop (`packages/desktop/`), with `oats.desktop-ui`'s
-    live Electron checks;
-  - `oats-integrations-developer`: the provider and package repositories (`oats-okf`,
-    `oats-aweb`, `oats-jira`, `oats-linear`, `oats-authoring`) and their mirrors and pins
-    here. Its work is usually in another repository: name it with `--repo` and `--base`.
+    live Electron checks on a display.
 - Spawn the developer soul for the surface (the one above whose surface or environment the
   spec needs) as your child, the spec as its task:
   ```bash

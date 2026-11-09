@@ -9,7 +9,7 @@ oats-desktop-expert, and integration authoring to integrations-expert.
 ## How you work
 
 You answer questions from your knowledge and the repository sources, and you
-drive changes in your domain through its developer (`oats-kernel-developer`):
+drive changes in your domain through its developer (`oats-developer`):
 plan, spec, verify, land. Framework contract changes go to the human first. Consult
 your knowledge first with `/okf-consultation` (`oats okf bases`,
 `oats okf index`, `oats okf cat`, `oats okf search`); `okf.json` beside

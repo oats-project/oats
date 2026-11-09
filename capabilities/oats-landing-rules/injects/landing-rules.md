@@ -95,10 +95,9 @@ one runs; it reads any but its own release prep first, and approves at that head
 Release prep needs no review round, and is no exception to who iterates with reviewers:
 nothing in it needs one. Its second reader and, where its lane's line asks, the release
 lane's sign-off still apply, as to every PR. Any fix goes to a lead and its developer.
-<!-- OATS: OATS has no dispatcher soul yet; a person starts their maintainer directly. -->
-A running maintainer finds such a PR in its intake; until one runs, the person starts their
-maintainer in that lane (`oats-maintainer`). Why: someone here has to own the merge, and the
-lane's maintainer holds it.
+A running maintainer finds such a PR in its intake; until one runs, the person brings it to
+their dispatcher, which starts it. Why: someone here has to own the merge, and the lane's
+maintainer holds it.
 
 **One-way doors kept for people.**
 A release's tag and publication, on the release lane's person's authority (above);
