@@ -195,7 +195,7 @@ try {
   const core = await import(pathToFileURL(installedRequire.resolve("@awebai/oats")).href);
   // The package's declared capabilities, as the workspace sync below resolves and the
   // spawn of the theory's author soul copies them (the v2 path reads them there).
-  assert.deepEqual(distribution.capabilities.map((path) => readJson(join(theorySource, path, "oats.json")).capability), ["oats.knowledge-theory", "oats.core", "oats.setup", "oats.support", "oats.onboarding"]);
+  assert.deepEqual(distribution.capabilities.map((path) => readJson(join(theorySource, path, "oats.json")).capability), ["oats.knowledge-theory", "oats.core", "oats.setup", "oats.support", "oats.onboarding", "oats.coordination-setup"]);
 
   // ---- The workspace: one host repo that is also its single member, holding
   // the souls. The deployment is a separate directory with only oats-local.yaml.

@@ -1,6 +1,6 @@
 # Framework capability payload
 
-The **oats.framework** package: the Git-distributed payload that ships five
+The **oats.framework** package: the Git-distributed payload that ships six
 independently selected capabilities, all resource-only but `oats.core`, and
 two package souls, `knowledge-theory-expert` and `oats-setup-expert`. Package
 identity and
@@ -13,6 +13,7 @@ npm root; the kernel npm tarball does not contain it.
 | `oats.core` | `oats-operate`, `oats-souls`, `oats-token-saving`, and the "You run on OATS" inject | How an agent works inside an instance, and how it keeps messages to other instances few and short; its hooks write a Claude instance's waiting hooks and adopt a home that `oats instance upgrade` moves; no commands, and not a core capability |
 | `oats.setup` | `oats-setup-model`, `oats-onboarding`, `oats-setup-expert`, `oats-host-delivery`, `oats-agent-permissions`, `oats-git-setup`, `oats-workspace-config`, `oats-teams`, `oats-package-pins`, `oats-automations`, `oats-upgrade`, and the setup inject | How an operator understands, realizes, configures and upgrades a workspace and a deployment; no automatic provisioning |
 | `oats.onboarding` | `oats-tailor-workspace` (the package soul `oats-setup-expert` uses it) | How the setup expert turns OATS's defaults into a new workspace's own coordination, knowledge and tasks capabilities; procedure only, no inject |
+| `oats.coordination-setup` | `coordination-best-practices`, `adapt-to-the-organisation`, `design-the-roster`, `set-landing-rules`, `review-the-setup`, and the coordination-setup inject (the package soul `oats-setup-expert` uses it) | How the setup expert shapes OATS's coordination practices to an organisation: its roster of souls, its landing rules and its ownership record across people; resource-only, proposes for the people's yes |
 | `oats.support` | `support-intake`, `support-safety`, `support-ticket`, `support-handoff`, `support-relay`, and the support inject | The support desk role: tickets requests and hands them to the project's support maintainer; never changes code, reviews, merges, releases or deploys |
 | `oats.knowledge-theory` | `knowledge-capability-authoring` with its complete local references (the package soul `knowledge-theory-expert` uses it) | Optional authoring theory; no mandatory runtime doctrine, harvester or OKF dependency |
 

@@ -803,7 +803,13 @@ and ships the soul at the locked commit, and the soul's copy is intact: for
 `--home`, the home's copy matches the digest it recorded, and a lock still
 at that commit records the same digest. The copy is digested on every read.
 It fails otherwise, with `code: "E_PACKAGE_INTEGRITY"` on a digest mismatch
-and the remedy naming `oats sync` or a fresh spawn.
+and the remedy naming `oats sync` or a fresh spawn. When the package is no
+longer locked, readiness cannot tell a deliberate drop from an accidental
+unpin or a pending sync, so the `--home` remedy names both, the respawn
+first: if the workspace dropped the package on purpose, spawn a new instance
+from a soul the workspace offers, then retire this one; otherwise declare the
+package in `packages:` and `oats sync`. For `--soul` it is declaring the
+package and `oats sync`.
 
 **`providers`** (producer `provider binding check`): for each module whose
 manifest declares `binding`, the kernel runs its `binding.check` and relays
@@ -6597,6 +6603,11 @@ results with package drift include `drift:[{capability, recorded:{version,commit
 locked:{version,commit}}]` for package modules behind the deployment lock,
 and omit the field when none are behind. Text prints one line after the start:
 `<n> package module(s) behind the lock (<cap> <version> @ <shortcommit> → <version> @ <shortcommit>); to move them: oats instance stop <instance>; oats instance upgrade <instance> --plan`.
+`drift` lists only modules an upgrade moves in place. Package modules an
+upgrade keeps, because their package is no longer locked or no longer
+provides the capability, add one string to `warnings`, printed as a
+`WARNING:` line:
+`<n> package module(s) cannot move in place (<cap>: package <id> is no longer locked; <cap>: package <id> no longer provides it); an upgrade keeps them as they are, so respawn this instance to move it onto the lock`.
 Restart has no upgrade flag. A partial upgrade receipt refuses a start with
 `E_UPGRADE_PARTIAL`, naming the retry with the original idempotency key.
 A committed receipt with `steps.cleaned: false` permits start and adds one

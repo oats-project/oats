@@ -480,7 +480,8 @@ always records `release.status: pending`.
 ## Releasing `oats.framework`
 
 The distribution package in `oats-package/` (`oats.core`, `oats.setup`,
-`oats.onboarding`, `oats.support`, `oats.knowledge-theory`) is not published
+`oats.onboarding`, `oats.coordination-setup`, `oats.support`,
+`oats.knowledge-theory`) is not published
 by `release.yml` or by this lane. A deployment takes it from this repository at the tag
 `oats-framework/v<version>`, through the catalog ref or its workspace pin. A
 skill changed under `oats-package/` therefore reaches deployments only when
