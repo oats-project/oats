@@ -30,6 +30,10 @@ maintainer, the maintainer of the effort's person in that lane.
 
 **CI green,** wherever these rules or a skill say it, means every check the forge requires
 at a head has succeeded there: none failing, none pending.
+<!-- OATS: OATS's repositories require no check on their default branches (no branch protection, no rulesets), so "every check the forge requires" is empty and would hold with every check red. -->
+Where the forge requires no check, CI green at a head means at least one check ran there,
+every check that ran succeeded (a skipped check didn't run), and none is failing or
+pending. A head where no check ran isn't green.
 <!-- OATS: the repository's rule (AGENTS.md, "Gates"): CI is the gate, and its suites never run locally. -->
 CI is the test run here: no agent runs the kernel's or the Desktop's test suites locally,
 on any host; locally, `npm run validate`, `npm run check` and at most one or two test files.
