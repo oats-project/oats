@@ -894,6 +894,15 @@ oats soul launch set <key> --harness <its harness> --model <its model> --dir D -
 oats soul launch set <key> --harness <its harness> --model <its model> --dir D
 ```
 
+Check a reviewer soul by its model too, since `'*'` replaces the model as
+well as the harness: where it declares `<harness>` but another model, give
+it its own entry the same way, with `--harness <its harness> --model <its
+model>`. Then its `oats spawn <key> --preview --json --dir D` must show a
+`launch.effective` model from a family other than the developers'. Where
+its declared model can't run here, set one that can, from another family;
+with none, name it in the hand-over ("For the person, later"): its reviews
+share the developers' model.
+
 `S` is the exception: it always keeps `<harness>`, the person's choice in
 step 1. When `S` declares another harness, give it its own entry with
 `<harness>` instead:

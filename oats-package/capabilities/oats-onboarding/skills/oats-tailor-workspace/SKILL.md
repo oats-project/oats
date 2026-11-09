@@ -59,9 +59,11 @@ sub-agent per capability you author**, on the strongest model available
 findings and its starting point:
 
 - **Coordination**, from the closest of OATS's coordination templates:
-  the template repositories listed in the installed kernel's
-  `docs/official-catalog.md` ("Coordination templates"), each copied at its
-  latest `template-v*` tag and adapted by its `ADAPTING.md`, never pinned. With
+  repositories each copied at its latest `template-v*` tag and adapted by its
+  `ADAPTING.md`, never pinned. For work that lands as pull requests, that is
+  the engineering template, `oats-project/oats-engineering-coordination`; from
+  the next kernel release, the installed kernel's `docs/official-catalog.md`
+  ("Coordination templates") lists every template. With
   `oats.coordination-setup`, `/adapt-to-the-organisation` chooses and adapts
   them: its roster of souls (`/design-the-roster`) and its landing rules
   (`/set-landing-rules`). Its reads and questions were step 1's. Here, design,
