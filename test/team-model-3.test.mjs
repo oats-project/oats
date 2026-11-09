@@ -140,11 +140,14 @@ test("doctor checks local-teams-closed offline: from the cached workspace file, 
   assert.ok(fx.cli(["doctor"]).stderr.includes(refused.error.details.replacement));
 });
 
-test("team-soul-unknown: a souls: key that is neither a pattern nor a discovered soul's qualified name warns, in oats teams and readiness", (t) => {
+test("team-soul-unknown: a souls: key that is no discovered soul's qualified name, or a pattern that matches none, warns, in oats teams and readiness", (t) => {
   const fx = deployment({}, { defaultTeam: "docs", souls: { "ws/dev": { teams: [] }, "ws/devv": { teams: [] }, "ws/*": {}, "other/*": {}, "oats.okf/harvester": {} } }); t.after(fx.cleanup);
   const warning = (key) => ({ code: "team-soul-unknown", severity: "warning", key, at: `${fx.key}:oats-workspace.yaml#/souls/${key.replace(/\//g, "~1")}`,
     message: `souls: ${key} names no soul of this workspace (a pattern is "*" or <member|package>/*)`, fix: "correct the key to a soul's qualified name (oats souls lists them), or remove it" });
-  assert.deepEqual(ok(fx.cli(["teams", "--json"]), "teams").problems, [warning("oats.okf/harvester"), warning("ws/devv")]);
+  // `other/*`: no member or package named `other` has souls here (#1759); `ws/*` matches ws/dev and is silent.
+  const patternWarning = (key) => ({ ...warning(key), message: `souls: ${key} is a pattern that matches no soul of this workspace`,
+    fix: "correct the prefix to a member's or package's name (oats souls lists them), or remove the key" });
+  assert.deepEqual(ok(fx.cli(["teams", "--json"]), "teams").problems, [warning("oats.okf/harvester"), patternWarning("other/*"), warning("ws/devv")]);
   const items = ok(fx.cli(["readiness", "--soul", "dev", "--json"]), "readiness").checks.configured.items.filter((i) => i.code === "team-soul-unknown");
-  assert.deepEqual(items.map((i) => [i.subject, i.required, i.key]), [["teams", false, "oats.okf/harvester"], ["teams", false, "ws/devv"]]);
+  assert.deepEqual(items.map((i) => [i.subject, i.required, i.key, i.reason, i.remedy]), [warning("oats.okf/harvester"), patternWarning("other/*"), warning("ws/devv")].map((w) => ["teams", false, w.key, w.message, w.fix]));
 });

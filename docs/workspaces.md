@@ -527,7 +527,9 @@ souls:                                   # per soul pattern: its default team an
   `<member>/*` or `<package>/*`, and `"*"`, with the member and package names
   `souls.disabled` uses (a member's name is its repository's). A bare soul name
   is refused. A key that is neither a pattern nor a soul the workspace offers
-  is the warning `team-soul-unknown` (a typo guard).
+  is the warning `team-soul-unknown` (a typo guard). So is a `<prefix>/*`
+  pattern whose prefix matches no soul the workspace offers: a typo, or a
+  member or package that was renamed or dropped. `"*"` never warns.
 - **The most specific key wins outright** for a soul's teams, and lists never
   merge: the soul's own key, then `<member|package>/*`, then `"*"`. The
   default comes from the most specific key that sets one. So

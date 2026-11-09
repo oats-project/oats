@@ -2024,7 +2024,7 @@ problem's own keys.
 | `default-team-changed` | warning | `recorded`, `current` | `--home` with live teams: the default changed since the spawn |
 | `E_TEAM_UNKNOWN` | failure | `label`, `at` | a local default no file declares |
 | `E_WORKSPACE_SCHEMA` | failure | `condition: "local-teams-closed"`, `path`, `keys` | `oats-local.yaml` declares `teams` / `defaultTeam` and the workspace does not allow local teams |
-| `team-soul-unknown` | warning | `key`, `at` | a `souls:` key that is neither `"*"` nor `<name>/*` nor a discovered soul's key (a typo guard) |
+| `team-soul-unknown` | warning | `key`, `at` | a `souls:` key that is no discovered soul's key, or a `<name>/*` pattern that matches none of them; never `"*"` (a typo guard; a pattern's `message` and `fix` are its own) |
 
 `E_TEAM_UNKNOWN` and local-teams-closed are also spawn, preview and inspect
 refusals (local-teams-closed as `E_WORKSPACE_SCHEMA` with details `{reason,
