@@ -35,7 +35,10 @@ no lock and adds nothing to an existing workspace.
 
 ## Coordination templates
 
-OATS's coordination ships as templates, not packages. A template is a
+OATS's coordination ships as templates, not packages. An installed kernel's
+copy of this catalog carries this section from the next kernel release; the
+onboarding skills name the engineering template directly, so they work on an
+older kernel too. A template is a
 repository that a setup expert copies into a workspace's own capabilities and
 adapts to the organisation by the repository's `ADAPTING.md`
 (`/adapt-to-the-organisation`, in `oats.framework`); nobody pins it. Template

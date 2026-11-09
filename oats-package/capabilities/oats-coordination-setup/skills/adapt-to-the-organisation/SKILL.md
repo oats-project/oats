@@ -59,11 +59,15 @@ your recommendation.
    capabilities together, so they agree with each other. Give it the agreed
    design and these rules:
    - **Start** from the template closest to each group's way of working: one
-     of OATS's template repositories, listed in the installed kernel's
-     `docs/official-catalog.md` ("Coordination templates"), copied at its
-     latest `template-v*` tag. Follow its `ADAPTING.md` in order. One
-     organisation can start different groups from different templates, with
-     one dispatcher for each person who wants one.
+     of OATS's template repositories, copied at its latest `template-v*` tag
+     (`git ls-remote --tags <repository> 'template-v*'` lists them). For work
+     that lands as pull requests, that is the engineering template,
+     `oats-project/oats-engineering-coordination`. From the next kernel
+     release, the installed kernel's `docs/official-catalog.md` ("Coordination
+     templates") lists every template; an older kernel's has no such section.
+     Follow the template's `ADAPTING.md` in order. One organisation can start
+     different groups from different templates, with one dispatcher for each
+     person who wants one.
    - **Check the ids first,** as `ADAPTING.md` section 1 says: run
      `oats capabilities` and settle each id the template brings that is
      already listed, before copying anything. A pin of the frozen package
