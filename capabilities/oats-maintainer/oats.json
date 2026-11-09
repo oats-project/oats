@@ -1,0 +1,21 @@
+{
+  "capability": "oats.maintainer",
+  "version": "2.0.0",
+  "compatibility": {
+    "oats": ">=0.69.7"
+  },
+  "description": "Maintainers hold a lane's authority for their person and are called, never a station: an author asks them by message at an exact head where the lane's landing rules need their read or reserve their merge, and they read through four gates (direction, correctness, security, mergeability) or merge that head. They answer contract and direction questions when called (the direction gate is a call), keep the overview of their lane and its lane map, holds and cleanliness, launch work their person asks them for with one lead expert per effort, plan, ship and verify releases from the release lane, take a support desk's tickets as the support maintainer, and keep the roadmap, architectural calls and coherence rules in their knowledge. Lanes: one release lane, the main maintainer, for the whole project; project lanes with at most one maintainer per person, plus one overflow seat while overrun; each lane's landing rules in the landing-rules capability. A maintainer is not an expert: don't give one soul both roles. Generic: the project's own facts stay with the soul. Copied from the engineering template, template-v2.0.0.",
+  "requires": [],
+  "inject": "injects/maintainer.md",
+  "skills": [
+    "skills/maintainer-intake",
+    "skills/launch-work",
+    "skills/direction-gate",
+    "skills/pr-review",
+    "skills/plan-release",
+    "skills/ship-release",
+    "skills/cross-review-peer",
+    "skills/keep-it-clean",
+    "skills/support-maintainer"
+  ]
+}

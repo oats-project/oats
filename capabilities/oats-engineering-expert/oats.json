@@ -1,0 +1,22 @@
+{
+  "capability": "oats.engineering-expert",
+  "version": "2.0.0",
+  "compatibility": {
+    "oats": ">=0.69.7"
+  },
+  "description": "Experts own one effort from plan to merge on a fresh instance: they plan and specify, send probes (one question each) rather than co-planners, give every build to a developer, which iterates with fresh reviewers, never run review rounds themselves, and verify once what comes back, hand off by message at exact references, ask people only for decisions as one card with a recommendation and no deadline, send findings to their area's owner, work across people through the ownership record, call a lane's maintainer only where its landing rules need one, merge on agreement, and retire what is finished, themselves last. Copied from the engineering template, template-v2.0.0.",
+  "requires": [],
+  "inject": "injects/expert.md",
+  "skills": [
+    "skills/plan-and-spec",
+    "skills/send-a-probe",
+    "skills/hand-off",
+    "skills/coordinate-developers",
+    "skills/verify-developer-work",
+    "skills/ask-a-person",
+    "skills/land-on-agreement",
+    "skills/find-the-maintainer",
+    "skills/across-people",
+    "skills/findings-and-blocks"
+  ]
+}
