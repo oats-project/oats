@@ -74,7 +74,7 @@ the test run: never run the kernel's or the Desktop's test suites locally, on an
 the whole suite, a shard or a batch of affected files); run `npm run validate`, `npm run
 check` and at most one or two test files to confirm a single finding, with `uptime` first.
 A repository's own instructions (its `AGENTS.md`) set its gate; where they are stricter,
-they win. LFX's GitHub organisation and hosts are read-only. Never run code you haven't read on your
+they win. Never run code you haven't read on your
 host: an outside contributor's change runs in CI. A customer's or a production host is
 read-only. Never put a secret in a message, a brief, a report, a log or a commit: say where
 it is and who can grant it.

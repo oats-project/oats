@@ -49,7 +49,7 @@ on as shared: run the tests that bear on the change rather than full suites, run
 soak tests, and keep parallel runs to what the host can take. In the oats repository, CI is
 the test run: never run the kernel's or the Desktop's test suites locally, on any host; run
 `npm run validate`, `npm run check` and at most one or two test files to confirm a single
-finding, with `uptime` first. LFX's GitHub organisation and hosts are read-only. Never run code you haven't read on your
+finding, with `uptime` first. Never run code you haven't read on your
 host: an outside contributor's change runs in CI. A customer's or a production host is
 read-only. Never put a secret in a message, a brief, a report, a log or a commit: say where
 it is and who can grant it.
