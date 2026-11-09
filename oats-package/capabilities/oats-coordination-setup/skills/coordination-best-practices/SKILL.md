@@ -24,6 +24,17 @@ investigate an alternative), reports what it found and retires; the plan stays
 the lead's. A finished part can be handed to another expert at an exact
 version, and that expert then owns it.
 
+**Children are OATS instances, on a different model when they check work.**
+A probe, a developer or a reviewer is spawned as an OATS child (`--parent`),
+not as the harness's own subagent (in Claude Code, pi or Codex alike): an OATS
+child shows in status and the Desktop, has its own messaging and knowledge,
+and is retired on record, while a native subagent is visible only to its
+parent. The exception is a harness's multi-agent workflow mode, such as
+Claude Code's ultracode, when it is in use. A child that reviews adversarially,
+investigates or validates a theory or an approach runs on a different model
+from the agent whose work it checks, wherever the organisation has one:
+agents of one model share blind spots, so their agreement is not independent.
+
 **Who stands, who is fresh.** Expertise lives in souls and their knowledge, so
 instances start fresh.
 - A dispatcher for each person who wants one, standing: the front door that
@@ -37,7 +48,8 @@ instances start fresh.
   that built a change opens its PR once the lane's green light is given at the
   verified head, works its reviews (bots, reviewers, CI), and raises to its
   expert only what needs product or architecture direction.
-- A reviewer, fresh per change: the forge's review bot or a reviewer soul.
+- A reviewer, fresh per round and launched by the developer, never by the
+  expert: the forge's review bot or a reviewer soul, on a different model.
 - A maintainer per person per lane, called by message where a lane's rules
   need its read or reserve its merge; spawned when first needed, never a
   second while one is active.
