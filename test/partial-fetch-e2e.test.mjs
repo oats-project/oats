@@ -2,7 +2,8 @@
 // each carrying large files nothing reads beside large files a module ships, served with partial fetches
 // (as GitHub serves them) or without (a default git). Sync, discovery, spawn preview and spawn must succeed
 // either way; with partial fetches the cache never receives the files nothing reads, and without them each
-// repository is reported once. The package puts its capability and soul in directories no convention names.
+// repository is reported once. A git older than PARTIAL_FETCH_GIT (#389) says so on one line instead, naming no
+// repository. The package puts its capability and soul in directories no convention names.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -14,8 +15,10 @@ import { v2Deployment, git } from "./helpers/v2-deployment.mjs";
 import { parseRepoRef, SMALL_BLOB_LIMIT } from "../lib/remote.mjs";
 import { PARTIAL_GIT, olderGitNotice } from "./helpers/partial-git.mjs";
 
-/** The one warning per repository a git older than PARTIAL_FETCH_GIT gives (#389): it never tries a partial fetch. */
-const olderGitWarning = (url) => `oats: warning: ${olderGitNotice(url)}`;
+/** What a git older than PARTIAL_FETCH_GIT gives (#389), which never tries a partial fetch: one warning per command
+ *  that starts caches, however many. In the scenario only `sync` starts any (both repositories' caches); the later
+ *  commands find them recorded full and say nothing. So the scenario prints it exactly once. */
+const OLDER_GIT_WARNINGS = [`oats: warning: ${olderGitNotice()}`];
 const warningsOf = (stderr) => stderr.split("\n").filter((l) => l.startsWith("oats: warning")).sort();
 
 const ok = (r, what) => { assert.equal(r.status, 0, `${what}: ${r.stdout}${r.stderr}`); const j = r.json(); assert.equal(j.ok, true, `${what}: ${r.stdout}`); return j.result; };
@@ -95,11 +98,11 @@ function runScenario({ fx }) {
   return stderr.join("");
 }
 
-test("served with partial fetches: everything works, and the cache never receives the files nothing reads (an older git: whole trees, one warning per repository)", (t) => {
+test("served with partial fetches: everything works, and the cache never receives the files nothing reads (an older git: whole trees, one warning for the command that starts the caches)", (t) => {
   const s = fixture({ partial: true }); t.after(s.fx.cleanup);
   const stderr = runScenario(s);
   if (PARTIAL_GIT) assert.equal(stderr.includes("oats: warning"), false, stderr);
-  else assert.deepEqual(warningsOf(stderr), [olderGitWarning(parseRepoRef(s.fx.ref).url), olderGitWarning(parseRepoRef(s.pkg.url).url)].sort());
+  else assert.deepEqual(warningsOf(stderr), OLDER_GIT_WARNINGS);
   // An older git (#389) receives every file: the fallback is the assertion there.
   const kept = PARTIAL_GIT ? [false, false, true] : [true, true, true];
   assert.deepEqual(s.holds(s.memberCache, ["assets/huge-1.bin", "assets/huge-2.bin", "capabilities/tools/data/model.bin"].map(s.memberBlob)), kept);
@@ -107,12 +110,12 @@ test("served with partial fetches: everything works, and the cache never receive
   for (const cache of [s.memberCache, s.pkgCache]) assert.equal(git(cache, "config", "--get", "oats.fetch"), PARTIAL_GIT ? "partial" : "full");
 });
 
-test("served without partial fetches: everything works on whole trees, and each repository is reported once", (t) => {
+test("served without partial fetches: everything works on whole trees, and each repository is reported once (an older git: one warning for the command that starts the caches)", (t) => {
   const s = fixture({ partial: false }); t.after(s.fx.cleanup);
   const stderr = runScenario(s);
-  // An older git (#389) never asks the server, so its own warning stands in for the server's.
-  const served = (url) => PARTIAL_GIT ? `oats: warning: ${url} does not serve partial fetches; OATS fetches whole trees from it` : olderGitWarning(url);
-  assert.deepEqual(warningsOf(stderr), [served(parseRepoRef(s.fx.ref).url), served(parseRepoRef(s.pkg.url).url)].sort());
+  // An older git (#389) never asks the server, so its one line stands in for the server's, one per repository.
+  const served = (url) => `oats: warning: ${url} does not serve partial fetches; OATS fetches whole trees from it`;
+  assert.deepEqual(warningsOf(stderr), PARTIAL_GIT ? [served(parseRepoRef(s.fx.ref).url), served(parseRepoRef(s.pkg.url).url)].sort() : OLDER_GIT_WARNINGS);
   assert.deepEqual(s.holds(s.memberCache, ["assets/huge-1.bin"].map(s.memberBlob)), [true], "the whole tree came");
   for (const cache of [s.memberCache, s.pkgCache]) assert.equal(git(cache, "config", "--get", "oats.fetch"), "full");
 });

@@ -334,6 +334,11 @@ returns an unparseable version, the read instead fails with
 `E_REMOTE_UNREADABLE` and an existing reason (`unknown` for unparseable
 output, `timeout` for a timeout). The partial cache, its fetch mode and its
 commit pins are preserved, and a later read can retry the version probe.
+With an older Git, a command says so once, however many repositories it
+fetches: one `oats: warning` line naming the Git version and the 2.45 floor,
+and saying that OATS fetches whole trees instead. A Git of 2.45 or later
+removes the line. Caches already fetched with whole trees stay that way after
+the upgrade.
 This also applies to library reads without a session. A cache already using
 whole trees stays in that mode when a later probe finds a newer Git.
 
