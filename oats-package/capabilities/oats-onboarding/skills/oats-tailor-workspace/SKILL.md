@@ -136,7 +136,7 @@ under `'*'`, so the soul can run; tell the person.
 Check the reviewer soul by its model too, since `'*'` replaces the model as
 well as the harness: where it declares the same harness as `'*'` but another
 model, give it its own entry the same way, with `--harness <its harness>
---model <its model>`. Then `oats spawn <reviewer soul> --preview --json`
+--model <its model>`. Then its `oats spawn <soul> --preview --json`
 must show a `launch.effective` model from a family other than the
 developers'. Where its declared model can't run here, set one that can, from
 another family; with none, tell the person its reviews share the
