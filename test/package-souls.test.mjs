@@ -331,8 +331,8 @@ test("readiness: a package soul's member check is its package (locked, integrity
   it = rd.checks.member.items[0];
   assert.deepEqual([it.subject, it.status], ["package acme.pkg/keeper", "fail"], JSON.stringify(it));
   assert.match(it.reason, /acme\.pkg is not locked in this workspace's packages:/);
-  // A home cannot be moved by declaring the package again: the remedy is a respawn.
-  assert.equal(it.remedy, "spawn a new instance from a soul this workspace offers (oats souls lists them), then retire this one");
+  // Readiness cannot tell a deliberate drop from an accidental unpin: the remedy names both, the respawn first.
+  assert.equal(it.remedy, "if the workspace dropped acme.pkg on purpose, spawn a new instance from a soul this workspace offers (oats souls lists them), then retire this one; otherwise declare acme.pkg in the workspace's packages:, then oats sync");
   ws.packages = pinned;
   fx.commit({ "oats-workspace.yaml": YAML.stringify(ws) }, "declare acme.pkg again");
 

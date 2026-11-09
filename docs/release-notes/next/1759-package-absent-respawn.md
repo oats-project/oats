@@ -4,9 +4,12 @@
   (oats-project/oats#1759, items 2 and 3). A workspace that stops declaring a
   package leaves the homes composed from it on their recorded copies, and only
   a respawn moves them.
-  - `oats readiness --home` no longer tells such a home to declare the package
-    again: the `package <package>/<soul>` item's remedy is to spawn a new
-    instance from a soul the workspace offers, then retire this one. Readiness
+  - `oats readiness --home` no longer only tells such a home to declare the
+    package again. Readiness cannot tell a deliberate drop from an accidental
+    unpin or a pending sync, so the `package <package>/<soul>` item's remedy
+    names both, the respawn first: if the workspace dropped the package on
+    purpose, spawn a new instance from a soul the workspace offers, then retire
+    this one; otherwise declare it in `packages:` and `oats sync`. Readiness
     of a soul (`--soul`) still names declaring the package and `oats sync`
     ([`oats readiness`](../desktop-cli-api.md#oats-readiness)).
   - `oats session start` and `restart` add one warning for package modules an

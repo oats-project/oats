@@ -804,9 +804,12 @@ and ships the soul at the locked commit, and the soul's copy is intact: for
 at that commit records the same digest. The copy is digested on every read.
 It fails otherwise, with `code: "E_PACKAGE_INTEGRITY"` on a digest mismatch
 and the remedy naming `oats sync` or a fresh spawn. When the package is no
-longer locked, the `--home` remedy is a respawn (spawn a new instance from a
-soul the workspace offers, then retire this one), never declaring the package
-again; for `--soul` it is declaring the package and `oats sync`.
+longer locked, readiness cannot tell a deliberate drop from an accidental
+unpin or a pending sync, so the `--home` remedy names both, the respawn
+first: if the workspace dropped the package on purpose, spawn a new instance
+from a soul the workspace offers, then retire this one; otherwise declare the
+package in `packages:` and `oats sync`. For `--soul` it is declaring the
+package and `oats sync`.
 
 **`providers`** (producer `provider binding check`): for each module whose
 manifest declares `binding`, the kernel runs its `binding.check` and relays
