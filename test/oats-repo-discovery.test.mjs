@@ -1,9 +1,10 @@
 // This repository as a workspace member: the kernel's member discovery
 // (lib/workspace.mjs#discoverRepo), run over this checkout's tracked tree, lists
-// only the repository's own capability. The package mirrors live under mirrors/
-// and are offered by their packages; a copy under capabilities/ would be listed
-// a second time, as a latest-state member capability of github.com/awebai/oats
-// ("member and publisher never collapse", docs/workspaces.md).
+// only the repository's own capabilities: its two private ones and its copy of the
+// engineering template (capabilities/TEMPLATE-RELEASE). The package mirrors live
+// under mirrors/ and are offered by their packages; a mirror under capabilities/
+// would be listed a second time, as a latest-state member capability of
+// github.com/awebai/oats ("member and publisher never collapse", docs/workspaces.md).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -50,14 +51,25 @@ function checkoutRemote() {
   };
 }
 
-test("member discovery over this repository lists its two private member capabilities, oats.desktop-ui and oats.workspace-experts; every package mirror comes from its package", async () => {
+// The copy of the engineering template is public (no `private`): souls in other members
+// compose it `from: github.com/awebai/oats`, as the template's ADAPTING.md says.
+const TEMPLATE_COPY = ["oats.code-review", "oats.developer", "oats.dispatcher", "oats.engineering-expert", "oats.landing-rules", "oats.maintainer"];
+
+test("member discovery over this repository lists its two private member capabilities and its six-capability copy of the engineering template; every package mirror comes from its package", async () => {
   const d = await discoverRepo("git:github.com/awebai/oats", { remote: checkoutRemote() });
   assert.equal(d.key, "github.com/awebai/oats");
   assert.deepEqual(d.problems, []);
   assert.deepEqual(d.capabilities.map((c) => ({ name: c.name, path: c.path, private: c.private })),
-    [{ name: "oats.desktop-ui", path: "capabilities/oats-desktop-ui", private: true },
+    [{ name: "oats.code-review", path: "capabilities/oats-code-review", private: false },
+     { name: "oats.desktop-ui", path: "capabilities/oats-desktop-ui", private: true },
+     { name: "oats.developer", path: "capabilities/oats-developer", private: false },
+     { name: "oats.dispatcher", path: "capabilities/oats-dispatcher", private: false },
+     { name: "oats.engineering-expert", path: "capabilities/oats-engineering-expert", private: false },
+     { name: "oats.landing-rules", path: "capabilities/oats-landing-rules", private: false },
+     { name: "oats.maintainer", path: "capabilities/oats-maintainer", private: false },
      { name: "oats.workspace-experts", path: "capabilities/oats-workspace-experts", private: true }],
     "a package mirror under capabilities/ is discovered as a member capability of this repository");
+  assert.ok(!d.capabilities.some((c) => c.path.startsWith("mirrors/")), "no capability under mirrors/ is discovered as a member");
   // What the repository publishes is reported, never enumerated as member capabilities.
   assert.equal(d.publishes?.package, "oats.framework");
 
@@ -71,6 +83,8 @@ test("member discovery over this repository lists its two private member capabil
     const alias = catalog.capabilities[id];
     const pkg = typeof alias === "string" ? alias : catalog.packages[id] ? id : null;
     assert.ok(pkg && Object.hasOwn(declared, pkg), `${file}: ${id} is supplied by a package oats-workspace.yaml declares (catalog says ${pkg})`);
-    assert.ok(!d.capabilities.some((c) => c.name === id), `${id} is not a member capability`);
+    // A mirrored id is a member capability only as the template copy's own folder, never the mirror.
+    const members = d.capabilities.filter((c) => c.name === id).map((c) => c.path);
+    assert.deepEqual(members, TEMPLATE_COPY.includes(id) ? [`capabilities/oats-${id.slice("oats.".length)}`] : [], `${id}: the member capabilities of that name`);
   }
 });
