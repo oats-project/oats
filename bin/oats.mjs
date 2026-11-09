@@ -306,6 +306,24 @@ async function doctorOperator(ws) {
   return { problems: found.map(({ code, label, message, remedy }) => ({ code, ...(label ? { label } : {}), message, remedy })), information: [] };
 }
 
+/** This machine's last read of the workspace, for doctor's checks of the soul names in oats-local.yaml:
+ *  discovered OFFLINE like doctorOperator, from this machine's cache only (cacheOnlyRemote), once per
+ *  doctor run however many checks ask, and only when one asks. A cache that cannot answer rejects, for
+ *  each check to say as information (doctorCacheWhy). */
+const doctorReads = new WeakMap();
+function doctorDiscovery(ws) {
+  if (!doctorReads.has(ws)) doctorReads.set(ws, (async () => {
+    const { cacheOnlyRemote } = await import("../lib/operator-coverage.mjs");
+    const { discoverOrStandalone } = await import("../lib/instance-resolution.mjs");
+    const deployment = dirname(ws.local.path);
+    return discoverOrStandalone(ws.local.value, { lock: readLockIfPresent(deployment), deployment, remoteOptions: remoteOptionsFromEnv(), remote: cacheOnlyRemote() });
+  })());
+  return doctorReads.get(ws);
+}
+/** Why doctorDiscovery could not answer, as a doctor line says it: a cache miss is the cache's; anything
+ *  else is named as itself. */
+const doctorCacheWhy = (e) => (e?.code === "E_REMOTE_UNREADABLE" ? `this machine's cache cannot answer (${e.message})` : `${e?.code ? `${e.code}: ` : ""}${e?.message ?? e}`);
+
 /** The keys of oats-local.yaml souls.launch that name no soul (awebai/oats#989), in doctor, OFFLINE like
  *  doctorOperator: the souls are discovered from this machine's cache only, and the one function
  *  (launchKeysUnmatched) decides. A problem per unmatched key, which speaks about this machine's last
@@ -321,13 +339,9 @@ async function doctorLaunchPreferences(ws) {
   const shown = (list) => (list.length > 3 ? `${list.slice(0, 3).map(launchKeyQuoted).join(", ")} and ${list.length - 3} more` : list.map(launchKeyQuoted).join(", "));
   let found;
   try {
-    const { cacheOnlyRemote } = await import("../lib/operator-coverage.mjs");
-    const { discoverOrStandalone } = await import("../lib/instance-resolution.mjs");
-    const deployment = dirname(ws.local.path);
-    const discovery = await discoverOrStandalone(local, { lock: readLockIfPresent(deployment), deployment, remoteOptions: remoteOptionsFromEnv(), remote: cacheOnlyRemote() });
-    found = launchKeysUnmatched({ local, offered: soulsOffered(discovery) });
+    found = launchKeysUnmatched({ local, offered: soulsOffered(await doctorDiscovery(ws)) });
   } catch (e) {
-    const why = e?.code === "E_REMOTE_UNREADABLE" ? `this machine's cache cannot answer (${e.message})` : `${e?.code ? `${e.code}: ` : ""}${e?.message ?? e}`;
+    const why = doctorCacheWhy(e);
     return { problems: [], information: [`launch-preference-unchecked: the keys of oats-local.yaml souls.launch (${shown(keys)}) were not checked against the souls this workspace offers: ${why}; oats sync, then oats souls, then run doctor again (a spawn reads the workspace itself and refuses a key that names no soul)`] };
   }
   return {
