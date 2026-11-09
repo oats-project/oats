@@ -41,6 +41,7 @@ description: >-
    today, such as a release's contents, publishing outside the company, money,
    and deleting what others use. Nothing else goes to a person by rule.
 7. **No deadlines and no defaults.** A request waits for its answer.
-8. **Write them** where the tasks layer says, in plain words, each rule with
-   its reason. Propose them to the people as one card each, for their own
-   lanes.
+8. **Write them** in the workspace's coordination capabilities, and as lane
+   arrangements on the lane map where the workspace keeps one, in plain words,
+   each rule with its reason. Propose them to the people as one card each, for
+   their own lanes.

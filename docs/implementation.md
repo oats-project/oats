@@ -29,8 +29,8 @@ reference pages ([workspaces](workspaces.md), [souls and instances](souls-and-in
   order is in [its README](../packages/pi/README.md)).
 - **`oats.framework`** (`oats-package/`): the `oats.core`, `oats.setup`,
   `oats.onboarding`, `oats.coordination-setup`, `oats.support` and
-  `oats.knowledge-theory` capabilities and the `knowledge-theory-expert` and `oats-setup-expert`
-  souls,
+  `oats.knowledge-theory` capabilities and the `knowledge-theory-expert`
+  and `oats-setup-expert` souls,
   released as a package under its own `oats-framework/v<version>` tags.
   `oats.core` is the one with executables: its spawn and launch hook and the
   Claude Code waiting emitter (`capabilities/oats-core/bin/`).

@@ -137,7 +137,7 @@ export function syncKnowledgeTheoryReferences(repoRoot = REPO_ROOT) {
   }
 }
 
-// Keep the operational capabilities narrow. oats.setup, oats.support and oats.onboarding are resource-only; oats.core
+// Keep the operational capabilities narrow. oats.setup, oats.support, oats.onboarding and oats.coordination-setup are resource-only; oats.core
 // adds exactly two executable surfaces. Its Claude Code waiting emitter: the spawn
 // and launch hooks of bin/oats-core.mjs (preview-aware), the bin/claude-waiting.sh
 // they wire into a Claude instance's settings, and the bin/claude-waiting-message.mjs
@@ -159,6 +159,7 @@ const OPERATIONAL_CAPABILITIES = [
   { slug: "oats-support", names: ["support-intake", "support-safety", "support-ticket", "support-handoff", "support-relay"], injection: "injects/support.md", compatibility: ">=0.40.0" },
   // No inject: the setup expert loads its one skill when oats.setup routes a new workspace to it.
   { slug: "oats-onboarding", names: ["oats-tailor-workspace"], compatibility: ">=0.30.0" },
+  { slug: "oats-coordination-setup", names: ["coordination-best-practices", "adapt-to-the-organisation", "design-the-roster", "set-landing-rules", "review-the-setup"], injection: "injects/coordination-setup.md", compatibility: ">=0.30.0" },
 ];
 export function checkOperationalCapabilities(packageRoot) {
   for (const { slug, names, injection, compatibility, executable } of OPERATIONAL_CAPABILITIES) {

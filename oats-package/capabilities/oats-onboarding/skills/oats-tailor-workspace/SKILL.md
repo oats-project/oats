@@ -57,7 +57,9 @@ each with step 1's findings and its starting point:
   `oats.code-review`) as the template, adapted by
   `/adapt-to-the-organisation` (`oats.coordination-setup`): its roster of
   souls (`/design-the-roster`) and its landing rules (`/set-landing-rules`).
-  It must cover:
+  You do that skill's reads, questions and card yourself, folded into step 1's
+  one round; the sub-agent writes the adapted capabilities from the design the
+  people agreed. It must cover:
   - the roles (maintainer, expert, developer, reviewer), adapted to their
     review and merge rules and to their size;
   - the Desktop's grouping (from OATS 0.69.2): a top-level agent is spawned

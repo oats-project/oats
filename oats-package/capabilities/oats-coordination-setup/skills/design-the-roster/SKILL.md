@@ -38,9 +38,10 @@ node, not a soul.
      tool rig.
 5. **Dispatchers.** One per person who wants a front door that starts their
    work and introduces its lead. Introducing one is that person's call.
-6. **Maintainers.** None at setup. A lane whose landing rules need a
-   maintainer's read, or reserve its merges, gets one for the person who owns
-   it, when first needed (`/set-landing-rules`).
+6. **Maintainers.** A maintainer soul exists where a lane's landing rules
+   need a maintainer's read or reserve its merges; no maintainer instance is
+   started at setup. One is started for the person who owns that lane when
+   first needed (`/set-landing-rules`).
 7. **Reviewers.** The forge's review bot if the organisation runs one,
    otherwise a reviewer soul, fresh per change.
 8. **Routines.** Only the organisation's scheduled jobs.
