@@ -833,10 +833,13 @@ oats onboard D --workspace W --json
   access problem (step 3). Another member with `cannot-read` is an access
   question for the setup expert, not a reason to stop.
 - **On Git under 2.45** (step 2; Ubuntu 24.04 ships 2.43), a warning
-  about this older Git and whole-tree fetches is expected, here and
-  whenever a later command first fetches another repository. It is
-  harmless. Don't show it to the person as an error, and don't try to fix
-  it.
+  that this Git can't keep a partial cache, so OATS fetches whole trees, is
+  expected. A recent OATS prints it at most once per command that starts or
+  rebuilds caches; an older one prints it once for each repository it
+  starts a cache for. Either form is harmless. Don't show it to the person
+  as an error, and don't try to fix it now: a Git of 2.45 or later,
+  installed later, removes it, and caches already made with whole trees
+  stay that way.
 - **`E_ALREADY_ONBOARDED`:** `D` already is a deployment. Stop and ask the
   person whether to use it as it is or to choose another directory.
 
