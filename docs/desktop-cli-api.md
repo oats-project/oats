@@ -803,7 +803,10 @@ and ships the soul at the locked commit, and the soul's copy is intact: for
 `--home`, the home's copy matches the digest it recorded, and a lock still
 at that commit records the same digest. The copy is digested on every read.
 It fails otherwise, with `code: "E_PACKAGE_INTEGRITY"` on a digest mismatch
-and the remedy naming `oats sync` or a fresh spawn.
+and the remedy naming `oats sync` or a fresh spawn. When the package is no
+longer locked, the `--home` remedy is a respawn (spawn a new instance from a
+soul the workspace offers, then retire this one), never declaring the package
+again; for `--soul` it is declaring the package and `oats sync`.
 
 **`providers`** (producer `provider binding check`): for each module whose
 manifest declares `binding`, the kernel runs its `binding.check` and relays
@@ -1893,8 +1896,6 @@ oats soul teams <soul>|'*' [--dir <d>] [--max-age <s>] --json
   matches, or none sets a default). For `'*'`, `soul`, `key` and the only
   pattern tried are `"*"`. Soul lookup: `E_SOUL_UNKNOWN`, `E_SOUL_AMBIGUOUS`;
   the soul's teams: `E_WORKSPACE_SCHEMA` (local-teams-closed), `E_TEAM_UNKNOWN`.
-- `notes`, strings, is present only when the soul was named through a renamed
-  package's old id: one line saying so ([Renamed packages](workspaces.md#renamed-packages)).
 - The edit flags `--add`, `--remove`, `--default` and `--clear-default` were
   removed in 0.38.0: `E_BAD_ARGS` with details `{flag, replacement: "souls: in
   oats-workspace.yaml (a PR to the workspace file)"}`, before anything else
@@ -1958,7 +1959,6 @@ One closed answer for `set`, `remove` and their plans.
 | `launch` | the [`Launch`](#the-launch-report-launch) report a spawn with no flags would decide for the named soul, with the file as it is after this change (as it would be, under `--plan`). After a `remove` it shows what the soul falls through to. For a key given by its exact text, the soul is the first of `souls`. `null` for `"*"` and for a key that is the key of no soul |
 | `unmatched` | the keys of `souls.launch` that are the key of no offered soul after this change, sorted by key: `[{key, at, value, suggestions}]`. `at` is `oats-local.yaml#/souls/launch/<key>` (JSON-pointer escaped), `value` the entry as in `before`, `suggestions` at most three offered soul keys: those with the key's bare name (the part after the last `/`) first, then those within two edits of it. `"*"` is never listed, and neither is a key the read could not check (a member unconfirmed, a soul skipped with a problem, a package declared and not locked). `[]`: no key is known to name no soul |
 | `unread` | `null`, or `{code, message}` when a `remove` by exact text ran although the workspace's souls could not be read |
-| `notes` | strings, present only when the soul was named through a renamed package's old id: one line saying so ([Renamed packages](workspaces.md#renamed-packages)) |
 
 - **Read `unread` first.** When it is not `null`, the answer says nothing
   about souls: `souls`, `launch` and `unmatched` are `null` for that reason
@@ -2526,10 +2526,6 @@ it to a temporary copy (`soulFetched: true`).
   `launchPromptAnswers` notice when the host file still has that key, and (0.49.0) the message of each
   [capability warning](#capability-warnings-hook-event-unsupported-oats-0490)
   of the resolved modules. The apply's `warnings` carries the same messages.
-- `notes`, present only when the soul was named through a renamed package's
-  old id, is an array of strings: one line saying so
-  ([Renamed packages](workspaces.md#renamed-packages)). The apply carries the
-  same `notes`.
 
 **Launch.**
 - `harness`, `model`, `modelSource`, `launchConfig`, `backend`, `yolo`
@@ -2868,8 +2864,7 @@ with `--expect-decision` records the key and decision in `instance.json`.
   `[{capability, ok, required, log, exitCode, signal?, timedOut?,
   contract?}]`, `log` being the hook's log file), `naming` (feature
   `spawn-apply-suggest-name`: only with `--suggest-name`, `{source, reason?,
-  message?, ms, harness?, model?}` as on the preview), `notes` (strings,
-  as on the preview).
+  message?, ms, harness?, model?}` as on the preview).
 - A spawn that runs `worktree` hooks can take up to 30 minutes per hook
   ([the worktree event](capabilities.md#the-worktree-event)).
 
@@ -4651,11 +4646,8 @@ from:{version,commit,digest}, to:{version,commit,integrity},
 skills:{added,removed,changed}, inject, hooks, provider:{decision,reason}}`.
 `inject` and `hooks` indicate changes. The plan also lists kept modules and
 member drift and `homeChangedSinceSpawn` (both excluded from `planRevision`).
-A package no longer in the lock is kept. So is a module recorded under a
-renamed package's old id, with the reason `package <old> was renamed to
-<new>: respawn the instance to move onto it`: an upgrade never rewrites a
-module's recorded package ([Renamed packages](workspaces.md#renamed-packages)).
-Member modules and the soul body never move. A provider refusal refuses the whole act.
+A package no longer in the lock is kept. Member modules and
+the soul body never move. A provider refusal refuses the whole act.
 
 Apply rechecks the revision under the lifecycle claim (`E_PLAN_STALE` with
 a fresh plan on mismatch) and records an idempotency receipt. It stages the
@@ -6606,12 +6598,13 @@ selection flags. See [the start workflow](desktop-instance-start.md).
 Start and restart keep the home's recorded module copies. Their successful
 results with package drift include `drift:[{capability, recorded:{version,commit},
 locked:{version,commit}}]` for package modules behind the deployment lock,
-and omit the field when none are behind. `drift` lists only modules an
-upgrade moves in place. Text prints one line after the start:
+and omit the field when none are behind. Text prints one line after the start:
 `<n> package module(s) behind the lock (<cap> <version> @ <shortcommit> → <version> @ <shortcommit>); to move them: oats instance stop <instance>; oats instance upgrade <instance> --plan`.
-Package modules an upgrade cannot move (the package or the capability gone
-from the lock, or a renamed package) add one string to `warnings`:
-`<n> package module(s) cannot move in place (<cap>: <why>; ...); an upgrade keeps them as they are, so respawn this instance to move it onto the lock`.
+`drift` lists only modules an upgrade moves in place. Package modules an
+upgrade keeps, because their package is no longer locked or no longer
+provides the capability, add one string to `warnings`, printed as a
+`WARNING:` line:
+`<n> package module(s) cannot move in place (<cap>: package <id> is no longer locked; <cap>: package <id> no longer provides it); an upgrade keeps them as they are, so respawn this instance to move it onto the lock`.
 Restart has no upgrade flag. A partial upgrade receipt refuses a start with
 `E_UPGRADE_PARTIAL`, naming the retry with the original idempotency key.
 A committed receipt with `steps.cleaned: false` permits start and adds one

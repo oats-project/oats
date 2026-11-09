@@ -2254,7 +2254,7 @@ async function soulCmd() {
   const name = positional(2);
   if (name === undefined) bail("E_BAD_ARGS", `oats soul teams needs a soul (or '*') — ${usage}`);
   const ctx = workspaceContext(bail);
-  let teamsCtx, soul = "*", key = "*", renamedNote = null;
+  let teamsCtx, soul = "*", key = "*";
   if (name === "*") teamsCtx = await teamsContext(bail);
   else {
     // The soul is named as for spawn: E_SOUL_UNKNOWN / E_SOUL_AMBIGUOUS; package souls come from the lock.
@@ -2267,17 +2267,13 @@ async function soulCmd() {
       entry = findSoulEntry(discovery, name);
     } catch (e) { if (typeof e?.code === "string" && e.code.startsWith("E_")) return bail(e.code, e.message, e.details ?? e.provenance); throw e; }
     soul = entry.name; key = teamKeyOf(entry);
-    renamedNote = (await import("../lib/instance-resolution.mjs")).renamedSelectorNote(name, entry);
     teamsCtx = { deployment: ctx.deploymentDir, localPath: ctx.localPath, local: ctx.local, workspace: discovery.standalone === true ? null : discovery.workspace, workspaceKey: discovery.key ?? null };
   }
   const V = await import("../lib/teams-verbs.mjs");
   let doc;
   try { doc = V.soulTeamsDocument(teamsCtx, { soul, key }); }
   catch (e) { if (typeof e?.code === "string" && e.code.startsWith("E_")) return bail(e.code, e.message, e.details); throw e; }
-  // A soul named through a renamed package's old id says so.
-  if (renamedNote !== null) doc.notes = [renamedNote];
   if (JSON_MODE) { jsonOk(withObservation(doc)); return; }
-  if (renamedNote !== null) console.log(`note: ${renamedNote}`);
   console.log(`${key === "*" ? "unlisted souls (\"*\")" : key} here: default ${doc.defaultTeam ? `${doc.defaultTeam.label} (${doc.defaultTeam.from})` : "(none)"}`);
   console.log(`souls: ${doc.match === null ? "no entry matches" : `teams from ${JSON.stringify(doc.match)}`}${doc.defaultMatch !== null ? `, default from ${JSON.stringify(doc.defaultMatch)}` : ""}`);
   if (doc.teams.length) printTable(["team", "id", "from", "why"], doc.teams.map((t) => [t.default ? `${t.label} (default)` : t.label, t.team ?? "(no id yet)", t.from, t.via.join(",")]));
@@ -2332,7 +2328,6 @@ async function soulLaunchCmd(bail, usage) {
   try { r = await V.soulLaunch({ deployment: ctx.deploymentDir, localPath: ctx.localPath }, { action: sub, name, value, plan: args.includes("--plan") }, { readSouls }); }
   catch (e) { if (typeof e?.code === "string" && e.code.startsWith("E_")) return bail(e.code, e.message, e.details ?? e.provenance); throw e; }
   if (JSON_MODE) { jsonOk(r); return; }
-  for (const n of r.notes || []) console.log(`note: ${n}`);
   const key = JSON.stringify(r.key), file = shortPath(r.file);
   if (!r.changed) console.log(`souls.launch ${key} is already ${launchEntryText(r.after)} in ${file}: nothing to change`);
   else if (r.action === "set") console.log(`${r.plan ? "Would set" : "Set"} souls.launch ${key} to ${launchEntryText(r.after)} in ${file}${r.before === null ? "" : ` (it was ${launchEntryText(r.before)})`}${r.plan ? "; nothing was written" : ""}`);
@@ -2774,8 +2769,6 @@ async function spawnCmd() {
       }
       if (!agent) bail("E_SOUL_UNKNOWN", `soul "${name}" was fetched to ${shortPath(soulDir)} but is not readable as a soul there`);
       note(`(workspace soul: "${name}" from ${wsPrepared.soulEntry.repoKey} @ ${String(wsPrepared.soulEntry.commit).slice(0, 12)}${wsPrepared.resolution.defaultTeam ? `, team ${wsPrepared.resolution.defaultTeam.label}` : ""}${soulFetched ? "; soul source fetched" : ""})`);
-      // A name that reached the soul through a renamed package's old id (lib/package-moves.mjs).
-      for (const n of wsPrepared.notes || []) note(`note: ${n}`);
     } catch (e) {
       // Standalone (decisions 10/25): the ONLY package request is the kernel's own
       // default; when the catalog cannot name it, say so instead of "add it to packages:"
@@ -2929,7 +2922,6 @@ async function spawnCmd() {
       // A workspace preview may have fetched the soul's SOURCE to a temporary copy
       // (the deployment's cache had no entry for its commit): the result says so.
       if (prepared) r.soulFetched = soulFetched;
-      if (wsPrepared?.notes?.length) r.notes = [...wsPrepared.notes];
       if (JSON_MODE) { jsonOk(withObservation(r)); return; }
       printSpawnPreview(r, { soulFetched });
       return;
@@ -2977,8 +2969,6 @@ async function spawnCmd() {
       ...(r.worktreeHooks ? { worktreeHooks: r.worktreeHooks } : {}),
       // Feature spawn-apply-suggest-name: how the name was chosen; only with --suggest-name.
       ...(r.naming ? { naming: r.naming } : {}),
-      // A soul named through a renamed package's old id: one line saying so; only then.
-      ...(wsPrepared?.notes?.length ? { notes: [...wsPrepared.notes] } : {}),
     });
     return;
   }

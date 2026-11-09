@@ -122,6 +122,8 @@ oats session start --home <absolute-home>
 Read the plan before applying it. It lists every moving package module,
 skill/inject/hook changes and provider adoption decisions, modules kept
 because their package is no longer locked, and member drift for information.
+A kept package module moves only by a respawn; `oats session start` and
+`restart` say so in one warning that names each one.
 One provider refusal refuses the whole move. A running or unreadable session
 refuses with `E_SESSION_RUNNING`; stop it first. A stale plan returns
 `E_PLAN_STALE` and a fresh plan to review.

@@ -390,61 +390,6 @@ moved repository.
 setting for moved repositories. An eighth entry needs a contract answer from
 both sides of the move.
 
-### Renamed packages
-
-One official package was renamed: `oats.engineering` is now
-`oats.engineering-coordination`. The kernel holds the table
-([`lib/package-moves.mjs`](../lib/package-moves.mjs)), and keeps the entry
-for good, because old `oats-local.yaml` files, workspaces, homes, schedules
-and triggers name the old id.
-
-**The old and the new id of a renamed package are one package, wherever a
-package id is compared.** That covers:
-
-- **A soul named `oats.engineering/<soul>`**, in `oats spawn` and its preview,
-  `oats soul teams`, `oats soul launch set|remove`, `oats capabilities show
-  --package`, and the schedules and triggers that spawn through them. The
-  name reaches `oats.engineering-coordination/<soul>`. `oats spawn` (and its
-  preview), `oats soul teams` and `oats soul launch` also print one line,
-  `note: package oats.engineering was renamed to
-  oats.engineering-coordination: oats.engineering/<soul> is
-  oats.engineering-coordination/<soul>`, which `--json` carries in `notes`. A
-  new spawn records the new id. A soul the new package does not ship is
-  `E_SOUL_UNKNOWN`, whose message names the new id.
-- **`oats-local.yaml`.** A `souls.launch` key or a `souls.disabled` entry
-  naming `oats.engineering/<soul>` applies to the renamed soul, and is not
-  reported as naming no soul. When both spellings are keys, the soul's own
-  spelling wins. `oats soul launch set` through the old id writes the new key;
-  `oats soul launch remove <soul>` removes the key that applies to the soul,
-  whichever id it spells.
-- **`souls:` in `oats-workspace.yaml`.** Exact keys and `<package>/*`
-  patterns spelled with either id apply to the package's souls and to homes
-  recorded under the old id. The soul's own spelling is tried first, and one
-  pattern applies, never both. An old-id key is not `team-soul-unknown`.
-- **Homes recorded under the old id.** `oats status` reads the new id's lock
-  entry, so their modules and soul read `moved`, not missing, and readiness
-  passes their package soul. An upgrade never rewrites a module's recorded
-  package: `oats instance upgrade --plan` keeps such a module, with the
-  reason that the package was renamed and the instance should be respawned,
-  and a start or restart names the respawn in `warnings`. A respawn moves the
-  home onto the new id.
-
-**The kernel compares and never rewrites.** Every id stays as it was declared
-or recorded: in `instance.json`, the lock, `oats-local.yaml`,
-`oats-workspace.yaml`, schedules and triggers. A home's `OATS_SOUL_ID` stays
-`package:oats.engineering#<soul>`, and agent directories do not move.
-
-**Both ids in `packages:` are one package declared twice.** `oats sync`
-refuses it with `E_WORKSPACE_SCHEMA`, details `{path, reason:
-"package-declared-twice", ids, keep}`, naming the id to keep. A lock that
-already holds both ids, written before this refusal, resolves a soul name by
-the id it spells exactly.
-
-**The migration is a pin swap.** Replace `oats.engineering: v1.18.0` with
-`oats.engineering-coordination: v2.x` in `packages:`, run `oats sync`, and
-`oats doctor` is clean. Old homes keep working; respawn them to move them onto
-the new package.
-
 ## Member tier vs package tier: the non-collapse rule
 
 A repository may be a **member** (it completed the handshake; its `souls/*` and
