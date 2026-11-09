@@ -99,7 +99,7 @@ test("a commit arrives with its trees and its small blobs only (with an older gi
       assert.deepEqual(session.notices, []);
     } else {
       assert.equal(git(f.repoDir, "config", "--get", "oats.fetch"), "full");
-      assert.deepEqual(session.notices, [olderGitNotice(f.bare)]);
+      assert.deepEqual(session.notices, [olderGitNotice()]);
     }
     assert.throws(() => git(f.repoDir, "config", "--get-all", "remote.origin.url"), "the url (it may carry credentials) is never written");
   } finally { await session.close(); }
@@ -364,7 +364,24 @@ test(`a git older than ${PARTIAL_FETCH_GIT.join(".")} (no GIT_NO_LAZY_FETCH) fet
     assert.ok(fetches.length > 0 && fetches.every((a) => !a.some((x) => x.startsWith("--filter"))), `no fetch asks the (partial-capable) server for a filter: ${JSON.stringify(fetches)}`);
     assert.deepEqual(f.present("assets/huge-1.bin"), { "assets/huge-1.bin": true }, "a whole tree, never a partial one");
     assert.equal(git(f.repoDir, "config", "--get", "oats.fetch"), "full");
-    assert.deepEqual(session.notices, [olderGitNotice(f.bare, "2.43.0")]);
+    assert.deepEqual(session.notices, [olderGitNotice("2.43.0")]);
+  } finally { await session.close(); }
+});
+
+test(`a git older than ${PARTIAL_FETCH_GIT.join(".")} says so once per session, however many caches it starts or rebuilds`, async () => {
+  const a = fixture(), b = fixture(), c = fixture();
+  // c's cache exists before the session: partial where this git keeps one, so the older git must rebuild it.
+  await observeRemote(c.bare, { cacheDir: c.cacheDir, at: c.commit });
+  assert.equal(git(c.repoDir, "config", "--get", "oats.fetch"), PARTIAL_GIT ? "partial" : "full");
+  const exec = olderGit("2.43.0");
+  const session = createReadSession();
+  try {
+    for (const f of [a, b, c]) {
+      assert.ok((await readRemoteFile(f.bare, f.commit, "elsewhere/tools/data/model.bin", { cacheDir: f.cacheDir, exec, session })).bytes.equals(noise(SMALL_BLOB_LIMIT * 3, "model")));
+      assert.equal(git(f.repoDir, "config", "--get", "oats.fetch"), "full", "every cache records whole-tree fetches");
+    }
+    assert.deepEqual(c.present("assets/huge-1.bin"), { "assets/huge-1.bin": true }, "the rebuilt cache holds the whole tree");
+    assert.deepEqual(session.notices, [olderGitNotice("2.43.0")], "one line for two new caches and a rebuild");
   } finally { await session.close(); }
 });
 

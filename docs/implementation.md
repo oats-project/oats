@@ -402,8 +402,11 @@ caches need git 2.45 or later (`PARTIAL_FETCH_GIT`, the first git with
 `GIT_NO_LAZY_FETCH`): only a successfully parsed version below that floor
 authorizes a version-driven rebuild. With that older git every cache fetches
 whole trees, a partial cache it meets is deleted and fetched again whole,
-and the same notice says why. An existing full cache stays full even when a
-later probe reports a modern git.
+and one notice says why: it names the git version, not a repository, and the
+session says it once (once per command, or per reader call), however many
+caches it starts or rebuilds. Each of those caches still records
+`oats.fetch = full`. An existing full cache stays full even when a later
+probe reports a modern git.
 
 One private strict version probe owns the memo per `exec`: concurrent callers
 share the in-flight probe, and a parsed success is retained. A rejection,
