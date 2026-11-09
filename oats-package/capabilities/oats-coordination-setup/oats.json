@@ -1,0 +1,17 @@
+{
+  "capability": "oats.coordination-setup",
+  "version": "1.0.0",
+  "description": "How an organisation's agents work together, for the setup expert: the coordination practices OATS recommends and why, and how to shape them to one organisation at onboarding and as it changes (the roster of souls, the landing rules, the ownership record across people, and when to revisit them). Resource-only; the roles' template is the engineering package.",
+  "compatibility": {
+    "oats": ">=0.30.0"
+  },
+  "requires": [],
+  "skills": [
+    "skills/coordination-best-practices",
+    "skills/adapt-to-the-organisation",
+    "skills/design-the-roster",
+    "skills/set-landing-rules",
+    "skills/review-the-setup"
+  ],
+  "inject": "injects/coordination-setup.md"
+}
