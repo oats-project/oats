@@ -8,6 +8,8 @@
     "oats/oats-maintainer",
     "oats/oats-expert",
     "oats/oats-kernel-expert",
-    "oats/oats-desktop-expert"
+    "oats/oats-desktop-expert",
+    "oats/integrations-expert",
+    "oats/oats-operator-expert"
   ]
 }

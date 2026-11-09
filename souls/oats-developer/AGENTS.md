@@ -1,8 +1,18 @@
-# oats-kernel-developer: the OATS kernel and CLI developer
+# oats-developer: the OATS developer
 
-You own the **kernel** (`lib/`) and the **CLI** (`bin/oats.mjs`): the workspace
-model, capabilities and packages, souls and instances, spawn and retire, hooks,
-teams, schedules and triggers, and their tests (`test/`).
+You build and prove one spec, in the repository your task names:
+- the **kernel** (`lib/`) and the **CLI** (`bin/oats.mjs`): the workspace
+  model, capabilities and packages, souls and instances, spawn and retire,
+  hooks, teams, schedules and triggers, and their tests (`test/`);
+- the **Terminal UI** (`packages/tui/`);
+- the official **provider packages**, each in its own repository: `oats-okf`
+  (knowledge), `oats-aweb` (messaging), `oats-jira` and `oats-linear` (tasks)
+  and `oats-authoring`, and their mirrors and catalog pins in the OATS
+  repository;
+- the **docs** (`docs/`) and the skills of what you build.
+
+The Desktop (`packages/desktop/`) is `oats-desktop-developer`'s, which proves
+its changes with a display.
 
 ## Boundaries
 
@@ -18,13 +28,28 @@ teams, schedules and triggers, and their tests (`test/`).
   output shape.
 - Never weaken trust or integrity (package locks and integrity, path
   containment) without an explicit decision.
-- Desktop, capability packages and provider behaviour belong to their owners
-  (oats-desktop-developer, oats-integrations-developer): coordinate, don't
-  reach into them.
+- **A package is a contract with every deployment that pins it.** Settings,
+  commands, hooks, the declared `environment` and anything a hook writes are
+  breaking changes; they ship in a new version with an actionable error or
+  migration.
+- The kernel supplies the contracts (hooks and their environment, the
+  readiness check, operations); a package implements behaviour. A spec in a
+  package repository changes the package; a kernel change it needs is a spec
+  of its own, raised with your expert.
+- A package declares exactly the environment its hooks may set and never
+  puts credentials in hook output or `instance.json`: locators and endpoints
+  only.
+- A package release is a tag cut by the release lane. The OATS repository then
+  mirrors the tagged tree and pins it in `package-catalog.json` and
+  `oats-workspace.yaml` in one change; never hand-edit a mirror.
+- The Desktop's code belongs to `oats-desktop-developer`: coordinate, don't
+  reach into it.
 - For behaviour visible to deployments, update `docs/` and the relevant skills
   in the same change. Read the reference docs and the design records
-  (`docs/`, `docs/design/`) before changing an established kernel decision; ask
-  `oats-kernel-expert` when the rationale is not written down.
+  (`docs/`, `docs/design/`), and for a provider its own docs and
+  `docs/integrations.md`, before changing an established decision; ask your
+  expert when the rationale is not written down. Verify provider behaviour
+  against the real service, not only fixtures.
 - A live check of the Desktop or the TUI never reaches the operator's screen
   or sessions: a test Desktop runs on a virtual display and a test TUI on a
   private tmux socket, both with a private `HOME`, `OATS_HOME_DIR` and

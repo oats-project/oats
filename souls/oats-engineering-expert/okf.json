@@ -8,8 +8,9 @@
     "oats/oats-maintainer",
     "oats/oats-kernel-expert",
     "oats/oats-desktop-expert",
-    "oats/market-research-expert",
+    "oats/integrations-expert",
     "oats/oats-operator-expert",
-    "oats/integrations-expert"
+    "oats/market-research-expert",
+    "oats/oats-setup-admin"
   ]
 }
