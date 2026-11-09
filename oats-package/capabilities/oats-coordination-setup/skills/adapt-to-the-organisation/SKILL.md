@@ -39,8 +39,8 @@ your recommendation.
    - the landing rules (`/set-landing-rules`);
    - with several people, the ownership record and the across-people rules.
      With one person, leave them out.
-4. **Propose.** The person onboarding with you approves the shared parts: the
-   souls and the role capabilities everyone composes. Each other person (anyone
+4. **Propose.** The person onboarding with you approves the shared parts (the
+   souls and the role capabilities everyone composes) and their own. Each other person (anyone
    who runs agents, owns a lane, or merges in one today) gets one card for what
    is theirs alone: their lanes' landing rules, their ownership entries, their
    dispatcher and their maintainer. Ask in it whether their repositories will
@@ -51,8 +51,8 @@ your recommendation.
      record.
    - Until they answer, their lanes land as they do today
      (`/set-landing-rules` step 1): agents hand that person a PR at an exact
-     head. Write that interim rule now, marked open, and replace it on their
-     yes.
+     head. Step 5 writes that interim rule, marked open, and their yes
+     replaces it.
    - At onboarding, the brief (`/oats-tailor-workspace` step 6) lists their
      part under what is open and who decides it.
 5. **Write, on each yes.** Run one sub-agent for all the coordination
