@@ -77,10 +77,12 @@ it. Why: where a rule is unsure, the change gets the loop.
 **A maintainer's read, and releases.**
 Every PR gets its second reader's read, and the release lane's sign-off where its lane's
 line asks (above). Releases and tags are the release lane's: its maintainer plans, tags and
-publishes every release of OATS and the official packages, on the yes of the owners whose
-lanes have changes in it. Release prep (versions, release notes, catalog and mirror pins)
-is the release lane's too. Why: the map gives the release lane the final say on what is
-released.
+publishes every release of OATS and the official packages, on the release plan it posts on
+the forge (`/plan-release`). Each lane with PRs in the plan, or left out of it, agrees there
+what goes in and when, through its maintainer. The tag and the publication rest on the
+release lane's person's authority. Release prep (versions, release notes, catalog and mirror
+pins) is the release lane's too. Why: the map gives the release lane the final say on what
+is released.
 
 **A PR with no lead here:** an outside contributor's, a person's own, or a maintainer's
 release prep (the version bump and the assembled notes, nothing more). The lane owner's
@@ -96,9 +98,11 @@ maintainer in that lane (`oats-maintainer`). Why: someone here has to own the me
 lane's maintainer holds it.
 
 **One-way doors kept for people.**
-A release's contents, publishing outside the organisation, spending money, deleting what
-someone else uses, and anything that touches a person's logins or accounts. Releases and
-tags are the release lane's (above). Nothing else goes to a person by rule.
+A release's tag and publication, on the release lane's person's authority (above);
+publishing anything else outside the organisation, spending money, deleting what someone
+else uses, and anything that touches a person's logins or accounts. A release's contents
+are agreed on the release plan, not by a person's card. Nothing else goes to a person by
+rule.
 
 **Contracts.** A contract change (a config key, a manifest field, the hook environment, a
 JSON answer the Desktop reads, the lock format) is decided by the two sides the lane map's

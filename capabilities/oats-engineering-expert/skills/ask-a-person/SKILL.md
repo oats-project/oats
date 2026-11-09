@@ -11,7 +11,7 @@ IMPORTANT: after a compaction, reload this skill before you continue the step.
 Only for:
 - a direction or a product choice the request leaves open;
 - a behaviour change in another person's paths (`/across-people`);
-- a release's contents, for its owner;
+<!-- OATS: the lane map's release-lane line: a release's contents are agreed on the release lane's plan, through each lane's maintainer, never on a person's card. -->
 - a one-way door your landing rules keep for people: publishing outside the organisation,
   deleting what someone else uses, money.
 

@@ -61,14 +61,11 @@ their reasons; the merge order; the agreements the release-prep PR lands on (you
 rules, a PR with no lead); the gates still to run; what users must do. Your state file names
 where it is and doesn't repeat it.
 
-A release's contents are approved by the owners your landing rules name for it: each person
-whose lane has changes in it. Send each of them one card: what goes in from their lane, the
-head to tag, and your recommendation. Tag only on every such yes, each from that person
-directly or relayed as `/cross-review-peer` accepts ("Decisions passed on from a human").
-<!-- OATS: a tag is a safeguard; a relayed yes approves the contents, and the tag waits for a direct one. -->
-A relayed yes approves the contents; the tag itself waits for each owner's direct go. A
-peer whose lane has PRs in the plan, or left out of it, is told once where the plan is, and
-answers there. A freeze before the tag is a hold on the default branch
+<!-- OATS: the lane map's release-lane line: lane:release has the final say on what is released, the lanes agree what goes in on its plan through their maintainers, and the tag and the publication rest on the release lane's person's authority. -->
+Here a release's contents are agreed on this plan: each lane with PRs in it, or left out of
+it, agrees there what goes in and when, through its maintainer, who is told once where the
+plan is and answers there. Send no card to each lane's person. The tag and the publication
+rest on your person's authority, as the release lane's maintainer, with that scope. A freeze before the tag is a hold on the default branch
 (`/cross-review-peer`), not a message.
 
 ## A freeze carries to a patch release

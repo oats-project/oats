@@ -7,7 +7,9 @@ description: Ship a planned release as exact artifacts under explicit authority 
 
 Start read-only. Confirm the version and its plan (`/plan-release`), the exact source SHA
 (on the default branch, reviewed, CI green), where it will be published, and your authority
-to publish: the yes of every owner your landing rules name for this release
+to publish:
+<!-- OATS: the lane map's release-lane line: the tag and the publication rest on the release lane's person's authority, on a plan the lanes agreed. -->
+your person's, as the release lane's maintainer, on the plan the lanes agreed
 (`/plan-release`), with that scope. This skill grants no push, merge,
 credential or protected-ref authority.
 
