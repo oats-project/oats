@@ -42,14 +42,14 @@ adapts to the organisation by the repository's `ADAPTING.md`
 releases are tagged `template-v<version>`, and each copied capability records
 the release it came from.
 
-- `oats-project/oats-engineering`: work that lands as pull requests. A
+- `oats-project/oats-engineering-coordination`: work that lands as pull requests. A
   dispatcher, a lead for each effort, developers who own their pull requests,
   reviewers on call, and a maintainer where a lane needs one.
 
 The package `oats.engineering` is frozen at `v1.18.0`. Its entry and its four
-aliases stay, so existing pins keep resolving; its repository's later releases
-are templates, and a pin to one of them finds no package manifest
-(`E_PACKAGE_MANIFEST`). Open: retiring the entry and moving the aliases, a
+aliases stay, so existing pins keep resolving, and its repository,
+`oats-project/oats-engineering`, gets no further releases. The engineering
+template that replaces it lives in its own repository, above. Open: retiring the entry and moving the aliases, a
 later decision once no workspace we know of pins it.
 
 ## Find and use packages
