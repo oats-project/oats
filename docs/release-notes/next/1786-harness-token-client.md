@@ -1,0 +1,19 @@
+## Added
+
+- `oats harness token set|status|remove <harness> --server <id>` uses the
+  separate operator SSH route and forced-command credential receiver.
+  `set --stdin` supports Claude setup-tokens and Codex, pi and opencode
+  API keys, without credential arguments, output or client files. A missing
+  operator route refuses; it never falls back to the agent route or reuses
+  its authenticated connection. Malformed or oversized replies fail closed,
+  and remote refusal text is escaped for terminal output.
+  Unknown server ids refuse before SSH, including when an orphan operator route exists.
+- The npm package includes `share/oats-login-receive`; see
+  [receiver installation](../servers.md#install-the-credential-receiver)
+  for Python 3, the root-owned configuration and the restricted SSH key.
+- Rotation lists sessions of the same harness started before or during the
+  receiver's reported replacement second;
+  they pick up the new value at their next start. Nothing restarts
+  automatically. A roster failure after installation is a warning, not a
+  failed install. Claude interactive capture is unavailable, and refreshing
+  browser sign-ins do not fit the read-only credential model.
