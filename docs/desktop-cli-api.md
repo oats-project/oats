@@ -4718,8 +4718,8 @@ before whether or not a claim is set. `attention` never marks a screen an Enter
 answers: a producer that wants one uses `question`, and review catches that.
 
 ```text
-oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message <text>] [--home <abs>] [--dir <d>] --json
-oats instance attention [--message <text>] [--clear] --json
+oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] --json
+oats instance attention [--message=<text>] [--clear] --json
 ```
 
 ```json

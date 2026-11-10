@@ -1272,8 +1272,8 @@ async function launchConfigCmd() {
 function instanceWaitingCmd(sub, bail) {
   dropAmbientRoot();
   const usage = sub === "attention"
-    ? "usage: oats instance attention [--message <text>] [--clear] [--json]"
-    : "usage: oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message <text>] [--home <abs>] [--dir <d>] [--json]";
+    ? "usage: oats instance attention [--message=<text>] [--clear] [--json]"
+    : "usage: oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] [--json]";
   const value = (name) => { const v = flag(name); if (v === true) throw Object.assign(new Error(`--${name} needs a value${name === "message" ? " (a message that starts with -- goes as --message=<text>)" : ""}`), { code: "E_BAD_ARGS" }); return v; };
   let home, producer, waiting, reason, message;
   try {
@@ -1290,7 +1290,7 @@ function instanceWaitingCmd(sub, bail) {
       producer = value("producer"); reason = value("reason");
       if (producer === undefined) return bail("E_BAD_ARGS", `--producer is required; ${usage}`);
       // Producer `agent` is the agent's own claim: only `attention` writes it.
-      if (producer === "agent") return bail("E_BAD_ARGS", "--producer agent is reserved for the agent's own claim: use `oats instance attention [--message <text>]` or `oats instance attention --clear` from its session");
+      if (producer === "agent") return bail("E_BAD_ARGS", "--producer agent is reserved for the agent's own claim: use `oats instance attention [--message=<text>]` or `oats instance attention --clear` from its session");
       const homeOpt = flag("home");
       if (homeOpt === true || (homeOpt !== undefined && !isAbsolute(homeOpt))) return bail("E_BAD_ARGS", "--home needs an absolute instance home");
       home = homeOpt ?? (process.env.OATS_INSTANCE_HOME || enclosingInstanceHome(logicalCwd()));
@@ -1445,7 +1445,7 @@ async function instanceCmd() {
   if (sub === "upgrade") return instanceUpgradeCmd(name, bail);
   if (sub === "waiting" || sub === "attention") return instanceWaitingCmd(sub, bail);
   if (sub === "suggest-name") return instanceSuggestNameCmd(bail);
-  const usage = "usage: oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message <text>] [--home <abs>] [--dir <d>] [--json] | oats instance attention [--message <text>] [--clear] [--json] | oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--dir <d>] [--json] | oats instance git <instance> [--home <abs>] [--dir <d>] [--json] | oats instance diff <instance> --file <id> --revision <rev> [--index-revision <rev>] [--home <abs>] [--dir <d>] [--json] | oats instance stop <instance> (--plan | --apply --plan-revision <rev> --idempotency-key <key>) [--no-recursive] [--grace-ms <n>] [--home <abs>] [--dir <d>] [--json] | oats instance color <instance> (<color> | --clear) [--home <abs>] [--dir <d>] [--json] | oats instance background <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance same-work <instance> on|off [--home <abs>] [--dir <d>] [--json]";
+  const usage = "usage: oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] [--json] | oats instance attention [--message=<text>] [--clear] [--json] | oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--dir <d>] [--json] | oats instance git <instance> [--home <abs>] [--dir <d>] [--json] | oats instance diff <instance> --file <id> --revision <rev> [--index-revision <rev>] [--home <abs>] [--dir <d>] [--json] | oats instance stop <instance> (--plan | --apply --plan-revision <rev> --idempotency-key <key>) [--no-recursive] [--grace-ms <n>] [--home <abs>] [--dir <d>] [--json] | oats instance color <instance> (<color> | --clear) [--home <abs>] [--dir <d>] [--json] | oats instance background <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance same-work <instance> on|off [--home <abs>] [--dir <d>] [--json]";
   if (!["git", "diff", "stop", "events", "color", "background", "same-work"].includes(sub) || !name || name.startsWith("--")) return bail("E_BAD_ARGS", usage);
   dropAmbientRoot();
   if (sub === "events") {
@@ -5162,10 +5162,10 @@ Usage:
                                              typed lifecycle events (spawned, launched, stopped,
                                              restarted, retired, worktree-retained…) written by
                                              the action that made them true; nothing inferred
-  oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message <text>] [--home <abs>] [--dir <d>] [--json]
+  oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] [--json]
                                              a producer's claim that the instance needs input
                                              from a human; appended only on change; display only
-  oats instance attention [--message <text>] [--clear] [--json]
+  oats instance attention [--message=<text>] [--clear] [--json]
                                              run by the agent from its home: "I need a human's
                                              answer" (waiting --producer agent --reason attention)
   oats instance upgrade <instance> --plan [--undo] [--json]

@@ -1,3 +1,15 @@
+## Upgrade
+
+- **A flag these commands never defined is now refused, where it was
+  ignored** (oats-project/oats#1824). A typo of a real flag is now refused
+  before anything happens: `oats schedule host install --prnt` installed the
+  host timer and `oats schedule tick --dry-rn` ran the tick; both are now
+  refused with `E_BAD_ARGS`. Check scripts and schedules that call `oats
+  instance`, `oats schedule`, `oats trigger`, `oats session`, `oats server
+  check` or `oats update`: what is now refused is listed under Fixed below,
+  and the flags each command defines in
+  [The flags a command defines](../desktop-cli-api.md#command-flags).
+
 ## Fixed
 
 - **The rest of the commands that change state refuse a flag they do not
