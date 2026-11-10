@@ -1430,8 +1430,41 @@ refused. A home removed between the read and its start is reported
   has answered, so a sweep killed while other starts run has counted it; a
   refused, skipped or busy one does not. `oats session start --resume` run by hand is neither
   bounded nor counted.
-- The boot is the boot id on Linux and the boot time on macOS. Elsewhere there
+- The boot is the boot time on macOS and the kernel's boot id
+  (`/proc/sys/kernel/random/boot_id`) on Linux. Elsewhere there
   is no boot: nothing is noted or counted, and every sweep tries again.
+- **Inside a container a boot is one run of the container.** A container
+  shares its host's kernel, so the kernel's boot id stays the same when the
+  container is stopped and started, restarted or made again, while every
+  process in it, its terminal server and its sessions included, is gone. The
+  boot there is the kernel's boot id together with the start time of the
+  container's PID 1 (field 22 of `/proc/1/stat`, clock ticks after the
+  kernel's boot): PID 1 starts once per run and its end ends the run, so the
+  identity is the same for every `oats` process of one run and another one
+  in the next, and the boot id keeps it apart from a run after the host's
+  restart. Each run has its own count of 3 starts per home, takes over a lock
+  the run before left, and clause 4 does not reach from one run into the
+  next. Both values are read without privileges and nothing is written for
+  them.
+  - OATS takes itself to be in a container when one of these is there: the
+    file `/.dockerenv` (Docker), the file `/run/.containerenv` (Podman), or
+    the environment variable `KUBERNETES_SERVICE_HOST` (every Kubernetes
+    pod). A container runtime that sets none of them is read as a host: give
+    its containers `KUBERNETES_SERVICE_HOST` or one of the files.
+  - Without one of them PID 1's start is not read. A command that a harness
+    runs in a sandbox with a PID namespace of its own (bubblewrap's
+    `--unshare-pid`) has that sandbox's PID 1, and is on the host's boot all
+    the same.
+  - When PID 1's start cannot be read in a container (a `/proc` mounted with
+    `hidepid`, say) the boot is the boot id alone. Every run on one host boot
+    is then the same boot: the count runs across them and clause 4 applies
+    across them, so a sweep starts fewer homes, never more.
+  - A container that shares its host's PID namespace (`--pid=host`), and a
+    Kubernetes pod with `shareProcessNamespace: true`, read a PID 1 that
+    outlives the container, so their boot is the same in every run.
+  - Inside a container, a command run in a sandbox with a PID namespace of
+    its own reads the sandbox's PID 1 and records a boot of its own. Run the
+    sweep outside such a sandbox there.
 - The lock, the per-boot note and the record of what status saw live in
   `session-resume/` under `~/.oats` (`$OATS_HOME_DIR` when set). All three
   are kernel-private, not a contract.
