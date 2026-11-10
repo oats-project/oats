@@ -9,7 +9,8 @@
   version can therefore still stop capture for that root after the upgrade:
   the pass names the lock and the command that removes it. Locks this
   version writes do not need that.
-- **A record root is written from one machine at a time.** A lock taken on
+- **A record root is written from one machine at a time.** A record root
+  must not be shared by two machines. A lock taken on
   another machine was taken in another boot, so it is reclaimed at once
   though its holder may be running there. Earlier versions never reclaimed
   another host's capture lock, and reclaimed another host's stream lock only

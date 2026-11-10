@@ -326,7 +326,8 @@ Honest limits:
   detection, not an exclusion: a replacement landing in the window between
   the recheck and the unlink is not seen and is removed. Nothing here
   defends against that window.
-- **One machine at a time writes a record root.** A boot is one machine's:
+- **One machine at a time writes a record root.** A record root must not
+  be shared by two machines. A boot is one machine's:
   a lock taken on another machine was taken in another boot and is
   reclaimed at once, while its holder may be running there. The stream lock
   and the capture lock serialize the processes of one machine (or one
