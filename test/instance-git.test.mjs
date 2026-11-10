@@ -334,7 +334,7 @@ test("remote: branch-configured remote wins over origin; no remote at all is nul
   assert.deepEqual(viaBranch, { name: "fork", url: "https://github.com/me/one.git", host: "github.com", path: "me/one", source: "branch-upstream" });
 });
 
-test("filter overrides: a driver the operator's global configuration also defines keeps the operator's values, and one the repository alone defines is emptied", (t) => {
+test("filter overrides: a driver the operator's own configuration also defines keeps the operator's values, and one the repository alone defines is emptied", (t) => {
   const base = mkdtempSync(join(tmpdir(), "oats-filter-operator-"));
   t.after(() => rmSync(base, { recursive: true, force: true }));
   const repo = join(base, "repo");
@@ -361,6 +361,14 @@ test("filter overrides: a driver the operator's global configuration also define
   assert.deepEqual(settings(filterOverrides(["-C", repo], { operatorEnv })), [
     "filter.lfs.clean=git-lfs clean -- %f", "filter.lfs.process=", "filter.lfs.required=true", "filter.lfs.smudge=git-lfs smudge -- %f",
     "filter.planted.clean=", "filter.planted.process=", "filter.planted.required=false", "filter.planted.smudge=",
+  ]);
+  // The operator's system configuration counts as the global one does, and the global one wins for a variable both set.
+  const systemConfig = join(base, "system-gitconfig");
+  writeFileSync(systemConfig, '[filter "lfs"]\n\tclean = system-clean\n\tprocess = system-process\n[filter "planted"]\n\tsmudge = system-smudge\n');
+  const { GIT_CONFIG_NOSYSTEM: _none, ...withSystem } = operatorEnv;
+  assert.deepEqual(settings(filterOverrides(["-C", repo], { operatorEnv: { ...withSystem, GIT_CONFIG_SYSTEM: systemConfig } })), [
+    "filter.lfs.clean=git-lfs clean -- %f", "filter.lfs.process=system-process", "filter.lfs.required=true", "filter.lfs.smudge=git-lfs smudge -- %f",
+    "filter.planted.clean=", "filter.planted.process=", "filter.planted.required=false", "filter.planted.smudge=system-smudge",
   ]);
   // A global configuration that cannot be read defines nothing: every driver is emptied.
   assert.deepEqual(settings(filterOverrides(["-C", repo], { operatorEnv: { ...hermetic, GIT_CONFIG_GLOBAL: join(base, "absent") } })), settings(filterOverrides(["-C", repo])));
