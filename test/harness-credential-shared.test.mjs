@@ -20,7 +20,7 @@ const base = mkdtempSync(join(tmpdir(), "oats-credentials-"));
 const restoreEnv = isolateSessionEnvironment(base);
 test.after(() => { restoreEnv(); rmSync(base, { recursive: true, force: true }); });
 const recipe = (env) => ({ version: 2, harness: "claude", executable: "/usr/bin/true", args: [], env, model: null, hooks: { launch: {}, env: {}, contributions: [] } });
-import { connectServer, readServers, targetOf, validateServer } from "../lib/servers.mjs";
+import { connectServer, readServers, readServerOperatorRoutes, targetOf, validateOperatorSshHost, validateServer } from "../lib/servers.mjs";
 
 const cli = (args, extra = {}) => spawnSync(process.execPath, [CLI, ...args, "--json"], { encoding: "utf8", env: { ...process.env, OATS_HOME_DIR: join(base, "registry"), ...extra } });
 
@@ -199,8 +199,10 @@ test("server add stores and lists the optional operator alias without changing t
   assert.equal(Object.hasOwn(row.target, "operatorSshHost"), false);
   const text = spawnSync(process.execPath, [CLI, "server", "list"], { env: { ...process.env, ...extra, OATS_HOME_DIR: join(base, "registry") }, encoding: "utf8" });
   assert.match(text.stdout, /operator ssh operator-host/);
-  assert.equal(JSON.parse(readFileSync(join(base, "registry", "servers.json"))).servers.box.operatorSshHost, "operator-host");
-  for (const alias of ["", "-option", "user@host", "host alias", "host;id", null, 42]) assert.throws(() => validateServer("box", { sshHost: "agent-host", workspace: "/srv/ws", operatorSshHost: alias }), (e) => e.code === "E_SERVER_INVALID");
+  assert.equal(Object.hasOwn(JSON.parse(readFileSync(join(base, "registry", "servers.json"))).servers.box, "operatorSshHost"), false);
+  assert.deepEqual(JSON.parse(readFileSync(join(base, "registry", "server-operator-routes.json"))), { box: { operatorSshHost: "operator-host" } });
+  for (const alias of ["", "-option", "user@host", "host alias", "host;id", null, 42]) assert.throws(() => validateOperatorSshHost(alias), (e) => e.code === "E_SERVER_INVALID");
+  assert.throws(() => validateServer("box", { sshHost: "agent-host", workspace: "/srv/ws", operatorSshHost: "operator-host" }), (e) => e.code === "E_SERVER_INVALID", "the agent registry keeps its older field set");
   assert.doesNotThrow(() => validateServer("old", { sshHost: "old-host", workspace: "/srv/ws" }));
 });
 
@@ -221,11 +223,48 @@ test("server connect records the operator alias while every remote call uses the
     };
     const result = connectServer(options, { execFileSync: remote });
     assert.equal(result.registration.operatorSshHost, "operator-host");
-    assert.equal(readServers().connected.operatorSshHost, "operator-host");
+    assert.equal(Object.hasOwn(readServers().connected, "operatorSshHost"), false);
+    assert.deepEqual(JSON.parse(readFileSync(join(process.env.OATS_HOME_DIR, "server-operator-routes.json"))), { connected: { operatorSshHost: "operator-host" } });
     assert.equal(targetOf(result.registration).sshHost, "agent-host");
     assert.equal(connectServer(options, { execFileSync: remote }).registration.operatorSshHost, "operator-host");
+    const bytes = readFileSync(join(process.env.OATS_HOME_DIR, "servers.json"), "utf8");
+    const { operatorSshHost, ...withoutOperator } = options;
+    assert.equal(connectServer({ ...withoutOperator, replace: true }, { execFileSync: remote }).registration.operatorSshHost, operatorSshHost);
+    assert.equal(connectServer({ ...options, operatorSshHost: "other-operator", replace: true }, { execFileSync: remote }).registration.operatorSshHost, "other-operator");
+    assert.equal(connectServer({ ...withoutOperator, noOperatorSsh: true, replace: true }, { execFileSync: remote }).registration.operatorSshHost, undefined);
+    assert.equal(readFileSync(join(process.env.OATS_HOME_DIR, "servers.json"), "utf8"), bytes);
+    assert.deepEqual(readServerOperatorRoutes(), {});
+    assert.throws(() => connectServer({ ...options, noOperatorSsh: true }, { execFileSync: () => assert.fail("conflicting flags never reach SSH") }), (e) => e.code === "E_BAD_ARGS");
     assert.throws(() => connectServer({ ...options, operatorSshHost: "user@host" }, { execFileSync: () => assert.fail("invalid alias never reaches SSH") }), (e) => e.code === "E_SERVER_INVALID");
   } finally { process.env.OATS_HOME_DIR = old; }
+});
+
+test("operator route changes preserve older registry bytes and remove cleans the sidecar", () => {
+  const dir = join(base, "sidecar-registry"), bin = join(base, "sidecar-bin"); mkdirSync(dir); mkdirSync(bin);
+  writeFileSync(join(bin, "ssh"), "#!/bin/sh\nexit 1\n"); chmodSync(join(bin, "ssh"), 0o755);
+  const file = join(dir, "servers.json"), routes = join(dir, "server-operator-routes.json");
+  const bytes = '{"servers": {"box": {"workspaceKey":"github.com/acme/ws", "workspace":"/srv/ws", "sshHost":"agent-host"}}}\n';
+  writeFileSync(file, bytes);
+  const extra = { OATS_HOME_DIR: dir, PATH: `${bin}:${process.env.PATH}` };
+  const add = (...flags) => cli(["server", "add", "box", "--ssh", "agent-host", "--workspace", "/srv/ws", "--replace", ...flags], extra);
+  let r = add("--operator-ssh", "operator-host");
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(readFileSync(file, "utf8"), bytes, "only the operator route changed, so the legacy registry stays byte-identical");
+  assert.deepEqual(JSON.parse(readFileSync(routes)), { box: { operatorSshHost: "operator-host" } });
+  assert.equal(statSync(routes).mode & 0o777, 0o600);
+  r = add("--operator-ssh", "other-host", "--no-operator-ssh");
+  assert.equal(JSON.parse(r.stdout).error.code, "E_BAD_ARGS");
+  assert.deepEqual(JSON.parse(readFileSync(routes)), { box: { operatorSshHost: "operator-host" } });
+  r = add();
+  assert.equal(JSON.parse(r.stdout).result.operatorSshHost, "operator-host", "replace without an operator flag keeps the route");
+  r = add("--no-operator-ssh");
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(Object.hasOwn(JSON.parse(r.stdout).result, "operatorSshHost"), false);
+  assert.deepEqual(JSON.parse(readFileSync(routes)), {});
+  r = add("--operator-ssh", "new-operator"); assert.equal(r.status, 0, r.stderr);
+  r = cli(["server", "remove", "box"], extra); assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(routes)), {});
+  assert.deepEqual(JSON.parse(readFileSync(file)), { servers: {} });
 });
 
 test("reference handoff is private, literal and deleted before the command runs", () => {

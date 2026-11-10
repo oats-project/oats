@@ -19,23 +19,30 @@ To put a workspace on a machine that has no deployment yet, use
 [`oats server connect`](#connect-a-machine) instead of `server add`.
 
 `server add` and `server connect` also accept `--operator-ssh <alias>`.
-It records the optional `operatorSshHost` in `~/.oats/servers.json` and shows
-it in `server list` (text and JSON). It follows the same rules as `--ssh`:
+It records the optional operator route separately in
+`~/.oats/server-operator-routes.json`:
+
+```json
+{ "build": { "operatorSshHost": "build-operator" } }
+```
+
+`server list` (text and JSON) and connect's `registration` join that route
+with the server registration. The alias follows the same rules as `--ssh`:
 letters, digits, dot, underscore and dash, beginning with a letter or digit;
 no `user@host`, spaces or SSH options. Put the user and forced-command key in
 OpenSSH configuration under that alias. Registrations without it remain valid.
-
-Before downgrading to a kernel without operator-route support, remove
-`operatorSshHost` from every registration in `~/.oats/servers.json`. Older
-kernels reject this unknown field and refuse the whole registry, including
-`server` commands and `--server` operations. This also applies to an older
-kernel bundled with Desktop, even when the CLI supports the field.
+Older kernels never read this separate file; `servers.json` retains the field
+set they accept.
 
 The operator alias is reserved for credential provisioning. Registering it
 runs no operator command: every existing remote operation continues to use
 `sshHost`, and saved instance targets contain no operator route. To change an
 existing registration, pass `--replace`; connect keeps an existing value
-without it. For example:
+without it. With `--replace`, the operator route is kept unless you give
+`--operator-ssh <alias>` to change it or `--no-operator-ssh` to clear it.
+The two flags cannot be combined. `server remove` deletes the operator route
+too. Both files are changed under the same `~/.oats/servers.lock`.
+For example:
 
 ```bash
 oats server add build --ssh build-host --operator-ssh build-operator --workspace /srv/team
@@ -111,7 +118,7 @@ missing, so after a human step you run the same command again.
 | `--dir <path>` | none, inside a deployment too: the folder on the host for this deployment, absolute or `~/…` (resolved by the host). Without it: `E_BAD_ARGS` "--dir <path on the host> is required: the folder on `<host>` for this deployment (absolute, or ~/… resolved there)". A registration made before it was required is unchanged |
 | `--workspace-ref <ref>` | this deployment's `oats-local.yaml` `workspace:` |
 | `--oats <path>`, `--path <dirs>`, `--label <text>` | as for `server add`; `--path` is where the host finds `npm`, `oats` and the harnesses. Without it, connect uses the PATH of the host user's [login shell](#the-hosts-login-shell-path) |
-| `--operator-ssh <alias>` | optional operator route, stored only; same validation as `--ssh` |
+| `--operator-ssh <alias>`, `--no-operator-ssh` | set or clear the separate operator route; with `--replace`, omitting both keeps it. Same alias validation as `--ssh` |
 | `--install-oats` | off: a missing or older OATS is a human step |
 | `--replace` | off: an id registered for another host or directory is refused |
 

@@ -3947,7 +3947,9 @@ oats server check <id> --json
 `server list` is an envelope whose `result` is `{file, servers}`; each row is
 the registration (`id`, `sshHost`, `workspace`, and `operatorSshHost`,
 `oatsPath`, `path`, `label` when set) plus `workspaceKey` (`null` when not known
-yet), `target` and `snapshots`. `operatorSshHost` is the optional `--operator-ssh` alias;
+yet), `target` and `snapshots`. `operatorSshHost` is the optional `--operator-ssh` alias,
+joined from `~/.oats/server-operator-routes.json`; it is absent from `servers.json`.
+Older kernels never read the separate file;
 existing routing and `target` use only `sshHost`. With `--workspace-ref <ref>`,
 `servers` holds only the rows whose `workspaceKey` is the canonical key of `<ref>` (`parseRepoRef`; any
 spelling of the repository), and `result.unknownWorkspace` lists the ids
@@ -3976,7 +3978,7 @@ contradicts fails the check with `E_SERVER_WORKSPACE_MISMATCH`, `details:
 
 ```text
 oats server connect <id> --ssh <host> --dir </abs/path or ~/path on the host> [--workspace-ref <ref>]
-                    [--operator-ssh <alias>] [--oats <path>] [--path <dirs>] [--label <text>] [--install-oats] [--replace] --json
+                    [--operator-ssh <alias> | --no-operator-ssh] [--oats <path>] [--path <dirs>] [--label <text>] [--install-oats] [--replace] --json
 ```
 
 An envelope, `ok: true` whenever no step failed, human steps included
@@ -4008,10 +4010,13 @@ An envelope, `ok: true` whenever no step failed, human steps included
   some codes, `details`. `skipped` steps say `waits for <step>`.
 - `registration` is the registration as written or found (`sshHost`,
   `workspace`: the absolute path the host resolved for `--dir`, never `~`;
-  `workspaceKey`; optional `operatorSshHost` from `--operator-ssh`; and
+  `workspaceKey`; optional `operatorSshHost` joined from the separate operator-route file; and
   `oatsPath`, `path`, `label` when set, given or, without `--path`, read from the host user's
   [login shell](servers.md#the-hosts-login-shell-path)), `null` until the
   `register` step has run.
+  With `--replace`, an existing operator route is kept unless `--operator-ssh`
+  sets it again or `--no-operator-ssh` clears it. `server remove` deletes the
+  separate route too. Both files are updated under `servers.lock`.
 - `human` lists the remedies of the `needs-human` steps, in order. A
   `readiness` step that needs a human has one line per problem
   (`<souls>: <subject>: <reason>[ → <remedy>]`, plus `readiness not checked

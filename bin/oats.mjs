@@ -73,7 +73,7 @@ const { sameRepo } = await kernelImport("repo-moves", () => import("../lib/repo-
 const { OATS_PACKAGE_NAME } = await kernelImport("version", () => import("../lib/version.mjs"));
 const { activateLocalInputs, localRevision } = await kernelImport("local-inputs", () => import("../lib/local-inputs.mjs"));
 const { default: YAML } = await kernelImport("yaml", () => import("yaml"));
-const { attachArgv, checkRemote, connectServer, forgetSnapshot, getServer, inspectRemote, startRemote, restartRemote, launchConfigRemote, scheduleRemote, listSnapshots, learnWorkspaceKey, readServers, redactArgv, reportedWorkspaceKey, rosterGroups, routeCapability, routeCommand, runRemote, serverFlagOf, targetOf, updateServers, validateServer, workspaceKeyOfStatus, workspaceMismatch, SERVERS_FILE } = await kernelImport("servers", () => import("../lib/servers.mjs"));
+const { attachArgv, checkRemote, connectServer, forgetSnapshot, getServer, inspectRemote, startRemote, restartRemote, launchConfigRemote, scheduleRemote, listSnapshots, learnWorkspaceKey, readServers, readServerOperatorRoutes, redactArgv, reportedWorkspaceKey, rosterGroups, routeCapability, routeCommand, runRemote, serverFlagOf, targetOf, updateServers, validateServer, validateOperatorSshHost, workspaceKeyOfStatus, workspaceMismatch, SERVERS_FILE } = await kernelImport("servers", () => import("../lib/servers.mjs"));
 const { readSessionViewer } = await kernelImport("session-viewer", () => import("../lib/session-viewer.mjs"));
 const { tickTriggers } = await kernelImport("triggers", () => import("../lib/triggers.mjs"));
 const A = await kernelImport("automations", () => import("../lib/automations.mjs"));
@@ -4316,7 +4316,7 @@ async function experimentalCmd() {
 async function serverCmd() {
   const bail = (code, msg, details) => (JSON_MODE ? jsonFail(code, msg, details) : die(msg));
   const sub = args[1];
-  const usage = "usage: oats server add <id> --ssh <host-alias> [--operator-ssh <alias>] --workspace </abs/path> [--oats <path>] [--path <dir:dir>] [--label <text>] [--replace] | connect <id> --ssh <host-alias> [--operator-ssh <alias>] [--workspace-ref <ref>] [--dir </abs/path or ~/path on the host>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] | list [--workspace-ref <ref>] | remove <id> | check <id> | roster [--server <id>] [--workspace-key <key>]... | forget <id> --instance <name>  [--json]";
+  const usage = "usage: oats server add <id> --ssh <host-alias> [--operator-ssh <alias> | --no-operator-ssh] --workspace </abs/path> [--oats <path>] [--path <dir:dir>] [--label <text>] [--replace] | connect <id> --ssh <host-alias> [--operator-ssh <alias> | --no-operator-ssh] [--workspace-ref <ref>] [--dir </abs/path or ~/path on the host>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] | list [--workspace-ref <ref>] | remove <id> | check <id> | roster [--server <id>] [--workspace-key <key>]... | forget <id> --instance <name>  [--json]";
   if (!["add", "connect", "list", "remove", "check", "roster", "forget"].includes(sub)) bail("E_USAGE", usage);
   if (sub === "connect") return serverConnectCmd(bail);
   if (sub === "forget") {
@@ -4366,7 +4366,9 @@ async function serverCmd() {
   let servers;
   try { servers = readServers(); } catch (e) { bail(e.code || "E_SERVERS_UNREADABLE", e.message); }
   if (sub === "list") {
-    let rows = Object.entries(servers).map(([id, s]) => ({ id, ...s, workspaceKey: s.workspaceKey ?? null, target: targetOf({ id, ...s }), snapshots: listSnapshots(id).length }));
+    let routes;
+    try { routes = readServerOperatorRoutes(); } catch (e) { bail(e.code || "E_SERVERS_UNREADABLE", e.message); }
+    let rows = Object.entries(servers).map(([id, s]) => ({ id, ...s, ...routes[id], workspaceKey: s.workspaceKey ?? null, target: targetOf({ id, ...s }), snapshots: listSnapshots(id).length }));
     // --workspace-ref: the servers of one workspace, by canonical key, and the ids whose workspace is not known yet.
     let unknownWorkspace;
     if (flag("workspace-ref") !== undefined) {
@@ -4389,14 +4391,22 @@ async function serverCmd() {
     const val = (name) => { const v = flag(name); return v === true ? bail("E_BAD_ARGS", `--${name} needs a value`) : v; };
     if (flag("herdr") !== undefined) { const e = herdrSettingRemoved("server add --herdr was given"); bail(e.code, e.message); }
     const entry = { sshHost: val("ssh"), workspace: val("workspace") };
-    for (const [k, f] of [["oatsPath", "oats"], ["path", "path"], ["label", "label"], ["operatorSshHost", "operator-ssh"]]) { const v = val(f); if (v !== undefined) entry[k] = v; }
+    for (const [k, f] of [["oatsPath", "oats"], ["path", "path"], ["label", "label"]]) { const v = val(f); if (v !== undefined) entry[k] = v; }
     if (!entry.sshHost || !entry.workspace) bail("E_USAGE", usage);
-    try { validateServer(id, entry); } catch (e) { bail(e.code, e.message); }
+    const operatorSshHost = val("operator-ssh"), noOperatorSsh = args.includes("--no-operator-ssh");
+    if (operatorSshHost !== undefined && noOperatorSsh) bail("E_BAD_ARGS", "choose --operator-ssh or --no-operator-ssh, not both");
+    try { validateServer(id, entry); if (operatorSshHost !== undefined) validateOperatorSshHost(operatorSshHost); } catch (e) { bail(e.code, e.message); }
+    let operatorRoute;
     try {
-      updateServers((current) => {
+      updateServers((current, routes) => {
         if (current[id] && !args.includes("--replace")) throw Object.assign(new Error(`server ${id} is already registered (pass --replace to overwrite; existing remote instances keep the route they were spawned with)`), { code: "E_SERVER_EXISTS" });
+        // An unchanged agent target keeps its learned identity when only the operator route changes.
+        if (current[id]?.workspaceKey && JSON.stringify(targetOf(current[id])) === JSON.stringify(targetOf(entry))) entry.workspaceKey = current[id].workspaceKey;
         current[id] = entry;
-      });
+        if (operatorSshHost !== undefined) routes[id] = { operatorSshHost };
+        else if (noOperatorSsh) delete routes[id];
+        operatorRoute = routes[id];
+      }, { operatorRoutes: true });
     } catch (e) { bail(e.code || "E_SERVERS_UNREADABLE", e.message); }
     // The workspace key is learned from the host, never typed: recorded when the host answers one and
     // the registration is still this one (it may change while the host is asked).
@@ -4407,17 +4417,18 @@ async function serverCmd() {
       else if (learnWorkspaceKey(id, entry, key) === "recorded") entry.workspaceKey = key;
       else warnings.push(`workspace key not recorded: registration ${id} changed while the host was asked; oats server check ${id} learns it`);
     } catch (e) { warnings.push(`workspace key unknown: ${e.message}; oats server check ${id} learns it once the host answers`); }
-    if (JSON_MODE) { jsonOk({ id, ...entry, workspaceKey: entry.workspaceKey ?? null, file: SERVERS_FILE(), ...(warnings.length ? { warnings } : {}) }); return; }
+    if (JSON_MODE) { jsonOk({ id, ...entry, ...operatorRoute, workspaceKey: entry.workspaceKey ?? null, file: SERVERS_FILE(), ...(warnings.length ? { warnings } : {}) }); return; }
     console.log(`Registered server ${id} → ssh ${entry.sshHost}, workspace ${entry.workspace}${entry.workspaceKey ? ` (workspace ${entry.workspaceKey})` : ""} (${shortPath(SERVERS_FILE())}). Verify it with \`oats server check ${id}\`.`);
     for (const w of warnings) console.error(`oats: warning: ${w}`);
     return;
   }
   if (sub === "remove") {
     try {
-      updateServers((current) => {
+      updateServers((current, routes) => {
         if (!current[id]) throw Object.assign(new Error(`no server registered as ${id}`), { code: "E_SERVER_UNKNOWN" });
         delete current[id];
-      });
+        delete routes[id];
+      }, { operatorRoutes: true });
     } catch (e) { bail(e.code || "E_SERVERS_UNREADABLE", e.message); }
     const snaps = listSnapshots(id);
     if (JSON_MODE) { jsonOk({ removed: id, remoteInstancesStillTracked: snaps.map((s) => s.instance) }); return; }
@@ -4460,7 +4471,7 @@ async function serverCmd() {
  *  step b): only the person knows where it goes. */
 function serverConnectCmd(bail) {
   const id = args[2];
-  if (!id || id.startsWith("--")) bail("E_USAGE", "usage: oats server connect <id> --ssh <host-alias> [--operator-ssh <alias>] --dir </abs/path or ~/path on the host> [--workspace-ref <ref>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] [--json]");
+  if (!id || id.startsWith("--")) bail("E_USAGE", "usage: oats server connect <id> --ssh <host-alias> [--operator-ssh <alias> | --no-operator-ssh] --dir </abs/path or ~/path on the host> [--workspace-ref <ref>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] [--json]");
   const val = (name) => { const v = flag(name); return v === true ? bail("E_BAD_ARGS", `--${name} needs a value`) : v; };
   const sshHost = val("ssh");
   if (!sshHost) bail("E_BAD_ARGS", "--ssh <host-alias> is required: the OpenSSH host alias of the machine to connect");
@@ -4473,7 +4484,7 @@ function serverConnectCmd(bail) {
   if (!dir) bail("E_BAD_ARGS", `--dir <path on the host> is required: the folder on ${sshHost} for this deployment (absolute, or ~/… resolved there)`);
   let res;
   try {
-    res = connectServer({ id, sshHost, operatorSshHost: val("operator-ssh"), workspaceRef, dir, oatsPath: val("oats"), path: val("path"), label: val("label"), installOats: args.includes("--install-oats"), replace: args.includes("--replace"), localVersion: OATS_VERSION });
+    res = connectServer({ id, sshHost, operatorSshHost: val("operator-ssh"), noOperatorSsh: args.includes("--no-operator-ssh"), workspaceRef, dir, oatsPath: val("oats"), path: val("path"), label: val("label"), installOats: args.includes("--install-oats"), replace: args.includes("--replace"), localVersion: OATS_VERSION });
   } catch (e) {
     if (!JSON_MODE && e.details?.steps) printConnectSteps(id, sshHost, e.details.steps);
     bail(e.code || "E_CONNECT", e.message, e.details);
