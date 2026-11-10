@@ -186,13 +186,14 @@ setInterval(() => {}, 1000);`, lock, JSON.stringify(owner)], { cwd: f.home });
     // A directory there is only ever an earlier OATS's start lock: refused, named, and left as it is.
     mkdirSync(lock);
     writeFileSync(join(lock, "keep.txt"), "earlier start");
-    assert.throws(() => startInstanceSession(f.home, { io }), (e) => e.code === "E_SESSION_START_BUSY"
+    // A person must act on it: its own code, never the busy one an unattended caller waits out.
+    assert.throws(() => startInstanceSession(f.home, { io }), (e) => e.code === "E_SESSION_START_LOCK_STUCK"
       && e.message === `${lock} is the start lock directory of an earlier OATS; nothing was stopped or started. Once no earlier oats is running, remove that directory and retry`);
     assert.equal(effects, 0);
     assert.equal(readFileSync(join(lock, "keep.txt"), "utf8"), "earlier start", "the directory is left byte for byte");
     rmSync(lock, { recursive: true });
     symlinkSync(join(f.home, "instance.json"), lock);
-    assert.throws(() => startInstanceSession(f.home, { io }), (e) => e.code === "E_SESSION_START_BUSY"
+    assert.throws(() => startInstanceSession(f.home, { io }), (e) => e.code === "E_SESSION_START_LOCK_STUCK"
       && e.message === `${lock} is neither a package upgrade's file nor an earlier OATS's start lock directory; nothing was stopped or started. Remove it and retry`);
   } finally {
     child.kill("SIGTERM");
