@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 import { parse } from "yaml";
 
 function sshSettings(source) {
@@ -18,6 +19,96 @@ function sshSettings(source) {
 }
 
 const read = (name) => readFileSync(new URL(`../container/agent/${name}`, import.meta.url), "utf8");
+
+function loginFixture() {
+  const dir = { uid: 0, gid: 20001, mode: 0o750, isDirectory: () => true };
+  const token = { uid: 0, gid: 20001, mode: 0o440, isFile: () => true };
+  const fs = {
+    constants: { R_OK: 4, W_OK: 2 },
+    statSync(path) { assert.equal(path, "/etc/agent-login"); return dir; },
+    lstatSync(path) { assert.equal(path, "/etc/agent-login/claude-token"); return token; },
+    accessSync(path, mode) {
+      assert.equal(path, "/etc/agent-login/claude-token");
+      if (mode === 2) throw Object.assign(new Error("read-only fixture"), { code: "EACCES" });
+      assert.equal(mode, 4);
+    },
+    readFileSync() { assert.fail("acceptance must not read the token contents"); },
+  };
+  return { dir, token, fs };
+}
+
+async function checkToken(fs, strict = true) {
+  const { tokenCheck } = await import("../container/agent/accept.mjs");
+  assert.equal(typeof tokenCheck, "function", "a separate optional-token probe is required");
+  // Probes run as standalone Node programs inside Docker; mock only filesystem access.
+  const result = runInNewContext(`(${tokenCheck.toString()})("20001", ${strict})`, {
+    require(name) {
+      if (name === "node:fs") return fs;
+      assert.equal(name, "node:assert/strict");
+      return assert;
+    },
+  });
+  return JSON.parse(JSON.stringify(result));
+}
+
+test("acceptance reports an absent setup-token without reading or creating it", async () => {
+  const { fs } = loginFixture();
+  fs.lstatSync = () => { throw Object.assign(new Error("absent fixture"), { code: "ENOENT" }); };
+  const result = await checkToken(fs);
+  assert.equal(result.present, false);
+  assert.deepEqual(result.evidence, ["PASS login directory: uid=0 gid=20001 mode=750", "NOT RUN: setup-token file absent"]);
+});
+
+test("an absent token does not bypass the login directory assertions", async () => {
+  for (const [key, value] of [["uid", 20001], ["gid", 0], ["mode", 0o770], ["isDirectory", () => false]]) {
+    const { fs, dir } = loginFixture();
+    fs.lstatSync = () => { throw Object.assign(new Error("absent fixture"), { code: "ENOENT" }); };
+    dir[key] = value;
+    await assert.rejects(checkToken(fs));
+  }
+});
+
+test("a present setup-token retains metadata and access checks without reading contents", async () => {
+  const fixture = loginFixture();
+  const result = await checkToken(fixture.fs);
+  assert.equal(result.present, true);
+  assert.match(result.evidence[1], /^PASS setup-token file: readable, not writable; uid=0 gid=20001 mode=440; contents not read$/);
+  for (const [key, value] of [["uid", 20001], ["gid", 0], ["mode", 0o640], ["isFile", () => false]]) {
+    const { fs, token } = loginFixture();
+    token[key] = value;
+    await assert.rejects(checkToken(fs));
+  }
+  for (const accessSync of [() => {}, () => { throw new Error("unreadable fixture"); }]) {
+    await assert.rejects(checkToken({ ...fixture.fs, accessSync }));
+  }
+});
+
+test("local token checks accept projected fixture ownership and modes", async () => {
+  const { fs, dir, token } = loginFixture();
+  Object.assign(dir, { uid: 20001, mode: 0o770 });
+  Object.assign(token, { uid: 20001, mode: 0o640 });
+  // The read-only bind still denies writes regardless of projected ownership.
+  const result = await checkToken(fs, false);
+  assert.equal(result.present, true);
+  assert.deepEqual(result.evidence, [
+    "PASS login directory: uid=20001 gid=20001 mode=770",
+    "PASS setup-token file: readable, not writable; uid=20001 gid=20001 mode=640; contents not read",
+  ]);
+});
+
+test("local token checks still require a login directory", async () => {
+  const { fs, dir } = loginFixture();
+  dir.isDirectory = () => false;
+  await assert.rejects(checkToken(fs, false), /login mount must be a directory/);
+});
+
+test("only ENOENT makes a setup-token optional", async () => {
+  const { fs } = loginFixture();
+  for (const code of ["EACCES", "EIO", "ENOTDIR"]) {
+    const error = Object.assign(new Error("filesystem fixture"), { code });
+    await assert.rejects(checkToken({ ...fs, lstatSync() { throw error; } }), (actual) => actual === error);
+  }
+});
 
 test("agent image pins its base and CLI dependency closure", () => {
   const dockerfile = read("Dockerfile");
