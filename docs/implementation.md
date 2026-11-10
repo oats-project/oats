@@ -492,14 +492,17 @@ reason text do not depend on whether Git's words can be shown.
 
 Every write to a cache repo (its `git init`, config, fetches and pins) holds
 the repo's cross-process write lock, `<cache>/.locks/<repo>.lock`
-(`withCacheWriteLock`): an exclusive file holding `{pid, token, startedAt}`,
-waited for while its holder lives (bounded by a whole fetch, then
-`reason: "cache"` naming the pid), reclaimed when the holder is dead, and
-released only by its owner. A holder is judged by its pid alone, so a lock whose
-holder is gone while its pid now names another process stays held until that
-process exits: each write until then waits out the deadline and is refused
-naming the pid. Once no oats process holds that pid, the lock is safe to
-remove. Reclaimers take a short guard,
+(`withCacheWriteLock`): an exclusive file holding
+`{pid, token, startedAt, bootId, processStart}`, waited for while its holder
+lives (bounded by a whole fetch, then `reason: "cache"` naming the pid and
+saying to check whether it is an oats process: once no oats process holds
+it, the lock is safe to remove), reclaimed when the holder is gone, and
+released only by its owner. A holder is judged by its pid, boot and start,
+as a claim's holder is (`lib/claim.mjs`): a lock taken in another boot, or
+whose pid is gone or runs with another start (a reused pid), is reclaimed
+at once, and one whose start cannot be read is waited for. A record that
+names no boot or start, as an earlier kernel writes it, is judged by its
+pid alone, and so is every record by that kernel. Reclaimers take a short guard,
 `<lock>.reclaim`, and check under it that the lock is still the dead
 record before removing it, so a reclaimer that paused cannot delete a
 live process's new lock. A guard whose holder died is never removed
