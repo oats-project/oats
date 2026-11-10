@@ -14,8 +14,10 @@
   (`git config --list`, which runs nothing), and each filter driver it
   defines is overridden to no command, as `oats instance git` does it.
   - A retire or a removal in a repository with no filter driver of its own
-    is unchanged. A driver that only the operator's global or system
-    configuration defines still runs.
+    is unchanged. A driver that the operator's global or system
+    configuration defines runs with the operator's command, also when the
+    repository defines one of the same name (`git lfs install --local`):
+    the repository's values for that name are replaced by the operator's.
   - A file a repository's filter applies to is compared as its bytes are in
     the work tree. A clean filter could make a rewritten file read as
     unchanged: `oats retire --discard-worktree` then removed the worktree
@@ -34,12 +36,9 @@
     worktree's, and the copy has none of the repository's configuration.
     For a file a repository's filter applies to, the two can disagree, and
     the retire then refuses with `E_WORK_PRESERVATION_FAILED` and removes
-    nothing. For a driver only the repository defines that was so before
-    (an untouched file whose stored form is the filtered one). For a driver
-    the operator's global or system configuration also defines under the
-    same name it is so from this version on, for a file whose times Git
-    cannot tell from the index's: the worktree compares its bytes, and the
-    copy runs the operator's filter on it.
+    nothing. That is so only for a driver the repository alone defines,
+    and was so before (an untouched file whose stored form is the filtered
+    one).
   - Not covered: a driver written between that read and the Git command,
     and a filter that a submodule's own configuration defines, which matters
     where the agent and whoever retires or removes its worktree are separate

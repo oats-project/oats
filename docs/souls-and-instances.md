@@ -745,18 +745,22 @@ way.
   `--discard-worktree` and `--force` too. A spawn into a worktree of such a
   repository is refused the same way and rolled back. Remove or rename the
   driver in the repository's configuration, then retry.
-- A driver that only the operator's global or system configuration defines
-  is the operator's own and runs, in the worktree and in the recovery alike.
+- A driver that the operator's global or system configuration defines is
+  the operator's own and runs with the operator's command, in the worktree
+  and in the recovery alike. That holds when the repository's configuration
+  defines a driver of the same name too (`git lfs install --local` beside
+  `git lfs install`): the repository's values for it are replaced by the
+  operator's, so a command the repository gives that name never runs. The
+  operator's configuration is the human's; the repository's is the agent's
+  to write.
 - The recovery has no local configuration, so it has none of the
   repository's drivers. Its status must still be the worktree's, and for a
   file such a filter applies to it can differ: the worktree reads an
   untouched file as unchanged by the size and times its index recorded,
   while the copy, whose files are written anew, compares its bytes with the
-  stored form. For a driver the operator's configuration also defines under
-  the same name it can differ the other way: the worktree compares the bytes
-  of a file whose times Git cannot tell from the index's, and the copy runs
-  the operator's filter on it. Either way the copy cannot be verified: the
-  retire refuses with `E_WORK_PRESERVATION_FAILED` and removes nothing.
+  stored form. The copy then cannot be verified: the retire refuses with
+  `E_WORK_PRESERVATION_FAILED` and removes nothing. This is so only for a
+  driver the repository alone defines.
 - Not covered: a driver written into the configuration between that read
   and the Git command that follows it, and a filter a **submodule's own**
   configuration defines. Git runs inside each populated submodule to learn
