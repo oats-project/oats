@@ -18,6 +18,23 @@ oats server remove build
 To put a workspace on a machine that has no deployment yet, use
 [`oats server connect`](#connect-a-machine) instead of `server add`.
 
+`server add` and `server connect` also accept `--operator-ssh <alias>`.
+It records the optional `operatorSshHost` in `~/.oats/servers.json` and shows
+it in `server list` (text and JSON). It follows the same rules as `--ssh`:
+letters, digits, dot, underscore and dash, beginning with a letter or digit;
+no `user@host`, spaces or SSH options. Put the user and forced-command key in
+OpenSSH configuration under that alias. Registrations without it remain valid.
+
+The operator alias is reserved for credential provisioning. Registering it
+runs no operator command: every existing remote operation continues to use
+`sshHost`, and saved instance targets contain no operator route. To change an
+existing registration, pass `--replace`; connect keeps an existing value
+without it. For example:
+
+```bash
+oats server add build --ssh build-host --operator-ssh build-operator --workspace /srv/team
+```
+
 - `--ssh` is an OpenSSH host alias or host name, never `user@host` or an
   option. Users, keys and host verification belong in `~/.ssh/config`.
   Connections are non-interactive (`BatchMode=yes`): a prompt fails fast.
@@ -88,6 +105,7 @@ missing, so after a human step you run the same command again.
 | `--dir <path>` | none, inside a deployment too: the folder on the host for this deployment, absolute or `~/…` (resolved by the host). Without it: `E_BAD_ARGS` "--dir <path on the host> is required: the folder on `<host>` for this deployment (absolute, or ~/… resolved there)". A registration made before it was required is unchanged |
 | `--workspace-ref <ref>` | this deployment's `oats-local.yaml` `workspace:` |
 | `--oats <path>`, `--path <dirs>`, `--label <text>` | as for `server add`; `--path` is where the host finds `npm`, `oats` and the harnesses. Without it, connect uses the PATH of the host user's [login shell](#the-hosts-login-shell-path) |
+| `--operator-ssh <alias>` | optional operator route, stored only; same validation as `--ssh` |
 | `--install-oats` | off: a missing or older OATS is a human step |
 | `--replace` | off: an id registered for another host or directory is refused |
 

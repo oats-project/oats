@@ -15,7 +15,9 @@ const base = mkdtempSync(join(tmpdir(), "oats-credentials-"));
 const restoreEnv = isolateSessionEnvironment(base);
 test.after(() => { restoreEnv(); rmSync(base, { recursive: true, force: true }); });
 const recipe = (env) => ({ version: 2, harness: "claude", executable: "/usr/bin/true", args: [], env, model: null, hooks: { launch: {}, env: {}, contributions: [] } });
-const cli = (args) => spawnSync(process.execPath, [CLI, ...args, "--json"], { encoding: "utf8", env: { ...process.env, OATS_HOME_DIR: join(base, "registry") } });
+import { connectServer, readServers, targetOf, validateServer } from "../lib/servers.mjs";
+
+const cli = (args, extra = {}) => spawnSync(process.execPath, [CLI, ...args, "--json"], { encoding: "utf8", env: { ...process.env, OATS_HOME_DIR: join(base, "registry"), ...extra } });
 
 test("fromFile validates an absolute path and survives launch-config set/list", () => {
   const file = join(base, "token ' #.txt");
@@ -141,4 +143,46 @@ test("Claude warns without an OATS-set token and checks the effective config dir
   assert.match(plan({ CLAUDE_CONFIG_DIR: { fromFile: selector } }).warnings.join("\n"), /oats harness token set claude/);
   const codex = recipe({ HOME: ownHome, CLAUDE_CODE_OAUTH_TOKEN: "fixture" }); codex.harness = "codex";
   assert.doesNotThrow(() => planLaunch({ home: base, instance: "fixture", meta: { launch: codex }, env: process.env }));
+});
+
+test("server add stores and lists the optional operator alias without changing the agent target", () => {
+  const bin = join(base, "server-bin"); mkdirSync(bin);
+  writeFileSync(join(bin, "ssh"), "#!/bin/sh\nexit 1\n"); chmodSync(join(bin, "ssh"), 0o755);
+  const extra = { PATH: `${bin}:${process.env.PATH}` };
+  let r = cli(["server", "add", "box", "--ssh", "agent-host", "--operator-ssh", "operator-host", "--workspace", "/srv/ws"], extra);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(JSON.parse(r.stdout).result.operatorSshHost, "operator-host");
+  r = cli(["server", "list"], extra);
+  const row = JSON.parse(r.stdout).result.servers[0];
+  assert.equal(row.operatorSshHost, "operator-host");
+  assert.equal(Object.hasOwn(row.target, "operatorSshHost"), false);
+  const text = spawnSync(process.execPath, [CLI, "server", "list"], { env: { ...process.env, ...extra, OATS_HOME_DIR: join(base, "registry") }, encoding: "utf8" });
+  assert.match(text.stdout, /operator ssh operator-host/);
+  assert.equal(JSON.parse(readFileSync(join(base, "registry", "servers.json"))).servers.box.operatorSshHost, "operator-host");
+  for (const alias of ["", "-option", "user@host", "host alias", "host;id", null, 42]) assert.throws(() => validateServer("box", { sshHost: "agent-host", workspace: "/srv/ws", operatorSshHost: alias }), (e) => e.code === "E_SERVER_INVALID");
+  assert.doesNotThrow(() => validateServer("old", { sshHost: "old-host", workspace: "/srv/ws" }));
+});
+
+test("server connect records the operator alias while every remote call uses the agent route", () => {
+  const old = process.env.OATS_HOME_DIR; process.env.OATS_HOME_DIR = join(base, "connect-registry");
+  try {
+    const options = { id: "connected", sshHost: "agent-host", operatorSshHost: "operator-host", workspaceRef: "git:github.com/acme/ws", dir: "/srv/ws", path: "/usr/bin", localVersion: "0.39.0" };
+    const envelope = (result) => JSON.stringify({ schemaVersion: 1, ok: true, result });
+    const remote = (bin, argv) => {
+      assert.equal(argv.includes("operator-host"), false);
+      const cmd = argv.at(-1);
+      if (/(^| )true$/.test(cmd)) return "";
+      if (/ version --json$/.test(cmd)) return JSON.stringify({ schemaVersion: 1, desktopApi: 1, name: "@awebai/oats", version: "99.0.0", features: ["server-connect"] });
+      if (/ onboard .* --check --json$/.test(cmd)) return envelope({ check: true, dir: "/srv/ws", state: "deployment", workspace: { ref: options.workspaceRef, key: "github.com/acme/ws" }, remote: { readable: true, commit: "a".repeat(40) } });
+      if (/ status --json --dir \/srv\/ws$/.test(cmd)) return envelope({ root: "/srv/ws/agents", agents: [], workspace: { key: "github.com/acme/ws" } });
+      if (/ souls --json --dir \/srv\/ws$/.test(cmd)) return envelope({ souls: [] });
+      throw new Error(`unexpected fake SSH call: ${cmd}`);
+    };
+    const result = connectServer(options, { execFileSync: remote });
+    assert.equal(result.registration.operatorSshHost, "operator-host");
+    assert.equal(readServers().connected.operatorSshHost, "operator-host");
+    assert.equal(targetOf(result.registration).sshHost, "agent-host");
+    assert.equal(connectServer(options, { execFileSync: remote }).registration.operatorSshHost, "operator-host");
+    assert.throws(() => connectServer({ ...options, operatorSshHost: "user@host" }, { execFileSync: () => assert.fail("invalid alias never reaches SSH") }), (e) => e.code === "E_SERVER_INVALID");
+  } finally { process.env.OATS_HOME_DIR = old; }
 });

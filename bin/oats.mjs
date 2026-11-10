@@ -4316,7 +4316,7 @@ async function experimentalCmd() {
 async function serverCmd() {
   const bail = (code, msg, details) => (JSON_MODE ? jsonFail(code, msg, details) : die(msg));
   const sub = args[1];
-  const usage = "usage: oats server add <id> --ssh <host-alias> --workspace </abs/path> [--oats <path>] [--path <dir:dir>] [--label <text>] [--replace] | connect <id> --ssh <host-alias> [--workspace-ref <ref>] [--dir </abs/path or ~/path on the host>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] | list [--workspace-ref <ref>] | remove <id> | check <id> | roster [--server <id>] [--workspace-key <key>]... | forget <id> --instance <name>  [--json]";
+  const usage = "usage: oats server add <id> --ssh <host-alias> [--operator-ssh <alias>] --workspace </abs/path> [--oats <path>] [--path <dir:dir>] [--label <text>] [--replace] | connect <id> --ssh <host-alias> [--operator-ssh <alias>] [--workspace-ref <ref>] [--dir </abs/path or ~/path on the host>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] | list [--workspace-ref <ref>] | remove <id> | check <id> | roster [--server <id>] [--workspace-key <key>]... | forget <id> --instance <name>  [--json]";
   if (!["add", "connect", "list", "remove", "check", "roster", "forget"].includes(sub)) bail("E_USAGE", usage);
   if (sub === "connect") return serverConnectCmd(bail);
   if (sub === "forget") {
@@ -4380,7 +4380,7 @@ async function serverCmd() {
     if (JSON_MODE) { jsonOk({ file: SERVERS_FILE(), servers: rows, ...(unknownWorkspace ? { unknownWorkspace } : {}) }); return; }
     if (unknownWorkspace?.length) console.log(`  (workspace not known yet for ${unknownWorkspace.join(", ")}: oats server check <id> learns it)`);
     if (!rows.length) { console.log(`no servers registered (${shortPath(SERVERS_FILE())}) — add one with \`oats server add <id> --ssh <alias> --workspace </path>\``); return; }
-    for (const r of rows) console.log(`  ${r.id}${r.label ? `  ${r.label}` : ""}${r.workspaceKey ? `  [${r.workspaceKey}]` : ""}\n      ssh ${r.sshHost}  workspace ${r.workspace}  oats ${r.target.oatsPath}${r.snapshots ? `  (${r.snapshots} remote instance${r.snapshots === 1 ? "" : "s"} spawned from here)` : ""}`);
+    for (const r of rows) console.log(`  ${r.id}${r.label ? `  ${r.label}` : ""}${r.workspaceKey ? `  [${r.workspaceKey}]` : ""}\n      ssh ${r.sshHost}${r.operatorSshHost ? `  operator ssh ${r.operatorSshHost}` : ""}  workspace ${r.workspace}  oats ${r.target.oatsPath}${r.snapshots ? `  (${r.snapshots} remote instance${r.snapshots === 1 ? "" : "s"} spawned from here)` : ""}`);
     return;
   }
   const id = args[2];
@@ -4389,7 +4389,7 @@ async function serverCmd() {
     const val = (name) => { const v = flag(name); return v === true ? bail("E_BAD_ARGS", `--${name} needs a value`) : v; };
     if (flag("herdr") !== undefined) { const e = herdrSettingRemoved("server add --herdr was given"); bail(e.code, e.message); }
     const entry = { sshHost: val("ssh"), workspace: val("workspace") };
-    for (const [k, f] of [["oatsPath", "oats"], ["path", "path"], ["label", "label"]]) { const v = val(f); if (v !== undefined) entry[k] = v; }
+    for (const [k, f] of [["oatsPath", "oats"], ["path", "path"], ["label", "label"], ["operatorSshHost", "operator-ssh"]]) { const v = val(f); if (v !== undefined) entry[k] = v; }
     if (!entry.sshHost || !entry.workspace) bail("E_USAGE", usage);
     try { validateServer(id, entry); } catch (e) { bail(e.code, e.message); }
     try {
@@ -4460,7 +4460,7 @@ async function serverCmd() {
  *  step b): only the person knows where it goes. */
 function serverConnectCmd(bail) {
   const id = args[2];
-  if (!id || id.startsWith("--")) bail("E_USAGE", "usage: oats server connect <id> --ssh <host-alias> --dir </abs/path or ~/path on the host> [--workspace-ref <ref>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] [--json]");
+  if (!id || id.startsWith("--")) bail("E_USAGE", "usage: oats server connect <id> --ssh <host-alias> [--operator-ssh <alias>] --dir </abs/path or ~/path on the host> [--workspace-ref <ref>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] [--json]");
   const val = (name) => { const v = flag(name); return v === true ? bail("E_BAD_ARGS", `--${name} needs a value`) : v; };
   const sshHost = val("ssh");
   if (!sshHost) bail("E_BAD_ARGS", "--ssh <host-alias> is required: the OpenSSH host alias of the machine to connect");
@@ -4473,7 +4473,7 @@ function serverConnectCmd(bail) {
   if (!dir) bail("E_BAD_ARGS", `--dir <path on the host> is required: the folder on ${sshHost} for this deployment (absolute, or ~/… resolved there)`);
   let res;
   try {
-    res = connectServer({ id, sshHost, workspaceRef, dir, oatsPath: val("oats"), path: val("path"), label: val("label"), installOats: args.includes("--install-oats"), replace: args.includes("--replace"), localVersion: OATS_VERSION });
+    res = connectServer({ id, sshHost, operatorSshHost: val("operator-ssh"), workspaceRef, dir, oatsPath: val("oats"), path: val("path"), label: val("label"), installOats: args.includes("--install-oats"), replace: args.includes("--replace"), localVersion: OATS_VERSION });
   } catch (e) {
     if (!JSON_MODE && e.details?.steps) printConnectSteps(id, sshHost, e.details.steps);
     bail(e.code || "E_CONNECT", e.message, e.details);
