@@ -54,10 +54,10 @@ function refused(fx, what, { commit, locked }) {
   assert.equal(details.package, "acme.pkg", what);
   assert.equal(details.version, "1.0.0", what);
   assert.equal(details.commit, commit, what);
-  assert.equal(details.locked, locked, what);
-  assert.match(details.observed, /^sha256-[0-9a-f]{64}$/, what);
-  assert.notEqual(details.observed, locked, what);
-  for (const named of ["acme.pkg", commit, locked, details.observed]) assert.ok(j.error.message.includes(named), `${what}: the message names ${named}: ${j.error.message}`);
+  assert.equal(details.expected, locked, what);
+  assert.match(details.actual, /^sha256-[0-9a-f]{64}$/, what);
+  assert.notEqual(details.actual, locked, what);
+  for (const named of ["acme.pkg", commit, locked, details.actual]) assert.ok(j.error.message.includes(named), `${what}: the message names ${named}: ${j.error.message}`);
   if (fresh) assert.equal(existsSync(instances), false, `${what}: no instance home`);
   assert.deepEqual(entriesUnder(fx.root), before, `${what}: nothing was created under the agents root`);
   for (const file of filesUnder(fx.root)) assert.equal(readFileSync(file, "utf8").includes("tampered:"), false, `${what}: ${file} holds the tampered content`);
@@ -170,7 +170,7 @@ test("a record whose cache repository was modified afterwards is not believed: t
   const record = assertVerified(fx, "after the first spawn");
   tamperCachedSkill(fx);
   const details = refused(fx, "the cached content changed after it was verified", { commit: fx.entry.commit, locked: fx.entry.integrity });
-  assert.notEqual(details.observed, fx.entry.integrity);
+  assert.notEqual(details.actual, fx.entry.integrity);
   assert.deepEqual(readdirSync(join(fx.root, "dev", "instances")).filter((name) => !name.startsWith(".")), ["dev-a"], "only the instance spawned before the change");
   assert.equal(verifiedRecord(fx).text, record.text, "a refused verification records nothing");
 });
@@ -208,6 +208,6 @@ test("a lock edited to another integrity is refused while a record of the true i
   edited.packages["acme.pkg"].integrity = `sha256-${"0".repeat(64)}`;
   writeFileSync(fx.lockFile, JSON.stringify(edited, null, 2) + "\n");
   const details = refused(fx, "the lock's integrity is not the verified one", { commit: fx.entry.commit, locked: edited.packages["acme.pkg"].integrity });
-  assert.equal(details.observed, fx.entry.integrity, "the observed digest is the content's");
+  assert.equal(details.actual, fx.entry.integrity, "the digest computed is the content's");
   assert.equal(verifiedRecord(fx).text, record.text, "the record of the true integrity is untouched, and none is written for the edited one");
 });

@@ -231,7 +231,7 @@ kernel digests the package tree (the lock entry's `path`) at the lock's
   the same check. `oats instance upgrade` makes it for each package it moves
   a module to.
 - **The refusal** is `E_PACKAGE_INTEGRITY` with `details: {package, version,
-  commit, locked, observed}`: `locked` is the lock's `integrity`, `observed`
+  commit, expected, actual}`: `expected` is the lock's `integrity`, `actual`
   the digest of the tree as this computer reads it. The message names the
   package, the commit and both digests. Two things produce it: a lock whose
   `commit` and `integrity` describe different content (a hand edit, a bad
