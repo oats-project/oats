@@ -25,6 +25,7 @@ appendFileSync(process.env.FIXTURE_CALLS,JSON.stringify({host,args})+"\\n");
 const [action,harness,name]=words;
 const input=readFileSync(0);
 if(host==="agent-host"){console.log(JSON.stringify({schemaVersion:1,ok:true,result:JSON.parse(process.env.FIXTURE_ROSTER||'{"agents":[]}')}));process.exit(0);}
+if(process.env.FIXTURE_REPLY_BYTES){await new Promise(resolve=>process.stdout.write("x".repeat(Number(process.env.FIXTURE_REPLY_BYTES)),resolve));process.exit(0);}
 if(process.env.FIXTURE_REPLY){process.stdout.write(process.env.FIXTURE_REPLY);process.exit(Number(process.env.FIXTURE_EXIT||0));}
 const result={ok:true,harness,name,fingerprint:action==="remove"?null:"sha256:0123456789abcdef",replacedAt:"2026-11-10T00:00:00Z"};
 if(action==="install")result.fingerprint="sha256:"+createHash("sha256").update(input).digest("hex").slice(0,16);
@@ -221,6 +222,34 @@ test("delivery errors distinguish connection, refusal and malformed replies with
     assert.match(r.stderr, /operator SSH/);
   }
   assert.equal(readFileSync(fx.calls, "utf8").trim().split("\n").length, 4, "a failed or mismatched install never asks the agent roster");
+});
+
+test("oversized receiver output is an unexpected reply after a possible install", () => {
+  const fx = fixture("oversized-reply");
+  const value = "private-api-key-fixture";
+  const r = fx.cli(["set", "codex", "--server", "box", "--stdin", "--json", "--debug"], { input: value, env: { FIXTURE_REPLY_BYTES: "200000" } });
+  assert.equal(r.status, 1);
+  assert.deepEqual(JSON.parse(r.stdout).error, { code: "E_HARNESS_TOKEN_DELIVERY", message: "Unexpected reply from the server's credential receiver." });
+  assert.match(r.stderr, /ENOBUFS/);
+  assert.equal((r.stdout + r.stderr).includes("x".repeat(64)), false, "the oversized output is never forwarded");
+  assert.equal((r.stdout + r.stderr).includes(value), false);
+  assert.equal(readFileSync(fx.calls, "utf8").trim().split("\n").length, 1, "an unexpected reply never queries the agent roster");
+});
+
+test("receiver refusal controls are escaped for the terminal while JSON keeps the reason", () => {
+  const fx = fixture("refusal-controls");
+  const value = "private-api-key-fixture";
+  const reason = "bad \u202e\u009b2J\u2028 path " + value;
+  const reply = { ok: false, harness: "codex", name: "team", error: reason };
+  const extra = { input: value, env: { FIXTURE_REPLY: JSON.stringify(reply), FIXTURE_EXIT: "1" } };
+  const args = ["set", "codex", "--server", "box", "--stdin"];
+  const json = fx.cli([...args, "--json"], extra);
+  assert.equal(json.status, 1);
+  assert.deepEqual(JSON.parse(json.stdout).error, { code: "E_HARNESS_TOKEN_DELIVERY", message: "The server refused the credential: bad \u202e\u009b2J\u2028 path <redacted>" });
+  const text = fx.cli(args, extra);
+  assert.equal(text.status, 1);
+  assert.ok(text.stderr.includes("bad \\u{202e}\\u{9b}2J\\u{2028} path <redacted>"));
+  for (const control of ["\u202e", "\u009b", "\u2028", value]) assert.equal((text.stdout + text.stderr).includes(control), false);
 });
 
 test("credential input is bounded and a terminal or missing route is refused before reading", async () => {

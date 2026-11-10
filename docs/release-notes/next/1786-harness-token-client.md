@@ -5,7 +5,8 @@
   `set --stdin` supports Claude setup-tokens and Codex, pi and opencode
   API keys, without credential arguments, output or client files. A missing
   operator route refuses; it never falls back to the agent route or reuses
-  its authenticated connection.
+  its authenticated connection. Malformed or oversized replies fail closed,
+  and remote refusal text is escaped for terminal output.
 - Rotation lists sessions of the same harness started before or during the
   receiver's reported replacement second;
   they pick up the new value at their next start. Nothing restarts

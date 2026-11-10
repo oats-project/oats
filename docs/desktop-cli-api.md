@@ -7624,7 +7624,10 @@ a plain explanation; the installation remains successful. No automatic
 restart is performed. Only `set` accepts stdin, as bounded credential bytes;
 there is no credential argument, result field, event or file on the client.
 The receiver's single JSON line and exit status must agree, name the requested
-harness and team, and carry valid metadata. Malformed replies fail closed.
+harness and team, and carry valid metadata. Malformed or oversized replies fail
+closed as unexpected replies. Text-mode refusal messages escape remote control
+characters for the terminal; JSON keeps the message without terminal escaping.
+The submitted credential is redacted in both modes.
 Refusals: `E_BAD_ARGS` for unsupported arguments or names,
 `E_HARNESS_TOKEN_ROUTE` for a missing operator alias,
 `E_HARNESS_TOKEN_INPUT` for invalid, too-large or terminal stdin,
