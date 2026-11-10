@@ -1788,7 +1788,7 @@ async function harnessTokenCmd() {
     if (JSON_MODE) jsonOk(result);
     else {
       console.log(result.action === "set" ? `Installed ${result.harness} credential for ${result.name} on ${result.server}: ${result.fingerprint}.` : result.action === "remove" ? `Removed ${result.harness} credential for ${result.name} on ${result.server}.` : `${result.harness} credential for ${result.name} on ${result.server}: ${result.fingerprint}, replaced ${result.replacedAt}.`);
-      for (const row of result.staleInstances ?? []) console.log(`  ${row.instance} (${row.agent}): started ${row.startedAt}; picks up the token at its next start.`);
+      for (const row of result.staleInstances ?? []) console.log(terminalText(`  ${row.instance} (${row.agent}): started ${row.startedAt}; picks up the token at its next start.`));
       for (const warning of result.warnings) console.error(`oats: warning: ${warning}`);
     }
   } catch (e) { cmdFail(e.code || "E_HARNESS_TOKEN_DELIVERY", e.message); }

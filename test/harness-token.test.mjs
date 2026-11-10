@@ -32,7 +32,7 @@ console.log(JSON.stringify(result));
 `); chmodSync(join(bin, "ssh"), 0o755);
   const env = { ...process.env, HOME: dir, OATS_HOME_DIR: config, PATH: `${bin}:${process.env.PATH}`, FIXTURE_CALLS: calls };
   const cli = (args, extra = {}) => spawnSync(process.execPath, [CLI, "harness", "token", ...args], { encoding: "utf8", ...extra, env: { ...env, ...extra.env } });
-  return { dir, config, calls, cli };
+  return { dir, config, calls, cli, env };
 }
 
 test("token status uses the separate operator route and returns a JSON envelope", () => {
@@ -59,6 +59,8 @@ test("stdin set delivers each harness credential only to the receiver and lists 
     const roster = { agents: [{ name: "dev", harness, instances: [old,
       { ...old, instance: "newer", startedAt: "2026-11-10T00:00:01Z" },
       { ...old, instance: "equal", startedAt: "2026-11-10T00:00:00Z" },
+      { ...old, instance: "same-second", startedAt: "2026-11-10T00:00:00.300Z" },
+      { ...old, instance: "last-millisecond", startedAt: "2026-11-10T00:00:00.999Z" },
       { ...old, instance: "other-harness", harness: "other" }, { ...old, instance: "never", startedAt: null },
     ] }] };
     const r = fx.cli(["set", harness, "--server", "box", "--stdin", "--json"], { input: value + "\r\n", env: { FIXTURE_ROSTER: JSON.stringify(roster) } });
@@ -66,7 +68,12 @@ test("stdin set delivers each harness credential only to the receiver and lists 
     assert.deepEqual(JSON.parse(r.stdout).result, { server: "box", action: "set", harness, name: "team",
       fingerprint: FINGERPRINTS[harness],
       replacedAt: "2026-11-10T00:00:00Z", warnings: [],
-      staleInstances: [{ instance: "older", agent: "dev", home: "/srv/ws/older", startedAt: old.startedAt }],
+      staleInstances: [
+        { instance: "older", agent: "dev", home: "/srv/ws/older", startedAt: old.startedAt },
+        { instance: "equal", agent: "dev", home: "/srv/ws/older", startedAt: "2026-11-10T00:00:00Z" },
+        { instance: "same-second", agent: "dev", home: "/srv/ws/older", startedAt: "2026-11-10T00:00:00.300Z" },
+        { instance: "last-millisecond", agent: "dev", home: "/srv/ws/older", startedAt: "2026-11-10T00:00:00.999Z" },
+      ],
     });
     assert.equal((r.stdout + r.stderr).includes(value), false);
     const calls = readFileSync(fx.calls, "utf8").trim().split("\n").map(JSON.parse);
@@ -101,14 +108,39 @@ test("malformed receiver metadata fails closed without forwarding its output", (
   assert.equal((r.stdout + r.stderr).includes(garbage), false);
 });
 
+test("stale session terminal output escapes remote control characters", () => {
+  const fx = fixture("terminal-text");
+  const row = { instance: "older\u001b[2J", home: "/srv/ws/older", harness: "codex", startedAt: "Mon,\t09 Nov 2026 12:00:00 GMT" };
+  const extra = { input: "private-fixture-key", env: { FIXTURE_ROSTER: JSON.stringify({ agents: [{ name: "dev\u202e", instances: [row] }] }) } };
+  const args = ["set", "codex", "--server", "box", "--stdin"];
+  const json = fx.cli([...args, "--json"], extra);
+  assert.equal(json.status, 0, json.stdout + json.stderr);
+  assert.deepEqual(JSON.parse(json.stdout).result.staleInstances, [{ instance: row.instance, agent: "dev\u202e", home: row.home, startedAt: row.startedAt }], "JSON preserves the remote data");
+  const text = fx.cli(args, extra);
+  assert.equal(text.status, 0, text.stdout + text.stderr);
+  assert.ok(text.stdout.includes("older\\u{1b}[2J (dev\\u{202e}): started Mon,\\u{9}09 Nov 2026 12:00:00 GMT; picks up the token at its next start."));
+  for (const control of ["\u001b", "\u202e", "\t"]) assert.equal((text.stdout + text.stderr).includes(control), false);
+});
+
 test("token commands refuse a missing operator route without calling the agent alias", () => {
   const fx = fixture("no-route", { operator: false });
+  const registration = { sshHost: "agent-host", workspace: "/srv/ws", label: "team", oatsPath: "/opt/team's oats", path: "/opt/team bin:/usr/bin" };
+  writeFileSync(join(fx.config, "servers.json"), JSON.stringify({ servers: { box: registration } }));
   const r = fx.cli(["status", "claude", "--server", "box", "--json"]);
   assert.equal(r.status, 1);
   const error = JSON.parse(r.stdout).error;
   assert.equal(error.code, "E_HARNESS_TOKEN_ROUTE");
-  assert.match(error.message, /oats server add box --operator-ssh <alias> --replace/);
+  const command = error.message.match(/Register one with (.+?)\. Credentials/)?.[1];
+  assert.ok(command, "the remedy includes a complete registration command");
+  const parsed = spawnSync("/bin/sh", ["-c", `set -- ${command.replace("<alias>", "operator-host")}; printf '%s\\0' "$@"`], { encoding: "utf8" });
+  assert.equal(parsed.status, 0, parsed.stderr);
+  const words = parsed.stdout.slice(0, -1).split("\0");
+  assert.deepEqual(words, ["oats", "server", "add", "box", "--ssh", "agent-host", "--workspace", "/srv/ws", "--label", "team", "--oats", "/opt/team's oats", "--path", "/opt/team bin:/usr/bin", "--operator-ssh", "operator-host", "--replace"]);
   assert.equal(existsSync(fx.calls), false);
+  const applied = spawnSync(process.execPath, [CLI, ...words.slice(1), "--json"], { env: fx.env, encoding: "utf8" });
+  assert.equal(applied.status, 0, applied.stdout + applied.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(join(fx.config, "servers.json"))).servers.box, registration, "the remedy preserves the label and custom executable/PATH");
+  assert.equal(fx.cli(["status", "claude", "--server", "box", "--json"]).status, 0, "the preserved label still supplies the default team name");
 });
 
 test("remove uses an explicit valid team name and returns only receiver metadata", () => {

@@ -132,7 +132,10 @@ These commands use the separate operator SSH alias and its forced-command
 receiver, with the usual noninteractive SSH options and `ControlPath=none`.
 They never reuse the agent connection or fall back to the agent alias.
 Without an operator route, OATS refuses with `E_HARNESS_TOKEN_ROUTE` and
-names `oats server add <id> --operator-ssh <alias> --replace` as the remedy.
+prints a complete `oats server add <id> --ssh <agent-alias> --workspace <path>
+--operator-ssh <alias> --replace` remedy, preserving the registration's
+existing `--label`, `--oats` and `--path` values. Replace `<alias>` with the
+operator alias; `oats server list --json` shows the current registration.
 The receiver answers only a fingerprint and replacement time; it never
 returns a credential. Removal deletes the delivered credential file; revoke
 the original credential with its provider too.
@@ -149,7 +152,9 @@ receiver writes atomically to its configured root-owned file, normally
 and not writable by it. OATS validates the returned fingerprint against the
 bytes it sent. Re-running `set` rotates the file; sessions keep their
 current credential until their next start. The output lists instances of the
-same harness on that server whose last start predates the replacement time.
+same harness on that server whose last start predates or falls within the
+reported replacement second. The receiver records whole seconds, so sessions
+started during that second may still have read the previous credential.
 It never restarts them. If listing fails after installation, the command
 still succeeds, with a warning and an unknown older-session list.
 

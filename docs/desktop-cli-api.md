@@ -7616,7 +7616,9 @@ result is:
 For `remove`, `action` is `remove` and `fingerprint` is `null`.
 `set --stdin` returns `action: "set"` and also `staleInstances`, an array
 of `{instance, agent, home, startedAt}` from that server's status rows, with
-the same harness and a last-start time strictly before `replacedAt`. If
+the same harness and a last-start time before or during the second named by
+`replacedAt`. The receiver records whole seconds, so starts during that second
+are included conservatively: they may still use the previous credential. If
 that roster cannot be read, `staleInstances` is `null` and `warnings` holds
 a plain explanation; the installation remains successful. No automatic
 restart is performed. Only `set` accepts stdin, as bounded credential bytes;

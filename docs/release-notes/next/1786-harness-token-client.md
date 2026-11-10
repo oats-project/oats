@@ -6,7 +6,8 @@
   API keys, without credential arguments, output or client files. A missing
   operator route refuses; it never falls back to the agent route or reuses
   its authenticated connection.
-- Rotation lists sessions of the same harness started before replacement;
+- Rotation lists sessions of the same harness started before or during the
+  receiver's reported replacement second;
   they pick up the new value at their next start. Nothing restarts
   automatically. A roster failure after installation is a warning, not a
   failed install. Claude interactive capture is unavailable, and refreshing
