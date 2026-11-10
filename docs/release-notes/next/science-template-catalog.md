@@ -1,0 +1,3 @@
+## Documentation
+
+- **The catalog lists the scientific research template.** [Coordination templates](../official-catalog.md#coordination-templates) adds `oats-project/oats-scientific-research-coordination` at `template-v1.0.0`, for studies that end in claims a person is accountable for: a dispatcher, a study lead for each study, an analyst for each arm of a locked protocol, fresh study reviewers for the methods, an independent check, leakage and citations, and a record steward that locks protocols and keeps the study records. A claim lands when the scientist accepts it; one that leaves the group needs a check that isn't LLM judgement. The onboarding skills still name the engineering template directly.
