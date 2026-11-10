@@ -3058,7 +3058,7 @@ function failedSpawnBranchLine(r, items, { local = false, host } = {}) {
 let retireReturned = false;
 function retireCmd() {
   const name = args[1];
-  if (!name || name.startsWith("--")) die(RETIRE_USAGE);
+  if (!name || name.startsWith("--")) return cmdFail("E_USAGE", RETIRE_USAGE);
   let homeFlag = flag("home");
   if (homeFlag === true) die("--home needs the instance home path");
   if (args.includes("--plan")) {

@@ -37,3 +37,7 @@
     `--repo` or `--preview` answers `unknown flag` with its usage.
   - `oats retire --json <instance> ...`, with `--json` before the
     instance, answers its refusal as one envelope.
+  - `oats retire --json` with no instance answers `E_USAGE` with the usage
+    line as one envelope, as a missing argument of other commands does; it
+    printed the usage on stderr and no envelope. Without `--json` it prints
+    the usage line, as before.

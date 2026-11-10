@@ -5937,6 +5937,9 @@ instance` with `error.details.argument`, each followed by the usage line. The
 flags are `--plan`, `--plan-revision`, `--idempotency-key`, `--home`, `--dir`,
 `--server`, `--self`, `--discard-worktree`, `--keep-dir`, `--force` and
 `--json` ([souls-and-instances.md](souls-and-instances.md#retire)).
+A retire with no instance is `E_USAGE`, with the usage line as
+`error.message`: one envelope under `--json`, the usage line on stderr
+without it. An unknown flag before the instance is still `E_BAD_ARGS`.
 
 A first retire prints the **raw receipt**, not an envelope:
 
