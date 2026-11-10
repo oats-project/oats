@@ -1,9 +1,9 @@
 // Which of a retire's Git commands run without the overrides of the repository's filter drivers
-// (lib/core.mjs retireGitReadsNoWorkTreeFile): only the exact forms that read no file of a work
+// (lib/retire-git-forms.mjs): only the exact forms that read no file of a work
 // tree. A form of the same subcommand that does read or write one is not among them.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { retireGitReadsNoWorkTreeFile as exempt } from "../lib/core.mjs";
+import { retireGitReadsNoWorkTreeFile as exempt } from "../lib/retire-git-forms.mjs";
 
 test("the forms a retire runs that read no work-tree file are exempt", () => {
   for (const args of [
