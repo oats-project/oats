@@ -553,13 +553,16 @@ anything is created or stopped), and only the harness's pane receives it.
 `list` and `preview` redact every environment value, literals included.
 
 `{ fromFile: /absolute/path }` reads a regular UTF-8 file on the host that
-starts the harness, at every start. It removes exactly one trailing LF or
+starts the harness, at every start. The source is limited to 64 KiB, including
+any final newline; larger files are refused before reading their contents.
+It removes exactly one trailing LF or
 CRLF; an empty file is allowed. Invalid UTF-8 and NUL are refused. A leading
 UTF-8 BOM is preserved as part of the value. `fromFile` is for credential
 values; directory selectors (`HOME`, `PATH`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
 `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`) require a literal or
 `{ fromEnv: NAME }`. A missing, unreadable or
-non-regular file refuses with `E_LAUNCH_ENV_MISSING`, naming
+non-regular file refuses with `E_LAUNCH_ENV_MISSING`. The message names the
+file and the reason (including encoding, NUL or size failures), then names
 `oats harness token set <harness> --server <id>` or operator provisioning on
 that host. The token command is a separate provisioning feature.
 
@@ -580,7 +583,10 @@ or a capability's launch contribution, it refuses with
 credential from that Claude configuration and use `oats harness token set
 claude` to provision an inference-only token. Without an OATS-set token, OATS
 warns with that command. An inherited token does not select the token route.
-Other harnesses are unaffected.
+Other harnesses are unaffected. Spawn preview and apply check the predictable
+configuration before creating a home, worktree or identity. A selector supplied
+by a capability hook is checked after its launch environment is known, and
+every actual launch checks its final pane again.
 
 Both reference kinds use `OATS_LAUNCH_REF_<NAME>` aliases. Their values are
 absent from process arguments, tmux command lines, recipes, events and logs.

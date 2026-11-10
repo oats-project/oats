@@ -4,3 +4,7 @@
   `E_CLAUDE_LOGIN_CREDENTIAL`; otherwise it warns. Both messages name
   `oats harness token set claude`. Remove the `/login` credential before
   starting on the token route. Inherited pane tokens do not trigger refusal.
+- Spawn preview and apply check the predictable launch configuration before
+  creating a home, worktree or identity; preview carries the warning too.
+  Hook-supplied selectors and tokens are checked once their environment is
+  known, and the actual pane is checked again before dispatch.

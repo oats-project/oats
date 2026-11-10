@@ -76,16 +76,18 @@ test("fromFile resolves again, strips one line ending, redacts and records only 
 
 test("missing, unreadable, NUL and nonregular file references refuse with a provisioning remedy", () => {
   const file = join(base, "invalid-token");
-  for (const kind of ["missing", "directory", "nul", "invalid-utf8", "unreadable", "fifo"]) {
+  for (const kind of ["missing", "directory", "nul", "invalid-utf8", "unreadable", "fifo", "oversize"]) {
     rmSync(file, { recursive: true, force: true });
     if (kind === "directory") mkdirSync(file);
     if (kind === "nul") writeFileSync(file, "fixture\0hidden");
+    if (kind === "oversize") writeFileSync(file, "x".repeat(64 * 1024 + 1));
     if (kind === "invalid-utf8") writeFileSync(file, Buffer.from([0x61, 0x62, 0xff, 0xfe, 0x63, 0x64, 0x0a]));
     if (kind === "unreadable") { writeFileSync(file, "fixture"); chmodSync(file, 0); }
     if (kind === "fifo") assert.equal(spawnSync("/usr/bin/mkfifo", [file]).status, 0);
     const r = recipe({ KEY: { fromFile: file } });
     assert.deepEqual(missingLaunchEnvRefs(r.env, {}), [`file:${file}`], kind);
-    assert.throws(() => launchEnvRefs(r, {}), (e) => e.code === "E_LAUNCH_ENV_MISSING" && /oats harness token set claude --server <id>/.test(e.message), kind);
+    const reasons = { missing: "is missing", directory: "is not a regular file", nul: "contains NUL", "invalid-utf8": "is not UTF-8", unreadable: "cannot be read", fifo: "is not a regular file", oversize: "is larger than 64 KiB" };
+    assert.throws(() => launchEnvRefs(r, {}), (e) => e.code === "E_LAUNCH_ENV_MISSING" && /oats harness token set claude --server <id>/.test(e.message) && e.message.includes(reasons[kind]), kind);
     const plan = planLaunch({ home: base, instance: "fixture", meta: { launch: r }, env: {}, preview: true });
     assert.equal(plan.preflight.find((p) => p.code === "E_LAUNCH_ENV_MISSING")?.ok, false, kind);
   }
@@ -104,8 +106,12 @@ test("spawn and start deliver both reference types without values in any tmux ar
   process.env.CREDENTIAL_FIXTURE_SOURCE = "env-fixture-secret";
   t.after(() => { delete process.env.CREDENTIAL_FIXTURE_SOURCE; });
   const auth = join(base, "live-auth"); mkdirSync(auth); writeFileSync(join(auth, ".credentials.json"), "fixture");
-  const fx = v2Deployment({ souls: { dev: { soul: { capabilities: { "claude.fixture": { from: "here" } } } } }, capabilities: { "claude.fixture": { manifest: { environment: ["CLAUDE_CONFIG_DIR"] } } }, local: { "launch-configs": { removed: { harness: "claude", executable: join(bin, "claude"), env: { CLAUDE_CODE_OAUTH_TOKEN: { fromFile: file } } }, files: { harness: "claude", executable: join(bin, "claude"), env: { KEY: { fromFile: file }, OTHER: { fromEnv: "CREDENTIAL_FIXTURE_SOURCE" } } }, blocked: { harness: "claude", executable: join(bin, "claude"), env: { CLAUDE_CONFIG_DIR: auth, CLAUDE_CODE_OAUTH_TOKEN: { fromFile: file } } } } } });
+  const fx = v2Deployment({ souls: { dev: { soul: { capabilities: { "claude.fixture": { from: "here" } } } } }, capabilities: { "claude.fixture": { manifest: { environment: ["CLAUDE_CONFIG_DIR"] } } }, local: { "launch-configs": { warned: { harness: "claude", executable: join(bin, "claude"), env: { CLAUDE_CONFIG_DIR: auth } }, removed: { harness: "claude", executable: join(bin, "claude"), env: { CLAUDE_CODE_OAUTH_TOKEN: { fromFile: file } } }, files: { harness: "claude", executable: join(bin, "claude"), env: { KEY: { fromFile: file }, OTHER: { fromEnv: "CREDENTIAL_FIXTURE_SOURCE" } } }, blocked: { harness: "claude", executable: join(bin, "claude"), env: { CLAUDE_CONFIG_DIR: auth, CLAUDE_CODE_OAUTH_TOKEN: { fromFile: file } } } } } });
   t.after(() => { try { execFileSync(realTmux, ["-S", oatsSocket(), "kill-server"]); } catch { /* private fixture already exited */ } fx.cleanup(); });
+  await assert.rejects(fx.spawn("dev", { name: "login-preview-refused", preview: true, work: "checkout", launch: true, launchConfig: "blocked" }), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL");
+  assert.equal(existsSync(join(fx.root, "dev", "instances", "login-preview-refused")), false);
+  const loginPreview = await fx.spawn("dev", { name: "login-preview-warned", preview: true, work: "checkout", launch: true, launchConfig: "warned" });
+  assert.match(loginPreview.warnings.join("\n"), /oats harness token set claude/);
   await assert.rejects(fx.spawn("dev", { name: "login-refused", work: "checkout", launch: true, launchConfig: "blocked" }), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL");
   const { home } = await fx.spawn("dev", { name: "credentials-live", work: "checkout", launch: true, launchConfig: "files" });
   const preview = cli(["launch-config", "preview", "--home", home]);
@@ -260,4 +266,13 @@ test("fromFile is refused for directory locations with a literal or fromEnv reme
       assert.equal(schemaEnv({ [name]: value }), true);
     }
   }
+});
+
+
+test("fromFile accepts at most 64 KiB of source bytes including the line ending", () => {
+  const file = join(base, "size-limit"), r = recipe({ TOKEN: { fromFile: file } });
+  writeFileSync(file, "x".repeat(64 * 1024 - 1) + "\n");
+  assert.equal(launchEnvRefs(r, {})[0].value.length, 64 * 1024 - 1);
+  writeFileSync(file, "x".repeat(64 * 1024) + "\n");
+  assert.throws(() => launchEnvRefs(r, {}), (e) => e.code === "E_LAUNCH_ENV_MISSING" && /is larger than 64 KiB/.test(e.message));
 });

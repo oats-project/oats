@@ -13,3 +13,6 @@
 - With references, the private handoff runs the pane wrapper through `/bin/sh`.
   Harness arguments already pass through the native recorder's POSIX shell;
   capability launch contributions are parsed arguments, not shell programs.
+- File sources are capped at 64 KiB, including a final newline, with bounded
+  reads. Refusals name the file and the missing, type, permission, encoding, NUL
+  or size problem while keeping `E_LAUNCH_ENV_MISSING`.
