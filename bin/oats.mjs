@@ -59,6 +59,7 @@ const {
 const {
   writeFileAtomic, LOCK_FILE, canonicalLock, readLock, readLockIfPresent, writeLock, resolvePackages, memoizedRemote,
   classifyPackageValue, parsePackageRequest } = await kernelImport("packages", () => import("../lib/packages.mjs"));
+const { harnessToken } = await kernelImport("harness-token", () => import("../lib/harness-token.mjs"));
 const { harnessTrust } = await kernelImport("harness-trust-write", () => import("../lib/harness-trust-write.mjs"));
 const { previewLaunchEnvironment, previewPaneEnvironment } = await kernelImport("core", () => import("../lib/core.mjs"));
 const { PI_BRIDGE, piBridgeFolders, piBridgeSkewWarnings, planPiBridges, piBridgePlanLines, piBridgeStepProblem, piBridgeFailure, kernelLookup, kernelLookupResult, planCliUpdate, desktopFirstLine, bridgeLookup, bridgeLookupProblem } = await kernelImport("pi-bridge", () => import("../lib/pi-bridge.mjs"));
@@ -1767,6 +1768,26 @@ function workspaceContext(bail) {
   try { found = loadLocal(dir); }
   catch (e) { return bail(e.code || "E_LOCAL_MISSING", e.message, e.details); }
   return { dir, localPath: found.path, local: found.local, deploymentDir: dirname(found.path), remoteOptions: remoteOptionsFromEnv() };
+}
+
+/** Tokens are operator-local calls even with --server; the forced-command key is the receiver. */
+async function harnessTokenCmd() {
+  const usage = "usage: oats harness token status|remove <harness> --server <id> [--name <team>] [--json]";
+  if (!["status", "remove"].includes(args[2]) || !args[3] || args[3].startsWith("-")) return cmdFail("E_BAD_ARGS", usage);
+  const seen = new Set();
+  for (let i = 4; i < args.length; i++) {
+    const word = args[i];
+    if (seen.has(word)) return cmdFail("E_BAD_ARGS", "Give each token-command flag once.");
+    seen.add(word);
+    if (word === "--json") continue;
+    if (["--server", "--name"].includes(word) && args[i + 1] && !args[i + 1].startsWith("-")) { i++; continue; }
+    return cmdFail("E_BAD_ARGS", usage);
+  }
+  try {
+    const result = await harnessToken({ action: args[2], harness: args[3], server: valueFlag("server"), name: valueFlag("name") });
+    if (JSON_MODE) jsonOk(result);
+    else console.log(result.action === "remove" ? `Removed ${result.harness} credential for ${result.name} on ${result.server}.` : `${result.harness} credential for ${result.name} on ${result.server}: ${result.fingerprint}, replaced ${result.replacedAt}.`);
+  } catch (e) { cmdFail(e.code || "E_HARNESS_TOKEN_DELIVERY", e.message); }
 }
 
 /** An explicit host-local operator action; never routed to a remote adapter. */
@@ -4879,6 +4900,7 @@ else if (cmd === "update") {
   if (t || flag("to") !== undefined) { cmdFail("E_BAD_ARGS", "oats update takes no package: pin package versions in oats-workspace.yaml (`oats package add <id> <version>`), then `oats sync`; bare `oats update [--check] [--yes]` updates the kernel"); process.exit(1); }
   updateCmd();
 }
+else if (cmd === "harness" && args[1] === "token") await harnessTokenCmd();
 else if (cmd === "harness") harnessTrustCmd();
 else if (cmd === "readiness") await readinessCmd();
 else if (cmd === "instance") await instanceCmd();
@@ -5196,6 +5218,7 @@ Usage:
                                             modules or the deployment's soul, trust checked, the provider's
                                             own command run in the home or scope, envelope
                                             relayed; a view answers {documents: [...]}
+  oats harness token status|remove <harness> --server <id> [--name <team>]  operator credential metadata/removal
   oats harness trust [--dir <deployment>]  explicitly trust one canonical deployment root
       [--harness claude|codex|all]         in every native configuration file a launch reads
       [--plan] [--json]                   (the ambient one and each launch configuration's

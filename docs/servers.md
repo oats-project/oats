@@ -106,6 +106,36 @@ never typed:
 (`workspaceReadable`; the host's [`onboard --check`](#what-connect-runs-on-the-host)),
 which is where a [macOS keychain](#git-on-a-macos-host) problem shows up.
 
+## Harness credentials
+
+Read or remove an installed harness credential through the operator route:
+
+```bash
+oats harness token status claude --server build --name team
+oats harness token remove claude --server build --name team
+```
+
+The harness is `claude`, `codex`, `pi` or `opencode`. `--name` is the
+receiver's configured team name: lowercase letters, digits and dashes,
+starting with a letter or digit, at most 63 characters. When omitted, the
+server label is used only if it already matches that grammar; otherwise
+give `--name`. OATS never guesses a slug from a display label.
+
+These commands use the separate operator SSH alias and its forced-command
+receiver, with the usual noninteractive SSH options and `ControlPath=none`.
+They never reuse the agent connection or fall back to the agent alias.
+Without an operator route, OATS refuses with `E_HARNESS_TOKEN_ROUTE` and
+names `oats server add <id> --operator-ssh <alias> --replace` as the remedy.
+The receiver answers only a fingerprint and replacement time; it never
+returns a credential. Removal deletes the delivered credential file; revoke
+the original credential with its provider too.
+
+The forced command is Hestia's `oats-login-receive`, installed root-owned
+and bound to a dedicated key. It accepts `status|remove <harness> <name>`
+through `SSH_ORIGINAL_COMMAND`; the destination is the receiver's root-owned
+configuration, never a client-supplied path. See the
+[CLI JSON contract](desktop-cli-api.md#harness-token).
+
 ## Connect a machine
 
 ```bash

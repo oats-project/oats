@@ -7599,6 +7599,29 @@ One warning per command, however many old spellings it read:
 The `--server` routes translate for a host without the `harness` feature:
 they send `--runtime` and `runtime` keys and read its `runtimes` list.
 
+<a id="harness-token"></a>
+### `harness token`
+
+`oats harness token status|remove <harness> --server <id> [--name <team>] --json`
+runs on the operator's machine. Its `--server` selects that registration's
+separate operator route, never a remote invocation of this CLI. The harness
+is `claude`, `codex`, `pi` or `opencode`; the name defaults to a valid
+server label and otherwise is required. The ordinary schemaVersion 1 envelope
+holds:
+
+```json
+{"server":"build","action":"status","harness":"claude","name":"team","fingerprint":"sha256:0123456789abcdef","replacedAt":"2026-11-10T00:00:00Z","warnings":[]}
+```
+
+For `remove`, `action` is `remove` and `fingerprint` is `null`.
+The receiver's single JSON line and exit status must agree, name the requested
+harness and team, and carry valid metadata. Malformed replies fail closed.
+Refusals: `E_BAD_ARGS` for unsupported arguments or names,
+`E_HARNESS_TOKEN_ROUTE` for a missing operator alias, and
+`E_HARNESS_TOKEN_DELIVERY` for connection failure, receiver refusal or an
+unexpected reply. Public errors do not forward raw SSH or malformed receiver
+output. See [servers](servers.md#harness-credentials).
+
 ### `harness trust`
 
 `oats harness trust [--dir <deployment>] [--harness claude|codex|all] [--plan] [--json]`
