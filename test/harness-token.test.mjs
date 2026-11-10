@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { harnessToken } from "../lib/harness-token.mjs";
 
 const CLI = resolve("bin/oats.mjs");
 const base = mkdtempSync(join(tmpdir(), "oats-token-client-"));
@@ -21,6 +23,7 @@ const args=process.argv.slice(2), at=args.indexOf("--"), host=args[at+1], words=
 appendFileSync(process.env.FIXTURE_CALLS,JSON.stringify({host,args})+"\\n");
 const [action,harness,name]=words;
 const input=readFileSync(0);
+if(host==="agent-host"){console.log(JSON.stringify({schemaVersion:1,ok:true,result:JSON.parse(process.env.FIXTURE_ROSTER||'{"agents":[]}')}));process.exit(0);}
 if(process.env.FIXTURE_REPLY){process.stdout.write(process.env.FIXTURE_REPLY);process.exit(Number(process.env.FIXTURE_EXIT||0));}
 const result={ok:true,harness,name,fingerprint:action==="remove"?null:"sha256:0123456789abcdef",replacedAt:"2026-11-10T00:00:00Z"};
 if(action==="install")result.fingerprint="sha256:"+createHash("sha256").update(input).digest("hex").slice(0,16);
@@ -45,6 +48,35 @@ test("token status uses the separate operator route and returns a JSON envelope"
   assert.equal(call.args.includes("ControlPath=none"), true);
   assert.equal(call.args.some((s) => s.startsWith("ControlMaster=")), false);
   for (const option of ["BatchMode=yes", "ConnectTimeout=15", "ServerAliveInterval=15", "ServerAliveCountMax=3"]) assert.equal(call.args.includes(option), true);
+});
+
+test("stdin set delivers each harness credential only to the receiver and lists older matching sessions", () => {
+  for (const harness of ["claude", "codex", "pi", "opencode"]) {
+    const fx = fixture("set-" + harness);
+    const value = harness === "claude" ? "sk-ant-oat01-private-fixture-credential" : harness + "-private-fixture-api-key";
+    const old = { instance: "older", home: "/srv/ws/older", harness, startedAt: "2026-11-09T12:00:00Z", running: false };
+    const roster = { agents: [{ name: "dev", harness, instances: [old,
+      { ...old, instance: "newer", startedAt: "2026-11-10T00:00:01Z" },
+      { ...old, instance: "equal", startedAt: "2026-11-10T00:00:00Z" },
+      { ...old, instance: "other-harness", harness: "other" }, { ...old, instance: "never", startedAt: null },
+    ] }] };
+    const r = fx.cli(["set", harness, "--server", "box", "--stdin", "--json"], { input: value + "\r\n", env: { FIXTURE_ROSTER: JSON.stringify(roster) } });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.deepEqual(JSON.parse(r.stdout).result, { server: "box", action: "set", harness, name: "team",
+      fingerprint: "sha256:" + createHash("sha256").update(value).digest("hex").slice(0, 16),
+      replacedAt: "2026-11-10T00:00:00Z", warnings: [],
+      staleInstances: [{ instance: "older", agent: "dev", home: "/srv/ws/older", startedAt: old.startedAt }],
+    });
+    assert.equal((r.stdout + r.stderr).includes(value), false);
+    const calls = readFileSync(fx.calls, "utf8").trim().split("\n").map(JSON.parse);
+    assert.deepEqual(calls.map((c) => c.host), ["operator-host", "agent-host"]);
+    assert.deepEqual(calls[0].args.slice(-3), ["install", harness, "team"]);
+    assert.equal(JSON.stringify(calls).includes(value), false, "every spawned SSH argv excludes the value");
+    const scan = (dir) => { for (const item of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, item.name); if (item.isDirectory()) scan(path);
+      else assert.equal(readFileSync(path).includes(Buffer.from(value)), false, "the client wrote no credential file or log");
+    } }; scan(fx.dir);
+  }
 });
 
 test("malformed receiver metadata fails closed without forwarding its output", () => {
@@ -81,4 +113,94 @@ test("remove uses an explicit valid team name and returns only receiver metadata
   const r = fx.cli(["remove", "pi", "--server", "box", "--name", "other-team", "--json"]);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.deepEqual(JSON.parse(r.stdout).result, { server: "box", action: "remove", harness: "pi", name: "other-team", fingerprint: null, replacedAt: "2026-11-10T00:00:00Z", warnings: [] });
+});
+
+test("stdin refuses invalid credentials before any SSH call", () => {
+  const fx = fixture("bad-input");
+  for (const input of [Buffer.alloc(0), Buffer.from(" \r\n\t"), Buffer.from([0xff]), Buffer.from("private\0fixture"), Buffer.from("first\nsecond"), Buffer.from("x".repeat(65536)), Buffer.from("x".repeat(65537))]) {
+    const r = fx.cli(["set", "codex", "--server", "box", "--stdin", "--json"], { input });
+    assert.equal(r.status, 1);
+    assert.equal(JSON.parse(r.stdout).error.code, "E_HARNESS_TOKEN_INPUT");
+    assert.equal(existsSync(fx.calls), false);
+  }
+  for (const input of ["wrong-private-claude-fixture", "sk-ant-oat" + "x".repeat(504)]) {
+    const r = fx.cli(["set", "claude", "--server", "box", "--stdin", "--json"], { input });
+    assert.equal(r.status, 1);
+    assert.equal(JSON.parse(r.stdout).error.code, "E_HARNESS_TOKEN_INPUT");
+    assert.equal((r.stdout + r.stderr).includes(input), false);
+  }
+  assert.equal(existsSync(fx.calls), false);
+});
+
+test("stdin accepts a credential whose installed newline fits the file cap", () => {
+  const fx = fixture("max-input");
+  const value = "x".repeat(65535);
+  const r = fx.cli(["set", "opencode", "--server", "box", "--stdin", "--json"], { input: value + "\n" });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(JSON.parse(r.stdout).result.fingerprint, "sha256:" + createHash("sha256").update(value).digest("hex").slice(0, 16));
+  assert.equal((r.stdout + r.stderr + readFileSync(fx.calls)).includes(value), false);
+});
+
+test("interactive setup is held for Claude and refreshing browser sign-ins are refused", () => {
+  const fx = fixture("interactive");
+  for (const harness of ["claude", "codex", "pi", "opencode"]) {
+    const r = fx.cli(["set", harness, "--server", "box", "--json"]);
+    assert.equal(r.status, 1);
+    const error = JSON.parse(r.stdout).error;
+    assert.equal(error.code, "E_HARNESS_TOKEN_UNSUPPORTED");
+    assert.match(error.message, /--stdin/);
+    if (harness === "codex" || harness === "pi") assert.match(error.message, /refreshing.*agent-writable.*read-only/);
+  }
+  assert.equal(existsSync(fx.calls), false, "no login or receiver command was run");
+});
+
+test("a successful install stays successful when the session roster cannot be read", () => {
+  const fx = fixture("no-roster");
+  const r = fx.cli(["set", "pi", "--server", "box", "--stdin", "--json"], { input: "private-pi-fixture-key", env: { FIXTURE_ROSTER: '{"agents":null}' } });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const result = JSON.parse(r.stdout).result;
+  assert.equal(result.staleInstances, null);
+  assert.match(result.warnings.join("\n"), /installed.*could not be listed/);
+});
+
+test("delivery errors distinguish connection, refusal and malformed replies without leaking stdin in debug", () => {
+  const fx = fixture("delivery-errors");
+  const value = "private-api-key-must-never-be-shown";
+  const bad = { ok: false, harness: "codex", name: "team", fingerprint: null, replacedAt: null, error: "fixture refusal " + value };
+  for (const [reply, exit, message] of [
+    [value, 255, /Couldn't reach the server/],
+    [JSON.stringify(bad), 1, /server refused the credential/],
+    [value, 0, /Unexpected reply/],
+    [JSON.stringify({ ...bad, ok: true, fingerprint: "sha256:0000000000000000", replacedAt: "2026-11-10T00:00:00Z" }), 0, /Unexpected reply/],
+  ]) {
+    const r = fx.cli(["set", "codex", "--server", "box", "--stdin", "--json", "--debug"], { input: value, env: { FIXTURE_REPLY: reply, FIXTURE_EXIT: String(exit) } });
+    assert.equal(r.status, 1);
+    const error = JSON.parse(r.stdout).error;
+    assert.equal(error.code, "E_HARNESS_TOKEN_DELIVERY");
+    assert.match(error.message, message);
+    assert.equal((r.stdout + r.stderr).includes(value), false);
+    assert.match(r.stderr, /operator SSH/);
+  }
+  assert.equal(readFileSync(fx.calls, "utf8").trim().split("\n").length, 4, "a failed or mismatched install never asks the agent roster");
+});
+
+test("credential input is bounded and a terminal or missing route is refused before reading", async () => {
+  const fx = fixture("stream-input"), prior = process.env.OATS_HOME_DIR;
+  process.env.OATS_HOME_DIR = fx.config;
+  const call = (input) => harnessToken({ action: "set", harness: "codex", server: "box", input }, { execFileSync: () => assert.fail("invalid input never reaches SSH") });
+  let read = 0;
+  try {
+    const terminal = { isTTY: true, async *[Symbol.asyncIterator]() { read++; yield Buffer.from("private-fixture"); } };
+    await assert.rejects(call(terminal), (e) => e.code === "E_HARNESS_TOKEN_INPUT" && /terminal input would show it/.test(e.message));
+    assert.equal(read, 0);
+    const oversized = { async *[Symbol.asyncIterator]() { read++; yield Buffer.alloc(65536, "a"); read++; yield Buffer.from("b"); read++; yield Buffer.from("never-read"); } };
+    await assert.rejects(call(oversized), (e) => e.code === "E_HARNESS_TOKEN_INPUT");
+    assert.equal(read, 2, "the read stops as soon as the cap is crossed");
+    rmSync(join(fx.config, "server-operator-routes.json"));
+    read = 0;
+    await assert.rejects(call(terminal), (e) => e.code === "E_HARNESS_TOKEN_ROUTE");
+    assert.equal(read, 0);
+  } finally {
+    if (prior === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = prior;
+  }
 });

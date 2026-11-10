@@ -574,6 +574,15 @@ launch-configs:
       CLAUDE_CODE_OAUTH_TOKEN: { fromFile: /etc/agent-login/claude-token }
 ```
 
+For server credentials, [harness token commands](servers.md#harness-credentials)
+deliver an existing setup-token or API key through the separate operator
+route, with `--stdin`. Bind the receiver's server-side file in the launch
+configuration, for example
+`CLAUDE_CODE_OAUTH_TOKEN: { fromFile: /srv/oats-team/team/login/claude-token }`.
+For Codex use `OPENAI_API_KEY`; for pi use the selected provider's env
+variable. The token command does not choose a provider or edit this binding.
+A replacement is read at the next start; existing sessions are not restarted.
+
 **Claude login credentials.** At a Claude start, OATS checks for
 `$CLAUDE_CONFIG_DIR/.credentials.json`, or `$HOME/.claude/.credentials.json`
 when no config directory is selected, using the launch's effective environment.

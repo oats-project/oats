@@ -1772,21 +1772,25 @@ function workspaceContext(bail) {
 
 /** Tokens are operator-local calls even with --server; the forced-command key is the receiver. */
 async function harnessTokenCmd() {
-  const usage = "usage: oats harness token status|remove <harness> --server <id> [--name <team>] [--json]";
-  if (!["status", "remove"].includes(args[2]) || !args[3] || args[3].startsWith("-")) return cmdFail("E_BAD_ARGS", usage);
+  const usage = "usage: oats harness token set|status|remove <harness> --server <id> [--name <team>] [--stdin] [--json] [--debug]";
+  if (!["set", "status", "remove"].includes(args[2]) || !args[3] || args[3].startsWith("-")) return cmdFail("E_BAD_ARGS", usage);
   const seen = new Set();
   for (let i = 4; i < args.length; i++) {
     const word = args[i];
     if (seen.has(word)) return cmdFail("E_BAD_ARGS", "Give each token-command flag once.");
     seen.add(word);
-    if (word === "--json") continue;
+    if (["--json", "--stdin", "--debug"].includes(word)) continue;
     if (["--server", "--name"].includes(word) && args[i + 1] && !args[i + 1].startsWith("-")) { i++; continue; }
     return cmdFail("E_BAD_ARGS", usage);
   }
   try {
-    const result = await harnessToken({ action: args[2], harness: args[3], server: valueFlag("server"), name: valueFlag("name") });
+    const result = await harnessToken({ action: args[2], harness: args[3], server: valueFlag("server"), name: valueFlag("name"), input: args.includes("--stdin") ? process.stdin : undefined }, { debug: args.includes("--debug") ? (line) => console.error(`oats: ${line}`) : undefined });
     if (JSON_MODE) jsonOk(result);
-    else console.log(result.action === "remove" ? `Removed ${result.harness} credential for ${result.name} on ${result.server}.` : `${result.harness} credential for ${result.name} on ${result.server}: ${result.fingerprint}, replaced ${result.replacedAt}.`);
+    else {
+      console.log(result.action === "set" ? `Installed ${result.harness} credential for ${result.name} on ${result.server}: ${result.fingerprint}.` : result.action === "remove" ? `Removed ${result.harness} credential for ${result.name} on ${result.server}.` : `${result.harness} credential for ${result.name} on ${result.server}: ${result.fingerprint}, replaced ${result.replacedAt}.`);
+      for (const row of result.staleInstances ?? []) console.log(`  ${row.instance} (${row.agent}): started ${row.startedAt}; picks up the token at its next start.`);
+      for (const warning of result.warnings) console.error(`oats: warning: ${warning}`);
+    }
   } catch (e) { cmdFail(e.code || "E_HARNESS_TOKEN_DELIVERY", e.message); }
 }
 
@@ -5218,7 +5222,7 @@ Usage:
                                             modules or the deployment's soul, trust checked, the provider's
                                             own command run in the home or scope, envelope
                                             relayed; a view answers {documents: [...]}
-  oats harness token status|remove <harness> --server <id> [--name <team>]  operator credential metadata/removal
+  oats harness token set|status|remove <harness> --server <id> [--name <team>]  operator credential metadata/removal
   oats harness trust [--dir <deployment>]  explicitly trust one canonical deployment root
       [--harness claude|codex|all]         in every native configuration file a launch reads
       [--plan] [--json]                   (the ambient one and each launch configuration's

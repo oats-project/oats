@@ -7602,25 +7602,36 @@ they send `--runtime` and `runtime` keys and read its `runtimes` list.
 <a id="harness-token"></a>
 ### `harness token`
 
-`oats harness token status|remove <harness> --server <id> [--name <team>] --json`
+`oats harness token set|status|remove <harness> --server <id> [--name <team>] [--stdin] [--debug] --json`
 runs on the operator's machine. Its `--server` selects that registration's
 separate operator route, never a remote invocation of this CLI. The harness
 is `claude`, `codex`, `pi` or `opencode`; the name defaults to a valid
-server label and otherwise is required. The ordinary schemaVersion 1 envelope
-holds:
+server label and otherwise is required. The ordinary schemaVersion 1 envelope's
+result is:
 
 ```json
 {"server":"build","action":"status","harness":"claude","name":"team","fingerprint":"sha256:0123456789abcdef","replacedAt":"2026-11-10T00:00:00Z","warnings":[]}
 ```
 
 For `remove`, `action` is `remove` and `fingerprint` is `null`.
+`set --stdin` returns `action: "set"` and also `staleInstances`, an array
+of `{instance, agent, home, startedAt}` from that server's status rows, with
+the same harness and a last-start time strictly before `replacedAt`. If
+that roster cannot be read, `staleInstances` is `null` and `warnings` holds
+a plain explanation; the installation remains successful. No automatic
+restart is performed. Only `set` accepts stdin, as bounded credential bytes;
+there is no credential argument, result field, event or file on the client.
 The receiver's single JSON line and exit status must agree, name the requested
 harness and team, and carry valid metadata. Malformed replies fail closed.
 Refusals: `E_BAD_ARGS` for unsupported arguments or names,
-`E_HARNESS_TOKEN_ROUTE` for a missing operator alias, and
+`E_HARNESS_TOKEN_ROUTE` for a missing operator alias,
+`E_HARNESS_TOKEN_INPUT` for invalid, too-large or terminal stdin,
+`E_HARNESS_TOKEN_UNSUPPORTED` for unavailable interactive capture or a
+refreshing sign-in, and
 `E_HARNESS_TOKEN_DELIVERY` for connection failure, receiver refusal or an
 unexpected reply. Public errors do not forward raw SSH or malformed receiver
-output. See [servers](servers.md#harness-credentials).
+output. `--debug` adds transport facts on stderr, never stdin or raw receiver
+output that might echo it. See [servers](servers.md#harness-credentials).
 
 ### `harness trust`
 

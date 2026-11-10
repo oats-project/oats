@@ -108,12 +108,19 @@ which is where a [macOS keychain](#git-on-a-macos-host) problem shows up.
 
 ## Harness credentials
 
-Read or remove an installed harness credential through the operator route:
+Install, inspect or remove a harness credential through the operator route:
 
 ```bash
+credential-source | oats harness token set claude --server build --name team --stdin
 oats harness token status claude --server build --name team
 oats harness token remove claude --server build --name team
 ```
+
+Here `credential-source` stands for a command that supplies an existing
+credential on stdout without putting it in arguments, files or terminal
+output elsewhere. OATS never accepts the credential as an argument or writes
+it on this machine. `--stdin` refuses a terminal, whose normal echo would
+show the value.
 
 The harness is `claude`, `codex`, `pi` or `opencode`. `--name` is the
 receiver's configured team name: lowercase letters, digits and dashes,
@@ -130,11 +137,48 @@ The receiver answers only a fingerprint and replacement time; it never
 returns a credential. Removal deletes the delivered credential file; revoke
 the original credential with its provider too.
 
-The forced command is Hestia's `oats-login-receive`, installed root-owned
-and bound to a dedicated key. It accepts `status|remove <harness> <name>`
+The forced command is `oats-login-receive`, installed root-owned
+and bound to a dedicated key. It accepts `install|status|remove <harness> <name>`
 through `SSH_ORIGINAL_COMMAND`; the destination is the receiver's root-owned
 configuration, never a client-supplied path. See the
 [CLI JSON contract](desktop-cli-api.md#harness-token).
+
+`set` maps to the receiver's `install`, with the credential on stdin. The
+receiver writes atomically to its configured root-owned file, normally
+`/srv/oats-team/<name>/login/<harness>-token`, readable by the agent group
+and not writable by it. OATS validates the returned fingerprint against the
+bytes it sent. Re-running `set` rotates the file; sessions keep their
+current credential until their next start. The output lists instances of the
+same harness on that server whose last start predates the replacement time.
+It never restarts them. If listing fails after installation, the command
+still succeeds, with a warning and an unknown older-session list.
+
+Input is at most 65,536 bytes of strict UTF-8. Leading and trailing ASCII
+whitespace is stripped as the receiver strips it; the result must be one
+non-empty line, contain no NUL, and fit in 65,535 bytes so the installed final
+newline fits the 64 KiB file-reference cap. Claude tokens must begin
+`sk-ant-oat` and fit in 512 bytes, matching the receiver's check. Other
+harness inputs are opaque provider API keys.
+
+| Harness | Credential supplied through stdin | Agent launch binding | Login and revocation |
+|---|---|---|---|
+| Claude | inference-only setup-token | `CLAUDE_CODE_OAUTH_TOKEN` with `fromFile` | Created on the person's machine; revoke by signing the session out in claude.ai settings |
+| Codex | non-refreshing OpenAI API key | `OPENAI_API_KEY` with `fromFile` | Obtain and revoke on the provider's key page |
+| pi | non-refreshing provider API key | the provider's env variable, such as `ANTHROPIC_API_KEY`, with `fromFile` | Provider-specific key page |
+| opencode | opaque provider API key | provider binding must be configured separately; OATS does not choose one | Provider-specific key page |
+
+OATS runs no harness login for this stdin path. Claude interactive capture
+is unavailable. Codex ChatGPT sign-in and pi OAuth are refused: their credentials
+refresh on the agent host and rewrite an auth file, which does not fit a
+read-only operator-delivered credential. No interactive opencode adapter is
+available. For pi, `--name` is the team, not a provider selection. Configure
+the provider's launch environment yourself; these commands never edit launch
+configurations. See [file references](configuration.md#launch-configurations).
+
+`--debug` prints SSH exit and known transport error codes on stderr.
+It never forwards receiver stdout or raw diagnostics: an unexpected peer
+could echo all or part of its stdin. Public failures distinguish an unreachable
+server, a receiver refusal and an unexpected reply without exposing a value.
 
 ## Connect a machine
 
