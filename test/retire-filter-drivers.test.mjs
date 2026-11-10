@@ -133,14 +133,14 @@ test("a spawn into a worktree of a repository with a filter driver whose name Gi
 });
 
 test("a driver the operator's own configuration also defines: the retire succeeds, the operator's command runs, and the repository's command for that name never does", () => {
-  const w = filtered("both", { lfs: "clean" }, "tracked.txt filter=lfs\n");
+  const w = filtered("both", { shared: "clean" }, "tracked.txt filter=shared\n");
   // The operator's driver of the same name, in the operator's global configuration. It stores a
   // file as it is, so what is committed is what it stores, as with a driver in real use.
   const operatorRan = join(w.f.base, "operator-filter-ran");
   const operatorFilter = join(w.f.base, "operator-filter.sh");
   write(operatorFilter, `#!/bin/sh\npwd -P >> '${operatorRan}'\nexec cat\n`, 0o700);
   const globalConfig = join(w.f.base, "operator-gitconfig");
-  write(globalConfig, `[filter "lfs"]\n\tclean = ${operatorFilter}\n`);
+  write(globalConfig, `[filter "shared"]\n\tclean = ${operatorFilter}\n`);
   const operator = { ...w.f, env: { ...w.f.env, GIT_CONFIG_GLOBAL: globalConfig } };
   // Rewritten with the bytes it has: its times are no longer the index's, so Git compares content.
   write(join(w.work, "tracked.txt"), readFileSync(join(w.work, "tracked.txt")));
