@@ -145,7 +145,8 @@ The forced command is `oats-login-receive`, installed root-owned
 and bound to a dedicated key. It accepts `install|status|remove <harness> <name>`
 through `SSH_ORIGINAL_COMMAND`; the destination is the receiver's root-owned
 configuration, never a client-supplied path. See the
-[CLI JSON contract](desktop-cli-api.md#harness-token).
+[CLI JSON contract](desktop-cli-api.md#harness-token) and
+[receiver installation](#install-the-credential-receiver).
 
 `set` maps to the receiver's `install`, with the credential on stdin. The
 receiver writes atomically to its configured root-owned file, normally
@@ -185,6 +186,62 @@ configurations. See [file references](configuration.md#launch-configurations).
 It never forwards receiver stdout or raw diagnostics: an unexpected peer
 could echo all or part of its stdin. Public failures distinguish an unreachable
 server, a receiver refusal and an unexpected reply without exposing a value.
+
+### Install the credential receiver
+
+The npm package ships `share/oats-login-receive`. On the receiving server,
+its installed path is
+`$(npm root -g)/@awebai/oats/share/oats-login-receive`. The receiver requires
+Python 3 at `/usr/bin/python3`; its shebang runs Python in isolated mode (`-I`).
+After installing OATS on that server, install the receiver as root, mode 0755:
+
+```bash
+sudo install -d -o root -g root -m 0755 /usr/local/sbin /etc/oats-login
+sudo install -o root -g root -m 0755 \
+  "$(npm root -g)/@awebai/oats/share/oats-login-receive" \
+  /usr/local/sbin/oats-login-receive
+sudoedit /etc/oats-login/receiver.json
+```
+
+The root-owned `/etc/oats-login/receiver.json` selects the allowed teams,
+read groups, harnesses and destinations. This is the format from the
+receiver's docstring, with a concrete team and group:
+
+```json
+{
+  "teams": {
+    "team": {
+      "group": "oats-team",
+      "harnesses": ["claude", "codex", "pi", "opencode"],
+      "path": "/srv/oats-team/{name}/login/{harness}-token"
+    }
+  }
+}
+```
+
+Replace `team` and `oats-team` with the receiver's configured team name and
+an existing group whose members may read its credentials. `path` is optional;
+the default is `/srv/oats-team/{name}/login/{harness}-token`. Keep both the
+configuration file and `/etc/oats-login` root-owned and not writable by group
+or others:
+
+```bash
+sudo chown root:root /etc/oats-login/receiver.json
+sudo chmod 0644 /etc/oats-login/receiver.json
+```
+
+Add the dedicated operator public key to root's `authorized_keys` with this
+forced command, replacing `<key>` with that public key:
+
+```text
+restrict,command="/usr/local/sbin/oats-login-receive" <key>
+```
+
+The operator SSH alias selects that key and the root account. The agent SSH
+alias uses its separate account and key. The receiver creates credential
+files root-owned, group-readable and mode 0440; the login directory is mode
+0750, and its parents must be root-owned, not writable by others and not
+symlinks. Neither the caller's command nor stdin chooses a destination path.
 
 ## Connect a machine
 
