@@ -13,7 +13,9 @@
   per-minute scheduler stopped for good after one killed tick. Each lock is
   now a file that names its holder by pid and start time, and the next command
   takes over a lock whose holder is gone. A holder that is still running is
-  never taken over. Three cases still need the operator, and the message says
+  never taken over. A SIGINT or SIGTERM that arrives inside a locked section
+  waits for it: the section completes, the lock is released, and the signal
+  then ends the command (it was lost before, and the command ran on). Three cases still need the operator, and the message says
   which it found and names the path: a lock file whose record is unreadable
   (remove the file), a holder that cannot be told to be running or gone
   (check that pid by hand, then remove the file), and a lock directory written

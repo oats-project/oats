@@ -1672,9 +1672,8 @@ function commandSession() {
     process.on("exit", () => { sayReadNotices(); readSession.closeNow(); });
     for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143], ["SIGHUP", 129]]) process.once(signal, () => {
       readSession.closeNow();
-      // Another handler still listening (a naming call's, which raises the signal again; a held
-      // `worktree` hook's, an attach's) ends the command itself after this one. No lock needs one: a
-      // lock left by a process that a signal ended is taken over (lib/dir-lock.mjs).
+      // Another handler still listening (a naming call's and a lock's, lib/dir-lock.mjs, which raise
+      // the signal again; a held `worktree` hook's, an attach's) ends the command itself after this one.
       if (process.listenerCount(signal) === 0) process.exit(code);
     });
   }
