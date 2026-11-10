@@ -229,6 +229,11 @@ test("server connect records the operator alias while every remote call uses the
     assert.equal(connectServer(options, { execFileSync: remote }).registration.operatorSshHost, "operator-host");
     const bytes = readFileSync(join(process.env.OATS_HOME_DIR, "servers.json"), "utf8");
     const { operatorSshHost, ...withoutOperator } = options;
+    for (const request of [{ ...options, operatorSshHost: "ignored-operator" }, { ...withoutOperator, noOperatorSsh: true }]) {
+      const kept = connectServer(request, { execFileSync: remote });
+      assert.equal(kept.registration.operatorSshHost, "operator-host");
+      assert.match(kept.steps.find((s) => s.step === "register").detail, /operator route.*not changed.*--replace/);
+    }
     assert.equal(connectServer({ ...withoutOperator, replace: true }, { execFileSync: remote }).registration.operatorSshHost, operatorSshHost);
     assert.equal(connectServer({ ...options, operatorSshHost: "other-operator", replace: true }, { execFileSync: remote }).registration.operatorSshHost, "other-operator");
     assert.equal(connectServer({ ...withoutOperator, noOperatorSsh: true, replace: true }, { execFileSync: remote }).registration.operatorSshHost, undefined);
@@ -236,6 +241,11 @@ test("server connect records the operator alias while every remote call uses the
     assert.deepEqual(readServerOperatorRoutes(), {});
     assert.throws(() => connectServer({ ...options, noOperatorSsh: true }, { execFileSync: () => assert.fail("conflicting flags never reach SSH") }), (e) => e.code === "E_BAD_ARGS");
     assert.throws(() => connectServer({ ...options, operatorSshHost: "user@host" }, { execFileSync: () => assert.fail("invalid alias never reaches SSH") }), (e) => e.code === "E_SERVER_INVALID");
+    // An older kernel removes only the legacy registration, leaving an orphan route.
+    writeFileSync(join(process.env.OATS_HOME_DIR, "servers.json"), '{"servers":{}}\n');
+    writeFileSync(join(process.env.OATS_HOME_DIR, "server-operator-routes.json"), JSON.stringify({ connected: { operatorSshHost: "orphan-operator" } }));
+    assert.equal(connectServer({ ...withoutOperator, sshHost: "different-agent" }, { execFileSync: remote }).registration.operatorSshHost, undefined);
+    assert.deepEqual(readServerOperatorRoutes(), {});
   } finally { process.env.OATS_HOME_DIR = old; }
 });
 
@@ -265,6 +275,56 @@ test("operator route changes preserve older registry bytes and remove cleans the
   r = cli(["server", "remove", "box"], extra); assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(JSON.parse(readFileSync(routes)), {});
   assert.deepEqual(JSON.parse(readFileSync(file)), { servers: {} });
+});
+
+test("server add replace learns an answering host's key without a false concurrency warning", () => {
+  const dir = join(base, "answered-registry"), bin = join(base, "answered-bin"); mkdirSync(dir); mkdirSync(bin);
+  writeFileSync(join(bin, "ssh"), `#!${process.execPath}\nconsole.log(JSON.stringify({schemaVersion:1,ok:true,result:{agents:[],workspace:{key:process.env.FIXTURE_KEY}}}));\n`);
+  chmodSync(join(bin, "ssh"), 0o755);
+  const file = join(dir, "servers.json");
+  const bytes = '{"servers":{"box":{"workspaceKey":"github.com/acme/old","workspace":"/srv/ws","sshHost":"agent-host"}}}\n';
+  for (const reported of ["github.com/acme/old", "github.com/acme/new"]) {
+    writeFileSync(file, bytes);
+    const r = cli(["server", "add", "box", "--ssh", "agent-host", "--workspace", "/srv/ws", "--replace", "--operator-ssh", "operator-host"], { OATS_HOME_DIR: dir, PATH: `${bin}:${process.env.PATH}`, FIXTURE_KEY: reported });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    const result = JSON.parse(r.stdout).result;
+    assert.equal(result.workspaceKey, reported);
+    assert.deepEqual(result.warnings ?? [], []);
+    assert.equal(JSON.parse(readFileSync(file)).servers.box.workspaceKey, reported);
+    if (reported === "github.com/acme/old") assert.equal(readFileSync(file, "utf8"), bytes, "an answered operator-only update also preserves registry bytes");
+  }
+});
+
+test("a fresh server add cannot inherit an orphan operator route", () => {
+  const dir = join(base, "orphan-registry"), bin = join(base, "orphan-bin"); mkdirSync(dir); mkdirSync(bin);
+  writeFileSync(join(bin, "ssh"), "#!/bin/sh\nexit 1\n"); chmodSync(join(bin, "ssh"), 0o755);
+  writeFileSync(join(dir, "servers.json"), '{"servers":{}}\n');
+  const routes = join(dir, "server-operator-routes.json");
+  writeFileSync(routes, JSON.stringify({ box: { operatorSshHost: "old-operator" }, other: { operatorSshHost: "other-operator" } }));
+  const extra = { OATS_HOME_DIR: dir, PATH: `${bin}:${process.env.PATH}` };
+  const r = cli(["server", "add", "box", "--ssh", "different-host", "--workspace", "/srv/other"], extra);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(JSON.parse(r.stdout).result.operatorSshHost, undefined);
+  assert.deepEqual(JSON.parse(readFileSync(routes)), { other: { operatorSshHost: "other-operator" } });
+  const listed = cli(["server", "list"], extra);
+  assert.equal(JSON.parse(listed.stdout).result.servers[0].operatorSshHost, undefined);
+});
+
+test("server add replace preserves a workspace key changed while the host is answering", () => {
+  const dir = join(base, "raced-registry"), bin = join(base, "raced-bin"); mkdirSync(dir); mkdirSync(bin);
+  writeFileSync(join(bin, "ssh"), `#!${process.execPath}
+import {readFileSync,writeFileSync} from 'node:fs';
+const file=process.env.OATS_HOME_DIR+'/servers.json';
+const doc=JSON.parse(readFileSync(file));doc.servers.box.workspaceKey='github.com/acme/concurrent';
+writeFileSync(file,JSON.stringify(doc));
+console.log(JSON.stringify({schemaVersion:1,ok:true,result:{agents:[],workspace:{key:'github.com/acme/reported'}}}));
+`); chmodSync(join(bin, "ssh"), 0o755);
+  const file = join(dir, "servers.json");
+  writeFileSync(file, JSON.stringify({ servers: { box: { sshHost: "agent-host", workspace: "/srv/ws", workspaceKey: "github.com/acme/before" } } }));
+  const r = cli(["server", "add", "box", "--ssh", "agent-host", "--workspace", "/srv/ws", "--replace"], { OATS_HOME_DIR: dir, PATH: `${bin}:${process.env.PATH}` });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(JSON.parse(readFileSync(file)).servers.box.workspaceKey, "github.com/acme/concurrent");
+  assert.match(JSON.parse(r.stdout).result.warnings.join("\n"), /changed while the host was asked/);
 });
 
 test("reference handoff is private, literal and deleted before the command runs", () => {

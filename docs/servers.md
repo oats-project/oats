@@ -42,6 +42,9 @@ without it. With `--replace`, the operator route is kept unless you give
 `--operator-ssh <alias>` to change it or `--no-operator-ssh` to clear it.
 The two flags cannot be combined. `server remove` deletes the operator route
 too. Both files are changed under the same `~/.oats/servers.lock`.
+A fresh add or connect starts with no operator route unless `--operator-ssh`
+is given; a route left behind by an older kernel is discarded for that new
+registration.
 For example:
 
 ```bash

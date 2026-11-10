@@ -7,3 +7,7 @@
 - `--replace` keeps the operator route unless `--operator-ssh` sets it again
   or `--no-operator-ssh` clears it. `server remove` deletes its route too.
   Existing commands and saved instance targets keep using the agent's SSH alias.
+- A fresh registration never inherits an orphan operator route left by an
+  older kernel's remove. On an unchanged agent target, an operator-only update
+  preserves `servers.json` bytes; an answered `--replace` can still refresh a
+  stale workspace key without a false concurrency warning.

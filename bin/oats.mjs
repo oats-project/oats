@@ -4400,6 +4400,8 @@ async function serverCmd() {
     try {
       updateServers((current, routes) => {
         if (current[id] && !args.includes("--replace")) throw Object.assign(new Error(`server ${id} is already registered (pass --replace to overwrite; existing remote instances keep the route they were spawned with)`), { code: "E_SERVER_EXISTS" });
+        // An older kernel can remove a registration while leaving its sidecar route behind.
+        if (!current[id]) delete routes[id];
         // An unchanged agent target keeps its learned identity when only the operator route changes.
         if (current[id]?.workspaceKey && JSON.stringify(targetOf(current[id])) === JSON.stringify(targetOf(entry))) entry.workspaceKey = current[id].workspaceKey;
         current[id] = entry;
@@ -4414,7 +4416,7 @@ async function serverCmd() {
     try {
       const { key, why } = reportedWorkspaceKey(targetOf(entry), { serverId: id, timeoutMs: 60000 });
       if (!key) warnings.push(`workspace key unknown: ${why}; oats server check ${id} learns it once the host answers one`);
-      else if (learnWorkspaceKey(id, entry, key) === "recorded") entry.workspaceKey = key;
+      else if (["recorded", "same"].includes(learnWorkspaceKey(id, entry, key, { replace: args.includes("--replace") }))) entry.workspaceKey = key;
       else warnings.push(`workspace key not recorded: registration ${id} changed while the host was asked; oats server check ${id} learns it`);
     } catch (e) { warnings.push(`workspace key unknown: ${e.message}; oats server check ${id} learns it once the host answers`); }
     if (JSON_MODE) { jsonOk({ id, ...entry, ...operatorRoute, workspaceKey: entry.workspaceKey ?? null, file: SERVERS_FILE(), ...(warnings.length ? { warnings } : {}) }); return; }
