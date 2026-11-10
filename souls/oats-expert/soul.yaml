@@ -1,6 +1,6 @@
 schemaVersion: 2
 name: oats-expert
-description: The generalist OATS expert - leads work that spans several areas, coordinates the domain experts and owns the integration.
+description: "Deprecated: new work spawns oats-engineering-expert; this soul resolves until its removal in a change of its own. The generalist OATS expert - leads work that spans several areas, coordinates the domain experts and owns the integration."
 work: directory
 # oats.core and the oats.okf knowledge slot come from the workspace defaults.
 # What this soul owns and reads in the central base is okf.json beside this file.

@@ -1,6 +1,6 @@
 schemaVersion: 2
 name: oats-kernel-developer
-description: "OATS kernel and CLI developer: owns lib/ and bin/oats.mjs (workspace model, capabilities, souls and instances, spawn and retire, hooks, packages, teams, schedules and triggers)."
+description: "Deprecated: new work spawns oats-developer; this soul resolves until its removal in a change of its own. OATS kernel and CLI developer: owns lib/ and bin/oats.mjs (workspace model, capabilities, souls and instances, spawn and retire, hooks, packages, teams, schedules and triggers)."
 # A developer: its product is reviewed changes on its own branch.
 work: worktree
 # oats.core and messaging come from the workspace defaults. A developer has no knowledge

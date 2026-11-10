@@ -7,10 +7,10 @@
      oats soul launch remove oats.engineering/code-reviewer
      ```
 
-     The soul's own launch, pi with `github-copilot/gpt-6.1-sol`, then applies, unless the machine has a `souls.launch."*"` entry: that one wins over the soul's own launch, for the reviewer as for every soul without an entry of its own. Check what the reviewer will run on with `oats spawn code-reviewer --preview`. A reviewer runs on a model family other than its developers'. Where the `"*"` entry, or any other choice, would put it on theirs, give the reviewer its own key: `oats soul launch set code-reviewer --harness <harness> --model <model>` (or `--launch-config <name>`).
+     The soul's own launch, pi with `github-copilot/gpt-6.1-sol`, then applies, unless the machine has a `souls.launch."*"` entry: that one wins over the soul's own launch, for the reviewer as for every soul without an entry of its own. Check what the reviewer will run on with `oats spawn code-reviewer --preview`. That preview, like every spawn that names no launch, of a soul with no `souls.launch` entry of its own, is refused while `souls.launch` holds any other key that names no soul: remove or re-point each such key first. A reviewer runs on a model family other than its developers'. Where the `"*"` entry, or any other choice, would put it on theirs, give the reviewer its own key: `oats soul launch set code-reviewer --harness <harness> --model <model>` (or `--launch-config <name>`).
 
      Left in place, the old key stops spawns. `oats doctor` shows `E_LAUNCH_PREFERENCE_UNMATCHED: oats-local.yaml souls.launch names "oats.engineering/code-reviewer" (nearest: code-reviewer)`. Its fix line pins a soul first, then removes the key; here removing the key is enough. Every spawn that names no launch, of a soul with no `souls.launch` entry of its own, is refused with that code, and nothing is created or started. A spawn that names its launch (`--harness` or `--launch-config`) still runs.
-  2. **`souls.disabled`.** No command writes it. In `oats-local.yaml`, change `oats.engineering/code-reviewer` to `code-reviewer`. A stale entry **fails open**: it disables nothing, so the renamed `code-reviewer` spawns again on that machine, and nothing warns. `oats doctor` and the spawn are silent.
+  2. **`souls.disabled`.** No command writes it. In `oats-local.yaml`, change `oats.engineering/code-reviewer` to `code-reviewer`. A stale entry **fails open**: it disables nothing, so the renamed `code-reviewer` spawns again on that machine, and the spawn doesn't refuse. `oats doctor` reports the stale entry (`disabled-soul-unmatched`).
   3. **Team patterns.** They are the workspace's `souls:`, and OATS's has only `"*"`, which covers `code-reviewer`. Nothing to change. `oats soul teams code-reviewer` shows the `oats` team, from `"*"`.
   4. **Schedules and triggers.** Find any that spawns the old soul with `oats schedule list` and `oats trigger list`. `oats schedule test <id>` reports `soul oats.engineering/code-reviewer does NOT resolve (E_SOUL_UNKNOWN)`, and the job spawns nothing; `oats trigger test <id>` checks its soul the same way. Change each to `code-reviewer`:
      - a host schedule: `oats schedule update <id> --file <spec.json>`, with `"agent": "code-reviewer"`;
@@ -19,7 +19,7 @@
 
      A new schedule that names the old soul is refused when it is added.
 
-  Then run `oats doctor`, after this or any soul rename or removal, and fix what it reports. Once [oats#1772](https://github.com/oats-project/oats/issues/1772) ships, doctor also reports a `souls.disabled` entry that names no soul. Until then, check `souls.disabled` by hand.
+  Then run `oats doctor`, after this or any soul rename or removal, and fix what it reports: a stale `souls.launch` key and a stale `souls.disabled` entry each show there.
 - **Running instances keep their copies.** An instance spawned before this change, the package's `code-reviewer` included, keeps v1.18.0's modules until it is retired and respawned. A respawn picks up the member copies.
 
 ## Changed

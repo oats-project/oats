@@ -139,8 +139,9 @@ The pinned versions and each package's capabilities and souls are in the
 
 ## Building an integration
 
-Building an integration is implementing a contract. The framework's
-`integrations-expert` soul is the specialist for contract design.
+Building an integration is implementing a contract. In the framework's own
+workspace, `oats-engineering-expert` leads contract design, reading the
+integrations knowledge node (`oats/integrations-expert`).
 
 **Any slot.**
 

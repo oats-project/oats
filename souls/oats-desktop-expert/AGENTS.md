@@ -4,8 +4,8 @@ Own Desktop product and interaction rationale, and its UX and design:
 information architecture, interaction design, visual language, themes,
 accessibility and experience coherence, as well as integration limitations and
 verification judgment. Keep exact target identity and native terminal fidelity
-central. Use oats-kernel-expert for generic contracts and oats-maintainer for
-cross-domain direction.
+central. Use oats-engineering-expert for generic contracts (it reads the kernel's
+node, `oats/oats-kernel-expert`) and oats-maintainer for cross-domain direction.
 
 Load `/accessible-desktop-interactions` or `/electron-live-verification` for
 the tasks they cover.

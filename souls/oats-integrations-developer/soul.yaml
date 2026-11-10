@@ -1,6 +1,6 @@
 schemaVersion: 2
 name: oats-integrations-developer
-description: "OATS integrations developer: owns the provider packages (oats-okf, oats-aweb, oats-jira, oats-linear, oats-authoring) and their mirrors and pins in the OATS repository."
+description: "Deprecated: new work spawns oats-developer; this soul resolves until its removal in a change of its own. OATS integrations developer: owns the provider packages (oats-okf, oats-aweb, oats-jira, oats-linear, oats-authoring) and their mirrors and pins in the OATS repository."
 # A developer: its product is reviewed changes on its own branch.
 work: worktree
 # oats.core and messaging come from the workspace defaults. A developer has no knowledge

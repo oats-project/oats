@@ -2,7 +2,7 @@ template: oats-project/oats-engineering-coordination
 release: template-v2.1.0
 commit: 7bec119c4124ef513fe4ab068bc95e08b3292ed3
 capabilities: oats.dispatcher, oats.engineering-expert, oats.developer, oats.code-review, oats.maintainer, oats.landing-rules
-souls: code-reviewer (the dispatcher soul comes with the roster change)
+souls: code-reviewer, dispatcher
 license: MIT, the template's notice in TEMPLATE-LICENSE beside this file; the sources three developer skills adapt, in THIRD-PARTY-NOTICES.md, which differs from the tag's by one added line, its path map (capabilities/developer/ is capabilities/oats-developer/ here)
 history: copied at template-v2.0.0 (1032ec8030ce375987cebf2be62e9f9f1806dc04), template-v2.1.0 ported
 adapted: each capability is the template's text, changed only at its adapt markers (their answers replace them), in its oats.json description and where an OATS rule wins, each such place marked <!-- OATS: <reason> --> in its paragraph (a skill's description, in front matter, is marked just below it); oats.maintainer drops support-maintainer, its inject line and its oats.json entry (the support-desk adapt marker: no desk)
