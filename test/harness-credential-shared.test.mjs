@@ -106,12 +106,12 @@ test("spawn and start deliver both reference types without values in any tmux ar
   process.env.CREDENTIAL_FIXTURE_SOURCE = "env-fixture-secret";
   t.after(() => { delete process.env.CREDENTIAL_FIXTURE_SOURCE; });
   const auth = join(base, "live-auth"); mkdirSync(auth); writeFileSync(join(auth, ".credentials.json"), "fixture");
-  const fx = v2Deployment({ souls: { dev: { soul: { capabilities: { "claude.fixture": { from: "here" } } } } }, capabilities: { "claude.fixture": { manifest: { environment: ["CLAUDE_CONFIG_DIR"] } } }, local: { "launch-configs": { warned: { harness: "claude", executable: join(bin, "claude"), env: { CLAUDE_CONFIG_DIR: auth } }, removed: { harness: "claude", executable: join(bin, "claude"), env: { CLAUDE_CODE_OAUTH_TOKEN: { fromFile: file } } }, files: { harness: "claude", executable: join(bin, "claude"), env: { KEY: { fromFile: file }, OTHER: { fromEnv: "CREDENTIAL_FIXTURE_SOURCE" } } }, blocked: { harness: "claude", executable: join(bin, "claude"), env: { CLAUDE_CONFIG_DIR: auth, CLAUDE_CODE_OAUTH_TOKEN: { fromFile: file } } } } } });
+  const fx = v2Deployment({ souls: { dev: { soul: { capabilities: { "claude.fixture": { from: "here" } } } } }, capabilities: { "claude.fixture": { manifest: { environment: ["CLAUDE_CONFIG_DIR"] } } }, local: { "launch-configs": { personal: { harness: "claude", executable: join(bin, "claude"), env: { CLAUDE_CONFIG_DIR: auth } }, removed: { harness: "claude", executable: join(bin, "claude"), env: { CLAUDE_CODE_OAUTH_TOKEN: { fromFile: file } } }, files: { harness: "claude", executable: join(bin, "claude"), env: { KEY: { fromFile: file }, OTHER: { fromEnv: "CREDENTIAL_FIXTURE_SOURCE" } } }, blocked: { harness: "claude", executable: join(bin, "claude"), env: { CLAUDE_CONFIG_DIR: auth, CLAUDE_CODE_OAUTH_TOKEN: { fromFile: file } } } } } });
   t.after(() => { try { execFileSync(realTmux, ["-S", oatsSocket(), "kill-server"]); } catch { /* private fixture already exited */ } fx.cleanup(); });
   await assert.rejects(fx.spawn("dev", { name: "login-preview-refused", preview: true, work: "checkout", launch: true, launchConfig: "blocked" }), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL");
   assert.equal(existsSync(join(fx.root, "dev", "instances", "login-preview-refused")), false);
-  const loginPreview = await fx.spawn("dev", { name: "login-preview-warned", preview: true, work: "checkout", launch: true, launchConfig: "warned" });
-  assert.match(loginPreview.warnings.join("\n"), /oats harness token set claude/);
+  const loginPreview = await fx.spawn("dev", { name: "login-preview-personal", preview: true, work: "checkout", launch: true, launchConfig: "personal" });
+  assert.equal((loginPreview.warnings ?? []).some((line) => line.includes("/login credential")), false, "a personal login without an OATS-set token is silent in spawn preview");
   await assert.rejects(fx.spawn("dev", { name: "login-refused", work: "checkout", launch: true, launchConfig: "blocked" }), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL");
   const { home } = await fx.spawn("dev", { name: "credentials-live", work: "checkout", launch: true, launchConfig: "files" });
   const preview = cli(["launch-config", "preview", "--home", home]);
@@ -170,16 +170,21 @@ test("Claude refuses a login credential alongside any OATS-set token reference",
   assert.throws(() => planLaunch({ home: base, instance: "fixture", meta: { launch: hooked }, env: process.env }), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL");
 });
 
-test("Claude warns without an OATS-set token and checks the effective config directory or HOME", () => {
+test("Claude permits personal and inherited logins silently and refuses only an OATS token conflict at the effective directory", () => {
   const ownHome = join(base, "claude-home"), defaultDir = join(ownHome, ".claude"), selected = join(base, "claude-selected");
   mkdirSync(defaultDir, { recursive: true }); mkdirSync(selected);
   writeFileSync(join(defaultDir, ".credentials.json"), "fixture");
   const plan = (env, inherited = {}) => planLaunch({ home: base, instance: "fixture", meta: { launch: recipe(env) }, env: { ...process.env, ...inherited } });
   for (const env of [{ HOME: ownHome }, { HOME: { fromEnv: "OWN_HOME" } }]) {
-    assert.match(plan(env, { OWN_HOME: ownHome, CLAUDE_CODE_OAUTH_TOKEN: "inherited-fixture" }).warnings.join("\n"), /oats harness token set claude/);
+    const inherited = { OWN_HOME: ownHome, CLAUDE_CODE_OAUTH_TOKEN: "inherited-fixture" };
+    assert.equal(plan(env, inherited).warnings.some((line) => line.includes("/login credential")), false);
+    assert.equal(plan(env, { OWN_HOME: ownHome }).warnings.some((line) => line.includes("/login credential")), false);
+    assert.throws(() => plan({ ...env, CLAUDE_CODE_OAUTH_TOKEN: "oats-fixture" }, inherited), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL" && e.message.includes(join(defaultDir, ".credentials.json")));
   }
-  assert.equal(plan({ HOME: ownHome, CLAUDE_CONFIG_DIR: selected }).warnings.some((w) => w.includes("oats harness token set claude")), false, "explicit config directory takes precedence");
+  assert.doesNotThrow(() => plan({ HOME: ownHome, CLAUDE_CONFIG_DIR: selected, CLAUDE_CODE_OAUTH_TOKEN: "oats-fixture" }), "the selected clean directory takes precedence over HOME's login");
   writeFileSync(join(selected, ".credentials.json"), "fixture");
+  assert.equal(plan({ HOME: ownHome, CLAUDE_CONFIG_DIR: selected }).warnings.some((line) => line.includes("/login credential")), false);
+  assert.throws(() => plan({ HOME: ownHome, CLAUDE_CONFIG_DIR: selected, CLAUDE_CODE_OAUTH_TOKEN: "oats-fixture" }), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL" && e.message.includes(join(selected, ".credentials.json")));
   const selector = join(base, "claude-selector"); writeFileSync(selector, selected + "\n");
   assert.throws(() => plan({ CLAUDE_CONFIG_DIR: { fromFile: selector } }), (e) => e.code === "E_LAUNCH_RECIPE_UNSUPPORTED");
   const codex = recipe({ HOME: ownHome, CLAUDE_CODE_OAUTH_TOKEN: "fixture" }); codex.harness = "codex";

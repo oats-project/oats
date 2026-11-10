@@ -582,8 +582,9 @@ or a capability's launch contribution, it refuses with
 `E_CLAUDE_LOGIN_CREDENTIAL`, naming the exact credential file it found. An
 empty value counts. Remove the `/login`
 credential from that Claude configuration and use `oats harness token set
-claude` to provision an inference-only token. Without an OATS-set token, OATS
-warns with that command. An inherited token does not select the token route.
+claude` to provision an inference-only token. Without an OATS-set token, a
+personal `/login` credential is allowed silently. An inherited token does not
+select the token route.
 Other harnesses are unaffected. Spawn preview and apply check the predictable
 configuration before creating a home, worktree or identity. A selector supplied
 by a capability hook is checked after its launch environment is known, and
