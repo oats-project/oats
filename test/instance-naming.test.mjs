@@ -482,7 +482,7 @@ test("oats instance suggest-name (#1490 §2): the preview's name for a soul that
     [["--soul", "dev", "--task", "x", "--harness", "gpt"], "E_BAD_ARGS", "--harness must be one of pi|claude|codex"],
     [["--soul", "dev", "--task", "x", "--harness", "claude", "--launch-config", "fakepi"], "E_BAD_ARGS", "a named configuration is a unit"],
     [["--soul", "dev", "--task", "x", "--launch-config", "nope"], "E_LAUNCH_CONFIG_UNKNOWN", "\"nope\""],
-    [["--soul", "dev", "--task", "x", "--name", "y"], "E_BAD_ARGS", "unexpected flag \"--name\""],
+    [["--soul", "dev", "--task", "x", "--name", "y"], "E_BAD_ARGS", "oats instance suggest-name: unknown flag --name"],
     [["--soul", "dev", "--task", "x", "extra"], "E_BAD_ARGS", "unexpected argument \"extra\""],
   ]) {
     const e = refused(suggest(argv), argv.join(" "));

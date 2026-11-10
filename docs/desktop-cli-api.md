@@ -299,37 +299,71 @@ string for this: to support older kernels, use the spaced form.
 <a id="command-flags"></a>
 ### The flags a command defines
 
-These commands change state, and each refuses a flag it does not define
-before anything happens: before a plan is read, a file is written, a
-process is stopped or started, and before a `--server` command is sent to
-its host. A typo of a protective flag (`--no-recursve` for
-`--no-recursive`) is never ignored.
+These commands change state (and `oats teams`, `oats server check`,
+`oats trigger poll` and `test`, which sit beside them), and each refuses a
+flag it does not define before anything happens: before a plan is read, a
+file is written, a process is stopped or started, and before a `--server`
+command is sent to its host. A typo of a protective flag (`--no-recursve`
+for `--no-recursive`) is never ignored.
 
-| Command | Arguments | Flags that take a value | Switches | Refused in their own words |
-|---|---|---|---|---|
-| `oats retire` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir`, `--server` | `--plan`, `--self`, `--discard-worktree`, `--keep-dir`, `--force`, `--json` | `--delete-branch` |
-| `oats instance stop` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--grace-ms`, `--home`, `--dir`, `--server` | `--plan`, `--apply`, `--no-recursive`, `--json` | none |
-| `oats instance upgrade` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir` | `--undo`, `--plan`, `--json` | `--server` |
-| `oats worktree add` | none | `--purpose`, `--branch`, `--base`, `--repo` | `--preview`, `--json` | `--server`, `--dir`, `--home` |
-| `oats worktree remove` | none | `--purpose` | `--json` | `--server`, `--dir`, `--home` |
-| `oats session start` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json`, `--resume` | none |
-| `oats session restart` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server`, `--stop-grace` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json` | `--resume` |
-| `oats schedule remove` | `<id>` | `--dir`, `--server` | `--force`, `--json` | none |
-| `oats schedule run` | `<id>` | `--dir`, `--server` | `--force`, `--json` | none |
-| `oats schedule enable` | `<id>` | `--dir`, `--server` | `--json` | none |
-| `oats schedule disable` | `<id>` | `--dir`, `--server` | `--json` | none |
-| `oats schedule reconcile` | `<id>` | `--dir`, `--server` | `--clear`, `--json` | none |
-| `oats schedule host uninstall` | none | `--dir`, `--server` | `--json` | none |
-| `oats trigger remove` | `<id>` | `--dir` | `--json` | none |
-| `oats trigger enable` | `<id>` | `--dir` | `--json` | none |
-| `oats trigger disable` | `<id>` | `--dir` | `--json` | none |
-| `oats server remove` | `<id>` | none | `--json` | none |
-| `oats server forget` | `<id>` | `--instance` | `--json` | none |
-| `oats package add` | `<id>` `<version>` | `--dir` | `--json` | none |
-| `oats package remove` | `<id>` | `--dir` | `--json` | none |
-| `oats launch-config set` | `<name>` | `--file`, `--dir`, `--server` | `--keep-env`, `--json` | `--home`, `--soul` |
-| `oats launch-config remove` | `<name>` | `--dir`, `--server` | `--json` | `--home`, `--soul` |
-| `oats automations refresh` | none | `--dir` | `--json` | none |
+| Command | Arguments | Flags that take a value | Switches | Refused in their own words | Its own answers |
+|---|---|---|---|---|---|
+| `oats retire` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir`, `--server` | `--plan`, `--self`, `--discard-worktree`, `--keep-dir`, `--force`, `--json` | `--delete-branch` | none |
+| `oats spawn` | `<soul>` | `--agents-root`, `--backend`, `--base`, `--branch`, `--dir`, `--expect-decision`, `--harness`, `--herdr-socket`, `--idempotency-key`, `--instance`, `--launch-config`, `--max-age`, `--model`, `--name`, `--parent`, `--provider` (2 words), `--purpose`, `--relation`, `--relative-root`, `--relative-to`, `--repo`, `--runtime`, `--server`, `--task`, `--task-file`, `--trigger-event`, `--wake-cron`, `--wake-every`, `--wake-file`, `--wake-json`, `--wake-message`, `--wake-message-file`, `--wake-tz`, `--work`, `--work-dir` | `--allow-child-spawns`, `--background`, `--json`, `--no-background`, `--no-child-spawns`, `--no-launch`, `--no-yolo`, `--preview`, `--same-work`, `--suggest-name`, `--yolo` | `--instructions-file`, `--def-file`, `--ephemeral` | an unknown flag, an argument after the last |
+| `oats sync` | none | `--dir` | `--plan`, `--json` | `--approve` | none |
+| `oats instance stop` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--grace-ms`, `--home`, `--dir`, `--server` | `--plan`, `--apply`, `--no-recursive`, `--json` | none | none |
+| `oats instance upgrade` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir` | `--undo`, `--plan`, `--json` | `--server` | none |
+| `oats instance color` | `<instance>` `[<color>]` | `--home`, `--dir`, `--server` | `--clear`, `--json` | none | none |
+| `oats instance background` | `<instance>` `<state>` | `--home`, `--dir`, `--server` | `--json` | none | none |
+| `oats instance same-work` | `<instance>` `<state>` | `--home`, `--dir`, `--server` | `--json` | none | none |
+| `oats instance waiting set` | none | `--producer`, `--reason`, `--message`, `--home`, `--dir` | `--json` | none | none |
+| `oats instance waiting clear` | none | `--producer`, `--reason`, `--message`, `--home`, `--dir` | `--json` | none | none |
+| `oats instance attention` | none | `--message` | `--clear`, `--json` | `--home`, `--dir`, `--producer`, `--reason` | none |
+| `oats instance suggest-name` | none | `--soul`, `--task`, `--task-file`, `--harness`, `--model`, `--launch-config`, `--dir` | `--json` | `--server` | none |
+| `oats worktree add` | none | `--purpose`, `--branch`, `--base`, `--repo` | `--preview`, `--json` | `--server`, `--dir`, `--home` | none |
+| `oats worktree remove` | none | `--purpose` | `--json` | `--server`, `--dir`, `--home` | none |
+| `oats session start` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json`, `--resume` | `--native-record` | none |
+| `oats session restart` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server`, `--stop-grace` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json` | `--native-record`, `--resume` | none |
+| `oats session resume` | none | `--deployment` | `--plan`, `--json` | `--native-record`, `--server` | none |
+| `oats session input` | none | `--home`, `--text-file` | `--json` | `--native-record` | none |
+| `oats session receive` | none | `--home`, `--name` | `--json` | `--native-record` | none |
+| `oats session upload` | none | `--file`, `--home`, `--instance`, `--server` | `--json` | `--native-record` | none |
+| `oats session attach` | none | `--detach-key`, `--home`, `--instance`, `--server` | `--no-status-line`, `--print`, `--json` | `--native-record` | none |
+| `oats schedule add` | `[<id>]` | `--file`, `--spec-json`, `--description`, `--workspace`, `--runs-on`, `--owner`, `--dir`, `--server` | `--json` | none | none |
+| `oats schedule update` | `<id>` | `--file`, `--spec-json`, `--description`, `--dir`, `--server` | `--json` | none | none |
+| `oats schedule remove` | `<id>` | `--dir`, `--server` | `--force`, `--json` | none | none |
+| `oats schedule run` | `<id>` | `--dir`, `--server` | `--force`, `--json` | none | none |
+| `oats schedule enable` | `<id>` | `--dir`, `--server` | `--json` | none | none |
+| `oats schedule disable` | `<id>` | `--dir`, `--server` | `--json` | none | none |
+| `oats schedule reconcile` | `<id>` | `--dir`, `--server` | `--clear`, `--json` | none | none |
+| `oats schedule tick` | none | `--dir`, `--server` | `--dry-run`, `--host`, `--json` | none | none |
+| `oats schedule host install` | none | `--max-concurrent`, `--triggers-max-concurrent`, `--os`, `--dir`, `--server` | `--print`, `--json` | none | none |
+| `oats schedule host uninstall` | none | `--dir`, `--server` | `--json` | none | none |
+| `oats trigger add` | none | `--file`, `--from`, `--set`, `--id`, `--description`, `--workspace`, `--runs-on`, `--owner`, `--dir` | `--json` | none | none |
+| `oats trigger poll` | `<id>` | `--dir`, `--max-age` | `--run-source`, `--json` | none | none |
+| `oats trigger test` | `<id>` | `--dir` | `--run-source`, `--json` | none | none |
+| `oats trigger remove` | `<id>` | `--dir` | `--json` | none | none |
+| `oats trigger enable` | `<id>` | `--dir` | `--json` | none | none |
+| `oats trigger disable` | `<id>` | `--dir` | `--json` | none | none |
+| `oats teams` | none | `--dir`, `--max-age` | `--json` | none | an unknown flag, an argument after the last |
+| `oats teams add` | `<label>` | `--dir`, `--team`, `--description` | `--no-default`, `--json` | none | an unknown flag |
+| `oats teams remove` | `<label>` | `--dir` | `--json` | none | an unknown flag |
+| `oats teams default` | `<label>` | `--dir`, `--expect` | `--if-absent`, `--json` | none | an unknown flag |
+| `oats soul launch set` | `<soul>` | `--dir`, `--launch-config`, `--harness`, `--model` | `--plan`, `--json` | none | an unknown flag, an argument after the last |
+| `oats soul launch remove` | `<soul or key>` | `--dir` | `--plan`, `--json` | none | an unknown flag, an argument after the last |
+| `oats server check` | `<id>` | none | `--json` | none | none |
+| `oats server remove` | `<id>` | none | `--json` | none | none |
+| `oats server forget` | `<id>` | `--instance` | `--json` | none | none |
+| `oats package add` | `<id>` `<version>` | `--dir` | `--json` | none | none |
+| `oats package remove` | `<id>` | `--dir` | `--json` | none | none |
+| `oats launch-config set` | `<name>` | `--file`, `--dir`, `--server` | `--keep-env`, `--json` | `--home`, `--soul` | none |
+| `oats launch-config remove` | `<name>` | `--dir`, `--server` | `--json` | `--home`, `--soul` | none |
+| `oats automations refresh` | none | `--dir` | `--json` | none | none |
+| `oats update` | none | `--dir` | `--check`, `--yes`, `--json` | `--to` | an argument after the last |
+
+An argument in brackets (`[<color>]`) is one the command may go without.
+A flag marked with a number of words (`--provider`, two: `--provider
+<capability> key=value`) takes that many.
 
 The refusal is `E_BAD_ARGS`, with the command's usage line after the
 message, and comes from the first problem from the left:
@@ -345,16 +379,34 @@ message, and comes from the first problem from the left:
   `--delete-branch` on retire, `--server` on `oats instance upgrade`),
   `error.details: {flag}`.
 
-Then, for a command given `--server`, a missing argument (every argument in
-the table is required) is `E_USAGE`, with the usage line as
-`error.message` and no `details`, and nothing is sent. On this machine each
-command answers a missing argument itself, as before (`oats retire` with no
-instance is `E_USAGE` too).
+A command whose last column names an answer gives that one in its own words:
 
-A flag that takes a value takes the next word unless it starts with `--`; a
-value flag given none is that flag's own refusal. `--` is a flag like any
-other, and none of these commands defines it. `--runtime` is the pre-0.27
-name of `--harness`. `--help` and `-h` print the usage first, as for every
+- `oats spawn`: `oats spawn: unknown flag <flag>`, and `oats spawn:
+  unexpected argument "<word>" after the soul "<soul>": spawn takes one
+  soul` (for a `key=value` word, `a capability setting is given as
+  --provider <capability> key=value`), `E_BAD_ARGS` with no usage line and
+  no `details`;
+- `oats teams` and its forms, `oats soul launch set` and `remove`: the
+  flag is `E_USAGE {flag}` in their words ([`oats teams`](#oats-teams),
+  [`oats soul launch`](#oats-soul-launch)); a word where `oats teams`
+  takes a form is `E_USAGE` with its usage; a second soul of `oats soul
+  launch` is `E_BAD_ARGS`, `takes one soul, and got <n>: …`, naming
+  every one;
+- `oats update <word>`: ``oats update takes no package: pin package
+  versions in oats-workspace.yaml (`oats package add <id> <version>`), then
+  `oats sync`; …``, `E_BAD_ARGS`, `error.details: {argument}`.
+
+Then, for a command given `--server`, a missing argument it requires is
+`E_USAGE`, with the usage line as `error.message` and no `details`, and
+nothing is sent. On this machine each command answers a missing argument
+itself, as before (`oats retire` with no instance is `E_USAGE` too).
+
+A flag that takes a value takes the next word (its number of words) unless
+it starts with `--`; a value after `=` is its first. A value flag given
+none (no word, or one that starts with `--`) ends the check there: it is
+that flag's own refusal, by the command, before any flag after it. `--` is a flag like any other, and none of
+these commands defines it. `--runtime` is the pre-0.27 name of
+`--harness`. `--help` and `-h` print the usage first, as for every
 kernel command.
 
 ### Dispatch errors
@@ -4674,8 +4726,8 @@ before whether or not a claim is set. `attention` never marks a screen an Enter
 answers: a producer that wants one uses `question`, and review catches that.
 
 ```text
-oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message <text>] [--home <abs>] [--dir <d>] --json
-oats instance attention [--message <text>] [--clear] --json
+oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] --json
+oats instance attention [--message=<text>] [--clear] --json
 ```
 
 ```json
