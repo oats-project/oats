@@ -131,3 +131,23 @@ test("a spawn into a worktree of a repository with a filter driver whose name Gi
   assert.equal(existsSync(join(f.root, "dev", "instances", "dev-unnameable")), false, "no home is left");
   assert.equal(fixtureGit(f.repo, ["worktree", "list", "--porcelain"], { encoding: "utf8" }).split("\n").filter((line) => line.startsWith("worktree ")).length, 1, "no worktree is left registered");
 });
+
+test("a driver the operator's own configuration also defines runs with the operator's command, in the worktree and in the recovery, and the repository's command for that name never runs", () => {
+  const w = filtered("both", { lfs: "clean" }, "tracked.txt filter=lfs\n");
+  // The operator's driver of the same name, in the operator's global configuration: it stores a
+  // file in upper case, so a file as committed here reads as changed wherever it runs.
+  const operatorRan = join(w.f.base, "operator-filter-ran");
+  const operatorFilter = join(w.f.base, "operator-filter.sh");
+  write(operatorFilter, `#!/bin/sh\necho ran >> '${operatorRan}'\nexec tr a-z A-Z\n`, 0o700);
+  const globalConfig = join(w.f.base, "operator-gitconfig");
+  write(globalConfig, `[filter "lfs"]\n\tclean = ${operatorFilter}\n`);
+  const operator = { ...w.f, env: { ...w.f.env, GIT_CONFIG_GLOBAL: globalConfig } };
+  // Rewritten with the bytes it has: its times are no longer the index's, so Git compares content.
+  write(join(w.work, "tracked.txt"), readFileSync(join(w.work, "tracked.txt")));
+
+  const retired = cli(operator, ["retire", w.instance, "--json"]);
+  assert.equal(retired.status, 0, retired.stdout + retired.stderr);
+  assert.deepEqual(w.ran(), [], "the repository's command for the driver did not run");
+  assert.equal(existsSync(operatorRan), true, "the operator's command for the driver ran");
+  assert.equal(hookRan(w.spawned.home), true, "the retire hook ran");
+});
