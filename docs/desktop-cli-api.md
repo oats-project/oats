@@ -345,6 +345,12 @@ message, and comes from the first problem from the left:
   `--delete-branch` on retire, `--server` on `oats instance upgrade`),
   `error.details: {flag}`.
 
+Then, for a command given `--server`, a missing argument (every argument in
+the table is required) is `E_USAGE`, with the usage line as
+`error.message` and no `details`, and nothing is sent. On this machine each
+command answers a missing argument itself, as before (`oats retire` with no
+instance is `E_USAGE` too).
+
 A flag that takes a value takes the next word unless it starts with `--`; a
 value flag given none is that flag's own refusal. `--` is a flag like any
 other, and none of these commands defines it. `--runtime` is the pre-0.27
@@ -5471,6 +5477,7 @@ had begun.
 | Code | `oats instance stop` | `oats retire` |
 |---|---|---|
 | `E_BAD_ARGS` | yes | yes |
+| `E_USAGE` | yes | yes |
 | `E_PLAN_STALE` | yes | yes |
 | `E_INSTANCE_RETIRING` | yes | yes |
 | `E_LIFECYCLE_BUSY` | yes | yes |

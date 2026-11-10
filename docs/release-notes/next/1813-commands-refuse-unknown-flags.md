@@ -41,3 +41,11 @@
     line as one envelope, as a missing argument of other commands does; it
     printed the usage on stderr and no envelope. Without `--json` it prints
     the usage line, as before.
+  - A command of the table given `--server` and missing its argument (`oats
+    retire --server build` with no instance, `oats schedule remove --server
+    build` with no id) answers `E_USAGE` with its usage line on this
+    machine and sends nothing; it was sent to the host.
+  - `E_USAGE` is one of the codes `oats retire` and `oats instance stop`
+    answer only before any effect
+    ([the table](../desktop-cli-api.md#before-effect-codes)): a client may
+    read it as "refused, nothing happened".

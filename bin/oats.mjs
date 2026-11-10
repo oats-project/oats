@@ -4805,7 +4805,7 @@ const wantsHelp = args.slice(1).some((a) => a === "--help" || a === "-h");
 if (cmd && KERNEL_COMMANDS.has(cmd) && wantsHelp) { if (JSON_MODE) { jsonOk({ command: cmd, usage: usageLinesFor(cmd) }); process.exit(0); } usageFor(cmd); process.exit(0); }
 // A state-changing command's argv against the flags it defines (lib/command-flags.mjs), before it runs
 // and before a --server command is sent: a host on an older OATS would ignore a flag it does not read.
-{ const problem = commandArgvProblem(rawArgs); if (problem) cmdFail("E_BAD_ARGS", problem.message, problem.details); }
+{ const problem = commandArgvProblem(rawArgs); if (problem) cmdFail(problem.code, problem.message, problem.details); }
 // #1490 §2: the name is decided on the machine that asks, for a spawn that lands elsewhere.
 if (cmd === "instance" && args[1] === "suggest-name" && flag("server") !== undefined) cmdFail("E_BAD_ARGS", "instance suggest-name takes no --server: it runs this machine's harness, for a spawn that may land on another; the host it lands on makes the name unique (or names an unnamed --suggest-name spawn itself)");
 // Session resume is local only (#1559, D1): a server resumes its own instances.
