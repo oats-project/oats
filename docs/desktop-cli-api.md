@@ -1186,6 +1186,13 @@ applies: gate `sync --plan` on `version` 0.44.0 or later, never by trying.
 - Errors: `E_LOCAL_MISSING`, `E_WORKSPACE_SCHEMA {path, problems}`,
   `E_REMOTE_UNREADABLE`, `E_LOCK_SCHEMA`, `E_PACKAGE_MISSING`,
   `E_PACKAGE_INTEGRITY`, `E_PACKAGE_MANIFEST`, `E_REPO_REF`, `E_BAD_ARGS`.
+  `E_PACKAGE_INTEGRITY` names its case in `details.why`: `branch`,
+  `package-id`, and `capabilities` or `souls` for an edited lock; a tag or
+  content that moved carries none
+  ([`oats sync`](packages.md#oats-sync--the-one-command-for-the-common-path)).
+  The Desktop's sync sheet words the refusal per `why`, and gives no `why`, or
+  one it doesn't know, the code's general meaning; its Details show the
+  kernel's message.
 
 ### `oats package add` and `remove`
 
