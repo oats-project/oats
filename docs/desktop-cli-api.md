@@ -1724,6 +1724,25 @@ person, as one `resume-lock-stuck` problem in `problems[]`, `{code, message,
 remedy}` ([The machine sweep](#the-machine-sweep-oats-session-resume),
 `E_RESUME_LOCK_STUCK`). It is the machine's, the same from every deployment.
 
+`oats doctor --json` lists each schedule slot whose record cannot be read, in
+the deployment and the others the host ticks, as one `schedule-slot-unreadable`
+problem in `problems[]`, `{code, severity: "warning", scope, id, message,
+remedy}` (text: `! schedule-slot-unreadable: <message>`, the remedy on the
+next line). The remedy is to check `oats schedule show <id>`, then run `oats
+schedule reconcile <id> --clear` ([Schedules](schedules.md#files)); for a
+workspace schedule this host does not run, or cannot tell it runs, the
+message says why and the remedy is to remove the slot by hand, at the path it
+names, once `oats status` shows no run of it here. A slot
+whose schedule is gone (a local one not in `oats-schedules.json`, a workspace
+one not in the saved snapshot, whose time it names), readable or not, is one
+`schedule-slot-orphaned` problem of the same shape, naming the run and the
+instance its record names; its remedy is to check `oats status`, then run
+`oats schedule reconcile <id> --clear`. A workspace schedule absent from the
+snapshot that cannot be shown gone (its member is not in it, or has a schedule
+file that could not be read) is the same problem, with the step that applies:
+remove the slot by hand at the path it names, or fix that file and run `oats
+automations refresh`.
+
 ### Desktop facts
 
 Feature `desktop-facts`: facts the kernel reports so the Desktop never derives
@@ -7367,6 +7386,27 @@ oats schedule update <id> --description=<text> [--dir <d>] --json
   `command` or `operation` attempt with `exited: true` (0.40.0) holds no host
   slot (`running: false`) but still blocks its own job; show it as needing
   `oats schedule reconcile <id>` (or `--clear`) either way.
+- **A slot whose record cannot be read** keeps `running: true`. The tick
+  reports its job `invalid` (`E_SCHEDULE_INVALID`) and runs the scope's
+  other jobs; `reconcile <id>` answers `{reconciled: "unknown", remedy}`
+  and `reconcile <id> --clear` releases the slot (`reconciled: "cleared"`).
+  `oats doctor --json` lists it as a `schedule-slot-unreadable` problem,
+  `{code, severity, scope, id, message, remedy}`
+  ([Schedules](schedules.md#files)).
+- **A slot whose schedule is gone** (a local one not in
+  `oats-schedules.json`; a workspace one not in the saved snapshot, decided
+  without refreshing it), readable or not, is counted by every tick until it
+  is released. `reconcile <id>` answers `{schedule: null, reconciled:
+  "unknown", remedy}` naming the run its record names, and `reconcile <id>
+  --clear` releases it, resolves a retained attempt as cleared and removes
+  the job's state: `{schedule: null, reconciled: "cleared", cleared}`,
+  `cleared` listing `"slot"`, `"attempt"` and `"state"` as each was there;
+  a gone schedule with retained state and no slot is reconciled the same
+  way (`cleared: ["attempt", "state"]`).
+  A workspace schedule that is disabled, untrusted or placed elsewhere is
+  not gone (`E_AUTOMATION_NOT_HERE`). `oats doctor --json` lists the slot as
+  a `schedule-slot-orphaned` problem of the same shape
+  ([Schedules](schedules.md#files)).
 - **Schedule IDs**: local and workspace schedule definition names permit 1–100
   lowercase letters, digits and dashes; trigger names retain their 40-character
   limit. Desktop accepts these schedule names for creation, editing and row

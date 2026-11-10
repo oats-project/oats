@@ -571,6 +571,14 @@ an upgrade that is a lock directory left by the earlier OATS
 `oats` is running on the machine
 ([The sweep](execution-targets.md#the-sweep)).
 
+`oats doctor` reports a schedule slot whose record cannot be read as a
+`schedule-slot-unreadable` problem, naming the deployment, the job and the
+remedy. After an upgrade that is a slot directory an earlier OATS left
+without its `owner.json`. The tick reports that job invalid and runs the
+deployment's other jobs. Check `oats schedule show <id>`; once its last run
+is not running, `oats schedule reconcile <id> --clear` releases the slot
+([Schedules](schedules.md#files)).
+
 ## After a change of Node version
 
 Two paths are written into things that outlive a command: the kernel's, and
