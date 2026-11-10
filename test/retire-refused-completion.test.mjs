@@ -342,11 +342,11 @@ test("a scheduled self-retire whose removal of the home fails part way, with no 
   if (ROOT) { t.skip(SKIP_FOR_ROOT); return; }
   const f = deployment(t);
   const i = await f.spawn("partial");
-  // A home whose record names no repository, as an earlier kernel spawned it: its retire starts no
-  // hook, so what keeps the marker here is the removal alone.
+  // A home whose record names no repository and says that no capability has a retire hook: its
+  // retire starts no hook, so what keeps the marker here is the removal alone.
   const { repo, ...record } = readJson(join(i.home, "instance.json"));
   assert.equal(typeof repo, "string", "fixture premise: the spawn recorded the repository");
-  writeFileSync(join(i.home, "instance.json"), JSON.stringify(record, null, 2) + "\n");
+  writeFileSync(join(i.home, "instance.json"), JSON.stringify({ ...record, capabilityRuntime: [] }, null, 2) + "\n");
   // The inspections and the recovery copy read it; the removal cannot empty it.
   mkdirSync(join(i.home, "notes", "ro"), { recursive: true });
   writeFileSync(join(i.home, "notes", "ro", "f"), "in a read-only directory\n");
