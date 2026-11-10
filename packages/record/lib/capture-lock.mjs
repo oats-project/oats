@@ -31,6 +31,7 @@
 // and reclamation even when the supervisor died. Callers own child termination/reaping; this module
 // never sends a terminating signal or infers a process group.
 import { closeSync, constants, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { makePrivateDir } from "./private-files.mjs";
 import { randomBytes } from "node:crypto";
 import { hostname } from "node:os";
 import { join } from "node:path";
@@ -165,7 +166,7 @@ export function acquireCaptureLock(root, { now = Date.now, pid = process.pid, li
   const fs = { writeFileSync, rmSync, openSync, closeSync, lstatSync, fsyncSync, renameSync, ...io };
   const dir = captureLockPath(root);
   const nonce = randomBytes(8).toString("hex");
-  mkdirSync(root, { recursive: true }); // the store creates the root lazily; the lock may come first
+  makePrivateDir(root); // the store creates the root lazily; the lock may come first
   let reclaimed;
   for (let attempt = 0; ; attempt++) {
     try { mkdirSync(dir, { mode: 0o700 }); break; }

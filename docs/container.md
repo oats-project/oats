@@ -61,10 +61,10 @@ version and regenerate this directory's lock with
 `npm install --package-lock-only --ignore-scripts`; review both files. Do not
 use `--install-oats` or `--install-aw` against a running container.
 
-The committed OATS 0.69.12 pin supports container/SSH checks and spawn
-preview. Live token delivery requires a new pin to a release that includes
-`env: { fromFile: ... }` and the operator's `oats harness token set` route.
-Until that image is built, the two-seat inference milestone remains unproven.
+The committed OATS 0.69.14 pin supports `env: { fromFile: ... }` and the
+operator's `oats harness token set` route. Provision the token through the
+[harness credential route](servers.md#harness-credentials) and collect live
+acceptance evidence before claiming the two-seat inference milestone.
 
 ## Mounts and UID
 
@@ -169,8 +169,7 @@ Preview runs no provider hook and does not validate a missing seat. Apply
 only after reviewing it and provisioning its seat; use the same arguments
 without `--preview`. Keep the team and controller keys outside the container.
 
-On an OATS release supporting file-backed launch environment, the launch
-configuration uses:
+The pinned OATS release supports this file-backed launch configuration:
 
 ```yaml
 launch-configs:
@@ -189,7 +188,7 @@ or narrow its authority. Never share the mount across trust groups.
 
 ## Acceptance and evidence
 
-The host needs Docker and Node 22+. Export the same plain variables used for
+The host needs Docker and Node 22.5+. Export the same plain variables used for
 Compose, then run:
 
 ```sh
@@ -200,9 +199,12 @@ container/agent/accept.sh "oats-agent-${TEAM}" --evidence live-lab \
 ```
 
 Choose the label matching the actual run. `local` accepts the builder's
-architecture; the other labels require amd64 and root:GID 0440 token / 0750
-login-directory metadata. Local fixtures use a dummy file, never a real
-login. Run the live Claude mode separately for each admitted instance home;
+architecture; the other labels require amd64 and root:GID 0750
+login-directory metadata, plus root:GID 0440 when a token is present.
+If the token file is absent, its check reports `NOT RUN` and acceptance
+continues; `claude -p` is skipped until the token exists. Do not create a
+placeholder token. Local fixtures never use a real login.
+Run the live Claude mode separately for each admitted instance home;
 the home is an evidence label and an `instance.json` existence check. The
 probe runs from a private temporary directory under `/tmp`, removed on
 success or failure, with `--setting-sources user`. It uses the container's
@@ -225,8 +227,8 @@ It checks the process's UID/GID/supplementary groups/capabilities/no-new-privile
 and non-root sshd's banner, scans `/` as container root (pruning `/proc`,
 `/sys`, `/dev` and the agent-scanned `/state`, `/tmp`, `/run`, `/work`),
 and scans those trees plus writable `/dev/shm` and `/dev/mqueue` as the agent
-for `.credentials.json`. It checks
-the token is readable and not writable, and proves a global npm install fails using an
+for `.credentials.json`. When a token is present, it checks
+that the token is readable and not writable. It proves a global npm install fails using an
 offline local package. Scan errors fail acceptance. The root inspection
 process receives no added capabilities. Token provenance still needs the
 operator's receipt: permissions and successful inference cannot distinguish

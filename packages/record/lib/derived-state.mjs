@@ -1,8 +1,9 @@
 // Local accelerators only. Journal bytes remain authority; removing this
 // database costs bounded rebuild work, never changes a turn or its ID.
-import { mkdirSync, statSync, unlinkSync } from "node:fs";
+import { statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { keysetRows } from "./sqlite-rows.mjs";
+import { ensurePrivateFile, makePrivateDir } from "./private-files.mjs";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 
@@ -31,9 +32,10 @@ function fileIdentity(path) {
 export class DerivedState {
   constructor(root) {
     const { DatabaseSync } = require("node:sqlite");
-    mkdirSync(join(root, "index"), { recursive: true });
+    makePrivateDir(join(root, "index"));
     this.path = join(root, "index", "capture.db");
     const before = fileIdentity(this.path);
+    ensurePrivateFile(this.path);
     this.db = new DatabaseSync(this.path);
     try {
       this.db.exec("PRAGMA busy_timeout = 60000; PRAGMA cache_size = -2048; PRAGMA temp_store = FILE");
