@@ -3,10 +3,8 @@
 `container/agent/` supplies an agent image and a Compose service for one
 team's trust group. It runs non-root sshd on port 2222; the operator uses the
 existing [server route](servers.md) to connect, preview and spawn. The
-entrypoint creates private state directories and host keys, starts sshd in
-the background and ends as `oats host run`
-([What runs in the container](#what-runs-in-the-container)). Deployment
-setup and seat admission belong to the operator.
+entrypoint creates private state directories and host keys, then starts
+sshd. Deployment setup and seat admission belong to the operator.
 
 ## Configuration contract
 
@@ -68,63 +66,6 @@ operator's `oats harness token set` route. Provision the token through the
 [harness credential route](servers.md#harness-credentials) and collect live
 acceptance evidence before claiming the two-seat inference milestone.
 
-## What runs in the container
-
-PID 1 is `tini -g`. Its one direct child is `oats host run`
-([desktop-cli-api.md](desktop-cli-api.md#the-host-run-oats-host-run)): the
-entrypoint's last two lines start sshd in the background and `exec oats host
-run`. A container has no launchd and no systemd user manager, so nothing else
-would run the kernel's periodic work there. `oats host run`:
-
-- **at start** resumes the sessions that were lost when the container last
-  stopped (`oats session resume`, once);
-- **each minute** runs the schedule tick for the registered deployment
-  ([Register the deployment](#register-the-deployment-for-the-tick)) and
-  records which instances run;
-- **on the runtime's SIGTERM** stops ticking, then stops every running
-  instance: SIGTERM to its harness, a wait of 20 seconds, never escalated.
-  Each is recorded as stopped with the host, so the next start resumes it.
-  Then it exits 0 and the container ends.
-
-`tini -g` sends the signal to its child's process group: `oats host run`
-and sshd. The OATS tmux server and the harnesses under it are in sessions of
-their own, outside that group, so they keep running until `oats host run`
-stops them. Measured on this image (tini 0.19.0, tmux 3.3a).
-
-**Stop grace.** The service sets `stop_grace_period: 45s`: Docker's default
-of 10 seconds is shorter than the 20 seconds each harness is given. A
-harness that does not end in time is left running and is killed with the
-container; its home then reads `lost` like the others and is resumed too.
-A longer wait is `oats host run --stop-grace <seconds>` in a derived
-entrypoint, with a `stop_grace_period` longer than it: the run also waits
-for a tick that is running, and lists the instances, before it stops them.
-
-**A container that is killed** (SIGKILL, an out-of-memory kill, a host
-crash) stops nothing in order. Its sessions read `lost` and the next start
-resumes those the kernel saw running. The lock a killed `oats host run`
-left is taken over by the next run.
-
-**Health.** The service's `healthcheck` opens a TCP connection to sshd on
-port 2222 every 30 seconds; three failures mark the container `unhealthy`.
-sshd logs each probe's connection. `oats host run` does not supervise sshd:
-if sshd ends while it runs, the agents keep running and the tick keeps
-ticking, but the operator's route is gone. Docker does not restart a
-container because it is unhealthy. To recover, restart it:
-
-```sh
-docker inspect --format '{{.State.Health.Status}}' "oats-agent-${TEAM}"
-docker restart "oats-agent-${TEAM}"
-```
-
-The restart is a stop and a start: the agents are stopped with the host and
-resumed. A non-zero exit of `oats host run` (a refusal, a crash) restarts
-the container under `restart: unless-stopped`; `docker logs` shows its
-refusal.
-
-**Environment.** The tmux server a resume starts is started by `oats host
-run`, so the agents it brings back get the entrypoint's environment, its
-`PATH` included.
-
 ## Mounts and UID
 
 The provisioner creates host directories with the runtime UID and GID.
@@ -181,10 +122,7 @@ Supply these plain variables to the bundle's env file:
 The bundle owns the network, resolver, forwarder, firewall and their bypass
 checks. The agent service publishes no ports and sets no DNS or extra-hosts
 override. It joins only the named external `agents` network. Its restart
-policy is `unless-stopped`, its stop grace 45 seconds, and its healthcheck
-reads sshd on port 2222
-([What runs in the container](#what-runs-in-the-container)); security flags
-are fixed in the service file.
+policy is `unless-stopped`; security flags are fixed in the service file.
 
 ```sh
 docker compose -p "oats-team-${TEAM}" --env-file <plain-env-file> \
@@ -219,26 +157,7 @@ oats server connect team-agent --ssh <ssh-alias> --dir /state/deploy \
 ```
 
 Use public HTTPS package pins unless a separate reviewed credential route
-is provisioned. Verify `server connect` reports ready.
-
-### Register the deployment for the tick
-
-After `server connect`, register the deployment in the container's host
-schedule registry, once per state volume:
-
-```sh
-oats schedule host install --register-only --server team-agent
-```
-
-It records the deployment and installs no timer
-([schedules.md](schedules.md#without-a-host-timer)); plain `host install`
-fails in the container, which has no systemd user manager. `oats host run`
-ticks whatever the registry lists from the next minute on, and until a
-deployment is registered it ticks nothing and says so in `docker logs`.
-`oats host run --plan`, over the route, shows the scopes it ticks and the
-homes its sweep would consider.
-
-The operator places
+is provisioned. Verify `server connect` reports ready. The operator places
 two independently admitted ordinary-member identities at
 `/state/seats/<alias>/.aw`; each spawn selects one:
 
@@ -292,7 +211,7 @@ It reads the token only inside the container and requires the exact inference
 response. It records no raw Claude output.
 
 The script compares inspect settings and the exact bind list to the exported
-variables, the stop grace of 45 seconds and the healthcheck included. It resolves `AGENT_IMAGE` independently and requires that image's
+variables. It resolves `AGENT_IMAGE` independently and requires that image's
 ID, reference and start command, and its complete environment (printing only
 names of differing variables). Other comparisons include supplementary
 groups, namespace overrides, sysctls, published ports, resolver overrides
