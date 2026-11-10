@@ -62,7 +62,9 @@ your recommendation.
      of OATS's template repositories, copied at its latest `template-v*` tag
      (`git ls-remote --tags <repository> 'template-v*'` lists them). For work
      that lands as pull requests, that is the engineering template,
-     `oats-project/oats-engineering-coordination`. From the next kernel
+     `oats-project/oats-engineering-coordination`; for work that ends in a
+     finding or a report, the research template,
+     `oats-project/oats-research-coordination`. From the next kernel
      release, the installed kernel's `docs/official-catalog.md` ("Coordination
      templates") lists every template; an older kernel's has no such section.
      Follow the template's `ADAPTING.md` in order. One organisation can start
@@ -92,10 +94,12 @@ your recommendation.
      maintainer before any PR.
    - **Keep the Desktop's grouping** (`/oats-tailor-workspace` step 2's list):
      a lead the dispatcher starts is top-level, a feature's agents share its
-     work, and each group has one colour.
-   - **Make the role skills agree with the landing rules:** who opens the PR
-     (the developer's inject, the expert's landing skill), who merges, and
-     when an expert finds or starts a maintainer.
+     work (`--same-work`), a related effort's lead is the first lead's
+     sibling, and each group has one colour.
+   - **Make the role skills agree with the landing rules:** who builds (the
+     lead or a developer) and that its author runs the review loop, who opens
+     the PR (the developer's inject, the expert's landing skill), who merges,
+     and when a lead starts a maintainer.
    - **Give the landing rules and the ownership record one home:** one small
      capability of the workspace's own that every coordinating soul composes.
      Write each rule's reason beside it. A lane map, where the workspace keeps

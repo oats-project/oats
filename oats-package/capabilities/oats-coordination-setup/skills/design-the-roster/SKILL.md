@@ -18,7 +18,8 @@ node, not a soul.
 1. **People.** List each person and what they own: paths, lanes, products.
 2. **Experts.** List the ways of working that plainly differ: product
    direction against engineering, say, or warehouse modelling against service
-   code. Give each one expert soul.
+   code, or research that ends in a report against work that lands as pull
+   requests. Give each one expert soul.
    - The areas inside it become its knowledge nodes, read per task.
    - Many services on one stack under one owner make one expert reading a
      node per service, not a dozen experts.
@@ -29,7 +30,10 @@ node, not a soul.
    from an upstream used outside OATS, the skill stays that source. The
    expert's node holds only the organisation's own decisions and lessons about
    it. Never move it into a node.
-4. **Developers.** One developer soul by default.
+4. **Developers.** One developer soul by default. A lead builds a small change
+   itself; a developer takes a spec where one protects the lead's context,
+   builds in parallel or specialises, and every large feature, one per
+   surface (`/coordination-best-practices`, "One lead per effort").
    - Check that each repository says how to build, run and test it (its
      `AGENTS.md` or `CLAUDE.md`, its dev skills). Where one doesn't, propose
      adding that to the repository first.
@@ -43,17 +47,24 @@ node, not a soul.
    talk to first.
 6. **Maintainers.** A maintainer soul exists where a lane's landing rules
    need a maintainer's read or reserve its merges; no maintainer instance is
-   started at setup. One is started for the person who owns that lane when
-   first needed (`/set-landing-rules`).
+   started at setup. A lead starts one for the person who owns that lane when
+   first needed, without asking, and tells them what it is
+   (`/set-landing-rules`).
 7. **Reviewers.** A reviewer soul, fresh each round and launched by the
-   developer, whose `launch:` names a model this organisation can launch,
-   from a family different from the developers'; on the PR, the forge's
-   review bot as well, where the organisation runs one.
+   change's author (a developer, or a lead for its own spec), whose `launch:`
+   names a model this organisation can launch, from a family different from
+   the developers' and the leads'; on the PR, the forge's review bot as well,
+   where the organisation runs one. A group whose work ends in a report has a
+   researcher soul and a verifier soul in place of the reviewer, the verifier
+   on a family no researcher and no lead runs on, wherever the organisation
+   has one.
 8. **Automations.** Only the organisation's scheduled jobs and the events that
    should start work (schedules and triggers, `/oats-automations`).
 9. **Retire rules.** Every short-lived soul says when its instance retires:
-   reviewers and probes when they have answered, developers once their PR has
-   merged or closed, experts when their effort is done.
+   probes (researchers and verifiers among them) when they have answered,
+   reviewers once their round is closed, a helper with a scoped piece once its
+   work has landed, developers once their PR has merged or closed, experts
+   when their effort is done.
 
 Give each line its reason in one sentence. Never one soul per imagined area,
 repository or topic.

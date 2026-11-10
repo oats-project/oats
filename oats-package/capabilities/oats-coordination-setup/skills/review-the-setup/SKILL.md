@@ -17,6 +17,8 @@ description: >-
 | An expert's index no longer reads in one sitting | Split its knowledge into nodes, keeping one expert |
 | Leads keep needing a way of working the expert doesn't have | A new expert soul for that way of working |
 | Developers keep reporting the same thing they can't run | Repository instructions first, then a developer soul with that environment |
+| Leads send every small change to a developer, or build a large feature alone | Point the lead's skills at who builds (`/coordination-best-practices`, "One lead per effort") |
+| Approvals or verdicts that don't say what they checked | Require the reviewer's Checked section (`/coordination-best-practices`, "Whoever builds iterates with fresh reviewers") |
 | A lead stacks PRs it can't land | Name a merge path for that lane (`/set-landing-rules`, step 3) |
 | A maintainer keeps making the same special judgment | Write it into the landing rules |
 | A person keeps answering the same kind of card | Move that decision into a rule or to the agents, with their yes |
