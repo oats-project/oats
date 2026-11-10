@@ -171,6 +171,17 @@ test("a failure Desktop raises itself never carries a detail, whatever the envel
     'E_SESSION_STOP_FAILED', 'E_WORK_PRESERVATION_FAILED', 'E_WORK_INSPECTION_FAILED', 'E_RETIRE_INCOMPLETE', 'E_RUNTIME_QUIESCE_FAILED']) assert.equal(lifecycleDetailCode(code), true, code);
   for (const none of [undefined, null, '', 7, {}]) assert.equal(lifecycleDetailCode(none), false);
 });
+test("a stop or a retire the kernel answers with E_USAGE (a missing argument, before any effect) is refused, with its sentence and the kernel's usage line as the detail", async () => {
+  const usage = 'usage: oats retire <instance> [--plan] [--json]', fixed = lifecycleReason('E_USAGE', DESKTOP_TERMS);
+  assert.deepEqual(fixed, { code: 'E_USAGE', message: 'Invalid lifecycle request.' }); assert.equal(lifecycleDetailCode('E_USAGE'), true);
+  for (const operation of ['stop', 'retire']) {
+    const f = fixture({ invoke: async (_bin, args) => args.phase === 'plan' ? envelope(operation === 'stop' ? stopPlan() : retirePlan())
+      : { schemaVersion: 1, ok: false, origin: 'kernel', error: { code: 'E_USAGE', message: usage } } });
+    const refused = await f.apply((await f.plan(operation)).planRef);
+    assert.equal(refused.status, 'refused', operation); assert.deepEqual(refused.reason, { ...fixed, detail: usage }, operation);
+    assert.equal(Object.hasOwn(refused, 'cause'), false, operation);
+  }
+});
 test("a local plan refusal and a refusal before any effect carry the CLI's message as their detail; an answer that is not an error envelope never does", async () => {
   const error = { code: 'E_INSTANCE_RETIRING', message: 'dev-1 is already being retired\n(since 12:00)' }, fixed = lifecycleReason('E_INSTANCE_RETIRING', DESKTOP_TERMS);
   const shown = { ...fixed, detail: 'dev-1 is already being retired (since 12:00)' };
@@ -425,11 +436,11 @@ test('a Herdr-recorded instance still plans and applies Retire: the kernel decid
   assert.equal((await f.apply(plan.planRef)).status, 'complete');
   assert.deepEqual(f.calls.map(c => [c.args.operation, c.args.phase]), [['retire', 'plan'], ['retire', 'apply']]);
 });
-test('BEFORE_EFFECT_CODES is a frozen list of ten codes, and it is the set an apply reads as "refused, nothing happened"', async () => {
-  assert.deepEqual(BEFORE_EFFECT_CODES, ['E_BAD_ARGS', 'E_INSTANCE_RETIRING', 'E_LIFECYCLE_BUSY',
+test('BEFORE_EFFECT_CODES is a frozen list of eleven codes, and it is the set an apply reads as "refused, nothing happened"', async () => {
+  assert.deepEqual(BEFORE_EFFECT_CODES, ['E_BAD_ARGS', 'E_USAGE', 'E_INSTANCE_RETIRING', 'E_LIFECYCLE_BUSY',
     'E_HOME_MISMATCH', 'E_SESSION_UNKNOWN', 'E_AMBIGUOUS_INSTANCE', 'E_UNIDENTIFIED_INSTANCE_HOME', 'E_REMOTE_INCOMPATIBLE', 'E_AMBIGUOUS', 'E_SNAPSHOT_UNKNOWN']);
   assert.equal(Object.isFrozen(BEFORE_EFFECT_CODES), true); assert.throws(() => BEFORE_EFFECT_CODES.push('E_OTHER'), TypeError);
-  assert.equal(new Set(BEFORE_EFFECT_CODES).size, 10); assert.ok(BEFORE_EFFECT_CODES.every(code => typeof code === 'string'));
+  assert.equal(new Set(BEFORE_EFFECT_CODES).size, 11); assert.ok(BEFORE_EFFECT_CODES.every(code => typeof code === 'string'));
   const applied = async (operation, code) => {
     const f = fixture({ invoke: async (_bin, args) => args.phase === 'plan' ? envelope(operation === 'stop' ? stopPlan() : retirePlan())
       : { schemaVersion: 1, ok: false, error: { code, message: 'a stand-in for the kernel message' } } });

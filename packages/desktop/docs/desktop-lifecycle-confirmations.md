@@ -374,6 +374,12 @@ from whether the plan observed `work/` (`facts.work.observed`):
   file or the folder, and the remedy where there is one) is in Details, for a
   local answer and a routed one. Where that message offers `--force`, it is
   the kernel's own word: Desktop offers none and adds nothing about it.
+- `E_USAGE` (a stop or a retire missing its argument, which the kernel
+  answers only before any effect, a routed one before it is sent) is a
+  **refusal** with the sentence of `E_BAD_ARGS`, "Invalid lifecycle
+  request.", and the kernel's usage line in Details. It is in
+  `BEFORE_EFFECT_CODES`: an apply answered with it reads as refused, never as
+  an unknown outcome.
 - Malformed receipts and timeouts are closed local messages.
   An error envelope's `message` renders only through the display filter
   (`packages/client/display-text.mjs`; see
