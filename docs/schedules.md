@@ -44,9 +44,32 @@ The design is in the
 | `<deployment>/.agents/schedules/` | Run state: `state.json` (last minute and recent runs per job), `triggers.json` (polls, pending events, fired keys) and one lock directory per running job. |
 | `~/.oats/schedules/registry.json` | The deployments this host ticks, `maxConcurrent` (absent: default 5 running scheduled jobs) and `triggersMaxConcurrent` (absent: no host cap on trigger-spawned live instances). The two caps are separate. |
 
-One host lock serializes ticks, run-now, reconcile and remove. It is never
-reclaimed by another process: a lock whose owner is gone is reported with the
-directory to remove.
+One host lock, `~/.oats/schedules/host.lock`, serializes ticks, run-now,
+reconcile and remove. Changes to the registry hold
+`~/.oats/schedules/registry.lock`, and changes to a deployment's definitions
+and state hold `<deployment>/.agents/schedules/scope.lock`. Each is a file that
+names the process holding it, by its pid and the time it started.
+
+**A lock left by a command that was killed is taken over by the next
+command.** A tick that is killed, or lost in a reboot, while it holds the host
+lock therefore does not stop the scheduler: the next tick finds that the
+process the file names is gone, takes the lock and runs. A holder that is
+still running is never taken over: the command answers `E_SCHEDULER_BUSY`
+(`pid <n> holds it`), and nothing was changed.
+
+Three cases are left to the operator. Each is `E_SCHEDULER_BUSY`, the message
+says which it is and names the path, and nothing at that path is removed for
+you:
+
+| The message says | What is there | What to do |
+|---|---|---|
+| `the record at <path> is unreadable` | a file that is not a lock's record | remove that file once no `oats schedule` process is running |
+| `whether pid <n>, which holds it, still runs cannot be established` | a record whose process cannot be told from another with the same pid (the record has no start time, or this host cannot read one) | check pid `<n>` by hand; if it is not an `oats schedule` process, remove the lock file |
+| `<path> is a lock directory written by an earlier kernel` | a directory, the lock of an oats older than this one | if an older oats is still running a schedule command, wait for it; otherwise remove the directory |
+
+A lock whose holder is gone and whose record cannot be taken over (a record
+without the identifier a takeover needs) is reported the same way, with the
+file that must be removed.
 
 ## Kinds
 

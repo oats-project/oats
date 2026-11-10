@@ -36,10 +36,14 @@ To put a workspace on a machine that has no deployment yet, use
 - Registrations live in `~/.oats/servers.json` on this machine, never in a
   repository. Every change to the file (add, remove, a learned workspace key,
   connect) is a short read-modify-write of the file as it is then, under the
-  lock directory `~/.oats/servers.lock`, so concurrent commands never lose each
-  other's registrations. A lock still held after 5 s, or left by a process
-  that died, is refused with `E_SERVERS_BUSY`, naming the directory to remove
-  once no oats process is changing the registry.
+  lock `~/.oats/servers.lock`, so concurrent commands never lose each
+  other's registrations. The lock is a file that names the process holding it.
+  One left by a command that was killed is taken over by the next command. One
+  whose holder is still running after 5 s is refused with `E_SERVERS_BUSY`. So
+  are a lock file whose record is unreadable, a holder that cannot be told to
+  be running or gone, and a lock directory written by an earlier kernel: the
+  message says which it found and names the path to remove once no oats
+  process is changing the registry.
 
 **Which workspace a server serves.** A registration records `workspaceKey`:
 the canonical key of the workspace its host deployment realizes, as the

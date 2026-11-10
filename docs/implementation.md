@@ -219,10 +219,15 @@ read-modify-write callers must supply the lock and reread. Later explicit one
 stays explicit, including one reintroduced by an older writer: the stored
 marker cannot distinguish its provenance. The trigger cap stays independent.
 
-The shared mkdir lock retries every occupied-directory window within the
-caller's retry deadline, including owner-file publication and removal. It never
-removes a contender's lock or steals from a live, dead or unreadable owner;
-persistent contention ends in the caller's existing busy error.
+The lock of these shared files (`dir-lock.mjs` `withDirLock`: the schedule
+locks, `servers.lock`, `deployments.lock`, a deployment's `local.lock`) is a
+claim (`claim.mjs`): a file hard-linked into place that names its holder by pid
+and start time. A holder that runs is waited for within the caller's retry
+deadline and then refused with the caller's busy error. A holder that is
+verifiably gone is taken over. A holder that cannot be judged, a record that
+does not parse and a directory at the lock's path (the lock of an earlier
+kernel) are refused with the same busy error and left as they are. The module
+installs no signal handler.
 
 Spawn compensation returns its diagnostic and a structural uncertainty flag;
 only an incomplete result marks the original error's `details.unconfirmed`.

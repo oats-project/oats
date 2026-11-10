@@ -1869,9 +1869,14 @@ oats teams default <label> [--if-absent | --expect <label>] --json
   Among concurrent `oats teams` writers on one deployment, a conditional write
   therefore never overwrites a default another of them set: when two race, the
   later one sees the earlier result and refuses with
-  `E_TEAM_DEFAULT_MISMATCH`. A lock still held after 5 s is `E_LOCAL_BUSY
-  {path, lock}`, naming the directory to remove when no oats process is
-  editing; nothing was written. The limits: a person or tool editing
+  `E_TEAM_DEFAULT_MISMATCH`. The lock is a file that names the process
+  holding it: one left by a command that was killed is taken over by the next
+  command. A lock whose holder is still running after 5 s is `E_LOCAL_BUSY
+  {path, lock}`, and so is one that cannot be judged: a record that is
+  unreadable, a holder that cannot be told to be running or gone, or a lock
+  directory written by an earlier kernel. The message says which was found and
+  names the path to remove when no oats process is editing; nothing was
+  written. The limits: a person or tool editing
   `oats-local.yaml` directly does not take the lock (the content compare still
   catches most such edits, but not one landing between the compare and the
   rename), and changes to the committed `oats-workspace.yaml` (a pull, a

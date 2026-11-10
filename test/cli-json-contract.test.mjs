@@ -19,6 +19,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { selfIdentity } from "../lib/worktree-hooks.mjs";
 import { inertHarnessPath } from "./helpers/runtime-stub.mjs";
 import { hostFeatures } from "../lib/servers.mjs";
 import { readSessionViewer } from "../lib/session-viewer.mjs";
@@ -235,10 +236,10 @@ test("oats soul launch --json: one stdout envelope for a set, a remove, a plan a
   failure(fx.cli(["soul", "launch", "remove", "dev", "--dir", bare, "--json"], { cwd: bare }), "E_LOCAL_MISSING", "outside a deployment");
   // The lock of the deployment's local file held elsewhere.
   const lock = join(fx.dep, ".agents", "locks", "local.lock");
-  mkdirSync(lock, { recursive: true });
-  writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.pid, at: new Date().toISOString(), what: "a test" }));
+  mkdirSync(dirname(lock), { recursive: true });
+  writeFileSync(lock, JSON.stringify({ ...selfIdentity(), nonce: "a".repeat(32), at: new Date().toISOString(), what: "a test" }) + "\n");
   assert.deepEqual(failure(run("set", "dev", "--launch-config", "fast"), "E_LOCAL_BUSY", "the lock held").details, { path: join(fx.dep, "oats-local.yaml"), lock });
-  rmSync(lock, { recursive: true });
+  rmSync(lock);
   // A file the rewrite would leave invalid is refused by the read of it, before the verb starts.
   writeFileSync(join(fx.dep, "oats-local.yaml"), `${readFileSync(join(fx.dep, "oats-local.yaml"), "utf8")}bogus: 1\n`);
   failure(run("set", "dev", "--launch-config", "fast"), "E_WORKSPACE_SCHEMA", "an invalid oats-local.yaml");
