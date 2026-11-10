@@ -1599,6 +1599,11 @@ Doctor reads this as `oats status` does, offline and read-only. Its exit
 status does not change: doctor exits 0 with problems. A deployment with no
 open retirement sees no change.
 
+`oats doctor --json` lists this machine's session resume lock, when it needs a
+person, as one `resume-lock-stuck` problem in `problems[]`, `{code, message,
+remedy}` ([The machine sweep](#the-machine-sweep-oats-session-resume),
+`E_RESUME_LOCK_STUCK`). It is the machine's, the same from every deployment.
+
 ### Desktop facts
 
 Feature `desktop-facts`: facts the kernel reports so the Desktop never derives
@@ -6916,15 +6921,37 @@ whatever the rows say:
 - **One sweep per machine.** A second sweep while one runs answers
   `E_RESUME_BUSY` through the standard failure envelope
   (`{"schemaVersion":1,"ok":false,"error":{"code":"E_RESUME_BUSY","message":"…"}}`,
-  exit 1); nothing was started, and a client shows no notice. A lock that
-  cannot be taken (an unreadable record, a holder that cannot be judged) is
-  the same code, with a message that says what to remove
-  ([The sweep](execution-targets.md#the-sweep)). The lock and
+  exit 1); nothing was started, and a client shows no notice. The lock and
   the per-boot note (refusals, and each home's count of sweep starts that
   launched something: `resumed`, `fresh`, `blocked`) are kernel-private,
   not a contract. Without a boot id (neither Linux nor macOS) nothing is
   noted or counted.
-- Errors: `E_RESUME_BUSY`; `E_BAD_ARGS` (`--deployment` that is not a
+- **A lock that needs a person.** `E_RESUME_LOCK_STUCK`, through the same
+  envelope at exit 1, when the sweep's lock cannot be taken and no sweep is
+  known to run; nothing was started, and no sweep starts anything on this
+  machine until the lock is removed. `error.details` is `{lock, found}`:
+  `lock` is the lock's absolute path, the file or directory to remove, and
+  `found` is one of
+
+  | `found` | what is at the lock's path |
+  |---|---|
+  | `unreadable` | a record that cannot be read |
+  | `unknown` | a holder that cannot be told to be running or gone |
+  | `cannot-take-over` | a gone holder's record that cannot be taken over |
+  | `held-again` | a lock that was taken again each time the sweep found it free |
+  | `own-start-unreadable` | nothing in the way: the sweep cannot read its own start time, so it could not hold the lock |
+  | `directory` | a directory, the lock of an OATS that locked with one; it is never removed for the operator |
+
+  The message says the same in words, with what to do
+  ([The sweep](execution-targets.md#the-sweep)). It is never
+  `E_RESUME_BUSY`: that code is a sweep that runs. `readResumeSweep` reads
+  it as `failed` with the code. `oats doctor --json` lists the same states
+  as one `resume-lock-stuck` problem in `problems[]`, `{code, message,
+  remedy}` (text: `! resume-lock-stuck: <message>`, the remedy on the next
+  line), read without taking the lock; a free lock, a sweep that runs and a
+  lock a gone sweep left are not listed, and doctor's exit status does not
+  change.
+- Errors: `E_RESUME_BUSY`; `E_RESUME_LOCK_STUCK`; `E_BAD_ARGS` (`--deployment` that is not a
   deployment directory, `--server`, an unknown flag or an argument); without
   `--deployment`, the list's own errors (`E_DEPLOYMENTS_INVALID`,
   `E_DEPLOYMENTS_VERSION`). A home's start failure is a row, never the
@@ -7023,7 +7050,7 @@ reading asks it for a live read, and every other reading for nothing
   passes its own exec must keep those three properties: detached, file-backed,
   and never signalling the child.
 - It answers the kernel's envelope: the result at exit 0, and an `ok:false`
-  envelope whatever the exit (`E_RESUME_BUSY` exits 1). Otherwise it answers
+  envelope whatever the exit (`E_RESUME_BUSY` and `E_RESUME_LOCK_STUCK` exit 1). Otherwise it answers
   a code of its own, with no message: `E_CLI_OUTPUT_LIMIT` (more than 4 MiB),
   `E_CLI_PROTOCOL` (no envelope), `E_CLI_FAILED` (a nonzero exit without an
   `ok:false` envelope, or an exec that throws). No stderr and no exception text

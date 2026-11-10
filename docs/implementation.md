@@ -126,7 +126,7 @@ and the rules its tests pin.
 | `shell-word.mjs` | `shellWord` and `shq`: one word of a command the kernel prints for a person to paste into a shell. It imports nothing, so `launch-preference.mjs` quotes by the rule `core.mjs` re-exports |
 | `soul-launch-verbs.mjs` | `oats soul launch set\|remove`, the writer of `souls.launch` |
 | `schedule.mjs`, `schedule-host.mjs`, `triggers.mjs`, `automations.mjs` | schedules, triggers and the host timer |
-| `session-end.mjs`, `session-resume.mjs`, `session-resume-contract.mjs`, `session-seen.mjs`, `start-env.mjs` | session resume (#1559): what every local listing saw of each home and the pure rule that decides which losses the sweep resumes (`session-seen.mjs`: one producer, `listInstances`; never in the way of the listing); the contract's names (`sessionEnd`, the start's `resume` object, the sweep's outcomes and reasons, the feature) in one dependency-free module that every producer, test and doc reads (awebai/oats#1567 settles them); how a launched home's last session ended (`sessionEnd`, from the kernel-private exit marker and stop record, both forms of the marker), and the machine sweep `oats session resume` with its lock (a claim taken through `dir-lock.mjs` `acquireDirLock`, its record naming the boot too; the lock directory of an earlier kernel is judged by that kernel's rules and removed once stale) and its per-boot note (refusals, and the count behind the bound of 3 sweep starts per home per boot); a resume holds the home's lifecycle claim (`claim.mjs` below), as every start does, the sweep's status-row read of a retire or a claim holder is only its filter, and every stop OATS does writes the stop record through `core.mjs` `recordStop`, a retire's before its window kill; the record of each start's `fromEnv` values (`start-env.mjs`: a keyed digest per variable, never a value) and the one check a resume and `--plan` share, so a resume never starts under a changed value; the conversation a resume continues is `packages/record/lib/last-conversation.mjs` |
+| `session-end.mjs`, `session-resume.mjs`, `session-resume-contract.mjs`, `session-seen.mjs`, `start-env.mjs` | session resume (#1559): what every local listing saw of each home and the pure rule that decides which losses the sweep resumes (`session-seen.mjs`: one producer, `listInstances`; never in the way of the listing); the contract's names (`sessionEnd`, the start's `resume` object, the sweep's outcomes and reasons, the feature) in one dependency-free module that every producer, test and doc reads (awebai/oats#1567 settles them); how a launched home's last session ended (`sessionEnd`, from the kernel-private exit marker and stop record, both forms of the marker), and the machine sweep `oats session resume` with its lock (a claim taken through `dir-lock.mjs` `acquireDirLock`, its record naming the boot too; `E_RESUME_LOCK_STUCK` for a lock that needs a person, which `oats doctor` reports as `resume-lock-stuck`) and its per-boot note (refusals, and the count behind the bound of 3 sweep starts per home per boot); a resume holds the home's lifecycle claim (`claim.mjs` below), as every start does, the sweep's status-row read of a retire or a claim holder is only its filter, and every stop OATS does writes the stop record through `core.mjs` `recordStop`, a retire's before its window kill; the record of each start's `fromEnv` values (`start-env.mjs`: a keyed digest per variable, never a value) and the one check a resume and `--plan` share, so a resume never starts under a changed value; the conversation a resume continues is `packages/record/lib/last-conversation.mjs` |
 | `stable-node.mjs` | the one rule for a node path written into anything that outlives the process: the host timer's unit and `OATS_NODE_BIN` ([capabilities](capabilities.md#the-node-a-hook-writes-down)). It imports nothing of the kernel |
 | `trigger-sources.mjs` | a capability's `triggerSources`: the use-time validator (per source, never from the manifest contract or discovery) and the source wire's answer and event rules; `triggers.mjs` runs a source with `instance-inspect.mjs`'s `runModuleCommand`, the provider-check runner |
 | `refused-text.mjs` | the one set of characters the kernel never stores or prints in text it did not write (`REFUSED_TEXT`), and `safeText`, which replaces them |
@@ -238,11 +238,14 @@ asynchronous (`acquireDirLock`, released by the sweep itself;
 `session-resume.mjs` `acquireResumeLock`). No signal is held back for it: a
 sweep a signal ends leaves its lock, and the next sweep takes it over. Its
 record carries the boot it was taken in, and a lock of another boot is gone
-whatever its pid reads as (`claim.mjs` `holderGone`). A directory at its path
-is not refused there: the sweep runs unattended, so it reads the directory by
-the rules of the kernel that made it, answers busy while that kernel holds it,
-and removes it under that kernel's takeover directory (`lock.takeover`) once
-it does not.
+whatever its pid reads as (`claim.mjs` `holderGone`). A sweep that runs is
+`E_RESUME_BUSY`; every refusal that needs a person, a directory at the lock's
+path included, is `E_RESUME_LOCK_STUCK`, told apart by the one word the lock
+gives its caller for what it found (`dir-lock.mjs` `refusals`, `found`).
+`oats doctor` reads the same lock without taking it (`dirLockHeld`, over
+`claim.mjs` `claimUnheld`, with the same `holderGone`) and reports those
+states as its `resume-lock-stuck` problem (`session-resume.mjs`
+`resumeLockProblem`): one classification for the sweep and for doctor.
 
 Spawn compensation returns its diagnostic and a structural uncertainty flag;
 only an incomplete result marks the original error's `details.unconfirmed`.

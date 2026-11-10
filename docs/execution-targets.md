@@ -1424,18 +1424,25 @@ refused. A home removed between the read and its start is reported
   - A lock taken in another boot is taken over whatever its pid reads as: a
     boot ends every process, and a pid and a start time counted from the boot
     can both come again in the next.
-  - Three locks are refused with `E_RESUME_BUSY` and left as they are, and
-    the message says which was found: a record that cannot be read, a holder
-    that cannot be told to be running or gone, and a gone holder's record
-    that cannot be taken over. Remove the file the message names once no
-    `oats session resume` is running, and run the sweep again.
+  - A lock that needs a person is refused with `E_RESUME_LOCK_STUCK`, never
+    with `E_RESUME_BUSY`, and left as it is. The message says which was
+    found and what to remove: a record that cannot be read, a holder that
+    cannot be told to be running or gone, a gone holder's record that cannot
+    be taken over, a lock that was taken again each time the sweep found it
+    free, or a sweep that cannot read its own start time. Remove the file
+    the message names once no `oats session resume` is running, and run the
+    sweep again. No sweep starts anything on this machine until then.
   - A directory at the lock's path is the lock of an OATS that locked with
-    one. It is busy while that OATS holds it by its own rules (its owner's
-    pid runs in the boot it recorded; with no owner recorded, for a minute),
-    and removed after that, so a directory left behind before an upgrade
-    stops no sweep. That OATS, meeting the file, answers `E_RESUME_BUSY` for
-    the file's first minute and takes the lock over after it, also from a
-    sweep that still runs: run one OATS version per machine.
+    one. It is refused with `E_RESUME_LOCK_STUCK` too, whoever its owner is,
+    and is never removed for you: remove the directory once no earlier
+    `oats` is running on this machine. That OATS, meeting the file, answers
+    `E_RESUME_BUSY` for the file's first minute and takes the lock over
+    after it, also from a sweep that still runs: run one OATS version per
+    machine.
+  - `oats doctor` reports a lock in any of those states as one
+    `resume-lock-stuck` problem, with the path and what to do. It reads the
+    lock and takes nothing. A free lock, a sweep that runs and a lock a gone
+    sweep left are not reported.
 - A loss is answered once: whatever a sweep did with it (resumed, refused,
   skipped or blocked), no later sweep starts it again, in this boot or after
   a reboot; a later sweep reports it `not-seen-recently`. A `lifecycle-busy`

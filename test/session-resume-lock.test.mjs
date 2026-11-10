@@ -72,6 +72,9 @@ function snapshot(path, out = {}) {
   if (st.isDirectory()) for (const name of readdirSync(path).sort()) snapshot(join(path, name), out);
   return out;
 }
+/** What is in the sweep's state directory: every entry there, with all that is under it. The
+ *  directory's own times are not part of it: taking a claim writes and removes its private file there. */
+const contents = (f) => Object.assign({}, ...f.entries().map((name) => snapshot(join(f.dir, name))));
 
 /** A separate process that runs `script` (an ES module's text) on the fixture's OATS_HOME_DIR,
  *  bounded by a watchdog. */
@@ -206,9 +209,9 @@ test("a sweep killed with SIGKILL while it holds the lock: the next sweep takes 
   h.proc.kill("SIGKILL");
   assert.deepEqual(await h.closed, { code: null, signal: "SIGKILL" });
   assert.equal(JSON.parse(readFileSync(f.path, "utf8")).pid, h.proc.pid, "the killed sweep left its lock");
-  const left = snapshot(f.dir);
+  const left = contents(f);
   assert.equal(resumeLockProblem({ boot: BOOT }), null, "a lock the next sweep takes over by itself is no problem to report");
-  assert.deepEqual(snapshot(f.dir), left, "and reading it changes nothing");
+  assert.deepEqual(contents(f), left, "and reading it changes nothing");
   const next = await contender(t, f).result();
   assert.equal(next.acquired, true, JSON.stringify(next));
   assert.ok(next.elapsedMs < AT_ONCE_MS, JSON.stringify(next));
@@ -278,11 +281,11 @@ test("a holder whose liveness cannot be established, a record that does not pars
       `the holder of ${f.path}, pid ${gone}, is gone, and that file cannot be taken over (its nonce is not the 32 hexadecimal digits a claim carries); it must be removed`],
   ]) {
     writeFileSync(f.path, bytes);
-    const before = snapshot(f.dir), start = Date.now();
+    const before = contents(f), start = Date.now();
     assert.equal(stuckHere(f, found), stuckOf(f.path, why), what);
     assert.ok(Date.now() - start < AT_ONCE_MS, `${what}: nobody is waited for`);
     assert.deepEqual(resumeLockProblem({ boot: BOOT }), problemOf(f.path, why), what);
-    assert.deepEqual(snapshot(f.dir), before, `${what}: the lock is as it was, and nothing is beside it`);
+    assert.deepEqual(contents(f), before, `${what}: the lock is as it was, and nothing is beside it`);
   }
   // Removed by the operator, as the message says, the lock is taken.
   rmSync(f.path);
@@ -308,13 +311,13 @@ for (const [what, plant] of [
   test(`an earlier kernel's lock directory ${what} is never judged and never removed: E_RESUME_LOCK_STUCK naming the directory to remove, everything left byte for byte, and doctor's read reports it`, async (t) => {
     const f = fixture(t);
     plant(f);
-    const before = snapshot(f.dir), why = `${f.path} is a lock directory written by an earlier kernel`;
+    const before = contents(f), why = `${f.path} is a lock directory written by an earlier kernel`;
     assert.equal(stuckHere(f, "directory"), stuckOf(f.path, why, REMOVE_DIRECTORY(f.path)));
     const other = await contender(t, f).result();
     assert.deepEqual([other.code, other.message], ["E_RESUME_LOCK_STUCK", stuckOf(f.path, why, REMOVE_DIRECTORY(f.path))], JSON.stringify(other));
     assert.ok(other.elapsedMs < AT_ONCE_MS, JSON.stringify(other));
     assert.deepEqual(resumeLockProblem({ boot: BOOT }), problemOf(f.path, why, REMOVE_DIRECTORY(f.path)));
-    assert.deepEqual(snapshot(f.dir), before);
+    assert.deepEqual(contents(f), before);
     // Removed by the operator, as the message says, the lock is taken.
     rmSync(f.path, { recursive: true });
     assert.equal(resumeLockProblem({ boot: BOOT }), null);
