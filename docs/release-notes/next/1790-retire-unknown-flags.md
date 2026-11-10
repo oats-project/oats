@@ -1,6 +1,6 @@
 ## Fixed
 
-- **`oats retire` refuses a flag it does not read.** `oats retire <instance>
+- **`oats retire` refuses a flag it does not read** (oats-project/oats#1790). `oats retire <instance>
   --keep-dirs`, a typo for `--keep-dir`, was accepted, the flag was ignored,
   and the instance's home was removed.
   - A flag retire does not define, or an argument after the instance, is
