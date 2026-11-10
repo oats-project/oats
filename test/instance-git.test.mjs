@@ -370,6 +370,8 @@ test("filter overrides: a driver the operator's own configuration also defines k
     "filter.lfs.clean=git-lfs clean -- %f", "filter.lfs.process=system-process", "filter.lfs.required=true", "filter.lfs.smudge=git-lfs smudge -- %f",
     "filter.planted.clean=", "filter.planted.process=", "filter.planted.required=false", "filter.planted.smudge=system-smudge",
   ]);
+  // A system configuration the caller's Git is told not to read (GIT_CONFIG_NOSYSTEM) is not the operator's in force.
+  assert.deepEqual(settings(filterOverrides(["-C", repo], { operatorEnv: { ...operatorEnv, GIT_CONFIG_SYSTEM: systemConfig } })), settings(filterOverrides(["-C", repo], { operatorEnv })));
   // A global configuration that cannot be read defines nothing: every driver is emptied.
   assert.deepEqual(settings(filterOverrides(["-C", repo], { operatorEnv: { ...hermetic, GIT_CONFIG_GLOBAL: join(base, "absent") } })), settings(filterOverrides(["-C", repo])));
 });
