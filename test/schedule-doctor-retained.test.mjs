@@ -175,6 +175,61 @@ test("a workspace schedule absent beside a schedule file of its member that cann
   assert.deepEqual(diskEvidence(fx), before, "the slot, the state and the snapshot are left as they are");
 });
 
+// An unreadable slot of a workspace schedule this host does not run (still defined: disabled,
+// untrusted, placed elsewhere): reconcile here refuses it, so no row of doctor's for it may name
+// --clear; the slot's remedy says why this host does not run it and is the step that acts.
+for (const [change, excluded] of [
+  ["disabled", "the schedule is disabled in the saved definition or local schedules.disabled"],
+  ["untrusted", "the schedule is untrusted by local automations.trust"],
+  ["moved", "the saved schedule is assigned elsewhere (elsewhere); this host is this-host"],
+]) {
+  test(`an unreadable slot of a workspace schedule this host does not run (${change}): doctor says why this host does not run it and names the slot to remove by hand, never --clear`, async (t) => {
+    const { fx, cli } = fixture(t);
+    if (change === "disabled") assert.equal(cli("schedule", "disable", "ws/retained").doc.ok, true);
+    if (change === "untrusted") writeFileSync(join(fx.dep, "oats-local.yaml"), `schemaVersion: 2\nworkspace: ${fx.ref}\nhost:\n  name: this-host\n`);
+    if (change === "moved") {
+      fx.commit({ "oats-schedules/retained.yaml": { yaml: { ...entry, runsOn: "elsewhere" } } }, change);
+      assert.equal(cli("sync").doc.ok, true);
+    }
+    await retainedState(fx);
+    writeFileSync(join(slotOf(fx), "owner.json"), "{not json");
+    const before = diskEvidence(fx);
+    const problems = (cli("doctor", fx.dep).doc.problems ?? []).filter((p) => p.id === "ws/retained");
+    assert.deepEqual(problems.find((p) => p.code === "schedule-slot-unreadable"), {
+      code: "schedule-slot-unreadable", severity: "warning", scope: fx.dep, id: "ws/retained",
+      message: `schedule ws/retained: its slot ${slotOf(fx)} has no readable record, and the slot counts against maxConcurrent; this host does not run the schedule (${excluded}), so reconcile here refuses it`,
+      remedy: `once oats status shows no run of schedule ws/retained here, remove the slot by hand: rm -r -- '${slotOf(fx)}'`,
+    });
+    for (const p of problems) assert.doesNotMatch(`${p.message} ${p.remedy}`, /--clear/, `${p.code} names no --clear reconcile would refuse`);
+    const refused = cli("schedule", "reconcile", "ws/retained", "--clear");
+    assert.equal(refused.doc.error?.code, "E_AUTOMATION_NOT_HERE", JSON.stringify(refused.doc));
+    assert.deepEqual(diskEvidence(fx), before, "the slot is left as it is");
+  });
+}
+
+test("a workspace schedule gone from the snapshot with retained state and no slot: reconcile answers it, --clear clears its attempt and state, and doctor names that command", async (t) => {
+  const { fx, cli } = fixture(t);
+  fx.commit({ "oats-schedules/retained.yaml": null }, "removed");
+  assert.equal(cli("sync").doc.ok, true);
+  await fx.inEnv(() => S.writeState(fx.dep, { jobs: { "ws~retained": { attempt: { scheduledFor, startedAt } } } }));
+  const takenAt = JSON.parse(readFileSync(snapshotPath(fx.dep), "utf8")).takenAt;
+  const said = `schedule ws/retained, which as of ${takenAt} is not in the workspace (run oats automations refresh if that is stale), has retained state with a launch attempt for ${scheduledFor} that has no recorded result`;
+  const remedy = "once no run of schedule ws/retained is running (oats status lists the instances it started), run oats schedule reconcile ws/retained --clear to clear its state";
+  const before = diskEvidence(fx);
+  const row = (cli("doctor", fx.dep).doc.problems ?? []).find((p) => p.code === "schedule-unresolved" && p.id === "ws/retained");
+  problemShape({ ...row, holdsSlot: true }, fx);
+  assert.equal(row.holdsSlot, false);
+  assert.equal(row.remedy, remedy);
+  assert.ok(row.message.endsWith(`${said}; ${remedy}`), row.message);
+  const asked = cli("schedule", "reconcile", "ws/retained");
+  assert.deepEqual([asked.doc.ok, asked.doc.result], [true, { schedule: null, reconciled: "unknown", remedy: `${said}; ${remedy}` }], JSON.stringify(asked.doc));
+  assert.deepEqual(diskEvidence(fx), before, "reconcile without --clear changes nothing");
+  const cleared = cli("schedule", "reconcile", "ws/retained", "--clear");
+  assert.deepEqual([cleared.doc.ok, cleared.doc.result], [true, { schedule: null, reconciled: "cleared", cleared: ["attempt", "state"] }], JSON.stringify(cleared.doc));
+  assert.equal("ws~retained" in JSON.parse(readFileSync(join(S.stateDir(fx.dep), "state.json"), "utf8")).jobs, false, "the job's state is removed");
+  assert.deepEqual((cli("doctor", fx.dep).doc.problems ?? []).filter((p) => p.id === "ws/retained"), [], "nothing is left to report");
+});
+
 test("offline doctor does not claim current authorization from a statically eligible workspace snapshot", async (t) => {
   const { fx, cli, calls } = fixture(t);
   await retainedState(fx);
