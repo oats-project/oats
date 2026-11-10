@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,6 +7,8 @@ import { join, resolve } from "node:path";
 import { harnessToken } from "../lib/harness-token.mjs";
 
 const CLI = resolve("bin/oats.mjs");
+// Independently checked with Python hashlib, as used by the fixed receiver.
+const FINGERPRINTS = { claude: "sha256:86d07a18688a5f7a", codex: "sha256:4e9fc8552b4c2083", pi: "sha256:ba7f449af02fd715", opencode: "sha256:d1ee38bd37f21a05" };
 const base = mkdtempSync(join(tmpdir(), "oats-token-client-"));
 test.after(() => rmSync(base, { recursive: true, force: true }));
 function fixture(name, { operator = true, label = "team" } = {}) {
@@ -63,7 +64,7 @@ test("stdin set delivers each harness credential only to the receiver and lists 
     const r = fx.cli(["set", harness, "--server", "box", "--stdin", "--json"], { input: value + "\r\n", env: { FIXTURE_ROSTER: JSON.stringify(roster) } });
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.deepEqual(JSON.parse(r.stdout).result, { server: "box", action: "set", harness, name: "team",
-      fingerprint: "sha256:" + createHash("sha256").update(value).digest("hex").slice(0, 16),
+      fingerprint: FINGERPRINTS[harness],
       replacedAt: "2026-11-10T00:00:00Z", warnings: [],
       staleInstances: [{ instance: "older", agent: "dev", home: "/srv/ws/older", startedAt: old.startedAt }],
     });
@@ -143,7 +144,7 @@ test("stdin accepts a credential whose installed newline fits the file cap", () 
   const value = "x".repeat(65535);
   const r = fx.cli(["set", "opencode", "--server", "box", "--stdin", "--json"], { input: value + "\n" });
   assert.equal(r.status, 0, r.stdout + r.stderr);
-  assert.equal(JSON.parse(r.stdout).result.fingerprint, "sha256:" + createHash("sha256").update(value).digest("hex").slice(0, 16));
+  assert.equal(JSON.parse(r.stdout).result.fingerprint, "sha256:09ab7495d3e61a76");
   assert.equal((r.stdout + r.stderr + readFileSync(fx.calls)).includes(value), false);
 });
 
