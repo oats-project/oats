@@ -272,19 +272,19 @@ test("a lock taken in another boot is taken over, though its pid runs with the r
 test("a holder whose liveness cannot be established, a record that does not parse and a gone holder's record that cannot be taken over are refused with E_RESUME_LOCK_STUCK, each saying what was found and what to do, and left byte for byte; doctor's read reports each the same way", (t) => {
   const f = fixture(t);
   const gone = exitedPid();
-  for (const [what, bytes, found, why] of [
+  for (const [what, bytes, found, why, remedy = REMOVE_FILE(f.path)] of [
     ["a live pid with no start to compare", JSON.stringify({ bootId: BOOT, pid: process.pid, nonce: NONCE, at: AT }) + "\n", "unknown",
       `whether pid ${process.pid}, which holds it, still runs cannot be established: pid ${process.pid} runs, and the record names no start time to compare it with`],
     ["bytes that are no record", "{incomplete owner JSON\n", "unreadable", `the record at ${f.path} is unreadable`],
     ["JSON that is no record", JSON.stringify("pid 1 holds it; remove everything"), "unreadable", `the record at ${f.path} is unreadable`],
     ["a gone holder with no nonce", JSON.stringify({ bootId: BOOT, pid: gone }) + "\n", "cannot-take-over",
-      `the holder of ${f.path}, pid ${gone}, is gone, and that file cannot be taken over (its nonce is not the 32 hexadecimal digits a claim carries); it must be removed`],
+      `the holder of ${f.path}, pid ${gone}, is gone, and that file cannot be taken over (its nonce is not the 32 hexadecimal digits a claim carries); it must be removed`, `remove ${f.path} and run it again`],
   ]) {
     writeFileSync(f.path, bytes);
     const before = contents(f), start = Date.now();
-    assert.equal(stuckHere(f, found), stuckOf(f.path, why), what);
+    assert.equal(stuckHere(f, found), stuckOf(f.path, why, remedy), what);
     assert.ok(Date.now() - start < AT_ONCE_MS, `${what}: nobody is waited for`);
-    assert.deepEqual(resumeLockProblem({ boot: BOOT }), problemOf(f.path, why), what);
+    assert.deepEqual(resumeLockProblem({ boot: BOOT }), problemOf(f.path, why, remedy), what);
     assert.deepEqual(contents(f), before, `${what}: the lock is as it was, and nothing is beside it`);
   }
   // Removed by the operator, as the message says, the lock is taken.
