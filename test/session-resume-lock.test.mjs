@@ -18,8 +18,8 @@ const resumeUrl = new URL("../lib/session-resume.mjs", import.meta.url).href;
 const NONCE = "a".repeat(32);
 const AT = "2026-10-10T00:00:00.000Z";
 const BOOT = "boot-1";
-/** A takeover is immediate. The bound is the host's, where every liveness read may be a `ps`; it
- *  is under the minute a lock without a judged owner was once waited for. */
+/** A takeover is immediate. The bound is the host's, where every liveness read may be a `ps`, and
+ *  it is under the minute an earlier kernel's ownerless directory is waited for. */
 const AT_ONCE_MS = 30_000;
 
 /** OATS_HOME_DIR on a scratch directory for one test, its `session-resume/` made. */

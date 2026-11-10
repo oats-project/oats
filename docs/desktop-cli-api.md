@@ -6916,7 +6916,10 @@ whatever the rows say:
 - **One sweep per machine.** A second sweep while one runs answers
   `E_RESUME_BUSY` through the standard failure envelope
   (`{"schemaVersion":1,"ok":false,"error":{"code":"E_RESUME_BUSY","message":"…"}}`,
-  exit 1); nothing was started, and a client shows no notice. The lock and
+  exit 1); nothing was started, and a client shows no notice. A lock that
+  cannot be taken (an unreadable record, a holder that cannot be judged) is
+  the same code, with a message that says what to remove
+  ([The sweep](execution-targets.md#the-sweep)). The lock and
   the per-boot note (refusals, and each home's count of sweep starts that
   launched something: `resumed`, `fresh`, `blocked`) are kernel-private,
   not a contract. Without a boot id (neither Linux nor macOS) nothing is

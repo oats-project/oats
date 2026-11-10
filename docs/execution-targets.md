@@ -1413,8 +1413,29 @@ refused. A home removed between the read and its start is reported
 `--plan` says what it would do and starts nothing. Its answer is in
 [desktop-cli-api.md](desktop-cli-api.md#the-machine-sweep-oats-session-resume).
 
-- One sweep runs per machine: a second one answers `E_RESUME_BUSY`. A lock
-  left by a process that is gone, or by another boot, is taken over.
+- One sweep runs per machine: a second one answers `E_RESUME_BUSY`, at once,
+  and starts nothing. The lock is one file, `session-resume/lock`, that names
+  the sweep holding it by pid, by the time that process started and by the
+  boot it was taken in.
+  - A lock left by a sweep that is gone (it exited, was killed, or its pid
+    belongs to another process) is taken over at once by the next sweep. A
+    sweep ended by a signal, a container's stop included, releases nothing:
+    its lock is one of these.
+  - A lock taken in another boot is taken over whatever its pid reads as: a
+    boot ends every process, and a pid and a start time counted from the boot
+    can both come again in the next.
+  - Three locks are refused with `E_RESUME_BUSY` and left as they are, and
+    the message says which was found: a record that cannot be read, a holder
+    that cannot be told to be running or gone, and a gone holder's record
+    that cannot be taken over. Remove the file the message names once no
+    `oats session resume` is running, and run the sweep again.
+  - A directory at the lock's path is the lock of an OATS that locked with
+    one. It is busy while that OATS holds it by its own rules (its owner's
+    pid runs in the boot it recorded; with no owner recorded, for a minute),
+    and removed after that, so a directory left behind before an upgrade
+    stops no sweep. That OATS, meeting the file, answers `E_RESUME_BUSY` for
+    the file's first minute and takes the lock over after it, also from a
+    sweep that still runs: run one OATS version per machine.
 - A loss is answered once: whatever a sweep did with it (resumed, refused,
   skipped or blocked), no later sweep starts it again, in this boot or after
   a reboot; a later sweep reports it `not-seen-recently`. A `lifecycle-busy`
