@@ -234,7 +234,7 @@ for (const corruption of [{ runsOn: "not a host name" }, { enabled: "false" }]) 
   });
 }
 
-test("local retained state doctor cannot vouch for (unreadable lock custody) says doctor does not recommend reconciling, not that reconcile is unavailable", async (t) => {
+test("local retained state whose slot cannot be read names the slot and the remedy that releases it once a person has checked", async (t) => {
   const fx = v2Deployment();
   t.after(() => fx.cleanup());
   await fx.inEnv(() => {
@@ -245,12 +245,13 @@ test("local retained state doctor cannot vouch for (unreadable lock custody) say
     writeFileSync(ownerPath, "{not json");
     const statePath = join(S.stateDir(fx.dep), "state.json");
     const state = readFileSync(statePath, "utf8");
-    const problem = S.unresolvedScheduleAttempts(fx.dep).problems.find((p) => p.id === "custody");
-    assert.ok(problem);
+    const problems = S.unresolvedScheduleAttempts(fx.dep).problems.filter((p) => p.id === "custody");
+    assert.deepEqual(problems.map((p) => p.code), ["schedule-slot-unreadable", "schedule-unresolved"], "the slot is listed on its own too");
+    const problem = problems[1];
     assert.deepEqual(Object.keys(problem).sort(), problemKeys);
-    noExecutableReconcile(problem);
-    assert.match(problem.remedy, /^Doctor does not recommend reconciling this job because job lock custody is unreadable/);
-    assert.doesNotMatch(problem.remedy, /unavailable/i, "reconcile itself does not refuse an unreadable lock: doctor only declines to recommend it");
+    const remedy = "check oats schedule show custody; once its last run is not running, run oats schedule reconcile custody --clear to release the slot";
+    assert.equal(problem.remedy, remedy);
+    assert.ok(problem.message.endsWith(`the slot ${join(S.stateDir(fx.dep), "locks", "custody")} has no readable record: ${remedy}`), problem.message);
     assert.equal(readFileSync(statePath, "utf8"), state, "doctor wrote nothing");
     assert.equal(readFileSync(ownerPath, "utf8"), "{not json", "the lock custody is untouched");
   });
