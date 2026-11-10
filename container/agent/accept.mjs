@@ -98,7 +98,7 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc") {
   return evidence;
 }
 
-function runtimeCheck(uid, gid, strict) {
+function runtimeCheck(uid, gid) {
   const fs = require("node:fs");
   const assert = require("node:assert/strict");
   const status = fs.readFileSync("/proc/self/status", "utf8");
@@ -121,21 +121,37 @@ function runtimeCheck(uid, gid, strict) {
     assert.equal(st.uid, Number(uid), path);
     console.log(`${path}: uid=${st.uid} mode=0700`);
   }
-  const token = "/etc/agent-login/claude-token";
-  assert.ok(fs.lstatSync(token).isFile(), "token must be a regular file");
-  fs.accessSync(token, fs.constants.R_OK);
-  assert.throws(() => fs.accessSync(token, fs.constants.W_OK), "token must not be writable");
-  const st = fs.statSync(token), dir = fs.statSync("/etc/agent-login");
-  if (strict) {
-    assert.equal(st.uid, 0); assert.equal(st.gid, Number(gid)); assert.equal(st.mode & 0o777, 0o440);
-    assert.equal(dir.uid, 0); assert.equal(dir.gid, Number(gid)); assert.equal(dir.mode & 0o777, 0o750);
-  }
-  console.log(`setup-token file: readable, not writable; uid=${st.uid} gid=${st.gid} mode=${(st.mode & 0o777).toString(8)}; directory mode=${(dir.mode & 0o777).toString(8)}; contents not read`);
   const net = require("node:net");
   const socket = net.connect(2222, "127.0.0.1");
   socket.setTimeout(5000, () => { console.error("SSH banner timed out"); process.exit(1); });
   socket.once("data", (chunk) => { assert.match(chunk.toString(), /^SSH-2\.0-OpenSSH_/); console.log(`SSH banner: ${chunk.toString().trim()}`); socket.destroy(); });
   socket.once("error", (err) => { console.error(err.message); process.exit(1); });
+}
+
+// Validate the mount even before a token is provisioned; never create a placeholder.
+export function tokenCheck(gid, strict) {
+  const fs = require("node:fs"), assert = require("node:assert/strict");
+  const dir = fs.statSync("/etc/agent-login");
+  assert.ok(dir.isDirectory(), "login mount must be a directory");
+  if (strict) {
+    assert.equal(dir.uid, 0); assert.equal(dir.gid, Number(gid)); assert.equal(dir.mode & 0o777, 0o750);
+  }
+  const evidence = [`PASS login directory: uid=${dir.uid} gid=${dir.gid} mode=${(dir.mode & 0o777).toString(8)}`];
+  const token = "/etc/agent-login/claude-token";
+  let st;
+  try { st = fs.lstatSync(token); }
+  catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    return { present: false, evidence: [...evidence, "NOT RUN: setup-token file absent"] };
+  }
+  assert.ok(st.isFile(), "token must be a regular file");
+  fs.accessSync(token, fs.constants.R_OK);
+  assert.throws(() => fs.accessSync(token, fs.constants.W_OK), "token must not be writable");
+  if (strict) {
+    assert.equal(st.uid, 0); assert.equal(st.gid, Number(gid)); assert.equal(st.mode & 0o777, 0o440);
+  }
+  evidence.push(`PASS setup-token file: readable, not writable; uid=${st.uid} gid=${st.gid} mode=${(st.mode & 0o777).toString(8)}; contents not read`);
+  return { present: true, evidence };
 }
 
 function credentialScan(roots, excluded = []) {
@@ -178,11 +194,13 @@ function main(args, env) {
   const defaultRuntime = docker(["info", "--format", "{{.DefaultRuntime}}"]);
   for (const line of inspectAgent(info, env, image, defaultRuntime)) report(`PASS ${line}`);
   const { uid, gid } = ids(env);
-  const program = (fn, params, root = false) => docker(["exec", "-i", ...(root ? ["--user", "0:0"] : []), container, "node"], `(${fn.toString()})(${params.map((p) => JSON.stringify(p)).join(",")});`);
+  const program = (fn, params, root = false) => docker(["exec", "-i", ...(root ? ["--user", "0:0"] : []), container, "node"], `const result = (${fn.toString()})(${params.map((p) => JSON.stringify(p)).join(",")}); if (result !== undefined) console.log(JSON.stringify(result));`);
   const arch = docker(["exec", container, "node", "-p", "process.arch"]);
   if (label !== "local") assert.equal(arch, "x64", "target evidence requires amd64");
   report(`PASS architecture=${arch}; image=${info.Image}`);
-  report(`PASS ${program(runtimeCheck, [uid, gid, label !== "local"]).replaceAll("\n", `\n[${label}] PASS `)}`);
+  report(`PASS ${program(runtimeCheck, [uid, gid]).replaceAll("\n", `\n[${label}] PASS `)}`);
+  const token = JSON.parse(program(tokenCheck, [gid, label !== "local"]));
+  for (const line of token.evidence) report(line);
   report(`PASS ${program(credentialScan, [["/"], ["/proc", "/sys", "/dev", "/state", "/tmp", "/run", "/work"]], true)}`);
   const writableRoots = ["/state", "/tmp", "/run", "/work", "/dev/shm", "/dev/mqueue"];
   report(`PASS ${program(credentialScan, [writableRoots])}`);
@@ -203,8 +221,8 @@ function main(args, env) {
     const output = docker(["exec", container, cli, ...argv]);
     report(`PASS ${cli}: ${cli === "oats" ? JSON.parse(output).version : output.replaceAll("\n", `\n[${label}] `)}`);
   }
-  if (home) {
-    assert.ok(home.startsWith("/state/deploy/") && !home.includes("\n"), "--claude requires an instance home under /state/deploy");
+  if (home) assert.ok(home.startsWith("/state/deploy/") && !home.includes("\n"), "--claude requires an instance home under /state/deploy");
+  if (home && token.present) {
     // Keep project hooks/instructions away from the named live instance.
     // Never record Claude's raw output: authentication failures may echo data.
     const r = spawnSync("docker", ["exec", container, "sh", "-eu", "-c", `
@@ -218,7 +236,7 @@ function main(args, env) {
     assert.ok(r.status === 0 && r.stdout.trim() === "OATS_CONTAINER_AUTH_OK", "claude -p did not return the expected response; raw output withheld");
     report(`PASS claude -p for ${home}: OATS_CONTAINER_AUTH_OK (scratch cwd; user settings only; token read only inside the process)`);
     report(`PASS ${program(credentialScan, [writableRoots])}`);
-  } else report("NOT RUN claude -p: requires --claude INSTANCE_HOME and an operator-provisioned setup-token");
+  } else report(`NOT RUN claude -p: ${token.present ? "requires --claude INSTANCE_HOME and an operator-provisioned setup-token" : "setup-token file absent"}`);
   report("NOT RUN platform network/bypass, admitted-seat spawn, viewer, package sync, mail/chat and governance checks: collect their own live evidence; this is not a full section 12 receipt");
 }
 
