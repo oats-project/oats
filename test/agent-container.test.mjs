@@ -6,11 +6,13 @@ import { parse } from "yaml";
 function sshSettings(source) {
   const settings = new Map();
   for (const line of source.split("\n").map((s) => s.trim()).filter((s) => s && !s.startsWith("#"))) {
-    const [keyword, ...value] = line.split(/\s+/);
+    const parsed = line.match(/^([A-Za-z][A-Za-z0-9]*)[ \t]+(.+)$/);
+    assert.ok(parsed && !parsed[2].trimStart().startsWith("="), "sshd guard requires Keyword value lines: " + line);
+    const [, keyword, value] = parsed;
     const key = keyword.toLowerCase();
     assert.ok(key !== "match" && key !== "include", "sshd config must be flat: " + keyword);
     assert.ok(!settings.has(key), "duplicate sshd keyword: " + keyword);
-    settings.set(key, value.join(" "));
+    settings.set(key, value);
   }
   return Object.fromEntries(settings);
 }
@@ -84,7 +86,7 @@ test("SSH accepts only agent public keys with forwarding disabled", () => {
 });
 
 test("SSH guard refuses repeated keywords or conditional configuration", () => {
-  for (const prefix of ["PasswordAuthentication yes", "disableforwarding no", "  Match User agent", "  Include /tmp/unreviewed.conf"]) assert.throws(() => sshSettings(prefix + "\n" + read("sshd_config")));
+  for (const prefix of ["PasswordAuthentication yes", "disableforwarding no", "  Match User agent", "  Include /tmp/unreviewed.conf", "disableforwarding=no", "PasswordAuthentication=yes", "DisableForwarding = no", "Include=/tmp/unreviewed.conf", '"PasswordAuthentication" yes']) assert.throws(() => sshSettings(prefix + "\n" + read("sshd_config")), prefix);
 });
 
 test("Claude auth acceptance excludes the instance project settings", () => {

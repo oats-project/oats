@@ -241,6 +241,7 @@ checks. Record target evidence separately from local evidence. Container
 startup and a local preview do not establish two running agents.
 
 `test/agent-container.test.mjs` pins the image, Compose and SSH security
-settings and rejects weakened inspect fixtures. The SSH guard refuses
-duplicate keywords and `Match`/`Include`, keeping that file flat. Follow the repository's
+settings and rejects weakened inspect fixtures. The SSH guard requires flat
+`Keyword value` lines and refuses duplicate keywords, `Match`/`Include`,
+equals-delimited keywords and quoted keywords. Follow the repository's
 local check limits; full suites run in CI.
