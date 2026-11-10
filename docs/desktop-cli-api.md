@@ -4371,7 +4371,12 @@ readOnly: {helpers: "disabled", optionalLocks: "off", objectsWritten: 0}}`.
     and the Git command that follows it, and a filter a **submodule's own**
     configuration defines. Git runs inside each populated submodule to learn
     whether it is dirty, and the overrides name the repository's drivers, not
-    the submodule's.
+    the submodule's. A dirty submodule stays visible in the status for that
+    reason. Where the agent and the reader of its worktree are one system
+    user, which is the usual arrangement, such a filter runs nothing the agent
+    could not run itself. Where they are separate users, it runs the agent's
+    command as the reader's user: do not read a worktree with populated
+    submodules across users.
 - If HEAD or the index moved, the id is not in the current observation, or
   anything moved during the read: `E_STALE_OBSERVATION` with
   `details.observation`. Re-observe; never render a diff of another tree.

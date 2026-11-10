@@ -18,5 +18,6 @@
   - A driver whose name cannot be passed on Git's command line (it holds `=`
     or is not UTF-8) refuses the read with `E_GIT_FAILED`.
   - Not covered: a driver written between that read and the Git command, and
-    a filter that a submodule's own configuration defines
+    a filter that a submodule's own configuration defines, which matters
+    where the agent and the reader of its worktree are separate system users
     ([Git and diff](../desktop-cli-api.md#git-and-diff)).
