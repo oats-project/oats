@@ -69,9 +69,15 @@ Until that image is built, the two-seat inference milestone remains unproven.
 ## Mounts and UID
 
 The provisioner creates host directories with the runtime UID and GID.
-The Compose defaults are `20001:20001`; the image also accepts another
-non-root UID, including `docker run --user 20001`. Always set both UID and
-GID in the target service so a group-readable token is readable.
+The Compose defaults are `20001:20001`; use an explicit non-root UID:GID in
+the target service so the group-readable token is readable.
+
+The image also starts with a numeric UID alone, such as
+`docker run --user 20001`. When that UID has no image passwd entry, Docker
+assigns GID 0. The wrapper names that runtime group `agent`, and new files
+in `/state` have GID 0. Such a run cannot read a root:20001 0750 login
+directory or its 0440 token. Use `--user 20001:20001` for the team login;
+the UID-only form proves startup and SSH support, not token access.
 
 | Container path | Host ownership and mode | Access |
 | --- | --- | --- |
@@ -202,9 +208,11 @@ it requires `instance.json`, reads the token only inside the container and
 requires the exact inference response. It records no raw Claude output.
 
 The script compares inspect settings and the exact bind list to the exported
-variables, including supplementary groups, namespace overrides, sysctls,
-published ports, resolver overrides and the single network/address. It
-rejects environment names added to the image without printing their values.
+variables. It resolves `AGENT_IMAGE` independently and requires that image's
+ID, reference and start command, and its complete environment (printing only
+names of differing variables). Other comparisons include supplementary
+groups, namespace overrides, sysctls, published ports, resolver overrides
+and the single network/address.
 It checks the process's UID/GID/supplementary groups/capabilities/no-new-privileges
 and non-root sshd's banner, scans `/` as container root (pruning `/proc`,
 `/sys`, `/dev` and the agent-scanned `/state`, `/tmp`, `/run`, `/work`),

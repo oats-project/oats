@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 function required(env, name) {
   assert.ok(env[name], `set ${name} to the reviewed Compose value`);
@@ -21,6 +22,13 @@ export function inspectAgent(info, env, image) {
   assert.match(uid, /^[1-9]\d*$/, "non-root AGENT_UID");
   assert.match(gid, /^[1-9]\d*$/, "non-root AGENT_GID");
   equal("running", info.State.Running, true);
+  equal("reviewed image reference", info.Config.Image, required(env, "AGENT_IMAGE"));
+  assert.ok(image?.Id, "reviewed image ID is required");
+  equal("reviewed image ID", info.Image, image.Id);
+  for (const key of ["Entrypoint", "Cmd"]) {
+    assert.ok(isDeepStrictEqual(info.Config[key] ?? null, image.Config[key] ?? null), key + " differs from reviewed image (arguments withheld)");
+    evidence.push(key + " matches reviewed image (arguments withheld)");
+  }
   equal("uid:gid", info.Config.User, `${uid}:${gid}`);
   const h = info.HostConfig;
   equal("capabilities dropped", h.CapDrop, ["ALL"]);
@@ -45,8 +53,11 @@ export function inspectAgent(info, env, image) {
   equal("agent IP", info.NetworkSettings.Networks[network].IPAddress, required(env, "AGENT_IP"));
   const names = (entries) => entries.map((entry) => entry.split("=", 1)[0]);
   assert.ok(Array.isArray(image?.Config?.Env), "image environment baseline is required");
-  const allowed = new Set(names(image.Config.Env));
-  equal("environment names added to image (values withheld)", names(info.Config.Env || []).filter((name) => !allowed.has(name)).sort(), []);
+  const actualEnv = info.Config.Env || [], expectedEnv = image.Config.Env;
+  const allNames = new Set([...names(actualEnv), ...names(expectedEnv)]);
+  const entriesFor = (entries, name) => entries.filter((entry) => entry.split("=", 1)[0] === name).sort();
+  const changedNames = [...allNames].filter((name) => !isDeepStrictEqual(entriesFor(actualEnv, name), entriesFor(expectedEnv, name)));
+  equal("environment names differing from reviewed image (values withheld)", changedNames.sort(), []);
   equal("devices", h.Devices || [], []);
   equal("device requests", h.DeviceRequests || [], []);
   equal("tmpfs", h.Tmpfs, { "/tmp": "rw,nosuid,nodev,mode=1777" });
@@ -157,7 +168,7 @@ function main(args, env) {
     return r.stdout.trim();
   };
   const info = JSON.parse(docker(["inspect", container]))[0];
-  const image = JSON.parse(docker(["image", "inspect", info.Image]))[0];
+  const image = JSON.parse(docker(["image", "inspect", "--", required(env, "AGENT_IMAGE")]))[0];
   for (const line of inspectAgent(info, env, image)) report(`PASS ${line}`);
   const { uid, gid } = ids(env);
   const program = (fn, params, root = false) => docker(["exec", "-i", ...(root ? ["--user", "0:0"] : []), container, "node"], `(${fn.toString()})(${params.map((p) => JSON.stringify(p)).join(",")});`);
