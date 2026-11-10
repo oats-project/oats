@@ -4,7 +4,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { parsePorcelainV2, parseRemoteUrl } from "../lib/instance-git.mjs";
+import { gitRead, gitRepoRun, parsePorcelainV2, parseRemoteUrl } from "../lib/instance-git.mjs";
 import { deploymentsImported } from "./helpers/host-fixture.mjs";
 
 const CLI = resolve(new URL("../bin/oats.mjs", import.meta.url).pathname);
@@ -239,6 +239,12 @@ test("hardening: a clean, smudge or process filter the repository's configuratio
     const fx = filteredRepo(`r5-${name}`, configure);
     observed[name] = observeAndDiff(fx.ws);
     if (existsSync(fx.sentinel)) executed.push(name);
+    // The reads other modules make through this one (a retire's status of a tree) run no filter either.
+    const status = gitRead(fx.work, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
+    assert.equal(status.ok, true, `${name}: ${status.err}`);
+    assert.deepEqual(status.out.split("\0").filter((record) => record && record !== "?? .gitattributes"), [" M src/a.txt", "?? new.txt"], name);
+    assert.equal(gitRepoRun(join(fx.work, ".git"), ["--work-tree", fx.work, "status", "--porcelain=v1", "-z", "--untracked-files=all"]), status.out, name);
+    if (existsSync(fx.sentinel)) executed.push(`${name} (gitRead, gitRepoRun)`);
   }
   assert.deepEqual(executed, [], "no filter the configuration defines executed during an observation or a diff");
   for (const [name, { result, patches }] of Object.entries(observed)) {
@@ -281,6 +287,9 @@ test("hardening: a filter driver whose name Git's -c cannot carry refuses the ob
   assert.notEqual(g.status, 0, g.stdout + g.stderr);
   assert.equal(g.envelope.error.code, "E_GIT_FAILED", g.stdout);
   assert.match(g.envelope.error.message, /filter driver/);
+  const read = gitRead(fx.work, ["status", "--porcelain=v1", "-z"]);
+  assert.equal(read.ok, false); assert.match(read.err, /filter driver/);
+  assert.throws(() => gitRepoRun(join(fx.work, ".git"), ["--work-tree", fx.work, "status", "--porcelain=v1", "-z"]), /was not run.*filter driver/);
   assert.equal(existsSync(fx.sentinel), false, "the filter was not run");
 });
 
