@@ -1609,7 +1609,11 @@ the deployment and the others the host ticks, as one `schedule-slot-unreadable`
 problem in `problems[]`, `{code, severity: "warning", scope, id, message,
 remedy}` (text: `! schedule-slot-unreadable: <message>`, the remedy on the
 next line). The remedy is to check `oats schedule show <id>`, then run `oats
-schedule reconcile <id> --clear` ([Schedules](schedules.md#files)).
+schedule reconcile <id> --clear` ([Schedules](schedules.md#files)). A slot
+whose schedule is not defined, readable or not, is one `schedule-slot-orphaned`
+problem of the same shape, naming the run and the instance its record
+names; its remedy is to check `oats status`, then run `oats schedule
+reconcile <id> --clear`.
 
 ### Desktop facts
 
@@ -7229,11 +7233,15 @@ oats schedule update <id> --description=<text> [--dir <d>] --json
   reports its job `invalid` (`E_SCHEDULE_INVALID`) and runs the scope's
   other jobs; `reconcile <id>` answers `{reconciled: "unknown", remedy}`
   and `reconcile <id> --clear` releases the slot (`reconciled: "cleared"`).
-  For such a slot of a schedule that is not defined, both answers carry
-  `schedule: null`.
   `oats doctor --json` lists it as a `schedule-slot-unreadable` problem,
   `{code, severity, scope, id, message, remedy}`
   ([Schedules](schedules.md#files)).
+- **A slot whose local schedule is not defined**, readable or not, is counted by
+  every tick until it is released. `reconcile <id>` answers `{schedule:
+  null, reconciled: "unknown", remedy}` naming the run its record names, and
+  `reconcile <id> --clear` releases it (`{schedule: null, reconciled:
+  "cleared"}`). `oats doctor --json` lists it as a `schedule-slot-orphaned`
+  problem of the same shape ([Schedules](schedules.md#files)).
 - **Schedule IDs**: local and workspace schedule definition names permit 1–100
   lowercase letters, digits and dashes; trigger names retain their 40-character
   limit. Desktop accepts these schedule names for creation, editing and row

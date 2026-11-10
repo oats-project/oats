@@ -77,7 +77,7 @@ const { attachArgv, checkRemote, connectServer, forgetSnapshot, getServer, inspe
 const { readSessionViewer } = await kernelImport("session-viewer", () => import("../lib/session-viewer.mjs"));
 const { tickTriggers } = await kernelImport("triggers", () => import("../lib/triggers.mjs"));
 const A = await kernelImport("automations", () => import("../lib/automations.mjs"));
-const { parseEnvelopeText, SCHEDULE_SLOT_UNREADABLE, unresolvedScheduleAttempts, scheduleScopeOf, listSchedules, describe: describeSchedule, testSchedule, addSchedule, updateSchedule, updateScheduleDescription, setEnabled: setScheduleEnabled, removeSchedule, runNow: runScheduleNow, reconcile: reconcileSchedule, tickHost, tickWorkspace, scopeAutomations, scheduleKind, registerWorkspace, unregisterWorkspace, readRegistry, schedulerStatus, saveWakeForHome, removeWakeForHome, wakeFromFlags, withHostLock, scheduleError, SCHEDULE_API } = await kernelImport("schedule", () => import("../lib/schedule.mjs"));
+const { parseEnvelopeText, SCHEDULE_SLOT_UNREADABLE, SCHEDULE_SLOT_ORPHANED, unresolvedScheduleAttempts, scheduleScopeOf, listSchedules, describe: describeSchedule, testSchedule, addSchedule, updateSchedule, updateScheduleDescription, setEnabled: setScheduleEnabled, removeSchedule, runNow: runScheduleNow, reconcile: reconcileSchedule, tickHost, tickWorkspace, scopeAutomations, scheduleKind, registerWorkspace, unregisterWorkspace, readRegistry, schedulerStatus, saveWakeForHome, removeWakeForHome, wakeFromFlags, withHostLock, scheduleError, SCHEDULE_API } = await kernelImport("schedule", () => import("../lib/schedule.mjs"));
 const { hostUnitFiles, hostUnitStatus, installHostUnit, uninstallHostUnit } = await kernelImport("schedule-host", () => import("../lib/schedule-host.mjs"));
 const { kernelNode, stableNode } = await kernelImport("stable-node", () => import("../lib/stable-node.mjs"));
 const { receiveAttachment, uploadAttachment, readStreamBounded, MAX_ATTACHMENT_BYTES } = await kernelImport("attachments", () => import("../lib/attachments.mjs"));
@@ -942,7 +942,7 @@ async function doctor(dir) {
   for (const p of [...legacyLayoutProblems(agentsRoot), readableInstanceHomes(agentsRoot)].filter(Boolean)) console.log(`\n! ${p.code}: ${p.message}`);
   for (const p of localTeams.problems) console.log(`\n! ${p.code} (${p.condition}): ${p.message}`);
   const schedules = unresolvedScheduleAttempts(dirname(ws.local.path));
-  for (const p of schedules.problems) console.log(`\n! ${p.code}: ${p.message}${p.code === SCHEDULE_SLOT_UNREADABLE ? `\n  ${p.remedy}` : ""}`);
+  for (const p of schedules.problems) console.log(`\n! ${p.code}: ${p.message}${[SCHEDULE_SLOT_UNREADABLE, SCHEDULE_SLOT_ORPHANED].includes(p.code) ? `\n  ${p.remedy}` : ""}`);
   const operator = await doctorOperator(ws);
   for (const p of operator.problems) console.log(`\n! ${p.code}: ${p.message}\n  ${p.remedy}`);
   const launchPreferences = await doctorLaunchPreferences(ws);

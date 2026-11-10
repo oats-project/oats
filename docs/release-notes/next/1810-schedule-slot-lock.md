@@ -16,6 +16,9 @@
   `schedule-slot-unreadable` problem, `{code, severity, scope, id, message,
   remedy}`, naming the deployment, the job and the remedy
   ([Schedules](../schedules.md#what-a-run-reports)).
+- **`oats doctor` lists a schedule slot whose schedule is not defined** as
+  a `schedule-slot-orphaned` problem of the same shape, naming the run and
+  the instance its record names.
 
 ## Fixed
 
@@ -32,6 +35,13 @@
   deployment's jobs ran, and `oats schedule reconcile` answered `nothing to
   reconcile`. The tick now reports only that job `invalid` and runs the
   others; `oats schedule reconcile <id>` answers the remedy, and
-  `reconcile <id> --clear` releases the slot once you have checked, also
-  when the schedule is no longer defined
+  `reconcile <id> --clear` releases the slot once you have checked
+  ([Schedules](../schedules.md#files)).
+- **A slot left by a schedule that is no longer defined can be released.**
+  A local schedule removed by hand could leave its slot, which every tick counted
+  against `maxConcurrent` and no command could release:
+  `oats schedule reconcile` and `remove --force` answered
+  `E_SCHEDULE_UNKNOWN`. The slot still counts until it is released, since its
+  run may still be going; `oats schedule reconcile <id>` now answers what it
+  found, and `reconcile <id> --clear` releases it once you have checked
   ([Schedules](../schedules.md#files)).
