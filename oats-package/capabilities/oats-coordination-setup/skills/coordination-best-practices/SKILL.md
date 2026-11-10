@@ -118,7 +118,7 @@ instances start fresh.
   different model. It retires once its round is closed.
 - In research, a researcher fresh per angle and a verifier fresh per check,
   each the lead's child, the verifier on a model family no researcher and no
-  lead runs on.
+  lead runs on, wherever the organisation has one.
 - A maintainer per person per lane, called by message where a lane's rules
   need its read or reserve its merge. Where the person has none active in the
   lane, the lead starts it, without asking, and tells the person in two or

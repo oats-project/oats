@@ -56,7 +56,8 @@ node, not a soul.
    the developers' and the leads'; on the PR, the forge's review bot as well,
    where the organisation runs one. A group whose work ends in a report has a
    researcher soul and a verifier soul in place of the reviewer, the verifier
-   on a family no researcher and no lead runs on.
+   on a family no researcher and no lead runs on, wherever the organisation
+   has one.
 8. **Automations.** Only the organisation's scheduled jobs and the events that
    should start work (schedules and triggers, `/oats-automations`).
 9. **Retire rules.** Every short-lived soul says when its instance retires:
