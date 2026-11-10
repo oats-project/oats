@@ -1,9 +1,12 @@
 // `oats host run` (oats-project/oats#1789, lib/host-run.mjs): the foreground entry that runs the
 // kernel's periodic work where no host timer can (a container, a VM without a user manager). This
-// file holds what needs no tmux: its refusals before any effect, `--plan` and its lock. Every
-// refusal is made by the real function over a scratch OATS_HOME_DIR, and every lock and record is
-// a real one; the host timer's state is the one seam (`hostStatus`), since a test never touches a
-// live timer.
+// file holds what needs no tmux: its refusals before any effect, `--plan`, its lock and its loop.
+// Every refusal is made by the real function over a scratch OATS_HOME_DIR, and every lock and
+// record is a real one. The seams are the ones the command has at its process boundary: the host
+// timer's state (`hostStatus`: a test never touches a live timer), the clock and its one timer
+// (`now`, `timer`), the `oats` child a step runs (`run`), the child that stops one home
+// (`stopHome`) and the signal (`onSignal`). What a stop does to a home, on a real session, is
+// test/host-stop.test.mjs.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -204,4 +207,128 @@ test("oats schedule host install --register-only records the scope in the host r
   const plan = cli("host", "run", "--plan", "--json");
   assert.equal(plan.status, 0, plan.stdout + plan.stderr);
   assert.deepEqual(JSON.parse(plan.stdout).result.scopes, [dep]);
+});
+
+// ------------------------------------------------------------------ the loop
+
+const SWEEP = "session resume --json", TICK = "schedule tick --host --json", LIST = "session resume --plan --json";
+const settle = () => new Promise((done) => setImmediate(done));
+const ok = (result) => ({ schemaVersion: 1, ok: true, result });
+/** A host run on a clock the test moves: `calls` every `oats` child it started (its argv, the time,
+ *  and `answer(envelope)` to end it), `stops` every home it asked to stop, `said` its lines.
+ *  `fire(iso)` moves the clock to `iso` and fires the one timer that is armed. */
+function world(t, { at, scopes = [] }) {
+  oatsHome(t);
+  const w = { time: Date.parse(at), scopes, calls: [], stops: [], said: [], timers: [], signal: null, listening: 0 };
+  const hhmmss = () => new Date(w.time).toISOString().slice(11, 23);
+  w.options = {
+    boot: BOOT, hostStatus: NO_TIMER, stopGraceMs: 7000, scopes: () => w.scopes, now: () => w.time,
+    timer: (fn, ms) => { const armed = { fn, at: w.time + ms, live: true }; w.timers.push(armed); return () => { armed.live = false; }; },
+    run: (argv) => new Promise((answer) => w.calls.push({ argv: argv.join(" "), at: hhmmss(), answer })),
+    stopHome: (home, graceMs) => new Promise((answer) => w.stops.push({ home, graceMs, at: hhmmss(), answer })),
+    onSignal: (handler) => { w.signal = handler; w.listening += 1; return () => { w.signal = null; w.listening -= 1; }; },
+    say: (line) => w.said.push(line),
+  };
+  w.armed = () => w.timers.filter((timer) => timer.live);
+  w.fire = async (iso) => {
+    const [armed, ...more] = w.armed();
+    assert.ok(armed && !more.length, `exactly one timer is armed (${w.armed().length})`);
+    w.time = Date.parse(iso);
+    armed.live = false;
+    armed.fn();
+    await settle();
+  };
+  /** The calls since the last look, as `<time> <argv>`. */
+  let seen = 0;
+  w.next = () => { const calls = w.calls.slice(seen); seen = w.calls.length; return calls.map((c) => `${c.at} ${c.argv}`); };
+  w.pending = (argv) => w.calls.filter((c) => c.argv === argv && !c.answered);
+  w.answer = async (argv, envelope) => { const [call] = w.pending(argv); assert.ok(call, `a ${argv} is running`); call.answered = true; call.answer(envelope); await settle(); };
+  return w;
+}
+const D = "2026-11-10T";
+
+test("the loop: the sweep once, then at second 0 of each minute the listing and, when a scope is registered, the tick; a minute whose tick still runs is skipped, and a missed minute is never replayed", async (t) => {
+  const w = world(t, { at: `${D}10:00:20.500Z` });
+  const running = hostRun(w.options);
+  await settle();
+  assert.equal(existsSync(hostRunLockPath()), true, "the lock is held while it runs");
+  assert.deepEqual(w.next(), [`10:00:20.500 ${SWEEP}`], "the sweep first, as a child");
+  assert.deepEqual(w.armed(), [], "no minute is armed while the sweep runs");
+  w.time = Date.parse(`${D}10:00:50.000Z`);
+  await w.answer(SWEEP, ok({ schemaVersion: 1, plan: false, deployments: [], rows: [{ outcome: "resumed" }, { outcome: "resumed" }, { outcome: "skipped" }] }));
+  assert.deepEqual(w.armed().map((timer) => new Date(timer.at).toISOString()), [`${D}10:01:00.000Z`], "armed for second 0 of the next minute");
+  assert.ok(w.said.includes("resume sweep: 2 resumed, 1 skipped"), w.said.join("\n"));
+
+  // No scope is registered: the listing alone, and it says so, once.
+  await w.fire(`${D}10:01:00.004Z`);
+  assert.deepEqual(w.next(), [`10:01:00.004 ${LIST}`]);
+  await w.answer(LIST, ok({ rows: [] }));
+  await w.fire(`${D}10:02:00.001Z`);
+  assert.deepEqual(w.next(), [`10:02:00.001 ${LIST}`]);
+  await w.answer(LIST, ok({ rows: [] }));
+  assert.equal(w.said.filter((line) => line.startsWith("no scope is registered, so nothing is ticked")).length, 1);
+
+  // A scope is registered while it runs: the next minute ticks.
+  w.scopes = ["/srv/deploy"];
+  await w.fire(`${D}10:03:00.000Z`);
+  assert.deepEqual(w.next(), [`10:03:00.000 ${TICK}`, `10:03:00.000 ${LIST}`]);
+  assert.ok(w.said.includes("ticking 1 scope each minute: /srv/deploy"), w.said.join("\n"));
+  await w.answer(LIST, ok({ rows: [] }));
+  // That tick still runs at the next minute: the minute is skipped, the listing is not.
+  await w.fire(`${D}10:04:00.002Z`);
+  assert.deepEqual(w.next(), [`10:04:00.002 ${LIST}`]);
+  await w.answer(LIST, ok({ rows: [] }));
+  w.time = Date.parse(`${D}10:04:30.000Z`);
+  await w.answer(TICK, ok({ considered: [] }));
+  await w.fire(`${D}10:05:00.000Z`);
+  assert.deepEqual(w.next(), [`10:05:00.000 ${TICK}`, `10:05:00.000 ${LIST}`]);
+  await w.answer(TICK, ok({ considered: [] }));
+  await w.answer(LIST, ok({ rows: [] }));
+
+  // The process did not run for four minutes: one tick when it wakes, then the next minute's.
+  await w.fire(`${D}10:09:17.000Z`);
+  assert.deepEqual(w.next(), [`10:09:17.000 ${TICK}`, `10:09:17.000 ${LIST}`]);
+  assert.deepEqual(w.armed().map((timer) => new Date(timer.at).toISOString()), [`${D}10:10:00.000Z`], "the missed minutes are not armed again");
+  await w.answer(TICK, ok({ considered: [] }));
+  await w.answer(LIST, ok({ rows: [] }));
+  // A timer that fires just before the minute runs nothing: a tick started then would evaluate the minute before.
+  await w.fire(`${D}10:09:59.998Z`);
+  assert.deepEqual(w.next(), []);
+  assert.deepEqual(w.armed().map((timer) => new Date(timer.at).toISOString()), [`${D}10:10:00.000Z`]);
+  await w.fire(`${D}10:10:00.000Z`);
+  assert.deepEqual(w.next(), [`10:10:00.000 ${TICK}`, `10:10:00.000 ${LIST}`]);
+  // A tick that fails is said and counted, and the next minute ticks again.
+  await w.answer(TICK, { schemaVersion: 1, ok: false, error: { code: "E_SCHEDULER_BUSY", message: "the host scheduler is locked" } });
+  assert.ok(w.said.includes("tick failed (E_SCHEDULER_BUSY): the host scheduler is locked"), w.said.join("\n"));
+  await w.answer(LIST, ok({ rows: [] }));
+
+  // The host stops it: nothing runs, so it ends at once, with what it did.
+  w.time = Date.parse(`${D}10:10:40.000Z`);
+  w.signal("SIGTERM");
+  await settle();
+  assert.deepEqual(w.next(), [`10:10:40.000 ${LIST}`], "it lists once to find what runs");
+  await w.answer(LIST, ok({ rows: [] }));
+  const answer = await running;
+  assert.deepEqual(answer, { schemaVersion: HOST_RUN_SCHEMA, plan: false, signal: "SIGTERM", warnings: [],
+    sweep: { schemaVersion: 1, plan: false, deployments: [], rows: [{ outcome: "resumed" }, { outcome: "resumed" }, { outcome: "skipped" }] },
+    ticks: { run: 4, skipped: 1, failed: 1, noScope: 2 }, stopped: [] });
+  assert.deepEqual([w.armed().length, w.listening, existsSync(hostRunLockPath())], [0, 0, false], "no timer is armed, no signal is listened for, and the lock is released");
+});
+
+test("a sweep that fails does not end the run: it is said, and the minutes go on; installed unit files are a warning of the run", async (t) => {
+  const w = world(t, { at: `${D}10:00:00.000Z`, scopes: ["/srv/deploy"] });
+  const running = hostRun({ ...w.options, hostStatus: () => ({ kind: "systemd", unit: UNIT, installed: true, active: false, problems: [] }) });
+  await settle();
+  await w.answer(SWEEP, { schemaVersion: 1, ok: false, error: { code: "E_RESUME_BUSY", message: "another session resume holds the lock" } });
+  assert.ok(w.said.includes("resume sweep failed (E_RESUME_BUSY): another session resume holds the lock"), w.said.join("\n"));
+  assert.ok(w.said.some((line) => line.startsWith("warning: the host timer's unit files are installed but not active")), w.said.join("\n"));
+  await w.fire(`${D}10:01:00.000Z`);
+  assert.deepEqual(w.next(), [`10:00:00.000 ${SWEEP}`, `10:01:00.000 ${TICK}`, `10:01:00.000 ${LIST}`]);
+  await w.answer(TICK, ok({ considered: [] }));
+  await w.answer(LIST, ok({ rows: [] }));
+  w.signal("SIGINT");
+  await settle();
+  await w.answer(LIST, ok({ rows: [] }));
+  const answer = await running;
+  assert.deepEqual([answer.signal, answer.sweep, answer.ticks, answer.warnings.length], ["SIGINT", { error: { code: "E_RESUME_BUSY", message: "another session resume holds the lock" } }, { run: 1, skipped: 0, failed: 0, noScope: 0 }, 1]);
 });
