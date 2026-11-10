@@ -248,12 +248,6 @@ jobs:
         if: runner.os == 'macOS' && matrix.arch == 'x64'
         run: sudo softwareupdate --install-rosetta --agree-to-license
 
-      # The Linux leg's launch phase onboards a fixture deployment with this
-      # repository's kernel, which needs the root dependencies (build-installers.yml
-      # installs both too).
-      - name: Install root deps (the launch fixture runs the kernel)
-        run: npm ci
-
       - name: Build Desktop distributables
         working-directory: packages/desktop
         run: |
@@ -318,6 +312,14 @@ jobs:
       # (docs/release-lane.md, "Desktop release verification"). This step must
       # stay identical in build-installers.yml and release.yml
       # (test/release-workflow.test.mjs enforces both).
+      # The launch phase onboards a fixture deployment with this repository's
+      # kernel, which needs the root dependencies. They are installed only here,
+      # after the Desktop suite and packaging ran with the Desktop's alone
+      # (test/continuous-integration.test.mjs). build-installers.yml installs both.
+      - name: Install root deps for the launch fixture (Linux only)
+        if: runner.os == 'Linux'
+        run: npm ci
+
       - name: Packaged window launch (smoke with the launch phase, Linux only)
         if: runner.os == 'Linux'
         working-directory: packages/desktop
