@@ -49,8 +49,8 @@ release it came from in its description, and the copy records it as a whole in
 
 | Template | Latest release | Way of working |
 | --- | --- | --- |
-| `oats-project/oats-engineering-coordination` | `template-v2.1.0` | Work that lands as pull requests: a dispatcher, a lead for each effort, developers who own their pull requests, a fresh reviewer each round, and a maintainer where a lane needs one. |
-| `oats-project/oats-research-coordination` | `template-v1.0.0` | Work that ends in a finding or a report: a dispatcher, a research lead for each question, a researcher for each angle, and a verifier briefed to disprove. A report lands when the person who asked accepts it. |
+| `oats-project/oats-engineering-coordination` | `template-v2.2.0` | Work that lands as pull requests: a dispatcher, a lead for each effort, developers who own their pull requests, a fresh reviewer each round, and a maintainer where a lane needs one. |
+| `oats-project/oats-research-coordination` | `template-v1.0.1` | Work that ends in a finding or a report: a dispatcher, a research lead for each question, a researcher for each angle, and a verifier briefed to disprove. A report lands when the person who asked accepts it. |
 
 The package `oats.engineering` is frozen at `v1.18.0`. Its entry and its four
 aliases stay, so existing pins keep resolving, and its repository,
