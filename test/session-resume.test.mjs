@@ -136,6 +136,25 @@ test("bootId: Linux's boot id, macOS's boot time, else none", () => {
   assert.equal(bootId({ platform: "linux", read: () => { throw new Error("EACCES"); } }), null);
 });
 
+test("bootId: macOS's boot time is read with the system's sysctl, never one the caller's PATH names", () => {
+  const dir = mkdtempSync(join(tmpdir(), "oats-boot-sysctl-"));
+  const sysctl = (where, sec) => { mkdirSync(where, { recursive: true }); writeFileSync(join(where, "sysctl"), `#!/bin/sh\necho "{ sec = ${sec}, usec = 7 } Mon Oct 27 08:50:00 2026"\n`, { mode: 0o755 }); };
+  sysctl(join(dir, "system"), 42);
+  sysctl(join(dir, "path"), 99);
+  const saved = { PATH: process.env.PATH, dirs: process.env.OATS_TEST_SYSTEM_TOOL_DIRS };
+  try {
+    process.env.PATH = `${join(dir, "path")}:/usr/bin:/bin`;
+    process.env.OATS_TEST_SYSTEM_TOOL_DIRS = join(dir, "system");
+    assert.equal(bootId({ platform: "darwin" }), "42.7");
+    process.env.OATS_TEST_SYSTEM_TOOL_DIRS = join(dir, "none");
+    assert.equal(bootId({ platform: "darwin" }), null, "no sysctl in the system directories: no boot id, not the PATH's");
+  } finally {
+    process.env.PATH = saved.PATH;
+    if (saved.dirs === undefined) delete process.env.OATS_TEST_SYSTEM_TOOL_DIRS; else process.env.OATS_TEST_SYSTEM_TOOL_DIRS = saved.dirs;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 const KERNEL_BOOT = "e0a897ff-f23d-4a81-847d-671154dc5f43";
 /** PID 1's `/proc/1/stat` line, started `start` clock ticks after the kernel's boot (field 22). */
 const pid1Stat = (start, comm = "sh") => `1 (${comm}) S 0 1 1 0 -1 4194560 796 88 0 0 0 0 0 0 20 0 1 0 ${start} 2473984 358 18446744073709551615 187650185953280 187650186080492 281474719137136 0 0 0 0 0 65538 1 0 0 17 5 0 0 0 0 0 187650186144608 187650186150416 187650434920448 281474719141477 281474719141769 281474719141769 281474719141868 0\n`;
