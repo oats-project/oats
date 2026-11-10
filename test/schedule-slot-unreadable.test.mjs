@@ -113,7 +113,7 @@ for (const [state, makeSlot] of Object.entries(SLOT_STATES)) {
     assert.deepEqual(entries(slot), before, "reconcile without --clear leaves the slot as it is");
     const cleared = cli("schedule", "reconcile", "gone", "--clear").json();
     assert.equal(cleared.ok, true, JSON.stringify(cleared));
-    assert.deepEqual(cleared.result, { schedule: null, reconciled: "cleared" });
+    assert.deepEqual(cleared.result, { schedule: null, reconciled: "cleared", cleared: ["slot"] });
     assert.deepEqual(readdirSync(join(S.stateDir(fx.dep), "locks")), [], "the slot is released");
     const again = cli("schedule", "reconcile", "gone").json();
     assert.equal(again.error?.code, "E_SCHEDULE_UNKNOWN", "with no slot, a schedule that is not defined is unknown, as before");
@@ -152,7 +152,7 @@ for (const [kind, make] of Object.entries(ORPHAN_RECORDS)) {
     assert.deepEqual(asked.result, { schedule: null, reconciled: "unknown", remedy: `the slot ${slot} of schedule gone, which is not defined, ${shown}; ${remedy(record.home)}` });
     assert.deepEqual(entries(slot), before, "reconcile without --clear leaves the slot as it is");
     const cleared = cli("schedule", "reconcile", "gone", "--clear").json();
-    assert.deepEqual([cleared.ok, cleared.result], [true, { schedule: null, reconciled: "cleared" }], JSON.stringify(cleared));
+    assert.deepEqual([cleared.ok, cleared.result], [true, { schedule: null, reconciled: "cleared", cleared: ["slot"] }], JSON.stringify(cleared));
     assert.deepEqual(readdirSync(join(S.stateDir(fx.dep), "locks")), [], "the slot is released");
   });
 }
