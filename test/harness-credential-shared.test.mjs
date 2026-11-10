@@ -207,7 +207,9 @@ test("server add stores and lists the optional operator alias without changing t
 });
 
 test("server connect records the operator alias while every remote call uses the agent route", () => {
-  const old = process.env.OATS_HOME_DIR; process.env.OATS_HOME_DIR = join(base, "cr");
+  const old = process.env.OATS_HOME_DIR;
+  const registry = mkdtempSync("/tmp/oats-cr-"); // short even under CI's per-file TMPDIR: the SSH control socket must fit
+  process.env.OATS_HOME_DIR = registry;
   try {
     const options = { id: "connected", sshHost: "agent-host", operatorSshHost: "operator-host", workspaceRef: "git:github.com/acme/ws", dir: "/srv/ws", path: "/usr/bin", localVersion: "0.39.0" };
     const envelope = (result) => JSON.stringify({ schemaVersion: 1, ok: true, result });
@@ -246,7 +248,7 @@ test("server connect records the operator alias while every remote call uses the
     writeFileSync(join(process.env.OATS_HOME_DIR, "server-operator-routes.json"), JSON.stringify({ connected: { operatorSshHost: "orphan-operator" } }));
     assert.equal(connectServer({ ...withoutOperator, sshHost: "different-agent" }, { execFileSync: remote }).registration.operatorSshHost, undefined);
     assert.deepEqual(readServerOperatorRoutes(), {});
-  } finally { process.env.OATS_HOME_DIR = old; }
+  } finally { process.env.OATS_HOME_DIR = old; rmSync(registry, { recursive: true, force: true }); }
 });
 
 test("operator route changes preserve older registry bytes and remove cleans the sidecar", () => {
