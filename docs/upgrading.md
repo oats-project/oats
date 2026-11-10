@@ -6,11 +6,11 @@ host that comes from it.
 
 ## Upgrading to the latest version
 
-The latest version is **OATS 0.69.12** ([release notes](release-notes/v0.69.12.md)).
-The 0.69.12 Desktop accepts OATS CLIs `>=0.26.0 <0.70.0`.
+The latest version is **OATS 0.69.13** ([release notes](release-notes/v0.69.13.md)).
+The 0.69.13 Desktop accepts OATS CLIs `>=0.26.0 <0.70.0`.
 
 **First, read the `## Upgrade` section of every release after yours, up to
-0.69.12,** in the [release notes](release-notes/): it says what to do before
+0.69.13,** in the [release notes](release-notes/): it says what to do before
 the CLI changes, and what else must change with it (the Desktop, another
 tool, a package pin). [Coming from an older version](#coming-from-an-older-version)
 names the releases that ask for more than the steps below. `oats version`
@@ -19,8 +19,8 @@ prints the version you have.
 Then, on each host:
 
 ```sh
-                                     # 0. where the Desktop is installed: Desktop 0.69.12 first
-npm install -g @awebai/oats@0.69.12  # 1. the CLI
+                                     # 0. where the Desktop is installed: Desktop 0.69.13 first
+npm install -g @awebai/oats@0.69.13  # 1. the CLI
 oats update                          # 2. in each deployment: the plan, then it asks before it runs
 oats doctor                          # 3. in the same deployment
 ```
@@ -204,6 +204,12 @@ of the Desktop and the CLI, and an optional package pin. A change a script
 must follow is in its release's Upgrade section whether or not it is listed
 here.
 
+- **[0.69.13](release-notes/v0.69.13.md#upgrade):** the catalog pins
+  oats.framework 1.23.0. Remove a sweep lock (`~/.oats/session-resume/lock`)
+  or a home's start lock (`<home>/.oats-start.lock`) an earlier OATS left;
+  check each `git:` package pin names its own id; a deployment of OATS's
+  own workspace takes the four hand steps for the reviewer soul's new name,
+  then respawns its homes onto the new souls and starts a dispatcher.
 - **[0.69.12](release-notes/v0.69.12.md#upgrade):** the catalog pins
   oats.okf 5.8.0, oats.aweb 1.37.0 and oats.framework 1.22.1. Where
   `oats.aweb-tasks` is composed, readiness warns until the host wake daemon

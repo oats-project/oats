@@ -1,3 +1,0 @@
-## Documentation
-
-- **The catalog lists the research template.** [Coordination templates](../official-catalog.md#coordination-templates) adds `oats-project/oats-research-coordination` at `template-v2.0.0`, for work that ends in a finding or a report: a dispatcher, a research lead for each question that researches a single small angle itself or sends a researcher for each, and a verifier briefed to disprove, which checks the lead's own claims too. A report lands when the person who asked accepts it. The engineering template's row names its latest release, `template-v3.0.1`. The section now says there is one template for each way of working. The onboarding skills still name the engineering template directly.

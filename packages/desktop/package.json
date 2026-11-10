@@ -1,6 +1,6 @@
 {
   "name": "@awebai/oats-desktop",
-  "version": "0.69.12",
+  "version": "0.69.13",
   "private": true,
   "description": "OATS desktop app — Electron shell, integrated tmux terminal, and view host for the agent control panel.",
   "type": "module",
