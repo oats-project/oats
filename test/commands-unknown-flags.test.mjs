@@ -122,6 +122,15 @@ test("a routed command refuses the typo before its route is taken", async (t) =>
     assert.equal(d.refusal([...argv, "--server", "nosuch", "--json"]).code, "E_SERVER_UNKNOWN", `${command}: fixture premise: it is routed`);
     assertUnknown(d.refusal([...argv, "--server", "nosuch", typo, "--json"]), command, typo, `${command} --server`);
   }
+  // A routed command missing its argument is E_USAGE with its usage line here, never sent: no server
+  // `nosuch` is registered, and a command that got as far as its route answers E_SERVER_UNKNOWN.
+  const usage = (command) => d.refusal([...command.split(" "), "--nosuch", "--json"]).message.split("\n")[1];
+  for (const argv of [["instance", "stop", "--plan"], ["schedule", "remove", "--force"], ["schedule", "reconcile"], ["launch-config", "remove"]]) {
+    const command = argv.slice(0, 2).join(" ");
+    assert.deepEqual(d.refusal([...argv, "--server", "nosuch", "--json"]), { code: "E_USAGE", message: usage(command) }, `${argv.join(" ")} --server`);
+  }
+  // On this machine each keeps its own refusal of a missing argument.
+  assert.deepEqual(d.refusal(["schedule", "remove", "--dir", d.fx.dep, "--json"]), { code: "E_BAD_ARGS", message: "oats schedule remove <id>" });
   assert.deepEqual(tree(d.fx.base), before, "nothing in the fixture changed");
 });
 
