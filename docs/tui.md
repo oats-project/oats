@@ -1296,7 +1296,7 @@ The exit status never depends on it.
 - An `oats tui` started again knows nothing of the acts an earlier one
   sent: `Check again` there answers that the plan expired, the list shows
   what the kernel reports, and against an earlier one's start still running
-  the kernel's start lock is the only guard.
+  the home's lifecycle claim is the only guard.
 - An agent on a machine whose OATS is older than 0.52.0: a stop interrupted
   there can leave `.oats-stop-pending.json` in the agent's home, and then
   the agent can be started but not stopped while that file exists.
