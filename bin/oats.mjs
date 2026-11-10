@@ -1021,7 +1021,7 @@ function serializeLaunchConfigs(map) {
     const envNames = Object.keys(e.env || {}).sort();
     if (envNames.length) {
       lines.push("    env:");
-      for (const n of envNames) { const v = e.env[n]; if (typeof v === "string") lines.push(`      ${n}: ${yamlQuoted(v)}`); else lines.push(`      ${n}:`, `        fromEnv: ${v.fromEnv}`); }
+      for (const n of envNames) { const v = e.env[n]; if (typeof v === "string") lines.push(`      ${n}: ${yamlQuoted(v)}`); else lines.push(`      ${n}:`, v.fromFile !== undefined ? `        fromFile: ${yamlQuoted(v.fromFile)}` : `        fromEnv: ${v.fromEnv}`); }
     }
     if (e.model !== undefined) lines.push(`    model: ${yamlQuoted(e.model)}`);
     if (e.yolo !== undefined) lines.push(`    yolo: ${e.yolo}`);
@@ -1037,7 +1037,7 @@ function normalizeLaunchConfig(e) {
     harness: Object.hasOwn(e, "harness") ? e.harness : e.runtime,
     ...(e.executable !== undefined ? { executable: e.executable } : {}),
     ...(e.args?.length ? { args: [...e.args] } : {}),
-    ...(e.env && Object.keys(e.env).length ? { env: Object.fromEntries(Object.keys(e.env).sort().map((n) => [n, typeof e.env[n] === "string" ? e.env[n] : { fromEnv: e.env[n].fromEnv }])) } : {}),
+    ...(e.env && Object.keys(e.env).length ? { env: Object.fromEntries(Object.keys(e.env).sort().map((n) => [n, typeof e.env[n] === "string" ? e.env[n] : { ...e.env[n] }])) } : {}),
     ...(e.model !== undefined ? { model: e.model } : {}),
     ...(e.yolo !== undefined ? { yolo: e.yolo } : {}),
     ...(e.default === true ? { default: true } : {}),
@@ -1065,7 +1065,7 @@ function machineDeclares(name) {
  *  reference as {fromEnv: NAME}. An editor keeps a literal it cannot see with
  *  `set --keep-env`. */
 function publicLaunchConfig(e, extra = {}) {
-  const env = Object.fromEntries(Object.keys(e.env || {}).sort().map((n) => [n, typeof e.env[n] === "string" ? { redacted: true } : { fromEnv: e.env[n].fromEnv }]));
+  const env = Object.fromEntries(Object.keys(e.env || {}).sort().map((n) => [n, typeof e.env[n] === "string" ? { redacted: true } : { ...e.env[n] }]));
   return { harness: e.harness, executable: e.executable ?? null, args: [...(e.args || [])], env, model: e.model ?? null, yolo: e.yolo ?? null, default: e.default === true, ...extra };
 }
 /** The scope a launch-config command reads: --dir (or cwd), a running

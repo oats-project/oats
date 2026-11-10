@@ -289,7 +289,7 @@ instance's terminal and press Enter yourself.
 An entry has `harness` (`pi` \| `claude` \| `codex`, required), `executable`
 (a bare name looked up on `PATH`, or a path relative to the directory of the
 file that declares it), `args` (literal, no shell), `env` (a literal string, or
-`{ fromEnv: NAME }` resolved on the host at start), `model`, `yolo` and
+`{ fromEnv: NAME }` or `{ fromFile: /absolute/path }` resolved on the host at start), `model`, `yolo` and
 `default` (0.32; see [the harness default](#the-harness-default)). A launch
 configuration is a host choice: a soul never names one.
 
@@ -551,6 +551,30 @@ never a value, in the recorded command and in every answer. At start each
 source variable must be set on the host (`E_LAUNCH_ENV_MISSING`, before
 anything is created or stopped), and only the harness's pane receives it.
 `list` and `preview` redact every environment value, literals included.
+
+`{ fromFile: /absolute/path }` reads a regular UTF-8 file on the host that
+starts the harness, at every start. It removes exactly one trailing LF or
+CRLF; an empty file is allowed, and NUL is refused. A missing, unreadable or
+non-regular file refuses with `E_LAUNCH_ENV_MISSING`, naming
+`oats harness token set <harness> --server <id>` or operator provisioning on
+that host. The token command is a separate provisioning feature.
+
+```yaml
+launch-configs:
+  subscription:
+    harness: claude
+    env:
+      CLAUDE_CODE_OAUTH_TOKEN: { fromFile: /etc/agent-login/claude-token }
+```
+
+Both reference kinds use `OATS_LAUNCH_REF_<NAME>` aliases. Their values are
+absent from process arguments, tmux command lines, recipes, events and logs.
+The kernel hands them to the pane through a per-start file in the instance
+home, created exclusively with mode 0600; the launcher reads and deletes it
+before executing the pane command. A failed dispatch removes it. Retirement
+recovery excludes leftover handoff files. The start environment records only
+keyed digests of reference values, including file references, so a resume
+refuses a changed value; an ordinary start adopts a rotated file.
 
 **The instance's `oats`.** Every launch (`oats spawn`, `session start`,
 `session restart`, locally or through `--server`) writes `<home>/.oats/bin/oats`,
