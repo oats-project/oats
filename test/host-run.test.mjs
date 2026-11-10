@@ -1,17 +1,19 @@
 // `oats host run` (oats-project/oats#1789, lib/host-run.mjs): the foreground entry that runs the
 // kernel's periodic work where no host timer can (a container, a VM without a user manager). This
-// file holds what needs no tmux: its refusals before any effect and `--plan`. Every refusal is
-// made by the real function over a scratch OATS_HOME_DIR; the host timer's state is the one seam
-// (`hostStatus`), since a test never touches a live timer.
+// file holds what needs no tmux: its refusals before any effect, `--plan` and its lock. Every
+// refusal is made by the real function over a scratch OATS_HOME_DIR, and every lock and record is
+// a real one; the host timer's state is the one seam (`hostStatus`), since a test never touches a
+// live timer.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { HOST_RUN_SCHEMA, hostRun, hostRunPlan } from "../lib/host-run.mjs";
+import { HOST_RUN_SCHEMA, acquireHostRunLock, hostRun, hostRunLockPath, hostRunPlan } from "../lib/host-run.mjs";
 import { registerWorkspace } from "../lib/schedule.mjs";
+import { isStartToken, processStartToken } from "../lib/worktree-hooks.mjs";
 
 const CLI = fileURLToPath(new URL("../bin/oats.mjs", import.meta.url));
 const NO_TIMER = () => ({ kind: "systemd", installed: false, active: false, problems: [] });
@@ -104,4 +106,69 @@ test("the CLI: oats host run --plan --json answers the envelope; an unknown flag
   const help = cli("host", "--help");
   assert.equal(help.status, 0);
   assert.match(help.stdout, /^Usage:\n  oats host run \[--stop-grace <s>\]/);
+});
+
+// ------------------------------------------------------------------ the lock
+
+const BOOT = "boot-1", NONCE = "a".repeat(32), AT = "2026-11-10T00:00:00.000Z";
+/** A real pid whose process has exited and been reaped. */
+function exitedPid() {
+  const exited = spawnSync(process.execPath, ["-e", ""], { timeout: 30000 });
+  assert.equal(exited.status, 0);
+  assert.throws(() => process.kill(exited.pid, 0), { code: "ESRCH" });
+  return exited.pid;
+}
+/** Write the lock as a holder left it. */
+function leaveLock(record) {
+  mkdirSync(join(process.env.OATS_HOME_DIR, "host-run"), { recursive: true });
+  const text = typeof record === "string" ? record : JSON.stringify({ nonce: NONCE, at: AT, ...record }) + "\n";
+  writeFileSync(hostRunLockPath(), text);
+  return text;
+}
+const busy = (found) => (e) => e.code === "E_HOST_RUN_BUSY" && JSON.stringify(e.details) === JSON.stringify({ lock: hostRunLockPath(), found });
+
+test("the lock is one claim file under OATS_HOME_DIR that names its holder by pid, process start and boot; a second host run is E_HOST_RUN_BUSY, at once, and starts nothing", async (t) => {
+  const home = oatsHome(t);
+  assert.equal(hostRunLockPath(), join(home, "host-run", "lock"));
+  const release = acquireHostRunLock({ boot: BOOT });
+  assert.ok(lstatSync(hostRunLockPath()).isFile(), "the lock is one file");
+  const record = JSON.parse(readFileSync(hostRunLockPath(), "utf8"));
+  assert.deepEqual([record.pid, record.processStart, record.bootId], [process.pid, processStartToken(process.pid), BOOT]);
+  const held = readFileSync(hostRunLockPath(), "utf8");
+  await assert.rejects(refused({ boot: BOOT, hostStatus: NO_TIMER }), (e) => busy("running")(e)
+    && e.message === `another oats host run on this machine holds ${hostRunLockPath()} (pid ${process.pid} holds it); nothing was started`);
+  assert.equal(readFileSync(hostRunLockPath(), "utf8"), held, "the holder's record is unchanged");
+  // A plan names the refusal and takes nothing.
+  const plan = await hostRunPlan({ boot: BOOT, hostStatus: NO_TIMER });
+  assert.deepEqual(plan.refusals.map((r) => [r.code, r.details]), [["E_HOST_RUN_BUSY", { lock: hostRunLockPath(), found: "running" }]]);
+  assert.equal(readFileSync(hostRunLockPath(), "utf8"), held);
+  release();
+  assert.deepEqual(readdirSync(join(home, "host-run")), [], "released: nothing is left at the lock's path or beside it");
+  assert.deepEqual((await hostRunPlan({ boot: BOOT, hostStatus: NO_TIMER })).refusals, []);
+});
+
+test("a lock left by a host run of another boot, or by a process that is gone, is taken over; one that lives in this boot is not", (t) => {
+  oatsHome(t);
+  const own = processStartToken(process.pid);
+  assert.ok(isStartToken(own), `fixture premise: this host reads a process's start (${own})`);
+  // Another boot (in a container, another run): the pid and its start can both come again.
+  leaveLock({ bootId: "boot-0", pid: process.pid, processStart: own });
+  acquireHostRunLock({ boot: BOOT })();
+  assert.equal(existsSync(hostRunLockPath()), false, "taken over, and released");
+  // A holder that exited, in this boot.
+  leaveLock({ bootId: BOOT, pid: exitedPid(), processStart: own });
+  acquireHostRunLock({ boot: BOOT })();
+  assert.equal(existsSync(hostRunLockPath()), false);
+  // The same record in the boot that wrote it is a host run that runs.
+  const live = leaveLock({ bootId: BOOT, pid: process.pid, processStart: own });
+  assert.throws(() => acquireHostRunLock({ boot: BOOT }), busy("running"));
+  assert.equal(readFileSync(hostRunLockPath(), "utf8"), live);
+});
+
+test("a lock that cannot be judged is E_HOST_RUN_BUSY too, says what was found and what to do, and is left as it is", (t) => {
+  oatsHome(t);
+  const junk = leaveLock("{ not json");
+  assert.throws(() => acquireHostRunLock({ boot: BOOT }), (e) => busy("unreadable")(e)
+    && e.message === `the host run lock ${hostRunLockPath()} cannot be taken (the record at ${hostRunLockPath()} is unreadable); if no oats host run is running on this machine, remove ${hostRunLockPath()} and run it again; nothing was started`);
+  assert.equal(readFileSync(hostRunLockPath(), "utf8"), junk);
 });
