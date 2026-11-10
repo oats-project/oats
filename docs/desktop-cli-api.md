@@ -296,6 +296,61 @@ accepted, and its value is only ever the message. A capability command's own fla
 typed; the kernel reads only its dispatch flag (`--soul`). There is no feature
 string for this: to support older kernels, use the spaced form.
 
+<a id="command-flags"></a>
+### The flags a command defines
+
+These commands change state, and each refuses a flag it does not define
+before anything happens: before a plan is read, a file is written, a
+process is stopped or started, and before a `--server` command is sent to
+its host. A typo of a protective flag (`--no-recursve` for
+`--no-recursive`) is never ignored.
+
+| Command | Arguments | Flags that take a value | Switches | Refused in their own words |
+|---|---|---|---|---|
+| `oats retire` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir`, `--server` | `--plan`, `--self`, `--discard-worktree`, `--keep-dir`, `--force`, `--json` | `--delete-branch` |
+| `oats instance stop` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--grace-ms`, `--home`, `--dir`, `--server` | `--plan`, `--apply`, `--no-recursive`, `--json` | none |
+| `oats instance upgrade` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir` | `--undo`, `--plan`, `--json` | `--server` |
+| `oats worktree add` | none | `--purpose`, `--branch`, `--base`, `--repo` | `--preview`, `--json` | `--server`, `--dir`, `--home` |
+| `oats worktree remove` | none | `--purpose` | `--json` | `--server`, `--dir`, `--home` |
+| `oats session start` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json`, `--resume` | none |
+| `oats session restart` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server`, `--stop-grace` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json` | `--resume` |
+| `oats schedule remove` | `<id>` | `--dir`, `--server` | `--force`, `--json` | none |
+| `oats schedule run` | `<id>` | `--dir`, `--server` | `--force`, `--json` | none |
+| `oats schedule enable` | `<id>` | `--dir`, `--server` | `--json` | none |
+| `oats schedule disable` | `<id>` | `--dir`, `--server` | `--json` | none |
+| `oats schedule reconcile` | `<id>` | `--dir`, `--server` | `--clear`, `--json` | none |
+| `oats schedule host uninstall` | none | `--dir`, `--server` | `--json` | none |
+| `oats trigger remove` | `<id>` | `--dir` | `--json` | none |
+| `oats trigger enable` | `<id>` | `--dir` | `--json` | none |
+| `oats trigger disable` | `<id>` | `--dir` | `--json` | none |
+| `oats server remove` | `<id>` | none | `--json` | none |
+| `oats server forget` | `<id>` | `--instance` | `--json` | none |
+| `oats package add` | `<id>` `<version>` | `--dir` | `--json` | none |
+| `oats package remove` | `<id>` | `--dir` | `--json` | none |
+| `oats launch-config set` | `<name>` | `--file`, `--dir`, `--server` | `--keep-env`, `--json` | `--home`, `--soul` |
+| `oats launch-config remove` | `<name>` | `--dir`, `--server` | `--json` | `--home`, `--soul` |
+| `oats automations refresh` | none | `--dir` | `--json` | none |
+
+The refusal is `E_BAD_ARGS`, with the command's usage line after the
+message, and comes from the first problem from the left:
+
+- a flag the command does not define: `oats <command>: unknown flag
+  <flag>`, `error.details: {flag}`;
+- a value on a switch: `oats <command>: <flag> takes no value (got
+  <flag>=<value>)`, `error.details: {flag}`;
+- an argument after the last one the command takes: `oats <command>:
+  unexpected argument "<word>" after the <name> "<value>": <command> takes
+  one <name>`, or `<command> takes no argument`, `error.details: {argument}`;
+- a flag refused in its own words: that message (for example
+  `--delete-branch` on retire, `--server` on `oats instance upgrade`),
+  `error.details: {flag}`.
+
+A flag that takes a value takes the next word unless it starts with `--`; a
+value flag given none is that flag's own refusal. `--` is a flag like any
+other, and none of these commands defines it. `--runtime` is the pre-0.27
+name of `--harness`. `--help` and `-h` print the usage first, as for every
+kernel command.
+
 ### Dispatch errors
 
 | Code | When |
