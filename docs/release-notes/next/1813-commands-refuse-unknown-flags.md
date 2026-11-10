@@ -48,4 +48,7 @@
   - `E_USAGE` is one of the codes `oats retire` and `oats instance stop`
     answer only before any effect
     ([the table](../desktop-cli-api.md#before-effect-codes)): a client may
-    read it as "refused, nothing happened".
+    read it as "refused, nothing happened". The Desktop does: a stop or a
+    retire it applies that answers `E_USAGE` shows as refused, "Invalid
+    lifecycle request.", with the usage line in Details, where it showed an
+    unknown outcome with no description.
