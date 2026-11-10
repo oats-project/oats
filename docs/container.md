@@ -162,8 +162,7 @@ two independently admitted ordinary-member identities at
 `/state/seats/<alias>/.aw`; each spawn selects one:
 
 ```sh
-oats spawn <soul> --server team-agent --harness claude --preview \
-  --provider oats.aweb identity.source=/state/seats/<alias>/.aw
+oats spawn <soul> --server team-agent --harness claude --preview --provider oats.aweb identity.source=/state/seats/<alias>/.aw
 ```
 
 Preview runs no provider hook and does not validate a missing seat. Apply
