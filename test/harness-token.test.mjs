@@ -204,3 +204,16 @@ test("credential input is bounded and a terminal or missing route is refused bef
     if (prior === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = prior;
   }
 });
+
+test("unreadable credential sources fail with plain input errors", async () => {
+  const fx = fixture("unreadable-input"), prior = process.env.OATS_HOME_DIR;
+  process.env.OATS_HOME_DIR = fx.config;
+  const privateError = "private-source-fixture-value";
+  try {
+    for (const input of [null, {}, { async *[Symbol.asyncIterator]() { throw new Error(privateError); } }]) {
+      await assert.rejects(harnessToken({ action: "set", harness: "pi", server: "box", input }, { execFileSync: () => assert.fail("unreadable input never reaches SSH") }), (e) => e.code === "E_HARNESS_TOKEN_INPUT" && !e.message.includes(privateError));
+    }
+  } finally {
+    if (prior === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = prior;
+  }
+});
