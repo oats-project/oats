@@ -204,7 +204,8 @@ when they trust it, so there is no second, per-version approval step. The lock i
 the exact commit and the content integrity, a moved tag or drifted content is
 `E_PACKAGE_INTEGRITY`, and at spawn the lock's capability list must match what
 the package declares at the locked commit (`E_PACKAGE_INTEGRITY { why:
-"capabilities" }`).
+"capabilities" }`) and the package tree there must digest to the lock's
+`integrity` ([The integrity check at spawn](#the-integrity-check-at-spawn)).
 
 ## Materialization from a package
 
@@ -216,6 +217,56 @@ against what the fetch reported; skills are copied to
 `{ kind: "package", package, version, commit, integrity, repoKey }`. Bumping
 `packages:` and syncing affects **only new spawns**; `oats status` shows a
 running instance's package module as `moved` once the lock points elsewhere.
+
+### The integrity check at spawn
+
+A spawn copies a package's capabilities only when the package is the content
+the lock records. For each package the soul composes a capability from, the
+kernel digests the package tree (the lock entry's `path`) at the lock's
+`commit`, as `oats sync` does, and compares the digest with the lock's
+`integrity`.
+
+- **When.** After the soul is resolved and before the spawn writes anything:
+  no soul copy, no worktree, no instance home. `oats spawn --preview` makes
+  the same check. `oats instance upgrade` makes it for each package it moves
+  a module to.
+- **The refusal** is `E_PACKAGE_INTEGRITY` with `details: {package, version,
+  commit, locked, observed}`: `locked` is the lock's `integrity`, `observed`
+  the digest of the tree as this computer reads it. The message names the
+  package, the commit and both digests. Two things produce it: a lock whose
+  `commit` and `integrity` describe different content (a hand edit, a bad
+  merge), which is fixed by restoring the lock; and a copy of the
+  package in this computer's remote cache that changed after it was fetched,
+  which is fixed by removing the cache (`$OATS_REMOTE_CACHE`, default
+  `~/.cache/oats/remotes`).
+- **Once per package version and computer.** A tree that matched is recorded
+  under the remote cache, in `.verified/`, one file per (repository key,
+  commit, path, integrity). The record also holds the state of the cached
+  repository the tree was read from: every file under it, by path, size,
+  mode, inode, modification time and status-change time. A later spawn
+  believes a record only when each of its fields is the one asked for and the
+  cached repository is still in that state, and then digests nothing. Any
+  file added, removed, replaced or rewritten there (a later fetch of the same
+  repository included) makes the next spawn digest the tree again. Nothing
+  is recorded when the cached repository changed while the tree was read (the
+  first fetch of the package's files): the next spawn digests it again. With
+  a missing or unreadable record the tree is digested, and a cached
+  repository that reads objects from outside itself (a symbolic link, an
+  alternates file) is digested every time. A record older than 30 days is
+  removed when the cache is next pruned. The records are the kernel's own and
+  no contract: deleting them only costs the next spawn a digest.
+- **What a record does not see.**
+  - A change to the cached repository that leaves every file's size, mode,
+    inode and both times as they were. That takes writing to the disk under
+    the filesystem, setting the clock back, or, on a filesystem that keeps
+    times to the second, rewriting a file in place to the same size within
+    the second it was last changed.
+  - A record written by whoever changed the cache: both live in the same
+    directory, so the cache is as trusted as the account that owns it.
+  - What Git reads outside the cached repository: its own configuration and
+    environment.
+  - A change made between the check and the copy of the modules a moment
+    later in the same spawn.
 
 ## Package souls
 

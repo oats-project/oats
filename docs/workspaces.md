@@ -457,6 +457,7 @@ the workspace's slot default):
 ```
 from: package → some locked package provides `name`            else E_PACKAGE_MISSING (run `oats sync`)
               → read its manifests at the locked commit; the lock's capability list must match   else E_PACKAGE_INTEGRITY
+              → at spawn, the package tree at the locked commit must digest to the lock's integrity   else E_PACKAGE_INTEGRITY
               → copy; record package/version/commit/digest
 from: <repo>  → <repo> is a CONFIRMED member                     else E_NOT_A_MEMBER / E_MEMBERSHIP_UNCONFIRMED
  (or `here`)  → it has capabilities/<name>/oats.json             else E_CAPABILITY_MISSING

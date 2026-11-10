@@ -2795,11 +2795,14 @@ async function spawnCmd() {
   {
     let discovery = null;
     try {
-      const { prepareInstance, ensureWorkspaceSoul, previewWorkspaceSoul, parseProviderFlags, discoverOrStandalone, agentDirOf } = await import("../lib/instance-resolution.mjs");
+      const { prepareInstance, verifyPreparedPackages, ensureWorkspaceSoul, previewWorkspaceSoul, parseProviderFlags, discoverOrStandalone, agentDirOf } = await import("../lib/instance-resolution.mjs");
       const remoteOptions = remoteOptionsFromEnv();
       const { local, path: localPath } = loadLocal(dirFlag());
       discovery = wsDiscovery = await discoverOrStandalone(local, { deployment: dirname(localPath), remoteOptions });
       wsPrepared = await prepareInstance(dirFlag(), name, { spawn: { providers: parseProviderFlags(providerPairs) }, remoteOptions, discovery });
+      // Each package the soul composes is the content the lock records (E_PACKAGE_INTEGRITY), before the
+      // first write of the spawn: the soul cache below is the first thing a spawn creates under the agents root.
+      await verifyPreparedPackages(wsPrepared);
       const soulName = agentDirOf(wsPrepared.soulEntry);
       let soulDir;
       if (isPreview) {

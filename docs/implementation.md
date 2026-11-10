@@ -517,7 +517,21 @@ A record is named by the digest of its fact's context (`ghLoginParts` in
 `automations.mjs`: never a token value) and holds only the answer and when it
 was observed; only `workspace-read.mjs` passes the reuse to `ghLogin` (its
 `lookup`, with the display's 5 s wait), so a tick, a poll or a run always asks
-`gh` live. `pruneStores` bounds both stores alike. Adding a cached item
+`gh` live. `pruneStores` bounds both stores alike. A third store,
+`<cache>/.verified/`, holds the package trees a spawn found to digest to the
+lock's `integrity` (`treeVerification` in `remote.mjs`, used by
+`verifyLockedPackage` in `packages.mjs`;
+[The integrity check at spawn](packages.md#the-integrity-check-at-spawn)).
+A record is named by the digest of (repo key, commit, path, digest) and holds
+those fields and the state of the cache repo the tree was read from
+(`cacheEntryState`: a digest over every file's path, size, mode, inode,
+mtime and ctime). It is believed only while the cache repo is in that state,
+because git answers an object from the cache without checking it against its
+id. `spawn` calls `verifyPreparedPackages` (`instance-resolution.mjs`)
+between `prepareInstance` and `ensureWorkspaceSoul`, the first write under
+the agents root; `instance-upgrade.mjs` compares through the same
+`fetchLockedPackage`. `pruneStores` removes a record older than an
+observation may be. Adding a cached item
 means choosing an item name unique to its producer (the item string its
 call site passes to `memoAtCommit`, or to `atCommit` in `workspace.mjs`) and
 adding it to `test/parsed-cache.test.mjs`; `test/read-path-scale.test.mjs` pins the member
