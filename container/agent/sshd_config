@@ -1,0 +1,23 @@
+Port 2222
+HostKey /state/ssh/ssh_host_ed25519_key
+PidFile /tmp/agent-sshd.pid
+AuthorizedKeysFile /etc/agent-ssh/authorized_keys
+AllowUsers agent
+PubkeyAuthentication yes
+AuthenticationMethods publickey
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+PermitRootLogin no
+UsePAM no
+StrictModes yes
+DisableForwarding yes
+PermitTunnel no
+PermitUserEnvironment no
+PermitUserRC no
+UseDNS no
+PrintMotd no
+LogLevel VERBOSE
+# sshd constructs a fresh environment for commands; keep runtime NSS there.
+SetEnv HOME=/state/home PATH=/usr/local/bin:/usr/bin:/bin LD_PRELOAD=/usr/local/lib/libnss_wrapper.so NSS_WRAPPER_PASSWD=/state/ssh/passwd NSS_WRAPPER_GROUP=/state/ssh/group
+Subsystem sftp internal-sftp

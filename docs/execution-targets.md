@@ -7,6 +7,8 @@ Closing a viewer, or the Desktop, stops neither the agent nor its session.
 
 All session commands run on the execution host, the machine that holds the
 home. To run them on another machine, see [servers.md](servers.md).
+For a team container reached over the same SSH route, see
+[the agent container contract](container.md).
 
 ## Harnesses
 
