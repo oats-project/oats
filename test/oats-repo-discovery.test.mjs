@@ -53,14 +53,15 @@ function checkoutRemote() {
 
 // The copy of the engineering template is public (no `private`): souls in other members
 // compose it `from: github.com/awebai/oats`, as the template's ADAPTING.md says.
-const TEMPLATE_COPY = ["oats.code-review", "oats.developer", "oats.dispatcher", "oats.engineering-expert", "oats.landing-rules", "oats.maintainer"];
+const TEMPLATE_COPY = ["oats.build", "oats.code-review", "oats.developer", "oats.dispatcher", "oats.engineering-expert", "oats.landing-rules", "oats.maintainer"];
 
-test("member discovery over this repository lists its two private member capabilities and its six-capability copy of the engineering template; every package mirror comes from its package", async () => {
+test("member discovery over this repository lists its two private member capabilities and its seven-capability copy of the engineering template; every package mirror comes from its package", async () => {
   const d = await discoverRepo("git:github.com/awebai/oats", { remote: checkoutRemote() });
   assert.equal(d.key, "github.com/awebai/oats");
   assert.deepEqual(d.problems, []);
   assert.deepEqual(d.capabilities.map((c) => ({ name: c.name, path: c.path, private: c.private })),
-    [{ name: "oats.code-review", path: "capabilities/oats-code-review", private: false },
+    [{ name: "oats.build", path: "capabilities/oats-build", private: false },
+     { name: "oats.code-review", path: "capabilities/oats-code-review", private: false },
      { name: "oats.desktop-ui", path: "capabilities/oats-desktop-ui", private: true },
      { name: "oats.developer", path: "capabilities/oats-developer", private: false },
      { name: "oats.dispatcher", path: "capabilities/oats-dispatcher", private: false },

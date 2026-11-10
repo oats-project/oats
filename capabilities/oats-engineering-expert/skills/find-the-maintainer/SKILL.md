@@ -1,6 +1,6 @@
 ---
 name: find-the-maintainer
-description: Find the maintainer a lane's landing rules need - the lane your work is in, the person who owns it, their active maintainer there on the lane map (running or stopped), or have one started for them when they have none, never a second while one is active. Use when a landing rule needs a maintainer's read, merge, release or direction answer, or when anyone asks you to bring a lane's maintainer in.
+description: Find the maintainer a lane's landing rules need - the lane your work is in, the person who owns it, their active maintainer there on the lane map (running or stopped), or start one for them yourself when they have none, never a second while one is active, and tell your person in plain words what a maintainer is, what it is for and its name. Use when a landing rule needs a maintainer's read, merge, release or direction answer, or when anyone asks you to bring a lane's maintainer in.
 ---
 
 IMPORTANT: after a compaction, reload this skill before you continue the step.
@@ -14,9 +14,10 @@ never a station every change passes, and you look for one only then.
 Here the landing rules need one on every PR: the maintainer of your person in the PR's
 lane. Call that one; it brings in the second reader and the release lane.
 
-1. **The lane** your work is in, from your landing rules; for a release, the release lane
-   they name. When you can't tell, ask your person; meanwhile plan and build, but call and
-   start no maintainer.
+1. **Your person, and the lane** your work is in. Your person is whoever your task is for;
+   the lane comes from your landing rules (for a release, the release lane they name).
+   Until you know both, call and start no maintainer: ask whoever gave you your task who
+   your person is, and your person which lane; meanwhile plan and build.
 2. **Whose lane:** the person who owns it, from your landing rules' ownership record. With
    one person, it is yours.
    <!-- OATS: a project lane has one maintainer per person; a PR's is the one of the effort's person (the lane map). -->
@@ -28,8 +29,8 @@ lane. Call that one; it brings in the second reader and the release lane.
      is stopped, so they can start it. An entry not updated for two weeks: ask its person
      whether it was retired; only they, or the map's keeper on their word, mark it `left`.
    - **None, or `left`:** have the needed one started for that person. For your own person,
-     spawn your workspace's maintainer soul for them, independent of you and never as your
-     child, so your retirement can't stop it:
+     start it yourself, without asking: spawn your workspace's maintainer soul for them,
+     independent of you and never as your child, so your retirement can't stop it:
      ```bash
      oats spawn <maintainer soul> --relation unrelated --purpose <person>-<lane>-<n> --task-file <brief.md>
      ```
@@ -37,12 +38,18 @@ lane. Call that one; it brings in the second reader and the release lane.
      map's `left` entries), so no instance takes a retired one's name. Brief: "maintainer
      for <person> in <lane>; first call: <your instance> asks for <a read | the merge> of
      <PR> at <head>" (or "<the release> of <what goes in> at <head>"), and where the lane
-     map is. Tell your person its instance name, and that they retire it with
-     `oats retire <name>`. For another person, send their dispatcher that brief and ask it to
-     start the maintainer, with your message by its id as the request it reads, as a
-     dispatcher starts any role another person's agents ask for; where they have none, ask
-     them (`/across-people`). If your workspace
-     names no maintainer soul, ask your person and spawn none.
+     map is. Right after, tell your person, in two or three plain sentences, what you
+     started:
+     "I started <name>, your maintainer for <lane>. A maintainer is the standing agent for
+     a lane: it reads and merges what leads hand it, after the PR's second reader and, where
+     the lane asks, the release lane's sign-off, and keeps the lane's entry on the lane map.
+     It is there so one agent, not each lead, decides what lands, and you have one place to
+     ask about the lane; you retire it with `oats retire <name>`."
+     For another person, send their dispatcher that brief and ask it to start the
+     maintainer, with your message by its id as the request it reads, as a dispatcher
+     starts any role another person's agents ask for; where they have none, ask them
+     (`/across-people`). If your workspace names no maintainer soul, ask your person and
+     spawn none.
 4. **No lane map:**
    - **Your landing rules link none** (a copy adapted without one): the lane owner has no
      maintainer on record. Go on as in step 3, "None, or `left`": the maintainer started

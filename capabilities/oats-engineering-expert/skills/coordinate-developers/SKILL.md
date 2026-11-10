@@ -1,13 +1,18 @@
 ---
 name: coordinate-developers
-description: Launch and drive developers to build what you specified, one per surface, several in parallel when surfaces are independent. Use when a spec is ready to build, when choosing how many developers to run, when a developer asks a question or returns work, or when work must be re-assigned.
+description: Launch and drive developers to build what you specified, for each spec whose builder is a developer (plan-and-spec, Who builds it), one per surface, several in parallel when surfaces are independent. Use when a spec a developer builds is ready, when choosing how many developers to run, when a developer asks a question or returns work, or when work must be re-assigned.
 ---
 
 # Coordinate developers
 
 ## Launch
+- A developer builds a spec only where `/plan-and-spec` ("Who builds it") gives it one: the
+  build would crowd your context, surfaces can be built in parallel, or the surface needs
+  a specialist in a lane of its own. Otherwise you build it yourself, as that section
+  says.
 - One developer per surface; two surfaces, two developers, in parallel if the plan allows.
-  Never one developer for two unrelated surfaces.
+  Never one developer for two unrelated surfaces, and never one coupled change split
+  across agents: a change and its tests have one author.
 - OATS's developer souls (the surfaces table in your `oats.workspace-experts` briefing is
   the authority):
   - `oats-developer`, the default one: the kernel and the CLI (`lib/`, `bin/`, the
@@ -21,13 +26,28 @@ description: Launch and drive developers to build what you specified, one per su
   spec needs) as your child, the spec as its task:
   ```bash
   oats spawn <developer-soul> --parent <your instance> --same-work --purpose <short-slug> \
-    --repo <clone of the spec's repository> --base <its default branch> --task-file <spec.md>
+    --task-file <spec.md>
   ```
-  The spec's "Surface / files" names its repository. A developer's worktree comes from the
-  clone `--repo` names and starts at `--base`; without them it comes from the soul's own
-  repository. Leave both out only when the spec is in that repository. Add only what the
-  spec can't hold: the branch or PR to target, and who else works next to it.
-- `--same-work` marks the developer as working on your work. A developer you started
+  The spec's "Surface / files" names its repository. Where that is the developer soul's own
+  repository, leave out `--repo` and `--base`: the worktree starts at the commit the spawn
+  observed on the remote. Where it is another repository, add
+  `--repo <clone of the spec's repository> --base origin/<its default branch>`. `--base`
+  names a ref in the clone, read there and never fetched: a bare branch name is the clone's
+  local branch, however far behind, and `origin/<branch>` is as fresh as the clone's last
+  fetch. Add only what the spec can't hold: the branch or PR to target, and who else works
+  next to it.
+- Before you apply, preview the same command with `--preview` and check its start point,
+  `from <ref or repository>@<commit>`, against the remote:
+  `git -C <clone> ls-remote origin <its default branch>`. If they differ, don't apply. For
+  the soul's own repository the remote moved since the preview: preview again. For
+  another, the clone is behind: update its `origin/<its default branch>`, then preview
+  again. Name the destination, so the fetch updates that ref whatever branches the clone
+  tracks:
+  `git -C <clone> fetch origin refs/heads/<branch>:refs/remotes/origin/<branch>`, with
+  `<branch>` its default branch.
+- `--same-work` records that the developer does your work, and your person's sidebar draws
+  its line to you. It shares no work tree: the developer keeps its own worktree and
+  branch, and only a reviewer is attached to its author's tree. A developer you started
   before the flag existed gets it with `oats instance same-work <developer> on`.
 - Tell each developer which developers share an interface with it, so they talk directly.
 - Record each in your instance state: instance name, surface, spec, branch.

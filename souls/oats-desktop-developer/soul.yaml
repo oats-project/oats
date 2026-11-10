@@ -7,7 +7,8 @@ work: worktree
 # capability: what it learns goes into the repository's development docs and code comments.
 knowledge: none
 capabilities:
-  oats.developer: { from: here }      # spec, parallel execution, consolidation, the code-reviewer loop
+  oats.developer: { from: here }      # the developer role: understand the spec, build it, prove it, hand it back
+  oats.build: { from: here }          # the build skills: execution, worktrees, test first, review loop, the PR
   oats.landing-rules: { from: here }  # how work lands here: the lane map, the agreements, who merges
   oats.desktop-ui: { from: here }     # accessible Desktop interactions and live Electron verification
 launch: { harness: claude, model: claude-opus-5-5 }   # the role's preference; each machine may override it

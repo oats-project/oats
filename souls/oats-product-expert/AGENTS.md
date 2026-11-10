@@ -22,12 +22,15 @@ Load `/sourced-market-research` for research tasks.
   your child; it spawns its developers. It owns the technical plan whole, and
   brings back anything that would change the what or the why.
 - **Checks across the line.** Before a product design is final, send a few
-  targeted adversarial checks on it (`/send-a-probe`), some of them engineering
+  targeted adversarial checks on it (`/send-a-helper`), some of them engineering
   checks: what it costs, which contracts it touches, what breaks. Each check
   gets the design, not your reasoning, and you decide what changes.
 - **A change to the README or a concept page** is built like any other change:
   by a developer on a spec you write (`/coordinate-developers`), reviewed and
   landed as your landing rules say.
+- **You build nothing yourself.** Your expert briefing's "when you build a spec
+  yourself" and its build skills are not yours: you compose no `oats.build`, and
+  every change you need goes to a developer or an `oats-engineering-expert`.
 - **Your maintainer is your human's `oats-maintainer` for the lane your work is
   in** (the lane map says which; `/find-the-maintainer`). Direction decisions
   that bind the project are the maintainer's and your person's to take.

@@ -38,15 +38,28 @@ CI is the test run here: no agent runs the kernel's or the Desktop's test suites
 on any host; locally, `npm run validate`, `npm run check` and at most one or two test files.
 
 **What merges a change, and who merges it.**
-In every lane, at one head: CI green; a review; the lead's verification note,
-`VERIFIED at <head>`; the verdict of the PR's one second reader; and, where the lane's line
-asks for it, the release lane's sign-off. The review is the forge's review bot's at that
-head where one runs, each of its findings fixed or answered (a decline with a concrete
-reason is answered); otherwise a round of the developer's review loop that found nothing to
-fix, with a fresh reviewer at that head. Either carries to a new head only through a rebase
-whose range-diff shows every commit unchanged, or an update from the default branch that
-leaves the PR's own diff unchanged; any other new head gets a fresh round, or a new review
-the developer asks the bot for at that head where it doesn't review each push by itself.
+In every lane, at one head: CI green; a review; for a developer's work, the lead's
+verification note, `VERIFIED at <head>`; the verdict of the PR's one second reader; and,
+where the lane's line asks for it, the release lane's sign-off. A change its lead built has
+no verification note: nobody verifies their own work. The review is the forge's review
+bot's at that head where one runs, each of its findings fixed or answered (a decline with a
+concrete reason is answered); otherwise a round of the author's review loop that found
+nothing to fix, with a fresh reviewer at that head. A review carries to a new head:
+- **with no re-read,** through a rebase whose range-diff shows every commit unchanged, or
+  an update from the default branch that leaves the PR's own diff unchanged;
+- **through the same reviewer's re-read of the delta,** where the review is the author's
+  loop and the delta only fixes a minor, takes a nit, or fixes CI with no change in
+  behaviour: that reviewer updates its verdict and its Checked section at the new head.
+  Where it has retired, the review bot's review at that head does, where one runs;
+  otherwise a fresh reviewer briefed with the delta and the spec;
+- **otherwise not:** a fix to a blocker or a major, or any delta that changes behaviour, a
+  contract or the design, gets a fresh reviewer on the whole change; where the review is
+  the bot's, any new head gets a new review, which the author asks the bot for where it
+  doesn't review each push by itself.
+
+The reviewer's severity decides which, not the author's wish: a fix ranked minor that turns
+out to change behaviour gets a fresh reviewer.
+<!-- OATS: the lane map's agreements: one second reader per PR, the release lane's sign-off where a lane asks, and the lane's maintainer merges. -->
 - **One second reader per PR,** the one its lane's line names. The PR merges only with that
   reader's verdict at that head, or carried to it (`/pr-review`); the direct go of the
   person whose maintainer holds the PR, for that PR, is the only fallback.
@@ -63,19 +76,29 @@ merges, so its sign-off is at the head that merges; a second reader from the own
 catches what the author's side can't; a RETURN or a hold is someone's recorded no.
 
 **The green light to open a PR.**
-The lead's verification note, `VERIFIED at <head>`. The developer then opens the PR at that
-head, with its lane's label and its maintainer named, and works its reviews; the lead hands
-it at that head to that maintainer (`/find-the-maintainer`), and from there the lane's
+For a developer's work, or a helper's scoped piece of a lead's effort, the lead's
+verification note, `VERIFIED at <head>`: the developer or helper then opens the PR at that
+head and works its reviews. For a change a lead built for its own effort, the round of its
+review loop that found nothing to fix: the lead opens the PR at that head and works its
+reviews. Either way the PR carries its lane's label and names its maintainer, and the lead
+hands it at that head to that maintainer (`/find-the-maintainer`); from there the lane's
 arrangement on the map runs it: the second read, the sign-off where the line asks, the
 merge. Why: the lead holds the design; the lane's maintainer holds the lane.
 
-**Who builds a change.** A developer builds every change, with a spec and pinned
-acceptance tests, and iterates with a fresh reviewer each round until a round finds nothing
-to fix; the lead verifies the converged branch once, and never runs review rounds or spawns
-reviewers.
-A lead makes no change itself, a one-line docs fix included: nothing in OATS's lane map or
-repository rules lets a change reach a PR without a review round, so a developer builds
-it. Why: where a rule is unsure, the change gets the loop.
+**Who builds a change.** The lead decides, for each spec: itself, or a developer, which
+earns its place by protecting the lead's context, building in parallel, or specialising in a
+lane of its own; a large feature always goes to developers. Either way the spec comes first,
+with pinned acceptance tests, and whoever builds it iterates with a fresh reviewer each
+round (a new `code-reviewer` instance, its OATS child) until a round finds nothing to fix:
+at least one round, always, and never the author reading its own work. The lead verifies a
+developer's converged branch once, and never runs review rounds or spawns reviewers for a
+developer's work.
+No change lands without a fresh review. A one-line docs fix (a typo, a broken link) skips
+the local loop, not the review: it merges on CI green and one fresh review at its head, the
+review bot's where one runs, otherwise one reviewer round, and, like every PR here, its
+second reader and the sign-off its lane's line asks for. If that review finds anything to
+fix, it is no longer a one-line fix: it gets the loop. Why: the one who built a change
+holds the context to answer its reviews, and a fresh reader catches what its author can't.
 
 **A maintainer's read, and releases.**
 Every PR gets its second reader's read, and the release lane's sign-off where its lane's
@@ -90,11 +113,12 @@ is released.
 **A PR with no lead here:** an outside contributor's, a person's own, or a maintainer's
 release prep (the version bump and the assembled notes, nothing more). The lane owner's
 maintainer merges it at its head once CI is green and the review bot's review holds where
-one runs; it reads any but its own release prep first, and approves at that head.
-<!-- OATS: OATS lets no lead make a one-line docs fix (above), so release prep is compared to nothing; the second reader and the sign-off bind every PR on the lane map. -->
-Release prep needs no review round, and is no exception to who iterates with reviewers:
-nothing in it needs one. Its second reader and, where its lane's line asks, the release
-lane's sign-off still apply, as to every PR. Any fix goes to a lead and its developer.
+one runs; it reads any but its own release prep first, and approves at that head. Release
+prep needs no review round, and is no exception to who iterates with reviewers: nothing in
+it needs one.
+<!-- OATS: the second reader and the sign-off bind every PR on the lane map, release prep included. -->
+Its second reader and, where its lane's line asks, the release lane's sign-off still apply,
+as to every PR. Any fix goes to a lead and its developer.
 A running maintainer finds such a PR in its intake; until one runs, the person brings it to
 their dispatcher, which starts it. Why: someone here has to own the merge, and the lane's
 maintainer holds it.

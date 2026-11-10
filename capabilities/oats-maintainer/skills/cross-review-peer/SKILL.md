@@ -154,9 +154,9 @@ the same human and lane.
 A lane's arrangement is its landing rules: the agreements that merge its changes, who
 merges, who gives a lead the green light to open a PR, and where a maintainer's read is
 needed. A new lane starts with the default: CI green and a review at the head (the review
-bot's, or a clean round of the developer's review loop), plus the lead's verification note
-at that head; the lead merges; no maintainer's read. The landing rules in your briefing
-record each lane's arrangement, and they are the authority.
+bot's, or a clean round of the author's review loop), plus, for a developer's work, the
+lead's verification note at that head; the lead merges; no maintainer's read. The landing
+rules in your briefing record each lane's arrangement, and they are the authority.
 <!-- OATS: the lane map's default for a new lane is the release lane's sign-off before every merge, with one second reader per PR. -->
 Here a new lane's default is the lane map's: one second reader per PR, the release lane's
 sign-off at the exact head before every merge, and its maintainer merges. Common additions, each where the

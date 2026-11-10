@@ -1,12 +1,14 @@
 ---
 name: run-the-review-loop
-description: The developer's review loop - you, never your expert, iterate with fresh reviewers - a new code-reviewer instance each round, spawned as your OATS child (a native subagent only where your person asks for one or your harness's multi-agent workflow mode is in use) on a different model from yours where one is available, never the previous round's, briefed without your reasoning, until a round finds nothing to fix; retire each reviewer once its findings are settled; the same loop for fixes your expert returns and for bigger fixes on your PR; finish once your PR is merged or closed so your expert retires you. Use when a piece of work is complete and verified on your local branch, before presenting it to your expert and before any PR exists, when a fix on your PR needs a review, and when your PR is merged and green, or closed.
+description: The author's review loop - you who built the change, a developer or a lead building its own spec, iterate with fresh reviewers, never whoever verifies it and never as your own reviewer - a new code-reviewer instance for each round, spawned as your OATS child (a native subagent only where your person asks for one or your harness's multi-agent workflow mode is in use) on a different model from yours where one is available, briefed without your reasoning, until a round whose report lists what it checked finds nothing to fix; a fix to a minor goes back to that round's reviewer as a delta, a fix to a blocker or a major gets a fresh reviewer; retire each reviewer once its round is closed; the same loop for fixes your expert returns and for fixes on your PR; finish once your PR is merged or closed so your expert retires you. Use when a piece of work is complete and verified on your local branch, before presenting it to your expert and before any PR exists, when a fix on your PR needs a review, and when your PR is merged and green, or closed.
 ---
 
 # Run the review loop
 
-You iterate with the reviewers; your expert never does. It verifies the converged branch
-once, and whatever it returns comes back through this loop.
+You built the change, so you iterate with the reviewers: a developer, or a lead building
+its own spec. A developer's expert never does: it verifies the converged branch once, and
+whatever it returns comes back through this loop. A lead running this loop for its own work
+is never its reviewer: each round's reviewer is a fresh instance, as below.
 
 ## When
 For each piece of work (a spec's worth, usually one future PR), on your local branch,
@@ -15,9 +17,10 @@ own verification passes there, with fresh reviewers round by round until one fin
 to fix. Again for a branch your expert returns, and for a fix on your PR where
 `/work-the-reviews` says. Not per commit, not before the work runs.
 
-## A fresh reviewer each round
+## A fresh reviewer for each round
 Each round's reviewer is fresh: a new `code-reviewer` instance, your OATS child, never the
-previous round's. It reads the change as it is, without the earlier rounds.
+previous round's. It reads the change as it is, without the earlier rounds. Only a delta
+of its own round (a fix to a minor finding, a nit taken) comes back to it (Iterate).
 <!-- OATS: no skill names a harness or a model; a machine's souls.launch picks the model. -->
 - **An OATS child:** a review is proper work, so its reviewer is an OATS child, not a
   native subagent of your harness. An OATS child is
@@ -36,9 +39,10 @@ oats spawn code-reviewer --work attached --work-dir <the consolidated worktree> 
 ```
 Always give both `--work-dir` and `--repo`. `<repository>` is the absolute path of the
 worktree's clone: `repo` in your `instance.json`, or the clone you made an extra worktree
-from. Each reviewer is your child, on your work (`--same-work`), shares your tree to read
-the code and run the tests, and must not edit it; each gets a purpose of its own, so no two
-share a name.
+from. Each reviewer is your child, on your work: `--same-work` records that it does your
+work, and your person's sidebar draws its line to you. That flag shares no tree:
+`--work attached` is what gives the reviewer your tree, to read the code and run the tests,
+and it must not edit it. Each gets a purpose of its own, so no two share a name.
 
 ## Pick a different model
 A reviewer on your model shares your blind spots. Before spawning, compare:
@@ -79,28 +83,45 @@ Leave out your design reasoning, what you think is risky, what you already check
 confident you are, and the earlier rounds' findings. The reviewer can ask you for a fact.
 Its method is its own `oats.code-review` capability. A native reviewer (where one is
 allowed, above) gets the same brief, plus "review adversarially: correctness, the spec, edge
-cases, tests; report findings with a verdict".
+cases, tests; report findings with a verdict, then a Checked section: one line per 'done
+when' item and pinned acceptance test, saying how you checked it, then the attacks that
+found nothing".
 
-## Iterate, one fresh reviewer per round
-1. The round's reviewer reports findings with a verdict: `APPROVE`, `APPROVE WITH NITS` or
-   `CHANGES NEEDED`.
+## Iterate: fresh where it matters, the same reviewer for a small delta
+1. The round's reviewer reports findings with a verdict (`APPROVE`, `APPROVE WITH NITS` or
+   `CHANGES NEEDED`), each finding ranked, and a Checked section.
 2. Verify each finding against the code, then fix it, or dispute it with a concrete
    reason (a test, a contract, a spec line); one that adds an abstraction gets the YAGNI
-   check of `/work-the-reviews`. Skip none silently, and record each in your notes. A finding you can't place or
-   reproduce, ask that reviewer about while it still runs: a fact about its finding, never
-   a review of your fix.
-3. Once every finding is fixed or disputed, close the round and retire its reviewer
-   (Close); a native reviewer ends with its report.
-4. Start the next round's fresh reviewer at the new head.
+   check of `/work-the-reviews`. Skip none silently, and record each in your notes. A
+   finding you can't place or reproduce, ask that reviewer about while it still runs: a
+   fact about its finding, never a review of your fix.
+3. **Check the Checked section.** A round counts as finding nothing to fix only if its
+   verdict carries a Checked section that covers every "done when" item. If it doesn't, ask
+   that reviewer to complete it; if it can't, run a fresh round.
+4. **Who reads your fix** is decided by the reviewer's severity, not by what you would
+   like:
+   - **Fresh, on the whole change:** after any fix to a blocker or a major, or any delta
+     that changes behaviour, a contract or the design. Close the round (Close) and start
+     the next round's fresh reviewer at the new head.
+   - **The same reviewer, on the delta:** a fix to a minor, a nit you take, or a CI fix
+     that changes no behaviour. Send that reviewer the new head, the delta's range and your
+     change per finding; it reads the delta against its own findings and updates its
+     verdict and its Checked section at the new head. A fix it ranked minor that turns out
+     to change behaviour gets a fresh round. If it has retired (a native reviewer ends with
+     its report): the review bot's review at that head, where one runs; otherwise a fresh
+     reviewer briefed with the delta and the spec.
+   - **No re-read:** a rebase whose range-diff shows every commit unchanged, or an update
+     from the default branch that leaves the PR's own diff unchanged.
 5. Repeat until a round finds nothing to fix: `APPROVE` or `APPROVE WITH NITS`, or only
-   findings you already dispute with a concrete reason. Nits are yours to take or leave: a
-   nit you take moves the head, and a moved head gets a fresh round, so leave the rest for
-   the PR. Hand back only the head a clean round reviewed.
+   findings you already dispute with a concrete reason, with a Checked section covering
+   every "done when" item, at the head you hand back. Nits are yours to take or leave: one
+   you take goes back to that reviewer as a delta. Hand back only a head its reviewer
+   read.
 
-Cap: 4 rounds. Still `CHANGES NEEDED` after round 4: stop, and take the open findings with
-your position on each to your expert, who decides each. One it overrules counts as disputed
-with a concrete reason (its decision, in your hand-back); one it upholds you fix, then run a
-fresh round.
+Cap: 4 fresh rounds; a delta's re-read is not a round. Still `CHANGES NEEDED` after round
+4: stop, and take the open findings with your position on each to your expert, who decides
+each. One it overrules counts as disputed with a concrete reason (its decision, in your
+hand-back); one it upholds you fix, then run a fresh round.
 
 ## Set a checkpoint before you wait
 Once your turn ends you run no instructions, and a stalled reviewer may report nothing: a
@@ -165,19 +186,20 @@ this one, retire the stalled one (`oats retire <name>`) and say so in your handb
 ## Close
 - Hand the branch to your expert only once the loop converges, never intermediate heads,
   with: the branch and its head, what was done against "done when", how it was verified and
-  what you could not run (`/prove-it-works`), the final verdict, the number of rounds, each
-  disputed finding and its resolution, and anything deliberately left out.
+  what you could not run (`/prove-it-works`), the final verdict with its Checked section,
+  the number of rounds, each disputed finding and its resolution, and anything
+  deliberately left out.
 - If the expert returns the branch, fix what it found and run the loop again, fresh
   reviewers included, and hand back only once a round finds nothing to fix: every change on
   the branch is reviewed before a PR exists.
-- On the PR (`/work-the-reviews`), a fix bigger than a few lines gets a fresh round before
-  you push it.
-- Retire each round's reviewer once every finding of its round is fixed or disputed, before
-  the next round starts, without asking anyone. With no messaging layer, it printed its
-  report as its final message and can't send a done line or answer a question: retire it
-  once you have the report. Otherwise tell it the round is closed, and once it
-  replies "done, harvested:
-  <harvester>" or "done, no harvest duty" (after "done, harvest pending: <proposal>", wait
+- On the PR (`/work-the-reviews`), a fix gets the review step 4 of Iterate says before you
+  push it.
+- Retire each round's reviewer once its round is closed, without asking anyone: when the
+  next round needs a fresh reviewer, or once its verdict holds at the head you hand back.
+  With no messaging layer, it printed its report as its final message and can't send a
+  done line or answer a question: retire it once you have the report. Otherwise tell it the
+  round is closed, and once it replies "done, harvested: <harvester>" or "done, no harvest
+  duty" (after "done, harvest pending: <proposal>", wait
   for the first), check `oats retire <name> --plan`, run `oats retire <name>`, note it
   (name, why). The consolidated worktree it read stays: the next round, your expert's
   return and your PR's fixes all run on it, and it goes at Finish (`/worktrees`). Retire only

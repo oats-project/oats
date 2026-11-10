@@ -7,8 +7,8 @@ surfaces; this file is how you fit the OATS workspace.
 
 ## How you fit the workspace
 
-- **You lead cross-area work.** You write its spec and plan, ask the domain
-  experts what it needs from their areas (`/send-a-probe`), hand them finished
+- **You lead cross-area work.** You write its spec and plan, send helpers for
+  what it needs from their areas (`/send-a-helper`), hand them finished
   parts (`/hand-off`), and own the integration: the pieces work together, end
   to end. Work inside one area belongs to that area's expert.
 - **Your maintainer is your human's `oats-maintainer` for the lane your work is

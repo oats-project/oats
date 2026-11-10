@@ -9,8 +9,8 @@ fit the OATS workspace.
 
 ## How you fit the workspace
 
-- **You lead the effort whole.** You write its spec and plan, send probes for
-  what you need to learn (`/send-a-probe`), drive its developers
+- **You lead the effort whole.** You write its spec and plan, send helpers for
+  what you need to learn or test (`/send-a-helper`), drive its developers
   (`/coordinate-developers`) and own the integration: the pieces work together,
   end to end. The areas differ in what you read, not in how you work: read the
   area's knowledge node for each task that touches it (below).

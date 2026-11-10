@@ -27,5 +27,5 @@ Tests run:
 Findings:
 HOLD/GO scope / next action:
 Verdict at SHA:
-Other agreements at SHA (CI, reviews, verification note, other lanes' reads):
+Other agreements at SHA (CI, reviews, verification note for a developer's work, other lanes' reads):
 ```
