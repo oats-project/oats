@@ -7626,9 +7626,11 @@ there is no credential argument, result field, event or file on the client.
 The receiver's single JSON line and exit status must agree, name the requested
 harness and team, and carry valid metadata. Malformed or oversized replies fail
 closed as unexpected replies. Text-mode refusal messages escape remote control
-characters for the terminal; JSON keeps the message without terminal escaping.
+characters for the terminal. C0 controls and DEL in refusal reasons become
+spaces in both modes; JSON retains the remaining characters without terminal escaping.
 The submitted credential is redacted in both modes.
 Refusals: `E_BAD_ARGS` for unsupported arguments or names,
+`E_SERVER_UNKNOWN` for a server id without a registration, even with an orphan operator route,
 `E_HARNESS_TOKEN_ROUTE` for a missing operator alias,
 `E_HARNESS_TOKEN_INPUT` for invalid, too-large or terminal stdin,
 `E_HARNESS_TOKEN_UNSUPPORTED` for unavailable interactive capture or a

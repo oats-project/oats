@@ -163,6 +163,19 @@ test("a constructor-named server needs its own operator route", () => {
   assert.equal(JSON.parse(readFileSync(fx.calls, "utf8").trim()).host, "operator-host");
 });
 
+test("an unregistered constructor id is unknown even with an orphan operator route", () => {
+  const fx = fixture("unregistered-constructor", { operator: false });
+  for (const routes of [undefined, { constructor: { operatorSshHost: "operator-host" } }]) {
+    if (routes) writeFileSync(join(fx.config, "server-operator-routes.json"), JSON.stringify(routes));
+    for (const action of ["status", "set"]) {
+      const r = fx.cli([action, "codex", "--server", "constructor", "--name", "team", "--json", ...(action === "set" ? ["--stdin"] : [])], { input: "private-unknown-server-fixture" });
+      assert.equal(r.status, 1);
+      assert.equal(JSON.parse(r.stdout).error.code, "E_SERVER_UNKNOWN");
+      assert.equal(existsSync(fx.calls), false, "an orphan operator route never authorizes SSH for an unknown registration");
+    }
+  }
+});
+
 test("remove uses an explicit valid team name and returns only receiver metadata", () => {
   const fx = fixture("remove", { label: "Display label has spaces" });
   const absent = fx.cli(["remove", "pi", "--server", "box", "--json"]);
@@ -255,20 +268,20 @@ test("oversized receiver output is an unexpected reply after a possible install"
   assert.equal(readFileSync(fx.calls, "utf8").trim().split("\n").length, 1, "an unexpected reply never queries the agent roster");
 });
 
-test("receiver refusal controls are escaped for the terminal while JSON keeps the reason", () => {
+test("receiver refusal reasons normalize C0 and DEL and escape other terminal controls", () => {
   const fx = fixture("refusal-controls");
   const value = "private-api-key-fixture";
-  const reason = "bad \u202e\u009b2J\u2028 path " + value;
+  const reason = "bad\0middle\u007fline\n \u202e\u009b2J\u2028 path " + value;
   const reply = { ok: false, harness: "codex", name: "team", error: reason };
   const extra = { input: value, env: { FIXTURE_REPLY: JSON.stringify(reply), FIXTURE_EXIT: "1" } };
   const args = ["set", "codex", "--server", "box", "--stdin"];
   const json = fx.cli([...args, "--json"], extra);
   assert.equal(json.status, 1);
-  assert.deepEqual(JSON.parse(json.stdout).error, { code: "E_HARNESS_TOKEN_DELIVERY", message: "The server refused the credential: bad \u202e\u009b2J\u2028 path <redacted>" });
+  assert.deepEqual(JSON.parse(json.stdout).error, { code: "E_HARNESS_TOKEN_DELIVERY", message: "The server refused the credential: bad middle line  \u202e\u009b2J\u2028 path <redacted>" });
   const text = fx.cli(args, extra);
   assert.equal(text.status, 1);
-  assert.ok(text.stderr.includes("bad \\u{202e}\\u{9b}2J\\u{2028} path <redacted>"));
-  for (const control of ["\u202e", "\u009b", "\u2028", value]) assert.equal((text.stdout + text.stderr).includes(control), false);
+  assert.ok(text.stderr.includes("bad middle line  \\u{202e}\\u{9b}2J\\u{2028} path <redacted>"));
+  for (const control of ["\0", "\u007f", "\u202e", "\u009b", "\u2028", value]) assert.equal((text.stdout + text.stderr).includes(control), false);
 });
 
 test("credential input is bounded and a terminal or missing route is refused before reading", async () => {

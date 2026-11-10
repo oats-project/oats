@@ -7,6 +7,7 @@
   operator route refuses; it never falls back to the agent route or reuses
   its authenticated connection. Malformed or oversized replies fail closed,
   and remote refusal text is escaped for terminal output.
+  Unknown server ids refuse before SSH, including when an orphan operator route exists.
 - Rotation lists sessions of the same harness started before or during the
   receiver's reported replacement second;
   they pick up the new value at their next start. Nothing restarts

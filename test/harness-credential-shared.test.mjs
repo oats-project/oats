@@ -253,6 +253,16 @@ test("server connect records the operator alias while every remote call uses the
     writeFileSync(join(process.env.OATS_HOME_DIR, "server-operator-routes.json"), JSON.stringify({ connected: { operatorSshHost: "orphan-operator" } }));
     assert.equal(connectServer({ ...withoutOperator, sshHost: "different-agent" }, { execFileSync: remote }).registration.operatorSshHost, undefined);
     assert.deepEqual(readServerOperatorRoutes(), {});
+    writeFileSync(join(registry, "servers.json"), JSON.stringify({ servers: { constructor: { sshHost: "agent-host", workspace: "/srv/ws", workspaceKey: "github.com/acme/ws", path: "/usr/bin" } } }));
+    const noRoute = connectServer({ ...withoutOperator, id: "constructor", noOperatorSsh: true }, { execFileSync: remote });
+    assert.equal(Object.hasOwn(noRoute.registration, "operatorSshHost"), false);
+    assert.doesNotMatch(noRoute.steps.find((s) => s.step === "register").detail ?? "", /operator route/, "an inherited property is not an operator route that needs clearing");
+    writeFileSync(join(registry, "servers.json"), '{"servers":{}}\n');
+    writeFileSync(join(registry, "server-operator-routes.json"), JSON.stringify({ constructor: { operatorSshHost: "orphan-operator" } }));
+    const fresh = connectServer({ ...withoutOperator, id: "constructor" }, { execFileSync: remote });
+    assert.ok(fresh.registration, JSON.stringify(fresh));
+    assert.equal(Object.hasOwn(fresh.registration, "operatorSshHost"), false);
+    assert.deepEqual(readServerOperatorRoutes(), {});
   } finally { process.env.OATS_HOME_DIR = old; rmSync(registry, { recursive: true, force: true }); }
 });
 
@@ -305,16 +315,18 @@ test("server add replace learns an answering host's key without a false concurre
 test("a fresh server add cannot inherit an orphan operator route", () => {
   const dir = join(base, "orphan-registry"), bin = join(base, "orphan-bin"); mkdirSync(dir); mkdirSync(bin);
   writeFileSync(join(bin, "ssh"), "#!/bin/sh\nexit 1\n"); chmodSync(join(bin, "ssh"), 0o755);
-  writeFileSync(join(dir, "servers.json"), '{"servers":{}}\n');
   const routes = join(dir, "server-operator-routes.json");
-  writeFileSync(routes, JSON.stringify({ box: { operatorSshHost: "old-operator" }, other: { operatorSshHost: "other-operator" } }));
   const extra = { OATS_HOME_DIR: dir, PATH: `${bin}:${process.env.PATH}` };
-  const r = cli(["server", "add", "box", "--ssh", "different-host", "--workspace", "/srv/other"], extra);
-  assert.equal(r.status, 0, r.stdout + r.stderr);
-  assert.equal(JSON.parse(r.stdout).result.operatorSshHost, undefined);
-  assert.deepEqual(JSON.parse(readFileSync(routes)), { other: { operatorSshHost: "other-operator" } });
-  const listed = cli(["server", "list"], extra);
-  assert.equal(JSON.parse(listed.stdout).result.servers[0].operatorSshHost, undefined);
+  for (const id of ["box", "constructor"]) {
+    writeFileSync(join(dir, "servers.json"), '{"servers":{}}\n');
+    writeFileSync(routes, JSON.stringify({ [id]: { operatorSshHost: "old-operator" }, other: { operatorSshHost: "other-operator" } }));
+    const r = cli(["server", "add", id, "--ssh", "different-host", "--workspace", "/srv/other"], extra);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(JSON.parse(r.stdout).result.operatorSshHost, undefined);
+    assert.deepEqual(JSON.parse(readFileSync(routes)), { other: { operatorSshHost: "other-operator" } });
+    const listed = cli(["server", "list"], extra);
+    assert.equal(JSON.parse(listed.stdout).result.servers[0].operatorSshHost, undefined);
+  }
 });
 
 test("server add replace preserves a workspace key changed while the host is answering", () => {

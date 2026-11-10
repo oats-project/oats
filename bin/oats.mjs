@@ -4393,7 +4393,7 @@ async function serverCmd() {
   if (sub === "list") {
     let routes;
     try { routes = readServerOperatorRoutes(); } catch (e) { bail(e.code || "E_SERVERS_UNREADABLE", e.message); }
-    let rows = Object.entries(servers).map(([id, s]) => ({ id, ...s, ...routes[id], workspaceKey: s.workspaceKey ?? null, target: targetOf({ id, ...s }), snapshots: listSnapshots(id).length }));
+    let rows = Object.entries(servers).map(([id, s]) => ({ id, ...s, ...(Object.hasOwn(routes, id) ? routes[id] : {}), workspaceKey: s.workspaceKey ?? null, target: targetOf({ id, ...s }), snapshots: listSnapshots(id).length }));
     // --workspace-ref: the servers of one workspace, by canonical key, and the ids whose workspace is not known yet.
     let unknownWorkspace;
     if (flag("workspace-ref") !== undefined) {
@@ -4424,15 +4424,16 @@ async function serverCmd() {
     let operatorRoute;
     try {
       updateServers((current, routes) => {
-        if (current[id] && !args.includes("--replace")) throw Object.assign(new Error(`server ${id} is already registered (pass --replace to overwrite; existing remote instances keep the route they were spawned with)`), { code: "E_SERVER_EXISTS" });
+        const existing = Object.hasOwn(current, id) ? current[id] : undefined;
+        if (existing && !args.includes("--replace")) throw Object.assign(new Error(`server ${id} is already registered (pass --replace to overwrite; existing remote instances keep the route they were spawned with)`), { code: "E_SERVER_EXISTS" });
         // An older kernel can remove a registration while leaving its sidecar route behind.
-        if (!current[id]) delete routes[id];
+        if (!existing) delete routes[id];
         // An unchanged agent target keeps its learned identity when only the operator route changes.
-        if (current[id]?.workspaceKey && JSON.stringify(targetOf(current[id])) === JSON.stringify(targetOf(entry))) entry.workspaceKey = current[id].workspaceKey;
+        if (existing?.workspaceKey && JSON.stringify(targetOf(existing)) === JSON.stringify(targetOf(entry))) entry.workspaceKey = existing.workspaceKey;
         current[id] = entry;
         if (operatorSshHost !== undefined) routes[id] = { operatorSshHost };
         else if (noOperatorSsh) delete routes[id];
-        operatorRoute = routes[id];
+        operatorRoute = Object.hasOwn(routes, id) ? routes[id] : undefined;
       }, { operatorRoutes: true });
     } catch (e) { bail(e.code || "E_SERVERS_UNREADABLE", e.message); }
     // The workspace key is learned from the host, never typed: recorded when the host answers one and

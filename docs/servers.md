@@ -131,6 +131,7 @@ give `--name`. OATS never guesses a slug from a display label.
 These commands use the separate operator SSH alias and its forced-command
 receiver, with the usual noninteractive SSH options and `ControlPath=none`.
 They never reuse the agent connection or fall back to the agent alias.
+An unknown server id refuses before SSH, even if an orphan operator route exists.
 Without an operator route, OATS refuses with `E_HARNESS_TOKEN_ROUTE` and
 prints a complete `oats server add <id> --ssh <agent-alias> --workspace <path>
 --operator-ssh <alias> --replace` remedy, preserving the registration's
