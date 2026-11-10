@@ -3201,6 +3201,8 @@ async function scheduleCmd() {
         const op = args[2];
         const os = flag("os");
         if (os !== undefined && !(op === "install" && args.includes("--print"))) throw scheduleError("E_BAD_ARGS", "--os is for oats schedule host install --print");
+        const registerOnly = op === "install" && args.includes("--register-only");
+        if (registerOnly && args.includes("--print")) throw scheduleError("E_BAD_ARGS", "--register-only records the scope and --print writes nothing: give one");
         if (op === "install" && args.includes("--print")) {
           // What install would write, rendered from this environment; nothing is written or loaded.
           if (os !== undefined && os !== "darwin" && os !== "linux") throw scheduleError("E_BAD_ARGS", "--os darwin|linux");
@@ -3222,14 +3224,17 @@ async function scheduleCmd() {
           };
           const caps = { maxConcurrent: cap("max-concurrent", "default"), triggersMaxConcurrent: cap("triggers-max-concurrent", "none") };
           registerWorkspace(ws(), caps);
+          // --register-only: the scope is in the host registry and no unit is installed, for a host
+          // whose ticker is `oats host run` (a container has neither launchd nor a systemd user manager).
+          if (registerOnly) return out({ scheduler: schedulerStatus(ws(), io), warnings: [] });
           const { warnings } = installHostUnit();
           return out({ scheduler: schedulerStatus(ws(), io), warnings });
         }
         if (op === "uninstall") { unregisterWorkspace(ws()); if (!readRegistry().workspaces.length) uninstallHostUnit(); return out({ scheduler: schedulerStatus(ws(), io) }); }
         if (op === "status") return out({ scheduler: schedulerStatus(ws(), io) });
-        throw scheduleError("E_BAD_ARGS", "oats schedule host install [--print [--os darwin|linux]]|uninstall|status");
+        throw scheduleError("E_BAD_ARGS", "oats schedule host install [--register-only | --print [--os darwin|linux]]|uninstall|status");
       }
-      default: throw scheduleError("E_BAD_ARGS", "usage: oats schedule list|show <id>|test <id>|add <id> --file <spec.json> [--description=<text>] [--workspace <member> --runs-on <host> --owner <host>/<login>]|update <id> (--file <spec.json> [--description=<text>] | --description=<text>)|enable <id>|disable <id>|run <id> [--force]|remove <id> [--force]|reconcile <id> [--clear]|tick [--dry-run] [--host]|host install [--max-concurrent <N|default>] [--triggers-max-concurrent <N|none>] | host install --print [--os darwin|linux]|uninstall|status [--dir <workspace>|--server <id>] [--json]");
+      default: throw scheduleError("E_BAD_ARGS", "usage: oats schedule list|show <id>|test <id>|add <id> --file <spec.json> [--description=<text>] [--workspace <member> --runs-on <host> --owner <host>/<login>]|update <id> (--file <spec.json> [--description=<text>] | --description=<text>)|enable <id>|disable <id>|run <id> [--force]|remove <id> [--force]|reconcile <id> [--clear]|tick [--dry-run] [--host]|host install [--register-only] [--max-concurrent <N|default>] [--triggers-max-concurrent <N|none>] | host install --print [--os darwin|linux]|uninstall|status [--dir <workspace>|--server <id>] [--json]");
     }
   } catch (e) {
     // K8b: typed refusal details travel (identity mismatch: key/declared; a refused file: its integrity source).
@@ -4962,6 +4967,8 @@ Usage:
       host install|uninstall|status              explicit IANA tz; see docs/schedules.md); --server
                                                 routes to that host's workspace
         install [--max-concurrent N|default] [--triggers-max-concurrent N|none]
+        install --register-only                 records the scope and installs no timer, for a
+                                                host whose ticker is oats host run
   oats schedule add|update <id> … --description=<text>   a one-line summary (1-200 characters)
   oats schedule update <id> --description=<text>   change only it (--description= clears it)
   oats trigger add (--file <json> | --from <package>:<template> [--set k=v]) | list | show | enable
