@@ -188,7 +188,7 @@ or narrow its authority. Never share the mount across trust groups.
 
 ## Acceptance and evidence
 
-The host needs Docker and Node 22+. Export the same plain variables used for
+The host needs Docker and Node 22.5+. Export the same plain variables used for
 Compose, then run:
 
 ```sh

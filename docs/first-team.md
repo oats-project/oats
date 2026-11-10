@@ -20,9 +20,10 @@ declaration and locked to a commit and integrity). Nothing is installed.
 
 ## 0. Prerequisites
 
-Node.js 22+, Git with read access to the repositories below (your own
-credential helpers; the kernel never prompts), tmux, and an authenticated
-harness (Pi, Claude or Codex).
+Node.js 22.5 or later (the floor `@awebai/oats` declares in `engines`), Git
+with read access to the repositories below (your own credential helpers; the
+kernel never prompts), tmux, and an authenticated harness (Pi, Claude or
+Codex).
 
 ```bash
 npm install -g @awebai/oats@latest
