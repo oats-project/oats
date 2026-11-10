@@ -322,13 +322,13 @@ for `--no-recursive`) is never ignored.
 | `oats instance suggest-name` | none | `--soul`, `--task`, `--task-file`, `--harness`, `--model`, `--launch-config`, `--dir` | `--json` | `--server` | none |
 | `oats worktree add` | none | `--purpose`, `--branch`, `--base`, `--repo` | `--preview`, `--json` | `--server`, `--dir`, `--home` | none |
 | `oats worktree remove` | none | `--purpose` | `--json` | `--server`, `--dir`, `--home` | none |
-| `oats session start` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json`, `--resume` | none | none |
-| `oats session restart` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server`, `--stop-grace` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json` | `--resume` | none |
-| `oats session resume` | none | `--deployment` | `--plan`, `--json` | none | none |
-| `oats session input` | none | `--home`, `--text-file` | `--json` | none | none |
-| `oats session receive` | none | `--home`, `--name` | `--json` | none | none |
-| `oats session upload` | none | `--file`, `--home`, `--instance`, `--server` | `--json` | none | none |
-| `oats session attach` | none | `--detach-key`, `--home`, `--instance`, `--server` | `--no-status-line`, `--print`, `--json` | none | none |
+| `oats session start` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json`, `--resume` | `--native-record` | none |
+| `oats session restart` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server`, `--stop-grace` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json` | `--native-record`, `--resume` | none |
+| `oats session resume` | none | `--deployment` | `--plan`, `--json` | `--native-record`, `--server` | none |
+| `oats session input` | none | `--home`, `--text-file` | `--json` | `--native-record` | none |
+| `oats session receive` | none | `--home`, `--name` | `--json` | `--native-record` | none |
+| `oats session upload` | none | `--file`, `--home`, `--instance`, `--server` | `--json` | `--native-record` | none |
+| `oats session attach` | none | `--detach-key`, `--home`, `--instance`, `--server` | `--no-status-line`, `--print`, `--json` | `--native-record` | none |
 | `oats schedule add` | `[<id>]` | `--file`, `--spec-json`, `--description`, `--workspace`, `--runs-on`, `--owner`, `--dir`, `--server` | `--json` | none | none |
 | `oats schedule update` | `<id>` | `--file`, `--spec-json`, `--description`, `--dir`, `--server` | `--json` | none | none |
 | `oats schedule remove` | `<id>` | `--dir`, `--server` | `--force`, `--json` | none | none |
@@ -403,7 +403,8 @@ itself, as before (`oats retire` with no instance is `E_USAGE` too).
 
 A flag that takes a value takes the next word (its number of words) unless
 it starts with `--`; a value after `=` is its first. A value flag given
-none is that flag's own refusal. `--` is a flag like any other, and none of
+none (no word, or one that starts with `--`) ends the check there: it is
+that flag's own refusal, by the command, before any flag after it. `--` is a flag like any other, and none of
 these commands defines it. `--runtime` is the pre-0.27 name of
 `--harness`. `--help` and `-h` print the usage first, as for every
 kernel command.

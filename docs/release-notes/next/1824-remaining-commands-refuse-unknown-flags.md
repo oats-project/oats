@@ -35,8 +35,9 @@
     take `--home`), `--server` on `oats trigger add`, `poll` and `test`
     (which have no route), `--clear` on `oats instance waiting` (it is
     `oats instance attention`'s), and anything after `oats update`'s own
-    flags. `oats instance waiting --server` is `E_BAD_ARGS`, unknown flag,
-    where it was `E_USAGE` from the router. The flags each command defines
+    flags. `--server` on `oats instance waiting`, `oats instance attention`,
+    `oats session input` and `oats session receive`, which have no route, is
+    `E_BAD_ARGS`, unknown flag, where it was `E_USAGE` from the router. The flags each command defines
     are listed in
     [The flags a command defines](../desktop-cli-api.md#command-flags).
 - **The commands that already refused a flag they do not read check it in

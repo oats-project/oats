@@ -100,7 +100,7 @@ const { callSession, parseMaxAge, readBudget } = await kernelImport("read-call",
 const { cachedWorkspace, legacyLayoutProblems, statusAnswer, statusView } = await kernelImport("roster-read", () => import("../lib/roster-read.mjs"));
 const { memberLabel, memberRows, packageRows, standaloneCatalogVersion, standalonePackages, workspaceName, workspaceStatusAnswer, workspaceStatusView } = await kernelImport("workspace-read", () => import("../lib/workspace-read.mjs"));
 const { expandInlineValues, flagValue } = await kernelImport("argv", () => import("../lib/argv.mjs"));
-const { APPROVAL_REMOVED, RETIRE_USAGE, SOUL_LAUNCH_USAGE, SPAWN_USAGE, SYNC_USAGE, TEAMS_USAGE, WORKTREE_USAGE, commandArgvProblem, commandFlags } = await kernelImport("command-flags", () => import("../lib/command-flags.mjs"));
+const { APPROVAL_REMOVED, NATIVE_RECORD_REFUSED, RESUME_LOCAL_ONLY, RETIRE_USAGE, SOUL_LAUNCH_USAGE, SPAWN_USAGE, SYNC_USAGE, TEAMS_USAGE, WORKTREE_USAGE, commandArgvProblem, commandFlags } = await kernelImport("command-flags", () => import("../lib/command-flags.mjs"));
 
 const rawArgs = process.argv.slice(2);
 const { argv: args, problem: argvProblem, inline: inlineValues } = expandInlineValues(rawArgs);
@@ -3402,7 +3402,7 @@ async function triggerFromPackage(T, from, sets, idFlag) {
 
 async function sessionCmd() {
   try {
-    if (flag("native-record") !== undefined) throw Object.assign(new Error("--native-record outcome inspection is gone (the captured/portable path was removed in 0.26)"), { code: "E_BAD_ARGS" });
+    if (flag("native-record") !== undefined) throw Object.assign(new Error(NATIVE_RECORD_REFUSED), { code: "E_BAD_ARGS" });
     const home = flag("home");
     let result;
     if (args[1] === "attach") {
@@ -4746,7 +4746,7 @@ if (cmd && KERNEL_COMMANDS.has(cmd) && wantsHelp) { if (JSON_MODE) { jsonOk({ co
 // and before a --server command is sent: a host on an older OATS would ignore a flag it does not read.
 { const problem = commandArgvProblem(rawArgs); if (problem) cmdFail(problem.code, problem.message, problem.details); }
 // Session resume is local only (#1559, D1): a server resumes its own instances.
-if (cmd === "session" && flag("server") !== undefined && (args[1] === "resume" || args.includes("--resume"))) cmdFail("E_BAD_ARGS", "session resume and session start --resume act on this machine's instances only; a server runs oats session resume itself");
+if (cmd === "session" && args[1] === "start" && flag("server") !== undefined && args.includes("--resume")) cmdFail("E_BAD_ARGS", RESUME_LOCAL_ONLY);
 if (flag("server") !== undefined && ROUTED_COMMANDS.has(cmd)) await serverRouteCmd();
 else if (cmd === "server") await serverCmd();
 else if (cmd === "deployments") deploymentsCmd();
