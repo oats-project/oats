@@ -6,6 +6,8 @@
 //     and under --json (one failure envelope, `details.flag`), and the home is as it was;
 //   - the refusal comes before `--plan` answers and before `--server` sends anything;
 //   - an argument after the instance is refused the same way (`details.argument`);
+//   - no instance is E_USAGE with the usage line, as one envelope under --json and the usage on stderr
+//     without it, with --server too, before the route; an unknown flag without an instance stays E_BAD_ARGS;
 //   - `--keep-dir` keeps the home, and every flag retire defines is read: a value flag's value is its
 //     value (spaced or `--flag=value`), never an argument.
 import test from "node:test";
@@ -99,6 +101,26 @@ test("an argument after the instance is refused, and neither home is touched", a
   assert.deepEqual(d.refusal(d.fx.cli(["retire", "dev-one", "--force", "dev-two", "--json"])), { code: "E_BAD_ARGS", message, details: { argument: "dev-two" } });
   d.untouched("dev-one", first, "the instance");
   d.untouched("dev-two", second, "the argument");
+});
+
+test("no instance is E_USAGE with the usage line: one envelope under --json, the usage on stderr without it", (t) => {
+  const d = deployment(t);
+  for (const argv of [["retire", "--json"], ["retire", "--plan", "--json"], ["retire", "--force", "--json"]]) {
+    const r = d.fx.cli(argv);
+    assert.equal(r.stderr, "", `${argv.join(" ")}: nothing on stderr`);
+    assert.deepEqual(d.refusal(r), { code: "E_USAGE", message: USAGE }, argv.join(" "));
+  }
+  const text = d.fx.cli(["retire"]);
+  assert.equal(text.status, 1, text.stdout + text.stderr);
+  assert.equal(text.stdout, "");
+  assert.equal(text.stderr, `oats: ${USAGE}\n`);
+  // On the --server route too, before the route is taken: no server `nosuch` is registered, and a retire
+  // that got as far as its route answers E_SERVER_UNKNOWN.
+  for (const argv of [["retire", "--server", "nosuch", "--json"], ["retire", "--plan", "--server", "nosuch", "--json"]]) {
+    assert.deepEqual(d.refusal(d.fx.cli(argv)), { code: "E_USAGE", message: USAGE }, argv.join(" "));
+  }
+  // An unknown flag is refused as one before the missing instance is.
+  assert.deepEqual(d.refusal(d.fx.cli(["retire", "--keep-dirs", "--json"])), { code: "E_BAD_ARGS", message: `oats retire: unknown flag --keep-dirs\n${USAGE}`, details: { flag: "--keep-dirs" } });
 });
 
 test("--keep-dir keeps the home; --home, --dir, --discard-worktree, --force and --json are read with it", async (t) => {

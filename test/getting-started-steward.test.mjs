@@ -516,14 +516,14 @@ test("a soul whose declared harness differs from this machine's '*' gets its own
   }
 });
 
-// No released kernel's catalog has "Coordination templates" yet, and oats.framework admits older kernels: the skills name the template.
+// Only OATS 0.69.13 and later ship the catalog's "Coordination templates", and oats.framework admits older kernels: the skills name the template.
 test("onboarding names the engineering template's repository, not only the installed kernel's catalog", () => {
   const adapt = read("oats-package/capabilities/oats-coordination-setup/skills/adapt-to-the-organisation/SKILL.md").replace(/\s+/g, " ");
   const tailor = read("oats-package/capabilities/oats-onboarding/skills/oats-tailor-workspace/SKILL.md").replace(/\s+/g, " ");
   for (const [name, text] of [["adapt-to-the-organisation", adapt], ["oats-tailor-workspace", tailor]]) {
     assert.ok(text.includes("the engineering template, `oats-project/oats-engineering-coordination`"), `${name} names the template's repository`);
     assert.ok(text.includes("latest `template-v*` tag"), `${name} copies the latest template release`);
-    assert.ok(text.includes("from the next kernel release, the installed kernel's `docs/official-catalog.md`") || text.includes("From the next kernel release, the installed kernel's `docs/official-catalog.md`"), `${name} dates the catalog's list`);
+    assert.ok(text.includes("from OATS 0.69.13, the installed kernel's `docs/official-catalog.md`") || text.includes("From OATS 0.69.13, the installed kernel's `docs/official-catalog.md`"), `${name} dates the catalog's list`);
   }
 });
 

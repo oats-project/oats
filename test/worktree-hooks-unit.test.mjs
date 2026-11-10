@@ -349,7 +349,7 @@ test("the ps the test seam names runs with the fixed environment, never the call
   process.env.LANG = "de_DE.UTF-8"; process.env.TZ = "Asia/Tokyo"; process.env.OATS_SEAM_SENTINEL = "inherited";
   t.after(() => { for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } delete process.env.OATS_SEAM_SENTINEL; });
   assert.deepEqual(processStart(process.pid), { state: "alive", token: "ps:Thu Jan  1 00:00:00 2026" }, "the named ps answered");
-  assert.equal(readFileSync(seen, "utf8"), "PATH=/usr/bin:/bin\nLC_ALL=C\nTZ=UTC\nLANG=\nSENTINEL=\n");
+  assert.equal(readFileSync(seen, "utf8"), "PATH=/usr/bin:/bin:/usr/sbin:/sbin\nLC_ALL=C\nTZ=UTC\nLANG=\nSENTINEL=\n");
 });
 
 test("a test seam that is neither 1 nor an absolute path reads no start: unknown, naming the seam, never a ps found on PATH (#878)", async (t) => {

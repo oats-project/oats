@@ -54,11 +54,12 @@ const {
   capabilityManifests, capabilityTrust, capabilityExecutablePath,
   officialPackageCatalog, officialCatalogFile, officialCapabilityAliases, resolvedFromHome, resolvedFromPrepared, teamEnv, isWorkspaceHome, preWorkspaceHome, isCapturedHome, capturedHomeRefusal, composeInstanceAgentsMd, parseYamlNested, withConfigFile,
   findInstanceHome, findInstanceHomes, homeLaunchLayers, processScanInformation, enclosingInstanceHome, logicalCwd, readableInstanceHomes, workspaceOf, ensureRoot, findRoot, findAgent, findAgentAt, legacyLocalAgents, legacyCapturedHomes, listAgents, listInstances, servedIdentityLine, spawnInstanceAsync, suggestSpawnName, instanceSoulDir, stableSoulId, preparedSoulIdOf, recordedKernelBin, launchConfigsAt, machineLaunchConfigs, machineLaunchConfigsFile, launchStartNotices, launchReportFor, explicitInstanceName, MAX_INSTANCE_NAME, retireInstance, RETIRE_SELECTED_HOME, RETIRE_UNDER_CLAIM, inspectInstanceSession, inputInstanceSession, attachInstanceSession, startInstanceSession, upgradeHoldsClaim, writeHomeRecord, defaultRepo, RELATIONS, validateLaunchConfig, validateLaunchConfigDefaults, renderLaunchRecipe, describeLaunchCommand, redactLaunchRecipe, withSafeTaskPrompt, LAUNCH_HARNESSES, planLaunch, redactLaunchCommand, restartInstanceSession,
-  FAILED_SPAWN_BRANCH_LEFT, RETIRE_DELETE_BRANCH_REFUSED,
+  FAILED_SPAWN_BRANCH_LEFT,
 } = await kernelImport("core", () => import("../lib/core.mjs"));
 const {
   writeFileAtomic, LOCK_FILE, canonicalLock, readLock, readLockIfPresent, writeLock, resolvePackages, memoizedRemote,
   classifyPackageValue, parsePackageRequest } = await kernelImport("packages", () => import("../lib/packages.mjs"));
+const { harnessToken } = await kernelImport("harness-token", () => import("../lib/harness-token.mjs"));
 const { harnessTrust } = await kernelImport("harness-trust-write", () => import("../lib/harness-trust-write.mjs"));
 const { previewLaunchEnvironment, previewPaneEnvironment } = await kernelImport("core", () => import("../lib/core.mjs"));
 const { PI_BRIDGE, piBridgeFolders, piBridgeSkewWarnings, planPiBridges, piBridgePlanLines, piBridgeStepProblem, piBridgeFailure, kernelLookup, kernelLookupResult, planCliUpdate, desktopFirstLine, bridgeLookup, bridgeLookupProblem } = await kernelImport("pi-bridge", () => import("../lib/pi-bridge.mjs"));
@@ -73,7 +74,7 @@ const { sameRepo } = await kernelImport("repo-moves", () => import("../lib/repo-
 const { OATS_PACKAGE_NAME } = await kernelImport("version", () => import("../lib/version.mjs"));
 const { activateLocalInputs, localRevision } = await kernelImport("local-inputs", () => import("../lib/local-inputs.mjs"));
 const { default: YAML } = await kernelImport("yaml", () => import("yaml"));
-const { attachArgv, checkRemote, connectServer, forgetSnapshot, getServer, inspectRemote, startRemote, restartRemote, launchConfigRemote, scheduleRemote, listSnapshots, learnWorkspaceKey, readServers, redactArgv, reportedWorkspaceKey, rosterGroups, routeCapability, routeCommand, runRemote, serverFlagOf, targetOf, updateServers, validateServer, workspaceKeyOfStatus, workspaceMismatch, SERVERS_FILE } = await kernelImport("servers", () => import("../lib/servers.mjs"));
+const { attachArgv, checkRemote, connectServer, forgetSnapshot, getServer, inspectRemote, startRemote, restartRemote, launchConfigRemote, scheduleRemote, listSnapshots, learnWorkspaceKey, readServers, readServerOperatorRoutes, redactArgv, reportedWorkspaceKey, rosterGroups, routeCapability, routeCommand, runRemote, serverFlagOf, targetOf, updateServers, validateServer, validateOperatorSshHost, workspaceKeyOfStatus, workspaceMismatch, SERVERS_FILE } = await kernelImport("servers", () => import("../lib/servers.mjs"));
 const { readSessionViewer } = await kernelImport("session-viewer", () => import("../lib/session-viewer.mjs"));
 const { tickTriggers } = await kernelImport("triggers", () => import("../lib/triggers.mjs"));
 const A = await kernelImport("automations", () => import("../lib/automations.mjs"));
@@ -99,6 +100,7 @@ const { callSession, parseMaxAge, readBudget } = await kernelImport("read-call",
 const { cachedWorkspace, legacyLayoutProblems, statusAnswer, statusView } = await kernelImport("roster-read", () => import("../lib/roster-read.mjs"));
 const { memberLabel, memberRows, packageRows, standaloneCatalogVersion, standalonePackages, workspaceName, workspaceStatusAnswer, workspaceStatusView } = await kernelImport("workspace-read", () => import("../lib/workspace-read.mjs"));
 const { expandInlineValues, flagValue } = await kernelImport("argv", () => import("../lib/argv.mjs"));
+const { APPROVAL_REMOVED, NATIVE_RECORD_REFUSED, RESUME_LOCAL_ONLY, RETIRE_USAGE, SOUL_LAUNCH_USAGE, SPAWN_USAGE, SYNC_USAGE, TEAMS_USAGE, WORKTREE_USAGE, commandArgvProblem, commandFlags } = await kernelImport("command-flags", () => import("../lib/command-flags.mjs"));
 
 const rawArgs = process.argv.slice(2);
 const { argv: args, problem: argvProblem, inline: inlineValues } = expandInlineValues(rawArgs);
@@ -1021,7 +1023,7 @@ function serializeLaunchConfigs(map) {
     const envNames = Object.keys(e.env || {}).sort();
     if (envNames.length) {
       lines.push("    env:");
-      for (const n of envNames) { const v = e.env[n]; if (typeof v === "string") lines.push(`      ${n}: ${yamlQuoted(v)}`); else lines.push(`      ${n}:`, `        fromEnv: ${v.fromEnv}`); }
+      for (const n of envNames) { const v = e.env[n]; if (typeof v === "string") lines.push(`      ${n}: ${yamlQuoted(v)}`); else lines.push(`      ${n}:`, v.fromFile !== undefined ? `        fromFile: ${yamlQuoted(v.fromFile)}` : `        fromEnv: ${v.fromEnv}`); }
     }
     if (e.model !== undefined) lines.push(`    model: ${yamlQuoted(e.model)}`);
     if (e.yolo !== undefined) lines.push(`    yolo: ${e.yolo}`);
@@ -1037,7 +1039,7 @@ function normalizeLaunchConfig(e) {
     harness: Object.hasOwn(e, "harness") ? e.harness : e.runtime,
     ...(e.executable !== undefined ? { executable: e.executable } : {}),
     ...(e.args?.length ? { args: [...e.args] } : {}),
-    ...(e.env && Object.keys(e.env).length ? { env: Object.fromEntries(Object.keys(e.env).sort().map((n) => [n, typeof e.env[n] === "string" ? e.env[n] : { fromEnv: e.env[n].fromEnv }])) } : {}),
+    ...(e.env && Object.keys(e.env).length ? { env: Object.fromEntries(Object.keys(e.env).sort().map((n) => [n, typeof e.env[n] === "string" ? e.env[n] : { ...e.env[n] }])) } : {}),
     ...(e.model !== undefined ? { model: e.model } : {}),
     ...(e.yolo !== undefined ? { yolo: e.yolo } : {}),
     ...(e.default === true ? { default: true } : {}),
@@ -1062,10 +1064,10 @@ function machineDeclares(name) {
 /** What a GUI or an operator sees of one configuration. Environment values
  *  never leave the file: a literal is answered as {redacted: true} (literals
  *  are non-secret by contract, but no value is shown anywhere) and a
- *  reference as {fromEnv: NAME}. An editor keeps a literal it cannot see with
+ *  reference as {fromEnv: NAME} or {fromFile: /path}. An editor keeps a literal it cannot see with
  *  `set --keep-env`. */
 function publicLaunchConfig(e, extra = {}) {
-  const env = Object.fromEntries(Object.keys(e.env || {}).sort().map((n) => [n, typeof e.env[n] === "string" ? { redacted: true } : { fromEnv: e.env[n].fromEnv }]));
+  const env = Object.fromEntries(Object.keys(e.env || {}).sort().map((n) => [n, typeof e.env[n] === "string" ? { redacted: true } : { ...e.env[n] }]));
   return { harness: e.harness, executable: e.executable ?? null, args: [...(e.args || [])], env, model: e.model ?? null, yolo: e.yolo ?? null, default: e.default === true, ...extra };
 }
 /** The scope a launch-config command reads: --dir (or cwd), a running
@@ -1140,7 +1142,7 @@ function launchPreview(bail) {
   const { recipe } = plan;
   const command = renderLaunchRecipe(recipe, { home, instance, redact: true, trustHome: plan.trustHome });
   const d = describeLaunchCommand(command);
-  const environment = d.environment.map((e) => e.reference && recipe.env[e.name]?.fromEnv ? { name: e.name, fromEnv: recipe.env[e.name].fromEnv } : e);
+  const environment = d.environment.map((e) => e.reference && recipe.env[e.name] && typeof recipe.env[e.name] === "object" ? { name: e.name, ...recipe.env[e.name] } : e);
   jsonOk({ context, selected, ...(plan.warnings?.length ? { warnings: plan.warnings } : {}), selection: { source: plan.selectionSource, launchConfig: recipe.launchConfig, harness: sel.harness ?? null, model: sel.model ?? null, yolo: sel.yolo ?? null }, harness: plan.harness, model: recipe.model, modelSource: plan.modelSource, yolo: recipe.yolo ?? null, launchConfig: recipe.launchConfig, launchConfigSource: recipe.launchConfigSource, launchConfigDefault: recipe.launchConfigDefault === true, executable: { path: plan.executable.path, declared: plan.executable.declared ?? null, resolvedFrom: plan.executable.resolvedFrom }, argv: d.argv, environment, command, prompt: recipe.prompt, hooks: redactLaunchRecipe(recipe).hooks, preflight: plan.preflight, ok: plan.ok });
 }
 async function launchConfigCmd() {
@@ -1151,7 +1153,6 @@ async function launchConfigCmd() {
   if (sub === "preview") { launchPreview(bail); return; }
   if (!["list", "set", "remove"].includes(sub)) bail("E_USAGE", usage);
   const { context: dir, selected } = sub === "list" ? launchConfigContext(bail) : { context: dirFlag(), selected: null };
-  if (sub !== "list" && (flag("home") !== undefined || flag("soul") !== undefined)) bail("E_BAD_ARGS", `launch-config ${sub} writes the deployment's oats-local.yaml: address it with --dir, not --home or --soul`);
   // Lead decision 2: launch configurations are a HOST choice, declared in the
   // deployment's oats-local.yaml (found walking up; a home's own deployment).
   const at = selected?.home ?? dir;
@@ -1169,7 +1170,7 @@ async function launchConfigCmd() {
     if (JSON_MODE) { jsonOk({ context: dir, level, file, selected, configurations }); return; }
     if (!configurations.length) { console.log(`No launch configurations are declared${file ? ` in ${shortPath(file)}` : ` (no oats-local.yaml in reach of ${dir})`} or in ${shortPath(machineLaunchConfigsFile())}`); return; }
     for (const c of configurations) {
-      const env = Object.entries(c.env).map(([n, v]) => v.fromEnv ? `${n}=$${v.fromEnv}` : `${n}=<redacted>`).join(" ");
+      const env = Object.entries(c.env).map(([n, v]) => v.fromEnv ? `${n}=$${v.fromEnv}` : v.fromFile ? `${n}=<file:${v.fromFile}>` : `${n}=<redacted>`).join(" ");
       console.log(`${c.name}: ${c.harness}${c.default ? ` (this machine's ${c.harness} default)` : ""}${c.executable ? ` ${c.executable}` : ""}${c.args.length ? ` ${c.args.map((a) => JSON.stringify(a)).join(" ")}` : ""}${env ? ` [${env}]` : ""}${c.model ? ` model ${c.model}` : ""}${c.yolo !== null ? ` yolo ${c.yolo}` : ""} (from ${shortPath(launchConfigFile(c.source))})${c.shadows.length ? ` (replaces ${c.shadows.map(shortPath).join(", ")}'s)` : ""}`);
     }
     return;
@@ -1271,15 +1272,13 @@ async function launchConfigCmd() {
 function instanceWaitingCmd(sub, bail) {
   dropAmbientRoot();
   const usage = sub === "attention"
-    ? "usage: oats instance attention [--message <text>] [--clear] [--json]"
-    : "usage: oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message <text>] [--home <abs>] [--dir <d>] [--json]";
+    ? "usage: oats instance attention [--message=<text>] [--clear] [--json]"
+    : "usage: oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] [--json]";
   const value = (name) => { const v = flag(name); if (v === true) throw Object.assign(new Error(`--${name} needs a value${name === "message" ? " (a message that starts with -- goes as --message=<text>)" : ""}`), { code: "E_BAD_ARGS" }); return v; };
   let home, producer, waiting, reason, message;
   try {
     message = value("message");
     if (sub === "attention") {
-      if (args[2] && !args[2].startsWith("--")) return bail("E_BAD_ARGS", usage);
-      for (const f of ["home", "dir", "producer", "reason"]) if (args.includes(`--${f}`)) return bail("E_BAD_ARGS", `oats instance attention has no --${f}: it records the agent's own claim on the instance it runs in ($OATS_INSTANCE_HOME); ${usage}`);
       home = process.env.OATS_INSTANCE_HOME;
       if (!home || !isAbsolute(home) || incarnationOf(home) === null) return bail("E_USAGE", `oats instance attention runs inside an instance session: $OATS_INSTANCE_HOME is ${home ? `${home}, which is not an instance home (no readable instance.json)` : "unset"}`);
       producer = "agent"; waiting = !args.includes("--clear");
@@ -1291,7 +1290,7 @@ function instanceWaitingCmd(sub, bail) {
       producer = value("producer"); reason = value("reason");
       if (producer === undefined) return bail("E_BAD_ARGS", `--producer is required; ${usage}`);
       // Producer `agent` is the agent's own claim: only `attention` writes it.
-      if (producer === "agent") return bail("E_BAD_ARGS", "--producer agent is reserved for the agent's own claim: use `oats instance attention [--message <text>]` or `oats instance attention --clear` from its session");
+      if (producer === "agent") return bail("E_BAD_ARGS", "--producer agent is reserved for the agent's own claim: use `oats instance attention [--message=<text>]` or `oats instance attention --clear` from its session");
       const homeOpt = flag("home");
       if (homeOpt === true || (homeOpt !== undefined && !isAbsolute(homeOpt))) return bail("E_BAD_ARGS", "--home needs an absolute instance home");
       home = homeOpt ?? (process.env.OATS_INSTANCE_HOME || enclosingInstanceHome(logicalCwd()));
@@ -1321,10 +1320,8 @@ function instanceWaitingCmd(sub, bail) {
 async function worktreeCmd() {
   const bail = (code, msg, details, exit) => (JSON_MODE ? jsonFail(code, msg, details, exit) : die(msg, exit));
   const sub = args[1];
-  const usage = "usage: oats worktree add --purpose <p> --branch <b> --base <remote-branch> [--repo <member key|clone path>] [--preview] [--json] | oats worktree remove --purpose <p> [--json]";
+  const usage = WORKTREE_USAGE;
   if (!["add", "remove"].includes(sub)) return bail("E_BAD_ARGS", usage);
-  if (flag("server") !== undefined) return bail("E_BAD_ARGS", "oats worktree runs in an instance home on this machine; --server is not accepted");
-  for (const f of ["dir", "home"]) if (args.includes(`--${f}`)) return bail("E_BAD_ARGS", `oats worktree has no --${f}: it acts on the instance home it runs in; ${usage}`);
   const value = (name) => { const v = flag(name); if (v === true) throw Object.assign(new Error(`--${name} needs a value`), { code: "E_BAD_ARGS" }); return v === undefined ? undefined : String(v); };
   const homeVariable = ["OATS_INSTANCE_HOME", "OATS_HOME"].find((name) => process.env[name]);
   const home = homeVariable ? process.env[homeVariable] : enclosingInstanceHome(logicalCwd());
@@ -1338,7 +1335,6 @@ async function worktreeCmd() {
   process.stderr.on("error", readerGone);
   try {
     if (sub === "remove") {
-      for (const f of ["branch", "base", "repo", "preview"]) if (args.includes(`--${f}`)) return bail("E_BAD_ARGS", `oats worktree remove takes only --purpose; ${usage}`);
       const r = await W.worktreeRemove(resolve(home), { purpose: value("purpose") });
       if (JSON_MODE) { jsonOk(r); return; }
       console.log(r.rolledBack
@@ -1399,7 +1395,6 @@ function retiredInstanceAddresses(root, name, home) {
 async function instanceUpgradeCmd(name, bail) {
   const usage = "usage: oats instance upgrade <instance> [--undo] (--plan | --plan-revision <rev> --idempotency-key <key>) [--home <abs>] [--dir <d>] [--json]";
   if (!name || name.startsWith("--")) return bail("E_BAD_ARGS", usage);
-  if (serverFlagOf(args)) return bail("E_BAD_ARGS", "instance upgrade supports local homes only; run it on the deployment host");
   const home = flag("home"), revision = flag("plan-revision"), key = flag("idempotency-key");
   if (home === true || (home !== undefined && !isAbsolute(home))) return bail("E_BAD_ARGS", "--home needs an absolute instance home");
   const planOnly = args.includes("--plan"), undo = args.includes("--undo");
@@ -1420,8 +1415,6 @@ async function instanceUpgradeCmd(name, bail) {
   } catch (e) { return lifecycleFail(e, "E_UPGRADE_FAILED", { ...e.details, ...(e.plan ? { plan: e.plan } : {}), ...(e.candidates ? { candidates: e.candidates } : {}) }); }
 }
 
-/** The flags `oats instance suggest-name` reads, each taking a value (`--json` aside). */
-const SUGGEST_NAME_FLAGS = new Set(["soul", "task", "task-file", "harness", "model", "launch-config", "dir"]);
 /** `oats instance suggest-name` (feature instance-suggest-name, awebai/oats#1490 §2): the name a spawn
  *  of a soul would get by --suggest-name, chosen here for a spawn that may land on another machine
  *  (lib/core.mjs suggestSpawnName). Never routed: --server is refused before the route dispatch. */
@@ -1435,12 +1428,6 @@ async function instanceSuggestNameCmd(bail) {
     if (v === undefined || (!inlineValues.has(name) && v.startsWith("--"))) return bail("E_BAD_ARGS", `--${name} needs a value; ${usage}`);
     return v;
   };
-  for (let i = 2; i < args.length; i++) {
-    const a = args[i];
-    if (a === "--json") continue;
-    if (!a.startsWith("--") || !SUGGEST_NAME_FLAGS.has(a.slice(2))) return bail("E_BAD_ARGS", `oats instance suggest-name: unexpected ${a.startsWith("--") ? "flag" : "argument"} ${JSON.stringify(a)}; ${usage}`);
-    if (!inlineValues.has(a.slice(2))) i++;
-  }
   const soul = value("soul"), task = value("task"), taskFile = value("task-file");
   if (soul === undefined) return bail("E_BAD_ARGS", `--soul is required; ${usage}`);
   if ((task === undefined) === (taskFile === undefined)) return bail("E_BAD_ARGS", `give the task with one of --task or --task-file; ${usage}`);
@@ -1458,7 +1445,7 @@ async function instanceCmd() {
   if (sub === "upgrade") return instanceUpgradeCmd(name, bail);
   if (sub === "waiting" || sub === "attention") return instanceWaitingCmd(sub, bail);
   if (sub === "suggest-name") return instanceSuggestNameCmd(bail);
-  const usage = "usage: oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message <text>] [--home <abs>] [--dir <d>] [--json] | oats instance attention [--message <text>] [--clear] [--json] | oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--dir <d>] [--json] | oats instance git <instance> [--home <abs>] [--dir <d>] [--json] | oats instance diff <instance> --file <id> --revision <rev> [--index-revision <rev>] [--home <abs>] [--dir <d>] [--json] | oats instance stop <instance> (--plan | --apply --plan-revision <rev> --idempotency-key <key>) [--no-recursive] [--grace-ms <n>] [--home <abs>] [--dir <d>] [--json] | oats instance color <instance> (<color> | --clear) [--home <abs>] [--dir <d>] [--json] | oats instance background <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance same-work <instance> on|off [--home <abs>] [--dir <d>] [--json]";
+  const usage = "usage: oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] [--json] | oats instance attention [--message=<text>] [--clear] [--json] | oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--dir <d>] [--json] | oats instance git <instance> [--home <abs>] [--dir <d>] [--json] | oats instance diff <instance> --file <id> --revision <rev> [--index-revision <rev>] [--home <abs>] [--dir <d>] [--json] | oats instance stop <instance> (--plan | --apply --plan-revision <rev> --idempotency-key <key>) [--no-recursive] [--grace-ms <n>] [--home <abs>] [--dir <d>] [--json] | oats instance color <instance> (<color> | --clear) [--home <abs>] [--dir <d>] [--json] | oats instance background <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance same-work <instance> on|off [--home <abs>] [--dir <d>] [--json]";
   if (!["git", "diff", "stop", "events", "color", "background", "same-work"].includes(sub) || !name || name.startsWith("--")) return bail("E_BAD_ARGS", usage);
   dropAmbientRoot();
   if (sub === "events") {
@@ -1501,7 +1488,6 @@ async function instanceCmd() {
     const words = [];
     for (let i = 3; i < args.length; i++) { if (args[i] === "--home" || args[i] === "--dir") i++; else if (!args[i].startsWith("--")) words.push(args[i]); }
     const clear = args.includes("--clear");
-    if (words.length > 1) return bail("E_BAD_ARGS", `oats instance color takes one colour; ${colorUsage}`);
     const value = words[0];
     if (value !== undefined && clear) return bail("E_BAD_ARGS", `give a colour or --clear, not both; ${colorUsage}`);
     if (value === undefined && !clear) return bail("E_BAD_ARGS", `give a colour or --clear; ${colorUsage}`);
@@ -1769,6 +1755,30 @@ function workspaceContext(bail) {
   return { dir, localPath: found.path, local: found.local, deploymentDir: dirname(found.path), remoteOptions: remoteOptionsFromEnv() };
 }
 
+/** Tokens are operator-local calls even with --server; the forced-command key is the receiver. */
+async function harnessTokenCmd() {
+  const usage = "usage: oats harness token set|status|remove <harness> --server <id> [--name <team>] [--stdin] [--json] [--debug]";
+  if (!["set", "status", "remove"].includes(args[2]) || !args[3] || args[3].startsWith("-")) return cmdFail("E_BAD_ARGS", usage);
+  const seen = new Set();
+  for (let i = 4; i < args.length; i++) {
+    const word = args[i];
+    if (seen.has(word)) return cmdFail("E_BAD_ARGS", "Give each token-command flag once.");
+    seen.add(word);
+    if (["--json", "--stdin", "--debug"].includes(word)) continue;
+    if (["--server", "--name"].includes(word) && args[i + 1] && !args[i + 1].startsWith("-")) { i++; continue; }
+    return cmdFail("E_BAD_ARGS", usage);
+  }
+  try {
+    const result = await harnessToken({ action: args[2], harness: args[3], server: valueFlag("server"), name: valueFlag("name"), input: args.includes("--stdin") ? process.stdin : undefined }, { debug: args.includes("--debug") ? (line) => console.error(`oats: ${line}`) : undefined });
+    if (JSON_MODE) jsonOk(result);
+    else {
+      console.log(result.action === "set" ? `Installed ${result.harness} credential for ${result.name} on ${result.server}: ${result.fingerprint}.` : result.action === "remove" ? `Removed ${result.harness} credential for ${result.name} on ${result.server}.` : `${result.harness} credential for ${result.name} on ${result.server}: ${result.fingerprint}, replaced ${result.replacedAt}.`);
+      for (const row of result.staleInstances ?? []) console.log(terminalText(`  ${row.instance} (${row.agent}): started ${row.startedAt}; picks up the token at its next start.`));
+      for (const warning of result.warnings) console.error(`oats: warning: ${warning}`);
+    }
+  } catch (e) { cmdFail(e.code || "E_HARNESS_TOKEN_DELIVERY", JSON_MODE ? e.message : terminalText(e.message)); }
+}
+
 /** An explicit host-local operator action; never routed to a remote adapter. */
 function harnessTrustCmd() {
   if (args[1] !== "trust") return cmdFail("E_BAD_ARGS", "usage: oats harness trust [--dir <deployment>] [--harness claude|codex|all] [--plan] [--json]");
@@ -1887,7 +1897,6 @@ function printTable(header, rows) {
 }
 
 /** `--approve` left with package approval (human decision 2026-09-24). */
-const APPROVAL_REMOVED = "package approval was removed; declaring a package in packages: is the trust decision";
 
 /** The body of `oats sync` — shared by `sync` and `onboard` (which onboards, then syncs the same
  * way). Given a v2 deployment context: discover over the remotes, confirm membership, resolve
@@ -2077,31 +2086,11 @@ function setDisabledHereCli(ws, kind, qid, enabled) {
   return A.setDisabledHere({ deployment: dirname(path), localPath: path }, kind, qid, !enabled);
 }
 
-const SYNC_USAGE = "usage: oats sync [--dir <deployment>] [--plan] [--json]";
-/** Why `oats sync`'s argv is not a sync, or undefined (#731): an unknown flag or a positional is refused
- *  before anything is read or written, never ignored. `--approve` keeps its own refusal (performSync). */
-function syncArgvProblem(argv) {
-  let dirs = 0;
-  for (let i = 1; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === "--json" || a === "--plan") continue;
-    if (a === "--dir") {
-      if (dirs++) return { message: `oats sync: give --dir once\n${SYNC_USAGE}`, details: { flag: a } };
-      if (argv[i + 1] !== undefined && !argv[i + 1].startsWith("--")) i++;
-      continue;
-    }
-    if (a === "--approve") return { message: `--approve: ${APPROVAL_REMOVED}`, details: { flag: a } };
-    if (a.startsWith("-")) return { message: `oats sync: unknown flag ${a}\n${SYNC_USAGE}`, details: { flag: a } };
-    return { message: `oats sync: unexpected argument ${JSON.stringify(a)}: sync takes no positional (the deployment is --dir <deployment>)\n${SYNC_USAGE}`, details: { argument: a } };
-  }
-  return undefined;
-}
-
 /** `oats sync [--dir] [--plan] [--json]` — contract §6. `--plan` previews: the same report, nothing written. */
 async function syncCmd() {
   const bail = (code, msg, details) => (JSON_MODE ? jsonFail(code, msg, details) : die(msg));
-  const problem = syncArgvProblem(args);
-  if (problem) return bail("E_BAD_ARGS", problem.message, problem.details);
+  // A second --dir: flag() would read the first and drop it.
+  if (args.filter((a) => a === "--dir").length > 1) return bail("E_BAD_ARGS", `oats sync: give --dir once\n${SYNC_USAGE}`, { flag: "--dir" });
   const ctx = workspaceContext(bail);
   const synced = await performSync(ctx, bail, { plan: args.includes("--plan") });
   // One envelope (or the §8 report); success is exit 0 (a failure bails with its code).
@@ -2239,41 +2228,15 @@ async function teamsContext(bail) {
 }
 const positional = (i) => (args[i] !== undefined && !args[i].startsWith("--") ? args[i] : undefined);
 
-/** The flags each `oats teams` form takes (value flags → true), beyond the global `--dir` and `--json`.
- *  Anything else is refused, never ignored: a kernel that ignored `--if-absent` would set unconditionally. */
-const TEAMS_FLAGS = {
-  "": { "--max-age": true },
-  add: { "--team": true, "--description": true, "--no-default": false },
-  remove: {},
-  default: { "--if-absent": false, "--expect": true },
-};
-/** The first flag `oats teams <sub>` does not take, or undefined. A value flag's value is skipped as flag()
- *  reads it (the next word unless it starts with `--`). */
-function teamsUnknownFlag(sub) {
-  const takes = { "--dir": true, "--json": false, ...TEAMS_FLAGS[sub ?? ""] };
-  for (let i = 1; i < args.length; i++) {
-    const a = args[i];
-    if (!a.startsWith("-")) continue;
-    if (!Object.hasOwn(takes, a)) return a;
-    if (takes[a] && args[i + 1] !== undefined && !args[i + 1].startsWith("--")) i++;
-  }
-  return undefined;
-}
-
 /** `oats teams [--json] | add <label> --team <id> [--description <d>] [--no-default] | remove <label> |
  *  default <label> [--if-absent | --expect <label>]` — this deployment's teams (team model 3). Config only:
  *  never a provider call. */
 async function teamsCmd() {
   const bail = (code, msg, details) => (JSON_MODE ? jsonFail(code, msg, details) : die(msg));
-  const usage = "usage: oats teams [--json] | oats teams add <label> --team <id> [--description <d>] [--no-default] | oats teams remove <label> | oats teams default <label> [--if-absent | --expect <label>]  [--dir <deployment>] [--json]";
-  // A single-dash word (`-x`) is a flag, never the subcommand: teamsUnknownFlag names it.
-  const sub = positional(1)?.startsWith("-") ? undefined : positional(1);
-  if (sub !== undefined && !["add", "remove", "default"].includes(sub)) bail("E_USAGE", usage);
-  const unknown = teamsUnknownFlag(sub);
-  if (unknown !== undefined) {
-    const form = sub ? `oats teams ${sub}` : "oats teams";
-    bail("E_USAGE", `${form} does not take ${unknown} (an option this kernel does not know may need a newer kernel; nothing was changed) — ${usage}`, { flag: unknown });
-  }
+  const usage = TEAMS_USAGE;
+  // The form and its flags were checked by the dispatch (lib/command-flags.mjs): a word where the form
+  // belongs, and a flag the form does not take, are E_USAGE there.
+  const sub = positional(1);
   const label = sub ? positional(2) : undefined;
   if (sub && label === undefined) bail("E_BAD_ARGS", `oats teams ${sub} needs a team label — ${usage}`);
   const ctx = await teamsContext(bail);
@@ -2338,13 +2301,6 @@ async function soulCmd() {
   if (doc.teams.length) printTable(["team", "id", "from", "why"], doc.teams.map((t) => [t.default ? `${t.label} (default)` : t.label, t.team ?? "(no id yet)", t.from, t.via.join(",")]));
 }
 
-const SOUL_LAUNCH_USAGE = "oats soul launch set <soul>|'*' (--launch-config <name>|none | --harness pi|claude|codex [--model <id>]) [--plan] [--dir <deployment>] [--json] | oats soul launch remove <soul>|'*'|<exact key> [--plan] [--dir <deployment>] [--json]";
-/** The flags each `oats soul launch` form takes (value flags → true). Anything else is refused, never
- *  ignored: `--home` and `--soul` among them, since the soul is the argument and the file the deployment's. */
-const SOUL_LAUNCH_FLAGS = {
-  set: { "--launch-config": true, "--harness": true, "--model": true },
-  remove: {},
-};
 /** A souls.launch entry in words: a launch configuration's name, or the inline harness and model. */
 const launchEntryText = (v) => (v === null ? "no entry" : typeof v === "string" ? (v === "none" ? "none (the bare harness)" : `launch configuration ${v}`) : `${v.harness}${v.model ? ` with model ${v.model}` : ""}`);
 
@@ -2354,23 +2310,22 @@ const launchEntryText = (v) => (v === null ? "no entry" : typeof v === "string" 
 async function soulLaunchCmd(bail, usage) {
   const sub = positional(2);
   if (!["set", "remove"].includes(sub)) bail("E_USAGE", usage);
-  // Every argument is accounted for before anything is read or written: a flag the form does not take, a
-  // value flag with no value at ANY of its occurrences (`--harness codex --harness`), a value flag given
-  // twice (flag() would read the first and drop the second) and a second name are refused, never ignored.
-  const takes = { "--dir": true, "--json": false, "--plan": false, ...SOUL_LAUNCH_FLAGS[sub] };
+  // Every argument is accounted for before anything is read or written. The dispatch refused a flag the
+  // form does not take and a second name (lib/command-flags.mjs); here a value flag with no value at ANY
+  // of its occurrences (`--harness codex --harness`) and a value flag given twice (flag() would read the
+  // first and drop the second) are refused, never ignored. Its value flags are the declaration's.
+  const { values } = commandFlags(args);
   const names = [], given = new Set();
   for (let i = 3; i < args.length; i++) {
     const a = args[i];
     if (!a.startsWith("-")) { names.push(a); continue; }
-    if (!Object.hasOwn(takes, a)) bail("E_USAGE", `oats soul launch ${sub} does not take ${a} (nothing was changed) — usage: ${SOUL_LAUNCH_USAGE}`, { flag: a });
-    if (!takes[a]) continue;
+    if (!values.includes(a)) continue;
     if (args[i + 1] === undefined || args[i + 1].startsWith("--")) bail("E_BAD_ARGS", `${a} needs a value`);
     if (given.has(a)) bail("E_BAD_ARGS", `oats soul launch ${sub} takes ${a} once (nothing was changed)`);
     given.add(a);
     i++;
   }
   if (names.length === 0) bail("E_BAD_ARGS", `oats soul launch ${sub} needs ${sub === "set" ? "a soul (or '*')" : "a soul, '*' or the exact text of a key in souls.launch"} — usage: ${SOUL_LAUNCH_USAGE}`);
-  if (names.length > 1) bail("E_BAD_ARGS", `oats soul launch ${sub} takes one ${sub === "set" ? "soul" : "soul or key"}, and got ${names.length}: ${names.map((n) => JSON.stringify(n)).join(", ")} (nothing was changed) — usage: ${SOUL_LAUNCH_USAGE}`);
   const name = names[0];
   const V = await import("../lib/soul-launch-verbs.mjs");
   let value = null;
@@ -2680,12 +2635,6 @@ function printStatus({ root, agents: data, ws, problems }, verbose) {
   }
 }
 
-/** The flags `oats spawn` reads: those taking a value, and switches. `--provider` takes two words.
- *  `--instance` is refused by a local spawn (with its replacement) but still travels to an older
- *  host through `--server`, whose route reads it. `--max-age` reaches here only on a preview or an
- *  apply bound by --expect-decision: the dispatch allow-list (maxAgeRefusal) refuses it otherwise. */
-const SPAWN_VALUE_FLAGS = new Set(["agents-root", "backend", "base", "branch", "dir", "expect-decision", "harness", "idempotency-key", "instance", "launch-config", "max-age", "model", "name", "parent", "purpose", "relation", "relative-root", "relative-to", "repo", "runtime", "task", "task-file", "trigger-event", "wake-cron", "wake-every", "wake-file", "wake-json", "wake-message", "wake-message-file", "wake-tz", "work", "work-dir"]);
-const SPAWN_SWITCHES = new Set(["allow-child-spawns", "background", "json", "no-background", "no-child-spawns", "no-launch", "no-yolo", "preview", "same-work", "suggest-name", "yolo"]);
 /** `--suggest-name` (features spawn-suggest-name, spawn-apply-suggest-name): a preview's or an apply's,
  *  with no --name, --purpose or --expect-decision. The kernel refuses the same (core.mjs spawnBody); the
  *  CLI says it before anything is read or sent. */
@@ -2698,26 +2647,6 @@ function suggestNameProblem(argv) {
 }
 /** `--background` / `--no-background` (feature instance-background): one of them, or neither. */
 const backgroundProblem = (argv) => (argv.includes("--background") && argv.includes("--no-background") ? "choose --background or --no-background, not both" : undefined);
-/** Why `argv` (after `spawn`, the soul first) is not a spawn, or undefined: a positional after the
- *  soul or a flag spawn does not read is never ignored. A value flag consumes its value exactly as
- *  flag() reads it; a missing value is the flag's own check. */
-function spawnArgvProblem(argv) {
-  const soul = argv[0];
-  for (let i = 1; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === "--provider") { i += 2; continue; }
-    if (a.startsWith("--")) {
-      const name = a.slice(2);
-      if (SPAWN_SWITCHES.has(name)) continue;
-      if (!SPAWN_VALUE_FLAGS.has(name)) return `oats spawn: unknown flag ${a}`;
-      if (argv[i + 1] !== undefined && !argv[i + 1].startsWith("--")) i++;
-      continue;
-    }
-    if (/^[A-Za-z0-9_.-]+=/.test(a)) return `oats spawn: unexpected argument ${JSON.stringify(a)} after the soul ${JSON.stringify(soul)}: a capability setting is given as --provider <capability> key=value (here: --provider <capability> ${a})`;
-    return `oats spawn: unexpected argument ${JSON.stringify(a)} after the soul ${JSON.stringify(soul)}: spawn takes one soul`;
-  }
-  return undefined;
-}
 /** The Herdr spawn flags (removed in 0.31.0), named for the refusal; undefined when none is given. */
 function herdrSpawnFlag() {
   if (flag("backend") === "herdr") return "--backend herdr";
@@ -2758,12 +2687,9 @@ async function spawnCmd() {
   };
   checkDirectoryOptions(requestedWork); // before anything is resolved or written
   const name = args[1];
-  if (!name || name.startsWith("--")) bail("E_USAGE", "usage: oats spawn <agent> [--task <text>|--task-file <f>] [--purpose <slug>|--name <slug>|--suggest-name] [--preview] [--base <ref>] [--model <id>|@native-default] [--allow-child-spawns|--no-child-spawns] [--relation child|sibling|parent|unrelated --relative-to <instance> [--relative-root <agents-root>]] [--parent <instance>] [--same-work] [--repo <r>] [--work worktree|checkout|attached|workspace|directory] [--work-dir <owner-work>] [--harness pi|claude|codex] [--backend tmux] [--yolo|--no-yolo] [--background|--no-background] [--model <m>] [--branch <b>] [--no-launch] [--json]");
+  if (!name || name.startsWith("--")) bail("E_USAGE", SPAWN_USAGE);
   // Retired boundary flags (maintainer transport ruling): fail LOUDLY before
   // ANY side effect, including root discovery.
-  // Local souls (local-agents/) are gone with the workspace model: a soul is a member
-  // repository's souls/<name>, so spawn never writes one.
-  for (const removed of ["instructions-file", "def-file"]) if (flag(removed) !== undefined) bail("E_BAD_ARGS", `--${removed} created a local soul under local-agents/, which the workspace model removed — author souls/<name>/soul.yaml + AGENTS.md in a member repository, then \`oats sync\``);
   if (args.includes("--instance")) bail("E_BAD_ARGS", "--instance was removed by the runtime-boundary ruling — use --purpose <slug> (deterministic <agent>-<purpose> naming) or --name <slug> (the exact instance name)");
   // --name <slug>: the exact, unprefixed instance name (human decision 2026-09-24).
   const nameFlag = flag("name");
@@ -2772,8 +2698,6 @@ async function spawnCmd() {
   { const problem = suggestNameProblem(args) ?? backgroundProblem(args); if (problem) bail("E_BAD_ARGS", problem); }
   // The slug rule is checked here too, before any side effect (soul fetch).
   if (nameFlag !== undefined) { try { explicitInstanceName(String(nameFlag)); } catch (e) { bail(e.code, e.message); throw e; } }
-  if (args.includes("--ephemeral")) bail("E_BAD_ARGS", "--ephemeral was removed by the runtime-boundary ruling — declare the agent in a capability manifest (agents:) for automatic ephemeral semantics");
-  { const problem = spawnArgvProblem(args.slice(1)); if (problem) bail("E_BAD_ARGS", problem); }
   let root;
   // A spawn needs a workspace deployment (lead decision c3-1): no oats-local.yaml
   // in reach is E_LOCAL_MISSING, before anything else is read. The agents root is
@@ -3058,40 +2982,11 @@ function failedSpawnBranchLine(r, items, { local = false, host } = {}) {
   return r.retainedHome ? `  branch: the "branch" recorded in ${join(r.retainedHome, "instance.json")}${host ? ` on ${host}` : ""}` : null;
 }
 
-const RETIRE_USAGE = "usage: oats retire <instance> [--plan] [--plan-revision <rev> --idempotency-key <key>] [--home <path>] [--dir <d>] [--server <id>] [--self] [--discard-worktree] [--keep-dir] [--force] [--json]";
-/** The flags `oats retire` reads: the ones that take a value, and its switches. */
-const RETIRE_VALUE_FLAGS = new Set(["dir", "home", "idempotency-key", "plan-revision", "server"]);
-const RETIRE_SWITCHES = new Set(["discard-worktree", "force", "json", "keep-dir", "plan", "self"]);
-/** Why `argv` (after `retire`) is not a retire, or undefined: a flag retire does not read (`--keep-dirs`
- *  for `--keep-dir`) or an argument after the instance is refused before anything is read, stopped or
- *  sent, never ignored. A value flag consumes its value exactly as flag() reads it; a missing value is
- *  the flag's own check. `--delete-branch` keeps its own refusal (RETIRE_DELETE_BRANCH_REFUSED). */
-function retireArgvProblem(argv) {
-  let instance;
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a.startsWith("-")) {
-      const name = a.startsWith("--") ? a.slice(2) : undefined;
-      if (RETIRE_SWITCHES.has(name)) continue;
-      if (!RETIRE_VALUE_FLAGS.has(name)) return { message: `oats retire: unknown flag ${a}\n${RETIRE_USAGE}`, details: { flag: a } };
-      if (argv[i + 1] !== undefined && !argv[i + 1].startsWith("--")) i++;
-      continue;
-    }
-    if (instance !== undefined) return { message: `oats retire: unexpected argument ${JSON.stringify(a)} after the instance ${JSON.stringify(instance)}: retire takes one instance\n${RETIRE_USAGE}`, details: { argument: a } };
-    instance = a;
-  }
-  return undefined;
-}
-
 /** Whether this process's retire (retireCmd) has returned from the kernel: set once, read by the dispatch. */
 let retireReturned = false;
 function retireCmd() {
   const name = args[1];
-  // Refused before anything else: before --plan, a replay, a plan revision or a recorded child is stopped.
-  if (args.includes("--delete-branch")) return args.includes("--json") ? jsonFail("E_BAD_ARGS", RETIRE_DELETE_BRANCH_REFUSED) : die(RETIRE_DELETE_BRANCH_REFUSED);
-  if (!name || name.startsWith("--")) die(RETIRE_USAGE);
-  const problem = retireArgvProblem(args.slice(1));
-  if (problem) return cmdFail("E_BAD_ARGS", problem.message, problem.details);
+  if (!name || name.startsWith("--")) return cmdFail("E_USAGE", RETIRE_USAGE);
   let homeFlag = flag("home");
   if (homeFlag === true) die("--home needs the instance home path");
   if (args.includes("--plan")) {
@@ -3507,7 +3402,7 @@ async function triggerFromPackage(T, from, sets, idFlag) {
 
 async function sessionCmd() {
   try {
-    if (flag("native-record") !== undefined) throw Object.assign(new Error("--native-record outcome inspection is gone (the captured/portable path was removed in 0.26)"), { code: "E_BAD_ARGS" });
+    if (flag("native-record") !== undefined) throw Object.assign(new Error(NATIVE_RECORD_REFUSED), { code: "E_BAD_ARGS" });
     const home = flag("home");
     let result;
     if (args[1] === "attach") {
@@ -3529,13 +3424,7 @@ async function sessionCmd() {
     if (args[1] === "resume") {
       // The machine sweep (feature session-resume, #1559): lib/session-resume.mjs. No --home: one home
       // is `session start --resume`.
-      const usage = "usage: oats session resume [--deployment <dir>] [--plan] [--json]";
-      for (let i = 2; i < args.length; i++) {
-        const a = args[i];
-        if (a === "--deployment") { i++; continue; }
-        if (a.startsWith("--deployment=") || a === "--plan" || a === "--json") continue;
-        throw Object.assign(new Error(a.startsWith("-") ? `oats session resume: unknown flag ${a}\n${usage}` : `oats session resume takes no argument ${JSON.stringify(a)}\n${usage}`), { code: "E_BAD_ARGS" });
-      }
+      const usage = commandFlags(args).usage;
       const deployment = flag("deployment");
       if (deployment === true || (typeof deployment === "string" && !deployment.trim())) throw Object.assign(new Error(`--deployment needs a deployment directory\n${usage}`), { code: "E_BAD_ARGS" });
       const { resumeSessions } = await import("../lib/session-resume.mjs");
@@ -3564,7 +3453,6 @@ async function sessionCmd() {
       // refused with a launch choice before anything of the home is read.
       const resume = args.includes("--resume");
       if (resume) {
-        if (args[1] === "restart") bad("--resume exists on session start only: it brings back a session that was lost");
         const chosen = ["--launch-config", "--harness", "--model", "--yolo", "--no-yolo", "--reselect-launch"].filter((f) => args.some((a) => a === f || a.startsWith(`${f}=`)));
         if (chosen.length) bad(`--resume runs the launch this home recorded; it cannot be combined with ${chosen.join(", ")}; nothing was read or started`);
       }
@@ -4316,7 +4204,7 @@ async function experimentalCmd() {
 async function serverCmd() {
   const bail = (code, msg, details) => (JSON_MODE ? jsonFail(code, msg, details) : die(msg));
   const sub = args[1];
-  const usage = "usage: oats server add <id> --ssh <host-alias> --workspace </abs/path> [--oats <path>] [--path <dir:dir>] [--label <text>] [--replace] | connect <id> --ssh <host-alias> [--workspace-ref <ref>] [--dir </abs/path or ~/path on the host>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] | list [--workspace-ref <ref>] | remove <id> | check <id> | roster [--server <id>] [--workspace-key <key>]... | forget <id> --instance <name>  [--json]";
+  const usage = "usage: oats server add <id> --ssh <host-alias> [--operator-ssh <alias> | --no-operator-ssh] --workspace </abs/path> [--oats <path>] [--path <dir:dir>] [--label <text>] [--replace] | connect <id> --ssh <host-alias> [--operator-ssh <alias> | --no-operator-ssh] [--workspace-ref <ref>] [--dir </abs/path or ~/path on the host>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] | list [--workspace-ref <ref>] | remove <id> | check <id> | roster [--server <id>] [--workspace-key <key>]... | forget <id> --instance <name>  [--json]";
   if (!["add", "connect", "list", "remove", "check", "roster", "forget"].includes(sub)) bail("E_USAGE", usage);
   if (sub === "connect") return serverConnectCmd(bail);
   if (sub === "forget") {
@@ -4366,7 +4254,9 @@ async function serverCmd() {
   let servers;
   try { servers = readServers(); } catch (e) { bail(e.code || "E_SERVERS_UNREADABLE", e.message); }
   if (sub === "list") {
-    let rows = Object.entries(servers).map(([id, s]) => ({ id, ...s, workspaceKey: s.workspaceKey ?? null, target: targetOf({ id, ...s }), snapshots: listSnapshots(id).length }));
+    let routes;
+    try { routes = readServerOperatorRoutes(); } catch (e) { bail(e.code || "E_SERVERS_UNREADABLE", e.message); }
+    let rows = Object.entries(servers).map(([id, s]) => ({ id, ...s, ...(Object.hasOwn(routes, id) ? routes[id] : {}), workspaceKey: s.workspaceKey ?? null, target: targetOf({ id, ...s }), snapshots: listSnapshots(id).length }));
     // --workspace-ref: the servers of one workspace, by canonical key, and the ids whose workspace is not known yet.
     let unknownWorkspace;
     if (flag("workspace-ref") !== undefined) {
@@ -4380,7 +4270,7 @@ async function serverCmd() {
     if (JSON_MODE) { jsonOk({ file: SERVERS_FILE(), servers: rows, ...(unknownWorkspace ? { unknownWorkspace } : {}) }); return; }
     if (unknownWorkspace?.length) console.log(`  (workspace not known yet for ${unknownWorkspace.join(", ")}: oats server check <id> learns it)`);
     if (!rows.length) { console.log(`no servers registered (${shortPath(SERVERS_FILE())}) — add one with \`oats server add <id> --ssh <alias> --workspace </path>\``); return; }
-    for (const r of rows) console.log(`  ${r.id}${r.label ? `  ${r.label}` : ""}${r.workspaceKey ? `  [${r.workspaceKey}]` : ""}\n      ssh ${r.sshHost}  workspace ${r.workspace}  oats ${r.target.oatsPath}${r.snapshots ? `  (${r.snapshots} remote instance${r.snapshots === 1 ? "" : "s"} spawned from here)` : ""}`);
+    for (const r of rows) console.log(`  ${r.id}${r.label ? `  ${r.label}` : ""}${r.workspaceKey ? `  [${r.workspaceKey}]` : ""}\n      ssh ${r.sshHost}${r.operatorSshHost ? `  operator ssh ${r.operatorSshHost}` : ""}  workspace ${r.workspace}  oats ${r.target.oatsPath}${r.snapshots ? `  (${r.snapshots} remote instance${r.snapshots === 1 ? "" : "s"} spawned from here)` : ""}`);
     return;
   }
   const id = args[2];
@@ -4391,12 +4281,23 @@ async function serverCmd() {
     const entry = { sshHost: val("ssh"), workspace: val("workspace") };
     for (const [k, f] of [["oatsPath", "oats"], ["path", "path"], ["label", "label"]]) { const v = val(f); if (v !== undefined) entry[k] = v; }
     if (!entry.sshHost || !entry.workspace) bail("E_USAGE", usage);
-    try { validateServer(id, entry); } catch (e) { bail(e.code, e.message); }
+    const operatorSshHost = val("operator-ssh"), noOperatorSsh = args.includes("--no-operator-ssh");
+    if (operatorSshHost !== undefined && noOperatorSsh) bail("E_BAD_ARGS", "choose --operator-ssh or --no-operator-ssh, not both");
+    try { validateServer(id, entry); if (operatorSshHost !== undefined) validateOperatorSshHost(operatorSshHost); } catch (e) { bail(e.code, e.message); }
+    let operatorRoute;
     try {
-      updateServers((current) => {
-        if (current[id] && !args.includes("--replace")) throw Object.assign(new Error(`server ${id} is already registered (pass --replace to overwrite; existing remote instances keep the route they were spawned with)`), { code: "E_SERVER_EXISTS" });
+      updateServers((current, routes) => {
+        const existing = Object.hasOwn(current, id) ? current[id] : undefined;
+        if (existing && !args.includes("--replace")) throw Object.assign(new Error(`server ${id} is already registered (pass --replace to overwrite; existing remote instances keep the route they were spawned with)`), { code: "E_SERVER_EXISTS" });
+        // An older kernel can remove a registration while leaving its sidecar route behind.
+        if (!existing) delete routes[id];
+        // An unchanged agent target keeps its learned identity when only the operator route changes.
+        if (existing?.workspaceKey && JSON.stringify(targetOf(existing)) === JSON.stringify(targetOf(entry))) entry.workspaceKey = existing.workspaceKey;
         current[id] = entry;
-      });
+        if (operatorSshHost !== undefined) routes[id] = { operatorSshHost };
+        else if (noOperatorSsh) delete routes[id];
+        operatorRoute = Object.hasOwn(routes, id) ? routes[id] : undefined;
+      }, { operatorRoutes: true });
     } catch (e) { bail(e.code || "E_SERVERS_UNREADABLE", e.message); }
     // The workspace key is learned from the host, never typed: recorded when the host answers one and
     // the registration is still this one (it may change while the host is asked).
@@ -4404,20 +4305,24 @@ async function serverCmd() {
     try {
       const { key, why } = reportedWorkspaceKey(targetOf(entry), { serverId: id, timeoutMs: 60000 });
       if (!key) warnings.push(`workspace key unknown: ${why}; oats server check ${id} learns it once the host answers one`);
-      else if (learnWorkspaceKey(id, entry, key) === "recorded") entry.workspaceKey = key;
-      else warnings.push(`workspace key not recorded: registration ${id} changed while the host was asked; oats server check ${id} learns it`);
+      else if (["recorded", "same"].includes(learnWorkspaceKey(id, entry, key, { replace: args.includes("--replace") }))) entry.workspaceKey = key;
+      else {
+        delete entry.workspaceKey;
+        warnings.push(`workspace key not recorded: registration ${id} changed while the host was asked; oats server check ${id} learns it`);
+      }
     } catch (e) { warnings.push(`workspace key unknown: ${e.message}; oats server check ${id} learns it once the host answers`); }
-    if (JSON_MODE) { jsonOk({ id, ...entry, workspaceKey: entry.workspaceKey ?? null, file: SERVERS_FILE(), ...(warnings.length ? { warnings } : {}) }); return; }
+    if (JSON_MODE) { jsonOk({ id, ...entry, ...operatorRoute, workspaceKey: entry.workspaceKey ?? null, file: SERVERS_FILE(), ...(warnings.length ? { warnings } : {}) }); return; }
     console.log(`Registered server ${id} → ssh ${entry.sshHost}, workspace ${entry.workspace}${entry.workspaceKey ? ` (workspace ${entry.workspaceKey})` : ""} (${shortPath(SERVERS_FILE())}). Verify it with \`oats server check ${id}\`.`);
     for (const w of warnings) console.error(`oats: warning: ${w}`);
     return;
   }
   if (sub === "remove") {
     try {
-      updateServers((current) => {
+      updateServers((current, routes) => {
         if (!current[id]) throw Object.assign(new Error(`no server registered as ${id}`), { code: "E_SERVER_UNKNOWN" });
         delete current[id];
-      });
+        delete routes[id];
+      }, { operatorRoutes: true });
     } catch (e) { bail(e.code || "E_SERVERS_UNREADABLE", e.message); }
     const snaps = listSnapshots(id);
     if (JSON_MODE) { jsonOk({ removed: id, remoteInstancesStillTracked: snaps.map((s) => s.instance) }); return; }
@@ -4460,7 +4365,7 @@ async function serverCmd() {
  *  step b): only the person knows where it goes. */
 function serverConnectCmd(bail) {
   const id = args[2];
-  if (!id || id.startsWith("--")) bail("E_USAGE", "usage: oats server connect <id> --ssh <host-alias> --dir </abs/path or ~/path on the host> [--workspace-ref <ref>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] [--json]");
+  if (!id || id.startsWith("--")) bail("E_USAGE", "usage: oats server connect <id> --ssh <host-alias> [--operator-ssh <alias> | --no-operator-ssh] --dir </abs/path or ~/path on the host> [--workspace-ref <ref>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] [--json]");
   const val = (name) => { const v = flag(name); return v === true ? bail("E_BAD_ARGS", `--${name} needs a value`) : v; };
   const sshHost = val("ssh");
   if (!sshHost) bail("E_BAD_ARGS", "--ssh <host-alias> is required: the OpenSSH host alias of the machine to connect");
@@ -4473,7 +4378,7 @@ function serverConnectCmd(bail) {
   if (!dir) bail("E_BAD_ARGS", `--dir <path on the host> is required: the folder on ${sshHost} for this deployment (absolute, or ~/… resolved there)`);
   let res;
   try {
-    res = connectServer({ id, sshHost, workspaceRef, dir, oatsPath: val("oats"), path: val("path"), label: val("label"), installOats: args.includes("--install-oats"), replace: args.includes("--replace"), localVersion: OATS_VERSION });
+    res = connectServer({ id, sshHost, operatorSshHost: val("operator-ssh"), noOperatorSsh: args.includes("--no-operator-ssh"), workspaceRef, dir, oatsPath: val("oats"), path: val("path"), label: val("label"), installOats: args.includes("--install-oats"), replace: args.includes("--replace"), localVersion: OATS_VERSION });
   } catch (e) {
     if (!JSON_MODE && e.details?.steps) printConnectSteps(id, sshHost, e.details.steps);
     bail(e.code || "E_CONNECT", e.message, e.details);
@@ -4663,7 +4568,7 @@ async function serverRouteCmd() {
     const herdr = herdrSpawnFlag();
     if (herdr) { const e = herdrSettingRemoved(`${herdr} was given`); bail(e.code, e.message); }
     const local = args.slice(1).filter((a, i, all) => a !== "--server" && all[i - 1] !== "--server");
-    const problem = spawnArgvProblem(local) ?? suggestNameProblem(local) ?? backgroundProblem(local);
+    const problem = suggestNameProblem(local) ?? backgroundProblem(local);
     if (problem) bail("E_BAD_ARGS", problem);
   }
   // Everything after the command word travels, minus the routing flags; a
@@ -4701,10 +4606,6 @@ async function serverRouteCmd() {
     }
     rest.push(a);
   }
-  // Refused here too, before anything is sent: a host on an older OATS would still delete the branch.
-  if (cmd === "retire" && rest.includes("--delete-branch")) bail("E_BAD_ARGS", RETIRE_DELETE_BRANCH_REFUSED);
-  // As is a flag retire does not read, or an argument after the instance: a host on an older OATS would ignore it and retire.
-  if (cmd === "retire") { const problem = retireArgvProblem(args.slice(1)); if (problem) bail("E_BAD_ARGS", problem.message, problem.details); }
   let routed;
   try { routed = routeCommand(id, cmd, rest); }
   catch (e) { bail(e.code || "E_SSH", e.message, e.details); }
@@ -4841,11 +4742,11 @@ else {
 // `okf harvest --help` spawned a harvester (BeadHub, 2026-09-05).
 const wantsHelp = args.slice(1).some((a) => a === "--help" || a === "-h");
 if (cmd && KERNEL_COMMANDS.has(cmd) && wantsHelp) { if (JSON_MODE) { jsonOk({ command: cmd, usage: usageLinesFor(cmd) }); process.exit(0); } usageFor(cmd); process.exit(0); }
-if (cmd === "instance" && args[1] === "upgrade" && flag("server") !== undefined) cmdFail("E_BAD_ARGS", "instance upgrade supports local homes only; run it on the deployment host");
-// #1490 §2: the name is decided on the machine that asks, for a spawn that lands elsewhere.
-if (cmd === "instance" && args[1] === "suggest-name" && flag("server") !== undefined) cmdFail("E_BAD_ARGS", "instance suggest-name takes no --server: it runs this machine's harness, for a spawn that may land on another; the host it lands on makes the name unique (or names an unnamed --suggest-name spawn itself)");
+// A state-changing command's argv against the flags it defines (lib/command-flags.mjs), before it runs
+// and before a --server command is sent: a host on an older OATS would ignore a flag it does not read.
+{ const problem = commandArgvProblem(rawArgs); if (problem) cmdFail(problem.code, problem.message, problem.details); }
 // Session resume is local only (#1559, D1): a server resumes its own instances.
-if (cmd === "session" && flag("server") !== undefined && (args[1] === "resume" || args.includes("--resume"))) cmdFail("E_BAD_ARGS", "session resume and session start --resume act on this machine's instances only; a server runs oats session resume itself");
+if (cmd === "session" && args[1] === "start" && flag("server") !== undefined && args.includes("--resume")) cmdFail("E_BAD_ARGS", RESUME_LOCAL_ONLY);
 if (flag("server") !== undefined && ROUTED_COMMANDS.has(cmd)) await serverRouteCmd();
 else if (cmd === "server") await serverCmd();
 else if (cmd === "deployments") deploymentsCmd();
@@ -4856,13 +4757,8 @@ else if (cmd === "doctor") {
   const doctorDir = args[1] && !args[1].startsWith("--") ? args[1] : undefined;
   await (args.includes("--json") ? doctorJson(doctorDir) : doctor(doctorDir));
 }
-else if (cmd === "update") {
-  // `oats update <package>` left with the installed tier (packages are pinned in
-  // the workspace file: `oats package add`); only the kernel self-update remains.
-  const t = args[1] && !args[1].startsWith("--") ? args[1] : undefined;
-  if (t || flag("to") !== undefined) { cmdFail("E_BAD_ARGS", "oats update takes no package: pin package versions in oats-workspace.yaml (`oats package add <id> <version>`), then `oats sync`; bare `oats update [--check] [--yes]` updates the kernel"); process.exit(1); }
-  updateCmd();
-}
+else if (cmd === "update") updateCmd();
+else if (cmd === "harness" && args[1] === "token") await harnessTokenCmd();
 else if (cmd === "harness") harnessTrustCmd();
 else if (cmd === "readiness") await readinessCmd();
 else if (cmd === "instance") await instanceCmd();
@@ -5180,6 +5076,8 @@ Usage:
                                             modules or the deployment's soul, trust checked, the provider's
                                             own command run in the home or scope, envelope
                                             relayed; a view answers {documents: [...]}
+  oats harness token set|status|remove <harness> --server <id> [--name <team>]
+      [--stdin] [--json] [--debug]           operator credential delivery, status and removal
   oats harness trust [--dir <deployment>]  explicitly trust one canonical deployment root
       [--harness claude|codex|all]         in every native configuration file a launch reads
       [--plan] [--json]                   (the ambient one and each launch configuration's
@@ -5264,10 +5162,10 @@ Usage:
                                              typed lifecycle events (spawned, launched, stopped,
                                              restarted, retired, worktree-retained…) written by
                                              the action that made them true; nothing inferred
-  oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message <text>] [--home <abs>] [--dir <d>] [--json]
+  oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] [--json]
                                              a producer's claim that the instance needs input
                                              from a human; appended only on change; display only
-  oats instance attention [--message <text>] [--clear] [--json]
+  oats instance attention [--message=<text>] [--clear] [--json]
                                              run by the agent from its home: "I need a human's
                                              answer" (waiting --producer agent --reason attention)
   oats instance upgrade <instance> --plan [--undo] [--json]

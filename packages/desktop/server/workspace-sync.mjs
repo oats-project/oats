@@ -83,7 +83,7 @@ export function createWorkspaceSyncBoundary({ invoke = (cli, options) => cliWork
     try {
       let result;
       try { result = await invoke(ctx.cli, options); } catch { result = workspaceFailure('E_CLI_FAILED', DESKTOP_TERMS); }
-      // The kernel refused (integrity, drift, discovery…): its code/message verbatim.
+      // The kernel refused (integrity, drift, discovery…): its code/message verbatim, and the case it names (why).
       if (!result?.ok) return kernelRefusal(result) ? refusal(result) : syncFailure(result?.reason?.code || 'E_CLI_FAILED');
       let report;
       try { report = syncData(result.document, ctx.deployment); } catch { return syncFailure('E_CLI_PROTOCOL'); }

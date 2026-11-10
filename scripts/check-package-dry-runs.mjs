@@ -61,7 +61,7 @@ export function checkKernelPackFiles(pack, root = ROOT) {
   assert.ok(!manifest.files.some((path) => /^\/?(?:capabilities|mirrors)(?:\/|$)/.test(path)), "npm files must not include capabilities/ or mirrors/: capabilities resolve from Git, never from the kernel package");
   const canonicalFiles = ["docs/knowledge-capability-authoring.md", ...treeFiles(join(root, "docs/knowledge-reference")).map((f) => `docs/knowledge-reference/${f}`)];
   const files = requireFiles(pack, [
-    "bin/oats.mjs", "lib/core.mjs", "docs/capabilities.md", "docs/capability-manifest.schema.json",
+    "bin/oats.mjs", "lib/core.mjs", "share/oats-login-receive", "docs/capabilities.md", "docs/capability-manifest.schema.json",
     "package-catalog.json", "package.json", "packages/record/bin/capture.mjs", "packages/record/bin/capture-hook.mjs", "packages/record/bin/recall.mjs",
     // The terminal client (`oats tui`) and the one shared reader it imports: both inside this package.
     "packages/tui/bin/tui.mjs", "packages/tui/lib/client.mjs", "packages/client/display-text.mjs",

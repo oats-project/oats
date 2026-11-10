@@ -42,7 +42,8 @@ export const reasonText = reason => reason ? [reason.code, reason.message].filte
 /** What a sync refusal means, in plain words. The kernel's message (which
  * package, which path) is shown under Details. */
 const SYNC_PROBLEMS = {
-  E_PACKAGE_INTEGRITY: 'A package no longer matches what the lock recorded (its tag moved, or it points at a branch). Check the version in the workspace file, then sync again.',
+  // The family's meaning: true for every case, a tag that moved and a newer kernel's `why` included (#1765).
+  E_PACKAGE_INTEGRITY: 'A package doesn’t match what the workspace file or the lock records for it. Check its version in the workspace file and see Details, then sync again.',
   E_PACKAGE_MISSING: 'A package the workspace declares couldn’t be found. Check its version in the workspace file, then sync again.',
   E_REMOTE_UNREADABLE: 'A repository the workspace uses couldn’t be read. Check your network and access, then sync again.',
   E_WORKSPACE_SCHEMA: 'The workspace file has a mistake OATS can’t read. Fix it, then sync again.',
@@ -54,10 +55,20 @@ const SYNC_PROBLEMS = {
   E_CLI_UNAVAILABLE: 'Choose a compatible OATS CLI first.',
   E_CLI_TIMEOUT: 'OATS took too long to sync. Try again.',
 };
+/** E_PACKAGE_INTEGRITY's cases the kernel names in `details.why` (docs/packages.md, `oats sync`), each worded
+ * for what it is; any other `why`, or none, keeps the family's meaning above. */
+const LOCK_EDITED = 'The lock’s record of a package doesn’t match what that package ships: the lock was edited. Remove the package’s entry from the lock file, then sync again.';
+const INTEGRITY_CASES = new Map([
+  ['branch', 'A package in the workspace file is pinned to a branch, which can move. Pin a tag or a full commit instead, then sync again.'],
+  ['package-id', 'A package’s manifest names a different package id than the one the workspace file pins it under. Change that pin as Details says, then sync again.'],
+  ['capabilities', LOCK_EDITED],
+  ['souls', LOCK_EDITED],
+]);
 export function syncProblem(reason) {
   const code = typeof reason?.code === 'string' ? reason.code : 'E_CLI_FAILED';
   const message = typeof reason?.message === 'string' ? reason.message.trim() : '';
-  return { text: SYNC_PROBLEMS[code] ?? 'OATS couldn’t finish the sync. Try again, or see Details.', code, detail: message ? `${code} · ${message}` : code };
+  const text = (code === 'E_PACKAGE_INTEGRITY' && INTEGRITY_CASES.get(reason?.why)) || SYNC_PROBLEMS[code];
+  return { text: text ?? 'OATS couldn’t finish the sync. Try again, or see Details.', code, detail: message ? `${code} · ${message}` : code };
 }
 
 /** Header state from workspace status: the lock is out of date, or current. */

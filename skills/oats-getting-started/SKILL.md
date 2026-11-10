@@ -34,7 +34,7 @@ an organisation and which packages it trusts. A **soul** is a durable agent
 role defined in Git; an **instance** is a soul at work, in its own home and
 terminal. A new workspace's setup expert is `oats.framework`'s soul
 `oats-setup-expert` (capabilities `oats.setup` and `oats.onboarding`, and
-`oats.coordination-setup` from the oats.framework release after 1.22.1),
+`oats.coordination-setup` from oats.framework 1.23.0),
 spawned as `<workspace>-oats-setup-expert`.
 
 **A machine found-list** is a JSON file in your prompt whose
@@ -533,7 +533,7 @@ installed CLI's catalog:
 node -e 'const c=require(process.argv[1]);console.log(c.packages["oats.framework"].ref,c.packages["oats.aweb"].ref)' "$(oats root)/package-catalog.json"
 ```
 
-It prints the two refs, for example `oats-framework/v1.22.1 v1.37.0`. If the
+It prints the two refs, for example `oats-framework/v1.23.0 v1.37.0`. If the
 framework's version (after the `/`) is below `1.19.0`, or with aweb
 `oats.aweb`'s is below `v1.33.1`, this OATS release is older than this
 skill: stop, and tell the person to wait for the next OATS
@@ -765,7 +765,7 @@ name: acme
 members:
   - git:github.com/acme/acme-oats     # the host; the setup expert adds the others
 packages:
-  oats.framework: v1.22.1             # the installed CLI's catalog versions (below)
+  oats.framework: v1.23.0             # the installed CLI's catalog versions (below)
   oats.aweb: v1.37.0                  # messaging: agent identities, mail and chat
   oats.machine: v0.1.1                # on a machine found-list only: the machine's steward
 defaults:

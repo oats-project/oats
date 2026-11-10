@@ -289,7 +289,7 @@ instance's terminal and press Enter yourself.
 An entry has `harness` (`pi` \| `claude` \| `codex`, required), `executable`
 (a bare name looked up on `PATH`, or a path relative to the directory of the
 file that declares it), `args` (literal, no shell), `env` (a literal string, or
-`{ fromEnv: NAME }` resolved on the host at start), `model`, `yolo` and
+`{ fromEnv: NAME }` or `{ fromFile: /absolute/path }` resolved on the host at start), `model`, `yolo` and
 `default` (0.32; see [the harness default](#the-harness-default)). A launch
 configuration is a host choice: a soul never names one.
 
@@ -551,6 +551,64 @@ never a value, in the recorded command and in every answer. At start each
 source variable must be set on the host (`E_LAUNCH_ENV_MISSING`, before
 anything is created or stopped), and only the harness's pane receives it.
 `list` and `preview` redact every environment value, literals included.
+
+`{ fromFile: /absolute/path }` reads a regular UTF-8 file on the host that
+starts the harness, at every start. The source is limited to 64 KiB, including
+any final newline; larger files are refused before reading their contents.
+It removes exactly one trailing LF or
+CRLF; an empty file is allowed. Invalid UTF-8 and NUL are refused. A leading
+UTF-8 BOM is preserved as part of the value. `fromFile` is for credential
+values; directory selectors (`HOME`, `PATH`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
+`PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`) require a literal or
+`{ fromEnv: NAME }`. A missing, unreadable or
+non-regular file refuses with `E_LAUNCH_ENV_MISSING`. The message names the
+file and the reason (including encoding, NUL or size failures), then names
+`oats harness token set <harness> --server <id>` or operator provisioning on
+that host. The token command is a separate provisioning feature.
+
+```yaml
+launch-configs:
+  subscription:
+    harness: claude
+    env:
+      CLAUDE_CODE_OAUTH_TOKEN: { fromFile: /etc/agent-login/claude-token }
+```
+
+For server credentials, [harness token commands](servers.md#harness-credentials)
+deliver an existing setup-token or API key through the separate operator
+route, with `--stdin`. Bind the receiver's server-side file in the launch
+configuration, for example
+`CLAUDE_CODE_OAUTH_TOKEN: { fromFile: /srv/oats-team/team/login/claude-token }`.
+For Codex use `OPENAI_API_KEY`; for pi use the selected provider's env
+variable. The token command does not choose a provider or edit this binding.
+A replacement is read at the next start; existing sessions are not restarted.
+
+**Claude login credentials.** At a Claude start, OATS checks for
+`$CLAUDE_CONFIG_DIR/.credentials.json`, or `$HOME/.claude/.credentials.json`
+when no config directory is selected, using the launch's effective environment.
+If OATS sets `CLAUDE_CODE_OAUTH_TOKEN` through a literal, either reference kind,
+or a capability's launch contribution, it refuses with
+`E_CLAUDE_LOGIN_CREDENTIAL`, naming the exact credential file it found. An
+empty value counts. Remove the `/login`
+credential from that Claude configuration and use `oats harness token set
+claude` to provision an inference-only token. Without an OATS-set token, a
+personal `/login` credential is allowed silently. An inherited token does not
+select the token route.
+Other harnesses are unaffected. Spawn preview and apply check the predictable
+configuration before creating a home, worktree or identity. A selector supplied
+by a capability hook is checked after its launch environment is known, and
+every actual launch checks its final pane again. On macOS, Claude's `/login`
+credential lives in the Keychain; this file check does not inspect it.
+
+Both reference kinds use `OATS_LAUNCH_REF_<NAME>` aliases. Their values are
+absent from process arguments, tmux command lines, recipes, events and logs.
+The kernel hands them to the pane through a per-start file in the instance
+home, created exclusively with mode 0600; the launcher reads and deletes it
+before executing the pane command. A failed dispatch removes it. Retirement
+recovery excludes leftover handoff files. Each subsequent start removes
+abandoned handoffs before dispatch, even when the new launch has no references. The start environment records only
+keyed digests of reference values, including file references, so a resume
+refuses a changed value; an ordinary start adopts a rotated file.
 
 **The instance's `oats`.** Every launch (`oats spawn`, `session start`,
 `session restart`, locally or through `--server`) writes `<home>/.oats/bin/oats`,
