@@ -96,6 +96,29 @@ export function checkReleaseVersions(root = ROOT) {
   }
   return version;
 }
+/** The Node floor the kernel declares (`engines.node`, as `>=x.y.z`): the lock's root entry carries
+ *  the same `engines`, and a package under packages/ that declares a floor declares none below it. */
+export function checkNodeFloor(root = ROOT) {
+  const json = (file) => JSON.parse(readFileSync(join(root, file), "utf8"));
+  const floor = (file) => {
+    const node = json(file).engines?.node;
+    if (node === undefined) return null;
+    const parts = /^>=(\d+)\.(\d+)\.(\d+)$/.exec(node);
+    assert.ok(parts, `${file} engines.node must be ">=x.y.z", not ${JSON.stringify(node)}`);
+    return parts.slice(1).map(Number);
+  };
+  const kernel = floor("package.json");
+  assert.ok(kernel, "package.json declares no engines.node");
+  assert.deepEqual(json("package-lock.json").packages[""].engines, json("package.json").engines, "package-lock.json root entry engines differ");
+  for (const name of readdirSync(join(root, "packages")).sort()) {
+    const file = `packages/${name}/package.json`;
+    const declared = existsSync(join(root, file)) ? floor(file) : null;
+    if (!declared) continue;
+    const at = declared.findIndex((part, i) => part !== kernel[i]);
+    assert.ok(at < 0 || declared[at] > kernel[at], `${file} engines.node >=${declared.join(".")} is below the kernel's >=${kernel.join(".")}`);
+  }
+  return kernel.join(".");
+}
 export function checkPackages(root = ROOT) {
   const version = checkReleaseVersions(root);
   const kernel = dryRun(root);

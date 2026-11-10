@@ -6,7 +6,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSy
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import {
-  ROOT, checkJavaScript, checkKernelPackFiles, checkReleaseVersions, shippedJavaScript,
+  ROOT, checkJavaScript, checkKernelPackFiles, checkNodeFloor, checkReleaseVersions, shippedJavaScript,
 } from "../scripts/check-package-dry-runs.mjs";
 import { EXPERT_PATH, checkKnowledgeTheoryPackage, treeFiles } from "../scripts/check-knowledge-theory-package.mjs";
 import { MIRROR_PATHS } from "../scripts/check-okf-mirror.mjs";
@@ -64,6 +64,26 @@ test("release alignment rejects stale lock metadata even when all three manifest
   lock.packages[""].version = "0.0.0";
   write(file, JSON.stringify(lock));
   assert.throws(() => checkReleaseVersions(root), /root entry version differs/);
+});
+
+// CI runs Node 22, and the record package the kernel ships needs node:sqlite (22.5).
+test("the kernel declares its Node floor, the lock carries it, and no package declares a lower one", (t) => {
+  assert.equal(checkNodeFloor(), "22.5.0");
+  assert.deepEqual(json("package.json").engines, { node: ">=22.5.0" });
+  const fixture = (change) => {
+    const root = scratch(t);
+    const files = { "package.json": json("package.json"), "package-lock.json": json("package-lock.json"), "packages/record/package.json": json("packages/record/package.json") };
+    change(files);
+    for (const [file, value] of Object.entries(files)) write(join(root, file), JSON.stringify(value));
+    return root;
+  };
+  assert.equal(checkNodeFloor(fixture(() => {})), "22.5.0");
+  assert.throws(() => checkNodeFloor(fixture((files) => { delete files["package.json"].engines; })), /package\.json declares no engines\.node/);
+  assert.throws(() => checkNodeFloor(fixture((files) => { files["package.json"].engines.node = "22"; })), /package\.json engines\.node must be ">=x\.y\.z", not "22"/);
+  assert.throws(() => checkNodeFloor(fixture((files) => { delete files["package-lock.json"].packages[""].engines; })), /package-lock\.json root entry engines differ/);
+  assert.throws(() => checkNodeFloor(fixture((files) => { files["packages/record/package.json"].engines.node = ">=22.4.9"; })), /packages\/record\/package\.json engines\.node >=22\.4\.9 is below the kernel's >=22\.5\.0/);
+  const noFloor = fixture((files) => { delete files["packages/record/package.json"].engines; });
+  assert.equal(checkNodeFloor(noFloor), "22.5.0", "a package that declares no floor declares no lower one");
 });
 
 test("v2 preparation aligns standalone OKF and Git-only theory catalog pins", () => {
