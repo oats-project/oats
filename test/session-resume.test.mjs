@@ -145,31 +145,53 @@ const procOf = (stat, boot = KERNEL_BOOT) => (p) => {
   if (p === "/proc/1/stat" && stat !== undefined) return stat;
   throw Object.assign(new Error(`ENOENT: ${p}`), { code: "ENOENT" });
 };
-const linuxBoot = (stat, boot) => bootId({ platform: "linux", read: procOf(stat, boot) });
+/** What marks a container, one at a time: the file Docker writes, the file Podman writes, the
+ *  variable Kubernetes sets. */
+const CONTAINER_MARKERS = {
+  docker: { exists: (p) => p === "/.dockerenv", env: {} },
+  podman: { exists: (p) => p === "/run/.containerenv", env: {} },
+  kubernetes: { exists: () => false, env: { KUBERNETES_SERVICE_HOST: "10.96.0.1" } },
+};
+const NO_MARKER = { exists: () => false, env: {} };
+const linuxBoot = (stat, { boot, marker = NO_MARKER } = {}) => bootId({ platform: "linux", read: procOf(stat, boot), ...marker });
+const containerBoot = (stat, boot) => linuxBoot(stat, { boot, marker: CONTAINER_MARKERS.docker });
 
-test("bootId on a Linux host, where PID 1 started with the kernel: the kernel's boot id and nothing else", () => {
+test("bootId on a Linux host: the kernel's boot id and nothing else, whenever PID 1 started", () => {
   for (const start of [0, 2, 147, 999]) assert.equal(linuxBoot(pid1Stat(start, "systemd")), KERNEL_BOOT, `PID 1 started at tick ${start}`);
+});
+
+test("bootId in a PID namespace of its own on a host, with nothing marking a container: the host's boot", () => {
+  // A harness runs a command in a sandbox that unshares PIDs: its PID 1 is the sandbox's, started
+  // long after the kernel, and the command is on the host's boot all the same.
+  for (const start of [1000, 30666820, 30667142]) assert.equal(linuxBoot(pid1Stat(start, "bwrap")), KERNEL_BOOT, `the sandbox's PID 1 started at tick ${start}`);
+  // A variable that only resembles the one Kubernetes sets marks nothing; neither does an empty one.
+  assert.equal(bootId({ platform: "linux", read: procOf(pid1Stat(30666820)), exists: () => false, env: { KUBERNETES_PORT: "tcp://10.96.0.1:443", KUBERNETES_SERVICE_HOST: "" } }), KERNEL_BOOT);
 });
 
 test("bootId in a container: the kernel's boot id and PID 1's start, the same all through one run, another in the next run on the same kernel boot", () => {
   // Two runs of one container (a `docker restart`) under one kernel boot: PID 1 starts 30666820 and
   // 30667142 ticks after it.
-  const first = linuxBoot(pid1Stat(30666820)), second = linuxBoot(pid1Stat(30667142));
+  const first = containerBoot(pid1Stat(30666820)), second = containerBoot(pid1Stat(30667142));
   assert.equal(first, `${KERNEL_BOOT}:30666820`);
-  assert.equal(linuxBoot(pid1Stat(30666820)), first, "every process of one run reads the same");
+  assert.equal(containerBoot(pid1Stat(30666820)), first, "every process of one run reads the same");
   assert.equal(second, `${KERNEL_BOOT}:30667142`);
   assert.notEqual(first, second);
-  assert.equal(linuxBoot(pid1Stat(1000)), `${KERNEL_BOOT}:1000`, "the first tick that is not the kernel's boot");
+  // Each marker alone says "container".
+  for (const [name, marker] of Object.entries(CONTAINER_MARKERS)) assert.equal(linuxBoot(pid1Stat(30666820), { marker }), first, name);
   // The same start under another kernel boot is another identity.
-  assert.notEqual(linuxBoot(pid1Stat(30666820), "0f8b6a2e-1111"), first);
+  assert.notEqual(containerBoot(pid1Stat(30666820), "0f8b6a2e-1111"), first);
+  // A container that shares its host's PID namespace reads the host's PID 1, the same in every run.
+  assert.equal(containerBoot(pid1Stat(0, "systemd")), `${KERNEL_BOOT}:0`);
   // PID 1's name is read as the kernel prints it: anything between the first "(" and the last ")".
-  for (const comm of ["systemd", "tini -s", "a) S 0 (b", "docker-init"]) assert.equal(linuxBoot(pid1Stat(30666820, comm)), first, comm);
+  for (const comm of ["systemd", "tini -s", "a) S 0 (b", "docker-init"]) assert.equal(containerBoot(pid1Stat(30666820, comm)), first, comm);
 });
 
 test("bootId on Linux without a start time of PID 1 to read: the kernel's boot id alone; without the boot id: none", () => {
-  assert.equal(linuxBoot(undefined), KERNEL_BOOT, "/proc/1/stat cannot be read");
-  for (const stat of ["", "\n", "1 (sh) S 0 1 1\n", "no parenthesis at all", pid1Stat("x"), pid1Stat("-5"), pid1Stat("12.5")]) assert.equal(linuxBoot(stat), KERNEL_BOOT, JSON.stringify(stat.slice(0, 40)));
-  assert.equal(bootId({ platform: "linux", read: (p) => { if (p === "/proc/1/stat") return pid1Stat(30666820); throw new Error("EACCES"); } }), null, "PID 1's start alone is no boot");
+  assert.equal(containerBoot(undefined), KERNEL_BOOT, "/proc/1/stat cannot be read");
+  for (const stat of ["", "\n", "1 (sh) S 0 1 1\n", "no parenthesis at all", pid1Stat("x"), pid1Stat("-5"), pid1Stat("12.5")]) assert.equal(containerBoot(stat), KERNEL_BOOT, JSON.stringify(stat.slice(0, 40)));
+  assert.equal(bootId({ platform: "linux", ...CONTAINER_MARKERS.docker, read: (p) => { if (p === "/proc/1/stat") return pid1Stat(30666820); throw new Error("EACCES"); } }), null, "PID 1's start alone is no boot");
+  // On a host /proc/1/stat is not read at all.
+  assert.equal(bootId({ platform: "linux", ...NO_MARKER, read: (p) => { if (p === "/proc/1/stat") throw new Error("read /proc/1/stat on a host"); return `${KERNEL_BOOT}\n`; } }), KERNEL_BOOT);
 });
 
 test("bootId on macOS reads the boot time and nothing under /proc", () => {
@@ -299,7 +321,7 @@ test("a lost home is resumed only when seen running for its start, not judged, f
 
 test("a container's next run on the same kernel boot is another boot to the sweep: the count of starts begins again, the lock of the run before is taken over, and the in-boot clause does not reach across", (t) => {
   oatsHome(t);
-  const first = linuxBoot(pid1Stat(30666820)), second = linuxBoot(pid1Stat(30667142));
+  const first = containerBoot(pid1Stat(30666820)), second = containerBoot(pid1Stat(30667142));
   // RESUME_LIMIT sweep starts of one home in the first run: the count the sweep refuses at.
   for (let n = 0; n < RESUME_LIMIT; n++) noteSweep({ launched: [H] }, first);
   assert.equal(readBootNote(first).resumes[H], RESUME_LIMIT);

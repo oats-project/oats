@@ -11,8 +11,9 @@
   answered `not-seen-recently`, since the 24-hour clause of one boot applied
   across the restart. The boot in a container is the kernel's boot id
   together with the start time of the container's PID 1 (`/proc/1/stat`),
-  which is the same all through one run and another in the next. On a Linux
-  host, where PID 1 starts with the kernel, and on macOS the boot is what it
-  was, and the sweep's records stay valid; in a container the first sweep
-  after the upgrade starts a new count
+  which is the same all through one run and another in the next. OATS takes
+  itself to be in a container when `/.dockerenv` or `/run/.containerenv`
+  exists or `KUBERNETES_SERVICE_HOST` is set. On a Linux host and on macOS
+  the boot is what it was, and the sweep's records stay valid; in a container
+  the first sweep after the upgrade starts a new count
   ([Execution targets](../execution-targets.md#the-sweep)).
