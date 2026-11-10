@@ -11,7 +11,7 @@ function required(env, name) {
 const ids = (env) => ({ uid: env.AGENT_UID || "20001", gid: env.AGENT_GID || "20001" });
 
 // Compare only reviewed settings, never dump Config.Env or credential contents.
-export function inspectAgent(info, env) {
+export function inspectAgent(info, env, image) {
   const evidence = [];
   const equal = (name, actual, expected) => {
     assert.deepEqual(actual, expected, name);
@@ -30,6 +30,23 @@ export function inspectAgent(info, env) {
   equal("privileged", h.Privileged, false);
   equal("host PID namespace", h.PidMode || "", "");
   equal("IPC namespace", h.IpcMode, "private");
+  equal("supplementary groups added", h.GroupAdd || [], []);
+  equal("user namespace override", h.UsernsMode || "", "");
+  equal("UTS namespace override", h.UTSMode || "", "");
+  equal("cgroup namespace", h.CgroupnsMode, "private");
+  equal("sysctls", h.Sysctls || {}, {});
+  equal("published ports", h.PortBindings || {}, {});
+  equal("publish all ports", !!h.PublishAllPorts, false);
+  equal("extra hosts", h.ExtraHosts || [], []);
+  equal("DNS override", h.Dns || [], []);
+  const network = required(env, "AGENTS_NETWORK");
+  equal("network mode", h.NetworkMode, network);
+  equal("attached networks", Object.keys(info.NetworkSettings.Networks), [network]);
+  equal("agent IP", info.NetworkSettings.Networks[network].IPAddress, required(env, "AGENT_IP"));
+  const names = (entries) => entries.map((entry) => entry.split("=", 1)[0]);
+  assert.ok(Array.isArray(image?.Config?.Env), "image environment baseline is required");
+  const allowed = new Set(names(image.Config.Env));
+  equal("environment names added to image (values withheld)", names(info.Config.Env || []).filter((name) => !allowed.has(name)).sort(), []);
   equal("devices", h.Devices || [], []);
   equal("device requests", h.DeviceRequests || [], []);
   equal("tmpfs", h.Tmpfs, { "/tmp": "rw,nosuid,nodev,mode=1777" });
@@ -71,9 +88,10 @@ function runtimeCheck(uid, gid, strict) {
   assert.equal(process.getuid(), Number(uid));
   assert.equal(process.getgid(), Number(gid));
   assert.match(status, new RegExp(`^Gid:\\s+${gid}\\s+${gid}\\s+${gid}\\s+${gid}$`, "m"));
+  assert.match(status, new RegExp(`^Groups:[\\t ]*(?:${gid}[\\t ]*)?$`, "m"));
   assert.match(status, /^CapEff:\s+0+$/m);
   assert.match(status, /^NoNewPrivs:\s+1$/m);
-  console.log(`process uid=${process.getuid()} gid=${process.getgid()}; ${status.match(/^Gid:.*$/m)[0]}; CapEff=0; NoNewPrivs=1`);
+  console.log(`process uid=${process.getuid()} gid=${process.getgid()}; ${status.match(/^Gid:.*$/m)[0]}; ${status.match(/^Groups:.*$/m)[0]}; CapEff=0; NoNewPrivs=1`);
   const pid = fs.readFileSync("/tmp/agent-sshd.pid", "utf8").trim();
   assert.match(pid, /^\d+$/);
   const daemon = fs.readFileSync(`/proc/${pid}/status`, "utf8");
@@ -103,11 +121,12 @@ function runtimeCheck(uid, gid, strict) {
   socket.once("error", (err) => { console.error(err.message); process.exit(1); });
 }
 
-function credentialScan(roots) {
+function credentialScan(roots, excluded = []) {
   const fs = require("node:fs"), path = require("node:path"), assert = require("node:assert/strict");
   let files = 0;
   const found = [];
   function walk(dir) {
+    if (excluded.includes(dir)) return;
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const file = path.join(dir, entry.name);
       if (entry.name === ".credentials.json") found.push(file);
@@ -117,7 +136,7 @@ function credentialScan(roots) {
   }
   for (const dir of roots) { if (fs.existsSync(dir)) walk(dir); }
   assert.deepEqual(found, [], "forbidden /login credential files (paths only)");
-  console.log(`no .credentials.json: searched ${roots.join(", ")}; ${files} entries; no contents read`);
+  console.log(`no .credentials.json: searched ${roots.join(", ")}${excluded.length ? ` excluding ${excluded.join(", ")}` : ""}; ${files} entries; no contents read`);
 }
 
 function main(args, env) {
@@ -138,14 +157,15 @@ function main(args, env) {
     return r.stdout.trim();
   };
   const info = JSON.parse(docker(["inspect", container]))[0];
-  for (const line of inspectAgent(info, env)) report(`PASS ${line}`);
+  const image = JSON.parse(docker(["image", "inspect", info.Image]))[0];
+  for (const line of inspectAgent(info, env, image)) report(`PASS ${line}`);
   const { uid, gid } = ids(env);
   const program = (fn, params, root = false) => docker(["exec", "-i", ...(root ? ["--user", "0:0"] : []), container, "node"], `(${fn.toString()})(${params.map((p) => JSON.stringify(p)).join(",")});`);
   const arch = docker(["exec", container, "node", "-p", "process.arch"]);
   if (label !== "local") assert.equal(arch, "x64", "target evidence requires amd64");
   report(`PASS architecture=${arch}; image=${info.Image}`);
   report(`PASS ${program(runtimeCheck, [uid, gid, label !== "local"]).replaceAll("\n", `\n[${label}] PASS `)}`);
-  report(`PASS ${program(credentialScan, [["/root", "/home", "/etc", "/opt", "/usr", "/var"]], true)}`);
+  report(`PASS ${program(credentialScan, [["/"], ["/proc", "/sys", "/dev", "/state", "/tmp", "/run", "/work"]], true)}`);
   report(`PASS ${program(credentialScan, [["/state", "/tmp", "/run", "/work"]])}`);
   const denied = docker(["exec", container, "sh", "-eu", "-c", `
     test "$(npm prefix -g)" = /usr/local

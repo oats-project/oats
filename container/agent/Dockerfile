@@ -22,10 +22,7 @@ RUN --network=none npm rebuild @awebai/aw --ignore-scripts=false --offline \
 
 COPY --chmod=755 entrypoint.sh /usr/local/bin/agent-entrypoint
 COPY --chmod=644 sshd_config /etc/agent-sshd_config
-ENV HOME=/state/home \
-    LD_PRELOAD=/usr/local/lib/libnss_wrapper.so \
-    NSS_WRAPPER_PASSWD=/state/ssh/passwd \
-    NSS_WRAPPER_GROUP=/state/ssh/group
+ENV HOME=/state/home
 # A child WORKDIR would be created by Docker as root inside a fresh mount.
 WORKDIR /state
 USER agent

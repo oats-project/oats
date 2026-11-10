@@ -18,6 +18,12 @@ printf 'agent:x:%s:%s:OATS agent:/state/home:/bin/sh\n' "$runtime_uid" "$runtime
 awk -F: -v gid="$runtime_gid" '$1 != "agent" && $3 != gid' /etc/group > /state/ssh/group
 printf 'agent:x:%s:\n' "$runtime_gid" >> /state/ssh/group
 
+# Only processes started after the runtime database exists use the wrapper.
+# Derived-image RUN steps and entrypoint overrides retain normal system NSS.
+export LD_PRELOAD=/usr/local/lib/libnss_wrapper.so
+export NSS_WRAPPER_PASSWD=/state/ssh/passwd
+export NSS_WRAPPER_GROUP=/state/ssh/group
+
 if [ ! -f /state/ssh/ssh_host_ed25519_key ]; then
     ssh-keygen -q -t ed25519 -N '' -f /state/ssh/ssh_host_ed25519_key
 fi

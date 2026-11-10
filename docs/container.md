@@ -48,6 +48,13 @@ must succeed during the build.
 No credentials or SSH host keys are baked in. The build context allowlist
 excludes everything except the image's five inputs.
 
+A derived image may add reviewed OS tools with `USER root` and `RUN`, then
+restore `USER agent`. Those build steps use the system passwd/group database.
+The entrypoint enables nss_wrapper only after generating the runtime
+database; SSH command environments also enable it. An overridden entrypoint
+or `docker exec` uses system NSS, so an arbitrary numeric UID may have no
+name there. Use the SSH route for commands that require the `agent` mapping.
+
 CLIs upgrade only by building and selecting a new image. Global npm installs
 fail on the read-only root. To update the OATS pin, change its one dependency
 version and regenerate this directory's lock with
@@ -195,10 +202,14 @@ it requires `instance.json`, reads the token only inside the container and
 requires the exact inference response. It records no raw Claude output.
 
 The script compares inspect settings and the exact bind list to the exported
-variables, checks the process's UID/GID/capabilities/no-new-privileges and
-non-root sshd's banner, scans image home/configuration trees as container
-root and state/work as the agent for `.credentials.json`, checks the token
-is readable and not writable, and proves a global npm install fails using an
+variables, including supplementary groups, namespace overrides, sysctls,
+published ports, resolver overrides and the single network/address. It
+rejects environment names added to the image without printing their values.
+It checks the process's UID/GID/supplementary groups/capabilities/no-new-privileges
+and non-root sshd's banner, scans `/` as container root (pruning `/proc`,
+`/sys`, `/dev` and the agent-scanned `/state`, `/tmp`, `/run`, `/work`),
+and scans those writable trees as the agent for `.credentials.json`. It checks
+the token is readable and not writable, and proves a global npm install fails using an
 offline local package. Scan errors fail acceptance. The root inspection
 process receives no added capabilities. Token provenance still needs the
 operator's receipt: permissions and successful inference cannot distinguish

@@ -14,6 +14,7 @@ test("agent image pins its base and CLI dependency closure", () => {
   assert.match(dockerfile, /^USER agent$/m);
   assert.equal([...dockerfile.matchAll(/^WORKDIR (.+)$/gm)].at(-1)[1], "/state", "Docker must not create a root-owned child in the state mount before entrypoint");
   assert.match(dockerfile, /^ENV HOME=\/state\/home/m);
+  assert.doesNotMatch(dockerfile, /^ENV[\s\S]*LD_PRELOAD/m, "derived-image build steps must retain the system user database");
   assert.match(dockerfile, /^ENTRYPOINT \["\/usr\/bin\/tini", "-g", "--", "\/usr\/local\/bin\/agent-entrypoint"\]$/m);
   const manifest = JSON.parse(read("package.json"));
   const lock = JSON.parse(read("package-lock.json"));
@@ -33,6 +34,7 @@ test("agent Compose service retains the isolation contract", () => {
   const compose = parse(read("compose.agent.yaml"));
   assert.deepEqual(Object.keys(compose.services), ["agent"]);
   const agent = compose.services.agent;
+  assert.deepEqual(Object.keys(agent).sort(), ["image", "container_name", "user", "cap_drop", "security_opt", "privileged", "read_only", "tmpfs", "pids_limit", "mem_limit", "cpus", "restart", "volumes", "networks"].sort(), "only reviewed service keys may be present");
   assert.equal(agent.container_name, "oats-agent-${TEAM:?Set TEAM}");
   assert.equal(agent.user, "${AGENT_UID:-20001}:${AGENT_GID:-20001}");
   assert.deepEqual(agent.cap_drop, ["ALL"]);
@@ -56,6 +58,8 @@ test("agent Compose service retains the isolation contract", () => {
     ["${RESOLV_CONF_FILE:?Set RESOLV_CONF_FILE}", "/etc/resolv.conf", true],
   ].map(([source, target, read_only]) => ({ source, target, read_only, type: "bind", bind: { create_host_path: false } })));
   const work = parse(read("compose.agent.work.yaml"));
+  assert.deepEqual(Object.keys(work.services), ["agent"]);
+  assert.deepEqual(Object.keys(work.services.agent), ["volumes"]);
   assert.deepEqual(work.services.agent.volumes, [{ type: "bind", source: "${TEAM_WORK_DIR:?Set TEAM_WORK_DIR}", target: "/work", bind: { create_host_path: false } }]);
 });
 
@@ -66,11 +70,13 @@ test("SSH accepts only agent public keys with forwarding disabled", () => {
 
 test("acceptance refuses drift in the admitted container settings", async () => {
   const { inspectAgent } = await import("../container/agent/accept.mjs");
-  const env = { AGENT_UID: "20001", AGENT_GID: "20001", TEAM_STATE_DIR: "/srv/team/state", TEAM_LOGIN_DIR: "/srv/team/login", AUTHORIZED_KEYS_FILE: "/srv/team/authorized_keys", RESOLV_CONF_FILE: "/srv/team/resolv.conf", AGENT_PIDS: "512", AGENT_MEMORY: "3g", AGENT_CPUS: "2" };
+  const env = { AGENT_UID: "20001", AGENT_GID: "20001", TEAM_STATE_DIR: "/srv/team/state", TEAM_LOGIN_DIR: "/srv/team/login", AUTHORIZED_KEYS_FILE: "/srv/team/authorized_keys", RESOLV_CONF_FILE: "/srv/team/resolv.conf", AGENT_PIDS: "512", AGENT_MEMORY: "3g", AGENT_CPUS: "2", AGENTS_NETWORK: "team-agents", AGENT_IP: "172.30.0.2" };
+  const image = { Config: { Env: ["PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/state/home"] } };
   const inspected = {
     State: { Running: true },
-    Config: { User: "20001:20001" },
-    HostConfig: { CapDrop: ["ALL"], CapAdd: null, SecurityOpt: ["no-new-privileges:true"], ReadonlyRootfs: true, Privileged: false, PidMode: "", IpcMode: "private", NetworkMode: "team-agents", PidsLimit: 512, Memory: 3221225472, NanoCpus: 2000000000, Tmpfs: { "/tmp": "rw,nosuid,nodev,mode=1777" }, Binds: [], Mounts: [], Devices: [], DeviceRequests: null, RestartPolicy: { Name: "unless-stopped" } },
+    Config: { User: "20001:20001", Env: [...image.Config.Env] },
+    HostConfig: { CapDrop: ["ALL"], CapAdd: null, SecurityOpt: ["no-new-privileges:true"], ReadonlyRootfs: true, Privileged: false, PidMode: "", IpcMode: "private", GroupAdd: null, UsernsMode: "", UTSMode: "", CgroupnsMode: "private", Sysctls: null, PortBindings: {}, ExtraHosts: [], Dns: null, NetworkMode: "team-agents", PidsLimit: 512, Memory: 3221225472, NanoCpus: 2000000000, Tmpfs: { "/tmp": "rw,nosuid,nodev,mode=1777" }, Binds: [], Mounts: [], Devices: [], DeviceRequests: null, RestartPolicy: { Name: "unless-stopped" } },
+    NetworkSettings: { Networks: { "team-agents": { IPAddress: "172.30.0.2" } } },
     Mounts: [
       { Source: "/srv/team/state", Destination: "/state", Type: "bind", RW: true },
       { Source: "/srv/team/login", Destination: "/etc/agent-login", Type: "bind", RW: false },
@@ -79,7 +85,7 @@ test("acceptance refuses drift in the admitted container settings", async () => 
     ],
   };
   inspected.HostConfig.Mounts = inspected.Mounts.map((m) => ({ Type: "bind", Source: m.Source, Target: m.Destination, ReadOnly: !m.RW, BindOptions: {} }));
-  assert.ok(inspectAgent(inspected, env).length >= 8);
+  assert.ok(inspectAgent(inspected, env, image).length >= 8);
   for (const mutate of [
     (v) => { v.Config.User = "0"; },
     (v) => { v.Config.User = "20001"; },
@@ -94,9 +100,21 @@ test("acceptance refuses drift in the admitted container settings", async () => 
     (v) => { v.Mounts.push({ Source: "/var/run/docker.sock", Destination: "/var/run/docker.sock", RW: true, Type: "bind" }); },
     (v) => { v.HostConfig.Tmpfs["/tmp"] = "rw"; },
     (v) => { v.HostConfig.Mounts[0].BindOptions.CreateMountpoint = true; },
+    (v) => { v.HostConfig.GroupAdd = ["10001"]; },
+    (v) => { v.HostConfig.UsernsMode = "host"; },
+    (v) => { v.HostConfig.UTSMode = "host"; },
+    (v) => { v.HostConfig.CgroupnsMode = "host"; },
+    (v) => { v.HostConfig.Sysctls = { "net.ipv4.ip_forward": "1" }; },
+    (v) => { v.HostConfig.PortBindings = { "2222/tcp": [{ HostPort: "2222" }] }; },
+    (v) => { v.HostConfig.ExtraHosts = ["outside:1.1.1.1"]; },
+    (v) => { v.HostConfig.Dns = ["1.1.1.1"]; },
+    (v) => { v.HostConfig.NetworkMode = "host"; },
+    (v) => { v.NetworkSettings.Networks.extra = { IPAddress: "172.18.0.2" }; },
+    (v) => { v.NetworkSettings.Networks["team-agents"].IPAddress = "172.30.0.3"; },
+    (v) => { v.Config.Env.push("CLAUDE_CODE_OAUTH_TOKEN=FIXTURE_VALUE_NEVER_REPORT"); },
   ]) {
     const changed = structuredClone(inspected);
     mutate(changed);
-    assert.throws(() => inspectAgent(changed, env));
+    assert.throws(() => inspectAgent(changed, env, image));
   }
 });
