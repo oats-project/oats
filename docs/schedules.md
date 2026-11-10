@@ -31,6 +31,10 @@ while the machine slept are skipped, never replayed; there are no retries and
 no queue. A schedule on a registered server keeps running while your laptop
 sleeps.
 
+A host with neither launchd nor a systemd user manager (a container) has no
+timer: there `oats host run`, a foreground process, runs the same tick at
+second 0 of every minute ([Without a host timer](#without-a-host-timer)).
+
 The design is in the
 [knowledge-operations design record](design/2026-09-26-okf-knowledge-operations.md#23-triggers)
 (§2.3 and §2.3a).
@@ -633,6 +637,7 @@ oats schedule host install        # register this deployment and install the one
 oats schedule host install --max-concurrent 3 --triggers-max-concurrent 2
 oats schedule host install --max-concurrent default --triggers-max-concurrent none
 oats schedule host install --print [--os darwin|linux]   # what install would write; changes nothing
+oats schedule host install --register-only   # register this deployment and install no timer (oats host run ticks)
 oats schedule host status | uninstall
 oats spawn <agent> ... --wake-every 15 --wake-message "Anything new?"   # or --wake-file spec.json
 ```
@@ -685,6 +690,22 @@ five. Correct it with `oats schedule host install --max-concurrent N` (or
 `--max-concurrent default`) from the deployment, or with `--dir <deployment>`.
 An absent value still means five. Set caps through the CLI; do not edit the
 registry by hand.
+
+### Without a host timer
+
+`oats schedule host install --register-only` records the deployment in the
+host registry, with any caps given, and installs no unit. It asks neither
+launchd nor systemd for anything, so it works where neither exists. It does
+not go with `--print` (`E_BAD_ARGS`). Its answer is install's: `scheduler`
+with `registered: true` and `installed: false`, and no warnings.
+
+On such a host `oats host run` is the ticker
+([container.md](container.md#what-runs-in-the-container)): each minute it
+runs `oats schedule tick --host` for the scopes the registry lists, and with
+none it ticks nothing and says so. It refuses to start while a host timer is
+active (`E_HOST_RUN_TIMER_ACTIVE`), so a host has one ticker, never two.
+With `--server`, `--register-only` is forwarded as it is: a destination on an
+OATS before this option does not know it.
 
 ### The host timer's unit
 

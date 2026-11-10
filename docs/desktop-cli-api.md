@@ -337,8 +337,9 @@ for `--no-recursive`) is never ignored.
 | `oats schedule disable` | `<id>` | `--dir`, `--server` | `--json` | none | none |
 | `oats schedule reconcile` | `<id>` | `--dir`, `--server` | `--clear`, `--json` | none | none |
 | `oats schedule tick` | none | `--dir`, `--server` | `--dry-run`, `--host`, `--json` | none | none |
-| `oats schedule host install` | none | `--max-concurrent`, `--triggers-max-concurrent`, `--os`, `--dir`, `--server` | `--print`, `--json` | none | none |
+| `oats schedule host install` | none | `--max-concurrent`, `--triggers-max-concurrent`, `--os`, `--dir`, `--server` | `--register-only`, `--print`, `--json` | none | none |
 | `oats schedule host uninstall` | none | `--dir`, `--server` | `--json` | none | none |
+| `oats host run` | none | `--stop-grace` | `--plan`, `--json` | none | none |
 | `oats trigger add` | none | `--file`, `--from`, `--set`, `--id`, `--description`, `--workspace`, `--runs-on`, `--owner`, `--dir` | `--json` | none | none |
 | `oats trigger poll` | `<id>` | `--dir`, `--max-age` | `--run-source`, `--json` | none | none |
 | `oats trigger test` | `<id>` | `--dir` | `--run-source`, `--json` | none | none |
@@ -3626,8 +3627,9 @@ its absence.
   reading `null` unless a harness runs there.
 - <a id="row-session-end"></a>**`sessionEnd`** (feature `session-resume`, OATS
   0.69): how the last session of a launched home that does not run ended:
-  `lost` (the host went down, its tmux server died, or the harness was killed
-  by a signal: the sweep brings it back when it can vouch for the loss,
+  `lost` (the host went down, its tmux server died, the harness was killed
+  by a signal, or `oats host run` stopped it because the host was stopping:
+  the sweep brings it back when it can vouch for the loss,
   [Which losses come back](execution-targets.md#which-losses-come-back)), `stopped` (stopped with OATS:
   `oats instance stop`, Desktop's Stop, or an `oats session restart` whose
   relaunch did not happen) or `exited` (the harness ended by
@@ -7103,6 +7105,64 @@ whatever the rows say:
   `E_DEPLOYMENTS_VERSION`). A home's start failure is a row, never the
   sweep's failure.
 
+### The host run (`oats host run`)
+
+`oats host run [--stop-grace <seconds>] [--plan] [--json]` runs
+the kernel's periodic work in one foreground process, for a host where no
+timer can ([container.md](container.md#what-runs-in-the-container)). It is
+this machine's: it takes no `--server`. It runs until SIGTERM or SIGINT.
+
+- **Refused before any effect**, through the standard failure envelope, exit 1:
+  - `E_USAGE`: `OATS_INSTANCE_HOME` is set (it runs as the host, never inside
+    an instance session);
+  - `E_HOST_RUN_TIMER_ACTIVE`: the host timer is active, so two tickers would
+    run; `error.details` `{unit}`. Unit files that are installed and not
+    active are a warning, not a refusal;
+  - `E_HOST_RUN_BUSY`: another `oats host run` holds this machine's lock
+    (`<OATS_HOME_DIR>/host-run/lock`, a kernel-private file), or the lock
+    cannot be judged; `error.details` `{lock, found}`, `found` as
+    `E_RESUME_LOCK_STUCK` names it, and `running` for a host run that runs.
+    A lock whose holder is gone, or that was taken in another boot (in a
+    container, another run), is taken over;
+  - `E_BAD_ARGS`: a flag it does not define, an argument, a `--stop-grace`
+    that is not 1 to 300 seconds, a verb other than `run`.
+
+  Any other failure of the run itself is `E_HOST_RUN_FAILED`, which says
+  nothing of how far it got. A child that ended without an answer is
+  reported under that code too, in `sweep.error` or on stderr, and does not
+  end the run.
+- **What it runs, in order.** The resume sweep once (`oats session resume`).
+  Then at second 0 of every minute: `oats schedule tick --host` when the
+  host schedule registry lists a scope, and a listing of every deployment's
+  instances, which records what runs for the next start's sweep. Each is a
+  child process. A minute whose tick still runs is skipped; a minute missed
+  is never replayed. With no scope registered it ticks nothing and says so.
+- **On SIGTERM or SIGINT.** No further minute starts; a tick or a sweep that
+  runs is waited for; it lists once; then it stops every running home, side
+  by side, each with the stop `oats session restart` uses: SIGTERM to the
+  harness, a wait of `--stop-grace` seconds (default 20), never escalated.
+  Each home's stop record is written before its harness is signalled and
+  says `"resume": true, "reason": "host-stop"`, so the home reads
+  `sessionEnd: "lost"` and the next start's sweep resumes it. It exits 0.
+- **Progress** is one line per event on stderr (`oats host run: …`), in both
+  modes. **The answer** is written once, when the run ends:
+  `result` `{schemaVersion: 1, plan: false, signal, warnings, sweep, ticks, stopped}`.
+  `signal` is `"SIGTERM"` or `"SIGINT"`; `warnings` an array of strings;
+  `sweep` the sweep's own `result`
+  ([The machine sweep](#the-machine-sweep-oats-session-resume)), or
+  `{error: {code, message}}` when it failed (the run goes on); `ticks`
+  `{run, skipped, failed, noScope}`, minutes counted; `stopped` one row per
+  home that ran when it stopped: `{ok: true, home, stopped, alreadyIdle, state}`
+  or `{ok: false, home, code, message, stillRunning}` (`stillRunning`: the
+  pids the stop established as alive, or `null`). A home that did not stop is
+  a row, never the run's failure.
+- **`--plan`** starts nothing, takes no lock and writes nothing: `result`
+  `{schemaVersion: 1, plan: true, refusals, warnings, scopes, sweep}`.
+  `refusals` is every refusal a run would meet now, in a run's order, each
+  `{code, message, details?}`; `scopes` the registered scopes it would tick;
+  `sweep` the sweep's `--plan` result. It exits 0 also when `refusals` is not
+  empty.
+
 ### Upload
 
 ```text
@@ -7421,6 +7481,11 @@ oats schedule update <id> --description=<text> [--dir <d>] --json
   `disable` → `{schedule}`. `run [--force]`, `remove [--force]`, `reconcile
   [--clear]` → the action's receipt. `tick [--dry-run] [--host]` →
   `{tickedAt, considered, scheduler}`; `host install` → `{scheduler, warnings}`;
+  `host install --register-only` → the same answer, the scope recorded in the
+  host registry and no unit installed (`scheduler.registered: true`,
+  `installed: false`, `warnings: []`), for a host whose ticker is
+  [`oats host run`](#the-host-run-oats-host-run); it does not go with
+  `--print` (`E_BAD_ARGS`);
   `host uninstall | status` → `{scheduler}`; `host install --print [--os
   darwin|linux]` → `{kind, files: {<path>: <content>}, warnings}`, writing
   nothing.

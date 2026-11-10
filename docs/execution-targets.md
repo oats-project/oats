@@ -1228,6 +1228,7 @@ for its current start (`startId` in `instance.json`):
 | What the home holds for its current start | `sessionEnd` | Resumed |
 |---|---|---|
 | a stop's record that names it (or, a record from before 0.69, written after the start) | `stopped` | no |
+| a stop's record that names it and says `resume: true`: OATS stopped it with the host (`oats host run`, [container.md](container.md#what-runs-in-the-container)), whatever the exit marker says | `lost` | when the sweep can vouch for the loss |
 | an exit marker that names it with an exit status below 128 (`/exit`, Ctrl-C handled by the harness, its own error), or the marker of a kernel before 0.69 | `exited` | no: the row offers Start, as before |
 | an exit marker that names it with a signal's status (128 and up: the harness alone was killed, an out-of-memory kill for example) | `lost` | when the sweep can vouch for the loss ([below](#which-losses-come-back)) |
 | neither (the host went down, or the tmux server died under the live harness) | `lost` | when the sweep can vouch for the loss |
@@ -1238,13 +1239,21 @@ without `sessionEnd`, prints `idle`, with one line under it naming the way
 back: `oats session start --resume --home <home>`, or the next sweep (`oats
 session resume`, which OATS Desktop and `oats tui` run when they open) when
 it can vouch for the loss. Both act on this machine's homes only, so a row
-of another host names the host to run them on.
+of another host names the host to run them on. A local row whose home was
+stopped with the host says so in that line: `lost (stopped with the host):
+…`. The reason is read from the home's stop record; `sessionEnd` has no
+fourth value and the row carries no reason.
 
 The window a spawn or a start makes writes the exit marker,
 `.oats-start-exited`, when the harness exits; `oats instance stop` writes its
 record, `.oats-stop.json`, and so do a retire, before it ends the window
 (0.69.2), and `oats session restart`, before it stops the harness (#1601). Both are kernel-private files of the home, not a
-contract: read `sessionEnd`. A shutdown kills the window's shell with the
+contract: read `sessionEnd`. One part of the stop record is a contract: when
+`oats host run` stops a home because the host is stopping, the record says
+`"resume": true` and `"reason": "host-stop"`, and is written before the
+harness is signalled, so a host that is killed while the harness ends still
+leaves a home that reads `lost`. Such a home is brought back by the sweep of
+the host's next start, under the rules below like any other loss. A shutdown kills the window's shell with the
 harness, so a lost session leaves no marker. A home spawned before 0.69 and
 never restarted since names no start: it reads `stopped` only after a stop,
 and otherwise `lost`, also when its harness ended by itself. It comes back only
