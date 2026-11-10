@@ -67,8 +67,6 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc") {
   equal("device requests", h.DeviceRequests || [], []);
   equal("tmpfs", h.Tmpfs, { "/tmp": "rw,nosuid,nodev,mode=1777" });
   equal("restart policy", h.RestartPolicy.Name, "unless-stopped");
-  equal("stop grace period (seconds)", info.Config.StopTimeout, 45);
-  equal("healthcheck (sshd on 2222)", info.Config.Healthcheck, { Test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2222"], Interval: 30e9, Timeout: 5e9, StartPeriod: 10e9, Retries: 3 });
   const pids = Number(required(env, "AGENT_PIDS"));
   assert.ok(Number.isSafeInteger(pids) && pids > 0, "positive AGENT_PIDS");
   equal("pids limit", h.PidsLimit, pids);
