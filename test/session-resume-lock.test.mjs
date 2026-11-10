@@ -1,25 +1,26 @@
 // The machine sweep's lock (lib/session-resume.mjs acquireResumeLock): a claim file (lib/claim.mjs)
 // at `<OATS_HOME_DIR>/session-resume/lock`, held by one sweep at a time, taken over at once from a
 // holder that is verifiably gone or that took it in another boot, never from one that lives or that
-// cannot be judged; and the lock directory of a kernel that locked with one, judged by that
-// kernel's rules. Every holder and contender that is not this process is a real separate process
+// cannot be judged; a lock that needs a person (those two, and the lock directory of a kernel that
+// locked with one) is refused with E_RESUME_LOCK_STUCK and left as it is, and `oats doctor`'s read
+// of the lock (resumeLockProblem) reports the same states without taking anything. Every holder and contender that is not this process is a real separate process
 // that imports the real module; every lock, record and directory is a real one.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { acquireResumeLock } from "../lib/session-resume.mjs";
+import { acquireResumeLock, resumeLockProblem } from "../lib/session-resume.mjs";
 import { isStartToken, processStartToken } from "../lib/worktree-hooks.mjs";
 
 const resumeUrl = new URL("../lib/session-resume.mjs", import.meta.url).href;
 const NONCE = "a".repeat(32);
 const AT = "2026-10-10T00:00:00.000Z";
 const BOOT = "boot-1";
-/** A takeover is immediate. The bound is the host's, where every liveness read may be a `ps`, and
- *  it is under the minute an earlier kernel's ownerless directory is waited for. */
+/** A takeover is immediate. The bound is the host's, where every liveness read may be a `ps`. */
 const AT_ONCE_MS = 30_000;
 
 /** OATS_HOME_DIR on a scratch directory for one test, its `session-resume/` made. */
@@ -58,7 +59,19 @@ async function until(predicate, what, timeoutMs = 60000) {
   }
 }
 const busyOf = (path, why) => `another session resume on this machine holds ${path} (${why}); nothing was started`;
-const stuckOf = (path, why) => `the session resume lock ${path} cannot be taken (${why}); if no oats session resume is running on this machine, remove ${path} and run it again; nothing was started`;
+const REMOVE_FILE = (path) => `if no oats session resume is running on this machine, remove ${path} and run it again`;
+const REMOVE_DIRECTORY = (path) => `once no earlier oats is running on this machine, remove the directory ${path} and run it again`;
+const cannotBeTaken = (path, why) => `the session resume lock ${path} cannot be taken (${why})`;
+const stuckOf = (path, why, remedy = REMOVE_FILE(path)) => `${cannotBeTaken(path, why)}; ${remedy}; nothing was started`;
+/** What doctor's read answers for a lock that needs a person. */
+const problemOf = (path, why, remedy = REMOVE_FILE(path)) => ({ code: "resume-lock-stuck", message: `${cannotBeTaken(path, why)}: oats session resume starts nothing on this machine while it is there`, remedy });
+/** Every entry at and under `path` as path → kind, mode, mtime and, for a file, its bytes' hash. */
+function snapshot(path, out = {}) {
+  const st = lstatSync(path);
+  out[path] = `${st.mode}:${st.mtimeMs}${st.isFile() ? `:${createHash("sha256").update(readFileSync(path)).digest("hex")}` : ""}`;
+  if (st.isDirectory()) for (const name of readdirSync(path).sort()) snapshot(join(path, name), out);
+  return out;
+}
 
 /** A separate process that runs `script` (an ES module's text) on the fixture's OATS_HOME_DIR,
  *  bounded by a watchdog. */
@@ -126,16 +139,25 @@ try {
 `);
 }
 
-/** This process is refused the lock with E_RESUME_BUSY → the refusal's message. */
-function refusedHere(boot = BOOT) {
+/** This process is refused the lock with `code` → the refusal. */
+function refusal(boot, code) {
   let release;
   try { release = acquireResumeLock({ boot }); }
   catch (e) {
-    assert.equal(e.code, "E_RESUME_BUSY", `${e.code}: ${e.message}`);
-    return e.message;
+    assert.equal(e.code, code, `${e.code}: ${e.message}`);
+    return e;
   }
   release();
   assert.fail("the lock was taken");
+}
+/** This process is refused the lock by a sweep that runs, E_RESUME_BUSY → the refusal's message. */
+const refusedHere = (boot = BOOT) => refusal(boot, "E_RESUME_BUSY").message;
+/** This process is refused a lock that needs a person, E_RESUME_LOCK_STUCK with the lock's path and
+ *  `found` in its details → the refusal's message. */
+function stuckHere(f, found, boot = BOOT) {
+  const e = refusal(boot, "E_RESUME_LOCK_STUCK");
+  assert.deepEqual(e.details, { lock: f.path, found }, e.message);
+  return e.message;
 }
 /** This process takes the lock and releases it → how long taking it took. */
 function takenHere(boot = BOOT) {
@@ -169,10 +191,12 @@ test("a sweep that runs is busy for another: E_RESUME_BUSY naming its pid, at on
   assert.deepEqual([refused.code, refused.message], ["E_RESUME_BUSY", busyOf(f.path, `pid ${h.proc.pid} holds it`)], JSON.stringify(refused));
   assert.ok(refused.elapsedMs < AT_ONCE_MS, JSON.stringify(refused));
   assert.equal(refusedHere(), busyOf(f.path, `pid ${h.proc.pid} holds it`));
+  assert.equal(resumeLockProblem({ boot: BOOT }), null, "a sweep that runs is no problem to report");
   assert.equal(readFileSync(f.path, "utf8"), record, "the holder's record is byte for byte what it was");
   assert.deepEqual(f.entries(), ["lock"], "a refused sweep leaves nothing beside the lock");
   await h.release();
   assert.deepEqual(f.entries(), []);
+  assert.equal(resumeLockProblem({ boot: BOOT }), null, "nor is a free lock");
   assert.equal((await contender(t, f).result()).acquired, true);
 });
 
@@ -182,6 +206,9 @@ test("a sweep killed with SIGKILL while it holds the lock: the next sweep takes 
   h.proc.kill("SIGKILL");
   assert.deepEqual(await h.closed, { code: null, signal: "SIGKILL" });
   assert.equal(JSON.parse(readFileSync(f.path, "utf8")).pid, h.proc.pid, "the killed sweep left its lock");
+  const left = snapshot(f.dir);
+  assert.equal(resumeLockProblem({ boot: BOOT }), null, "a lock the next sweep takes over by itself is no problem to report");
+  assert.deepEqual(snapshot(f.dir), left, "and reading it changes nothing");
   const next = await contender(t, f).result();
   assert.equal(next.acquired, true, JSON.stringify(next));
   assert.ok(next.elapsedMs < AT_ONCE_MS, JSON.stringify(next));
@@ -220,6 +247,9 @@ test("a lock taken in another boot is taken over, though its pid runs with the r
   assert.equal(refusedHere(null), busyOf(f.path, `pid ${h.proc.pid} holds it`));
   assert.equal(refusedHere("boot-0"), busyOf(f.path, `pid ${h.proc.pid} holds it`));
   assert.equal(readFileSync(f.path, "utf8"), record);
+  // Doctor's read applies the same rule: a sweep that runs in this boot, a lock to take over in another.
+  for (const boot of [null, "boot-0", BOOT]) assert.equal(resumeLockProblem({ boot }), null, String(boot));
+  assert.equal(readFileSync(f.path, "utf8"), record);
   const release = acquireResumeLock({ boot: BOOT });
   const mine = readFileSync(f.path, "utf8");
   assert.deepEqual([JSON.parse(mine).pid, JSON.parse(mine).bootId], [process.pid, BOOT]);
@@ -236,111 +266,61 @@ test("a lock taken in another boot is taken over, though its pid runs with the r
   assert.equal(readFileSync(f.path, "utf8"), bootless);
 });
 
-test("a holder whose liveness cannot be established, a record that does not parse and a gone holder's record that cannot be taken over are refused, each saying what was found and what to do, and left byte for byte", (t) => {
+test("a holder whose liveness cannot be established, a record that does not parse and a gone holder's record that cannot be taken over are refused with E_RESUME_LOCK_STUCK, each saying what was found and what to do, and left byte for byte; doctor's read reports each the same way", (t) => {
   const f = fixture(t);
   const gone = exitedPid();
-  for (const [what, bytes, why] of [
-    ["a live pid with no start to compare", JSON.stringify({ bootId: BOOT, pid: process.pid, nonce: NONCE, at: AT }) + "\n",
+  for (const [what, bytes, found, why] of [
+    ["a live pid with no start to compare", JSON.stringify({ bootId: BOOT, pid: process.pid, nonce: NONCE, at: AT }) + "\n", "unknown",
       `whether pid ${process.pid}, which holds it, still runs cannot be established: pid ${process.pid} runs, and the record names no start time to compare it with`],
-    ["bytes that are no record", "{incomplete owner JSON\n", `the record at ${f.path} is unreadable`],
-    ["JSON that is no record", JSON.stringify("pid 1 holds it; remove everything"), `the record at ${f.path} is unreadable`],
-    ["a gone holder with no nonce", JSON.stringify({ bootId: BOOT, pid: gone }) + "\n",
+    ["bytes that are no record", "{incomplete owner JSON\n", "unreadable", `the record at ${f.path} is unreadable`],
+    ["JSON that is no record", JSON.stringify("pid 1 holds it; remove everything"), "unreadable", `the record at ${f.path} is unreadable`],
+    ["a gone holder with no nonce", JSON.stringify({ bootId: BOOT, pid: gone }) + "\n", "cannot-take-over",
       `the holder of ${f.path}, pid ${gone}, is gone, and that file cannot be taken over (its nonce is not the 32 hexadecimal digits a claim carries); it must be removed`],
   ]) {
     writeFileSync(f.path, bytes);
-    const start = Date.now();
-    assert.equal(refusedHere(), stuckOf(f.path, why), what);
+    const before = snapshot(f.dir), start = Date.now();
+    assert.equal(stuckHere(f, found), stuckOf(f.path, why), what);
     assert.ok(Date.now() - start < AT_ONCE_MS, `${what}: nobody is waited for`);
-    assert.equal(readFileSync(f.path, "utf8"), bytes, what);
-    assert.deepEqual(f.entries(), ["lock"], what);
+    assert.deepEqual(resumeLockProblem({ boot: BOOT }), problemOf(f.path, why), what);
+    assert.deepEqual(snapshot(f.dir), before, `${what}: the lock is as it was, and nothing is beside it`);
   }
   // Removed by the operator, as the message says, the lock is taken.
   rmSync(f.path);
+  assert.equal(resumeLockProblem({ boot: BOOT }), null);
   assert.ok(takenHere() < AT_ONCE_MS);
 });
 
 /** The lock of a kernel that locked with a directory: `lock/` and, in it, `owner.json`. */
 function earlierLock(f, owner) {
   mkdirSync(f.path);
-  const bytes = owner === undefined ? undefined : JSON.stringify(owner) + "\n";
-  if (bytes !== undefined) writeFileSync(join(f.path, "owner.json"), bytes);
-  return bytes;
+  if (owner !== undefined) writeFileSync(join(f.path, "owner.json"), JSON.stringify(owner) + "\n");
 }
 const minutesAgo = (path, minutes) => { const then = new Date(Date.now() - minutes * 60_000); utimesSync(path, then, then); };
 
-test("an earlier kernel's lock directory whose owner is gone, or took it in another boot, is removed and the lock taken, with nothing left beside it", (t) => {
-  const f = fixture(t);
-  for (const [what, owner] of [
-    ["an owner that exited", { pid: exitedPid(), bootId: BOOT, at: AT }],
-    ["an owner that exited, with no boot", { pid: exitedPid(), at: AT }],
-    ["an owner of another boot whose pid runs", { pid: process.pid, bootId: "boot-0", at: AT }],
-  ]) {
-    earlierLock(f, owner);
-    const release = acquireResumeLock({ boot: BOOT });
-    assert.ok(lstatSync(f.path).isFile(), `${what}: the lock is a claim file`);
-    assert.equal(JSON.parse(readFileSync(f.path, "utf8")).pid, process.pid, what);
-    assert.deepEqual(f.entries(), ["lock"], `${what}: nothing of the directory or of its removal is left`);
-    release();
-    assert.deepEqual(f.entries(), [], what);
-  }
-});
-
-test("an earlier kernel's lock directory whose owner's pid runs is that kernel's sweep: busy, and the directory and its record are unchanged", async (t) => {
-  const f = fixture(t);
-  // The earlier kernel's sweep, a process that runs: it holds its directory until it removes it.
-  const bytes = earlierLock(f, { pid: process.pid, bootId: BOOT, at: AT });
-  for (const result of [await contender(t, f).result(), { code: "E_RESUME_BUSY", message: refusedHere() }]) {
-    assert.deepEqual([result.code, result.message], ["E_RESUME_BUSY", busyOf(f.path, `pid ${process.pid} holds it`)], JSON.stringify(result));
-  }
-  // Without a boot on either side its pid alone is what that kernel judged by.
-  assert.equal(refusedHere(null), busyOf(f.path, `pid ${process.pid} holds it`));
-  assert.ok(lstatSync(f.path).isDirectory());
-  assert.deepEqual(readdirSync(f.path), ["owner.json"]);
-  assert.equal(readFileSync(join(f.path, "owner.json"), "utf8"), bytes);
-  assert.deepEqual(f.entries(), ["lock"]);
-  // Released by its owner, which removes the directory, the lock is taken.
-  rmSync(f.path, { recursive: true });
-  assert.ok(takenHere() < AT_ONCE_MS);
-});
-
-test("an earlier kernel's lock directory with no owner recorded is its acquirer's own for a minute, busy and unchanged, and a crashed acquirer's after it, removed", (t) => {
-  const f = fixture(t);
-  earlierLock(f);
-  assert.equal(refusedHere(), busyOf(f.path, "its owner is not recorded yet"));
-  assert.ok(lstatSync(f.path).isDirectory());
-  assert.deepEqual(readdirSync(f.path), []);
-  minutesAgo(f.path, 2);
-  assert.ok(takenHere() < AT_ONCE_MS);
-  assert.deepEqual(f.entries(), []);
-  // A record that kernel could not read is no owner to it either.
-  earlierLock(f);
-  writeFileSync(join(f.path, "owner.json"), "{incomplete");
-  assert.equal(refusedHere(), busyOf(f.path, "its owner is not recorded yet"));
-  assert.equal(readFileSync(join(f.path, "owner.json"), "utf8"), "{incomplete");
-  minutesAgo(f.path, 2);
-  assert.ok(takenHere() < AT_ONCE_MS);
-  assert.deepEqual(f.entries(), []);
-});
-
-test("an earlier kernel's stale lock directory is removed under that kernel's takeover lock: one that another sweep holds is busy, one left by a crashed takeover is taken after a minute", (t) => {
-  const f = fixture(t);
-  const takeover = `${f.path}.takeover`;
-  const bytes = earlierLock(f, { pid: exitedPid(), bootId: BOOT, at: AT });
-  mkdirSync(takeover);
-  assert.equal(refusedHere(), busyOf(f.path, "another sweep is taking over a stale lock"));
-  assert.equal(readFileSync(join(f.path, "owner.json"), "utf8"), bytes, "the stale directory is left to the sweep that is taking it over");
-  assert.deepEqual(f.entries(), ["lock", "lock.takeover"]);
-  minutesAgo(takeover, 2);
-  assert.ok(takenHere() < AT_ONCE_MS);
-  assert.deepEqual(f.entries(), []);
-  // A claim file is never removed under it: a takeover directory beside a sweep that runs changes nothing.
-  const release = acquireResumeLock({ boot: BOOT });
-  mkdirSync(takeover);
-  assert.equal(refusedHere(), busyOf(f.path, `pid ${process.pid} holds it`));
-  release();
-  assert.ok(takenHere() < AT_ONCE_MS, "nor does one beside a free lock");
-  assert.deepEqual(f.entries(), ["lock.takeover"]);
-});
+for (const [what, plant] of [
+  ["whose owner exited", (f) => earlierLock(f, { pid: exitedPid(), bootId: BOOT, at: AT })],
+  ["whose owner's pid runs", (f) => earlierLock(f, { pid: process.pid, bootId: BOOT, at: AT })],
+  ["whose owner took it in another boot", (f) => earlierLock(f, { pid: process.pid, bootId: "boot-0", at: AT })],
+  ["with no owner recorded", (f) => earlierLock(f)],
+  ["with no owner recorded for two minutes", (f) => { earlierLock(f); minutesAgo(f.path, 2); }],
+  ["whose owner exited, beside that kernel's takeover directory", (f) => { earlierLock(f, { pid: exitedPid(), bootId: BOOT, at: AT }); mkdirSync(`${f.path}.takeover`); minutesAgo(`${f.path}.takeover`, 2); }],
+]) {
+  test(`an earlier kernel's lock directory ${what} is never judged and never removed: E_RESUME_LOCK_STUCK naming the directory to remove, everything left byte for byte, and doctor's read reports it`, async (t) => {
+    const f = fixture(t);
+    plant(f);
+    const before = snapshot(f.dir), why = `${f.path} is a lock directory written by an earlier kernel`;
+    assert.equal(stuckHere(f, "directory"), stuckOf(f.path, why, REMOVE_DIRECTORY(f.path)));
+    const other = await contender(t, f).result();
+    assert.deepEqual([other.code, other.message], ["E_RESUME_LOCK_STUCK", stuckOf(f.path, why, REMOVE_DIRECTORY(f.path))], JSON.stringify(other));
+    assert.ok(other.elapsedMs < AT_ONCE_MS, JSON.stringify(other));
+    assert.deepEqual(resumeLockProblem({ boot: BOOT }), problemOf(f.path, why, REMOVE_DIRECTORY(f.path)));
+    assert.deepEqual(snapshot(f.dir), before);
+    // Removed by the operator, as the message says, the lock is taken.
+    rmSync(f.path, { recursive: true });
+    assert.equal(resumeLockProblem({ boot: BOOT }), null);
+    assert.ok(takenHere() < AT_ONCE_MS);
+  });
+}
 
 /** `n` sweeps that all try the lock at one instant, each holding it once taken until told to
  *  let go → how many held it at once, and what the others answered. */
@@ -380,7 +360,6 @@ try {
 for (const [what, prepare] of [
   ["a free lock", () => {}],
   ["the lock of a sweep that is gone", (f) => writeFileSync(f.path, JSON.stringify({ bootId: BOOT, pid: exitedPid(), processStart: startTokens().own, nonce: NONCE, at: AT }) + "\n")],
-  ["the stale lock directory of an earlier kernel", (f) => earlierLock(f, { pid: exitedPid(), bootId: BOOT, at: AT })],
 ]) {
   test(`sweeps racing for ${what}: exactly one runs, and every other is busy`, async (t) => {
     const f = fixture(t);

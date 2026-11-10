@@ -4,7 +4,7 @@
 // row mapping. The real-tmux sweep is test/session-resume-tmux.test.mjs.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describeLaunchCommand, parseLaunchCommand, renderLaunchCommand, renderLaunchRecipe, RESUME_NOTICE, startInstanceSession } from "../lib/core.mjs";
@@ -199,7 +199,7 @@ test("bootId on macOS reads the boot time and nothing under /proc", () => {
   assert.equal(bootId({ platform: "darwin", read: () => { throw new Error("read on macOS"); }, sysctl: () => "{ sec = 1761555000, usec = 123456 } Mon Oct 27 08:50:00 2026\n" }), "1761555000.123456");
 });
 
-test("the machine lock: one sweep at a time; the lock directory of an earlier kernel is judged by that kernel's rules: a dead owner's, or another boot's, is taken over", (t) => {
+test("the machine lock: one sweep at a time; the lock directory of an earlier kernel is refused as that, whatever its owner, and left as it is", (t) => {
   oatsHome(t);
   const lock = join(resumeStateDir(), "lock");
   const release = acquireResumeLock({ boot: "boot-1" });
@@ -207,20 +207,23 @@ test("the machine lock: one sweep at a time; the lock directory of an earlier ke
   assert.throws(() => acquireResumeLock({ boot: "boot-1" }), (e) => e.code === "E_RESUME_BUSY" && e.message.includes(`pid ${process.pid}`));
   release();
   assert.equal(existsSync(lock), false, "released");
-  // A dead pid: stale.
-  mkdirSync(lock); writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: 2 ** 22 + 12345, bootId: "boot-1" }));
-  acquireResumeLock({ boot: "boot-1" })();
-  // A live pid, recorded in another boot: stale (the pid is someone else's now).
-  mkdirSync(lock); writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.ppid, bootId: "boot-0" }));
-  acquireResumeLock({ boot: "boot-1" })();
-  // A live pid in this boot: busy.
-  mkdirSync(lock); writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.ppid, bootId: "boot-1" }));
-  assert.throws(() => acquireResumeLock({ boot: "boot-1" }), (e) => e.code === "E_RESUME_BUSY");
-  // No owner yet: an acquirer's own for the grace, a crashed one's after it.
-  rmSync(lock, { recursive: true }); mkdirSync(lock);
-  assert.throws(() => acquireResumeLock({ boot: "boot-1" }), (e) => e.code === "E_RESUME_BUSY");
+  const stuck = (e) => e.code === "E_RESUME_LOCK_STUCK" && e.message.includes(`remove the directory ${lock}`);
+  for (const [what, owner] of [
+    ["a dead pid", { pid: 2 ** 22 + 12345, bootId: "boot-1" }],
+    ["a live pid, recorded in another boot", { pid: process.ppid, bootId: "boot-0" }],
+    ["a live pid in this boot", { pid: process.ppid, bootId: "boot-1" }],
+  ]) {
+    mkdirSync(lock); writeFileSync(join(lock, "owner.json"), JSON.stringify(owner));
+    assert.throws(() => acquireResumeLock({ boot: "boot-1" }), stuck, what);
+    assert.equal(readFileSync(join(lock, "owner.json"), "utf8"), JSON.stringify(owner), what);
+    rmSync(lock, { recursive: true });
+  }
+  // No owner: the same, however long the directory has been there.
+  mkdirSync(lock);
+  assert.throws(() => acquireResumeLock({ boot: "boot-1" }), stuck);
   const old = new Date(Date.now() - 120_000); utimesSync(lock, old, old);
-  acquireResumeLock({ boot: "boot-1" })();
+  assert.throws(() => acquireResumeLock({ boot: "boot-1" }), stuck);
+  assert.deepEqual(readdirSync(lock), []);
 });
 
 test("the per-boot note: refusals and each home's count of sweep starts, replaced in another boot, nothing kept without a boot id", (t) => {

@@ -15,6 +15,8 @@ test('reader: a refusal reads as unsupported, busy or failed with its code', () 
   assert.deepEqual(readResumeSweep(refusal('E_CLI_UNAVAILABLE')), { kind: 'unsupported' });
   assert.deepEqual(readResumeSweep(refusal('E_RESUME_FEATURE')), { kind: 'unsupported' });
   assert.deepEqual(readResumeSweep(refusal('E_RESUME_BUSY')), { kind: 'busy' });
+  // A lock that needs a person is not a sweep that runs: it is a failure, with its code.
+  assert.deepEqual(readResumeSweep(refusal('E_RESUME_LOCK_STUCK')), { kind: 'failed', code: 'E_RESUME_LOCK_STUCK' });
   assert.deepEqual(readResumeSweep(refusal('E_CLI_OUTPUT_LIMIT')), { kind: 'failed', code: 'E_CLI_OUTPUT_LIMIT' });
   assert.deepEqual(readResumeSweep(refusal('E_CLI_FAILED')), { kind: 'failed', code: 'E_CLI_FAILED' });
   // A code not of the kernel's form is never relayed.
