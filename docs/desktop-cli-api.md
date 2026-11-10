@@ -296,6 +296,67 @@ accepted, and its value is only ever the message. A capability command's own fla
 typed; the kernel reads only its dispatch flag (`--soul`). There is no feature
 string for this: to support older kernels, use the spaced form.
 
+<a id="command-flags"></a>
+### The flags a command defines
+
+These commands change state, and each refuses a flag it does not define
+before anything happens: before a plan is read, a file is written, a
+process is stopped or started, and before a `--server` command is sent to
+its host. A typo of a protective flag (`--no-recursve` for
+`--no-recursive`) is never ignored.
+
+| Command | Arguments | Flags that take a value | Switches | Refused in their own words |
+|---|---|---|---|---|
+| `oats retire` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir`, `--server` | `--plan`, `--self`, `--discard-worktree`, `--keep-dir`, `--force`, `--json` | `--delete-branch` |
+| `oats instance stop` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--grace-ms`, `--home`, `--dir`, `--server` | `--plan`, `--apply`, `--no-recursive`, `--json` | none |
+| `oats instance upgrade` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir` | `--undo`, `--plan`, `--json` | `--server` |
+| `oats worktree add` | none | `--purpose`, `--branch`, `--base`, `--repo` | `--preview`, `--json` | `--server`, `--dir`, `--home` |
+| `oats worktree remove` | none | `--purpose` | `--json` | `--server`, `--dir`, `--home` |
+| `oats session start` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json`, `--resume` | none |
+| `oats session restart` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server`, `--stop-grace` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json` | `--resume` |
+| `oats schedule remove` | `<id>` | `--dir`, `--server` | `--force`, `--json` | none |
+| `oats schedule run` | `<id>` | `--dir`, `--server` | `--force`, `--json` | none |
+| `oats schedule enable` | `<id>` | `--dir`, `--server` | `--json` | none |
+| `oats schedule disable` | `<id>` | `--dir`, `--server` | `--json` | none |
+| `oats schedule reconcile` | `<id>` | `--dir`, `--server` | `--clear`, `--json` | none |
+| `oats schedule host uninstall` | none | `--dir`, `--server` | `--json` | none |
+| `oats trigger remove` | `<id>` | `--dir` | `--json` | none |
+| `oats trigger enable` | `<id>` | `--dir` | `--json` | none |
+| `oats trigger disable` | `<id>` | `--dir` | `--json` | none |
+| `oats server remove` | `<id>` | none | `--json` | none |
+| `oats server forget` | `<id>` | `--instance` | `--json` | none |
+| `oats package add` | `<id>` `<version>` | `--dir` | `--json` | none |
+| `oats package remove` | `<id>` | `--dir` | `--json` | none |
+| `oats launch-config set` | `<name>` | `--file`, `--dir`, `--server` | `--keep-env`, `--json` | `--home`, `--soul` |
+| `oats launch-config remove` | `<name>` | `--dir`, `--server` | `--json` | `--home`, `--soul` |
+| `oats automations refresh` | none | `--dir` | `--json` | none |
+
+The refusal is `E_BAD_ARGS`, with the command's usage line after the
+message, and comes from the first problem from the left:
+
+- a flag the command does not define: `oats <command>: unknown flag
+  <flag>`, `error.details: {flag}`;
+- a value on a switch: `oats <command>: <flag> takes no value (got
+  <flag>=<value>)`, `error.details: {flag}`;
+- an argument after the last one the command takes: `oats <command>:
+  unexpected argument "<word>" after the <name> "<value>": <command> takes
+  one <name>`, or `<command> takes no argument`, `error.details: {argument}`;
+- a flag refused in its own words: that message (for example
+  `--delete-branch` on retire, `--server` on `oats instance upgrade`),
+  `error.details: {flag}`.
+
+Then, for a command given `--server`, a missing argument (every argument in
+the table is required) is `E_USAGE`, with the usage line as
+`error.message` and no `details`, and nothing is sent. On this machine each
+command answers a missing argument itself, as before (`oats retire` with no
+instance is `E_USAGE` too).
+
+A flag that takes a value takes the next word unless it starts with `--`; a
+value flag given none is that flag's own refusal. `--` is a flag like any
+other, and none of these commands defines it. `--runtime` is the pre-0.27
+name of `--harness`. `--help` and `-h` print the usage first, as for every
+kernel command.
+
 ### Dispatch errors
 
 | Code | When |
@@ -5227,12 +5288,21 @@ The sweep reports each of these `skipped`, `lifecycle-busy`
 apply refuses a home that is not stopped, so it stops nothing: beside a
 resume that is still starting, it meets the claim.
 
-Upgrade requires a stopped session. It also holds the start's
-`.oats-start.lock` mutex until its final invocation receipt is persisted. A
-start reaches that mutex only once it holds the claim, so beside an upgrade
-that runs it is refused at the claim (`E_LIFECYCLE_BUSY`); the mutex answers
-(`E_SESSION_START_BUSY`, naming the same-key retry) only when an upgrade that
-died left it. A partial receipt refuses starts through the remaining
+Upgrade requires a stopped session. It also keeps a file at the home's
+`.oats-start.lock` until its final invocation receipt is persisted. A start
+makes nothing at that path and reads it only once it holds the claim, so
+beside an upgrade that runs it is refused at the claim (`E_LIFECYCLE_BUSY`);
+the file answers (`E_SESSION_START_BUSY`, naming the same-key retry) only
+when an upgrade that died left it. A directory at that path is the start lock
+of an earlier OATS: a start refuses it with `E_SESSION_START_LOCK_STUCK`,
+`<path> is the start lock directory of an earlier OATS; nothing was stopped
+or started. Once no earlier oats is running, remove that directory and
+retry`, and never removes it. Anything else there is refused with the same
+code: `<path> is neither a package upgrade's file nor an earlier OATS's start
+lock directory; nothing was stopped or started. Remove it and retry`. An
+upgrade apply that meets such a directory answers `E_SESSION_RUNNING`, `<name>:
+<path> is a start lock left by an earlier OATS; upgrade never removes it.
+Once no earlier oats is running, remove that directory and retry`. A partial receipt refuses starts through the remaining
 finalization (`E_UPGRADE_PARTIAL`): the CLI checks it first, before it reads
 the home's live teams, except while an upgrade holds the claim, which then
 answers. The following stop/retire notes describe the original table.
@@ -5416,6 +5486,7 @@ had begun.
 | Code | `oats instance stop` | `oats retire` |
 |---|---|---|
 | `E_BAD_ARGS` | yes | yes |
+| `E_USAGE` | yes | yes |
 | `E_PLAN_STALE` | yes | yes |
 | `E_INSTANCE_RETIRING` | yes | yes |
 | `E_LIFECYCLE_BUSY` | yes | yes |
@@ -5882,6 +5953,9 @@ instance` with `error.details.argument`, each followed by the usage line. The
 flags are `--plan`, `--plan-revision`, `--idempotency-key`, `--home`, `--dir`,
 `--server`, `--self`, `--discard-worktree`, `--keep-dir`, `--force` and
 `--json` ([souls-and-instances.md](souls-and-instances.md#retire)).
+A retire with no instance is `E_USAGE`, with the usage line as
+`error.message`: one envelope under `--json`, the usage line on stderr
+without it. An unknown flag before the instance is still `E_BAD_ARGS`.
 
 A first retire prints the **raw receipt**, not an envelope:
 
@@ -6753,7 +6827,12 @@ warning naming the same-key cleanup retry.
   `E_UNIDENTIFIED_INSTANCE_HOME` (the home's `instance.json`
   [cannot be read](#unreadable-record): nothing was started, `start` and
   `restart`),
-  `E_SESSION_START_BUSY`, `E_INSTANCE_RETIRING`, `E_LIFECYCLE_BUSY` (feature
+  `E_SESSION_START_BUSY`, `E_SESSION_START_LOCK_STUCK` (a start lock
+  directory an earlier OATS left at `<home>/.oats-start.lock`, or anything
+  else there that is not a package upgrade's file; the message names it and
+  what to remove; nothing was started or stopped:
+  [Commands that meet on one home](#lifecycle-pairs)),
+  `E_INSTANCE_RETIRING`, `E_LIFECYCLE_BUSY` (feature
   `lifecycle-claim-start`: a stop or an upgrade of the home holds its
   lifecycle claim, or the claim cannot be read or taken; `details.holder`,
   `details.action`; nothing was started or stopped:
