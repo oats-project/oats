@@ -117,6 +117,13 @@ test("the commands that answer in their own words keep them, and nothing changes
     "instance suggest-name takes no --server: it runs this machine's harness, for a spawn that may land on another; the host it lands on makes the name unique (or names an unnamed --suggest-name spawn itself)");
   assertUnknown(d.refusal(["instance", "suggest-name", "--soul", "dev", "--taks", "t", "--json"]), "instance suggest-name", "--taks", "suggest-name");
   assertUnknown(d.refusal(["session", "resume", "--plna", "--json"]), "session resume", "--plna", "session resume");
+  assert.deepEqual(d.refusal(["session", "resume", "--server", "build", "--json"]), { code: "E_BAD_ARGS", message: "session resume and session start --resume act on this machine's instances only; a server runs oats session resume itself", details: { flag: "--server" } });
+  for (const sub of [["input"], ["receive"], ["upload"], ["attach"], ["start"], ["restart"], ["resume"]]) {
+    assert.deepEqual(d.refusal(["session", ...sub, "--native-record", "x", "--json"]), { code: "E_BAD_ARGS", message: "--native-record outcome inspection is gone (the captured/portable path was removed in 0.26)", details: { flag: "--native-record" } }, sub[0]);
+  }
+  // A value flag with no value is the command's own refusal, at its place: a later unknown flag never answers first.
+  assert.equal(d.refusal(["schedule", "remove", "nightly", "--dir", "--forse", "--json"]).message, "--dir needs a directory path");
+  assert.match(d.refusal(["instance", "attention", "--message", "--deploy", "--clear", "--json"], d.inHome).message, /^--message needs a value/);
   assert.deepEqual(tree(d.fx.base), before, "nothing in the fixture changed");
 });
 
@@ -170,6 +177,13 @@ test("the declaration's row fields, by the check: an optional argument, a flag o
   // spawn's own answers carry no details; the shared ones do.
   assert.deepEqual(commandArgvProblem(["spawn", "dev", "--frobnicate"]), { code: "E_BAD_ARGS", message: "oats spawn: unknown flag --frobnicate" });
   assert.equal(commandArgvProblem(["spawn", "--server", "build"]).code, "E_USAGE", "a routed spawn without its soul is never sent");
+  // A value flag whose value is missing ends the check there: the command answers it, a later typo never does.
+  assert.equal(commandArgvProblem(["retire", "dev-one", "--home", "--keep-dirs"]), undefined);
+  assert.equal(commandArgvProblem(["retire", "dev-one", "--home"]), undefined);
+  assert.equal(commandArgvProblem(["spawn", "dev", "--provider", "oats.aweb", "--frobnicate"]), undefined, "a flag of two words given one");
+  assert.equal(commandArgvProblem(["spawn", "dev", "--provider=oats.aweb", "--frobnicate"]), undefined, "its first after =, its second missing");
+  // ...but not one after an argument too many, which is the first problem.
+  assert.equal(commandArgvProblem(["retire", "dev-one", "dev-two", "--home"]).details.argument, "dev-two");
   // soul launch: every name it was given, in its own words.
   assert.match(commandArgvProblem(["soul", "launch", "remove", "dev", "writer", "reviewer"]).message, /^oats soul launch remove takes one soul or key, and got 3: "dev", "writer", "reviewer"/);
 });
