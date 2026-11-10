@@ -555,7 +555,10 @@ anything is created or stopped), and only the harness's pane receives it.
 `{ fromFile: /absolute/path }` reads a regular UTF-8 file on the host that
 starts the harness, at every start. It removes exactly one trailing LF or
 CRLF; an empty file is allowed. Invalid UTF-8 and NUL are refused. A leading
-UTF-8 BOM is preserved as part of the value. A missing, unreadable or
+UTF-8 BOM is preserved as part of the value. `fromFile` is for credential
+values; directory selectors (`HOME`, `PATH`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`,
+`PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`) require a literal or
+`{ fromEnv: NAME }`. A missing, unreadable or
 non-regular file refuses with `E_LAUNCH_ENV_MISSING`, naming
 `oats harness token set <harness> --server <id>` or operator provisioning on
 that host. The token command is a separate provisioning feature.

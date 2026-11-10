@@ -77,7 +77,15 @@
                 { "type": "object", "additionalProperties": false, "required": ["fromFile"], "properties": { "fromFile": { "type": "string", "pattern": "^/[^\\u0000]*$" } } }
               ]
             },
-            "description": "Environment for the harness. A string is a literal (non-secret by contract; still redacted in every answer). {fromEnv: NAME} is resolved from the execution host's environment at start time; the reference, never the value, is recorded. A missing reference refuses the start before anything stops. {fromFile: /absolute/path} reads a regular UTF-8 file on the execution host at every start, stripping one trailing LF or CRLF. NUL, missing, unreadable or nonregular files refuse with E_LAUNCH_ENV_MISSING. Both reference kinds are redacted and recorded only as keyed digests."
+            "allOf": [{ "properties": {
+              "HOME": { "not": { "type": "object", "required": ["fromFile"] } },
+              "PATH": { "not": { "type": "object", "required": ["fromFile"] } },
+              "CLAUDE_CONFIG_DIR": { "not": { "type": "object", "required": ["fromFile"] } },
+              "CODEX_HOME": { "not": { "type": "object", "required": ["fromFile"] } },
+              "PI_CODING_AGENT_DIR": { "not": { "type": "object", "required": ["fromFile"] } },
+              "PI_CODING_AGENT_SESSION_DIR": { "not": { "type": "object", "required": ["fromFile"] } }
+            } }],
+            "description": "Environment for the harness. A string is a literal (non-secret by contract; still redacted in every answer). {fromEnv: NAME} is resolved from the execution host's environment at start time; the reference, never the value, is recorded. A missing reference refuses the start before anything stops. {fromFile: /absolute/path} reads a regular UTF-8 file on the execution host at every start, stripping one trailing LF or CRLF. NUL, missing, unreadable or nonregular files refuse with E_LAUNCH_ENV_MISSING. Both reference kinds are redacted and recorded only as keyed digests. fromFile is for credential values; directory selectors require a literal or fromEnv."
           },
           "model": { "type": "string", "minLength": 1, "description": "Model for this configuration's harness; overrides the soul default when this configuration is selected." },
           "yolo": { "type": "boolean", "description": "Permission bypass for this configuration; overrides scope and soul defaults when selected." },

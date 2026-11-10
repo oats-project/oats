@@ -8,3 +8,8 @@
   per-start file, removed by the launcher before the harness runs. This removes
   the existing `fromEnv` exposure in tmux process arguments. A subsequent start
   removes abandoned handoff files, including when it needs no references.
+- `fromFile` is for credential values. Directory selectors require a literal
+  or `{ fromEnv: NAME }`; validation names the selector and remedy.
+- With references, the private handoff runs the pane wrapper through `/bin/sh`.
+  Harness arguments already pass through the native recorder's POSIX shell;
+  capability launch contributions are parsed arguments, not shell programs.

@@ -1,4 +1,5 @@
 import test from "node:test";
+import Ajv from "ajv";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -54,7 +55,7 @@ test("fromFile resolves again, strips one line ending, redacts and records only 
   assert.deepEqual(refs.map(({ target, value }) => [target, value]), [["KEY", secret], ["OTHER", "environment-fixture"]]);
   const launch = launchEnvironment({ configEnv: r.env, env: { ...process.env, SRC: "environment-fixture" } });
   assert.equal(launch.of("KEY").value, secret);
-  assert.deepEqual(launchConfigFolder("CLAUDE_CONFIG_DIR", { CLAUDE_CONFIG_DIR: { fromFile: file } }), { problem: `CLAUDE_CONFIG_DIR ${JSON.stringify(secret)} is not an absolute path` });
+  assert.deepEqual(launchConfigFolder("CLAUDE_CONFIG_DIR", { CLAUDE_CONFIG_DIR: { fromEnv: "BAD_DIR" } }, { BAD_DIR: secret }), { problem: `CLAUDE_CONFIG_DIR ${JSON.stringify(secret)} is not an absolute path` });
   assert.equal(launchEffectiveEnv({ configEnv: r.env, base: { SRC: "environment-fixture" }, launch, harness: "claude" }).KEY, secret);
   const command = renderLaunchRecipe(r, { home: base, instance: "fixture", redact: true });
   assert.match(command, /KEY="\$OATS_LAUNCH_REF_KEY"/);
@@ -103,7 +104,7 @@ test("spawn and start deliver both reference types without values in any tmux ar
   process.env.CREDENTIAL_FIXTURE_SOURCE = "env-fixture-secret";
   t.after(() => { delete process.env.CREDENTIAL_FIXTURE_SOURCE; });
   const auth = join(base, "live-auth"); mkdirSync(auth); writeFileSync(join(auth, ".credentials.json"), "fixture");
-  const fx = v2Deployment({ local: { "launch-configs": { files: { harness: "claude", executable: join(bin, "claude"), env: { KEY: { fromFile: file }, OTHER: { fromEnv: "CREDENTIAL_FIXTURE_SOURCE" } } }, blocked: { harness: "claude", executable: join(bin, "claude"), env: { CLAUDE_CONFIG_DIR: auth, CLAUDE_CODE_OAUTH_TOKEN: { fromFile: file } } } } } });
+  const fx = v2Deployment({ souls: { dev: { soul: { capabilities: { "claude.fixture": { from: "here" } } } } }, capabilities: { "claude.fixture": { manifest: { environment: ["CLAUDE_CONFIG_DIR"] } } }, local: { "launch-configs": { removed: { harness: "claude", executable: join(bin, "claude"), env: { CLAUDE_CODE_OAUTH_TOKEN: { fromFile: file } } }, files: { harness: "claude", executable: join(bin, "claude"), env: { KEY: { fromFile: file }, OTHER: { fromEnv: "CREDENTIAL_FIXTURE_SOURCE" } } }, blocked: { harness: "claude", executable: join(bin, "claude"), env: { CLAUDE_CONFIG_DIR: auth, CLAUDE_CODE_OAUTH_TOKEN: { fromFile: file } } } } } });
   t.after(() => { try { execFileSync(realTmux, ["-S", oatsSocket(), "kill-server"]); } catch { /* private fixture already exited */ } fx.cleanup(); });
   await assert.rejects(fx.spawn("dev", { name: "login-refused", work: "checkout", launch: true, launchConfig: "blocked" }), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL");
   const { home } = await fx.spawn("dev", { name: "credentials-live", work: "checkout", launch: true, launchConfig: "files" });
@@ -143,6 +144,10 @@ test("spawn and start deliver both reference types without values in any tmux ar
   assert.equal(restarted.reused, "pane");
   assert.deepEqual(JSON.parse(readFileSync(received)), ["rotated-fixture-secret", "env-fixture-secret"]);
   assert.equal(readFileSync(calls, "utf8").includes("rotated-fixture-secret"), false);
+  process.kill(Number(readFileSync(join(home, "fixture.pid"))), "SIGTERM");
+  await waitUntil(() => inspectInstanceSession(home).state === "shell", { message: "fixture stopped before removed-selector start" });
+  execFileSync(realTmux, ["-S", meta.tmux.socket, "set-environment", "-t", `=${meta.tmux.session}`, "CLAUDE_CONFIG_DIR", auth]);
+  assert.doesNotThrow(() => startInstanceSession(home, { launchConfig: "removed", env: process.env }), "a selector the launch removes must not select the pane's login credential");
 });
 
 test("Claude refuses a login credential alongside any OATS-set token reference", () => {
@@ -170,7 +175,7 @@ test("Claude warns without an OATS-set token and checks the effective config dir
   assert.equal(plan({ HOME: ownHome, CLAUDE_CONFIG_DIR: selected }).warnings.some((w) => w.includes("oats harness token set claude")), false, "explicit config directory takes precedence");
   writeFileSync(join(selected, ".credentials.json"), "fixture");
   const selector = join(base, "claude-selector"); writeFileSync(selector, selected + "\n");
-  assert.match(plan({ CLAUDE_CONFIG_DIR: { fromFile: selector } }).warnings.join("\n"), /oats harness token set claude/);
+  assert.throws(() => plan({ CLAUDE_CONFIG_DIR: { fromFile: selector } }), (e) => e.code === "E_LAUNCH_RECIPE_UNSUPPORTED");
   const codex = recipe({ HOME: ownHome, CLAUDE_CODE_OAUTH_TOKEN: "fixture" }); codex.harness = "codex";
   assert.doesNotThrow(() => planLaunch({ home: base, instance: "fixture", meta: { launch: codex }, env: process.env }));
 });
@@ -238,4 +243,21 @@ test("reference handoff is private, literal and deleted before the command runs"
   writeFileSync(abandoned, "fixture-old-secret");
   launchEnvHandoff(dir, "without-references", []);
   assert.equal(existsSync(abandoned), false, "a start without references also removes abandoned handoffs");
+});
+
+
+test("fromFile is refused for directory locations with a literal or fromEnv remedy", () => {
+  const schema = JSON.parse(readFileSync(new URL("../docs/oats-local.schema.json", import.meta.url), "utf8"));
+  const schemaEnv = new Ajv().compile(schema.properties["launch-configs"].additionalProperties.properties.env);
+  assert.equal(schemaEnv({ TOKEN: { fromFile: "/fixture/token" } }), true);
+  for (const name of ["HOME", "PATH", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "PI_CODING_AGENT_DIR", "PI_CODING_AGENT_SESSION_DIR"]) {
+    const env = { [name]: { fromFile: "/fixture/location" } };
+    assert.equal(schemaEnv(env), false, `${name}: schema refuses file-backed locations`);
+    assert.throws(() => validateLaunchConfig("locations", { harness: "claude", env }), (e) => e.code === "E_LAUNCH_CONFIG_INVALID" && e.message.includes(`${name} is a directory location; give it as a literal or {fromEnv}. fromFile is for credential values.`));
+    assert.throws(() => assertLaunchRecipe(recipe(env), "fixture"), (e) => e.code === "E_LAUNCH_RECIPE_UNSUPPORTED" && e.message.includes("fromFile is for credential values"));
+    for (const value of ["/fixture/directory", { fromEnv: "FIXTURE_DIRECTORY" }]) {
+      assert.doesNotThrow(() => validateLaunchConfig("locations", { harness: "claude", env: { [name]: value } }));
+      assert.equal(schemaEnv({ [name]: value }), true);
+    }
+  }
 });
