@@ -50,7 +50,6 @@ The version bump and the assembled notes, nothing more, are your own small PR: o
 keep it green and up to date, and merge it at an exact head once the agreements your
 landing rules name for a PR with no lead hold. A fix the release needs is
 not release prep: it goes to a lead, which decides who builds it (`/launch-work`).
-<!-- OATS: template-v3.0.0 still says "a lead and its developer" here, a leftover of the old rule; under its own principle 3 the lead decides who builds a fix. -->
 
 ## Write the plan down
 The release lane's maintainer owns each release (`/cross-review-peer`, "The release lane").

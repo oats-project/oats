@@ -232,7 +232,6 @@ A maintainer joining doesn't change a lane's arrangement.
 - **Your own PRs** (release prep only; a fix goes to a lead, which decides who builds it)
   are in your lane, and land as your landing rules say for a PR with no lead. You never
   approve your own.
-  <!-- OATS: template-v3.0.0 still says "a lead and its developer" here, a leftover of the old rule; under its own principle 3 the lead decides who builds a fix. -->
 - **A RETURN you disagree with:** put both positions on the PR, each with its evidence, and
   take it to the humans who decide.
 
