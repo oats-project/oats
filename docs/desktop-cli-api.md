@@ -3308,9 +3308,9 @@ A failed `add` reports the same facts about its rollback in `details`:
 | `E_BASE_UNKNOWN` | the new HEAD is not the fetched commit; the message names both |
 | `E_REQUIRED_HOOK_FAILED`, `E_HOOK_ENVIRONMENT_CONTRACT` | a required `worktree` hook failed or timed out, or a hook answered `env`; the tree is removed (`details.hooks`, `details.rolledBack`) |
 | `E_INTERRUPTED` | SIGINT, SIGTERM or SIGHUP while the hooks ran; the tree is removed and the process exits 128 + the signal number (`details.signal`) |
-| `E_WORKTREE_DIRTY` | `remove`: Git refused a tree with uncommitted or untracked work (`details.git` is Git's message), or an unregistered residue differs from the recorded branch (the message and `details.git` list the modified or nonignored untracked paths). The record is kept. Save the changes, or discard, then retry |
+| `E_WORKTREE_DIRTY` | `remove`: Git refused a tree with uncommitted or untracked work (`details.git` is Git's message), or an unregistered residue differs from the recorded branch (the message and `details.git` list the modified or nonignored untracked paths). No filter driver the repository's configuration defines is run for either: a file such a filter applies to is compared as its bytes are in the tree. The record is kept. Save the changes, or discard, then retry |
 | `E_CHILDREN_RUNNING` | `remove`: an instance attached to the tree has a session that is running, or that cannot be read. Answered under the purpose's claim, before Git is asked anything: nothing is removed and the record is kept. `details: {purpose, path, children: [{instance, home, session}]}`, `session` being `"running"` or `"unknown"`; only the instances that refuse are listed. The message names each one and what was seen, and the step: `oats instance stop <instance>`, or retire it, then remove again. No flag removes anyway. It is the code [a retire](#retire-children-running) answers, with other `details`: a retire answers it for a child it asked to stop and that did not; `remove` for an attached instance it found running or unread, and it asks nobody to stop, so there is no `childrenStopped` |
-| `E_WORK_PRESERVATION_FAILED` | `remove`: Git refused for another reason, removal could not be verified, or an unregistered residue could not be checked against its recorded branch or deleted; the record is kept. A failure after Git started removal reports possible partial deletion and the retry, never that nothing was removed. A missing or invalid `.git` marker names the manual step: save any work, remove the directory by hand, then run `remove` again to drop the record. See [extra-tree removal recovery](souls-and-instances.md#extra-trees) |
+| `E_WORK_PRESERVATION_FAILED` | `remove`: Git refused for another reason, removal could not be verified, an unregistered residue could not be checked against its recorded branch or deleted, or the repository's configuration defines a filter driver whose name cannot be overridden on Git's command line (it holds `=` or is not UTF-8; Git is not run on the tree, since it would run that filter: [filter drivers](souls-and-instances.md#retire-filter-drivers)); the record is kept. A failure after Git started removal reports possible partial deletion and the retry, never that nothing was removed. A missing or invalid `.git` marker names the manual step: save any work, remove the directory by hand, then run `remove` again to drop the record. See [extra-tree removal recovery](souls-and-instances.md#extra-trees) |
 | `E_LIFECYCLE_FAILED` | an error that is not the kernel's; with [`details.cause`](#kernel-codes) when it has a code of its own or is a defect, and without it when it is a refusal without a code. When it is the purpose's claim that could not be taken (`<home>/.oats/trees` cannot be made, the claim's file cannot be written), the message is `the claim <path> could not be taken (…); nothing was done`. Also a command that was refused the claim after its takeover had ended a dead command's git step: the message names the group it ended first, then the refusal, and `details` are that refusal's (a refusal of the kernel's has no `details.cause`; anything else has it by the same rule) |
 
 A rollback that cannot finish keeps the record and says so in the message
@@ -4357,11 +4357,13 @@ readOnly: {helpers: "disabled", optionalLocks: "off", objectsWritten: 0}}`.
 - **Filter drivers are not run.** Git runs a `filter.<name>.clean` or
   `.process` command when a status or a diff compares a work-tree file that
   carries the `filter` attribute, and it has no switch that turns filters
-  off. Before each Git command that reads a work-tree file, `oats instance
+  off. Before the Git commands that read a work-tree file, `oats instance
   git` and `oats instance diff` read the configuration Git would use (`git config --list`, which runs
   nothing and follows `include.path` and `includeIf`) and override every
   filter driver it defines to no command (`clean`, `smudge`, `process`) and
-  not required.
+  not required. An observation makes that read once, before its status, for
+  its status and its line counts; each command of a diff is preceded by its
+  own.
   - A file such a filter applies to (a Git LFS file, for one) is compared as
     its bytes are in the work tree, not as the filter would store them. An
     untouched file still reads as unchanged, by its recorded size and times.
@@ -4374,7 +4376,9 @@ readOnly: {helpers: "disabled", optionalLocks: "off", objectsWritten: 0}}`.
     or is not UTF-8) cannot be overridden: Git is not run, and the read fails
     with `E_GIT_FAILED`.
   - Not covered: a driver written into the configuration between that read
-    and the Git command that follows it, and a filter a **submodule's own**
+    and a Git command it covers (for an observation, up to its line counts,
+    which follow its status and its reads of HEAD, the index and the refs),
+    and a filter a **submodule's own**
     configuration defines. Git runs inside each populated submodule to learn
     whether it is dirty, and the overrides name the repository's drivers, not
     the submodule's. A dirty submodule stays visible in the status for that

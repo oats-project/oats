@@ -4,7 +4,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { gitRead, gitRepoRun, parsePorcelainV2, parseRemoteUrl } from "../lib/instance-git.mjs";
+import { filterOverrides, gitRead, gitRepoRun, parsePorcelainV2, parseRemoteUrl } from "../lib/instance-git.mjs";
 import { deploymentsImported } from "./helpers/host-fixture.mjs";
 
 const CLI = resolve(new URL("../bin/oats.mjs", import.meta.url).pathname);
@@ -332,4 +332,46 @@ test("remote: branch-configured remote wins over origin; no remote at all is nul
   git(work, "config", "branch.main.remote", "fork");
   const viaBranch = oats(["instance", "git", "dev-1", "--dir", ws, "--home", home]).envelope.result.remote;
   assert.deepEqual(viaBranch, { name: "fork", url: "https://github.com/me/one.git", host: "github.com", path: "me/one", source: "branch-upstream" });
+});
+
+test("filter overrides: a driver the operator's own configuration also defines keeps the operator's values, and one the repository alone defines is emptied", (t) => {
+  const base = mkdtempSync(join(tmpdir(), "oats-filter-operator-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const repo = join(base, "repo");
+  const hermetic = { PATH: process.env.PATH, HOME: base, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
+  const git = (...args) => execFileSync("git", args, { env: hermetic, stdio: ["ignore", "pipe", "pipe"] });
+  git("init", "-q", repo);
+  // What an agent can write: its own command under the operator's driver name, and a driver of its own.
+  git("-C", repo, "config", "filter.lfs.clean", "agent-command --clean");
+  git("-C", repo, "config", "filter.lfs.process", "agent-command --process");
+  git("-C", repo, "config", "filter.planted.clean", "agent-command --planted");
+  const globalConfig = join(base, "operator-gitconfig");
+  writeFileSync(globalConfig, '[filter "lfs"]\n\tclean = git-lfs clean -- %f\n\tsmudge = git-lfs smudge -- %f\n\trequired = true\n[filter "operator-only"]\n\tclean = cat\n');
+  const operatorEnv = { ...hermetic, GIT_CONFIG_GLOBAL: globalConfig };
+  const settings = (result) => { assert.equal(result.ok, true, JSON.stringify(result)); return result.args.filter((arg) => arg !== "-c").sort(); };
+
+  // A reader whose Git does not read the operator's configuration: every driver the repository defines is emptied.
+  assert.deepEqual(settings(filterOverrides(["-C", repo])), [
+    "filter.lfs.clean=", "filter.lfs.process=", "filter.lfs.required=false", "filter.lfs.smudge=",
+    "filter.planted.clean=", "filter.planted.process=", "filter.planted.required=false", "filter.planted.smudge=",
+  ]);
+  // A caller whose Git does: the operator's driver has the operator's values, and what the operator does not
+  // set for it (process) is emptied, so nothing the repository wrote for that name is left. A driver only the
+  // operator defines is not named: it is the operator's, in force as it is.
+  assert.deepEqual(settings(filterOverrides(["-C", repo], { operatorEnv })), [
+    "filter.lfs.clean=git-lfs clean -- %f", "filter.lfs.process=", "filter.lfs.required=true", "filter.lfs.smudge=git-lfs smudge -- %f",
+    "filter.planted.clean=", "filter.planted.process=", "filter.planted.required=false", "filter.planted.smudge=",
+  ]);
+  // The operator's system configuration counts as the global one does, and the global one wins for a variable both set.
+  const systemConfig = join(base, "system-gitconfig");
+  writeFileSync(systemConfig, '[filter "lfs"]\n\tclean = system-clean\n\tprocess = system-process\n[filter "planted"]\n\tsmudge = system-smudge\n');
+  const { GIT_CONFIG_NOSYSTEM: _none, ...withSystem } = operatorEnv;
+  assert.deepEqual(settings(filterOverrides(["-C", repo], { operatorEnv: { ...withSystem, GIT_CONFIG_SYSTEM: systemConfig } })), [
+    "filter.lfs.clean=git-lfs clean -- %f", "filter.lfs.process=system-process", "filter.lfs.required=true", "filter.lfs.smudge=git-lfs smudge -- %f",
+    "filter.planted.clean=", "filter.planted.process=", "filter.planted.required=false", "filter.planted.smudge=system-smudge",
+  ]);
+  // A system configuration the caller's Git is told not to read (GIT_CONFIG_NOSYSTEM) is not the operator's in force.
+  assert.deepEqual(settings(filterOverrides(["-C", repo], { operatorEnv: { ...operatorEnv, GIT_CONFIG_SYSTEM: systemConfig } })), settings(filterOverrides(["-C", repo], { operatorEnv })));
+  // A global configuration that cannot be read defines nothing: every driver is emptied.
+  assert.deepEqual(settings(filterOverrides(["-C", repo], { operatorEnv: { ...hermetic, GIT_CONFIG_GLOBAL: join(base, "absent") } })), settings(filterOverrides(["-C", repo])));
 });
