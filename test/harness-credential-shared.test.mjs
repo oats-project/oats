@@ -324,6 +324,7 @@ console.log(JSON.stringify({schemaVersion:1,ok:true,result:{agents:[],workspace:
   const r = cli(["server", "add", "box", "--ssh", "agent-host", "--workspace", "/srv/ws", "--replace"], { OATS_HOME_DIR: dir, PATH: `${bin}:${process.env.PATH}` });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.equal(JSON.parse(readFileSync(file)).servers.box.workspaceKey, "github.com/acme/concurrent");
+  assert.equal(JSON.parse(r.stdout).result.workspaceKey, null, "a lost race cannot report the preserved key as established");
   assert.match(JSON.parse(r.stdout).result.warnings.join("\n"), /changed while the host was asked/);
 });
 

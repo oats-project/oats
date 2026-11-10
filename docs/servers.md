@@ -91,7 +91,8 @@ never typed:
 - A key is recorded only on the registration that was asked: if the
   registration is removed or pointed elsewhere while the host is being asked,
   the answer is dropped (`server add` warns), never written onto the new
-  entry or used to bring a removed one back.
+  entry or used to bring a removed one back. The add result reports no
+  workspace key when the registration changed during the request.
 - A host reporting a different key than the recorded one is
   `E_SERVER_WORKSPACE_MISMATCH` (`details: {recorded, reported}`) and the
   registration is not rewritten. If the host now serves another workspace,

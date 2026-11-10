@@ -4417,7 +4417,10 @@ async function serverCmd() {
       const { key, why } = reportedWorkspaceKey(targetOf(entry), { serverId: id, timeoutMs: 60000 });
       if (!key) warnings.push(`workspace key unknown: ${why}; oats server check ${id} learns it once the host answers one`);
       else if (["recorded", "same"].includes(learnWorkspaceKey(id, entry, key, { replace: args.includes("--replace") }))) entry.workspaceKey = key;
-      else warnings.push(`workspace key not recorded: registration ${id} changed while the host was asked; oats server check ${id} learns it`);
+      else {
+        delete entry.workspaceKey;
+        warnings.push(`workspace key not recorded: registration ${id} changed while the host was asked; oats server check ${id} learns it`);
+      }
     } catch (e) { warnings.push(`workspace key unknown: ${e.message}; oats server check ${id} learns it once the host answers`); }
     if (JSON_MODE) { jsonOk({ id, ...entry, ...operatorRoute, workspaceKey: entry.workspaceKey ?? null, file: SERVERS_FILE(), ...(warnings.length ? { warnings } : {}) }); return; }
     console.log(`Registered server ${id} → ssh ${entry.sshHost}, workspace ${entry.workspace}${entry.workspaceKey ? ` (workspace ${entry.workspaceKey})` : ""} (${shortPath(SERVERS_FILE())}). Verify it with \`oats server check ${id}\`.`);
