@@ -62,7 +62,7 @@ findings and its starting point:
   repositories each copied at its latest `template-v*` tag and adapted by its
   `ADAPTING.md`, never pinned. For work that lands as pull requests, that is
   the engineering template, `oats-project/oats-engineering-coordination`; from
-  the next kernel release, the installed kernel's `docs/official-catalog.md`
+  OATS 0.69.13, the installed kernel's `docs/official-catalog.md`
   ("Coordination templates") lists every template. With
   `oats.coordination-setup`, `/adapt-to-the-organisation` chooses and adapts
   them: its roster of souls (`/design-the-roster`) and its landing rules

@@ -64,9 +64,9 @@ your recommendation.
      that lands as pull requests, that is the engineering template,
      `oats-project/oats-engineering-coordination`; for work that ends in a
      finding or a report, the research template,
-     `oats-project/oats-research-coordination`. From the next kernel
-     release, the installed kernel's `docs/official-catalog.md` ("Coordination
-     templates") lists every template; an older kernel's has no such section.
+     `oats-project/oats-research-coordination`. From OATS 0.69.13,
+     the installed kernel's `docs/official-catalog.md` ("Coordination
+     templates") lists every template; an earlier kernel's has no such section.
      Follow the template's `ADAPTING.md` in order. One organisation can start
      different groups from different templates, with one dispatcher for each
      person who wants one.

@@ -78,7 +78,7 @@ were given (`oats status` shows them as moved).
 
 After removing or renaming a pin, or any soul it provided, run `oats doctor`
 on each deployment and fix what it reports. Check `souls.disabled` in
-`oats-local.yaml` by hand too: an older kernel's doctor doesn't report it. An
+`oats-local.yaml` by hand too: a doctor before OATS 0.69.13 doesn't report it. An
 entry that names a soul that no longer exists fails open: it disables nothing,
 so the soul it was meant to keep off spawns again under its new name.
 
