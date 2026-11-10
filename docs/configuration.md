@@ -567,6 +567,17 @@ launch-configs:
       CLAUDE_CODE_OAUTH_TOKEN: { fromFile: /etc/agent-login/claude-token }
 ```
 
+**Claude login credentials.** At a Claude start, OATS checks for
+`$CLAUDE_CONFIG_DIR/.credentials.json`, or `$HOME/.claude/.credentials.json`
+when no config directory is selected, using the launch's effective environment.
+If OATS sets `CLAUDE_CODE_OAUTH_TOKEN` through a literal, either reference kind,
+or a capability's launch contribution, it refuses with
+`E_CLAUDE_LOGIN_CREDENTIAL`. An empty value counts. Remove the `/login`
+credential from that Claude configuration and use `oats harness token set
+claude` to provision an inference-only token. Without an OATS-set token, OATS
+warns with that command. An inherited token does not select the token route.
+Other harnesses are unaffected.
+
 Both reference kinds use `OATS_LAUNCH_REF_<NAME>` aliases. Their values are
 absent from process arguments, tmux command lines, recipes, events and logs.
 The kernel hands them to the pane through a per-start file in the instance

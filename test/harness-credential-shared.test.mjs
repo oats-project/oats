@@ -112,3 +112,33 @@ test("spawn and start deliver both reference types without values in any tmux ar
   assert.equal(readFileSync(calls, "utf8").includes("rotated-fixture-secret"), false);
   assert.equal(readdirSync(home).some((name) => name.startsWith(".oats-launch-env-")), false);
 });
+
+test("Claude refuses a login credential alongside any OATS-set token reference", () => {
+  const dir = join(base, "claude-login"); mkdirSync(dir);
+  writeFileSync(join(dir, ".credentials.json"), "fixture login credential, never read");
+  const token = join(base, "claude-token"); writeFileSync(token, "fixture-token\n");
+  for (const value of ["", "literal-fixture", { fromEnv: "SRC" }, { fromFile: token }]) {
+    const r = recipe({ CLAUDE_CONFIG_DIR: dir, CLAUDE_CODE_OAUTH_TOKEN: value });
+    const args = { home: base, instance: "fixture", meta: { launch: r }, env: { ...process.env, SRC: "referenced-fixture" } };
+    assert.throws(() => planLaunch(args), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL" && /oats harness token set claude/.test(e.message));
+    assert.equal(planLaunch({ ...args, preview: true }).preflight.some((p) => p.code === "E_CLAUDE_LOGIN_CREDENTIAL"), true);
+  }
+  const hooked = recipe({ CLAUDE_CONFIG_DIR: dir }); hooked.hooks.env.CLAUDE_CODE_OAUTH_TOKEN = "";
+  assert.throws(() => planLaunch({ home: base, instance: "fixture", meta: { launch: hooked }, env: process.env }), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL");
+});
+
+test("Claude warns without an OATS-set token and checks the effective config directory or HOME", () => {
+  const ownHome = join(base, "claude-home"), defaultDir = join(ownHome, ".claude"), selected = join(base, "claude-selected");
+  mkdirSync(defaultDir, { recursive: true }); mkdirSync(selected);
+  writeFileSync(join(defaultDir, ".credentials.json"), "fixture");
+  const plan = (env, inherited = {}) => planLaunch({ home: base, instance: "fixture", meta: { launch: recipe(env) }, env: { ...process.env, ...inherited } });
+  for (const env of [{ HOME: ownHome }, { HOME: { fromEnv: "OWN_HOME" } }]) {
+    assert.match(plan(env, { OWN_HOME: ownHome, CLAUDE_CODE_OAUTH_TOKEN: "inherited-fixture" }).warnings.join("\n"), /oats harness token set claude/);
+  }
+  assert.equal(plan({ HOME: ownHome, CLAUDE_CONFIG_DIR: selected }).warnings.some((w) => w.includes("oats harness token set claude")), false, "explicit config directory takes precedence");
+  writeFileSync(join(selected, ".credentials.json"), "fixture");
+  const selector = join(base, "claude-selector"); writeFileSync(selector, selected + "\n");
+  assert.match(plan({ CLAUDE_CONFIG_DIR: { fromFile: selector } }).warnings.join("\n"), /oats harness token set claude/);
+  const codex = recipe({ HOME: ownHome, CLAUDE_CODE_OAUTH_TOKEN: "fixture" }); codex.harness = "codex";
+  assert.doesNotThrow(() => planLaunch({ home: base, instance: "fixture", meta: { launch: codex }, env: process.env }));
+});
