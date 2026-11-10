@@ -32,5 +32,6 @@
   deployment's jobs ran, and `oats schedule reconcile` answered `nothing to
   reconcile`. The tick now reports only that job `invalid` and runs the
   others; `oats schedule reconcile <id>` answers the remedy, and
-  `reconcile <id> --clear` releases the slot once you have checked
+  `reconcile <id> --clear` releases the slot once you have checked, also
+  when the schedule is no longer defined
   ([Schedules](../schedules.md#files)).

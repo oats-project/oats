@@ -96,6 +96,11 @@ leaves the slot; once you have checked, `reconcile <id> --clear` releases
 it (`reconciled: "cleared"`), and reconciles an attempt beside it as
 `--clear` does any attempt. `oats doctor` lists the slot as a
 `schedule-slot-unreadable` problem ([Unresolved attempts](#what-a-run-reports)).
+A slot whose record cannot be read and whose schedule is not defined (its
+definition was removed by hand, or is gone from the snapshot) is read by no
+tick: `oats schedule reconcile <id>` answers `{schedule: null, reconciled:
+"unknown", remedy}`, saying so, and leaves it, and `reconcile <id> --clear`
+releases it (`{schedule: null, reconciled: "cleared"}`).
 
 ## Kinds
 
@@ -884,7 +889,10 @@ item:
 `message` names the job and the slot's path; `remedy` is `check oats schedule
 show <id>; once its last run is not running, run oats schedule reconcile <id>
 --clear to release the slot`, with `--dir <scope>` on both commands for
-another deployment. Doctor reads the slot as the tick does and changes
+another deployment. For a slot whose schedule is not defined, the message
+says so and the remedy is `once no run of schedule <id> is running (oats
+status lists the instances it started), run oats schedule reconcile <id>
+--clear to release the slot`. Doctor reads the slot as the tick does and changes
 nothing. A readable slot, and no slot, are not listed.
 
 Workspace guidance uses only validated local settings and the saved automation

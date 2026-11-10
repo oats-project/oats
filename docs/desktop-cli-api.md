@@ -7229,6 +7229,8 @@ oats schedule update <id> --description=<text> [--dir <d>] --json
   reports its job `invalid` (`E_SCHEDULE_INVALID`) and runs the scope's
   other jobs; `reconcile <id>` answers `{reconciled: "unknown", remedy}`
   and `reconcile <id> --clear` releases the slot (`reconciled: "cleared"`).
+  For such a slot of a schedule that is not defined, both answers carry
+  `schedule: null`.
   `oats doctor --json` lists it as a `schedule-slot-unreadable` problem,
   `{code, severity, scope, id, message, remedy}`
   ([Schedules](schedules.md#files)).
