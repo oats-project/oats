@@ -204,8 +204,13 @@ Choose the label matching the actual run. `local` accepts the builder's
 architecture; the other labels require amd64 and root:GID 0440 token / 0750
 login-directory metadata. Local fixtures use a dummy file, never a real
 login. Run the live Claude mode separately for each admitted instance home;
-it requires `instance.json`, reads the token only inside the container and
-requires the exact inference response. It records no raw Claude output.
+the home is an evidence label and an `instance.json` existence check. The
+probe runs from a private temporary directory under `/tmp`, removed on
+success or failure, with `--setting-sources user`. It uses the container's
+user settings, excluding the instance's project settings, hooks and
+`CLAUDE.md`, so the probe does not clear that live instance's waiting claim.
+It reads the token only inside the container and requires the exact inference
+response. It records no raw Claude output.
 
 The script compares inspect settings and the exact bind list to the exported
 variables. It resolves `AGENT_IMAGE` independently and requires that image's

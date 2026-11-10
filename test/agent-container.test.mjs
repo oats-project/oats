@@ -71,6 +71,13 @@ test("SSH accepts only agent public keys with forwarding disabled", () => {
   for (const [key, value] of Object.entries({ Port: "2222", AllowUsers: "agent", AuthenticationMethods: "publickey", PasswordAuthentication: "no", KbdInteractiveAuthentication: "no", PermitRootLogin: "no", UsePAM: "no", DisableForwarding: "yes", StrictModes: "yes", AuthorizedKeysFile: "/etc/agent-ssh/authorized_keys", HostKey: "/state/ssh/ssh_host_ed25519_key", PidFile: "/tmp/agent-sshd.pid" })) assert.equal(config[key], value, key);
 });
 
+test("Claude auth acceptance excludes the instance project settings", () => {
+  const source = read("accept.mjs");
+  assert.match(source, /--setting-sources user/);
+  assert.match(source, /mktemp -d \/tmp\/oats-claude-probe\.XXXXXX/);
+  assert.doesNotMatch(source, /"exec", "--workdir", home/);
+});
+
 test("acceptance refuses drift in the admitted container settings", async () => {
   const { inspectAgent } = await import("../container/agent/accept.mjs");
   const env = { AGENT_IMAGE: "oats-agent:reviewed", AGENT_UID: "20001", AGENT_GID: "20001", TEAM_STATE_DIR: "/srv/team/state", TEAM_LOGIN_DIR: "/srv/team/login", AUTHORIZED_KEYS_FILE: "/srv/team/authorized_keys", RESOLV_CONF_FILE: "/srv/team/resolv.conf", AGENT_PIDS: "512", AGENT_MEMORY: "3g", AGENT_CPUS: "2", AGENTS_NETWORK: "team-agents", AGENT_IP: "172.30.0.2" };

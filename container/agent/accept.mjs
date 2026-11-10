@@ -197,14 +197,18 @@ function main(args, env) {
   }
   if (home) {
     assert.ok(home.startsWith("/state/deploy/") && !home.includes("\n"), "--claude requires an instance home under /state/deploy");
+    // Keep project hooks/instructions away from the named live instance.
     // Never record Claude's raw output: authentication failures may echo data.
-    const r = spawnSync("docker", ["exec", "--workdir", home, container, "sh", "-eu", "-c", `
-      test -f instance.json
+    const r = spawnSync("docker", ["exec", container, "sh", "-eu", "-c", `
+      test -f "$1/instance.json"
+      probe=$(mktemp -d /tmp/oats-claude-probe.XXXXXX)
+      trap 'rm -rf "$probe"' EXIT
+      cd "$probe"
       export CLAUDE_CODE_OAUTH_TOKEN="$(cat /etc/agent-login/claude-token)"
-      exec claude -p --tools '' --strict-mcp-config --mcp-config '{"mcpServers":{}}' --no-session-persistence 'Reply with exactly OATS_CONTAINER_AUTH_OK'
-    `], { encoding: "utf8", timeout: 180000, maxBuffer: 1024 * 1024 });
+      claude -p --setting-sources user --tools '' --strict-mcp-config --mcp-config '{"mcpServers":{}}' --no-session-persistence 'Reply with exactly OATS_CONTAINER_AUTH_OK'
+    `, "oats-claude-probe", home], { encoding: "utf8", timeout: 180000, maxBuffer: 1024 * 1024 });
     assert.ok(r.status === 0 && r.stdout.trim() === "OATS_CONTAINER_AUTH_OK", "claude -p did not return the expected response; raw output withheld");
-    report(`PASS claude -p in ${home}: OATS_CONTAINER_AUTH_OK (token read only inside the process)`);
+    report(`PASS claude -p for ${home}: OATS_CONTAINER_AUTH_OK (scratch cwd; user settings only; token read only inside the process)`);
     report(`PASS ${program(credentialScan, [["/state", "/tmp", "/run", "/work"]])}`);
   } else report("NOT RUN claude -p: requires --claude INSTANCE_HOME and an operator-provisioned setup-token");
   report("NOT RUN platform network/bypass, admitted-seat spawn, viewer, package sync, mail/chat and governance checks: collect their own live evidence; this is not a full section 12 receipt");
