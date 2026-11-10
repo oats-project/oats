@@ -33,7 +33,8 @@ A **workspace** is one Git repository declaring which repositories belong to
 an organisation and which packages it trusts. A **soul** is a durable agent
 role defined in Git; an **instance** is a soul at work, in its own home and
 terminal. A new workspace's setup expert is `oats.framework`'s soul
-`oats-setup-expert` (capabilities `oats.setup` and `oats.onboarding`),
+`oats-setup-expert` (capabilities `oats.setup` and `oats.onboarding`, and
+`oats.coordination-setup` from the oats.framework release after 1.22.1),
 spawned as `<workspace>-oats-setup-expert`.
 
 **A machine found-list** is a JSON file in your prompt whose
@@ -399,18 +400,26 @@ for l in libasound.so.2 libfuse.so.2; do PATH="$PATH:/sbin:/usr/sbin" ldconfig -
   whole-tree fetches, and go on.
 - **npm's global folder** must be writable for step 4's installs
   (`test -w "$(npm prefix -g)/lib"`). If it is not (a system Node under
-  `/usr`, as NodeSource installs it), set a per-user prefix,
-  `npm config set prefix ~/.local`, as step 1's list said (when Node will
-  come from NodeSource, the list names the per-user folder and its PATH
-  line). Then start each later command of yours with
-  `export PATH="$HOME/.local/bin:$PATH"`, and add that line to their shell's
-  startup file yourself, so their own terminal finds `oats` too, and tell
-  them: `~/.zshrc` when `$SHELL` ends in `zsh`, else `~/.bashrc` (for fish,
-  `fish -c 'fish_add_path ~/.local/bin'` instead).
+  `/usr`, as NodeSource installs it), make the two changes step 1's list
+  named for it (when Node will come from NodeSource, the list names the
+  per-user folder and its PATH line), each as its own command, never
+  joined into one:
+  - **npm's per-user folder** (in `~/.npmrc`):
 
-  ```bash
-  RC="$HOME/.bashrc"; case "$SHELL" in *zsh) RC="$HOME/.zshrc";; esac; grep -qsF '$HOME/.local/bin' "$RC" || printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$RC"; echo "$RC"
-  ```
+    ```bash
+    npm config set prefix ~/.local
+    ```
+  - **The line that puts it on their PATH** in their shell's startup file:
+    `~/.zshrc` when `$SHELL` ends in `zsh`, else `~/.bashrc` (for fish,
+    `fish -c 'fish_add_path ~/.local/bin'` instead), so their own terminal
+    finds `oats` too. Tell them which file.
+
+    ```bash
+    RC="$HOME/.bashrc"; case "$SHELL" in *zsh) RC="$HOME/.zshrc";; esac; grep -qsF '$HOME/.local/bin' "$RC" || printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$RC"; echo "$RC"
+    ```
+
+  Your own shell doesn't read their startup file, so start each later
+  command of yours with `export PATH="$HOME/.local/bin:$PATH"`.
 - **Windows** is not supported.
 
 ## 3. Log in to GitHub
@@ -823,6 +832,14 @@ oats onboard D --workspace W --json
 - **The host must be `confirmed`;** a host that can't be read is a GitHub
   access problem (step 3). Another member with `cannot-read` is an access
   question for the setup expert, not a reason to stop.
+- **On Git under 2.45** (step 2; Ubuntu 24.04 ships 2.43), a warning
+  that this Git can't keep a partial cache, so OATS fetches whole trees, is
+  expected. A recent OATS prints it at most once per command that starts or
+  rebuilds caches; an older one prints it once for each repository it
+  starts a cache for. Either form is harmless. Don't show it to the person
+  as an error, and don't try to fix it now: a Git of 2.45 or later,
+  installed later, removes it, and caches already made with whole trees
+  stay that way.
 - **`E_ALREADY_ONBOARDED`:** `D` already is a deployment. Stop and ask the
   person whether to use it as it is or to choose another directory.
 
@@ -876,6 +893,15 @@ first:
 oats soul launch set <key> --harness <its harness> --model <its model> --dir D --plan
 oats soul launch set <key> --harness <its harness> --model <its model> --dir D
 ```
+
+Check a reviewer soul by its model too, since `'*'` replaces the model as
+well as the harness: where it declares `<harness>` but another model, give
+it its own entry the same way, with `--harness <its harness> --model <its
+model>`. Then its `oats spawn <key> --preview --json --dir D` must show a
+`launch.effective` model from a family other than the developers'. Where
+its declared model can't run here, set one that can, from another family;
+with none, name it in the hand-over ("For the person, later"): its reviews
+share the developers' model.
 
 `S` is the exception: it always keeps `<harness>`, the person's choice in
 step 1. When `S` declares another harness, give it its own entry with

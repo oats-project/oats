@@ -107,7 +107,9 @@ souls, and keeping its messages to other instances few and short:
 `oats.core: off`. **`oats.setup`** (same package) carries the whole-architecture
 knowledge an onboarding expert needs, **`oats.onboarding`** (same package)
 is how the package soul `oats-setup-expert` tailors a new workspace to its use
-case, and **`oats.support`** (same package)
+case, **`oats.coordination-setup`** (same package) is how it shapes OATS's
+coordination practices to that organisation, and **`oats.support`** (same
+package)
 is the support desk role: a publicly reachable soul that tickets requests and
 hands them to a support maintainer. None of them is kernel magic; the kernel still
 composes its own instance-boundary and work-mode briefings, and the "You run
@@ -536,6 +538,15 @@ retire's `warnings` and stays readable after the home is gone: each one is a
 `retire-warning` event in the instance's workspace log, read with
 `oats instance events <instance>` ([Events](desktop-cli-api.md#events)).
 
+`oats retire <instance>` reads these flags: `--plan`, `--plan-revision <rev>`
+with `--idempotency-key <key>`, `--home <path>`, `--dir <d>`, `--server <id>`,
+`--self`, `--discard-worktree`, `--keep-dir`, `--force` and `--json`. Any
+other flag, and any argument after the instance, is refused with `E_BAD_ARGS`
+before anything happens: before a plan is read, a child is stopped, a hook
+runs, or a routed retire is sent to its server. The refusal names the flag
+(`oats retire: unknown flag --keep-dirs`) and prints the usage, so a mistyped
+`--keep-dir` never removes the home.
+
 One retire of an instance runs at a time. A retire holds the instance's claim
 from the moment it has resolved the home until it ends: the file
 `.oats-retirement/claims/<instance>.lock` in the agent's instances directory,
@@ -705,9 +716,60 @@ them, and without them a status can read differently (a global
 `core.excludesFile`, `core.autocrlf`, a filter), which would add a copy
 attempt to every existing instance's retire. They are the operator's own;
 what the retire guards against is configuration the retired agent could
-write. One limit remains: a filter driver that the repository's own
-configuration names and its `.gitattributes` select can still run during
-`git status`. Turning it off would change what status reports.
+write.
+
+<a id="retire-filter-drivers"></a>
+**Filter drivers of the repository are not run.** Git runs a
+`filter.<name>.clean` or `.process` command when a status compares a
+work-tree file that carries the `filter` attribute (`.gitattributes`, or
+`info/attributes` in the Git directory), and it has no switch that turns
+filters off. Before each `git status` of the worktree, of a repository under
+it and of a recovery, and before a recovery's `git checkout`, the retire
+reads the repository's own configuration (`git config --list`, which runs
+nothing and follows `include.path` and `includeIf`) and overrides every
+filter driver it defines to no command (`clean`, `smudge`, `process`) and
+not required. The status the spawn baseline is taken from is read the same
+way.
+
+- A file such a filter applies to is compared as its bytes are in the work
+  tree, not as the filter would store them. An untouched file still reads as
+  unchanged, by the size and times the index recorded for it. One that was
+  rewritten, or whose times Git cannot tell from the index's, reads as
+  changed even when its filtered form is what is stored: it is work to
+  preserve, the retire copies it, and a worktree holding it is not removed
+  as a clean one.
+- A driver whose name cannot be passed on Git's command line (it holds `=`
+  or is not UTF-8) cannot be overridden. Git is not run, and the status has
+  failed: the retire refuses with `E_WORK_INSPECTION_FAILED` at its first
+  inspection, as for any [status that fails](#retire-status-fails), with
+  `--discard-worktree` and `--force` too. A spawn into a worktree of such a
+  repository is refused the same way and rolled back. Remove or rename the
+  driver in the repository's configuration, then retry.
+- A driver that the operator's global or system configuration defines is
+  the operator's own and runs with the operator's command, in the worktree
+  and in the recovery alike. That holds when the repository's configuration
+  defines a driver of the same name too (`git lfs install --local` beside
+  `git lfs install`): the repository's values for it are replaced by the
+  operator's, so a command the repository gives that name never runs. The
+  operator's configuration is the human's; the repository's is the agent's
+  to write.
+- The recovery has no local configuration, so it has none of the
+  repository's drivers. Its status must still be the worktree's, and for a
+  file such a filter applies to it can differ: the worktree reads an
+  untouched file as unchanged by the size and times its index recorded,
+  while the copy, whose files are written anew, compares its bytes with the
+  stored form. The copy then cannot be verified: the retire refuses with
+  `E_WORK_PRESERVATION_FAILED` and removes nothing. This is so only for a
+  driver the repository alone defines.
+- Not covered: a driver written into the configuration between that read
+  and the Git command that follows it, and a filter a **submodule's own**
+  configuration defines. Git runs inside each populated submodule to learn
+  whether it is dirty, and the overrides name the repository's drivers, not
+  the submodule's. Where the agent and whoever retires it are one system
+  user, which is the usual arrangement, such a filter runs nothing the agent
+  could not run itself. Where they are separate users, it runs the agent's
+  command as the retiring user: do not retire a worktree with populated
+  submodules across users.
 
 **A worktree whose top level is another directory.** A worktree's
 per-worktree configuration can set `core.worktree` to a directory other
@@ -966,6 +1028,7 @@ That changes no digest and no error, and it is bounded: at most four files
 are read at once, each through a 1 MiB buffer, and never more than 64 MiB or
 4096 files ahead of the digest.
 
+<a id="retire-status-fails"></a>
 A worktree whose `git status` fails refuses the retire with
 `E_WORK_INSPECTION_FAILED` at the first inspection: no recovery was written,
 nothing was deleted, and the retire has not stopped the instance's session.
@@ -1948,10 +2011,17 @@ option.
   rework an existing one).
 - `--repo`: the instance's repository by default. A member key is looked up
   as a spawn looks up a clone (`oats-local.yaml` `clones:`, then
-  `<deployment>/<member name>`; `E_CLONE_MISSING` when there is none). A path
-  (absolute, or starting with `.` or `~`) is used as given. It must be a
-  clone, not a linked worktree (`E_CLONE_MISMATCH`), and have an `origin`
-  remote (`E_CLONE_MISMATCH`). Not a Git repository: `E_CLONE_MISSING`.
+  `<deployment>/<member name>`; `E_CLONE_MISSING` when there is none). A name
+  that isn't a repository key (`oats`, `awebai/oats`, `oats.git`) names no
+  member and is refused as before: `E_CLONE_MISMATCH` when a clone is at its
+  convention path or `clones:` names one for it, `E_CLONE_MISSING` when there
+  is none. When that clone has a remote of that name (its key is the name or ends
+  in `/<name>`), the refusal names the key to pass, `--repo <key>`, and the
+  clone's path as the other spelling that works. It never suggests repointing
+  the clone. A path (absolute, or starting with `.` or `~`) is used as given.
+  It must be a clone, not a linked worktree (`E_CLONE_MISMATCH`), and have an
+  `origin` remote (`E_CLONE_MISMATCH`). Not a Git repository:
+  `E_CLONE_MISSING`.
 
 **What `add` does.** It writes a record, `<home>/.oats/trees/<p>.json`, in
 state `creating`, with its own pid and start time. Then it runs, as argument
@@ -2049,6 +2119,21 @@ output. This never changes the clone's index. Cleanup grants directories
 owner read, write and search access, and keeps `.git` until all other entries
 are deleted, so a failed deletion can be retried.
 An unreadable branch or a failed inspection keeps the tree and record.
+
+`remove` runs no filter driver the repository's configuration defines
+(`filter.<name>.clean`, `.process`): its own status of the tree, the clean
+check inside `git worktree remove` and the comparison of an unregistered
+tree's surviving files are each preceded by one read of that configuration,
+and every driver it defines is overridden to no command, [as a retire does
+it](#retire-filter-drivers). A file such a filter applies to is compared as
+its bytes are in the tree, so one that was rewritten is uncommitted work
+(`E_WORKTREE_DIRTY`)
+even when its filtered form is what the branch stores. A driver whose name
+cannot be passed on Git's command line (it holds `=` or is not UTF-8)
+refuses the removal with `E_WORK_PRESERVATION_FAILED` before Git is run on
+the tree: no files were removed, and the record is kept. The same limits
+hold: a driver written between that read and the Git command, and a
+submodule's own configuration.
 Failures after Git started removing files say that removal may be partial
 and name the retry. If Git already removed `.git` too, automatic comparison
 is refused: save any work and remove the directory by hand, then run

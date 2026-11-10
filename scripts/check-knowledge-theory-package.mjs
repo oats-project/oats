@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const CAPABILITY_PATH = "capabilities/oats-knowledge-theory";
 export const DISTRIBUTION_PACKAGE_ID = "oats.framework";
-export const DISTRIBUTION_CAPABILITIES = [CAPABILITY_PATH, "capabilities/oats-core", "capabilities/oats-setup", "capabilities/oats-support", "capabilities/oats-onboarding"];
+export const DISTRIBUTION_CAPABILITIES = [CAPABILITY_PATH, "capabilities/oats-core", "capabilities/oats-setup", "capabilities/oats-support", "capabilities/oats-onboarding", "capabilities/oats-coordination-setup"];
 // Dev-only validators load lazily so syntax-only checks (release lane, --syntax-only)
 // work in a checkout without node_modules; a missing dependency then fails only
 // the manifest/frontmatter checks that actually need it.
@@ -34,7 +34,7 @@ const PACKAGE_SOULS = [
   // work: directory, because a package soul in worktree mode would work in a tree of the
   // package's own repository; it clones the workspace's host into its work/ to change a shared file.
   // No messaging slot: it takes the workspace's messaging default, so it stays the operator.
-  { path: SETUP_EXPERT_PATH, name: "oats-setup-expert", work: "directory", capabilities: { "oats.setup": { from: "here" }, "oats.onboarding": { from: "here" } }, why: "the setup expert reads oats.setup and oats.onboarding from its own package" },
+  { path: SETUP_EXPERT_PATH, name: "oats-setup-expert", work: "directory", capabilities: { "oats.setup": { from: "here" }, "oats.onboarding": { from: "here" }, "oats.coordination-setup": { from: "here" } }, why: "the setup expert reads oats.setup, oats.onboarding and oats.coordination-setup from its own package" },
 ];
 
 function inside(root, path) {
@@ -137,7 +137,7 @@ export function syncKnowledgeTheoryReferences(repoRoot = REPO_ROOT) {
   }
 }
 
-// Keep the operational capabilities narrow. oats.setup, oats.support and oats.onboarding are resource-only; oats.core
+// Keep the operational capabilities narrow. oats.setup, oats.support, oats.onboarding and oats.coordination-setup are resource-only; oats.core
 // adds exactly two executable surfaces. Its Claude Code waiting emitter: the spawn
 // and launch hooks of bin/oats-core.mjs (preview-aware), the bin/claude-waiting.sh
 // they wire into a Claude instance's settings, and the bin/claude-waiting-message.mjs
@@ -159,6 +159,7 @@ const OPERATIONAL_CAPABILITIES = [
   { slug: "oats-support", names: ["support-intake", "support-safety", "support-ticket", "support-handoff", "support-relay"], injection: "injects/support.md", compatibility: ">=0.40.0" },
   // No inject: the setup expert loads its one skill when oats.setup routes a new workspace to it.
   { slug: "oats-onboarding", names: ["oats-tailor-workspace"], compatibility: ">=0.30.0" },
+  { slug: "oats-coordination-setup", names: ["coordination-best-practices", "adapt-to-the-organisation", "design-the-roster", "set-landing-rules", "review-the-setup"], injection: "injects/coordination-setup.md", compatibility: ">=0.30.0" },
 ];
 export function checkOperationalCapabilities(packageRoot) {
   for (const { slug, names, injection, compatibility, executable } of OPERATIONAL_CAPABILITIES) {

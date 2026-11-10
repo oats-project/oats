@@ -118,11 +118,12 @@ test("knowledge-theory-expert and oats-setup-expert are oats.framework PACKAGE S
   assert.deepEqual(Object.keys(meta.modules), ["oats.knowledge-theory"], "its package's theory capability, no knowledge slot");
   assert.ok(readFileSync(join(spawned.home, ".agents", "skills", "knowledge-capability-authoring", "SKILL.md"), "utf8").includes("name: knowledge-capability-authoring"));
   assert.match(readFileSync(join(spawned.home, "AGENTS.md"), "utf8"), /# Knowledge theory expert/);
-  // The setup expert: its package's oats.setup and oats.onboarding, no knowledge slot, in its own folder.
+  // The setup expert: its package's oats.setup, oats.onboarding and oats.coordination-setup, no knowledge slot, in its own folder.
   const setup = ok(fx.cli(["spawn", "oats.framework/oats-setup-expert", "--name", "acme-oats-setup-expert", "--no-launch", "--json"]));
   assert.equal(setup.home, join(fx.root, "oats-framework--oats-setup-expert", "instances", "acme-oats-setup-expert"));
   const setupMeta = JSON.parse(readFileSync(join(setup.home, "instance.json"), "utf8"));
-  assert.deepEqual(Object.keys(setupMeta.modules).sort(), ["oats.onboarding", "oats.setup"], "its package's setup and onboarding capabilities, no knowledge slot");
+  assert.deepEqual(Object.keys(setupMeta.modules).sort(), ["oats.coordination-setup", "oats.onboarding", "oats.setup"], "its package's setup, onboarding and coordination-setup capabilities, no knowledge slot");
+  assert.ok(readFileSync(join(setup.home, ".agents", "skills", "adapt-to-the-organisation", "SKILL.md"), "utf8").includes("name: adapt-to-the-organisation"));
   assert.ok(readFileSync(join(setup.home, ".agents", "skills", "oats-tailor-workspace", "SKILL.md"), "utf8").includes("name: oats-tailor-workspace"));
   assert.match(readFileSync(join(setup.home, "AGENTS.md"), "utf8"), /# OATS setup expert/);
 });

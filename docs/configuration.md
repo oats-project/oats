@@ -64,7 +64,7 @@ refused (`E_WORKSPACE_SCHEMA`).
 | `settings.<cap>.<key>` | Host-owned values a capability's manifest asks for: absolute paths, state roots, delivery modes. The workspace file refuses absolute paths; they go here. Merged into the capability's provider payload after the soul's own and before any `--provider` flag ([three homes](workspaces.md#provider-payloads-have-three-homes)). |
 | `teams.<label>` | A **local** team: `{ team: <provider team id>, description? }`, a team only this deployment uses; every soul may join it. Allowed only where `oats-workspace.yaml` says `localTeams: true` (or in the standalone view); otherwise refused (`E_WORKSPACE_SCHEMA`, reason `local-teams-closed`). Shared teams are committed in `oats-workspace.yaml`; a label in both is `team-label-collision` (the shared one wins). Written by `oats teams add <label> --team <id>` and `oats teams remove <label>`. |
 | `defaultTeam` | This deployment's default team: a label of a local or shared team, under the same condition as `teams`. A soul's own default in the workspace's `souls:` wins over it; it wins over the workspace's `defaultTeam`. The first `oats teams add` sets it (unless `--no-default`); `oats teams default <label>` changes it, and `--if-absent` / `--expect <label>` change it only where there is no effective default / it is that label. |
-| `souls.disabled` | Souls not run on this machine; a spawn is refused with `E_SOUL_DISABLED`. A bare name disables every soul of that name; `<package>/<soul>` or `<member>/<soul>` disables one. It is for a soul that must not run here (broken, or not for this machine), with the reason in a comment; it is not a gate for souls without a `launch:`, which take the host default like any launch nobody named (see [Launch preferences](#launch-preferences)). |
+| `souls.disabled` | Souls not run on this machine; a spawn is refused with `E_SOUL_DISABLED`. A bare name disables every soul of that name; `<package>/<soul>` or `<member>/<soul>` disables one. It is for a soul that must not run here (broken, or not for this machine), with the reason in a comment; it is not a gate for souls without a `launch:`, which take the host default like any launch nobody named (see [Launch preferences](#launch-preferences)). An entry is matched by exact name only, so one whose soul was renamed or moved (a removed package pin, for example) names no soul and keeps nothing off: it fails open, and the soul becomes spawnable again under its new name, unlike a stale `souls.launch` key, which fails closed. Run `oats doctor` after any rename or removal: it reports such an entry as `disabled-soul-unmatched`, with the nearest souls ([what doctor reports](desktop-cli-api.md#launch-preferences)). |
 | `session.tmuxSession` | The tmux session new tmux instances open their windows in (0.31). Absent: `OATS_TMUX_SESSION`, else `PI_AGENTS_TMUX_SESSION` (the pre-0.31 variable), else `oats-agents`. `session: { tmuxSession: pi-agents }` keeps the pre-0.31 layout. `oats inspect --json` reports it as `session`. |
 | `host.name` | This machine's name. A workspace trigger or schedule runs only on the host named by its `runsOn` ([schedules.md](schedules.md)). |
 | `automations.trust` | The workspace triggers and schedules (`<member>/<id>`) this host agrees to run, or `"*"` for every one the workspace places here (0.30). Absent or empty: none runs. See [Who runs workspace automations](#who-runs-workspace-automations). |
@@ -450,7 +450,7 @@ launch: { harness: claude, model: claude-opus-5-5 }
 souls:
   launch:
     "*": personal                                    # a launch configuration, for every soul here
-    oats-expert: { harness: claude, model: claude-opus-5-5 }
+    oats-engineering-expert: { harness: claude, model: claude-opus-5-5 }
     oats.engineering/code-reviewer: { harness: codex }   # a package soul
 ```
 
@@ -693,8 +693,8 @@ oats doctor                    # this deployment's files and the lock
 ```
 
 Environment: `OATS_REMOTE_CACHE` relocates the fetch cache (which also holds
-the bounded parsed-read cache and the observations `--max-age` reuses; all of
-it is safe to delete); `OATS_PACKAGE_CATALOG` names an alternative package
+the bounded parsed-read cache, the observations `--max-age` reuses and the
+records of verified package trees; all of it is safe to delete); `OATS_PACKAGE_CATALOG` names an alternative package
 catalog file. The read verbs (`status`, `workspace status`, `souls`,
 `capabilities`, `inspect`, the read forms of `teams` and `soul teams`, and
 `spawn --preview`), and a spawn apply bound by `--expect-decision`, take

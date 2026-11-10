@@ -1413,8 +1413,36 @@ refused. A home removed between the read and its start is reported
 `--plan` says what it would do and starts nothing. Its answer is in
 [desktop-cli-api.md](desktop-cli-api.md#the-machine-sweep-oats-session-resume).
 
-- One sweep runs per machine: a second one answers `E_RESUME_BUSY`. A lock
-  left by a process that is gone, or by another boot, is taken over.
+- One sweep runs per machine: a second one answers `E_RESUME_BUSY`, at once,
+  and starts nothing. The lock is one file, `session-resume/lock`, that names
+  the sweep holding it by pid, by the time that process started and by the
+  boot it was taken in.
+  - A lock left by a sweep that is gone (it exited, was killed, or its pid
+    belongs to another process) is taken over at once by the next sweep. A
+    sweep ended by a signal, a container's stop included, releases nothing:
+    its lock is one of these.
+  - A lock taken in another boot is taken over whatever its pid reads as: a
+    boot ends every process, and a pid and a start time counted from the boot
+    can both come again in the next.
+  - A lock that needs a person is refused with `E_RESUME_LOCK_STUCK`, never
+    with `E_RESUME_BUSY`, and left as it is. The message says which was
+    found and what to remove: a record that cannot be read, a holder that
+    cannot be told to be running or gone, a gone holder's record that cannot
+    be taken over, a lock that was taken again each time the sweep found it
+    free, or a sweep that cannot read its own start time. Remove the file
+    the message names once no `oats session resume` is running, and run the
+    sweep again. No sweep starts anything on this machine until then.
+  - A directory at the lock's path is the lock of an OATS that locked with
+    one. It is refused with `E_RESUME_LOCK_STUCK` too, whoever its owner is,
+    and is never removed for you: remove the directory once no earlier
+    `oats` is running on this machine. That OATS, meeting the file, answers
+    `E_RESUME_BUSY` for the file's first minute and takes the lock over
+    after it, also from a sweep that still runs: run one OATS version per
+    machine.
+  - `oats doctor` reports a lock in any of those states as one
+    `resume-lock-stuck` problem, with the path and what to do. It reads the
+    lock and takes nothing. A free lock, a sweep that runs and a lock a gone
+    sweep left are not reported.
 - A loss is answered once: whatever a sweep did with it (resumed, refused,
   skipped or blocked), no later sweep starts it again, in this boot or after
   a reboot; a later sweep reports it `not-seen-recently`. A `lifecycle-busy`
@@ -1430,8 +1458,41 @@ refused. A home removed between the read and its start is reported
   has answered, so a sweep killed while other starts run has counted it; a
   refused, skipped or busy one does not. `oats session start --resume` run by hand is neither
   bounded nor counted.
-- The boot is the boot id on Linux and the boot time on macOS. Elsewhere there
+- The boot is the boot time on macOS and the kernel's boot id
+  (`/proc/sys/kernel/random/boot_id`) on Linux. Elsewhere there
   is no boot: nothing is noted or counted, and every sweep tries again.
+- **Inside a container a boot is one run of the container.** A container
+  shares its host's kernel, so the kernel's boot id stays the same when the
+  container is stopped and started, restarted or made again, while every
+  process in it, its terminal server and its sessions included, is gone. The
+  boot there is the kernel's boot id together with the start time of the
+  container's PID 1 (field 22 of `/proc/1/stat`, clock ticks after the
+  kernel's boot): PID 1 starts once per run and its end ends the run, so the
+  identity is the same for every `oats` process of one run and another one
+  in the next, and the boot id keeps it apart from a run after the host's
+  restart. Each run has its own count of 3 starts per home, takes over a lock
+  the run before left, and clause 4 does not reach from one run into the
+  next. Both values are read without privileges and nothing is written for
+  them.
+  - OATS takes itself to be in a container when one of these is there: the
+    file `/.dockerenv` (Docker), the file `/run/.containerenv` (Podman), or
+    the environment variable `KUBERNETES_SERVICE_HOST` (every Kubernetes
+    pod). A container runtime that sets none of them is read as a host: give
+    its containers `KUBERNETES_SERVICE_HOST` or one of the files.
+  - Without one of them PID 1's start is not read. A command that a harness
+    runs in a sandbox with a PID namespace of its own (bubblewrap's
+    `--unshare-pid`) has that sandbox's PID 1, and is on the host's boot all
+    the same.
+  - When PID 1's start cannot be read in a container (a `/proc` mounted with
+    `hidepid`, say) the boot is the boot id alone. Every run on one host boot
+    is then the same boot: the count runs across them and clause 4 applies
+    across them, so a sweep starts fewer homes, never more.
+  - A container that shares its host's PID namespace (`--pid=host`), and a
+    Kubernetes pod with `shareProcessNamespace: true`, read a PID 1 that
+    outlives the container, so their boot is the same in every run.
+  - Inside a container, a command run in a sandbox with a PID namespace of
+    its own reads the sandbox's PID 1 and records a boot of its own. Run the
+    sweep outside such a sandbox there.
 - The lock, the per-boot note and the record of what status saw live in
   `session-resume/` under `~/.oats` (`$OATS_HOME_DIR` when set). All three
   are kernel-private, not a contract.

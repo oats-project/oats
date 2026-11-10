@@ -506,6 +506,25 @@ test("a soul whose declared harness differs from this machine's '*' gets its own
     assert.match(text, /differs from [^.]*and is installed and logged in on this machine/, `${name} keeps a declared harness only when it is installed here`);
     assert.ok(text.includes("A declared harness that isn't installed here stays under `'*'`, so the soul can run; tell the person."), `${name} leaves a missing harness under '*'`);
   }
+  // '*' replaces the model too: a reviewer on the developers' harness with another model keeps it, and its preview proves it.
+  for (const [name, text] of [["oats-tailor-workspace", tailor], ["oats-package-pins", pins], ["oats-getting-started", skill.replace(/\s+/g, " ")]]) {
+    assert.match(text, /Check (a|the|a new) reviewer soul by its model too, since `'\*'` replaces the model as well as the harness/, `${name} checks the reviewer's model`);
+    assert.match(text, /where it declares (the same harness as `'\*'`|`<harness>`) but another model, give it its own entry the same way, with `--harness <its harness> --model <its model>`/, `${name} gives a same-harness reviewer its own entry with its model`);
+    assert.ok(text.includes("must show a `launch.effective` model from a family other than the developers'"), `${name} checks the reviewer's preview`);
+    assert.ok(text.includes("Where its declared model can't run here, set one that can, from another family;"), `${name} falls back to a runnable model from another family`);
+    assert.match(text, /with none, (tell the person|name it in the hand-over \("For the person, later"\):) its reviews share the developers' model\./, `${name} tells the person when no other family can run`);
+  }
+});
+
+// No released kernel's catalog has "Coordination templates" yet, and oats.framework admits older kernels: the skills name the template.
+test("onboarding names the engineering template's repository, not only the installed kernel's catalog", () => {
+  const adapt = read("oats-package/capabilities/oats-coordination-setup/skills/adapt-to-the-organisation/SKILL.md").replace(/\s+/g, " ");
+  const tailor = read("oats-package/capabilities/oats-onboarding/skills/oats-tailor-workspace/SKILL.md").replace(/\s+/g, " ");
+  for (const [name, text] of [["adapt-to-the-organisation", adapt], ["oats-tailor-workspace", tailor]]) {
+    assert.ok(text.includes("the engineering template, `oats-project/oats-engineering-coordination`"), `${name} names the template's repository`);
+    assert.ok(text.includes("latest `template-v*` tag"), `${name} copies the latest template release`);
+    assert.ok(text.includes("from the next kernel release, the installed kernel's `docs/official-catalog.md`") || text.includes("From the next kernel release, the installed kernel's `docs/official-catalog.md`"), `${name} dates the catalog's list`);
+  }
 });
 
 test("getting-started: a person with no GitHub account is helped to make one, and gh is installed for them", () => {

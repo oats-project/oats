@@ -8,7 +8,8 @@
 // server is killed. `oats session resume --json` then brings back the lost ones in their own
 // conversations (asserted on the argv the stand-ins received), under their own deployment's launch
 // configuration; the stopped and the exited ones are not listed; a second sweep reports `already-running` and starts nothing; a refusal is reported again in the same boot
-// (`refused-this-boot`) without a second start; a held lock answers E_RESUME_BUSY.
+// (`refused-this-boot`) without a second start; a held lock answers E_RESUME_BUSY, and a lock that
+// needs a person E_RESUME_LOCK_STUCK.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
@@ -25,6 +26,7 @@ import { fakeBin } from "./helpers/fake-ssh.mjs";
 import { agentScopeWarning, isAgentScopeWarning } from "../lib/tmux-server-scope.mjs";
 import { readEvents } from "../lib/instance-events.mjs";
 import { START_ENV_FILE, START_ENV_KEY_FILE, launchEnvUnverifiedWarning } from "../lib/start-env.mjs";
+import { processStartToken } from "../lib/worktree-hooks.mjs";
 
 const hasTmux = !spawnSync("tmux", ["-V"], { stdio: "ignore" }).error;
 /** The PATH this file was started with: the isolated environment (test.before) keeps a small one. */
@@ -273,14 +275,25 @@ test("after the tmux server dies, the sweep resumes the lost homes in their own 
   for (const name of ["a1", "a4", "a5", "a6", "a7", "c1"]) assert.equal(before(name), counts[name] + 1, `${name} was not started again`);
 
   // A held lock: E_RESUME_BUSY through the standard failure envelope, nothing started.
+  // The holder is this process, as a sweep's claim names it.
   const lock = join(oatsHome, "session-resume", "lock");
-  mkdirSync(lock, { recursive: true });
-  writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.pid, bootId: bootId() }));
+  writeFileSync(lock, JSON.stringify({ bootId: bootId(), pid: process.pid, processStart: processStartToken(process.pid), nonce: "a".repeat(32), at: new Date().toISOString() }) + "\n");
   const busy = cli(A, ["session", "resume", "--json"]);
   assert.equal(busy.status, 1, busy.stdout);
   const failure = busy.json();
   assert.deepEqual([failure.schemaVersion, failure.ok, failure.error.code], [1, false, "E_RESUME_BUSY"]);
-  assert.equal(typeof failure.error.message, "string");
+  assert.equal(failure.error.message, `another session resume on this machine holds ${lock} (pid ${process.pid} holds it); nothing was started`);
+  rmSync(lock);
+  // A lock that needs a person: E_RESUME_LOCK_STUCK through the same envelope, with the lock's path
+  // and what was found in its details, nothing started and the directory left.
+  mkdirSync(lock);
+  writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.pid, bootId: bootId() }));
+  const stuck = cli(A, ["session", "resume", "--json"]);
+  assert.equal(stuck.status, 1, stuck.stdout);
+  const refusal = stuck.json();
+  assert.deepEqual([refusal.schemaVersion, refusal.ok, refusal.error.code, refusal.error.details], [1, false, "E_RESUME_LOCK_STUCK", { lock, found: "directory" }]);
+  assert.match(refusal.error.message, /is a lock directory written by an earlier kernel\); once no earlier oats is running on this machine, remove the directory /);
+  assert.deepEqual(readdirSync(lock), ["owner.json"]);
   rmSync(lock, { recursive: true });
 });
 

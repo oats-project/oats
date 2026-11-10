@@ -137,11 +137,15 @@ try {
   assert.equal(pinnedRef, `v${mirroredVersion}`, "okf mirror and packed official catalog version drift");
   assert.equal(mirroredVersion, "5.8.0");
   // The PACKED tarball's catalog carries this release's provider pins, each equal to the checkout's mirror of it.
-  for (const [id, slug, version] of [["oats.aweb", "oats-aweb", "1.37.0"], ["oats.engineering", "oats-developer", "1.18.0"], ["oats.apps", "oats-folio", "1.0.0"], ["oats.apps", "oats-library", "1.0.0"]]) {
+  for (const [id, slug, version] of [["oats.aweb", "oats-aweb", "1.37.0"], ["oats.apps", "oats-folio", "1.0.0"], ["oats.apps", "oats-library", "1.0.0"]]) {
     const mirrored = readJson(join(repo, "mirrors", slug, "oats.json")).version;
     assert.equal(mirrored, version, `${id}: the mirror is ${mirrored}`);
     assert.equal(packedCatalog.packages?.[id]?.ref, `v${version}`, `${id}: the packed catalog pins ${packedCatalog.packages?.[id]?.ref}`);
   }
+  // The frozen oats.engineering keeps its catalog entry, so existing pins resolve; this
+  // workspace doesn't pin it, so the checkout keeps no mirror of it.
+  assert.equal(packedCatalog.packages?.["oats.engineering"]?.ref, "v1.18.0", "the packed catalog keeps the frozen oats.engineering at v1.18.0");
+  for (const slug of ["oats-engineering-expert", "oats-developer", "oats-code-review", "oats-maintainer"]) assert.ok(!existsSync(join(repo, "mirrors", slug)), `mirrors/${slug}: no mirror of an unpinned package`);
   const okfCommit = gitRepo(officialRepo, "okf");
   const okfTag = `v${mirroredVersion}`;
   run("git", ["-C", officialRepo, "tag", okfTag]);
@@ -195,7 +199,7 @@ try {
   const core = await import(pathToFileURL(installedRequire.resolve("@awebai/oats")).href);
   // The package's declared capabilities, as the workspace sync below resolves and the
   // spawn of the theory's author soul copies them (the v2 path reads them there).
-  assert.deepEqual(distribution.capabilities.map((path) => readJson(join(theorySource, path, "oats.json")).capability), ["oats.knowledge-theory", "oats.core", "oats.setup", "oats.support", "oats.onboarding"]);
+  assert.deepEqual(distribution.capabilities.map((path) => readJson(join(theorySource, path, "oats.json")).capability), ["oats.knowledge-theory", "oats.core", "oats.setup", "oats.support", "oats.onboarding", "oats.coordination-setup"]);
 
   // ---- The workspace: one host repo that is also its single member, holding
   // the souls. The deployment is a separate directory with only oats-local.yaml.

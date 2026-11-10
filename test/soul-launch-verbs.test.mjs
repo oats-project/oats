@@ -9,7 +9,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { selfIdentity } from "../lib/worktree-hooks.mjs";
 import YAML from "yaml";
 import { v2Deployment } from "./helpers/v2-deployment.mjs";
 import { KEY, OID, REF, detailed, soulFile, world } from "./helpers/memory-workspace.mjs";
@@ -390,11 +391,12 @@ test("every refusal comes before a byte of the file changes", async (t) => {
   await refusedUnchanged(fx, () => remove(fx, w, "planner"), "E_LAUNCH_PREFERENCE_UNKNOWN", (e) => assert.deepEqual(e.details, { key: "planner", keys: ["builder"] }));
   // The lock held by another process: E_LOCAL_BUSY, the holder's lock untouched.
   const lock = localLock(fx.dir);
-  mkdirSync(lock, { recursive: true });
-  writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.pid, at: new Date().toISOString(), what: "a test" }));
+  mkdirSync(dirname(lock), { recursive: true });
+  const held = JSON.stringify({ ...selfIdentity(), nonce: "a".repeat(32), at: new Date().toISOString(), what: "a test" }) + "\n";
+  writeFileSync(lock, held);
   await refusedUnchanged(fx, () => set(fx, w, "planner", "fast"), "E_LOCAL_BUSY", (e) => { assert.deepEqual(e.details, { path: fx.localPath, lock }); assert.match(e.message, /nothing was written/); });
-  assert.ok(existsSync(join(lock, "owner.json")));
-  rmSync(lock, { recursive: true });
+  assert.equal(readFileSync(lock, "utf8"), held);
+  rmSync(lock);
   // A file the edit would leave invalid (a key the local schema does not know): refused, with where.
   const invalid = fileOf(t, "bogus: 1\n");
   await refusedUnchanged(invalid, () => set(invalid, w, "planner", "fast"), "E_WORKSPACE_SCHEMA", (e) => { assert.match(e.message, /would be invalid .*nothing was written/); assert.ok(e.details.problems.some((p) => p.path === "/bogus")); });
@@ -415,7 +417,7 @@ test("--plan runs every check and writes nothing: the apply's answer but plan, n
     const text = fx.text();
     const planned = await plan();
     assert.equal(fx.text(), text, "the plan wrote nothing");
-    assert.equal(existsSync(join(fx.dir, ".agents")), false, "not even a lock directory");
+    assert.equal(existsSync(join(fx.dir, ".agents")), false, "not even the lock's directory");
     const applied = await apply();
     assert.deepEqual(planned, { ...applied, plan: true });
     assert.equal(planned.changed, true);
@@ -428,8 +430,8 @@ test("--plan runs every check and writes nothing: the apply's answer but plan, n
   await refusedUnchanged(fx, () => set(fx, w, "nobody", "fast", true), "E_SOUL_UNKNOWN");
   // A plan takes no lock, so one held elsewhere does not refuse it.
   const lock = localLock(fx.dir);
-  mkdirSync(lock, { recursive: true });
-  writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.pid, at: new Date().toISOString(), what: "a test" }));
+  mkdirSync(dirname(lock), { recursive: true });
+  writeFileSync(lock, JSON.stringify({ ...selfIdentity(), nonce: "a".repeat(32), at: new Date().toISOString(), what: "a test" }) + "\n");
   const held = fx.text();
   assert.equal((await set(fx, w, "builder", "fast", true)).plan, true);
   assert.equal(fx.text(), held);
@@ -455,8 +457,8 @@ test("the edit works from the file as it is now, and shares the lock of `oats te
   // One lock for both: held by a teams writer or a soul launch writer, the other answers E_LOCAL_BUSY on it.
   const lock = localLock(fx.dir);
   assert.equal(lock, join(fx.dir, ".agents", "locks", "local.lock"));
-  mkdirSync(lock, { recursive: true });
-  writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.pid, at: new Date().toISOString(), what: "oats soul launch set" }));
+  mkdirSync(dirname(lock), { recursive: true });
+  writeFileSync(lock, JSON.stringify({ ...selfIdentity(), nonce: "a".repeat(32), at: new Date().toISOString(), what: "oats soul launch set" }) + "\n");
   assert.throws(() => teamsAdd(teamsCtx(), "third", { team: "third:me.example" }), (e) => e.code === "E_LOCAL_BUSY" && e.details.lock === lock);
   await assert.rejects(() => set(fx, w, "planner", "fast"), (e) => e.code === "E_LOCAL_BUSY" && e.details.lock === lock);
 });

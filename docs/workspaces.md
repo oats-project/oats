@@ -336,6 +336,10 @@ output, `timeout` for a timeout). The partial cache, its fetch mode and its
 commit pins are preserved, and a later read can retry the version probe.
 This also applies to library reads without a session. A cache already using
 whole trees stays in that mode when a later probe finds a newer Git.
+With an older Git, a command says so once, however many repositories it
+fetches: one `oats: warning` line naming the Git version and the 2.45 floor,
+and saying that OATS fetches whole trees instead. A Git of 2.45 or later
+removes the line.
 
 **Repo-owned capabilities.** `private: true` in a capability's `oats.json`
 makes it **repo-owned**: it is listed like any other capability (with
@@ -418,6 +422,23 @@ So the framework's own souls say `oats.okf: { from: package }` even though
 member soul that is the expert in that capability (`oats-okf-expert`,
 `oats-aweb-expert`, …), discoverable at latest state like any member soul.
 
+**OATS's coordination is a member copy of the engineering template.** The
+`oats` repository keeps its own copy of
+[oats-project/oats-engineering-coordination](https://github.com/oats-project/oats-engineering-coordination)
+at template-v3.0.1, adapted to OATS: `oats.engineering-expert`,
+`oats.developer`, `oats.build`, `oats.code-review`, `oats.maintainer`,
+`oats.landing-rules` and `oats.dispatcher`, in `capabilities/oats-<name>/`.
+`capabilities/TEMPLATE-RELEASE` records the release, its commit and what was copied, and
+`capabilities/THIRD-PARTY-NOTICES.md` the sources four of the build skills and the
+developer's quality floor adapt. `oats.build` holds the build skills, and every soul that
+builds composes it: the developers, and the engineering experts that build their own
+specs. The framework's own souls compose them `from: here`, never the `oats.engineering` package's copies; the
+landing rules point at the lane map, which stays the one home of OATS's lanes.
+The reviewer is the template's `code-reviewer` soul, in `souls/`. The workspace
+doesn't pin the `oats.engineering` package, frozen at v1.18.0
+([official catalog](official-catalog.md#coordination-templates)), so each of
+those ids has one source here: the member copy.
+
 ## Packages, lock, catalog
 
 `packages:` values have two forms, a **bare version** resolved through the
@@ -438,6 +459,7 @@ the workspace's slot default):
 ```
 from: package → some locked package provides `name`            else E_PACKAGE_MISSING (run `oats sync`)
               → read its manifests at the locked commit; the lock's capability list must match   else E_PACKAGE_INTEGRITY
+              → at spawn, the package tree at the locked commit must digest to the lock's integrity   else E_PACKAGE_INTEGRITY
               → copy; record package/version/commit/digest
 from: <repo>  → <repo> is a CONFIRMED member                     else E_NOT_A_MEMBER / E_MEMBERSHIP_UNCONFIRMED
  (or `here`)  → it has capabilities/<name>/oats.json             else E_CAPABILITY_MISSING
@@ -527,7 +549,9 @@ souls:                                   # per soul pattern: its default team an
   `<member>/*` or `<package>/*`, and `"*"`, with the member and package names
   `souls.disabled` uses (a member's name is its repository's). A bare soul name
   is refused. A key that is neither a pattern nor a soul the workspace offers
-  is the warning `team-soul-unknown` (a typo guard).
+  is the warning `team-soul-unknown` (a typo guard). So is a `<prefix>/*`
+  pattern whose prefix matches no soul the workspace offers: a typo, or a
+  member or package that was renamed or dropped. `"*"` never warns.
 - **The most specific key wins outright** for a soul's teams, and lists never
   merge: the soul's own key, then `<member|package>/*`, then `"*"`. The
   default comes from the most specific key that sets one. So
@@ -820,8 +844,10 @@ PATH        STATE    VIA
 ```
 
 **Concurrency.** Every change runs under `~/.oats/config/deployments.lock`
-(waiting up to 3 s for it) and re-reads the file inside it, and each write
-replaces the file atomically. Readers take no lock: they read a regular file
+(waiting up to 3 s for a holder that is running) and re-reads the file inside
+it, and each write replaces the file atomically. The lock is a file that names
+the process holding it: one left by a command that was killed is taken over by
+the next command. Readers take no lock: they read a regular file
 only, without following a link, up to 1 MiB. A missing file is an empty list.
 
 **Errors:**
@@ -830,7 +856,7 @@ only, without following a link, up to 1 MiB. A missing file is an empty list.
 |---|---|
 | `E_DEPLOYMENTS_INVALID` | the file is not JSON, not an object, a link, over 1 MiB, or a row breaks the schema: "`<file>` cannot be read as this computer's deployments list (`<reason>`). Fix it, or move it aside and run `oats deployments add <dir>` for each deployment; nothing was changed" |
 | `E_DEPLOYMENTS_VERSION` | `schemaVersion` is newer than this oats reads: "`<file>` was written by a newer oats (schema `<n>`); upgrade oats". The file is never rewritten down |
-| `E_DEPLOYMENTS_BUSY` | the lock is still held after 3 s: "this computer's deployments list is locked (`<why>`); if no oats process is changing it, remove `<lock>` and retry; nothing was changed" |
+| `E_DEPLOYMENTS_BUSY` | the lock is still held by a running process after 3 s, or cannot be judged: "this computer's deployments list is locked (`<why>`); if no oats process is changing it, remove `<lock>` and retry; nothing was changed". `<why>` says what was found: `pid <n> holds it`; `the record at <lock> is unreadable` (remove that file); that it cannot be established whether pid `<n>` still runs (check that pid by hand, then remove the file); or `<lock> is a lock directory written by an earlier kernel` (remove the directory once no older oats is running) |
 | `E_DEPLOYMENTS_WRITE` | the write failed, or would make the file larger than 1 MiB: "cannot write `<file>` (`<system error>`); nothing was changed" |
 | `E_DEPLOYMENTS_IMPORT` | `~/Agents` cannot be read for the first-use import: "cannot read `<dir>` to import its deployments (`<system error>`); make it readable, or move it aside, and retry; nothing was changed" |
 

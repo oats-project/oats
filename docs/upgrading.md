@@ -122,6 +122,8 @@ oats session start --home <absolute-home>
 Read the plan before applying it. It lists every moving package module,
 skill/inject/hook changes and provider adoption decisions, modules kept
 because their package is no longer locked, and member drift for information.
+A kept package module moves only by a respawn; `oats session start` and
+`restart` say so in one warning that names each one.
 One provider refusal refuses the whole move. A running or unreadable session
 refuses with `E_SESSION_RUNNING`; stop it first. A stale plan returns
 `E_PLAN_STALE` and a fresh plan to review.
@@ -551,6 +553,14 @@ It also warns about a folder it could not look at (one that does not
 resolve, or a bridge that cannot be read). A folder that does not exist or
 holds no bridge is not a skew, and it says nothing about it. The warnings are
 in the text output only; `oats doctor --json` does not carry them.
+
+`oats doctor` also reports this machine's session resume lock when it needs a
+person, as a `resume-lock-stuck` problem with the path and what to do: after
+an upgrade that is a lock directory left by the earlier OATS
+(`~/.oats/session-resume/lock/`), which `oats session resume` refuses with
+`E_RESUME_LOCK_STUCK` and never removes. Remove the directory once no earlier
+`oats` is running on the machine
+([The sweep](execution-targets.md#the-sweep)).
 
 ## After a change of Node version
 

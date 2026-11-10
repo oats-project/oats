@@ -64,9 +64,9 @@ const { previewLaunchEnvironment, previewPaneEnvironment } = await kernelImport(
 const { PI_BRIDGE, piBridgeFolders, piBridgeSkewWarnings, planPiBridges, piBridgePlanLines, piBridgeStepProblem, piBridgeFailure, kernelLookup, kernelLookupResult, planCliUpdate, desktopFirstLine, bridgeLookup, bridgeLookupProblem } = await kernelImport("pi-bridge", () => import("../lib/pi-bridge.mjs"));
 const { loadLocal, validateWorkspace, validateLocal, discoverPackageSouls, unlockedPackages, workspaceWarnings, memberRowByKey } = await kernelImport("workspace", () => import("../lib/workspace.mjs"));
 const { discoveredTeamKeys, isTeamRefusal, localTeamsClosedProblem, recordedTeams, reportRows, soulKeyOf, soulTeams, teamKeyOf, teamModel } = await kernelImport("teams", () => import("../lib/teams.mjs"));
-const { LAUNCH_KEY_UNCHECKED, LAUNCH_PREFERENCE_UNMATCHED, launchKeyQuoted, launchKeysUnmatched, launchLayers, soulLaunchCommand, unmatchedKeyMessage } = await kernelImport("launch-preference", () => import("../lib/launch-preference.mjs"));
-const { terminalText } = await kernelImport("refused-text", () => import("../lib/refused-text.mjs"));
-const { qualifiedSoulName, soulCandidates, soulsOffered } = await kernelImport("instance-resolution", () => import("../lib/instance-resolution.mjs"));
+const { LAUNCH_KEY_UNCHECKED, LAUNCH_PREFERENCE_UNMATCHED, LAUNCH_PROBLEM_TEXT_MAX, launchKeyQuoted, launchKeysUnmatched, launchLayers, soulLaunchCommand, uncheckedSentences, unmatchedKeyMessage } = await kernelImport("launch-preference", () => import("../lib/launch-preference.mjs"));
+const { safeText, terminalText } = await kernelImport("refused-text", () => import("../lib/refused-text.mjs"));
+const { disabledEntriesUnmatched, qualifiedSoulName, soulCandidates, soulsOffered } = await kernelImport("instance-resolution", () => import("../lib/instance-resolution.mjs"));
 const { parseConfigData } = await kernelImport("config-data", () => import("../lib/config-data.mjs"));
 const remoteModule = await kernelImport("remote", () => import("../lib/remote.mjs"));
 const { sameRepo } = await kernelImport("repo-moves", () => import("../lib/repo-moves.mjs"));
@@ -306,6 +306,24 @@ async function doctorOperator(ws) {
   return { problems: found.map(({ code, label, message, remedy }) => ({ code, ...(label ? { label } : {}), message, remedy })), information: [] };
 }
 
+/** This machine's last read of the workspace, for doctor's checks of the soul names in oats-local.yaml:
+ *  discovered OFFLINE like doctorOperator, from this machine's cache only (cacheOnlyRemote), once per
+ *  doctor run however many checks ask, and only when one asks. A cache that cannot answer rejects, for
+ *  each check to say as information (doctorCacheWhy). */
+const doctorReads = new WeakMap();
+function doctorDiscovery(ws) {
+  if (!doctorReads.has(ws)) doctorReads.set(ws, (async () => {
+    const { cacheOnlyRemote } = await import("../lib/operator-coverage.mjs");
+    const { discoverOrStandalone } = await import("../lib/instance-resolution.mjs");
+    const deployment = dirname(ws.local.path);
+    return discoverOrStandalone(ws.local.value, { lock: readLockIfPresent(deployment), deployment, remoteOptions: remoteOptionsFromEnv(), remote: cacheOnlyRemote() });
+  })());
+  return doctorReads.get(ws);
+}
+/** Why doctorDiscovery could not answer, as a doctor line says it: a cache miss is the cache's; anything
+ *  else is named as itself. */
+const doctorCacheWhy = (e) => (e?.code === "E_REMOTE_UNREADABLE" ? `this machine's cache cannot answer (${e.message})` : `${e?.code ? `${e.code}: ` : ""}${e?.message ?? e}`);
+
 /** The keys of oats-local.yaml souls.launch that name no soul (awebai/oats#989), in doctor, OFFLINE like
  *  doctorOperator: the souls are discovered from this machine's cache only, and the one function
  *  (launchKeysUnmatched) decides. A problem per unmatched key, which speaks about this machine's last
@@ -321,13 +339,9 @@ async function doctorLaunchPreferences(ws) {
   const shown = (list) => (list.length > 3 ? `${list.slice(0, 3).map(launchKeyQuoted).join(", ")} and ${list.length - 3} more` : list.map(launchKeyQuoted).join(", "));
   let found;
   try {
-    const { cacheOnlyRemote } = await import("../lib/operator-coverage.mjs");
-    const { discoverOrStandalone } = await import("../lib/instance-resolution.mjs");
-    const deployment = dirname(ws.local.path);
-    const discovery = await discoverOrStandalone(local, { lock: readLockIfPresent(deployment), deployment, remoteOptions: remoteOptionsFromEnv(), remote: cacheOnlyRemote() });
-    found = launchKeysUnmatched({ local, offered: soulsOffered(discovery) });
+    found = launchKeysUnmatched({ local, offered: soulsOffered(await doctorDiscovery(ws)) });
   } catch (e) {
-    const why = e?.code === "E_REMOTE_UNREADABLE" ? `this machine's cache cannot answer (${e.message})` : `${e?.code ? `${e.code}: ` : ""}${e?.message ?? e}`;
+    const why = doctorCacheWhy(e);
     return { problems: [], information: [`launch-preference-unchecked: the keys of oats-local.yaml souls.launch (${shown(keys)}) were not checked against the souls this workspace offers: ${why}; oats sync, then oats souls, then run doctor again (a spawn reads the workspace itself and refuses a key that names no soul)`] };
   }
   return {
@@ -335,6 +349,38 @@ async function doctorLaunchPreferences(ws) {
       message: unmatchedKeyMessage(row, { lastRead: true }),
       remedy: `pin the soul it was meant for (${soulLaunchCommand("set")}), then: ${soulLaunchCommand("remove", { key: row.key })}` })),
     information: found.unchecked.map((row) => `launch-preference-unchecked: oats-local.yaml souls.launch ${launchKeyQuoted(row.key)} was not checked against the souls this workspace offers: ${LAUNCH_KEY_UNCHECKED[row.reason] ?? row.reason}; this is this machine's last read, and a spawn reads the workspace itself`),
+  };
+}
+
+/** The entries of oats-local.yaml souls.disabled that name no soul (oats-project/oats#1772), in doctor,
+ *  OFFLINE from the read doctorLaunchPreferences uses (doctorDiscovery), and the one function
+ *  (disabledEntriesUnmatched) decides. Such an entry keeps no soul off this machine: it fails open. A
+ *  problem per unmatched entry, which speaks about this machine's last read of the souls: a spawn reads
+ *  the workspace itself and is the authority. An entry that could not be checked, or a cache that cannot
+ *  answer, is an information line (`disabled-soul-unchecked`), never silence and never a failure of
+ *  doctor. No command writes souls.disabled, so the remedy is the hand edit. The entry and the nearest
+ *  souls are said through the launch texts' bound (launchKeyQuoted, safeText).
+ *  → { problems: [{ code, entry, at, suggestions, message, remedy }], information: [string] } */
+async function doctorDisabledSouls(ws) {
+  const local = ws.local.value;
+  const entries = Array.isArray(local?.souls?.disabled) ? local.souls.disabled.filter((e) => typeof e === "string") : [];
+  if (!entries.length) return { problems: [], information: [] };
+  let found;
+  try {
+    found = disabledEntriesUnmatched({ local, discovery: await doctorDiscovery(ws) });
+  } catch (e) {
+    const shown = entries.length > 3 ? `${entries.slice(0, 3).map(launchKeyQuoted).join(", ")} and ${entries.length - 3} more` : entries.map(launchKeyQuoted).join(", ");
+    return { problems: [], information: [`disabled-soul-unchecked: the entries of oats-local.yaml souls.disabled (${shown}) were not checked against the souls this workspace offers: ${doctorCacheWhy(e)}; oats sync, then oats souls, then run doctor again`] };
+  }
+  const reasons = uncheckedSentences("entry");
+  return {
+    problems: found.unmatched.map(({ entry, at, suggestions }) => {
+      const near = suggestions.map((name) => safeText(name, LAUNCH_PROBLEM_TEXT_MAX)).join(", ");
+      return { code: "disabled-soul-unmatched", entry, at, suggestions,
+        message: `oats-local.yaml souls.disabled names ${launchKeyQuoted(entry)}${near ? ` (nearest: ${near})` : ""}, which is no soul in this machine's last read of the souls this workspace offers, so it keeps no soul off this machine. A spawn reads the workspace itself and is the authority`,
+        remedy: `in oats-local.yaml souls.disabled, replace ${launchKeyQuoted(entry)} with the soul it was meant to keep off this machine (${near ? `nearest: ${near}; ` : ""}oats souls lists them), or remove it` };
+    }),
+    information: found.unchecked.map(({ entry, reason }) => `disabled-soul-unchecked: oats-local.yaml souls.disabled ${launchKeyQuoted(entry)} was not checked against the souls this workspace offers: ${reasons[reason] ?? reason}; this is this machine's last read, and a spawn reads the workspace itself`),
   };
 }
 
@@ -826,6 +872,14 @@ function doctorMachineLaunchConfigs() {
     return { file, present: true, ok: false, configurations: [], error: e.message };
   }
 }
+/** The machine's resume lock when it needs a person (lib/session-resume.mjs resumeLockProblem), as
+ *  doctor's problems: read where a sweep would take it, nothing taken. It is this machine's, the
+ *  same from every deployment. */
+async function doctorResumeLock() {
+  const { resumeLockProblem } = await import("../lib/session-resume.mjs");
+  const problem = resumeLockProblem();
+  return problem ? [problem] : [];
+}
 async function doctorWorkspaceJson(ctx, soulName, ws) {
   const composition = await doctorComposition(ctx, soulName, ws, (code, msg, details) => jsonFail(code, msg, details));
   const agentsRoot = join(dirname(ws.local.path), "agents");
@@ -833,14 +887,15 @@ async function doctorWorkspaceJson(ctx, soulName, ws) {
   const schedules = unresolvedScheduleAttempts(dirname(ws.local.path));
   const operator = await doctorOperator(ws);
   const launchPreferences = await doctorLaunchPreferences(ws);
+  const disabledSouls = await doctorDisabledSouls(ws);
   // With --soul, the soul's composition; without, the deployment's capabilities (doctorHookWarnings).
   const hookEvents = composition ? { warnings: composition.warnings, information: [] } : await doctorHookWarnings(ws);
-  const problems = [...legacyLayoutProblems(agentsRoot), readableInstanceHomes(agentsRoot), ...localTeams.problems, ...schedules.problems, ...operator.problems, ...launchPreferences.problems, ...retireIncompleteProblems(agentsRoot)].filter(Boolean);
+  const problems = [...legacyLayoutProblems(agentsRoot), readableInstanceHomes(agentsRoot), ...localTeams.problems, ...schedules.problems, ...operator.problems, ...launchPreferences.problems, ...disabledSouls.problems, ...retireIncompleteProblems(agentsRoot), ...await doctorResumeLock()].filter(Boolean);
   return {
     schemaVersion: 1, workspaceApi: 2, context: ctx,
     workspace: { file: ws.local.path, ref: ws.local.workspace },
     workspaceError: ws.localError, lockFile: ws.lockFile, packages: ws.packages, lockError: ws.lockError,
-    information: [...(operationalKnowledgeNote(composition, soulName) ? [operationalKnowledgeNote(composition, soulName)] : []), ...localTeams.information, ...schedules.information, ...operator.information, ...launchPreferences.information, ...hookEvents.information, ...processScanInformation(), ...doctorRetained(ws).flat()],
+    information: [...(operationalKnowledgeNote(composition, soulName) ? [operationalKnowledgeNote(composition, soulName)] : []), ...localTeams.information, ...schedules.information, ...operator.information, ...launchPreferences.information, ...disabledSouls.information, ...hookEvents.information, ...processScanInformation(), ...doctorRetained(ws).flat()],
     machineLaunchConfigs: doctorMachineLaunchConfigs(),
     composedInstructions: composition?.text, instructionBlocks: composition?.blocks,
     ...(problems.length ? { problems } : {}),
@@ -892,12 +947,15 @@ async function doctor(dir) {
   for (const p of operator.problems) console.log(`\n! ${p.code}: ${p.message}\n  ${p.remedy}`);
   const launchPreferences = await doctorLaunchPreferences(ws);
   for (const p of launchPreferences.problems) console.log(`\n! ${p.code}: ${p.message}\n  ${p.remedy}`);
+  const disabledSouls = await doctorDisabledSouls(ws);
+  for (const p of disabledSouls.problems) console.log(`\n! ${p.code}: ${p.message}\n  ${p.remedy}`);
   // Retirements left open (#1747): the command that finishes each, and whose hook failed last.
   for (const p of retireIncompleteProblems(agentsRoot)) console.log(`\n! ${p.code}: ${terminalText(p.message)}\n  ${terminalText(p.remedy)}`);
+  for (const p of await doctorResumeLock()) console.log(`\n! ${p.code}: ${terminalText(p.message)}\n  ${terminalText(p.remedy)}`);
   const hookEvents = composition ? { warnings: composition.warnings, information: [] } : await doctorHookWarnings(ws);
   for (const w of hookEvents.warnings) console.log(`\nwarning  ${w.code}  ${w.message}`);
   if (!soulName) for (const w of doctorCaptureWarnings()) console.log(`\nwarning  ${w.code}  ${terminalText(w.message)}`);
-  for (const line of [...localTeams.information, ...schedules.information, ...operator.information, ...launchPreferences.information, ...hookEvents.information, ...processScanInformation()]) console.log(`\nINFO: ${line}`);
+  for (const line of [...localTeams.information, ...schedules.information, ...operator.information, ...launchPreferences.information, ...disabledSouls.information, ...hookEvents.information, ...processScanInformation()]) console.log(`\nINFO: ${line}`);
   for (const block of doctorRetained(ws)) console.log(`\n${block.map((line) => `INFO: ${line}`).join("\n")}`);
   if (soulName) {
     const information = operationalKnowledgeNote(composition, soulName);
@@ -1623,7 +1681,8 @@ function commandSession() {
     process.on("exit", () => { sayReadNotices(); readSession.closeNow(); });
     for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143], ["SIGHUP", 129]]) process.once(signal, () => {
       readSession.closeNow();
-      // Another handler (a scheduler lock's release) exits on its own after this one.
+      // Another handler still listening (a naming call's and a lock's, lib/dir-lock.mjs, which raise
+      // the signal again; a held `worktree` hook's, an attach's) ends the command itself after this one.
       if (process.listenerCount(signal) === 0) process.exit(code);
     });
   }
@@ -2746,11 +2805,14 @@ async function spawnCmd() {
   {
     let discovery = null;
     try {
-      const { prepareInstance, ensureWorkspaceSoul, previewWorkspaceSoul, parseProviderFlags, discoverOrStandalone, agentDirOf } = await import("../lib/instance-resolution.mjs");
+      const { prepareInstance, verifyPreparedPackages, ensureWorkspaceSoul, previewWorkspaceSoul, parseProviderFlags, discoverOrStandalone, agentDirOf } = await import("../lib/instance-resolution.mjs");
       const remoteOptions = remoteOptionsFromEnv();
       const { local, path: localPath } = loadLocal(dirFlag());
       discovery = wsDiscovery = await discoverOrStandalone(local, { deployment: dirname(localPath), remoteOptions });
       wsPrepared = await prepareInstance(dirFlag(), name, { spawn: { providers: parseProviderFlags(providerPairs) }, remoteOptions, discovery });
+      // Each package the soul composes is the content the lock records (E_PACKAGE_INTEGRITY), before the
+      // first write of the spawn: the soul cache below is the first thing a spawn creates under the agents root.
+      await verifyPreparedPackages(wsPrepared);
       const soulName = agentDirOf(wsPrepared.soulEntry);
       let soulDir;
       if (isPreview) {
@@ -2996,13 +3058,40 @@ function failedSpawnBranchLine(r, items, { local = false, host } = {}) {
   return r.retainedHome ? `  branch: the "branch" recorded in ${join(r.retainedHome, "instance.json")}${host ? ` on ${host}` : ""}` : null;
 }
 
+const RETIRE_USAGE = "usage: oats retire <instance> [--plan] [--plan-revision <rev> --idempotency-key <key>] [--home <path>] [--dir <d>] [--server <id>] [--self] [--discard-worktree] [--keep-dir] [--force] [--json]";
+/** The flags `oats retire` reads: the ones that take a value, and its switches. */
+const RETIRE_VALUE_FLAGS = new Set(["dir", "home", "idempotency-key", "plan-revision", "server"]);
+const RETIRE_SWITCHES = new Set(["discard-worktree", "force", "json", "keep-dir", "plan", "self"]);
+/** Why `argv` (after `retire`) is not a retire, or undefined: a flag retire does not read (`--keep-dirs`
+ *  for `--keep-dir`) or an argument after the instance is refused before anything is read, stopped or
+ *  sent, never ignored. A value flag consumes its value exactly as flag() reads it; a missing value is
+ *  the flag's own check. `--delete-branch` keeps its own refusal (RETIRE_DELETE_BRANCH_REFUSED). */
+function retireArgvProblem(argv) {
+  let instance;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith("-")) {
+      const name = a.startsWith("--") ? a.slice(2) : undefined;
+      if (RETIRE_SWITCHES.has(name)) continue;
+      if (!RETIRE_VALUE_FLAGS.has(name)) return { message: `oats retire: unknown flag ${a}\n${RETIRE_USAGE}`, details: { flag: a } };
+      if (argv[i + 1] !== undefined && !argv[i + 1].startsWith("--")) i++;
+      continue;
+    }
+    if (instance !== undefined) return { message: `oats retire: unexpected argument ${JSON.stringify(a)} after the instance ${JSON.stringify(instance)}: retire takes one instance\n${RETIRE_USAGE}`, details: { argument: a } };
+    instance = a;
+  }
+  return undefined;
+}
+
 /** Whether this process's retire (retireCmd) has returned from the kernel: set once, read by the dispatch. */
 let retireReturned = false;
 function retireCmd() {
   const name = args[1];
   // Refused before anything else: before --plan, a replay, a plan revision or a recorded child is stopped.
   if (args.includes("--delete-branch")) return args.includes("--json") ? jsonFail("E_BAD_ARGS", RETIRE_DELETE_BRANCH_REFUSED) : die(RETIRE_DELETE_BRANCH_REFUSED);
-  if (!name || name.startsWith("--")) die("usage: oats retire <instance> [--plan] [--plan-revision <rev> --idempotency-key <key>] [--home <path>] [--self] [--discard-worktree] [--keep-dir] [--force] [--json]");
+  if (!name || name.startsWith("--")) die(RETIRE_USAGE);
+  const problem = retireArgvProblem(args.slice(1));
+  if (problem) return cmdFail("E_BAD_ARGS", problem.message, problem.details);
   let homeFlag = flag("home");
   if (homeFlag === true) die("--home needs the instance home path");
   if (args.includes("--plan")) {
@@ -4614,6 +4703,8 @@ async function serverRouteCmd() {
   }
   // Refused here too, before anything is sent: a host on an older OATS would still delete the branch.
   if (cmd === "retire" && rest.includes("--delete-branch")) bail("E_BAD_ARGS", RETIRE_DELETE_BRANCH_REFUSED);
+  // As is a flag retire does not read, or an argument after the instance: a host on an older OATS would ignore it and retire.
+  if (cmd === "retire") { const problem = retireArgvProblem(args.slice(1)); if (problem) bail("E_BAD_ARGS", problem.message, problem.details); }
   let routed;
   try { routed = routeCommand(id, cmd, rest); }
   catch (e) { bail(e.code || "E_SSH", e.message, e.details); }

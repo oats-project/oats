@@ -803,7 +803,13 @@ and ships the soul at the locked commit, and the soul's copy is intact: for
 `--home`, the home's copy matches the digest it recorded, and a lock still
 at that commit records the same digest. The copy is digested on every read.
 It fails otherwise, with `code: "E_PACKAGE_INTEGRITY"` on a digest mismatch
-and the remedy naming `oats sync` or a fresh spawn.
+and the remedy naming `oats sync` or a fresh spawn. When the package is no
+longer locked, readiness cannot tell a deliberate drop from an accidental
+unpin or a pending sync, so the `--home` remedy names both, the respawn
+first: if the workspace dropped the package on purpose, spawn a new instance
+from a soul the workspace offers, then retire this one; otherwise declare the
+package in `packages:` and `oats sync`. For `--soul` it is declaring the
+package and `oats sync`.
 
 **`providers`** (producer `provider binding check`): for each module whose
 manifest declares `binding`, the kernel runs its `binding.check` and relays
@@ -1593,6 +1599,11 @@ Doctor reads this as `oats status` does, offline and read-only. Its exit
 status does not change: doctor exits 0 with problems. A deployment with no
 open retirement sees no change.
 
+`oats doctor --json` lists this machine's session resume lock, when it needs a
+person, as one `resume-lock-stuck` problem in `problems[]`, `{code, message,
+remedy}` ([The machine sweep](#the-machine-sweep-oats-session-resume),
+`E_RESUME_LOCK_STUCK`). It is the machine's, the same from every deployment.
+
 ### Desktop facts
 
 Feature `desktop-facts`: facts the kernel reports so the Desktop never derives
@@ -1863,9 +1874,14 @@ oats teams default <label> [--if-absent | --expect <label>] --json
   Among concurrent `oats teams` writers on one deployment, a conditional write
   therefore never overwrites a default another of them set: when two race, the
   later one sees the earlier result and refuses with
-  `E_TEAM_DEFAULT_MISMATCH`. A lock still held after 5 s is `E_LOCAL_BUSY
-  {path, lock}`, naming the directory to remove when no oats process is
-  editing; nothing was written. The limits: a person or tool editing
+  `E_TEAM_DEFAULT_MISMATCH`. The lock is a file that names the process
+  holding it: one left by a command that was killed is taken over by the next
+  command. A lock whose holder is still running after 5 s is `E_LOCAL_BUSY
+  {path, lock}`, and so is one that cannot be judged: a record that is
+  unreadable, a holder that cannot be told to be running or gone, or a lock
+  directory written by an earlier kernel. The message says which was found and
+  names the path to remove when no oats process is editing; nothing was
+  written. The limits: a person or tool editing
   `oats-local.yaml` directly does not take the lock (the content compare still
   catches most such edits, but not one landing between the compare and the
   rename), and changes to the committed `oats-workspace.yaml` (a pull, a
@@ -2024,7 +2040,7 @@ problem's own keys.
 | `default-team-changed` | warning | `recorded`, `current` | `--home` with live teams: the default changed since the spawn |
 | `E_TEAM_UNKNOWN` | failure | `label`, `at` | a local default no file declares |
 | `E_WORKSPACE_SCHEMA` | failure | `condition: "local-teams-closed"`, `path`, `keys` | `oats-local.yaml` declares `teams` / `defaultTeam` and the workspace does not allow local teams |
-| `team-soul-unknown` | warning | `key`, `at` | a `souls:` key that is neither `"*"` nor `<name>/*` nor a discovered soul's key (a typo guard) |
+| `team-soul-unknown` | warning | `key`, `at` | a `souls:` key that is no discovered soul's key, or a `<name>/*` pattern that matches none of them; never `"*"` (a typo guard; a pattern's `message` and `fix` are its own) |
 
 `E_TEAM_UNKNOWN` and local-teams-closed are also spawn, preview and inspect
 refusals (local-teams-closed as `E_WORKSPACE_SCHEMA` with details `{reason,
@@ -2143,7 +2159,7 @@ Every object shape here is closed.
   souls:
     launch:
       "*": opus                                          # every soul on this machine
-      oats-expert: opus                                  # a launch configuration
+      oats-engineering-expert: opus                      # a launch configuration
       oats.engineering/code-reviewer: {harness: codex}   # an inline preference
   ```
 - **Migration.** 0.29.x refuses an unknown soul.yaml key, and members are read
@@ -2283,6 +2299,39 @@ shows the drift as `launch-changed`.
   set '*' --launch-config <name>)". A start or restart of an existing
   home, `--reselect-launch` included, is never refused this way.
 - `E_WORKSPACE_SCHEMA`: a malformed `launch` or `souls.launch`, path named.
+
+**A `souls.disabled` entry that names no soul** (oats-project/oats#1772) keeps
+no soul off this machine, and spawn does not refuse because of it: a stale
+entry fails open, where a stale `souls.launch` key fails closed. `oats doctor`
+reports it with the launch check's discipline, offline, from the same read of
+this machine's cache:
+- An entry matches when spawn's own rule (`E_SOUL_DISABLED`) holds for a soul
+  the workspace offers: its bare name, or its qualified name (`<package>/<soul>`
+  or `<member>/<soul>`). A disabled soul is still offered. Spawn's rule is
+  exact: `<member>/<soul>` for a soul that only another member offers does not
+  match.
+- `problems[]` gains `{code: "disabled-soul-unmatched", entry, at,
+  suggestions, message, remedy}` per entry that matches nothing, in file
+  order (text: `! disabled-soul-unmatched: <message>`, then the remedy). `at`
+  is `oats-local.yaml#/souls/disabled/<index>`. `suggestions` holds at most
+  three qualified names of offered souls, ranked as the launch rows rank
+  theirs: the same bare name first, then a bare name within two edits. The
+  message says that it speaks about this machine's last read and that a spawn
+  reads the workspace itself and is the authority. The remedy is the hand
+  edit, replace the entry with the soul it was meant for or remove it: no
+  command writes `souls.disabled`.
+- An entry is *not checked*, and gets an `information[]` line that starts
+  `disabled-soul-unchecked:` instead of a row, when the source that could
+  hold its soul was not read, for the reasons of the launch check: an entry
+  under a package that is declared and not locked, or one of whose souls was
+  skipped; any entry not under the package of an offered package soul while
+  a member is not confirmed or a member's or an external soul was skipped (a
+  bare name, `<member>/<soul>`, or a prefix that may be a member's name);
+  every entry in the standalone view of a workspace whose host cannot be
+  read, or a read that kept no record of what it skipped. When the cache
+  cannot answer at all, one such line names the entries.
+- Doctor still exits 0. With no `souls.disabled`, or an empty list, nothing is
+  added. Spawn, `oats souls`, readiness and inspect do not change.
 
 ### The launch report (`Launch`)
 
@@ -3076,6 +3125,7 @@ kernel stage raised as well.
 | `E_NOT_A_MEMBER`, `E_MEMBERSHIP_UNCONFIRMED` | | the soul's repository is not a confirmed member |
 | `E_CAPABILITY_MISSING`, `E_CAPABILITY_PRIVATE`, `E_CAPABILITY_INCOMPATIBLE`, `E_COMPATIBILITY` | | a capability cannot be resolved |
 | `E_PACKAGE_MISSING`, `E_PACKAGE_INTEGRITY`, `E_LOCK_SCHEMA` | | the lock does not provide it (standalone: `{…, standalone: true, reason: "no-catalog", catalog}`) |
+| `E_PACKAGE_INTEGRITY` | `{package, version, commit, expected, actual}` | a composed package's tree at the locked commit does not digest to the lock's `integrity` (`expected`); `actual` is the digest read. Preview and apply, before anything is written ([The integrity check at spawn](packages.md#the-integrity-check-at-spawn)) |
 | `E_SLOT_CONFLICT`, `E_SKILL_DUPLICATE` | | the composition conflicts |
 | `E_WORKSPACE_SCHEMA` | `{path, key, reason}` | a removed key or invalid payload |
 | `E_CLONE_MISSING`, `E_CLONE_MISMATCH` | | the member's clone is missing or wrong |
@@ -3263,9 +3313,9 @@ A failed `add` reports the same facts about its rollback in `details`:
 | `E_BASE_UNKNOWN` | the new HEAD is not the fetched commit; the message names both |
 | `E_REQUIRED_HOOK_FAILED`, `E_HOOK_ENVIRONMENT_CONTRACT` | a required `worktree` hook failed or timed out, or a hook answered `env`; the tree is removed (`details.hooks`, `details.rolledBack`) |
 | `E_INTERRUPTED` | SIGINT, SIGTERM or SIGHUP while the hooks ran; the tree is removed and the process exits 128 + the signal number (`details.signal`) |
-| `E_WORKTREE_DIRTY` | `remove`: Git refused a tree with uncommitted or untracked work (`details.git` is Git's message), or an unregistered residue differs from the recorded branch (the message and `details.git` list the modified or nonignored untracked paths). The record is kept. Save the changes, or discard, then retry |
+| `E_WORKTREE_DIRTY` | `remove`: Git refused a tree with uncommitted or untracked work (`details.git` is Git's message), or an unregistered residue differs from the recorded branch (the message and `details.git` list the modified or nonignored untracked paths). No filter driver the repository's configuration defines is run for either: a file such a filter applies to is compared as its bytes are in the tree. The record is kept. Save the changes, or discard, then retry |
 | `E_CHILDREN_RUNNING` | `remove`: an instance attached to the tree has a session that is running, or that cannot be read. Answered under the purpose's claim, before Git is asked anything: nothing is removed and the record is kept. `details: {purpose, path, children: [{instance, home, session}]}`, `session` being `"running"` or `"unknown"`; only the instances that refuse are listed. The message names each one and what was seen, and the step: `oats instance stop <instance>`, or retire it, then remove again. No flag removes anyway. It is the code [a retire](#retire-children-running) answers, with other `details`: a retire answers it for a child it asked to stop and that did not; `remove` for an attached instance it found running or unread, and it asks nobody to stop, so there is no `childrenStopped` |
-| `E_WORK_PRESERVATION_FAILED` | `remove`: Git refused for another reason, removal could not be verified, or an unregistered residue could not be checked against its recorded branch or deleted; the record is kept. A failure after Git started removal reports possible partial deletion and the retry, never that nothing was removed. A missing or invalid `.git` marker names the manual step: save any work, remove the directory by hand, then run `remove` again to drop the record. See [extra-tree removal recovery](souls-and-instances.md#extra-trees) |
+| `E_WORK_PRESERVATION_FAILED` | `remove`: Git refused for another reason, removal could not be verified, an unregistered residue could not be checked against its recorded branch or deleted, or the repository's configuration defines a filter driver whose name cannot be overridden on Git's command line (it holds `=` or is not UTF-8; Git is not run on the tree, since it would run that filter: [filter drivers](souls-and-instances.md#retire-filter-drivers)); the record is kept. A failure after Git started removal reports possible partial deletion and the retry, never that nothing was removed. A missing or invalid `.git` marker names the manual step: save any work, remove the directory by hand, then run `remove` again to drop the record. See [extra-tree removal recovery](souls-and-instances.md#extra-trees) |
 | `E_LIFECYCLE_FAILED` | an error that is not the kernel's; with [`details.cause`](#kernel-codes) when it has a code of its own or is a defect, and without it when it is a refusal without a code. When it is the purpose's claim that could not be taken (`<home>/.oats/trees` cannot be made, the claim's file cannot be written), the message is `the claim <path> could not be taken (…); nothing was done`. Also a command that was refused the claim after its takeover had ended a dead command's git step: the message names the group it ended first, then the refusal, and `details` are that refusal's (a refusal of the kernel's has no `details.cause`; anything else has it by the same rule) |
 
 A rollback that cannot finish keeps the record and says so in the message
@@ -4309,6 +4359,39 @@ readOnly: {helpers: "disabled", optionalLocks: "off", objectsWritten: 0}}`.
   (`readOnly`). An object a partial clone lacks is not fetched: the read
   fails with `E_GIT_FAILED` (with Git 2.44 or later; an older Git ignores
   `GIT_NO_LAZY_FETCH`).
+- **Filter drivers are not run.** Git runs a `filter.<name>.clean` or
+  `.process` command when a status or a diff compares a work-tree file that
+  carries the `filter` attribute, and it has no switch that turns filters
+  off. Before the Git commands that read a work-tree file, `oats instance
+  git` and `oats instance diff` read the configuration Git would use (`git config --list`, which runs
+  nothing and follows `include.path` and `includeIf`) and override every
+  filter driver it defines to no command (`clean`, `smudge`, `process`) and
+  not required. An observation makes that read once, before its status, for
+  its status and its line counts; each command of a diff is preceded by its
+  own.
+  - A file such a filter applies to (a Git LFS file, for one) is compared as
+    its bytes are in the work tree, not as the filter would store them. An
+    untouched file still reads as unchanged, by its recorded size and times.
+    One that was rewritten, or whose times Git cannot tell from the index's,
+    reads as `changed` even when its filtered form is what is stored; its
+    line counts and its diff are the stored form (an LFS pointer) against the
+    work tree's bytes. The observation then carries a note that the
+    repository's configuration defines a filter driver.
+  - A driver whose name cannot be passed on Git's command line (it holds `=`
+    or is not UTF-8) cannot be overridden: Git is not run, and the read fails
+    with `E_GIT_FAILED`.
+  - Not covered: a driver written into the configuration between that read
+    and a Git command it covers (for an observation, up to its line counts,
+    which follow its status and its reads of HEAD, the index and the refs),
+    and a filter a **submodule's own**
+    configuration defines. Git runs inside each populated submodule to learn
+    whether it is dirty, and the overrides name the repository's drivers, not
+    the submodule's. A dirty submodule stays visible in the status for that
+    reason. Where the agent and the reader of its worktree are one system
+    user, which is the usual arrangement, such a filter runs nothing the agent
+    could not run itself. Where they are separate users, it runs the agent's
+    command as the reader's user: do not read a worktree with populated
+    submodules across users.
 - If HEAD or the index moved, the id is not in the current observation, or
   anything moved during the read: `E_STALE_OBSERVATION` with
   `details.observation`. Re-observe; never render a diff of another tree.
@@ -5791,6 +5874,15 @@ extra tree that is not clean is moved the same way; a clean one is removed.
 oats retire <instance> [--plan-revision <rev> --idempotency-key <key>] [--discard-worktree] [--home <abs>] --json
 ```
 
+A flag retire does not read, or an argument after the instance, is refused
+with `E_BAD_ARGS` before any effect, `--plan` and `--server` included:
+`oats retire: unknown flag <flag>` with `error.details.flag`, or `oats retire:
+unexpected argument "<word>" after the instance "<instance>": retire takes one
+instance` with `error.details.argument`, each followed by the usage line. The
+flags are `--plan`, `--plan-revision`, `--idempotency-key`, `--home`, `--dir`,
+`--server`, `--self`, `--discard-worktree`, `--keep-dir`, `--force` and
+`--json` ([souls-and-instances.md](souls-and-instances.md#retire)).
+
 A first retire prints the **raw receipt**, not an envelope:
 
 ```json
@@ -6597,6 +6689,11 @@ results with package drift include `drift:[{capability, recorded:{version,commit
 locked:{version,commit}}]` for package modules behind the deployment lock,
 and omit the field when none are behind. Text prints one line after the start:
 `<n> package module(s) behind the lock (<cap> <version> @ <shortcommit> → <version> @ <shortcommit>); to move them: oats instance stop <instance>; oats instance upgrade <instance> --plan`.
+`drift` lists only modules an upgrade moves in place. Package modules an
+upgrade keeps, because their package is no longer locked or no longer
+provides the capability, add one string to `warnings`, printed as a
+`WARNING:` line:
+`<n> package module(s) cannot move in place (<cap>: package <id> is no longer locked; <cap>: package <id> no longer provides it); an upgrade keeps them as they are, so respawn this instance to move it onto the lock`.
 Restart has no upgrade flag. A partial upgrade receipt refuses a start with
 `E_UPGRADE_PARTIAL`, naming the retry with the original idempotency key.
 A committed receipt with `steps.cleaned: false` permits start and adds one
@@ -6829,7 +6926,31 @@ whatever the rows say:
   launched something: `resumed`, `fresh`, `blocked`) are kernel-private,
   not a contract. Without a boot id (neither Linux nor macOS) nothing is
   noted or counted.
-- Errors: `E_RESUME_BUSY`; `E_BAD_ARGS` (`--deployment` that is not a
+- **A lock that needs a person.** `E_RESUME_LOCK_STUCK`, through the same
+  envelope at exit 1, when the sweep's lock cannot be taken and no sweep is
+  known to run; nothing was started, and no sweep starts anything on this
+  machine until it can be. `error.details` is `{lock, found}`: `lock` is
+  the lock's absolute path, and `found` is one of
+
+  | `found` | what is at the lock's path | what to do |
+  |---|---|---|
+  | `unreadable` | a record that cannot be read | remove the file once no sweep runs |
+  | `unknown` | a holder that cannot be told to be running or gone | remove the file once no sweep runs |
+  | `cannot-take-over` | a gone holder's record that cannot be taken over | remove the file |
+  | `held-again` | a lock that was taken again each time the sweep found it free | run the sweep again |
+  | `own-start-unreadable` | nothing in the way: the sweep cannot read its own start time, so it could not hold the lock | run the sweep again; nothing is to be removed |
+  | `directory` | a directory, the lock of an OATS that locked with one; it is never removed for the operator | remove the directory once no earlier `oats` runs |
+
+  The message says the same in words, with what to do
+  ([The sweep](execution-targets.md#the-sweep)). It is never
+  `E_RESUME_BUSY`: that code is a sweep that runs. `readResumeSweep` reads
+  it as `failed` with the code. `oats doctor --json` lists the same states
+  as one `resume-lock-stuck` problem in `problems[]`, `{code, message,
+  remedy}` (text: `! resume-lock-stuck: <message>`, the remedy on the next
+  line), read without taking the lock; a free lock, a sweep that runs and a
+  lock a gone sweep left are not listed, and doctor's exit status does not
+  change.
+- Errors: `E_RESUME_BUSY`; `E_RESUME_LOCK_STUCK`; `E_BAD_ARGS` (`--deployment` that is not a
   deployment directory, `--server`, an unknown flag or an argument); without
   `--deployment`, the list's own errors (`E_DEPLOYMENTS_INVALID`,
   `E_DEPLOYMENTS_VERSION`). A home's start failure is a row, never the
@@ -6928,7 +7049,7 @@ reading asks it for a live read, and every other reading for nothing
   passes its own exec must keep those three properties: detached, file-backed,
   and never signalling the child.
 - It answers the kernel's envelope: the result at exit 0, and an `ok:false`
-  envelope whatever the exit (`E_RESUME_BUSY` exits 1). Otherwise it answers
+  envelope whatever the exit (`E_RESUME_BUSY` and `E_RESUME_LOCK_STUCK` exit 1). Otherwise it answers
   a code of its own, with no message: `E_CLI_OUTPUT_LIMIT` (more than 4 MiB),
   `E_CLI_PROTOCOL` (no envelope), `E_CLI_FAILED` (a nonzero exit without an
   `ok:false` envelope, or an exec that throws). No stderr and no exception text

@@ -79,7 +79,7 @@ test("a reply's name agrees with the clients' nameWithRole wherever a reply mean
 });
 
 test("the name: the first non-empty line as a slug, trailing roles stripped, at most 4 words, within 64, -2 and -3 when taken", () => {
-  assert.equal(named("\n  \nFix the Login Bug!\nsecond line", "oats-kernel-developer"), "fix-the-login-bug-developer");
+  assert.equal(named("\n  \nFix the Login Bug!\nsecond line", "oats-developer"), "fix-the-login-bug-developer");
   assert.equal(named("desktop-improvements-expert-expert", "oats-desktop-expert"), "desktop-improvements-expert", "one or more trailing roles");
   assert.equal(named("one-two-three-four-five-six", "code-reviewer"), "one-two-three-four-reviewer", "4 words");
   assert.equal(named("`release-notes`", "oats-maintainer"), "release-notes-maintainer");
@@ -91,11 +91,11 @@ test("the name: the first non-empty line as a slug, trailing roles stripped, at 
   assert.equal(named("x".repeat(70), "code-reviewer"), null, "one word past the budget leaves nothing");
   // Taken (an instance, a soul, a live window): -2, -3; a suffix past 64 drops a word first.
   const taken = new Set(["fix-login-developer", "fix-login-developer-2"]);
-  assert.equal(named("fix-login", "oats-kernel-developer", (n) => taken.has(n)), "fix-login-developer-3");
+  assert.equal(named("fix-login", "oats-developer", (n) => taken.has(n)), "fix-login-developer-3");
   const full = `${"a".repeat(30)}-${"b".repeat(22)}`; // 53 + "-developer" (10) = 63
   const fullName = `${full}-developer`;
   assert.equal(fullName.length, 63);
-  assert.equal(named(full, "oats-kernel-developer", (n) => n === fullName), `${"a".repeat(30)}-developer-2`);
+  assert.equal(named(full, "oats-developer", (n) => n === fullName), `${"a".repeat(30)}-developer-2`);
   // No role: the descriptive name alone.
   assert.equal(named("mirror-sync", "trailing-"), "mirror-sync");
 });
@@ -397,9 +397,9 @@ test("oats instance suggest-name (#1490 §2): the preview's name for a soul that
   const env = { FAKE_RECORD: fake.record, FAKE_REPLY: "fix-flaky-login\n" };
   const suggest = (extra, e = env) => fx.cli(["instance", "suggest-name", ...extra, "--json"], { env: e });
 
-  // The soul is only a name: oats-kernel-developer is no soul of this deployment. claude, through the
+  // The soul is only a name: oats-developer is no soul of this deployment. claude, through the
   // machine's default configuration for it.
-  const r = okResult(suggest(["--soul", "oats-kernel-developer", "--task", "Fix the flaky login test"]), "suggest");
+  const r = okResult(suggest(["--soul", "oats-developer", "--task", "Fix the flaky login test"]), "suggest");
   assert.deepEqual(Object.keys(r).sort(), ["name", "naming"]);
   assert.equal(r.name, "fix-flaky-login-developer");
   assert.deepEqual({ ...r.naming, ms: 0 }, { source: "suggested", ms: 0, harness: "claude", model: "haiku" });
@@ -407,8 +407,8 @@ test("oats instance suggest-name (#1490 §2): the preview's name for a soul that
   assert.equal(fake.read().stdin, namingPrompt("Fix the flaky login test"));
   // A package-qualified soul gives its role; the words, role and length rules are the preview's.
   assert.equal(okResult(suggest(["--soul", "acme/pkg--ops-lead", "--task", "x"]), "qualified").name, "fix-flaky-login-lead");
-  const long = okResult(suggest(["--soul", "oats-kernel-developer", "--task", "x"], { ...env, FAKE_REPLY: `${"abcdefghijklmnop-".repeat(6)}\n` }), "long").name;
-  assert.equal(long, named(`${"abcdefghijklmnop-".repeat(6)}\n`, "oats-kernel-developer"));
+  const long = okResult(suggest(["--soul", "oats-developer", "--task", "x"], { ...env, FAKE_REPLY: `${"abcdefghijklmnop-".repeat(6)}\n` }), "long").name;
+  assert.equal(long, named(`${"abcdefghijklmnop-".repeat(6)}\n`, "oats-developer"));
   assert.ok(long.length <= 64 && long.endsWith("-developer"), long);
   // Not made unique: a name taken in this deployment is answered as it is (the landing host decides).
   okResult(fx.cli(["spawn", "dev", "--name", "fix-login-dev", "--launch-config", "fake", "--no-launch", "--json"]), "premise: taken");

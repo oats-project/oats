@@ -5,6 +5,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
+import YAML from "yaml";
 import {
   KERNEL_HOME_RECEIPTS, capabilityManifest, completeDeferredRetirement, composeInstanceAgentsMd, deferredRetireResultPath, findAgent, findInstanceHomes, retirePendingMarkerPath,
   FAILED_SPAWN_BRANCH_LEFT, listInstances, RETIRE_DELETE_BRANCH_REFUSED, retireInstance, runLifecycleHooks, spawnInstanceAsync,
@@ -3291,7 +3292,6 @@ test("the package mirrors carry the versions package-catalog.json pins", () => {
   // each capability; a capability a package exports under another identity is
   // mapped, not assumed.
   const expected = { "oats-okf": "oats.okf", "oats-aweb": "oats.aweb", "oats-aweb-tasks": "oats.aweb", "oats-jira": "oats.jira", "oats-linear": "oats.linear", "oats-authoring": "oats.authoring",
-    "oats-engineering-expert": "oats.engineering", "oats-developer": "oats.engineering", "oats-code-review": "oats.engineering", "oats-maintainer": "oats.engineering",
     "oats-folio": "oats.apps", "oats-library": "oats.apps" };
   for (const [slug, pkg] of Object.entries(expected)) {
     const ref = catalog.packages[pkg]?.ref;
@@ -3299,15 +3299,16 @@ test("the package mirrors carry the versions package-catalog.json pins", () => {
     const manifest = JSON.parse(readFileSync(join(pkgRoot, "mirrors", slug, "oats.json"), "utf8"));
     assert.equal(manifest.version, String(ref).replace(/^v/, ""), `mirrors/${slug} must carry the version ${pkg} is pinned at`);
   }
-  // oats.engineering exports four capabilities under their own ids; the
-  // catalog aliases each to the package, and the reviewer is a package soul.
-  for (const [slug, id] of [["oats-engineering-expert", "oats.engineering-expert"], ["oats-developer", "oats.developer"], ["oats-code-review", "oats.code-review"], ["oats-maintainer", "oats.maintainer"]]) {
-    const manifest = JSON.parse(readFileSync(join(pkgRoot, "mirrors", slug, "oats.json"), "utf8"));
-    assert.equal(manifest.capability, id);
-    assert.equal(catalog.capabilities[id], "oats.engineering", `${id} is supplied by the oats.engineering package`);
-    assert.equal(Object.hasOwn(manifest, "agents"), false, `${id} declares no capability agent: the code-reviewer is oats.engineering's package soul`);
-  }
+  // oats.engineering is frozen at v1.18.0: its entry and its four aliases stay, so
+  // existing pins resolve. This workspace doesn't pin it (its souls compose the
+  // member copy of the engineering template), so it has no mirror here (as oats.cloning).
   assert.equal(catalog.packages["oats.engineering"].ref, "v1.18.0");
+  const workspacePackages = YAML.parse(readFileSync(join(pkgRoot, "oats-workspace.yaml"), "utf8")).packages;
+  assert.equal(Object.hasOwn(workspacePackages, "oats.engineering"), false, "this workspace no longer pins oats.engineering");
+  for (const [slug, id] of [["oats-engineering-expert", "oats.engineering-expert"], ["oats-developer", "oats.developer"], ["oats-code-review", "oats.code-review"], ["oats-maintainer", "oats.maintainer"]]) {
+    assert.equal(catalog.capabilities[id], "oats.engineering", `${id} is still aliased to the frozen oats.engineering package`);
+    assert.equal(existsSync(join(pkgRoot, "mirrors", slug)), false, `mirrors/${slug}: no mirror of an unpinned package`);
+  }
   // oats.cloning exports one capability under the package's own id: no alias; the cloner is a package soul.
   // This workspace does not pin it, so it has no mirror here (as oats.machine).
   assert.equal(catalog.packages["oats.cloning"].ref, "v1.1.0");
@@ -3350,15 +3351,15 @@ test("no shipped instructional surface teaches settling in the work tree (mainta
   }
 });
 
-test("the independently targetable oats.engineering capabilities assume no knowledge or messaging layer", () => {
+test("the independently targetable coordination capabilities (the member copy of the engineering template) assume no knowledge or messaging layer", () => {
   // Each may be composed into a deployment that has replaced or disabled either
   // layer — `requires` is for host commands and harness packages, never
   // capability dependencies (maintainer ruling). These are BOUNDED, observable
   // properties. Provider neutrality as a whole is not machine-decidable from
   // prose: when these surfaces change, it needs semantic review by the
   // maintainer, which the PR process already provides.
-  for (const slug of ["oats-engineering-expert", "oats-developer", "oats-code-review", "oats-maintainer"]) {
-    const dir = resolve(new URL(`../mirrors/${slug}`, import.meta.url).pathname);
+  for (const slug of ["oats-engineering-expert", "oats-developer", "oats-code-review", "oats-maintainer", "oats-landing-rules", "oats-dispatcher"]) {
+    const dir = resolve(new URL(`../capabilities/${slug}`, import.meta.url).pathname);
     const manifest = JSON.parse(readFileSync(join(dir, "oats.json"), "utf8"));
     for (const r of manifest.requires || []) {
       assert.ok(!r.capability && !r.layer, `${slug}: requires must not carry layer dependencies: ${JSON.stringify(r)}`);
@@ -3374,7 +3375,7 @@ test("the independently targetable oats.engineering capabilities assume no knowl
   }
   // The reviewer's report states the no-layer delivery: what an instance needs
   // to behave correctly with, and without, a messaging layer.
-  const reviewer = readFileSync(resolve(new URL("../mirrors/oats-code-review/injects/reviewer.md", import.meta.url).pathname), "utf8");
+  const reviewer = readFileSync(resolve(new URL("../capabilities/oats-code-review/injects/reviewer.md", import.meta.url).pathname), "utf8");
   assert.match(reviewer, /messaging layer if one is active[\s\S]*otherwise print it as your final message/, "the reviewer's report falls back to its own session");
 });
 

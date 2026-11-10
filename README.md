@@ -75,9 +75,9 @@ The agent then starts normally in its home and reads its `AGENTS.md` and skills 
 
 - **Three are core: knowledge, messaging and tasks.** They turn separate agents into a team: what they know, how they reach each other and people, and what work they share. Other capabilities build on them, so OATS defines a contract for each. Any capability that meets it can fill it, such as Jira or Linear for tasks, and an agent has **at most one of each**.
 - **Any other capability** adds other know-how and behaviours you want your agents to have, such as planning engineering work or reaching your own systems.
-- **Coordination** is the one that shapes a team most: how agents divide work, hand it over, review it and bring in a person. It is a capability, not part of OATS, so each team can work its own way and change it by pull request. Today `oats.engineering` provides it, and default coordination templates are coming.
+- **Coordination** is the one that shapes a team most: how agents divide work, hand it over, review it and bring in a person. It is a set of capabilities, not part of OATS, so each team can work its own way and change it by pull request. It starts from a template: a repository of coordination capabilities that a team copies into its own repository and adapts to how it works. The first is the engineering template, for work that lands as pull requests. OATS's own coordination is such a copy.
 - **Use a ready-made one or write your own.** Ready-made capabilities, and sometimes souls, come in **packages**. You pin each package to a version, so every agent gets exactly the same thing.
-- **Official packages** cover engineering (expert, developer, code review, maintainer), knowledge, messaging, and tasks including Jira and Linear.
+- **Official packages** cover knowledge, messaging, and tasks including Jira and Linear.
 
 ## Why souls are valuable
 
@@ -113,7 +113,7 @@ So:
 
 ## Work the way you choose
 
-- **Start from a default.** Packages ship ready-made souls, and default coordination templates, such as the one below, are coming. During setup, an agent called the setup expert adapts the defaults to your project with you.
+- **Start from a default.** Packages ship ready-made souls, and coordination starts from a template, such as the one below. During setup, an agent called the setup expert adapts the defaults to your project with you.
 - **Adapt it.** Change instructions, swap capabilities, add or drop roles, each by pull request.
 - **Or build your own:** one generalist, a set of specialists, a team with a person approving every merge, agents that only run on a schedule. Messaging, knowledge and tasks are capabilities too, so you can bring your own tools.
 

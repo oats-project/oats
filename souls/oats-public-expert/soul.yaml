@@ -6,7 +6,8 @@ description: The OATS expert anyone can reach — a global aweb identity that an
 work: directory
 # oats.core and the oats.okf knowledge slot come from the workspace defaults.
 capabilities:
-  oats.engineering-expert: { from: package }   # the expert method: understand, specify, coordinate, verify
+  oats.engineering-expert: { from: here }      # the expert method: understand, specify, probe, coordinate, verify
+  oats.landing-rules: { from: here }           # how work lands here: the lane map, the agreements, who merges
   oats.workspace-experts: { from: here }       # this repository's surfaces, developers and delivery
 # A global identity, reachable at its public address from outside any team, acting through a resident
 # session grant. The resident's custody is a host fact: the host that runs it maps the resident name in

@@ -1,6 +1,6 @@
 schemaVersion: 2
 name: market-research-expert
-description: "Dated attributable research, fair scoped comparisons and positioning evidence; no facts invented."
+description: "Deprecated: new work spawns oats-product-expert; this soul resolves until its removal in a change of its own. Dated attributable research, fair scoped comparisons and positioning evidence; no facts invented."
 work: directory
 # oats.core and the oats.okf knowledge slot come from the workspace defaults.
 # What this soul owns and reads in the central base is okf.json beside this file.
