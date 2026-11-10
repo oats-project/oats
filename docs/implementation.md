@@ -495,7 +495,9 @@ the repo's cross-process write lock, `<cache>/.locks/<repo>.lock`
 (`withCacheWriteLock`): an exclusive file holding `{pid, token, startedAt}`,
 waited for while its holder lives (bounded by a whole fetch, then
 `reason: "cache"` naming the pid), reclaimed when the holder is dead, and
-released only by its owner. Reclaimers take a short guard,
+released only by its owner. A holder is judged by its pid alone, so a lock whose
+holder is gone while its pid names another process is waited out to that
+deadline before the waiter is refused: a delay, never a lock that stays. Reclaimers take a short guard,
 `<lock>.reclaim`, and check under it that the lock is still the dead
 record before removing it, so a reclaimer that paused cannot delete a
 live process's new lock. A guard whose holder died is never removed
