@@ -30,6 +30,7 @@
   "files": [
     "bin/",
     "lib/",
+    "share/oats-login-receive",
     "skills/",
     "injects/",
     "docs/",

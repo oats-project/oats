@@ -3201,6 +3201,7 @@ kernel stage raised as well.
 | `E_LAUNCH_*`, `E_MODEL_UNKNOWN`, `E_UNSUPPORTED_HARNESS` | | the launch selection is refused |
 | `E_HARNESS_UNAVAILABLE` | `{harness, from, at, fix}` | the chosen harness has no executable on this machine ([launch preferences](#soul-launch-preferences-feature-launch-preference-oats-0300)) |
 | `E_CLAUDE_CONFIG_REMOVED` | `{file, executable, fix}` | a new claude launch with an `oats-claude-config` in reach ([configuration.md](configuration.md)) |
+| `E_CLAUDE_LOGIN_CREDENTIAL` | | the effective Claude configuration has a `/login` credential file while OATS sets `CLAUDE_CODE_OAUTH_TOKEN`; remove the login credential and use the token route ([configuration.md](configuration.md)). Spawn preflight checks predictable values before effects, and the actual pane is checked after hooks |
 | `E_HARNESS_RESOURCE_MISSING` | | a harness package a capability requires for the selected harness is not installed, disabled, or cannot be verified ([capabilities.md](capabilities.md)); raised before any home exists, at a preview too, and again by an apply after the home, the work and the hooks when the pane it got differs from the one it checked in a name the probe reads, or selects another program (another creator started the OATS tmux server): then the spawn is rolled back, with `details.unconfirmed` when that cannot finish. A start, a restart and a launch plan's `harness-packages` check answer the same code |
 | `E_LAUNCH_SHIM` | | the home's `oats` (`<home>/.oats/bin/oats`) cannot be written; the spawn is rolled back |
 | `E_SCHEDULE_INVALID` | | a bad wake (`--wake-json`, `--wake-file`, `--wake-*`) |
@@ -4005,16 +4006,19 @@ oats server check <id> --json
 ```
 
 `server list` is an envelope whose `result` is `{file, servers}`; each row is
-the registration (`id`, `sshHost`, `workspace`, and `oatsPath`, `path`,
-`label` when set) plus `workspaceKey` (`null` when not known yet), `target`
-and `snapshots`. With `--workspace-ref <ref>`, `servers` holds only the rows
-whose `workspaceKey` is the canonical key of `<ref>` (`parseRepoRef`; any
+the registration (`id`, `sshHost`, `workspace`, and `operatorSshHost`,
+`oatsPath`, `path`, `label` when set) plus `workspaceKey` (`null` when not known
+yet), `target` and `snapshots`. `operatorSshHost` is the optional `--operator-ssh` alias,
+joined from `~/.oats/server-operator-routes.json`; it is absent from `servers.json`.
+Older kernels never read the separate file;
+existing routing and `target` use only `sshHost`. With `--workspace-ref <ref>`,
+`servers` holds only the rows whose `workspaceKey` is the canonical key of `<ref>` (`parseRepoRef`; any
 spelling of the repository), and `result.unknownWorkspace` lists the ids
 whose key is not known; an unparsable ref is `E_REPO_REF`.
 
 ```json
 {"file":"/Users/me/.oats/servers.json",
- "servers":[{"id":"altair-aweb","sshHost":"altair","workspace":"/Users/me/acme","path":"/opt/homebrew/bin","label":"altair",
+ "servers":[{"id":"altair-aweb","sshHost":"altair","operatorSshHost":"altair-operator","workspace":"/Users/me/acme","path":"/opt/homebrew/bin","label":"altair",
              "workspaceKey":"github.com/awebai/ac",
              "target":{"sshHost":"altair","workspace":"/Users/me/acme","oatsPath":"oats","path":"/opt/homebrew/bin"},"snapshots":0}],
  "unknownWorkspace":["build"]}
@@ -4035,7 +4039,7 @@ contradicts fails the check with `E_SERVER_WORKSPACE_MISMATCH`, `details:
 
 ```text
 oats server connect <id> --ssh <host> --dir </abs/path or ~/path on the host> [--workspace-ref <ref>]
-                    [--oats <path>] [--path <dirs>] [--label <text>] [--install-oats] [--replace] --json
+                    [--operator-ssh <alias> | --no-operator-ssh] [--oats <path>] [--path <dirs>] [--label <text>] [--install-oats] [--replace] --json
 ```
 
 An envelope, `ok: true` whenever no step failed, human steps included
@@ -4067,10 +4071,13 @@ An envelope, `ok: true` whenever no step failed, human steps included
   some codes, `details`. `skipped` steps say `waits for <step>`.
 - `registration` is the registration as written or found (`sshHost`,
   `workspace`: the absolute path the host resolved for `--dir`, never `~`;
-  `workspaceKey`; and `oatsPath`, `path`,
-  `label` when set, given or, without `--path`, read from the host user's
+  `workspaceKey`; optional `operatorSshHost` joined from the separate operator-route file; and
+  `oatsPath`, `path`, `label` when set, given or, without `--path`, read from the host user's
   [login shell](servers.md#the-hosts-login-shell-path)), `null` until the
   `register` step has run.
+  With `--replace`, an existing operator route is kept unless `--operator-ssh`
+  sets it again or `--no-operator-ssh` clears it. `server remove` deletes the
+  separate route too. Both files are updated under `servers.lock`.
 - `human` lists the remedies of the `needs-human` steps, in order. A
   `readiness` step that needs a human has one line per problem
   (`<souls>: <subject>: <reason>[ → <remedy>]`, plus `readiness not checked
@@ -6839,6 +6846,8 @@ warning naming the same-key cleanup retry.
   [Commands that meet on one home](#lifecycle-pairs)), `E_LAUNCH_*` (among them
   `E_LAUNCH_SHIM`: the home's `oats` link cannot be written, nothing was
   started), `E_MODEL_UNKNOWN`, `E_UNSUPPORTED_HARNESS`,
+  `E_CLAUDE_LOGIN_CREDENTIAL` (the effective Claude config has a `/login`
+  credential file alongside an OATS-set token; other harnesses are unaffected),
   `E_HARNESS_RESOURCE_MISSING` (a harness package an active capability
   requires is not installed, disabled, or cannot be verified: nothing was
   started; `E_HARNESS_PACKAGE` before 0.56.0), `E_SESSION_FAILED`
@@ -6897,10 +6906,10 @@ answer is the ordinary start answer plus one object:
 - Refused `E_RESUME_NOT_LOST` when the home did not lose its session
   (`stopped`, `exited`, never launched), read under the claim and the start
   lock before any launch hook runs; nothing was started.
-- Refused `E_LAUNCH_ENV_CHANGED` when a `{fromEnv}` value differs from the
-  one the start it brings back ran with (checked after `E_LAUNCH_ENV_MISSING`):
-  the message names the variables, sorted, never a value; nothing was
-  started. A home with no record of its last start's values (last started
+- Refused `E_LAUNCH_ENV_CHANGED` when a reference value (`fromEnv` or
+  `fromFile`) differs from the one the start it brings back ran with (checked after `E_LAUNCH_ENV_MISSING`):
+  the message names the sources (an environment name or `file:<path>`),
+  sorted, never a value; nothing was started. A home with no record of its last start's values (last started
   by an earlier kernel, or a record that does not read) is resumed, and
   `warnings` carries once `<instance>'s launch environment could not be
   verified this once (it was last started before OATS recorded it); its
@@ -7165,15 +7174,17 @@ accept `--server <id>`.
 ```json
 {"context":"/w","level":"/w","file":"/w/oats-local.yaml","selected":null,
  "configurations":[{"name":"reviewers","harness":"claude","executable":null,"args":["--permission-mode","plan"],
-                    "env":{"ANTHROPIC_API_KEY":{"fromEnv":"REVIEW_KEY"},"REVIEW_MODE":{"redacted":true}},
+                    "env":{"ANTHROPIC_API_KEY":{"fromEnv":"REVIEW_KEY"},"CLAUDE_CODE_OAUTH_TOKEN":{"fromFile":"/etc/agent-login/claude-token"},"REVIEW_MODE":{"redacted":true}},
                     "model":"opus","yolo":null,"default":false,"source":"/w/oats-local.yaml","shadows":[]}]}
 ```
 
 - **list**: `selected` is `null`, `{home, instance}` or `{soul, agentsRoot}`;
   `level` and `file` are `null` without an `oats-local.yaml` (the set is then
   empty). An environment literal is `{redacted: true}`, a reference
-  `{fromEnv}`; values never leave the file. `default` (0.32, feature
-  `launch-config-default`) is always a boolean: `true` marks this host's
+  `{fromEnv: NAME}` or `{fromFile: /absolute/path}`; resolved values are never
+  returned. File references hold credential values; directory selectors require
+  a literal or `fromEnv` ([configuration.md](configuration.md)). `default`
+  (0.32, feature `launch-config-default`) is always a boolean: `true` marks this host's
   default for the configuration's harness.
 - **set**/**remove**: `{name, action, level, file, before, after,
   effective}`. `set --file` takes `{harness, executable?, args?, env?, model?,
@@ -7209,8 +7220,8 @@ accept `--server <id>`.
 - **preview** (read-only) answers `{context, selected, selection: {source,
   launchConfig, harness, model, yolo}, harness, model, modelSource, yolo,
   launchConfig, launchConfigSource, launchConfigDefault, executable: {path,
-  declared, resolvedFrom}, argv, environment: [{name, fromEnv} | {name, redacted:
-  true} | {name, reference: true}], command (redacted), prompt, hooks,
+  declared, resolvedFrom}, argv, environment: [{name, fromEnv} | {name, fromFile}
+  | {name, redacted: true} | {name, reference: true}], command (redacted), prompt, hooks,
   preflight: [{check, ok, detail, code?}], ok}`. A failed check carries the
   code a start would refuse with; the `harness-packages` check's is the
   gate's own, `E_HARNESS_RESOURCE_MISSING` (`E_HARNESS_PACKAGE` before
@@ -7666,6 +7677,47 @@ One warning per command, however many old spellings it read:
 
 The `--server` routes translate for a host without the `harness` feature:
 they send `--runtime` and `runtime` keys and read its `runtimes` list.
+
+<a id="harness-token"></a>
+### `harness token`
+
+`oats harness token set|status|remove <harness> --server <id> [--name <team>] [--stdin] [--debug] --json`
+runs on the operator's machine. Its `--server` selects that registration's
+separate operator route, never a remote invocation of this CLI. The harness
+is `claude`, `codex`, `pi` or `opencode`; the name defaults to a valid
+server label and otherwise is required. The ordinary schemaVersion 1 envelope's
+result is:
+
+```json
+{"server":"build","action":"status","harness":"claude","name":"team","fingerprint":"sha256:0123456789abcdef","replacedAt":"2026-11-10T00:00:00Z","warnings":[]}
+```
+
+For `remove`, `action` is `remove` and `fingerprint` is `null`.
+`set --stdin` returns `action: "set"` and also `staleInstances`, an array
+of `{instance, agent, home, startedAt}` from that server's status rows, with
+the same harness and a last-start time before or during the second named by
+`replacedAt`. The receiver records whole seconds, so starts during that second
+are included conservatively: they may still use the previous credential. If
+that roster cannot be read, `staleInstances` is `null` and `warnings` holds
+a plain explanation; the installation remains successful. No automatic
+restart is performed. Only `set` accepts stdin, as bounded credential bytes;
+there is no credential argument, result field, event or file on the client.
+The receiver's single JSON line and exit status must agree, name the requested
+harness and team, and carry valid metadata. Malformed or oversized replies fail
+closed as unexpected replies. Text-mode refusal messages escape remote control
+characters for the terminal. C0 controls and DEL in refusal reasons become
+spaces in both modes; JSON retains the remaining characters without terminal escaping.
+The submitted credential is redacted in both modes.
+Refusals: `E_BAD_ARGS` for unsupported arguments or names,
+`E_SERVER_UNKNOWN` for a server id without a registration, even with an orphan operator route,
+`E_HARNESS_TOKEN_ROUTE` for a missing operator alias,
+`E_HARNESS_TOKEN_INPUT` for invalid, too-large or terminal stdin,
+`E_HARNESS_TOKEN_UNSUPPORTED` for unavailable interactive capture or a
+refreshing sign-in, and
+`E_HARNESS_TOKEN_DELIVERY` for connection failure, receiver refusal or an
+unexpected reply. Public errors do not forward raw SSH or malformed receiver
+output. `--debug` adds transport facts on stderr, never stdin or raw receiver
+output that might echo it. See [servers](servers.md#harness-credentials).
 
 ### `harness trust`
 
