@@ -3,6 +3,18 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { parse } from "yaml";
 
+function sshSettings(source) {
+  const settings = new Map();
+  for (const line of source.split("\n").map((s) => s.trim()).filter((s) => s && !s.startsWith("#"))) {
+    const [keyword, ...value] = line.split(/\s+/);
+    const key = keyword.toLowerCase();
+    assert.ok(key !== "match" && key !== "include", "sshd config must be flat: " + keyword);
+    assert.ok(!settings.has(key), "duplicate sshd keyword: " + keyword);
+    settings.set(key, value.join(" "));
+  }
+  return Object.fromEntries(settings);
+}
+
 const read = (name) => readFileSync(new URL(`../container/agent/${name}`, import.meta.url), "utf8");
 
 test("agent image pins its base and CLI dependency closure", () => {
@@ -67,8 +79,12 @@ test("agent Compose service retains the isolation contract", () => {
 });
 
 test("SSH accepts only agent public keys with forwarding disabled", () => {
-  const config = Object.fromEntries(read("sshd_config").split("\n").filter((s) => s && !s.startsWith("#")).map((s) => { const [key, ...value] = s.split(/\s+/); return [key, value.join(" ")]; }));
-  for (const [key, value] of Object.entries({ Port: "2222", AllowUsers: "agent", AuthenticationMethods: "publickey", PasswordAuthentication: "no", KbdInteractiveAuthentication: "no", PermitRootLogin: "no", UsePAM: "no", DisableForwarding: "yes", StrictModes: "yes", AuthorizedKeysFile: "/etc/agent-ssh/authorized_keys", HostKey: "/state/ssh/ssh_host_ed25519_key", PidFile: "/tmp/agent-sshd.pid" })) assert.equal(config[key], value, key);
+  const config = sshSettings(read("sshd_config"));
+  for (const [key, value] of Object.entries({ Port: "2222", AllowUsers: "agent", AuthenticationMethods: "publickey", PasswordAuthentication: "no", KbdInteractiveAuthentication: "no", PermitRootLogin: "no", UsePAM: "no", DisableForwarding: "yes", StrictModes: "yes", AuthorizedKeysFile: "/etc/agent-ssh/authorized_keys", HostKey: "/state/ssh/ssh_host_ed25519_key", PidFile: "/tmp/agent-sshd.pid" })) assert.equal(config[key.toLowerCase()], value, key);
+});
+
+test("SSH guard refuses repeated keywords or conditional configuration", () => {
+  for (const prefix of ["PasswordAuthentication yes", "disableforwarding no", "  Match User agent", "  Include /tmp/unreviewed.conf"]) assert.throws(() => sshSettings(prefix + "\n" + read("sshd_config")));
 });
 
 test("Claude auth acceptance excludes the instance project settings", () => {
@@ -96,10 +112,17 @@ test("acceptance refuses drift in the admitted container settings", async () => 
     ],
   };
   inspected.HostConfig.Mounts = inspected.Mounts.map((m) => ({ Type: "bind", Source: m.Source, Target: m.Destination, ReadOnly: !m.RW, BindOptions: {} }));
+  Object.assign(inspected.HostConfig, { Runtime: "runc", MemorySwap: 6442450944, OomKillDisable: false, DeviceCgroupRules: null, ShmSize: 67108864 });
   assert.ok(inspectAgent(inspected, env, image).length >= 8);
   const withoutCmd = structuredClone(image);
   delete withoutCmd.Config.Cmd;
   assert.ok(inspectAgent(inspected, env, withoutCmd).length >= 8, "Docker image metadata omits Cmd while container metadata uses null");
+  const defaultSwap = structuredClone(inspected);
+  delete defaultSwap.HostConfig.MemorySwap;
+  assert.ok(inspectAgent(defaultSwap, env, image).length >= 8, "absent swap setting uses Docker's memory-derived default");
+  const otherDaemon = structuredClone(inspected);
+  otherDaemon.HostConfig.Runtime = "runsc";
+  assert.ok(inspectAgent(otherDaemon, env, image, "runsc").length >= 8, "runtime must match the independently read daemon default");
   for (const mutate of [
     (v) => { v.Config.User = "0"; },
     (v) => { v.Config.User = "20001"; },
@@ -134,6 +157,11 @@ test("acceptance refuses drift in the admitted container settings", async () => 
     (v) => { v.Config.Env.push("HOME=/tmp"); },
     (v) => { v.Config.Entrypoint = ["/bin/sh", "-c", "sleep infinity"]; },
     (v) => { v.Config.Cmd = ["sh"]; },
+    (v) => { v.HostConfig.Runtime = "other"; },
+    (v) => { v.HostConfig.MemorySwap = -1; },
+    (v) => { v.HostConfig.OomKillDisable = true; },
+    (v) => { v.HostConfig.DeviceCgroupRules = ["c *:* rmw"]; },
+    (v) => { v.HostConfig.ShmSize = 8589934592; },
   ]) {
     const changed = structuredClone(inspected);
     mutate(changed);

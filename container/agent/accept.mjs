@@ -12,7 +12,7 @@ function required(env, name) {
 const ids = (env) => ({ uid: env.AGENT_UID || "20001", gid: env.AGENT_GID || "20001" });
 
 // Compare only reviewed settings, never dump Config.Env or credential contents.
-export function inspectAgent(info, env, image) {
+export function inspectAgent(info, env, image, defaultRuntime = "runc") {
   const evidence = [];
   const equal = (name, actual, expected) => {
     assert.deepEqual(actual, expected, name);
@@ -38,6 +38,11 @@ export function inspectAgent(info, env, image) {
   equal("privileged", h.Privileged, false);
   equal("host PID namespace", h.PidMode || "", "");
   equal("IPC namespace", h.IpcMode, "private");
+  assert.ok(typeof defaultRuntime === "string" && defaultRuntime.length > 0, "Docker default OCI runtime is required");
+  equal("OCI runtime", h.Runtime, defaultRuntime);
+  equal("OOM killer disabled", !!h.OomKillDisable, false);
+  equal("device cgroup rules", h.DeviceCgroupRules || [], []);
+  equal("shared memory size", h.ShmSize, 67108864);
   equal("supplementary groups added", h.GroupAdd || [], []);
   equal("user namespace override", h.UsernsMode || "", "");
   equal("UTS namespace override", h.UTSMode || "", "");
@@ -70,6 +75,7 @@ export function inspectAgent(info, env, image) {
   const bytes = Number(memory[1]) * (1024 ** ({ "": 0, b: 0, k: 1, m: 2, g: 3 }[memory[2].toLowerCase()]));
   assert.ok(bytes > 0, "positive AGENT_MEMORY");
   equal("memory limit", h.Memory, bytes);
+  equal("memory + swap (Docker default if absent)", h.MemorySwap ?? 2 * bytes, 2 * bytes);
   const nanos = Math.round(Number(required(env, "AGENT_CPUS")) * 1e9);
   assert.ok(nanos > 0, "positive AGENT_CPUS");
   equal("CPU limit", h.NanoCpus, nanos);
@@ -169,7 +175,8 @@ function main(args, env) {
   };
   const info = JSON.parse(docker(["inspect", container]))[0];
   const image = JSON.parse(docker(["image", "inspect", "--", required(env, "AGENT_IMAGE")]))[0];
-  for (const line of inspectAgent(info, env, image)) report(`PASS ${line}`);
+  const defaultRuntime = docker(["info", "--format", "{{.DefaultRuntime}}"]);
+  for (const line of inspectAgent(info, env, image, defaultRuntime)) report(`PASS ${line}`);
   const { uid, gid } = ids(env);
   const program = (fn, params, root = false) => docker(["exec", "-i", ...(root ? ["--user", "0:0"] : []), container, "node"], `(${fn.toString()})(${params.map((p) => JSON.stringify(p)).join(",")});`);
   const arch = docker(["exec", container, "node", "-p", "process.arch"]);
@@ -177,7 +184,8 @@ function main(args, env) {
   report(`PASS architecture=${arch}; image=${info.Image}`);
   report(`PASS ${program(runtimeCheck, [uid, gid, label !== "local"]).replaceAll("\n", `\n[${label}] PASS `)}`);
   report(`PASS ${program(credentialScan, [["/"], ["/proc", "/sys", "/dev", "/state", "/tmp", "/run", "/work"]], true)}`);
-  report(`PASS ${program(credentialScan, [["/state", "/tmp", "/run", "/work"]])}`);
+  const writableRoots = ["/state", "/tmp", "/run", "/work", "/dev/shm", "/dev/mqueue"];
+  report(`PASS ${program(credentialScan, [writableRoots])}`);
   const denied = docker(["exec", container, "sh", "-eu", "-c", `
     test "$(npm prefix -g)" = /usr/local
     probe=$(mktemp -d /tmp/oats-npm-probe.XXXXXX)
@@ -209,7 +217,7 @@ function main(args, env) {
     `, "oats-claude-probe", home], { encoding: "utf8", timeout: 180000, maxBuffer: 1024 * 1024 });
     assert.ok(r.status === 0 && r.stdout.trim() === "OATS_CONTAINER_AUTH_OK", "claude -p did not return the expected response; raw output withheld");
     report(`PASS claude -p for ${home}: OATS_CONTAINER_AUTH_OK (scratch cwd; user settings only; token read only inside the process)`);
-    report(`PASS ${program(credentialScan, [["/state", "/tmp", "/run", "/work"]])}`);
+    report(`PASS ${program(credentialScan, [writableRoots])}`);
   } else report("NOT RUN claude -p: requires --claude INSTANCE_HOME and an operator-provisioned setup-token");
   report("NOT RUN platform network/bypass, admitted-seat spawn, viewer, package sync, mail/chat and governance checks: collect their own live evidence; this is not a full section 12 receipt");
 }

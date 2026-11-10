@@ -217,11 +217,16 @@ variables. It resolves `AGENT_IMAGE` independently and requires that image's
 ID, reference and start command, and its complete environment (printing only
 names of differing variables). Other comparisons include supplementary
 groups, namespace overrides, sysctls, published ports, resolver overrides
-and the single network/address.
+and the single network/address. The OCI runtime must match the daemon's
+independently read default; shared memory stays at Docker's 64 MiB default,
+the OOM killer stays enabled, and device cgroup rules stay empty. The total
+memory-plus-swap setting is absent or Docker's default of twice the memory
+limit; unlimited swap is refused.
 It checks the process's UID/GID/supplementary groups/capabilities/no-new-privileges
 and non-root sshd's banner, scans `/` as container root (pruning `/proc`,
 `/sys`, `/dev` and the agent-scanned `/state`, `/tmp`, `/run`, `/work`),
-and scans those writable trees as the agent for `.credentials.json`. It checks
+and scans those trees plus writable `/dev/shm` and `/dev/mqueue` as the agent
+for `.credentials.json`. It checks
 the token is readable and not writable, and proves a global npm install fails using an
 offline local package. Scan errors fail acceptance. The root inspection
 process receives no added capabilities. Token provenance still needs the
@@ -236,5 +241,6 @@ checks. Record target evidence separately from local evidence. Container
 startup and a local preview do not establish two running agents.
 
 `test/agent-container.test.mjs` pins the image, Compose and SSH security
-settings and rejects weakened inspect fixtures. Follow the repository's
+settings and rejects weakened inspect fixtures. The SSH guard refuses
+duplicate keywords and `Match`/`Include`, keeping that file flat. Follow the repository's
 local check limits; full suites run in CI.
