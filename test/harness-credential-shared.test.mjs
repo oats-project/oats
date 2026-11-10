@@ -163,8 +163,8 @@ test("Claude refuses a login credential alongside any OATS-set token reference",
   for (const value of ["", "literal-fixture", { fromEnv: "SRC" }, { fromFile: token }]) {
     const r = recipe({ CLAUDE_CONFIG_DIR: dir, CLAUDE_CODE_OAUTH_TOKEN: value });
     const args = { home: base, instance: "fixture", meta: { launch: r }, env: { ...process.env, SRC: "referenced-fixture" } };
-    assert.throws(() => planLaunch(args), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL" && /oats harness token set claude/.test(e.message));
-    assert.equal(planLaunch({ ...args, preview: true }).preflight.some((p) => p.code === "E_CLAUDE_LOGIN_CREDENTIAL"), true);
+    assert.throws(() => planLaunch(args), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL" && /oats harness token set claude/.test(e.message) && e.message.includes(join(dir, ".credentials.json")));
+    assert.equal(planLaunch({ ...args, preview: true }).preflight.some((p) => p.code === "E_CLAUDE_LOGIN_CREDENTIAL" && p.detail.includes(join(dir, ".credentials.json"))), true);
   }
   const hooked = recipe({ CLAUDE_CONFIG_DIR: dir }); hooked.hooks.env.CLAUDE_CODE_OAUTH_TOKEN = "";
   assert.throws(() => planLaunch({ home: base, instance: "fixture", meta: { launch: hooked }, env: process.env }), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL");

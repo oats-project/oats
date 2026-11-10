@@ -25,6 +25,12 @@ letters, digits, dot, underscore and dash, beginning with a letter or digit;
 no `user@host`, spaces or SSH options. Put the user and forced-command key in
 OpenSSH configuration under that alias. Registrations without it remain valid.
 
+Before downgrading to a kernel without operator-route support, remove
+`operatorSshHost` from every registration in `~/.oats/servers.json`. Older
+kernels reject this unknown field and refuse the whole registry, including
+`server` commands and `--server` operations. This also applies to an older
+kernel bundled with Desktop, even when the CLI supports the field.
+
 The operator alias is reserved for credential provisioning. Registering it
 runs no operator command: every existing remote operation continues to use
 `sshHost`, and saved instance targets contain no operator route. To change an

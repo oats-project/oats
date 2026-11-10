@@ -579,7 +579,8 @@ launch-configs:
 when no config directory is selected, using the launch's effective environment.
 If OATS sets `CLAUDE_CODE_OAUTH_TOKEN` through a literal, either reference kind,
 or a capability's launch contribution, it refuses with
-`E_CLAUDE_LOGIN_CREDENTIAL`. An empty value counts. Remove the `/login`
+`E_CLAUDE_LOGIN_CREDENTIAL`, naming the exact credential file it found. An
+empty value counts. Remove the `/login`
 credential from that Claude configuration and use `oats harness token set
 claude` to provision an inference-only token. Without an OATS-set token, OATS
 warns with that command. An inherited token does not select the token route.
