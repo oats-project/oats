@@ -61,10 +61,10 @@ version and regenerate this directory's lock with
 `npm install --package-lock-only --ignore-scripts`; review both files. Do not
 use `--install-oats` or `--install-aw` against a running container.
 
-The committed OATS 0.69.12 pin supports container/SSH checks and spawn
-preview. Live token delivery requires a new pin to a release that includes
-`env: { fromFile: ... }` and the operator's `oats harness token set` route.
-Until that image is built, the two-seat inference milestone remains unproven.
+The committed OATS 0.69.14 pin supports `env: { fromFile: ... }` and the
+operator's `oats harness token set` route. Provision the token through the
+[harness credential route](servers.md#harness-credentials) and collect live
+acceptance evidence before claiming the two-seat inference milestone.
 
 ## Mounts and UID
 
@@ -169,8 +169,7 @@ Preview runs no provider hook and does not validate a missing seat. Apply
 only after reviewing it and provisioning its seat; use the same arguments
 without `--preview`. Keep the team and controller keys outside the container.
 
-On an OATS release supporting file-backed launch environment, the launch
-configuration uses:
+The pinned OATS release supports this file-backed launch configuration:
 
 ```yaml
 launch-configs:
