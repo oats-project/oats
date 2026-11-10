@@ -765,12 +765,15 @@ not go with `--print` (`E_BAD_ARGS`). Its answer is install's: `scheduler`
 with `registered: true` and `installed: false`, and no warnings.
 
 On such a host `oats host run` is the ticker
-([container.md](container.md#what-runs-in-the-container)): each minute it
+([desktop-cli-api.md](desktop-cli-api.md#the-host-run-oats-host-run)): each minute it
 runs `oats schedule tick --host` for the scopes the registry lists, and with
 none it ticks nothing and says so. It refuses to start while a host timer is
 active (`E_HOST_RUN_TIMER_ACTIVE`), so a host has one ticker, never two.
-With `--server`, `--register-only` is forwarded as it is: a destination on an
-OATS before this option does not know it.
+With `--server`, `--register-only` is sent only to a destination that
+advertises `schedule` and `schedule-host-register-only`. Any other is
+refused with `E_REMOTE_INCOMPATIBLE` before anything is sent, because a
+destination that does not know the option ignores it and installs a timer.
+Upgrade OATS on the destination.
 
 ### The host timer's unit
 

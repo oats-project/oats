@@ -1,24 +1,14 @@
-## Upgrade
-
-- **The agent container's entrypoint now ends as `oats host run`, and its
-  Compose service has a stop grace and a healthcheck**
-  (oats-project/oats#1789). An image built from `container/agent/` needs an
-  OATS pin that has `oats host run`: with an earlier pin the entrypoint's
-  last line fails and the container restarts in a loop. `accept.sh` now
-  expects `stop_grace_period: 45s` and the healthcheck on port 2222, so a
-  container created from the earlier service file fails acceptance until it
-  is recreated. After `server connect`, register the deployment for the tick:
-  `oats schedule host install --register-only --server <id>`
-  ([container.md](../container.md#register-the-deployment-for-the-tick)).
-
 ## Added
 
 - **`oats host run`: the kernel's periodic work in one foreground process,
-  for a container** (oats-project/oats#1789). Every `oats` command is
+  for a host without a timer** (oats-project/oats#1789). Every `oats` command is
   short-lived, and the resume sweep and the schedule tick were started by a
   client or by a host timer. A container has neither, so nothing there
-  resumed sessions after a restart, ran schedules, or stopped the agents in
-  order when the container stopped.
+  resumes sessions after a restart, runs schedules, or stops the agents in
+  order when the container stops. The command is what an operator, or the
+  entrypoint of an image, runs for that; the agent image in
+  `container/agent/` does not run it yet
+  ([container.md](../container.md#the-kernels-periodic-work)).
   - `oats host run [--stop-grace <seconds>] [--plan] [--json]` runs the
     resume sweep once, then `oats schedule tick --host` at second 0 of every
     minute for the registered scopes, and lists the instances each minute so
@@ -48,8 +38,13 @@
   the host schedule registry, with any caps given, and installs no timer
   (oats-project/oats#1789). It asks neither launchd nor systemd for
   anything, so it works in a container, where plain `host install` fails
-  after registering. It does not go with `--print`. A new contract: the
-  flag, and its answer, which is `host install`'s
+  after registering. It does not go with `--print`. With `--server` it is
+  sent only to a host that advertises the new feature
+  `schedule-host-register-only` (and `schedule`); any other is refused here
+  with `E_REMOTE_INCOMPATIBLE` before anything is sent, since a host that
+  does not know the option ignores it and installs a timer. New contracts:
+  the flag; its answer, which is `host install`'s; and the feature
+  `schedule-host-register-only` in the probe
   ([schedules.md](../schedules.md#without-a-host-timer)).
 - **A session that OATS stopped with the host is resumed**
   (oats-project/oats#1789). A stop by `oats host run` writes the home's stop
@@ -60,13 +55,3 @@
   the host)` under a local row. A new contract: `resume` and `reason` in
   `.oats-stop.json`
   ([execution-targets.md](../execution-targets.md#how-a-sessions-end-is-read)).
-
-## Changed
-
-- **The agent container** (`container/agent/`, oats-project/oats#1789):
-  `entrypoint.sh` starts sshd in the background and ends as `oats host
-  run`, which is now the process `tini` signals and waits for;
-  `compose.agent.yaml` sets `stop_grace_period: 45s` and a `healthcheck`
-  that connects to sshd on port 2222. Docker does not restart an unhealthy
-  container: [container.md](../container.md#what-runs-in-the-container) says
-  how to recover.

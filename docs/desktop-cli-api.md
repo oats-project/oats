@@ -171,6 +171,7 @@ see the [official catalog](official-catalog.md) for current pins.
 | `spawn-attribution` | the kernel validates who spawned an instance: `spawnedBy` (`{instance, home}` or `null`) in `instance.json`, on the `spawned` event and on `oats status --json` rows and remote rows, and `OATS_SPAWNER_HOME` for spawn hooks ([Spawned by](#spawned-by)); `attributedHuman` on `oats status --json` rows and on remote rows ([Attributed human](#attributed-human)). Absent: no `spawnedBy` and no `attributedHuman`, and a capability must not read a missing `OATS_SPAWNER_HOME` as a person's spawn | |
 | `workspace-tasks-payload` | oats-workspace.yaml may carry a top-level `tasks:` payload, merged for the capability that fills the tasks slot exactly as `messaging:` is for the messaging one; its leaves' `settingsOrigins` are `{kind: "workspace", at: "oats-workspace.yaml#/tasks"}` ([Provider payloads have three homes](workspaces.md#provider-payloads-have-three-homes)). A kernel without it refuses a workspace file that carries `tasks:` (unknown property) | |
 | `settings-committed-only` | a manifest `settings.<key>.committedOnly: true` is enforced: that key in oats-local.yaml `settings.<cap>` or a `--provider <cap>` flag is refused `E_WORKSPACE_SCHEMA` reason `committed-only-key`, with `details.layer`, `details.at` and `details.allowed` ([Commands and hooks](capabilities.md#commands-and-hooks)). A kernel without it ignores the flag and merges the key | |
+| `schedule-host-register-only` | `oats schedule host install --register-only`: the scope is recorded in the host schedule registry and no timer is installed ([`oats schedule`](#oats-schedule)). Routed with `--server`, the option is sent only to a host that lists this and `schedule`; otherwise it is refused here with `E_REMOTE_INCOMPATIBLE` before anything is sent, since a host without it ignores the option and installs a timer | |
 
 Payload-only integers, never in the probe: `onboardApi: 2`, `syncApi: 1`,
 `workspaceStatusApi: 1`, `capabilitiesApi: 1`, the `oats souls` document's
@@ -7128,7 +7129,7 @@ whatever the rows say:
 
 `oats host run [--stop-grace <seconds>] [--plan] [--json]` runs
 the kernel's periodic work in one foreground process, for a host where no
-timer can ([container.md](container.md#what-runs-in-the-container)). It is
+timer can ([container.md](container.md#the-kernels-periodic-work)). It is
 this machine's: it takes no `--server`. It runs until SIGTERM or SIGINT.
 
 - **Refused before any effect**, through the standard failure envelope, exit 1:
@@ -7525,7 +7526,9 @@ oats schedule update <id> --description=<text> [--dir <d>] --json
   host registry and no unit installed (`scheduler.registered: true`,
   `installed: false`, `warnings: []`), for a host whose ticker is
   [`oats host run`](#the-host-run-oats-host-run); it does not go with
-  `--print` (`E_BAD_ARGS`);
+  `--print` (`E_BAD_ARGS`), and with `--server` the host must advertise
+  `schedule` and `schedule-host-register-only` (`E_REMOTE_INCOMPATIBLE`
+  otherwise, before anything is sent: nothing is installed there);
   `host uninstall | status` → `{scheduler}`; `host install --print [--os
   darwin|linux]` → `{kind, files: {<path>: <content>}, warnings}`, writing
   nothing.

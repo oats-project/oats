@@ -1228,7 +1228,7 @@ for its current start (`startId` in `instance.json`):
 | What the home holds for its current start | `sessionEnd` | Resumed |
 |---|---|---|
 | a stop's record that names it (or, a record from before 0.69, written after the start) | `stopped` | no |
-| a stop's record that names it and says `resume: true`: OATS stopped it with the host (`oats host run`, [container.md](container.md#what-runs-in-the-container)), whatever the exit marker says | `lost` | when the sweep can vouch for the loss |
+| a stop's record that names it and says `resume: true`: OATS stopped it with the host (`oats host run`, [desktop-cli-api.md](desktop-cli-api.md#the-host-run-oats-host-run)), whatever the exit marker says | `lost` | when the sweep can vouch for the loss |
 | an exit marker that names it with an exit status below 128 (`/exit`, Ctrl-C handled by the harness, its own error), or the marker of a kernel before 0.69 | `exited` | no: the row offers Start, as before |
 | an exit marker that names it with a signal's status (128 and up: the harness alone was killed, an out-of-memory kill for example) | `lost` | when the sweep can vouch for the loss ([below](#which-losses-come-back)) |
 | neither (the host went down, or the tmux server died under the live harness) | `lost` | when the sweep can vouch for the loss |
