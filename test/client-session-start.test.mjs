@@ -97,7 +97,7 @@ test('a failed start: refused only for the kernel\'s three codes; anything else,
   for (const [error, outcome, sentence] of [
     [{ code: 'E_SESSION_START_BUSY', message: 'session start busy: the home\'s start lock is held' }, 'refused', 'OATS refused this start as busy. Nothing was started.'],
     [{ code: 'E_SESSION_START_LOCK_STUCK', message: '/w/agents/dev/instances/dev-1/.oats-start.lock is the start lock directory of an earlier OATS; nothing was stopped or started. Once no earlier oats is running, remove that directory and retry' },
-      'refused', 'An earlier OATS\'s start lock, or something else that is no upgrade\'s, is in this instance\'s home; OATS\'s message names it. Nothing was started. Remove it once no earlier OATS is running: waiting will not clear it.'],
+      'refused', 'Something in this instance\'s home blocks starting, usually a start lock an earlier OATS left; OATS\'s message names it. Nothing was started. Remove it once no earlier OATS is running: waiting will not clear it.'],
     [{ code: 'E_SESSION_RUNNING', message: 'session already running in tmux window =agents:=dev-1' }, 'refused', 'This instance is already running. Nothing was started.'],
     [{ code: 'E_START_UNCONFIRMED' }, 'uncertain', null],
     [{ code: 'E_LAUNCH_CONFIG_AMBIGUOUS', message: 'two configurations for codex' }, 'uncertain', null],

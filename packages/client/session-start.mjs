@@ -49,7 +49,7 @@ export const CLAIM_STARTED_NOTHING_CODES = Object.freeze(['E_LIFECYCLE_BUSY', 'E
  * is what only a person ends: the kernel's message names the path to remove. */
 const STARTED_NOTHING = Object.freeze({
   E_SESSION_START_BUSY: 'OATS refused this start as busy. Nothing was started.',
-  E_SESSION_START_LOCK_STUCK: 'An earlier OATS\'s start lock, or something else that is no upgrade\'s, is in this instance\'s home; OATS\'s message names it. Nothing was started. Remove it once no earlier OATS is running: waiting will not clear it.',
+  E_SESSION_START_LOCK_STUCK: 'Something in this instance\'s home blocks starting, usually a start lock an earlier OATS left; OATS\'s message names it. Nothing was started. Remove it once no earlier OATS is running: waiting will not clear it.',
   E_SESSION_RUNNING: 'This instance is already running. Nothing was started.',
 });
 /** A CLAIM_STARTED_NOTHING_CODES refusal's sentence. E_LIFECYCLE_BUSY reads by who holds the claim (`holder`,
