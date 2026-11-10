@@ -59,6 +59,7 @@ const {
 const {
   writeFileAtomic, LOCK_FILE, canonicalLock, readLock, readLockIfPresent, writeLock, resolvePackages, memoizedRemote,
   classifyPackageValue, parsePackageRequest } = await kernelImport("packages", () => import("../lib/packages.mjs"));
+const { harnessToken } = await kernelImport("harness-token", () => import("../lib/harness-token.mjs"));
 const { harnessTrust } = await kernelImport("harness-trust-write", () => import("../lib/harness-trust-write.mjs"));
 const { previewLaunchEnvironment, previewPaneEnvironment } = await kernelImport("core", () => import("../lib/core.mjs"));
 const { PI_BRIDGE, piBridgeFolders, piBridgeSkewWarnings, planPiBridges, piBridgePlanLines, piBridgeStepProblem, piBridgeFailure, kernelLookup, kernelLookupResult, planCliUpdate, desktopFirstLine, bridgeLookup, bridgeLookupProblem } = await kernelImport("pi-bridge", () => import("../lib/pi-bridge.mjs"));
@@ -73,7 +74,7 @@ const { sameRepo } = await kernelImport("repo-moves", () => import("../lib/repo-
 const { OATS_PACKAGE_NAME } = await kernelImport("version", () => import("../lib/version.mjs"));
 const { activateLocalInputs, localRevision } = await kernelImport("local-inputs", () => import("../lib/local-inputs.mjs"));
 const { default: YAML } = await kernelImport("yaml", () => import("yaml"));
-const { attachArgv, checkRemote, connectServer, forgetSnapshot, getServer, inspectRemote, startRemote, restartRemote, launchConfigRemote, scheduleRemote, listSnapshots, learnWorkspaceKey, readServers, redactArgv, reportedWorkspaceKey, rosterGroups, routeCapability, routeCommand, runRemote, serverFlagOf, targetOf, updateServers, validateServer, workspaceKeyOfStatus, workspaceMismatch, SERVERS_FILE } = await kernelImport("servers", () => import("../lib/servers.mjs"));
+const { attachArgv, checkRemote, connectServer, forgetSnapshot, getServer, inspectRemote, startRemote, restartRemote, launchConfigRemote, scheduleRemote, listSnapshots, learnWorkspaceKey, readServers, readServerOperatorRoutes, redactArgv, reportedWorkspaceKey, rosterGroups, routeCapability, routeCommand, runRemote, serverFlagOf, targetOf, updateServers, validateServer, validateOperatorSshHost, workspaceKeyOfStatus, workspaceMismatch, SERVERS_FILE } = await kernelImport("servers", () => import("../lib/servers.mjs"));
 const { readSessionViewer } = await kernelImport("session-viewer", () => import("../lib/session-viewer.mjs"));
 const { tickTriggers } = await kernelImport("triggers", () => import("../lib/triggers.mjs"));
 const A = await kernelImport("automations", () => import("../lib/automations.mjs"));
@@ -1022,7 +1023,7 @@ function serializeLaunchConfigs(map) {
     const envNames = Object.keys(e.env || {}).sort();
     if (envNames.length) {
       lines.push("    env:");
-      for (const n of envNames) { const v = e.env[n]; if (typeof v === "string") lines.push(`      ${n}: ${yamlQuoted(v)}`); else lines.push(`      ${n}:`, `        fromEnv: ${v.fromEnv}`); }
+      for (const n of envNames) { const v = e.env[n]; if (typeof v === "string") lines.push(`      ${n}: ${yamlQuoted(v)}`); else lines.push(`      ${n}:`, v.fromFile !== undefined ? `        fromFile: ${yamlQuoted(v.fromFile)}` : `        fromEnv: ${v.fromEnv}`); }
     }
     if (e.model !== undefined) lines.push(`    model: ${yamlQuoted(e.model)}`);
     if (e.yolo !== undefined) lines.push(`    yolo: ${e.yolo}`);
@@ -1038,7 +1039,7 @@ function normalizeLaunchConfig(e) {
     harness: Object.hasOwn(e, "harness") ? e.harness : e.runtime,
     ...(e.executable !== undefined ? { executable: e.executable } : {}),
     ...(e.args?.length ? { args: [...e.args] } : {}),
-    ...(e.env && Object.keys(e.env).length ? { env: Object.fromEntries(Object.keys(e.env).sort().map((n) => [n, typeof e.env[n] === "string" ? e.env[n] : { fromEnv: e.env[n].fromEnv }])) } : {}),
+    ...(e.env && Object.keys(e.env).length ? { env: Object.fromEntries(Object.keys(e.env).sort().map((n) => [n, typeof e.env[n] === "string" ? e.env[n] : { ...e.env[n] }])) } : {}),
     ...(e.model !== undefined ? { model: e.model } : {}),
     ...(e.yolo !== undefined ? { yolo: e.yolo } : {}),
     ...(e.default === true ? { default: true } : {}),
@@ -1063,10 +1064,10 @@ function machineDeclares(name) {
 /** What a GUI or an operator sees of one configuration. Environment values
  *  never leave the file: a literal is answered as {redacted: true} (literals
  *  are non-secret by contract, but no value is shown anywhere) and a
- *  reference as {fromEnv: NAME}. An editor keeps a literal it cannot see with
+ *  reference as {fromEnv: NAME} or {fromFile: /path}. An editor keeps a literal it cannot see with
  *  `set --keep-env`. */
 function publicLaunchConfig(e, extra = {}) {
-  const env = Object.fromEntries(Object.keys(e.env || {}).sort().map((n) => [n, typeof e.env[n] === "string" ? { redacted: true } : { fromEnv: e.env[n].fromEnv }]));
+  const env = Object.fromEntries(Object.keys(e.env || {}).sort().map((n) => [n, typeof e.env[n] === "string" ? { redacted: true } : { ...e.env[n] }]));
   return { harness: e.harness, executable: e.executable ?? null, args: [...(e.args || [])], env, model: e.model ?? null, yolo: e.yolo ?? null, default: e.default === true, ...extra };
 }
 /** The scope a launch-config command reads: --dir (or cwd), a running
@@ -1141,7 +1142,7 @@ function launchPreview(bail) {
   const { recipe } = plan;
   const command = renderLaunchRecipe(recipe, { home, instance, redact: true, trustHome: plan.trustHome });
   const d = describeLaunchCommand(command);
-  const environment = d.environment.map((e) => e.reference && recipe.env[e.name]?.fromEnv ? { name: e.name, fromEnv: recipe.env[e.name].fromEnv } : e);
+  const environment = d.environment.map((e) => e.reference && recipe.env[e.name] && typeof recipe.env[e.name] === "object" ? { name: e.name, ...recipe.env[e.name] } : e);
   jsonOk({ context, selected, ...(plan.warnings?.length ? { warnings: plan.warnings } : {}), selection: { source: plan.selectionSource, launchConfig: recipe.launchConfig, harness: sel.harness ?? null, model: sel.model ?? null, yolo: sel.yolo ?? null }, harness: plan.harness, model: recipe.model, modelSource: plan.modelSource, yolo: recipe.yolo ?? null, launchConfig: recipe.launchConfig, launchConfigSource: recipe.launchConfigSource, launchConfigDefault: recipe.launchConfigDefault === true, executable: { path: plan.executable.path, declared: plan.executable.declared ?? null, resolvedFrom: plan.executable.resolvedFrom }, argv: d.argv, environment, command, prompt: recipe.prompt, hooks: redactLaunchRecipe(recipe).hooks, preflight: plan.preflight, ok: plan.ok });
 }
 async function launchConfigCmd() {
@@ -1169,7 +1170,7 @@ async function launchConfigCmd() {
     if (JSON_MODE) { jsonOk({ context: dir, level, file, selected, configurations }); return; }
     if (!configurations.length) { console.log(`No launch configurations are declared${file ? ` in ${shortPath(file)}` : ` (no oats-local.yaml in reach of ${dir})`} or in ${shortPath(machineLaunchConfigsFile())}`); return; }
     for (const c of configurations) {
-      const env = Object.entries(c.env).map(([n, v]) => v.fromEnv ? `${n}=$${v.fromEnv}` : `${n}=<redacted>`).join(" ");
+      const env = Object.entries(c.env).map(([n, v]) => v.fromEnv ? `${n}=$${v.fromEnv}` : v.fromFile ? `${n}=<file:${v.fromFile}>` : `${n}=<redacted>`).join(" ");
       console.log(`${c.name}: ${c.harness}${c.default ? ` (this machine's ${c.harness} default)` : ""}${c.executable ? ` ${c.executable}` : ""}${c.args.length ? ` ${c.args.map((a) => JSON.stringify(a)).join(" ")}` : ""}${env ? ` [${env}]` : ""}${c.model ? ` model ${c.model}` : ""}${c.yolo !== null ? ` yolo ${c.yolo}` : ""} (from ${shortPath(launchConfigFile(c.source))})${c.shadows.length ? ` (replaces ${c.shadows.map(shortPath).join(", ")}'s)` : ""}`);
     }
     return;
@@ -1763,6 +1764,30 @@ function workspaceContext(bail) {
   try { found = loadLocal(dir); }
   catch (e) { return bail(e.code || "E_LOCAL_MISSING", e.message, e.details); }
   return { dir, localPath: found.path, local: found.local, deploymentDir: dirname(found.path), remoteOptions: remoteOptionsFromEnv() };
+}
+
+/** Tokens are operator-local calls even with --server; the forced-command key is the receiver. */
+async function harnessTokenCmd() {
+  const usage = "usage: oats harness token set|status|remove <harness> --server <id> [--name <team>] [--stdin] [--json] [--debug]";
+  if (!["set", "status", "remove"].includes(args[2]) || !args[3] || args[3].startsWith("-")) return cmdFail("E_BAD_ARGS", usage);
+  const seen = new Set();
+  for (let i = 4; i < args.length; i++) {
+    const word = args[i];
+    if (seen.has(word)) return cmdFail("E_BAD_ARGS", "Give each token-command flag once.");
+    seen.add(word);
+    if (["--json", "--stdin", "--debug"].includes(word)) continue;
+    if (["--server", "--name"].includes(word) && args[i + 1] && !args[i + 1].startsWith("-")) { i++; continue; }
+    return cmdFail("E_BAD_ARGS", usage);
+  }
+  try {
+    const result = await harnessToken({ action: args[2], harness: args[3], server: valueFlag("server"), name: valueFlag("name"), input: args.includes("--stdin") ? process.stdin : undefined }, { debug: args.includes("--debug") ? (line) => console.error(`oats: ${line}`) : undefined });
+    if (JSON_MODE) jsonOk(result);
+    else {
+      console.log(result.action === "set" ? `Installed ${result.harness} credential for ${result.name} on ${result.server}: ${result.fingerprint}.` : result.action === "remove" ? `Removed ${result.harness} credential for ${result.name} on ${result.server}.` : `${result.harness} credential for ${result.name} on ${result.server}: ${result.fingerprint}, replaced ${result.replacedAt}.`);
+      for (const row of result.staleInstances ?? []) console.log(terminalText(`  ${row.instance} (${row.agent}): started ${row.startedAt}; picks up the token at its next start.`));
+      for (const warning of result.warnings) console.error(`oats: warning: ${warning}`);
+    }
+  } catch (e) { cmdFail(e.code || "E_HARNESS_TOKEN_DELIVERY", JSON_MODE ? e.message : terminalText(e.message)); }
 }
 
 /** An explicit host-local operator action; never routed to a remote adapter. */
@@ -4282,7 +4307,7 @@ async function experimentalCmd() {
 async function serverCmd() {
   const bail = (code, msg, details) => (JSON_MODE ? jsonFail(code, msg, details) : die(msg));
   const sub = args[1];
-  const usage = "usage: oats server add <id> --ssh <host-alias> --workspace </abs/path> [--oats <path>] [--path <dir:dir>] [--label <text>] [--replace] | connect <id> --ssh <host-alias> [--workspace-ref <ref>] [--dir </abs/path or ~/path on the host>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] | list [--workspace-ref <ref>] | remove <id> | check <id> | roster [--server <id>] [--workspace-key <key>]... | forget <id> --instance <name>  [--json]";
+  const usage = "usage: oats server add <id> --ssh <host-alias> [--operator-ssh <alias> | --no-operator-ssh] --workspace </abs/path> [--oats <path>] [--path <dir:dir>] [--label <text>] [--replace] | connect <id> --ssh <host-alias> [--operator-ssh <alias> | --no-operator-ssh] [--workspace-ref <ref>] [--dir </abs/path or ~/path on the host>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] | list [--workspace-ref <ref>] | remove <id> | check <id> | roster [--server <id>] [--workspace-key <key>]... | forget <id> --instance <name>  [--json]";
   if (!["add", "connect", "list", "remove", "check", "roster", "forget"].includes(sub)) bail("E_USAGE", usage);
   if (sub === "connect") return serverConnectCmd(bail);
   if (sub === "forget") {
@@ -4332,7 +4357,9 @@ async function serverCmd() {
   let servers;
   try { servers = readServers(); } catch (e) { bail(e.code || "E_SERVERS_UNREADABLE", e.message); }
   if (sub === "list") {
-    let rows = Object.entries(servers).map(([id, s]) => ({ id, ...s, workspaceKey: s.workspaceKey ?? null, target: targetOf({ id, ...s }), snapshots: listSnapshots(id).length }));
+    let routes;
+    try { routes = readServerOperatorRoutes(); } catch (e) { bail(e.code || "E_SERVERS_UNREADABLE", e.message); }
+    let rows = Object.entries(servers).map(([id, s]) => ({ id, ...s, ...(Object.hasOwn(routes, id) ? routes[id] : {}), workspaceKey: s.workspaceKey ?? null, target: targetOf({ id, ...s }), snapshots: listSnapshots(id).length }));
     // --workspace-ref: the servers of one workspace, by canonical key, and the ids whose workspace is not known yet.
     let unknownWorkspace;
     if (flag("workspace-ref") !== undefined) {
@@ -4346,7 +4373,7 @@ async function serverCmd() {
     if (JSON_MODE) { jsonOk({ file: SERVERS_FILE(), servers: rows, ...(unknownWorkspace ? { unknownWorkspace } : {}) }); return; }
     if (unknownWorkspace?.length) console.log(`  (workspace not known yet for ${unknownWorkspace.join(", ")}: oats server check <id> learns it)`);
     if (!rows.length) { console.log(`no servers registered (${shortPath(SERVERS_FILE())}) — add one with \`oats server add <id> --ssh <alias> --workspace </path>\``); return; }
-    for (const r of rows) console.log(`  ${r.id}${r.label ? `  ${r.label}` : ""}${r.workspaceKey ? `  [${r.workspaceKey}]` : ""}\n      ssh ${r.sshHost}  workspace ${r.workspace}  oats ${r.target.oatsPath}${r.snapshots ? `  (${r.snapshots} remote instance${r.snapshots === 1 ? "" : "s"} spawned from here)` : ""}`);
+    for (const r of rows) console.log(`  ${r.id}${r.label ? `  ${r.label}` : ""}${r.workspaceKey ? `  [${r.workspaceKey}]` : ""}\n      ssh ${r.sshHost}${r.operatorSshHost ? `  operator ssh ${r.operatorSshHost}` : ""}  workspace ${r.workspace}  oats ${r.target.oatsPath}${r.snapshots ? `  (${r.snapshots} remote instance${r.snapshots === 1 ? "" : "s"} spawned from here)` : ""}`);
     return;
   }
   const id = args[2];
@@ -4357,12 +4384,23 @@ async function serverCmd() {
     const entry = { sshHost: val("ssh"), workspace: val("workspace") };
     for (const [k, f] of [["oatsPath", "oats"], ["path", "path"], ["label", "label"]]) { const v = val(f); if (v !== undefined) entry[k] = v; }
     if (!entry.sshHost || !entry.workspace) bail("E_USAGE", usage);
-    try { validateServer(id, entry); } catch (e) { bail(e.code, e.message); }
+    const operatorSshHost = val("operator-ssh"), noOperatorSsh = args.includes("--no-operator-ssh");
+    if (operatorSshHost !== undefined && noOperatorSsh) bail("E_BAD_ARGS", "choose --operator-ssh or --no-operator-ssh, not both");
+    try { validateServer(id, entry); if (operatorSshHost !== undefined) validateOperatorSshHost(operatorSshHost); } catch (e) { bail(e.code, e.message); }
+    let operatorRoute;
     try {
-      updateServers((current) => {
-        if (current[id] && !args.includes("--replace")) throw Object.assign(new Error(`server ${id} is already registered (pass --replace to overwrite; existing remote instances keep the route they were spawned with)`), { code: "E_SERVER_EXISTS" });
+      updateServers((current, routes) => {
+        const existing = Object.hasOwn(current, id) ? current[id] : undefined;
+        if (existing && !args.includes("--replace")) throw Object.assign(new Error(`server ${id} is already registered (pass --replace to overwrite; existing remote instances keep the route they were spawned with)`), { code: "E_SERVER_EXISTS" });
+        // An older kernel can remove a registration while leaving its sidecar route behind.
+        if (!existing) delete routes[id];
+        // An unchanged agent target keeps its learned identity when only the operator route changes.
+        if (existing?.workspaceKey && JSON.stringify(targetOf(existing)) === JSON.stringify(targetOf(entry))) entry.workspaceKey = existing.workspaceKey;
         current[id] = entry;
-      });
+        if (operatorSshHost !== undefined) routes[id] = { operatorSshHost };
+        else if (noOperatorSsh) delete routes[id];
+        operatorRoute = Object.hasOwn(routes, id) ? routes[id] : undefined;
+      }, { operatorRoutes: true });
     } catch (e) { bail(e.code || "E_SERVERS_UNREADABLE", e.message); }
     // The workspace key is learned from the host, never typed: recorded when the host answers one and
     // the registration is still this one (it may change while the host is asked).
@@ -4370,20 +4408,24 @@ async function serverCmd() {
     try {
       const { key, why } = reportedWorkspaceKey(targetOf(entry), { serverId: id, timeoutMs: 60000 });
       if (!key) warnings.push(`workspace key unknown: ${why}; oats server check ${id} learns it once the host answers one`);
-      else if (learnWorkspaceKey(id, entry, key) === "recorded") entry.workspaceKey = key;
-      else warnings.push(`workspace key not recorded: registration ${id} changed while the host was asked; oats server check ${id} learns it`);
+      else if (["recorded", "same"].includes(learnWorkspaceKey(id, entry, key, { replace: args.includes("--replace") }))) entry.workspaceKey = key;
+      else {
+        delete entry.workspaceKey;
+        warnings.push(`workspace key not recorded: registration ${id} changed while the host was asked; oats server check ${id} learns it`);
+      }
     } catch (e) { warnings.push(`workspace key unknown: ${e.message}; oats server check ${id} learns it once the host answers`); }
-    if (JSON_MODE) { jsonOk({ id, ...entry, workspaceKey: entry.workspaceKey ?? null, file: SERVERS_FILE(), ...(warnings.length ? { warnings } : {}) }); return; }
+    if (JSON_MODE) { jsonOk({ id, ...entry, ...operatorRoute, workspaceKey: entry.workspaceKey ?? null, file: SERVERS_FILE(), ...(warnings.length ? { warnings } : {}) }); return; }
     console.log(`Registered server ${id} → ssh ${entry.sshHost}, workspace ${entry.workspace}${entry.workspaceKey ? ` (workspace ${entry.workspaceKey})` : ""} (${shortPath(SERVERS_FILE())}). Verify it with \`oats server check ${id}\`.`);
     for (const w of warnings) console.error(`oats: warning: ${w}`);
     return;
   }
   if (sub === "remove") {
     try {
-      updateServers((current) => {
+      updateServers((current, routes) => {
         if (!current[id]) throw Object.assign(new Error(`no server registered as ${id}`), { code: "E_SERVER_UNKNOWN" });
         delete current[id];
-      });
+        delete routes[id];
+      }, { operatorRoutes: true });
     } catch (e) { bail(e.code || "E_SERVERS_UNREADABLE", e.message); }
     const snaps = listSnapshots(id);
     if (JSON_MODE) { jsonOk({ removed: id, remoteInstancesStillTracked: snaps.map((s) => s.instance) }); return; }
@@ -4426,7 +4468,7 @@ async function serverCmd() {
  *  step b): only the person knows where it goes. */
 function serverConnectCmd(bail) {
   const id = args[2];
-  if (!id || id.startsWith("--")) bail("E_USAGE", "usage: oats server connect <id> --ssh <host-alias> --dir </abs/path or ~/path on the host> [--workspace-ref <ref>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] [--json]");
+  if (!id || id.startsWith("--")) bail("E_USAGE", "usage: oats server connect <id> --ssh <host-alias> [--operator-ssh <alias> | --no-operator-ssh] --dir </abs/path or ~/path on the host> [--workspace-ref <ref>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] [--json]");
   const val = (name) => { const v = flag(name); return v === true ? bail("E_BAD_ARGS", `--${name} needs a value`) : v; };
   const sshHost = val("ssh");
   if (!sshHost) bail("E_BAD_ARGS", "--ssh <host-alias> is required: the OpenSSH host alias of the machine to connect");
@@ -4439,7 +4481,7 @@ function serverConnectCmd(bail) {
   if (!dir) bail("E_BAD_ARGS", `--dir <path on the host> is required: the folder on ${sshHost} for this deployment (absolute, or ~/… resolved there)`);
   let res;
   try {
-    res = connectServer({ id, sshHost, workspaceRef, dir, oatsPath: val("oats"), path: val("path"), label: val("label"), installOats: args.includes("--install-oats"), replace: args.includes("--replace"), localVersion: OATS_VERSION });
+    res = connectServer({ id, sshHost, operatorSshHost: val("operator-ssh"), noOperatorSsh: args.includes("--no-operator-ssh"), workspaceRef, dir, oatsPath: val("oats"), path: val("path"), label: val("label"), installOats: args.includes("--install-oats"), replace: args.includes("--replace"), localVersion: OATS_VERSION });
   } catch (e) {
     if (!JSON_MODE && e.details?.steps) printConnectSteps(id, sshHost, e.details.steps);
     bail(e.code || "E_CONNECT", e.message, e.details);
@@ -4827,6 +4869,7 @@ else if (cmd === "update") {
   if (t || flag("to") !== undefined) { cmdFail("E_BAD_ARGS", "oats update takes no package: pin package versions in oats-workspace.yaml (`oats package add <id> <version>`), then `oats sync`; bare `oats update [--check] [--yes]` updates the kernel"); process.exit(1); }
   updateCmd();
 }
+else if (cmd === "harness" && args[1] === "token") await harnessTokenCmd();
 else if (cmd === "harness") harnessTrustCmd();
 else if (cmd === "readiness") await readinessCmd();
 else if (cmd === "instance") await instanceCmd();
@@ -5144,6 +5187,8 @@ Usage:
                                             modules or the deployment's soul, trust checked, the provider's
                                             own command run in the home or scope, envelope
                                             relayed; a view answers {documents: [...]}
+  oats harness token set|status|remove <harness> --server <id> [--name <team>]
+      [--stdin] [--json] [--debug]           operator credential delivery, status and removal
   oats harness trust [--dir <deployment>]  explicitly trust one canonical deployment root
       [--harness claude|codex|all]         in every native configuration file a launch reads
       [--plan] [--json]                   (the ambient one and each launch configuration's

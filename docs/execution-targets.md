@@ -1279,9 +1279,9 @@ a signed-in host.
 
 #### The launch environment a resume runs under
 
-A resume starts only under the `{fromEnv: SRC}` values the start it brings
-back ran with. Every start that renders a recipe, the spawn's own launch
-included, records them. A resume compares them, after the check that every
+A resume starts only under the reference values (`fromEnv` or `fromFile`)
+the start it brings back ran with. Every start that renders a recipe, the
+spawn's own launch included, records them. A resume compares them, after the check that every
 reference is set (`E_LAUNCH_ENV_MISSING`, which comes first):
 
 - **A changed value** refuses the resume before anything is launched:

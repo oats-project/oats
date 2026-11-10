@@ -12,8 +12,8 @@ const base = realpathSync(mkdtempSync(join(tmpdir(), "oats-system-tools-")));
 test.after(() => rmSync(base, { recursive: true, force: true }));
 const tool = (dir, name, mode = 0o755) => { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, name), "#!/bin/sh\nexit 0\n"); chmodSync(join(dir, name), mode); return join(dir, name); };
 
-test("the system directories are /usr/bin and /bin", () => {
-  assert.deepEqual(SYSTEM_TOOL_DIRS, ["/usr/bin", "/bin"]);
+test("the system directories are /usr/bin and /bin, then /usr/sbin and /sbin", () => {
+  assert.deepEqual(SYSTEM_TOOL_DIRS, ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]);
   assert.ok(Object.isFrozen(SYSTEM_TOOL_DIRS));
 });
 
