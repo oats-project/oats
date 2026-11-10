@@ -7,13 +7,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const scheduleModule = new URL("../lib/schedule.mjs", import.meta.url).href;
+const hooksModule = new URL("../lib/worktree-hooks.mjs", import.meta.url).href;
 const prelude = `
   import assert from "node:assert/strict";
   import fs from "node:fs";
   import { join } from "node:path";
   import { syncBuiltinESMExports } from "node:module";
   import * as S from ${JSON.stringify(scheduleModule)};
+  import { selfIdentity } from ${JSON.stringify(hooksModule)};
   const dir = S.hostScheduleDir(), path = join(dir, "registry.json");
+  // The registry lock as its holder writes it (lib/claim.mjs): this process's record, here by hand
+  // so that each step of taking it can be held open.
+  const claimRecord = () => JSON.stringify({ ...selfIdentity(), nonce: "a".repeat(32), at: new Date().toISOString(), what: "the host schedule registry" }) + "\\n";
 `;
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), "oats-registry-read-"));
@@ -128,19 +133,24 @@ test("registry readers report corrupt and nonregular state instead of inventing 
 
 // A real second process keeps the writer windows open until each isolated
 // reader finishes. There is deliberately no E_SCHEDULER_BUSY retry wrapper.
-for (const phase of ["acquired", "owner-writing", "owned", "owner-removed", "removed"]) {
+// The windows are the steps of a writer's lock (lib/claim.mjs): its private file
+// written, the lock linked beside it, the lock held alone, a lock whose record
+// does not parse, and the lock released.
+for (const phase of ["private-file", "linked", "held", "unparseable", "released"]) {
   test(`registry reader remains lock-free during writer ${phase} window`, async (t) => {
     const f = fixture(t), expected = seed(f, { capsVersion: 2, maxConcurrent: 7, triggersMaxConcurrent: 2 });
     const writer = spawn(process.execPath, ["--input-type=module", "-e", prelude + `
-      const lock = join(dir, "registry.lock"), owner = join(lock, "owner.json");
-      fs.mkdirSync(lock);
+      const lock = join(dir, "registry.lock"), mine = lock + ".tmp-" + process.pid + "-" + "a".repeat(32);
       const phase = ${JSON.stringify(phase)};
-      if (phase === "owner-writing") fs.writeFileSync(owner, '{"pid":');
-      if (["owned", "owner-removed", "removed"].includes(phase)) fs.writeFileSync(owner, JSON.stringify({ pid: process.pid }));
-      if (["owner-removed", "removed"].includes(phase)) fs.unlinkSync(owner);
-      if (phase === "removed") fs.rmdirSync(lock);
+      if (phase === "unparseable") fs.writeFileSync(lock, '{"pid":');
+      else {
+        fs.writeFileSync(mine, claimRecord(), { mode: 0o600 });
+        if (phase !== "private-file") fs.linkSync(mine, lock);
+        if (["held", "released"].includes(phase)) fs.unlinkSync(mine);
+        if (phase === "released") fs.unlinkSync(lock);
+      }
       process.send("ready");
-      process.once("message", () => { fs.rmSync(lock, { recursive: true, force: true }); process.disconnect(); });
+      process.once("message", () => { fs.rmSync(mine, { force: true }); fs.rmSync(lock, { force: true }); process.disconnect(); });
     `], { env: f.env, stdio: ["ignore", "ignore", "pipe", "ipc"] });
     let stderr = "";
     writer.stderr.on("data", (data) => { stderr += data; });
@@ -216,12 +226,13 @@ test("registry reader keeps its complete old descriptor snapshot when replacemen
 test("raw registry writer persists supplied values without cap projection or implicit locking", (t) => {
   const f = fixture(t);
   run(f, `
-    fs.mkdirSync(join(dir, "registry.lock"), { recursive: true });
-    fs.writeFileSync(join(dir, "registry.lock", "owner.json"), JSON.stringify({ pid: process.pid }));
+    fs.mkdirSync(dir, { recursive: true });
+    const held = claimRecord();
+    fs.writeFileSync(join(dir, "registry.lock"), held);
     const raw = { version: 1, maxConcurrent: 1, workspaces: [], extension: { exact: true } };
     S.writeRegistry(raw);
     assert.deepEqual(JSON.parse(fs.readFileSync(path, "utf8")), raw);
-    assert.equal(fs.existsSync(join(dir, "registry.lock", "owner.json")), true);
+    assert.equal(fs.readFileSync(join(dir, "registry.lock"), "utf8"), held);
   `);
 });
 

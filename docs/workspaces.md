@@ -841,8 +841,10 @@ PATH        STATE    VIA
 ```
 
 **Concurrency.** Every change runs under `~/.oats/config/deployments.lock`
-(waiting up to 3 s for it) and re-reads the file inside it, and each write
-replaces the file atomically. Readers take no lock: they read a regular file
+(waiting up to 3 s for a holder that is running) and re-reads the file inside
+it, and each write replaces the file atomically. The lock is a file that names
+the process holding it: one left by a command that was killed is taken over by
+the next command. Readers take no lock: they read a regular file
 only, without following a link, up to 1 MiB. A missing file is an empty list.
 
 **Errors:**
@@ -851,7 +853,7 @@ only, without following a link, up to 1 MiB. A missing file is an empty list.
 |---|---|
 | `E_DEPLOYMENTS_INVALID` | the file is not JSON, not an object, a link, over 1 MiB, or a row breaks the schema: "`<file>` cannot be read as this computer's deployments list (`<reason>`). Fix it, or move it aside and run `oats deployments add <dir>` for each deployment; nothing was changed" |
 | `E_DEPLOYMENTS_VERSION` | `schemaVersion` is newer than this oats reads: "`<file>` was written by a newer oats (schema `<n>`); upgrade oats". The file is never rewritten down |
-| `E_DEPLOYMENTS_BUSY` | the lock is still held after 3 s: "this computer's deployments list is locked (`<why>`); if no oats process is changing it, remove `<lock>` and retry; nothing was changed" |
+| `E_DEPLOYMENTS_BUSY` | the lock is still held by a running process after 3 s, or cannot be judged: "this computer's deployments list is locked (`<why>`); if no oats process is changing it, remove `<lock>` and retry; nothing was changed". `<why>` says what was found: `pid <n> holds it`; `the record at <lock> is unreadable` (remove that file); that it cannot be established whether pid `<n>` still runs (check that pid by hand, then remove the file); or `<lock> is a lock directory written by an earlier kernel` (remove the directory once no older oats is running) |
 | `E_DEPLOYMENTS_WRITE` | the write failed, or would make the file larger than 1 MiB: "cannot write `<file>` (`<system error>`); nothing was changed" |
 | `E_DEPLOYMENTS_IMPORT` | `~/Agents` cannot be read for the first-use import: "cannot read `<dir>` to import its deployments (`<system error>`); make it readable, or move it aside, and retry; nothing was changed" |
 

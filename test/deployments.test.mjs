@@ -13,6 +13,7 @@ import childProcess from "node:child_process";
 import { syncBuiltinESMExports } from "node:module";
 import { devNull, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { selfIdentity } from "../lib/worktree-hooks.mjs";
 import { outsideTemporaryBase, outsideTemporaryUnavailable } from "./helpers/outside-temporary.mjs";
 
 const CLI = resolve(new URL("../bin/oats.mjs", import.meta.url).pathname);
@@ -50,7 +51,7 @@ function fixture(t, { outside = false } = {}) {
   const stored = () => JSON.parse(readFileSync(file, "utf8"));
   const seed = (doc) => { mkdirSync(join(oatsHome, "config"), { recursive: true, mode: 0o700 }); writeFileSync(file, typeof doc === "string" ? doc : JSON.stringify(doc, null, 2) + "\n", { mode: 0o600 }); };
   /** A lock some other live process holds (this test's own pid: alive, and not the CLI child). */
-  const holdLock = () => { mkdirSync(lock, { recursive: true }); writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.pid, at: new Date().toISOString(), what: "a test" }) + "\n"); return () => rmSync(lock, { recursive: true, force: true }); };
+  const holdLock = () => { mkdirSync(join(oatsHome, "config"), { recursive: true }); writeFileSync(lock, JSON.stringify({ ...selfIdentity(), nonce: "a".repeat(32), at: new Date().toISOString(), what: "a test" }) + "\n"); return () => rmSync(lock, { force: true }); };
   return { base, home, oatsHome, file, lock, env, oats, json, ok, failure, deployment, stored, seed, holdLock };
 }
 /** Make every directory under `p` writable again, so a case that took permissions away can clean up. */
@@ -563,7 +564,7 @@ test("auto-add budget: a listed deployment costs one read: no lock, no write, th
   const after = statSync(f.file);
   assert.equal(after.mtimeMs, before.mtimeMs, "the file's mtime is unchanged");
   assert.equal(after.ino, before.ino, "the file was not replaced");
-  assert.equal(existsSync(f.lock), false, "no lock directory");
+  assert.equal(existsSync(f.lock), false, "no lock");
   // A held lock: an unlisted deployment's command does not wait for it, and lists nothing.
   const beta = f.deployment("beta"); mkdirSync(join(beta, "agents"));
   const free = Date.now(); f.oats(["doctor", "--json"], { cwd: f.deployment("gamma") }); const baseline = Date.now() - free;
