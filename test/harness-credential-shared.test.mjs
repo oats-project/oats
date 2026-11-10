@@ -4,9 +4,13 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { assertLaunchRecipe, launchEffectiveEnv, launchEnvironment, launchEnvRefs, missingLaunchEnvRefs, planLaunch, startInstanceSession, renderLaunchRecipe, validateLaunchConfig } from "../lib/core.mjs";
+import { assertLaunchRecipe, launchEffectiveEnv, launchEnvironment, launchEnvRefs, missingLaunchEnvRefs, planLaunch, inspectInstanceSession, startInstanceSession, renderLaunchRecipe, validateLaunchConfig } from "../lib/core.mjs";
 import { checkStartEnv, recordStartEnv, START_ENV_FILE } from "../lib/start-env.mjs";
 
+import { launchConfigFolder } from "../lib/harness-trust.mjs";
+import { resumeSessions } from "../lib/session-resume.mjs";
+import { recordSeen } from "../lib/session-seen.mjs";
+import { launchEnvHandoff } from "../lib/launch-env.mjs";
 import { v2Deployment } from "./helpers/v2-deployment.mjs";
 import { isolateSessionEnvironment, oatsSocket, systemExecutable, waitUntil } from "./helpers/host-fixture.mjs";
 
@@ -47,6 +51,7 @@ test("fromFile resolves again, strips one line ending, redacts and records only 
   assert.deepEqual(refs.map(({ target, value }) => [target, value]), [["KEY", secret], ["OTHER", "environment-fixture"]]);
   const launch = launchEnvironment({ configEnv: r.env, env: { ...process.env, SRC: "environment-fixture" } });
   assert.equal(launch.of("KEY").value, secret);
+  assert.deepEqual(launchConfigFolder("CLAUDE_CONFIG_DIR", { CLAUDE_CONFIG_DIR: { fromFile: file } }), { problem: `CLAUDE_CONFIG_DIR ${JSON.stringify(secret)} is not an absolute path` });
   assert.equal(launchEffectiveEnv({ configEnv: r.env, base: { SRC: "environment-fixture" }, launch, harness: "claude" }).KEY, secret);
   const command = renderLaunchRecipe(r, { home: base, instance: "fixture", redact: true });
   assert.match(command, /KEY="\$OATS_LAUNCH_REF_KEY"/);
@@ -84,15 +89,17 @@ test("spawn and start deliver both reference types without values in any tmux ar
   mkdirSync(bin);
   const quote = (s) => "'" + s.replace(/'/g, "'\\''") + "'";
   writeFileSync(join(bin, "tmux"), `#!/bin/sh\nprintf '%s\\n' "$@" >> ${quote(calls)}\nexec ${quote(realTmux)} "$@"\n`);
-  writeFileSync(join(bin, "claude"), `#!${process.execPath}\nimport {writeFileSync} from 'node:fs';\nwriteFileSync(process.env.OATS_INSTANCE_HOME+'/received.json',JSON.stringify([process.env.KEY,process.env.OTHER]));\nsetInterval(()=>{},1000);\n`);
+  writeFileSync(join(bin, "claude"), `#!${process.execPath}\nimport {writeFileSync} from 'node:fs';\nwriteFileSync(process.env.OATS_INSTANCE_HOME+'/fixture.pid',String(process.pid));\nwriteFileSync(process.env.OATS_INSTANCE_HOME+'/received.json',JSON.stringify([process.env.KEY,process.env.OTHER]));\nsetInterval(()=>{},1000);\n`);
   for (const name of ["tmux", "claude"]) chmodSync(join(bin, name), 0o755);
   const oldPath = process.env.PATH; process.env.PATH = `${bin}:${oldPath}`;
   t.after(() => { process.env.PATH = oldPath; });
   const file = join(base, "live-token"); writeFileSync(file, "file-fixture-secret\n");
   process.env.CREDENTIAL_FIXTURE_SOURCE = "env-fixture-secret";
   t.after(() => { delete process.env.CREDENTIAL_FIXTURE_SOURCE; });
-  const fx = v2Deployment({ local: { "launch-configs": { files: { harness: "claude", executable: join(bin, "claude"), env: { KEY: { fromFile: file }, OTHER: { fromEnv: "CREDENTIAL_FIXTURE_SOURCE" } } } } } });
+  const auth = join(base, "live-auth"); mkdirSync(auth); writeFileSync(join(auth, ".credentials.json"), "fixture");
+  const fx = v2Deployment({ local: { "launch-configs": { files: { harness: "claude", executable: join(bin, "claude"), env: { KEY: { fromFile: file }, OTHER: { fromEnv: "CREDENTIAL_FIXTURE_SOURCE" } } }, blocked: { harness: "claude", executable: join(bin, "claude"), env: { CLAUDE_CONFIG_DIR: auth, CLAUDE_CODE_OAUTH_TOKEN: { fromFile: file } } } } } });
   t.after(() => { try { execFileSync(realTmux, ["-S", oatsSocket(), "kill-server"]); } catch { /* private fixture already exited */ } fx.cleanup(); });
+  await assert.rejects(fx.spawn("dev", { name: "login-refused", work: "checkout", launch: true, launchConfig: "blocked" }), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL");
   const { home } = await fx.spawn("dev", { name: "credentials-live", work: "checkout", launch: true, launchConfig: "files" });
   const received = join(home, "received.json");
   await waitUntil(() => existsSync(received), { message: "fixture harness received references" });
@@ -106,13 +113,27 @@ test("spawn and start deliver both reference types without values in any tmux ar
   const meta = JSON.parse(readFileSync(join(home, "instance.json")));
   const digest = JSON.parse(readFileSync(join(home, START_ENV_FILE)));
   assert.equal(Object.keys(digest.digests).length, 2, "both sources recorded");
+  recordSeen(join(fx.dep, "agents"), [{ home, startId: meta.startId, running: true, launched: true }]);
   execFileSync(realTmux, ["-S", meta.tmux.socket, "kill-window", "-t", `=${meta.tmux.session}:${meta.tmux.window}`]);
+  const same = await resumeSessions({ deployment: fx.dep, plan: true });
+  assert.equal(same.rows.find((r) => r.home === home)?.outcome, "fresh", JSON.stringify(same.rows));
   rmSync(received); writeFileSync(file, "rotated-fixture-secret\n");
+  const changed = await resumeSessions({ deployment: fx.dep, plan: true });
+  assert.equal(changed.rows.find((r) => r.home === home)?.code, "E_LAUNCH_ENV_CHANGED");
   startInstanceSession(home, { env: { ...process.env } });
   await waitUntil(() => existsSync(received), { message: "second start reads rotated file" });
   assert.deepEqual(JSON.parse(readFileSync(received)), ["rotated-fixture-secret", "env-fixture-secret"]);
   assert.equal(readFileSync(calls, "utf8").includes("rotated-fixture-secret"), false);
   assert.equal(readdirSync(home).some((name) => name.startsWith(".oats-launch-env-")), false);
+  process.kill(Number(readFileSync(join(home, "fixture.pid"))), "SIGTERM");
+  await waitUntil(() => inspectInstanceSession(home).state === "shell", { message: "fixture harness left its fallback shell" });
+  assert.throws(() => startInstanceSession(home, { launchConfig: "blocked", env: process.env }), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL");
+  rmSync(received);
+  const restarted = startInstanceSession(home, { env: process.env });
+  await waitUntil(() => existsSync(received), { message: "in-place pane restart receives references" });
+  assert.equal(restarted.reused, "pane");
+  assert.deepEqual(JSON.parse(readFileSync(received)), ["rotated-fixture-secret", "env-fixture-secret"]);
+  assert.equal(readFileSync(calls, "utf8").includes("rotated-fixture-secret"), false);
 });
 
 test("Claude refuses a login credential alongside any OATS-set token reference", () => {
@@ -164,7 +185,7 @@ test("server add stores and lists the optional operator alias without changing t
 });
 
 test("server connect records the operator alias while every remote call uses the agent route", () => {
-  const old = process.env.OATS_HOME_DIR; process.env.OATS_HOME_DIR = join(base, "connect-registry");
+  const old = process.env.OATS_HOME_DIR; process.env.OATS_HOME_DIR = join(base, "cr");
   try {
     const options = { id: "connected", sshHost: "agent-host", operatorSshHost: "operator-host", workspaceRef: "git:github.com/acme/ws", dir: "/srv/ws", path: "/usr/bin", localVersion: "0.39.0" };
     const envelope = (result) => JSON.stringify({ schemaVersion: 1, ok: true, result });
@@ -185,4 +206,20 @@ test("server connect records the operator alias while every remote call uses the
     assert.equal(connectServer(options, { execFileSync: remote }).registration.operatorSshHost, "operator-host");
     assert.throws(() => connectServer({ ...options, operatorSshHost: "user@host" }, { execFileSync: () => assert.fail("invalid alias never reaches SSH") }), (e) => e.code === "E_SERVER_INVALID");
   } finally { process.env.OATS_HOME_DIR = old; }
+});
+
+test("reference handoff is private, literal and deleted before the command runs", () => {
+  const dir = join(base, "handoff"); mkdirSync(dir);
+  const value = "fixture ' \" $(touch NEVER) `false`\nsecond line";
+  const h = launchEnvHandoff(dir, "test-start", [{ name: "OATS_LAUNCH_REF_SECRET", value }]);
+  const file = join(dir, ".oats-launch-env-test-start.sh");
+  assert.equal(statSync(file).mode & 0o777, 0o600);
+  const command = `${JSON.stringify(process.execPath)} -e 'process.stdout.write(JSON.stringify([process.env.OATS_LAUNCH_REF_SECRET,require("node:fs").existsSync(process.argv[1])]))' ${JSON.stringify(file)}`;
+  const wrapped = h.wrap(command);
+  assert.equal(wrapped.includes(value), false);
+  const child = spawnSync("/bin/sh", ["-c", wrapped], { encoding: "utf8", env: process.env, cwd: dir });
+  assert.equal(child.status, 0, child.stderr);
+  assert.deepEqual(JSON.parse(child.stdout), [value, false]);
+  assert.equal(existsSync(join(dir, "NEVER")), false, "contents are not shell instructions");
+  h.remove();
 });
