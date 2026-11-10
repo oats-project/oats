@@ -4348,6 +4348,35 @@ readOnly: {helpers: "disabled", optionalLocks: "off", objectsWritten: 0}}`.
   (`readOnly`). An object a partial clone lacks is not fetched: the read
   fails with `E_GIT_FAILED` (with Git 2.44 or later; an older Git ignores
   `GIT_NO_LAZY_FETCH`).
+- **Filter drivers are not run.** Git runs a `filter.<name>.clean` or
+  `.process` command when a status or a diff compares a work-tree file that
+  carries the `filter` attribute, and it has no switch that turns filters
+  off. Before each Git command that reads a work-tree file, `oats instance
+  git` and `oats instance diff` read the configuration Git would use (`git config --list`, which runs
+  nothing and follows `include.path` and `includeIf`) and override every
+  filter driver it defines to no command (`clean`, `smudge`, `process`) and
+  not required.
+  - A file such a filter applies to (a Git LFS file, for one) is compared as
+    its bytes are in the work tree, not as the filter would store them. An
+    untouched file still reads as unchanged, by its recorded size and times.
+    One that was rewritten, or whose times Git cannot tell from the index's,
+    reads as `changed` even when its filtered form is what is stored; its
+    line counts and its diff are the stored form (an LFS pointer) against the
+    work tree's bytes. The observation then carries a note that the
+    repository's configuration defines a filter driver.
+  - A driver whose name cannot be passed on Git's command line (it holds `=`
+    or is not UTF-8) cannot be overridden: Git is not run, and the read fails
+    with `E_GIT_FAILED`.
+  - Not covered: a driver written into the configuration between that read
+    and the Git command that follows it, and a filter a **submodule's own**
+    configuration defines. Git runs inside each populated submodule to learn
+    whether it is dirty, and the overrides name the repository's drivers, not
+    the submodule's. A dirty submodule stays visible in the status for that
+    reason. Where the agent and the reader of its worktree are one system
+    user, which is the usual arrangement, such a filter runs nothing the agent
+    could not run itself. Where they are separate users, it runs the agent's
+    command as the reader's user: do not read a worktree with populated
+    submodules across users.
 - If HEAD or the index moved, the id is not in the current observation, or
   anything moved during the read: `E_STALE_OBSERVATION` with
   `details.observation`. Re-observe; never render a diff of another tree.
