@@ -11,6 +11,7 @@ import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import * as packages from "../lib/packages.mjs";
 import { APPROVED_HOOKS } from "../lib/capability-contract.mjs";
+import { parseRepoRef as remoteParseRepoRef } from "../lib/remote.mjs";
 import { DISPOSABLE_HOME_ACCEPTED, DISPOSABLE_HOME_REFUSED, disposableHomeRefusal } from "./helpers/disposable-home.mjs";
 import {
   classifyPackageValue, packageProviding, parsePackageRequest,
@@ -251,6 +252,172 @@ test("catalog may be passed as the bare packages map", async () => {
   const f = fixture();
   const { lock } = await resolvePackages(workspace({ "oats.okf": "2.1.3" }), { catalog: f.catalog.packages, remote: f.remote });
   assert.equal(lock.packages["oats.okf"].commit, f.commits.okf213, "a version without the leading v still selects the v-tag");
+});
+
+// ---------- a package is locked under its own id (#1759) ----------
+
+/** A release of oats.engineering whose manifest names another package (the #1759 mislock), beside the
+ *  northwind fixture. `named` is what its oats-package.json says. */
+function renamedFixture({ named = "oats.engineering-coordination", catalogHasNamed = true, path = "oats-package", url } = {}) {
+  const f = fixture();
+  const eng = new FakeRepo("github.com/awebai/oats-engineering");
+  const eng200 = eng.commit("2.0.0", pkgFiles(named, "2.0.0", [{ dir: "coord", name: "oats.coordination" }], { path }));
+  eng.tag("v2.0.0", eng200);
+  // The named package lives elsewhere in the catalog: the catalog decides, so the fix is still `<named>: v2.0.0`.
+  const other = new FakeRepo("github.com/awebai/oats-coordination");
+  const other200 = other.commit("2.0.0", pkgFiles(named, "2.0.0", [{ dir: "coord", name: "oats.coordination" }]));
+  other.tag("v2.0.0", other200);
+  const catalog = { ...f.catalog, packages: { ...f.catalog.packages, "oats.engineering": { url: url ?? eng.url, ref: "v1.18.0", path },
+    ...(catalogHasNamed ? { [named]: { url: other.url, ref: "v2.0.0", path: "oats-package" } } : {}) } };
+  // A catalog url may carry user information: the fake remote reads past it, as git would.
+  const remote = fakeRemote([...Object.values(f.repos), eng, other]);
+  const strip = (ref) => String(ref).replace("u:tok@", "");
+  for (const name of ["observeRemote", "readRemoteFile", "listRemoteTree", "fetchRemoteTree"]) {
+    const fn = remote[name]; remote[name] = (ref, ...rest) => fn(strip(ref), ...rest);
+  }
+  return { ...f, eng, eng200, other200, catalog, remote };
+}
+
+const packageIdRefusal = (check) => (e) => {
+  assert.equal(e.code, "E_PACKAGE_INTEGRITY");
+  assert.equal(e.details.why, "package-id");
+  check(e);
+  return true;
+};
+
+test("#1759: a catalog pin whose manifest names a package the catalog has → refused, fix `<named>: <same version>`; nothing locked", async () => {
+  const f = renamedFixture();
+  const ws = workspace({ "oats.engineering": "v2.0.0", "oats.okf": "v2.1.3" });
+  await assert.rejects(resolvePackages(ws, { catalog: f.catalog, remote: f.remote }), packageIdRefusal((e) => {
+    assert.equal(e.details.id, "oats.engineering");
+    assert.equal(e.details.value, "v2.0.0");
+    assert.equal(e.details.manifestPackage, "oats.engineering-coordination");
+    assert.equal(e.details.commit, f.eng200, "the full OID");
+    assert.equal(e.message,
+      `packages.oats.engineering: v2.0.0 resolves to https://github.com/awebai/oats-engineering.git@v2.0.0 (${f.eng200.slice(0, 12)}), `
+      + `whose oats-package.json names package "oats.engineering-coordination", not "oats.engineering" — a package is locked under its own id: `
+      + "declare oats.engineering-coordination: v2.0.0 in packages: in place of oats.engineering, or pin a version of oats.engineering whose manifest names oats.engineering; then run `oats sync`");
+  }));
+  // The fresh branch refuses right after the manifest read: no integrity or soul digest was computed for it.
+  assert.ok(!f.remote.calls.some(([op, ref]) => op === "fetchRemoteTree" && String(ref).includes("oats-engineering")), "no tree fetched for the refused package");
+  // The fix it names locks: the named package, from where the catalog says it lives.
+  const fixed = await resolvePackages(workspace({ "oats.engineering-coordination": "v2.0.0", "oats.okf": "v2.1.3" }), { catalog: f.catalog, remote: f.remote });
+  assert.equal(fixed.lock.packages["oats.engineering-coordination"].commit, f.other200);
+});
+
+test("#1759: a catalog pin whose named package is not in the catalog → fix `<named>: git:<repo>@<resolved ref>`, which locks", async () => {
+  const f = renamedFixture({ catalogHasNamed: false });
+  const fix = "git:https://github.com/awebai/oats-engineering.git@v2.0.0";
+  await assert.rejects(resolvePackages(workspace({ "oats.engineering": "2.0.0" }), { catalog: f.catalog.packages, remote: f.remote }), packageIdRefusal((e) => {
+    assert.equal(e.details.value, "2.0.0");
+    assert.match(e.message, /^packages\.oats\.engineering: 2\.0\.0 resolves to https:\/\/github\.com\/awebai\/oats-engineering\.git@v2\.0\.0 /);
+    assert.ok(e.message.includes(`declare oats.engineering-coordination: ${fix} in packages: in place of oats.engineering, or pin a version of oats.engineering whose manifest names oats.engineering; then run \`oats sync\``), e.message);
+  }));
+  const fixed = await resolvePackages(workspace({ "oats.engineering-coordination": fix }), { catalog: f.catalog, remote: f.remote });
+  assert.equal(fixed.lock.packages["oats.engineering-coordination"].commit, f.eng200, "the named fix line resolves to the same release");
+});
+
+test("#1759: a catalog url's user information never reaches the refusal or its fix line", async () => {
+  const f = renamedFixture({ catalogHasNamed: false, url: "https://u:tok@github.com/awebai/oats-engineering.git" });
+  await assert.rejects(resolvePackages(workspace({ "oats.engineering": "v2.0.0" }), { catalog: f.catalog, remote: f.remote }), packageIdRefusal((e) => {
+    assert.ok(!e.message.includes("tok") && !JSON.stringify(e.details).includes("tok"), e.message);
+    assert.ok(e.message.includes("declare oats.engineering-coordination: git:https://github.com/awebai/oats-engineering.git@v2.0.0 in packages:"), e.message);
+    assert.match(e.message, /its user information is not shown/);
+  }));
+});
+
+test("#1759: a catalog url in the git@host: ssh form gives a fix line that parses, written as the catalog has it", async () => {
+  const f = renamedFixture({ catalogHasNamed: false, url: "git@github.com:awebai/oats-engineering.git" });
+  const remote = { ...f.remote };
+  for (const name of ["observeRemote", "readRemoteFile", "listRemoteTree", "fetchRemoteTree"]) remote[name] = (ref, ...rest) => f.remote[name](String(ref).replace(/^git@github\.com:/, "https://github.com/"), ...rest);
+  const fix = "git:git@github.com:awebai/oats-engineering.git@v2.0.0";
+  await assert.rejects(resolvePackages(workspace({ "oats.engineering": "v2.0.0" }), { catalog: f.catalog, remote }), packageIdRefusal((e) => {
+    assert.ok(e.message.includes(`resolves to git@github.com:awebai/oats-engineering.git@v2.0.0 (`), e.message);
+    assert.ok(e.message.includes(`declare oats.engineering-coordination: ${fix} in packages:`), e.message);
+    assert.ok(!/user information/.test(e.message), e.message);
+  }));
+  const c = classifyPackageValue(fix);
+  assert.equal(c.kind, "git");
+  assert.doesNotThrow(() => remoteParseRepoRef(c.repo), "the fix line's repo is a repository reference");
+});
+
+test("#1759: a long valid package id is named whole in the fix line", async () => {
+  const named = `a${"b".repeat(99)}`;
+  const f = renamedFixture({ named });
+  await assert.rejects(resolvePackages(workspace({ "oats.engineering": "v2.0.0" }), { catalog: f.catalog, remote: f.remote }), packageIdRefusal((e) => {
+    assert.equal(e.details.manifestPackage, named);
+    assert.ok(e.message.includes(`names package "${named}", not`) && e.message.includes(`declare ${named}: v2.0.0 in packages:`), e.message);
+  }));
+});
+
+test("#1759: a catalog entry at another path than oats-package names no git: line (a git: pin cannot reach it)", async () => {
+  const f = renamedFixture({ catalogHasNamed: false, path: "pkg" });
+  await assert.rejects(resolvePackages(workspace({ "oats.engineering": "v2.0.0" }), { catalog: f.catalog, remote: f.remote }), packageIdRefusal((e) => {
+    assert.ok(!e.message.includes("declare"), e.message);
+    assert.ok(e.message.includes("a git: pin reads oats-package/ and this package is at pkg/"), e.message);
+    assert.ok(e.message.endsWith("pin a version of oats.engineering whose manifest names oats.engineering; then run `oats sync`"), e.message);
+  }));
+});
+
+test("#1759: a git: pin whose manifest names another id → fix `<named>: <the same git: value>`", async () => {
+  const f = fixture();
+  const value = "git:github.com/northwind/tooling@v0.3.0";
+  await assert.rejects(resolvePackages(workspace({ "northwind.tools": value }), { catalog: f.catalog, remote: f.remote }), packageIdRefusal((e) => {
+    assert.equal(e.details.id, "northwind.tools");
+    assert.equal(e.details.value, value);
+    assert.equal(e.details.manifestPackage, "nw.tools");
+    assert.equal(e.details.commit, f.commits.nwMain);
+    assert.equal(e.message, `packages.northwind.tools: ${value} resolves to ${f.commits.nwMain.slice(0, 12)}, whose oats-package.json names package "nw.tools", not "northwind.tools" — `
+      + `a package is locked under its own id: declare nw.tools: ${value} in packages: in place of northwind.tools, or pin a version of northwind.tools whose manifest names northwind.tools; then run \`oats sync\``);
+  }));
+});
+
+test("#1759: a manifest naming something that is not a package id offers only the other way out", async () => {
+  const f = renamedFixture({ named: "Not An\nId", catalogHasNamed: false });
+  await assert.rejects(resolvePackages(workspace({ "oats.engineering": "v2.0.0" }), { catalog: f.catalog, remote: f.remote }), packageIdRefusal((e) => {
+    assert.equal(e.details.manifestPackage, "Not An\nId");
+    assert.ok(e.message.includes(`names package "Not An\\nId", not "oats.engineering", which is not a package id — `), e.message);
+    assert.ok(!e.message.includes("declare") && !e.message.includes("\n"), e.message);
+  }));
+});
+
+test("#1759: an already-locked entry under another package's id is refused at the next sync; the moved-tag and digest checks come first", async () => {
+  const f = fixture();
+  const value = "git:github.com/northwind/tooling@v0.3.0";
+  // What an older kernel wrote: nw.tools's release locked under the key northwind.tools.
+  const { lock: right } = await resolvePackages(workspace({ "nw.tools": value }), { catalog: f.catalog, remote: f.remote });
+  const stale = { lockfileVersion: 3, packages: { "northwind.tools": right.packages["nw.tools"] } };
+  const ws = workspace({ "northwind.tools": value });
+  await assert.rejects(resolvePackages(ws, { catalog: f.catalog, lock: stale, remote: f.remote }), packageIdRefusal((e) => {
+    assert.equal(e.details.id, "northwind.tools");
+    assert.equal(e.details.manifestPackage, "nw.tools");
+    assert.ok(e.message.includes(`declare nw.tools: ${value} in packages: in place of northwind.tools`), e.message);
+  }));
+  const tampered = { lockfileVersion: 3, packages: { "northwind.tools": { ...stale.packages["northwind.tools"], integrity: `sha256-${"0".repeat(64)}` } } };
+  await assert.rejects(resolvePackages(ws, { catalog: f.catalog, lock: tampered, remote: f.remote }), (e) => e.code === "E_PACKAGE_INTEGRITY" && e.details.why === undefined && /digest/.test(e.message));
+  const moved = f.repos.nw.commit("moved", pkgFiles("nw.tools", "0.3.0", [{ dir: "nw-release", name: "nw-release-tooling" }]));
+  f.repos.nw.tag("v0.3.0", moved);
+  await assert.rejects(resolvePackages(ws, { catalog: f.catalog, lock: stale, remote: f.remote }), (e) => e.code === "E_PACKAGE_INTEGRITY" && e.details.why === undefined && /the tag moved/.test(e.message));
+});
+
+test("#1759: matching ids lock exactly as before, on a first and a repeated sync", async () => {
+  const f = fixture();
+  const ws = workspace({ "oats.okf": "v2.1.3", "nw.tools": "git:github.com/northwind/tooling@v0.3.0" });
+  const { lock } = await resolvePackages(ws, { catalog: f.catalog, remote: f.remote });
+  const digest = async (repo, commit) => (await f.remote.fetchRemoteTree(repo.url, commit, "oats-package", "/dev/null")).digest;
+  assert.deepEqual(lock, { lockfileVersion: 3, packages: {
+    "nw.tools": { source: "git:github.com/northwind/tooling@v0.3.0", url: f.repos.nw.url, path: "oats-package", version: "0.3.0", commit: f.commits.nwMain, integrity: await digest(f.repos.nw, f.commits.nwMain), capabilities: ["nw-release-tooling"] },
+    "oats.okf": { source: "catalog:oats.okf", url: f.repos.okf.url, path: "oats-package", version: "2.1.3", commit: f.commits.okf213, integrity: await digest(f.repos.okf, f.commits.okf213), capabilities: ["oats.okf"] },
+  } });
+  const again = await resolvePackages(ws, { catalog: f.catalog, lock, remote: f.remote });
+  assert.equal(JSON.stringify(canonicalLock(again.lock)), JSON.stringify(canonicalLock(lock)));
+});
+
+test("#1759: a manifest without package is still E_PACKAGE_MANIFEST, read before any id comparison", async () => {
+  const f = fixture();
+  const bad = f.repos.nw.commit("no-id", { "oats-package/oats-package.json": JSON.stringify({ capabilities: [] }) });
+  f.repos.nw.tag("v0.4.0", bad);
+  await assert.rejects(resolvePackages(workspace({ "nw.tools": "git:github.com/northwind/tooling@v0.4.0" }), { catalog: f.catalog, remote: f.remote }), (e) => e.code === "E_PACKAGE_MANIFEST");
 });
 
 // ---------- packageProviding ----------
