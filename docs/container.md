@@ -199,9 +199,12 @@ container/agent/accept.sh "oats-agent-${TEAM}" --evidence live-lab \
 ```
 
 Choose the label matching the actual run. `local` accepts the builder's
-architecture; the other labels require amd64 and root:GID 0440 token / 0750
-login-directory metadata. Local fixtures use a dummy file, never a real
-login. Run the live Claude mode separately for each admitted instance home;
+architecture; the other labels require amd64 and root:GID 0750
+login-directory metadata, plus root:GID 0440 when a token is present.
+If the token file is absent, its check reports `NOT RUN` and acceptance
+continues; `claude -p` is skipped until the token exists. Do not create a
+placeholder token. Local fixtures never use a real login.
+Run the live Claude mode separately for each admitted instance home;
 the home is an evidence label and an `instance.json` existence check. The
 probe runs from a private temporary directory under `/tmp`, removed on
 success or failure, with `--setting-sources user`. It uses the container's
@@ -224,8 +227,8 @@ It checks the process's UID/GID/supplementary groups/capabilities/no-new-privile
 and non-root sshd's banner, scans `/` as container root (pruning `/proc`,
 `/sys`, `/dev` and the agent-scanned `/state`, `/tmp`, `/run`, `/work`),
 and scans those trees plus writable `/dev/shm` and `/dev/mqueue` as the agent
-for `.credentials.json`. It checks
-the token is readable and not writable, and proves a global npm install fails using an
+for `.credentials.json`. When a token is present, it checks
+that the token is readable and not writable. It proves a global npm install fails using an
 offline local package. Scan errors fail acceptance. The root inspection
 process receives no added capabilities. Token provenance still needs the
 operator's receipt: permissions and successful inference cannot distinguish
