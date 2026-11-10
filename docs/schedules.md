@@ -98,18 +98,38 @@ it (`reconciled: "cleared"`), and reconciles an attempt beside it as
 `schedule-slot-unreadable` problem ([Unresolved attempts](#what-a-run-reports)).
 
 **A slot whose schedule is not defined is held until a person releases it.**
-A local schedule removed by hand from `oats-schedules.json` can leave its
-slot behind, readable or not, and it may stand for a run that is still going.
-(A workspace schedule's slot is never taken for one: a workspace schedule
-absent here may be placed elsewhere, disabled or untrusted, and its state is
-reconciled under its own authorization.) No tick reads it, and every tick counts it against
-`maxConcurrent` until it is released. `oats schedule reconcile <id>` answers
-`{schedule: null, reconciled: "unknown", remedy}` with what it found (the
-slot, that the schedule is not defined, and the run its record names: its due
-minute and, for a wake, the home of its instance; a spawn's or a command's
-record names no instance) and leaves it. Once you have checked `oats status`,
-`reconcile <id> --clear` releases it (`{schedule: null, reconciled:
-"cleared"}`). `oats doctor` lists it as a `schedule-slot-orphaned` problem.
+A schedule that is gone can leave its slot behind, readable or not, and it may
+stand for a run that is still going. A local schedule is gone when it is no
+longer in `oats-schedules.json`. A workspace schedule is gone when the saved
+automation snapshot says so: its member was read at a commit, the snapshot
+has no problem of that member that could hide a schedule (a schedule file
+that could not be read or parsed, which may carry any id, or a member that
+could not be listed), and no schedule has its id. That is decided from the
+snapshot as it was last saved: reconcile and doctor refresh nothing, and
+both name the snapshot's time. A workspace schedule that is disabled,
+untrusted or placed on another host still has its entry there: it is not
+gone, and reconcile refuses it as before (`E_AUTOMATION_NOT_HERE`). Without a
+snapshot nothing is gone.
+
+No tick reads the slot of a schedule that is gone, and every tick counts it
+against `maxConcurrent` until it is released. `oats schedule reconcile <id>`
+answers `{schedule: null, reconciled: "unknown", remedy}` with what it found
+(the slot, how the schedule is known to be gone, and the run its record
+names: its due minute and, for a wake, the home of its instance; a spawn's or
+a command's record names no instance) and changes nothing. Once you have
+checked `oats status`, `reconcile <id> --clear` releases the slot, resolves a
+retained launch attempt as cleared (as for a defined job) and removes the
+job's state: `{schedule: null, reconciled: "cleared", cleared: [...]}`, which
+lists `"slot"`, `"attempt"` and `"state"` as each was there. `oats doctor`
+lists the slot as a `schedule-slot-orphaned` problem.
+
+A workspace schedule that is absent from the snapshot but cannot be shown gone
+stays refused (`E_SCHEDULE_UNKNOWN`), and doctor lists its slot as
+`schedule-slot-orphaned` with the step that applies: when its member is not
+in the snapshot (removed from the workspace, or not read), check `oats
+status` and remove the slot by hand, at the path doctor names; when its
+member has a schedule file that could not be read, fix that file and run
+`oats automations refresh`.
 
 ## Kinds
 
@@ -901,16 +921,26 @@ show <id>; once its last run is not running, run oats schedule reconcile <id>
 another deployment. Doctor reads the slot as the tick does and changes
 nothing. A readable slot of a defined job, and no slot, are not listed.
 
-A slot whose schedule is not defined, readable or not, is listed as a
+A slot whose schedule is gone, readable or not, is listed as a
 `schedule-slot-orphaned` problem instead, of the same shape (`! schedule-slot-orphaned:
-<message>`, the remedy on the next line). Its message says the schedule is
-not defined and what the slot's record names (`has no readable record`, or
-`holds the run due <minute> of the instance at <home>`, or `… of an
-instance its record does not name`). Its remedy is `once oats status shows
-the instance at <home> is not running, run oats schedule reconcile <id>
---clear to release the slot`, or, when the record names no instance, `once
-no run of schedule <id> is running (oats status lists the instances it
-started), run oats schedule reconcile <id> --clear to release the slot`.
+<message>`, the remedy on the next line). Its message says how the schedule
+is known gone (`which is not defined`, or `which as of <takenAt> is not in
+the workspace (run oats automations refresh if that is stale)`) and what the
+slot's record names (`has no readable record`, or `holds the run due
+<minute> of the instance at <home>`, or `… of an instance its record does
+not name`). Its remedy is `once oats status shows the instance at <home> is
+not running, run oats schedule reconcile <id> --clear to release the slot`,
+or, when the record names no instance, `once no run of schedule <id> is
+running (oats status lists the instances it started), run oats schedule
+reconcile <id> --clear to release the slot`. The `schedule-unresolved` row of
+a gone workspace schedule's retained attempt names the same remedy. A
+workspace schedule absent from the snapshot that cannot be shown gone is
+listed as `schedule-slot-orphaned` too, with `which is not in the
+workspace's snapshot of <takenAt>`, why, and its step: `check oats status for
+a run of schedule <id>; once none is running, remove the slot by hand: rm -r
+-- '<path>'` for a member not in the snapshot, `fix <file> in member
+<member> and run oats automations refresh; doctor then says whether
+schedule <id> is gone` for a file that could not be read.
 
 Workspace guidance uses only validated local settings and the saved automation
 snapshot. A known opt-out, missing saved definition, different assigned host or
