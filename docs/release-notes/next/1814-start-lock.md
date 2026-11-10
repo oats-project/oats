@@ -9,7 +9,9 @@
   naming it. Remove the directory once no earlier `oats` is running on the
   machine. The resume sweep reports such a home as a refused start
   (`start-refused`, with the code) instead of skipping it as one where a
-  start is running.
+  start is running. The Desktop and `oats tui` show it as a start that
+  started nothing, with a sentence that says to remove the lock its message
+  names once no earlier OATS is running, since waiting will not clear it.
 
 ## Changed
 

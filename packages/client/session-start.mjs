@@ -26,12 +26,13 @@ import { requireTerms } from './client-terms.mjs';
 export { startGate };
 
 /** The kernel's codes for a start that started nothing: another start holds the home, an upgrade has not
- * finished, an earlier kernel's start lock is there, or an earlier start's
- * pane is still a shell without its completion marker (E_SESSION_START_BUSY); the instance was seen running,
- * or its window appeared during the start (E_SESSION_RUNNING). Some places that raise E_SESSION_RUNNING come
+ * finished, or an earlier start's pane is still a shell without its completion marker (E_SESSION_START_BUSY);
+ * an earlier kernel's start lock, or anything else that is no upgrade's file, is at the home's
+ * `.oats-start.lock` (E_SESSION_START_LOCK_STUCK); the instance was seen running, or its window appeared
+ * during the start (E_SESSION_RUNNING). Some places that raise E_SESSION_RUNNING come
  * after the kernel has written the start's pending receipt, or after a restart's stop: nothing was started,
  * not nothing happened. A code joins only when every place the kernel raises it in a start launches nothing. */
-export const STARTED_NOTHING_CODES = Object.freeze(['E_SESSION_START_BUSY', 'E_SESSION_RUNNING']);
+export const STARTED_NOTHING_CODES = Object.freeze(['E_SESSION_START_BUSY', 'E_SESSION_START_LOCK_STUCK', 'E_SESSION_RUNNING']);
 
 /** The kernel feature from which a start or a restart holds the home's lifecycle claim (#1602). */
 const CLAIM_START_FEATURE = 'lifecycle-claim-start';
@@ -43,11 +44,12 @@ const CLAIM_START_FEATURE = 'lifecycle-claim-start';
  * (lifecycle-contract.mjs answeringFeatures), never this computer's for a server's row. */
 export const CLAIM_STARTED_NOTHING_CODES = Object.freeze(['E_LIFECYCLE_BUSY', 'E_INSTANCE_RETIRING']);
 
-/** The two kernel codes' own sentences, for a client that words by code. The kernel's message is the
- * answer's `detail`, through the display filter. E_SESSION_START_BUSY says no more than busy: the kernel answers
- * it also for an earlier kernel's start lock that is there, which waiting does not remove. */
+/** The kernel codes' own sentences, for a client that words by code. The kernel's message is the answer's
+ * `detail`, through the display filter. E_SESSION_START_BUSY says no more than busy. E_SESSION_START_LOCK_STUCK
+ * is what only a person ends: the kernel's message names the path to remove. */
 const STARTED_NOTHING = Object.freeze({
   E_SESSION_START_BUSY: 'OATS refused this start as busy. Nothing was started.',
+  E_SESSION_START_LOCK_STUCK: 'An earlier OATS\'s start lock, or something else that is no upgrade\'s, is in this instance\'s home; OATS\'s message names it. Nothing was started. Remove it once no earlier OATS is running: waiting will not clear it.',
   E_SESSION_RUNNING: 'This instance is already running. Nothing was started.',
 });
 /** A CLAIM_STARTED_NOTHING_CODES refusal's sentence. E_LIFECYCLE_BUSY reads by who holds the claim (`holder`,
