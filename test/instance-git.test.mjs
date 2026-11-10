@@ -192,6 +192,98 @@ test("hardening: configured external diff/textconv/fsmonitor helpers NEVER execu
   assert.notEqual(g2.observation.indexRevision, idx); assert.ok(!g2.files.some((f) => f.id === id("README.md")));
 });
 
+/** A repository an agent has given a filter driver: `configure(work, helper)` writes the hostile
+ *  configuration after the fixture's own commit, then a tracked file is rewritten (same size, so
+ *  Git must read its content to compare it) and an untracked one is added. `helper` records that it
+ *  ran in `sentinel`. */
+function filteredRepo(name, configure) {
+  const work = repo(join(base, name));
+  const sentinel = join(base, `${name}-helper-ran`);
+  const helper = join(base, `${name}-helper.sh`); writeFileSync(helper, `#!/bin/sh\necho ran > '${sentinel}'\ncat\n`, { mode: 0o700 });
+  configure(work, helper);
+  write(join(work, "src", "a.txt"), "b\n"); write(join(work, "new.txt"), "new\n");
+  rmSync(sentinel, { force: true });
+  return { work, sentinel, helper, ...scope(`s-${name}`, { work }) };
+}
+/** `oats instance git`, then `oats instance diff` of every file it lists → { result, patches: path → patch }. */
+function observeAndDiff(ws) {
+  const g = oats(["instance", "git", "dev-1", "--dir", ws]); assert.equal(g.status, 0, g.stdout + g.stderr);
+  const result = g.envelope.result, patches = {};
+  for (const f of result.files) {
+    const d = oats(["instance", "diff", "dev-1", "--dir", ws, "--file", f.id, "--revision", result.observation.revision, "--index-revision", result.observation.indexRevision]);
+    assert.equal(d.status, 0, d.stdout + d.stderr);
+    patches[f.path] = d.envelope.result.patch;
+  }
+  return { result, patches };
+}
+const FILTER_NOTE = /filter driver/;
+
+test("hardening: a clean, smudge or process filter the repository's configuration defines NEVER executes, wherever its attribute and its definition come from, and the observation is the unfiltered one", () => {
+  const inTree = (work) => write(join(work, ".gitattributes"), "* filter=evil\n");
+  const inInfo = (work) => write(join(work, ".git", "info", "attributes"), "* filter=evil\n");
+  const cases = {
+    "clean": (work, helper) => { git(work, "config", "filter.evil.clean", helper); inTree(work); },
+    "clean-required": (work, helper) => { git(work, "config", "filter.evil.clean", helper); git(work, "config", "filter.evil.required", "true"); inTree(work); },
+    "smudge": (work, helper) => { git(work, "config", "filter.evil.smudge", helper); inTree(work); },
+    "process": (work, helper) => { git(work, "config", "filter.evil.process", helper); inTree(work); },
+    "info-attributes": (work, helper) => { git(work, "config", "filter.evil.clean", helper); inInfo(work); },
+    "included": (work, helper) => {
+      const included = join(base, "r5-included.gitconfig"); writeFileSync(included, `[filter "evil"]\n\tclean = ${helper}\n\tprocess = ${helper}\n`);
+      git(work, "config", "include.path", included); inInfo(work);
+    },
+    "worktree-config": (work, helper) => { git(work, "config", "extensions.worktreeConfig", "true"); git(work, "config", "--worktree", "filter.evil.clean", helper); inInfo(work); },
+    "name-with-dots": (work, helper) => { git(work, "config", "filter.Évil.v2.x.clean", helper); write(join(work, ".gitattributes"), "* filter=Évil.v2.x\n"); },
+  };
+  const executed = [], observed = {};
+  for (const [name, configure] of Object.entries(cases)) {
+    const fx = filteredRepo(`r5-${name}`, configure);
+    observed[name] = observeAndDiff(fx.ws);
+    if (existsSync(fx.sentinel)) executed.push(name);
+  }
+  assert.deepEqual(executed, [], "no filter the configuration defines executed during an observation or a diff");
+  for (const [name, { result, patches }] of Object.entries(observed)) {
+    const row = (path) => { const f = result.files.find((x) => x.path === path); assert.ok(f, `${name}: ${path} is listed: ${JSON.stringify(result.files.map((x) => x.path))}`); return f; };
+    assert.deepEqual([row("src/a.txt").kind, row("src/a.txt").xy, row("src/a.txt").additions, row("src/a.txt").deletions], ["changed", ".M", 1, 1], name);
+    assert.equal(row("new.txt").kind, "untracked", name);
+    assert.match(patches["src/a.txt"], /^-a\n\+b$/m, name);
+    assert.match(patches["new.txt"], /^\+new$/m, name);
+    assert.ok(result.notes.some((n) => FILTER_NOTE.test(n)), `${name}: the observation says a filter driver was not run: ${JSON.stringify(result.notes)}`);
+  }
+});
+
+test("hardening: a filter in use (stored form differs from the work tree's) is not run: a touched file reads as changed, its diff is the stored form against the work tree's bytes, and a note says so; a repository with no filter driver has no such note", () => {
+  const work = repo(join(base, "r6"));
+  const sentinel = join(base, "r6-helper-ran");
+  const helper = join(base, "r6-helper.sh"); writeFileSync(helper, `#!/bin/sh\necho ran > '${sentinel}'\ntr a-z A-Z\n`, { mode: 0o700 });
+  git(work, "config", "filter.upper.clean", helper); write(join(work, ".gitattributes"), "*.dat filter=upper\n");
+  write(join(work, "big.dat"), "payload\n"); git(work, "add", "."); git(work, "commit", "-qm", "a filtered file");
+  assert.equal(git(work, "cat-file", "blob", "HEAD:big.dat"), "PAYLOAD", "the fixture's own commit stored the filtered form");
+  assert.equal(git(work, "status", "--porcelain"), "", "with its filter, the tree is clean");
+  write(join(work, "big.dat"), "payload\n"); // the same bytes, written again: Git must read the content to compare it
+  rmSync(sentinel, { force: true });
+  const { ws } = scope("s6", { work });
+  const { result, patches } = observeAndDiff(ws);
+  assert.equal(existsSync(sentinel), false, "the filter was not run");
+  const f = result.files.find((x) => x.path === "big.dat");
+  assert.deepEqual([f?.kind, f?.xy, f?.additions, f?.deletions], ["changed", ".M", 1, 1], JSON.stringify(result.files));
+  assert.match(patches["big.dat"], /^-PAYLOAD\n\+payload$/m);
+  assert.equal(result.notes.filter((n) => FILTER_NOTE.test(n)).length, 1, JSON.stringify(result.notes));
+
+  const plain = repo(join(base, "r6-plain")); write(join(plain, "src", "a.txt"), "b\n");
+  const g = oats(["instance", "git", "dev-1", "--dir", scope("s6-plain", { work: plain }).ws]);
+  assert.equal(g.status, 0, g.stdout + g.stderr);
+  assert.deepEqual(g.envelope.result.notes, [], "no filter driver, no note");
+});
+
+test("hardening: a filter driver whose name Git's -c cannot carry refuses the observation, and the filter is not run", () => {
+  const fx = filteredRepo("r7", (work, helper) => { git(work, "config", "filter.a=b.clean", helper); write(join(work, ".git", "info", "attributes"), "* filter=a=b\n"); });
+  const g = oats(["instance", "git", "dev-1", "--dir", fx.ws]);
+  assert.notEqual(g.status, 0, g.stdout + g.stderr);
+  assert.equal(g.envelope.error.code, "E_GIT_FAILED", g.stdout);
+  assert.match(g.envelope.error.message, /filter driver/);
+  assert.equal(existsSync(fx.sentinel), false, "the filter was not run");
+});
+
 // GIT_NO_LAZY_FETCH is Git 2.44's; an older Git ignores it, and there is no protection to test.
 const [gitMajor, gitMinor] = (/(\d+)\.(\d+)/.exec(execFileSync("git", ["--version"], { encoding: "utf8" })) || []).slice(1).map(Number);
 const gitHasNoLazyFetch = gitMajor > 2 || (gitMajor === 2 && gitMinor >= 44);
