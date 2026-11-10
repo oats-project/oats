@@ -636,7 +636,7 @@ function holdWriteLock(f, pid, identity = {}) {
   return lock;
 }
 /** The refusal a write lock held past the deadline ends in: the holder's pid, and how to tell whether the lock is safe to remove. */
-const heldLockRefusal = (pid, lock) => new RegExp(`oats process ${pid} has been writing it since .*; try again once it finishes; check whether pid ${pid} is an oats process: once no oats process holds it, the lock ${lock.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} is safe to remove$`);
+const heldLockRefusal = (pid, lock) => new RegExp(`(?<!oats )process ${pid} has been writing it since .*; try again once it finishes; check whether pid ${pid} is an oats process: once no oats process holds it, the lock ${lock.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} is safe to remove$`);
 
 test("a live holder of the cache write lock is waited for (bounded) and never stolen from: reason cache naming its pid", async () => {
   const f = fixture();
