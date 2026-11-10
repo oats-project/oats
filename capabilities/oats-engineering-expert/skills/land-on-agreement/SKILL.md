@@ -1,6 +1,6 @@
 ---
 name: land-on-agreement
-description: Take your effort's PRs from a verified branch to merge - your verification note and the lane's green light, the developer opening the PR and working its reviews (it, never you, iterates with fresh reviewers), the maintainer's read where the lane needs one, the merge at that exact head by whoever your landing rules name once every agreement holds, rebases without re-asking anyone, a release its owner approved - and retire what's finished, yourself last. Use whenever your work becomes a PR, while it is open, for a release you lead, and when an instance you started, or your effort, is finished.
+description: Take your effort's PRs to merge - for a developer's work, your verification note and the lane's green light, the developer opening the PR and working its reviews (it, never you, iterates with fresh reviewers); for a change you built, the clean round of your own review loop and you opening and working the PR; the maintainer's read where the lane needs one, the merge at that exact head by whoever your landing rules name once every agreement holds, rebases without re-asking anyone, a release its owner approved - and retire what's finished, yourself last. Use whenever your work becomes a PR, while it is open, for a release you lead, and when an instance you started, or your effort, is finished.
 ---
 
 IMPORTANT: after a compaction, reload this skill before you continue the step.
@@ -10,26 +10,33 @@ IMPORTANT: after a compaction, reload this skill before you continue the step.
 ## Your landing rules
 Your landing rules are in your briefing, with any change to them you recorded since (the
 rules say how), which wins. Per lane, they name the agreements that merge a change, who
-merges, who gives the green light to open a PR, whether a lead may make a one-line docs fix
-itself, where a maintainer's read is required (on a PR, or on a contract change before it is
-built), and the one-way doors kept for people. Read them once per effort, and again after a
+merges, who gives the green light to open a PR, what a one-line docs fix needs, where a
+maintainer's read is required (on a PR, or on a contract change before it is built), and
+the one-way doors kept for people. Read them once per effort, and again after a
 compaction. None in your briefing: that is a block (`/findings-and-blocks`); merge nothing
 until it is settled.
 
-## 1. Verify
-The developer iterates with fresh reviewers, not you. Its branch comes back at the head of a
-round that found nothing to fix: verify it once (`/verify-developer-work`), ending with
-`VERIFIED at <head>` and the checks you ran. What you find goes back to the developer,
-which fixes it and runs its loop again. You never run review rounds or spawn reviewers.
+## 1. Verify, or your own clean round
+**A developer's work,** or a helper's scoped piece: its author iterates with fresh
+reviewers, not you. Its branch comes back at the head of a round that found nothing to
+fix: verify it once (`/verify-developer-work`), ending with `VERIFIED at <head>` and the
+checks you ran. What you find goes back to its author, which fixes it and runs its loop
+again. You never run review rounds or spawn reviewers for it.
 
-**A one-line docs fix** (a typo, a broken link) you make yourself only where your landing
-rules allow it, with no review loop: it is no exception to who iterates with reviewers, as
-nothing in it needs a review round. Anything more goes to a developer. Prove it the way the
-repository checks its docs, open its PR, and land it like any other: CI, the review bot
-where one runs, and your note. If the bot finds anything to fix, it is no longer a one-line
-fix: give it to a developer.
+**A change you built:** you ran its review loop (`/run-the-review-loop`), each round's
+reviewer a fresh `code-reviewer` instance, your child, never you. The round that found
+nothing to fix, with its Checked section, is the green light: nobody verifies their own
+work, so there is no `VERIFIED` note. Open the PR at that head and work its reviews
+(`/work-the-reviews`), then go on from section 4.
+
+**A one-line docs fix** (a typo, a broken link) skips the local loop, not the review. Prove
+it the way the repository checks its docs, open its PR, and land it on CI green and one
+fresh review at its head: the review bot's where one runs, otherwise one reviewer round
+(`/run-the-review-loop`). If that review finds anything to fix, it is no longer a one-line
+fix: it gets the loop.
 
 ## 2. The green light, and the PR
+For a developer's work, or a helper's scoped piece (a change you built: section 1):
 - Where the lane names another authority for the green light, ask it first (`/hand-off`)
   at the verified head. Then give the developer the green light in one message: `VERIFIED
   at <head>`, open the PR, and the reviews the lane counts (the forge's review bot, or its
@@ -54,12 +61,15 @@ by message. A new head goes back to it for the delta.
 <!-- OATS: the lane map gives every PR a maintainer and one second reader, and most lanes the release lane's sign-off. -->
 Here every lane requires one: the PR's maintainer, the one of your person in its lane. It
 asks the PR's second reader and the release lane's sign-off as the lane's line says; you
-don't. A RETURN from any of them goes to your developer like a finding of yours.
+don't. A RETURN from any of them goes to the change's author: to your developer or helper,
+like a finding of yours, for their work; for a change you built, you fix it or dispute it
+yourself, and its new head is reviewed as `/work-the-reviews` says.
 
 ## 5. Merge
-When every agreement holds at the same head (CI, the reviews the lane counts, your note,
-the maintainer's verdict where needed) and nothing holds the PR or the default branch (your
-landing rules say how holds are recorded), the one your landing rules name merges it:
+When every agreement holds at the same head (CI, the reviews the lane counts, your note on
+a developer's work, the maintainer's verdict where needed) and nothing holds the PR or the
+default branch (your landing rules say how holds are recorded), the one your landing rules
+name merges it:
 <!-- OATS: the lane map's agreements: the second reader's verdict, the release lane's sign-off where the lane asks, and no RETURN. -->
 (here the agreements include the second reader's verdict and, where the lane asks, the
 release lane's sign-off, all at that head, with no RETURN outstanding)
@@ -76,9 +86,10 @@ release lane's sign-off, all at that head, with no RETURN outstanding)
 Then check CI on the merged commit, and fix forward if it breaks.
 
 ## 6. A conflict with the default branch
-The first merge wins. The developer rebases, proves it again, and runs a fresh review round
-where the lane counts its review loop and the rebase changed a commit. Verify the delta
-again, and check the agreements again at the new head. Decisions people already took hold
+The first merge wins. The author (the developer, or you for a change you built) rebases,
+proves it again, and runs a fresh review round where the lane counts its review loop and the
+rebase changed a commit. Verify a developer's delta again, and check the agreements again
+at the new head. Decisions people already took hold
 through the rebase: nobody is asked to decide again.
 
 ## 7. After the merge
@@ -136,7 +147,9 @@ An instance is **finished** when all of these hold:
   harvest.
 - **Your developers:** once the PR is merged and green, or closed, and it sends its done
   line.
-- **Your probes:** once they have answered (`/send-a-probe`). A probe's work is its answer,
+- **Your helpers:** a helper with a scoped piece of work once that work has landed, as a
+  developer is. **Your probes** (helpers with a question): once they have answered
+  (`/send-a-helper`). A probe's work is its answer,
   and its scratch commits are not delivered: skip the `oats instance git` check, and where
   it has a work tree, retire it with `oats retire <probe> --discard-worktree`. Retire any
   probe that hasn't answered too.

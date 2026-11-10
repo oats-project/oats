@@ -1,19 +1,20 @@
 # Third-party notices
 
-In OATS's copy, the template's `capabilities/developer/` is `capabilities/oats-developer/`.
+In OATS's copy, the template's `capabilities/<name>/` is `capabilities/oats-<name>/`: its
+`capabilities/build/` is `capabilities/oats-build/` here.
 
-Three of the developer's skills adapt rules from MIT-licensed skill collections. The rules
-were rewritten in this template's words; no file was copied. Each source's copyright notice
-and licence follow, as the MIT licence asks. Keep this file with any copy of those skills
-(ADAPTING.md, section 1).
+Four of the build skills (`oats.build`) and the developer's quality floor adapt rules from
+MIT-licensed skill collections. The rules were rewritten in this template's words; no file
+was copied. Each source's copyright notice and licence follow, as the MIT licence asks. Keep
+this file with any copy of those skills (ADAPTING.md, section 1).
 
 | Template skill | Adapted from |
 |---|---|
-| `capabilities/developer/skills/test-first` | mattpocock/skills (`tdd`); obra/superpowers (`test-driven-development`) |
-| `capabilities/developer/skills/diagnose-before-fixing` | mattpocock/skills (`diagnosing-bugs`); obra/superpowers (`systematic-debugging`) |
-| `capabilities/developer/skills/design-while-writing` | mattpocock/skills (`codebase-design`); addyosmani/agent-skills (`api-and-interface-design`, `incremental-implementation`) |
+| `capabilities/build/skills/test-first` | mattpocock/skills (`tdd`); obra/superpowers (`test-driven-development`) |
+| `capabilities/build/skills/diagnose-before-fixing` | mattpocock/skills (`diagnosing-bugs`); obra/superpowers (`systematic-debugging`) |
+| `capabilities/build/skills/design-while-writing` | mattpocock/skills (`codebase-design`); addyosmani/agent-skills (`api-and-interface-design`, `incremental-implementation`) |
 | `capabilities/developer/injects/developer.md`, the quality floor | addyosmani/agent-skills (`constraint-driven-development`) |
-| `capabilities/developer/skills/prove-it-works`, step 6 | obra/superpowers (`verification-before-completion`) |
+| `capabilities/build/skills/prove-it-works`, step 6 | obra/superpowers (`verification-before-completion`) |
 
 ## mattpocock/skills
 

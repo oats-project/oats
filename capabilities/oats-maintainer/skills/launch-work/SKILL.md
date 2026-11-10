@@ -7,7 +7,7 @@ description: Turn work someone asks the maintainer for (usually a human's high-l
 
 Every effort you launch gets one lead expert. It holds the expert role: it writes the spec
 and plan, works out the detail with the human where needed, drives its developers and
-probes, and lands its own PRs on the agreements the landing rules name. A lead you spawn
+helpers, and lands its own PRs on the agreements the landing rules name. A lead you spawn
 for your human's work, in a lane where you hold its seat or as its overflow seat, is your
 child. Where your human has a dispatcher, new work usually starts there instead; you launch
 what reaches you.
@@ -58,8 +58,8 @@ Spawn a new instance of that expert soul as your child, with the brief below:
 `oats spawn <expert> --parent "$OATS_INSTANCE" --purpose <slug> --task-file <brief.md>`,
 without `--same-work`: the effort is its own, not your work.
 
-- **One lead per effort,** never one per domain: it brings in what else it needs by probe
-  or hand-off.
+- **One lead per effort,** never one per domain: it brings in what else it needs by a
+  helper or a hand-off.
 - Never pile new work onto a live expert to save a spawn.
 - **Your children:** stopping or retiring you stops your leads, and theirs, first (a
   non-recursive stop spares them); a retire refuses (`E_CHILDREN_RUNNING`) while one won't

@@ -15,9 +15,11 @@ never run review rounds or spawn reviewers for it.
   Pin that head; if the branch moves while you verify, stop and wait for its next report.
 - Read your knowledge's recorded decisions and coherence rules for this area first.
 - The handover needs: what was done, against the spec's "done when"; how it was verified
-  (tests and real runs, with results); the final round's verdict and the number of rounds;
-  anything deliberately left out.
-- No review, or a last round that still found something to fix: send it back. You don't do
+  (tests and real runs, with results); the final round's verdict with its Checked section
+  (how each "done when" item was checked) and the number of rounds; anything deliberately
+  left out.
+- No review, a last round that still found something to fix, or a final verdict with no
+  Checked section, or one that leaves a "done when" item out: send it back. You don't do
   the reviewers' job. A finding the developer disputed with a concrete reason, listed in
   the hand-back, is not one to fix, nor is one you overruled when its loop reached its round
   cap: read each, and return one only where it touches the design or a contract.

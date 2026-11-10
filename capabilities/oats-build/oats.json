@@ -1,0 +1,20 @@
+{
+  "capability": "oats.build",
+  "version": "3.0.0",
+  "compatibility": {
+    "oats": ">=0.69.7"
+  },
+  "description": "The craft of building a change, for whoever builds it: a developer, or a lead that builds its own spec. Skills only, with no inject: the builder's role says when to use them. How to run the work and its extra worktrees, writing it test first, diagnosing a bug before fixing it and designing as it writes, proving it works, iterating with a fresh reviewer each round (a new code-reviewer instance, this template's soul, spawned as an OATS child on a different model where one is available) until a round finds nothing to fix, working the PR's reviews, and keeping the development docs current. Copied from the engineering template, template-v3.0.0.",
+  "requires": [],
+  "skills": [
+    "skills/execution-strategy",
+    "skills/worktrees",
+    "skills/test-first",
+    "skills/diagnose-before-fixing",
+    "skills/design-while-writing",
+    "skills/prove-it-works",
+    "skills/run-the-review-loop",
+    "skills/work-the-reviews",
+    "skills/maintain-dev-docs"
+  ]
+}

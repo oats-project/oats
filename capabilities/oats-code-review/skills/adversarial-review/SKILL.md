@@ -54,16 +54,32 @@ Then the findings, most severe first, each as:
 - **minor:** a real but low-impact issue.
 - Simplifications go in their own short section (see `/simplification-review`).
 
+Then **Checked**, in every report, an `APPROVE` included:
+```
+Checked
+- <"done when" item or pinned acceptance test>: read <file:lines> | ran <command>: <result>
+- attacks that found nothing: <which inputs, which failure paths>
+```
+One line for each "done when" item and each pinned acceptance test: how you checked it,
+read (with the file and lines) or ran (with the command and its result). Then the attacks
+that found nothing, named. Lines, not prose. An approval that lists no checks is not a
+review.
+
 **Keep out:** style the formatter or linter owns; personal taste; "consider adding
 comments"; restating the diff; praise; speculative findings with no path. **At most 3
 minors per round.** If you have more, pick the three that matter.
 
 ## 5. One round, the whole change
-The developer runs a fresh reviewer each round, so you are one round and the next head is
-another reviewer's.
-- Review the whole diff range at your head, not a delta: assume no earlier round read any
-  of it, and that nobody will check your findings for you.
+The author runs a fresh reviewer for each round, so you are one round.
+- Review the whole diff range at your head: assume no earlier round read any of it, and
+  that nobody will check your findings for you.
 - Hold the bar the spec sets, not a bar of your own: a fresh reviewer each round must not
   mean a moving target. Taste stays out (section 4).
-- If the developer disputes a finding with you, re-read it against its reason. Withdraw it
-  if they're right; say why if they aren't. Either way, the next round decides afresh.
+- Your severity decides what comes next. A fix to a blocker or a major gets a fresh
+  reviewer on the whole change. A fix to a minor, a nit taken, or a CI fix that changes no
+  behaviour comes back to you as a delta: read it against your own findings, then send an
+  updated verdict and Checked section at the new head. A delta that changes behaviour, a
+  contract or the design is not yours to approve as a delta: say so, and it gets a fresh
+  round.
+- If the author disputes a finding with you, re-read it against its reason. Withdraw it if
+  they're right; say why if they aren't.

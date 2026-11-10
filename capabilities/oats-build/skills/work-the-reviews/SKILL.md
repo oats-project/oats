@@ -1,6 +1,6 @@
 ---
 name: work-the-reviews
-description: Open and own your PR once your expert has verified the branch and the lane's green light is given - watch it for reviews and CI with what your harness offers, never a busy loop; answer every review-bot, reviewer and CI finding (fix it or say why not) in one fix commit per round (a structural change in a commit of its own); rebase when the default branch moves; raise to your expert only what needs product or architecture direction; hand the PR back at a merge-ready head. Use from the green light until your PR merges or closes, and whenever a review, a comment or a CI result arrives on it.
+description: Open and own your PR once your expert has verified the branch and the lane's green light is given (for a lead's own change, once a round of its review loop found nothing to fix) - watch it for reviews and CI with what your harness offers, never a busy loop; answer every review-bot, reviewer and CI finding (fix it or say why not) in one fix commit per round (a structural change in a commit of its own), each new head reviewed as the finding's severity says; rebase when the default branch moves; raise to your expert only what needs product or architecture direction; hand the PR back at a merge-ready head. Use from the green light until your PR merges or closes, and whenever a review, a comment or a CI result arrives on it.
 ---
 
 IMPORTANT: after a compaction, reload this skill before you continue.
@@ -11,7 +11,8 @@ You built the change, so you hold the context to answer its reviews. Your expert
 direction.
 
 1. **Open the PR** from the verified head, once the lane's green light is given (your
-   expert's verification, unless the lane names another): what it does, the spec it
+   expert's verification, unless the lane names another; for a lead's own change, the head
+   of the round that found nothing to fix): what it does, the spec it
    implements, what you ran, your review loop's final verdict and rounds, how to undo it.
    Name your expert as its owner, and tell it the PR's number and head in one line.
 2. **Watch it** for new reviews, comments and CI results.
@@ -43,13 +44,20 @@ direction.
    in each thread with that commit. A rename, a move or an extraction the round asks for
    goes in a commit of its own beside it (`/design-while-writing`); each thread names the
    commit that answers it.
-4. **A fix bigger than a few lines** gets a fresh review round before you push it: a new
-   reviewer at the fix's head, never an earlier round's (`/run-the-review-loop`). Where
-   your review loop is the review the lane counts (no review bot runs), every new head
-   gets one, except an unchanged rebase or update (your landing rules say when a review
-   carries). Where the bot's
-   review counts and it doesn't review each push by itself, ask it for a review at each
-   new head, the same exception aside, the way your landing rules say.
+4. **Each new head gets the review its fix calls for,** decided by the finding's severity,
+   not by what you would like (`/run-the-review-loop`, Iterate, step 4). Where your review
+   loop is the review the lane counts (no review bot runs):
+   - a fix to a blocker or a major, or any fix that changes behaviour, a contract or the
+     design, gets a fresh reviewer on the whole change before you push it;
+   - a fix to a minor, a nit taken, or a CI fix that changes no behaviour gets the clean
+     round's reviewer's re-read of the delta, or, with that reviewer retired, a fresh
+     reviewer briefed with the delta and the spec;
+   - an unchanged rebase or update needs none (your landing rules say when a review
+     carries).
+
+   Where the bot's review counts and it doesn't review each push by itself, ask it for a
+   review at each new head, the unchanged rebase or update aside, the way your landing
+   rules say.
 5. **Raise to your expert ONLY** what needs product or architecture direction: a finding
    that would change what the spec asks, a contract or an interface another surface uses,
    or a trade-off the spec didn't settle. One message with the finding, the options and

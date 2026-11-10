@@ -13,9 +13,11 @@ description: Read a PR at the exact head an author names, when your lane's landi
   <!-- OATS: on the lane map every PR names its maintainer and needs a second reader, so no PR lands without a maintainer's read. -->
   Here no PR lands without its maintainer: one your sweep finds that nobody called you
   for, ask its lead for the call.
-- **The call names:** the exact head, CI green on it, the lead's verification note at that
-  head, and the reviews the lane counts, where they are in. Before CI is green at that head,
-  no read: tell the author what is missing, in one line.
+- **The call names:** the exact head, CI green on it, the reviews the lane counts, where
+  they are in, and, for a developer's work or a helper's scoped piece, the lead's
+  verification note at that head. A change its lead built has no such note: nobody
+  verifies their own work; the clean round of its review loop stands in its place.
+  Before CI is green at that head, no read: tell the author what is missing, in one line.
 - **A head that moves after the call:** stop until the author calls again, then read only
   the delta and re-bind your verdict. A branch you brought up to date yourself is not a new
   head to read (Merge).
@@ -23,8 +25,9 @@ description: Read a PR at the exact head an author names, when your lane's landi
   marks it ready (not a draft) or asks for a read at a named head, with CI green. For a
   fork, the workflow and secrets check (Security) comes first, so CI can run.
 - **A PR a maintainer authored itself** (release prep only: the version bump and the notes;
-  a fix goes to a lead and its developer, `/launch-work`): it lands as your landing rules
-  say for a PR with no lead. You never approve your own.
+  a fix goes to a lead, which decides who builds it, `/launch-work`): it lands as your
+  landing rules say for a PR with no lead. You never approve your own.
+  <!-- OATS: template-v3.0.0 still says "a lead and its developer" here, a leftover of the old rule; under its own principle 3 the lead decides who builds a fix. -->
 - **As an overflow seat,** the calls for the efforts your parent gave you: give the verdict
   at the head, and refer a merge reserved for the lane to your parent (`/cross-review-peer`,
   "An overflow seat").
@@ -34,7 +37,8 @@ Pin the base and head SHAs before you read a line. Read
 hold applies, or you are about to merge.
 
 Read the author's evidence, given at this head: what it was verified with and, where the
-project uses them, the pre-PR review's verdict and rounds and the lead's verification note.
+project uses them, the pre-PR review's verdict and rounds and, for a developer's work, the
+lead's verification note.
 Missing: ask the author for it at this head. These inform your read and don't replace it.
 
 Read the PR as a whole: the description's claim against the diff, the scope against what
@@ -78,12 +82,12 @@ line, in its thread.
 
 ## Your verdict is one agreement
 Your verdict is one of the agreements the lane's landing rules name. The author gathers the
-others (CI, the reviews, its verification note, another lane's read where its code is
-touched) and merges, unless the lane reserves the merge for you. A PR with no lead (an
-outside contributor's) is yours to merge where your landing rules say so: at its head, once
-every agreement they name for it holds. You forward nothing to
-another maintainer and ask no one else for a read: where a PR also needs another lane's
-read, its author asks that lane's maintainer.
+others (CI, the reviews, its verification note for a developer's work, another lane's read
+where its code is touched) and merges, unless the lane reserves the merge for you. A PR with
+no lead (an outside contributor's) is yours to merge where your landing rules say so: at its
+head, once every agreement they name for it holds. You forward nothing to another maintainer
+and ask no one else for a read: where a PR also needs another lane's read, its author asks
+that lane's maintainer.
 <!-- OATS: the lane map: the PR's maintainer asks its second reader and the release lane's sign-off. -->
 Here you do ask: once you approve a PR of your lane at a head, ask its second reader (the
 one its lane's line names) and, where the line asks, the release lane's sign-off, at that
@@ -98,9 +102,10 @@ This section is yours when the lane's landing rules reserve the merge for you; a
 merging its own PR follows its own landing skill.
 - **Who:** you, where the landing rules reserve the merge for your lane, on the author's
   call at the head to merge. A maintainer alone merges what its landing rules give it.
-- **Needs:** the authority; every agreement the landing rules name, at the current head
-  (CI green, the reviews, the lead's verification note, your verdict, and any other lane's
-  read the PR needs). An earlier-head verdict carries only as Merge says below.
+- **Needs:** the authority; every agreement the landing rules name, at the current head (CI
+  green, the reviews, the lead's verification note for a developer's work, your verdict, and
+  any other lane's read the PR needs). An earlier-head verdict carries only as Merge says
+  below.
 - **No hold:** no hold recorded on the PR, and every open default-branch hold names an
   exception for this PR at this head (`/cross-review-peer`, "Holds").
 - **The default branch moved since CI ran on this head?** Two changes that share no file
