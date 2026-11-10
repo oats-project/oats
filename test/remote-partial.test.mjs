@@ -677,7 +677,7 @@ test("a live holder named by its boot and start is waited for (bounded) and neve
   } finally { holder.kill(); }
 });
 
-test("a cache write lock taken in another boot is reclaimed at once, though its pid is alive with the recorded start", async () => {
+test("a cache write lock taken in another boot is reclaimed at once, though its pid is alive with the recorded start", { skip: thisBoot() === null && "this host reads no boot id (bootId), so no lock can be told to be of another boot" }, async () => {
   const f = fixture();
   const holder = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], { stdio: "ignore" });
   try {
