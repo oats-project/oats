@@ -294,6 +294,8 @@ Each entry's manifests, souls and integrity are read at the observed commit →
 `{ lock, changes: [{ id, from, to, commit }] }` (`to: null`: no longer declared).
 
 - A branch is `E_PACKAGE_INTEGRITY { why: "branch" }`.
+- A manifest whose `package` is not the entry's key is `E_PACKAGE_INTEGRITY { why: "package-id" }`,
+  fresh or already locked.
 - An unchanged version, source and path is re-verified: a moved commit or different integrity,
   capabilities or souls is `E_PACKAGE_INTEGRITY`.
 - A malformed package is `E_PACKAGE_MANIFEST`.
