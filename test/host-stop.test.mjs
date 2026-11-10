@@ -4,17 +4,19 @@
 // `resume: true` and `reason: "host-stop"`, is written before anything is signalled, and reads
 // `lost`, never `stopped`, so the next start's sweep brings the home back. No fourth `sessionEnd`.
 //
+// The last test is the command itself, as a real process: `oats host run`, SIGTERM, exit 0.
+//
 // The reading is tested on files; the stop itself on a real session on the fixture's own tmux
 // server, its only seam the `kill` the stop already takes, which here sends the real signal after
 // noting what the home held at that moment.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFile, execFileSync, spawnSync } from "node:child_process";
+import { execFile, execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { v2Deployment } from "./helpers/v2-deployment.mjs";
+import { CLI, v2Deployment } from "./helpers/v2-deployment.mjs";
 import { leaveEnclosingInstance, waitUntil } from "./helpers/host-fixture.mjs";
 import { inspectInstanceSession, listInstances, shq, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
 import { HOST_STOP_REASON, lostReasonOf, sessionEndOf } from "../lib/session-end.mjs";
@@ -153,4 +155,32 @@ test("the private child of oats host run stops one home with the host and answer
   const bad = await child("relative/home", "10000");
   assert.equal(bad.status, 0, bad.stderr);
   assert.deepEqual([JSON.parse(bad.stdout).ok, JSON.parse(bad.stdout).code], [false, "E_BAD_ARGS"]);
+});
+
+test("oats host run as a real process: SIGTERM stops the running home with the host, the run exits 0 with its answer, and its lock is released", TMUX, async (t) => {
+  const { fx, home } = await runningHome(t, "whole-run");
+  // The run sweeps and lists this machine's deployments: a deployment under a temporary directory is
+  // listed only when asked.
+  const listed = fx.cli(["deployments", "add", fx.dep, "--json"]);
+  assert.equal(listed.status, 0, `${listed.stderr}\n${listed.stdout}`);
+  const proc = spawn(process.execPath, [CLI, "host", "run", "--stop-grace", "10", "--json"], { cwd: fx.base, env: fx.env, stdio: ["ignore", "pipe", "pipe"] });
+  let stdout = "", stderr = "";
+  proc.stdout.on("data", (data) => { stdout += data; });
+  proc.stderr.on("data", (data) => { stderr += data; });
+  const closed = new Promise((resolve, reject) => { proc.once("error", reject); proc.once("close", (code, signal) => resolve({ code, signal })); });
+  t.after(async () => { if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL"); await closed; });
+  await waitUntil(() => /^oats host run: resume sweep: /m.test(stderr) || proc.exitCode !== null, "the run's sweep to answer", 120000);
+  assert.match(stderr, /^oats host run: resume sweep: 1 already-running$/m, stdout + stderr);
+  assert.equal(stdout, "", "nothing is answered while it runs");
+  proc.kill("SIGTERM");
+  assert.deepEqual(await closed, { code: 0, signal: null }, stderr);
+  const envelope = JSON.parse(stdout);
+  assert.deepEqual([envelope.schemaVersion, envelope.ok, envelope.result.plan, envelope.result.signal], [1, true, false, "SIGTERM"]);
+  assert.deepEqual(envelope.result.stopped.map((row) => [row.ok, homeKey(row.home), row.stopped, row.alreadyIdle]), [[true, homeKey(home), true, false]]);
+  assert.match(stderr, /^oats host run: SIGTERM: ticking ended$/m);
+  const record = readJson(join(home, ".oats-stop.json"));
+  assert.deepEqual([record.resume, record.reason, record.stop.signal], [true, "host-stop", "SIGTERM"]);
+  await waitUntil(() => existsSync(join(home, ".oats-start-exited")), "the session's start wrapper to exit");
+  assert.equal((await rowOf(fx, home)).sessionEnd, SESSION_END.LOST);
+  assert.equal(existsSync(join(fx.env.OATS_HOME_DIR, "host-run", "lock")), false, "the lock is released");
 });

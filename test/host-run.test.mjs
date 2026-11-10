@@ -332,3 +332,77 @@ test("a sweep that fails does not end the run: it is said, and the minutes go on
   const answer = await running;
   assert.deepEqual([answer.signal, answer.sweep, answer.ticks, answer.warnings.length], ["SIGINT", { error: { code: "E_RESUME_BUSY", message: "another session resume holds the lock" } }, { run: 1, skipped: 0, failed: 0, noScope: 0 }, 1]);
 });
+
+// ------------------------------------------------------------------ the stop
+
+test("SIGTERM: ticking ends first, a tick that runs is waited for, then one listing, then every running home is stopped side by side; it answers what it stopped", async (t) => {
+  const w = world(t, { at: `${D}10:00:00.000Z`, scopes: ["/srv/deploy"] });
+  const running = hostRun(w.options);
+  await settle();
+  await w.answer(SWEEP, ok({ rows: [] }));
+  await w.fire(`${D}10:01:00.000Z`);
+  await w.answer(LIST, ok({ rows: [] }));
+  assert.deepEqual(w.next(), [`10:00:00.000 ${SWEEP}`, `10:01:00.000 ${TICK}`, `10:01:00.000 ${LIST}`]);
+  assert.equal(w.pending(TICK).length, 1, "a tick runs");
+
+  w.time = Date.parse(`${D}10:01:20.000Z`);
+  w.signal("SIGTERM");
+  await settle();
+  assert.deepEqual(w.armed(), [], "no minute is armed after the signal");
+  assert.ok(w.said.includes("SIGTERM: ticking ended"), w.said.join("\n"));
+  assert.deepEqual([w.next(), w.stops], [[], []], "while the tick runs nothing is listed and no home is stopped: its wake job may still start one");
+  // A second signal changes nothing.
+  w.signal("SIGTERM"); w.signal("SIGINT");
+  await settle();
+  assert.deepEqual([w.next(), w.stops], [[], []]);
+
+  w.time = Date.parse(`${D}10:01:25.000Z`);
+  await w.answer(TICK, ok({ considered: [] }));
+  assert.deepEqual(w.next(), [`10:01:25.000 ${LIST}`], "the tick has ended: one listing");
+  assert.deepEqual(w.stops, [], "no home is stopped before the listing answers");
+  const A = "/srv/deploy/agents/dev/instances/a", B = "/srv/deploy/agents/dev/instances/b", C = "/srv/deploy/agents/dev/instances/c";
+  await w.answer(LIST, ok({ rows: [
+    { deployment: "/srv/deploy", instance: "a", home: A, outcome: "already-running" },
+    { deployment: "/srv/deploy", instance: "lost", home: "/srv/deploy/agents/dev/instances/lost", outcome: "resumed" },
+    { deployment: "/srv/deploy", instance: "b", home: B, outcome: "already-running" },
+    { deployment: "/srv/deploy", instance: "unknown", home: "/srv/deploy/agents/dev/instances/unknown", outcome: "skipped", reason: "unknown" },
+    { deployment: "/srv/deploy", instance: "c", home: C, outcome: "already-running" },
+  ] }));
+  assert.deepEqual(w.stops.map((s) => [s.home, s.graceMs, s.at]), [[A, 7000, "10:01:25.000"], [B, 7000, "10:01:25.000"], [C, 7000, "10:01:25.000"]], "every running home, and only those, each with the stop grace, all before any has answered");
+  assert.ok(w.said.includes("stopping 3 running instances, each given 7 s"), w.said.join("\n"));
+  assert.deepEqual(w.next(), [], "nothing else is started");
+
+  // They answer in another order than they were asked; the answer keeps the listing's.
+  w.stops[2].answer({ ok: false, home: C, code: "E_SESSION_STOP_FAILED", message: "c was asked to stop and is still running after 7000 ms; nothing was escalated", stillRunning: [4242] });
+  w.stops[1].answer({ ok: true, home: B, stopped: false, alreadyIdle: true, state: "stopped" });
+  await settle();
+  let ended = false;
+  running.then(() => { ended = true; });
+  await settle();
+  assert.equal(ended, false, "it waits for every stop");
+  w.stops[0].answer({ ok: true, home: A, stopped: true, alreadyIdle: false, state: "shell" });
+  const answer = await running;
+  assert.deepEqual(answer.stopped, [
+    { ok: true, home: A, stopped: true, alreadyIdle: false, state: "shell" },
+    { ok: true, home: B, stopped: false, alreadyIdle: true, state: "stopped" },
+    { ok: false, home: C, code: "E_SESSION_STOP_FAILED", message: "c was asked to stop and is still running after 7000 ms; nothing was escalated", stillRunning: [4242] },
+  ]);
+  assert.deepEqual([answer.signal, answer.ticks], ["SIGTERM", { run: 1, skipped: 0, failed: 0, noScope: 0 }]);
+  assert.ok(w.said.includes(`could not stop ${C} (E_SESSION_STOP_FAILED): c was asked to stop and is still running after 7000 ms; nothing was escalated`), w.said.join("\n"));
+  assert.deepEqual([w.listening, existsSync(hostRunLockPath())], [0, false], "the lock is released once the homes have answered");
+});
+
+test("SIGTERM while the sweep runs: the sweep is waited for, no minute is ever armed, and what runs is stopped; a listing that fails stops nothing and is said", async (t) => {
+  const w = world(t, { at: `${D}10:00:00.000Z`, scopes: ["/srv/deploy"] });
+  const running = hostRun(w.options);
+  await settle();
+  w.signal("SIGTERM");
+  await settle();
+  assert.deepEqual([w.next(), w.stops, w.armed()], [[`10:00:00.000 ${SWEEP}`], [], []], "the sweep's starts are not cut: nothing else happens while it runs");
+  await w.answer(SWEEP, ok({ rows: [{ outcome: "resumed" }] }));
+  assert.deepEqual([w.next(), w.armed()], [[`10:00:00.000 ${LIST}`], []]);
+  await w.answer(LIST, { schemaVersion: 1, ok: false, error: { code: "E_DEPLOYMENTS_INVALID", message: "the deployments list cannot be read" } });
+  const answer = await running;
+  assert.deepEqual([answer.stopped, w.stops], [[], []]);
+  assert.ok(w.said.includes("listing failed (E_DEPLOYMENTS_INVALID): the deployments list cannot be read: no instance is stopped"), w.said.join("\n"));
+});
