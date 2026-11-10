@@ -13,6 +13,7 @@ import { syncData, capabilitiesData, onboardData } from '../../client/deployment
 import { createWorkspaceSyncBoundary } from '../server/workspace-sync.mjs';
 import { deploymentDoubles } from './helpers/deployment-doubles.mjs';
 import { DESKTOP_TERMS } from '../renderer/desktop-terms.mjs';
+import { syncProblem } from '../renderer/workspace-sync-view.mjs';
 
 const file = name => new URL(`./fixtures/workspace-v2/f2/${name}.json`, import.meta.url);
 const raw = name => JSON.parse(readFileSync(file(name), 'utf8'));
@@ -92,6 +93,17 @@ test('exit semantics: success is exit 0 only (no "pending"); refusals keep only 
   assert.doesNotMatch(JSON.stringify(await cliWorkspace(cli(), { action: 'sync', context: deployment }, DESKTOP_TERMS, { exec: (_b, _a, _o, done) => done(exitError(1), 'SECRET stderr') })), /SECRET/);
 });
 
+test('a sync refusal carries details.why when it is a short slug, and nothing else of details (#1765)', async () => {
+  // The captured refusal with an illustrative why: the kernel's other details stay behind.
+  const withWhy = why => (_b, _a, _o, done) => { const doc = fixture('sync-integrity'); doc.error.details.why = why; done(exitError(1), JSON.stringify(doc)); };
+  const run = (why, action = 'sync') => cliWorkspace(cli(), { action, context: deployment }, DESKTOP_TERMS, { exec: withWhy(why) });
+  const carried = await run('lock-was-edited');
+  assert.deepEqual(carried.reason, { code: 'E_PACKAGE_INTEGRITY', message: fixture('sync-integrity').error.message, why: 'lock-was-edited' });
+  for (const bad of ['', 'Branch', 'two words', 'x'.repeat(33), '-lead', 7, null, ['branch'], { why: 'branch' }])
+    assert.deepEqual(Object.keys((await run(bad)).reason), ['code', 'message'], JSON.stringify(bad));
+  assert.deepEqual(Object.keys((await run('branch', 'capabilities')).reason), ['code', 'message'], 'only sync carries why');
+});
+
 test('gate: API 2, workspace-v2 and packages-no-approval are all required; nothing dispatches otherwise', async () => {
   const older = { ...cli(), features: cli().features.filter(f => f !== 'packages-no-approval') };
   for (const state of [{ ...cli(), ok: false }, { ...cli(), workspaceApi: 1 }, { ...cli(), features: [] }, { ...cli(), bin: 'oats' }, older]) {
@@ -154,6 +166,40 @@ test('a refused sync is the kernel refusal, verbatim', async () => {
   const refused = await b.request({ action: 'sync' }, { workspace, cli: cli() });
   assert.equal(refused.status, 'refused'); assert.equal(refused.reason.code, 'E_PACKAGE_INTEGRITY');
   assert.equal(refused.reason.message, fixture('sync-integrity').error.message);
+});
+
+test('a refused sync keeps its why on the way to the renderer (#1765)', async () => {
+  const b = boundary([(state, options) => cliWorkspace(state, options, DESKTOP_TERMS, { exec: (_b, _a, _o, done) => {
+    const doc = fixture('sync-integrity'); doc.error.details.why = 'branch'; done(exitError(1), JSON.stringify(doc));
+  } })]);
+  const refused = await b.request({ action: 'sync' }, { workspace, cli: cli() });
+  assert.equal(refused.status, 'refused'); assert.equal(refused.reason.why, 'branch');
+});
+
+// The sync sheet's sentence for E_PACKAGE_INTEGRITY is true for the case the kernel names in details.why
+// (docs/packages.md); with no why, or one this Desktop doesn't know, it is the family's meaning. The
+// kernel's own message stays under Details. Live kernel refusals: test/desktop-sync-integrity-kernel.test.mjs.
+const INTEGRITY_SENTENCES = {
+  branch: 'A package in the workspace file is pinned to a branch, which can move. Pin a tag or a full commit instead, then sync again.',
+  'package-id': 'A package’s manifest names a different package id than the one the workspace file pins it under. Change that pin as Details says, then sync again.',
+  capabilities: 'The lock’s record of a package doesn’t match what that package ships: the lock was edited. Remove the package’s entry from the lock file, then sync again.',
+  souls: 'The lock’s record of a package doesn’t match what that package ships: the lock was edited. Remove the package’s entry from the lock file, then sync again.',
+};
+const INTEGRITY_GENERIC = 'A package doesn’t match what the workspace file or the lock records for it. Check its version in the workspace file and see Details, then sync again.';
+
+test('syncProblem words E_PACKAGE_INTEGRITY for the case its why names', () => {
+  for (const [why, text] of Object.entries(INTEGRITY_SENTENCES))
+    assert.deepEqual(syncProblem({ code: 'E_PACKAGE_INTEGRITY', message: 'kernel says', why }), { text, code: 'E_PACKAGE_INTEGRITY', detail: 'E_PACKAGE_INTEGRITY · kernel says' }, why);
+});
+
+test('syncProblem gives E_PACKAGE_INTEGRITY its family meaning with no why or an unknown one', () => {
+  for (const why of [undefined, 'soul-digest', 'a-newer-case', 'constructor', '__proto__', 'toString', 7])
+    assert.equal(syncProblem({ code: 'E_PACKAGE_INTEGRITY', message: 'kernel says', ...(why === undefined ? {} : { why }) }).text, INTEGRITY_GENERIC, String(why));
+  assert.doesNotMatch(INTEGRITY_GENERIC, /tag|branch|edited/, 'the fallback names no cause');
+});
+
+test('syncProblem reads why only for E_PACKAGE_INTEGRITY', () => {
+  assert.equal(syncProblem({ code: 'E_PACKAGE_MISSING', message: 'm', why: 'branch' }).text, syncProblem({ code: 'E_PACKAGE_MISSING', message: 'm' }).text);
 });
 
 test('one sync per deployment; a malformed report is a protocol failure', async () => {

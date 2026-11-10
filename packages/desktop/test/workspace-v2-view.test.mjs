@@ -508,7 +508,7 @@ test('a refused sync reads plainly; the kernel code and message stay verbatim be
   assert.equal(sheet.hidden, false); assert.equal(sheet.querySelector('h2').textContent, 'Sync didn’t finish');
   const lead = sheet.querySelector('.ws-sync-lead');
   assert.ok(lead.classList.contains('error')); assert.doesNotMatch(lead.textContent, /E_[A-Z]|\//);
-  assert.match(lead.textContent, /no longer matches what the lock recorded/);
+  assert.match(lead.textContent, /doesn’t match what the workspace file or the lock records for it/, 'a moved tag names no why: the general meaning (#1765)');
   const detail = sheet.querySelector('.ws-sync-detail');
   assert.equal(detail.hidden, true); sheet.querySelector('.ws-sync-details').click();
   assert.equal(detail.hidden, false); assert.equal(detail.textContent, `${integrity.code} · ${integrity.message}`);
