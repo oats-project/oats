@@ -538,6 +538,15 @@ retire's `warnings` and stays readable after the home is gone: each one is a
 `retire-warning` event in the instance's workspace log, read with
 `oats instance events <instance>` ([Events](desktop-cli-api.md#events)).
 
+`oats retire <instance>` reads these flags: `--plan`, `--plan-revision <rev>`
+with `--idempotency-key <key>`, `--home <path>`, `--dir <d>`, `--server <id>`,
+`--self`, `--discard-worktree`, `--keep-dir`, `--force` and `--json`. Any
+other flag, and any argument after the instance, is refused with `E_BAD_ARGS`
+before anything happens: before a plan is read, a child is stopped, a hook
+runs, or a routed retire is sent to its server. The refusal names the flag
+(`oats retire: unknown flag --keep-dirs`) and prints the usage, so a mistyped
+`--keep-dir` never removes the home.
+
 One retire of an instance runs at a time. A retire holds the instance's claim
 from the moment it has resolved the home until it ends: the file
 `.oats-retirement/claims/<instance>.lock` in the agent's instances directory,

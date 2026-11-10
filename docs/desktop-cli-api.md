@@ -5830,6 +5830,15 @@ extra tree that is not clean is moved the same way; a clean one is removed.
 oats retire <instance> [--plan-revision <rev> --idempotency-key <key>] [--discard-worktree] [--home <abs>] --json
 ```
 
+A flag retire does not read, or an argument after the instance, is refused
+with `E_BAD_ARGS` before any effect, `--plan` and `--server` included:
+`oats retire: unknown flag <flag>` with `error.details.flag`, or `oats retire:
+unexpected argument "<word>" after the instance "<instance>": retire takes one
+instance` with `error.details.argument`, each followed by the usage line. The
+flags are `--plan`, `--plan-revision`, `--idempotency-key`, `--home`, `--dir`,
+`--server`, `--self`, `--discard-worktree`, `--keep-dir`, `--force` and
+`--json` ([souls-and-instances.md](souls-and-instances.md#retire)).
+
 A first retire prints the **raw receipt**, not an envelope:
 
 ```json
