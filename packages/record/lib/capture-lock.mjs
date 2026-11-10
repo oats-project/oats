@@ -4,13 +4,19 @@
 // and the next pass catches up, since reconciliation is idempotent.
 //
 // The lock is a DIRECTORY: mkdir is atomic and a directory is never
-// observable half-created. The owner record (pid, nonce, start time, host)
+// observable half-created. The owner record (pid, nonce, start time, host,
+// and the boot and process start its holder is judged by)
 // is written inside it after the mkdir. A live, unknowable or still
 // initializing (owner-less) lock refuses the pass and names the holder and
 // the operator recovery; it is never stolen.
 //
-// A lock whose recorded owner AND registered worker are DEAD on this host is reclaimed (a capture
-// killed mid-pass by a hook or caller timeout runs no finally). Records
+// A lock whose recorded owner AND registered worker are DEAD is reclaimed (a capture
+// killed mid-pass by a hook or caller timeout runs no finally). A record that
+// names its holder's boot or start (`bootId`, `processStart`) is judged by them
+// (lock-holder.mjs holderLiveness), whatever host it names: a container that is created again
+// has another hostname, its pids start low again, and a lock on a volume
+// outlives it. A record that names neither is dead only on this host, by its
+// pid alone. Records
 // without host predate host recording and live under this user's home, so
 // they count as this host's (RECLAIM_HOSTLESS_RECORDS). Reclaimers
 // are serialized by a guard, `<lock>.reclaim` (exclusive create): under it
@@ -21,25 +27,20 @@
 // Acquire never waits: it reclaims once or skips, and the next pass catches up.
 // A supervisor publishes its idle child's identity before permitting work.
 // The worker is part of the same lock, not a second independently reclaimed
-// lock. A live/reused/unknown child PID prevents release and reclamation even
-// when the supervisor died. Callers own child termination/reaping; this module
+// lock. A child that runs, or whose liveness cannot be read, prevents release
+// and reclamation even when the supervisor died. Callers own child termination/reaping; this module
 // never sends a terminating signal or infers a process group.
 import { closeSync, constants, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { hostname } from "node:os";
 import { join } from "node:path";
+import { holderIdentity, holderLiveness, namesIdentity, validPid } from "./lock-holder.mjs";
 
 /** Whether an owner record that names no host is reclaimed when its pid is dead here: yes. Records without
  *  host predate host recording and live under this user's home, so they are this host's. */
 export const RECLAIM_HOSTLESS_RECORDS = true;
 
 export function captureLockPath(root) { return join(root, ".capture.lock"); }
-
-/** "alive" | "dead" | "unknown" for an owner pid ("unknown" = exists but not signalable). */
-export function holderLiveness(pid) {
-  if (!Number.isInteger(pid) || pid <= 0 || pid > 2147483647) return "unknown";
-  try { process.kill(pid, 0); return "alive"; } catch (e) { return e.code === "ESRCH" ? "dead" : "unknown"; }
-}
 
 const sameFile = (a, b) => a.dev === b.dev && a.ino === b.ino && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
 const readJson = (path) => {
@@ -67,7 +68,7 @@ export const readCaptureLockOwner = root => readOwner(captureLockPath(root));
 // lock, from which entry and trigger, and the immediate parent process. Fixed
 // labels and direct process facts only, never argv, environment or a guessed
 // external caller; an entry that is not known is left out. It never confers authority: identity, liveness and reclaim
-// read only pid, nonce, startedAt, host and worker.
+// read only pid, nonce, startedAt, host, bootId, processStart and worker.
 const COMMANDS = new Set(["pass", "home", "file", "reset-cursors", "retry"]);
 const ENTRIES = new Set(["oats", "turn-record", "hook-runner", "service-runner"]);
 const TRIGGERS = new Set(["manual", "watch", "hook", "setup", "service"]);
@@ -79,20 +80,21 @@ export function captureLockAttribution({ command, caller, ppid = process.ppid } 
     ...(validPid(ppid) ? { ppid } : {}) };
 }
 
-function validPid(pid) { return Number.isInteger(pid) && pid > 0 && pid <= 2147483647; }
 function workerDead(owner, { host, liveness }) {
   if (!Object.hasOwn(owner, "worker")) return true;
   const worker = owner.worker;
-  return validPid(worker?.pid) && worker.pid !== owner.pid && worker.host === host && typeof worker.nonce === "string" &&
+  return validPid(worker?.pid) && worker.pid !== owner.pid && (namesIdentity(worker) || worker.host === host) && typeof worker.nonce === "string" &&
     worker.nonce.length > 0 && worker.nonce.length <= 128 && typeof worker.startedAt === "string" &&
-    Number.isFinite(Date.parse(worker.startedAt)) && liveness(worker.pid) === "dead";
+    Number.isFinite(Date.parse(worker.startedAt)) && liveness(worker) === "dead";
 }
 
-/** Whether `owner` is a record of this host whose process is dead: the only lock this module reclaims. */
+/** Whether `owner` is a record whose process is dead, and its worker's: the only lock this module reclaims.
+ *  A record that names its boot or start is judged wherever it was written; one that names neither only
+ *  when it is this host's. */
 function deadHere(owner, { host, liveness, reclaimHostless }) {
   if (!owner || !validPid(owner.pid)) return false;
-  const here = owner.host === undefined ? reclaimHostless : owner.host === host;
-  return here && liveness(owner.pid) === "dead" && workerDead(owner, { host, liveness });
+  const here = namesIdentity(owner) || (owner.host === undefined ? reclaimHostless : owner.host === host);
+  return here && liveness(owner) === "dead" && workerDead(owner, { host, liveness });
 }
 
 /** Remove the lock `dir` held by the dead `owner`, serialized by the guard `<dir>.reclaim`. → { removed }
@@ -135,7 +137,7 @@ export function recoveryInstruction(dir, owner, liveness) {
 /** Try to take the root's capture lock. Returns { path, release, reclaimed? }
  *  when taken, or { path, held: { pid, startedAt, liveness, recovery, guard? },
  *  reclaimed? } when a lock is held. A lock it did not create is removed only
- *  when its recorded owner is dead on this host, under the reclaim guard (the
+ *  when its recorded owner and worker are dead, under the reclaim guard (the
  *  header); `reclaimed: { pid, startedAt }` says THIS call removed it (whether
  *  or not it then won the lock), and `held.guard` names a guard a dead
  *  reclaimer left. Every other lock is left alone.
@@ -171,8 +173,9 @@ export function acquireCaptureLock(root, { now = Date.now, pid = process.pid, li
       if (e.code !== "EEXIST") throw e;
       const owner = readOwner(dir);
       const opts = { host, liveness, reclaimHostless };
-      if (attempt === 0 && owner?.pid !== pid && deadHere(owner, opts)) {
-        const r = reclaimDeadLock(dir, owner, { pid, nonce, host }, opts);
+      // A record with this pass's own pid that names another boot or start is another process's.
+      if (attempt === 0 && (owner?.pid !== pid || namesIdentity(owner)) && deadHere(owner, opts)) {
+        const r = reclaimDeadLock(dir, owner, { pid, nonce, host, ...holderIdentity(pid) }, opts);
         if (r.abandoned) {
           const { guard, pid: reclaimer } = r.abandoned;
           return { path: dir, held: { pid: owner.pid, startedAt: owner.startedAt, liveness: "dead", guard,
@@ -186,7 +189,7 @@ export function acquireCaptureLock(root, { now = Date.now, pid = process.pid, li
       // Gone between the mkdir and this read (a release or a reclaim): try once more. A directory that
       // exists without a record is initializing or mid-removal, and is reported so.
       if (!now && attempt === 0 && !existsSync(dir)) continue;
-      const live = now ? (now.pid === pid ? "alive" : liveness(now.pid)) : "unknown";
+      const live = now ? (now.pid === pid && !namesIdentity(now) ? "alive" : liveness(now)) : "unknown";
       return { path: dir, ...(reclaimed ? { reclaimed } : {}), held: { pid: now?.pid, startedAt: now?.startedAt, liveness: live, recovery: recoveryInstruction(dir, now, live) } };
     }
   }
@@ -197,7 +200,7 @@ export function acquireCaptureLock(root, { now = Date.now, pid = process.pid, li
     // a record-less replacement look like the directory we created.
     directoryFd = fs.openSync(dir, "r");
     identity = fstatSync(directoryFd);
-    fs.writeFileSync(join(dir, "owner.json"), JSON.stringify({ pid, nonce, startedAt: new Date(now()).toISOString(), host, ...attribution }), { mode: 0o600 });
+    fs.writeFileSync(join(dir, "owner.json"), JSON.stringify({ pid, nonce, startedAt: new Date(now()).toISOString(), host, ...holderIdentity(pid), ...attribution }), { mode: 0o600 });
   } catch (err) {
     // Ownership was proven by the mkdir, not by the moment of cleanup: the
     // directory is removed only if it is still ours (same inode) and holds
@@ -271,14 +274,14 @@ export function acquireCaptureLock(root, { now = Date.now, pid = process.pid, li
       const current = ownCurrent("capture lock changed before worker registration");
       // Continuation never drops the root lock between children. Replace only
       // the caller's exact previous publication, after positive death proof;
-      // reused PIDs and uncertain liveness preserve the old lock unchanged.
+      // a worker that runs, or of uncertain liveness, preserves the old lock unchanged.
       if (Object.hasOwn(current, "worker")) {
         if (!previous || current.worker?.pid !== previous.pid || current.worker?.nonce !== previous.nonce ||
             current.worker?.startedAt !== previous.startedAt || !workerDead(current, { host, liveness })) {
           throw new Error("previous capture worker is not proven dead and unchanged");
         }
       } else if (previous) throw new Error("capture lock changed before worker continuation");
-      replaceOwner(current, { ...current, worker: { pid: worker.pid, nonce: worker.nonce, startedAt: worker.startedAt, host } }, "worker registration", "worker");
+      replaceOwner(current, { ...current, worker: { pid: worker.pid, nonce: worker.nonce, startedAt: worker.startedAt, host, ...holderIdentity(worker.pid) } }, "worker registration", "worker");
     },
     // A cooperative stop request for this acquisition's worker, which reads the
     // owner record between bounded units. It is not a lock release, changes no
@@ -319,7 +322,7 @@ export function acquireCaptureLock(root, { now = Date.now, pid = process.pid, li
       }
       // Our own lock could not be removed. We are the holder and, as far as
       // this process can tell, alive; the operator gets a conditional line.
-      const live = pid === process.pid ? "alive" : liveness(pid);
+      const live = pid === process.pid ? "alive" : liveness(cur);
       const recovery = `${dir} is still held by pid ${pid} (this pass, ${live} when it reported this); its removal failed${error ? ` (${error.message})` : ""}; once that process has exited (ps -p ${pid}), remove the lock with: rm -r -- ${shellQuote(dir)}  and rerun`;
       return { released: false, reason: "remove-failed", liveness: live, ...(error ? { error: error.message } : {}), recovery };
     },

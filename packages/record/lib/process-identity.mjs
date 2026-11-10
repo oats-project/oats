@@ -71,7 +71,7 @@ function psProgram() {
  *  process) and success are "exists"; anything else is unknown. Never from how procfs or `ps`
  *  word an absence: macOS's `ps` answers a pid that does not exist with an error and exit 1, which
  *  says nothing a failing `ps` does not also say. */
-function existence(pid) {
+export function existence(pid) {
   try { process.kill(pid, 0); return { state: "exists" }; }
   catch (e) {
     if (e.code === "ESRCH") return { state: "gone" };

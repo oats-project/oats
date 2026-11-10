@@ -1,7 +1,9 @@
 // A capture lock whose owner died on this host is reclaimed by the next pass (awebai/oats#437): a capture
 // killed mid-pass (a hook or caller timeout) runs no finally, and its lock used to make every later pass skip.
-// Only a dead owner recorded on this host is reclaimed, under a guard; a live, unknown, owner-less or
-// other-host lock is never touched, and a reclaimer that died holding the guard is named, never removed.
+// Only a dead owner is reclaimed, under a guard: one judged by the boot and process start its record names
+// (awebai/oats#1812), or, for a record that names neither, one recorded on this host whose pid is gone. A
+// live, unknown or owner-less lock, and another host's lock that names neither, is never touched, and a
+// reclaimer that died holding the guard is named, never removed.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
@@ -102,6 +104,17 @@ test("a lock taken in another boot is reclaimed, though its pid is alive with th
   assert.ok(a.release, JSON.stringify(a.held));
   assert.deepEqual(a.reclaimed, { pid: child.pid, startedAt: "2026-10-01T00:00:00.000Z" });
   assert.deepEqual(a.release(), { released: true });
+});
+
+test("a lock that names this pass's own pid with another boot or another start is another process's, and is reclaimed", (t) => {
+  const r = root(t);
+  for (const [label, identity] of [["another boot", { ...identityOf(process.pid), bootId: OTHER_BOOT }], ["another start", { bootId: thisBoot(), processStart: "proc:1" }]]) {
+    plant(r, { pid: process.pid, nonce: "n", startedAt: "2026-10-01T00:00:00.000Z", host: OTHER_HOST, ...identity });
+    const a = acquireCaptureLock(r);
+    assert.ok(a.release, `${label}: ${JSON.stringify(a.held)}`);
+    assert.deepEqual(a.reclaimed, { pid: process.pid, startedAt: "2026-10-01T00:00:00.000Z" }, label);
+    assert.deepEqual(a.release(), { released: true }, label);
+  }
 });
 
 test("a record that names its holder's boot and start is judged by them, whatever host it names", (t) => {
