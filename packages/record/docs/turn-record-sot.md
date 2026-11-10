@@ -202,6 +202,16 @@ at the center of the model.
   Turns reference them as `sha256:<hex>`.
 - **index/** (SQLite metadata/FTS, later vectors) is cache. Deleting it loses
   nothing; any replica can rebuild it from streams + objects.
+- **Permissions.** The record holds conversations, so what the store creates
+  is for its owner alone: directories with mode `0700` (the root, `streams/`
+  and each stream, `objects/` and its fan-out, `index/`) and files with mode
+  `0600` (journals, objects, quarantined copies, the index databases). The
+  mode is given at creation and the store never changes the permissions of
+  what already exists: a root, a directory or a file made beforehand keeps
+  the permissions it has until its owner tightens them
+  (`chmod -R go-rwx <record-root>`). One directory is outside the rule: a
+  capture pass's lock creates a root that does not exist yet with the
+  process's default mode. What is created below it is private as above.
 
 ## Synchronization contract
 

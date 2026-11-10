@@ -92,7 +92,7 @@ test("a fresh host: no npm, then no oats, then installed, onboarded, registered 
     assert.deepEqual(statuses(res), ["ok", "needs-human", "skipped", "skipped", "skipped", "skipped"]);
     assert.equal(stepOf(res, "ssh").detail, "could not read box-host's login-shell PATH (its login shell (sh) is not bash, zsh or fish); using ssh's own PATH");
     assert.equal(stepOf(res, "oats").detail, "no oats at oats on box-host, and no npm on ssh's PATH");
-    assert.equal(stepOf(res, "oats").remedy, "install Node.js 22+ (npm) on box-host where a non-interactive ssh command finds it, then check again (run the same connect); from the CLI, --path <the directory holding npm> names it instead");
+    assert.equal(stepOf(res, "oats").remedy, "install Node.js 22.5+ (npm) on box-host where a non-interactive ssh command finds it, then check again (run the same connect); from the CLI, --path <the directory holding npm> names it instead");
     for (const name of STEPS.slice(2)) assert.equal(stepOf(res, name).detail, "waits for oats");
     assert.deepEqual(res.human, [stepOf(res, "oats").remedy]);
     assert.deepEqual(s.servers(), {}, "nothing registered");
@@ -582,7 +582,7 @@ test("even the login shell has no npm: the remedy names the login shell's PATH a
     assert.deepEqual(statuses(res), ["ok", "needs-human", "skipped", "skipped", "skipped", "skipped"]);
     assert.equal(stepOf(res, "oats").detail, "no oats at oats on box-host, and no npm on the PATH of box-host's login shell (zsh -l -i)");
     const remedy = stepOf(res, "oats").remedy;
-    assert.equal(remedy, `install Node.js 22+ (npm) on box-host so that its login shell finds it (there, \`${shell} -l -i -c 'command -v npm'\` prints its path), then check again (run the same connect); from the CLI, --path <the directory holding npm> names it instead`);
+    assert.equal(remedy, `install Node.js 22.5+ (npm) on box-host so that its login shell finds it (there, \`${shell} -l -i -c 'command -v npm'\` prints its path), then check again (run the same connect); from the CLI, --path <the directory holding npm> names it instead`);
     assert.deepEqual(codeSpans(remedy), [`${shell} -l -i -c 'command -v npm'`], "one command, for the Desktop's copy button");
     assert.deepEqual(res.human, [remedy]);
     assert.deepEqual(s.servers(), {});

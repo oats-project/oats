@@ -13,6 +13,9 @@
   },
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "test": "node scripts/run-tests.mjs",
     "test:session": "node scripts/test-session-inheritance.mjs",

@@ -11,10 +11,11 @@
 // verbatim record); text is extracted from that line, so a hit names the
 // turn AND the event's line in the original transcript.
 
-import { closeSync, existsSync, mkdirSync, openSync, readSync, rmSync, unlinkSync } from "node:fs";
+import { closeSync, existsSync, openSync, readSync, rmSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { keysetRows } from "./sqlite-rows.mjs";
 import { captureContext } from "./capture-context.mjs";
+import { ensurePrivateFile, makePrivateDir } from "./private-files.mjs";
 import { DerivedState, fileVersion, sameVersion } from "./derived-state.mjs";
 import { validJournalCheckpoint } from "./store.mjs";
 import { INDEX_SCHEMA_VERSION as SCHEMA_VERSION, TEXT_SCHEMA, resetIndexTables } from "./index-reset.mjs";
@@ -110,9 +111,10 @@ export class RecordIndex {
     const { DatabaseSync } = require("node:sqlite");
     this.store = store;
     const dir = join(store.root, "index");
-    mkdirSync(dir, { recursive: true });
+    makePrivateDir(dir);
     const path = join(dir, "turns.db");
     const open = () => {
+      ensurePrivateFile(path);
       const db = new DatabaseSync(path);
       // Concurrent index users (watcher pass, manual reindex, recall)
       // wait for each other instead of dying on "database is locked".
