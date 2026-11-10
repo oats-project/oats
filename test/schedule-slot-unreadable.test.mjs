@@ -94,7 +94,7 @@ test("oats doctor lists no unreadable slot for a readable slot or none", async (
 });
 
 for (const [state, makeSlot] of Object.entries(SLOT_STATES)) {
-  test(`an unreadable slot of a schedule that is not defined (${state}): reconcile answers what it found and leaves it, --clear releases it, and doctor names that command`, async (t) => {
+  test(`an unreadable slot of a schedule that is not defined (${state}): reconcile answers what it found and leaves it, --clear releases it, and doctor lists it as orphaned with that command`, async (t) => {
     const { fx, cli } = await deployment(t);
     const slot = join(S.stateDir(fx.dep), "locks", "gone");
     makeSlot(slot);
@@ -102,8 +102,8 @@ for (const [state, makeSlot] of Object.entries(SLOT_STATES)) {
     const said = `the slot ${slot} of schedule gone, which is not defined, has no readable record`;
     const remedy = "once no run of schedule gone is running (oats status lists the instances it started), run oats schedule reconcile gone --clear to release the slot";
     const problems = JSON.parse(cli("doctor").stdout).problems ?? [];
-    assert.deepEqual(problems.filter((p) => p.code === "schedule-slot-unreadable"), [{
-      code: "schedule-slot-unreadable", severity: "warning", scope: fx.dep, id: "gone",
+    assert.deepEqual(problems.filter((p) => p.id === "gone"), [{
+      code: "schedule-slot-orphaned", severity: "warning", scope: fx.dep, id: "gone",
       message: `schedule gone, which is not defined: its slot ${slot} has no readable record, and the slot counts against maxConcurrent`,
       remedy,
     }]);
@@ -117,5 +117,42 @@ for (const [state, makeSlot] of Object.entries(SLOT_STATES)) {
     assert.deepEqual(readdirSync(join(S.stateDir(fx.dep), "locks")), [], "the slot is released");
     const again = cli("schedule", "reconcile", "gone").json();
     assert.equal(again.error?.code, "E_SCHEDULE_UNKNOWN", "with no slot, a schedule that is not defined is unknown, as before");
+  });
+}
+
+// A readable slot of a schedule that is not defined: a run of a schedule removed by hand may still
+// be running, so the slot is held and counted until a person has checked and releases it.
+const ORPHAN_RECORDS = {
+  "a wake's record, which names the instance's home": (fx) => ({ record: { scheduledFor: "2026-10-03T09:00:00.000Z", wake: true, home: join(fx.dep, "agents", "dev", "instances", "gone-1") },
+    found: (slot, home) => `holds the run due 2026-10-03T09:00:00.000Z of the instance at ${home}`,
+    remedy: (home) => `once oats status shows the instance at ${home} is not running, run oats schedule reconcile gone --clear to release the slot` }),
+  "a spawn's record, which names no instance": () => ({ record: { scheduledFor: "2026-10-03T09:00:00.000Z" },
+    found: () => "holds the run due 2026-10-03T09:00:00.000Z of an instance its record does not name",
+    remedy: () => "once no run of schedule gone is running (oats status lists the instances it started), run oats schedule reconcile gone --clear to release the slot" }),
+};
+for (const [kind, make] of Object.entries(ORPHAN_RECORDS)) {
+  test(`a readable slot of a schedule that is not defined (${kind}): counted by the tick, listed by doctor with what its record names, released only by reconcile --clear`, async (t) => {
+    const { fx, cli } = await deployment(t);
+    const { record, found, remedy } = make(fx);
+    const slot = join(S.stateDir(fx.dep), "locks", "gone");
+    await fx.inEnv(() => { S.registerWorkspace(fx.dep, { maxConcurrent: 1 }); assert.equal(S.acquireJobLock(fx.dep, "gone", record), true); });
+    const before = entries(slot);
+    const io = { command: () => ({ ok: true, result: {} }), inspect: () => ({ present: false, state: "shell" }) };
+    const considered = await fx.inEnv(() => S.tickHost({ now: new Date("2026-10-03T10:00:00Z"), io }).considered.filter((c) => c.workspace === fx.dep && c.id));
+    assert.ok(considered.length > 0 && considered.every((c) => c.action === "skipped" && c.reason === "host busy"), `the slot still counts against maxConcurrent: ${JSON.stringify(considered)}`);
+    const shown = found(slot, record.home);
+    const problems = JSON.parse(cli("doctor").stdout).problems ?? [];
+    assert.deepEqual(problems.filter((p) => p.id === "gone"), [{
+      code: "schedule-slot-orphaned", severity: "warning", scope: fx.dep, id: "gone",
+      message: `schedule gone, which is not defined: its slot ${slot} ${shown}, and the slot counts against maxConcurrent`,
+      remedy: remedy(record.home),
+    }]);
+    const asked = cli("schedule", "reconcile", "gone").json();
+    assert.equal(asked.ok, true, JSON.stringify(asked));
+    assert.deepEqual(asked.result, { schedule: null, reconciled: "unknown", remedy: `the slot ${slot} of schedule gone, which is not defined, ${shown}; ${remedy(record.home)}` });
+    assert.deepEqual(entries(slot), before, "reconcile without --clear leaves the slot as it is");
+    const cleared = cli("schedule", "reconcile", "gone", "--clear").json();
+    assert.deepEqual([cleared.ok, cleared.result], [true, { schedule: null, reconciled: "cleared" }], JSON.stringify(cleared));
+    assert.deepEqual(readdirSync(join(S.stateDir(fx.dep), "locks")), [], "the slot is released");
   });
 }
