@@ -13,7 +13,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { acquireResumeLock, resumeLockProblem } from "../lib/session-resume.mjs";
+import { acquireResumeLock, resumeLockProblem, resumeLockStuck } from "../lib/session-resume.mjs";
 import { isStartToken, processStartToken } from "../lib/worktree-hooks.mjs";
 
 const resumeUrl = new URL("../lib/session-resume.mjs", import.meta.url).href;
@@ -378,3 +378,20 @@ for (const [what, prepare] of [
     assert.deepEqual(f.entries(), [], "nothing is left at the lock's path or beside it");
   });
 }
+
+test("what to do about a lock that needs a person is said for what was found: nothing is to be removed where nothing is in the way", () => {
+  const path = "/state/session-resume/lock";
+  const remedy = (found) => resumeLockStuck(path, "why", found).remedy;
+  // Something is at the path, and a person decides that no sweep holds it.
+  assert.equal(remedy("unreadable"), `if no oats session resume is running on this machine, remove ${path} and run it again`);
+  assert.equal(remedy("unknown"), `if no oats session resume is running on this machine, remove ${path} and run it again`);
+  assert.equal(remedy("directory"), `once no earlier oats is running on this machine, remove the directory ${path} and run it again`);
+  // The holder is known to be gone: there is nothing to check first.
+  assert.equal(remedy("cannot-take-over"), `remove ${path} and run it again`);
+  // Nothing is in the way: other sweeps kept taking the lock, or this one could not read its own start.
+  assert.equal(remedy("held-again"), "run it again");
+  assert.equal(remedy("own-start-unreadable"), `run it again; nothing at ${path} is to be removed`);
+  for (const found of ["held-again", "own-start-unreadable"]) assert.doesNotMatch(remedy(found), /^remove|, remove/, found);
+  // What is said of the lock is the same for each.
+  assert.equal(resumeLockStuck(path, "why", "held-again").said, `the session resume lock ${path} cannot be taken (why)`);
+});
