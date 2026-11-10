@@ -872,6 +872,14 @@ function doctorMachineLaunchConfigs() {
     return { file, present: true, ok: false, configurations: [], error: e.message };
   }
 }
+/** The machine's resume lock when it needs a person (lib/session-resume.mjs resumeLockProblem), as
+ *  doctor's problems: read where a sweep would take it, nothing taken. It is this machine's, the
+ *  same from every deployment. */
+async function doctorResumeLock() {
+  const { resumeLockProblem } = await import("../lib/session-resume.mjs");
+  const problem = resumeLockProblem();
+  return problem ? [problem] : [];
+}
 async function doctorWorkspaceJson(ctx, soulName, ws) {
   const composition = await doctorComposition(ctx, soulName, ws, (code, msg, details) => jsonFail(code, msg, details));
   const agentsRoot = join(dirname(ws.local.path), "agents");
@@ -882,7 +890,7 @@ async function doctorWorkspaceJson(ctx, soulName, ws) {
   const disabledSouls = await doctorDisabledSouls(ws);
   // With --soul, the soul's composition; without, the deployment's capabilities (doctorHookWarnings).
   const hookEvents = composition ? { warnings: composition.warnings, information: [] } : await doctorHookWarnings(ws);
-  const problems = [...legacyLayoutProblems(agentsRoot), readableInstanceHomes(agentsRoot), ...localTeams.problems, ...schedules.problems, ...operator.problems, ...launchPreferences.problems, ...disabledSouls.problems, ...retireIncompleteProblems(agentsRoot)].filter(Boolean);
+  const problems = [...legacyLayoutProblems(agentsRoot), readableInstanceHomes(agentsRoot), ...localTeams.problems, ...schedules.problems, ...operator.problems, ...launchPreferences.problems, ...disabledSouls.problems, ...retireIncompleteProblems(agentsRoot), ...await doctorResumeLock()].filter(Boolean);
   return {
     schemaVersion: 1, workspaceApi: 2, context: ctx,
     workspace: { file: ws.local.path, ref: ws.local.workspace },
@@ -943,6 +951,7 @@ async function doctor(dir) {
   for (const p of disabledSouls.problems) console.log(`\n! ${p.code}: ${p.message}\n  ${p.remedy}`);
   // Retirements left open (#1747): the command that finishes each, and whose hook failed last.
   for (const p of retireIncompleteProblems(agentsRoot)) console.log(`\n! ${p.code}: ${terminalText(p.message)}\n  ${terminalText(p.remedy)}`);
+  for (const p of await doctorResumeLock()) console.log(`\n! ${p.code}: ${terminalText(p.message)}\n  ${terminalText(p.remedy)}`);
   const hookEvents = composition ? { warnings: composition.warnings, information: [] } : await doctorHookWarnings(ws);
   for (const w of hookEvents.warnings) console.log(`\nwarning  ${w.code}  ${w.message}`);
   if (!soulName) for (const w of doctorCaptureWarnings()) console.log(`\nwarning  ${w.code}  ${terminalText(w.message)}`);

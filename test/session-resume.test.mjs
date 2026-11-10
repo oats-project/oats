@@ -4,13 +4,14 @@
 // row mapping. The real-tmux sweep is test/session-resume-tmux.test.mjs.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describeLaunchCommand, parseLaunchCommand, renderLaunchCommand, renderLaunchRecipe, RESUME_NOTICE, startInstanceSession } from "../lib/core.mjs";
 import { readStartExited, sessionEndOf } from "../lib/session-end.mjs";
 import { acquireResumeLock, bootId, noteSweep, readBootNote, RESUME_LIMIT, resumeSessions, resumeStateDir, rowFromStart } from "../lib/session-resume.mjs";
 import { nextSeen, resumeEligible } from "../lib/session-seen.mjs";
+import { processStartToken } from "../lib/worktree-hooks.mjs";
 import { FRESH_REASON, NOT_SWEPT, OUTCOME, RESUME_WAITING, ROW_REASON, SESSION_END, SESSION_RESUME_FEATURE } from "../lib/session-resume-contract.mjs";
 
 const scratch = (t) => { const d = mkdtempSync(join(tmpdir(), "oats-resume-")); t.after(() => rmSync(d, { recursive: true, force: true })); return d; };
@@ -198,28 +199,31 @@ test("bootId on macOS reads the boot time and nothing under /proc", () => {
   assert.equal(bootId({ platform: "darwin", read: () => { throw new Error("read on macOS"); }, sysctl: () => "{ sec = 1761555000, usec = 123456 } Mon Oct 27 08:50:00 2026\n" }), "1761555000.123456");
 });
 
-test("the machine lock: one sweep at a time; a dead owner's lock, or another boot's, is taken over", (t) => {
+test("the machine lock: one sweep at a time; the lock directory of an earlier kernel is refused as that, whatever its owner, and left as it is", (t) => {
   oatsHome(t);
   const lock = join(resumeStateDir(), "lock");
   const release = acquireResumeLock({ boot: "boot-1" });
-  assert.equal(JSON.parse(readFileSync(join(lock, "owner.json"), "utf8")).pid, process.pid);
+  assert.equal(JSON.parse(readFileSync(lock, "utf8")).pid, process.pid);
   assert.throws(() => acquireResumeLock({ boot: "boot-1" }), (e) => e.code === "E_RESUME_BUSY" && e.message.includes(`pid ${process.pid}`));
   release();
   assert.equal(existsSync(lock), false, "released");
-  // A dead pid: stale.
-  mkdirSync(lock); writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: 2 ** 22 + 12345, bootId: "boot-1" }));
-  acquireResumeLock({ boot: "boot-1" })();
-  // A live pid, recorded in another boot: stale (the pid is someone else's now).
-  mkdirSync(lock); writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.ppid, bootId: "boot-0" }));
-  acquireResumeLock({ boot: "boot-1" })();
-  // A live pid in this boot: busy.
-  mkdirSync(lock); writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.ppid, bootId: "boot-1" }));
-  assert.throws(() => acquireResumeLock({ boot: "boot-1" }), (e) => e.code === "E_RESUME_BUSY");
-  // No owner yet: an acquirer's own for the grace, a crashed one's after it.
-  rmSync(lock, { recursive: true }); mkdirSync(lock);
-  assert.throws(() => acquireResumeLock({ boot: "boot-1" }), (e) => e.code === "E_RESUME_BUSY");
+  const stuck = (e) => e.code === "E_RESUME_LOCK_STUCK" && e.message.includes(`remove the directory ${lock}`);
+  for (const [what, owner] of [
+    ["a dead pid", { pid: 2 ** 22 + 12345, bootId: "boot-1" }],
+    ["a live pid, recorded in another boot", { pid: process.ppid, bootId: "boot-0" }],
+    ["a live pid in this boot", { pid: process.ppid, bootId: "boot-1" }],
+  ]) {
+    mkdirSync(lock); writeFileSync(join(lock, "owner.json"), JSON.stringify(owner));
+    assert.throws(() => acquireResumeLock({ boot: "boot-1" }), stuck, what);
+    assert.equal(readFileSync(join(lock, "owner.json"), "utf8"), JSON.stringify(owner), what);
+    rmSync(lock, { recursive: true });
+  }
+  // No owner: the same, however long the directory has been there.
+  mkdirSync(lock);
+  assert.throws(() => acquireResumeLock({ boot: "boot-1" }), stuck);
   const old = new Date(Date.now() - 120_000); utimesSync(lock, old, old);
-  acquireResumeLock({ boot: "boot-1" })();
+  assert.throws(() => acquireResumeLock({ boot: "boot-1" }), stuck);
+  assert.deepEqual(readdirSync(lock), []);
 });
 
 test("the per-boot note: refusals and each home's count of sweep starts, replaced in another boot, nothing kept without a boot id", (t) => {
@@ -329,10 +333,17 @@ test("a container's next run on the same kernel boot is another boot to the swee
   assert.deepEqual(readBootNote(second), { bootId: second, refused: [], resumes: {} });
   noteSweep({ launched: [H] }, second);
   assert.deepEqual(readBootNote(second).resumes, { [H]: 1 });
-  // A lock the first run left, its pid a live process of the next run: stale.
+  // A lock the first run left, its pid a live process of the next run: stale, even when that
+  // process's start reads as the recorded one (a start is counted from the kernel's boot, and a
+  // PID namespace starts its pids again in each run). In the run that took it, it is a sweep that runs.
   const lock = join(resumeStateDir(), "lock");
-  mkdirSync(lock); writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.ppid, bootId: first }));
+  mkdirSync(resumeStateDir(), { recursive: true });
+  const left = JSON.stringify({ bootId: first, pid: process.pid, processStart: processStartToken(process.pid), nonce: "a".repeat(32), at: "2026-10-27T09:00:00.000Z" }) + "\n";
+  writeFileSync(lock, left);
+  assert.throws(() => acquireResumeLock({ boot: first }), (e) => e.code === "E_RESUME_BUSY" && e.message.includes(`pid ${process.pid} holds it`));
+  assert.equal(readFileSync(lock, "utf8"), left);
   acquireResumeLock({ boot: second })();
+  assert.equal(existsSync(lock), false, "taken over, and released");
   // Seen running in the first run, the container down for two weeks, first seen lost in the next.
   const at = (ms) => new Date(ms).toISOString();
   const record = { startId: "s1", lastSeenRunningAt: at(T("18:00:00.000") - 14 * DAY), lastSeenRunningBoot: first, firstNotRunningAt: at(T("09:00:00.000")), firstNotRunningBoot: second, judgedBy: null };
