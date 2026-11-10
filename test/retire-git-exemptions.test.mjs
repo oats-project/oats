@@ -26,6 +26,8 @@ test("a form that reads or writes a work-tree file gets the overrides, whatever 
     ["stash", "push"], ["stash"], ["stash", "pop"], ["stash", "apply"], ["stash", "create"],
     ["worktree", "remove", "tree"], ["worktree", "add", "tree"], ["worktree", "move", "a", "b"], ["worktree"],
     ["hash-object", "file.txt"], ["hash-object", "-w", "file.txt"], ["hash-object", "--stdin-paths"],
+    // With --path the content read from standard input goes through the filters of that path.
+    ["hash-object", "--stdin", "--path=file.txt"], ["hash-object", "-w", "--stdin", "--path", "file.txt"], ["hash-object", "--path=file.txt", "-t", "blob", "--stdin"],
     ["ls-files", "--modified"], ["ls-files", "-m"], ["ls-files", "--others"], ["ls-files", "-o", "--stage"], ["ls-files", "--deleted"], ["ls-files"],
     ["reflog", "expire", "--all"], ["remote", "update"], ["remote", "add", "o", "url"],
     ["-c", "a=b", "stash", "push"],
