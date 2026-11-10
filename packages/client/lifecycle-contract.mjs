@@ -17,7 +17,9 @@ export const planReference = v => typeof v === 'string' && /^[a-f0-9]{64}$/.test
 const at = v => typeof v === 'string' && Number.isFinite(Date.parse(v));
 const strings = v => Array.isArray(v) && v.length <= 64 && v.every(n => text(n));
 const messages = {
-  E_BAD_ARGS: 'Invalid lifecycle request.', E_WORKSPACE_UNKNOWN: 'Choose an advertised workspace.',
+  E_BAD_ARGS: 'Invalid lifecycle request.',
+  // The kernel's, for a stop or a retire missing its argument (the usage line is its message). Answered only before any effect.
+  E_USAGE: 'Invalid lifecycle request.', E_WORKSPACE_UNKNOWN: 'Choose an advertised workspace.',
   E_SESSION_UNKNOWN: 'This instance is no longer in the current roster.', E_AMBIGUOUS_INSTANCE: 'Select an exact instance home.',
   E_HOME_MISMATCH: 'The instance home no longer matches this selection.',
   // The kernel's, for a home it cannot work from: a record that is there and cannot be read, a rollback
