@@ -163,6 +163,7 @@ test("a home whose spawn finished retires as before: no marker is left by the sp
   assert.equal(row.rollbackIncomplete, undefined);
   const r = d.fx.cli(["retire", "dev-done", "--json"]);
   assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.equal(JSON.parse(r.stdout).workRecovery, undefined, "the home is as its spawn left it: nothing to copy to recovery");
   const ran = d.retireRuns("dev-done");
   assert.equal(ran.length, 1);
   assert.equal(ran[0].homeThere, true);
