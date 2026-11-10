@@ -144,6 +144,25 @@ test("token commands refuse a missing operator route without calling the agent a
   assert.equal(fx.cli(["status", "claude", "--server", "box", "--json"]).status, 0, "the preserved label still supplies the default team name");
 });
 
+test("a constructor-named server needs its own operator route", () => {
+  const fx = fixture("constructor-route", { operator: false });
+  writeFileSync(join(fx.config, "servers.json"), JSON.stringify({ servers: { constructor: { sshHost: "agent-host", workspace: "/srv/ws", label: "team" } } }));
+  const args = ["status", "claude", "--server", "constructor", "--json"];
+  for (const routes of [undefined, { box: { operatorSshHost: "operator-host" } }]) {
+    if (routes) writeFileSync(join(fx.config, "server-operator-routes.json"), JSON.stringify(routes));
+    const r = fx.cli(args);
+    assert.equal(r.status, 1);
+    assert.equal(JSON.parse(r.stdout).error.code, "E_HARNESS_TOKEN_ROUTE");
+    assert.match(JSON.parse(r.stdout).error.message, /oats server add constructor --ssh agent-host --workspace \/srv\/ws/);
+    assert.equal(existsSync(fx.calls), false, "an inherited property is never an operator route");
+  }
+  writeFileSync(join(fx.config, "server-operator-routes.json"), JSON.stringify({ constructor: { operatorSshHost: "operator-host" } }));
+  const present = fx.cli(args);
+  assert.equal(present.status, 0, present.stdout + present.stderr);
+  assert.equal(JSON.parse(present.stdout).result.server, "constructor");
+  assert.equal(JSON.parse(readFileSync(fx.calls, "utf8").trim()).host, "operator-host");
+});
+
 test("remove uses an explicit valid team name and returns only receiver metadata", () => {
   const fx = fixture("remove", { label: "Display label has spaces" });
   const absent = fx.cli(["remove", "pi", "--server", "box", "--json"]);
