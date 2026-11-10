@@ -72,6 +72,12 @@ test("stdin set delivers each harness credential only to the receiver and lists 
     assert.deepEqual(calls.map((c) => c.host), ["operator-host", "agent-host"]);
     assert.deepEqual(calls[0].args.slice(-3), ["install", harness, "team"]);
     assert.equal(JSON.stringify(calls).includes(value), false, "every spawned SSH argv excludes the value");
+    if (harness === "claude") {
+      const text = fx.cli(["set", harness, "--server", "box", "--stdin"], { input: value, env: { FIXTURE_ROSTER: JSON.stringify(roster) } });
+      assert.equal(text.status, 0, text.stdout + text.stderr);
+      assert.match(text.stdout, /older \(dev\).*next start/);
+      assert.equal((text.stdout + text.stderr).includes(value), false);
+    }
     const scan = (dir) => { for (const item of readdirSync(dir, { withFileTypes: true })) {
       const path = join(dir, item.name); if (item.isDirectory()) scan(path);
       else assert.equal(readFileSync(path).includes(Buffer.from(value)), false, "the client wrote no credential file or log");

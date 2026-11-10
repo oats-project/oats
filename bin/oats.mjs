@@ -5222,7 +5222,8 @@ Usage:
                                             modules or the deployment's soul, trust checked, the provider's
                                             own command run in the home or scope, envelope
                                             relayed; a view answers {documents: [...]}
-  oats harness token set|status|remove <harness> --server <id> [--name <team>]  operator credential metadata/removal
+  oats harness token set|status|remove <harness> --server <id> [--name <team>]
+      [--stdin] [--json] [--debug]           operator credential delivery, status and removal
   oats harness trust [--dir <deployment>]  explicitly trust one canonical deployment root
       [--harness claude|codex|all]         in every native configuration file a launch reads
       [--plan] [--json]                   (the ambient one and each launch configuration's
