@@ -8,3 +8,6 @@
   creating a home, worktree or identity; preview carries the warning too.
   Hook-supplied selectors and tokens are checked once their environment is
   known, and the actual pane is checked again before dispatch.
+- The final credential check follows the harness selected for this start,
+  including a switch between Claude and another harness. Hook-supplied
+  directory selectors are covered at preview, spawn and start.

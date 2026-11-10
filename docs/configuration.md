@@ -586,7 +586,8 @@ warns with that command. An inherited token does not select the token route.
 Other harnesses are unaffected. Spawn preview and apply check the predictable
 configuration before creating a home, worktree or identity. A selector supplied
 by a capability hook is checked after its launch environment is known, and
-every actual launch checks its final pane again.
+every actual launch checks its final pane again. On macOS, Claude's `/login`
+credential lives in the Keychain; this file check does not inspect it.
 
 Both reference kinds use `OATS_LAUNCH_REF_<NAME>` aliases. Their values are
 absent from process arguments, tmux command lines, recipes, events and logs.

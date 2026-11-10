@@ -276,3 +276,63 @@ test("fromFile accepts at most 64 KiB of source bytes including the line ending"
   writeFileSync(file, "x".repeat(64 * 1024) + "\n");
   assert.throws(() => launchEnvRefs(r, {}), (e) => e.code === "E_LAUNCH_ENV_MISSING" && /is larger than 64 KiB/.test(e.message));
 });
+
+function hookedCredentials(t) {
+  const dir = mkdtempSync(join(base, "hook-selector-"));
+  const ambient = join(dir, "ambient"), clean = join(dir, "clean"), dirty = join(dir, "dirty"), token = join(dir, "token"), events = join(dir, "hook-events");
+  for (const path of [join(ambient, ".claude"), clean, dirty]) mkdirSync(path, { recursive: true });
+  for (const path of [join(ambient, ".claude"), dirty]) writeFileSync(join(path, ".credentials.json"), "fixture");
+  writeFileSync(token, "fixture-hook-token\n");
+  const executable = join(dir, "harness");
+  writeFileSync(executable, `#!${process.execPath}\nimport {writeFileSync} from 'node:fs';\nwriteFileSync(process.env.OATS_INSTANCE_HOME+'/fixture.pid',String(process.pid));\nsetInterval(()=>{},1000);\n`);
+  chmodSync(executable, 0o755);
+  const hook = `import {appendFileSync,existsSync,readFileSync,writeFileSync} from 'node:fs';\nimport {join} from 'node:path';\nconst home=process.env.OATS_HOME, instance=process.env.OATS_INSTANCE;\nconst selector=join(home,'selector');\nconst dir=existsSync(selector)?readFileSync(selector,'utf8'):instance.includes('dirty')?${JSON.stringify(dirty)}:${JSON.stringify(clean)};\nappendFileSync(${JSON.stringify(events)},instance+'\\n');\nif(process.env.OATS_LAUNCH_PREVIEW!=='1' && process.env.OATS_HARNESS==='claude' && existsSync(join(home,'create-credential')))writeFileSync(join(dir,'.credentials.json'),'fixture');\nprocess.stdout.write(JSON.stringify({env:{CLAUDE_CONFIG_DIR:dir}})+'\\n');\n`;
+  const fx = v2Deployment({ souls: { hooked: { soul: { capabilities: { "claude.selector": { from: "here" } } } }, plain: {} }, capabilities: { "claude.selector": { manifest: { environment: ["CLAUDE_CONFIG_DIR"], launchPreview: true, hooks: { spawn: "hook.mjs", launch: "hook.mjs" } }, files: { "hook.mjs": hook } } }, local: { "launch-configs": {
+    token: { harness: "claude", executable, env: { CLAUDE_CODE_OAUTH_TOKEN: { fromFile: token } } },
+    claude: { harness: "claude", executable, env: { CLAUDE_CONFIG_DIR: clean, CLAUDE_CODE_OAUTH_TOKEN: { fromFile: token } } },
+    codex: { harness: "codex", executable, env: { CLAUDE_CONFIG_DIR: dirty, CLAUDE_CODE_OAUTH_TOKEN: { fromFile: token } } },
+    codexHook: { harness: "codex", executable, env: { CLAUDE_CODE_OAUTH_TOKEN: { fromFile: token } } },
+  } } });
+  fx.env.HOME = ambient;
+  const tmux = systemExecutable("tmux");
+  t.after(() => { try { execFileSync(tmux, ["-S", oatsSocket(), "kill-server"]); } catch { /* private server already gone */ } fx.cleanup(); });
+  const stopped = async (home) => {
+    await waitUntil(() => existsSync(join(home, "fixture.pid")), { message: "fixture harness started" });
+    process.kill(Number(readFileSync(join(home, "fixture.pid"))), "SIGTERM");
+    await waitUntil(() => inspectInstanceSession(home).state === "shell", { message: "fixture left a fallback shell" });
+  };
+  return { fx, clean, dirty, events, stopped };
+}
+
+test("hook selectors defer preview and check the environment supplied by spawn and launch hooks", async (t) => {
+  const { fx, clean, dirty, events, stopped } = hookedCredentials(t);
+  const preview = await fx.spawn("hooked", { name: "hook-dirty-preview", work: "checkout", preview: true, launch: true, launchConfig: "token" });
+  assert.equal(preview.warnings?.some((line) => line.includes("/login credential")) ?? false, false);
+  assert.equal(existsSync(events), false, "preview does not execute hooks");
+  await assert.rejects(fx.spawn("hooked", { name: "hook-dirty-apply", work: "checkout", launch: true, launchConfig: "token" }), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL");
+  assert.match(readFileSync(events, "utf8"), /hook-dirty-apply/, "the refusal followed the hook");
+  const { home, warnings = [] } = await fx.spawn("hooked", { name: "hook-clean-apply", work: "checkout", launch: true, launchConfig: "token" });
+  assert.equal(warnings.some((line) => line.includes("/login credential")), false, "clean hook selector wins over dirty pane HOME");
+  await stopped(home);
+  writeFileSync(join(home, "selector"), dirty);
+  assert.throws(() => startInstanceSession(home, { env: process.env }), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL");
+  writeFileSync(join(home, "selector"), clean);
+  assert.doesNotThrow(() => startInstanceSession(home, { env: process.env }));
+});
+
+test("leaving Claude for Codex does not run the Claude credential check", async (t) => {
+  const { fx, stopped } = hookedCredentials(t);
+  const { home } = await fx.spawn("plain", { name: "switch-from-claude", work: "checkout", launch: true, launchConfig: "claude" });
+  await stopped(home);
+  const codex = startInstanceSession(home, { launchConfig: "codex", env: process.env });
+  assert.equal(codex.harness, "codex");
+  assert.equal(codex.warnings?.some((line) => line.includes("/login credential")) ?? false, false);
+});
+
+test("entering Claude checks credentials created by the real launch hook", async (t) => {
+  const { fx, stopped } = hookedCredentials(t);
+  const reverse = await fx.spawn("hooked", { name: "switch-from-codex", work: "checkout", launch: true, launchConfig: "codexHook" });
+  await stopped(reverse.home);
+  writeFileSync(join(reverse.home, "create-credential"), "fixture");
+  assert.throws(() => startInstanceSession(reverse.home, { launchConfig: "token", env: process.env }), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL", "the real launch hook creates credentials after the planner's preview check");
+});
