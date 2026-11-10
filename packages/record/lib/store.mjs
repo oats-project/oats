@@ -21,7 +21,6 @@ import {
   fsyncSync,
   ftruncateSync,
   linkSync,
-  mkdirSync,
   openSync,
   opendirSync,
   readdirSync,
@@ -34,6 +33,7 @@ import {
 } from "node:fs";
 import { DerivedState, fileVersion, sameVersion, invalidateLegacyMaps } from "./derived-state.mjs";
 import { captureContext } from "./capture-context.mjs";
+import { PRIVATE_FILE, makePrivateDir } from "./private-files.mjs";
 import { randomBytes } from "node:crypto";
 import { hostname } from "node:os";
 import { join } from "node:path";
@@ -357,7 +357,7 @@ export class RecordStore {
       return fn();
     }
     const dir = join(this.streamsDir(), streamId);
-    mkdirSync(dir, { recursive: true });
+    makePrivateDir(dir);
     const lockPath = join(dir, ".lock");
     const token = newLockToken();
     const deadline = Date.now() + this.lockTimeoutMs;
@@ -664,7 +664,7 @@ export class RecordStore {
       let chunk = [], chunkBytes = 0, appended = 0;
       const flush = () => {
         if (!chunk.length) return;
-        appendFileSync(path, chunk.join("\n") + "\n");
+        appendFileSync(path, chunk.join("\n") + "\n", { mode: PRIVATE_FILE });
         chunk = []; chunkBytes = 0;
       };
       // A failed transaction can leave appended journal bytes. Its old version
@@ -702,9 +702,9 @@ export class RecordStore {
     const digest = sha256Hex(bytes);
     const path = this.objectPath(digest);
     if (!existsSync(path)) {
-      mkdirSync(join(this.root, "objects", "sha256", digest.slice(0, 2)), { recursive: true });
+      makePrivateDir(join(this.root, "objects", "sha256", digest.slice(0, 2)));
       const tmp = path + ".tmp-" + process.pid;
-      writeFileSync(tmp, bytes);
+      writeFileSync(tmp, bytes, { mode: PRIVATE_FILE });
       renameSync(tmp, path);
     }
     return "sha256:" + digest;
@@ -737,7 +737,7 @@ export class RecordStore {
       for (let i = 0; i < shorter.length; i++) {
         if (shorter[i].id !== longer[i].id) {
           const qPath = join(this.streamsDir(), streamId, `quarantine-${Date.now()}.jsonl`);
-          writeFileSync(qPath, foreignTurns.map((t) => JSON.stringify(t)).join("\n") + "\n");
+          writeFileSync(qPath, foreignTurns.map((t) => JSON.stringify(t)).join("\n") + "\n", { mode: PRIVATE_FILE });
           throw new StoreError(
             `non-prefix copies of stream ${streamId}: foreign copy quarantined at ${qPath}`,
           );
@@ -746,7 +746,7 @@ export class RecordStore {
       if (longer === local) return { extended: 0 };
       repairTail(path);
       const suffix = longer.slice(local.length);
-      appendFileSync(path, suffix.map((t) => JSON.stringify(t)).join("\n") + "\n");
+      appendFileSync(path, suffix.map((t) => JSON.stringify(t)).join("\n") + "\n", { mode: PRIVATE_FILE });
       syncPath(path);
       return { extended: suffix.length };
     });
