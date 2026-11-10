@@ -6929,18 +6929,17 @@ whatever the rows say:
 - **A lock that needs a person.** `E_RESUME_LOCK_STUCK`, through the same
   envelope at exit 1, when the sweep's lock cannot be taken and no sweep is
   known to run; nothing was started, and no sweep starts anything on this
-  machine until the lock is removed. `error.details` is `{lock, found}`:
-  `lock` is the lock's absolute path, the file or directory to remove, and
-  `found` is one of
+  machine until it can be. `error.details` is `{lock, found}`: `lock` is
+  the lock's absolute path, and `found` is one of
 
-  | `found` | what is at the lock's path |
-  |---|---|
-  | `unreadable` | a record that cannot be read |
-  | `unknown` | a holder that cannot be told to be running or gone |
-  | `cannot-take-over` | a gone holder's record that cannot be taken over |
-  | `held-again` | a lock that was taken again each time the sweep found it free |
-  | `own-start-unreadable` | nothing in the way: the sweep cannot read its own start time, so it could not hold the lock |
-  | `directory` | a directory, the lock of an OATS that locked with one; it is never removed for the operator |
+  | `found` | what is at the lock's path | what to do |
+  |---|---|---|
+  | `unreadable` | a record that cannot be read | remove the file once no sweep runs |
+  | `unknown` | a holder that cannot be told to be running or gone | remove the file once no sweep runs |
+  | `cannot-take-over` | a gone holder's record that cannot be taken over | remove the file |
+  | `held-again` | a lock that was taken again each time the sweep found it free | run the sweep again |
+  | `own-start-unreadable` | nothing in the way: the sweep cannot read its own start time, so it could not hold the lock | run the sweep again; nothing is to be removed |
+  | `directory` | a directory, the lock of an OATS that locked with one; it is never removed for the operator | remove the directory once no earlier `oats` runs |
 
   The message says the same in words, with what to do
   ([The sweep](execution-targets.md#the-sweep)). It is never

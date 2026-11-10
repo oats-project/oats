@@ -16,8 +16,8 @@
   never `E_RESUME_BUSY`, when the lock cannot be taken and no sweep is known
   to run: a record that cannot be read, a holder that cannot be told to be
   running or gone, a gone holder's record that cannot be taken over, or the
-  earlier OATS's lock directory. The message says which it found and names
-  the path to remove, and `error.details` is `{lock, found}`. `oats doctor`
+  earlier OATS's lock directory. The message says which it found and what
+  to do about it, and `error.details` is `{lock, found}`. `oats doctor`
   lists the same states as a `resume-lock-stuck` problem, reading the lock
   without taking it
   ([The machine sweep](../desktop-cli-api.md#the-machine-sweep-oats-session-resume)).
