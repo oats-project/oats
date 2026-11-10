@@ -150,6 +150,7 @@ test("invalidation: the kernel fingerprint covers the resolved yaml parser, not 
     const root = mkdtempSync(join(tmpdir(), "oats-fp-"));
     try {
       cpSync(join(repo, "lib"), join(root, "lib"), { recursive: true });
+      cpSync(join(repo, "packages", "record", "lib"), join(root, "packages", "record", "lib"), { recursive: true });
       mkdirSync(join(root, "docs"));
       for (const name of readdirSync(join(repo, "docs"))) if (name.endsWith(".schema.json")) cpSync(join(repo, "docs", name), join(root, "docs", name));
       cpSync(join(repo, "package.json"), join(root, "package.json"));

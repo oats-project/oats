@@ -308,7 +308,7 @@ test("the kernel's npm name is package.json's; oats version keeps the probe's na
 test("the same code published under the other name reports that name, updates itself under it and keeps the probe's name", async (t) => {
   const base = mkdtempSync(join(tmpdir(), "oats-repo-moves-name-"));
   t.after(() => rmSync(base, { recursive: true, force: true }));
-  for (const dir of ["bin", "lib"]) cpSync(join(REPO, dir), join(base, dir), { recursive: true });
+  for (const dir of ["bin", "lib", join("packages", "record", "lib")]) cpSync(join(REPO, dir), join(base, dir), { recursive: true });
   cpSync(join(REPO, "package-catalog.json"), join(base, "package-catalog.json"));
   symlinkSync(join(REPO, "node_modules"), join(base, "node_modules"));
   const manifest = JSON.parse(readFileSync(join(REPO, "package.json"), "utf8"));
