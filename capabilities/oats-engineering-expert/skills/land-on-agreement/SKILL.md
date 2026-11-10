@@ -61,7 +61,9 @@ by message. A new head goes back to it for the delta.
 <!-- OATS: the lane map gives every PR a maintainer and one second reader, and most lanes the release lane's sign-off. -->
 Here every lane requires one: the PR's maintainer, the one of your person in its lane. It
 asks the PR's second reader and the release lane's sign-off as the lane's line says; you
-don't. A RETURN from any of them goes to your developer like a finding of yours.
+don't. A RETURN from any of them goes to the change's author: to your developer or helper,
+like a finding of yours, for their work; for a change you built, you fix it or dispute it
+yourself, and its new head is reviewed as `/work-the-reviews` says.
 
 ## 5. Merge
 When every agreement holds at the same head (CI, the reviews the lane counts, your note on
