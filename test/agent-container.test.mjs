@@ -51,7 +51,7 @@ test("agent Compose service retains the isolation contract", () => {
   const compose = parse(read("compose.agent.yaml"));
   assert.deepEqual(Object.keys(compose.services), ["agent"]);
   const agent = compose.services.agent;
-  assert.deepEqual(Object.keys(agent).sort(), ["image", "container_name", "user", "cap_drop", "security_opt", "privileged", "read_only", "tmpfs", "pids_limit", "mem_limit", "cpus", "restart", "volumes", "networks"].sort(), "only reviewed service keys may be present");
+  assert.deepEqual(Object.keys(agent).sort(), ["image", "container_name", "user", "cap_drop", "security_opt", "privileged", "read_only", "tmpfs", "pids_limit", "mem_limit", "cpus", "restart", "stop_grace_period", "healthcheck", "volumes", "networks"].sort(), "only reviewed service keys may be present");
   assert.equal(agent.container_name, "oats-agent-${TEAM:?Set TEAM}");
   assert.equal(agent.user, "${AGENT_UID:-20001}:${AGENT_GID:-20001}");
   assert.deepEqual(agent.cap_drop, ["ALL"]);
@@ -63,6 +63,8 @@ test("agent Compose service retains the isolation contract", () => {
   assert.equal(agent.mem_limit, "${AGENT_MEMORY:?Set AGENT_MEMORY}");
   assert.equal(agent.cpus, "${AGENT_CPUS:?Set AGENT_CPUS}");
   assert.equal(agent.restart, "unless-stopped");
+  assert.equal(agent.stop_grace_period, "45s", "oats host run stops the agents within the stop grace");
+  assert.deepEqual(agent.healthcheck, { test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2222"], interval: "30s", timeout: "5s", retries: 3, start_period: "10s" }, "sshd on 2222 is what the healthcheck reads");
   assert.equal(agent.dns, undefined);
   assert.equal(agent.ports, undefined);
   assert.equal(agent.extra_hosts, undefined);
@@ -78,6 +80,12 @@ test("agent Compose service retains the isolation contract", () => {
   assert.deepEqual(Object.keys(work.services), ["agent"]);
   assert.deepEqual(Object.keys(work.services.agent), ["volumes"]);
   assert.deepEqual(work.services.agent.volumes, [{ type: "bind", source: "${TEAM_WORK_DIR:?Set TEAM_WORK_DIR}", target: "/work", bind: { create_host_path: false } }]);
+});
+
+test("the entrypoint starts sshd in the background and ends as oats host run, tini's direct child", () => {
+  const lines = read("entrypoint.sh").trimEnd().split("\n");
+  assert.deepEqual(lines.slice(-2), ["/usr/sbin/sshd -D -e -f /etc/agent-sshd_config &", "exec oats host run"]);
+  assert.equal(lines.filter((line) => /^\s*exec\b/.test(line)).length, 1, "one exec, the last line: whatever it runs is what tini signals and waits for");
 });
 
 test("SSH accepts only agent public keys with forwarding disabled", () => {
@@ -103,7 +111,8 @@ test("acceptance refuses drift in the admitted container settings", async () => 
   const inspected = {
     Image: image.Id,
     State: { Running: true },
-    Config: { Image: env.AGENT_IMAGE, User: "20001:20001", Env: [...image.Config.Env], Entrypoint: [...image.Config.Entrypoint], Cmd: null },
+    Config: { Image: env.AGENT_IMAGE, User: "20001:20001", Env: [...image.Config.Env], Entrypoint: [...image.Config.Entrypoint], Cmd: null, StopTimeout: 45,
+      Healthcheck: { Test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2222"], Interval: 30000000000, Timeout: 5000000000, StartPeriod: 10000000000, Retries: 3 } },
     HostConfig: { CapDrop: ["ALL"], CapAdd: null, SecurityOpt: ["no-new-privileges:true"], ReadonlyRootfs: true, Privileged: false, PidMode: "", IpcMode: "private", GroupAdd: null, UsernsMode: "", UTSMode: "", CgroupnsMode: "private", Sysctls: null, PortBindings: {}, ExtraHosts: [], Dns: null, NetworkMode: "team-agents", PidsLimit: 512, Memory: 3221225472, NanoCpus: 2000000000, Tmpfs: { "/tmp": "rw,nosuid,nodev,mode=1777" }, Binds: [], Mounts: [], Devices: [], DeviceRequests: null, RestartPolicy: { Name: "unless-stopped" } },
     NetworkSettings: { Networks: { "team-agents": { IPAddress: "172.30.0.2" } } },
     Mounts: [
@@ -164,6 +173,12 @@ test("acceptance refuses drift in the admitted container settings", async () => 
     (v) => { v.HostConfig.OomKillDisable = true; },
     (v) => { v.HostConfig.DeviceCgroupRules = ["c *:* rmw"]; },
     (v) => { v.HostConfig.ShmSize = 8589934592; },
+    (v) => { delete v.Config.StopTimeout; },
+    (v) => { v.Config.StopTimeout = 10; },
+    (v) => { delete v.Config.Healthcheck; },
+    (v) => { v.Config.Healthcheck.Test = ["NONE"]; },
+    (v) => { v.Config.Healthcheck.Test = ["CMD", "true"]; },
+    (v) => { v.Config.Healthcheck.Retries = 30; },
   ]) {
     const changed = structuredClone(inspected);
     mutate(changed);
