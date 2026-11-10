@@ -28,8 +28,11 @@ OATS and the official packages, and keeps the map. Every PR is in exactly one la
 lane of the effort that produced it, shown by its `lane:` label; its description names its
 maintainer, the maintainer of the effort's person in that lane.
 
-**CI green,** wherever these rules or a skill say it, means every check the forge requires
-at a head has succeeded there: none failing, none pending.
+<!-- OATS: OATS's repositories require no check on their default branches (no branch protection, no rulesets), so template-v2.1.0's "every check the forge requires" would be empty and hold with every check red; this definition, stricter than template-v2.1.0's, holds with or without required checks. -->
+**CI green,** wherever these rules or a skill say it, means at least one check ran at a
+head, every check the forge requires is among them, and every check that ran succeeded (a
+skipped check didn't run): none failing, none pending. A head where no check ran isn't
+green.
 <!-- OATS: the repository's rule (AGENTS.md, "Gates"): CI is the gate, and its suites never run locally. -->
 CI is the test run here: no agent runs the kernel's or the Desktop's test suites locally,
 on any host; locally, `npm run validate`, `npm run check` and at most one or two test files.

@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describeLaunchCommand, parseLaunchCommand, renderLaunchCommand, renderLaunchRecipe, RESUME_NOTICE, startInstanceSession } from "../lib/core.mjs";
 import { readStartExited, sessionEndOf } from "../lib/session-end.mjs";
-import { acquireResumeLock, bootId, noteSweep, readBootNote, resumeSessions, resumeStateDir, rowFromStart } from "../lib/session-resume.mjs";
+import { acquireResumeLock, bootId, noteSweep, readBootNote, RESUME_LIMIT, resumeSessions, resumeStateDir, rowFromStart } from "../lib/session-resume.mjs";
 import { nextSeen, resumeEligible } from "../lib/session-seen.mjs";
 import { FRESH_REASON, NOT_SWEPT, OUTCOME, RESUME_WAITING, ROW_REASON, SESSION_END, SESSION_RESUME_FEATURE } from "../lib/session-resume-contract.mjs";
 
@@ -135,6 +135,69 @@ test("bootId: Linux's boot id, macOS's boot time, else none", () => {
   assert.equal(bootId({ platform: "linux", read: () => { throw new Error("EACCES"); } }), null);
 });
 
+const KERNEL_BOOT = "e0a897ff-f23d-4a81-847d-671154dc5f43";
+/** PID 1's `/proc/1/stat` line, started `start` clock ticks after the kernel's boot (field 22). */
+const pid1Stat = (start, comm = "sh") => `1 (${comm}) S 0 1 1 0 -1 4194560 796 88 0 0 0 0 0 0 20 0 1 0 ${start} 2473984 358 18446744073709551615 187650185953280 187650186080492 281474719137136 0 0 0 0 0 65538 1 0 0 17 5 0 0 0 0 0 187650186144608 187650186150416 187650434920448 281474719141477 281474719141769 281474719141769 281474719141868 0\n`;
+/** `/proc` as a Linux process reads it: the kernel's boot id and PID 1's stat (`stat` undefined:
+ *  unreadable). */
+const procOf = (stat, boot = KERNEL_BOOT) => (p) => {
+  if (p === "/proc/sys/kernel/random/boot_id") return `${boot}\n`;
+  if (p === "/proc/1/stat" && stat !== undefined) return stat;
+  throw Object.assign(new Error(`ENOENT: ${p}`), { code: "ENOENT" });
+};
+/** What marks a container, one at a time: the file Docker writes, the file Podman writes, the
+ *  variable Kubernetes sets. */
+const CONTAINER_MARKERS = {
+  docker: { exists: (p) => p === "/.dockerenv", env: {} },
+  podman: { exists: (p) => p === "/run/.containerenv", env: {} },
+  kubernetes: { exists: () => false, env: { KUBERNETES_SERVICE_HOST: "10.96.0.1" } },
+};
+const NO_MARKER = { exists: () => false, env: {} };
+const linuxBoot = (stat, { boot, marker = NO_MARKER } = {}) => bootId({ platform: "linux", read: procOf(stat, boot), ...marker });
+const containerBoot = (stat, boot) => linuxBoot(stat, { boot, marker: CONTAINER_MARKERS.docker });
+
+test("bootId on a Linux host: the kernel's boot id and nothing else, whenever PID 1 started", () => {
+  for (const start of [0, 2, 147, 999]) assert.equal(linuxBoot(pid1Stat(start, "systemd")), KERNEL_BOOT, `PID 1 started at tick ${start}`);
+});
+
+test("bootId in a PID namespace of its own on a host, with nothing marking a container: the host's boot", () => {
+  // A harness runs a command in a sandbox that unshares PIDs: its PID 1 is the sandbox's, started
+  // long after the kernel, and the command is on the host's boot all the same.
+  for (const start of [1000, 30666820, 30667142]) assert.equal(linuxBoot(pid1Stat(start, "bwrap")), KERNEL_BOOT, `the sandbox's PID 1 started at tick ${start}`);
+  // A variable that only resembles the one Kubernetes sets marks nothing; neither does an empty one.
+  assert.equal(bootId({ platform: "linux", read: procOf(pid1Stat(30666820)), exists: () => false, env: { KUBERNETES_PORT: "tcp://10.96.0.1:443", KUBERNETES_SERVICE_HOST: "" } }), KERNEL_BOOT);
+});
+
+test("bootId in a container: the kernel's boot id and PID 1's start, the same all through one run, another in the next run on the same kernel boot", () => {
+  // Two runs of one container (a `docker restart`) under one kernel boot: PID 1 starts 30666820 and
+  // 30667142 ticks after it.
+  const first = containerBoot(pid1Stat(30666820)), second = containerBoot(pid1Stat(30667142));
+  assert.equal(first, `${KERNEL_BOOT}:30666820`);
+  assert.equal(containerBoot(pid1Stat(30666820)), first, "every process of one run reads the same");
+  assert.equal(second, `${KERNEL_BOOT}:30667142`);
+  assert.notEqual(first, second);
+  // Each marker alone says "container".
+  for (const [name, marker] of Object.entries(CONTAINER_MARKERS)) assert.equal(linuxBoot(pid1Stat(30666820), { marker }), first, name);
+  // The same start under another kernel boot is another identity.
+  assert.notEqual(containerBoot(pid1Stat(30666820), "0f8b6a2e-1111"), first);
+  // A container that shares its host's PID namespace reads the host's PID 1, the same in every run.
+  assert.equal(containerBoot(pid1Stat(0, "systemd")), `${KERNEL_BOOT}:0`);
+  // PID 1's name is read as the kernel prints it: anything between the first "(" and the last ")".
+  for (const comm of ["systemd", "tini -s", "a) S 0 (b", "docker-init"]) assert.equal(containerBoot(pid1Stat(30666820, comm)), first, comm);
+});
+
+test("bootId on Linux without a start time of PID 1 to read: the kernel's boot id alone; without the boot id: none", () => {
+  assert.equal(containerBoot(undefined), KERNEL_BOOT, "/proc/1/stat cannot be read");
+  for (const stat of ["", "\n", "1 (sh) S 0 1 1\n", "no parenthesis at all", pid1Stat("x"), pid1Stat("-5"), pid1Stat("12.5")]) assert.equal(containerBoot(stat), KERNEL_BOOT, JSON.stringify(stat.slice(0, 40)));
+  assert.equal(bootId({ platform: "linux", ...CONTAINER_MARKERS.docker, read: (p) => { if (p === "/proc/1/stat") return pid1Stat(30666820); throw new Error("EACCES"); } }), null, "PID 1's start alone is no boot");
+  // On a host /proc/1/stat is not read at all.
+  assert.equal(bootId({ platform: "linux", ...NO_MARKER, read: (p) => { if (p === "/proc/1/stat") throw new Error("read /proc/1/stat on a host"); return `${KERNEL_BOOT}\n`; } }), KERNEL_BOOT);
+});
+
+test("bootId on macOS reads the boot time and nothing under /proc", () => {
+  assert.equal(bootId({ platform: "darwin", read: () => { throw new Error("read on macOS"); }, sysctl: () => "{ sec = 1761555000, usec = 123456 } Mon Oct 27 08:50:00 2026\n" }), "1761555000.123456");
+});
+
 test("the machine lock: one sweep at a time; a dead owner's lock, or another boot's, is taken over", (t) => {
   oatsHome(t);
   const lock = join(resumeStateDir(), "lock");
@@ -254,4 +317,25 @@ test("a lost home is resumed only when seen running for its start, not judged, f
   no(record({ lastSeenRunningAt: at(T("01:55:00.000")) }), T("02:02:00.000"), /not seen it stop/, "its loss not recorded");
   // No boot id: the in-boot clause applies to every loss.
   no(record({ lastSeenRunningAt: at(T("18:00:00.000") - 14 * DAY), firstNotRunningAt: at(T("09:00:00.000")), lastSeenRunningBoot: null, firstNotRunningBoot: null }), T("09:00:05.000"), /24 hours or more before its loss/, "no boot id: two weeks off is not resumed");
+});
+
+test("a container's next run on the same kernel boot is another boot to the sweep: the count of starts begins again, the lock of the run before is taken over, and the in-boot clause does not reach across", (t) => {
+  oatsHome(t);
+  const first = containerBoot(pid1Stat(30666820)), second = containerBoot(pid1Stat(30667142));
+  // RESUME_LIMIT sweep starts of one home in the first run: the count the sweep refuses at.
+  for (let n = 0; n < RESUME_LIMIT; n++) noteSweep({ launched: [H] }, first);
+  assert.equal(readBootNote(first).resumes[H], RESUME_LIMIT);
+  // The next run reads no count, and its first start is counted as the first.
+  assert.deepEqual(readBootNote(second), { bootId: second, refused: [], resumes: {} });
+  noteSweep({ launched: [H] }, second);
+  assert.deepEqual(readBootNote(second).resumes, { [H]: 1 });
+  // A lock the first run left, its pid a live process of the next run: stale.
+  const lock = join(resumeStateDir(), "lock");
+  mkdirSync(lock); writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.ppid, bootId: first }));
+  acquireResumeLock({ boot: second })();
+  // Seen running in the first run, the container down for two weeks, first seen lost in the next.
+  const at = (ms) => new Date(ms).toISOString();
+  const record = { startId: "s1", lastSeenRunningAt: at(T("18:00:00.000") - 14 * DAY), lastSeenRunningBoot: first, firstNotRunningAt: at(T("09:00:00.000")), firstNotRunningBoot: second, judgedBy: null };
+  assert.deepEqual(resumeEligible(record, lost(), { now: T("09:00:05.000") }), { eligible: true });
+  assert.equal(resumeEligible({ ...record, firstNotRunningBoot: first }, lost(), { now: T("09:00:05.000") }).eligible, false, "lost within the run it was seen running in");
 });

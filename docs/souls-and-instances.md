@@ -538,6 +538,15 @@ retire's `warnings` and stays readable after the home is gone: each one is a
 `retire-warning` event in the instance's workspace log, read with
 `oats instance events <instance>` ([Events](desktop-cli-api.md#events)).
 
+`oats retire <instance>` reads these flags: `--plan`, `--plan-revision <rev>`
+with `--idempotency-key <key>`, `--home <path>`, `--dir <d>`, `--server <id>`,
+`--self`, `--discard-worktree`, `--keep-dir`, `--force` and `--json`. Any
+other flag, and any argument after the instance, is refused with `E_BAD_ARGS`
+before anything happens: before a plan is read, a child is stopped, a hook
+runs, or a routed retire is sent to its server. The refusal names the flag
+(`oats retire: unknown flag --keep-dirs`) and prints the usage, so a mistyped
+`--keep-dir` never removes the home.
+
 One retire of an instance runs at a time. A retire holds the instance's claim
 from the moment it has resolved the home until it ends: the file
 `.oats-retirement/claims/<instance>.lock` in the agent's instances directory,
@@ -1950,10 +1959,17 @@ option.
   rework an existing one).
 - `--repo`: the instance's repository by default. A member key is looked up
   as a spawn looks up a clone (`oats-local.yaml` `clones:`, then
-  `<deployment>/<member name>`; `E_CLONE_MISSING` when there is none). A path
-  (absolute, or starting with `.` or `~`) is used as given. It must be a
-  clone, not a linked worktree (`E_CLONE_MISMATCH`), and have an `origin`
-  remote (`E_CLONE_MISMATCH`). Not a Git repository: `E_CLONE_MISSING`.
+  `<deployment>/<member name>`; `E_CLONE_MISSING` when there is none). A name
+  that isn't a repository key (`oats`, `awebai/oats`, `oats.git`) names no
+  member and is refused as before: `E_CLONE_MISMATCH` when a clone is at its
+  convention path or `clones:` names one for it, `E_CLONE_MISSING` when there
+  is none. When that clone has a remote of that name (its key is the name or ends
+  in `/<name>`), the refusal names the key to pass, `--repo <key>`, and the
+  clone's path as the other spelling that works. It never suggests repointing
+  the clone. A path (absolute, or starting with `.` or `~`) is used as given.
+  It must be a clone, not a linked worktree (`E_CLONE_MISMATCH`), and have an
+  `origin` remote (`E_CLONE_MISMATCH`). Not a Git repository:
+  `E_CLONE_MISSING`.
 
 **What `add` does.** It writes a record, `<home>/.oats/trees/<p>.json`, in
 state `creating`, with its own pid and start time. Then it runs, as argument
