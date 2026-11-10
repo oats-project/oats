@@ -1,1 +1,3 @@
+## Changed
+
 - The [team agent image](../container.md) pins OATS 0.69.14, adding file-backed launch environment and the operator's harness token route; amd64 and live-lab acceptance remain separate evidence.
