@@ -5227,12 +5227,16 @@ The sweep reports each of these `skipped`, `lifecycle-busy`
 apply refuses a home that is not stopped, so it stops nothing: beside a
 resume that is still starting, it meets the claim.
 
-Upgrade requires a stopped session. It also holds the start's
-`.oats-start.lock` mutex until its final invocation receipt is persisted. A
-start reaches that mutex only once it holds the claim, so beside an upgrade
-that runs it is refused at the claim (`E_LIFECYCLE_BUSY`); the mutex answers
-(`E_SESSION_START_BUSY`, naming the same-key retry) only when an upgrade that
-died left it. A partial receipt refuses starts through the remaining
+Upgrade requires a stopped session. It also keeps a file at the home's
+`.oats-start.lock` until its final invocation receipt is persisted. A start
+makes nothing at that path and reads it only once it holds the claim, so
+beside an upgrade that runs it is refused at the claim (`E_LIFECYCLE_BUSY`);
+the file answers (`E_SESSION_START_BUSY`, naming the same-key retry) only
+when an upgrade that died left it. A directory at that path is the start lock
+of an earlier OATS: a start refuses it with `E_SESSION_START_BUSY`, `<path>
+is the start lock directory of an earlier OATS; nothing was stopped or
+started. Once no earlier oats is running, remove that directory and retry`,
+and never removes it. A partial receipt refuses starts through the remaining
 finalization (`E_UPGRADE_PARTIAL`): the CLI checks it first, before it reads
 the home's live teams, except while an upgrade holds the claim, which then
 answers. The following stop/retire notes describe the original table.

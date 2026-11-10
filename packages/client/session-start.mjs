@@ -25,7 +25,8 @@ import { requireTerms } from './client-terms.mjs';
 /** The gate is page-safe and lives apart (start-gate.mjs); a client takes it from here, with the rest of the rule. */
 export { startGate };
 
-/** The kernel's codes for a start that started nothing: the home's start lock is held, or an earlier start's
+/** The kernel's codes for a start that started nothing: another start holds the home, an upgrade has not
+ * finished, an earlier kernel's start lock is there, or an earlier start's
  * pane is still a shell without its completion marker (E_SESSION_START_BUSY); the instance was seen running,
  * or its window appeared during the start (E_SESSION_RUNNING). Some places that raise E_SESSION_RUNNING come
  * after the kernel has written the start's pending receipt, or after a restart's stop: nothing was started,
@@ -44,7 +45,7 @@ export const CLAIM_STARTED_NOTHING_CODES = Object.freeze(['E_LIFECYCLE_BUSY', 'E
 
 /** The two kernel codes' own sentences, for a client that words by code. The kernel's message is the
  * answer's `detail`, through the display filter. E_SESSION_START_BUSY says no more than busy: the kernel answers
- * it for a start lock that is there, which a start that ended without removing it leaves behind too. */
+ * it also for an earlier kernel's start lock that is there, which waiting does not remove. */
 const STARTED_NOTHING = Object.freeze({
   E_SESSION_START_BUSY: 'OATS refused this start as busy. Nothing was started.',
   E_SESSION_RUNNING: 'This instance is already running. Nothing was started.',
