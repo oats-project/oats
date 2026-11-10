@@ -99,7 +99,7 @@ const { callSession, parseMaxAge, readBudget } = await kernelImport("read-call",
 const { cachedWorkspace, legacyLayoutProblems, statusAnswer, statusView } = await kernelImport("roster-read", () => import("../lib/roster-read.mjs"));
 const { memberLabel, memberRows, packageRows, standaloneCatalogVersion, standalonePackages, workspaceName, workspaceStatusAnswer, workspaceStatusView } = await kernelImport("workspace-read", () => import("../lib/workspace-read.mjs"));
 const { expandInlineValues, flagValue } = await kernelImport("argv", () => import("../lib/argv.mjs"));
-const { RETIRE_USAGE, commandArgvProblem } = await kernelImport("command-flags", () => import("../lib/command-flags.mjs"));
+const { RETIRE_USAGE, WORKTREE_USAGE, commandArgvProblem } = await kernelImport("command-flags", () => import("../lib/command-flags.mjs"));
 
 const rawArgs = process.argv.slice(2);
 const { argv: args, problem: argvProblem, inline: inlineValues } = expandInlineValues(rawArgs);
@@ -1152,7 +1152,6 @@ async function launchConfigCmd() {
   if (sub === "preview") { launchPreview(bail); return; }
   if (!["list", "set", "remove"].includes(sub)) bail("E_USAGE", usage);
   const { context: dir, selected } = sub === "list" ? launchConfigContext(bail) : { context: dirFlag(), selected: null };
-  if (sub !== "list" && (flag("home") !== undefined || flag("soul") !== undefined)) bail("E_BAD_ARGS", `launch-config ${sub} writes the deployment's oats-local.yaml: address it with --dir, not --home or --soul`);
   // Lead decision 2: launch configurations are a HOST choice, declared in the
   // deployment's oats-local.yaml (found walking up; a home's own deployment).
   const at = selected?.home ?? dir;
@@ -1322,10 +1321,8 @@ function instanceWaitingCmd(sub, bail) {
 async function worktreeCmd() {
   const bail = (code, msg, details, exit) => (JSON_MODE ? jsonFail(code, msg, details, exit) : die(msg, exit));
   const sub = args[1];
-  const usage = "usage: oats worktree add --purpose <p> --branch <b> --base <remote-branch> [--repo <member key|clone path>] [--preview] [--json] | oats worktree remove --purpose <p> [--json]";
+  const usage = WORKTREE_USAGE;
   if (!["add", "remove"].includes(sub)) return bail("E_BAD_ARGS", usage);
-  if (flag("server") !== undefined) return bail("E_BAD_ARGS", "oats worktree runs in an instance home on this machine; --server is not accepted");
-  for (const f of ["dir", "home"]) if (args.includes(`--${f}`)) return bail("E_BAD_ARGS", `oats worktree has no --${f}: it acts on the instance home it runs in; ${usage}`);
   const value = (name) => { const v = flag(name); if (v === true) throw Object.assign(new Error(`--${name} needs a value`), { code: "E_BAD_ARGS" }); return v === undefined ? undefined : String(v); };
   const homeVariable = ["OATS_INSTANCE_HOME", "OATS_HOME"].find((name) => process.env[name]);
   const home = homeVariable ? process.env[homeVariable] : enclosingInstanceHome(logicalCwd());
@@ -1339,7 +1336,6 @@ async function worktreeCmd() {
   process.stderr.on("error", readerGone);
   try {
     if (sub === "remove") {
-      for (const f of ["branch", "base", "repo", "preview"]) if (args.includes(`--${f}`)) return bail("E_BAD_ARGS", `oats worktree remove takes only --purpose; ${usage}`);
       const r = await W.worktreeRemove(resolve(home), { purpose: value("purpose") });
       if (JSON_MODE) { jsonOk(r); return; }
       console.log(r.rolledBack
@@ -1400,7 +1396,6 @@ function retiredInstanceAddresses(root, name, home) {
 async function instanceUpgradeCmd(name, bail) {
   const usage = "usage: oats instance upgrade <instance> [--undo] (--plan | --plan-revision <rev> --idempotency-key <key>) [--home <abs>] [--dir <d>] [--json]";
   if (!name || name.startsWith("--")) return bail("E_BAD_ARGS", usage);
-  if (serverFlagOf(args)) return bail("E_BAD_ARGS", "instance upgrade supports local homes only; run it on the deployment host");
   const home = flag("home"), revision = flag("plan-revision"), key = flag("idempotency-key");
   if (home === true || (home !== undefined && !isAbsolute(home))) return bail("E_BAD_ARGS", "--home needs an absolute instance home");
   const planOnly = args.includes("--plan"), undo = args.includes("--undo");
@@ -3536,7 +3531,6 @@ async function sessionCmd() {
       // refused with a launch choice before anything of the home is read.
       const resume = args.includes("--resume");
       if (resume) {
-        if (args[1] === "restart") bad("--resume exists on session start only: it brings back a session that was lost");
         const chosen = ["--launch-config", "--harness", "--model", "--yolo", "--no-yolo", "--reselect-launch"].filter((f) => args.some((a) => a === f || a.startsWith(`${f}=`)));
         if (chosen.length) bad(`--resume runs the launch this home recorded; it cannot be combined with ${chosen.join(", ")}; nothing was read or started`);
       }
@@ -4812,7 +4806,6 @@ if (cmd && KERNEL_COMMANDS.has(cmd) && wantsHelp) { if (JSON_MODE) { jsonOk({ co
 // A state-changing command's argv against the flags it defines (lib/command-flags.mjs), before it runs
 // and before a --server command is sent: a host on an older OATS would ignore a flag it does not read.
 { const problem = commandArgvProblem(rawArgs); if (problem) cmdFail("E_BAD_ARGS", problem.message, problem.details); }
-if (cmd === "instance" && args[1] === "upgrade" && flag("server") !== undefined) cmdFail("E_BAD_ARGS", "instance upgrade supports local homes only; run it on the deployment host");
 // #1490 §2: the name is decided on the machine that asks, for a spawn that lands elsewhere.
 if (cmd === "instance" && args[1] === "suggest-name" && flag("server") !== undefined) cmdFail("E_BAD_ARGS", "instance suggest-name takes no --server: it runs this machine's harness, for a spawn that may land on another; the host it lands on makes the name unique (or names an unnamed --suggest-name spawn itself)");
 // Session resume is local only (#1559, D1): a server resumes its own instances.
