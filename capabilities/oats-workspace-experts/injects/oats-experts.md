@@ -4,8 +4,9 @@ This is the OATS-repo-specific part of the expert role. It lives in the oats rep
 capability, `oats.workspace-experts`, assigned to this workspace's expert souls), not in
 the copied engineering capabilities beside it.
 
-**Surfaces and their developers.** To drive development, launch the developer that owns
-the surface; for work across surfaces, one developer per surface. Every engineering effort,
+**Surfaces and their developers.** Where a spec goes to a developer (`/plan-and-spec`,
+"Who builds it"), launch the developer that owns the surface; for work across surfaces,
+one developer per surface. Every engineering effort,
 in one surface or across several, is led by `oats-engineering-expert`, a fresh instance per
 effort: it writes the spec and plan, reads each surface's knowledge node for the tasks that
 touch it, and owns the integration. A brief from `oats-product-expert` reaches it at an exact

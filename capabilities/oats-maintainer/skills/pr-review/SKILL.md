@@ -25,8 +25,9 @@ description: Read a PR at the exact head an author names, when your lane's landi
   marks it ready (not a draft) or asks for a read at a named head, with CI green. For a
   fork, the workflow and secrets check (Security) comes first, so CI can run.
 - **A PR a maintainer authored itself** (release prep only: the version bump and the notes;
-  a fix goes to a lead and its developer, `/launch-work`): it lands as your landing rules
-  say for a PR with no lead. You never approve your own.
+  a fix goes to a lead, which decides who builds it, `/launch-work`): it lands as your
+  landing rules say for a PR with no lead. You never approve your own.
+  <!-- OATS: template-v3.0.0 still says "a lead and its developer" here, a leftover of the old rule; under its own principle 3 the lead decides who builds a fix. -->
 - **As an overflow seat,** the calls for the efforts your parent gave you: give the verdict
   at the head, and refer a merge reserved for the lane to your parent (`/cross-review-peer`,
   "An overflow seat").

@@ -118,7 +118,8 @@ prep needs no review round, and is no exception to who iterates with reviewers: 
 it needs one.
 <!-- OATS: the second reader and the sign-off bind every PR on the lane map, release prep included. -->
 Its second reader and, where its lane's line asks, the release lane's sign-off still apply,
-as to every PR. Any fix goes to a lead and its developer.
+as to every PR. Any fix goes to a lead, which decides who builds it.
+<!-- OATS: template-v3.0.0 still says "a lead and its developer" here, a leftover of the old rule; under its own principle 3 the lead decides who builds a fix. -->
 A running maintainer finds such a PR in its intake; until one runs, the person brings it to
 their dispatcher, which starts it. Why: someone here has to own the merge, and the lane's
 maintainer holds it.
