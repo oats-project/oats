@@ -1604,6 +1604,13 @@ person, as one `resume-lock-stuck` problem in `problems[]`, `{code, message,
 remedy}` ([The machine sweep](#the-machine-sweep-oats-session-resume),
 `E_RESUME_LOCK_STUCK`). It is the machine's, the same from every deployment.
 
+`oats doctor --json` lists each schedule slot whose record cannot be read, in
+the deployment and the others the host ticks, as one `schedule-slot-unreadable`
+problem in `problems[]`, `{code, severity: "warning", scope, id, message,
+remedy}` (text: `! schedule-slot-unreadable: <message>`, the remedy on the
+next line). The remedy is to check `oats schedule show <id>`, then run `oats
+schedule reconcile <id> --clear` ([Schedules](schedules.md#files)).
+
 ### Desktop facts
 
 Feature `desktop-facts`: facts the kernel reports so the Desktop never derives
@@ -7218,6 +7225,13 @@ oats schedule update <id> --description=<text> [--dir <d>] --json
   `command` or `operation` attempt with `exited: true` (0.40.0) holds no host
   slot (`running: false`) but still blocks its own job; show it as needing
   `oats schedule reconcile <id>` (or `--clear`) either way.
+- **A slot whose record cannot be read** keeps `running: true`. The tick
+  reports its job `invalid` (`E_SCHEDULE_INVALID`) and runs the scope's
+  other jobs; `reconcile <id>` answers `{reconciled: "unknown", remedy}`
+  and `reconcile <id> --clear` releases the slot (`reconciled: "cleared"`).
+  `oats doctor --json` lists it as a `schedule-slot-unreadable` problem,
+  `{code, severity, scope, id, message, remedy}`
+  ([Schedules](schedules.md#files)).
 - **Schedule IDs**: local and workspace schedule definition names permit 1–100
   lowercase letters, digits and dashes; trigger names retain their 40-character
   limit. Desktop accepts these schedule names for creation, editing and row

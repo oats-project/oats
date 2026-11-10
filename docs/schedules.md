@@ -79,9 +79,23 @@ Its record is written in `.agents/schedules/.slot-<id>/`, which is then
 renamed to the slot, and a release renames the slot back there before
 removing it. A command killed while it takes or releases a slot leaves the
 slot with its record or no slot, and at most that directory, which the next
-take or release of the slot removes. A slot directory without its record,
-which an earlier oats could leave, is held as it is and reads as
-`job lock custody is unreadable`.
+take or release of the slot removes.
+
+**A slot whose record cannot be read stops only its job.** A slot directory
+without its record (which an earlier oats could leave), a record that does
+not parse, or something else at the slot's path says nothing about whether
+the run it stands for still runs. OATS never writes into it or removes it
+for you. The tick reports that job `invalid`, with the error `the slot <path>
+has no readable record; check oats schedule show <id>; once its last run is
+not running, run oats schedule reconcile <id> --clear to release the slot`
+(`E_SCHEDULE_INVALID`), and ticks the deployment's other jobs as usual; the
+slot counts against `maxConcurrent` until it is released. `oats schedule
+run <id>` refuses with the same words. `oats schedule reconcile <id>`
+answers `reconciled: "unknown"` with that sentence as its `remedy` and
+leaves the slot; once you have checked, `reconcile <id> --clear` releases
+it (`reconciled: "cleared"`), and reconciles an attempt beside it as
+`--clear` does any attempt. `oats doctor` lists the slot as a
+`schedule-slot-unreadable` problem ([Unresolved attempts](#what-a-run-reports)).
 
 ## Kinds
 
@@ -854,8 +868,24 @@ schedule whose saved state supports reconciliation, `remedy` names
 `oats schedule reconcile <id>`, with `--clear` for unproven command/operation
 effects (check the roster and host by hand first), and `--dir <scope>` for
 another deployment. Invalid or unsupported saved inputs instead receive a
-warning to preserve state and inspect effects with the deployment owner.
+warning to preserve state and inspect effects with the deployment owner. A
+job whose slot has no readable record gets the slot's remedy below.
 A warning never changes doctor's exit status.
+
+`oats doctor` also lists each slot whose record cannot be read, in the same
+deployments, as its own problem. The text form is `! schedule-slot-unreadable:
+<message>` with the remedy on the next line; in `--json` it is a `problems[]`
+item:
+
+```text
+{ code: "schedule-slot-unreadable", severity: "warning", scope, id, message, remedy }
+```
+
+`message` names the job and the slot's path; `remedy` is `check oats schedule
+show <id>; once its last run is not running, run oats schedule reconcile <id>
+--clear to release the slot`, with `--dir <scope>` on both commands for
+another deployment. Doctor reads the slot as the tick does and changes
+nothing. A readable slot, and no slot, are not listed.
 
 Workspace guidance uses only validated local settings and the saved automation
 snapshot. A known opt-out, missing saved definition, different assigned host or
