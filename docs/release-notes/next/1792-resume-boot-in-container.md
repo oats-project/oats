@@ -1,7 +1,7 @@
 ## Fixed
 
 - **Inside a container, `oats session resume` counts a boot per run of the
-  container.** A container shares its host's kernel, so the kernel's boot id,
+  container** (oats-project/oats#1792). A container shares its host's kernel, so the kernel's boot id,
   which the sweep read as the boot, stayed the same when the container was
   stopped and started, although every session in it was gone. With
   `~/.oats` on a volume, the third restart of a container within one host
