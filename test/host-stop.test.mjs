@@ -81,7 +81,6 @@ test.afterEach(() => { for (const fx of fixtures.splice(0)) fx.cleanup(); });
 async function runningHome(t, purpose) {
   const fx = v2Deployment({ souls: { dev: { soul: { work: "directory" } } } });
   fixtures.push(fx);
-  await fx.prepare("dev");
   t.after(leaveEnclosingInstance(fx.base)); // this worker starts a tmux server: as no instance
   const harness = join(fx.base, "fixture-harness");
   writeFileSync(harness, `#!/bin/sh\necho $$ > "$OATS_INSTANCE_HOME/harness-ready.tmp"\n/bin/mv "$OATS_INSTANCE_HOME/harness-ready.tmp" "$OATS_INSTANCE_HOME/harness-ready"\nexec sleep 600\n`, { mode: 0o755 });
