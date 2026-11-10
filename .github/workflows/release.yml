@@ -248,6 +248,12 @@ jobs:
         if: runner.os == 'macOS' && matrix.arch == 'x64'
         run: sudo softwareupdate --install-rosetta --agree-to-license
 
+      # The Linux leg's launch phase onboards a fixture deployment with this
+      # repository's kernel, which needs the root dependencies (build-installers.yml
+      # installs both too).
+      - name: Install root deps (the launch fixture runs the kernel)
+        run: npm ci
+
       - name: Build Desktop distributables
         working-directory: packages/desktop
         run: |
