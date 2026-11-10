@@ -4,9 +4,12 @@
   An earlier OATS made the directory `<home>/.oats-start.lock` for each
   session start and could leave it behind when the start was killed. This
   OATS makes nothing there: `oats session start` and `restart` refuse a
-  home with that directory (`E_SESSION_START_BUSY`, naming it) and never
-  remove it. Remove the directory once no earlier `oats` is running on the
-  machine.
+  home with that directory with the new code `E_SESSION_START_LOCK_STUCK`,
+  naming it, and never remove it; `oats instance upgrade` refuses it too,
+  naming it. Remove the directory once no earlier `oats` is running on the
+  machine. The resume sweep reports such a home as a refused start
+  (`start-refused`, with the code) instead of skipping it as one where a
+  start is running.
 
 ## Changed
 

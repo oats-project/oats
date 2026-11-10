@@ -287,7 +287,7 @@ test("refusals happen before any mutation", async () => {
   assert.throws(() => startInstanceSession(f.home), (e) => e.code === "E_INSTANCE_RETIRING" && /retire-pending/.test(e.message));
   rmSync(join(dirname(f.home), ".oats-retire-pending-refuse.json"));
   mkdirSync(join(f.home, ".oats-start.lock"));
-  assert.throws(() => startInstanceSession(f.home), (e) => e.code === "E_SESSION_START_BUSY");
+  assert.throws(() => startInstanceSession(f.home), (e) => e.code === "E_SESSION_START_LOCK_STUCK");
   rmSync(join(f.home, ".oats-start.lock"), { recursive: true });
   assert.throws(() => startInstanceSession(f.home, { model: "openai/gpt-x" }), (e) => e.code === "E_MODEL_UNKNOWN", "a preference claude cannot use is an error, not a silent default");
   const unsupported = await makeHome("unsupported");

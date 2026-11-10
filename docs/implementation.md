@@ -184,9 +184,13 @@ lifecycle claim (#1602), which excludes another start and an upgrade that
 runs, and then only reads the path (`core.mjs` `refuseStartMutex`). A
 regular file there is an upgrade that died before it finished, refused with
 `E_SESSION_START_BUSY` naming the same-key retry; a directory is the start
-lock an earlier OATS made for each start, refused with `E_SESSION_START_BUSY`
-naming it; anything else is refused naming it. A start never removes what
-it finds there.
+lock an earlier OATS made for each start, refused with
+`E_SESSION_START_LOCK_STUCK` naming it, and so is anything else there: only a
+person ends either, and the code keeps an unattended start from reading it
+as a start that runs. A start never removes what it finds there. The upgrade
+names a directory there as a start lock left by an earlier OATS, and an entry
+that appears between its check and its create as that or a file made there
+in between (`E_SESSION_RUNNING`).
 
 Upgrade compares the home with its independent spawn baseline before it
 changes anything there. A dirty home retains the entire baseline byte for
