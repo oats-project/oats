@@ -1,7 +1,7 @@
 ## Fixed
 
 - **On macOS, the boot id is read with the system's `sysctl`, whatever the
-  caller's `PATH`.** It was read with the first `sysctl` on `PATH`, so under a
+  caller's `PATH`** (oats-project/oats#1821). It was read with the first `sysctl` on `PATH`, so under a
   `PATH` without `/usr/sbin` (a scheduled job, a reduced environment) it read
   none. The boot rule was then off without a word: the resume sweep's count
   of starts per boot and its lock, and the cache write lock's holder check,
