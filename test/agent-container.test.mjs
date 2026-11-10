@@ -83,6 +83,25 @@ test("a present setup-token retains metadata and access checks without reading c
   }
 });
 
+test("local token checks accept projected fixture ownership and modes", async () => {
+  const { fs, dir, token } = loginFixture();
+  Object.assign(dir, { uid: 20001, mode: 0o770 });
+  Object.assign(token, { uid: 20001, mode: 0o640 });
+  // The read-only bind still denies writes regardless of projected ownership.
+  const result = await checkToken(fs, false);
+  assert.equal(result.present, true);
+  assert.deepEqual(result.evidence, [
+    "PASS login directory: uid=20001 gid=20001 mode=770",
+    "PASS setup-token file: readable, not writable; uid=20001 gid=20001 mode=640; contents not read",
+  ]);
+});
+
+test("local token checks still require a login directory", async () => {
+  const { fs, dir } = loginFixture();
+  dir.isDirectory = () => false;
+  await assert.rejects(checkToken(fs, false), /login mount must be a directory/);
+});
+
 test("only ENOENT makes a setup-token optional", async () => {
   const { fs } = loginFixture();
   for (const code of ["EACCES", "EIO", "ENOTDIR"]) {

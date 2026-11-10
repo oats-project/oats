@@ -236,7 +236,7 @@ function main(args, env) {
     assert.ok(r.status === 0 && r.stdout.trim() === "OATS_CONTAINER_AUTH_OK", "claude -p did not return the expected response; raw output withheld");
     report(`PASS claude -p for ${home}: OATS_CONTAINER_AUTH_OK (scratch cwd; user settings only; token read only inside the process)`);
     report(`PASS ${program(credentialScan, [writableRoots])}`);
-  } else report(`NOT RUN claude -p: ${token.present ? "requires --claude INSTANCE_HOME and an operator-provisioned setup-token" : "setup-token file absent"}`);
+  } else report(`NOT RUN claude -p: ${token.present ? "requires --claude INSTANCE_HOME" : "setup-token file absent"}`);
   report("NOT RUN platform network/bypass, admitted-seat spawn, viewer, package sync, mail/chat and governance checks: collect their own live evidence; this is not a full section 12 receipt");
 }
 
