@@ -3045,13 +3045,40 @@ function failedSpawnBranchLine(r, items, { local = false, host } = {}) {
   return r.retainedHome ? `  branch: the "branch" recorded in ${join(r.retainedHome, "instance.json")}${host ? ` on ${host}` : ""}` : null;
 }
 
+const RETIRE_USAGE = "usage: oats retire <instance> [--plan] [--plan-revision <rev> --idempotency-key <key>] [--home <path>] [--dir <d>] [--server <id>] [--self] [--discard-worktree] [--keep-dir] [--force] [--json]";
+/** The flags `oats retire` reads: the ones that take a value, and its switches. */
+const RETIRE_VALUE_FLAGS = new Set(["dir", "home", "idempotency-key", "plan-revision", "server"]);
+const RETIRE_SWITCHES = new Set(["discard-worktree", "force", "json", "keep-dir", "plan", "self"]);
+/** Why `argv` (after `retire`) is not a retire, or undefined: a flag retire does not read (`--keep-dirs`
+ *  for `--keep-dir`) or an argument after the instance is refused before anything is read, stopped or
+ *  sent, never ignored. A value flag consumes its value exactly as flag() reads it; a missing value is
+ *  the flag's own check. `--delete-branch` keeps its own refusal (RETIRE_DELETE_BRANCH_REFUSED). */
+function retireArgvProblem(argv) {
+  let instance;
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith("-")) {
+      const name = a.startsWith("--") ? a.slice(2) : undefined;
+      if (RETIRE_SWITCHES.has(name)) continue;
+      if (!RETIRE_VALUE_FLAGS.has(name)) return { message: `oats retire: unknown flag ${a}\n${RETIRE_USAGE}`, details: { flag: a } };
+      if (argv[i + 1] !== undefined && !argv[i + 1].startsWith("--")) i++;
+      continue;
+    }
+    if (instance !== undefined) return { message: `oats retire: unexpected argument ${JSON.stringify(a)} after the instance ${JSON.stringify(instance)}: retire takes one instance\n${RETIRE_USAGE}`, details: { argument: a } };
+    instance = a;
+  }
+  return undefined;
+}
+
 /** Whether this process's retire (retireCmd) has returned from the kernel: set once, read by the dispatch. */
 let retireReturned = false;
 function retireCmd() {
   const name = args[1];
   // Refused before anything else: before --plan, a replay, a plan revision or a recorded child is stopped.
   if (args.includes("--delete-branch")) return args.includes("--json") ? jsonFail("E_BAD_ARGS", RETIRE_DELETE_BRANCH_REFUSED) : die(RETIRE_DELETE_BRANCH_REFUSED);
-  if (!name || name.startsWith("--")) die("usage: oats retire <instance> [--plan] [--plan-revision <rev> --idempotency-key <key>] [--home <path>] [--self] [--discard-worktree] [--keep-dir] [--force] [--json]");
+  if (!name || name.startsWith("--")) die(RETIRE_USAGE);
+  const problem = retireArgvProblem(args.slice(1));
+  if (problem) return cmdFail("E_BAD_ARGS", problem.message, problem.details);
   let homeFlag = flag("home");
   if (homeFlag === true) die("--home needs the instance home path");
   if (args.includes("--plan")) {
@@ -4663,6 +4690,8 @@ async function serverRouteCmd() {
   }
   // Refused here too, before anything is sent: a host on an older OATS would still delete the branch.
   if (cmd === "retire" && rest.includes("--delete-branch")) bail("E_BAD_ARGS", RETIRE_DELETE_BRANCH_REFUSED);
+  // As is a flag retire does not read, or an argument after the instance: a host on an older OATS would ignore it and retire.
+  if (cmd === "retire") { const problem = retireArgvProblem(args.slice(1)); if (problem) bail("E_BAD_ARGS", problem.message, problem.details); }
   let routed;
   try { routed = routeCommand(id, cmd, rest); }
   catch (e) { bail(e.code || "E_SSH", e.message, e.details); }
