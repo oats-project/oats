@@ -693,8 +693,8 @@ oats doctor                    # this deployment's files and the lock
 ```
 
 Environment: `OATS_REMOTE_CACHE` relocates the fetch cache (which also holds
-the bounded parsed-read cache and the observations `--max-age` reuses; all of
-it is safe to delete); `OATS_PACKAGE_CATALOG` names an alternative package
+the bounded parsed-read cache, the observations `--max-age` reuses and the
+records of verified package trees; all of it is safe to delete); `OATS_PACKAGE_CATALOG` names an alternative package
 catalog file. The read verbs (`status`, `workspace status`, `souls`,
 `capabilities`, `inspect`, the read forms of `teams` and `soul teams`, and
 `spawn --preview`), and a spawn apply bound by `--expect-decision`, take

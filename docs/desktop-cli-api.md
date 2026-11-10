@@ -3120,6 +3120,7 @@ kernel stage raised as well.
 | `E_NOT_A_MEMBER`, `E_MEMBERSHIP_UNCONFIRMED` | | the soul's repository is not a confirmed member |
 | `E_CAPABILITY_MISSING`, `E_CAPABILITY_PRIVATE`, `E_CAPABILITY_INCOMPATIBLE`, `E_COMPATIBILITY` | | a capability cannot be resolved |
 | `E_PACKAGE_MISSING`, `E_PACKAGE_INTEGRITY`, `E_LOCK_SCHEMA` | | the lock does not provide it (standalone: `{…, standalone: true, reason: "no-catalog", catalog}`) |
+| `E_PACKAGE_INTEGRITY` | `{package, version, commit, expected, actual}` | a composed package's tree at the locked commit does not digest to the lock's `integrity` (`expected`); `actual` is the digest read. Preview and apply, before anything is written ([The integrity check at spawn](packages.md#the-integrity-check-at-spawn)) |
 | `E_SLOT_CONFLICT`, `E_SKILL_DUPLICATE` | | the composition conflicts |
 | `E_WORKSPACE_SCHEMA` | `{path, key, reason}` | a removed key or invalid payload |
 | `E_CLONE_MISSING`, `E_CLONE_MISMATCH` | | the member's clone is missing or wrong |
