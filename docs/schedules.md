@@ -120,8 +120,13 @@ a command's record names no instance) and changes nothing. Once you have
 checked `oats status`, `reconcile <id> --clear` releases the slot, resolves a
 retained launch attempt as cleared (as for a defined job) and removes the
 job's state: `{schedule: null, reconciled: "cleared", cleared: [...]}`, which
-lists `"slot"`, `"attempt"` and `"state"` as each was there. `oats doctor`
-lists the slot as a `schedule-slot-orphaned` problem.
+lists `"slot"`, `"attempt"` and `"state"` as each was there. A schedule that is
+gone with retained state and no slot is reconciled the same way: reconcile
+answers that it has retained state (and a launch attempt with no recorded
+result, when there is one) and points to `--clear`, which answers `cleared:
+["attempt", "state"]`. `oats doctor` lists the slot as a
+`schedule-slot-orphaned` problem, and the `schedule-unresolved` row of a
+retained attempt names the same `reconcile <id> --clear`.
 
 A workspace schedule that is absent from the snapshot but cannot be shown gone
 stays refused (`E_SCHEDULE_UNKNOWN`), and doctor lists its slot as
@@ -918,8 +923,13 @@ item:
 `message` names the job and the slot's path; `remedy` is `check oats schedule
 show <id>; once its last run is not running, run oats schedule reconcile <id>
 --clear to release the slot`, with `--dir <scope>` on both commands for
-another deployment. Doctor reads the slot as the tick does and changes
-nothing. A readable slot of a defined job, and no slot, are not listed.
+another deployment. A workspace schedule that this host does not run
+(disabled, untrusted, placed on another host, as the saved snapshot and
+`oats-local.yaml` say offline), or that it cannot tell it runs, is refused by
+reconcile here: its message says why, and its remedy is `once oats status
+shows no run of schedule <id> here, remove the slot by hand: rm -r --
+'<path>'`. No doctor row names a `--clear` that reconcile would refuse.
+Doctor reads the slot as the tick does and changes nothing. A readable slot of a defined job, and no slot, are not listed.
 
 A slot whose schedule is gone, readable or not, is listed as a
 `schedule-slot-orphaned` problem instead, of the same shape (`! schedule-slot-orphaned:

@@ -46,8 +46,11 @@
   answered `E_SCHEDULE_UNKNOWN`. The slot still counts until it is released,
   since its run may still be going; `oats schedule reconcile <id>` now
   answers what it found, and `reconcile <id> --clear` releases it once you
-  have checked, with the job's retained attempt and state. A workspace
+  have checked, with the job's retained attempt and state; a gone
+  schedule's retained state with no slot is cleared the same way. A workspace
   schedule is gone only when the saved snapshot shows it: run `oats
   automations refresh` first if the snapshot is stale. One that is disabled,
-  untrusted or placed elsewhere is refused as before
-  ([Schedules](../schedules.md#files)).
+  untrusted or placed elsewhere is refused as before, and `oats doctor`
+  names the step that acts for its unreadable slot: remove it by hand once
+  `oats status` shows no run of it here, never a `reconcile --clear` that
+  refuses it ([Schedules](../schedules.md#files)).

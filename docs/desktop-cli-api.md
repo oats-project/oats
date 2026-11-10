@@ -1609,7 +1609,10 @@ the deployment and the others the host ticks, as one `schedule-slot-unreadable`
 problem in `problems[]`, `{code, severity: "warning", scope, id, message,
 remedy}` (text: `! schedule-slot-unreadable: <message>`, the remedy on the
 next line). The remedy is to check `oats schedule show <id>`, then run `oats
-schedule reconcile <id> --clear` ([Schedules](schedules.md#files)). A slot
+schedule reconcile <id> --clear` ([Schedules](schedules.md#files)); for a
+workspace schedule this host does not run, or cannot tell it runs, the
+message says why and the remedy is to remove the slot by hand, at the path it
+names, once `oats status` shows no run of it here. A slot
 whose schedule is gone (a local one not in `oats-schedules.json`, a workspace
 one not in the saved snapshot, whose time it names), readable or not, is one
 `schedule-slot-orphaned` problem of the same shape, naming the run and the
@@ -7248,7 +7251,9 @@ oats schedule update <id> --description=<text> [--dir <d>] --json
   "unknown", remedy}` naming the run its record names, and `reconcile <id>
   --clear` releases it, resolves a retained attempt as cleared and removes
   the job's state: `{schedule: null, reconciled: "cleared", cleared}`,
-  `cleared` listing `"slot"`, `"attempt"` and `"state"` as each was there.
+  `cleared` listing `"slot"`, `"attempt"` and `"state"` as each was there;
+  a gone schedule with retained state and no slot is reconciled the same
+  way (`cleared: ["attempt", "state"]`).
   A workspace schedule that is disabled, untrusted or placed elsewhere is
   not gone (`E_AUTOMATION_NOT_HERE`). `oats doctor --json` lists the slot as
   a `schedule-slot-orphaned` problem of the same shape
