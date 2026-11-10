@@ -8,6 +8,8 @@ function required(env, name) {
   return env[name];
 }
 
+const ids = (env) => ({ uid: env.AGENT_UID || "20001", gid: env.AGENT_GID || "20001" });
+
 // Compare only reviewed settings, never dump Config.Env or credential contents.
 export function inspectAgent(info, env) {
   const evidence = [];
@@ -15,7 +17,7 @@ export function inspectAgent(info, env) {
     assert.deepEqual(actual, expected, name);
     evidence.push(`${name}: ${JSON.stringify(actual)}`);
   };
-  const uid = env.AGENT_UID || "20001", gid = env.AGENT_GID || "20001";
+  const { uid, gid } = ids(env);
   assert.match(uid, /^[1-9]\d*$/, "non-root AGENT_UID");
   assert.match(gid, /^[1-9]\d*$/, "non-root AGENT_GID");
   equal("running", info.State.Running, true);
@@ -137,7 +139,7 @@ function main(args, env) {
   };
   const info = JSON.parse(docker(["inspect", container]))[0];
   for (const line of inspectAgent(info, env)) report(`PASS ${line}`);
-  const uid = env.AGENT_UID || "20001", gid = env.AGENT_GID || "20001";
+  const { uid, gid } = ids(env);
   const program = (fn, params, root = false) => docker(["exec", "-i", ...(root ? ["--user", "0:0"] : []), container, "node"], `(${fn.toString()})(${params.map((p) => JSON.stringify(p)).join(",")});`);
   const arch = docker(["exec", container, "node", "-p", "process.arch"]);
   if (label !== "local") assert.equal(arch, "x64", "target evidence requires amd64");
