@@ -135,15 +135,12 @@ function refusedHere(path, retryMs = 0) {
 
 test("an acquirer runs fn holding a record that names it, returns what fn returns, and leaves nothing at the path or beside it", (t) => {
   const f = fixture(t);
-  const signals = () => ["SIGINT", "SIGTERM"].map((s) => process.listenerCount(s));
-  const before = signals();
   const value = withDirLock(f.path, "a test", () => {
     assert.ok(lstatSync(f.path).isFile(), "the lock is one file");
     const record = JSON.parse(readFileSync(f.path, "utf8"));
     assert.deepEqual([record.pid, record.processStart, record.what], [process.pid, processStartToken(process.pid), "a test"]);
     assert.match(record.nonce, /^[0-9a-f]{32}$/);
     assert.deepEqual(f.entries(), ["registry.lock"], "nothing else is beside it while it is held");
-    assert.deepEqual(signals(), before, "holding the lock installs no signal handler");
     return { answer: 42 };
   }, { busy });
   assert.deepEqual(value, { answer: 42 });
@@ -152,6 +149,53 @@ test("an acquirer runs fn holding a record that names it, returns what fn return
   const deep = join(f.root, "a", "b", "deep.lock");
   assert.equal(withDirLock(deep, "a test", () => existsSync(deep), { busy }), true);
   assert.equal(existsSync(deep), false);
+});
+
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  test(`${signal} inside a locked section waits for it: fn completes, the lock is released, and then the signal ends the process as it would have`, async (t) => {
+    const f = fixture(t);
+    const inside = join(f.state, "inside"), signalled = join(f.state, "signalled"), finished = join(f.state, "finished"), after = join(f.state, "after"), late = join(f.state, "late");
+    const c = child(t, `
+import fs from 'node:fs';
+const { withDirLock } = await import(${JSON.stringify(lockUrl)});
+withDirLock(${JSON.stringify(f.path)}, 'a section', () => {
+  fs.writeFileSync(${JSON.stringify(inside)}, '');
+  const cell = new Int32Array(new SharedArrayBuffer(4)), end = Date.now() + 12000;
+  while (!fs.existsSync(${JSON.stringify(signalled)}) && Date.now() < end) Atomics.wait(cell, 0, 0, 5);
+  // The signal has been sent: the rest of the section still runs.
+  Atomics.wait(cell, 0, 0, 200);
+  fs.writeFileSync(${JSON.stringify(finished)}, fs.readFileSync(${JSON.stringify(f.path)}, 'utf8'));
+}, { busy: (why) => Object.assign(new Error(why), { code: 'E_TEST_BUSY' }) });
+fs.writeFileSync(${JSON.stringify(after)}, String(fs.existsSync(${JSON.stringify(f.path)})));
+// What only a process the signal did not end would do.
+setTimeout(() => fs.writeFileSync(${JSON.stringify(late)}, ''), 3000);
+`);
+    await until(() => existsSync(inside), "the process to be inside fn");
+    c.proc.kill(signal);
+    writeFileSync(signalled, "");
+    const ended = await c.closed;
+    assert.equal(JSON.parse(readFileSync(finished, "utf8")).pid, c.proc.pid, "fn ran to its end, holding the lock");
+    assert.equal(readFileSync(after, "utf8"), "false", "the lock was released before anything else ran");
+    assert.deepEqual(ended, { code: null, signal }, "the process ended by the signal, with its default action");
+    assert.equal(existsSync(late), false);
+    assert.deepEqual(f.entries(), [], "nothing is left at the path or beside it");
+    assert.equal(withDirLock(f.path, "a test", () => "free", { busy }), "free");
+  });
+}
+
+test("the lock listens for a signal only around a section: with none arrived, its listeners are gone once the event loop turns, and a later signal is the process's own", async (t) => {
+  const f = fixture(t);
+  const c = child(t, `
+const { withDirLock } = await import(${JSON.stringify(lockUrl)});
+const count = () => ['SIGINT', 'SIGTERM'].map((s) => process.listenerCount(s));
+const before = count();
+const busy = (why) => Object.assign(new Error(why), { code: 'E_TEST_BUSY' });
+let during;
+for (let n = 0; n < 3; n++) withDirLock(${JSON.stringify(f.path)}, 'a section', () => { during = count(); }, { busy });
+await new Promise((resolve) => setTimeout(resolve, 50));
+console.log(JSON.stringify({ before, during, after: count() }));
+`);
+  assert.deepEqual(await c.result(), { before: [0, 0], during: [1, 1], after: [0, 0] });
 });
 
 test("an error fn throws propagates as it is, and the lock is released", (t) => {
