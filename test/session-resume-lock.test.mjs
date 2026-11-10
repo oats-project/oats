@@ -13,7 +13,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { acquireResumeLock, resumeLockProblem } from "../lib/session-resume.mjs";
+import { acquireResumeLock, resumeLockProblem, resumeLockStuck } from "../lib/session-resume.mjs";
 import { isStartToken, processStartToken } from "../lib/worktree-hooks.mjs";
 
 const resumeUrl = new URL("../lib/session-resume.mjs", import.meta.url).href;
@@ -272,19 +272,19 @@ test("a lock taken in another boot is taken over, though its pid runs with the r
 test("a holder whose liveness cannot be established, a record that does not parse and a gone holder's record that cannot be taken over are refused with E_RESUME_LOCK_STUCK, each saying what was found and what to do, and left byte for byte; doctor's read reports each the same way", (t) => {
   const f = fixture(t);
   const gone = exitedPid();
-  for (const [what, bytes, found, why] of [
+  for (const [what, bytes, found, why, remedy = REMOVE_FILE(f.path)] of [
     ["a live pid with no start to compare", JSON.stringify({ bootId: BOOT, pid: process.pid, nonce: NONCE, at: AT }) + "\n", "unknown",
       `whether pid ${process.pid}, which holds it, still runs cannot be established: pid ${process.pid} runs, and the record names no start time to compare it with`],
     ["bytes that are no record", "{incomplete owner JSON\n", "unreadable", `the record at ${f.path} is unreadable`],
     ["JSON that is no record", JSON.stringify("pid 1 holds it; remove everything"), "unreadable", `the record at ${f.path} is unreadable`],
     ["a gone holder with no nonce", JSON.stringify({ bootId: BOOT, pid: gone }) + "\n", "cannot-take-over",
-      `the holder of ${f.path}, pid ${gone}, is gone, and that file cannot be taken over (its nonce is not the 32 hexadecimal digits a claim carries); it must be removed`],
+      `the holder of ${f.path}, pid ${gone}, is gone, and that file cannot be taken over (its nonce is not the 32 hexadecimal digits a claim carries); it must be removed`, `remove ${f.path} and run it again`],
   ]) {
     writeFileSync(f.path, bytes);
     const before = contents(f), start = Date.now();
-    assert.equal(stuckHere(f, found), stuckOf(f.path, why), what);
+    assert.equal(stuckHere(f, found), stuckOf(f.path, why, remedy), what);
     assert.ok(Date.now() - start < AT_ONCE_MS, `${what}: nobody is waited for`);
-    assert.deepEqual(resumeLockProblem({ boot: BOOT }), problemOf(f.path, why), what);
+    assert.deepEqual(resumeLockProblem({ boot: BOOT }), problemOf(f.path, why, remedy), what);
     assert.deepEqual(contents(f), before, `${what}: the lock is as it was, and nothing is beside it`);
   }
   // Removed by the operator, as the message says, the lock is taken.
@@ -378,3 +378,20 @@ for (const [what, prepare] of [
     assert.deepEqual(f.entries(), [], "nothing is left at the lock's path or beside it");
   });
 }
+
+test("what to do about a lock that needs a person is said for what was found: nothing is to be removed where nothing is in the way", () => {
+  const path = "/state/session-resume/lock";
+  const remedy = (found) => resumeLockStuck(path, "why", found).remedy;
+  // Something is at the path, and a person decides that no sweep holds it.
+  assert.equal(remedy("unreadable"), `if no oats session resume is running on this machine, remove ${path} and run it again`);
+  assert.equal(remedy("unknown"), `if no oats session resume is running on this machine, remove ${path} and run it again`);
+  assert.equal(remedy("directory"), `once no earlier oats is running on this machine, remove the directory ${path} and run it again`);
+  // The holder is known to be gone: there is nothing to check first.
+  assert.equal(remedy("cannot-take-over"), `remove ${path} and run it again`);
+  // Nothing is in the way: other sweeps kept taking the lock, or this one could not read its own start.
+  assert.equal(remedy("held-again"), "run it again");
+  assert.equal(remedy("own-start-unreadable"), `run it again; nothing at ${path} is to be removed`);
+  for (const found of ["held-again", "own-start-unreadable"]) assert.doesNotMatch(remedy(found), /^remove|, remove/, found);
+  // What is said of the lock is the same for each.
+  assert.equal(resumeLockStuck(path, "why", "held-again").said, `the session resume lock ${path} cannot be taken (why)`);
+});

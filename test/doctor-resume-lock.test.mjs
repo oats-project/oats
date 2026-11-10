@@ -53,15 +53,15 @@ test("doctor: a free lock, a sweep that runs and a lock a gone sweep left are no
 test("doctor reports a lock that needs a person as one resume-lock-stuck problem, naming the path, what was found and what to do; it is read-only", (t) => {
   const f = fixture(t);
   const gone = exitedPid();
-  for (const [what, bytes, why] of [
+  for (const [what, bytes, why, remedy = removeFile(f.lock)] of [
     ["a record that does not parse", "{incomplete owner JSON\n", `the record at ${f.lock} is unreadable`],
     ["a live pid with no start to compare", JSON.stringify({ bootId: bootId(), pid: process.pid, nonce: NONCE, at: AT }) + "\n",
       `whether pid ${process.pid}, which holds it, still runs cannot be established: pid ${process.pid} runs, and the record names no start time to compare it with`],
     ["a gone holder with no nonce", JSON.stringify({ pid: gone }) + "\n",
-      `the holder of ${f.lock}, pid ${gone}, is gone, and that file cannot be taken over (its nonce is not the 32 hexadecimal digits a claim carries); it must be removed`],
+      `the holder of ${f.lock}, pid ${gone}, is gone, and that file cannot be taken over (its nonce is not the 32 hexadecimal digits a claim carries); it must be removed`, `remove ${f.lock} and run it again`],
   ]) {
     writeFileSync(f.lock, bytes);
-    const want = problem(f.lock, why);
+    const want = problem(f.lock, why, remedy);
     assert.deepEqual(f.problems(), [want], what);
     assert.ok(f.doctor(false).includes(`\n! resume-lock-stuck: ${want.message}\n  ${want.remedy}\n`), what);
     assert.equal(readFileSync(f.lock, "utf8"), bytes, `${what}: the lock is as it was`);
