@@ -92,3 +92,30 @@ test("oats doctor lists no unreadable slot for a readable slot or none", async (
   await fx.inEnv(() => assert.equal(S.acquireJobLock(fx.dep, "broken", { scheduledFor: "2026-10-03T10:00:00.000Z" }), true));
   assert.equal((JSON.parse(cli("doctor").stdout).problems ?? []).some((p) => p.code === "schedule-slot-unreadable"), false, "a readable slot");
 });
+
+for (const [state, makeSlot] of Object.entries(SLOT_STATES)) {
+  test(`an unreadable slot of a schedule that is not defined (${state}): reconcile answers what it found and leaves it, --clear releases it, and doctor names that command`, async (t) => {
+    const { fx, cli } = await deployment(t);
+    const slot = join(S.stateDir(fx.dep), "locks", "gone");
+    makeSlot(slot);
+    const before = entries(slot);
+    const said = `the slot ${slot} of schedule gone, which is not defined, has no readable record`;
+    const remedy = "once no run of schedule gone is running (oats status lists the instances it started), run oats schedule reconcile gone --clear to release the slot";
+    const problems = JSON.parse(cli("doctor").stdout).problems ?? [];
+    assert.deepEqual(problems.filter((p) => p.code === "schedule-slot-unreadable"), [{
+      code: "schedule-slot-unreadable", severity: "warning", scope: fx.dep, id: "gone",
+      message: `schedule gone, which is not defined: its slot ${slot} has no readable record, and the slot counts against maxConcurrent`,
+      remedy,
+    }]);
+    const asked = cli("schedule", "reconcile", "gone").json();
+    assert.equal(asked.ok, true, JSON.stringify(asked));
+    assert.deepEqual(asked.result, { schedule: null, reconciled: "unknown", remedy: `${said}; ${remedy}` });
+    assert.deepEqual(entries(slot), before, "reconcile without --clear leaves the slot as it is");
+    const cleared = cli("schedule", "reconcile", "gone", "--clear").json();
+    assert.equal(cleared.ok, true, JSON.stringify(cleared));
+    assert.deepEqual(cleared.result, { schedule: null, reconciled: "cleared" });
+    assert.deepEqual(readdirSync(join(S.stateDir(fx.dep), "locks")), [], "the slot is released");
+    const again = cli("schedule", "reconcile", "gone").json();
+    assert.equal(again.error?.code, "E_SCHEDULE_UNKNOWN", "with no slot, a schedule that is not defined is unknown, as before");
+  });
+}
