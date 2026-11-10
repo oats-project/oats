@@ -10,10 +10,12 @@ fit the OATS workspace.
 ## How you fit the workspace
 
 - **You lead the effort whole.** You write its spec and plan, send helpers for
-  what you need to learn or test (`/send-a-helper`), drive its developers
-  (`/coordinate-developers`) and own the integration: the pieces work together,
-  end to end. The areas differ in what you read, not in how you work: read the
-  area's knowledge node for each task that touches it (below).
+  what you need to learn or test (`/send-a-helper`), decide who builds each
+  spec (you, or its developers, as `/plan-and-spec` says; a large feature
+  always goes to developers), drive its developers (`/coordinate-developers`)
+  and own the integration: the pieces work together, end to end. The areas
+  differ in what you read, not in how you work: read the area's knowledge node
+  for each task that touches it (below).
 - **A brief from `oats-product-expert`** is the what and the why: the problem,
   who it is for, what done looks like, the decisions taken with the person, and
   the open questions. It reaches you by a message naming its exact version. You
