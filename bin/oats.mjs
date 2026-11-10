@@ -3263,7 +3263,8 @@ async function hostCmd() {
       if (!plan.sweep.rows.length) console.log("the sweep would find nothing to resume");
       return;
     }
-    await hostRun();
+    const answer = await hostRun({ kernel: { execPath: process.execPath, bin: CLI_BIN }, ...(grace !== undefined ? { stopGraceMs: Number(grace) * 1000 } : {}) });
+    if (JSON_MODE) jsonOk(answer);
   } catch (e) { lifecycleFail(e, "E_HOST_RUN_FAILED", e?.details); }
 }
 
