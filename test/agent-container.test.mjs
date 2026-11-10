@@ -1,0 +1,102 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import { parse } from "yaml";
+
+const read = (name) => readFileSync(new URL(`../container/agent/${name}`, import.meta.url), "utf8");
+
+test("agent image pins its base and CLI dependency closure", () => {
+  const dockerfile = read("Dockerfile");
+  assert.match(dockerfile, /^FROM node:22-bookworm-slim@sha256:[a-f0-9]{64}$/m);
+  assert.match(dockerfile, /npm ci --ignore-scripts/);
+  assert.match(dockerfile, /rm -rf \/var\/lib\/apt\/lists\/\* \/var\/cache\/apt/);
+  assert.match(dockerfile, /RUN --network=none npm rebuild @awebai\/aw --ignore-scripts=false/);
+  assert.match(dockerfile, /^USER agent$/m);
+  assert.equal([...dockerfile.matchAll(/^WORKDIR (.+)$/gm)].at(-1)[1], "/state", "Docker must not create a root-owned child in the state mount before entrypoint");
+  assert.match(dockerfile, /^ENV HOME=\/state\/home/m);
+  assert.match(dockerfile, /^ENTRYPOINT \["\/usr\/bin\/tini", "-g", "--", "\/usr\/local\/bin\/agent-entrypoint"\]$/m);
+  const manifest = JSON.parse(read("package.json"));
+  const lock = JSON.parse(read("package-lock.json"));
+  assert.deepEqual(Object.keys(manifest.dependencies).sort(), ["@anthropic-ai/claude-code", "@awebai/aw", "@awebai/oats"]);
+  for (const [name, version] of Object.entries(manifest.dependencies)) {
+    assert.match(version, /^\d+\.\d+\.\d+$/);
+    assert.equal(lock.packages[`node_modules/${name}`].version, version);
+  }
+  for (const [name, pkg] of Object.entries(lock.packages)) {
+    if (!name) continue;
+    assert.match(pkg.integrity, /^sha512-/);
+    assert.match(pkg.resolved, /^https:\/\/registry\.npmjs\.org\//);
+  }
+});
+
+test("agent Compose service retains the isolation contract", () => {
+  const compose = parse(read("compose.agent.yaml"));
+  assert.deepEqual(Object.keys(compose.services), ["agent"]);
+  const agent = compose.services.agent;
+  assert.equal(agent.container_name, "oats-agent-${TEAM:?Set TEAM}");
+  assert.equal(agent.user, "${AGENT_UID:-20001}:${AGENT_GID:-20001}");
+  assert.deepEqual(agent.cap_drop, ["ALL"]);
+  assert.deepEqual(agent.security_opt, ["no-new-privileges:true"]);
+  assert.equal(agent.read_only, true);
+  assert.equal(agent.privileged, false);
+  assert.deepEqual(agent.tmpfs, ["/tmp:rw,nosuid,nodev,mode=1777"]);
+  assert.equal(agent.pids_limit, "${AGENT_PIDS:?Set AGENT_PIDS}");
+  assert.equal(agent.mem_limit, "${AGENT_MEMORY:?Set AGENT_MEMORY}");
+  assert.equal(agent.cpus, "${AGENT_CPUS:?Set AGENT_CPUS}");
+  assert.equal(agent.restart, "unless-stopped");
+  assert.equal(agent.dns, undefined);
+  assert.equal(agent.ports, undefined);
+  assert.equal(agent.extra_hosts, undefined);
+  assert.deepEqual(agent.networks, { agents: { ipv4_address: "${AGENT_IP:?Set AGENT_IP}" } });
+  assert.deepEqual(compose.networks, { agents: { external: true, name: "${AGENTS_NETWORK:?Set AGENTS_NETWORK}" } });
+  assert.deepEqual(agent.volumes.map(({ source, target, read_only, type, bind }) => ({ source, target, read_only: !!read_only, type, bind })), [
+    ["${TEAM_STATE_DIR:?Set TEAM_STATE_DIR}", "/state", false],
+    ["${TEAM_LOGIN_DIR:?Set TEAM_LOGIN_DIR}", "/etc/agent-login", true],
+    ["${AUTHORIZED_KEYS_FILE:?Set AUTHORIZED_KEYS_FILE}", "/etc/agent-ssh/authorized_keys", true],
+    ["${RESOLV_CONF_FILE:?Set RESOLV_CONF_FILE}", "/etc/resolv.conf", true],
+  ].map(([source, target, read_only]) => ({ source, target, read_only, type: "bind", bind: { create_host_path: false } })));
+  const work = parse(read("compose.agent.work.yaml"));
+  assert.deepEqual(work.services.agent.volumes, [{ type: "bind", source: "${TEAM_WORK_DIR:?Set TEAM_WORK_DIR}", target: "/work", bind: { create_host_path: false } }]);
+});
+
+test("SSH accepts only agent public keys with forwarding disabled", () => {
+  const config = Object.fromEntries(read("sshd_config").split("\n").filter((s) => s && !s.startsWith("#")).map((s) => { const [key, ...value] = s.split(/\s+/); return [key, value.join(" ")]; }));
+  for (const [key, value] of Object.entries({ Port: "2222", AllowUsers: "agent", AuthenticationMethods: "publickey", PasswordAuthentication: "no", KbdInteractiveAuthentication: "no", PermitRootLogin: "no", UsePAM: "no", DisableForwarding: "yes", StrictModes: "yes", AuthorizedKeysFile: "/etc/agent-ssh/authorized_keys", HostKey: "/state/ssh/ssh_host_ed25519_key", PidFile: "/tmp/agent-sshd.pid" })) assert.equal(config[key], value, key);
+});
+
+test("acceptance refuses drift in the admitted container settings", async () => {
+  const { inspectAgent } = await import("../container/agent/accept.mjs");
+  const env = { AGENT_UID: "20001", AGENT_GID: "20001", TEAM_STATE_DIR: "/srv/team/state", TEAM_LOGIN_DIR: "/srv/team/login", AUTHORIZED_KEYS_FILE: "/srv/team/authorized_keys", RESOLV_CONF_FILE: "/srv/team/resolv.conf", AGENT_PIDS: "512", AGENT_MEMORY: "3g", AGENT_CPUS: "2" };
+  const inspected = {
+    State: { Running: true },
+    Config: { User: "20001:20001" },
+    HostConfig: { CapDrop: ["ALL"], CapAdd: null, SecurityOpt: ["no-new-privileges:true"], ReadonlyRootfs: true, Privileged: false, PidMode: "", IpcMode: "private", NetworkMode: "team-agents", PidsLimit: 512, Memory: 3221225472, NanoCpus: 2000000000, Tmpfs: { "/tmp": "rw,nosuid,nodev,mode=1777" }, Binds: [], Mounts: [], Devices: [], DeviceRequests: null, RestartPolicy: { Name: "unless-stopped" } },
+    Mounts: [
+      { Source: "/srv/team/state", Destination: "/state", Type: "bind", RW: true },
+      { Source: "/srv/team/login", Destination: "/etc/agent-login", Type: "bind", RW: false },
+      { Source: "/srv/team/authorized_keys", Destination: "/etc/agent-ssh/authorized_keys", Type: "bind", RW: false },
+      { Source: "/srv/team/resolv.conf", Destination: "/etc/resolv.conf", Type: "bind", RW: false },
+    ],
+  };
+  inspected.HostConfig.Mounts = inspected.Mounts.map((m) => ({ Type: "bind", Source: m.Source, Target: m.Destination, ReadOnly: !m.RW, BindOptions: {} }));
+  assert.ok(inspectAgent(inspected, env).length >= 8);
+  for (const mutate of [
+    (v) => { v.Config.User = "0"; },
+    (v) => { v.Config.User = "20001"; },
+    (v) => { v.HostConfig.CapAdd = ["SYS_ADMIN"]; },
+    (v) => { v.HostConfig.SecurityOpt = ["seccomp=unconfined", "no-new-privileges:true"]; },
+    (v) => { v.HostConfig.ReadonlyRootfs = false; },
+    (v) => { v.HostConfig.Privileged = true; },
+    (v) => { v.HostConfig.PidMode = "host"; },
+    (v) => { v.HostConfig.Memory = 0; },
+    (v) => { v.Mounts[1].RW = true; },
+    (v) => { v.Mounts[0].Source = "/home/operator"; },
+    (v) => { v.Mounts.push({ Source: "/var/run/docker.sock", Destination: "/var/run/docker.sock", RW: true, Type: "bind" }); },
+    (v) => { v.HostConfig.Tmpfs["/tmp"] = "rw"; },
+    (v) => { v.HostConfig.Mounts[0].BindOptions.CreateMountpoint = true; },
+  ]) {
+    const changed = structuredClone(inspected);
+    mutate(changed);
+    assert.throws(() => inspectAgent(changed, env));
+  }
+});
