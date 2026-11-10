@@ -41,7 +41,7 @@ The design is in the
 | --- | --- |
 | `<deployment>/oats-schedules.json` | This machine's local definitions, `{version: 1, jobs: {<id>: …}}`, local triggers included (`kind: "trigger"`). |
 | `<deployment>/.agents/automations/snapshot.json` | The workspace definitions discovered from the members. |
-| `<deployment>/.agents/schedules/` | Run state: `state.json` (last minute and recent runs per job), `triggers.json` (polls, pending events, fired keys) and one lock directory per running job. |
+| `<deployment>/.agents/schedules/` | Run state: `state.json` (last minute and recent runs per job), `triggers.json` (polls, pending events, fired keys) and one slot directory per running job, `locks/<id>/` with its record `owner.json`. |
 | `~/.oats/schedules/registry.json` | The deployments this host ticks, `maxConcurrent` (absent: default 5 running scheduled jobs) and `triggersMaxConcurrent` (absent: no host cap on trigger-spawned live instances). The two caps are separate. |
 
 One host lock, `~/.oats/schedules/host.lock`, serializes ticks, run-now,
@@ -70,6 +70,18 @@ you:
 A lock whose holder is gone and whose record cannot be taken over (a record
 without the identifier a takeover needs) is reported the same way, with the
 file that must be removed.
+
+**A job's slot is never there without its record.** The slot a running job
+holds against `maxConcurrent`, `.agents/schedules/locks/<id>/`, is no lock
+between processes: the host lock serializes everything that takes or
+releases it, and it stands for the job's run until that run's instance ends.
+Its record is written in `.agents/schedules/.slot-<id>/`, which is then
+renamed to the slot, and a release renames the slot back there before
+removing it. A command killed while it takes or releases a slot leaves the
+slot with its record or no slot, and at most that directory, which the next
+take or release of the slot removes. A slot directory without its record,
+which an earlier oats could leave, is held as it is and reads as
+`job lock custody is unreadable`.
 
 ## Kinds
 
