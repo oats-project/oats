@@ -1062,7 +1062,7 @@ function machineDeclares(name) {
 /** What a GUI or an operator sees of one configuration. Environment values
  *  never leave the file: a literal is answered as {redacted: true} (literals
  *  are non-secret by contract, but no value is shown anywhere) and a
- *  reference as {fromEnv: NAME}. An editor keeps a literal it cannot see with
+ *  reference as {fromEnv: NAME} or {fromFile: /path}. An editor keeps a literal it cannot see with
  *  `set --keep-env`. */
 function publicLaunchConfig(e, extra = {}) {
   const env = Object.fromEntries(Object.keys(e.env || {}).sort().map((n) => [n, typeof e.env[n] === "string" ? { redacted: true } : { ...e.env[n] }]));
@@ -1140,7 +1140,7 @@ function launchPreview(bail) {
   const { recipe } = plan;
   const command = renderLaunchRecipe(recipe, { home, instance, redact: true, trustHome: plan.trustHome });
   const d = describeLaunchCommand(command);
-  const environment = d.environment.map((e) => e.reference && recipe.env[e.name]?.fromEnv ? { name: e.name, fromEnv: recipe.env[e.name].fromEnv } : e);
+  const environment = d.environment.map((e) => e.reference && recipe.env[e.name] && typeof recipe.env[e.name] === "object" ? { name: e.name, ...recipe.env[e.name] } : e);
   jsonOk({ context, selected, ...(plan.warnings?.length ? { warnings: plan.warnings } : {}), selection: { source: plan.selectionSource, launchConfig: recipe.launchConfig, harness: sel.harness ?? null, model: sel.model ?? null, yolo: sel.yolo ?? null }, harness: plan.harness, model: recipe.model, modelSource: plan.modelSource, yolo: recipe.yolo ?? null, launchConfig: recipe.launchConfig, launchConfigSource: recipe.launchConfigSource, launchConfigDefault: recipe.launchConfigDefault === true, executable: { path: plan.executable.path, declared: plan.executable.declared ?? null, resolvedFrom: plan.executable.resolvedFrom }, argv: d.argv, environment, command, prompt: recipe.prompt, hooks: redactLaunchRecipe(recipe).hooks, preflight: plan.preflight, ok: plan.ok });
 }
 async function launchConfigCmd() {
@@ -1169,7 +1169,7 @@ async function launchConfigCmd() {
     if (JSON_MODE) { jsonOk({ context: dir, level, file, selected, configurations }); return; }
     if (!configurations.length) { console.log(`No launch configurations are declared${file ? ` in ${shortPath(file)}` : ` (no oats-local.yaml in reach of ${dir})`} or in ${shortPath(machineLaunchConfigsFile())}`); return; }
     for (const c of configurations) {
-      const env = Object.entries(c.env).map(([n, v]) => v.fromEnv ? `${n}=$${v.fromEnv}` : `${n}=<redacted>`).join(" ");
+      const env = Object.entries(c.env).map(([n, v]) => v.fromEnv ? `${n}=$${v.fromEnv}` : v.fromFile ? `${n}=<file:${v.fromFile}>` : `${n}=<redacted>`).join(" ");
       console.log(`${c.name}: ${c.harness}${c.default ? ` (this machine's ${c.harness} default)` : ""}${c.executable ? ` ${c.executable}` : ""}${c.args.length ? ` ${c.args.map((a) => JSON.stringify(a)).join(" ")}` : ""}${env ? ` [${env}]` : ""}${c.model ? ` model ${c.model}` : ""}${c.yolo !== null ? ` yolo ${c.yolo}` : ""} (from ${shortPath(launchConfigFile(c.source))})${c.shadows.length ? ` (replaces ${c.shadows.map(shortPath).join(", ")}'s)` : ""}`);
     }
     return;

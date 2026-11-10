@@ -40,6 +40,9 @@ test("fromFile validates an absolute path and survives launch-config set/list", 
   r = cli(["launch-config", "list", "--dir", scope]);
   assert.deepEqual(JSON.parse(r.stdout).result.configurations[0].env.TOKEN, { fromFile: file });
   assert.match(readFileSync(join(scope, "oats-local.yaml"), "utf8"), /fromFile:/);
+  const listed = spawnSync(process.execPath, [CLI, "launch-config", "list", "--dir", scope], { encoding: "utf8", env: { ...process.env, OATS_HOME_DIR: join(base, "registry") } });
+  assert.equal(listed.status, 0, listed.stderr);
+  assert.ok(listed.stdout.includes(`TOKEN=<file:${file}>`), listed.stdout);
 });
 
 test("fromFile resolves again, strips one line ending, redacts and records only keyed digests", () => {
@@ -66,14 +69,17 @@ test("fromFile resolves again, strips one line ending, redacts and records only 
   assert.equal(next[0].value, "rotated\n", "strip exactly one trailing line ending");
   assert.deepEqual(checkStartEnv(home, "start-one", next.map((r) => r.source), Object.fromEntries(next.map((r) => [r.source, r.value]))), { changed: [refs[0].source] });
   writeFileSync(file, ""); assert.equal(launchEnvRefs(r, { SRC: "environment-fixture" })[0].value, "");
+  writeFileSync(file, "\uFEFFfixture-token\n");
+  assert.equal(launchEnvRefs(r, { SRC: "environment-fixture" })[0].value, "\uFEFFfixture-token", "a UTF-8 BOM is preserved as part of the verbatim value");
 });
 
 test("missing, unreadable, NUL and nonregular file references refuse with a provisioning remedy", () => {
   const file = join(base, "invalid-token");
-  for (const kind of ["missing", "directory", "nul", "unreadable", "fifo"]) {
+  for (const kind of ["missing", "directory", "nul", "invalid-utf8", "unreadable", "fifo"]) {
     rmSync(file, { recursive: true, force: true });
     if (kind === "directory") mkdirSync(file);
     if (kind === "nul") writeFileSync(file, "fixture\0hidden");
+    if (kind === "invalid-utf8") writeFileSync(file, Buffer.from([0x61, 0x62, 0xff, 0xfe, 0x63, 0x64, 0x0a]));
     if (kind === "unreadable") { writeFileSync(file, "fixture"); chmodSync(file, 0); }
     if (kind === "fifo") assert.equal(spawnSync("/usr/bin/mkfifo", [file]).status, 0);
     const r = recipe({ KEY: { fromFile: file } });
@@ -101,6 +107,9 @@ test("spawn and start deliver both reference types without values in any tmux ar
   t.after(() => { try { execFileSync(realTmux, ["-S", oatsSocket(), "kill-server"]); } catch { /* private fixture already exited */ } fx.cleanup(); });
   await assert.rejects(fx.spawn("dev", { name: "login-refused", work: "checkout", launch: true, launchConfig: "blocked" }), (e) => e.code === "E_CLAUDE_LOGIN_CREDENTIAL");
   const { home } = await fx.spawn("dev", { name: "credentials-live", work: "checkout", launch: true, launchConfig: "files" });
+  const preview = cli(["launch-config", "preview", "--home", home]);
+  assert.equal(preview.status, 0, preview.stdout + preview.stderr);
+  assert.deepEqual(JSON.parse(preview.stdout).result.environment.find((entry) => entry.name === "KEY"), { name: "KEY", fromFile: file });
   const received = join(home, "received.json");
   await waitUntil(() => existsSync(received), { message: "fixture harness received references" });
   assert.deepEqual(JSON.parse(readFileSync(received)), ["file-fixture-secret", "env-fixture-secret"]);
@@ -211,9 +220,13 @@ test("server connect records the operator alias while every remote call uses the
 test("reference handoff is private, literal and deleted before the command runs", () => {
   const dir = join(base, "handoff"); mkdirSync(dir);
   const value = "fixture ' \" $(touch NEVER) `false`\nsecond line";
+  const abandoned = join(dir, ".oats-launch-env-abandoned.sh"), unrelated = join(dir, "keep-me.sh");
+  writeFileSync(abandoned, "fixture-old-secret"); writeFileSync(unrelated, "keep me");
   const h = launchEnvHandoff(dir, "test-start", [{ name: "OATS_LAUNCH_REF_SECRET", value }]);
   const file = join(dir, ".oats-launch-env-test-start.sh");
   assert.equal(statSync(file).mode & 0o777, 0o600);
+  assert.equal(existsSync(abandoned), false, "a new start removes abandoned secret handoffs");
+  assert.equal(readFileSync(unrelated, "utf8"), "keep me");
   const command = `${JSON.stringify(process.execPath)} -e 'process.stdout.write(JSON.stringify([process.env.OATS_LAUNCH_REF_SECRET,require("node:fs").existsSync(process.argv[1])]))' ${JSON.stringify(file)}`;
   const wrapped = h.wrap(command);
   assert.equal(wrapped.includes(value), false);
@@ -222,4 +235,7 @@ test("reference handoff is private, literal and deleted before the command runs"
   assert.deepEqual(JSON.parse(child.stdout), [value, false]);
   assert.equal(existsSync(join(dir, "NEVER")), false, "contents are not shell instructions");
   h.remove();
+  writeFileSync(abandoned, "fixture-old-secret");
+  launchEnvHandoff(dir, "without-references", []);
+  assert.equal(existsSync(abandoned), false, "a start without references also removes abandoned handoffs");
 });
