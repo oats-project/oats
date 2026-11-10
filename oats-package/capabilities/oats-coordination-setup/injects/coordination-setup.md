@@ -10,7 +10,9 @@ you. A **card**, in these skills, is one message to a person with the
 question, the options and your recommendation. A **person** is anyone who
 runs agents, owns a lane, or merges in one today.
 
-**IMPORTANT: LOAD THE SKILL FOR EACH STEP. DO NOT GUESS.**
+**IMPORTANT: LOAD THE SKILL FOR EACH STEP. DO NOT GUESS. KEEP LOADING THE SKILL
+FOR EACH STEP AS THE WORK GOES ON, EACH TIME YOU REACH IT, NOT ONCE AT THE
+START.** After every compaction, reload the skill of the step you are on.
 - At onboarding, from `/oats-tailor-workspace` step 1:
   `/adapt-to-the-organisation` (ask, design, propose, write), which runs
   `/design-the-roster` and `/set-landing-rules`
