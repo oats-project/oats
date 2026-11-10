@@ -1,10 +1,10 @@
 {
   "capability": "oats.developer",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "compatibility": {
     "oats": ">=0.69.7"
   },
-  "description": "Developers build one spec end to end: evaluate it (or write one), execute it (in one context by default, fanning out only by context, never by kind of work), add its acceptance tests unchanged, write it test first, diagnosing a bug before fixing it and designing as it writes, above a quality floor it never lowers silently, prove it the way the repository runs it, and iterate with a fresh reviewer each round (a new code-reviewer instance, this template's soul, spawned as an OATS child on a different model where one is available; a harness-native subagent only for small tasks that directly help, where the person asks, or in a multi-agent workflow mode) until a round finds nothing to fix before handing back; their expert never runs review rounds. Once their expert has verified the branch and the lane's green light is given, they open the PR, work its reviews (bots, reviewers, CI) and raise to their expert only what needs product or architecture direction. Copied from the engineering template, template-v3.0.0.",
+  "description": "Developers build one spec end to end: evaluate it (or write one), execute it (in one context by default, fanning out only by context, never by kind of work), add its acceptance tests unchanged, write it test first, diagnosing a bug before fixing it and designing as it writes, above a quality floor it never lowers silently, prove it the way the repository runs it, and iterate with a fresh reviewer each round (a new code-reviewer instance, this template's soul, spawned as an OATS child on a different model where one is available; a harness-native subagent only for small tasks that directly help, where the person asks, or in a multi-agent workflow mode) until a round finds nothing to fix before handing back; their expert never runs review rounds. Once their expert has verified the branch and the lane's green light is given, they open the PR, work its reviews (bots, reviewers, CI) and raise to their expert only what needs product or architecture direction. Copied from the engineering template, template-v3.0.1.",
   "requires": [],
   "inject": "injects/developer.md",
   "skills": [

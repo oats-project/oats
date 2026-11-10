@@ -26,8 +26,10 @@ is how you fit the OATS workspace.
     exact version, and names each direction decision in its hand-back for your
     node.
   - The workspace's own configuration: `oats-setup-admin`.
-  - Developers build from the experts' specs: `oats-developer`, and
-    `oats-desktop-developer` for the Desktop.
+  - The lead expert decides who builds each spec: itself, or a developer
+    (`oats-developer`, and `oats-desktop-developer` for the Desktop); a large
+    feature always goes to developers, and nothing lands without a fresh
+    review.
 - **You give experts feedback** on architecture and approach, early, before a
   design sets.
 - **You review the PRs that belong to you for coherence** (`/pr-review`, with
