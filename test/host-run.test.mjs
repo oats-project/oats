@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HOST_RUN_SCHEMA, acquireHostRunLock, hostRun, hostRunLockPath, hostRunPlan } from "../lib/host-run.mjs";
 import { registerWorkspace } from "../lib/schedule.mjs";
@@ -171,4 +171,37 @@ test("a lock that cannot be judged is E_HOST_RUN_BUSY too, says what was found a
   assert.throws(() => acquireHostRunLock({ boot: BOOT }), (e) => busy("unreadable")(e)
     && e.message === `the host run lock ${hostRunLockPath()} cannot be taken (the record at ${hostRunLockPath()} is unreadable); if no oats host run is running on this machine, remove ${hostRunLockPath()} and run it again; nothing was started`);
   assert.equal(readFileSync(hostRunLockPath(), "utf8"), junk);
+});
+
+// ------------------------------------------------------- registering a scope
+
+test("oats schedule host install --register-only records the scope in the host registry and installs no unit, where neither launchd nor a systemd user manager exists", (t) => {
+  const home = oatsHome(t);
+  const base = mkdtempSync(join(tmpdir(), "oats-host-run-register-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const dep = deployment(base, "dep"), userHome = join(base, "home"), config = join(base, "config");
+  mkdirSync(userHome);
+  // A PATH with node alone: no launchctl, no systemctl.
+  const env = { ...process.env, OATS_HOME_DIR: home, HOME: userHome, XDG_CONFIG_HOME: config, PATH: dirname(process.execPath) };
+  const cli = (...argv) => spawnSync(process.execPath, [CLI, ...argv], { env, encoding: "utf8", timeout: 60000 });
+  const r = cli("schedule", "host", "install", "--register-only", "--dir", dep, "--json");
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const { scheduler, warnings } = JSON.parse(r.stdout).result;
+  assert.deepEqual([scheduler.registered, scheduler.installed, scheduler.active, scheduler.workspaces, warnings], [true, false, false, [dep], []]);
+  assert.deepEqual(JSON.parse(readFileSync(join(home, "schedules", "registry.json"), "utf8")).workspaces, [dep]);
+  assert.equal(existsSync(config), false, "no systemd unit directory was made");
+  assert.deepEqual(readdirSync(userHome), [], "no LaunchAgents directory was made");
+  assert.equal(existsSync(join(home, "schedules", "log")), false, "nor the timer's log directory");
+  // The caps travel with it, and a second registration changes nothing.
+  const again = cli("schedule", "host", "install", "--register-only", "--max-concurrent", "2", "--dir", dep, "--json");
+  assert.equal(again.status, 0, again.stdout + again.stderr);
+  assert.deepEqual([JSON.parse(again.stdout).result.scheduler.maxConcurrent, JSON.parse(again.stdout).result.scheduler.workspaces], [2, [dep]]);
+  // It installs nothing, so it does not go with --print, which writes nothing.
+  const both = cli("schedule", "host", "install", "--register-only", "--print", "--dir", dep, "--json");
+  assert.equal(both.status, 1);
+  assert.deepEqual([JSON.parse(both.stdout).error.code, JSON.parse(both.stdout).error.message], ["E_BAD_ARGS", "--register-only records the scope and --print writes nothing: give one"]);
+  // What host run would tick is what the registry lists.
+  const plan = cli("host", "run", "--plan", "--json");
+  assert.equal(plan.status, 0, plan.stdout + plan.stderr);
+  assert.deepEqual(JSON.parse(plan.stdout).result.scopes, [dep]);
 });
