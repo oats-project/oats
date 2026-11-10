@@ -4357,11 +4357,13 @@ readOnly: {helpers: "disabled", optionalLocks: "off", objectsWritten: 0}}`.
 - **Filter drivers are not run.** Git runs a `filter.<name>.clean` or
   `.process` command when a status or a diff compares a work-tree file that
   carries the `filter` attribute, and it has no switch that turns filters
-  off. Before each Git command that reads a work-tree file, `oats instance
+  off. Before the Git commands that read a work-tree file, `oats instance
   git` and `oats instance diff` read the configuration Git would use (`git config --list`, which runs
   nothing and follows `include.path` and `includeIf`) and override every
   filter driver it defines to no command (`clean`, `smudge`, `process`) and
-  not required.
+  not required. An observation makes that read once, before its status, for
+  its status and its line counts; each command of a diff is preceded by its
+  own.
   - A file such a filter applies to (a Git LFS file, for one) is compared as
     its bytes are in the work tree, not as the filter would store them. An
     untouched file still reads as unchanged, by its recorded size and times.
@@ -4374,7 +4376,9 @@ readOnly: {helpers: "disabled", optionalLocks: "off", objectsWritten: 0}}`.
     or is not UTF-8) cannot be overridden: Git is not run, and the read fails
     with `E_GIT_FAILED`.
   - Not covered: a driver written into the configuration between that read
-    and the Git command that follows it, and a filter a **submodule's own**
+    and a Git command it covers (for an observation, up to its line counts,
+    which follow its status and its reads of HEAD, the index and the refs),
+    and a filter a **submodule's own**
     configuration defines. Git runs inside each populated submodule to learn
     whether it is dirty, and the overrides name the repository's drivers, not
     the submodule's. A dirty submodule stays visible in the status for that
