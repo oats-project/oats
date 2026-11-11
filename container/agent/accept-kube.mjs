@@ -62,6 +62,7 @@ export function checkRendered(docs) {
   }
   for (const kind of allowed) assert.ok(docs.filter((d) => d.kind === kind).length <= 1, `duplicate ${kind}`);
   const set = one(docs, "StatefulSet"), sa = one(docs, "ServiceAccount"), pdb = one(docs, "PodDisruptionBudget");
+  assert.ok(typeof set.metadata.name === "string" && set.metadata.name.length <= 52, "StatefulSet name must leave room for its revision label");
   assert.equal(set.spec.replicas, 1, "replicas must stay at one");
   const p = set.spec.template.spec;
   isolation(p);

@@ -75,6 +75,20 @@ test("chart refuses unpinned images and unbounded forwarder selectors", () => {
   }
 });
 
+test("chart refuses names that cannot fit the StatefulSet revision label", async () => {
+  const { checkRendered } = await import("../container/agent/accept-kube.mjs");
+  const docs = parseAllDocuments(helm("template", "r".repeat(36), chart, ...values)).map((d) => d.toJSON());
+  const set = docs.find((d) => d.kind === "StatefulSet");
+  assert.equal(set.metadata.name.length, 52);
+  checkRendered(docs);
+  const r = spawnSync(process.env.HELM || "helm", ["template", "r".repeat(37), chart, ...values], { encoding: "utf8" });
+  assert.ifError(r.error);
+  assert.notEqual(r.status, 0, "a 53-character StatefulSet name must not render");
+  assert.match(r.stderr, /36 characters/);
+  set.metadata.name += "r";
+  assert.throws(() => checkRendered(docs), /StatefulSet name/);
+});
+
 test("acceptance rejects admitted pod security or mount drift", async () => {
   const { checkRendered, checkPod } = await import("../container/agent/accept-kube.mjs");
   const docs = render();

@@ -170,6 +170,10 @@ ConfigMaps, environment variables, a rendered manifest or a command line.
 | `forwarder.networkPolicy` | `false`; optional egress policy, requires forwarder DNS and nonempty selectors. |
 | `forwarder.namespaceLabels`, `forwarder.podLabels` | Labels selecting the forwarder/resolver namespace and pods together. |
 
+Helm release names are limited to 36 characters, leaving room in the
+StatefulSet's revision label for its fixed name suffix and revision hash.
+Longer names are refused at render.
+
 Resource defaults fit clusters that enforce admission limits like these.
 All six quantities are values under `resources.requests` and
 `resources.limits`; acceptance also checks positive, ordered quantities and
@@ -263,7 +267,8 @@ container/agent/accept-kube.sh --values team-values.yaml --namespace team --rele
 ```
 
 Acceptance needs read rights on those workload objects, `pods/portforward`,
-and `pods/log` for the optional shutdown proof. It needs no Secret read or
+and `pods/log` for the optional shutdown proof, plus `delete` on pods for
+`--delete-pod`. It needs no Secret read or
 pod exec rights. To prove shutdown on a **disposable acceptance deployment**,
 append `--delete-pod`. This deletes the named pod, records the ordered
 `SIGTERM: ticking ended` and `ended` host events within 45 seconds, and
