@@ -574,7 +574,8 @@ One package can carry capabilities meant for **different souls**. oats.okf
 ships three:
 
 - `oats.okf` fills every working soul's knowledge slot;
-- `oats.okf-harvest` is composed only into its harvester soul;
+- `oats.okf-harvest` is composed only into its harvester soul, a stub
+  since 6.0 that refuses every spawn (kept until 7.0);
 - `oats.okf-maintenance` is composed only into its maintainer soul.
 
 Each is its own manifest with its own skills, inject and commands. One pin
@@ -1587,7 +1588,7 @@ schedule or an operator invokes without knowing the provider.
 
 ```json
 "operations": {
-  "harvest": { "kind": "action", "command": "harvest", "context": "home", "description": "Promote this instance's notes" },
+  "checkpoint": { "kind": "action", "command": "checkpoint", "context": "home", "description": "Record this instance's checkpoint" },
   "inspect": { "kind": "view",   "command": "inspect", "context": "home", "description": "Show this instance's working knowledge" }
 }
 ```

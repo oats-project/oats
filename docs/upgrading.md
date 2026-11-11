@@ -294,7 +294,8 @@ here.
 - **[0.57.0](release-notes/v0.57.0.md#upgrade):** a retire plan taken before
   the upgrade is refused once (`E_PLAN_STALE`); `oats worktree remove` may
   refuse with `E_CHILDREN_RUNNING`; with oats.okf 5.2.0, new spawns carry the
-  harvest duty unless the soul opts out.
+  harvest duty unless the soul opts out (oats.okf 6 makes it the duty to
+  propose: [knowledge.md](knowledge.md#pin-and-select-the-package)).
 - **[0.56.0](release-notes/v0.56.0.md#upgrade):** new refusal codes for
   scripts; `open-workspace` in `tui.json` is `open`; a launch gets only its
   capabilities' declared environment.

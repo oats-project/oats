@@ -176,8 +176,8 @@ export function reconcileCommand(row, { clear = false } = {}) {
   return ['oats schedule reconcile', shellWord(row.id), clear ? '--clear' : null, row.scope ? `--dir ${shellWord(row.scope)}` : null].filter(Boolean).join(' ');
 }
 
-/** A package template's provenance in words: "oats.okf:harvest-review v0.4.0 @abc1234", or a
- * workspace trigger's `from:` ("oats.okf:harvest-review"). */
+/** A package template's provenance in words: "oats.okf:proposal-review v0.4.0 @abc1234", or a
+ * workspace trigger's `from:` ("oats.okf:proposal-review"). */
 export function templateProvenance(template) {
   if (!record(template)) return null;
   const label = templateLabel(template) || text(template.from);
@@ -307,7 +307,7 @@ export function relativeTime(iso, now = Date.now()) {
   return { label: unit === null ? (future ? 'in under a minute' : 'just now') : future ? `in ${unit}` : `${unit} ago`, title: new Date(t).toLocaleString() };
 }
 
-/** "oats.okf:harvest-review" for a row's package template ({ package, version, commit, template }). */
+/** "oats.okf:proposal-review" for a row's package template ({ package, version, commit, template }). */
 export function templateLabel(template) {
   if (!record(template)) return null;
   return [text(template.package), text(template.template) || text(template.id)].filter(Boolean).join(':') || null;

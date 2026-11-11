@@ -669,7 +669,10 @@ It relays the host's viewer fact the same way, `probe.sessionViewer`
 host's viewer takes `C-b [`, or `null` when unknown.
 
 **Harvest** runs the knowledge capability's `okf harvest --json` in the
-instance's saved home on the server and relays its envelope.
+instance's saved home on the server and relays its envelope. oats.okf 5.0
+and later refuse that command with `E_REMOVED`: an instance proposes its
+knowledge from its own home with `oats okf propose`
+([the flow](knowledge.md#the-flow)).
 
 ## What this machine keeps
 

@@ -1,3 +1,6 @@
+# oats.okf 5.x harvest PRs (label okf-harvest). oats.okf 6 proposes with the
+# label okf-proposal, which okf-proposal-review.yaml watches. This file goes
+# once no 5.x harvester can open an okf-harvest PR.
 kind: oats-trigger
 schemaVersion: 1
 description: Review every OKF harvest PR on the knowledge base

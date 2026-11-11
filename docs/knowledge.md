@@ -6,7 +6,7 @@ kernel owns slot selection, composition and command dispatch; the capability
 owns its knowledge format, instructions and promotion procedure. The model is
 in [Knowledge, instances and evolving expertise](knowledge-theory.md).
 
-This is the operator guide for **oats.okf 6.0.0** (OATS **>=0.69.2**). Provider implementation and
+This is the operator guide for **oats.okf 6.0.1** (OATS **>=0.69.2**). Provider implementation and
 recovery details belong to the [oats-okf README](https://github.com/awebai/oats-okf).
 In 6.0 there is no knowledge harvester: a working instance proposes its own
 knowledge as a pull request at its checkpoints (`oats okf propose`), and the
@@ -28,7 +28,7 @@ knowledge maintainer gates every merge.
 ```yaml
 # oats-workspace.yaml (excerpt)
 packages:
-  oats.okf: v6.0.0
+  oats.okf: v6.0.1
 defaults:
   knowledge: { oats.okf: { from: package } }
 stores:
@@ -56,9 +56,9 @@ Upgrading from 4.x requires the ordered
 just editing a version line. The package requires OATS >=0.69.2: its
 `knowledge-maintainer` soul says `background: true`, which an older kernel
 refuses. Upgrade OATS first, then the package. Each 5.x step is in
-[oats.okf's CHANGELOG](https://github.com/awebai/oats-okf/blob/v6.0.0/CHANGELOG.md).
+[oats.okf's CHANGELOG](https://github.com/oats-project/oats-okf/blob/v6.0.1/CHANGELOG.md).
 
-**Upgrade to 6.0:** pin `oats.okf: v6.0.0` and run `oats sync`. Only new
+**Upgrade to 6.0:** pin `oats.okf: v6.0.1` and run `oats sync`. Only new
 spawns get `oats okf propose`, the 6.0 `okf-propose` skill and the
 spawn-recorded duty. Existing homes keep their copied provider even after a
 session restart; a stopped 5.x home can move with `oats instance upgrade`
@@ -67,7 +67,7 @@ remedy to retire and respawn it. Harvester spawns stop: the stub soul
 `oats.okf/knowledge-harvester`, kept until 7.0, refuses every spawn with
 `E_REMOVED` and the fix. Harvesters already running keep their 5.x modules
 and finish, or a person retires them. Then, by hand, from the deployment
-(oats.okf's [Upgrading to 6.0](https://github.com/awebai/oats-okf/blob/v6.0.0/README.md#upgrading-to-60)
+(oats.okf's [Upgrading to 6.0](https://github.com/oats-project/oats-okf/blob/v6.0.1/README.md#upgrading-to-60)
 has each step's commands):
 
 1. Delete the harvester's launch preference, if any:
