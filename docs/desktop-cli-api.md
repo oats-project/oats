@@ -5648,12 +5648,20 @@ had begun.
 | `E_INSTANCE_RETIRING` | yes | yes |
 | `E_LIFECYCLE_BUSY` | yes | yes |
 | `E_HOME_MISMATCH` | yes | yes |
+| `E_HOME_NOT_OWNED` | yes | yes |
 | `E_SESSION_UNKNOWN` | yes | yes |
 | `E_AMBIGUOUS_INSTANCE` | yes | yes |
 | `E_UNIDENTIFIED_INSTANCE_HOME` | yes | yes |
 | `E_REMOTE_INCOMPATIBLE` | yes | yes |
 | `E_AMBIGUOUS` | yes | yes |
 | `E_SNAPSHOT_UNKNOWN` | yes | yes |
+
+`E_HOME_NOT_OWNED` is the answer of every command that takes a home's
+lifecycle claim (a start, a resume, a stop, a retire, an upgrade) when the
+user it runs as does not own the home. It is answered before the claim is
+written, root is refused like any other user, and `details` carries
+`instance`, `home`, `owner` and `user` (the two uids). The fix is to run the
+command as the home's owner ([trust model](trust-model.md#the-line), rule 3).
 
 The last three are the router's (`--server`): they are answered before the
 command is sent to the host. The list is about the envelope's `error.code`.
