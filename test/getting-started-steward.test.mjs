@@ -344,9 +344,8 @@ test("a new workspace with aweb defaults to aweb tasks, and to `tasks: none` onl
   assert.ok(flat.includes("step 7 writes `tasks: none`"));
   assert.ok(flat.includes("Ask only when unsure, as the final-values message's one open line, prefilled with the answer you'd pick: ticket keys the person didn't name"));
   assert.doesNotMatch(flat, /no `tasks:` default/);
-  // Onboarding neither edits the team's instructions nor installs the wake broker: the first task opts the
-  // team in, and /oats-host-delivery installs the broker where a home needs it.
-  assert.doesNotMatch(skill, /AWEB_TASKS_LINE|aw instructions set|oats aweb wake install/);
+  // Onboarding does not edit the team's instructions: the first task opts the team in.
+  assert.doesNotMatch(skill, /AWEB_TASKS_LINE|aw instructions set/);
   // Beside a tracker, the hand-off keeps aweb's list empty.
   assert.ok(flat.includes("Leave aweb's task list empty: one task there opts your whole group in to it. To use aweb's task list instead, ask the setup assistant."));
   // Every path reaches item 6, the hand-over records the choice, and the found-list and no-messaging skeletons carry no tasks line.
@@ -550,4 +549,20 @@ test("getting-started: a join never runs aw team ensure (it would make a second 
     assert.ok(m.index > step5 && m.index < step6, "an `aw team ensure` command outside step 5");
   }
   assert.ok(flat.includes("**Only for a new workspace with aweb whose person chose, in step 1, the team on their own aweb account now.**"));
+});
+
+test("getting-started: a setup expert the wake broker delivers to is spawned only once the broker runs", () => {
+  const flat = read("skills/oats-getting-started/SKILL.md").replace(/\s+/g, " ");
+  const item = flat.slice(flat.indexOf("6. **Codex, or `delivery: session`: the wake broker runs before the spawn.**"), flat.indexOf("## 10. Spawn the setup expert"));
+  assert.ok(item.length > 0, "step 9 carries the item, before step 10");
+  // Claude and pi have their own channel; everything else is refused by oats.aweb with no broker.
+  assert.ok(item.includes("Skip this item when the setup expert's harness is Claude or pi and the soul's `oats.aweb` settings don't set `delivery: session`"));
+  assert.ok(item.includes("oats.aweb refuses to spawn or start it while no broker runs (`wake-daemon-not-running`)"));
+  // The person starts their own user service; the agent only checks.
+  assert.ok(item.includes('cd "D" && oats aweb wake install'));
+  assert.ok(item.includes("the line is `aw wake run`, kept running as a supervised process"));
+  assert.ok(item.includes("oats aweb wake status --dir D --json"));
+  assert.ok(item.includes('Go on to step 10 only when it reports `"daemon": { "running": true }`. Otherwise stop, spawn nothing'));
+  // Step 4 no longer leaves Codex's wake to the setup expert.
+  assert.doesNotMatch(flat, /the setup expert sets up its wake/);
 });
