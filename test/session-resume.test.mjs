@@ -13,6 +13,8 @@ import { acquireResumeLock, bootId, noteSweep, readBootNote, RESUME_LIMIT, resum
 import { nextSeen, resumeEligible } from "../lib/session-seen.mjs";
 import { processStartToken } from "../lib/worktree-hooks.mjs";
 import { FRESH_REASON, NOT_SWEPT, OUTCOME, RESUME_WAITING, ROW_REASON, SESSION_END, SESSION_RESUME_FEATURE } from "../lib/session-resume-contract.mjs";
+import { identityHolderState } from "../packages/record/lib/process-identity.mjs";
+import { acquireHostRunLock, hostRunPlan } from "../lib/host-run.mjs";
 
 const scratch = (t) => { const d = mkdtempSync(join(tmpdir(), "oats-resume-")); t.after(() => rmSync(d, { recursive: true, force: true })); return d; };
 const write = (home, name, value) => writeFileSync(join(home, name), typeof value === "string" ? value : JSON.stringify(value));
@@ -188,22 +190,19 @@ test("bootId in a PID namespace of its own on a host, with nothing marking a con
   assert.equal(bootId({ platform: "linux", read: procOf(pid1Stat(30666820)), exists: () => false, env: { KUBERNETES_PORT: "tcp://10.96.0.1:443", KUBERNETES_SERVICE_HOST: "" } }), KERNEL_BOOT);
 });
 
-test("bootId in a container: the kernel's boot id and PID 1's start, the same all through one run, another in the next run on the same kernel boot", () => {
-  // Two runs of one container (a `docker restart`) under one kernel boot: PID 1 starts 30666820 and
-  // 30667142 ticks after it.
+test("bootId agreement in a container: only the kernel UUID, across PID 1 restarts and every marker/environment permutation", () => {
   const first = containerBoot(pid1Stat(30666820)), second = containerBoot(pid1Stat(30667142));
-  assert.equal(first, `${KERNEL_BOOT}:30666820`);
+  assert.equal(first, KERNEL_BOOT);
   assert.equal(containerBoot(pid1Stat(30666820)), first, "every process of one run reads the same");
-  assert.equal(second, `${KERNEL_BOOT}:30667142`);
-  assert.notEqual(first, second);
-  // Each marker alone says "container".
-  for (const [name, marker] of Object.entries(CONTAINER_MARKERS)) assert.equal(linuxBoot(pid1Stat(30666820), { marker }), first, name);
-  // The same start under another kernel boot is another identity.
+  assert.equal(second, first, "a restart on the same kernel retains the boot identity");
+  for (const marker of [NO_MARKER, ...Object.values(CONTAINER_MARKERS), { exists: () => true, env: { KUBERNETES_SERVICE_HOST: "10.96.0.1" } }]) {
+    assert.equal(linuxBoot(pid1Stat(30666820), { marker }), KERNEL_BOOT);
+    assert.equal(linuxBoot(pid1Stat(30667142), { marker }), KERNEL_BOOT);
+  }
   assert.notEqual(containerBoot(pid1Stat(30666820), "0f8b6a2e-1111"), first);
-  // A container that shares its host's PID namespace reads the host's PID 1, the same in every run.
-  assert.equal(containerBoot(pid1Stat(0, "systemd")), `${KERNEL_BOOT}:0`);
-  // PID 1's name is read as the kernel prints it: anything between the first "(" and the last ")".
+  assert.equal(containerBoot(pid1Stat(0, "systemd")), KERNEL_BOOT);
   for (const comm of ["systemd", "tini -s", "a) S 0 (b", "docker-init"]) assert.equal(containerBoot(pid1Stat(30666820, comm)), first, comm);
+  assert.equal(bootId({ platform: "linux", read: (p) => { assert.equal(p, "/proc/sys/kernel/random/boot_id"); return KERNEL_BOOT; }, exists: () => assert.fail("no marker lookup"), env: new Proxy({}, { get: () => assert.fail("no environment lookup") }) }), KERNEL_BOOT);
 });
 
 test("bootId on Linux without a start time of PID 1 to read: the kernel's boot id alone; without the boot id: none", () => {
@@ -342,30 +341,71 @@ test("a lost home is resumed only when seen running for its start, not judged, f
   no(record({ lastSeenRunningAt: at(T("18:00:00.000") - 14 * DAY), firstNotRunningAt: at(T("09:00:00.000")), lastSeenRunningBoot: null, firstNotRunningBoot: null }), T("09:00:05.000"), /24 hours or more before its loss/, "no boot id: two weeks off is not resumed");
 });
 
-test("a container's next run on the same kernel boot is another boot to the sweep: the count of starts begins again, the lock of the run before is taken over, and the in-boot clause does not reach across", (t) => {
+test("a container restart on the same kernel carries its failure budget and uses pid/start to judge a previous lock", (t) => {
   oatsHome(t);
   const first = containerBoot(pid1Stat(30666820)), second = containerBoot(pid1Stat(30667142));
   // RESUME_LIMIT sweep starts of one home in the first run: the count the sweep refuses at.
   for (let n = 0; n < RESUME_LIMIT; n++) noteSweep({ launched: [H] }, first);
   assert.equal(readBootNote(first).resumes[H], RESUME_LIMIT);
-  // The next run reads no count, and its first start is counted as the first.
-  assert.deepEqual(readBootNote(second), { bootId: second, refused: [], resumes: {} });
-  noteSweep({ launched: [H] }, second);
-  assert.deepEqual(readBootNote(second).resumes, { [H]: 1 });
-  // A lock the first run left, its pid a live process of the next run: stale, even when that
-  // process's start reads as the recorded one (a start is counted from the kernel's boot, and a
-  // PID namespace starts its pids again in each run). In the run that took it, it is a sweep that runs.
+  assert.deepEqual(readBootNote(second), { bootId: KERNEL_BOOT, refused: [], resumes: { [H]: RESUME_LIMIT } });
   const lock = join(resumeStateDir(), "lock");
   mkdirSync(resumeStateDir(), { recursive: true });
   const left = JSON.stringify({ bootId: first, pid: process.pid, processStart: processStartToken(process.pid), nonce: "a".repeat(32), at: "2026-10-27T09:00:00.000Z" }) + "\n";
   writeFileSync(lock, left);
   assert.throws(() => acquireResumeLock({ boot: first }), (e) => e.code === "E_RESUME_BUSY" && e.message.includes(`pid ${process.pid} holds it`));
   assert.equal(readFileSync(lock, "utf8"), left);
+  assert.throws(() => acquireResumeLock({ boot: second }), (e) => e.code === "E_RESUME_BUSY", "a live holder is still held after restart/upgrade");
+  assert.equal(readFileSync(lock, "utf8"), left);
+  writeFileSync(lock, JSON.stringify({ ...JSON.parse(left), processStart: "proc:1" }));
   acquireResumeLock({ boot: second })();
   assert.equal(existsSync(lock), false, "taken over, and released");
   // Seen running in the first run, the container down for two weeks, first seen lost in the next.
   const at = (ms) => new Date(ms).toISOString();
   const record = { startId: "s1", lastSeenRunningAt: at(T("18:00:00.000") - 14 * DAY), lastSeenRunningBoot: first, firstNotRunningAt: at(T("09:00:00.000")), firstNotRunningBoot: second, judgedBy: null };
-  assert.deepEqual(resumeEligible(record, lost(), { now: T("09:00:05.000") }), { eligible: true });
-  assert.equal(resumeEligible({ ...record, firstNotRunningBoot: first }, lost(), { now: T("09:00:05.000") }).eligible, false, "lost within the run it was seen running in");
+  assert.equal(resumeEligible(record, lost(), { now: T("09:00:05.000") }).eligible, false, "the conservative in-boot time guard carries across restart");
+  assert.deepEqual(readBootNote("another-kernel-boot"), { bootId: "another-kernel-boot", refused: [], resumes: {} });
+});
+
+test("legacy qualified boot ids defer to the live holder across upgrades and unmarked PID namespaces", (t) => {
+  oatsHome(t);
+  const lock = join(resumeStateDir(), "lock");
+  mkdirSync(resumeStateDir(), { recursive: true });
+  const own = processStartToken(process.pid);
+  for (const [recorded, current] of [[`${KERNEL_BOOT}:123`, KERNEL_BOOT], [KERNEL_BOOT, `${KERNEL_BOOT}:456`], [`${KERNEL_BOOT}:123`, `${KERNEL_BOOT}:456`]]) {
+    const left = JSON.stringify({ bootId: recorded, pid: process.pid, processStart: own, nonce: "a".repeat(32), at: "2026-10-27T09:00:00.000Z" });
+    writeFileSync(lock, left);
+    assert.throws(() => acquireResumeLock({ boot: current }), (e) => e.code === "E_RESUME_BUSY");
+    assert.equal(readFileSync(lock, "utf8"), left);
+    rmSync(lock);
+  }
+  const hostBoot = linuxBoot(pid1Stat(0, "systemd")), sandboxBoot = linuxBoot(pid1Stat(1234567, "bwrap"));
+  const release = acquireResumeLock({ boot: hostBoot });
+  try { assert.throws(() => acquireResumeLock({ boot: sandboxBoot }), (e) => e.code === "E_RESUME_BUSY", "unmarked sandbox cannot reclaim the live host lock"); }
+  finally { release(); }
+  for (const state of ["alive", "unknown", "gone"]) {
+    const holder = { bootId: `${KERNEL_BOOT}:123`, pid: process.pid, processStart: own };
+    assert.equal(identityHolderState(holder, { boot: KERNEL_BOOT, liveness: () => ({ state }) }), state, "legacy qualification defers to process identity, including unreadable starts");
+    assert.equal(identityHolderState(holder, { boot: "11111111-1111-4111-8111-111111111111", liveness: () => assert.fail("another kernel boot establishes death") }), "gone");
+  }
+});
+
+test("legacy qualified failure notes and loss records keep the same-kernel guards", (t) => {
+  oatsHome(t);
+  const oldBoot = `${KERNEL_BOOT}:30666820`;
+  noteSweep({ launched: [H], refusals: [{ home: H, startId: "s1", code: "E_FIXTURE", message: "fixture refusal", at: "2026-10-27T09:00:00.000Z" }] }, oldBoot);
+  const note = readBootNote(KERNEL_BOOT);
+  assert.equal(note.resumes[H], 1);
+  assert.equal(note.refused[0].code, "E_FIXTURE");
+  const record = { startId: "s1", lastSeenRunningAt: new Date(T("09:00:00.000") - 2 * DAY).toISOString(), lastSeenRunningBoot: oldBoot, firstNotRunningAt: new Date(T("09:00:00.000")).toISOString(), firstNotRunningBoot: KERNEL_BOOT, judgedBy: null };
+  assert.equal(resumeEligible(record, lost(), { now: T("09:00:05.000") }).eligible, false, "qualification changes do not bypass the in-boot time guard");
+});
+
+test("host run plan in an SSH or sandbox environment still sees a legacy qualified live holder", async (t) => {
+  oatsHome(t);
+  const release = acquireHostRunLock({ boot: `${KERNEL_BOOT}:813944` });
+  try {
+    const plan = await hostRunPlan({ boot: KERNEL_BOOT, env: {}, hostStatus: () => ({ installed: false, active: false }) });
+    assert.deepEqual(plan.refusals.map((r) => [r.code, r.details.found]), [["E_HOST_RUN_BUSY", "running"]]);
+    assert.throws(() => acquireHostRunLock({ boot: KERNEL_BOOT }), (e) => e.code === "E_HOST_RUN_BUSY");
+  } finally { release(); }
 });

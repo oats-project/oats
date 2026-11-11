@@ -283,9 +283,10 @@ guarantees rest on that token:
 provably stale and is reclaimed at once, without waiting out any threshold.
 A holder is gone when its pid is gone, when its pid runs with another start
 than the recorded one (the pid went to another process), or when the lock
-was taken in another boot. A run of a container counts as a boot, so a lock
-left on a volume by a container that was stopped is reclaimed by the next
-one, whatever its hostname and whichever process holds the pid there. The
+was taken in another kernel boot. Containers and PID sandboxes use the same
+Linux kernel UUID; a container restart reclaims a lock when its recorded
+pid is gone or has another start time. Old qualified Linux UUIDs compare as
+their base UUID, so an upgrade does not reclaim a live holder. The
 kernel judges its own claims by the same rule, with the same code
 (`lib/process-identity.mjs`).
 
@@ -353,10 +354,9 @@ its registered worker too:
 
 - An owner, a worker or a reclaimer is dead when its pid is gone, when its
   pid runs with another start than the recorded one (the pid went to
-  another process), or when its record was taken in another boot. A run of
-  a container counts as a boot: a lock left on a volume by a container that
-  was stopped is reclaimed by the first pass of the next one, whatever its
-  hostname and whichever process holds the pid there. The host a record
+  another process), or when its record was taken in another kernel boot.
+  Container restarts use pid and process start on that same kernel; old
+  qualified UUIDs are compared as their base UUID. The host a record
   names does not enter this judgement. One whose start cannot be read is
   unknowable, and never dead.
 - A record that names neither boot nor start, as an earlier version writes
