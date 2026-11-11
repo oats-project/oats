@@ -86,9 +86,13 @@ the one with **this Desktop's own version** — the app's degradation card
 shows that exact `npm install -g @awebai/oats@<version>` command, and
 copying it from the card is the reliable route.
 
-Each Desktop accepts a band of released CLI versions around its own
-(prereleases never), and a feature may need a higher floor; the app states
-both, so this guide does not repeat the numbers. The contract is
+Each Desktop accepts released CLI versions from a floor up (prereleases
+never), and a feature may need a higher floor; the app states both, so this
+guide does not repeat the numbers. A CLI newer than the Desktop's own minor
+version is accepted with only reads, terminals, Spawn, Start, Restart, the
+colour and the background on: one line in the card's place says that every
+other change is off until you install the OATS Desktop of that CLI's version,
+and links its release. A Desktop of 0.69.17 or older refuses such a CLI. The contract is
 [desktop-cli-api.md](desktop-cli-api.md). The app discovers the CLI automatically
 (your PATH, the npm global prefix, a login shell) and re-probes on launch,
 app focus, and Retry. Until a compatible CLI is verified, the Soul roster's
@@ -1135,7 +1139,8 @@ unknown or unreported harness shows "?". Sources and licences are in
 | Symptom | Cause / fix |
 | --- | --- |
 | "Compatible oats CLI required" card | No CLI, or a version outside the range the card itself states. Copy the card's install command, or **Choose oats…** to point at the right binary; **Retry** re-probes. Spawn is disabled until a compatible CLI is verified. |
-| "This Desktop is older than the installed oats CLI" card | The CLI found is a released version above the range this Desktop works with, usually because the CLI was updated first. Install OATS Desktop of the version the card names; the card offers no npm command, since installing the CLI this Desktop pins would downgrade it. Reads and terminals keep working meanwhile; **Choose oats…** points at another, compatible CLI and **Retry** re-probes. |
+| "This Desktop was tested with oats CLIs up to …" line, and most changes off | The CLI is of a later minor or major version than this Desktop, usually because the CLI was updated first. Reads, terminals, Spawn, Start, Restart, the colour and the background keep working; every other change is off until you install OATS Desktop of the version the line names, from the release it links. There is no npm command, since installing the CLI this Desktop pins would downgrade it; **Choose oats…** points at another CLI and **Retry** re-probes. |
+| "This Desktop is older than the installed oats CLI" card | The CLI found speaks a newer desktop API than this Desktop. Install OATS Desktop of the version the card names; the card offers no npm command. Reads and terminals keep working meanwhile; **Choose oats…** points at another, compatible CLI and **Retry** re-probes. |
 | Spawn disabled, no card | The probe hasn't settled yet (transient, resolves in ms). If it persists, the backend is unreachable — restart the app. |
 | Terminals fail to open ("could not attach") | tmux missing, or no live session for that instance. Install tmux (`tmux -V`); check `tmux -L oats ls` (the OATS tmux server, where instances run) and `tmux ls` (your default server, where an instance started by an earlier kernel may still be). |
 | Can't select/copy text in a terminal tab | A plain drag selects, and copying is a separate step: ⌘C / Edit › Copy (macOS), Ctrl+Shift+C (Linux/Windows) or right-click › Copy ([Copy from a terminal](#copy-from-a-terminal)). A drag selects only what is on screen: scroll back first (wheel up, Shift+PgUp or Ctrl+B then `[`) for older output. In `oats session attach` in your own terminal, hold **Option** (iTerm2, Ghostty, Terminal.app) or **Shift** while dragging. |

@@ -26,7 +26,7 @@ oats doctor                          # 3. in the same deployment
 ```
 
 The Desktop's installers are the assets of the
-[GitHub Release](https://github.com/awebai/oats/releases) of that version
+[GitHub Release](https://github.com/oats-project/oats/releases) of that version
 ([OATS Desktop](desktop.md#install)). Then restart the pi sessions that were
 running: a session keeps the bridge it loaded when it started.
 [The steps](#the-steps) says what each step does and why they come in this
@@ -40,9 +40,12 @@ the version you are upgrading from.
 ## The steps
 
 Upgrading OATS means three things, in this order, on each host, and one
-before them where the Desktop is installed:
+more where the Desktop is installed:
 
-0. **The Desktop**, where it is installed: the new version's, before the CLI.
+0. **The Desktop**, where it is installed: the new version's. Install it
+   before the CLI where the Desktop is 0.69.17 or older
+   ([which goes first](#either-order-works)); with a newer one, either order
+   works.
 1. **The CLI** (`@awebai/oats`, the kernel).
 2. **The pi bridge** (`@awebai/oats-pi`), in every pi folder the host's
    deployments launch pi with: `oats update`, in each deployment.
@@ -62,12 +65,21 @@ instances. A pi started outside any instance looks for a global install, an
 **A release's own steps are in its notes**, in its `## Upgrade` section.
 This page is the part that is the same for every release.
 
-**Why the Desktop goes first.** A Desktop accepts a CLI up to its own minor
-version and refuses a newer one: with the CLI moved first, the Desktop that
-is still running lists no instance until it is replaced. The new Desktop
-accepts the older CLI in the meantime. The CLI can move by two commands, the
-`npm install` and an `oats update` whose plan installs it: step 0 comes
-before either.
+<a id="either-order-works"></a>**Either order works**, with a Desktop newer than 0.69.17. Such a Desktop was
+tested with the CLIs of its own minor version, and accepts a newer minor or
+major one: reads, terminals, Spawn, Start, Restart, the colour and the
+background keep working with it, and every other change is held back until
+the Desktop of that version is installed. It says so in one line, in the
+place of the CLI card:
+`This Desktop was tested with oats CLIs up to <X.Y>; the installed CLI is <version>. Stop, Remove, schedules, triggers and every other change except Spawn, Start, Restart, colour and background are off until you install OATS Desktop <version>.`
+A Desktop accepts an older CLI too, down to its floor, so installing it first
+holds nothing back.
+
+**A Desktop of 0.69.17 or older still refuses a CLI newer than its own minor
+version:** with the CLI moved first, it lists no instance until it is
+replaced. Where one is installed, step 0 comes first. The CLI can move by two
+commands, the `npm install` and an `oats update` whose plan installs it:
+step 0 comes before either.
 
 **Package versions are a different thing.** `oats update` moves the CLI and
 the bridge, never a package. A deployment's capabilities come from the
@@ -88,8 +100,8 @@ the same run. So where the Desktop is installed, step 0 comes before such an
 `oats update` too: `oats update --check` shows whether the plan holds that
 install, and runs nothing. When that install is of another minor or major
 version, the plan says so in one line under its steps, whether or not a
-Desktop is installed: `OATS Desktop refuses a CLI newer than its own minor
-version: if you use it, install OATS Desktop <version> first.`
+Desktop is installed: `An OATS Desktop older than <X.Y> holds actions back with this CLI. Stop, Remove, schedules, triggers and every other change except Spawn, Start, Restart, colour and background are off until you install OATS Desktop <version>. (An OATS Desktop of 0.69.17 or older refuses this CLI until then.)`
+Its second sentence is the Desktop's own notice, word for word.
 
 **`oats update` only moves forward.** It never installs an older CLI or an
 older bridge than the one in place:

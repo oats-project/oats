@@ -52,10 +52,20 @@ see the [official catalog](official-catalog.md) for current pins.
  "capabilityShowApi":1,"sessionViewer":{"prefixScroll":true},"package":"@awebai/oats"}
 ```
 
-- The Desktop accepts `desktopApi === 1` and a released `version` inside
-  `ACCEPT_RANGE` (`packages/client/cli-locator.mjs`); a prerelease is never
-  accepted. The real gate is the feature list; its minimum is
-  `packages-no-approval`.
+- The Desktop accepts `desktopApi === 1` and a released `version` at or
+  above `ACCEPT_RANGE`'s floor (`packages/client/cli-locator.mjs`); a
+  prerelease is never accepted. The real gate is the feature list; its
+  minimum is `packages-no-approval`.
+- A version above the Desktop's tested bound, the minor of its own release
+  (`testedBound`), is accepted with `aboveTested: true` and `testedThrough`
+  (`X.Y`): the Desktop then runs only its reads, terminals, the Spawn preview
+  and apply, Start, Restart, the colour and the background, refuses every
+  other operation before running the CLI (`cli-above-tested`), and says so in
+  one line until the Desktop of that version is installed. A Desktop of
+  0.69.17 or older refuses such a CLI. `oats tui` judges the kernel it ships
+  with against that kernel's own version, so never finds it above. A
+  `desktopApi` other than 1 is refused (`newerApi` on the candidate when it is
+  a higher one).
 - `harnesses` is what `--harness` accepts; `sessionBackends` what `--backend`
   accepts: `["tmux"]` since 0.31.0, when Herdr was removed (`--backend herdr`
   is refused with `E_HERDR_REMOVED`). A host without the `harness` feature
