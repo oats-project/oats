@@ -18,6 +18,22 @@
   is no longer serialized between them
   ([turn record: Durability and concurrency](../../packages/record/README.md#durability-and-concurrency)).
 
+## Changed
+
+- **An owner whose liveness can't be judged is never reclaimed.** The
+  remote cache write lock (`<cache>/.locks/<repo>.lock`) and the turn
+  record's capture and stream locks read a lock's owner through one
+  function, which answers "unknown" for a pid whose existence cannot be
+  checked (`kill` answers neither `ESRCH` nor `EPERM`) and for a record
+  whose pid is no process ID (zero, a negative number, one above the
+  range). The cache write lock reclaimed a lock without a boot or a start
+  on such a failed check, and one of another boot whatever its pid; it
+  waits for both and refuses with `E_REMOTE_UNREADABLE` (`reason:
+  "cache"`), as for a live holder. For a pid that is no process ID the
+  refusal says that the lock names none and is safe to remove once no oats
+  process is running, and its details carry no `holderPid`
+  ([Implementation](../implementation.md)).
+
 ## Fixed
 
 - **A capture lock or a stream lock whose holder is gone no longer stops

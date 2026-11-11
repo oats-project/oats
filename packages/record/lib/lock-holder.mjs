@@ -4,11 +4,9 @@
 // it was taken in and the holder's process start, and is judged by the
 // rule the kernel judges its cache write lock by (process-identity.mjs
 // identityHolderState).
-import { identityHolderState, namesIdentity, processStartToken, thisBoot } from "./process-identity.mjs";
+import { identityHolderState, namesIdentity, processStartToken, thisBoot, validPid } from "./process-identity.mjs";
 
-export { namesIdentity };
-
-export function validPid(pid) { return Number.isInteger(pid) && pid > 0 && pid <= 2147483647; }
+export { namesIdentity, validPid };
 
 /** What a record names its holder `pid` by beside the pid: this boot and the pid's start (null when it
  *  cannot be read). */
@@ -20,6 +18,4 @@ const LIVENESS = { alive: "alive", gone: "dead", unknown: "unknown" };
  *  its pid is gone, runs with another start (a reused pid) or is a zombie; unknown when its start
  *  cannot be read. One that names neither is judged by its pid alone: dead when the pid is gone.
  *  A record without a process ID is unknown, whatever else it names. */
-export function holderLiveness(holder) {
-  return validPid(holder?.pid) ? LIVENESS[identityHolderState(holder)] : "unknown";
-}
+export const holderLiveness = (holder) => LIVENESS[identityHolderState(holder)];

@@ -283,18 +283,27 @@ export const takenInAnotherBoot = (boot) => (holder) => Boolean(boot) && typeof 
  *  `processStart`), whatever their values. */
 export const namesIdentity = (holder) => "bootId" in holder || "processStart" in holder;
 
+/** Whether `pid` is a process ID: a positive integer a process can have. Zero and a negative number
+ *  name a process group to kill(2), never a process. */
+export function validPid(pid) { return Number.isInteger(pid) && pid > 0 && pid <= 2147483647; }
+
 /** The state of the holder a lock record names → "gone" | "alive" | "unknown". The one place the
  *  rule is composed, for a cache write lock (lib/remote.mjs ownerGone) and the turn record's
  *  capture and stream locks (lock-holder.mjs holderLiveness):
+ *   - a record whose pid is no process ID (validPid) is unknown, whatever else it names, and
+ *     nothing is read: it proves nothing about a process;
  *   - a record that names its identity (namesIdentity) is gone when taken in another boot
  *     (takenInAnotherBoot), and has its process's state otherwise (processLiveness): gone when its
  *     pid is gone, runs with another start (a reused pid) or is a zombie; unknown when its start
  *     cannot be read, or when it names none while its pid runs;
  *   - a record that names neither is judged by its pid alone (existence): alive when the pid
- *     exists, another user's too, and unknown when that cannot be read.
+ *     exists, another user's too, and unknown when that cannot be read (kill answers neither
+ *     ESRCH nor EPERM).
+ *  Only "gone" lets a caller take a lock over: "unknown" is waited for or refused, as "alive" is.
  *  A claim's holder is judged by lib/claim.mjs holderLiveness, which takes its caller's own
  *  `holderGone`. `boot`, `liveness` and `exists` are seams for tests. */
 export function identityHolderState(holder, { boot = thisBoot(), liveness = processLiveness, exists = existence } = {}) {
+  if (!validPid(holder?.pid)) return "unknown";
   if (namesIdentity(holder)) return takenInAnotherBoot(boot)(holder) ? "gone" : liveness(holder).state;
   const { state } = exists(holder.pid);
   return state === "exists" ? "alive" : state;
