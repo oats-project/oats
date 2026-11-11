@@ -218,8 +218,10 @@ or narrow its authority. Never share the mount across trust groups.
 ## The kernel's periodic work
 
 A container has no launchd and no systemd user manager, so no timer runs
-the kernel's periodic work in it. The image's entrypoint does: it starts
-sshd in the background and then runs `oats host run`
+the kernel's periodic work in it. After the entrypoint prepares NSS and
+SSH host keys, an image-local Node supervisor starts `aw wake run`. It waits
+for `aw wake status --json` to report `daemon_running: true` while that child
+stays alive, then starts sshd and `oats host run`
 ([desktop-cli-api.md](desktop-cli-api.md#the-host-run-oats-host-run)), one
 foreground process that lasts as long as the container.
 
@@ -240,21 +242,19 @@ foreground process that lasts as long as the container.
 
 What the image's files fix for that:
 
-- **`oats host run` is tini's direct child**, the process the runtime's
-  signal reaches and the container waits for: the entrypoint's last line is
-  `exec oats host run`, after sshd is started in the background. `tini -g`
-  signals its child's process group; the OATS tmux server and the harnesses
-  under it are in sessions of their own, outside that group, so they run
-  until `oats host run` stops them. Measured in `oats-agent:o1-local` with
-  tini 0.19.0 and tmux 3.3a: on `docker stop` both members of the group
-  received the TERM, and two seconds later the tmux server and its pane were
-  alive and the pane had received nothing.
+- **PID-only tini signals the Node supervisor.** It forwards TERM to host
+  run alone and keeps the wake broker alive until host run finishes stopping
+  the agents. Then it stops sshd and the broker. A broker or host-run exit is
+  reported and drains the other children before a nonzero container exit, so
+  the restart policy can restart it. The broker runs as the agent uid; its
+  default state directory is `/state/home/.config/aw/wake`, so registrations
+  survive container replacement and it starts again even with no spawn.
 - **`stop_grace_period: 45s`** in the Compose service. Docker's default is
   10 seconds, shorter than the 20 seconds each harness is given; a container
   killed at the timeout leaves agents that were not stopped in order. A
   platform that does not read the Compose file needs the same stop timeout
   in its container spec.
-- **A healthcheck on sshd.** `oats host run` does not supervise sshd: if
+- **A healthcheck on sshd.** The supervisor reports an sshd exit; if
   sshd ends, the agents and the tick go on and the operator's route is gone.
   The service's healthcheck opens `127.0.0.1:2222` every 30 seconds (5
   second timeout, 3 retries, 10 second start period), so the container then

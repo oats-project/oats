@@ -21,10 +21,11 @@ RUN --network=none npm rebuild @awebai/aw --ignore-scripts=false --offline \
     && npm cache clean --force
 
 COPY --chmod=755 entrypoint.sh /usr/local/bin/agent-entrypoint
+COPY --chmod=644 supervisor.mjs /usr/local/lib/agent-supervisor.mjs
 COPY --chmod=644 sshd_config /etc/agent-sshd_config
 ENV HOME=/state/home
 # A child WORKDIR would be created by Docker as root inside a fresh mount.
 WORKDIR /state
 USER agent
 EXPOSE 2222
-ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/usr/local/bin/agent-entrypoint"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/agent-entrypoint"]
