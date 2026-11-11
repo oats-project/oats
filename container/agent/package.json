@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "dependencies": {
-    "@awebai/oats": "0.69.14",
+    "@awebai/oats": "0.69.15",
     "@awebai/aw": "1.36.56",
     "@anthropic-ai/claude-code": "2.1.322"
   }

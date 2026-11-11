@@ -3,8 +3,10 @@
 `container/agent/` supplies an agent image and a Compose service for one
 team's trust group. It runs non-root sshd on port 2222; the operator uses the
 existing [server route](servers.md) to connect, preview and spawn. The
-entrypoint creates private state directories and host keys, then starts
-sshd. Deployment setup and seat admission belong to the operator.
+entrypoint creates private state directories and host keys, starts sshd,
+then runs `oats host run`
+([The kernel's periodic work](#the-kernels-periodic-work)). Deployment setup
+and seat admission belong to the operator.
 
 ## Configuration contract
 
@@ -61,8 +63,10 @@ version and regenerate this directory's lock with
 `npm install --package-lock-only --ignore-scripts`; review both files. Do not
 use `--install-oats` or `--install-aw` against a running container.
 
-The committed OATS 0.69.14 pin supports `env: { fromFile: ... }` and the
-operator's `oats harness token set` route. Provision the token through the
+The committed OATS 0.69.15 pin has `oats host run`, which the entrypoint
+runs, and `oats schedule host install --register-only`. It supports
+`env: { fromFile: ... }` and the operator's `oats harness token set` route.
+Provision the token through the
 [harness credential route](servers.md#harness-credentials) and collect live
 acceptance evidence before claiming the two-seat inference milestone.
 
@@ -122,7 +126,10 @@ Supply these plain variables to the bundle's env file:
 The bundle owns the network, resolver, forwarder, firewall and their bypass
 checks. The agent service publishes no ports and sets no DNS or extra-hosts
 override. It joins only the named external `agents` network. Its restart
-policy is `unless-stopped`; security flags are fixed in the service file.
+policy is `unless-stopped`, its stop grace period is 45 seconds and its
+healthcheck reads sshd's port
+([The kernel's periodic work](#the-kernels-periodic-work)); security flags
+are fixed in the service file.
 
 ```sh
 docker compose -p "oats-team-${TEAM}" --env-file <plain-env-file> \
@@ -157,7 +164,15 @@ oats server connect team-agent --ssh <ssh-alias> --dir /state/deploy \
 ```
 
 Use public HTTPS package pins unless a separate reviewed credential route
-is provisioned. Verify `server connect` reports ready. The operator places
+is provisioned. Verify `server connect` reports ready. Then register the
+deployment for the schedule tick `oats host run` runs in the container
+([The kernel's periodic work](#the-kernels-periodic-work)):
+
+```sh
+oats schedule host install --register-only --server team-agent
+```
+
+The operator places
 two independently admitted ordinary-member identities at
 `/state/seats/<alias>/.aw`; each spawn selects one:
 
@@ -188,46 +203,77 @@ or narrow its authority. Never share the mount across trust groups.
 
 ## The kernel's periodic work
 
-The image's entrypoint starts sshd and nothing else. A container has no
-launchd and no systemd user manager, so in it nothing resumes the sessions
-that were lost when it last stopped, nothing runs the schedule tick, and
-nothing stops the agents in order when the runtime stops it: they are killed
-with the container and read `lost`.
+A container has no launchd and no systemd user manager, so no timer runs
+the kernel's periodic work in it. The image's entrypoint does: it starts
+sshd in the background and then runs `oats host run`
+([desktop-cli-api.md](desktop-cli-api.md#the-host-run-oats-host-run)), one
+foreground process that lasts as long as the container.
 
-`oats host run`
-([desktop-cli-api.md](desktop-cli-api.md#the-host-run-oats-host-run)) is the
-kernel command that does those three things in one foreground process. The
-image's pinned OATS does not have it, and the image does not run it. An operator can run it by hand in a
-container whose OATS has it, and the entrypoint of a derived image can end
-in it. What such an entrypoint has to respect:
+- **At start** it runs the resume sweep once, so the sessions that were lost
+  when the container last stopped are started again
+  ([Resume after a shutdown](execution-targets.md#resume-after-a-shutdown)).
+  Then, at second 0 of every minute, it runs the schedule tick for the
+  deployments the container's host schedule registry lists and lists the
+  instances. With no deployment registered it ticks nothing and says so.
+- **On the runtime's SIGTERM** (`docker stop`, `docker restart`, a Compose
+  `down` or a recreate) it starts no further minute, waits for a tick that
+  is running, and stops every running agent side by side: SIGTERM to the
+  harness and a wait of 20 seconds, never escalated. Each home's stop record
+  says it was stopped with the host, so the home reads `lost` and the next
+  start's sweep resumes it. Then it exits 0 and the container ends.
+- **Its progress** is one line per event on standard error, beside sshd's
+  log, in `docker logs`.
 
-- **`oats host run` is the process the runtime's signal must reach and
-  wait for.** Under `tini -g` that is tini's direct child: start sshd in the
-  background, then `exec oats host run`. `tini -g` signals its child's
-  process group; the OATS tmux server and the harnesses under it are in
-  sessions of their own, outside that group, so they run until `oats host
-  run` stops them. Measured with tini 0.19.0 and tmux 3.3a.
-- **The runtime's stop timeout must be longer than the stop.** On SIGTERM
-  `oats host run` waits for a tick that is running, lists the instances and
-  gives each harness `--stop-grace` seconds (default 20). Docker's default
-  stop timeout is 10 seconds.
-- **It does not supervise sshd.** If sshd ends while it runs, the agents and
-  the tick go on and the operator's route is gone.
-- **The tmux server a resume starts gets its environment**, its `PATH`
-  included.
+What the image's files fix for that:
 
-It ticks the deployments the container's host schedule registry lists. To
-register one where no timer can be installed:
+- **`oats host run` is tini's direct child**, the process the runtime's
+  signal reaches and the container waits for: the entrypoint's last line is
+  `exec oats host run`, after sshd is started in the background. `tini -g`
+  signals its child's process group; the OATS tmux server and the harnesses
+  under it are in sessions of their own, outside that group, so they run
+  until `oats host run` stops them. Measured in `oats-agent:o1-local` with
+  tini 0.19.0 and tmux 3.3a: on `docker stop` both members of the group
+  received the TERM, and two seconds later the tmux server and its pane were
+  alive and the pane had received nothing.
+- **`stop_grace_period: 45s`** in the Compose service. Docker's default is
+  10 seconds, shorter than the 20 seconds each harness is given; a container
+  killed at the timeout leaves agents that were not stopped in order. A
+  platform that does not read the Compose file needs the same stop timeout
+  in its container spec.
+- **A healthcheck on sshd.** `oats host run` does not supervise sshd: if
+  sshd ends, the agents and the tick go on and the operator's route is gone.
+  The service's healthcheck opens `127.0.0.1:2222` every 30 seconds (5
+  second timeout, 3 retries, 10 second start period), so the container then
+  reads `unhealthy`. Docker does not restart a container for being
+  unhealthy. Read it and restart the container; the stop is the ordered one
+  above, and the next start resumes the agents:
+
+  ```sh
+  docker inspect --format '{{.State.Health.Status}}' "oats-agent-${TEAM}"
+  docker restart "oats-agent-${TEAM}"
+  ```
+
+- **The tmux server a resume starts gets the entrypoint's environment**, its
+  `PATH` and the nss_wrapper mapping included.
+
+`oats host run` refuses to start while another one holds the container's
+lock (`E_HOST_RUN_BUSY`); the container then exits 1 and the restart policy
+starts it again. A lock left by an earlier run of the container is taken
+over.
+
+The schedule tick covers only registered deployments. Register the
+deployment once, after `server connect`
+([OATS over SSH](#oats-over-ssh)):
 
 ```sh
-oats schedule host install --register-only --dir /state/deploy
+oats schedule host install --register-only --server team-agent
 ```
 
-([schedules.md](schedules.md#without-a-host-timer)). Plain `host install`
-fails in a container after registering, since there is no systemd user
-manager. Over the route (`--server team-agent`) the option is refused
-(`E_REMOTE_INCOMPATIBLE`, nothing sent) unless the container's OATS
-advertises `schedule-host-register-only`; the image's pin does not.
+or, in the container, `oats schedule host install --register-only --dir
+/state/deploy` ([schedules.md](schedules.md#without-a-host-timer)). Plain
+`host install` fails in a container after registering, since there is no
+systemd user manager. The registry is in `/state/home`, so it persists
+across container runs.
 
 ## Acceptance and evidence
 
@@ -261,7 +307,9 @@ variables. It resolves `AGENT_IMAGE` independently and requires that image's
 ID, reference and start command, and its complete environment (printing only
 names of differing variables). Other comparisons include supplementary
 groups, namespace overrides, sysctls, published ports, resolver overrides
-and the single network/address. The OCI runtime must match the daemon's
+and the single network/address. The stop timeout must be 45 seconds and the
+healthcheck the service file's, so a container made before either was set
+is refused until it is recreated. The OCI runtime must match the daemon's
 independently read default; shared memory stays at Docker's 64 MiB default,
 the OOM killer stays enabled, and device cgroup rules stay empty. The total
 memory-plus-swap setting is absent or Docker's default of twice the memory
@@ -285,7 +333,8 @@ checks. Record target evidence separately from local evidence. Container
 startup and a local preview do not establish two running agents.
 
 `test/agent-container.test.mjs` pins the image, Compose and SSH security
-settings and rejects weakened inspect fixtures. The SSH guard requires flat
+settings and the entrypoint's last two lines, and rejects weakened inspect
+fixtures. The SSH guard requires flat
 `Keyword value` lines and refuses duplicate keywords, `Match`/`Include`,
 equals-delimited keywords and quoted keywords. Follow the repository's
 local check limits; full suites run in CI.
