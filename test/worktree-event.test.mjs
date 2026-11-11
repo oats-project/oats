@@ -900,7 +900,8 @@ test("hook output stays in its 0600 log: never in the envelope, the record, the 
 
 /** A `git` on PATH that runs the real one, pausing first at the step `gate` (a JS expression over
  *  `a`, the argv) until `<base>/<release>` exists, after writing its own pid to `<base>/<entered>`; `after`, when given, is written once that step's real git returned. Each is
- *  a JS expression for a file name. */
+ *  a JS expression for a file name. A wait that reaches its limit (30 s) fails that step, naming the
+ *  gate, rather than running git anyway: a gate that no longer matches what the test meant fails. */
 function gatedGit(fx, name, { gate, entered, release, after = "null" }) {
   const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8", env: fx.env }).trim();
   const dir = join(fx.base, `git-${name}`); mkdirSync(dir);
@@ -913,6 +914,10 @@ if (gated) {
   const entered = base + "/" + (${entered});
   writeFileSync(entered + ".tmp", String(process.pid)); renameSync(entered + ".tmp", entered);
   for (let n = 0; n < 1500 && !existsSync(base + "/" + (${release})); n++) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+  if (!existsSync(base + "/" + (${release}))) {
+    process.stderr.write("gate " + ${JSON.stringify(name)} + " timed out: " + (${release}) + " never appeared, so git " + a.join(" ") + " did not run\\n");
+    process.exit(125);
+  }
 }
 const r = spawnSync(${JSON.stringify(real)}, a, { stdio: "inherit" });
 if (gated && (${after})) writeFileSync(base + "/" + (${after}), "");
