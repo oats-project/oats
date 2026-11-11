@@ -1454,21 +1454,27 @@ refused. A home removed between the read and its start is reported
     `resume-lock-stuck` problem, with the path and what to do. It reads the
     lock and takes nothing. A free lock, a sweep that runs and a lock a gone
     sweep left are not reported.
-- A loss is answered once: whatever a sweep did with it (resumed, refused,
-  skipped or blocked), no later sweep starts it again, in this boot or after
-  a reboot; a later sweep reports it `not-seen-recently`. A `lifecycle-busy`
-  skip is the one that answers nothing: the next sweep reads the home again. A refused resume is
-  never retried automatically: it is also noted for the boot, and reported
-  `refused-this-boot` should that answer be lost.
-- A home lost unexpectedly is started by sweeps at most 3 times in a boot. A home lost again
-  after each resume (a harness that crashes the host or its terminal server,
-  say) is then reported `keeps-getting-lost`, and that loss is answered: no
-  sweep starts it again, after a reboot either. Start it by hand: its next
-  loss is a new one, with a new count in each boot. Every sweep start that launched
-  something counts (resumed, fresh or blocked), by home, as soon as that start
-  has answered, so a sweep killed while other starts run has counted it; a
-  refused, skipped or busy one does not. `oats session start --resume` run by hand is neither
-  bounded nor counted.
+- A loss a sweep started is answered once: whether that start resumed, came
+  up fresh or is blocked, no later sweep starts it again, in this boot or
+  after a reboot; a later sweep reports it `not-seen-recently`. A
+  `lifecycle-busy` skip answers nothing: the next sweep reads the home again.
+- A refused start answers nothing either. It launched nothing, and what
+  refused it (a launch variable not set, no wake broker yet) is how the host
+  was at that moment. The sweep notes it and tries that home again no sooner
+  than 1 minute later, then 2, 4 and 8, and every 15 minutes after that; a
+  sweep that runs before then reports it `start-refused-retrying`, with the
+  refusal's code and the time of the next attempt, and starts nothing. The
+  retries end when the loss is 24 hours old (`not-seen-recently`).
+- A home lost unexpectedly is started by sweeps at most 3 times in an hour. A
+  home lost again after each resume (a harness that crashes the host or its
+  terminal server, say) is then reported `keeps-getting-lost`, with the time
+  the oldest of those starts is an hour old: a sweep starts the home again
+  then. Every sweep start that launched something counts (resumed, fresh or
+  blocked), by home, as soon as that start has answered, so a sweep killed
+  while other starts run has counted it; a refused, skipped or busy one does
+  not. The count and the retry delays are kept for one boot: a reboot starts
+  both again. `oats session start --resume` run by hand is neither bounded
+  nor counted.
   A stop of the current start with the host is different: a successful
   restore after that administrative stop neither spends nor resets the
   crash budget, and the crash ceiling cannot prevent it. A failed or
