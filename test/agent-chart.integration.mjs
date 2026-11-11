@@ -270,7 +270,7 @@ if(fs.existsSync(prior)){
 }
 if(command==='oats host run --plan --json'){
  if(process.env.O1B_FIXTURE_INVALID_JSON==='plan')console.log('fixture-private-ssh-banner');
- else console.log(JSON.stringify({ok:true,result:{plan:process.env.O1B_FIXTURE_INVALID_JSON==='plan-value'?'fixture-private-plan-value':true,refusals:[{code:'E_HOST_RUN_BUSY'}]}}));
+ else console.log(JSON.stringify({ok:true,result:{plan:process.env.O1B_FIXTURE_INVALID_JSON==='plan-value'?'fixture-private-plan-value':true,refusals:[{code:'E_HOST_RUN_BUSY',details:process.env.O1B_FIXTURE_LOCK_FOUND==='missing'?{}:{found:process.env.O1B_FIXTURE_LOCK_FOUND||'running'}}]}}));
 }
 else if(command.startsWith('node -e '))console.log('PASS fixture SSH boundary (no real runtime assertions)');
 else process.exit(2);
@@ -307,6 +307,13 @@ else process.exit(2);
       assert.notEqual(invalid.status, 0);
       assert.match(invalid.stderr, source === "plan-value" ? /host run plan answer/ : /invalid JSON \(output withheld\)/);
       assert.doesNotMatch(invalid.stdout + invalid.stderr, /fixture-private/);
+    }
+    for (const found of ["unknown", "unreadable", "directory", "cannot-take-over", "held-again", "missing"]) {
+      rmSync(join(dir, "known-host-path"), { force: true });
+      const held = spawnSync("sh", [script, "--values", join(dir, "values.json"), "--namespace", "proof", "--release", "proof", "--context", "fixture-context", "--pod", pod.metadata.name, "--ssh-key", join(dir, "key")], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, O1B_FIXTURE_LOCK_FOUND: found }, timeout: 10_000 });
+      assert.notEqual(held.status, 0, `a ${found} lock must not prove a running holder`);
+      assert.match(held.stderr, /entrypoint host run must already hold its lock/);
+      assert.doesNotMatch(held.stdout, /entrypoint host run holds its lock/);
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

@@ -145,7 +145,7 @@ function sshProof(port, key, knownHosts, uid, gid, phase = "ssh") {
   const plan = json(command("ssh", [...ssh, "oats host run --plan --json"]), "host plan");
   assert.equal(plan.ok, true, "host run plan failed");
   assert.equal(plan.result.plan, true, "host run plan answer");
-  assert.ok(plan.result.refusals.some((r) => r.code === "E_HOST_RUN_BUSY"), "entrypoint host run must already hold its lock");
+  assert.ok(plan.result.refusals.some((r) => r.code === "E_HOST_RUN_BUSY" && r.details?.found === "running"), "entrypoint host run must already hold its lock");
   report(phase, "PASS oats host run --plan: plan=true; entrypoint host run holds its lock (E_HOST_RUN_BUSY)");
 }
 
