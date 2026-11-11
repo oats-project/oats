@@ -49,7 +49,11 @@ function write(path, content) { mkdirSync(dirname(path), { recursive: true }); w
  *  queues behind it): the hook would then take its version-floor path, not the path under test. One
  *  untimed exec here takes that cost. */
 function fakeAw(bin, script) {
-  write(join(bin, "aw"), script);
+  // Every fake is a host whose wake broker runs: oats.aweb refuses a start the broker delivers to
+  // without one, before the step a test here is about.
+  const shebang = "#!/bin/sh\n";
+  assert.ok(script.startsWith(shebang), "a fake aw here is a /bin/sh script");
+  write(join(bin, "aw"), `${shebang}if [ "$1 $2" = "wake status" ]; then echo '{"daemon_running":true,"daemon_version_state":"reported","daemon_version":"1.36.58","instances":[]}'; exit 0; fi\n${script.slice(shebang.length)}`);
   execFileSync("chmod", ["+x", join(bin, "aw")]);
   execFileSync(join(bin, "aw"), ["version"]);
 }

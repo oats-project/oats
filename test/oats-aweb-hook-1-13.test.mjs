@@ -39,7 +39,8 @@ function csv(name, fallback) { return String(process.env[name] || fallback).spli
 fs.appendFileSync(log, JSON.stringify({ argv: a, cwd: process.cwd(), identityHome: process.env.AWEB_IDENTITY_HOME || null }) + "\\n");
 if (a[0] === "id" && a[1] === "grant" && process.env.AWEB_IDENTITY_HOME) { console.error("grant command refuses external identity home"); process.exit(2); }
 if (s === "version") { process.stdout.write(process.env.FAKE_AW_VERSION ? "aw " + process.env.FAKE_AW_VERSION : ${JSON.stringify(AW_VERSION)}); process.exit(0); }
-if (s.startsWith("wake status")) { console.log(j({ instances: [] })); process.exit(0); }
+// A host whose wake broker runs: a start the broker delivers to is refused without one.
+if (s.startsWith("wake status")) { console.log(j({ daemon_running: true, daemon_version_state: "reported", daemon_version: "1.36.58", instances: [] })); process.exit(0); }
 if (s.startsWith("wake ")) process.exit(0);
 if (a[0] === "custody" && a[1] === "status" && a.includes("--json")) {
   const team = process.env.FAKE_CUSTODY_TEAM || "t:example.test";
@@ -378,7 +379,7 @@ test("launch with renewal off preserves the existing grant locator and session d
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.deepEqual(r.doc.env, { AWEB_DELIVERY: "session", AWEB_IDENTITY_HOME: oldHome });
     assert.deepEqual(r.doc.meta, { ...old, delivery: "session", runtime: "" }, "the start records the delivery and runtime it ran under and keeps the grant");
-    assert.deepEqual(logLines(base).map((l) => l.argv.join(" ")), [`wake register --home ${home} --identity-home ${oldHome} --delivery session`], "renewal off calls aw only to keep the broker registration on the existing grant home");
+    assert.deepEqual(logLines(base).map((l) => l.argv.join(" ")), ["wake status --json", `wake register --home ${home} --identity-home ${oldHome} --delivery session`], "renewal off calls aw only to confirm the broker runs and keep its registration on the existing grant home");
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
 

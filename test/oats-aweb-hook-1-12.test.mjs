@@ -37,7 +37,7 @@ if (grantCmd[0] === "id" && grantCmd[1] === "grant" && (a[0] === "--identity-hom
 const cmd = a;
 function val(flag) { const eq = a.find((x) => x.startsWith(flag + "=")); if (eq) return eq.slice(flag.length + 1); const i = a.indexOf(flag); return i >= 0 ? a[i + 1] : undefined; }
 if (s === "version") { process.stdout.write(process.env.FAKE_AW_VERSION || ${JSON.stringify(AW_VERSION)}); process.exit(0); }
-if (s.startsWith("wake ")) { if (process.env.FAKE_NO_WAKE) { console.error("aw: unknown command wake"); process.exit(2); } process.exit(0); }
+if (s.startsWith("wake ")) { if (process.env.FAKE_WAKE_REGISTER_FAIL && s.startsWith("wake register")) { console.error("aw wake register: the broker refused the registration"); process.exit(5); } if (s.startsWith("wake status")) console.log(JSON.stringify({ daemon_running: true, daemon_version_state: "reported", daemon_version: "1.36.58", instances: [] })); process.exit(0); }
 if (cmd[0] === "custody" && cmd[1] === "status" && cmd.includes("--json")) {
   if (process.env.AWEB_IDENTITY_HOME) {
     let text = ""; try { text = fs.readFileSync(path.join(process.env.AWEB_IDENTITY_HOME, "grant.yaml"), "utf8"); } catch {}
@@ -210,7 +210,7 @@ test("global mode compensates if wake registration fails after mint", () => {
   const base = mkdtempSync(join(tmpdir(), "oats-aweb-112-"));
   try {
     const bin = fakeAw(base); const { root, home } = deployment(base); const custody = resident(base);
-    const r = runHook(bin, "spawn", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_SETTINGS: JSON.stringify({ delivery: "session", identity: { mode: "global", resident: "merlin" }, residents: { merlin: custody } }), FAKE_NO_WAKE: "1" });
+    const r = runHook(bin, "spawn", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_SETTINGS: JSON.stringify({ delivery: "session", identity: { mode: "global", resident: "merlin" }, residents: { merlin: custody } }), FAKE_WAKE_REGISTER_FAIL: "1" });
     assert.notEqual(r.status, 0);
     assert.equal(r.doc.meta.identity.grant.id, "grant-123");
     assert.equal(existsSync(join(home, ".aweb-identity")), false, "grant home removed after wake registration failure");
