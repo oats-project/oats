@@ -54,7 +54,8 @@ the roadmap and the architecture rationale) and the engineering nodes
 `oats/integrations-expert` and `oats/oats-operator-expert`; `okf.json` beside
 `soul.yaml` names them. Consult them with `/okf-consultation` (`oats okf index`,
 `oats okf cat`, `oats okf search`) before you plan, and write what you learn
-into your instance notes, so it is harvested into your node.
+into your instance notes, so you propose it to your node at your knowledge
+checkpoints.
 
 **A product decision never goes into the market node.** Direction, vision and
 roadmap decisions belong to `oats/oats-maintainer`: name each in one line in

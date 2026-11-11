@@ -1,7 +1,8 @@
 # Publication safety gate
 
 Run `node <okf-authoring skill dir>/scripts/okf-publication.mjs --help` for the
-exact flags. This dependency-free helper is shared by harvest and maintenance.
+exact flags. This dependency-free helper is shared by the proposer (`oats okf
+propose`, in oats.okf) and the maintainer (oats.okf-maintenance).
 It is separate from `okf-validate.mjs`: that validator's interface and exit
 codes are unchanged, and it checks structure, not content.
 
@@ -51,6 +52,63 @@ Git push options are cleared, not transmitted outside the screened graph. The re
 must match, with no pushurl or clone-local URL rewrite. Host-wide Git routing
 continues to apply to the recorded locator. No credentials are copied.
 
+## Uncertain push diagnostics
+
+`E_PUSH_UNCERTAIN` and `E_DELETE_UNCERTAIN` (the branch deletion in
+`close-unsafe`) include a `diagnostic` object. The error code, exit **2**,
+retained artifacts and no-automatic-retry rule are unchanged. A deletion error
+can occur after the PR has already closed; it is not permission to repeat the
+close or delete.
+
+```json
+{"ok":false,"code":"E_PUSH_UNCERTAIN","diagnostic":{"phase":"push","exitCode":128,"signal":null,"timedOut":false,"elapsedMs":37,"cause":"auth-required"}}
+```
+
+The field set is the same in both helper copies:
+
+- `phase`: `push` means the Git push child failed, including a delete push;
+  `readback-absent` means a pushed ref was not found afterwards;
+  `readback-other` means a pushed ref names an unexpected OID, or a deleted ref
+  still exists. That OID is never included in the diagnostic.
+- `exitCode`: the push child's integer exit status, or `null` if unavailable.
+  A readback mismatch after a successful push reports `0`.
+- `signal`: a fixed allowlisted signal name, or `null` when absent/unrecognized.
+  The list is `SIGABRT`, `SIGALRM`, `SIGBREAK`, `SIGBUS`, `SIGFPE`, `SIGHUP`,
+  `SIGILL`, `SIGINT`, `SIGKILL`, `SIGPIPE`, `SIGQUIT`, `SIGSEGV`, `SIGSYS`,
+  `SIGTERM`, `SIGTRAP`, `SIGUSR1`, `SIGUSR2`, `SIGXCPU`, `SIGXFSZ`.
+- `timedOut`: whether the push child reported `ETIMEDOUT`.
+- `elapsedMs`: nonnegative integer milliseconds spent in the push child, not
+  the whole operation or subsequent readback. No process outcome is invented
+  when the OS supplied none.
+- `cause` (optional): only one constant from the table below, matched
+  case-insensitively on failed Git client-side stderr lines. No match means
+  the field is absent. Successful-push readback mismatches have no cause.
+
+| Fixed client phrase | `cause` |
+| --- | --- |
+| `terminal prompts disabled` or `could not read Username` | `auth-required` |
+| `Authentication failed` or `Permission denied (publickey)` | `auth-denied` |
+| `Could not resolve host` | `host-unresolved` |
+| `connection refused` or `connection timed out` | `connection-failed` |
+
+The first matching table row wins. Lines starting with `remote:` or
+`fatal: remote error:` are excluded (including leading whitespace and case
+variants). Git can also quote remote text in `error: remote unpack failed:`,
+remote-status warnings, `unable to parse remote unpack status:` and
+`protocol error:` diagnostics. The entire stderr tail starting with these
+remote/protocol diagnostics is excluded: their payloads can contain unprefixed
+continuation lines or control characters. Stdout is never an input to `cause`.
+Push children run under
+`LC_ALL=C`; the caller's locale is not changed. Raw stderr/stdout, snippets,
+URLs, paths, configuration, identities, tokens and arbitrary error/signal
+strings never enter this field. There is no debug or bypass flag.
+
+A cause identifies only a recognized client phrase, not a guaranteed root
+cause, successful authentication, absence of transferred objects, or permission
+for recovery. Retain and inspect the exact state before a separately authorized
+attempt. A public repository can be read anonymously; successful reads do not
+establish how credentials reach a push or whether its receive phase will pass.
+
 ## Rules, exclusions and limits of detection
 
 Rules live in `scripts/okf-content-screen.mjs`; `RULE_IDS` is the authoritative
@@ -97,18 +155,34 @@ node <skill-dir>/scripts/okf-publication.mjs screen-tree \
 selected tree, including navigation/metadata, for accepted-corpus measurement.
 Neither writes remote state. `--root` defaults to `.`. A missing root refuses.
 
+`screen-text`, `screen`, `screen-tree`, `commit` and `create` accept an
+optional `--terms-file` (oats.okf 6.0: the host setting `screen-terms-file`,
+which `oats okf propose` passes): one term per line, matched
+case-insensitively in every screened text, file name and ref, reported as rule
+`host-term` with its location only. Terms only add refusals; an unreadable
+or malformed file is `E_CONTENT_INPUT`, never "no terms".
+
 ## Create
 
-The harvest skill supplies the exact create recipe. Its local-only `commit`
+`oats okf propose --apply` runs the exact create sequence. Its local-only `commit`
 step snapshots screened commit text, fixes author and committer explicitly
 (overriding more-specific Git settings after clearing inherited selectors),
 checks the staged tree, and updates only the current new branch with a local
 old-head compare-and-swap. No raw commit summary is printed. `create` preserves its
-fresh `okf-harvest/<date>-<UUID>` key, empty expected-old lease and new-ref
+fresh `okf-proposal/<date>-<UUID>` key (a 5.x `okf-harvest/` key with a
+version 2 block is still accepted through 6.x), empty expected-old lease and new-ref
 confirmation. It never updates an existing ref, even an identical one. The
 helper verifies the recorded accepted branch tip before and after screening.
-A moving base refuses; an independent remote base can still move after that
-check, so this is not an atomic lock of the whole forge. The helper rechecks
+A base that moved before the push is recovered inside `create`, at most three
+times: it fetches the accepted branch (writing no local ref but the CAS
+below), requires a fast-forward, reconciles the PR's delta onto the new tip
+as `rewrite` does, commits it with the original message, moves the local
+branch by compare-and-swap and screens the new range again before pushing.
+The result names `base` (the tip the PR is parented on) and `recovered`.
+Exhausted retries, a conflict, a non-fast-forward tip, nothing left to
+publish or a failed fetch refuse `E_BASE_MOVED` with a fixed `recover`
+diagnostic. An independent remote base can still move after the last check,
+so this is not an atomic lock of the whole forge. The helper rechecks
 after label creation and reads back the new PR's identity/head before reporting
 success. GitHub create/close have no atomic head predicate: movement detected
 after a write is `E_PR_UNCERTAIN`, not success or a promise of zero effects.
@@ -117,7 +191,8 @@ outcomes instead of replaying them.
 
 ## Amend, then review the new head
 
-For provenance **v2**, stage your sanitized PR changes in the old PR checkout,
+For provenance **v3** (an `okf-proposal` PR) and **v2** (a 5.x `okf-harvest`
+PR), stage your sanitized PR changes in the old PR checkout,
 run whole-base structural validation, and use `rewrite` with `--head` equal to
 the exact old PR head and `--base` equal to the fetched current accepted tip.
 The helper derives the PR's delta from its unique fork and reconciles that delta
@@ -127,7 +202,10 @@ reparented on a newer accepted commit. Three-way text merging uses Git's
 longstanding `merge-file` plumbing, not new Git version-dependent flags. This
 constructs an explicit replacement for review, not a prediction of hosted merge
 semantics (attributes, rename handling and algorithms can differ). The
-maintainer's working tree/index entries stay unchanged.
+maintainer's working tree/index entries stay unchanged. The replacement PR body
+(`--body-file`) keeps the PR's own provenance version: a v3 PR keeps its
+`okf-proposal` block, a v2 PR its `okf-harvest` block; the other version
+refuses `E_PROVENANCE`.
 
 The reconciled tree becomes **one new commit parented on the current accepted
 tip**, not the old PR head. The gate screens its actual bytes before replacing
@@ -159,7 +237,7 @@ head. If content must be removed, **close and delete the PR branch** using
 `close-unsafe`, never an append-only sanitization or rewrite. Even a safe
 textual deletion refuses in `amend-legacy`; close/re-propose instead. If the
 current accepted tip is not an ancestor of a legacy PR head, both `merge` and
-`amend-legacy` refuse with `E_REWRITE_REQUIRED`. Close it for a new v2 proposal;
+`amend-legacy` refuse with `E_REWRITE_REQUIRED`. Close it for re-proposal (a v3 PR);
 never reparent or append a catch-up commit to bypass the legacy ancestry rule.
 
 ## Verdict and settlement
@@ -169,7 +247,7 @@ never reparent or append a catch-up commit to bypass the legacy ancestry rule.
 that exact head and the appropriate verdict (`merge`/`amend+merge`, or
 `close`). `merge` verifies the pinned current accepted tip and requires it to
 be an ancestor of the reviewed head. A behind/divergent PR refuses with
-`E_REWRITE_REQUIRED` (operational exit 2) before comment or merge. For v2, use
+`E_REWRITE_REQUIRED` (operational exit 2) before comment or merge. For v3 or v2, use
 `rewrite` against the current tip, review the actual returned replacement tree,
 and bind a fresh verdict to that head; legacy closes for re-proposal. Never
 reuse a stale base OID or an earlier verdict to bypass the refusal.

@@ -23,7 +23,7 @@ members:
 # the engineering template (capabilities/, TEMPLATE-RELEASE).
 packages:
   oats.framework: v1.23.0
-  oats.okf: v5.8.0
+  oats.okf: v6.0.1
   oats.aweb: v1.39.0
   oats.jira: v1.0.1
   oats.linear: v1.0.1

@@ -172,7 +172,7 @@ For current settings and the respawn/cleanup sequence, see [knowledge.md](knowle
     }
   },
   "providers": {
-    "oats.okf": { "bindings-file": "/Users/ana/.oats/okf-bindings.json", "state-dir": "/Users/ana/.oats/okf", "harvest-runtime": "claude" },
+    "oats.okf": { "bindings-file": "/Users/ana/.oats/okf-bindings.json", "state-dir": "/Users/ana/.oats/okf" },
     "acme-release-tooling": {}
   },
   "workspace": {
@@ -403,8 +403,7 @@ setting given without `--provider <capability>`). The full DTOs are in
 Examples of spawn hooks:
 
 - `oats.okf` validates the soul's declaration and the bindings, and creates the
-  instance knowledge files. With harvest on, it also registers a durable source
-  and its harvest schedule; with harvest off (the default) it registers nothing.
+  instance knowledge files. It registers no source, worker or schedule.
   Missing knowledge configuration is an error, never permission to bootstrap an
   empty substitute.
 - `oats.aweb` mints a messaging identity or, with
@@ -419,9 +418,10 @@ current, appends milestones to `log.md`, and captures non-obvious insights in
 
 It consults accepted knowledge remotely, at its accepted state, with
 `oats okf index`, `cat` and `search` (the `okf-consultation` skill), and never
-writes accepted knowledge; this is instruction, not an OS sandbox. With harvest
-on, an independent harvester judges the instance's notes and session record and
-proposes promotions by pull request. See [knowledge](knowledge.md).
+writes accepted knowledge; this is instruction, not an OS sandbox. At each
+knowledge checkpoint, an instance with a duty to propose judges its own notes
+and proposes durable claims as one pull request (`oats okf propose`). See
+[knowledge](knowledge.md).
 
 ### Spawning and coordinating with other agents
 
@@ -528,10 +528,11 @@ says what a clone carries and what it does not.
 ### Retire
 
 Retirement runs active capability retire hooks in reverse spawn order before the home disappears. The aweb
-integration deletes the instance identity here. With harvest on, `oats.okf`
-takes a final capture of notes and the session record into durable custody; an
-incomplete capture keeps the home for a retry. Retirement never waits for a
-model or GitHub: processing continues after the home is gone.
+integration deletes the instance identity here. `oats.okf` captures nothing
+at retirement: an instance proposes before it finishes, and for one that
+retired without proposing, the operator proposes from its retirement recovery
+copy ([the flow](knowledge.md#the-flow)). Retirement never waits for a model
+or GitHub.
 
 A spawn that is killed after its spawn hooks started and before it wrote the
 home's record (SIGKILL, a container stop, a dropped connection) leaves a home
@@ -1844,8 +1845,8 @@ after the capability injects (`injects/instance-boundary.md`):
   soul's instructions, and `instance.json` `soulDir` records the (read-only,
   per-commit) soul directory every hook and dispatched command receives as
   `OATS_SOUL`. Durable soul edits go through tracked paths under `work/` under
-  the applicable review rules. The knowledge harvester proposes changes to the
-  external knowledge base, never to soul files or skills.
+  the applicable review rules. A knowledge proposal changes the external
+  knowledge base, never soul files or skills.
 
 Agents move between the two as the task needs; the boundary is what each
 directory is for, not a place to settle in.

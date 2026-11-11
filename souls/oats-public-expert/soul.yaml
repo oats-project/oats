@@ -19,7 +19,7 @@ messaging:
     resident: oats-expert
     scopes: [mail.read, mail.send, chat.read, chat.send, events.read, presence.write]
     renew: launch
-# Instance notes hold other workspaces' material; never harvest them into the shared knowledge base.
+# Instance notes hold other workspaces' material; never propose them to the shared knowledge base.
 knowledge:
   harvest: off
 launch: { harness: claude, model: claude-opus-5-5 }   # the role's preference; each machine may override it

@@ -66,8 +66,8 @@ provider packages and their contracts) and `oats/oats-operator-expert`
 `oats/market-research-expert` and `oats/oats-setup-admin`; `okf.json` beside
 `soul.yaml` names them all. Consult them with `/okf-consultation`
 (`oats okf index`, `oats okf cat`, `oats okf search`) before you plan, and
-write what you learn into your instance notes, so it is harvested into your
-node.
+write what you learn into your instance notes, so you propose it to your node
+at your knowledge checkpoints.
 
 Until the knowledge base is organised by subject, an area lesson goes into
 `oats/oats-expert` too, never into the area's node, which belongs to another

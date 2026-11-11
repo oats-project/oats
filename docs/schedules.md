@@ -221,9 +221,9 @@ refuses the key on a trigger.
   again only at due minutes, so a harness that keeps exiting is not restarted
   in a loop. Unobservable or still starting: skipped, delivery kept pending.
   Word wake messages so that receiving one again is harmless.
-- **operation** `{…, operation, home}` — runs a provider operation such as
-  `knowledge:harvest` in the instance at `home` through `oats operation run
-  <layer>:<name> --home <home>`. The provider is whatever fills that layer
+- **operation** `{…, operation, home}` — runs a provider operation
+  (`<layer>:<name>`, one the capability filling that layer declares) in the
+  instance at `home` through `oats operation run <layer>:<name> --home <home>`. The provider is whatever fills that layer
   when the job runs. Tracking is that of a command job.
 
 `--wake-every N` at spawn time means `*/N * * * *`: every 7 fires at :00, :07,
@@ -244,11 +244,11 @@ reports `gh.credentialSource` (`keyring`, `config`, `env:<VAR>`) and warns
 when the timer cannot reach it.
 
 ```json
-{ "id": "okf-harvest-review", "enabled": true, "kind": "trigger",
-  "description": "Review every harvest PR on the knowledge base",
+{ "id": "okf-proposal-review", "enabled": true, "kind": "trigger",
+  "description": "Review every knowledge proposal PR on the knowledge base",
   "on": { "source": "github.pull_request", "repo": "github.com/acme/knowledge",
           "events": ["opened", "reopened", "ready_for_review"],
-          "labels": ["okf-harvest"], "base": "main", "poll": "2m" },
+          "labels": ["okf-proposal"], "base": "main", "poll": "2m" },
   "spawn": { "soul": "oats.okf/knowledge-maintainer", "purpose": "review-pr-{number}",
              "task": "Review knowledge-base PR {repo}#{number}. Load knowledge-review first.",
              "harness": "claude", "model": "opus" },
@@ -328,7 +328,7 @@ when the timer cannot reach it.
 
 ```sh
 oats trigger add --file trigger.json [--description=<text>]   # or:
-oats trigger add --from oats.okf:harvest-review --set repo=github.com/acme/knowledge [--id <id>] [--description=<text>]
+oats trigger add --from oats.okf:proposal-review --set repo=github.com/acme/knowledge [--id <id>] [--description=<text>]
 oats trigger update <id> --description=<text>   # the description only; --description= clears it
 oats trigger list | show <id> | enable <id> | disable <id> | remove <id>
 oats trigger test <id>      # dry run: gh credentials, repo permissions, the soul, what WOULD fire
@@ -576,11 +576,11 @@ with the kind's suffix anywhere in the member (`.yml` works too), for example
 `oats-package/`, `.git/` and `node_modules/` are never scanned.
 
 ```yaml
-# <member>/oats-triggers/okf-harvest-review.yaml
+# <member>/oats-triggers/okf-proposal-review.yaml
 kind: oats-trigger
 schemaVersion: 1
-description: Review every harvest PR on the knowledge base
-from: oats.okf:harvest-review        # a package template at the locked commit, then its parameters
+description: Review every knowledge proposal PR on the knowledge base
+from: oats.okf:proposal-review       # a package template at the locked commit, then its parameters
 set: { repo: github.com/acme/knowledge }
 runsOn: kb-bot-server                # the host.name that runs it
 owner: github.com/acme-kb-bot        # the GitHub account it acts as
@@ -1122,35 +1122,38 @@ more than that:
 fails, the spawn result still carries the instance receipt, plus
 `wakeScheduleError` and a warning.
 
-## Knowledge harvest and review
+## Knowledge proposal review
 
-**oats.okf 5.x does not schedule harvest jobs.** In 5.2 the capability's
-IMPORTANT inject and compulsory `okf-propose` skill give the duty, not TASK.md.
-A working instance keeps its notes current, checks `oats okf status`, and at
-a finished task or PR hand-over proposes only durable, non-duplicate claims.
-At most one proposal per completed unit of work, one harvester at a time,
-and no spawn under memory pressure or below 8 GB available; otherwise defer
-and hand back the pending claims. Most checkpoints propose nothing. When the
-skill's gates pass, the instance directly spawns the package harvester:
+**oats.okf 6 schedules no knowledge job.** Its IMPORTANT inject and
+compulsory `okf-propose` skill give the duty to propose, not TASK.md. At each
+knowledge checkpoint an instance with that duty proposes its durable,
+non-duplicate claims itself, from its home, as one pull request on the
+knowledge base:
 
 ```sh
-oats spawn oats.okf/knowledge-harvester --task-file <proposal> --relation unrelated
+oats okf propose --plan --slug <slug>       # stages the proposal in the home
+oats okf propose --check --slug <slug>      # the diff and its digest
+oats okf propose --apply --slug <slug> --digest <digest>
 ```
 
-The unrelated harvester can outlive the proposing instance. It checks the
-recorded source and its soul opt-out, accepted knowledge and open/recent
-harvest PRs, then proposes an owned-node change through a normal reviewed
-Git PR. Retirement does not automatically capture or harvest anything.
-There is no host harvest switch, per-source command job, run-source command
-or capture/drain/worker engine. The soul-only `knowledge: { harvest: off }`
-keeps consultation while forbidding harvest of that soul's material.
+`--apply` pushes a create-only `okf-proposal/<date>-<id>` branch and opens
+one PR labelled `okf-proposal`; most checkpoints propose nothing. No worker
+is spawned, nobody waits for the PR, and retirement captures nothing. There
+is no host switch, per-source job or capture engine. The soul-only
+`knowledge: { harvest: off }` keeps consultation while giving that soul no
+duty to propose ([The soul's opt-out](knowledge.md#the-souls-opt-out)).
 
-**Review still uses a trigger.** Each harvest PR can be reviewed by
+**Review still uses a trigger.** Each proposal PR can be reviewed by
 `oats.okf/knowledge-maintainer`, spawned from the package template
-`oats.okf:harvest-review`: a workspace trigger file or a local
-`oats trigger add --from oats.okf:harvest-review`. This is a PR-review
-trigger, not a harvest scheduler or a kernel PR-opened capture hook.
+`oats.okf:proposal-review`: a workspace trigger file or a local
+`oats trigger add --from oats.okf:proposal-review`. Through 6.x the template
+`oats.okf:harvest-review` watches only the 5.x label `okf-harvest`: keep it
+beside `proposal-review` only while a 5.x harvester may still open such a
+PR. These are PR-review triggers, not a knowledge scheduler or a kernel
+PR-opened capture hook.
 
+A deployment moving from 5.x takes the hand steps in
+[Pin and select the package](knowledge.md#pin-and-select-the-package).
 Deployments upgrading from 4.x must settle registered sources before
 changing the pin, then use the 5.0 guard-exempt host-key cleanup before new
 spawns. See the [5.0 cutover sequence](release-notes/v0.49.0.md#oatsokf-50-cutover--order-matters). Provider

@@ -164,7 +164,7 @@ mode.
 - `oats retire` and `oats instance stop` are allowed with `--plan` only,
   which reads. Applying them ends someone's work: a stop ends a live
   session and stops its children, and a retire removes a home whose
-  knowledge may not be harvested yet. They go to the classifier.
+  knowledge may not be proposed yet. They go to the classifier.
 - `aw`: reading mail and chat is allowed. Sending (`aw mail send`, `reply`,
   `aw chat send-and-wait` and the rest) goes to the classifier: a send can
   attach any file and reach an address outside the team. The `autoMode`

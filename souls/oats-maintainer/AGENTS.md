@@ -129,4 +129,4 @@ expert's node, the area nodes and the market node (`okf.json` beside
 `soul.yaml` names them). Consult them with
 `/okf-consultation` (`oats okf index`, `oats okf cat`, `oats okf search`).
 Write decisions, roadmap changes and coherence rules into your instance notes,
-so they are harvested into your node.
+so you propose them to your node at your knowledge checkpoints.

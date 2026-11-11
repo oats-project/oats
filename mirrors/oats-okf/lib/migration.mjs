@@ -91,6 +91,9 @@ export function cutoverMigration(file,soul) {
   const original=readJSON(join(dirname(file),'legacy.json'));if(digest(original)!==m.originalDigest) fail('E_MIGRATION','backup differs');
   const declarationFile=join(soul,'okf.json');const ref=`${m.alias}/${m.node}`;
   let decl=fs.existsSync(declarationFile)?validateDeclaration(readJSON(declarationFile)):{version:1,owner:m.owner,owns:[],reads:[]};
+  // okf 6.0: a version-2 declaration names subjects, not an owner or nodes, so
+  // there is no owner to compare and nowhere to add the node: name the version.
+  if(decl.version===2) fail('E_MIGRATION',`${declarationFile} is version 2 (subjects): a version-2 soul has no owner, owns or reads, so the cutover has nowhere to add ${ref}. Nothing was changed. To finish the cutover, replace it with a version-1 declaration ({"version":1,"owner":"${m.owner}","owns":[],"reads":[]}) and rerun this command, then put the version-2 declaration back (a version-2 soul reads its subjects, not the node)`);
   if(decl.owner!==m.owner) fail('E_OWNER','existing soul declaration owner differs');
   decl={...decl,owns:[...new Set([...decl.owns,ref])],reads:[...new Set([...decl.reads,ref])]};
   // The declaration resolves through TODAY's bindings, not the frozen delivery

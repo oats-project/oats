@@ -6,8 +6,8 @@ description: >-
   declarations, choosing the deployment directory, running `oats onboard`,
   placing host settings, syncing, messaging and host delivery, cloning work
   targets and verifying before the first spawn. Also use it to set up okf
-  knowledge operations (the knowledge maintainer and harvester, the harvest
-  review trigger, a soul's harvest opt-out). For package pins see
+  knowledge operations (the knowledge maintainer, the proposal review
+  trigger, a soul's opt-out). For package pins see
   `/oats-package-pins`. Part of the setup and config of an OATS workspace
   (oats.setup); day-to-day operation inside an instance is oats.core.
 ---
@@ -329,9 +329,9 @@ receipt repair.
 
 ## Knowledge operations with OKF
 
-Set this up only after cards 1–8 succeed, and only when the intake authorizes harvested
+Set this up only after cards 1–8 succeed, and only when the intake authorizes proposed
 knowledge reviewed and merged by an agent. It needs kernel ≥ 0.69.2 (the first that
-reads the `background:` key oats.okf's package souls declare) and `oats.okf` 5.8.0. The contract is
+reads the `background:` key oats.okf's package souls declare) and `oats.okf` 6.0.1. The contract is
 `docs/knowledge.md` ("Knowledge operations") and `docs/schedules.md`
 ("Triggers", "Workspace triggers and schedules") in the installed kernel, and
 okf's own README at the pinned tag; read them, and okf's own
@@ -339,42 +339,44 @@ okf's own README at the pinned tag; read them, and okf's own
 
 ### 1. Pin the package
 
-`packages: { oats.okf: v5.8.0 }` in the workspace file, then `oats sync`
+`packages: { oats.okf: v6.0.1 }` in the workspace file, then `oats sync`
 (`/oats-package-pins`). One pin brings, versioned and locked together:
 
-- the three capabilities: `oats.okf` (every working soul's knowledge slot),
-  `oats.okf-harvest` (the harvester's) and `oats.okf-maintenance` (the
-  maintainer's);
-- two **package souls**: `oats.okf/knowledge-harvester` and
-  `oats.okf/knowledge-maintainer` (`oats souls` lists them as `kind: package`);
-- the **review-trigger template** `oats.okf:harvest-review`.
+- the capabilities: `oats.okf` (every working soul's knowledge slot) and
+  `oats.okf-maintenance` (the maintainer's);
+- the **package soul** `oats.okf/knowledge-maintainer` (`oats souls` lists it
+  as `kind: package`);
+- the **review-trigger template** `oats.okf:proposal-review`.
+
+Until 7.0 it also carries the stubs of the removed harvester
+(`oats.okf-harvest`, `oats.okf/knowledge-harvester`): they refuse every spawn.
 
 Show the operator what the package runs before pinning (its manifests'
 `commands` and `hooks`): declaring it is the trust decision, for its souls too.
 
-### 2. The harvester and the maintainer live in the default team
+### 2. The maintainer lives in the default team
 
-Since oats.okf 4.0.2 okf declares and joins no team of its own: the harvester
-and the maintainer live in the deployment's default team, where they talk
+Since oats.okf 4.0.2 okf declares and joins no team of its own: the
+maintainer lives in the deployment's default team, where they talk
 (questions, amendment requests, "merged"). There is nothing to declare. To put
-them in another team, opt them in like any soul, by a `souls:` entry in
+it in another team, opt them in like any soul, by a `souls:` entry in
 `oats-workspace.yaml` (`oats.okf/*: { teams: [<label>] }`), then join at
 spawn (`/oats-teams`).
 
 ### 3. Declare the review trigger for ONE host that can merge
 
-The trigger spawns a `knowledge-maintainer` for each harvest PR on the
-knowledge-base repo. Declare it as a **workspace file** in a member repo (the
+The trigger spawns a `knowledge-maintainer` for each knowledge proposal PR
+(label `okf-proposal`) on the knowledge-base repo. Declare it as a **workspace file** in a member repo (the
 workspace's host repo is the usual place): it is shared through Git, reviewed
 like a soul, and names **the machine that runs it** and **the GitHub account
 it acts as**.
 
 ```yaml
-# <member repo>/oats-triggers/okf-harvest-review.yaml
+# <member repo>/oats-triggers/okf-proposal-review.yaml
 kind: oats-trigger
 schemaVersion: 1
-description: Review every harvest PR on the knowledge base
-from: oats.okf:harvest-review
+description: Review every knowledge proposal PR on the knowledge base
+from: oats.okf:proposal-review
 set: { repo: github.com/<org>/<knowledge-base> }
 runsOn: <host name>                 # that machine's oats-local.yaml host.name
 owner: github.com/<account>         # the account it acts as; it must be able to MERGE on the knowledge base
@@ -387,20 +389,22 @@ owner: github.com/<account>         # the account it acts as; it must be able to
   `owner-mismatch`, `host-unnamed`). So "exactly one host" is a declared fact,
   and the operator's consent is naming the host and logging in as the account.
 - **Handle the self-approval limit.** GitHub forbids approving your own PR. If
-  `owner` is also the account that opens the harvest PRs, either use a
-  separate reviewer or bot account as `owner`, or configure the
-  knowledge-base repo's accepted branch to need no approving review (merge
-  permission only).
+  `owner` is also a proposing host's account, either use a separate reviewer
+  or bot account as `owner`, or let the knowledge-base repo's accepted branch
+  need no approving review (merge permission only).
 - The file's contract (required fields, where it may live, its refusals) is
   `/oats-automations`, "Workspace automations".
-- `oats trigger add --from oats.okf:harvest-review --set repo=… --workspace <member> --runs-on <host name> --owner github.com/<account>`
+- **Protect the accepted branch** (PRs only, merged by the maintainer's
+  account) and give each proposing host's account branch-create access on the
+  knowledge-base repo, never accepted-branch push (`/okf-trigger-setup`).
+- `oats trigger add --from oats.okf:proposal-review --set repo=… --workspace <member> --runs-on <host name> --owner github.com/<account>`
   writes the file, or prints it when that repo is not the current checkout.
   Commit it as a reviewed change, then `oats sync`.
 
 Then, **on the named host**, from its deployment directory:
 
 ```bash
-oats trigger test <member>/okf-harvest-review   # must pass: runs here, owner = this gh login, merge permission, the soul resolvable
+oats trigger test <member>/okf-proposal-review  # must pass: runs here, owner = this gh login, merge permission, the soul resolvable
 oats schedule host status                       # has this host the ONE host timer yet? (docs/schedules.md)
 ```
 
@@ -422,56 +426,52 @@ full (the cap flags, why its `--print` is no preview) is `/oats-automations`,
 "One host timer, no daemon".
 
 **The machine-private alternative** is a local trigger: this host only, its
-own `gh`, no `runsOn`/`owner`, id `local/okf-harvest-review`. Use it to try
+own `gh`, no `runsOn`/`owner`, id `local/okf-proposal-review`. Use it to try
 the loop out; anything a team relies on belongs in the workspace file.
 
 ```bash
-oats trigger add --from oats.okf:harvest-review --set repo=github.com/<org>/<knowledge-base>
+oats trigger add --from oats.okf:proposal-review --set repo=github.com/<org>/<knowledge-base>
 ```
 
-### 4. Harvest in okf 5.x: proposals, and the soul's opt-out
+### 4. Proposals in okf 6, and the soul's opt-out
 
-Since oats.okf 5.0 there is no harvest setting on the host or at spawn.
-`harvest`, `harvest-runtime` and `harvest-model` in `oats-local.yaml`, the
-`--harvest` flag and `oats okf harvest-status` are gone; 5.0 refuses the keys
-with `E_REMOVED`.
+oats.okf 6.0 has no harvester, and no host or spawn switch for the duty to propose.
 
-- **How it works:** a working soul whose knowledge slot is `oats.okf`
-  reads the compulsory `okf-propose` skill from its IMPORTANT inject and
-  checks `oats okf status`. At each harvest checkpoint `okf-propose` names
-  (some only for long-lived roles), new claims become one proposal for one
-  harvester at a time, under a name the skill prints. The harvester opens
-  owned-node PRs for the review trigger (section 3). The duty needs no task
-  briefing; only new spawns get it after the pin.
+- **How it works:** a working soul whose knowledge slot is `oats.okf` reads
+  the compulsory `okf-propose` skill from its IMPORTANT inject and checks
+  `oats okf status`. At each knowledge checkpoint the skill names, it proposes
+  its new durable claims itself with `oats okf propose` (`--plan`, `--check`,
+  `--apply`): one PR labelled `okf-proposal`, for the review trigger
+  (section 3). Nothing is spawned; nobody waits for the PR. Only new spawns
+  get the duty after the pin.
 - **The one switch is the soul's own opt-out:** `knowledge: { harvest: off }`
-  in its `soul.yaml`. Its instances get the shared conditional instructions
-  but no duty; `oats okf status` reports `off` from the spawn-written policy.
-  The harvester independently refuses a proposal naming that soul: the only
-  harvest control enforced in code. It is per soul, and it covers that soul's own
-  proposals, not what its instances tell other seats. Whether a deployment
-  allows opt-outs is that deployment's policy. Opt out a soul whose work is
-  reading third-party correspondence: the harvest exclusions, personal data
-  included, are instructions to agents, and nothing checks the content before
-  the push (okf README, "What is enforced and what is an instruction").
+  in its `soul.yaml`: its instances get no duty, `oats okf status` reports
+  `off`, and `oats okf propose` refuses for that soul (`E_OPTED_OUT`). It is
+  per soul and covers its own proposals, not what its instances tell other
+  seats; whether opt-outs are allowed is the deployment's policy. Opt out a
+  soul whose work is reading third-party correspondence: the exclusions,
+  personal data included, are instructions and a bounded screen, not a
+  guarantee (okf README, "What is enforced and what is an instruction").
 - **The review trigger is independent:** a trigger host can review other
-  hosts' harvest PRs without harvesting itself.
+  hosts' proposal PRs without proposing itself.
 
 Order:
 
-1. Declare the review trigger (section 3) and prove the loop against a scratch
-   knowledge-base repo (see `/okf-trigger-setup`): a harvest PR opens with its
-   provenance block, the trigger spawns the maintainer, it merges, and the
-   harvester retires. Read every step back.
-2. Only then pin `oats.okf` 5.x in the real workspace, with intake consent
+1. Declare the review trigger (section 3) and prove the loop on a scratch
+   knowledge-base repo (`/okf-trigger-setup`): a proposal PR opens with its
+   provenance block, the trigger spawns the maintainer, it merges. Read every
+   step back.
+2. Only then pin `oats.okf` 6.x in the real workspace, with intake consent
    covering what its souls will propose.
 
-**Moving from 4.x:** settle 4.x harvests while 4.x is still pinned; after the
-pin nothing processes them. Then pin 5.x and `oats sync`. From the deployment
-directory, plan first and then apply: `oats okf setup
---remove-legacy-settings --soul <soul> --plan --json`, then the same without
-`--plan`. Drop any `--provider oats.okf harvest=...` from spawn commands. Homes
-spawned on 4.x keep their 4.x modules until respawned. Leftover 4.x source
-records, and when they may be removed by hand, are in the okf README section
+**Moving from 5.x:** take the hand steps of `docs/knowledge.md` ("Pin and
+select the package"), each with its commands in okf's README, "Upgrading to
+6.0": among them `proposal-review` beside `harvest-review`, trusted on its
+host. Homes spawned on 5.x keep their 5.x modules until respawned or upgraded.
+
+**Moving from 4.x:** settle 4.x harvests while 4.x is still pinned (after
+the pin nothing processes them), pin 5.x (okf README, "Upgrading to 5.0"),
+then move on as from 5.x. Leftover 4.x source records are in the okf README,
 "4.x source records after the pin".
 
 ### Gotchas
@@ -484,7 +484,7 @@ records, and when they may be removed by hand, are in the okf README section
 - `oats trigger test` proves only the host it runs on: run it on the
   `runsOn` host, logged in as `owner`.
 - To stop the named host from running a workspace trigger without a commit,
-  run `oats trigger disable <member>/okf-harvest-review` there (it writes
+  run `oats trigger disable <member>/okf-proposal-review` there (it writes
   `triggers.disabled` in that host's `oats-local.yaml`).
 
 ## Never

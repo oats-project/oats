@@ -273,13 +273,19 @@ test("oats okf init --soul probe from the deployment (no home) provisions the ba
     const misnamed = run(["okf", "inspect", "--json"], renamed);
     assert.match(misnamed.err, /using the settings and teams of soul [\w.-]+\/probe,/, misnamed.out + misnamed.err);
 
-    // A 5.0 package-soul harvester requires a proposal naming an actual source.
-    // It still homes under <agents-root>/<package>--<soul>/instances/<name>.
-    const proposal = join(dep, "proposal.md");
-    writeFileSync(proposal, `# Proposal\n\nSource: instance ${r.json.result.instance}, home ${r.json.result.home}, soul probe\n\nA fixture observation merits review.\n`);
-    r = run(["spawn", "oats.okf/knowledge-harvester", "--dir", dep, "--task-file", proposal, "--relation", "unrelated", "--name", "okf-harvester-opd", "--no-launch", "--json"]);
+    // A package soul (oats.okf 6.0's knowledge maintainer) homes under
+    // <agents-root>/<package>--<soul>/instances/<name>.
+    r = run(["spawn", "oats.okf/knowledge-maintainer", "--dir", dep, "--task", "Review knowledge-base PR https://github.com/fixture/knowledge/pull/1 at 0123456789abcdef0123456789abcdef01234567.", "--relation", "unrelated", "--name", "okf-maintainer-opd", "--no-launch", "--json"]);
     assert.equal(r.code, 0, r.out + r.err);
-    assert.equal(realpathSync(r.json.result.home), join(dep, "agents", "oats-okf--knowledge-harvester", "instances", "okf-harvester-opd"));
+    assert.equal(realpathSync(r.json.result.home), join(dep, "agents", "oats-okf--knowledge-maintainer", "instances", "okf-maintainer-opd"));
+    // The removed harvester's stub soul refuses through its required spawn hook and keeps no home.
+    const proposal = join(dep, "proposal.md");
+    writeFileSync(proposal, `# Proposal\n\nSource: instance ${r.json.result.instance}, soul probe\n\nA fixture observation merits review.\n`);
+    const refused = run(["spawn", "oats.okf/knowledge-harvester", "--dir", dep, "--task-file", proposal, "--relation", "unrelated", "--name", "okf-harvester-opd", "--no-launch", "--json"]);
+    assert.equal(refused.code, 1, refused.out + refused.err);
+    assert.equal(refused.json?.error?.code, "E_REQUIRED_HOOK_FAILED", refused.out);
+    assert.match(refused.json.error.message, /oats-okf-harvest E_REMOVED:/);
+    assert.ok(!existsSync(join(dep, "agents", "oats-okf--knowledge-harvester", "instances", "okf-harvester-opd")), "the refused spawn keeps no home");
     assert.ok(!existsSync(join(dep, "local-agents")), "nothing is written under the 0.25 local-agents/ base");
 
     // A leftover 0.25 local-agents/ dir is ONE status/doctor problem and changes nothing else.

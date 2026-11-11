@@ -253,20 +253,34 @@ test("removed okf harvest --json answers E_REMOVED, not an invented empty durabl
   assert.match(doc.error.message, /proposal|propose/);
 });
 
-test("a proposal's actual no-launch harvester identity crosses the public CLI JSON boundary", t => {
-  const f = okfFixture(t), file = f.proposal();
+test("the removed harvester's refusal crosses the public CLI JSON boundary as one envelope, and keeps no home", t => {
+  // oats.okf 6.0: the stub soul's required spawn hook refuses every spawn.
+  const f = okfFixture(t), file = f.proposal(), before = readFileSync(join(f.home, "instance.json"));
   const r = f.raw(["spawn", "oats.okf/knowledge-harvester", "--task-file", file, "--relation", "unrelated", "--name", "okf-harvester-json", "--no-launch", "--json"], f.as(f.source));
-  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
   const doc = parseOnly(r.stdout);
-  assert.equal(doc.schemaVersion, 1); assert.equal(doc.ok, true);
-  assert.equal(doc.result.instance, "okf-harvester-json");
-  const meta = JSON.parse(readFileSync(join(doc.result.home, "instance.json"), "utf8"));
-  assert.equal(meta.work, "directory"); assert.equal(meta.launched, false);
-  assert.equal(meta.parentInstance, undefined); assert.equal(meta.spawnOrigin, "instance");
-  assert.equal(existsSync(join(doc.result.home, "work/input.json")), false);
-  assert.equal(existsSync(join(doc.result.home, "work/staging.json")), false);
-  assert.ok(readFileSync(join(doc.result.home, "TASK.md"), "utf8").includes(readFileSync(file, "utf8").trim()));
-  f.retire(doc.result.instance); f.retire(f.source.instance);
+  assert.equal(doc.schemaVersion, 1); assert.equal(doc.ok, false); assert.equal(doc.result, undefined);
+  assert.equal(doc.error.code, "E_REQUIRED_HOOK_FAILED");
+  assert.deepEqual(doc.error.details, { hooks: [{ capability: "oats.okf-harvest", ok: false, required: true, log: null }] });
+  assert.match(doc.error.message, /oats\.okf-harvest spawn hook \(declared required\): oats-okf-harvest E_REMOVED:/);
+  assert.match(doc.error.message, /oats okf propose --plan/);
+  assert.equal(existsSync(join(f.context, "agents/oats-okf--knowledge-harvester/instances/okf-harvester-json")), false);
+  assert.deepEqual(readFileSync(join(f.home, "instance.json")), before);
+  f.retire(f.source.instance);
+});
+
+test("oats okf propose --json from an instance home crosses the public CLI JSON boundary as one envelope", t => {
+  // The fixture's base is a directory base, which takes no proposal: the
+  // package's typed refusal must reach the caller through the kernel unchanged.
+  const f = okfFixture(t);
+  const r = f.raw(["okf", "propose", "--plan", "--slug", "json-boundary", "--json"], f.as(f.source));
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  const doc = parseOnly(r.stdout);
+  assert.equal(doc.schemaVersion, 1); assert.equal(doc.ok, false); assert.equal(doc.result, undefined);
+  assert.equal(doc.error.code, "E_UNSUPPORTED");
+  const usage = parseOnly(f.raw(["okf", "propose", "--json"], f.as(f.source)).stdout);
+  assert.equal(usage.ok, false); assert.equal(usage.error.code, "E_USAGE");
+  f.retire(f.source.instance);
 });
 
 test("removed harvest refuses before needing a kernel binary, with no PATH fallback or consumed notes", t => {

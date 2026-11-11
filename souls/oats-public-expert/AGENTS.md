@@ -79,5 +79,6 @@ human.
 
 Your instance state records, for every request: the sender, the message id,
 what you answered or where you routed it, and what the requester was last
-told. Exact references only. Harvest is off for this soul: nothing from these
-conversations enters the shared knowledge base.
+told. Exact references only. This soul has no duty to propose knowledge
+(`knowledge: { harvest: off }`): nothing from these conversations enters the
+shared knowledge base.

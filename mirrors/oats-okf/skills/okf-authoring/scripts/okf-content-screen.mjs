@@ -44,6 +44,11 @@
  * other addresses on that line, or any secret/phone finding. This is a narrow
  * subset of Git trailer syntax, not a permissive Git message parser.
  *
+ * terms (oats.okf 6.0): an optional array of host-supplied terms, each matched
+ * case-insensitively anywhere in a line (rule host-term, location only). It
+ * only ever ADDS refusals: it is the host's own deny list, never an allow list,
+ * and it is a caller argument, not a text directive or environment setting.
+ *
  * Limits: not a universal secret/PII detector, a name recognizer, a contextual
  * people/team classifier, or publication authority. Does not decode arbitrary
  * encodings, obfuscation, structured documents, split/multiline credentials,
@@ -67,7 +72,10 @@ export const RULE_IDS = Object.freeze([
   'secret-assignment',
   'contact-email',
   'contact-phone',
+  'host-term',
 ]);
+const MAX_TERMS = 10000;
+const MAX_TERM = 256;
 
 function inputError() {
   const error = new Error(INPUT_MESSAGE);
@@ -75,18 +83,32 @@ function inputError() {
   return error;
 }
 
-function commitOption(options) {
-  if (options === undefined) return false;
+function parseOptions(options) {
+  if (options === undefined) return { commit: false, terms: [] };
   if (options === null || typeof options !== 'object' || Array.isArray(options)) throw inputError();
   // Accept data properties only; do not evaluate caller-supplied getters.
   const properties = Object.getOwnPropertyDescriptors(options);
-  if (Reflect.ownKeys(properties).some(key => key !== 'commit')) throw inputError();
-  if (!Object.hasOwn(properties, 'commit')) return false;
-  const property = properties.commit;
-  if (!Object.hasOwn(property, 'value')) throw inputError();
-  if (property.value === undefined) return false;
-  if (typeof property.value !== 'boolean') throw inputError();
-  return property.value;
+  if (Reflect.ownKeys(properties).some(key => key !== 'commit' && key !== 'terms')) throw inputError();
+  let commit = false, terms = [];
+  if (Object.hasOwn(properties, 'commit')) {
+    const property = properties.commit;
+    if (!Object.hasOwn(property, 'value')) throw inputError();
+    if (property.value !== undefined && typeof property.value !== 'boolean') throw inputError();
+    commit = property.value ?? false;
+  }
+  if (Object.hasOwn(properties, 'terms')) {
+    const property = properties.terms;
+    if (!Object.hasOwn(property, 'value')) throw inputError();
+    const value = property.value;
+    if (value !== undefined) {
+      if (!Array.isArray(value) || value.length > MAX_TERMS) throw inputError();
+      terms = Array.from(value, term => {
+        if (typeof term !== 'string' || !term || term.length > MAX_TERM || /[\0\r\n]/.test(term)) throw inputError();
+        return term.toLowerCase();
+      });
+    }
+  }
+  return { commit, terms };
 }
 
 const PYPi = /(?<![A-Za-z0-9_])pypi-[A-Za-z0-9_-]{16,}(?![A-Za-z0-9_-])/;
@@ -291,8 +313,8 @@ export function screenText(text, location, options = {}) {
   if (typeof text !== 'string' || typeof location !== 'string' || text.length > MAX_BYTES ||
       Buffer.byteLength(text, 'utf8') > MAX_BYTES || text.includes('\0') ||
       /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(text)) throw inputError();
-  let commit;
-  try { commit = commitOption(options); } catch { throw inputError(); }
+  let commit, terms;
+  try { ({ commit, terms } = parseOptions(options)); } catch { throw inputError(); }
   const lines = text.split(/\r\n|\r|\n/);
   const exemptions = trailerExemptions(lines, commit);
   const findings = [];
@@ -303,6 +325,7 @@ export function screenText(text, location, options = {}) {
       PYPi.test(line), GITHUB.test(line), SERVICE.test(line), PRIVATE_KEY.test(line),
       credentialURL(line), credentialAssignment(line),
       contactEmail(line, exemptions.get(index)), contactPhone(line),
+      terms.length > 0 && (lower => terms.some(term => lower.includes(term)))(line.toLowerCase()),
     ];
     for (let rule = 0; rule < RULE_IDS.length; rule++) {
       if (matches[rule]) findings.push({ location, line: index + 1, rule: RULE_IDS[rule] });

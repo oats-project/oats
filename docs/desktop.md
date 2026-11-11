@@ -735,7 +735,7 @@ deployment. Details are in
 
 Open **Automations › Schedules** in the selected workspace (the sidebar's
 **Automations**, or ⌘3 / Ctrl+3) to launch a new agent on a cron,
-wake an existing agent with a message, or harvest its knowledge. **Schedule…**
+wake an existing agent with a message, or run a provider operation on it. **Schedule…**
 on a Soul roster card preselects that soul. Choose the task or message, repeat
 pattern and time zone; new agent jobs also offer harness, model, permissions
 and session backend. The list shows the next run, last observed outcome and
@@ -1096,7 +1096,7 @@ their name. It is decorative: the name beside it is authoritative. The letters
 come from the name without its package qualifier (what follows the last `/`
 or `--`), and from three words or more without its first (a namespace word like
 `oats`): the initials of the first two words, or a one-word name's first two
-letters. So `oats-desktop-expert` is DE, `oats-okf--knowledge-harvester` KH and
+letters. So `oats-desktop-expert` is DE, `oats-okf--knowledge-maintainer` KM and
 `oats.aweb` OA. Two names can share a mark (`oats-expert` and
 `oats-operator-expert` are both OE); the name and the colour tell them apart.
 
@@ -1122,7 +1122,7 @@ unknown or unreported harness shows "?". Sources and licences are in
   stop, retire or start as a process in its own session.
 - Task text for spawns travels via an owner-only (0600) tempfile, never
   argv. A local start or restart launches only in the server-verified
-  instance home. A provider operation on an instance (its harvest included)
+  instance home. A provider operation on an instance
   is addressed with `--home` to a home the server's roster reports, and one
   on a soul to a soul and agents root the server lists, never a path the
   caller names.

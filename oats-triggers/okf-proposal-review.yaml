@@ -1,0 +1,8 @@
+kind: oats-trigger
+schemaVersion: 1
+description: Review every OKF knowledge proposal PR on the knowledge base
+runsOn: polaris
+owner: github.com/josep-reyero
+from: oats.okf:proposal-review
+set:
+  repo: github.com/awebai/oats-knowledge

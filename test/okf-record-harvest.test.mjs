@@ -1,6 +1,7 @@
-// oats.okf 5.0: checkpoints are explicit proposals, not native-record capture.
-// These cross the real public kernel CLI with the verified package mirror,
-// always --no-launch. Native record transport is still covered independently
+// oats.okf 5.0 and later: checkpoints are explicit proposals, not native-record
+// capture; from 6.0 the instance proposes itself (`oats okf propose`) and no
+// harvester starts. These cross the real public kernel CLI with the verified
+// package mirror, always --no-launch. Native record transport is still covered independently
 // by packages/record/test/home-capture-cli.test.mjs, including its >21 MB / 60
 // turn piped-stdout regression; no record implementation/coverage is removed.
 import test from 'node:test';
@@ -15,47 +16,60 @@ const noCustody = f => {
   assert.equal(fs.existsSync(join(f.home, '.okf-source.json')), false, 'no source marker');
 };
 
-test('a checkpoint passes only the own proposal; no native transcript or note snapshot enters an automatic worker bundle', t => {
+test('a checkpoint starts no worker: the removed harvester\'s stub refuses through its required spawn hook, keeps no home, and the source\'s retire captures nothing', t => {
   const f = fixture(t);
   f.env.TURN_RECORD_ROOT = join(f.base, 'record'); f.env.TURN_RECORD_OWNER = 'fixture';
   const transcript = join(f.user, '.claude/projects/-fixture/session.jsonl');
   write(transcript, JSON.stringify({ type: 'assistant', cwd: f.home, sessionId: 'fixture', timestamp: '2026-09-13T12:00:00Z', message: { role: 'assistant', content: [{ type: 'text', text: 'DO_NOT_IMPORT_TRANSCRIPT' }] } }) + '\n');
   write(join(f.home, 'notes/lesson.md'), 'DO_NOT_AUTOCOPY_NOTE_BYTES\n');
   const file = f.proposal({ text: 'Preserve complete evidence when reviewing a bounded preview.' });
-  const proposal = fs.readFileSync(file, 'utf8'), sourceBefore = fs.readFileSync(join(f.home, 'instance.json'));
-  const run = f.propose({ file }), meta = readJSON(join(run.home, 'instance.json'));
-  assert.equal(meta.launched, false); assert.equal(meta.work, 'directory');
-  assert.equal(meta.parentInstance, undefined); assert.equal(meta.spawnOrigin, 'instance');
-  assert.equal(fs.lstatSync(join(run.home, 'work')).isSymbolicLink(), false);
-  assert.deepEqual(Object.keys(meta.modules), ['oats.okf-harvest']);
-  const task = fs.readFileSync(join(run.home, 'TASK.md'), 'utf8');
-  assert.ok(task.includes(proposal.trim()));
-  assert.doesNotMatch(task, /DO_NOT_IMPORT_TRANSCRIPT|DO_NOT_AUTOCOPY_NOTE_BYTES/);
-  for (const p of ['work/input.json', 'work/staging.json', 'STATE.md', 'notes', '.okf-source.json']) assert.equal(fs.existsSync(join(run.home, p)), false, p);
-  assert.deepEqual(fs.readFileSync(join(f.home, 'instance.json')), sourceBefore);
+  const sourceBefore = fs.readFileSync(join(f.home, 'instance.json'));
+  const harvesters = join(f.context, 'agents/oats-okf--knowledge-harvester/instances');
+  for (const [name, relation] of [['okf-harvester-unrelated', ['--relation', 'unrelated']], ['okf-harvester-child', ['--parent', f.source.instance]]]) {
+    const r = f.spawnHarvester({ file, relation, extra: ['--name', name] });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.ok, false); assert.equal(out.error.code, 'E_REQUIRED_HOOK_FAILED', 'a required spawn hook keeps its typed code');
+    assert.deepEqual(out.error.details, { hooks: [{ capability: 'oats.okf-harvest', ok: false, required: true, log: null }] });
+    assert.match(out.error.message, /oats\.okf-harvest spawn hook \(declared required\): oats-okf-harvest E_REMOVED: oats\.okf 6\.0 removed the knowledge harvester/);
+    assert.match(out.error.message, /oats okf propose --plan/, 'the refusal names the fix');
+    assert.doesNotMatch(r.stdout + r.stderr, /DO_NOT_IMPORT_TRANSCRIPT|DO_NOT_AUTOCOPY_NOTE_BYTES/);
+    assert.equal(fs.existsSync(join(harvesters, name)), false, `${name}: no home kept`);
+  }
+  assert.deepEqual(fs.readFileSync(join(f.home, 'instance.json')), sourceBefore, 'the source record is untouched');
+  assert.equal(fs.readFileSync(join(f.home, 'notes/lesson.md'), 'utf8'), 'DO_NOT_AUTOCOPY_NOTE_BYTES\n', 'notes stay the source\'s');
   noCustody(f);
   const retired = f.retire(f.source.instance);
   assert.equal(retired.removedDir, true);
   assert.equal(retired.capabilityMeta?.['oats.okf'], undefined, 'no retire capture hook or receipt');
   assert.equal(fs.existsSync(f.env.TURN_RECORD_ROOT), false, 'no record capture was invoked');
-  assert.equal(fs.existsSync(run.home), true, 'already admitted unrelated harvester survives');
-  assert.ok(fs.readFileSync(join(run.home, 'TASK.md'), 'utf8').includes(proposal.trim()));
-  f.retire(run.instance);
+  // The kernel's own dot-directories there (rollback baselines) are not homes.
+  assert.deepEqual(fs.existsSync(harvesters) ? fs.readdirSync(harvesters).filter(n => !n.startsWith('.')) : [], [], 'no harvester home exists');
 });
 
-test('each explicit checkpoint is a distinct proposal, not a shared active worker or cursor; notes remain the source responsibility', t => {
-  const f = fixture(t), note = join(f.home, 'notes/lesson.md');
+test('each explicit checkpoint is a distinct proposal in the source\'s own home, not a shared worker or cursor; notes remain the source responsibility', t => {
+  const f = fixture(t, { git: true }), note = join(f.home, 'notes/lesson.md');
   write(note, 'First observation.\n');
-  const first = f.propose({ file: f.proposal({ text: 'First proposal and its rationale.' }) });
-  const firstTask = fs.readFileSync(join(first.home, 'TASK.md'), 'utf8');
+  const plan = slug => {
+    const r = f.okfPropose(['--plan', '--slug', slug]);
+    assert.equal(r.status, 0, JSON.stringify(r.out) + r.stderr); assert.equal(r.out.ok, true); return r.out.result;
+  };
+  const first = plan('first-checkpoint');
+  const firstProposal = join(first.proposal, 'proposal.md');
+  fs.writeFileSync(firstProposal, '# OKF proposal: first proposal and its rationale\n');
   write(note, 'Revised observation while another proposal is pending.\n');
-  const second = f.propose({ file: f.proposal({ text: 'Second proposal and new evidence.' }) });
-  assert.notEqual(first.home, second.home); assert.notEqual(first.instance, second.instance);
-  assert.equal(fs.readFileSync(join(first.home, 'TASK.md'), 'utf8'), firstTask, 'a later checkpoint cannot rewrite the first proposal');
-  assert.match(fs.readFileSync(join(second.home, 'TASK.md'), 'utf8'), /Second proposal and new evidence/);
+  const second = plan('second-checkpoint');
+  assert.notEqual(first.proposal, second.proposal);
+  for (const p of [first.proposal, second.proposal]) assert.ok(p.startsWith(join(f.home, 'proposals') + '/'), 'each proposal is in the source home');
+  assert.notEqual(first.bases[0].clone, second.bases[0].clone, 'each proposal has its own clone');
+  assert.equal(fs.readFileSync(firstProposal, 'utf8'), '# OKF proposal: first proposal and its rationale\n', 'a later checkpoint cannot rewrite the first proposal');
+  const again = f.okfPropose(['--plan', '--slug', 'first-checkpoint']);
+  assert.equal(again.status, 1); assert.equal(again.out.error.code, 'E_PROPOSAL_EXISTS', 'a slug names one proposal');
   assert.equal(fs.readFileSync(note, 'utf8'), 'Revised observation while another proposal is pending.\n');
+  const homes = fs.readdirSync(join(f.context, 'agents')).flatMap(agent => fs.existsSync(join(f.context, 'agents', agent, 'instances')) ? fs.readdirSync(join(f.context, 'agents', agent, 'instances')).filter(n => !n.startsWith('.')) : []);
+  assert.deepEqual(homes, [f.source.instance], 'no worker instance was started');
   noCustody(f);
-  f.retire(first.instance); f.retire(second.instance); f.retire(f.source.instance);
+  f.retire(f.source.instance);
 });
 
 test('removed capture, completion and retry commands refuse without consuming notes or private legacy bytes', t => {

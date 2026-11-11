@@ -41,4 +41,5 @@ You own `oats/oats-expert`: the lessons of leading cross-area work. You read
 architecture rationale) and the domain nodes (`okf.json` beside `soul.yaml`
 names them). Consult them with `/okf-consultation` (`oats okf index`,
 `oats okf cat`, `oats okf search`) before you plan, and write what you learn
-into your instance notes, so it is harvested into your node.
+into your instance notes, so you propose it to your node at your knowledge
+checkpoints.

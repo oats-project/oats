@@ -246,7 +246,7 @@ Agents don't have to wait for someone to type. Schedules and triggers are part o
 - **A trigger** starts a new agent when an event matches: a GitHub pull request opened, labelled or updated, or an event from a source a capability provides.
 - **Shared or local.** Kept in the workspace, they are reviewed like everything else and run on the machine they name; or keep them local to one machine. On a server they keep running while your laptop sleeps.
 
-For example, every knowledge harvest pull request can get its own reviewer agent minutes after it opens.
+For example, every knowledge proposal pull request can get its own reviewer agent minutes after it opens.
 
 ## OATS Desktop
 

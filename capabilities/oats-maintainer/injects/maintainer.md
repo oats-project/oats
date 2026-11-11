@@ -158,10 +158,10 @@ against those decisions when called and record new ones; you don't invent direct
 - Who owns which domain: which expert to launch for what.
 - Not one-off patches, PR-by-PR logs, or anything the repository already records.
 
-**Harvest at a maintainer's checkpoints,** without waiting for your task to end: a
-feature ready (its last PR merged), a release or deploy shipped, a direction decision taken
-with your person. Run your knowledge layer's harvest procedure then, as its rules allow
-(your knowledge layer's rules name these checkpoints).
+**Run your knowledge checkpoints as a maintainer,** without waiting for your task to end:
+a feature ready (its last PR merged), a release or deploy shipped, a direction decision
+taken with your person. Run your knowledge layer's checkpoint procedure then, as its rules
+allow (your knowledge layer's rules name these checkpoints).
 
 **Out of this role:** leading efforts, deployment and host specifics, credentials,
 branch-protection changes, and building features.

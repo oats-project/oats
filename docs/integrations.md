@@ -40,7 +40,7 @@ arrives from.
 ```yaml
 # oats-workspace.yaml: one default per slot, for every soul
 packages:
-  oats.okf: v5.8.0
+  oats.okf: v6.0.1
   oats.aweb: v1.39.0
   oats.linear: v1.0.1
   oats.jira: v1.0.1
@@ -86,13 +86,14 @@ operations in full.
 | `tasks` | `oats.linear` | `LINEAR_API_KEY` in the environment (never in OATS config); `team` (and optionally `project`) in the soul's `tasks:` payload or `settings.oats.linear` | [awebai/oats-linear](https://github.com/awebai/oats-linear) |
 
 - **`oats.okf`** consults the soul's external OKF bases, keeps instance
-  knowledge, and teaches the harvest duty in its IMPORTANT inject block and
+  knowledge, and teaches the duty to propose in its IMPORTANT inject block and
   compulsory `okf-propose` skill, not the task briefing. Eligible instances
-  propose durable claims at finished tasks or PR hand-overs by directly
-  spawning `oats.okf/knowledge-harvester`. The
-  soul-only `knowledge: { harvest: off }` forbids harvest while retaining
-  consultation. No host switch or automatic transcript/retire capture remains;
-  `knowledge-maintainer` reviews the resulting Git PRs.
+  propose durable claims at their knowledge checkpoints (a finished task, a PR
+  handed over) themselves, with `oats okf propose`, as one pull request each;
+  no worker is spawned. The soul-only `knowledge: { harvest: off }` gives no
+  duty to propose while retaining consultation. No host switch or automatic
+  transcript/retire capture remains; `knowledge-maintainer` reviews the
+  resulting Git PRs.
 - **`oats.aweb-tasks`** (in the `oats.aweb` package from 1.31.0) fills the
   tasks slot with aweb tasks, acting as the instance's own `oats.aweb`
   identity in its default team. **An existing workspace opts in** by pinning

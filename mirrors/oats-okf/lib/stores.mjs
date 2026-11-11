@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { fs, join, dirname, safePath, readJSON, atomic, tree, materialize, digest, hash, withLock, exec, cleanEnv, fail, relPath, overlaps, resolve, within, redactUrls, displayRepo } from './io.mjs';
 import { metadata, noGit, gitTimeoutMs } from './config.mjs';
+import { isBridgedMeta, subjectOfPath } from './okf-reindex.mjs';
 const validator = fileURLToPath(new URL('./okf-validate.mjs', import.meta.url));
 // Never let local replace refs reinterpret frozen OIDs, including inside Git's
 // transport subprocesses. Override even an explicitly supplied command env.
@@ -23,8 +24,9 @@ function classifyGitFailure(error) {
   if(/could not resolve host|failed to connect|connection refused|network is unreachable|no route to host|proxy/i.test(text)) return 'network';
   return 'unknown';
 }
-export function unavailable(base,alias,step,error) {
-  const reason=classifyGitFailure(error),detail=reason==='unknown'?`; original Git failure: ${redactUrls(String(error?.message || 'unknown failure'))}`:'';
+export function unavailable(base,alias,step,error,{detail:withDetail=true}={}) {
+  // withDetail false (oats okf propose): a fixed classification only, never the tool's own bytes.
+  const reason=classifyGitFailure(error),detail=reason==='unknown'&&withDetail?`; original Git failure: ${redactUrls(String(error?.message || 'unknown failure'))}`:'';
   const message=`Git base "${alias}" repository "${displayRepo(base.repository)}" is required by the deployment's bindings, but ${step} failed (reason: ${reason}${detail}); ${baseRemedy(alias)}`;
   baseError('E_BASE_UNAVAILABLE',message,base,alias,step,reason);
 }
@@ -32,22 +34,43 @@ export function requireNotShallow(base,alias,cwd) {
   const shallow=git(cwd,['rev-parse','--is-shallow-repository']);
   if(shallow==='true') baseError('E_BASE_SHALLOW',`Git base "${alias}" repository "${displayRepo(base.repository)}" is required by the deployment's bindings, but the repository is shallow; oats.okf requires full accepted history before staging; ${baseRemedy(alias)}`,base,alias,'clone','shallow');
 }
-export function preflightLocalRepository(base,alias) {
+export function preflightLocalRepository(base,alias,opts) {
   if(!base.repository.startsWith('/')) return;
-  if(!fs.existsSync(base.repository)) unavailable(base,alias,'clone',Object.assign(new Error('repository not found'),{code:'ENOENT'}));
+  if(!fs.existsSync(base.repository)) unavailable(base,alias,'clone',Object.assign(new Error('repository not found'),{code:'ENOENT'}),opts);
   try { requireNotShallow(base,alias,base.repository); }
-  catch(e) { if(e.code==='E_BASE_SHALLOW') throw e; unavailable(base,alias,'clone',e); }
+  catch(e) { if(e.code==='E_BASE_SHALLOW') throw e; unavailable(base,alias,'clone',e,opts); }
 }
 export const baseLock = b => `${b.path}.okf-lock`;
 // okf consult readers hold a directory base's lock briefly; staging and
 // publication queue behind them for a bounded time instead of failing.
 const CONSULT_READER_WAIT_MS = 10000;
 export const journalPath = b => `${b.path}.okf-publication.json`;
-export function validateBase(root, base) {
+// okf 6.0: on a base with the subject layout, a READER (`reader: true`:
+// consult's validation, spawn, readiness) tolerates the two maintainer-upkeep
+// warnings: a stale (missing, orphaned) generated index and an old-node
+// concept awaiting its id; it reads the committed indexes as they are and
+// warns (W_INDEX_STALE). Every writer (propose, migration, publication) keeps
+// the default, strict: what it writes is refused until regenerated.
+const INDEX_WARNING=/: generated index is (stale|missing|orphan); run okf-reindex\.mjs$/;
+const ID_WARNING=/: missing 'id' \(stamped by the maintainer at acceptance\)$/;
+/** `allow(findings)` (okf 6.0, propose only) returns the findings that still
+ *  refuse: a proposed claim may wait for the maintainer's id. → {..., stale:
+ *  the number of generated files a reader found stale (0 unless `reader`)}. */
+export function validateBase(root, base, { allow = findings => findings, reader = false } = {}) {
   const files=tree(root,{git:base.kind==='git' && base.root==='.'}); const meta=metadata(files,base);
   const result=JSON.parse(exec(process.execPath,[validator,root,'--strict','--json'],{acceptedStatus:[0,1]}));
-  if(result.errors.length || result.warnings.length) fail('E_VALIDATION', [...result.errors,...result.warnings].join('; '));
-  return {files,meta,digest:digest(files)};
+  const tolerated=reader && result.layout==='subjects' ? result.warnings.filter(w=>INDEX_WARNING.test(w) || ID_WARNING.test(w)) : [];
+  const findings=allow([...result.errors,...result.warnings.filter(w=>!tolerated.includes(w))]);
+  if(findings.length) fail('E_VALIDATION', findings.join('; '));
+  return {files,meta,digest:digest(files),subjects:subjectsOf(files,meta),stale:tolerated.filter(w=>INDEX_WARNING.test(w)).length};
+}
+/** The reader's warning for a base whose generated indexes are stale. */
+export const staleWarning=(n,at)=>`W_INDEX_STALE: ${n} generated file${n===1?'':'s'} stale at ${at}; the maintainer regenerates (okf-reindex.mjs)`;
+/** okf 6.0: the subject refs of a base with the subject layout (its subject
+ *  files, subjects/<kind>/<slug>.md), or null for a plain base. */
+export function subjectsOf(files,meta) {
+  if(!isBridgedMeta(meta)) return null;
+  return Object.keys(files).map(p=>subjectOfPath(p)?.ref).filter(Boolean).sort();
 }
 /** Git must never fetch a missing blob on its own, one round trip per object:
  *  a read of a blob the stage lacks fails instead (git 2.45+; an older git
@@ -559,7 +582,7 @@ export function gitPublish(base, stage, proposal, receipt, persist, {beforePubli
     receipt.status='pr-intent'; persist();
     const title=presentation?.title || `okf-harvest: ${proposal.run}`,body=presentation?.body || `Knowledge-only proposal from durable OKF run ${proposal.run}. Review provenance and promotion judgment.`;
     const label=presentation?.label;
-    // The label is what the harvest-review trigger watches: make sure the
+    // The label is what the review trigger watches: make sure the
     // repository has it (idempotent), then open the PR carrying it.
     if(label) try {exec('gh',['label','create',label,'--repo',base.pr.repository,'--force','--color','0E8A16','--description','OKF harvest PR (oats.okf)'],{cwd,env:gitEnv()});} catch { /* may exist already or be unmanageable; pr create reports a real problem */ }
     try { exec('gh',['pr','create','--repo',base.pr.repository,'--head',branch,'--base',base.acceptedBranch,'--title',title,'--body',body,...(label?['--label',label]:[])],{cwd,env:gitEnv()}); }

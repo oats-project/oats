@@ -198,10 +198,10 @@ this one, retire the stalled one (`oats retire <name>`) and say so in your handb
   next round needs a fresh reviewer, or once its verdict holds at the head you hand back.
   With no messaging layer, it printed its report as its final message and can't send a
   done line or answer a question: retire it once you have the report. Otherwise tell it the
-  round is closed, and once it replies "done, harvested: <harvester>" or "done, no harvest
-  duty" (after "done, harvest pending: <proposal>", wait
-  for the first), check `oats retire <name> --plan`, run `oats retire <name>`, note it
-  (name, why). The consolidated worktree it read stays: the next round, your expert's
+  round is closed, and once it replies "done, proposed: <PR URLs>", "done, nothing to
+  propose: <reason>" or "done, no duty to propose" (after "done, proposal pending: <slug
+  and why>", wait for one of those), check `oats retire <name> --plan`, run
+  `oats retire <name>`, note it (name, why). The consolidated worktree it read stays: the next round, your expert's
   return and your PR's fixes all run on it, and it goes at Finish (`/worktrees`). Retire only
   your own children, and never give a new reviewer a retired one's name. None of this
   involves a person.
@@ -213,10 +213,10 @@ An instance is **finished** when all of these hold:
   is not landed: it may still be needed for fixes and rebases;
 - nothing waits on it: no open PR, review, question or hand-back of its own, and its own
   children are retired;
-- with a harvest duty (your knowledge layer says whether you have one), its final harvest
-  checkpoint ("you finish a task") is recorded in its log.md with the harvester's name, and
-  the harvester is launched. The harvester snapshots its evidence at spawn and the retire
-  keeps a recovery copy, so nobody waits for the harvester to finish.
+- with a duty to propose knowledge (your knowledge layer says whether you have one), its
+  final knowledge checkpoint ("you finish a task") is run and its outcome recorded, as that
+  layer says. A proposal it opened at any knowledge checkpoint is in the knowledge layer's
+  hands from then on, not one of its PRs above: nobody waits for it.
 
 Once you learn your PR is merged and green, or closed, or that the work was dropped (your
 expert tells you, or you see it on the forge), finish unprompted:
@@ -225,9 +225,10 @@ expert tells you, or you see it on the forge), finish unprompted:
    your expert checks `oats instance git` before it retires you, since a retire would keep
    such a work tree, not deliver it. When your work isn't a Git work tree (directory or
    workspace mode), it checks each repository your done report names instead.
-3. With a harvest duty, run your final checkpoint and launch the harvester.
-4. Send your done line: "done, harvested: <harvester>" or "done, no harvest duty". After
-   "done, harvest pending: <proposal>" you are not finished: send "done, harvested:
-   <harvester>" once the proposal goes through. When your work isn't a Git work tree, name
-   each repository you used under it, with its branch. Your expert, your parent, then
+3. With a duty to propose knowledge, run your final knowledge checkpoint as your knowledge
+   layer says.
+4. Send your done line: "done, proposed: <PR URLs>", "done, nothing to propose: <reason>"
+   or "done, no duty to propose". After "done, proposal pending: <slug and why>" you are
+   not finished: send one of the other three once the proposal is settled. When your work
+   isn't a Git work tree, name each repository you used under it, with its branch. Your expert, your parent, then
    retires you with `oats retire <name>`, without asking anyone.
