@@ -1,6 +1,6 @@
 schemaVersion: 2
 name: oats-engineering-expert
-description: The OATS engineering expert - a fresh instance leads one engineering effort (the kernel and CLI, the Terminal UI, the Desktop, the provider packages, operating a deployment, the docs) from plan to merge, reading each area's knowledge node as the task needs, and owns the integration.
+description: The OATS engineering expert - a fresh instance leads one engineering effort (the kernel and CLI, the Terminal UI, the Desktop, the provider packages, operating a deployment, the docs) from plan to merge, reading each area's knowledge subject as the task needs, and owns the integration.
 work: directory
 # oats.core and the oats.okf knowledge slot come from the workspace defaults.
 # What this soul owns and reads in the central base is okf.json beside this file.
