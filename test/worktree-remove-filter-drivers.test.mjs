@@ -109,3 +109,43 @@ for (const [state, prepare] of [["registered", () => {}], ["unregistered", (w) =
     assert.ok(existsSync(w.record), "the record is kept");
   });
 }
+
+/** Names a file monitor in the repository's configuration (`core.fsmonitor`): a command that records
+ *  each directory Git ran it in → `ranIn()`. */
+function fileMonitor(w) {
+  const marker = join(w.fx.base, "file-monitor-ran");
+  const command = join(w.fx.base, "file-monitor.sh");
+  writeFileSync(command, `#!/bin/sh\npwd -P >> '${marker}'\n`, { mode: 0o700 });
+  w.git(w.fx.member, "config", "core.fsmonitor", command);
+  return { ranIn: () => (existsSync(marker) ? readFileSync(marker, "utf8").trim().split("\n") : []) };
+}
+
+test("remove of a registered tree does not run the file monitor the repository's configuration names: a tree with a change is refused, and one as committed is removed", async (t) => {
+  const w = await fixture(t);
+  const monitor = fileMonitor(w);
+  writeFileSync(join(w.tree, "tracked.txt"), "changed\n");
+
+  const error = refusal(w.cli("remove"));
+  assert.equal(error.code, "E_WORKTREE_DIRTY", JSON.stringify(error));
+  assert.deepEqual(monitor.ranIn(), [], "the refused removal ran no file monitor");
+  assert.ok(existsSync(w.record), "the record is kept");
+
+  writeFileSync(join(w.tree, "tracked.txt"), "committed\n");
+  const result = w.cli("remove");
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.deepEqual(monitor.ranIn(), [], "the removal ran no file monitor");
+  assert.equal(existsSync(w.tree), false);
+  assert.equal(w.registered(), false);
+});
+
+test("remove of an unregistered tree compares its surviving files without running the file monitor the repository's configuration names", async (t) => {
+  const w = await fixture(t);
+  const monitor = fileMonitor(w);
+  w.orphan();
+  writeFileSync(join(w.tree, "tracked.txt"), "changed\n");
+
+  const error = refusal(w.cli("remove"));
+  assert.equal(error.code, "E_WORKTREE_DIRTY", JSON.stringify(error));
+  assert.deepEqual(monitor.ranIn(), [], "the comparison ran no file monitor");
+  assert.ok(existsSync(w.record), "the record is kept");
+});
