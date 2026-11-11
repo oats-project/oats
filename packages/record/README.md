@@ -286,7 +286,9 @@ than the recorded one (the pid went to another process), or when the lock
 was taken in another kernel boot. Containers and PID sandboxes use the same
 Linux kernel UUID; a container restart reclaims a lock when its recorded
 pid is gone or has another start time. Old qualified Linux UUIDs compare as
-their base UUID, so an upgrade does not reclaim a live holder. The
+their base UUID, so an upgrade does not reclaim a visible live holder.
+Holder liveness assumes the reader can see the recorded pid in its PID
+namespace; a shared boot string does not translate pids across namespaces. The
 kernel judges its own claims by the same rule, with the same code
 (`lib/process-identity.mjs`).
 

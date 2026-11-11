@@ -154,7 +154,7 @@ test("a lock left by a host run of another boot, or by a process that is gone, i
   oatsHome(t);
   const own = processStartToken(process.pid);
   assert.ok(isStartToken(own), `fixture premise: this host reads a process's start (${own})`);
-  // Another boot (in a container, another run): the pid and its start can both come again.
+  // Another kernel boot: the pid and its start can both come again.
   leaveLock({ bootId: "boot-0", pid: process.pid, processStart: own });
   acquireHostRunLock({ boot: BOOT })();
   assert.equal(existsSync(hostRunLockPath()), false, "taken over, and released");

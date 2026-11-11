@@ -1475,13 +1475,22 @@ refused. A home removed between the read and its start is reported
   blocked restore keeps its failure accounting; prior refusals and loss
   eligibility checks still apply. A stop receipt from an earlier start
   cannot grant this exception.
+  For a validated current-start host stop, the in-boot gap is measured
+  from the last running observation to the stop receipt's time, excluding
+  container downtime. Thus a clean stop lasting more than 24 hours can
+  still resume. The first-observed-loss age limit and prior judgement
+  still apply; unknown, pre-start, future and other-start receipts relax
+  none of these guards.
 - The boot is the boot time on macOS and the kernel's boot id
   (`/proc/sys/kernel/random/boot_id`) on Linux. Elsewhere there
   is no boot: nothing is noted or counted, and every sweep tries again.
 - **Containers and PID sandboxes share their host kernel's boot.** No
   environment variable, marker file or PID 1 lookup changes that identity.
-  An SSH command and the entrypoint therefore judge the same live lock
-  alike, as does a command in a harness's unmarked bubblewrap PID namespace.
+  An SSH command and the entrypoint in the same PID namespace therefore
+  agree on the boot and holder identity. An unmarked bubblewrap PID
+  namespace keeps the host's boot string. Holder liveness still requires
+  that the reader can see the holder's pid; equal boot strings do not
+  provide cross-PID-namespace process visibility or pid translation.
   - A lock left by an earlier container run is reclaimed when its recorded
     pid is gone or has another process start time. A live holder is never
     reclaimed; an unreadable or missing start stays unknown and held.

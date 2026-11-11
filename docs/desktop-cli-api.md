@@ -7182,7 +7182,12 @@ whatever the rows say:
   the per-boot note (refusals, and each home's count of sweep starts that
   launched something: `resumed`, `fresh`, `blocked`) are kernel-private,
   not a contract. Without a boot id (neither Linux nor macOS) nothing is
-  noted or counted.
+  noted or counted. A validated current-start host-stop receipt excludes
+  downtime from the in-boot eligibility gap and exempts a successful restore
+  from the crash ceiling and count; it preserves prior failure counts and
+  refusals. Blocked restores still count. See
+  [Which losses come back](execution-targets.md#which-losses-come-back)
+  for receipt validation and the independent loss-age and judgement guards.
 - **A lock that needs a person.** `E_RESUME_LOCK_STUCK`, through the same
   envelope at exit 1, when the sweep's lock cannot be taken and no sweep is
   known to run; nothing was started, and no sweep starts anything on this

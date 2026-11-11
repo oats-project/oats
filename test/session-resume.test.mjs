@@ -10,11 +10,12 @@ import { join } from "node:path";
 import { describeLaunchCommand, parseLaunchCommand, renderLaunchCommand, renderLaunchRecipe, RESUME_NOTICE, startInstanceSession } from "../lib/core.mjs";
 import { readStartExited, sessionEndOf } from "../lib/session-end.mjs";
 import { acquireResumeLock, bootId, noteSweep, readBootNote, RESUME_LIMIT, resumeSessions, resumeStateDir, rowFromStart } from "../lib/session-resume.mjs";
-import { nextSeen, resumeEligible } from "../lib/session-seen.mjs";
+import { homeKey, nextSeen, recordSeen, resumeEligible } from "../lib/session-seen.mjs";
 import { processStartToken } from "../lib/worktree-hooks.mjs";
 import { FRESH_REASON, NOT_SWEPT, OUTCOME, RESUME_WAITING, ROW_REASON, SESSION_END, SESSION_RESUME_FEATURE } from "../lib/session-resume-contract.mjs";
 import { identityHolderState } from "../packages/record/lib/process-identity.mjs";
 import { acquireHostRunLock, hostRunPlan } from "../lib/host-run.mjs";
+import { v2Deployment } from "./helpers/v2-deployment.mjs";
 
 const scratch = (t) => { const d = mkdtempSync(join(tmpdir(), "oats-resume-")); t.after(() => rmSync(d, { recursive: true, force: true })); return d; };
 const write = (home, name, value) => writeFileSync(join(home, name), typeof value === "string" ? value : JSON.stringify(value));
@@ -362,11 +363,11 @@ test("a container restart on the same kernel carries its failure budget and uses
   // Seen running in the first run, the container down for two weeks, first seen lost in the next.
   const at = (ms) => new Date(ms).toISOString();
   const record = { startId: "s1", lastSeenRunningAt: at(T("18:00:00.000") - 14 * DAY), lastSeenRunningBoot: first, firstNotRunningAt: at(T("09:00:00.000")), firstNotRunningBoot: second, judgedBy: null };
-  assert.equal(resumeEligible(record, lost(), { now: T("09:00:05.000") }).eligible, false, "the conservative in-boot time guard carries across restart");
+  assert.equal(resumeEligible(record, lost(), { now: T("09:00:05.000") }).eligible, false, "without a validated host-stop receipt the in-boot time guard carries across restart");
   assert.deepEqual(readBootNote("another-kernel-boot"), { bootId: "another-kernel-boot", refused: [], resumes: {} });
 });
 
-test("legacy qualified boot ids defer to the live holder across upgrades and unmarked PID namespaces", (t) => {
+test("legacy qualified boot ids defer to a visible live holder across upgrades", (t) => {
   oatsHome(t);
   const lock = join(resumeStateDir(), "lock");
   mkdirSync(resumeStateDir(), { recursive: true });
@@ -380,13 +381,89 @@ test("legacy qualified boot ids defer to the live holder across upgrades and unm
   }
   const hostBoot = linuxBoot(pid1Stat(0, "systemd")), sandboxBoot = linuxBoot(pid1Stat(1234567, "bwrap"));
   const release = acquireResumeLock({ boot: hostBoot });
-  try { assert.throws(() => acquireResumeLock({ boot: sandboxBoot }), (e) => e.code === "E_RESUME_BUSY", "unmarked sandbox cannot reclaim the live host lock"); }
+  try { assert.throws(() => acquireResumeLock({ boot: sandboxBoot }), (e) => e.code === "E_RESUME_BUSY", "the unchanged unmarked-sandbox boot string cannot itself mark this visible holder gone"); }
   finally { release(); }
   for (const state of ["alive", "unknown", "gone"]) {
     const holder = { bootId: `${KERNEL_BOOT}:123`, pid: process.pid, processStart: own };
     assert.equal(identityHolderState(holder, { boot: KERNEL_BOOT, liveness: () => ({ state }) }), state, "legacy qualification defers to process identity, including unreadable starts");
     assert.equal(identityHolderState(holder, { boot: "11111111-1111-4111-8111-111111111111", liveness: () => assert.fail("another kernel boot establishes death") }), "gone");
   }
+});
+
+test("a validated host-stop time excludes container downtime from only the in-boot gap", () => {
+  const now = T("09:00:00.000"), runningAt = now - 30 * 60 * 60_000, stoppedAt = runningAt + 60_000;
+  const record = { startId: "s1", lastSeenRunningAt: new Date(runningAt).toISOString(), lastSeenRunningBoot: KERNEL_BOOT, firstNotRunningAt: new Date(now).toISOString(), firstNotRunningBoot: KERNEL_BOOT, judgedBy: null };
+  assert.deepEqual(resumeEligible(record, lost(), { now, hostStoppedAt: stoppedAt }), { eligible: true });
+  for (const at of [null, NaN, runningAt - 1, now + 1]) assert.equal(resumeEligible(record, lost(), { now, hostStoppedAt: at }).eligible, false);
+  assert.equal(resumeEligible({ ...record, judgedBy: { outcome: "refused" } }, lost(), { now, hostStoppedAt: stoppedAt }).eligible, false);
+  assert.equal(resumeEligible(record, lost("other-start"), { now, hostStoppedAt: stoppedAt }).eligible, false);
+  assert.equal(resumeEligible(record, lost(), { now: now + DAY, hostStoppedAt: stoppedAt }).eligible, false, "first observed loss age still applies");
+});
+
+test("host-stop timestamps must name the current start and fall within its observed lifetime", async (t) => {
+  const { hostStoppedAt } = await import("../lib/session-end.mjs");
+  assert.equal(typeof hostStoppedAt, "function", "validated timestamp reader required");
+  const home = scratch(t), now = T("09:00:00.000"), startedAt = now - 31 * 60 * 60_000, at = now - 30 * 60 * 60_000;
+  const meta = { startId: "s1", createdAt: new Date(startedAt).toISOString() };
+  const receipt = { startId: "s1", resume: true, reason: "host-stop", at: new Date(at).toISOString() };
+  write(home, ".oats-stop.json", receipt);
+  assert.equal(hostStoppedAt(home, meta, { now }), at);
+  for (const patch of [{ startId: "other" }, { at: "unknown" }, { at: new Date(now + 1).toISOString() }, { at: new Date(startedAt - 1).toISOString() }, { resume: false }, { reason: "other" }]) {
+    write(home, ".oats-stop.json", { ...receipt, ...patch });
+    assert.equal(hostStoppedAt(home, meta, { now }), null);
+  }
+});
+
+test("a same-kernel startup after 30 hours restores clean stops and preserves blocked, refused and stale-receipt accounting", async (t) => {
+  const fx = v2Deployment({ t, souls: { dev: { soul: { work: "directory" } } } });
+  const names = ["success", "blocked", "refused", "prior", "other-start", "other-start-short", "future"], homes = {};
+  for (const name of names) {
+    const { home } = await fx.spawn("dev", { name, harness: "claude" });
+    const path = join(home, "instance.json"), meta = JSON.parse(readFileSync(path, "utf8"));
+    const startId = `fixture-${name}`;
+    writeFileSync(path, JSON.stringify({ ...meta, launched: true, startId }));
+    homes[name] = { home, instance: name, startId, launched: true, running: true };
+  }
+  const stopped = Date.now(), now = stopped + 30 * 60 * 60_000, boot = bootId();
+  const prior = { home: homeKey(homes.prior.home), startId: homes.prior.startId, code: "E_PRIOR", message: "prior fixture refusal", at: new Date(stopped).toISOString() };
+  await fx.inEnv(() => {
+    recordSeen(join(fx.dep, "agents"), Object.values(homes), { now: stopped, boot });
+    // A short ordinary loss with an other-start receipt still obeys the crash ceiling.
+    recordSeen(join(fx.dep, "agents"), Object.values(homes).map((r) => r.instance === "other-start-short" ? { ...r, startId: "fixture-new-short" } : { ...r, running: null }), { now: now - 1000, boot });
+    const short = homes["other-start-short"], path = join(short.home, "instance.json");
+    short.startId = "fixture-new-short";
+    writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, "utf8")), startId: short.startId }));
+    for (let n = 0; n < RESUME_LIMIT; n++) noteSweep({ launched: Object.values(homes).map((r) => homeKey(r.home)) }, boot);
+    noteSweep({ refusals: [prior] }, boot);
+  });
+  for (const [name, row] of Object.entries(homes)) {
+    write(row.home, ".oats-stop.json", { startId: name.startsWith("other-start") ? "old-start" : row.startId, at: new Date(name === "future" ? now + 1 : stopped + 1).toISOString(), resume: true, reason: "host-stop" });
+  }
+  const realNow = Date.now, called = [];
+  let answer;
+  try {
+    Date.now = () => now;
+    answer = await fx.inEnv(() => resumeSessions({ deployment: fx.dep, boot, start: async (row) => {
+      called.push(row.instance);
+      if (row.instance === "success") return { ok: true, result: { resume: { resumed: true, sessionId: "fixture-conversation" } } };
+      if (row.instance === "blocked") return { ok: true, result: { resume: { resumed: true, waiting: "resume-confirmation" } } };
+      if (row.instance === "refused") return { ok: false, error: { code: "E_FIXTURE", message: "fixture start refused" } };
+      assert.fail(`an ineligible or already-refused home was started: ${row.instance}`);
+    } }));
+  } finally { Date.now = realNow; }
+  const rows = Object.fromEntries(answer.rows.map((r) => [r.instance, r]));
+  assert.deepEqual(called.sort(), ["blocked", "refused", "success"]);
+  assert.equal(rows.success.outcome, OUTCOME.RESUMED);
+  assert.equal(rows.blocked.outcome, OUTCOME.BLOCKED);
+  assert.equal(rows.refused.code, "E_FIXTURE");
+  assert.equal(rows.prior.reason, ROW_REASON.REFUSED_THIS_BOOT);
+  assert.equal(rows["other-start"].reason, ROW_REASON.NOT_SEEN_RECENTLY);
+  assert.equal(rows.future.reason, ROW_REASON.NOT_SEEN_RECENTLY);
+  assert.equal(rows["other-start-short"].reason, ROW_REASON.KEEPS_GETTING_LOST);
+  const note = await fx.inEnv(() => readBootNote(boot));
+  for (const [name, row] of Object.entries(homes)) assert.equal(note.resumes[homeKey(row.home)], name === "blocked" ? RESUME_LIMIT + 1 : RESUME_LIMIT, name);
+  assert.ok(note.refused.some((r) => r.home === homeKey(homes.refused.home) && r.startId === homes.refused.startId && r.code === "E_FIXTURE"));
+  assert.ok(note.refused.some((r) => r.home === prior.home && r.code === "E_PRIOR"));
 });
 
 test("legacy qualified failure notes and loss records keep the same-kernel guards", (t) => {
@@ -400,7 +477,7 @@ test("legacy qualified failure notes and loss records keep the same-kernel guard
   assert.equal(resumeEligible(record, lost(), { now: T("09:00:05.000") }).eligible, false, "qualification changes do not bypass the in-boot time guard");
 });
 
-test("host run plan in an SSH or sandbox environment still sees a legacy qualified live holder", async (t) => {
+test("host run plan without a Kubernetes environment marker still sees a qualified visible holder", async (t) => {
   oatsHome(t);
   const release = acquireHostRunLock({ boot: `${KERNEL_BOOT}:813944` });
   try {
