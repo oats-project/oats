@@ -271,7 +271,7 @@ It is optional: agents run, message each other and follow their schedules whethe
 
 3. **Answer its questions.** It asks everything in one round and lists the changes it will make to your computer; say yes to them. After that you only approve the GitHub login and type a password or token if one is asked for.
 
-Your agent then installs OATS, OATS Desktop and what they need. It creates a private GitHub repository for your agents' shared setup (the workspace), creates the group your agents message each other in (on [aweb](https://aweb.ai), with no sign-up), and starts the **setup expert**, an agent that adapts the defaults with you. OATS Desktop opens on it. Allow 5 to 10 minutes.
+Your agent then installs OATS and what it needs, and OATS Desktop unless you decline it: the Desktop is optional, and the terminal UI (`oats tui`) or the command line work without it. It creates a private GitHub repository for your agents' shared setup (the workspace), creates the group your agents message each other in (on [aweb](https://aweb.ai), with no sign-up), and starts the **setup expert**, an agent that adapts the defaults with you. OATS Desktop, if you kept it, opens on it. Allow 5 to 10 minutes.
 
 **To join a workspace a teammate already runs,** say instead *"Join our OATS workspace at \<its GitHub repository\>, following https://github.com/oats-project/oats"*. Your teammate's agent makes you an invite, which your teammate passes to you privately; your agent tells you when to paste it.
 
