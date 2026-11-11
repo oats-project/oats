@@ -291,22 +291,25 @@ test("acceptance refuses drift in the admitted container settings", async () => 
 });
 
 
-async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false, stubbornFinish = false } = {}) {
+async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false, stubbornFinish = false, brokerStatusPid = "owned" } = {}) {
   const supervisor = new URL("../container/agent/supervisor.mjs", import.meta.url);
   assert.ok(existsSync(supervisor), "the image must own broker readiness and ordered child shutdown");
   const { supervise } = await import(supervisor);
   const dir = mkdtempSync(join(tmpdir(), "oats-image-supervisor-"));
-  const events = join(dir, "events"), childFile = join(dir, "child.cjs");
+  const events = join(dir, "events"), childFile = join(dir, "child.cjs"), brokerPid = join(dir, "broker-pid");
   writeFileSync(events, "");
   writeFileSync(childFile, `
     const fs = require("node:fs");
-    const [role, events, mode] = process.argv.slice(2);
+    const [role, events, mode, pidFile, pidMode] = process.argv.slice(2);
     const log = text => fs.appendFileSync(events, text + "\\n");
+    if (role === "broker") fs.writeFileSync(pidFile, String(process.pid));
     log(role + " started");
     if (role === "status") {
       const running = ((mode === "ready" || mode === "stubborn") && fs.readFileSync(events, "utf8").includes("broker started")) || (mode === "after-exit" && fs.readFileSync(events, "utf8").includes("broker exited"));
       if (running) log("broker ready");
-      process.stdout.write(JSON.stringify({daemon_running: running}));
+      const pid = fs.existsSync(pidFile) ? Number(fs.readFileSync(pidFile,"utf8")) : 0;
+      const identity = pidMode === "missing" ? {} : {daemon_pid: pidMode === "other" ? process.ppid : pid};
+      process.stdout.write(JSON.stringify({daemon_running: running, ...identity}));
       process.exit(0);
     }
     if (role === "broker" && mode === "after-exit") { log("broker exited"); process.exit(0); }
@@ -327,7 +330,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
       appendFileSync(events, role + " spawned\n");
       const failProbe = role === "status" && statusSpawnFailsOnce && !statusFailed;
       if (failProbe) statusFailed = true;
-      const child = spawn(failProbe ? join(dir, "missing-probe") : process.execPath, failProbe ? [] : [childFile, role, events, mode], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
+      const child = spawn(failProbe ? join(dir, "missing-probe") : process.execPath, failProbe ? [] : [childFile, role, events, mode, brokerPid, brokerStatusPid], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
       children.set(role, child);
       return child;
     },
@@ -437,4 +440,15 @@ test("SSH and broker final cleanup share one grace span after host run ends", as
   assert.ok(events.indexOf("host ended") < events.indexOf("broker TERM"),fx.text());
   assert.ok(events.indexOf("broker TERM") < events.indexOf("supervisor sshd exited (SIGKILL)"),"broker must be asked to stop before SSH consumes its entire grace: "+fx.text());
   assert.ok(events.includes("supervisor broker exited (SIGKILL)"));
+});
+
+
+test("a status without our live broker PID cannot admit agents", async (t) => {
+  for (const brokerStatusPid of ["other", "missing"]) {
+    const fx = await supervisorFixture(t, {brokerStatusPid});
+    await fx.until(() => fx.text().split("status spawned").length-1 >= 3);
+    assert.doesNotMatch(fx.text(), /(?:ssh|host) spawned/, brokerStatusPid);
+    fx.term();
+    assert.equal(await fx.running,0);
+  }
 });

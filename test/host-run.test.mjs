@@ -567,3 +567,41 @@ test("a closed private fence keeps trigger events pending and blocks wake or dir
   const state=JSON.parse(readFileSync(join(ws,'.agents/schedules/triggers.json'),'utf8'));
   assert.equal(Object.keys(state.triggers['local/trigger'].pending).length,1,'the event is retained for the next live tick');
 });
+
+
+test("a post-drain ownership error stays visible but releases the quiescent host claim", async (t) => {
+  const base=oatsHome(t), bin=join(base,'bad-registration.mjs');
+  writeFileSync(bin, `import {writeFileSync} from 'node:fs';import {dirname,join} from 'node:path';
+    import {hostRunChildArgs} from ${JSON.stringify(new URL('../lib/host-run-admission.mjs',import.meta.url).href)};
+    const fence=hostRunChildArgs('unused',[])[2];
+    writeFileSync(join(dirname(fence),'groups','999999991'),'malformed');
+    setTimeout(()=>console.log(JSON.stringify({ok:true,result:{rows:[]}})),300);`);
+  let signal;const said=[];
+  const running=hostRun({kernel:{execPath:process.execPath,bin},hostStatus:NO_TIMER,onSignal:fn=>{signal=fn;return()=>{};},say:line=>said.push(line)});
+  const rejected=assert.rejects(running,/ownership is unreadable/);
+  t.after(async()=>{signal?.('SIGTERM');await rejected;});
+  for(let i=0;!said.some(line=>line.includes('child ownership failed'))&&i<300;i+=1) await delay(10);
+  assert.ok(said.some(line=>line.includes('child ownership failed')),'the control-read fault was observed');
+  signal('SIGTERM');
+  await rejected;
+  assert.equal(existsSync(hostRunLockPath()),false,'post-drain failure must not leave a live-process claim held');
+});
+
+
+test("a failed close cannot certify quiescence while its owned child still runs", async (t) => {
+  const base=oatsHome(t), bin=join(base,'live-work.mjs'), ready=join(base,'control');
+  const {hostRunWork}=await import('../lib/host-run-work.mjs');
+  writeFileSync(bin, `import {writeFileSync} from 'node:fs';
+    import {hostRunChildArgs} from ${JSON.stringify(new URL('../lib/host-run-admission.mjs',import.meta.url).href)};
+    writeFileSync(${JSON.stringify(ready)},JSON.stringify({pid:process.pid,fence:hostRunChildArgs('unused',[])[2]}));setInterval(()=>{},1000);`);
+  const work=hostRunWork({kernel:{execPath:process.execPath,bin},env:process.env,naturalMs:50,cancelMs:100});
+  const answer=work.run([]);let pid;
+  t.after(async()=>{if(pid){try{process.kill(pid,'SIGKILL');}catch(e){if(e.code!=='ESRCH')throw e;}}await answer;});
+  for(let i=0;!existsSync(ready)&&i<200;i+=1) await delay(10);
+  const control=JSON.parse(readFileSync(ready,'utf8'));pid=control.pid;
+  assert.match(dirname(control.fence),/oats-host-work-/,'only this fixture control directory is removed');
+  rmSync(dirname(control.fence),{recursive:true,force:true});
+  await assert.rejects(work.close(),{code:'ENOENT'});
+  assert.equal(work.quiescent,false,'rejected cleanup is not evidence that launch-capable work ended');
+  assert.doesNotThrow(()=>process.kill(pid,0),'the owned child really is still alive');
+});

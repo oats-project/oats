@@ -61,7 +61,8 @@ Inside one trust group, none of these hold:
 - That an agent cannot read another agent's seat key, the team's Claude
   token, the launch configurations, the schedule registry or sshd's host
   keys.
-- That an agent cannot stop sshd or `oats host run`.
+- That an agent cannot stop sshd, `oats host run`, the wake broker or its
+  supervisor.
 - That a capability is confined to the outputs it declares.
 - That a command which reads is one which runs nothing.
   `oats readiness --home <home>` executes the home's module commands, and

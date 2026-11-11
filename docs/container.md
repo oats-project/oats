@@ -220,8 +220,8 @@ or narrow its authority. Never share the mount across trust groups.
 A container has no launchd and no systemd user manager, so no timer runs
 the kernel's periodic work in it. After the entrypoint prepares NSS and
 SSH host keys, an image-local Node supervisor starts `aw wake run`. It waits
-for `aw wake status --json` to report `daemon_running: true` while that child
-stays alive, then starts sshd and `oats host run`
+for `aw wake status --json` to report `daemon_running: true` and name that
+live child's PID as `daemon_pid`, then starts sshd and `oats host run`
 ([desktop-cli-api.md](desktop-cli-api.md#the-host-run-oats-host-run)), one
 foreground process that lasts as long as the container.
 

@@ -59,7 +59,10 @@ export async function supervise({
       await Promise.race([read.done, requested]);
       if (!read.ended) await finish(read);
       if (read.code !== 0 || overflow) return false;
-      try { return JSON.parse(text).daemon_running === true; } catch { return false; }
+      try {
+        const state = JSON.parse(text);
+        return state.daemon_running === true && Number.isSafeInteger(state.daemon_pid) && state.daemon_pid > 0 && state.daemon_pid === broker.child.pid;
+      } catch { return false; }
     } finally { clearTimeout(timeout); }
   };
   try {
