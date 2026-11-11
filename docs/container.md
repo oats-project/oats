@@ -17,7 +17,9 @@ container is one trust group ([trust-model.md](trust-model.md)):
   every agent, seat and credential in it as subverted. Each agent can read
   every seat under `/state/seats`, the Claude token and sshd's host keys,
   rewrite the launch configurations in `/state/deploy` and the schedule
-  registry in `/state/home`, and stop sshd or `oats host run`.
+  registry in `/state/home`, rewrite the wake registrations under
+  `/state/home/.config/aw/wake`, and stop sshd, `oats host run`, the wake
+  broker or its supervisor.
 - **It holds one team, never several.** Agents that must not be able to read
   each other's identities or affect each other's work get separate
   containers. Nothing in OATS makes sharing one safe.

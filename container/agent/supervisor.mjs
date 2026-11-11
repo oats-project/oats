@@ -48,7 +48,9 @@ export async function supervise({
     try { await state.done; } finally { clearTimeout(escalation); }
   };
   const status = async () => {
-    const read = launch("status", "aw", ["wake", "status", "--json"], ["ignore", "pipe", "ignore"]);
+    let read;
+    try { read = launch("status", "aw", ["wake", "status", "--json"], ["ignore", "pipe", "ignore"]); }
+    catch { say("status could not start"); return false; }
     let text = "", overflow = false;
     read.child.stdout.on("data", (chunk) => {
       if (text.length + chunk.length > 65536) { overflow = true; read.child.kill("SIGKILL"); }
@@ -57,7 +59,7 @@ export async function supervise({
     const timeout = setTimeout(() => read.child.kill("SIGKILL"), 1000);
     try {
       await Promise.race([read.done, requested]);
-      if (!read.ended) await finish(read);
+      if (!read.ended) { read.child.kill("SIGKILL"); await read.done; }
       if (read.code !== 0 || overflow) return false;
       try {
         const state = JSON.parse(text);

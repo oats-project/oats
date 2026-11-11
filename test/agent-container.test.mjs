@@ -291,7 +291,7 @@ test("acceptance refuses drift in the admitted container settings", async () => 
 });
 
 
-async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false, stubbornFinish = false, brokerStatusPid = "owned" } = {}) {
+async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false, statusSpawnThrowsOnce = false, statusIgnoresTerm = false, stubbornFinish = false, brokerStatusPid = "owned" } = {}) {
   const supervisor = new URL("../container/agent/supervisor.mjs", import.meta.url);
   assert.ok(existsSync(supervisor), "the image must own broker readiness and ordered child shutdown");
   const { supervise } = await import(supervisor);
@@ -304,7 +304,11 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
     const log = text => fs.appendFileSync(events, text + "\\n");
     if (role === "broker") fs.writeFileSync(pidFile, String(process.pid));
     log(role + " started");
-    if (role === "status") {
+    if (role === "status" && mode === "probe-stubborn") {
+      process.on("SIGTERM", () => log("status TERM"));
+      log("status listening");
+      setInterval(() => {}, 1000);
+    } else if (role === "status") {
       const running = ((mode === "ready" || mode === "stubborn") && fs.readFileSync(events, "utf8").includes("broker started")) || (mode === "after-exit" && fs.readFileSync(events, "utf8").includes("broker exited"));
       if (running) log("broker ready");
       const pid = fs.existsSync(pidFile) ? Number(fs.readFileSync(pidFile,"utf8")) : 0;
@@ -312,22 +316,28 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
       process.stdout.write(JSON.stringify({daemon_running: running, ...identity}));
       process.exit(0);
     }
-    if (role === "broker" && mode === "after-exit") { log("broker exited"); process.exit(0); }
-    process.on("SIGTERM", () => {
-      log(role + " TERM");
-      if (mode === "stubborn" && (role === "ssh" || role === "broker")) return;
-      setTimeout(() => { log(role + " ended"); process.exit(0); }, role === "host" ? 80 : 0);
-    });
-    log(role + " listening");
-    setInterval(() => {}, 1000);
+    if (role !== "status") {
+      if (role === "broker" && mode === "after-exit") { log("broker exited"); process.exit(0); }
+      process.on("SIGTERM", () => {
+        log(role + " TERM");
+        if (mode === "stubborn" && (role === "ssh" || role === "broker")) return;
+        setTimeout(() => { log(role + " ended"); process.exit(0); }, role === "host" ? 80 : 0);
+      });
+      log(role + " listening");
+      setInterval(() => {}, 1000);
+    }
   `);
   const children = new Map(), said = [];
   let signal, statusFailed = false;
   const running = supervise({
     spawnChild(file, args, options) {
       const role = file === "aw" ? (args[1] === "run" ? "broker" : "status") : file === "oats" ? "host" : "ssh";
-      const mode = statusTrueAfterBrokerExit ? "after-exit" : stubbornFinish ? "stubborn" : ready ? "ready" : "not-ready";
+      const mode = role === "status" && statusIgnoresTerm ? "probe-stubborn" : statusTrueAfterBrokerExit ? "after-exit" : stubbornFinish ? "stubborn" : ready ? "ready" : "not-ready";
       appendFileSync(events, role + " spawned\n");
+      if (role === "status" && statusSpawnThrowsOnce && !statusFailed) {
+        statusFailed = true;
+        throw Object.assign(new Error("fixture status spawn failed"), {code: "ENOMEM"});
+      }
       const failProbe = role === "status" && statusSpawnFailsOnce && !statusFailed;
       if (failProbe) statusFailed = true;
       const child = spawn(failProbe ? join(dir, "missing-probe") : process.execPath, failProbe ? [] : [childFile, role, events, mode, brokerPid, brokerStatusPid], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
@@ -450,5 +460,29 @@ test("a status without our live broker PID cannot admit agents", async (t) => {
     assert.doesNotMatch(fx.text(), /(?:ssh|host) spawned/, brokerStatusPid);
     fx.term();
     assert.equal(await fx.running,0);
+  }
+});
+
+
+test("a synchronous ENOMEM status-probe spawn is retried before readiness expires", async (t) => {
+  const fx = await supervisorFixture(t, {statusSpawnThrowsOnce:true});
+  await fx.until(() => fx.text().includes("host started"));
+  assert.ok(fx.said.includes("status could not start"), "the synchronous spawn failure was observed");
+  assert.ok(fx.text().split("status spawned").length-1 >= 2, "readiness was retried");
+  fx.term();
+  assert.equal(await fx.running,0,"a transient synchronous status failure does not fail the container");
+});
+
+
+test("TERM kills a read-only status probe without failing the shortened stop grace", async (t) => {
+  for (const statusSpawnThrowsOnce of [false, true]) {
+    const fx = await supervisorFixture(t, {statusIgnoresTerm:true, statusSpawnThrowsOnce});
+    await fx.until(() => fx.text().includes("status listening") && fx.text().includes("broker listening"));
+    const probe = fx.children.get("status");
+    fx.term();
+    assert.equal(await fx.running,0,"forced read-only probe cleanup is a clean startup stop");
+    assert.equal(probe.signalCode,"SIGKILL","the probe is killed and awaited");
+    assert.doesNotMatch(fx.text(), /(?:ssh|host) spawned/);
+    assert.match(fx.text(), /broker TERM[\s\S]*broker ended/);
   }
 });
