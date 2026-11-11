@@ -100,13 +100,13 @@ const { callSession, parseMaxAge, readBudget } = await kernelImport("read-call",
 const { cachedWorkspace, legacyLayoutProblems, statusAnswer, statusView } = await kernelImport("roster-read", () => import("../lib/roster-read.mjs"));
 const { memberLabel, memberRows, packageRows, standaloneCatalogVersion, standalonePackages, workspaceName, workspaceStatusAnswer, workspaceStatusView } = await kernelImport("workspace-read", () => import("../lib/workspace-read.mjs"));
 const { expandInlineValues, flagValue } = await kernelImport("argv", () => import("../lib/argv.mjs"));
-const { APPROVAL_REMOVED, NATIVE_RECORD_REFUSED, RESUME_LOCAL_ONLY, RETIRE_USAGE, SOUL_LAUNCH_USAGE, SPAWN_USAGE, SYNC_USAGE, TEAMS_USAGE, WORKTREE_USAGE, commandArgvProblem, commandFlags } = await kernelImport("command-flags", () => import("../lib/command-flags.mjs"));
+const { APPROVAL_REMOVED, NATIVE_RECORD_REFUSED, HOST_RUN_USAGE, RESUME_LOCAL_ONLY, RETIRE_USAGE, SOUL_LAUNCH_USAGE, SPAWN_USAGE, SYNC_USAGE, TEAMS_USAGE, WORKTREE_USAGE, commandArgvProblem, commandFlags } = await kernelImport("command-flags", () => import("../lib/command-flags.mjs"));
 
 const rawArgs = process.argv.slice(2);
 const { argv: args, problem: argvProblem, inline: inlineValues } = expandInlineValues(rawArgs);
 let cmd = args[0];
 const HELP_WORDS = new Set(["help", "--help", "-h"]);
-const KERNEL_COMMANDS = new Set(["harness", "automations", "trigger", "capture", "capabilities", "deployments", "doctor", "inspect", "instance", "operation", "package", "readiness", "souls", "soul", "teams", "launch-config", "experimental", "onboard", "pane", "reader", "recall", "retire", "root", "schedule", "server", "session", "setup", "spawn", "status", "sync", "tui", "update", "version", "workspace", "worktree"]);
+const KERNEL_COMMANDS = new Set(["harness", "automations", "trigger", "capture", "capabilities", "deployments", "doctor", "inspect", "instance", "operation", "package", "readiness", "souls", "soul", "teams", "launch-config", "experimental", "host", "onboard", "pane", "reader", "recall", "retire", "root", "schedule", "server", "session", "setup", "spawn", "status", "sync", "tui", "update", "version", "workspace", "worktree"]);
 /** Commands whose argv another parser reads (packages/record, packages/experimental and packages/tui parse process.argv). */
 const OWN_ARGV_COMMANDS = new Set(["capture", "recall", "setup", "experimental", "tui"]);
 /** Commands `--server <id>` runs on a registered server. */
@@ -3201,6 +3201,8 @@ async function scheduleCmd() {
         const op = args[2];
         const os = flag("os");
         if (os !== undefined && !(op === "install" && args.includes("--print"))) throw scheduleError("E_BAD_ARGS", "--os is for oats schedule host install --print");
+        const registerOnly = op === "install" && args.includes("--register-only");
+        if (registerOnly && args.includes("--print")) throw scheduleError("E_BAD_ARGS", "--register-only records the scope and --print writes nothing: give one");
         if (op === "install" && args.includes("--print")) {
           // What install would write, rendered from this environment; nothing is written or loaded.
           if (os !== undefined && os !== "darwin" && os !== "linux") throw scheduleError("E_BAD_ARGS", "--os darwin|linux");
@@ -3222,20 +3224,48 @@ async function scheduleCmd() {
           };
           const caps = { maxConcurrent: cap("max-concurrent", "default"), triggersMaxConcurrent: cap("triggers-max-concurrent", "none") };
           registerWorkspace(ws(), caps);
+          // --register-only: the scope is in the host registry and no unit is installed, for a host
+          // whose ticker is `oats host run` (a container has neither launchd nor a systemd user manager).
+          if (registerOnly) return out({ scheduler: schedulerStatus(ws(), io), warnings: [] });
           const { warnings } = installHostUnit();
           return out({ scheduler: schedulerStatus(ws(), io), warnings });
         }
         if (op === "uninstall") { unregisterWorkspace(ws()); if (!readRegistry().workspaces.length) uninstallHostUnit(); return out({ scheduler: schedulerStatus(ws(), io) }); }
         if (op === "status") return out({ scheduler: schedulerStatus(ws(), io) });
-        throw scheduleError("E_BAD_ARGS", "oats schedule host install [--print [--os darwin|linux]]|uninstall|status");
+        throw scheduleError("E_BAD_ARGS", "oats schedule host install [--register-only | --print [--os darwin|linux]]|uninstall|status");
       }
-      default: throw scheduleError("E_BAD_ARGS", "usage: oats schedule list|show <id>|test <id>|add <id> --file <spec.json> [--description=<text>] [--workspace <member> --runs-on <host> --owner <host>/<login>]|update <id> (--file <spec.json> [--description=<text>] | --description=<text>)|enable <id>|disable <id>|run <id> [--force]|remove <id> [--force]|reconcile <id> [--clear]|tick [--dry-run] [--host]|host install [--max-concurrent <N|default>] [--triggers-max-concurrent <N|none>] | host install --print [--os darwin|linux]|uninstall|status [--dir <workspace>|--server <id>] [--json]");
+      default: throw scheduleError("E_BAD_ARGS", "usage: oats schedule list|show <id>|test <id>|add <id> --file <spec.json> [--description=<text>] [--workspace <member> --runs-on <host> --owner <host>/<login>]|update <id> (--file <spec.json> [--description=<text>] | --description=<text>)|enable <id>|disable <id>|run <id> [--force]|remove <id> [--force]|reconcile <id> [--clear]|tick [--dry-run] [--host]|host install [--register-only] [--max-concurrent <N|default>] [--triggers-max-concurrent <N|none>] | host install --print [--os darwin|linux]|uninstall|status [--dir <workspace>|--server <id>] [--json]");
     }
   } catch (e) {
     // K8b: typed refusal details travel (identity mismatch: key/declared; a refused file: its integrity source).
     const details = { ...(e.details && typeof e.details === "object" ? e.details : {}), ...Object.fromEntries(["key", "declared", "source", "field"].filter((k) => e[k] !== undefined).map((k) => [k, e[k]])) };
     if (JSON_MODE) jsonFail(e.code || "E_SCHEDULE_FAILED", e.message, Object.keys(details).length ? details : undefined); else die(e.message);
   }
+}
+
+/** `oats host run` (lib/host-run.mjs): the resume sweep once, the schedule tick each minute and an
+ *  ordered stop of the agents when the host stops, in the foreground. Progress goes to stderr; the
+ *  one answer is written when the run ends. */
+async function hostCmd() {
+  try {
+    const bad = (message) => Object.assign(new Error(message), { code: "E_BAD_ARGS" });
+    if (args[1] !== "run") throw bad(HOST_RUN_USAGE);
+    const grace = flag("stop-grace");
+    if (grace !== undefined && (grace === true || !/^\d+$/.test(String(grace)) || Number(grace) < 1 || Number(grace) > 300)) throw bad("--stop-grace needs a number of seconds (1..300) to wait for each harness after SIGTERM");
+    const { hostRun, hostRunPlan, NO_SCOPE_SAID } = await import("../lib/host-run.mjs");
+    if (args.includes("--plan")) {
+      const plan = await hostRunPlan();
+      if (JSON_MODE) return jsonOk(plan);
+      for (const r of plan.refusals) console.log(`would refuse (${r.code}): ${terminalText(r.message)}`);
+      for (const w of plan.warnings) console.log(`warning: ${terminalText(w)}`);
+      console.log(plan.scopes.length ? `would tick ${plan.scopes.length} scope${plan.scopes.length === 1 ? "" : "s"} each minute: ${plan.scopes.join(", ")}` : NO_SCOPE_SAID);
+      for (const r of plan.sweep.rows) console.log(`  ${r.instance}  would be ${r.outcome}${r.reason ? ` (${r.reason}${r.code ? `, ${r.code}` : ""})` : ""}${r.message ? `: ${terminalText(r.message)}` : ""}`);
+      if (!plan.sweep.rows.length) console.log("the sweep would find nothing to resume");
+      return;
+    }
+    const answer = await hostRun({ kernel: { execPath: process.execPath, bin: CLI_BIN }, ...(grace !== undefined ? { stopGraceMs: Number(grace) * 1000 } : {}) });
+    if (JSON_MODE) jsonOk(answer);
+  } catch (e) { lifecycleFail(e, "E_HOST_RUN_FAILED", e?.details); }
 }
 
 /** `oats trigger …` (lib/triggers.mjs): event-driven spawns stored beside the schedules of the
@@ -4777,6 +4807,7 @@ else if (cmd === "version" || cmd === "--version" || cmd === "-v") versionCmd();
 else if (cmd === "reader") await readerCmd();
 else if (cmd === "session") await sessionCmd();
 else if (cmd === "schedule") await scheduleCmd();
+else if (cmd === "host") await hostCmd();
 else if (cmd === "trigger") await triggerCmd();
 else if (cmd === "automations") await automationsCmd();
 // What a spawn throws outside its kernel stage goes through the same door as the inner catch.
@@ -4937,6 +4968,8 @@ Usage:
       host install|uninstall|status              explicit IANA tz; see docs/schedules.md); --server
                                                 routes to that host's workspace
         install [--max-concurrent N|default] [--triggers-max-concurrent N|none]
+        install --register-only                 records the scope and installs no timer, for a
+                                                host whose ticker is oats host run
   oats schedule add|update <id> … --description=<text>   a one-line summary (1-200 characters)
   oats schedule update <id> --description=<text>   change only it (--description= clears it)
   oats trigger add (--file <json> | --from <package>:<template> [--set k=v]) | list | show | enable
@@ -4975,6 +5008,12 @@ Usage:
   oats session resume [--deployment <dir>]   resume every lost session of this computer's
       [--plan] [--json]                     deployments (one sweep per machine; at most 3 resumes
                                             of a home per boot); --plan starts nothing
+  oats host run [--stop-grace <s>]           run the kernel in the foreground where no host timer
+      [--plan] [--json]                     can (a container): the resume sweep once, the schedule
+                                            tick each minute; on SIGTERM it stops ticking, then
+                                            stops every running instance (SIGTERM, bounded wait,
+                                            never escalated) so that the next start resumes it
+                                            (docs/container.md); --plan starts nothing
   oats session restart --home <abs-home>     stop the running harness (SIGTERM, bounded wait,
       [same flags] [--stop-grace <s>]        never escalated) and start it again in place under
                                             the same lock; a stop that is not observed is
