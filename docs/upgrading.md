@@ -6,11 +6,11 @@ host that comes from it.
 
 ## Upgrading to the latest version
 
-The latest version is **OATS 0.69.15** ([release notes](release-notes/v0.69.15.md)).
-The 0.69.15 Desktop accepts OATS CLIs `>=0.26.0 <0.70.0`.
+The latest version is **OATS 0.69.16** ([release notes](release-notes/v0.69.16.md)).
+The 0.69.16 Desktop accepts OATS CLIs `>=0.26.0 <0.70.0`.
 
 **First, read the `## Upgrade` section of every release after yours, up to
-0.69.15,** in the [release notes](release-notes/): it says what to do before
+0.69.16,** in the [release notes](release-notes/): it says what to do before
 the CLI changes, and what else must change with it (the Desktop, another
 tool, a package pin). [Coming from an older version](#coming-from-an-older-version)
 names the releases that ask for more than the steps below. `oats version`
@@ -19,8 +19,8 @@ prints the version you have.
 Then, on each host:
 
 ```sh
-                                     # 0. where the Desktop is installed: Desktop 0.69.15 first
-npm install -g @awebai/oats@0.69.15  # 1. the CLI
+                                     # 0. where the Desktop is installed: Desktop 0.69.16 first
+npm install -g @awebai/oats@0.69.16  # 1. the CLI
 oats update                          # 2. in each deployment: the plan, then it asks before it runs
 oats doctor                          # 3. in the same deployment
 ```
@@ -204,6 +204,13 @@ of the Desktop and the CLI, and an optional package pin. A change a script
 must follow is in its release's Upgrade section whether or not it is listed
 here.
 
+- **[0.69.16](release-notes/v0.69.16.md#upgrade):** the catalog pins
+  oats.okf 6.0.1, oats.aweb 1.39.0 and oats.framework 1.24.0. A deployment
+  that takes oats.okf 6 removes the harvester's launch preference and spawn
+  flags, adds the `proposal-review` trigger beside `harvest-review`, and
+  retires its harvesters; aw 1.36.56 is the tested aw; pi homes keep
+  @awebai/claude-skills out of their pi folder; the team agent image is
+  rebuilt.
 - **[0.69.15](release-notes/v0.69.15.md#upgrade):** Node 22.5.0 or later
   before the CLI; on a shared host, `chmod -R go-rwx` each turn-record root;
   a record root is written from one machine at a time; release a schedule
