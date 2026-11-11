@@ -16,7 +16,8 @@ import { createInstanceSoulSection } from '../renderer/instance-soul.mjs';
 import { createSelectionOwnership } from '../renderer/selection-ownership.mjs';
 import { getBinding, formatChord } from '../renderer/keybindings.mjs';
 import { deploymentDoubles } from './helpers/deployment-doubles.mjs';
-import { handlerAuth, authorized } from './helpers/handler-auth.mjs';
+import { handlerAuth, authorized, HANDLER_SECRET } from './helpers/handler-auth.mjs';
+import { INSTANCE_DIFF_LIMIT } from '../../client/instance-git-contract.mjs';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; };
@@ -91,6 +92,19 @@ test('UTF8 split chunks preserve literal root identity; only a server roster mat
   const h = http({ snapshots: new Map([['/A', { instances: [i] }]]), exec: (_b, _a, _o, done) => done(null, JSON.stringify(envelope(state(i)))) });
   const response = await h.request({ chunks: [body.subarray(0, at), body.subarray(at)] });
   assert.equal(response.body.status, 'available'); assert.equal(h.seen[0].argv[6], i.home);
+});
+
+test('a Git diff whose patch carries the server\'s credential is refused with no content; an ordinary diff is served', async () => {
+  const diff = (patch) => envelope({ instanceGitApi: 1, observation: observation(instance()), file: state().files[0], against: 'a'.repeat(40), binary: false,
+    bytes: Buffer.byteLength(patch), truncated: false, limit: INSTANCE_DIFF_LIMIT, patch, readOnly: { helpers: 'disabled', optionalLocks: 'off', objectsWritten: 0 } });
+  const body = JSON.stringify({ action: 'diff', selector: selector(instance()), fileId: 'c'.repeat(24), revision: 'a'.repeat(40), indexRevision: 'b'.repeat(40) });
+  const ordinary = await http({ exec: (_b, _a, _o, done) => done(null, JSON.stringify(diff('+an ordinary line\n'))) }).request({ body });
+  assert.equal(ordinary.status, 200); assert.equal(ordinary.body.data?.patch, '+an ordinary line\n', JSON.stringify(ordinary.body));
+  // A token file (or a hard link or copy of it) inside an instance's worktree, read into a diff by the CLI.
+  const leaking = await http({ exec: (_b, _a, _o, done) => done(null, JSON.stringify(diff(`+${HANDLER_SECRET}\n`))) }).request({ body });
+  assert.equal(leaking.status, 403);
+  assert.equal(leaking.body.code, 'E_FORBIDDEN');
+  assert.equal(JSON.stringify(leaking).includes(HANDLER_SECRET), false, 'no part of the reply carries the credential');
 });
 
 test('HTTP concurrent reads share only their in-flight request; stale diagnostics remain sanitized', async () => {

@@ -1126,7 +1126,8 @@ unknown or unreported harness shows "?". Sources and licences are in
   over a private pipe when it starts it: 32 random bytes, fresh for each
   server, never on a command line, in an environment, a URL, a log or the
   renderer. A request without it is refused (401) before anything else
-  happens. The Host guard (a loopback Host on every request) and the Origin
+  happens, and no reply carries it: a reply that would (a file, a skill or
+  a Git diff holding it) is refused (403) with no content. The Host guard (a loopback Host on every request) and the Origin
   guard (a loopback Origin on POSTs) stay. Main only ever talks to the
   server it started, and discards a reply from a server it has since
   replaced. Do not expose the socket: the server can type into your agent

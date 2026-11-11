@@ -100,3 +100,14 @@ export function bearerMatches(header, expected) {
   if (given.length !== expected.length) return false;
   return timingSafeEqual(given, expected);
 }
+
+/** The refusal sent in place of a reply that would carry the server's credential. */
+export const CREDENTIAL_IN_REPLY = Object.freeze({ error: "forbidden: the reply would carry the server's credential", code: "E_FORBIDDEN" });
+
+/** Whether a reply body (a string or bytes) holds `secret` anywhere. The credential is base64url,
+ * which JSON never escapes, so a body that embeds a file or a patch holding it holds it verbatim. */
+export function carriesSecret(data, secret) {
+  if (typeof secret !== "string" || !secret) return false;
+  if (typeof data === "string") return data.includes(secret);
+  return Buffer.isBuffer(data) || data instanceof Uint8Array ? Buffer.from(data.buffer, data.byteOffset, data.byteLength).includes(secret) : false;
+}

@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
-import { chmodSync, chownSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, chownSync, copyFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -180,4 +180,18 @@ test('the server holds no end of the credential pipe once it is ready', async (t
   }
   assert.equal(await Promise.race([ended, new Promise((ok) => setTimeout(() => ok(false), 3000))]), true,
     'its end of fd 3 is closed: nothing it runs can inherit it');
+});
+
+test('no reply carries the credential: a copy of the --token-file (another inode) is refused by /api/file too', async (t) => {
+  const s = await startLoadPathServer({ tokenFile: (deployment) => join(deployment, 'agents', 'token') });
+  t.after(() => s.stop());
+  await s.until(async () => (await s.panel()).deployment?.status === 'observed');
+  const agents = join(s.deployment, 'agents');
+  copyFileSync(join(agents, 'token'), join(agents, 'token-copy.md'));
+  const r = await s.request(`/api/file?path=${encodeURIComponent(join(agents, 'token-copy.md'))}`);
+  const text = await r.text();
+  assert.equal(r.status, 403, text.replace(s.secret, '<credential>'));
+  assert.equal(text.includes(s.secret), false, 'no content');
+  assert.equal(JSON.parse(text).code, 'E_FORBIDDEN');
+  assert.equal((await s.request('/api/version')).status, 200, 'the server goes on serving');
 });

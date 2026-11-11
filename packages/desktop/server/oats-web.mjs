@@ -60,7 +60,7 @@ import { launchEnvironment } from "../../client/own-environment.mjs";
 import { createServer } from "node:http";
 import { execFile, spawn } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync, lstatSync, unlinkSync, chmodSync, realpathSync, accessSync, constants as fsConstants } from "node:fs";
-import { StartupRefusal, readSecretFd, readSecretFile, checkSocketParent, bearerBytes, bearerMatches, sameFile, UNAUTHORIZED } from "./request-checks.mjs";
+import { StartupRefusal, readSecretFd, readSecretFile, checkSocketParent, bearerBytes, bearerMatches, sameFile, carriesSecret, CREDENTIAL_IN_REPLY, UNAUTHORIZED } from "./request-checks.mjs";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { homedir } from "node:os";
@@ -147,6 +147,7 @@ if (sub !== "start") {
    refusal is one stderr line naming the flag, never a value, and exit 1. */
 const startupRefusal = (message) => { console.error(`oats-desktop server: ${message}`); process.exit(1); };
 let SOCKET_PATH, BEARER;
+let CREDENTIAL; // the secret itself: no reply that holds it is sent (send)
 let TOKEN_FILE = null; // the --token-file's { dev, ino }: never served, whatever path names it
 try {
   if (args.includes("--port")) throw new StartupRefusal("--port is not accepted: the server listens only on --socket <path>");
@@ -164,6 +165,7 @@ try {
   checkSocketParent(socket);
   SOCKET_PATH = socket;
   BEARER = bearerBytes(secret);
+  CREDENTIAL = secret;
 } catch (e) {
   startupRefusal(e instanceof StartupRefusal ? e.message : "startup checks failed");
 }
@@ -1181,7 +1183,10 @@ function fileData(requested) {
 
 // ---- HTTP ----
 const send = (res, code, body, type = "application/json") => {
-  const data = type === "application/json" ? JSON.stringify(body) : body;
+  let data = type === "application/json" ? JSON.stringify(body) : body;
+  // No reply carries the credential, whatever route built it: a file, a skill or a Git diff that
+  // holds the --token-file's content (a copy or a hard link included) is refused with no content.
+  if (carriesSecret(data, CREDENTIAL)) { code = 403; type = "application/json"; data = JSON.stringify(CREDENTIAL_IN_REPLY); }
   res.writeHead(code, { "content-type": `${type}; charset=utf-8`, "cache-control": "no-store" });
   res.end(data);
 };
