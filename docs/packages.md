@@ -48,7 +48,7 @@ whole organisation:
 
 ```yaml
 packages:
-  oats.okf: v6.0.1                                    # bare version → the official catalog
+  oats.okf: v6.0.2                                    # bare version → the official catalog
   acme.tools: git:github.com/acme/tools@v0.4.0        # direct ref: git:<repo>@<tag or full OID>
 ```
 
@@ -79,7 +79,7 @@ members:
   - git:github.com/acme/platform
 packages:
   oats.framework: v1.24.0
-  oats.okf: v6.0.1
+  oats.okf: v6.0.2
   oats.aweb: v1.39.0
 teams:
   platform: { team: "platform:acme.aweb.ai", description: Platform engineering }
@@ -109,7 +109,7 @@ decision recorded in the lock.
 $ oats sync
 workspace  acme  (github.com/acme/agents @ 3f2a9c1e)
 members    agents ✓↔ (@ 3f2a9c1e)   platform ✓↔ (@ 77c0a1b2)   billing ✗ (no-backlink)
-packages   acme.tools 0.4.0 ✓ (@ 47f4b816)   oats.okf 6.0.1 ✓ (@ 95449a66)
+packages   acme.tools 0.4.0 ✓ (@ 47f4b816)   oats.okf 6.0.2 ✓ (@ 5c3f684c)
 changed    acme.tools  — → 0.4.0 (@ 47f4b816)
 souls      9 discovered (6 members, 1 external, 2 package, 0 disabled here) · 0 private capabilities
 teams      platform (shared) · this deployment's: oats teams
@@ -181,8 +181,8 @@ same workspace commit hold identical locks.
       "source": "catalog:oats.okf",
       "url": "https://github.com/awebai/oats-okf.git",
       "path": "oats-package",
-      "version": "6.0.1",
-      "commit": "95449a665146f36fbaecddeea413c9421d109912",
+      "version": "6.0.2",
+      "commit": "5c3f684c35b2ea9eeec5cdca915b6d845273fb4d",
       "integrity": "sha256-…",
       "capabilities": ["oats.okf", "oats.okf-harvest", "oats.okf-maintenance"]
     },
@@ -431,7 +431,7 @@ A soul that names one of the package's capabilities with
 {
   "policy": "docs/official-catalog.md",
   "packages": {
-    "oats.okf":       { "url": "https://github.com/awebai/oats-okf.git", "ref": "v6.0.1", "path": "oats-package" },
+    "oats.okf":       { "url": "https://github.com/awebai/oats-okf.git", "ref": "v6.0.2", "path": "oats-package" },
     "oats.framework": { "url": "https://github.com/awebai/oats.git", "ref": "oats-framework/v1.24.0", "path": "oats-package" }
   }
 }

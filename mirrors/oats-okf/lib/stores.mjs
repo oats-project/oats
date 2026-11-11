@@ -49,23 +49,36 @@ export const journalPath = b => `${b.path}.okf-publication.json`;
 // consult's validation, spawn, readiness) tolerates the two maintainer-upkeep
 // warnings: a stale (missing, orphaned) generated index and an old-node
 // concept awaiting its id; it reads the committed indexes as they are and
-// warns (W_INDEX_STALE). Every writer (propose, migration, publication) keeps
-// the default, strict: what it writes is refused until regenerated.
+// warns (W_INDEX_STALE). okf 6.0.2 (#138): it also tolerates one error, a
+// claims/ concept merged without the maintainer's id stamp, and warns
+// (W_ID_MISSING). Every writer (propose, migration, publication) keeps the
+// default, strict: what it writes is refused until regenerated or stamped;
+// propose alone lets through, by its `allow`, the missing ids of its own claims
+// and (6.0.2) of accepted claims/ concepts it leaves untouched, as a warning.
 const INDEX_WARNING=/: generated index is (stale|missing|orphan); run okf-reindex\.mjs$/;
 const ID_WARNING=/: missing 'id' \(stamped by the maintainer at acceptance\)$/;
+/** The validator's error for a claims/ concept without `id` (one claim each). */
+export const UNSTAMPED_ERROR=/^claims\/.+\.md: missing 'id' \(stamped by the maintainer at acceptance\)$/;
 /** `allow(findings)` (okf 6.0, propose only) returns the findings that still
  *  refuse: a proposed claim may wait for the maintainer's id. → {..., stale:
- *  the number of generated files a reader found stale (0 unless `reader`)}. */
+ *  the number of generated files a reader found stale, unstamped: the number
+ *  of claims/ concepts a reader found without id (both 0 unless `reader`)}. */
 export function validateBase(root, base, { allow = findings => findings, reader = false } = {}) {
   const files=tree(root,{git:base.kind==='git' && base.root==='.'}); const meta=metadata(files,base);
   const result=JSON.parse(exec(process.execPath,[validator,root,'--strict','--json'],{acceptedStatus:[0,1]}));
-  const tolerated=reader && result.layout==='subjects' ? result.warnings.filter(w=>INDEX_WARNING.test(w) || ID_WARNING.test(w)) : [];
-  const findings=allow([...result.errors,...result.warnings.filter(w=>!tolerated.includes(w))]);
+  const subjectLayout=reader && result.layout==='subjects';
+  const tolerated=subjectLayout ? result.warnings.filter(w=>INDEX_WARNING.test(w) || ID_WARNING.test(w)) : [];
+  const unstamped=subjectLayout ? result.errors.filter(e=>UNSTAMPED_ERROR.test(e)) : [];
+  const findings=allow([...result.errors.filter(e=>!unstamped.includes(e)),...result.warnings.filter(w=>!tolerated.includes(w))]);
   if(findings.length) fail('E_VALIDATION', findings.join('; '));
-  return {files,meta,digest:digest(files),subjects:subjectsOf(files,meta),stale:tolerated.filter(w=>INDEX_WARNING.test(w)).length};
+  return {files,meta,digest:digest(files),subjects:subjectsOf(files,meta),stale:tolerated.filter(w=>INDEX_WARNING.test(w)).length,unstamped:unstamped.length};
 }
 /** The reader's warning for a base whose generated indexes are stale. */
 export const staleWarning=(n,at)=>`W_INDEX_STALE: ${n} generated file${n===1?'':'s'} stale at ${at}; the maintainer regenerates (okf-reindex.mjs)`;
+/** The reader's warning for a base holding claims/ concepts merged without id. */
+export const unstampedWarning=(n,at)=>`W_ID_MISSING: ${n} claim${n===1?' lacks':'s lack'} an id at ${at}; the maintainer stamps ${n===1?'it':'them'} (knowledge-review)`;
+/** Every reader warning for a validated base, in a fixed order. */
+export const readerWarnings=({stale=0,unstamped=0},at)=>[...(stale>0?[staleWarning(stale,at)]:[]),...(unstamped>0?[unstampedWarning(unstamped,at)]:[])];
 /** okf 6.0: the subject refs of a base with the subject layout (its subject
  *  files, subjects/<kind>/<slug>.md), or null for a plain base. */
 export function subjectsOf(files,meta) {

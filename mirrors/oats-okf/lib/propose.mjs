@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, relative, sep } from 'node:path';
 import { fs, join, resolve, dirname, safePath, atomic, hash, cleanEnv, exec, fail } from './io.mjs';
 import { settings, resolveNodes, gitTimeoutMs } from './config.mjs';
-import { git as rawGit, gitEnv, preflightLocalRepository, unavailable, validateBase } from './stores.mjs';
+import { git as rawGit, gitEnv, preflightLocalRepository, unavailable, validateBase, UNSTAMPED_ERROR, unstampedWarning } from './stores.mjs';
 import { consultSource } from './sources.mjs';
 import { harvestPolicy } from './harvest-policy.mjs';
 import { isBridgedMeta } from './okf-reindex.mjs';
@@ -579,7 +579,7 @@ function prepare(source, dir, plan) {
     let treeId = workingTree(clone, accepted), list = changes(clone, accepted, treeId);
     if (!list.length) { results.push({ alias: entry.alias, clone, accepted, tree: treeId, changed: [] }); continue; }
     checkFiles(owned, list);
-    let allow, inspect;
+    let allow, inspect, unstamped = 0;
     if (scope.subjects) {
       // okf 6.0, the subject layout (spec §3): a version-1 soul's new claims get
       // about: from legacy-nodes, every generated index is regenerated, then the
@@ -598,9 +598,17 @@ function prepare(source, dir, plan) {
         checkWriteSurface({ root: proposed, decl: source.decl, ownedNodes: scope.ownedNodes, changes: changed, before });
         verdicts.push(...proposalVerdicts(proposed, changed).map(v => ({ ...v, path: baseFile(owned.base, v.path) })));
       };
-      allow = findings => proposalFindings(findings, changed);
+      // okf 6.0.2 (#138): a claims/ concept the base already holds without id
+      // (merged without the maintainer's stamp) does not refuse the proposal;
+      // it is reported as the readers report it, W_ID_MISSING.
+      allow = findings => {
+        const rest = proposalFindings(findings, changed), kept = rest.filter(f => !UNSTAMPED_ERROR.test(f));
+        unstamped = rest.length - kept.length;
+        return kept;
+      };
     } else checkScope(owned, scope, list);
     validateTree(clone, owned, treeId, allow, inspect);
+    if (unstamped) warnings.push(unstampedWarning(unstamped, `${entry.alias}@${accepted.slice(0, 12)}`));
     // What the clone's files stage to now: --apply refuses if they move
     // before it stages the checked tree (which, prepared on stored bytes, may
     // differ from it under a clean filter).
