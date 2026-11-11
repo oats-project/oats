@@ -120,14 +120,14 @@ test("a filter driver whose name Git's -c cannot carry refuses the retire before
   }
 });
 
-test("a spawn into a worktree of a repository with a filter driver whose name Git's -c cannot carry is refused and rolled back: the status its baseline is taken from is not run", () => {
+test("a spawn into a worktree of a repository with a filter driver whose name Git's -c cannot carry is refused and rolled back: its checkout is not run", () => {
   const f = fixture();
   fixtureGit(f.repo, ["config", "filter.a=b.clean", "cat"]);
   const spawned = cli(f, ["spawn", "dev", "--purpose", "unnameable", "--no-launch", "--json"]);
   assert.notEqual(spawned.status, 0, spawned.stdout);
   const error = JSON.parse(spawned.stdout).error;
   assert.equal(error.code, "E_WORK_INSPECTION_FAILED", spawned.stdout);
-  assert.match(error.message, /^could not inspect instance worktree: git status was not run in \S+\/work: the repository's configuration defines a filter driver whose name cannot be overridden.* — spawn rolled back$/);
+  assert.match(error.message, /^could not make the instance worktree: git worktree add was not run in \S+: the repository's configuration defines a filter driver whose name cannot be overridden.* — spawn rolled back$/);
   assert.equal(existsSync(join(f.root, "dev", "instances", "dev-unnameable")), false, "no home is left");
   assert.equal(fixtureGit(f.repo, ["worktree", "list", "--porcelain"], { encoding: "utf8" }).split("\n").filter((line) => line.startsWith("worktree ")).length, 1, "no worktree is left registered");
 });

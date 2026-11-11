@@ -82,7 +82,7 @@ const { parseEnvelopeText, SCHEDULE_SLOT_UNREADABLE, SCHEDULE_SLOT_ORPHANED, unr
 const { hostUnitFiles, hostUnitStatus, installHostUnit, uninstallHostUnit } = await kernelImport("schedule-host", () => import("../lib/schedule-host.mjs"));
 const { kernelNode, stableNode } = await kernelImport("stable-node", () => import("../lib/stable-node.mjs"));
 const { receiveAttachment, uploadAttachment, readStreamBounded, MAX_ATTACHMENT_BYTES } = await kernelImport("attachments", () => import("../lib/attachments.mjs"));
-const { observeInstanceGit, diffInstanceFile } = await kernelImport("instance-git", () => import("../lib/instance-git.mjs"));
+const { observeInstanceGit, diffInstanceFile, NO_FILE_MONITOR } = await kernelImport("instance-git", () => import("../lib/instance-git.mjs"));
 const { planStop, applyStop, planRetire, retireDefaultsLine, stopClosingLine, descendantsOf, resolveInstance: resolveInstanceForCli, setInstanceColor, setInstanceBackground, setInstanceSameWork, STOP_WARNINGS } = await kernelImport("instance-lifecycle", () => import("../lib/instance-lifecycle.mjs"));
 const { extraWorktreeLines, formatBytes, warningLines, workRecoveryLines } = await kernelImport("retire-output", () => import("../lib/retire-output.mjs"));
 const { livenessWord, lostLine, statusWord, waitingLine } = await kernelImport("status-words", () => import("../lib/status-words.mjs"));
@@ -2117,7 +2117,8 @@ function workspaceCheckoutFrom(dir) {
       let inCheckout = false;
       for (let d = current; ; d = dirname(d)) { if (existsSync(join(d, ".git"))) { inCheckout = true; break; } if (dirname(d) === d) break; }
       if (!inCheckout) return null;
-      const tracked = spawnSync("git", ["-C", current, "ls-files", "--error-unmatch", "--", "oats-workspace.yaml"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 10000 });
+      // Git reads the checkout's index for this: it does not run the file monitor the checkout's configuration names.
+      const tracked = spawnSync("git", [...NO_FILE_MONITOR, "-C", current, "ls-files", "--error-unmatch", "--", "oats-workspace.yaml"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 10000 });
       return tracked.status === 0 ? { file: candidate, root: current } : null;
     }
     const parent = dirname(current);
