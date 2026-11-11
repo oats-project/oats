@@ -1323,6 +1323,24 @@ leaves what happened on disk (OATS 0.53.0):
 - **One event,** `retire-refused`, which says which of the two it was
   ([Events](desktop-cli-api.md#retire-refused-event)).
 
+<a id="self-retire-interrupted"></a>**A completion that was killed** (a
+`SIGKILL`, a container that stopped, a reboot) leaves no outcome, and its
+pending marker stays. The marker names the completion by its pid, its start
+and its boot, and the rule is: a pending marker holds its home only while
+the completion it names can still act; once that completion is gone,
+`oats retire <instance>` takes the retire over and completes it, and
+`oats session start` is refused with that command in its message. A
+completion is gone when its process has ended, when its pid runs with
+another start, and when the marker was written in another boot, whatever
+its pid reads as there. `oats status` shows the row's `retire` as
+`interrupted`, and `oats doctor` lists the home. A start answers
+`E_INSTANCE_RETIRING`, `<instance> is owed a retire (its retire was
+interrupted): finish it with` and the retire to run, because the home is
+never started again: the completion may have run retire hooks before it
+was killed, and a start would bring back an instance whose identity is
+gone. A marker that names no completion (one an OATS before 0.51.0 wrote)
+is refused by a start as before, and `oats retire <instance>` completes it.
+
 <a id="self-retire-hook-retry"></a>**A completion retries a cleanup that only
 retire hooks left incomplete** (oats-project/oats#1747), because a provider's
 failure is often transient. When the retire ends with the home quarantined,
