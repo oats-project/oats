@@ -6334,7 +6334,19 @@ zombie) has died: its claim is taken over without waiting for that reap
 (0.52.0, #870; before, the retire was refused as running until the reap). The
 claim does not end what the killed retire left running: one of its retire
 hooks may still be running when the next retire takes the claim over and
-runs the hooks again (#865). Until
+runs that hook again (#865). <a id="retire-hooks-in-claim"></a>The retire
+that takes over does not run again a retire hook the killed one had
+finished: a retire records each hook that ended in its claim, as
+`retireHooks: [{capability, meta?}]` (the `meta` that hook answered) with
+`retireHooksFor`, the home's `createdAt`, and the next holder skips those
+hooks and judges the cleanup, and writes its `retired` row, with their
+`meta` as if it had run them. A hook that had not ended is run again. Only
+a take-over reads the list: a retire that returns removes its claim, so
+the retry of a quarantined home, and each retry a self-retire's completion
+makes of a cleanup its hooks left incomplete, runs every hook again. A
+claim without the list, or whose list names another incarnation, skips
+nothing, and of a list only the entries that name a capability of this
+home with a retire hook count. Until
 that name is retired again its claim file stays where it is, and it is safe
 to remove once its pid is gone. A retire that ends removes its claim file;
 the `claims/` directory itself stays, empty.
