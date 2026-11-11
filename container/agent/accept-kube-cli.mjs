@@ -58,6 +58,7 @@ function runtimeProbe(uid, gid) {
   }
   assert.ok(fs.statSync("/etc/agent-login").isDirectory());
   assert.throws(() => fs.accessSync("/etc/agent-login", fs.constants.W_OK));
+  assert.equal(fs.statSync("/state/ssh/ssh_host_ed25519_key").mode & 0o777, 0o600, "persisted SSH host key must retain mode 0600");
   console.log(`PASS uid=${uid} gid=${gid}; CapEff=0; NoNewPrivs=1; no SA token; /state,/tmp writable; root and login/key/resolver mounts not writable`);
 }
 
@@ -82,16 +83,17 @@ async function forwarded(kube, pod) {
 
 async function shutdown(kube, pod, expectedUID) {
   // Start streaming BEFORE deletion; a removed pod cannot be queried for its final logs.
-  const log = spawn("kubectl", [...kube, "logs", "--follow", pod, "-c", "agent"], { stdio: ["ignore", "pipe", "pipe"] });
+  const log = spawn("kubectl", [...kube, "logs", "--follow", "--tail=1", pod, "-c", "agent"], { stdio: ["ignore", "pipe", "pipe"] });
   const closed = new Promise((resolve) => { log.once("error", () => resolve(false)); log.once("close", (code) => resolve(code === 0)); });
   let ready;
   const started = new Promise((resolve) => { ready = resolve; });
   let tail = "", ended = false, signal = false;
   log.stdout.on("data", (data) => {
+    // Receiving the stream proves attachment even after the boot line has rotated away.
+    if (data.length) ready(true);
     tail += data;
     const lines = tail.split("\n"); tail = lines.pop();
     for (const line of lines) {
-      if (line.startsWith("oats host run: started (pid ")) ready(true);
       if (line === "oats host run: SIGTERM: ticking ended") { signal = true; report("stop", line); }
       if (signal && line === "oats host run: ended") { ended = true; report("stop", line); }
     }
@@ -114,13 +116,28 @@ async function shutdown(kube, pod, expectedUID) {
 }
 
 function sshProof(port, key, knownHosts, uid, gid, phase = "ssh") {
-  const ssh = ["-F", "/dev/null", "-T", "-oBatchMode=yes", "-oIdentitiesOnly=yes", "-oIdentityAgent=none", "-oStrictHostKeyChecking=accept-new", `-oUserKnownHostsFile=${knownHosts}`, "-oConnectTimeout=10", "-p", port, "-i", key, "agent@127.0.0.1"];
+  const ssh = ["-F", "/dev/null", "-T", "-oBatchMode=yes", "-oIdentitiesOnly=yes", "-oIdentityAgent=none", "-oStrictHostKeyChecking=accept-new", "-oHostKeyAlias=oats-kube-accept", `-oUserKnownHostsFile=${knownHosts}`, "-oConnectTimeout=10", "-p", port, "-i", key, "agent@127.0.0.1"];
   report(phase, command("ssh", [...ssh, `node -e ${quote(`(${runtimeProbe.toString()})(${uid},${gid})`)}`]).trim());
   const plan = JSON.parse(command("ssh", [...ssh, "oats host run --plan --json"]));
   assert.equal(plan.ok, true, "host run plan failed");
   assert.equal(plan.result.plan, true, "host run plan answer");
   assert.ok(plan.result.refusals.some((r) => r.code === "E_HOST_RUN_BUSY"), "entrypoint host run must already hold its lock");
   report(phase, "PASS oats host run --plan: plan=true; entrypoint host run holds its lock (E_HOST_RUN_BUSY)");
+}
+
+async function replacementPod(kube, name, previousUID, docs) {
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    const text = command("kubectl", [...kube, "get", "pod", name, "--ignore-not-found=true", "--request-timeout=5s", "-o", "json"]);
+    const pod = text.trim() ? JSON.parse(text) : null;
+    if (pod?.metadata?.uid && pod.metadata.uid !== previousUID) {
+      checkPod(docs, pod);
+      if (!pod.metadata.deletionTimestamp && pod.status?.phase === "Running" && pod.status.conditions?.some((c) => c.type === "Ready" && c.status === "True")) return pod;
+    }
+    // Readiness is bounded and observed; an old Ready condition cannot satisfy a new UID.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error("replacement pod did not become Ready with a new UID within 120 seconds");
 }
 
 async function main() {
@@ -152,7 +169,14 @@ async function main() {
     tunnel = await forwarded(kube, pod.metadata.name);
     const s = set.spec.template.spec.securityContext;
     sshProof(tunnel.port, o["--ssh-key"], join(dir, "known_hosts"), s.runAsUser, s.runAsGroup);
-    if (o.delete) await shutdown(kube, pod.metadata.name, pod.metadata.uid);
+    if (o.delete) {
+      await shutdown(kube, pod.metadata.name, pod.metadata.uid);
+      tunnel.child.kill();
+      const replacement = await replacementPod(kube, pod.metadata.name, pod.metadata.uid, docs);
+      tunnel = await forwarded(kube, replacement.metadata.name);
+      sshProof(tunnel.port, o["--ssh-key"], join(dir, "known_hosts"), s.runAsUser, s.runAsGroup, "replacement");
+      report("replacement", "PASS replacement pod Ready with a new UID; declared isolation, persisted SSH host key and host-run lock re-proven");
+    }
     else report("stop", "NOT RUN: deletion requires --delete-pod (only for a disposable acceptance deployment)");
   } finally { tunnel?.child.kill(); rmSync(dir, { recursive: true, force: true }); }
   report("live", "NOT RUN: seats, native harness auth, mail/chat and network bypass checks; each needs its own platform evidence");

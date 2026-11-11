@@ -178,7 +178,7 @@ test("accept-kube renders by default and requires explicit live deletion inputs"
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test("acceptance uses only the selected context and records ordered shutdown evidence", () => {
+test("acceptance records shutdown and re-proves SSH on the replacement pod in the selected context", () => {
   const dir = mkdtempSync(join(tmpdir(), "oats-kube-boundary-"));
   try {
     const docs = render(), set = docs.find((d) => d.kind === "StatefulSet");
@@ -197,14 +197,20 @@ if(a[0]==='get'){
  const docs=JSON.parse(fs.readFileSync(path.join(root,'objects.json')));
  const found=docs.find(d=>d.kind.toLowerCase()===a[1].toLowerCase());
  if(!found)process.exit(3);
+ if(found.kind==='Pod'&&fs.existsSync(path.join(root,'stop'))){
+  const f=path.join(root,'replacement-reads'),n=fs.existsSync(f)?Number(fs.readFileSync(f))+1:1;fs.writeFileSync(f,String(n));
+  found.metadata.uid=n===1?'fixture-uid':'replacement-uid';
+  found.status={phase:n===2?'Pending':'Running',conditions:[{type:'Ready',status:n===2?'False':'True'}]};
+ }
  console.log(JSON.stringify(found));
 }else if(a[0]==='port-forward'){
  console.log('Forwarding from 127.0.0.1:22222 -> 2222'); setInterval(()=>{},10000);
 }else if(a[0]==='logs'){
  setTimeout(()=>{
-  const watcher=fs.watch(root,()=>{if(fs.existsSync(path.join(root,'stop'))){console.log('oats host run: SIGTERM: ticking ended');console.log('oats host run: ended');watcher.close();}});
+  const watcher=fs.watch(root,()=>{if(fs.existsSync(path.join(root,'stop'))){clearTimeout(fail);console.log('oats host run: SIGTERM: ticking ended');console.log('oats host run: ended');watcher.close();}});
+  const fail=setTimeout(()=>{watcher.close();process.exit(6);},3000);
   fs.writeFileSync(path.join(root,'ready'),'ready');
-  console.log('oats host run: started (pid 42); it holds /state/home/.oats/host-run/lock');
+  console.log('sshd: periodic probe connection closed (boot line rotated away)');
  },500);
 }else if(a[0]==='delete'){
  if(!fs.existsSync(path.join(root,'ready')))process.exit(5);
@@ -212,6 +218,8 @@ if(a[0]==='get'){
 }else process.exit(4);
 `, { mode: 0o755 });
     writeFileSync(join(dir, "ssh"), `#!/usr/bin/env node
+const fs=require('node:fs'),path=require('node:path');
+fs.appendFileSync(path.join(__dirname,'ssh-calls'),JSON.stringify(process.argv.slice(2))+'\\n');
 const command=process.argv.at(-1);
 if(command==='oats host run --plan --json')console.log(JSON.stringify({ok:true,result:{plan:true,refusals:[{code:'E_HOST_RUN_BUSY'}]}}));
 else if(command.startsWith('node -e '))console.log('PASS fixture SSH boundary (no real runtime assertions)');
@@ -223,9 +231,15 @@ else process.exit(2);
     assert.match(r.stdout, /PASS admitted pod/);
     assert.match(r.stdout, /SIGTERM: ticking ended/);
     assert.match(r.stdout, /PASS ordered host shutdown/);
+    assert.match(r.stdout, /PASS replacement pod/);
+    assert.equal(readFileSync(join(dir, "replacement-reads"), "utf8"), "3", "old Ready UID and new Pending UID cannot satisfy replacement readiness");
+    const sshCalls = readFileSync(join(dir, "ssh-calls"), "utf8").trim().split("\n").map(JSON.parse);
+    assert.equal(sshCalls.filter((a) => a.at(-1).startsWith("node -e ")).length, 2, "runtime is checked before and after replacement");
+    assert.equal(sshCalls.filter((a) => a.at(-1) === "oats host run --plan --json").length, 2);
+    assert.ok(sshCalls.every((a) => a.includes("-oHostKeyAlias=oats-kube-accept")), "one known host key must survive a new forwarded port");
     const calls = readFileSync(join(dir, "calls"), "utf8").trim().split("\n").map(JSON.parse);
     assert.ok(calls.every((args) => !args.includes("exec")), "operator route needs no exec permission");
-    assert.ok(calls.find((args) => args.includes("logs")));
+    assert.ok(calls.find((args) => args.includes("logs") && args.includes("--tail=1")));
     assert.ok(calls.find((args) => args.includes("delete") && args.includes("--wait=false")));
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
