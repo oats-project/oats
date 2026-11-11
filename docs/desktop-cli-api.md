@@ -433,6 +433,11 @@ failure as `E_SSH`, message `ssh to <host> failed: …`:
   retrying cannot help.
 - No `details`: ssh ran and the link failed (unreachable host, refused key,
   lost connection, timeout); a retry may succeed.
+- `error.details` is `{decision, idempotencyKey, fix}` when the link failed
+  under the apply of a routed spawn the route bound itself
+  ([Idempotency](#spawn-idempotency-routed)): the host may have started the
+  spawn, and the same spawn with `--expect-decision <decision.revision>
+  --idempotency-key <idempotencyKey>` answers that one instance.
 
 (0.31.0; before it `E_SSH` never carried details.)
 
@@ -2993,6 +2998,23 @@ with `--expect-decision` records the key and decision in `instance.json`.
   for that intent's retries.
 - `wake: {requested, saved, error}` is recorded and replayed; `saved: null`
   means the outcome was not recorded.
+- A replay answers `attach` as the first apply did; its `launch` is `null`
+  (nothing runs again).
+- <a id="spawn-idempotency-routed"></a>**Routed (`--server`).** A spawn that
+  brings neither `--expect-decision` nor `--idempotency-key` is bound by the
+  route: it asks the host for its preview, then applies with that decision
+  and a key it makes for the request, and relays the host's keyed answer
+  (`decision`, `replayed: false`, `wake`). A link that fails under that apply
+  is `E_SSH` with `error.details: {decision, idempotencyKey, fix}`: `decision`
+  is the previewed decision, `idempotencyKey` the key the apply carried and
+  `fix` the sentence naming the two flags (and `--name <decision.instance>`
+  in place of `--suggest-name`). The same spawn with them is forwarded as
+  given and answers the one instance. A spawn that brings either flag is
+  forwarded as given. A host without `spawn-preview-2`, `spawn-apply-2` and
+  `spawn-idempotency-2` (and, for `--suggest-name`, `spawn-suggest-name` and
+  `spawn-name`) gets one unbound spawn, and the answer's `warnings` say that
+  a dropped link cannot be retried safely there
+  ([servers.md](servers.md#run-there)).
 
 **Result** (`oats spawn <soul> … --json`):
 

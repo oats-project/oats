@@ -152,7 +152,11 @@ test("oats spawn --server: the host's warnings are spelled on their WARNING line
   const run = routed(t, { "spawn dev": ok({ instance: "dev-a", agent: "dev", home: HOME, work: "worktree", branch: "agents/dev-a", launched: false, warnings: [`the host's hook says ${HOSTILE}`] }) });
   const text = run(["spawn", "dev", "--server", "build", "--purpose", "a", "--no-launch"]);
   assert.equal(text.status, 0, text.stdout + text.stderr);
-  assert.deepEqual(linesWith(text.stdout, "WARNING"), [`  WARNING: the host's hook says ${SPELLED}`]);
+  // The host of this file's probe advertises none of the keyed spawn's features, so the route adds its own warning.
+  const warnings = linesWith(text.stdout, "WARNING");
+  assert.equal(warnings.length, 2, text.stdout);
+  assert.equal(warnings[0], `  WARNING: the host's hook says ${SPELLED}`);
+  assert.match(warnings[1], /^  WARNING: remote oats \S+ at build-host does not advertise spawn-preview-2, spawn-apply-2, spawn-idempotency-2: /);
   assert.doesNotMatch(text.stdout + text.stderr, RAW, "no escape and no bidi override reaches the terminal");
   const json = run(["spawn", "dev", "--server", "build", "--purpose", "a", "--no-launch", "--json"]);
   assert.equal(json.status, 0, json.stdout + json.stderr);
