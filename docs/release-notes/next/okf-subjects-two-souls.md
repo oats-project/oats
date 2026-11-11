@@ -18,3 +18,5 @@
   `workstream/oats-direction` and `workstream/positioning`. Their spawn brief
   lists those subjects, and their texts say each proposed claim names the
   subjects it is about. Every other soul keeps its version-1 `okf.json`.
+- **`oats.workspace-experts` 1.3.1:** its table of surfaces names, beside each
+  knowledge node, the subject that absorbs it ("Knowledge it reads").

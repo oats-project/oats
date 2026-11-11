@@ -1,7 +1,7 @@
 {
   "capability": "oats.workspace-experts",
   "private": true,
-  "version": "1.3.0",
+  "version": "1.3.1",
   "compatibility": { "oats": ">=0.29.0" },
   "description": "The OATS framework repository's part of the expert role: which developer soul owns each surface, what an expert's own worktrees are for (reading, verifying, a probe's scratch work and the specs it builds itself), and how changes land here (PRs merged by the maintainer, oats-maintainer; every engineering effort led by oats-engineering-expert). Assigned to this workspace's expert souls, beside oats.engineering-expert.",
   "requires": [],
