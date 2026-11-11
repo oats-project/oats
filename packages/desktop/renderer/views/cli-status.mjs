@@ -93,6 +93,28 @@ export function cliAboveTested(s = cli) { return aboveTestedState(s); }
 /** Why `operation` (above-tested.mjs's name for it) is off, the notice sentence, or null when it is not held
  * back. What a control that would run it shows as its title once it is disabled; the backend refuses it too. */
 export function cliHeldBack(operation, s = cli) { return aboveTestedRefusal(s, operation)?.message ?? null; }
+/** Marks `control` as running `operation` (an operation of packages/client/above-tested.mjs): disabled with the
+ * notice as its title while that operation is held back, else disabled and titled as it was painted (its own
+ * state now, kept on the element). Returns it. A control kept across paints is marked again by its next paint. */
+export function holdControl(control, operation) {
+  control.dataset.heldOperation = operation;
+  control.dataset.heldDisabled = String(!!control.disabled);
+  control.dataset.heldTitle = control.title || "";
+  applyHold(control);
+  return control;
+}
+function applyHold(control) {
+  const held = cliHeldBack(control.dataset.heldOperation);
+  control.disabled = held ? true : control.dataset.heldDisabled === "true";
+  control.title = held ?? control.dataset.heldTitle;
+}
+/** Applies the hold of every control `holdControl` marked under the elements `roots()` gives again, at each CLI
+ * change, so a reprobe into or out of the tested bound shows without a repaint. Returns the unsubscribe. */
+export function syncHeldControls(roots) {
+  return onCliChange(() => {
+    for (const root of roots()) if (root) for (const control of root.querySelectorAll("[data-held-operation]")) applyHold(control);
+  });
+}
 export function cliKnownUnavailable() { return (!!cli && !cli.ok) || settledUnknown; }
 export function onCliChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 /** Test seam: invalidate in-flight work and return to probe-pending. */

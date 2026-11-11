@@ -1073,10 +1073,13 @@ export function mountAutomationsPage(el, ctx, kind, extend = () => ({}), { cli: 
     shown = key; view?.dispose(); view = null; card?.dispose?.(); card = null;
     if (cliKnownUnavailable()) { const body = gate(`${title} need the OATS CLI`); card = cliCard(doc, ctx); body.append(card.el); return; }
     if (!cli) { gate('Checking the OATS CLI…'); return; }
-    if (!ok) { gate(`${title} need OATS 0.29 or later`, `Update OATS to see the workspace's ${title.toLowerCase()} and this computer's own, and where each one runs.`); return; }
-    if (!ws) { gate('Choose a workspace', `${title} are read for one local workspace.`); return; }
+    // The notice says what a newer CLI holds back on every page it reaches, a gated one too: above the tested bound
+    // a CLI with no automations API of a known shape is still accepted, and its gate alone would say nothing of why.
+    const mountNotice = () => { if (notice) { card = aboveTestedCard(doc, ctx); root.prepend(card.el); } };
+    if (!ok) { gate(`${title} need OATS 0.29 or later`, `Update OATS to see the workspace's ${title.toLowerCase()} and this computer's own, and where each one runs.`); mountNotice(); return; }
+    if (!ws) { gate('Choose a workspace', `${title} are read for one local workspace.`); mountNotice(); return; }
     root.replaceChildren();
-    if (notice) { card = aboveTestedCard(doc, ctx); root.append(card.el); }
+    mountNotice();
     // A source's "Open capability" resolves against this workspace's catalog (the held `oats capabilities` table,
     // read once per build): exactly one row of that name, or the source stays text.
     const catalog = new Map(), built = ++builds;

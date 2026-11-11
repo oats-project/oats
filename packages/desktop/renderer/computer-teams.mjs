@@ -28,10 +28,11 @@ import { iconElement } from './shell-icons.mjs';
 import { createSoulMark } from './identity-marks.mjs';
 import { deploymentLabel, shortPath } from '../../client/deployment-label.mjs';
 import { DESKTOP_TERMS } from './desktop-terms.mjs';
-import { cliHeldBack } from './views/cli-status.mjs';
+import { cliHeldBack, holdControl, syncHeldControls } from './views/cli-status.mjs';
 
-/** Above the tested bound (#1879) every team write is held back (packages/client/above-tested.mjs): the notice, or null. */
-const writesHeld = () => cliHeldBack('POST /api/workspace-teams add');
+/** Above the tested bound (#1879) every team write is held back (packages/client/above-tested.mjs): its controls are
+ * marked with this operation (holdControl), disabled with the notice, and follow a reprobe (syncHeldControls). */
+const TEAM_WRITE = 'POST /api/workspace-teams add';
 import { ageText } from './age-text.mjs';
 import { captureFocusState } from './loading.mjs';
 import { pageBar } from './capability-page.mjs';
@@ -511,6 +512,8 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
   const head = el(doc, 'div', null, 'ct-page-head ws-sticky'), titles = el(doc, 'div', null, 'ct-title-wrap');
   titles.append(el(doc, 'h2', 'Teams', 'ct-title'), el(doc, 'p', 'Who your agents can message. A team never adds capabilities or restricts what a soul can do.', 'ct-lead'));
   const addButton = el(doc, 'button', null, 'ct-act ct-add'); addButton.type = 'button';
+  // The team writes follow the CLI: a reprobe into or out of the tested bound holds them back or gives them back.
+  const offHeld = syncHeldControls(() => [page, shown?.content]);
   addButton.append(iconElement(doc, 'plus', { size: 13 }), el(doc, 'span', 'Add a local team'));
   addButton.setAttribute('aria-expanded', 'false');
   addButton.addEventListener('click', () => { if (addButton.disabled) return; openAdd('head'); });
@@ -658,11 +661,11 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
     if (text(team.description)) header.append(el(doc, 'p', team.description, 'ct-desc'));
     const actions = el(doc, 'div', null, 'ct-actions');
     // Make default writes oats-local.yaml's defaultTeam: only where this deployment may declare it.
-    if (!team.default && localAllowed(current)) actions.append(button('Make default', '', () => { confirming = team.label; render(); focusIn(`[data-team="${team.label}"] .ct-confirm .primary`, root()); },
-      { disabled: !team.team || !!writesHeld(), title: writesHeld() ?? (team.team ? '' : 'A team with no provider id yet cannot be the default.'), aria: `Make ${team.label} the default team`, key: 'team:make-default' }));
+    if (!team.default && localAllowed(current)) actions.append(holdControl(button('Make default', '', () => { confirming = team.label; render(); focusIn(`[data-team="${team.label}"] .ct-confirm .primary`, root()); },
+      { disabled: !team.team, title: team.team ? '' : 'A team with no provider id yet cannot be the default.', aria: `Make ${team.label} the default team`, key: 'team:make-default' }), TEAM_WRITE));
     const why = team.from === 'local' ? teamInUse(current, team.label) : null;
-    if (team.from === 'local') actions.append(button('Remove', '', () => run({ action: 'remove', label: team.label }, { label: team.label }),
-      { disabled: !!why || !!writesHeld(), title: writesHeld() ?? (why || ''), aria: why ? `Remove ${team.label}: ${why}` : `Remove ${team.label}`, key: 'team:remove' }));
+    if (team.from === 'local') actions.append(holdControl(button('Remove', '', () => run({ action: 'remove', label: team.label }, { label: team.label }),
+      { disabled: !!why, title: why || '', aria: why ? `Remove ${team.label}: ${why}` : `Remove ${team.label}`, key: 'team:remove' }), TEAM_WRITE));
     if (actions.childElementCount) header.append(actions);
     card.append(header);
     // What blocks comes first, then the facts, then the team's warnings and why Remove is off.
@@ -708,12 +711,13 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
     const first = field('label', 'Label', 'mine'); field('team', 'Team id', 'mine:you.aweb.ai'); field('description', 'Description (optional)', '', 'wide');
     const actions = el(doc, 'div', null, 'ct-actions');
     const submit = button('Add team', 'primary', () => {});
-    submit.type = 'submit'; submit.disabled = pending;
+    submit.type = 'submit'; submit.disabled = pending; holdControl(submit, TEAM_WRITE);
     actions.append(submit, button('Cancel', '', () => { adding = false; cardError = null; render(); focusIn(opener === 'link' ? '.ct-empty .ct-link' : '.ct-add'); }));
     const hint = el(doc, 'p', null, 'ct-hint'); hint.append('To create a new team, run ', el(doc, 'code', 'oats aweb setup'), '.');
     form.append(actions, hint);
     form.addEventListener('submit', event => {
       event.preventDefault();
+      if (cliHeldBack(TEAM_WRITE)) return;
       const label = draft.label.trim(), team = draft.team.trim(), description = draft.description.trim();
       if (!label || !team) { cardError = { message: 'A local team needs a label and its provider team id.' }; render(); return; }
       // The kernel's label grammar (lowercase only); said here instead of a bare E_BAD_ARGS from the route.
@@ -785,7 +789,7 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
   }
   function paintBoard() {
     body.replaceChildren();
-    addButton.disabled = pending || !!writesHeld(); addButton.title = writesHeld() ?? ''; addButton.setAttribute('aria-expanded', String(adding));
+    addButton.disabled = pending; addButton.title = ''; holdControl(addButton, TEAM_WRITE); addButton.setAttribute('aria-expanded', String(adding));
     addButton.hidden = !!current && !localAllowed(current);
     if (!current) { status.textContent = pending ? 'Reading the teams on this computer (oats teams)…' : status.textContent; if (cardError) body.append(problemBox(cardError)); return; }
     // The page's own problems (no team card holds them), failures first: team model 3's local-teams-closed leads.
@@ -804,7 +808,7 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
     if (!local.length && !adding && !localAllowed(current)) localSection.append(el(doc, 'p', `No local teams: ${LOCAL_TEAMS_CLOSED}.`, 'ct-dashed'));
     else if (!local.length && !adding) {
       const empty = emptyCard("No local teams. A local team lives in this computer's oats-local.yaml and is visible only here.");
-      empty.append(button('Add a local team', 'ct-link', () => openAdd('link'), { disabled: !!writesHeld(), title: writesHeld() ?? '' }));
+      empty.append(holdControl(button('Add a local team', 'ct-link', () => openAdd('link')), TEAM_WRITE));
       localSection.append(empty);
     }
     if (cardError) localSection.append(problemBox(cardError));
@@ -975,5 +979,5 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
 
   void read(); void readRoster();
   return { element: page, refresh: read, syncRoster, showTeam, hideTeam,
-    dispose() { disposed = true; serial++; rosterSerial++; const gone = shown?.onGone; forget(); gone?.(); } };
+    dispose() { disposed = true; serial++; rosterSerial++; offHeld(); const gone = shown?.onGone; forget(); gone?.(); } };
 }
