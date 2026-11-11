@@ -5,9 +5,10 @@ import { workspaceScoped } from "./renderer/workspace-routes.mjs";
 
 export { workspaceScoped };
 
-/** The origin request paths are resolved against: a fixed name, not an address. The backend is
- * reached only over main's socket (backend-client.mjs); a path that resolves anywhere else is refused. */
-const ORIGIN = "http://localhost";
+/** The origin request paths are resolved against: a reserved name (RFC 6761 `.invalid`), never an
+ * address. The backend is reached only over main's socket (backend-client.mjs); a path that resolves
+ * to any other origin is refused. */
+const ORIGIN = "http://oats-backend.invalid";
 const resolveOnOrigin = (pathname) => {
   const url = new URL(pathname, ORIGIN);
   return url.origin === ORIGIN ? url : null;

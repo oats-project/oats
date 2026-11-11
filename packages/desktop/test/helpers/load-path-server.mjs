@@ -21,15 +21,12 @@
 // server that is not running. With `recordEnvironment: true` the fake oats
 // logs the environment of each call too.
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, realpathSync, readFileSync, renameSync } from 'node:fs';
-import { spawn } from 'node:child_process';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { once } from 'node:events';
+import { startBackend } from './backend-server.mjs';
 
 const FIXTURES = fileURLToPath(new URL('../fixtures/workspace-v2/desktop-facts/', import.meta.url));
-const SERVER = fileURLToPath(new URL('../../server/oats-web.mjs', import.meta.url));
 export const FIXTURE_DEPLOYMENT = '/fixture/base/northwind-workspace';
 /** The observation stamp the fake reports whenever it is asked with --max-age (a kernel that
  * declares observe-max-age always reports one; without the flag it reports none). */
@@ -91,11 +88,6 @@ export function loggedRows(file) {
   return text.slice(0, text.lastIndexOf('\n') + 1).split('\n').filter(Boolean).map(line => JSON.parse(line));
 }
 
-async function freePort() {
-  const socket = createServer(); socket.listen(0, '127.0.0.1'); await once(socket, 'listening');
-  const port = socket.address().port; await new Promise(resolve => socket.close(resolve));
-  return port;
-}
 
 /** Boot a server for one temp deployment. `probe` mutates the fixture probe (e.g. adds a feature);
  * `gated` names the verbs whose calls block until the test releases them; `extra` registers that
@@ -103,7 +95,7 @@ async function freePort() {
  * (into `deployments`) whose `status` is an empty deployment's answer. `env` is given the directory
  * that holds the fakes (`dir`) and returns names laid over the server's environment;
  * `recordEnvironment` and `tmux` are described at the top. */
-export async function startLoadPathServer({ probe = v => v, gated = [], extra = 0, empty = [], env = () => ({}), recordEnvironment = false, tmux = false } = {}) {
+export async function startLoadPathServer({ probe = v => v, gated = [], extra = 0, empty = [], env = () => ({}), recordEnvironment = false, tmux = false, tokenFile = null } = {}) {
   const temp = realpathSync(mkdtempSync(join(tmpdir(), 'oats-load-path-')));
   const deployment = join(temp, 'workspace'); mkdirSync(join(deployment, 'agents'), { recursive: true });
   writeFileSync(join(deployment, 'oats-local.yaml'), 'workspace: fixture\n');
@@ -126,23 +118,16 @@ export async function startLoadPathServer({ probe = v => v, gated = [], extra = 
   const tmuxLog = join(temp, 'tmux-calls.jsonl'); writeFileSync(tmuxLog, '');
   if (tmux) writeFileSync(join(temp, 'tmux'), FAKE_TMUX, { mode: 0o700 });
   writeFileSync(join(temp, 'package.json'), '{"type":"module"}'); // the extensionless fake is ESM whatever the temp path
-  const port = await freePort();
-  const proc = spawn(process.execPath, [SERVER, 'start', '--port', String(port), ...deployments.flatMap(dir => ['--dir', dir])], {
-    detached: true, stdio: ['ignore', 'ignore', 'pipe'],
+  // The server, started as every test starts it (helpers/backend-server.mjs): a fresh credential, a private
+  // socket, and `request` (fetch-shaped, authorized) over it. `tokenFile(deployment)` names a --token-file instead of fd 3.
+  const server = await startBackend({ dirs: deployments, detached: true, tokenFile: tokenFile ? tokenFile(deployment) : null,
     env: { ...process.env, OATS_DESKTOP_OATS_BIN: fake, FAKE_SCRIPT_DIR: script, FAKE_LOG: log, PATH: '/nonexistent', SHELL: '/bin/false',
-      OATS_INSTANCE_HOME: undefined, OATS_INSTANCE: undefined, OATS_DEPLOYMENT: undefined, ...env({ dir: temp }) },
-  });
-  let stderr = ''; proc.stderr.on('data', data => { stderr += data; });
-  const base = `http://127.0.0.1:${port}`;
+      OATS_INSTANCE_HOME: undefined, OATS_INSTANCE: undefined, OATS_DEPLOYMENT: undefined, ...env({ dir: temp }) } });
+  const { request } = server;
+  const stderr = server.stderr;
   const ws = `?ws=${encodeURIComponent(deployment)}`;
-  const get = async path => (await fetch(base + path)).json();
-  const post = async (path, body) => (await fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
-  let ready = false;
-  for (let n = 0; n < 100 && !ready; n++) {
-    try { ready = (await fetch(base + '/api/version')).ok; } catch { /* starting */ }
-    if (!ready) await new Promise(resolve => setTimeout(resolve, 50));
-  }
-  if (!ready) throw new Error(`server never listened: ${stderr}`);
+  const get = async path => (await request(path)).json();
+  const post = async (path, body) => (await request(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
   /** Every call so far, in start order: { id, verb, argv, start, end } with `end` null while it runs (or waits at its gate);
    * `env` too under `recordEnvironment`. */
   const calls = () => {
@@ -165,13 +150,18 @@ export async function startLoadPathServer({ probe = v => v, gated = [], extra = 
   const pending = verb => calls().filter(c => c.verb === verb && c.end === null);
   const release = id => writeFileSync(join(script, 'go', id), '');
   return {
-    deployment, deployments, base, ws, get, post, calls, until, config, pending, release,
+    deployment, deployments, ws, get, post, calls, until, config, pending, release,
+    /** fetch-shaped and authorized, over the server's socket: `(path, { method, headers, body, signal })`. */
+    request,
+    /** One request with exactly the headers given (no credential unless given). */
+    raw: server.raw,
+    secret: server.secret,
     /** The directory that holds the fakes, as `env` was given it. */
     dir: temp,
     /** Every start of the fake tmux so far: { argv, env }. */
     tmuxCalls: () => loggedRows(tmuxLog),
     /** The HTTP status and body of a GET, for refusals. */
-    async getStatus(path) { const response = await fetch(base + path); return { status: response.status, body: await response.json() }; },
+    async getStatus(path) { const response = await request(path); return { status: response.status, body: await response.json() }; },
     /** Change the fake's config for every invocation from now on. */
     reconfigure(change) { change(config); writeConfig(); },
     /** Wait until `count` calls of `verb` have STARTED (they may be waiting at their gate). */
@@ -183,11 +173,10 @@ export async function startLoadPathServer({ probe = v => v, gated = [], extra = 
     gate(verb) { if (!config.gated.includes(verb)) config.gated.push(verb); writeConfig(); },
     panel: () => get(`/api/panel${ws}`),
     agents: () => get(`/api/agents${ws}`),
-    stderr: () => stderr,
+    stderr: () => stderr(),
     async stop() {
-      const exited = proc.exitCode !== null || proc.signalCode !== null ? Promise.resolve() : once(proc, 'exit');
-      try { process.kill(-proc.pid, 'SIGTERM'); } catch { /* already stopped */ }
-      await exited; rmSync(temp, { recursive: true, force: true });
+      await server.stop();
+      rmSync(temp, { recursive: true, force: true });
     },
   };
 }

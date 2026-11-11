@@ -123,7 +123,8 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     ({ secret, identity: secretFile } = readSecretFile(tokenFile));
   } catch (e) { refuse(e instanceof StartupRefusal ? e.message : "--token-file: cannot read the token file"); }
   const harnessToken = randomBytes(32).toString("base64url");
-  createHarnessServer({ apiSocket, secret, harnessToken, secretFile }).listen(port, "127.0.0.1", () => {
-    console.log(`harness at http://127.0.0.1:${port}/harness.html#t=${harnessToken}`);
+  const server = createHarnessServer({ apiSocket, secret, harnessToken, secretFile });
+  server.listen(port, "127.0.0.1", () => {
+    console.log(`harness at http://127.0.0.1:${server.address().port}/harness.html#t=${harnessToken}`);
   });
 }

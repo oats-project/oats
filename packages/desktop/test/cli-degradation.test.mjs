@@ -83,11 +83,10 @@ test("refreshCli/reprobeCli update shared state and notify subscribers", async (
   off();
 });
 
-test("reprobeCli forwards a chosen binary path in the body", async () => {
+test("reprobeCli posts {} and names no binary, whatever it is given", async () => {
   const state = { get: payload(false), post: payload(true), reprobes: [] };
   await cs.reprobeCli(jsonCtx(state), "/chosen/oats");
-  assert.equal(state.reprobes.length, 1);
-  assert.match(String(state.reprobes[0]), /\/chosen\/oats/);
+  assert.deepEqual(state.reprobes, ["{}"]);
 });
 
 test("cliCard renders the full contract surface: detected, required, Choose, Retry, docs, copyable install", async () => {
@@ -95,9 +94,10 @@ test("cliCard renders the full contract surface: detected, required, Choose, Ret
   const state = { get: payload(false), post: payload(false), reprobes: [] };
   await cs.refreshCli(jsonCtx(state));
   let chosen = 0, opened = null;
+  const order = [];
   const ctx = {
-    ...jsonCtx(state),
-    chooseCliBinary: async () => { chosen++; return { path: "/picked/oats" }; },
+    api: async (pathname, opts) => { if (pathname === "/api/cli/reprobe") order.push(["reprobe", opts?.body]); return jsonCtx(state).api(pathname, opts); },
+    chooseCliBinary: async () => { chosen++; await new Promise((r) => setTimeout(r, 1)); order.push("picked"); return { path: "/picked/oats" }; },
     openExternal: (url) => { opened = url; },
   };
   const { el, dispose } = cs.cliCard(doc, ctx);
@@ -118,11 +118,12 @@ test("cliCard renders the full contract surface: detected, required, Choose, Ret
   // docs link opens externally, never navigates the shell
   el.querySelector(".cli-docs").dispatchEvent(new doc.defaultView.Event("click", { bubbles: true, cancelable: true }));
   assert.equal(opened, cs.DOCS_URL);
-  // choose runs the picker then reprobes with the picked path
+  // choose runs the picker (main writes the choice file) and, once it resolved, reprobes with {}: the path is never sent
   choose.dispatchEvent(new doc.defaultView.Event("click"));
-  await new Promise((r) => setTimeout(r, 10));
+  await new Promise((r) => setTimeout(r, 20));
   assert.equal(chosen, 1);
-  assert.ok(state.reprobes.some((b) => String(b).includes("/picked/oats")), "picked path reprobed");
+  assert.deepEqual(order, ["picked", ["reprobe", "{}"]], "the reprobe follows the picker and names no binary");
+  assert.ok(!state.reprobes.some((b) => String(b).includes("/picked/oats")), "the picked path is never posted");
   dispose();
 });
 

@@ -11,10 +11,10 @@
 // written against fetch keeps its shape. `raw(...)` sends exactly the headers it is given.
 import { spawn as nodeSpawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { chmodSync, mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { once } from 'node:events';
 
 export const SERVER = new URL('../../server/oats-web.mjs', import.meta.url).pathname;
@@ -76,21 +76,42 @@ export function waitReady(child, { timeout = 30_000, output = () => '' } = {}) {
 
 /**
  * Start the server with a fresh credential on fd 3 and a private socket. `args` follow
- * `--socket … --token-fd 3` and the `--dir`s; `spec` (an alternative to args) is a ready
- * `{ command, args, options }` such as serverSpawnSpec's, whose fd 3 receives the secret.
- * `stdin: 'pipe'` keeps a lifeline pipe open. Resolves once the ready line is out.
+ * `--socket … --token-fd 3` and the `--dir`s. `stdin: 'pipe'` keeps a lifeline pipe open.
+ * Resolves once the ready line is out.
  */
 export async function startBackend({ dirs = [], args = [], env = process.env, cwd, detached = false, stdin = 'ignore',
-  spawn = nodeSpawn, spec, socket = privateSocketDir(), secret = backendSecret(), timeout } = {}) {
-  const command = spec ? spec.command : process.execPath;
-  const argv = spec ? spec.args : [SERVER, 'start', '--socket', socket.socketPath, '--token-fd', '3', ...dirs.flatMap((d) => ['--dir', d]), ...args];
-  const options = spec ? { ...spec.options } : { stdio: [stdin, 'pipe', 'pipe', 'pipe'], env, cwd, detached };
-  const child = spawn(command, argv, options);
+  spawn = nodeSpawn, socket = privateSocketDir(), secret = backendSecret(), tokenFile = null, timeout } = {}) {
+  // `tokenFile`: the operator's way (--token-file, a 0600 file written here), instead of fd 3.
+  if (tokenFile) writeFileSync(tokenFile, `${secret}\n`, { mode: 0o600 });
+  const credential = tokenFile ? ['--token-file', tokenFile] : ['--token-fd', '3'];
+  const argv = [SERVER, 'start', '--socket', socket.socketPath, ...credential, ...dirs.flatMap((d) => ['--dir', d]), ...args];
+  const child = spawn(process.execPath, argv, { stdio: [stdin, 'pipe', 'pipe', tokenFile ? 'ignore' : 'pipe'], env, cwd, detached });
+  if (!tokenFile) {
+    child.stdio[3].on('error', () => { /* the server read it and closed it, or never started */ });
+    child.stdio[3].end(secret);
+  }
+  return served(child, { socketPath: socket.socketPath, dir: socket.dir, remove: socket.remove }, secret, { detached, timeout });
+}
+
+/**
+ * Start the server exactly as main does: launchServerChild (a private socket directory under
+ * `socketBase` and a fresh credential on fd 3) over serverSpawnSpec. `o` is serverSpawnSpec's input
+ * without `socketPath` (defaults: no deployment, Node as execPath, the real server).
+ */
+export async function startBackendThroughSpec(o = {}, { spawn = nodeSpawn, socketBase = tmpdir(), timeout } = {}) {
+  const { launchServerChild, serverSpawnSpec } = await import('../../server-host.mjs');
+  let spec;
+  const launched = launchServerChild({ spawn, socketBase, spec: (socketPath) => (spec = serverSpawnSpec({
+    execPath: process.execPath, bin: SERVER, dirs: [], pathSource: 'inherited', pathError: null, home: tmpdir(), env: process.env,
+    remoteIdentityFile: join(socketBase, `oats-t-remote-${process.pid}-${Date.now()}.json`), ...o, socketPath })) });
+  const s = await served(launched.child, { socketPath: launched.socketPath, dir: dirname(launched.socketPath), remove: launched.remove }, launched.secret, { timeout });
+  return { ...s, spec };
+}
+
+async function served(child, socket, secret, { detached = false, timeout } = {}) {
   let stdout = '', stderr = '';
   child.stdout.on('data', (d) => { stdout += d; });
   child.stderr.on('data', (d) => { stderr += d; });
-  child.stdio[3].on('error', () => { /* the server read it and closed it, or never started */ });
-  child.stdio[3].end(secret);
   child.stdin?.on?.('error', () => { /* gone */ });
   try { await waitReady(child, { timeout, output: () => `${stdout}\n${stderr}` }); }
   catch (e) { try { child.kill('SIGKILL'); } catch { /* gone */ } socket.remove(); throw e; }
