@@ -868,6 +868,13 @@ Spawn order is by capability name; retirement reverses successful
 spawn order. Hooks run from the instance's own copy
 (`<home>/.oats/modules/<cap>/`).
 
+A retire hook must be safe to run again, and safe to run beside itself. A
+retire whose process is killed while one of its retire hooks runs leaves that
+hook running. A later retire takes the home's claim over, does not run again
+the hooks the claim records as finished
+([one retire at a time](desktop-cli-api.md#retire-hooks-in-claim)), and runs
+the unfinished one again, possibly while the first run of it is still going.
+
 ### A declared name is the provider's
 
 A variable a capability declares in `environment` is the capability's to
