@@ -97,7 +97,7 @@ const row = (running) => ({ instance: 'dev-1', home: '/team/agents/dev/instances
 // A start's receipt as the kernel answers one (docs/desktop-cli-api.md, `oats session start`).
 const HOME = '/team/agents/dev/instances/dev-1';
 const RECEIPT = { instance: 'dev-1', agent: 'dev', home: HOME, harness: 'claude', backend: 'tmux', model: null, launchConfig: null, yolo: null,
-  target: { socket: '/tmp/oats-tmux', session: 'oats-agents', window: 'dev-1' }, startedAt: '2026-11-11T22:00:00.000Z', restartCount: 0, reused: false, warnings: [] };
+  target: { backend: 'tmux', session: 'oats-agents', window: 'dev-1', socket: '/tmp/oats-tmux' }, startedAt: '2026-11-11T22:00:00.000Z', restartCount: 0, reused: 'new', warnings: [] };
 const answered = (result) => ({ schemaVersion: 1, ok: true, result });
 const without = (key) => { const { [key]: _, ...rest } = RECEIPT; return rest; };
 const UNKNOWN_STARTS = [
@@ -108,6 +108,13 @@ const UNKNOWN_STARTS = [
   ['a receipt with no start time', answered(without('startedAt'))],
   ['a receipt with no target', answered(without('target'))],
   ['a receipt whose warnings are not a list of strings', answered({ ...RECEIPT, warnings: [{ text: 'x' }] })],
+  ['a receipt whose target is empty', answered({ ...RECEIPT, target: {} })],
+  ['a receipt whose target is of another format', answered({ ...RECEIPT, target: { jobId: 'queued-123' } })],
+  ['a receipt on another backend', answered({ ...RECEIPT, backend: 'future', target: { ...RECEIPT.target, backend: 'future' } })],
+  ['a receipt whose target is on another backend', answered({ ...RECEIPT, target: { ...RECEIPT.target, backend: 'future' } })],
+  ['a receipt whose target has no socket', answered({ ...RECEIPT, target: { backend: 'tmux', session: 'oats-agents', window: 'dev-1' } })],
+  ['a receipt that says how its session was found in a way it does not know', answered({ ...RECEIPT, reused: 'queued' })],
+  ['a receipt whose reuse is a yes or a no', answered({ ...RECEIPT, reused: true })],
   ['a result naming another instance', { schemaVersion: 1, ok: true, result: { instance: 'dev-2', home: '/team/agents/dev/instances/dev-2' } }],
   ['a result that is a list', { schemaVersion: 1, ok: true, result: [] }],
   ['no result', { schemaVersion: 1, ok: true }],
@@ -129,7 +136,10 @@ for (const restart of [false, true]) {
     assert.deepEqual(outcome, { ok: true, result: { launched: true } });
   });
   test(`acceptance (fail closed): above the bound, a ${verb} answered with the receipt it knows is reported started`, async () => {
-    for (const result of [RECEIPT, { ...RECEIPT, restartCount: 3, reused: true, warnings: ['a launch hook said so'], launchPrompts: { status: 'not-engaged' } }]) {
+    // A new window, a retained pane, and an earlier start's adopted launch (lib/core.mjs reused), with a target
+    // carrying more than the four keys.
+    for (const result of [RECEIPT, { ...RECEIPT, restartCount: 3, reused: 'pane', warnings: ['a launch hook said so'], launchPrompts: { status: 'not-engaged' } },
+      { ...RECEIPT, reused: 'adopted', target: { ...RECEIPT.target, windowId: '@3', paneId: '%7' } }]) {
       const outcome = await startInstance(above(START_CLI), row(restart), {}, { restart, terms, verifyHome: () => HOME, start: async () => answered(result) });
       assert.deepEqual(outcome, { ok: true, result });
     }

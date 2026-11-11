@@ -86,17 +86,24 @@ export function verifiedLocalHome(row, deployments, realpath) {
   return null;
 }
 
+/** How a start came by its session, as the kernel's receipt says (`reused`): a new window, a retained pane, or the
+ * adopted launch of an earlier start whose record was not written. */
+const START_REUSED = Object.freeze(['new', 'pane', 'adopted']);
+
 /** Whether `v` is the receipt of a completed start or restart of `row`, as the kernel answers one
  * (docs/desktop-cli-api.md, `oats session start`: `{instance, agent, home, harness, backend, model, launchConfig,
  * yolo, target, startedAt, restartCount, reused, warnings}`): the row's instance, in the row's home (the kernel
- * answers with its real path: `canonical`, the verified local home), with the fields a start always carries. Read
- * where the CLI is newer than this client was tested with, so a format it does not know is not taken for one. */
+ * answers with its real path: `canonical`, the verified local home), on the one backend there is, tmux, with its
+ * target (`{backend, session, window, socket}`, more keys allowed) and the other fields a start always carries.
+ * Read where the CLI is newer than this client was tested with, so a format it does not know is not taken for one. */
 function startReceipt(v, row, canonical) {
   const record = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
   const text = (x) => typeof x === 'string' && x.length > 0;
   return record(v) && v.instance === row.instance && text(v.home) && (v.home === row.home || (canonical !== null && v.home === canonical))
-    && text(v.agent) && text(v.harness) && text(v.backend) && text(v.startedAt) && record(v.target)
-    && Number.isSafeInteger(v.restartCount) && v.restartCount >= 0 && typeof v.reused === 'boolean'
+    && text(v.agent) && text(v.harness) && v.backend === 'tmux' && text(v.startedAt)
+    && record(v.target) && v.target.backend === 'tmux' && text(v.target.session) && text(v.target.window)
+    && text(v.target.socket) && v.target.socket.startsWith('/')
+    && Number.isSafeInteger(v.restartCount) && v.restartCount >= 0 && START_REUSED.includes(v.reused)
     && Array.isArray(v.warnings) && v.warnings.every((w) => typeof w === 'string');
 }
 
