@@ -96,9 +96,9 @@ Without a terminal (a script, an agent's shell) it runs only with `--yes`.
 
 `oats update` also does step 1: when npm lists a newer `@awebai/oats`, its
 plan starts with that install, and the bridges move to that same version in
-the same run. So where the Desktop is installed, step 0 comes before such an
-`oats update` too: `oats update --check` shows whether the plan holds that
-install, and runs nothing. When that install is of another minor or major
+the same run. So where a Desktop of 0.69.17 or older is installed, step 0
+comes before such an `oats update` too: `oats update --check` shows whether
+the plan holds that install, and runs nothing. When that install is of another minor or major
 version, the plan says so in one line under its steps, whether or not a
 Desktop is installed: `An OATS Desktop older than <X.Y> holds actions back with this CLI. Stop, Remove, schedules, triggers and every other change except Spawn, Start, Restart, colour and background are off until you install OATS Desktop <version>. (An OATS Desktop of 0.69.17 or older refuses this CLI until then.)`
 Its second sentence is the Desktop's own notice, word for word.

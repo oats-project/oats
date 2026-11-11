@@ -86,6 +86,20 @@ export function verifiedLocalHome(row, deployments, realpath) {
   return null;
 }
 
+/** Whether `v` is the receipt of a completed start or restart of `row`, as the kernel answers one
+ * (docs/desktop-cli-api.md, `oats session start`: `{instance, agent, home, harness, backend, model, launchConfig,
+ * yolo, target, startedAt, restartCount, reused, warnings}`): the row's instance, in the row's home (the kernel
+ * answers with its real path: `canonical`, the verified local home), with the fields a start always carries. Read
+ * where the CLI is newer than this client was tested with, so a format it does not know is not taken for one. */
+function startReceipt(v, row, canonical) {
+  const record = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+  const text = (x) => typeof x === 'string' && x.length > 0;
+  return record(v) && v.instance === row.instance && text(v.home) && (v.home === row.home || (canonical !== null && v.home === canonical))
+    && text(v.agent) && text(v.harness) && text(v.backend) && text(v.startedAt) && record(v.target)
+    && Number.isSafeInteger(v.restartCount) && v.restartCount >= 0 && typeof v.reused === 'boolean'
+    && Array.isArray(v.warnings) && v.warnings.every((w) => typeof w === 'string');
+}
+
 /** Start or restart one row.
  *   choices   { model, launchConfig, harness, yolo }: the launch choices, each one argv value
  *   restart   a restart (the kernel's one call, never a stop then a start)
@@ -109,8 +123,8 @@ export async function startInstance(cli, row, choices = {}, { restart = false, d
   const gate = startGate(cli, row, { restart, choices }, terms);
   if (gate) return refused(gate.code, gate.sentence, gate.detail ? { detail: gate.detail } : {});
   const local = !row.server;
-  if (local && !(verifyHome ? verifyHome(row) : verifiedLocalHome(row, deployments, realpath)))
-    return refused('E_HOME_UNVERIFIED', 'Instance home is outside the workspace instances layout');
+  const canonical = local ? (verifyHome ? verifyHome(row) : verifiedLocalHome(row, deployments, realpath)) : null;
+  if (local && !canonical) return refused('E_HOME_UNVERIFIED', 'Instance home is outside the workspace instances layout');
   let envelope;
   // A call that could not be made, or failed on its way (an exec that throws, a rejected call), is uncertain like
   // any answer this cannot read: the CLI may have begun the start. Its words are the rule's; the exception's text
@@ -120,11 +134,11 @@ export async function startInstance(cli, row, choices = {}, { restart = false, d
   { ...(exec ? { exec } : {}), ...(after ? { after } : {}), ...(wait !== undefined ? { wait } : {}) }); }
   catch { return { ok: false, outcome: 'uncertain', code: 'E_CLI_FAILED', sentence: CLI_FAILED, detail: null, ran: true }; }
   if (envelope?.ok === true) {
-    // Above the client's tested bound (#1879, cli-locator.mjs aboveTested) a start is reported started only on an
-    // answer in the shape it knows: a record naming the row's instance. Any other is an outcome not known, never a
-    // start; nothing more is run. Within the bound the answer is taken as before.
-    if (cli?.aboveTested === true && !(envelope.result !== null && typeof envelope.result === 'object' && !Array.isArray(envelope.result)
-      && envelope.result.instance === row.instance)) return { ok: false, outcome: 'uncertain', code: 'E_CLI_PROTOCOL', sentence: null, detail: null, ran: true };
+    // Above the client's tested bound (#1879, cli-locator.mjs aboveTested) a start is reported started only on the
+    // receipt it knows (startReceipt): any other answer is an outcome not known, never a start, and nothing more
+    // is run. Within the bound the answer is taken as before.
+    if (cli?.aboveTested === true && !startReceipt(envelope.result, row, canonical))
+      return { ok: false, outcome: 'uncertain', code: 'E_CLI_PROTOCOL', sentence: null, detail: null, ran: true };
     return { ok: true, result: envelope.result };
   }
   const code = typeof envelope?.error?.code === 'string' ? envelope.error.code : 'E_CLI_PROTOCOL';
