@@ -427,6 +427,10 @@ test("a running look during stop grace does not invalidate a current-start host 
 
 test("a same-kernel startup after 30 hours restores clean stops and preserves blocked, refused and stale-receipt accounting", async (t) => {
   const fx = v2Deployment({ t, souls: { dev: { soul: { work: "directory" } } } });
+  // Even an unlaunched spawn resolves the harness; use the fixture's inert binaries.
+  const hostPath = process.env.PATH;
+  process.env.PATH = fx.env.PATH;
+  t.after(() => { if (hostPath === undefined) delete process.env.PATH; else process.env.PATH = hostPath; });
   const names = ["success", "blocked", "refused", "prior", "other-start", "other-start-short", "future", "status-after-stop", "status-after-stop-short"], homes = {};
   for (const name of names) {
     const { home } = await fx.spawn("dev", { name, harness: "claude" });
