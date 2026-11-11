@@ -208,6 +208,7 @@ fs.appendFileSync(path.join(root,'calls'),JSON.stringify(args)+'\\n');
 if(args[0]!=='--context'||args[1]!=='fixture-context'||args[2]!=='--namespace'||args[3]!=='proof')process.exit(2);
 const a=args.slice(4);
 if(a[0]==='get'){
+ if(process.env.O1B_FIXTURE_INVALID_JSON==='pod'){console.log('fixture-private-kubectl-banner');process.exit(0);}
  const docs=JSON.parse(fs.readFileSync(path.join(root,'objects.json')));
  const found=docs.find(d=>d.kind.toLowerCase()===a[1].toLowerCase());
  if(!found)process.exit(3);
@@ -253,7 +254,10 @@ if(fs.existsSync(prior)){
 }else{
  fs.writeFileSync(prior,known);fs.writeFileSync(known,'oats-kube-accept ssh-ed25519 fixture-public-host-key\\n');
 }
-if(command==='oats host run --plan --json')console.log(JSON.stringify({ok:true,result:{plan:true,refusals:[{code:'E_HOST_RUN_BUSY'}]}}));
+if(command==='oats host run --plan --json'){
+ if(process.env.O1B_FIXTURE_INVALID_JSON==='plan')console.log('fixture-private-ssh-banner');
+ else console.log(JSON.stringify({ok:true,result:{plan:process.env.O1B_FIXTURE_INVALID_JSON==='plan-value'?'fixture-private-plan-value':true,refusals:[{code:'E_HOST_RUN_BUSY'}]}}));
+}
 else if(command.startsWith('node -e '))console.log('PASS fixture SSH boundary (no real runtime assertions)');
 else process.exit(2);
 `, { mode: 0o755 });
@@ -282,5 +286,12 @@ else process.exit(2);
     assert.notEqual(failed.status, 0);
     assert.match(failed.stderr, /runtime probe failed: uid/);
     assert.doesNotMatch(failed.stdout + failed.stderr, /fixture-sensitive-(stdout|stderr)|AssertionError/);
+    for (const source of ["plan", "pod", "plan-value"]) {
+      rmSync(join(dir, "known-host-path"), { force: true });
+      const invalid = spawnSync("sh", [script, "--values", join(dir, "values.json"), "--namespace", "proof", "--release", "proof", "--context", "fixture-context", "--pod", pod.metadata.name, "--ssh-key", join(dir, "key")], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, O1B_FIXTURE_INVALID_JSON: source }, timeout: 10_000 });
+      assert.notEqual(invalid.status, 0);
+      assert.match(invalid.stderr, source === "plan-value" ? /host run plan answer/ : /invalid JSON \(output withheld\)/);
+      assert.doesNotMatch(invalid.stdout + invalid.stderr, /fixture-private/);
+    }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

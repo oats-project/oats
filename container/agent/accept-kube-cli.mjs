@@ -22,6 +22,10 @@ function command(bin, args, { probe = false } = {}) {
   assert.equal(r.status, 0, `${bin} failed (output withheld)`);
   return r.stdout;
 }
+function json(text, what) {
+  try { return JSON.parse(text); }
+  catch { throw new Error(`${what}: invalid JSON (output withheld)`); }
+}
 function options(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i++) {
@@ -123,7 +127,7 @@ async function shutdown(kube, pod, expectedUID) {
     const attached = await Promise.race([started, closed.then(() => false), new Promise((resolve) => { timer = setTimeout(() => resolve(false), 15_000); })]);
     clearTimeout(timer);
     assert.ok(attached, "shutdown log stream did not attach before deletion");
-    const current = JSON.parse(command("kubectl", [...kube, "get", "pod", pod, "-o", "json"]));
+    const current = json(command("kubectl", [...kube, "get", "pod", pod, "-o", "json"]), "pod before deletion");
     assert.equal(current.metadata.uid, expectedUID, "pod was replaced before deletion");
     const start = Date.now();
     command("kubectl", [...kube, "delete", "pod", pod, "--wait=false"]);
@@ -138,7 +142,7 @@ async function shutdown(kube, pod, expectedUID) {
 function sshProof(port, key, knownHosts, uid, gid, phase = "ssh") {
   const ssh = ["-F", "/dev/null", "-T", "-oBatchMode=yes", "-oIdentitiesOnly=yes", "-oIdentityAgent=none", "-oStrictHostKeyChecking=accept-new", "-oHostKeyAlias=oats-kube-accept", `-oUserKnownHostsFile=${knownHosts}`, "-oConnectTimeout=10", "-p", port, "-i", key, "agent@127.0.0.1"];
   report(phase, command("ssh", [...ssh, `node -e ${quote(`(${runtimeProbe.toString()})(${uid},${gid})`)}`], { probe: true }).trim());
-  const plan = JSON.parse(command("ssh", [...ssh, "oats host run --plan --json"]));
+  const plan = json(command("ssh", [...ssh, "oats host run --plan --json"]), "host plan");
   assert.equal(plan.ok, true, "host run plan failed");
   assert.equal(plan.result.plan, true, "host run plan answer");
   assert.ok(plan.result.refusals.some((r) => r.code === "E_HOST_RUN_BUSY"), "entrypoint host run must already hold its lock");
@@ -149,7 +153,7 @@ async function replacementPod(kube, name, previousUID, docs) {
   const deadline = Date.now() + 120_000;
   while (Date.now() < deadline) {
     const text = command("kubectl", [...kube, "get", "pod", name, "--ignore-not-found=true", "--request-timeout=5s", "-o", "json"]);
-    const pod = text.trim() ? JSON.parse(text) : null;
+    const pod = text.trim() ? json(text, "replacement pod") : null;
     if (pod?.metadata?.uid && pod.metadata.uid !== previousUID) {
       checkPod(docs, pod);
       if (!pod.metadata.deletionTimestamp && pod.status?.phase === "Running" && pod.status.conditions?.some((c) => c.type === "Ready" && c.status === "True")) return pod;
@@ -170,13 +174,13 @@ async function main() {
   report("render", "NOT ASSUMED: NetworkPolicy enforcement; no hostname allowlist proof without operator-verified enforcement and bypass tests");
   if (!o["--pod"]) { report("render", "NOT RUN: live pod, SSH, filesystem and deletion checks (supply --context --pod --ssh-key)"); return; }
   const kube = ["--context", o["--context"], "--namespace", o["--namespace"]];
-  const pod = JSON.parse(command("kubectl", [...kube, "get", "pod", o["--pod"], "-o", "json"]));
+  const pod = json(command("kubectl", [...kube, "get", "pod", o["--pod"], "-o", "json"]), "pod");
   checkPod(docs, pod);
-  checkWorkload(docs, JSON.parse(command("kubectl", [...kube, "get", "StatefulSet", set.metadata.name, "-o", "json"])));
+  checkWorkload(docs, json(command("kubectl", [...kube, "get", "StatefulSet", set.metadata.name, "-o", "json"]), "StatefulSet"));
   report("live", `PASS admitted pod ${pod.metadata.name}: declared image digest, uid/gid, security, exact mounts, resources and probes match`);
   // Also compare workload objects whose limits cannot be inferred from a pod alone.
   for (const object of docs) if (object.kind !== "StatefulSet") {
-    const admitted = JSON.parse(command("kubectl", [...kube, "get", object.kind, object.metadata.name, "-o", "json"]));
+    const admitted = json(command("kubectl", [...kube, "get", object.kind, object.metadata.name, "-o", "json"]), "admitted workload");
     if (object.kind === "ServiceAccount") {
       checkAccount(object, admitted, o["--release"]);
     } else if (object.kind === "PodDisruptionBudget") { assert.equal(admitted.spec.maxUnavailable, 1); assert.deepEqual(admitted.spec.selector, object.spec.selector); }
@@ -202,4 +206,8 @@ async function main() {
   report("live", "NOT RUN: seats, native harness auth, mail/chat and network bypass checks; each needs its own platform evidence");
 }
 
-main().catch((error) => { console.error(`[kube] FAIL: ${error.message}`); process.exitCode = 1; });
+main().catch((error) => {
+  // Assertion diagnostics append actual remote values after the fixed check label.
+  console.error(`[kube] FAIL: ${error.message.split("\n")[0]}`);
+  process.exitCode = 1;
+});
