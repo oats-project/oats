@@ -1,5 +1,6 @@
 import { isAbsolute } from 'node:path';
-import { refuseLegacySettings, withoutDefaults } from './legacy-settings.mjs';
+import { refuseLegacySettings, refuseKnowledgeKeys, withoutDefaults } from './legacy-settings.mjs';
+import { SUBJECT_REF } from './okf-reindex.mjs';
 import { fs, join, resolve, dirname, fail, readJSON, safePath, relPath, identifier, overlaps, hash, embedsCredential } from './io.mjs';
 const obj = v => v && typeof v === 'object' && !Array.isArray(v);
 function keys(value, allowed, label, code='E_CONFIG') {
@@ -8,12 +9,14 @@ function keys(value, allowed, label, code='E_CONFIG') {
 }
 export function settings() {
   refuseLegacySettings(); // okf 5.0: a forwarded harvest/harvest-runtime/harvest-model names its fix first
+  refuseKnowledgeKeys(); // okf 6.0: knowledge.propose refuses; publish is only the soul's off
   // A 4.x manifest default (harvest off, harvest-runtime pi) is dropped, never a 5.0 setting;
   // `harvest` left here can only be the soul's own opt-out (off): refuseLegacySettings refused any other.
   const s = withoutDefaults(JSON.parse(process.env.OATS_SETTINGS || '{}'));
-  keys(s,['bindings-file','state-dir','git-timeout','consult-max-age','harvest'],'OATS_SETTINGS');
+  keys(s,['bindings-file','state-dir','git-timeout','consult-max-age','screen-terms-file','harvest','publish'],'OATS_SETTINGS');
   if(s['git-timeout']!==undefined && (!Number.isInteger(s['git-timeout']) || s['git-timeout']<1)) fail('E_CONFIG','git-timeout must be a positive integer number of seconds');
   if(s['consult-max-age']!==undefined && (!Number.isInteger(s['consult-max-age']) || s['consult-max-age']<0)) fail('E_CONFIG','consult-max-age must be a non-negative integer number of seconds');
+  if(s['screen-terms-file']!==undefined && (typeof s['screen-terms-file']!=='string' || !isAbsolute(s['screen-terms-file']) || resolve(s['screen-terms-file'])!==s['screen-terms-file'])) fail('E_CONFIG','screen-terms-file must be a normalized absolute path');
   if(s['state-dir']!==undefined && (typeof s['state-dir']!=='string' || !isAbsolute(s['state-dir']) || resolve(s['state-dir'])!==s['state-dir'])) fail('E_CONFIG','state-dir must be a normalized absolute path');
   return s;
 }
@@ -85,9 +88,19 @@ export function declaration(soul) {
   if(!fs.existsSync(join(soul,'okf.json'))) fail('E_CONFIG',`soul has no okf.json: this soul reads/owns no knowledge yet. Provision it explicitly (oats okf init --soul <soul>, or oats okf migrate --soul <soul> for a legacy soul), or deactivate oats.okf for this soul; nothing was created`);
   return validateDeclaration(readJSON(join(soul,'okf.json')));
 }
+/** okf.json: version 1 `{owner, owns, reads}` (nodes) or, okf 6.0, version 2
+ *  `{subjects}` (reading defaults on a base with the subject layout; no
+ *  owner, owns or reads). Both normalize to `{version, owns, reads, ...}`, a
+ *  v2 one with empty owns/reads, so node-based code paths see no nodes. */
 export function validateDeclaration(d) {
+  if(obj(d) && d.version===2) {
+    keys(d,['version','subjects'],'soul declaration (version 2)');
+    if(!Array.isArray(d.subjects) || !d.subjects.length || new Set(d.subjects).size!==d.subjects.length) fail('E_CONFIG','okf.json version 2 requires subjects: a non-empty unique array of <kind>/<slug> references');
+    for(const ref of d.subjects) if(typeof ref!=='string' || !SUBJECT_REF.test(ref)) fail('E_CONFIG',`subject reference must be <system|workstream|project>/<slug>: ${JSON.stringify(ref)}`);
+    return { version:2, subjects:[...d.subjects], owns:[], reads:[] };
+  }
   keys(d,['version','owner','owns','reads'],'soul declaration');
-  if(!obj(d) || d.version!==1) fail('E_CONFIG','soul/okf.json requires version:1');
+  if(!obj(d) || d.version!==1) fail('E_CONFIG','soul/okf.json requires version:1 (owner/owns/reads) or version:2 (subjects)');
   identifier(d.owner);
   for(const key of ['owns','reads']) {
     if(!Array.isArray(d[key]) || new Set(d[key]).size !== d[key].length) fail('E_CONFIG', `${key} must be a unique array`);
@@ -118,6 +131,26 @@ export function metadata(files, base) {
     if(!p.endsWith('.md') || !paths.some(n=>p.startsWith(n+'/'))) fail('E_BASE',`file outside node knowledge: ${p}`);
   }
   return m;
+}
+/** A normalized declaration back to its file form (a v2 one drops the empty
+ *  owns/reads it was given), for re-validation of a carried runtime. */
+export const declarationFile=d=>obj(d) && d.version===2 && Array.isArray(d.owns) && !d.owns.length && Array.isArray(d.reads) && !d.reads.length && !('owner' in d) ? {version:2,subjects:d.subjects} : d;
+/** okf 6.0: a version-2 declaration's subjects resolve to subject files in
+ *  the accepted bases that have the subject layout (`accepted[alias].subjects`
+ *  lists their refs; null on a plain base). A base not judged yet (not
+ *  primed) is skipped, as resolveNodes' callers skip it. */
+export function resolveSubjects(d, bindings, accepted) {
+  if(d.version!==2) return;
+  const all=Object.keys(bindings.bases),known=all.filter(a=>accepted[a]),layout=known.filter(a=>Array.isArray(accepted[a].subjects));
+  if(!layout.length) {
+    if(known.length<all.length) return;
+    fail('E_CONFIG',`${known.length>1?`bases ${known.join(', ')} have`:`base ${known[0]} has`} no subject layout; declare owns/reads (version 1) or bridge the base (release note §7.2)`);
+  }
+  for(const ref of d.subjects) {
+    const found=layout.filter(a=>accepted[a].subjects.includes(ref));
+    if(found.length>1) fail('E_CONFIG',`subject ${ref} resolves in several bases (${found.join(', ')}); bind one base with the subject layout`);
+    if(!found.length && known.length===all.length) fail('E_CONFIG',`unresolved subject: ${ref}`);
+  }
 }
 export function resolveNodes(d, bindings, accepted) {
   for(const ref of [...d.owns,...d.reads]) {

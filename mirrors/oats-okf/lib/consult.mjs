@@ -5,9 +5,11 @@
 import { randomUUID } from 'node:crypto';
 import { hostname, tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { fs, join, dirname, resolve, safePath, readJSON, save, digest, tree, withLock, fail, syncDir, identifier, relPath, within, displayRepo, hash } from './io.mjs';
-import { noGit, gitTimeoutMs, consultMaxAgeMs, splitRef, resolveNodes } from './config.mjs';
-import { git, gitEnv, validateBase, baseLock, journalPath, preflightLocalRepository, requireNotShallow, verifyRemote, unavailable } from './stores.mjs';
+import { fs, join, dirname, resolve, safePath, readJSON, save, digest, tree, withLock, fail, syncDir, identifier, relPath, within, displayRepo, hash, exec } from './io.mjs';
+import { noGit, gitTimeoutMs, consultMaxAgeMs, splitRef, resolveNodes, resolveSubjects } from './config.mjs';
+import { git, gitEnv, validateBase, staleWarning, baseLock, journalPath, preflightLocalRepository, requireNotShallow, verifyRemote, unavailable } from './stores.mjs';
+import { isBridgedMeta, METADATA_LIMIT, metadataTooLarge, parseFrontmatter, parseView, plainText, parseSubjectsIndex, counts as viewCounts, subjectFile, viewFile, subjectOfPath, SUBJECT_REF, KINDS } from './okf-reindex.mjs';
+import { verdictLanes } from './verdicts.mjs';
 
 const HIT_LIMIT = 50, SNIPPET = 200, FRONTMATTER_BYTES = 8 * 1024, TEXT_BYTES = 64 * 1024 * 1024;
 const WALK_FILES = 20000, WALK_BYTES = 256 * 1024 * 1024, DIRECTORY_WAIT_MS = 30000, LOCAL_GIT_MS = 30000;
@@ -323,12 +325,15 @@ const VALIDATION_CODES = new Set(['E_VALIDATION', 'E_BASE', 'E_PATH', 'E_ID', 'E
 function validationFile(ctx) { return join(ctx.cache, 'okf-validation', `${ctx.commit}-${hash({ root: ctx.base.root }).slice(0, 16)}.json`); }
 export function verdict(ctx, { fetchMissing = true, saveResult = true } = {}) {
   const judge = run => {
-    try { const v = run(); return { version: 1, ok: true, digest: v.digest, nodes: v.meta.nodes }; }
-    catch (e) { if (!VALIDATION_CODES.has(e.code)) throw e; return { version: 1, ok: false, error: { code: e.code, message: e.message } }; }
+    // okf 6.0: version 3 adds `subjects` (null on a plain base) and `stale`
+    // (generated files a reader tolerates); an older cached verdict is judged
+    // again rather than read without them (a 6.0 pre-release refused staleness).
+    try { const v = run(); return { version: 3, ok: true, digest: v.digest, nodes: v.meta.nodes, subjects: v.subjects, stale: v.stale ?? 0 }; }
+    catch (e) { if (!VALIDATION_CODES.has(e.code)) throw e; return { version: 3, ok: false, error: { code: e.code, message: e.message } }; }
   };
-  if (ctx.kind === 'directory') return judge(() => validateBase(ctx.base.path, ctx.base));
+  if (ctx.kind === 'directory') return judge(() => validateBase(ctx.base.path, ctx.base, { reader: true }));
   const file = validationFile(ctx);
-  if (fs.existsSync(file)) { const cached = readJSON(file); if (cached?.version === 1 && cached.commit === ctx.commit && cached.root === ctx.base.root) return cached; }
+  if (fs.existsSync(file)) { const cached = readJSON(file); if (cached?.version === 3 && cached.commit === ctx.commit && cached.root === ctx.base.root) return cached; }
   const scratch = fs.mkdtempSync(join(saveResult ? dirname(ctx.cache) : fs.realpathSync(tmpdir()), saveResult ? '.validate-' : 'okf-validate-'));
   const root = join(scratch, 'tree');
   // Also used by offline inspection: never lazy-fetch while checking objects.
@@ -350,7 +355,7 @@ export function verdict(ctx, { fetchMissing = true, saveResult = true } = {}) {
         if (missing.stdout.split('\n').some(line => line.startsWith('?'))) unavailable(ctx.base, ctx.alias, 'read', new Error('cached validation needs missing objects'));
       }
       materializeBatch(ctx, rows, join(scratch, 'objects'));
-      return validateBase(root, ctx.base);
+      return validateBase(root, ctx.base, { reader: true });
     });
     if (saveResult) save(file, { ...result, commit: ctx.commit, root: ctx.base.root, at: new Date().toISOString() });
     return result;
@@ -364,10 +369,11 @@ export function acceptedResolution(bindings, decl) {
   for (const alias of Object.keys(bindings.bases)) withBase(bindings, alias, {}, ctx => {
     const v = verdict(ctx);
     if (!v.ok) fail(v.error.code, `base "${alias}" at ${short(ctx.receipt)}: ${v.error.message}`);
-    accepted[alias] = { nodes: v.nodes };
+    accepted[alias] = { nodes: v.nodes, subjects: v.subjects };
     view[alias] = { ...ctx.receipt, digest: v.digest, nodes: v.nodes };
   });
   resolveNodes(decl, bindings, accepted);
+  resolveSubjects(decl, bindings, accepted);
   return view;
 }
 
@@ -419,21 +425,62 @@ function onePath(positionals, label) {
   return positionals[0];
 }
 
+// ---------------------------------------------------------------- protection
+// oats.okf 6.0: every Git base's accepted branch should take changes by PR
+// only, merged by the knowledge maintainer. Two read-only, best-effort GitHub
+// reads per base report it; they never refuse anything. The branch rules
+// endpoint shows rulesets only, so classic branch protection is read too:
+// GitHub answers 404 "Branch not protected" when the caller may read it and
+// there is none, and 404 "Not Found" (or 403) when the caller may not.
+// enforced: a ruleset, or classic protection, requires a PR or restricts
+// pushes; none: both reads succeeded and neither does (classic protection with
+// status checks only included); unknown otherwise.
+/** What `protection` answers, printed with every Git base by `oats okf bases`. */
+export const PROTECTION_MEANING = 'protection answers "can anyone but a reviewer land a change on the accepted branch?": enforced = a readable ruleset or classic rule requires a pull request or restricts who may push; none = both reads succeeded and neither does (classic protection with status checks only included: it gates nothing); unknown = neither read shows such a rule and at least one read failed, or the base is not on GitHub. It does not check approval counts, bypass lists or who the maintainer is';
+const GITHUB_REMOTE = /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)/;
+export function protection(base, { run = (args, timeout) => exec('gh', args, { timeout }) } = {}) {
+  if (base.kind !== 'git' || !GITHUB_REMOTE.test(base.repository)) return 'unknown';
+  const repo = `repos/${base.pr.repository}`, branch = base.acceptedBranch;
+  let rules = null;
+  try { const v = JSON.parse(run(['api', `${repo}/rules/branches/${branch}`], gitTimeoutMs())); if (Array.isArray(v)) rules = v; } catch { /* unreadable */ }
+  // A rule that forbids updates outside a PR, or restricts who may push.
+  if (rules?.some(r => r && ['pull_request', 'update'].includes(r.type))) return 'enforced';
+  let classic = 'unreadable';
+  try {
+    const v = JSON.parse(run(['api', `${repo}/branches/${branch}/protection`], gitTimeoutMs()));
+    // The same predicate as the rulesets': a required PR review, or restricted
+    // pushers. Classic protection without either (status checks only) does
+    // not gate direct pushes, so it establishes nothing.
+    const obj = x => x !== null && typeof x === 'object' && !Array.isArray(x);
+    if (obj(v) && typeof v.url === 'string') classic = obj(v.required_pull_request_reviews) || obj(v.restrictions) ? 'gated' : 'absent';
+  } catch (e) {
+    let body = null; try { body = JSON.parse(String(e?.stdout ?? '')); } catch { /* not GitHub's answer */ }
+    if (body?.message === 'Branch not protected') classic = 'absent';
+  }
+  if (classic === 'gated') return 'enforced';
+  return rules && classic === 'absent' ? 'none' : 'unknown';
+}
+
 // ---------------------------------------------------------------- commands
 export function bases(source, flags) {
   const rows = [], receipts = [];
   for (const [alias, base] of Object.entries(source.bindings.bases)) withBase(source.bindings, alias, { fresh: !!flags.fresh }, ctx => {
     const v = verdict(ctx), mine = relation => source.decl[relation].filter(ref => splitRef(ref)[0] === alias).map(ref => splitRef(ref)[1]);
-    rows.push({ alias, id: base.id, kind: base.kind, ...(base.kind === 'git' ? { repository: displayRepo(base.repository), acceptedBranch: base.acceptedBranch, root: base.root, commit: ctx.commit } : { path: base.path, digest: ctx.receipt.digest }),
+    rows.push({ alias, id: base.id, kind: base.kind, ...(base.kind === 'git' ? { repository: displayRepo(base.repository), acceptedBranch: base.acceptedBranch, root: base.root, commit: ctx.commit, protection: protection(base) } : { path: base.path, digest: ctx.receipt.digest }),
       fetchedAt: ctx.receipt.fetchedAt, stale: ctx.receipt.stale, ...(ctx.receipt.reason ? { reason: ctx.receipt.reason } : {}),
-      validated: v.ok ? { ok: true } : { ok: false, error: v.error }, nodes: v.ok ? Object.keys(v.nodes) : null, owns: mine('owns'), reads: mine('reads'), receipt: ctx.receipt });
+      validated: v.ok ? { ok: true } : { ok: false, error: v.error }, nodes: v.ok ? Object.keys(v.nodes) : null, layout: v.ok ? (v.subjects ? 'subjects' : 'plain') : null, ...(v.ok && v.subjects ? { subjects: v.subjects.length } : {}), owns: mine('owns'), reads: mine('reads'), receipt: ctx.receipt });
     receipts.push(ctx.receipt);
   });
-  const text = rows.map(r => `${r.alias} (${r.kind}) ${r.kind === 'git' ? `${r.repository} ${r.acceptedBranch} root=${r.root}` : r.path}\n  accepted ${short(r.receipt)} fetched ${age(r.fetchedAt)}${r.stale ? ` STALE: ${r.reason}` : ''}; ${r.validated.ok ? 'valid OKF base' : `INVALID: ${r.validated.error.message}`}\n  owns: ${r.owns.join(', ') || '-'}; reads: ${r.reads.join(', ') || '-'}${r.nodes ? `; nodes: ${r.nodes.join(', ')}` : ''}`).join('\n');
-  return { result: { bases: rows }, text: `${text}\n${footer(receipts)}` };
+  const text = rows.map(r => `${r.alias} (${r.kind}) ${r.kind === 'git' ? `${r.repository} ${r.acceptedBranch} root=${r.root} protection: ${r.protection}` : r.path}\n  accepted ${short(r.receipt)} fetched ${age(r.fetchedAt)}${r.stale ? ` STALE: ${r.reason}` : ''}; ${r.validated.ok ? `valid OKF base${r.layout === 'subjects' ? `, subject layout (${r.subjects} subjects)` : ''}` : `INVALID: ${r.validated.error.message}`}\n  owns: ${r.owns.join(', ') || '-'}; reads: ${r.reads.join(', ') || '-'}${r.nodes ? `; nodes: ${r.nodes.join(', ')}` : ''}`).join('\n');
+  const git = rows.some(r => r.kind === 'git');
+  return { result: { bases: rows, ...(git ? { protectionMeaning: PROTECTION_MEANING } : {}) }, text: `${text}\n${git ? `${PROTECTION_MEANING}\n` : ''}${footer(receipts)}` };
 }
 export function index(source, flags, positionals) {
-  if (positionals.length > 1) fail('E_USAGE', 'index takes at most one node');
+  if (positionals.length > 1) fail('E_USAGE', 'index takes at most one node or subject');
+  // okf 6.0: a subject ref (unless its kind is a bound alias), or a v2
+  // declaration with no argument, reads generated subject indexes.
+  const subjectRef = positionals.length === 1 && isSubjectArg(source, positionals[0]) ? positionals[0] : null;
+  if (subjectRef || (!positionals.length && !flags.base && source.decl.version === 2)) return subjectIndexes(source, flags, subjectRef ? [subjectRef] : source.decl.subjects);
   let targets;
   const relation = (alias, node) => refsOf(source.decl).find(([ref]) => ref === `${alias}/${node}`)?.[1] ?? null;
   if (positionals.length) {
@@ -571,4 +618,208 @@ export function search(source, flags, positionals) {
   return { result: { query, regex: !!flags.regex, bases: scope, node, hits: shownHits, total: hits.length, more, receipts: Object.fromEntries(receipts.map(r => [r.base, r])) },
     text: `${text || `no matches for ${JSON.stringify(query)}`}${more ? `\n… and ${more} more (narrow with --node or a longer query)` : ''}\n${footer(receipts)}` };
 }
-export const CONSULT = { bases, index, cat, ls, links, search };
+// ---------------------------------------------------------------- subject layout (okf 6.0)
+// The verbs read committed generated indexes (one blob each), never scan the
+// base. A base without the reserved nodes answers E_USAGE.
+// A version-2 soul has no nodes: a <kind>/<slug> is always a subject. A
+// version-1 soul keeps alias/node precedence for a kind that is a bound alias.
+const isSubjectArg = (source, p) => SUBJECT_REF.test(p) && (source.decl.version === 2 || !Object.hasOwn(source.bindings.bases, p.split('/')[0]));
+function subjectArg(ref) {
+  if (typeof ref !== 'string' || !SUBJECT_REF.test(ref)) fail('E_USAGE', `expected a subject <system|workstream|project>/<slug>, got ${JSON.stringify(ref ?? null)}`);
+  return ref;
+}
+/** The layout as the validator classifies it: no okf-base.json or invalid
+ *  JSON is plain; metadata above the shared limit is refused, never plain. */
+export function hasSubjectLayout(ctx) {
+  const e = entry(ctx, 'okf-base.json');
+  if (!e || e.type !== 'file') return false;
+  const text = read(ctx, 'okf-base.json', e, { limit: METADATA_LIMIT + 1 });
+  if (Buffer.byteLength(text) > METADATA_LIMIT) throw metadataTooLarge();
+  try { return isBridgedMeta(JSON.parse(text)); } catch { return false; }
+}
+/** fn(ctx) on the base a subject verb reads: --base, the only bound base, or
+ *  the only bound base with the subject layout. */
+export function withLayout(source, flags, fn) {
+  const aliases = Object.keys(source.bindings.bases), opts = { fresh: !!flags.fresh };
+  if (flags.base || aliases.length === 1) {
+    const alias = flags.base ?? aliases[0];
+    return withBase(source.bindings, alias, opts, ctx => hasSubjectLayout(ctx) ? (noteStale(ctx), fn(ctx)) : fail('E_USAGE', `base ${alias} has no subject layout`));
+  }
+  const found = aliases.filter(alias => withBase(source.bindings, alias, opts, hasSubjectLayout));
+  if (found.length > 1) fail('E_USAGE', `several bases have the subject layout (${found.join(', ')}); pass --base ALIAS`);
+  if (!found.length) fail('E_USAGE', `bases ${aliases.join(', ')} have no subject layout`);
+  return withBase(source.bindings, found[0], opts, ctx => (noteStale(ctx), fn(ctx)));
+}
+// okf 6.0: the subject verbs read the committed generated indexes as they are.
+// A base whose indexes are stale is not refused: each verb warns once per base
+// (stderr, and `warnings` in --json) when the base's validation says so (the
+// validation a spawn or `oats okf bases` cached for this commit; a directory
+// base is judged now). Never a fetch or a whole-base read for the warning.
+const warned = [];
+export const takeWarnings = () => warned.splice(0);
+function noteStale(ctx) {
+  let n = 0;
+  if (ctx.kind === 'directory') { try { n = validateBase(ctx.base.path, ctx.base, { reader: true }).stale; } catch { return; } }
+  else {
+    const file = validationFile(ctx);
+    if (!fs.existsSync(file)) return;
+    const c = readJSON(file);
+    if (c?.version === 3 && c.ok && c.commit === ctx.commit && c.root === ctx.base.root) n = c.stale ?? 0;
+  }
+  if (n > 0) { const w = staleWarning(n, short(ctx.receipt)); if (!warned.includes(w)) warned.push(w); }
+}
+/** Where each subject ref lives: the one bound base with the subject layout
+ *  holding its file (--base narrows the search to one). → Map ref → alias.
+ *  A ref in two bases is ambiguous (E_USAGE, pass --base). */
+function subjectBases(source, flags, refs) {
+  const aliases = flags.base ? [flags.base] : Object.keys(source.bindings.bases), layouts = [];
+  const found = new Map(refs.map(ref => [ref, []]));
+  for (const alias of aliases) withBase(source.bindings, alias, { fresh: !!flags.fresh }, ctx => {
+    if (!hasSubjectLayout(ctx)) return;
+    layouts.push(alias);
+    for (const ref of refs) if (entry(ctx, subjectFile(ref))?.type === 'file') found.get(ref).push(alias);
+  });
+  if (!layouts.length) fail('E_USAGE', aliases.length === 1 ? `base ${aliases[0]} has no subject layout` : `bases ${aliases.join(', ')} have no subject layout`);
+  for (const [ref, at] of found) {
+    if (at.length > 1) fail('E_USAGE', `subject ${ref} is in several bases (${at.join(', ')}); pass --base ALIAS`);
+    if (!at.length) fail('E_NOT_FOUND', `no bound base with the subject layout (${layouts.join(', ')}) has subject ${ref} (/${subjectFile(ref)}); \`oats okf subjects\` lists them`);
+  }
+  return new Map([...found].map(([ref, at]) => [ref, at[0]]));
+}
+/** fn(ctx) on the base holding one subject. */
+const withSubject = (source, flags, ref, fn) => withBase(source.bindings, subjectBases(source, flags, [ref]).get(ref), {}, fn);
+function subjectEntry(ctx, ref) {
+  const file = subjectFile(ref), e = entry(ctx, file);
+  if (!e || e.type !== 'file') fail('E_NOT_FOUND', `${ctx.alias} has no subject ${ref} (${shown(file)}) at ${short(ctx.receipt)}; \`oats okf subjects\` lists them`);
+  return { file, e };
+}
+function readView(ctx, ref) {
+  noteStale(ctx);
+  subjectEntry(ctx, ref);
+  const path = viewFile(ref), e = entry(ctx, path);
+  if (!e || e.type !== 'file') fail('E_NOT_FOUND', `${ctx.alias}${shown(path)}: subject ${ref} has no generated index at ${short(ctx.receipt)}; the base's maintainer runs okf-reindex.mjs`);
+  const text = read(ctx, path, e);
+  return { path, text, view: parseView(text) };
+}
+const plural = (type, n) => { const t = type.toLowerCase(); return n === 1 ? t : /(s|x|ch|sh)$/.test(t) ? `${t}es` : /[^aeiou]y$/.test(t) ? `${t.slice(0, -1)}ies` : `${t}s`; };
+export const countText = counts => [...counts].map(([type, n]) => `${n} ${plural(type, n)}`).join(', ');
+/** A view's claim counts by type, for display: a type over HEADING_CHARS is
+ *  cut (types that then read alike are counted together), so the answer and
+ *  its JSON keys stay bounded whatever an untrusted committed index holds. */
+function shownCounts(view) {
+  const out = new Map();
+  for (const [type, n] of viewCounts(view)) { const t = cutHeading(type); out.set(t, (out.get(t) ?? 0) + n); }
+  return out;
+}
+function subjectIndexes(source, flags, refs) {
+  refs.forEach(subjectArg);
+  const declared = new Set(source.decl.subjects ?? []), where = subjectBases(source, flags, refs), byRef = new Map(), receipts = [];
+  // Each subject from the base that holds it, in declaration order.
+  for (const alias of [...new Set(where.values())]) withBase(source.bindings, alias, {}, ctx => {
+    receipts.push(ctx.receipt);
+    for (const ref of refs.filter(r => where.get(r) === alias)) { const v = readView(ctx, ref); byRef.set(ref, { base: alias, node: null, subject: ref, relation: declared.has(ref) ? 'subject' : null, path: v.path, text: v.text, receipt: ctx.receipt }); }
+  });
+  const indexes = refs.map(ref => byRef.get(ref));
+  const text = indexes.map(x => `## ${x.base}/${x.subject}${x.relation ? ` (${x.relation})` : ''}\n\n${x.text.trimEnd()}\n`).join('\n');
+  return { result: { indexes }, text: `${text}\n${footer(receipts)}` };
+}
+export function subjects(source, flags, positionals) {
+  if (positionals.length) fail('E_USAGE', 'subjects takes no argument; filter with --kind system|workstream|project');
+  if (flags.kind !== undefined && !Object.hasOwn(KINDS, flags.kind)) fail('E_USAGE', `--kind is one of ${Object.keys(KINDS).join(', ')}`);
+  const declared = new Set(source.decl.subjects ?? []);
+  return withLayout(source, flags, ctx => {
+    const path = 'subjects/index.md';
+    const rows = parseSubjectsIndex(read(ctx, path, requireFile(ctx, path))).filter(x => !flags.kind || x.kind === flags.kind).map(x => ({ ...x, declared: declared.has(x.ref) }));
+    const text = rows.map(x => `${x.ref} — ${x.title}${x.description ? `: ${x.description}` : ''}`).join('\n');
+    return { result: { base: ctx.alias, kind: flags.kind ?? null, subjects: rows, receipt: ctx.receipt }, text: `${text || '(no subjects)'}\n${footer([ctx.receipt])}` };
+  });
+}
+export function subject(source, flags, positionals) {
+  const ref = subjectArg(onePath(positionals, 'subject <kind>/<slug>'));
+  return withSubject(source, flags, ref, ctx => {
+    const { file, e } = subjectEntry(ctx, ref), text = read(ctx, file, e), meta = parseFrontmatter(text).meta ?? {};
+    const list = key => Array.isArray(meta[key]) ? meta[key] : [];
+    const { path, view } = readView(ctx, ref), counts = shownCounts(view);
+    const members = view.members.map(m => subjectOfPath(m.path)?.ref).filter(Boolean);
+    const result = { base: ctx.alias, ref, path: file, title: view.title, description: view.description, legacyNodes: list('legacy-nodes'), inWorkstreams: list('in-workstreams'), dependsOn: list('depends-on'), members, counts: Object.fromEntries(counts), index: path, text, receipt: ctx.receipt };
+    const lines = [
+      result.legacyNodes.length ? `legacy nodes: ${result.legacyNodes.join(', ')}` : null,
+      result.inWorkstreams.length ? `in workstreams: ${result.inWorkstreams.join(', ')}` : null,
+      result.dependsOn.length ? `depends on: ${result.dependsOn.join(', ')}` : null,
+      members.length ? `in this workstream: ${members.join(', ')}` : null,
+      `claims: ${countText(counts) || 'none yet'} (${shown(path)}; \`oats okf claims --about ${ref}\`)`
+    ].filter(Boolean);
+    return { result, text: `${text.trimEnd()}\n\n${lines.join('\n')}\n${footer([ctx.receipt])}` };
+  });
+}
+const HEADING_CHARS = 200;
+const cutHeading = v => v.length > HEADING_CHARS ? `${v.slice(0, HEADING_CHARS)}…` : v;
+export function claims(source, flags, positionals) {
+  if (positionals.length) fail('E_USAGE', 'claims takes --about <kind>/<slug> [--type T] [--kind K]');
+  if (flags.about === undefined) fail('E_USAGE', 'claims needs --about <kind>/<slug>');
+  const ref = subjectArg(flags.about);
+  return withSubject(source, flags, ref, ctx => {
+    const { path, view } = readView(ctx, ref);
+    // Each row repeats its section's type and kind: those read from an
+    // untrusted committed index are cut to HEADING_CHARS so a long heading
+    // over many entries cannot multiply the answer (the filter sees them whole).
+    // The filter is compared once per distinct type and kind (keyed by the
+    // parser's textKey), not once per section: one long type over many kinds.
+    const memo = (want, cache = new Map()) => (text, key) => { if (want === undefined) return true; if (!cache.has(key)) cache.set(key, (text ?? '').toLowerCase() === want); return cache.get(key); };
+    // A filter is read as the index renders a heading (plain text, brackets as parentheses).
+    const typeOk = memo(flags.type === undefined ? undefined : plainText(flags.type).toLowerCase()), kindOk = memo(flags.kind === undefined ? undefined : plainText(flags.kind).toLowerCase());
+    const rows = view.sections.filter(x => typeOk(x.type, x.typeKey) && kindOk(x.kind, x.kindKey)).flatMap(x => {
+      const type = cutHeading(x.type), kind = x.kind === null ? null : cutHeading(x.kind);
+      return x.entries.map(c => ({ type, kind, title: c.title, path: c.path, description: c.description }));
+    });
+    const text = rows.map(r => `${shown(r.path)}  [${r.type}${r.kind ? `/${r.kind}` : ''}] ${r.title}${r.description ? ` — ${r.description}` : ''}`).join('\n');
+    return { result: { base: ctx.alias, about: ref, type: flags.type ?? null, kind: flags.kind ?? null, index: path, claims: rows, receipt: ctx.receipt }, text: `${text || '(no claims)'}\n${footer([ctx.receipt])}` };
+  });
+}
+const CLAIM_FILE_BYTES = 1024 * 1024;
+/** The verdict lanes against a base's committed verdict record (one blob for
+ *  the index, one per identity hit). */
+export function verdictReport(ctx, meta) {
+  const path = 'verdicts/index.md', e = entry(ctx, path);
+  // The generated record is required: a missing one is not "no verdicts".
+  if (!e || e.type !== 'file') fail('E_NOT_FOUND', `${ctx.alias}${shown(path)}: the base has no generated verdict index at ${short(ctx.receipt)}; the base's maintainer runs okf-reindex.mjs`);
+  const indexText = read(ctx, path, e);
+  return verdictLanes(meta, indexText, id => { const p = `verdicts/${id}.md`, ve = entry(ctx, p); return ve && ve.type === 'file' ? read(ctx, p, ve) : null; });
+}
+export function verdicts(source, flags, positionals) {
+  // `--check FILE`: a value flag, or (where --check is a boolean switch, as for propose) the switch and one argument.
+  const file = typeof flags.check === 'string' && !positionals.length ? flags.check : flags.check === true && positionals.length === 1 ? positionals[0] : null;
+  if (!file) fail('E_USAGE', 'verdicts --check <claim file>');
+  let text;
+  try { const stat = fs.statSync(file); if (!stat.isFile() || stat.size > CLAIM_FILE_BYTES) throw Object.assign(new Error('not a regular file under 1 MiB'), { code: 'E_SIZE' }); text = fs.readFileSync(file, 'utf8'); }
+  catch (e) { fail('E_USAGE', `cannot read claim file ${file}: ${e.code || e.message}`); }
+  const fm = parseFrontmatter(text);
+  if (!fm.parsed) fail('E_USAGE', `${file}: no parseable frontmatter`);
+  return withLayout(source, flags, ctx => {
+    const report = { claim: file, base: ctx.alias, ...verdictReport(ctx, fm.meta), receipt: ctx.receipt };
+    if (report.refusal) throw Object.assign(new Error(report.refusal), { code: 'E_VERDICT', result: report });
+    const lines = [
+      report.identity ? `identity: ${report.identity.id} ${report.identity.verdict}${report.identity.reconsidered ? ' (reconsidered by this claim)' : ''}${report.identity.reason ? ` — ${report.identity.reason}` : ''}` : `identity: ${report.id ? `${report.id} has no verdict` : 'the claim names no id'}`,
+      report.candidates.length ? `title hash ${report.titleHash}: ${report.candidates.length} candidate(s) for the PR body:\n${report.candidates.map(c => `  ${c.id} ${c.verdict} [${c.claimType}] ${c.title} (${shown(c.path)})`).join('\n')}` : `title hash ${report.titleHash}: no verdict with this title`
+    ];
+    return { result: report, text: `${lines.join('\n')}\n${footer([ctx.receipt])}` };
+  });
+}
+/** okf 6.0 spawn brief: one line per declared subject, from its generated
+ *  index in an already-validated base (never a fetch at spawn); at most eight. */
+export function subjectBriefLines(bindings, decl, accepted) {
+  const lines = [];
+  for (const ref of decl.subjects.slice(0, 8)) {
+    const alias = Object.keys(accepted).find(a => Array.isArray(accepted[a]?.subjects) && accepted[a].subjects.includes(ref));
+    let line = ref;
+    if (alias) try {
+      line = withBase(bindings, alias, { preferCached: true }, ctx => {
+        const { view } = readView(ctx, ref), counts = countText(shownCounts(view));
+        return `${ref} — ${view.description || view.title}${counts ? ` (${counts})` : ' (no claims yet)'}`;
+      });
+    } catch { /* the bare ref; consult reads it later */ }
+    lines.push(line);
+  }
+  return decl.subjects.length > 8 ? [...lines.slice(0, 7), `… and ${decl.subjects.length - 7} more subjects: \`oats okf index\``] : lines;
+}
+export const CONSULT = { bases, index, cat, ls, links, search, subjects, subject, claims, verdicts };

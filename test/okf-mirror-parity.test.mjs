@@ -94,7 +94,7 @@ function assertMirrorUnchanged(root, run, pattern) {
 
 test("checked-in mirror is a complete standalone inventory with consistent pending or published provenance", () => {
   const inventory = checkOkfMirror();
-  assert.equal(inventory.version, "5.8.0");
+  assert.equal(inventory.version, "6.0.0");
   assert.equal(inventory.source.repository, "https://github.com/awebai/oats-okf.git");
   assert.equal(inventory.release.plannedTag, `v${inventory.version}`);
   if (inventory.release.status === "pending") {
@@ -116,7 +116,7 @@ test("checked-in mirror is a complete standalone inventory with consistent pendi
   assert.deepEqual(inventory.mirrorPaths, ["mirrors/oats-okf", "mirrors/oats-okf-harvest", "mirrors/oats-okf-maintenance"]);
   for (const cap of CAPABILITY_PATHS) assert.ok(!existsSync(join(REPO_ROOT, cap)), `no mirror at ${cap}: it would be discovered as a member capability of this repository`);
   // 4.0.0's package souls and trigger are recorded as exact text, never mirrored into this repository's souls/.
-  assert.deepEqual(inventory.distributionFiles.map((file) => file.path), ["souls/knowledge-harvester/AGENTS.md", SOUL_FILE, "souls/knowledge-maintainer/AGENTS.md", "souls/knowledge-maintainer/soul.yaml", "triggers/harvest-review.json"]);
+  assert.deepEqual(inventory.distributionFiles.map((file) => file.path), ["souls/knowledge-harvester/AGENTS.md", SOUL_FILE, "souls/knowledge-maintainer/AGENTS.md", "souls/knowledge-maintainer/soul.yaml", "triggers/harvest-review.json", "triggers/proposal-review.json"]);
   assert.ok(!existsSync(join(REPO_ROOT, "souls/knowledge-harvester")), "no package soul in this repository's own souls/");
   assert.match(inventory.distributionLicenseText, /^MIT License\n/);
   assert.ok(!JSON.stringify(inventory).includes(REPO_ROOT), "inventory has no machine paths");
