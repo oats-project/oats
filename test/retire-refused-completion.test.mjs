@@ -620,7 +620,7 @@ for (const [what, gate, unwritable] of [
       assert.equal(readJson(claimOf(i)).pid, run.child.pid, "fixture premise: the scheduling holds the home's claim");
       // The marker's format is what it was: who scheduled the completion is told to the completion
       // alone, in its environment.
-      if (existsSync(i.marker)) assert.deepEqual(Object.keys(readJson(i.marker)).sort(), ["agent", "completionPid", "completionStart", "delaySec", "instance", "options", "requestedAt", "requestedByPid", "resultPath", "root"]);
+      if (existsSync(i.marker)) assert.deepEqual(Object.keys(readJson(i.marker)).sort(), ["agent", "completionBoot", "completionPid", "completionStart", "delaySec", "instance", "options", "requestedAt", "requestedByPid", "resultPath", "root"]);
       else assert.deepEqual(gate(i), { fn: "writeFileSync", path: i.marker }, "fixture premise: only a scheduling held before its marker's write has none");
       // What a person sees while a completion waits: a live instance until the marker is written.
       assert.equal(Object.hasOwn(f.status(i).row, "retirePending"), existsSync(i.marker), "oats status reads the instance as retiring from the marker's write on, and as live before");
