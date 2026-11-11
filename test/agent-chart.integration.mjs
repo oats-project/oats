@@ -219,7 +219,17 @@ if(a[0]==='get'){
 `, { mode: 0o755 });
     writeFileSync(join(dir, "ssh"), `#!/usr/bin/env node
 const fs=require('node:fs'),path=require('node:path');
-fs.appendFileSync(path.join(__dirname,'ssh-calls'),JSON.stringify(process.argv.slice(2))+'\\n');
+const args=process.argv.slice(2);
+fs.appendFileSync(path.join(__dirname,'ssh-calls'),JSON.stringify(args)+'\\n');
+if(!args.includes('-oStrictHostKeyChecking=accept-new'))process.exit(3);
+const known=args.find(a=>a.startsWith('-oUserKnownHostsFile='))?.slice('-oUserKnownHostsFile='.length);
+if(!known)process.exit(4);
+const prior=path.join(__dirname,'known-host-path');
+if(fs.existsSync(prior)){
+ if(fs.readFileSync(prior,'utf8')!==known||!fs.existsSync(known)||!fs.readFileSync(known,'utf8').includes('fixture-public-host-key'))process.exit(5);
+}else{
+ fs.writeFileSync(prior,known);fs.writeFileSync(known,'oats-kube-accept ssh-ed25519 fixture-public-host-key\\n');
+}
 const command=process.argv.at(-1);
 if(command==='oats host run --plan --json')console.log(JSON.stringify({ok:true,result:{plan:true,refusals:[{code:'E_HOST_RUN_BUSY'}]}}));
 else if(command.startsWith('node -e '))console.log('PASS fixture SSH boundary (no real runtime assertions)');
@@ -237,6 +247,11 @@ else process.exit(2);
     assert.equal(sshCalls.filter((a) => a.at(-1).startsWith("node -e ")).length, 2, "runtime is checked before and after replacement");
     assert.equal(sshCalls.filter((a) => a.at(-1) === "oats host run --plan --json").length, 2);
     assert.ok(sshCalls.every((a) => a.includes("-oHostKeyAlias=oats-kube-accept")), "one known host key must survive a new forwarded port");
+    assert.ok(sshCalls.every((a) => a.includes("-oStrictHostKeyChecking=accept-new")), "replacement must reject a changed host key");
+    assert.equal(new Set(sshCalls.map((a) => a.find((arg) => arg.startsWith("-oUserKnownHostsFile=")))).size, 1, "one known_hosts file must survive replacement");
+    for (const args of sshCalls.filter((a) => a.at(-1).startsWith("node -e "))) {
+      assert.match(args.at(-1), /assert\.equal\(fs\.statSync\("\/state\/ssh\/ssh_host_ed25519_key"\)\.mode & 0o777, 0o600[,)]/, "the shipped probe must enforce the persisted host-key mode");
+    }
     const calls = readFileSync(join(dir, "calls"), "utf8").trim().split("\n").map(JSON.parse);
     assert.ok(calls.every((args) => !args.includes("exec")), "operator route needs no exec permission");
     assert.ok(calls.find((args) => args.includes("logs") && args.includes("--tail=1")));
