@@ -340,6 +340,33 @@ export function parseTimestamp(value) {
   return Date.parse(value);
 }
 
+/** Whether `aw wake status --json` confirms a running host wake daemon. A
+ *  status that could not be read confirms nothing. */
+export function wakeDaemonRunning(status) {
+  return object(status) && status.daemon_running === true;
+}
+
+/** How long a start waits before it reads the wake status a second time: the
+ *  wake unit is restarted by every `oats aweb wake install`. */
+export const WAKE_BROKER_RECHECK_MS = 3000;
+
+/** Why a start that the host wake broker delivers to must not proceed, or
+ *  undefined when a broker runs. `aw wake register` stores a registration and
+ *  exits 0 with no broker running, and the home is then never woken.
+ *  `readStatus` answers the parsed `aw wake status --json`, or undefined; it
+ *  is read again once after `wait(WAKE_BROKER_RECHECK_MS)`. `serviceManager`
+ *  says whether this host can run the broker as a unit. The text starts with
+ *  the code readiness reports and fits the hook's 300 characters. */
+export function wakeBrokerRefusal({readStatus, wait, serviceManager}) {
+  if (wakeDaemonRunning(readStatus())) return undefined;
+  wait(WAKE_BROKER_RECHECK_MS);
+  if (wakeDaemonRunning(readStatus())) return undefined;
+  const start = serviceManager
+    ? 'start it with `oats aweb wake install`, which also restarts an installed unit'
+    : 'this host has no service manager, so run `aw wake run` as a supervised process';
+  return `wake-daemon-not-running: the host wake broker delivers to this home and is not running, so nothing would wake it; ${start}, then retry`;
+}
+
 /** The host wake daemon alone, from `aw wake status --json`: running, with a
  *  reported version. Home scope reads it after the status's instances list;
  *  soul scope, which has no target row, reads only this. */
@@ -347,7 +374,7 @@ export function wakeDaemonAssessment(status, {minimumVersion}) {
   const warnings = [];
   const fail = (code, message) => ({problems: [problem(code, message)], warnings});
   if (!object(status)) return fail('wake-status-unavailable', 'aw wake status is unavailable or malformed');
-  if (status.daemon_running !== true) return fail('wake-daemon-not-running', 'host wake daemon is not confirmed running');
+  if (!wakeDaemonRunning(status)) return fail('wake-daemon-not-running', 'host wake daemon is not confirmed running');
   if (status.daemon_version_state !== 'reported' || typeof status.daemon_version !== 'string' || !parseVersion(status.daemon_version)) return fail('wake-daemon-version-unknown', 'host wake daemon compatibility is unproven');
   // A daemon below the floor still receives; the floor exists for replies to
   // senders outside the roster, so it is reported as a warning, and every

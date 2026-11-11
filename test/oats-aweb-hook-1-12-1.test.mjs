@@ -26,6 +26,8 @@ const log = ${JSON.stringify(join(base, "aw.log"))};
 fs.appendFileSync(log, JSON.stringify({ argv: a, cwd: process.cwd(), identityHome: process.env.AWEB_IDENTITY_HOME || null }) + "\\n");
 const j = (obj) => JSON.stringify(obj, null, 2);
 if (s === "version") { process.stdout.write(${JSON.stringify(AW_VERSION_OUTPUT)}); process.exit(0); }
+// A host whose wake broker runs: a start the broker delivers to is refused without one.
+if (s.startsWith("wake status")) { console.log(j({ daemon_running: true, daemon_version_state: "reported", daemon_version: "1.36.58", instances: [] })); process.exit(0); }
 if (s.startsWith("wake ")) process.exit(0);
 if (s.startsWith("team list")) { console.log(j({ active_team: "t:example.test", memberships: [{ team_id: "t:example.test" }] })); process.exit(0); }
 if (s.startsWith("team invite")) { console.log(j({ token: "TOK-secret" })); process.exit(0); }

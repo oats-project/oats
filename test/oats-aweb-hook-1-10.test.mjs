@@ -32,7 +32,7 @@ const { createGrantModel, serializeGrant } = require(${JSON.stringify(resolve(ne
 const grants = createGrantModel(${JSON.stringify(base)});
 const val = (flag) => { const eq = args.find((x) => x.startsWith(flag + "=")); if (eq) return eq.slice(flag.length + 1); const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : undefined; };
 fs.appendFileSync(log, a + " @" + process.cwd() + "\\n");
-if (a.startsWith("wake ")) { if (process.env.FAKE_NO_WAKE) { console.error("aw: unknown command wake"); process.exit(2); } if (a.startsWith("wake status")) console.log(JSON.stringify({ instances: [] })); process.exit(0); }
+if (a.startsWith("wake ")) { if (process.env.FAKE_WAKE_REGISTER_FAIL && a.startsWith("wake register")) { console.error("aw wake register: the broker refused the registration"); process.exit(5); } if (a.startsWith("wake status")) console.log(JSON.stringify({ daemon_running: true, daemon_version_state: "reported", daemon_version: "1.36.58", instances: [] })); process.exit(0); }
 if (a.startsWith("team list")) { console.log(JSON.stringify({ active_team: "t:example.test", memberships: [{ team_id: "t:example.test" }] })); process.exit(0); }
 if (a.startsWith("team invite")) { console.log(JSON.stringify({ token: "TOK-secret" })); process.exit(0); }
 if (a.startsWith("team join")) {
@@ -225,11 +225,11 @@ test("spawn with delivery=session: AWEB_DELIVERY in the launch env, no Claude ch
     assert.equal(session.doc.launch, undefined, "no channel flag in session mode");
     assert.match(session.doc.brief, /Notification delivery: external \(AWEB_DELIVERY=session\)/);
     assert.match(readFileSync(join(base, "aw.log"), "utf8"), new RegExp(`^wake register --home ${home.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")} --identity-home .*/.aw --delivery session`, "m"), "registered with the broker");
-    // Without an aw that has the wake CLI, session mode refuses instead of going silently poll-only.
+    // When the registration with the broker fails, session mode refuses instead of going silently poll-only.
     mkdirSync(join(root, "agents", "dev", "instances", "probe-nw"), { recursive: true });
-    const noWake = runHook(base, bin, "spawn", { ...env, OATS_INSTANCE: "probe-nw", OATS_HOME: join(root, "agents", "dev", "instances", "probe-nw"), OATS_SETTINGS: JSON.stringify({ delivery: "session" }), FAKE_NO_WAKE: "1" });
-    assert.notEqual(noWake.status, 0);
-    assert.match(noWake.stdout, /needs an aw with the wake broker CLI/);
+    const registerFails = runHook(base, bin, "spawn", { ...env, OATS_INSTANCE: "probe-nw", OATS_HOME: join(root, "agents", "dev", "instances", "probe-nw"), OATS_SETTINGS: JSON.stringify({ delivery: "session" }), FAKE_WAKE_REGISTER_FAIL: "1" });
+    assert.notEqual(registerFails.status, 0);
+    assert.match(registerFails.stdout, /needs an aw with the wake broker CLI/);
     // Retire in session mode deregisters.
     mkdirSync(join(home, ".aw"), { recursive: true });
     const ret = runHook(base, bin, "retire", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_META: JSON.stringify(session.doc.meta) });
@@ -470,7 +470,7 @@ test("retained identity in session mode: an aw without the wake CLI fails the se
   const base = mkdtempSync(join(tmpdir(), "oats-aweb-110-"));
   try {
     const bin = fakeAw(base); const { root, home } = deployment(base); const { src } = legacySeat(base);
-    const r = runHook(base, bin, "spawn", { OATS_INSTANCE: "merlin-seat", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_RUNTIME: "pi", OATS_TEAM_ID: "t:example.test", OATS_SETTINGS: JSON.stringify({ identity: { source: src }, delivery: "session" }), FAKE_NO_WAKE: "1" });
+    const r = runHook(base, bin, "spawn", { OATS_INSTANCE: "merlin-seat", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_RUNTIME: "pi", OATS_TEAM_ID: "t:example.test", OATS_SETTINGS: JSON.stringify({ identity: { source: src }, delivery: "session" }), FAKE_WAKE_REGISTER_FAIL: "1" });
     assert.notEqual(r.status, 0);
     assert.match(r.stdout, /could not be seated .*wake broker CLI/);
     const connects = readFileSync(join(base, "aw.log"), "utf8").split("\n").filter((l) => l.startsWith("workspace connect"));

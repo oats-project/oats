@@ -49,7 +49,11 @@ function write(path, content) { mkdirSync(dirname(path), { recursive: true }); w
  *  queues behind it): the hook would then take its version-floor path, not the path under test. One
  *  untimed exec here takes that cost. */
 function fakeAw(bin, script) {
-  write(join(bin, "aw"), script);
+  // Every fake is a host whose wake broker runs: oats.aweb refuses a start the broker delivers to
+  // without one, before the step a test here is about.
+  const shebang = "#!/bin/sh\n";
+  assert.ok(script.startsWith(shebang), "a fake aw here is a /bin/sh script");
+  write(join(bin, "aw"), `${shebang}if [ "$1 $2" = "wake status" ]; then echo '{"daemon_running":true,"daemon_version_state":"reported","daemon_version":"1.36.58","instances":[]}'; exit 0; fi\n${script.slice(shebang.length)}`);
   execFileSync("chmod", ["+x", join(bin, "aw")]);
   execFileSync(join(bin, "aw"), ["version"]);
 }
@@ -2347,9 +2351,11 @@ test("the SHIPPED aweb spawn hook exits nonzero when it cannot mint an identity"
   // check whatever aw the host has (1.16's no-root and no-aw refusals shared one phrase; 1.17's differ).
   const bin = join(base, "bin"); mkdirSync(bin, { recursive: true });
   fakeAw(bin, `#!/bin/sh\nif [ "$1" = "version" ]; then ${AW_VERSION_SHELL}; exit 0; fi\necho "unexpected aw $*" 1>&2; exit 2\n`);
+  // The home exists, as at any spawn: the hook asks the wake broker from there before it looks for the root.
+  const home = join(base, "home"); mkdirSync(home);
   const r = spawnSync(process.execPath, [hook, "spawn"], {
     encoding: "utf8",
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, OATS_EVENT: "spawn", OATS_INSTANCE: "probe", OATS_HOME: join(base, "no-such-home"), OATS_WORKSPACE: base, OATS_CONTEXT: base, OATS_TEAM_SCOPE: base, ...AWEB_V2_ENV },
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, OATS_EVENT: "spawn", OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: base, OATS_CONTEXT: base, OATS_TEAM_SCOPE: base, ...AWEB_V2_ENV },
   });
   assert.notEqual(r.status, 0, `no aweb root must be fatal, got exit ${r.status}: ${r.stdout}`);
   assert.match(r.stdout, /no messaging root at .*could not mint this instance/);
