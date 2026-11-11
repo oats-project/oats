@@ -18,11 +18,12 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CLI, v2Deployment } from "./helpers/v2-deployment.mjs";
 import { leaveEnclosingInstance, waitUntil } from "./helpers/host-fixture.mjs";
-import { inspectInstanceSession, listInstances, shq, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
+import { inspectInstanceSession, listInstances, retirePendingMarkerPath, shq, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
 import { HOST_STOP_REASON, lostReasonOf, sessionEndOf } from "../lib/session-end.mjs";
 import { SESSION_END } from "../lib/session-resume-contract.mjs";
 import { readSeen, resumeEligible, homeKey } from "../lib/session-seen.mjs";
 import { lostLine } from "../lib/status-words.mjs";
+import { processStartToken } from "../lib/worktree-hooks.mjs";
 
 const STOP_CHILD = fileURLToPath(new URL("../lib/host-stop-child.mjs", import.meta.url));
 const hasTmux = !spawnSync("tmux", ["-V"], { stdio: "ignore" }).error;
@@ -155,6 +156,29 @@ test("the private child of oats host run stops one home with the host and answer
   const bad = await child("relative/home", "10000");
   assert.equal(bad.status, 0, bad.stderr);
   assert.deepEqual([JSON.parse(bad.stdout).ok, JSON.parse(bad.stdout).code], [false, "E_BAD_ARGS"]);
+});
+
+test("the private child of oats host run and a scheduled self-retire: a running home whose completion lives is answered E_INSTANCE_RETIRING and left running; once that completion is gone the home is stopped with the host", TMUX, async (t) => {
+  const { fx, home, instance } = await runningHome(t, "retiring");
+  const child = (...argv) => new Promise((done) => execFile(process.execPath, [STOP_CHILD, ...argv], { env: fx.env, encoding: "utf8" }, (error, stdout, stderr) => done({ status: error ? error.code : 0, stdout, stderr })));
+  const marker = retirePendingMarkerPath(home);
+  const pending = (completion) => writeFileSync(marker, JSON.stringify({ instance, requestedAt: new Date().toISOString(), ...completion }));
+  // A completion that runs: this test's process, by its pid and its start.
+  pending({ completionPid: process.pid, completionStart: processStartToken(process.pid) });
+  const held = await child(home, "10000");
+  assert.equal(held.status, 0, held.stderr);
+  assert.deepEqual([JSON.parse(held.stdout).ok, JSON.parse(held.stdout).code], [false, "E_INSTANCE_RETIRING"]);
+  assert.equal(existsSync(join(home, ".oats-stop.json")), false, "nothing was stopped or recorded");
+  // The completion was killed (a container that stopped): the marker stays, and names a process that is gone.
+  pending({ completionPid: spawnSync(process.execPath, ["-e", ""]).pid, completionStart: "proc:1" });
+  const r = await child(home, "10000");
+  assert.equal(r.status, 0, r.stderr);
+  const answer = JSON.parse(r.stdout);
+  assert.deepEqual([answer.ok, answer.home, answer.stopped, answer.alreadyIdle], [true, home, true, false], r.stdout);
+  assert.deepEqual([readJson(join(home, ".oats-stop.json")).resume, readJson(join(home, ".oats-stop.json")).reason], [true, "host-stop"]);
+  assert.equal(existsSync(marker), true, "the marker stays: the home is still owed its retire");
+  await waitUntil(() => existsSync(join(home, ".oats-start-exited")), "the session's start wrapper to exit");
+  rmSync(marker);
 });
 
 test("oats host run as a real process: SIGTERM stops the running home with the host, the run exits 0 with its answer, and its lock is released", TMUX, async (t) => {

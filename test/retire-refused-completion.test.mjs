@@ -330,7 +330,7 @@ test("a scheduled self-retire that fails after a retire hook started: its marker
   assert.equal(f.hookRuns(), 1, "fixture premise: the retire hook ran");
   assert.equal(readFileSync(i.marker, "utf8"), markerBytes, "the marker stays, as it was");
   assert.equal(f.status(i).row.retirePending.instance, "hooked", "oats status: the row is owed a retirement");
-  assert.deepEqual(f.stopPlan(i).targets.map((target) => target.retiring), [true], "a stop plan: retiring");
+  assert.deepEqual(f.stopPlan(i).targets.map((target) => target.retiring), [false], "a stop plan: the completion has ended, so nothing holds the home against a stop");
   assert.equal(f.startCode(i), "E_INSTANCE_RETIRING", "a start is refused beside the marker");
 
   const row = oneRefusal(f, i.workspaceLog, outcome, true, "the workspace's log");
@@ -876,19 +876,27 @@ test("a scheduling that fails before it wrote its marker leaves the marker that 
 
 // A scheduled self-retire whose completion was killed (a SIGKILL, a container stop) before it ran:
 // its marker stays, and names a completion that is gone. The home is owed the retire, and nothing
-// carries it out: a retire takes it over and completes it, and a start is refused, with the retire
-// to run in its message. A completion is gone when its process ended, when its pid runs with
-// another start, and when the marker was written in another boot.
+// carries it out: a retire takes it over and completes it, a stop is a stop of any home, and a start
+// is refused, with the retire to run in its message. A completion is gone when its process ended,
+// when its pid runs with another start, and when the marker was written in another boot.
 /** How `oats <argv> --json` ends → `{ status: 0 }`, or `{ status, code, message }` of its error.
  *  `env`: what the command's environment adds to the fixture's. */
 const answerOf = (f, argv, env = {}) => {
   const r = f.fx.cli([...argv, "--json"], { env });
   return r.status === 0 ? { status: 0 } : { status: r.status, code: r.json().error.code, message: r.json().error.message };
 };
+/** `oats instance stop <i>`: its plan, then its apply → `retiring` as the plan shows it for `i`, and
+ *  how the apply ends (answerOf). */
+const stopOf = (f, i, env = {}) => {
+  const shown = f.fx.cli(["instance", "stop", i.name, "--plan", "--json"], { env });
+  assert.equal(shown.status, 0, shown.stdout + shown.stderr);
+  const plan = shown.json().result;
+  return { retiring: plan.targets.at(-1).retiring, ...answerOf(f, ["instance", "stop", i.name, "--apply", "--plan-revision", plan.planRevision, "--idempotency-key", `stop-${i.name}-${plan.planRevision}`], env) };
+};
 /** What a start answers for a home whose self-retire was interrupted. */
 const owedSaid = (i) => `${i.name} is owed a retire (its retire was interrupted): finish it with \`oats retire ${i.name} --home ${i.home}\`; nothing was started`;
 
-test("a scheduled self-retire whose completion was killed: the row reads interrupted, a start is refused and names the retire to run, and a retire completes it with its hook run once", async (t) => {
+test("a scheduled self-retire whose completion was killed: the row reads interrupted, a start is refused and names the retire to run, a stop is not refused, and a retire completes it with its hook run once", async (t) => {
   const f = deployment(t);
   const i = await f.spawn("killed");
   const { completionPid } = await f.scheduling(i);
@@ -901,7 +909,8 @@ test("a scheduled self-retire whose completion was killed: the row reads interru
   assert.equal(f.status(i).row.retire.state, "interrupted");
 
   assert.deepEqual(answerOf(f, ["session", "start", "--home", i.home]), { status: 1, code: "E_INSTANCE_RETIRING", message: owedSaid(i) }, "a home owed a retire is never started");
-  assert.deepEqual([existsSync(i.marker), f.hookRuns()], [true, 0], "the refused start left the marker, and the completion was killed before it ran a hook");
+  assert.deepEqual(stopOf(f, i), { retiring: false, status: 0 }, "a marker whose completion is gone refuses no stop");
+  assert.deepEqual([existsSync(i.marker), f.hookRuns()], [true, 0], "the start and the stop left the marker, and the completion was killed before it ran a hook");
 
   const retire = answerOf(f, ["retire", "killed"]);
   assert.equal(retire.status, 0, `${retire.code} ${retire.message}`);
@@ -910,13 +919,14 @@ test("a scheduled self-retire whose completion was killed: the row reads interru
   assert.deepEqual(besideTheHomes(dirname(i.home)), [], "no marker and no outcome is left");
 });
 
-test("a scheduled self-retire whose completion lives: a start and a retire are refused, and nothing is retired", async (t) => {
+test("a scheduled self-retire whose completion lives: a start, a stop and a retire are refused, and nothing is retired", async (t) => {
   const f = deployment(t);
   const i = await f.spawn("carried");
   const { completionPid } = await f.scheduling(i);
   f.track(completionPid);
   assert.equal(f.status(i).row.retire.state, "running");
   assert.deepEqual(answerOf(f, ["session", "start", "--home", i.home]), { status: 1, code: "E_INSTANCE_RETIRING", message: `carried is being retired (${i.marker} is present); nothing was started` });
+  assert.deepEqual(stopOf(f, i), { retiring: true, status: 1, code: "E_INSTANCE_RETIRING", message: "carried is being retired; nothing was stopped" });
   const retire = answerOf(f, ["retire", "carried"]);
   assert.deepEqual([retire.status, retire.code], [1, "E_LIFECYCLE_BUSY"], retire.message);
   assert.ok(retire.message.includes(`pid ${completionPid}`), retire.message);
@@ -938,20 +948,23 @@ test("a marker written in another boot names a completion that is gone, whatever
   const here = answerOf(f, ["retire", "rebooted"], env);
   assert.deepEqual([here.status, here.code], [1, "E_LIFECYCLE_BUSY"], `in the boot the marker names, a completion that runs holds the home: ${here.message}`);
   assert.ok(here.message.includes(`pid ${process.pid}`), here.message);
+  assert.deepEqual(stopOf(f, i, env), { retiring: true, status: 1, code: "E_INSTANCE_RETIRING", message: "rebooted is being retired; nothing was stopped" });
 
   writeFileSync(i.marker, JSON.stringify({ ...named, completionBoot: `${boot}-earlier` }, null, 2) + "\n");
   assert.deepEqual(answerOf(f, ["session", "start", "--home", i.home], env), { status: 1, code: "E_INSTANCE_RETIRING", message: owedSaid(i) });
+  assert.deepEqual(stopOf(f, i, env), { retiring: false, status: 0 }, "a stop is not refused by a completion of another boot");
   const retire = answerOf(f, ["retire", "rebooted"], env);
   assert.equal(retire.status, 0, `${retire.code} ${retire.message}`);
   assert.deepEqual([existsSync(i.home), f.hookRuns(), besideTheHomes(dirname(i.home))], [false, 1, []]);
 });
 
-test("a marker that names no completion (an earlier OATS wrote it): whether its retire runs cannot be told, so a start is refused as beside a retire that runs, and a retire completes it", async (t) => {
+test("a marker that names no completion (an earlier OATS wrote it): whether its retire runs cannot be told, so a start and a stop are refused as beside a retire that runs, and a retire completes it", async (t) => {
   const f = deployment(t);
   const i = await f.spawn("unnamed");
   writeFileSync(i.marker, JSON.stringify(f.intent(i), null, 2) + "\n");
   assert.equal(f.status(i).row.retire.state, "unknown");
   assert.deepEqual(answerOf(f, ["session", "start", "--home", i.home]), { status: 1, code: "E_INSTANCE_RETIRING", message: `unnamed is being retired (${i.marker} is present); nothing was started` });
+  assert.deepEqual(stopOf(f, i), { retiring: true, status: 1, code: "E_INSTANCE_RETIRING", message: "unnamed is being retired; nothing was stopped" });
   const retire = answerOf(f, ["retire", "unnamed"]);
   assert.equal(retire.status, 0, `${retire.code} ${retire.message}`);
   assert.deepEqual([existsSync(i.home), f.hookRuns(), besideTheHomes(dirname(i.home))], [false, 1, []]);
