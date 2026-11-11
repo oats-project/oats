@@ -291,7 +291,7 @@ test("acceptance refuses drift in the admitted container settings", async () => 
 });
 
 
-async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false } = {}) {
+async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false } = {}) {
   const supervisor = new URL("../container/agent/supervisor.mjs", import.meta.url);
   assert.ok(existsSync(supervisor), "the image must own broker readiness and ordered child shutdown");
   const { supervise } = await import(supervisor);
@@ -317,13 +317,15 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
     setInterval(() => {}, 1000);
   `);
   const children = new Map(), said = [];
-  let signal;
+  let signal, statusFailed = false;
   const running = supervise({
     spawnChild(file, args, options) {
       const role = file === "aw" ? (args[1] === "run" ? "broker" : "status") : file === "oats" ? "host" : "ssh";
       const mode = statusTrueAfterBrokerExit ? "after-exit" : ready ? "ready" : "not-ready";
       writeFileSync(events, readFileSync(events, "utf8") + role + " spawned\n");
-      const child = spawn(process.execPath, [childFile, role, events, mode], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
+      const failProbe = role === "status" && statusSpawnFailsOnce && !statusFailed;
+      if (failProbe) statusFailed = true;
+      const child = spawn(failProbe ? join(dir, "missing-probe") : process.execPath, failProbe ? [] : [childFile, role, events, mode], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
       children.set(role, child);
       return child;
     },
@@ -398,4 +400,15 @@ test("unexpected host run exit stops the broker and fails the container", async 
   fx.children.get("host").kill("SIGKILL");
   assert.equal(await fx.running, 1);
   assert.match(fx.text(), /broker TERM[\s\S]*broker ended/);
+});
+
+
+test("a status-probe spawn error is retried before broker readiness expires", async (t) => {
+  const fx = await supervisorFixture(t, {statusSpawnFailsOnce:true});
+  await fx.until(() => fx.text().includes("host started"));
+  assert.ok(fx.said.includes("status could not start"), "the real failed spawn was observed");
+  assert.ok(fx.said.includes("broker ready (daemon_running: true)"));
+  assert.equal(fx.text().split("status spawned").length-1 >= 2,true,"readiness was retried");
+  fx.term();
+  assert.equal(await fx.running,0,"transient status failure does not fail the container");
 });

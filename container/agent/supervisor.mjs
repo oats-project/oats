@@ -27,7 +27,7 @@ export async function supervise({
     state.done = new Promise((resolve) => {
       child.once("error", () => {
         say(`${role} could not start`);
-        if (role !== "sshd") { failed = true; stop(); }
+        if (role !== "sshd" && role !== "status") { failed = true; stop(); }
       });
       child.once("close", (code, signal) => {
         state.ended = true;
