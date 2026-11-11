@@ -253,7 +253,11 @@ execution-target decision before using this route.
 `accept-kube.sh` requires Node 22, the repository dependencies (`npm ci`),
 Helm 3, and, for a live check, kubectl and an operator SSH test key. It prints
 labelled PASS/FAIL evidence and exits nonzero on a failed check. By default
-it only renders and validates the chart:
+it only renders and validates the chart. Runtime failures name a fixed
+check such as `uid`, `root` or `host-key-mode`; arbitrary remote output is
+withheld on failure.
+
+Render and validate:
 
 ```sh
 container/agent/accept-kube.sh --values team-values.yaml --namespace team --release team

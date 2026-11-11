@@ -235,6 +235,15 @@ if(a[0]==='get'){
 const fs=require('node:fs'),path=require('node:path');
 const args=process.argv.slice(2);
 fs.appendFileSync(path.join(__dirname,'ssh-calls'),JSON.stringify(args)+'\\n');
+const command=process.argv.at(-1);
+if(process.env.O1B_FIXTURE_UID_FAILURE==='1'&&command.startsWith('node -e ')){
+ console.error('fixture-sensitive-stderr');
+ console.log('fixture-sensitive-stdout');
+ const program=command.slice('node -e '.length+1,-1).replaceAll(String.fromCharCode(39,92,39,39),String.fromCharCode(39));
+ const remote={getuid:()=>0,getgid:()=>20001,exitCode:0};
+ require('node:vm').runInNewContext(program,{require,console,process:remote});
+ process.exit(remote.exitCode||7);
+}
 if(!args.includes('-oStrictHostKeyChecking=accept-new'))process.exit(3);
 const known=args.find(a=>a.startsWith('-oUserKnownHostsFile='))?.slice('-oUserKnownHostsFile='.length);
 if(!known)process.exit(4);
@@ -244,7 +253,6 @@ if(fs.existsSync(prior)){
 }else{
  fs.writeFileSync(prior,known);fs.writeFileSync(known,'oats-kube-accept ssh-ed25519 fixture-public-host-key\\n');
 }
-const command=process.argv.at(-1);
 if(command==='oats host run --plan --json')console.log(JSON.stringify({ok:true,result:{plan:true,refusals:[{code:'E_HOST_RUN_BUSY'}]}}));
 else if(command.startsWith('node -e '))console.log('PASS fixture SSH boundary (no real runtime assertions)');
 else process.exit(2);
@@ -270,5 +278,9 @@ else process.exit(2);
     assert.ok(calls.every((args) => !args.includes("exec")), "operator route needs no exec permission");
     assert.ok(calls.find((args) => args.includes("logs") && args.includes("--tail=1")));
     assert.ok(calls.find((args) => args.includes("delete") && args.includes("--wait=false")));
+    const failed = spawnSync("sh", [script, "--values", join(dir, "values.json"), "--namespace", "proof", "--release", "proof", "--context", "fixture-context", "--pod", pod.metadata.name, "--ssh-key", join(dir, "key")], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, O1B_FIXTURE_UID_FAILURE: "1" }, timeout: 10_000 });
+    assert.notEqual(failed.status, 0);
+    assert.match(failed.stderr, /runtime probe failed: uid/);
+    assert.doesNotMatch(failed.stdout + failed.stderr, /fixture-sensitive-(stdout|stderr)|AssertionError/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

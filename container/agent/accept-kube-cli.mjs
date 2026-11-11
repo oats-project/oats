@@ -10,9 +10,14 @@ import { checkAccount, checkPod, checkRendered, checkWorkload } from "./accept-k
 const usage = "accept-kube.sh --values FILE --namespace NS --release NAME [--context CONTEXT --pod POD --ssh-key FILE] [--delete-pod]";
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 const report = (phase, message) => console.log(`[${phase}] ${message}`);
-function command(bin, args) {
+function command(bin, args, { probe = false } = {}) {
   const r = spawnSync(bin, args, { encoding: "utf8", timeout: 120_000, maxBuffer: 8 * 1024 ** 2 });
   assert.ifError(r.error);
+  // Only fixed probe labels can leave a failed SSH call; arbitrary remote output stays private.
+  if (r.status !== 0 && probe) {
+    const failed = r.stdout.match(/^OATS_KUBE_PROBE_FAIL:(uid|gid|process-security|state-tmp|root|mounts|login|host-key-mode)$/m);
+    throw new Error(failed ? `runtime probe failed: ${failed[1]}` : "ssh runtime probe failed (output withheld)");
+  }
   // Do not echo argv, stdout or stderr on failure: an admission hook may inject secrets.
   assert.equal(r.status, 0, `${bin} failed (output withheld)`);
   return r.stdout;
@@ -37,28 +42,43 @@ function options(argv) {
 // Serialized and run through SSH, as the image's agent user. No kubectl exec right.
 function runtimeProbe(uid, gid) {
   const assert = require("node:assert/strict"), fs = require("node:fs");
-  assert.equal(process.getuid(), uid); assert.equal(process.getgid(), gid);
-  const status = fs.readFileSync("/proc/self/status", "utf8");
-  assert.match(status, /^CapEff:\s+0+$/m); assert.match(status, /^NoNewPrivs:\s+1$/m);
-  assert.equal(fs.existsSync("/var/run/secrets/kubernetes.io/serviceaccount/token"), false);
-  for (const dir of ["/state", "/tmp"]) {
-    const path = `${dir}/.oats-kube-probe-${process.pid}`;
-    fs.writeFileSync(path, "probe", { flag: "wx", mode: 0o600 }); fs.unlinkSync(path);
+  let check = "uid";
+  try {
+    assert.equal(process.getuid(), uid);
+    check = "gid";
+    assert.equal(process.getgid(), gid);
+    check = "process-security";
+    const status = fs.readFileSync("/proc/self/status", "utf8");
+    assert.match(status, /^CapEff:\s+0+$/m); assert.match(status, /^NoNewPrivs:\s+1$/m);
+    assert.equal(fs.existsSync("/var/run/secrets/kubernetes.io/serviceaccount/token"), false);
+    check = "state-tmp";
+    for (const dir of ["/state", "/tmp"]) {
+      const path = `${dir}/.oats-kube-probe-${process.pid}`;
+      fs.writeFileSync(path, "probe", { flag: "wx", mode: 0o600 }); fs.unlinkSync(path);
+    }
+    check = "root";
+    for (const path of ["/opt/.oats-kube-probe", "/run/.oats-kube-probe"]) {
+      let wrote = false;
+      try { fs.writeFileSync(path, "probe", { flag: "wx" }); wrote = true; }
+      catch (e) { assert.equal(e.code, "EROFS"); }
+      if (wrote) fs.unlinkSync(path);
+      assert.equal(wrote, false, "root filesystem write succeeded");
+    }
+    check = "mounts";
+    for (const path of ["/etc/resolv.conf", "/etc/agent-ssh/authorized_keys"]) {
+      fs.accessSync(path, fs.constants.R_OK);
+      assert.throws(() => fs.openSync(path, "r+"), (e) => e.code === "EROFS" || e.code === "EACCES");
+    }
+    check = "login";
+    assert.ok(fs.statSync("/etc/agent-login").isDirectory());
+    assert.throws(() => fs.accessSync("/etc/agent-login", fs.constants.W_OK));
+    check = "host-key-mode";
+    assert.equal(fs.statSync("/state/ssh/ssh_host_ed25519_key").mode & 0o777, 0o600, "persisted SSH host key must retain mode 0600");
+  } catch {
+    console.log(`OATS_KUBE_PROBE_FAIL:${check}`);
+    process.exitCode = 1;
+    return;
   }
-  for (const path of ["/opt/.oats-kube-probe", "/run/.oats-kube-probe"]) {
-    let wrote = false;
-    try { fs.writeFileSync(path, "probe", { flag: "wx" }); wrote = true; }
-    catch (e) { assert.equal(e.code, "EROFS"); }
-    if (wrote) fs.unlinkSync(path);
-    assert.equal(wrote, false, "root filesystem write succeeded");
-  }
-  for (const path of ["/etc/resolv.conf", "/etc/agent-ssh/authorized_keys"]) {
-    fs.accessSync(path, fs.constants.R_OK);
-    assert.throws(() => fs.openSync(path, "r+"), (e) => e.code === "EROFS" || e.code === "EACCES");
-  }
-  assert.ok(fs.statSync("/etc/agent-login").isDirectory());
-  assert.throws(() => fs.accessSync("/etc/agent-login", fs.constants.W_OK));
-  assert.equal(fs.statSync("/state/ssh/ssh_host_ed25519_key").mode & 0o777, 0o600, "persisted SSH host key must retain mode 0600");
   console.log(`PASS uid=${uid} gid=${gid}; CapEff=0; NoNewPrivs=1; no SA token; /state,/tmp writable; root and login/key/resolver mounts not writable`);
 }
 
@@ -117,7 +137,7 @@ async function shutdown(kube, pod, expectedUID) {
 
 function sshProof(port, key, knownHosts, uid, gid, phase = "ssh") {
   const ssh = ["-F", "/dev/null", "-T", "-oBatchMode=yes", "-oIdentitiesOnly=yes", "-oIdentityAgent=none", "-oStrictHostKeyChecking=accept-new", "-oHostKeyAlias=oats-kube-accept", `-oUserKnownHostsFile=${knownHosts}`, "-oConnectTimeout=10", "-p", port, "-i", key, "agent@127.0.0.1"];
-  report(phase, command("ssh", [...ssh, `node -e ${quote(`(${runtimeProbe.toString()})(${uid},${gid})`)}`]).trim());
+  report(phase, command("ssh", [...ssh, `node -e ${quote(`(${runtimeProbe.toString()})(${uid},${gid})`)}`], { probe: true }).trim());
   const plan = JSON.parse(command("ssh", [...ssh, "oats host run --plan --json"]));
   assert.equal(plan.ok, true, "host run plan failed");
   assert.equal(plan.result.plan, true, "host run plan answer");
