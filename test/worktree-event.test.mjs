@@ -1145,6 +1145,61 @@ test("a git step that fails on its own answers E_GIT_FAILED, not a clone or bran
   assert.equal(tipOf(fx, "agents/sw"), null);
 });
 
+// A racing add's switch can meet the branch's ref lock while another git holds it: the branch does not
+// exist yet, and a crashed git's stale lock looks the same, so it is git's failure (#1865). The lock is
+// in place before the add starts: the precheck reads the ref, never its lock, so the add reaches its
+// switch and meets it there. No gate, no timer.
+test("a switch that meets the branch's ref lock held by another git answers E_GIT_FAILED with git's message; a retry once the branch exists gets the precheck's E_BRANCH_EXISTS and its remedy", async (t) => {
+  const fx = deployment(t, { hookless: true });
+  const { home } = await fx.spawn("dev", { instance: "dev-lock", work: "checkout" });
+  const common = gitIn(fx, fx.member, "rev-parse", "--path-format=absolute", "--git-common-dir");
+  // The files backend, where a loose ref's lock is a file beside it: no `extensions.refStorage`, or
+  // `files` (read from the config, which every Git answers; `rev-parse --show-ref-format` is Git 2.44+).
+  const storage = spawnSync("git", ["-C", fx.member, "config", "--get", "extensions.refStorage"], { encoding: "utf8", env: fx.env }).stdout.trim();
+  assert.ok(storage === "" || storage === "files", `the clone stores its refs in the files backend, not ${storage}`);
+  const lock = join(common, "refs", "heads", "agents", "lock.lock");
+  mkdirSync(join(lock, ".."), { recursive: true }); writeFileSync(lock, "");
+  const r = add(fx, home, "lock");
+  const e = r.json().error;
+  assert.equal(e.code, "E_GIT_FAILED", r.stdout);
+  assert.match(e.message, /^git switch failed in .*cannot lock ref 'refs\/heads\/agents\/lock'/);
+  assert.equal(e.details.rolledBack, true);
+  assert.equal(e.details.remedy, undefined, "no remedy: the branch does not exist");
+  assert.equal(tipOf(fx, "agents/lock"), null);
+  assert.equal(existsSync(lock), true, "another git's lock is never removed");
+  assert.equal(existsSync(join(home, ".work-lock")), false);
+  // The other git finishes: its lock is gone and the branch is there.
+  rmSync(lock); gitIn(fx, fx.member, "branch", "agents/lock", "HEAD");
+  const again = add(fx, home, "lock").json().error;
+  assert.equal(again.code, "E_BRANCH_EXISTS");
+  assert.match(again.message, /^branch agents\/lock already exists in /);
+  assert.equal(again.details.remedy, "dev-lock/agents/lock");
+});
+
+// The race path's E_BRANCH_EXISTS: the branch appears between the precheck and the switch. A `git` in
+// front of the real one creates it in the clone, then runs the switch, in sequence: no gate, no timer.
+// It finds the switch by its arguments, never by their position (#1857).
+test("the race path's E_BRANCH_EXISTS carries the precheck's details: branch, clone and remedy", async (t) => {
+  const fx = deployment(t, { hookless: true });
+  const { home } = await fx.spawn("dev", { instance: "dev-rp", work: "checkout" });
+  const real = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8", env: fx.env }).trim();
+  const dir = join(fx.base, "git-branch-first"); mkdirSync(dir);
+  writeFileSync(join(dir, "git"), `#!/bin/sh\ncase " $* " in *" switch "*" -c agents/rp "*) ${JSON.stringify(real)} -C ${JSON.stringify(fx.member)} branch agents/rp HEAD || exit 99;; esac\nexec ${JSON.stringify(real)} "$@"\n`, { mode: 0o755 });
+  const at = gitIn(fx, fx.member, "rev-parse", "HEAD");
+  const r = wt(fx, home, ["add", "--purpose", "rp", "--branch", "agents/rp", "--base", "main", "--json"], { PATH: `${dir}:${fx.env.PATH}` });
+  const e = r.json().error;
+  assert.equal(e.code, "E_BRANCH_EXISTS", r.stdout);
+  assert.match(e.message, /^git switch -c agents\/rp failed: .*already exists.*name another, e\.g\. dev-rp\/agents\/rp/);
+  assert.equal(e.details.rolledBack, true);
+  assert.equal(e.details.branchKept, true, "the branch another git made is kept");
+  assert.equal(tipOf(fx, "agents/rp"), at, "where the other git made it");
+  const pre = add(fx, home, "rp").json().error;
+  assert.equal(pre.code, "E_BRANCH_EXISTS");
+  assert.match(pre.message, /^branch agents\/rp already exists in /, "this one is the precheck's");
+  for (const k of ["branch", "clone", "remedy"]) assert.equal(e.details[k], pre.details[k], k);
+  assert.equal(e.details.remedy, "dev-rp/agents/rp");
+});
+
 // ---------- a process whose start cannot be read is never taken for gone ----------
 
 /** A `ps` that cannot read `pid` (exit 2, an error on stderr) and is the real `ps` for any other
