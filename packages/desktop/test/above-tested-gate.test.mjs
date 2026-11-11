@@ -152,3 +152,17 @@ test('acceptance (enforcement): above the tested bound, the launch resume sweep 
   assert.equal(inside.ran.length, 1, 'within the bound the launch sweep runs as before');
   assert.deepEqual(inside.logged, []);
 });
+
+test('acceptance (enforcement): above the tested bound, a POST to a route no table names is refused before the handler dispatches it', async () => {
+  for (const url of ['/api/inventory-probe', `/api/inventory-probe/dev-a${WS}`, '/api/start/dev-a/extra', '/api/version']) {
+    const s = await serve(ABOVE);
+    const answer = await s.post(url, { action: 'list' });
+    assert.deepEqual(s.ran, [], url);
+    assert.equal(answer.status, 409, url);
+    assert.equal(answer.body.code, ABOVE_TESTED_CODE, url);
+    assert.equal(answer.body.error, NOTICE, url);
+    // Within the bound the same request is the handler's, as before: no such route.
+    const inside = await serve(INSIDE);
+    assert.equal((await inside.post(url, { action: 'list' })).status, 404, url);
+  }
+});

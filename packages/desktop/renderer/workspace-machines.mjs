@@ -18,7 +18,7 @@ import { box } from './workspace-setup.mjs';
 import { iconElement } from './shell-icons.mjs';
 import { openAddMachineDialog } from './add-machine-dialog.mjs';
 import { followBackfill, BACKFILL_POLL_MS } from '../../client/machine-contract.mjs';
-import { cliHeldBack } from './views/cli-status.mjs';
+import { cliHeldBack, onCliChange } from './views/cli-status.mjs';
 
 /** Above the tested bound (#1879) a machine's Check, Remove and Add are held back (packages/client/above-tested.mjs):
  * the notice for one, or null. */
@@ -94,7 +94,6 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
   function addButton() {
     if (add) return add;
     add = el('button', 'Add a machine to this workspace…', 'machines-add'); add.type = 'button';
-    if (machineHeld('connect')) { add.disabled = true; add.title = machineHeld('connect'); }
     add.addEventListener('click', () => {
       if (!live() || !answer?.deployment) return;
       dialog.current?.close({ restoreFocus: false });
@@ -116,6 +115,8 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
     if (!answer && !failure) return;
     if (answer?.deployment) { if (!add?.isConnected) head.append(addButton()); }
     else add?.remove();
+    // Held back or not as the CLI is now: the button is kept across renders, and a reprobe renders again.
+    if (add) { const held = machineHeld('connect'); add.disabled = !!held; add.title = held ?? ''; }
     if (failure || answer?.error) {
       const why = answer?.error?.message || failure;
       const line = el('p', `The machines of this workspace could not be read${typeof why === 'string' && why ? `: ${why}` : '.'}`, 'machines-reason');
@@ -228,11 +229,13 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
     if (mayFocus(since)) body.querySelector(`[data-machine="${id}"] .machine-remove`)?.focus();
   }
 
+  // A CLI moving into or out of the tested bound changes what the rows and Add offer.
+  const offCli = onCliChange(() => { if (live()) render(); });
   void load();
   return {
     element,
     /** Read the list again (a machine added or removed elsewhere). */
     refresh() { if (live()) void load(); },
-    dispose() { alive = false; ticket++; stopFollow?.(); dialog.current?.close({ restoreFocus: false }); element.remove(); },
+    dispose() { alive = false; ticket++; offCli(); stopFollow?.(); dialog.current?.close({ restoreFocus: false }); element.remove(); },
   };
 }

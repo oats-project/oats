@@ -171,6 +171,18 @@ export function postOperation(route, action) {
   return `POST ${route} ${typeof action === 'string' && /^[a-z][a-z:-]{0,63}$/.test(action) ? action : '?'}`;
 }
 
+/** The routes OPERATIONS names for a POST. */
+const POST_ROUTES = Object.freeze([...new Set(Object.keys(OPERATIONS).filter((k) => k.startsWith('POST ')).map((k) => k.split(' ')[1]))]);
+const INSTANCE_SEGMENT = /^[A-Za-z0-9._-]+$/;
+
+/** Whether a POST to `path` is to a route OPERATIONS names: the route itself, or one instance under it
+ * (`<route>/<name>`, as `/api/start/<instance>`). The server asks it of every POST before it dispatches, so a
+ * route added without a classification is held back above the bound before its handler runs. */
+export function postRouteClassified(path) {
+  return typeof path === 'string' && POST_ROUTES.some((route) => path === route
+    || (path.startsWith(`${route}/`) && INSTANCE_SEGMENT.test(path.slice(route.length + 1))));
+}
+
 /** Whether `operation` stays on above the tested bound: a read, or allowed. False for anything else. */
 export function permittedAboveTested(operation) {
   const entry = Object.hasOwn(OPERATIONS, operation) ? OPERATIONS[operation] : null;

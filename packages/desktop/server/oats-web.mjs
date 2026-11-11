@@ -85,7 +85,7 @@ import { automationsRequest, automationsFailure } from "./automations.mjs";
 import { soulRows } from "../../client/soul-rows.mjs";
 import { harnessFlag, HARNESSES } from "../../client/harness-names.mjs";
 import { probeChanged } from "../../client/cli-probe-contract.mjs";
-import { aboveTestedRefusal, postOperation } from "../../client/above-tested.mjs";
+import { aboveTestedRefusal, postOperation, postRouteClassified } from "../../client/above-tested.mjs";
 import { workspaceNotServed } from "../renderer/deployment-header.mjs";
 import { createRemoteIdentityStore } from "./remote-identity.mjs";
 import { DESKTOP_TERMS } from "../renderer/desktop-terms.mjs";
@@ -1163,8 +1163,11 @@ const readStrictBody = (req, limit = 65536, measured = false) => new Promise((ok
    below asks `heldBack(...)` with its (route, action) once its body is read and before it runs anything: an
    operation the allowlist does not name is answered with the notice sentence, and no CLI process starts.
    One answer for every route: 409, { status: "refused", code, error, reason: { code, message }, release }.
+   Before any of them, a POST to a route the table does not name is refused the same way (`unclassifiedRoute`),
+   so a handler added without a classification is held back too.
    test/above-tested-inventory.test.mjs holds every POST route here to a class there. */
 const heldBack = (route, action) => aboveTestedRefusal(cliState, postOperation(route, action));
+const unclassifiedRoute = (path) => (postRouteClassified(path) ? null : aboveTestedRefusal(cliState, "POST ?"));
 const refuseHeld = (res, refusal) => send(res, 409, { status: "refused", code: refusal.code, error: refusal.message,
   reason: { code: refusal.code, message: refusal.message }, ...(refusal.release ? { release: refusal.release } : {}) });
 
@@ -1187,6 +1190,7 @@ const server = createServer(async (req, res) => {
     if (!originOk) return send(res, 403, { error: "forbidden origin" });
   }
   try {
+    if (req.method === "POST") { const refused = unclassifiedRoute(path); if (refused) return refuseHeld(res, refused); }
     if (req.method === "GET" && path === "/api/version") {
       return send(res, 200, { capability: MANIFEST.capability, version: MANIFEST.version });
     }

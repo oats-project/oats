@@ -1,4 +1,5 @@
 import test from 'node:test';
+import * as LOCATOR from '../../client/cli-locator.mjs'; // cliStatus reads the locator's range text and tested bound
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { EventEmitter } from 'node:events';
@@ -97,7 +98,7 @@ test('proxy refuses oversize inputs, off-origin paths and oversized/malformed/fo
 test('public status forwards only integer API2, never API1/string/future', () => {
   const s = readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8').match(/function cliStatus\(\) \{[^]*?\n\}/)[0];
   for (const value of [undefined, 1, '2', 3, 2]) {
-    const r = new Function('cliState', 'locator', 'MANIFEST', `return (${s})();`)({ spawnPreviewApi: value }, { supportsRelations: () => false, RELATIONS_MIN: [] }, { version: 'fixture' });
+    const r = new Function('cliState', 'locator', 'MANIFEST', `return (${s})();`)({ spawnPreviewApi: value }, { ...LOCATOR, supportsRelations: () => false, RELATIONS_MIN: [] }, { version: '0.69.17' });
     assert.equal(r.spawnPreviewApi, value === 2 ? 2 : null);
   }
 });

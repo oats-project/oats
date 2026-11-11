@@ -12,7 +12,7 @@
 // functions (client.mjs), which decide what a roster, a row and a failed read are, once, for both
 // clients: the TUI never writes "stopped" for a row and never builds the collector's input by hand.
 import { execFile as nodeExecFile, spawn as nodeSpawn } from "node:child_process";
-import { closeSync, fstatSync, lstatSync, mkdtempSync, openSync, readFileSync, readSync, realpathSync, rmdirSync, statSync, unlinkSync } from "node:fs";
+import { closeSync, fstatSync, lstatSync, mkdtempSync, openSync, readSync, realpathSync, rmdirSync, statSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,13 +38,6 @@ export function tellable(stream) {
  *  URL from this file. Every kernel call is `node <this path> …`, so the TUI depends on no shebang,
  *  no execute bit and no `PATH`, and never talks to another install's kernel. */
 export const KERNEL_BIN = fileURLToPath(new URL("../../../bin/oats.mjs", import.meta.url));
-/** The version of that kernel's own package (its package.json, beside bin/): the TUI's tested version, which
- *  the shared acceptProbe requires (cli-locator.mjs). The kernel the TUI runs is this one, so it is never above
- *  it. null when the manifest cannot be read: the probe then refuses, as acceptProbe does without one. */
-export const KERNEL_VERSION = (() => {
-  try { const version = JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8")).version; return typeof version === "string" ? version : null; }
-  catch { return null; }
-})();
 
 /** How long the probe waits for `version --json`. */
 const PROBE_TIMEOUT_MS = 10_000;
@@ -171,6 +164,18 @@ export const CHANGE_FILES = Object.freeze({
     } finally { quietly(() => closeSync(fd)); }
   },
 });
+
+/** The version of the kernel's own package (its package.json, beside bin/, as KERNEL_BIN): the TUI's tested
+ *  version, which the shared acceptProbe requires (cli-locator.mjs). The kernel the TUI runs is this one, so it is
+ *  never above it. Read once, by the bounded read a change's output is read with (no other read of node:fs); null
+ *  when the manifest cannot be read or is over 1 MiB: the probe then refuses, as acceptProbe does without one. */
+export const KERNEL_VERSION = (() => {
+  try {
+    const { text, over } = CHANGE_FILES.read(fileURLToPath(new URL("../../../package.json", import.meta.url)), 1024 * 1024);
+    const version = over ? null : JSON.parse(text).version;
+    return typeof version === "string" ? version : null;
+  } catch { return null; }
+})();
 
 /** A child that did not end well, as execFile reports one: the facts on an Error, and no text of the child's. */
 const failure = (facts) => Object.assign(new Error("the child did not end with an answer"), facts);

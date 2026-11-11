@@ -199,3 +199,28 @@ test('an owner that moved on: no answer renders or starts the next step, and the
   assert.equal(u.q('.machine-dialog'), null);
   assert.deepEqual(u.calls.map(c => c.path.split('?')[0]), ['/api/servers', '/api/server-connect'], 'no messaging step, no list read');
 });
+
+test('#1879: above the tested bound Add, Check and Remove are held back with the notice, and no check runs; a reprobe into the bound gives them back', async t => {
+  const cs = await import('../renderer/views/cli-status.mjs');
+  const cli = (extra = {}) => ({ ok: true, bin: '/oats', version: '0.70.1', source: 'path', required: { desktopApi: 1, range: '>=0.26.0, tested through 0.69' }, tried: [], features: [], ...extra });
+  let probe = cli({ aboveTested: true, testedThrough: '0.69' });
+  const cliCtx = { api: async () => probe };
+  await cs.refreshCli(cliCtx);
+  t.after(() => cs.resetCliStateForTests());
+  const u = setup(t, {
+    '/api/servers': () => answer([machine('altair-aweb')]),
+    '/api/server-check': body => ({ id: body.id, check: { reachable: true, version: '0.70.1', error: null } }),
+  });
+  await settle();
+  const notice = cs.cliHeldBack('POST /api/server-connect');
+  assert.match(notice, /^This Desktop was tested with oats CLIs up to 0\.69; the installed CLI is 0\.70\.1\. /);
+  const controls = () => ['.machines-add', '.machine-check', '.machine-remove'].map(s => [u.q(s).disabled, u.q(s).title]);
+  assert.deepEqual(controls(), [[true, notice], [true, notice], [true, notice]]);
+  assert.deepEqual(u.calls.map(c => c.path), [`/api/servers?ws=${encodeURIComponent(WS)}`], 'no background check');
+  probe = cli({ version: '0.69.25' });
+  await cs.refreshCli(cliCtx); await settle();
+  assert.deepEqual(controls(), [[false, ''], [false, ''], [false, '']]);
+  probe = cli({ aboveTested: true, testedThrough: '0.69' });
+  await cs.refreshCli(cliCtx); await settle();
+  assert.deepEqual(controls(), [[true, notice], [true, notice], [true, notice]], 'and back again, on the button kept across renders');
+});

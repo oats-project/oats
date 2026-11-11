@@ -230,7 +230,8 @@ terminals, the Spawn preview and apply (fenced by `--expect-decision`), Start,
 Restart, the colour and the background. Every other operation, one that does not
 exist yet included, is refused where it enters the backend, before any CLI process
 runs, with code `cli-above-tested` and the notice sentence: each POST handler of
-`server/oats-web.mjs` by (route, action), and in main the deployments-list writes,
+`server/oats-web.mjs` by (route, action), a POST to a route the table does not
+name before any handler, and in main the deployments-list writes,
 onboard and the launch resume sweep (skipped with one log line naming the code).
 The renderer reads the same table to disable what would be refused, and shows the
 notice in the card's place. On the surfaces that stay on, an answer of a shape the

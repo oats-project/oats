@@ -71,20 +71,35 @@ const ROUTE_LEVEL = ['/api/forge-connections', '/api/instance-forge', '/api/forg
   '/api/server-connect', '/api/server-forget', '/api/window-state', '/api/windows', '/api/remote-roster/refresh',
   '/api/cli/reprobe', '/api/start', '/api/restart', '/api/retire'];
 
-/** Every route the handler compares its path with, and the instance routes' family. */
-function handlerRoutes() {
-  const routes = new Set();
-  for (const m of HANDLER.matchAll(/path\s*===\s*(["'])(\/api\/[^"']+)\1/g)) routes.add(m[2]);
-  for (const m of HANDLER.matchAll(/\[([^\]]*)\]\.includes\(path\)/g)) for (const r of m[1].matchAll(/["'](\/api\/[^"']+)["']/g)) routes.add(r[1]);
-  const family = HANDLER.match(/path\.match\(\/\^\\\/api\\\/\(([a-z|]+)\)/);
-  assert.ok(family, 'the instance route family is found');
-  for (const r of family[1].split('|')) routes.add(`/api/${r}`);
-  return routes;
+/** How the handler `source` routes: each route it compares its path with (`path === '…'`, `[…].includes(path)`),
+ * each family it matches (`path.match(/^\/api\/<route>\/…/)`, `/^\/api\/(a|b)\/…/`: `/api/a` and `/api/b`), and
+ * every other use of `path` in its code that is none of these, nor the gate's own (an argument of heldBack,
+ * unclassifiedRoute or postRouteClassified, its declaration). Such a use is a way of routing this test cannot
+ * read, and fails it: write the route in one of the forms above. */
+function handlerRouting(source) {
+  const text = code(source), routes = new Map(), unread = [];
+  for (const m of text.matchAll(/path\s*===\s*(["'])(\/api\/[^"']+)\1/g)) routes.set(m[2], 'route');
+  for (const m of text.matchAll(/\[([^\]]*)\]\.includes\(path\)/g)) for (const r of m[1].matchAll(/["'](\/api\/[^"']+)["']/g)) routes.set(r[1], 'route');
+  for (const m of text.matchAll(/path\.match\(\/((?:\\.|[^/\\\n])+)\//g)) {
+    const alternatives = m[1].match(/^\^\\\/api\\\/\(([a-z|-]+)\)\\\//), single = m[1].match(/^\^\\\/api\\\/([a-z-]+(?:\\\/[a-z-]+)*)\\\//);
+    if (alternatives) for (const r of alternatives[1].split('|')) routes.set(`/api/${r}`, 'family');
+    else if (single) routes.set(`/api/${single[1].replace(/\\\//g, '/')}`, 'family');
+    else unread.push(`path.match(/${m[1]}/)`);
+  }
+  for (const m of text.matchAll(/(?<![\w.$"'`])path(?![\w$"'`])/g)) { // the variable, not a string "path"
+    const before = text.slice(Math.max(0, m.index - 40), m.index), after = text.slice(m.index + 4, m.index + 44);
+    const read = /^\s*[!=]==\s*["']\/api\//.test(after) || (/\.includes\($/.test(before) && /^\)/.test(after))
+      || /^\.match\(\/\^\\\/api\\\//.test(after) || /\b(heldBack|unclassifiedRoute|postRouteClassified)\(\s*$/.test(before)
+      || /^\s*=\s*url\.pathname;/.test(after) || (/unclassifiedRoute = \($/.test(before) && /^\) =>/.test(after));
+    if (!read) unread.push(`${before.slice(-20)}path${after.slice(0, 20)}`.replace(/\s+/g, ' '));
+  }
+  return { routes, unread };
 }
+const handlerRoutes = () => handlerRouting(HANDLER).routes;
 // The bodies of routes that check theirs before the gate (a refusal there runs nothing either).
 const BODY = { '/api/window-state': { focused: true }, '/api/windows': { views: [null] } };
-const GET_ONLY = ['/api/version', '/api/panel', '/api/agents', '/api/team-members', '/api/servers', '/api/cli', '/api/file'];
-const postRoutes = () => [...handlerRoutes()].filter((r) => !GET_ONLY.includes(r)).sort();
+const GET_ONLY = ['/api/version', '/api/panel', '/api/agents', '/api/team-members', '/api/servers', '/api/cli', '/api/file', '/api/brain'];
+const postRoutes = () => [...handlerRoutes().keys()].filter((r) => !GET_ONLY.includes(r)).sort();
 /** The classified POST operations, grouped by route: route → the actions named (null for the route itself). */
 function classifiedPosts() {
   const byRoute = new Map();
@@ -108,14 +123,33 @@ test('acceptance (inventory): every classification names a known class and why',
 });
 
 test('acceptance (inventory): every route the handler serves by POST is classified, and nothing else is', () => {
+  assert.deepEqual(handlerRouting(HANDLER).unread, [], 'the handler routes only in the forms this test reads');
   assert.deepEqual(postRoutes(), [...classifiedPosts().keys()].sort());
   assert.deepEqual(postRoutes(), sorted([...Object.keys(ACTIONS_FROM), ...ROUTE_LEVEL]), 'each POST route says where its actions are decided');
 });
 
+test('acceptance (inventory): a route added in a form the test reads is found, and one in any other form fails it', () => {
+  const branch = (match) => `\n    const pm = ${match};\n    if (pm && req.method === "POST") return send(res, 200, await probe(pm[1]));\n`;
+  const at = HANDLER.indexOf('    const hm = path.match(');
+  const added = (text) => HANDLER.slice(0, at) + text + HANDLER.slice(at);
+  // A second family, as the instance routes are written: found, so the route comparison above fails until it is classified.
+  const family = handlerRouting(added(branch('path.match(/^\\/api\\/inventory-probe\\/([A-Za-z0-9._-]+)$/)')));
+  assert.equal(family.routes.get('/api/inventory-probe'), 'family');
+  assert.deepEqual(family.unread, []);
+  assert.notDeepEqual([...family.routes.keys()].filter((r) => !GET_ONLY.includes(r)).sort(), [...classifiedPosts().keys()].sort());
+  // A literal route and a list: found.
+  assert.equal(handlerRouting(added('    if (path === "/api/inventory-probe" && req.method === "POST") return send(res, 200, {});\n')).routes.get('/api/inventory-probe'), 'route');
+  // Any other way of routing on the path: not read, and reported.
+  for (const form of ['path.startsWith("/api/inventory-probe/")', 'ROUTES[path]', '/^\\/api\\/probe/.test(path)', 'path == "/api/inventory-probe"', 'path.match(/^\\/v2\\/(x)$/)']) {
+    assert.notDeepEqual(handlerRouting(added(`    if (${form}) return send(res, 200, {});\n`)).unread, [], form);
+  }
+});
+
 test("acceptance (inventory): the handler's GET-only routes run nothing for a POST", async () => {
   const { request } = await loadServer(juanState().state);
+  const routes = handlerRoutes();
   for (const route of GET_ONLY) {
-    const answer = await request({ url: `${route}?ws=${encodeURIComponent(A)}`, method: 'POST', body: {} });
+    const answer = await request({ url: `${route}${routes.get(route) === 'family' ? '/dev' : ''}?ws=${encodeURIComponent(A)}`, method: 'POST', body: {} });
     assert.equal(answer.status, 404, `${route}: ${JSON.stringify(answer.body)}`);
   }
 });

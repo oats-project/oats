@@ -157,7 +157,9 @@ anything it does not name is held. Its `aboveTestedRefusal(cli, operation)` is
 the one gate: every POST handler of `server/oats-web.mjs` calls it (as
 `heldBack(route, action)`) once the body is read and before anything runs, as
 do main's deployments-list writes and onboard (`mainRefusal`) and the resume
-sweep (`session-resume-launch.mjs`). The renderer asks the same table
+sweep (`session-resume-launch.mjs`). Before any handler, a POST to a route the
+table does not name is refused the same way (`postRouteClassified`), so a
+handler added without its classification is held back too. The renderer asks the same table
 (`cliHeldBack` in `renderer/views/cli-status.mjs`; `renderer/desktop-acts.mjs`
 for a row's acts) only to disable what the backend would refuse.
 `above-tested-notice.mjs` builds the one sentence every refusal and the notice

@@ -403,11 +403,13 @@ test("mutation: reset must advance request ownership", async () => {
   await assert.rejects(resetRace("compatible", mod), /reset invalidates pending request/);
 });
 test("mutation: latest card action must own its completion message", async () => {
-  const mod = await mutant('if (owns() && !cliAvailable() && el.isConnected)', 'if (!cliAvailable() && el.isConnected)');
+  const mod = await mutant('if (owns() && still() && el.isConnected)', 'if (still() && el.isConnected)');
   await assert.rejects(cardRace("newer action", "transport", mod), /obsolete card completion must not paint/);
 });
 test("mutation: disposal must invalidate a pending picker", async () => {
-  const mod = await mutant('dispose() { alive = false; off(); }', 'dispose() { off(); }');
+  // The card's own disposer (the notice beside it has one of the same shape).
+  const mod = await mutant('// dispose with the element: observe removal via the returned disposer\n  return { el, dispose() { alive = false; off(); } };',
+    '// dispose with the element: observe removal via the returned disposer\n  return { el, dispose() { off(); } };');
   await assert.rejects(pickerRace("dispose", "resolve", mod), /obsolete picker must not dispatch reprobe/);
 });
 test("mutation: emitting per response instead of per change is caught", async () => {
