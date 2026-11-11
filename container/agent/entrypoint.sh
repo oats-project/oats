@@ -27,4 +27,7 @@ export NSS_WRAPPER_GROUP=/state/ssh/group
 if [ ! -f /state/ssh/ssh_host_ed25519_key ]; then
     ssh-keygen -q -t ed25519 -N '' -f /state/ssh/ssh_host_ed25519_key
 fi
-exec /usr/sbin/sshd -D -e -f /etc/agent-sshd_config
+# sshd is a background child; oats host run is what tini signals and waits for. On the
+# runtime's SIGTERM it stops the agents, and the container ends when it exits.
+/usr/sbin/sshd -D -e -f /etc/agent-sshd_config &
+exec oats host run
