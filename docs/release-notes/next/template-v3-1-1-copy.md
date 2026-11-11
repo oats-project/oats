@@ -1,6 +1,6 @@
 ## Changed
 
-- **OATS's own copy of the engineering template moves to template-v3.1.0: the
+- **OATS's own copy of the engineering template moves to template-v3.1.1: the
   lead leads the whole effort and delegates well.** This changes the texts
   this workspace's own souls are composed from, not the kernel or any package.
   - An expert leads its effort and decides who does each piece. "Build it
@@ -17,6 +17,9 @@
   - Exploration is a task once it has bounds: the decision it serves, where
     to look, when to stop and what to send back.
   - The dispatcher says "one effort, one lead".
+  - After a change to the landing rules, a lead tells all its running
+    children, a standing specialist included, not only its developers
+    (template-v3.1.1).
 
   A running instance keeps the texts it was spawned with; a new spawn takes
   these. `capabilities/TEMPLATE-RELEASE` records the release and its commit.
