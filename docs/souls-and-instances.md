@@ -1892,9 +1892,16 @@ limits are [a retire's](#retire-filter-drivers).
   refused with `E_WORK_INSPECTION_FAILED` and rolled back, and
   `oats worktree add` with `E_GIT_FAILED`, its tree removed.
 
-The same checkouts, and the fetch of `oats worktree add` between its two,
-run with `core.fsmonitor=false`: a file monitor command the repository's
-configuration names is not run, and a checkout has no use for one. The clone's Git hooks (`post-checkout` among them) are not part of
+<a id="no-file-monitor"></a>
+**No file monitor.** Every Git command OATS runs that reads or writes an
+instance's work tree, an extra tree or their index runs with
+`core.fsmonitor=false`, so a file monitor command the repository's
+configuration names is never run: these checkouts and the fetch of
+`oats worktree add` between its two, `oats worktree remove`, a retire and its
+recovery copy, the status a spawn's baseline is taken from, and the reads of
+`oats instance git` and `oats instance diff`. One read outside those trees
+does not carry the setting: the check that `oats-workspace.yaml` is tracked
+in the workspace checkout that holds it (`git ls-files`). The clone's Git hooks (`post-checkout` among them) are not part of
 this: they run in a checkout as they do for the operator's own Git.
 
 After the spawn hooks succeed, the spawn fires the
@@ -2185,7 +2192,8 @@ owner read, write and search access, and keeps `.git` until all other entries
 are deleted, so a failed deletion can be retried.
 An unreadable branch or a failed inspection keeps the tree and record.
 
-`remove` runs no filter driver the repository's configuration defines
+`remove` runs no file monitor the repository's configuration names
+([no file monitor](#no-file-monitor)), and no filter driver it defines
 (`filter.<name>.clean`, `.process`): its own status of the tree, the clean
 check inside `git worktree remove` and the comparison of an unregistered
 tree's surviving files are each preceded by one read of that configuration,
