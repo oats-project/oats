@@ -351,6 +351,12 @@ test('A14: a base that makes the socket path 104 bytes or more refuses the start
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
 
+test('a socket path over the limit says which directory to shorten, XDG_RUNTIME_DIR included', () => {
+  const message = new SocketPathTooLong(`/run/${'x'.repeat(100)}/oats-d-XXXXXX/s`, 121).message;
+  assert.match(message, /XDG_RUNTIME_DIR/, 'on Linux the private XDG_RUNTIME_DIR is used first, so shortening TMPDIR alone cannot help');
+  assert.match(message, /TMPDIR/);
+});
+
 test('A14: ENOENT on the current lease revokes it and replaces once; again within the minute is a failed start', async () => {
   let now = 1_000_000;
   const replaced = [], failed = [];

@@ -39,7 +39,10 @@ export function socketPathFits(socketPath) {
 /** A refusal naming the path, its length and the limit. */
 export class SocketPathTooLong extends Error {
   constructor(socketPath, bytes) {
-    super(`the backend server's socket path is ${bytes} bytes, over the limit of ${SOCKET_PATH_LIMIT}: ${socketPath} (set TMPDIR to a shorter directory)`);
+    // socketBase: on Linux a private XDG_RUNTIME_DIR comes first, so the advice names both.
+    super(`the backend server's socket path is ${bytes} bytes, over the limit of ${SOCKET_PATH_LIMIT}: ${socketPath} `
+      + "(on Linux it goes under XDG_RUNTIME_DIR when that is a private directory of yours, else under TMPDIR: "
+      + "start the app with that variable set to a shorter directory, or with XDG_RUNTIME_DIR unset and a short TMPDIR)");
     this.name = "SocketPathTooLong"; this.code = "E_SOCKET_PATH_TOO_LONG"; this.socketPath = socketPath; this.bytes = bytes;
   }
 }
