@@ -435,7 +435,7 @@ oats trigger add --from oats.okf:proposal-review --set repo=github.com/<org>/<kn
 
 ### 4. Proposals in okf 6, and the soul's opt-out
 
-oats.okf 6.0 has no harvester, and no knowledge setting on a host or a spawn.
+oats.okf 6.0 has no harvester, and no host or spawn switch for the duty to propose.
 
 - **How it works:** a working soul whose knowledge slot is `oats.okf` reads
   the compulsory `okf-propose` skill from its IMPORTANT inject and checks
