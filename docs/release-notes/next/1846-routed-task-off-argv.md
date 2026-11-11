@@ -1,3 +1,10 @@
+## Upgrade
+
+- **A server before its clients.** Where a spawn is routed with `--server`,
+  upgrade the host first: a client with this release cannot route a spawn
+  that has a task to an older host (`E_REMOTE_INCOMPATIBLE`, nothing is
+  sent). A spawn without a task is routed to an older host as before.
+
 ## Added
 
 - **`oats spawn <soul> --task-file -` reads the task from standard input**
