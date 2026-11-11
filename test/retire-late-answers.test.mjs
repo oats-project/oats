@@ -387,7 +387,7 @@ test("afterFirstEffect, the stop's side: every code `oats instance stop` answers
   const { afterFirstEffect, BEFORE_EFFECT_CODES, oatsError } = errors;
   const point = "a target's stop had begun";
   const listed = BEFORE_EFFECT_CODES["instance stop"];
-  assert.deepEqual(listed, ["E_BAD_ARGS", "E_USAGE", "E_PLAN_STALE", "E_INSTANCE_RETIRING", "E_LIFECYCLE_BUSY", "E_HOME_MISMATCH", "E_SESSION_UNKNOWN",
+  assert.deepEqual(listed, ["E_BAD_ARGS", "E_USAGE", "E_PLAN_STALE", "E_INSTANCE_RETIRING", "E_LIFECYCLE_BUSY", "E_HOME_MISMATCH", "E_HOME_NOT_OWNED", "E_SESSION_UNKNOWN",
     "E_AMBIGUOUS_INSTANCE", "E_UNIDENTIFIED_INSTANCE_HOME", "E_REMOTE_INCOMPATIBLE", "E_AMBIGUOUS", "E_SNAPSHOT_UNKNOWN"], "the codes a stop answers only before any effect");
   for (const code of listed) {
     const details = { plan: { planRevision: "r1" }, lock: "/claims/x.lock" };
