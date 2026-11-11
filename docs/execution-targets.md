@@ -1475,6 +1475,13 @@ refused. A home removed between the read and its start is reported
   not. The count and the retry delays are kept for one boot: a reboot starts
   both again. `oats session start --resume` run by hand is neither bounded
   nor counted.
+- That does not go on for ever. A home that uses up its 3 starts in 3 hours
+  in a row is given up: its row has no time of a next attempt, the loss is
+  answered, and no sweep starts it again until a person does. Hours are in a
+  row when each begins less than an hour after the one before it cleared.
+  Only an hour without one begins the count again: no start does. A person
+  may start a home that was given up, and if it is lost again in a used-up
+  hour it is given up again at once.
   A stop of the current start with the host is different: a successful
   restore after that administrative stop neither spends nor resets the
   crash budget, and the crash ceiling cannot prevent it. A failed or

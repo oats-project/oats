@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describeLaunchCommand, parseLaunchCommand, renderLaunchCommand, renderLaunchRecipe, RESUME_NOTICE, startInstanceSession } from "../lib/core.mjs";
 import { readStartExited, sessionEndOf } from "../lib/session-end.mjs";
-import { acquireResumeLock, bootId, noteSweep, readBootNote, RESUME_LIMIT, RESUME_WINDOW_MS, resumeSessions, resumeStateDir, RETRY_CEILING_MS, RETRY_FIRST_MS, retryDueAt, rowFromStart } from "../lib/session-resume.mjs";
+import { acquireResumeLock, bootId, noteSweep, readBootNote, RESUME_LIMIT, RESUME_SPENT_HOURS, RESUME_WINDOW_MS, resumeSessions, resumeStateDir, RETRY_CEILING_MS, RETRY_FIRST_MS, retryDueAt, rowFromStart, spentHours } from "../lib/session-resume.mjs";
 import { homeKey, nextSeen, recordSeen, resumeEligible } from "../lib/session-seen.mjs";
 import { processStartToken } from "../lib/worktree-hooks.mjs";
 import { FRESH_REASON, NOT_SWEPT, OUTCOME, RESUME_WAITING, ROW_REASON, SESSION_END, SESSION_RESUME_FEATURE } from "../lib/session-resume-contract.mjs";
@@ -568,6 +568,57 @@ test("a home that used up its starts of the hour is reported keeps-getting-lost 
 
   const again = await f.sweep(oldest + RESUME_WINDOW_MS, RESUMES);
   assert.deepEqual([again.started, again.row.outcome], [1, OUTCOME.RESUMED], "the oldest start left the hour");
+});
+
+test("used-up hours are in a row when each begins less than an hour after the one before cleared; the same hour is counted once; only an hour without one begins again", () => {
+  const at = (min) => new Date(T("12:00:00.000") + min * 60_000).toISOString();
+  assert.deepEqual(spentHours(undefined, at(0)), { hours: 1, since: at(0) });
+  const first = { hours: 1, since: at(0) };
+  assert.deepEqual(spentHours(first, at(0)), first, "a later sweep in the same hour marks nothing new");
+  assert.deepEqual(spentHours(first, at(60)), { hours: 2, since: at(60) }, "it cleared at 60 and was used up again from 60");
+  assert.deepEqual(spentHours(first, at(119)), { hours: 2, since: at(119) }, "59 minutes after it cleared");
+  assert.deepEqual(spentHours(first, at(120)), { hours: 1, since: at(120) }, "an hour without one");
+  assert.deepEqual(spentHours({ hours: 3, since: at(120) }, at(125)), { hours: 4, since: at(125) }, "still in a row after it was given up");
+  assert.equal(RESUME_SPENT_HOURS, 3);
+});
+
+/** The home of `f` uses up an hour: three sweep starts from `since`, a minute apart, then a sweep
+ *  five minutes after the first → that sweep's `{ row, started }`. */
+async function useUpAnHour(f, since) {
+  await f.fx.inEnv(() => { for (const at of [since, since + 60_000, since + 120_000]) noteSweep({ launched: [f.key] }, f.boot, at); });
+  return f.sweep(since + 5 * 60_000, () => assert.fail("started with its starts of the hour used up"));
+}
+
+test("a home that uses up its starts three hours in a row is given up: no time of a next attempt, the loss judged, no sweep starts it again", { skip: bootId() ? false : "no boot id on this platform: nothing is counted" }, async (t) => {
+  const now = Date.now() + 60 * 60_000, f = await lostHome(t, "given-up", now - 5 * 60_000 + 5 * 60_000);
+  const hour = RESUME_WINDOW_MS;
+  const first = await useUpAnHour(f, now);
+  const second = await useUpAnHour(f, now + hour);
+  for (const [n, r] of [[1, first], [2, second]]) assert.deepEqual([r.started, r.row.reason, typeof r.row.nextAttemptAt], [0, ROW_REASON.KEEPS_GETTING_LOST, "string"], `hour ${n} is not the last`);
+  const third = await useUpAnHour(f, now + 2 * hour);
+  assert.deepEqual([third.started, third.row.outcome, third.row.reason, third.row.nextAttemptAt], [0, OUTCOME.REFUSED, ROW_REASON.KEEPS_GETTING_LOST, undefined]);
+  assert.match(third.row.message, /^given-up was resumed 3 times an hour for 3 hours in a row and was lost again each time; no sweep starts it again: start it by hand \(oats session start --resume --home /);
+  const later = await f.sweep(now + 4 * hour, () => assert.fail("a home that was given up was started"));
+  assert.deepEqual([later.started, later.row.outcome, later.row.reason], [0, OUTCOME.SKIPPED, ROW_REASON.NOT_SEEN_RECENTLY], "the loss was judged");
+});
+
+test("only an hour without a used-up budget begins the hours in a row again; a start by hand does not", { skip: bootId() ? false : "no boot id on this platform: nothing is counted" }, async (t) => {
+  const now = Date.now() + 60 * 60_000, hour = RESUME_WINDOW_MS;
+  const clean = await lostHome(t, "clean-hour", now);
+  await useUpAnHour(clean, now);
+  await useUpAnHour(clean, now + hour);
+  const afterAClean = await useUpAnHour(clean, now + 3 * hour + 60_000);
+  assert.equal(typeof afterAClean.row.nextAttemptAt, "string", "the third used-up hour is not in a row with the first two");
+
+  const byHand = await lostHome(t, "by-hand", now);
+  const record = join(byHand.home, "instance.json");
+  await useUpAnHour(byHand, now);
+  await useUpAnHour(byHand, now + hour);
+  // A person starts it: another start id, seen running, then lost again in the next hour.
+  writeFileSync(record, JSON.stringify({ ...JSON.parse(readFileSync(record, "utf8")), startId: "started-by-hand" }));
+  await byHand.fx.inEnv(() => recordSeen(join(byHand.fx.dep, "agents"), [{ home: byHand.home, instance: "by-hand", startId: "started-by-hand", launched: true, running: true }], { now: now + 2 * hour - 60_000, boot: byHand.boot }));
+  const afterAHand = await useUpAnHour(byHand, now + 2 * hour);
+  assert.deepEqual([afterAHand.row.reason, afterAHand.row.nextAttemptAt], [ROW_REASON.KEEPS_GETTING_LOST, undefined], "the third hour in a row gives it up, whoever started it in between");
 });
 
 test("legacy qualified failure notes and loss records keep the same-kernel guards", (t) => {

@@ -8,6 +8,8 @@
   minutes at most, until the loss is 24 hours old. A home that keeps getting
   lost is still started at most 3 times, now in an hour instead of in a boot,
   and a sweep starts it again when the oldest of those starts is an hour old.
+  A home that uses up its starts 3 hours in a row is given up until a person
+  starts it.
   Both the count and the delays are kept for one boot. On upgrade, a home's
   count of starts for the current boot begins at zero once: the earlier
   kernel's note holds no start times.
@@ -21,6 +23,7 @@
     carry `nextAttemptAt`, an ISO time (not on a host without a boot id,
     where nothing is noted);
   - `keeps-getting-lost` keeps its name and now means 3 starts in the last
-    hour, not in this boot, and it is no longer final;
+    hour, not in this boot. It is final only without `nextAttemptAt`: after
+    3 such hours in a row;
   - a refused start and `keeps-getting-lost` no longer make later sweeps
     answer the home `not-seen-recently`.
