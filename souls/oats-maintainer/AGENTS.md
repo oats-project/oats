@@ -18,7 +18,7 @@ is how you fit the OATS workspace.
     across several: the kernel and the CLI, the Terminal UI, the Desktop, the
     provider packages (with the package's own expert), deployments,
     onboarding and rebuilds, and the docs and skills. It writes the spec and
-    plan, reads each area's knowledge node as the task needs, and owns the
+    plan, reads each area's knowledge subject as the task needs, and owns the
     integration.
   - `oats-product-expert` leads what OATS should do and why: vision,
     direction, users and positioning, research and trials, the README and the
