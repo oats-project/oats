@@ -9,11 +9,12 @@
 // its exit in a finally, on every path. There is NO synchronous execution
 // primitive in this module, and the tests import it to assert the probes go
 // through the reaper.
-import { mkdtempSync, rmSync } from "node:fs";
-import { createConnection, createServer } from "node:net";
+import { mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync } from "node:fs";
+import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { serverSpawnSpec } from "../server-host.mjs";
+import { launchServerChild, serverSpawnSpec } from "../server-host.mjs";
+import { createBackendClient, watchReadyLine } from "../backend-client.mjs";
 import { boundedTail } from "./launch-probe.mjs";
 
 /**
@@ -161,23 +162,54 @@ export async function runMainImportsProbe(reaper, appExe, entry, {
 /** As the hermetic tests start the backend: no oats CLI is discoverable, no login shell runs. */
 export const NO_CLI_ENV = Object.freeze({ OATS_DESKTOP_OATS_BIN: "", PATH: "/nonexistent", SHELL: "/bin/false" });
 
-async function freePort() {
-  const s = createServer();
-  await new Promise((ok, bad) => { s.once("error", bad); s.listen(0, "127.0.0.1", ok); });
-  const { port } = s.address();
-  await new Promise((ok) => s.close(ok));
-  return port;
-}
-
-/** Whether something accepts a connection on the loopback port. */
-function portOpen(port) {
+/** Whether something accepts a connection on the Unix socket at `path`. */
+function socketOpen(path) {
   return new Promise((done) => {
-    const c = createConnection({ host: "127.0.0.1", port });
+    const c = createConnection({ path });
     const end = (open) => { c.destroy(); done(open); };
     c.once("connect", () => end(true));
     c.once("error", () => end(false));
     c.setTimeout(2000, () => end(false));
   });
+}
+
+/**
+ * The TCP ports `pid` listens on (Linux): its socket descriptors (/proc/<pid>/fd) matched by inode
+ * against the LISTEN rows of /proc/net/tcp and tcp6. null where /proc cannot be read (not Linux,
+ * or the process is gone). `fs` is injectable for tests.
+ */
+export function listeningTcpPorts(pid, fs = { readdirSync, readlinkSync, readFileSync }) {
+  let inodes;
+  try {
+    inodes = new Set(fs.readdirSync(`/proc/${pid}/fd`).flatMap((fd) => {
+      try { const m = /^socket:\[(\d+)\]$/.exec(fs.readlinkSync(`/proc/${pid}/fd/${fd}`)); return m ? [m[1]] : []; } catch { return []; }
+    }));
+  } catch { return null; }
+  const ports = [];
+  for (const table of ["/proc/net/tcp", "/proc/net/tcp6"]) {
+    let text; try { text = fs.readFileSync(table, "utf8"); } catch { continue; }
+    for (const line of text.split("\n").slice(1)) {
+      const cols = line.trim().split(/\s+/);
+      if (cols.length < 10 || cols[3] !== "0A") continue; // 0A: LISTEN
+      if (inodes.has(cols[9])) ports.push(parseInt(cols[1].split(":").pop(), 16));
+    }
+  }
+  return ports;
+}
+
+/** The pid of `parent`'s child whose command line matches `pattern` (Linux /proc), or null. */
+export function childPidMatching(parent, pattern, fs = { readdirSync, readFileSync }) {
+  let names; try { names = fs.readdirSync("/proc"); } catch { return null; }
+  for (const name of names) {
+    if (!/^\d+$/.test(name)) continue;
+    try {
+      const stat = fs.readFileSync(`/proc/${name}/stat`, "utf8");
+      const ppid = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1]);
+      if (ppid !== parent) continue;
+      if (pattern.test(fs.readFileSync(`/proc/${name}/cmdline`, "utf8").replace(/\0/g, " "))) return Number(name);
+    } catch { /* gone */ }
+  }
+  return null;
 }
 
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
@@ -193,12 +225,15 @@ const seconds = (ms) => `${Math.round(ms / 100) / 10}s`;
  * The headless backend phase: what the packaged app runs as Node, run
  * without a display (#634).
  *  1. the backend (`bin`, app.asar/server/oats-web.mjs) is started THROUGH
- *     THE PRODUCTION SPEC (`serverSpawnSpec`, as main starts it) with the
- *     packaged executable as execPath, no deployment, a free port, a
- *     temporary home and no CLI discoverable, and must answer GET /api/cli
- *     (any HTTP answer) within `readyMs`;
+ *     THE PRODUCTION SPEC (`serverSpawnSpec`, as main starts it, its fresh
+ *     credential on fd 3 and a private socket: launchServerChild) with the
+ *     packaged executable as execPath, no deployment, a temporary home and no
+ *     CLI discoverable, must print its ready line and answer GET /api/cli
+ *     through the backend client (backend-client.mjs, the authenticated
+ *     socket path) within `readyMs`; on Linux it must hold no listening TCP
+ *     socket;
  *  2. its stdin is then closed, as the kernel closes it when main ends, and
- *     it must exit 0 with its port closed within `exitMs` (#698's lifeline);
+ *     it must exit 0 with its socket closed within `exitMs` (#698's lifeline);
  *  3. the collector (`collector`, client/liveness-main.mjs beside app.asar,
  *     the entry the backend starts) is run as Node with `[]` on stdin and must
  *     print `[]` within `collectorMs`.
@@ -220,18 +255,25 @@ export async function runBackendProbe(reaper, appExe, {
   const how = { targetArch, platform, hostArch };
   const mode = packagedNode(appExe, [], how).rosetta ? " under Rosetta x86_64" : "";
   const home = mkdtempSync(join(tmpdir(), "oats-smoke-backend-"));
-  let child = null, exited = null, tail = "";
+  let child = null, exited = null, tail = "", socket = null;
   let settle;
   const exit = new Promise((ok) => { settle = ok; });
   const fail = (detail) => ({ ok: false, detail, pids });
   const output = () => tail.trim().slice(-1500) || "(no output)";
   try {
-    const port = await freePort();
-    const s = spec({ execPath: appExe, bin, dirs: [], port, oatsBin: null, pathSource: "inherited", pathError: null,
-      remoteIdentityFile: join(home, "remote-identity.json"), home, env: { ...env, ...NO_CLI_ENV, HOME: home } });
-    const run = packagedNode(s.command, s.args, how);
-    child = reaper.spawnTracked(run.exe, run.args, s.options);
+    let s;
+    const client = createBackendClient();
+    const launched = launchServerChild({
+      spawn: (command, args, options) => { const run = packagedNode(command, args, how); return reaper.spawnTracked(run.exe, run.args, options); },
+      socketBase: tmpdir(),
+      spec: (socketPath) => (s = spec({ execPath: appExe, bin, dirs: [], socketPath, cliChoiceFile: join(home, "oats-cli-choice.json"),
+        pathSource: "inherited", pathError: null, remoteIdentityFile: join(home, "remote-identity.json"), home,
+        env: { ...env, ...NO_CLI_ENV, HOME: home } })),
+    });
+    child = launched.child; socket = launched;
     pids.backend = child.pid;
+    const lease = client.begin({ child, socketPath: launched.socketPath, secret: launched.secret });
+    if (child.stdout) watchReadyLine(child.stdout, () => client.markReady(lease));
     child.on("exit", (code, signal) => { exited = { code, signal }; settle(exited); });
     child.on("error", (e) => { tail = boundedTail(tail, `\nspawn error: ${e.message}`); exited ??= { code: -1, signal: null }; settle(exited); });
     child.stdout?.on("data", (d) => { tail = boundedTail(tail, d); });
@@ -245,19 +287,23 @@ export async function runBackendProbe(reaper, appExe, {
       if (exited) return fail(`backend${mode} exited before answering GET /api/cli (code ${exited.code}, signal ${exited.signal}); output tail:\n${output()}`);
       const left = readyBy - Date.now();
       if (left <= 0) return fail(`backend${mode} never answered GET /api/cli within ${seconds(readyMs)} (reaped); output tail:\n${output()}`);
+      if (!lease.ready) { await sleep(Math.min(200, Math.max(0, left))); continue; }
       try {
-        const res = await fetch(`http://127.0.0.1:${port}/api/cli`, { signal: AbortSignal.timeout(Math.min(2000, left)) });
+        const res = await client.fetch("/api/cli", { signal: AbortSignal.timeout(Math.min(2000, left)) });
         status = res.status;
-        await res.body?.cancel();
       } catch { await sleep(Math.min(200, Math.max(0, readyBy - Date.now()))); }
     }
+    if (status === 401) return fail(`backend${mode} refused the credential main handed it over fd 3 (HTTP 401); output tail:\n${output()}`);
+    // No TCP listener: the backend listens on its socket alone (Linux, where /proc shows it).
+    const tcp = platform === "linux" ? listeningTcpPorts(child.pid) : null;
+    if (tcp && tcp.length) return fail(`backend${mode} listens on TCP port(s) ${tcp.join(", ")}; it must listen on its socket only; output tail:\n${output()}`);
 
     // 2. The lifeline: stdin closes, as when main ends; the server must go, port and all.
     child.stdin?.end();
     const gone = await within(exit, exitMs);
     if (!gone) return fail(`lifeline (#698): the backend${mode} was still running ${seconds(exitMs)} after its stdin closed (reaped); output tail:\n${output()}`);
     if (gone.code !== 0 || gone.signal !== null) return fail(`lifeline (#698): the backend${mode} ended with code ${gone.code}, signal ${gone.signal} when its stdin closed, expected exit 0; output tail:\n${output()}`);
-    if (await portOpen(port)) return fail(`lifeline (#698): port ${port} still accepts connections after the backend${mode} exited (reaped); output tail:\n${output()}`);
+    if (await socketOpen(launched.socketPath)) return fail(`lifeline (#698): the backend's socket still accepts connections after the backend${mode} exited (reaped); output tail:\n${output()}`);
 
     // 3. The collector: rows on stdin, one liveness per row on stdout; none in, none out.
     const col = packagedNode(s.command, [collector], how);
@@ -273,8 +319,9 @@ export async function runBackendProbe(reaper, appExe, {
       ok: true, pids,
       detail: `backend, lifeline and collector run as Node under the packaged executable${mode}`,
       lines: [
-        `backend: ${bin} started through serverSpawnSpec as Node under the packaged executable${mode}, no CLI discoverable, answered GET /api/cli (HTTP ${status})`,
-        `lifeline (#698): closing the backend's stdin ended it (exit 0) and closed port ${port}`,
+        `backend: ${bin} started through serverSpawnSpec as Node under the packaged executable${mode} (credential on fd 3, private socket), no CLI discoverable, answered GET /api/cli through the backend client over the authenticated socket (HTTP ${status})`,
+        tcp ? `backend: holds no listening TCP socket (/proc/${child.pid})` : `backend: TCP listeners not inspected on ${platform} (no /proc)`,
+        `lifeline (#698): closing the backend's stdin ended it (exit 0) and closed its socket`,
         `collector: ${collector} run as Node under the packaged executable${mode} answered [] to []`,
         `not exercised by this phase: the GUI (phase 5)${appImage}`,
       ],
@@ -284,6 +331,7 @@ export async function runBackendProbe(reaper, appExe, {
       reaper.reapGroup(child);
       if (!exited) await within(exit, 5000);
     }
+    socket?.remove();
     rmSync(home, { recursive: true, force: true });
   }
 }

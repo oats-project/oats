@@ -1,6 +1,6 @@
 /** K7 read IPC: normalized route, trusted frame, copied connection ownership,
  * streaming response byte cap, and independent public DTO reprojection. */
-import { apiUrl, apiInit } from './api-url.mjs';
+import { apiUrl, apiInit, requestPath } from './api-url.mjs';
 import { trustedForgeFrame } from './forge-proxy.mjs';
 import { eventsRequest, eventsTarget, eventsFailure } from '../client/instance-events-contract.mjs';
 import { eventsData } from './renderer/instance-events-data.mjs';
@@ -25,19 +25,19 @@ async function boundedText(response) {
     return Buffer.concat(chunks, bytes).toString('utf8');
   } finally { reader.releaseLock(); }
 }
-export async function proxyInstanceEvents(event, path, opts, { rendererURL, connection, fetch: fetcher = globalThis.fetch } = {}) {
+export async function proxyInstanceEvents(event, path, opts, { rendererURL, connection, fetch: fetcher } = {}) {
   const reply = (code, status = 503) => ({ ok: false, status, body: eventsFailure(code) });
   let frame; try { frame = event?.senderFrame; } catch { return reply('E_FORBIDDEN_FRAME', 403); }
   const owns = () => { try { return trustedForgeFrame(event, rendererURL) && event.sender.mainFrame === frame; } catch { return false; } };
   if (!owns()) return reply('E_FORBIDDEN_FRAME', 403);
   let start;
-  const current = () => { try { const c = connection(); return !c.transition && c.epoch === start?.epoch && c.base === start?.base && c.wsId === start?.wsId; } catch { return false; } };
+  const current = () => { try { const c = connection(); return !c.transition && c.epoch === start?.epoch && c.wsId === start?.wsId; } catch { return false; } };
   try {
     if (opts?.method !== 'POST') return reply('E_BAD_ARGS', 400);
     start = { ...connection() }; if (start.transition) return reply('E_TARGET_CHANGED');
     let url, input, init;
     try {
-      url = apiUrl(path, start.base, start.wsId, start.allowedWs, { bound: start.bound === true });
+      url = apiUrl(path, start.wsId, start.allowedWs, { bound: start.bound === true });
       if (url.pathname !== '/api/instance-events' || url.searchParams.getAll('ws').length !== 1 || !url.searchParams.get('ws')
         || [...url.searchParams.keys()].some(k => k !== 'ws')) return reply('E_BAD_ARGS', 400);
       init = apiInit({ method: 'POST', body: opts.body });
@@ -45,7 +45,7 @@ export async function proxyInstanceEvents(event, path, opts, { rendererURL, conn
       input = eventsRequest(JSON.parse(init.body));
       if (!input) return reply('E_BAD_ARGS', 400);
     } catch { return reply('E_BAD_ARGS', 400); }
-    const response = await fetcher(url, { ...init, signal: AbortSignal.timeout(EVENTS_PROXY_TIMEOUT) });
+    const response = await fetcher(requestPath(url), { ...init, signal: AbortSignal.timeout(EVENTS_PROXY_TIMEOUT) });
     const raw = await boundedText(response);
     if (!owns()) return reply('E_FORBIDDEN_FRAME', 403);
     if (!current()) return reply('E_TARGET_CHANGED');

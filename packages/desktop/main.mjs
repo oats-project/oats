@@ -3,9 +3,10 @@
 // Responsibilities (per the desktop-app contract):
 //   * window + security posture: contextIsolation ON, nodeIntegration OFF,
 //     all privileged work behind explicit IPC channels.
-//   * server management: connect to a running desktop backend server (default
-//     127.0.0.1:4820) or spawn the bundled `server/oats-web.mjs start`
-//     as a child; the renderer's ctx.api() proxies to it over IPC.
+//   * server management: start the bundled `server/oats-web.mjs start` as a
+//     child, always (never one main did not start), on a private socket with a
+//     per-launch credential, and talk to it only through backend-client.mjs's
+//     backendFetch; the renderer's ctx.api() proxies to it over IPC.
 //   * integrated terminal: node-pty running `tmux attach-session` per
 //     terminal tab, bytes streamed to xterm.js over IPC. Closing a tab kills
 //     the pty ONLY — the tmux session is the durable host and must survive.
@@ -18,7 +19,7 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { apiUrl, apiInit, classifyApiRoute, createUnservedRefusal, servedSelectors, windowRefusal } from "./api-url.mjs";
+import { apiUrl, apiInit, classifyApiRoute, createUnservedRefusal, requestPath, servedSelectors, windowRefusal } from "./api-url.mjs";
 import { scopedRequest } from "./renderer/workspace-routes.mjs";
 import { forgeProxyOptions, FORGE_EPOCH_HEADER, installForgeAuthHandlers, trustedForgeFrame } from "./forge-proxy.mjs";
 import { createGhRunner, forgeEnvironment } from "./forge-cli.mjs";
@@ -31,14 +32,16 @@ import { sweepViewers, listedTables } from "./tmux-target.mjs";
 import { tmuxSocketArgs } from "./local-tmux-io.mjs";
 import { createTerminalOwnerBroker, installTerminalHandlers } from './terminal-owner.mjs';
 import { createTerminalIo } from './terminal-io.mjs';
-import { ensureServerOnPort, serverCompatible } from "./server-compat.mjs";
-import { createServerHost, createServerAdapter, serverSpawnSpec } from "./server-host.mjs";
+import { serverCompatible } from "./server-compat.mjs";
+import { createServerHost, launchServerChild, serverSpawnSpec } from "./server-host.mjs";
+import { createBackendClient, createSocketLossRecovery } from "./backend-client.mjs";
+import { socketBase, sweepStaleSocketDirs } from "./backend-socket.mjs";
 import { cliWorkspace, validWorkspaceRef } from "../client/workspace-cli.mjs";
 import { onboardData } from "../client/deployment-data.mjs";
 import { validateWorkspace } from "../client/workspace-admission.mjs";
 import { cliDeploymentList as runDeploymentList } from "../client/deployment-list-cli.mjs";
 import { aboveTestedRefusal } from "../client/above-tested.mjs";
-import { workspaceSuggestions, listState, createRemoveListed, unsavedOpenSet, importDesktopLists, createSerialQueue, settledCli, listDeployment, decideAdd, createGenerations, createAddExecutor, restoreWorkspaceDirs, saveWorkspaceDirs, commitOpenSet, startupOpenSet, matchWorkspaceDirs, createOnboardOffers, createOnboardExecutor,
+import { workspaceSuggestions, listState, createRemoveListed, unsavedOpenSet, importDesktopLists, createSerialQueue, settledCli, listDeployment, decideAdd, createGenerations, createAddExecutor, restoreWorkspaceDirs, saveWorkspaceDirs, commitOpenSet, startupOpenSet, matchWorkspaceDirs, createOnboardOffers, createOnboardExecutor, writeJsonAtomic,
   savedWorkspacePaths, persistableDirs, stageDirs, pickedFolderChoices, createPerformAdd, createSuggestionCalls } from "./workspace-registry.mjs";
 import { workspaceNotServed } from "./renderer/deployment-header.mjs";
 import { appMenuTemplate } from "./app-menu.mjs";
@@ -66,8 +69,11 @@ const pty = require("node-pty");
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-let port = Number(process.env.OATS_DESKTOP_PORT || 4820);
-const base = () => `http://127.0.0.1:${port}`;
+// The backend client (backend-client.mjs): the lease of the server generation main started, and
+// backendFetch, the only way anything in main reaches that server. A lost socket file (a temp
+// cleaner) replaces the server once (socketLoss, below).
+const backend = createBackendClient({ onSocketLost: () => socketLoss() });
+const backendFetch = backend.fetch;
 // Window activity → backend refresh cadence: the server backs its kernel
 // polling off while every window is blurred/hidden and refreshes promptly
 // when one returns. Main posts directly (as it already does for /api/panel
@@ -75,7 +81,7 @@ const base = () => `http://127.0.0.1:${port}`;
 // new IPC surface for a fact main already holds. Edge-triggered in
 // window-activity.mjs so an event burst is one POST.
 const activity = createActivityNotifier({
-  post: body => fetch(`${base()}/api/window-state`, {
+  post: body => backendFetch("/api/window-state", {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify(body), signal: AbortSignal.timeout(1500),
   }),
@@ -86,7 +92,7 @@ const noteWindowActivity = () => { activity.update(BrowserWindow.getAllWindows()
 // and again for each server main learns (serverEpoch), and retried at the next served-list update
 // (noteServed, which every panel read reaches) when a post failed. One post at a time, in order.
 const windowViewsNotifier = createViewsNotifier({
-  post: async (body) => (await fetch(`${base()}/api/windows`, {
+  post: async (body) => (await backendFetch("/api/windows", {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify(body), signal: AbortSignal.timeout(1500),
   })).ok,
@@ -138,27 +144,29 @@ async function applyLoginPath() {
 }
 
 // ---- backend server management ----------------------------------------
-// Server host (server-host.mjs): owns the child lifecycle, the ownership-
-// through-transition invariant, and trust-state invalidation on replace.
+// Server host (server-host.mjs): owns the child lifecycle and each generation's lease, the
+// ownership-through-transition invariant, and trust-state invalidation on replace.
 let invalidateForgeReads = () => {};
 let invalidateTerminalPreparations = () => {};
 const serverHost = createServerHost({
-  spawnChild: (dirs, onPort) => {
+  client: backend,
+  spawnChild: (dirs) => {
     const bin = join(HERE, "server", "oats-web.mjs");
-    if (!existsSync(bin)) throw new Error(`desktop backend server not found at ${bin} and no usable server on port ${onPort}`);
-    // The persisted user-chosen oats binary (if any) rides along as the
-    // server's top-priority discovery candidate; the server re-probes it.
-    const chosen = readCliChoice();
-    // The argv and options, including the stdin owner lifeline (#698), are serverSpawnSpec's.
-    const spec = serverSpawnSpec({ execPath: process.execPath, bin, dirs, port: onPort, oatsBin: chosen,
-      pathSource: loginPath.source, pathError: loginPath.error, remoteIdentityFile: REMOTE_IDENTITY_FILE(),
-      home: homedir(), env: process.env });
-    const child = spawn(spec.command, spec.args, spec.options);
+    if (!existsSync(bin)) throw new Error(`desktop backend server not found at ${bin}`);
+    // A private socket directory and a fresh credential for this child alone, the credential over its
+    // fd 3 (launchServerChild). The argv and options, including the stdin owner lifeline (#698), are
+    // serverSpawnSpec's. The chosen oats binary is the choice file's, which the server reads at each probe.
+    const spawned = launchServerChild({ spawn, socketBase: socketBase(),
+      spec: (socketPath) => serverSpawnSpec({ execPath: process.execPath, bin, dirs, socketPath, cliChoiceFile: CLI_CHOICE_FILE(),
+        pathSource: loginPath.source, pathError: loginPath.error, remoteIdentityFile: REMOTE_IDENTITY_FILE(),
+        home: homedir(), env: process.env }) });
+    const { child } = spawned;
     // The lifeline's write end: held, never written, never ended (server-host.mjs).
     child.stdin.on("error", () => { /* the server is gone; its exit is reported */ });
     child.stdout.on("data", (d) => process.stdout.write(`[oats-desktop-server] ${d}`));
     child.stderr.on("data", (d) => process.stderr.write(`[oats-desktop-server] ${d}`));
-    return child;
+    child.on("error", (e) => console.error(`oats-desktop: the backend server could not be started: ${e.code || e.message}`));
+    return spawned;
   },
   // trust state belongs to the outgoing server — stale entries must never
   // validate ?ws= or decideAdd; repopulated only from the current server.
@@ -190,10 +198,15 @@ function noteServed(list) {
 const advertisedNow = () => (allowedWs.size ? allowedWs : advertisedBefore);
 
 async function panelWorkspaces() {
+  // The generation the read is made under; what it read is committed only while that generation is
+  // still the current, ready one (a replacement or an exit in between commits nothing).
+  const lease = serverHost.lease(), epoch = serverEpoch;
+  const current = () => lease !== null && serverHost.lease() === lease && lease.ready && !lease.revoked && epoch === serverEpoch;
   try {
-    const r = await fetch(`${base()}/api/panel`, { signal: AbortSignal.timeout(1500) });
+    const r = await backendFetch("/api/panel", { signal: AbortSignal.timeout(1500) });
     if (!r.ok) return null;
     const d = await r.json();
+    if (!current()) return null;
     const list = d.workspaces || [];
     allowedWs = servedSelectors(list);
     noteServed(list);
@@ -207,69 +220,48 @@ function localServerIdentity() {
   return { capability: m.name, version: m.version };
 }
 
-/** Probe GET /api/version on the current port; null on network failure. */
+/** Probe GET /api/version on the current server; null on a transport failure (none ready yet included). */
 async function probeVersion() {
   try {
-    const r = await fetch(`${base()}/api/version`, { signal: AbortSignal.timeout(1500) });
+    const r = await backendFetch("/api/version", { signal: AbortSignal.timeout(1500) });
     let body = null; try { body = await r.json(); } catch { /* non-JSON */ }
     return { ok: r.ok, status: r.status, body };
   } catch { return null; }
 }
 
-/** The backend must cover every restored workspace before it can be reused. */
+/** The workspace the started server serves for the restored set (null when it covers none). */
 function matchWorkspace(workspaces) {
   return matchWorkspaceDirs(workspaceDirs, workspaces);
 }
 
-async function freePort(from) {
-  const { createServer } = await import("node:net");
-  for (let p = from; p < from + 50; p++) {
-    const ok = await new Promise((res) => {
-      const s = createServer();
-      s.once("error", () => res(false));
-      s.listen(p, "127.0.0.1", () => s.close(() => res(true)));
-    });
-    if (ok) return p;
-  }
-  throw new Error(`no free port in ${from}..${from + 49}`);
+const replaceServer = (dirs) => serverHost.replace([...dirs]);
+
+/** Until the server is ready, or `ms`: false when it ended before it was ready or took longer. */
+async function serverReady(ms) {
+  let timer;
+  try {
+    return await Promise.race([serverHost.whenReady().then(() => true, () => false),
+      new Promise((ok) => { timer = setTimeout(() => ok(false), ms); })]);
+  } finally { clearTimeout(timer); }
 }
 
-// Port-committing adapter (server-host.mjs): the production wiring between
-// selection and the host — commits the module port before the child starts.
-const serverAdapter = createServerAdapter({
-  host: serverHost,
-  getPort: () => port,
-  setPort: (p) => { port = p; },
-});
-const spawnServer = (onPort, dirs = workspaceDirs) => serverAdapter.spawnServer(onPort, dirs);
-const replaceServer = (dirs) => serverAdapter.replaceServer(dirs);
-
+/** Start this app's own server, always, and wait until it is ready and covers the restored set. */
 async function ensureServer() {
-  // ensureServerOnPort (server-compat.mjs) is the testable seam for the
-  // whole step: reuse only a server that covers OUR workspace AND identifies
-  // as this checkout via /api/version; otherwise leave it alone and spawn
-  // our own — on the next free port when the current one is occupied.
-  const r = await ensureServerOnPort({
-    panelWorkspaces, probeVersion, matchWorkspace, local: localServerIdentity(),
-    port, freePort: (from) => freePort(from), spawnServer: (p) => spawnServer(p),
-    log: (m) => console.log(`oats-desktop: ${m}`),
-  });
-  port = r.port;
-  if (!r.spawned) { wsId = r.wsId; return { spawned: false }; }
-  // wait for the server to come up (max ~10s) and verify its workspace
+  serverHost.start([...workspaceDirs]);
+  if (!(await serverReady(30_000))) throw new Error("the backend server did not become ready (see its output above)");
   for (let i = 0; i < 40; i++) {
     const ws = await panelWorkspaces();
     if (ws) {
       // With no deployment to serve there is nothing to cover: the window chooses (#518).
-      if (!workspaceDirs.length) return { spawned: true };
+      if (!workspaceDirs.length) return;
       const id = matchWorkspace(ws);
-      if (!id) throw new Error(`spawned backend serves ${ws.map((w) => w.id).join(", ")} — does not cover ${workspaceDirs.join(", ")}`);
+      if (!id) throw new Error(`the backend server serves ${ws.map((w) => w.id).join(", ")} — does not cover ${workspaceDirs.join(", ")}`);
       wsId = id;
-      return { spawned: true };
+      return;
     }
     await new Promise((ok) => setTimeout(ok, 250));
   }
-  throw new Error("spawned backend server but it never answered /api/panel");
+  throw new Error("the backend server never answered /api/panel");
 }
 
 // ---- IPC hardening -------------------------------------------------------
@@ -346,7 +338,7 @@ const wsValidate = (p) => validateWorkspace(p, {
 
 // This computer's deployments list (#1390): every call a kernel verb, through the server's accepted CLI
 // (the binary every other kernel verb uses). Gated on its deployments-list feature; nothing falls back.
-const readServedCli = async () => (await fetch(`${base()}/api/cli`, { signal: AbortSignal.timeout(10_000) })).json();
+const readServedCli = async () => (await backendFetch("/api/cli", { signal: AbortSignal.timeout(10_000) })).json();
 /** Main's own runs of the CLI for an effect, refused above the tested bound before anything runs
  * (packages/client/above-tested.mjs, oats-project/oats#1879): its `main <what>` operation, or null. Each
  * refusal is in the shape its caller already reads, a reason with a code and a message. */
@@ -366,6 +358,13 @@ async function deploymentList(options) {
 }
 // Adds (their listing included) and Removes, one after the other (createSerialQueue).
 const servingQueue = createSerialQueue();
+// The socket file of the running server was removed under it (a temp cleaner): one replacement, in
+// line with the adds; a second loss within a minute of it is a failed start (backend-client.mjs).
+const socketLoss = createSocketLossRecovery({
+  replace: () => servingQueue(() => replaceServer(workspaceDirs)),
+  fail: (message) => { console.error(`oats-desktop: ${message}`); serverHost.stop(); },
+  log: (message) => console.error(`oats-desktop: ${message}`),
+});
 /** At startup, once the CLI is known (#1390): the Desktop's own lists imported once, then the launch's
  * own deployment (`--dir`, or a cwd that is one) listed. Both best effort, both only logged: no window
  * owns them. */
@@ -427,7 +426,7 @@ const executeAdd = createAddExecutor({
   replaceServer,
   refreshAdvertised: async () => (await panelWorkspaces()) !== null, // true only when the server ANSWERED
   probeVersion,
-  // any 2xx is NOT enough during a same-port race — identity must match
+  // the replacement must identify as this checkout's bundled server
   isCompatible: (v) => serverCompatible(v, localServerIdentity()).compatible,
   advertises: async (id) => { await panelWorkspaces(); return allowedWs.has(id); },
 });
@@ -565,21 +564,24 @@ ipcMain.handle("workspace:pick", async (e) => {
 });
 
 // ---- IPC: CLI binary picker (Choose oats…) --------------------------------
-// Native file picker for the degradation card. Persistence lives here (the
-// main process owns userData); the picked path goes to the server via the
-// renderer's POST /api/cli/reprobe {bin} — the server re-validates with the
-// full probe, so a bad pick degrades with diagnostics, never trusts a path.
+// Native file picker for the degradation card. The CLI binary is chosen only
+// through this dialog: main writes the pick to the choice file (userData),
+// whose path the server was started with (--cli-choice) and reads at every
+// probe; the renderer then asks for a reprobe, whose body names nothing. The
+// server re-validates with the full probe, so a bad pick degrades with
+// diagnostics, never trusts a path.
 const CLI_CHOICE_FILE = () => join(app.getPath("userData"), "oats-cli-choice.json");
 function readCliChoice() {
   try { const p = JSON.parse(readFileSync(CLI_CHOICE_FILE(), "utf8")).bin; return typeof p === "string" && p.startsWith("/") ? p : null; }
   catch { return null; }
 }
+/** Atomically (a temporary file renamed in the same directory); false when it could not be written. */
 function writeCliChoice(bin) {
-  try { writeFileSync(CLI_CHOICE_FILE(), JSON.stringify({ bin })); } catch { /* best-effort */ }
+  try { writeJsonAtomic(CLI_CHOICE_FILE(), { bin }); return true; } catch { return false; }
 }
 // The CLI the backend resolved, for the picker's starting directory only.
 async function resolvedCliBin() {
-  try { const bin = (await (await fetch(`${base()}/api/cli`, { signal: AbortSignal.timeout(1500) })).json()).bin; return typeof bin === "string" ? bin : null; }
+  try { const bin = (await (await backendFetch("/api/cli", { signal: AbortSignal.timeout(1500) })).json()).bin; return typeof bin === "string" ? bin : null; }
   catch { return null; }
 }
 ipcMain.handle("cli:pick", async (e) => {
@@ -598,14 +600,16 @@ ipcMain.handle("cli:pick", async (e) => {
     message: "Select the oats executable (e.g. from `command -v oats`)",
   });
   if (r.canceled || !r.filePaths?.[0]) return { path: null };
-  writeCliChoice(r.filePaths[0]);           // persisted — top discovery priority next launch
+  // The choice file the server reads at every probe; the renderer's reprobe follows. A pick that could
+  // not be written is a failed choice (the card says so), never a path sent anywhere else.
+  if (!writeCliChoice(r.filePaths[0])) throw new Error("the chosen oats binary could not be saved");
   return { path: r.filePaths[0] };
 });
 
 // ---- IPC: API proxy -----------------------------------------------------
 // The roster/agents read of a deployment this Desktop knows (and that is still one) but the
 // server does not advertise: refused with E_WORKSPACE_NOT_SERVED, never fetched (api-url.mjs).
-const unservedRefusal = createUnservedRefusal({ base, body: workspaceNotServed,
+const unservedRefusal = createUnservedRefusal({ body: workspaceNotServed,
   state: () => ({ allowedWs: allowedWs.size ? allowedWs : advertisedBefore, known: (path) => knownDirs.has(path) && !!wsValidate(path) }) });
 
 // The renderer never talks to the network directly; ctx.api() lands here.
@@ -629,19 +633,19 @@ ipcMain.handle("api", async (e, pathname, opts) => {
   // server advertises from panel replies, so it re-reads that first: a view observed since (its
   // identity is read after the server starts) is served, and a refused window would never bring the
   // reply that says so.
-  let notServed = windowRefusal(pathname, base(), windowWs, advertisedNow());
-  if (notServed) { await panelWorkspaces(); notServed = windowRefusal(pathname, base(), windowWs, advertisedNow()); }
+  let notServed = windowRefusal(pathname, windowWs, advertisedNow());
+  if (notServed) { await panelWorkspaces(); notServed = windowRefusal(pathname, windowWs, advertisedNow()); }
   // The served choices go with it: the window finds the view that holds its deployments now (#482's
   // rehome) without another read, which would name the same unserved workspace.
   if (notServed) return { ok: false, status: 404, body: { ...workspaceNotServed(notServed), workspaces: servedList } };
   // One normalized classifier owns every specialized routing decision;
   // aliases cannot bypass frame/epoch guards, deadlines or typed failures.
-  const route = classifyApiRoute(pathname, base());
-  const connection = () => ({ base: base(), wsId: windowWs ?? wsId, allowedWs, bound: windowWs !== null, epoch: serverEpoch, transition: serverHost.inTransition() });
-  if (route === 'spawn-apply') return proxySpawnApply(e, pathname, opts, { rendererURL: RENDERER_URL, connection });
-  if (route === 'spawn-preview') return proxySpawnPreview(e, pathname, opts, { rendererURL: RENDERER_URL, connection });
-  if (route === 'instance-events') return proxyInstanceEvents(e, pathname, opts, { rendererURL: RENDERER_URL, connection });
-  if (route === 'readiness') return proxyReadiness(e, pathname, opts, { rendererURL: RENDERER_URL, connection });
+  const route = classifyApiRoute(pathname);
+  const connection = () => ({ wsId: windowWs ?? wsId, allowedWs, bound: windowWs !== null, epoch: serverEpoch, transition: serverHost.inTransition() });
+  if (route === 'spawn-apply') return proxySpawnApply(e, pathname, opts, { rendererURL: RENDERER_URL, connection, fetch: backendFetch });
+  if (route === 'spawn-preview') return proxySpawnPreview(e, pathname, opts, { rendererURL: RENDERER_URL, connection, fetch: backendFetch });
+  if (route === 'instance-events') return proxyInstanceEvents(e, pathname, opts, { rendererURL: RENDERER_URL, connection, fetch: backendFetch });
+  if (route === 'readiness') return proxyReadiness(e, pathname, opts, { rendererURL: RENDERER_URL, connection, fetch: backendFetch });
   const lifecycle = route === 'lifecycle';
   const forgeRequest = lifecycle || route === 'forge';
   const failure = lifecycle ? (code, extra) => lifecycleFailure(code, DESKTOP_TERMS, extra) : forgeFailure;
@@ -660,8 +664,8 @@ ipcMain.handle("api", async (e, pathname, opts) => {
   // apiUrl rejects off-origin resolution (e.g. "//attacker/x"), and pins
   // the window's workspace (else the verified one) on scoped endpoints
   // unless the caller selects a workspace this server actually advertises
-  // (the views' ws switcher).
-  const url = apiUrl(pathname, base(), windowWs ?? wsId, allowedWs, { bound: windowWs !== null });
+  // (the views' ws switcher). backendFetch sends its path to main's own server.
+  const url = apiUrl(pathname, windowWs ?? wsId, allowedWs, { bound: windowWs !== null });
   const epoch = serverHost.inTransition() ? null : serverEpoch;
   // apiInit forwards pre-serialized (string) bodies and headers unchanged —
   // views serialize once in common.mjs::postJson — and serializes object
@@ -684,7 +688,7 @@ ipcMain.handle("api", async (e, pathname, opts) => {
     : route === 'automations' ? 90_000 : route === 'instance-git' || route === 'instance-color' || route === 'instance-background' ? 50_000 : route === 'machine-connect' ? 980_000 : route === 'machines' ? 130_000
     : route === 'instance-start' || route === 'remote-roster' ? 70_000 : 20_000);
   const init = { ...(forge?.init ?? apiInit(opts)), signal: AbortSignal.timeout(timeout) };
-  const r = await fetch(url, init);
+  const r = await backendFetch(requestPath(url), init);
   const text = await r.text();
   if ((forge || lifecycle) && !ownsForgeFrame()) return { ok: false, status: 403, body: forbidden() };
   let json; try { json = JSON.parse(text); } catch { json = lifecycle ? failure(mutation ? 'E_OUTCOME_UNKNOWN' : 'E_CLI_PROTOCOL', { status: mutation ? 'unknown' : 'unavailable' })
@@ -723,7 +727,7 @@ const forgeAuth = createForgeAuthBroker({
     const serverLease = serverEpoch, readEpoch = currentForgeEpoch();
     if (serverHost.inTransition()) return forgeFailure('E_CONNECTION_CHANGED');
     try {
-      const response = await fetch(`${base()}/api/forge-connections`, {
+      const response = await backendFetch("/api/forge-connections", {
         method: 'POST', headers: { 'content-type': 'application/json', [FORGE_EPOCH_HEADER]: readEpoch },
         body: JSON.stringify({ hostRef: connectionRef }), signal: AbortSignal.timeout(25_000),
       });
@@ -764,7 +768,7 @@ installForgeAuthHandlers({ ipc: ipcMain, broker: forgeAuth, rendererUrl: RENDERE
 // ---- IPC: integrated terminal (leased linked-window viewers) ------------
 // The shared broker owns process-wide reservations, document principals,
 // current-owner output and confirmed cleanup. No numeric-ID IPC lane.
-const terminalContext = () => serverHost.inTransition() ? null : `${serverEpoch}:${base()}`;
+const terminalContext = () => serverHost.inTransition() ? null : `${serverEpoch}:${serverHost.lease()?.generation ?? 0}`;
 // A terminal opens only from a frame whose hash is the workspace main binds its window to (holdsHash), or from
 // one with no hash that is still adopting its first workspace: a window a take-over moved its workspace away
 // from, or one with no workspace (choosers), opens none.
@@ -775,7 +779,7 @@ const terminalFrame = (e) => {
   return typeof id === "string" && holdsHash(win, id);
 };
 const terminalBroker = createTerminalOwnerBroker({ rendererUrl: RENDERER_URL, context: terminalContext, admitFrame: terminalFrame,
-  io: createTerminalIo({ base, context: terminalContext,
+  io: createTerminalIo({ fetch: backendFetch, context: terminalContext,
     attachmentDirectory: () => join(app.getPath('userData'), 'attachments'),
     spawnPty: (...args) => pty.spawn(...args), execFileSync, sweep: sweepOrphanViewers,
   }),
@@ -1133,6 +1137,8 @@ const primaryInstance = startSingleInstance(app, (argv, workingDirectory) => {
   // a moment (a volume not mounted yet) stays saved, served again once it is back (#472).
   const startupSet = startupOpenSet(saved, workspaceDirs, wsValidate);
   openDirs = startupSet.open;
+  // Socket directories a crashed Desktop left behind (backend-socket.mjs): best effort, never ours.
+  void sweepStaleSocketDirs(socketBase()).catch(() => { /* best effort */ });
   try {
     await ensureServer();
     // Written only when the launch opened a deployment the saved set lacks.

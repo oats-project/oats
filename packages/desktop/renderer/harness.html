@@ -11,10 +11,11 @@
      dompurify straight from node_modules (browser-ready single-file ESM,
      served by harness-server's /node_modules route).
 
-     Usage:
-       node packages/desktop/server/oats-web.mjs start --port 4821 --dir <ws>
-       node packages/desktop/renderer/harness-server.mjs --port 4899 --api http://127.0.0.1:4821
-       open http://127.0.0.1:4899/
+     Usage (a private 0700 directory for the socket, and a 0600 token file of
+     43 base64url characters, outside packages/desktop and packages/client):
+       node packages/desktop/server/oats-web.mjs start --socket <dir>/s --token-file <file> --dir <ws>
+       node packages/desktop/renderer/harness-server.mjs --port 4899 --api-socket <dir>/s --token-file <file>
+       open the URL the harness prints (http://127.0.0.1:4899/harness.html#t=<its own token>)
 -->
 <head>
 <meta charset="utf-8">
@@ -57,8 +58,10 @@
 </header>
 <div id="host"></div>
 <script type="module">
-  const API = new URLSearchParams(location.search).get("api") || ""; // "" = same-origin (harness-server proxy)
-  document.getElementById("note").textContent = `api ${API || "same-origin"} · openTerminal is a stub`;
+  // The harness server's own token (the URL it prints): sent with every API request, which it proxies
+  // to the backend over its socket. The page never holds the backend's credential.
+  const HARNESS_TOKEN = new URLSearchParams(location.hash.slice(1)).get("t") || "";
+  document.getElementById("note").textContent = `api via harness-server${HARNESS_TOKEN ? "" : " (no token: open the URL it printed)"} · openTerminal is a stub`;
 
   const savedTheme = localStorage.getItem("oats.desktop.theme");
   const sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -70,11 +73,11 @@
   };
 
   /* contract ctx — the shell provides the real one; the harness stubs the
-     cross-view hooks and points api() at the backend server. openFile routes
+     cross-view hooks and points api() at the harness server's proxy. openFile routes
      into the markdown view (its real cross-view behavior); openTerminal stays
      a stub (shell-owned terminal). */
   const ctx = {
-    api: (pathname, opts) => fetch(API + pathname, opts),
+    api: (pathname, opts = {}) => fetch(pathname, { ...opts, headers: { ...(opts.headers || {}), "x-oats-harness-token": HARNESS_TOKEN } }),
     openFile: (path) => show("markdown", { path }),
     openTerminal: (instance) => alert(`ctx.openTerminal (shell hook, tui-dev's view)\n${instance}`),
   };
