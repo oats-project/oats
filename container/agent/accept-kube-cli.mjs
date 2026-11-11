@@ -111,15 +111,17 @@ async function shutdown(kube, pod, expectedUID) {
   const closed = new Promise((resolve) => { log.once("error", () => resolve(false)); log.once("close", (code) => resolve(code === 0)); });
   let ready;
   const started = new Promise((resolve) => { ready = resolve; });
-  let tail = "", ended = false, signal = false;
+  let tail = "", ended = false, signal = false, stopFailed = false;
   log.stdout.on("data", (data) => {
     // Receiving the stream proves attachment even after the boot line has rotated away.
     if (data.length) ready(true);
     tail += data;
     const lines = tail.split("\n"); tail = lines.pop();
     for (const line of lines) {
-      if (line === "oats host run: SIGTERM: ticking ended") { signal = true; report("stop", line); }
-      if (signal && line === "oats host run: ended") { ended = true; report("stop", line); }
+      if (line === "oats host run: SIGTERM: ticking ended") signal = true;
+      if (signal && line.startsWith("oats host run:")) report("stop", line);
+      if (signal && /^oats host run: (could not stop |listing failed\b)/.test(line)) stopFailed = true;
+      if (signal && line === "oats host run: ended") ended = true;
     }
   });
   let timer;
@@ -134,6 +136,7 @@ async function shutdown(kube, pod, expectedUID) {
     const success = await Promise.race([closed, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("host run did not stop within 45 seconds")), 45_000); })]);
     assert.ok(success, "shutdown log stream failed");
     assert.ok(signal && ended, "missing ordered SIGTERM and ended events");
+    assert.ok(!stopFailed, "host run reported a shutdown failure");
     assert.ok(Date.now() - start <= 45_000, "shutdown exceeded grace period");
     report("stop", `PASS ordered host shutdown in ${Date.now() - start}ms (45s grace); StatefulSet may replace the deleted pod`);
   } finally { clearTimeout(timer); log.kill(); }

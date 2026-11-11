@@ -235,7 +235,14 @@ if(a[0]==='get'){
  console.log('Forwarding from 127.0.0.1:22222 -> 2222'); setInterval(()=>{},10000);
 }else if(a[0]==='logs'){
  setTimeout(()=>{
-  const watcher=fs.watch(root,()=>{if(fs.existsSync(path.join(root,'stop'))){clearTimeout(fail);console.log('oats host run: SIGTERM: ticking ended');console.log('oats host run: ended');watcher.close();}});
+  const watcher=fs.watch(root,()=>{if(fs.existsSync(path.join(root,'stop'))){
+   clearTimeout(fail);console.log('oats host run: SIGTERM: ticking ended');
+   console.log('oats host run: stopping 1 running instance, each given 20 s');
+   if(process.env.O1B_FIXTURE_STOP_FAILURE==='stop')console.log('oats host run: could not stop /fixture (E_FIXTURE): fixture stop failed');
+   else if(process.env.O1B_FIXTURE_STOP_FAILURE==='listing')console.log('oats host run: listing failed (E_FIXTURE): no instance is stopped');
+   else console.log('oats host run: stopped /fixture');
+   console.log('oats host run: ended');watcher.close();
+  }});
   const fail=setTimeout(()=>{watcher.close();process.exit(6);},3000);
   fs.writeFileSync(path.join(root,'ready'),'ready');
   console.log('sshd: periodic probe connection closed (boot line rotated away)');
@@ -281,6 +288,8 @@ else process.exit(2);
     assert.match(r.stdout, /PASS admitted pod/);
     assert.match(r.stdout, /SIGTERM: ticking ended/);
     assert.match(r.stdout, /PASS ordered host shutdown/);
+    assert.match(r.stdout, /oats host run: stopping 1 running instance/);
+    assert.match(r.stdout, /oats host run: stopped \/fixture/);
     assert.match(r.stdout, /PASS replacement pod/);
     assert.equal(readFileSync(join(dir, "replacement-reads"), "utf8"), "3", "old Ready UID and new Pending UID cannot satisfy replacement readiness");
     const sshCalls = readFileSync(join(dir, "ssh-calls"), "utf8").trim().split("\n").map(JSON.parse);
@@ -314,6 +323,14 @@ else process.exit(2);
       assert.notEqual(held.status, 0, `a ${found} lock must not prove a running holder`);
       assert.match(held.stderr, /entrypoint host run must already hold its lock/);
       assert.doesNotMatch(held.stdout, /entrypoint host run holds its lock/);
+    }
+    for (const failure of ["stop", "listing"]) {
+      for (const file of ["stop", "ready", "known-host-path", "replacement-reads"]) rmSync(join(dir, file), { force: true });
+      const stopped = spawnSync("sh", [script, "--values", join(dir, "values.json"), "--namespace", "proof", "--release", "proof", "--context", "fixture-context", "--pod", pod.metadata.name, "--ssh-key", join(dir, "key"), "--delete-pod"], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, O1B_FIXTURE_STOP_FAILURE: failure }, timeout: 10_000 });
+      assert.notEqual(stopped.status, 0, `a ${failure} failure must fail shutdown acceptance`);
+      assert.match(stopped.stderr, /host run reported a shutdown failure/);
+      assert.match(stopped.stdout, failure === "stop" ? /could not stop \/fixture/ : /listing failed/);
+      assert.doesNotMatch(stopped.stdout, /PASS ordered host shutdown|PASS replacement pod/);
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

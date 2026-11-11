@@ -277,8 +277,9 @@ and `pods/log` for the optional shutdown proof, plus `delete` on pods for
 pod exec rights. To prove shutdown on a **disposable acceptance deployment**,
 append `--delete-pod`. This deletes the named pod, records the ordered
 `SIGTERM: ticking ended` and `ended` host events within 45 seconds, and
-reports elapsed time. It then waits up to 120 seconds for a replacement
-pod with a new UID to become Ready, checks its admission settings again,
+reports elapsed time. It records intervening host-run events and fails if
+listing or an instance stop fails. It then waits up to 120 seconds for a
+replacement pod with a new UID to become Ready, checks its admission settings again,
 and repeats the SSH runtime and host-lock probes. The persisted SSH host
 key must still match and have mode 0600. Run this proof on storage that
 honors fsGroup ownership management; a local-path volume that skips that
