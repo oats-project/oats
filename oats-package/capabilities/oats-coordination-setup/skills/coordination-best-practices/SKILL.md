@@ -147,8 +147,8 @@ the lead asks them directly. Their experts and maintainers are started through
 their dispatcher, or by them. Disputes between people are theirs.
 
 **Knowledge.** A node per area; split knowledge before souls. Conventions
-change in the PR that changes the code; lessons and decisions are harvested at
-checkpoints. The code is the truth about code. Knowledge an upstream owns
+change in the PR that changes the code; lessons and decisions are proposed at
+knowledge checkpoints. The code is the truth about code. Knowledge an upstream owns
 stays upstream: a skill copied from a source used outside OATS stays that
 source, and the organisation's node holds only its own decisions and lessons
 about it.

@@ -112,10 +112,10 @@ running.
 ### A trigger, field by field
 
 ```json
-{ "id": "okf-harvest-review", "enabled": true, "kind": "trigger",
+{ "id": "okf-proposal-review", "enabled": true, "kind": "trigger",
   "on": { "source": "github.pull_request", "repo": "github.com/acme/knowledge",
           "events": ["opened", "reopened", "ready_for_review"],
-          "labels": ["okf-harvest"], "base": "main", "poll": "2m" },
+          "labels": ["okf-proposal"], "base": "main", "poll": "2m" },
   "spawn": { "soul": "oats.okf/knowledge-maintainer", "purpose": "review-pr-{number}",
              "task": "Review knowledge-base PR {repo}#{number}.",
              "harness": "claude", "model": "opus" },
@@ -201,8 +201,8 @@ contract is `docs/schedules.md`, "Workspace triggers and schedules".
 # <member repo>/oats-triggers/<id>.yaml
 kind: oats-trigger
 schemaVersion: 1
-description: Review every harvest PR on the knowledge base
-from: oats.okf:harvest-review          # a package template, then its parameters; or on/spawn/concurrency in full
+description: Review every knowledge proposal PR on the knowledge base
+from: oats.okf:proposal-review         # a package template, then its parameters; or on/spawn/concurrency in full
 set: { repo: github.com/<org>/<repo> }
 runsOn: <host name>                    # a machine's oats-local.yaml host.name
 owner: github.com/<account>            # the account it acts as
