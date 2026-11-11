@@ -6,11 +6,11 @@ host that comes from it.
 
 ## Upgrading to the latest version
 
-The latest version is **OATS 0.69.14** ([release notes](release-notes/v0.69.14.md)).
-The 0.69.14 Desktop accepts OATS CLIs `>=0.26.0 <0.70.0`.
+The latest version is **OATS 0.69.15** ([release notes](release-notes/v0.69.15.md)).
+The 0.69.15 Desktop accepts OATS CLIs `>=0.26.0 <0.70.0`.
 
 **First, read the `## Upgrade` section of every release after yours, up to
-0.69.14,** in the [release notes](release-notes/): it says what to do before
+0.69.15,** in the [release notes](release-notes/): it says what to do before
 the CLI changes, and what else must change with it (the Desktop, another
 tool, a package pin). [Coming from an older version](#coming-from-an-older-version)
 names the releases that ask for more than the steps below. `oats version`
@@ -19,8 +19,8 @@ prints the version you have.
 Then, on each host:
 
 ```sh
-                                     # 0. where the Desktop is installed: Desktop 0.69.14 first
-npm install -g @awebai/oats@0.69.14  # 1. the CLI
+                                     # 0. where the Desktop is installed: Desktop 0.69.15 first
+npm install -g @awebai/oats@0.69.15  # 1. the CLI
 oats update                          # 2. in each deployment: the plan, then it asks before it runs
 oats doctor                          # 3. in the same deployment
 ```
@@ -204,6 +204,10 @@ of the Desktop and the CLI, and an optional package pin. A change a script
 must follow is in its release's Upgrade section whether or not it is listed
 here.
 
+- **[0.69.15](release-notes/v0.69.15.md#upgrade):** Node 22.5.0 or later
+  before the CLI; on a shared host, `chmod -R go-rwx` each turn-record root;
+  a record root is written from one machine at a time; release a schedule
+  slot an earlier OATS left without its record (`oats doctor` lists it).
 - **[0.69.14](release-notes/v0.69.14.md#upgrade):** 0.69.13 was tagged but
   never published, so its steps (below) are this release's; the remaining
   state-changing commands refuse a flag they do not define.
