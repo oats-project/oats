@@ -678,7 +678,7 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
       const confirm = el(doc, 'div', null, 'ct-confirm');
       confirm.append(el(doc, 'p', `Make ${team.label} the default team on this computer? Running instances keep their current default team until they are respawned.`));
       const buttons = el(doc, 'div', null, 'ct-actions');
-      buttons.append(button('Make default', 'primary', () => run({ action: 'default', label: team.label }, { label: team.label }), { key: 'team:confirm' }),
+      buttons.append(holdControl(button('Make default', 'primary', () => run({ action: 'default', label: team.label }, { label: team.label }), { key: 'team:confirm' }), TEAM_WRITE),
         button('Cancel', '', () => { confirming = null; render(); focusIn(`[data-team="${team.label}"] .ct-head .ct-actions button`, root()); }, { key: 'team:cancel' }));
       confirm.append(buttons); card.append(confirm);
     }

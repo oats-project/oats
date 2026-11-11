@@ -286,6 +286,37 @@ test('#1879: a reprobe above the tested bound holds every team write back with t
   assert.equal(u.q('.ct-form'), form);
 });
 
+test('#1879: an open Make default confirmation follows a reprobe: held back above the tested bound, its click sends nothing, Cancel stays usable; given back within it', async t => {
+  const cs = await import('../renderer/views/cli-status.mjs');
+  const cli = (extra = {}) => ({ ok: true, bin: '/oats', version: '0.70.1', source: 'path', required: { desktopApi: 1, range: '>=0.26.0, tested through 0.69' }, tried: [], features: [], ...extra });
+  let probe = cli({ version: '0.69.25' });
+  const cliCtx = { api: async () => probe };
+  await cs.refreshCli(cliCtx);
+  t.after(() => cs.resetCliStateForTests());
+  const u = await mount(t, () => mapped());
+  await u.click(u.act('engineering', 'Make default'));
+  const confirm = u.row('engineering').querySelector('.ct-confirm');
+  const primary = () => confirm.querySelector('.primary'), cancel = () => [...confirm.querySelectorAll('.ct-act')].find(b => b.textContent === 'Cancel');
+  assert.deepEqual([primary().disabled, primary().title], [false, ''], 'within the bound: the confirmation is on');
+
+  probe = cli({ aboveTested: true, testedThrough: '0.69' });
+  await cs.refreshCli(cliCtx); await tick();
+  const notice = cs.cliHeldBack('POST /api/workspace-teams add');
+  assert.match(notice, /^This Desktop was tested with oats CLIs up to 0\.69; the installed CLI is 0\.70\.1\. /);
+  assert.equal(u.row('engineering').querySelector('.ct-confirm'), confirm, 'the open confirmation is kept');
+  assert.deepEqual([primary().disabled, primary().title], [true, notice], 'held back, with no repaint');
+  const calls = u.calls.length;
+  await u.click(primary());
+  assert.equal(u.calls.length, calls, 'a held-back confirmation sends nothing');
+  assert.equal(cancel().disabled, false, 'Cancel stays usable');
+
+  probe = cli({ version: '0.69.25' });
+  await cs.refreshCli(cliCtx); await tick();
+  assert.deepEqual([primary().disabled, primary().title], [false, ''], 'given back within the bound');
+  await u.click(cancel());
+  assert.equal(u.row('engineering').querySelector('.ct-confirm'), null, 'and Cancel closes it');
+});
+
 test('#1879: after disposal a CLI change touches the team page no more', async t => {
   const cs = await import('../renderer/views/cli-status.mjs');
   const cli = (extra = {}) => ({ ok: true, bin: '/oats', version: '0.70.1', source: 'path', required: { desktopApi: 1, range: '>=0.26.0, tested through 0.69' }, tried: [], features: [], ...extra });
