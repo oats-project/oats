@@ -69,6 +69,9 @@ function validateEnvelope(value) {
  * the kernel's one resolver. No winner is selected here. */
 export function normalizeKnowledgeDeclaration(envelope,{origins={},origin=null,pointer='/knowledge/payload'}={}) {
   const payload=validateEnvelope(envelope);
+  // okf 6.0: the portable payload stays owner/stores/reads/owns (okf.json version 1);
+  // a subjects declaration (version 2) is read from okf.json through the bindings-file setting.
+  if(obj(payload) && Object.hasOwn(payload,'subjects')) fail('E_CONFIG','the portable knowledge binding (oats.okf.locations@1) carries okf.json version 1 owner/owns/reads only; a version-2 subjects declaration is read from the soul\'s okf.json through the bindings-file setting (oats.okf 6.0)');
   keys(payload,['owner','stores','reads','owns'],['owner','stores','reads','owns'],'OKF knowledge payload');
   const owner=identifier(payload.owner),stores={},requirements=[],candidates=[];
   if(!obj(payload.stores)) fail('E_CONFIG','knowledge stores must be an object');

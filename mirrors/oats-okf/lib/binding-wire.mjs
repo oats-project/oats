@@ -13,7 +13,7 @@ import {
   renderKnowledgeRuntime,
   sameJson,
 } from './portable-binding.mjs';
-import { declaration as soulDeclaration, loadBindings, validateBindings, validateDeclaration, resolveNodes } from './config.mjs';
+import { declaration as soulDeclaration, loadBindings, validateBindings, validateDeclaration, declarationFile, resolveNodes, resolveSubjects } from './config.mjs';
 import { gitEnv, validateBase } from './stores.mjs';
 import { acceptedCommit, cacheDir, usableCache, verdict } from './consult.mjs';
 import { legacySettings, withoutDefaults, REMOVED_TEMPLATE } from './legacy-settings.mjs';
@@ -29,7 +29,7 @@ const wireError=code=>{throw Object.assign(new Error(code),{wireCode:code});};
 // Private diagnostic marker and closed literal vocabulary. Never serialize a
 // caught exception's message, supplied value, path, alias or unknown key.
 const settingDiagnostic=Symbol('runtime-setting-diagnostic');
-const V1_REMOVED='E_REMOVED: OKF binding payloadVersion 1 (harvest runtime/model) was removed in oats.okf 5.0; respawn to bind with oats.okf 5 (the harvester uses the kernel\'s own harness and model)';
+const V1_REMOVED='E_REMOVED: OKF binding payloadVersion 1 (harvest runtime/model) was removed in oats.okf 5.0; respawn to bind with oats.okf 5 (there is no harvest runtime or model)';
 const settingMessages=Object.freeze({
   'bindings-file:missing':'setting bindings-file is required (absolute host path)',
   'bindings-file:invalid':'setting bindings-file must be a normalized absolute host path',
@@ -125,7 +125,7 @@ function runtimeSettings(settings) {
   if(obj(settings)) {const removed=removedMessage(settings);if(removed) removedError(removed);}
   // A 4.x manifest default is dropped; `harvest` left can only be the soul's own opt-out (off).
   settings=withoutDefaults(settings);
-  keys(settings,['bindings-file','state-dir','harvest'],[], 'OKF settings');
+  keys(settings,['bindings-file','state-dir','screen-terms-file','harvest','publish'],[], 'OKF settings');
   const descriptorFile=settings['bindings-file'],stateDir=settings['state-dir'];
   for(const name of ['bindings-file','state-dir']) {
     if(settings[name]===undefined) settingError(`${name}:missing`);
@@ -388,7 +388,7 @@ async function checkPhase(req) {
   const probes=new Map(await Promise.all(gitBases.map(async ([alias,base])=>[alias,await lsRemote(base)])));
   for(const [alias,base] of Object.entries(bindings.bases)) {
     if(base.kind==='directory') {
-      try { accepted[alias]=validateBase(base.path,base).meta; }
+      try { const validated=validateBase(base.path,base,{reader:true});accepted[alias]={...validated.meta,subjects:validated.subjects}; }
       catch(error) { const out=checkError(error,'validate');problems.push(out.problem); }
       continue;
     }
@@ -403,7 +403,7 @@ async function checkPhase(req) {
     const ctx={alias,base,bindings,kind:'git',cache,commit,receipt:{base:alias,id:base.id,kind:'git',commit,fetchedAt:state.fetchedAt,stale:!!state.error,...(state.error?{reason:state.error}:{})}};
     try {
       const v=verdict(ctx,{fetchMissing:false,saveResult:false});
-      if(v.ok) accepted[alias]={nodes:v.nodes};
+      if(v.ok) accepted[alias]={nodes:v.nodes,subjects:v.subjects};
       else problems.push(problem('provider-not-qualified','base:not-validated'));
     } catch(error) {
       if(error.code==='E_BASE_UNAVAILABLE' && error.step==='read') {unresolved.push(alias);warnings.push(warning('cache-not-validated','cache-not-validated',{alias,cached:shortOid(commit)}));}
@@ -417,7 +417,7 @@ async function checkPhase(req) {
   // The soul's declared nodes resolve in the accepted bases it can read now
   // (by the bindings' own aliases; a base not cached yet is skipped above).
   const resolvable=ref=>!unresolved.includes(ref.split('/')[0]);
-  try { const decl=validateDeclaration(runtime.declaration);resolveNodes({...decl,owns:decl.owns.filter(resolvable),reads:decl.reads.filter(resolvable)},bindings,accepted); }
+  try { const decl=validateDeclaration(declarationFile(runtime.declaration));resolveNodes({...decl,owns:decl.owns.filter(resolvable),reads:decl.reads.filter(resolvable)},bindings,accepted);resolveSubjects(decl,bindings,accepted); }
   catch(error) { const out=checkError(error,'declaration');problems.push(out.problem); }
   const result={status:statusOf(problems),problems};
   if(warnings.length) result.warnings=warnings;

@@ -1,37 +1,67 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://oats.dev/schemas/okf-soul.schema.json",
-  "type": "object",
-  "required": [
-    "version",
-    "owner",
-    "owns",
-    "reads"
-  ],
-  "properties": {
-    "version": {
-      "const": 1
-    },
-    "owner": {
-      "type": "string",
-      "pattern": "^(?!(?:constructor|__proto__|prototype|toString|valueOf)$)[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}$"
-    },
-    "owns": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "pattern": "^(?!(?:constructor|__proto__|prototype|toString|valueOf)/)[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}/(?!(?:constructor|__proto__|prototype|toString|valueOf)$)[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}$"
+  "oneOf": [
+    {
+      "title": "version 1: nodes",
+      "description": "A soul declared by OKF nodes: its owner id, the base/node refs it owns and reads.",
+      "type": "object",
+      "required": [
+        "version",
+        "owner",
+        "owns",
+        "reads"
+      ],
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "owner": {
+          "type": "string",
+          "pattern": "^(?!(?:constructor|__proto__|prototype|toString|valueOf)$)[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}$"
+        },
+        "owns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!(?:constructor|__proto__|prototype|toString|valueOf)/)[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}/(?!(?:constructor|__proto__|prototype|toString|valueOf)$)[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}$"
+          },
+          "uniqueItems": true
+        },
+        "reads": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(?!(?:constructor|__proto__|prototype|toString|valueOf)/)[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}/(?!(?:constructor|__proto__|prototype|toString|valueOf)$)[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}$"
+          },
+          "uniqueItems": true
+        }
       },
-      "uniqueItems": true
+      "additionalProperties": false
     },
-    "reads": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "pattern": "^(?!(?:constructor|__proto__|prototype|toString|valueOf)/)[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}/(?!(?:constructor|__proto__|prototype|toString|valueOf)$)[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}$"
+    {
+      "title": "version 2: subjects (oats.okf 6.0)",
+      "description": "A soul declared by subjects on bases with the subject layout: no owner, owns or reads.",
+      "type": "object",
+      "required": [
+        "version",
+        "subjects"
+      ],
+      "properties": {
+        "version": {
+          "const": 2
+        },
+        "subjects": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^(system|workstream|project)/[a-z0-9][a-z0-9._-]*$"
+          }
+        }
       },
-      "uniqueItems": true
+      "additionalProperties": false
     }
-  },
-  "additionalProperties": false
+  ]
 }

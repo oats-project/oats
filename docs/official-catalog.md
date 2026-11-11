@@ -10,7 +10,7 @@ or workspace membership alone does not make a package official.
 | package | release | capabilities | package souls |
 |---|---|---|---|
 | `oats.framework` | `oats-framework/v1.23.0` (this repository) | `oats.core`, `oats.setup`, `oats.onboarding`, `oats.support`, `oats.knowledge-theory`, `oats.coordination-setup` | `knowledge-theory-expert`, `oats-setup-expert` |
-| `oats.okf` | `v5.8.0` | `oats.okf` (knowledge), `oats.okf-harvest`, `oats.okf-maintenance` | `knowledge-harvester`, `knowledge-maintainer` |
+| `oats.okf` | `v6.0.1` | `oats.okf` (knowledge), `oats.okf-harvest`, `oats.okf-maintenance` | `knowledge-harvester`, `knowledge-maintainer` |
 | `oats.aweb` | `v1.39.0` | `oats.aweb` (messaging), `oats.aweb-tasks` (tasks) | |
 | `oats.engineering` | `v1.18.0` (frozen: see Coordination templates) | `oats.engineering-expert`, `oats.developer`, `oats.code-review`, `oats.maintainer` | `code-reviewer` |
 | `oats.authoring` | `v1.0.3` | `oats.authoring` | |
@@ -64,7 +64,7 @@ aliases, a later decision once no workspace we know of pins it.
 ## Find and use packages
 
 - A workspace pins an official package by **bare version** in its
-  `packages:` map (`oats.okf: v5.8.0`); `oats sync` resolves it through the
+  `packages:` map (`oats.okf: v6.0.1`); `oats sync` resolves it through the
   catalog to an exact commit, fetches it, verifies its integrity and locks it.
   A package outside the catalog is written `git:<repo>@<ref>`. Pinning does
   not join a team or adopt the publisher's workspace. See

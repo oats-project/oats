@@ -7,7 +7,7 @@ description: >-
   and reject lists, the two-part test, one canonical home, supersession,
   human-accepted decisions, slow state and exclusions. Use when deciding
   whether instance knowledge is worth proposing at a checkpoint, when judging
-  a proposal, when reviewing a harvest PR, or when deciding whether a concept
+  a proposal, when reviewing a knowledge PR, or when deciding whether a concept
   should be merged, superseded or dropped. Not the oats.knowledge-theory
   capability for capability authors; not the capture craft
   (okf-instance-knowledge).
@@ -42,7 +42,7 @@ same repository. It is what we are building souls to accumulate.
 
 ### 3.2 The accept list
 
-A knowledge base holds these kinds of knowledge; the harvester promotes them and the maintainer accepts them. Each is illustrated so the
+A knowledge base holds these kinds of knowledge; the proposing instance promotes them and the maintainer accepts them. Each is illustrated so the
 category is unmistakable.
 
 1. **Decisions and their rationale.** What was chosen and why. *"Registration-time
@@ -113,7 +113,7 @@ A judge drops these, however well written.
 
 ### 3.4 The two-part test
 
-For every candidate the judge (the proposing agent, the harvester or the maintainer) asks:
+For every candidate the judge (the proposing agent or the maintainer) asks:
 
 1. **Would a future instance of this soul act differently for knowing it?**
 2. **Could it NOT have found this by reading the repository?**
@@ -152,7 +152,7 @@ Route every claim to ONE canonical concept; merge or supersede rather than
 copy. Consult the existing indexes first, across nodes as necessary.
 Repository-wide facts already authoritative in repository docs get pointers,
 not duplicates. A claim whose right home is a node the source does not own is
-dropped from that harvest with an explicit reason for the owner to review; it is
+dropped from that proposal with an explicit reason for the owner to review; it is
 never silently written into another node. There is no indefinite ownerless
 inbox queue.
 
@@ -187,7 +187,7 @@ cited.** A change that would supersede, contradict or rewrite one:
 - **A change citing no acceptance is closed**, and so is one whose GitHub
   record or relay does not confirm it: an agent alone does not overturn a human's
   decision. A change is never parked to wait for a human or for the
-  harvester.
+  proposer.
 
 An accepted change is an explicit supersession: the new concept names the old
 one, the old concept says it is superseded and links the new one, and the node
@@ -215,13 +215,17 @@ of a published source you cite is fine.
 Private evidence (a proposal, a note, a session) is not publication permission. Drop tool noise, task
 residue, code descriptions and duplicates. Do not quote third-party text just
 because it appears in a source record. Preserve verified, generalized
-conclusions only.
+conclusions only. In oats.okf 6 the proposing instance applies these
+exclusions to its own outgoing diff before it publishes, and the maintainer
+reads them again as the second reader; nobody else judges in between.
 
 ## Provenance
 
 Every promoted or merged concept cites where it came from: the proposal and
-the source notes it relied on (an oats.okf 4.x harvest cited the durable input
-id and the transcript turn ids). Provenance is what
+the source notes it relied on. The proposing instance writes that citation
+itself; its PR's `okf-proposal` provenance block names the source
+incarnation and hashes each note it read (an oats.okf 4.x harvest cited the
+durable input id and the transcript turn ids). Provenance is what
 lets a later judge (and a human) check the claim instead of trusting it. Do
 not put copied home paths, account details, machine state or secrets in
 reusable knowledge.
