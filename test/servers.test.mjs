@@ -188,7 +188,7 @@ test("oats server + --server: registry, check, remote spawn with a hostile task,
     assert.equal(sp.result.instance, "dev-probe");
     const home = join(repo, "agents", "dev", "instances", "dev-probe");
     assert.equal(existsSync(home), true, "the remote kernel created the home in the registered workspace");
-    assert.equal(readFileSync(join(home, "TASK.md"), "utf8").includes(hostile.trim()), true, "task text intact through ssh quoting");
+    assert.equal(readFileSync(join(home, "TASK.md"), "utf8").includes(hostile.trim()), true, "task text intact through the route");
     assert.equal(existsSync(join(process.cwd(), "NEVER_RUN")), false);
     const snap = JSON.parse(readFileSync(join(env.OATS_HOME_DIR, "remote", "build", "dev-probe.json"), "utf8"));
     assert.equal(snap.target.workspace, repo); assert.equal(snap.home, home); assert.equal(snap.remote.schemaVersion, 1);
@@ -654,11 +654,11 @@ test("routed spawn: a host that does not advertise the keyed spawn gets one spaw
     // --suggest-name: the preview carries it; the apply carries the name the preview chose, and the answer how it was chosen.
     const naming = { source: "suggested", harness: "pi", model: null, ms: 12 };
     const preview = { schemaVersion: 1, ok: true, result: { spawnPreviewApi: 2, preview: true, agent: "dev", instance: "dev-tidy", home: "/w/agents/dev/instances/dev-tidy", naming, decision: { instance: "dev-tidy", revision: "0123456789abcdef01234567" } } };
-    const host = remote([...KEYED, "spawn-suggest-name", "spawn-apply-suggest-name", "spawn-name"], { preview, apply: spawned("dev-tidy", { decision: preview.result.decision, replayed: false }) });
+    const host = remote([...KEYED, "spawn-suggest-name", "spawn-apply-suggest-name", "spawn-name", "spawn-task-stdin"], { preview, apply: spawned("dev-tidy", { decision: preview.result.decision, replayed: false }) });
     const { envelope } = routeCommand("build", "spawn", ["dev", "--suggest-name", "--task", "tidy up", "--no-launch"], { server, execFileSync: host.exec });
     assert.equal(host.sent.length, 2, host.sent.join("\n"));
-    assert.equal(host.sent[0], "oats spawn dev --suggest-name --task 'tidy up' --no-launch --preview --dir /w --json");
-    assert.match(host.sent[1], /^oats spawn dev --task 'tidy up' --no-launch --name dev-tidy --expect-decision 0123456789abcdef01234567 --idempotency-key \S+ --dir \/w --json$/);
+    assert.equal(host.sent[0], "oats spawn dev --suggest-name --task-file - --no-launch --preview --dir /w --json");
+    assert.match(host.sent[1], /^oats spawn dev --task-file - --no-launch --name dev-tidy --expect-decision 0123456789abcdef01234567 --idempotency-key \S+ --dir \/w --json$/);
     assert.equal(envelope.result.instance, "dev-tidy"); assert.deepEqual(envelope.result.naming, naming);
     assert.deepEqual(envelope.result.warnings, ["the host's own warning"]);
 
@@ -735,7 +735,7 @@ test("routed spawn --preview (#610): the host's preview, printed as the local on
     const made = instances();
 
     // Text: the local preview's line naming the server, and none of the apply's lines.
-    // A --task-file travels as --task text, --harness in the host's names.
+    // A --task-file's text travels on the remote command's stdin (--task-file -), --harness in the host's names.
     const taskFile = join(base, "task.md"); writeFileSync(taskFile, "preview me\n");
     let mark = readFileSync(log, "utf8").length;
     r = oats(env, ["spawn", "dev", "--server", "build", "--purpose", "pv", "--harness", "pi", "--task-file", taskFile, "--no-launch", "--preview"]);
@@ -744,7 +744,7 @@ test("routed spawn --preview (#610): the host's preview, printed as the local on
     assert.match(lines[0], /^preview dev → dev-pv on build \(checkout\) harness pi .*; nothing was created/, r.stdout);
     for (const apply of [/Spawned/, /remote home:/, /route snapshot:/, /attach:/]) assert.doesNotMatch(r.stdout, apply);
     const sent = readFileSync(log, "utf8").slice(mark);
-    assert.ok(sent.includes(` spawn dev --purpose pv --harness pi --task ${remoteQuote("preview me\n")} --no-launch --preview --dir `), sent);
+    assert.ok(sent.includes(" spawn dev --purpose pv --harness pi --task-file - --no-launch --preview --dir "), sent);
     unchanged("text preview");
     assert.deepEqual(instances(), made, "nothing was created on the host");
     // The same line as a local preview of that deployment prints, with " on build" added.
@@ -899,12 +899,12 @@ test("routed spawn --preview --suggest-name (#1421 §3) needs a host that advert
     assert.throws(() => routeCommand("build", "spawn", args, { server, execFileSync: old.exec }),
       (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.67.0 at h does not advertise spawn-suggest-name; upgrade it there; nothing was sent");
     assert.deepEqual(old.spawned(), []);
-    const current = remote(["spawn-preview-2", "spawn-suggest-name"]);
+    const current = remote(["spawn-preview-2", "spawn-suggest-name", "spawn-task-stdin"]);
     const routed = routeCommand("build", "spawn", args, { server, execFileSync: current.exec });
     assert.deepEqual(routed.envelope.result.naming, naming);
     assert.equal(routed.envelope.result.instance, "fix-login-dev");
     assert.equal(current.spawned().length, 1);
-    assert.match(current.spawned()[0], / spawn dev --preview --suggest-name --task 'Fix the login bug' --dir \/w --json$/);
+    assert.match(current.spawned()[0], / spawn dev --preview --suggest-name --task-file - --dir \/w --json$/);
   } finally {
     if (prevHomeDir === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = prevHomeDir;
     rmSync(base, { recursive: true, force: true });
@@ -943,10 +943,10 @@ test("routed spawn --name needs a host that advertises spawn-name: refused befor
     assert.match(purposeOnly.spawned()[0], / spawn dev --purpose api-v2 --task 'Ship it' --dir \/w --json$/);
     rmSync(REMOTE_SNAPSHOT_DIR(), { recursive: true, force: true });
     // A host with spawn-name: --name travels untouched, and the route is saved under the name the host reports.
-    const current = remote(["spawn-name"]);
+    const current = remote(["spawn-name", "spawn-task-stdin"]);
     const routed = routeCommand("build", "spawn", args, { server, execFileSync: current.exec });
     assert.equal(current.spawned().length, 1);
-    assert.match(current.spawned()[0], / spawn dev --name api-v2-dev --task 'Ship it' --dir \/w --json$/);
+    assert.match(current.spawned()[0], / spawn dev --name api-v2-dev --task-file - --dir \/w --json$/);
     assert.equal(routed.envelope.result.instance, "api-v2-dev");
     assert.equal(routed.envelope.result.snapshot, snapshotPath("build", "api-v2-dev"));
     // That name now has a saved route here: a second --name spawn of it is refused before the spawn is sent.
@@ -989,7 +989,7 @@ test("routed spawn --suggest-name on an apply (#1490 §3) needs the host's spawn
       (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.67.0 at h does not advertise spawn-apply-suggest-name; upgrade it there; nothing was sent");
     assert.deepEqual(previewsOnly.spawned(), []);
     // A host that names applies only: a preview still needs spawn-suggest-name.
-    const appliesOnly = remote(["spawn-preview-2", "spawn-apply-suggest-name"]);
+    const appliesOnly = remote(["spawn-preview-2", "spawn-apply-suggest-name", "spawn-task-stdin"]);
     assert.throws(() => routeCommand("build", "spawn", preview, { server, execFileSync: appliesOnly.exec }),
       (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message.includes("does not advertise spawn-suggest-name"));
     assert.deepEqual(appliesOnly.spawned(), []);
@@ -997,7 +997,7 @@ test("routed spawn --suggest-name on an apply (#1490 §3) needs the host's spawn
     assert.deepEqual(routed.envelope.result.naming, naming);
     assert.equal(routed.envelope.result.instance, "fix-login-dev");
     assert.equal(appliesOnly.spawned().length, 1);
-    assert.match(appliesOnly.spawned()[0], / spawn dev --suggest-name --task 'Fix the login bug' --dir \/w --json$/);
+    assert.match(appliesOnly.spawned()[0], / spawn dev --suggest-name --task-file - --dir \/w --json$/);
   } finally {
     if (prevHomeDir === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = prevHomeDir;
     rmSync(base, { recursive: true, force: true });

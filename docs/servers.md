@@ -442,9 +442,27 @@ Arguments are quoted for the remote shell. Local files (`--task-file`,
 `--wake-file`, a schedule or launch-configuration `--file`) are read here and
 sent as text or on stdin, never as paths.
 
+<a id="a-routed-spawns-task"></a>
+**A routed spawn's task is on no command line, for a server that advertises
+`spawn-task-stdin`.** The text of `--task` or of `--task-file` goes to such a
+server on the standard input of the ssh session, to the server's preview and
+to its spawn alike, and the remote command carries `--task-file -` in its
+place: the text is in the arguments of neither the local `ssh` process nor
+the server's `oats`, where every user of either machine could read it in the
+process list. A server that does not advertise `spawn-task-stdin` cannot read
+it there, and gets it as an argument of the remote command: the spawn
+succeeds, the task is readable in both process lists while it runs (this
+machine's, in the `ssh` command, and the server's), and the answer carries
+one warning that says so: `remote oats <version> at <host> does not
+advertise spawn-task-stdin, so the task was passed as an argument, visible
+in this machine's process list (the ssh command) and the host's while the
+spawn runs; upgrade the host`. Upgrade OATS on the server to keep tasks off
+both command lines. A `--wake-message` and a
+schedule's spec still travel as arguments.
+
 | Command | Where it runs | The server must advertise |
 |---|---|---|
-| `spawn` | registered workspace | the requested harness, backend and yolo option; `launch-config` for `--launch-config`; `schedule` for a wake schedule; `spawn-name` for `--name`; `spawn-preview-2` for `--preview`; `spawn-preview-2`, `spawn-apply-2` and `spawn-idempotency-2` for a spawn bound to its preview and a key (without them: one call and a warning); `spawn-suggest-name` for `--suggest-name` on a preview, `spawn-apply-suggest-name` on an apply; `instance-background` for `--background` or `--no-background`; `instance-same-work` for `--same-work` |
+| `spawn` | registered workspace | the requested harness, backend and yolo option; `launch-config` for `--launch-config`; `schedule` for a wake schedule; `spawn-name` for `--name`; `spawn-task-stdin` for a `--task` or `--task-file` kept off the command line (without it: the task as an argument, and a warning; [a routed spawn's task](#a-routed-spawns-task)); `spawn-preview-2` for `--preview`; `spawn-preview-2`, `spawn-apply-2` and `spawn-idempotency-2` for a spawn bound to its preview and a key (without them: one call and a warning); `spawn-suggest-name` for `--suggest-name` on a preview, `spawn-apply-suggest-name` on an apply; `instance-background` for `--background` or `--no-background`; `instance-same-work` for `--same-work` |
 | `status` | registered workspace | |
 | `retire` | the instance's home | `retire-home` to retire by exact home |
 | `session inspect`, `session attach` | the instance's home | `session`; `session-attach-detach-key` for `attach --detach-key`; `session-attach-no-status-line` for `attach --no-status-line`, which a host without it ignores |

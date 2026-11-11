@@ -1910,7 +1910,10 @@ conversation (OATS 0.69, #1559). In a fresh conversation the instance resumes
 its work from its own state files, as its knowledge capability prescribes.
 
 The task's text never travels on a command line, where any local user could
-read it in the process list:
+read it in the process list. A spawn through a server sends it on the ssh
+session's standard input to a server that advertises `spawn-task-stdin`; an
+older server gets it as an argument, and the answer warns
+([servers.md](servers.md#a-routed-spawns-task)). To the harness:
 
 - pi and Claude Code get `@TASK.md`, which each harness reads as the file.
   pi sends it as the session's first prompt and refuses it if another
