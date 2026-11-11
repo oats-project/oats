@@ -166,7 +166,7 @@ ConfigMaps, environment variables, a rendered manifest or a command line.
 | `tmpSize` | `128Mi`; memory-backed `emptyDir` at `/tmp`, counted against pod memory. |
 | `service.enabled` | `false`; when enabled creates only a ClusterIP Service on 2222. |
 | `forwarder.enabled` | `false`; explicit opt-in to forwarder DNS. |
-| `forwarder.resolverIP` | Forwarder resolver IPv4 address, required when enabled. |
+| `forwarder.resolverIP` | Forwarder resolver IPv4 address, required when enabled; invalid addresses are refused at render. |
 | `forwarder.networkPolicy` | `false`; optional egress policy, requires forwarder DNS and nonempty selectors. |
 | `forwarder.namespaceLabels`, `forwarder.podLabels` | Labels selecting the forwarder/resolver namespace and pods together. |
 
@@ -191,6 +191,13 @@ or writable root is needed. TCP readiness and liveness probes use port 2222.
 The 45-second termination grace lets the entrypoint's `oats host run` stop
 before a drain completes; the PDB permits a single-pod disruption. The PVC
 persists across pod replacement and image upgrades.
+
+`fsGroupChangePolicy: OnRootMismatch` is fixed in the pod. On storage that
+uses kubelet's fsGroup ownership management, it prevents a subsequent
+mount from recursively widening the persisted SSH host key from 0600 to
+0660, which sshd refuses. The volume root must retain its initialized
+group/mode. A CSI driver that delegates volume-group handling must provide
+equivalent behavior; qualify the storage with a replacement-pod SSH check.
 
 With forwarder DNS enabled, `dnsPolicy: None` and a single nameserver replace
 cluster DNS. The optional policy allows only TCP 443 and UDP/TCP 53 to pods

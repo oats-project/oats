@@ -31,7 +31,7 @@ test("Helm lint and default rendering enforce the agent isolation contract", () 
   assert.equal(p.automountServiceAccountToken, false);
   assert.equal(p.enableServiceLinks, false);
   assert.equal(p.serviceAccountName, "proof-oats-team-agent");
-  assert.deepEqual(p.securityContext, { runAsNonRoot: true, runAsUser: 20001, runAsGroup: 20001, fsGroup: 20001, seccompProfile: { type: "RuntimeDefault" } });
+  assert.deepEqual(p.securityContext, { runAsNonRoot: true, runAsUser: 20001, runAsGroup: 20001, fsGroup: 20001, fsGroupChangePolicy: "OnRootMismatch", seccompProfile: { type: "RuntimeDefault" } });
   assert.deepEqual(c.securityContext, { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] }, readOnlyRootFilesystem: true, privileged: false });
   assert.equal(c.stdin, false);
   assert.equal(c.tty, false);
@@ -68,7 +68,7 @@ test("optional ClusterIP and key Secret preserve the approved mounts", () => {
 });
 
 test("chart refuses unpinned images and unbounded forwarder selectors", () => {
-  for (const args of [["--set", "image.digest=latest"], ["--set", "uid=0"], ["--set", "authorizedKeys.kind=Pod"], ["--set", "forwarder.enabled=true"], ["--set", "forwarder.networkPolicy=true"], ["--set", "forwarder.enabled=true", "--set", "forwarder.resolverIP=10.96.0.9", "--set", "forwarder.networkPolicy=true"]]) {
+  for (const args of [["--set", "image.digest=latest"], ["--set", "uid=0"], ["--set", "authorizedKeys.kind=Pod"], ["--set", "forwarder.enabled=true"], ...["resolver.invalid", "::1", "256.0.0.1", "10.0.0.01"].map((ip) => ["--set", "forwarder.enabled=true", "--set-string", `forwarder.resolverIP=${ip}`]), ["--set", "forwarder.networkPolicy=true"], ["--set", "forwarder.enabled=true", "--set", "forwarder.resolverIP=10.96.0.9", "--set", "forwarder.networkPolicy=true"]]) {
     const r = spawnSync(process.env.HELM || "helm", ["template", "proof", chart, ...values, ...args], { encoding: "utf8" });
     assert.ifError(r.error);
     assert.notEqual(r.status, 0, `unsafe values rendered: ${args}`);
@@ -93,6 +93,7 @@ test("acceptance rejects admitted pod security or mount drift", async () => {
     (p) => { p.spec.automountServiceAccountToken = true; },
     (p) => { p.spec.securityContext.runAsUser = 0; },
     (p) => { p.spec.securityContext.fsGroup = 0; },
+    (p) => { p.spec.securityContext.fsGroupChangePolicy = "Always"; },
     (p) => { p.spec.hostNetwork = true; },
     (p) => { p.spec.serviceAccountName = "default"; },
     (p) => { p.spec.containers[0].securityContext.capabilities.add = ["SYS_ADMIN"]; },

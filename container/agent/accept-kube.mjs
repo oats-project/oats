@@ -30,7 +30,8 @@ function isolation(p) {
   for (const key of ["hostNetwork", "hostPID", "hostIPC", "shareProcessNamespace"]) assert.ok(!p[key], `${key} must be off`);
   for (const key of ["initContainers", "ephemeralContainers"]) assert.equal(p[key]?.length ?? 0, 0, `${key} not approved`);
   const s = p.securityContext;
-  same(keys(s), ["fsGroup", "runAsGroup", "runAsNonRoot", "runAsUser", "seccompProfile"], "pod security context fields");
+  same(keys(s), ["fsGroup", "fsGroupChangePolicy", "runAsGroup", "runAsNonRoot", "runAsUser", "seccompProfile"], "pod security context fields");
+  assert.equal(s.fsGroupChangePolicy, "OnRootMismatch", "fsGroup must not widen persisted host-key permissions on remount");
   assert.equal(s.runAsNonRoot, true, "runAsNonRoot");
   for (const key of ["runAsUser", "runAsGroup", "fsGroup"]) assert.ok(Number.isInteger(s[key]) && s[key] > 0, `${key} must be positive`);
   same(s.seccompProfile, { type: "RuntimeDefault" }, "seccomp profile");

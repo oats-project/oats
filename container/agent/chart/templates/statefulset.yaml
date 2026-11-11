@@ -24,6 +24,8 @@ spec:
         runAsUser: {{ .Values.uid }}
         runAsGroup: {{ .Values.gid }}
         fsGroup: {{ .Values.fsGroup }}
+        # Avoid recursively widening the persisted sshd host-key mode on every remount.
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile: { type: RuntimeDefault }
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
