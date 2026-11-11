@@ -120,6 +120,157 @@ ControlMaster multiplexing uses SSH command/session channels and needs no
 TCP, agent or X11 forwarding. The operator's jump host must separately permit
 the ProxyJump connection to the container.
 
+## Kubernetes
+
+The Helm 3 chart at `container/agent/chart/` runs the same agent image on a
+managed Kubernetes cluster. It creates one StatefulSet with one ReadWriteOnce
+PVC at `/state`, a dedicated ServiceAccount without RBAC or cloud IAM bindings,
+and a PodDisruptionBudget with `maxUnavailable: 1`. Replicas stay fixed at one.
+The operator supplies the namespace, storage and deployment pipeline. The
+ServiceAccount is fixed at first deployment; do not change it afterwards.
+
+Supply these plain values in an operator-owned file. The chart contains no
+Secret resources or credentials; `loginSecret` names a Secret the operator
+creates separately. An empty login Secret is suitable before a setup-token
+has been provisioned; never create a placeholder token.
+
+```yaml
+image:
+  repository: registry.example.invalid/agent
+  digest: sha256:<reviewed-64-hex-digit-digest>
+imagePullSecrets:
+  - name: agent-image-pull
+loginSecret: team-harness-login
+authorizedKeys:
+  kind: ConfigMap
+  name: team-operator-public-keys
+```
+
+`authorizedKeys.kind` accepts `Secret` or `ConfigMap`; the referenced object
+must have an `authorized_keys` key containing the operator's public SSH keys.
+It mounts read-only at `/etc/agent-ssh/authorized_keys`. The login Secret
+mounts read-only at `/etc/agent-login`, with mode 0440; Kubernetes projects
+Secret files through symlinks. Provision its `claude-token` key only through
+the operator's credential route. Never put its contents in Helm values,
+ConfigMaps, environment variables, a rendered manifest or a command line.
+
+| Value | Default / meaning |
+| --- | --- |
+| `image.repository`, `image.digest` | Required reviewed image, pinned by SHA-256 digest; no tag-only deployment. |
+| `image.pullPolicy` | `IfNotPresent`; also accepts `Always` and `Never`. |
+| `imagePullSecrets` | Empty list; operator-created registry pull Secret names. |
+| `uid`, `gid`, `fsGroup` | Each 20001; positive numeric IDs. Volume group support is required from the storage driver. |
+| `storage.size`, `storage.className` | `10Gi`, empty; an empty class omits `storageClassName` and uses the cluster default. |
+| `loginSecret` | Required existing Secret name. |
+| `authorizedKeys.kind`, `authorizedKeys.name` | `ConfigMap`, required existing object name. |
+| `tmpSize` | `128Mi`; memory-backed `emptyDir` at `/tmp`, counted against pod memory. |
+| `service.enabled` | `false`; when enabled creates only a ClusterIP Service on 2222. |
+| `forwarder.enabled` | `false`; explicit opt-in to forwarder DNS. |
+| `forwarder.resolverIP` | Forwarder resolver IPv4 address, required when enabled. |
+| `forwarder.networkPolicy` | `false`; optional egress policy, requires forwarder DNS and nonempty selectors. |
+| `forwarder.namespaceLabels`, `forwarder.podLabels` | Labels selecting the forwarder/resolver namespace and pods together. |
+
+Resource defaults fit clusters that enforce admission limits like these.
+All six quantities are values under `resources.requests` and
+`resources.limits`; acceptance also checks positive, ordered quantities and
+the CPU/memory budgets.
+
+| Resource | Request default / maximum | Limit default / maximum |
+| --- | --- | --- |
+| CPU | `500m` / `500m` | `2` / `2` |
+| Memory | `2Gi` / `2Gi` | `4Gi` / `4Gi` |
+| Ephemeral storage | `256Mi` / operator policy | `1Gi` / operator policy |
+
+The pod sets its own security restrictions: non-root UID/GID, all
+capabilities dropped, no privilege escalation, read-only root, RuntimeDefault
+seccomp, no service-account token or service links, and no stdin or TTY.
+Admission is not relied on to supply them. Only `/state` and `/tmp` are
+declared writable mounts. The image writes its home, host keys and kernel
+state below `/state`; `/run/sshd` is already in the image. No init container
+or writable root is needed. TCP readiness and liveness probes use port 2222.
+The 45-second termination grace lets the entrypoint's `oats host run` stop
+before a drain completes; the PDB permits a single-pod disruption. The PVC
+persists across pod replacement and image upgrades.
+
+With forwarder DNS enabled, `dnsPolicy: None` and a single nameserver replace
+cluster DNS. The optional policy allows only TCP 443 and UDP/TCP 53 to pods
+matching **both** selectors; the forwarder/resolver itself is provided by the
+operator. **NetworkPolicy enforcement is not assumed.** This policy isolates
+egress only where the cluster enforces it. Do not claim hostname allowlisting
+until the operator has verified enforcement and the platform's bypass tests.
+With forwarder DNS off, normal cluster DNS applies and this chart makes no
+egress-isolation claim.
+
+Render before installing through the operator's pipeline:
+
+```sh
+helm lint container/agent/chart --strict --values team-values.yaml
+helm template team container/agent/chart --namespace team --values team-values.yaml
+```
+
+The default creates no Service. `serviceName` names the optional Service;
+without it the pod has no governing-Service DNS record. Access uses the pod
+name directly, not StatefulSet DNS. No LoadBalancer or NodePort is created.
+
+For the existing OATS SSH route, start a loopback-only tunnel in an operator
+terminal and leave it running:
+
+```sh
+kubectl --context operator-cluster --namespace team port-forward --address=127.0.0.1 pod/team-oats-team-agent-0 12222:2222
+```
+
+After it reports `Forwarding from 127.0.0.1:12222`, this SSH config uses
+`ProxyCommand` to bridge the forwarded port (the operator host needs `nc`):
+
+```sshconfig
+Host team-agent
+  HostName team-oats-team-agent-0
+  User agent
+  Port 2222
+  IdentityFile ~/.ssh/team-agent
+  IdentitiesOnly yes
+  ProxyCommand nc 127.0.0.1 12222
+```
+
+The port-forward stays on the operator host, with rights scoped to the
+namespace. SSH reaches the existing `agent` user without any `kubectl exec`
+permission or kernel target. Use `team-agent` as the SSH host in the
+`oats server add` / `oats server connect` route in [OATS over SSH](#oats-over-ssh). Stop the
+tunnel when finished. A cluster that forbids sshd or port-forward needs an
+execution-target decision before using this route.
+
+`accept-kube.sh` requires Node 22, the repository dependencies (`npm ci`),
+Helm 3, and, for a live check, kubectl and an operator SSH test key. It prints
+labelled PASS/FAIL evidence and exits nonzero on a failed check. By default
+it only renders and validates the chart:
+
+```sh
+container/agent/accept-kube.sh --values team-values.yaml --namespace team --release team
+```
+
+To compare the admitted pod/controller, account, PDB and optional policy,
+then prove runtime identity, writable paths and the host plan through SSH:
+
+```sh
+container/agent/accept-kube.sh --values team-values.yaml --namespace team --release team --context operator-cluster --pod team-oats-team-agent-0 --ssh-key ~/.ssh/team-agent
+```
+
+Acceptance needs read rights on those workload objects, `pods/portforward`,
+and `pods/log` for the optional shutdown proof. It needs no Secret read or
+pod exec rights. To prove shutdown on a **disposable acceptance deployment**,
+append `--delete-pod`. This deletes the named pod, records the ordered
+`SIGTERM: ticking ended` and `ended` host events within 45 seconds, and
+reports elapsed time; the StatefulSet may immediately replace the pod. Do
+not use the deletion option on a team that is doing work. Remove the local
+test cluster afterwards. Seats, native harness authentication, mail/chat
+and network bypass checks require separate platform evidence and are
+reported as NOT RUN by this script.
+
+The cluster-free chart gate is
+`node --test test/agent-chart.integration.mjs`, with Helm 3 on PATH (or
+`HELM` set to its executable). Its dedicated CI workflow installs a pinned,
+checksum-verified Helm binary; the normal kernel tests need no Helm install.
+
 ## Compose integration
 
 Supply these plain variables to the bundle's env file:
