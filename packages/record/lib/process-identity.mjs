@@ -218,23 +218,6 @@ export function processLiveness(record) {
 
 // ---------- the boot a record was taken in ----------
 
-/** What says this process runs in a container: a file each runtime puts in its containers, or the
- *  variable Kubernetes sets in every pod. Docker writes `/.dockerenv`, Podman `/run/.containerenv`. */
-const CONTAINER_FILES = ["/.dockerenv", "/run/.containerenv"];
-const inContainer = (exists, env) => CONTAINER_FILES.some((file) => exists(file)) || Boolean(env.KUBERNETES_SERVICE_HOST);
-
-/** When PID 1 started, as this process sees PID 1: field 22 of `/proc/1/stat`, in clock ticks after
- *  the kernel's boot, as the digits the kernel printed; null when the file cannot be read or does
- *  not hold it. The fields are counted after the last ")": the name (field 2) may hold spaces and
- *  parentheses. */
-function initStart(read) {
-  try {
-    const stat = read("/proc/1/stat"), named = stat.lastIndexOf(")");
-    const start = named < 0 ? undefined : stat.slice(named + 1).trim().split(/\s+/)[19];
-    return typeof start === "string" && /^\d+$/.test(start) ? start : null;
-  } catch { return null; }
-}
-
 /** macOS's boot time, from the system's sysctl (systemTool), never one the caller's PATH names: a
  *  PATH without /usr/sbin, or with another sysctl first, must not change or lose the boot id. */
 function systemSysctl() {
@@ -246,24 +229,16 @@ function systemSysctl() {
  *  process the kernel may have recorded: the sessions, their terminal server, a sweep.
  *   - macOS: the boot time (`sysctl -n kern.boottime`, its `sec`/`usec`).
  *   - Linux: the kernel's boot id (`/proc/sys/kernel/random/boot_id`).
- *   - Linux in a container (inContainer): `<boot id>:<PID 1's start>`. A container shares its
- *     host's kernel and so its boot id, which outlives a stop and start of the container; its PID 1
- *     does not. PID 1 starts once per run of the container and ends every process of the run when
- *     it ends, so its start is the same for every process of one run and another in the next; the
- *     boot id keeps a start apart from the same number of ticks after another kernel boot. When
- *     PID 1's start cannot be read there, the boot id alone: the sweep then counts a home's starts
- *     across the runs and applies the in-boot clause across them, so it starts less, never more.
- *  PID 1's start is read only in a container. A process in a PID namespace of its own on a host (a
- *  command a harness runs in a sandbox) reads that namespace's PID 1, which is not the machine's,
- *  and it is on the host's boot all the same.
+ *  A container and a sandbox share the kernel's boot. Their environment, marker files and PID 1
+ *  cannot change this identity: a holder's pid and processStart distinguish a dead or reused pid
+ *  on that kernel. Old records that qualified the UUID are read by sameBoot below.
  *  Each is read from the kernel without privileges and written nowhere. */
-export function bootId({ platform = process.platform, read = (p) => readFileSync(p, "utf8"), exists = existsSync, env = process.env, sysctl = systemSysctl } = {}) {
+export function bootId({ platform = process.platform, read = (p) => readFileSync(p, "utf8"), sysctl = systemSysctl } = {}) {
   try {
     if (platform === "linux") {
       const id = read("/proc/sys/kernel/random/boot_id").trim();
       if (!id) return null;
-      const start = inContainer(exists, env) ? initStart(read) : null;
-      return start === null ? id : `${id}:${start}`;
+      return id;
     }
     if (platform === "darwin") { const m = /sec = (\d+), usec = (\d+)/.exec(sysctl()); return m ? `${m[1]}.${m[2]}` : null; }
   } catch { /* unknown */ }
@@ -272,12 +247,15 @@ export function bootId({ platform = process.platform, read = (p) => readFileSync
 let processBoot;
 /** bootId, read once per process: a process never outlives its boot. */
 export const thisBoot = () => (processBoot === undefined ? (processBoot = bootId()) : processBoot);
-/** Whether the lock record `holder` (the sweep's lock, a cache write lock: lib/remote.mjs) was taken
- *  in another boot than `boot`: its holder is gone then, whatever its pid reads as. A boot ends
- *  every process, and a pid and a start counted from the boot can both come again in the next (in a
- *  container, a boot is one run: bootId). Without a boot id on either side the process alone is
- *  judged. */
-export const takenInAnotherBoot = (boot) => (holder) => Boolean(boot) && typeof holder.bootId === "string" && holder.bootId !== "" && holder.bootId !== boot;
+// Only the historical Linux UUID:PID1-start format is normalized. Opaque boot identities (macOS
+// included) keep their exact comparison. This does not rewrite records held by another process.
+const linuxKernelBoot = (id) => typeof id === "string" ? id.replace(/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}):\d+$/i, "$1") : id;
+/** True only for two known identities of the same kernel boot, including old qualified Linux IDs.
+ *  Qualification never proves a live holder gone during an upgrade; pid/start still decide. */
+export const sameBoot = (a, b) => typeof a === "string" && a !== "" && typeof b === "string" && b !== "" && linuxKernelBoot(a) === linuxKernelBoot(b);
+/** Whether the two known identities establish another kernel boot. Without either boot the
+ *  reader must judge the process itself; a missing/unreadable start remains unknown, never gone. */
+export const takenInAnotherBoot = (boot) => (holder) => Boolean(boot) && typeof holder.bootId === "string" && holder.bootId !== "" && !sameBoot(holder.bootId, boot);
 
 /** Whether a lock record names the boot it was taken in or its holder's start (`bootId`,
  *  `processStart`), whatever their values. */

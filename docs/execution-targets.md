@@ -1460,7 +1460,7 @@ refused. A home removed between the read and its start is reported
   skip is the one that answers nothing: the next sweep reads the home again. A refused resume is
   never retried automatically: it is also noted for the boot, and reported
   `refused-this-boot` should that answer be lost.
-- A home is started by sweeps at most 3 times in a boot. A home lost again
+- A home lost unexpectedly is started by sweeps at most 3 times in a boot. A home lost again
   after each resume (a harness that crashes the host or its terminal server,
   say) is then reported `keeps-getting-lost`, and that loss is answered: no
   sweep starts it again, after a reboot either. Start it by hand: its next
@@ -1469,41 +1469,44 @@ refused. A home removed between the read and its start is reported
   has answered, so a sweep killed while other starts run has counted it; a
   refused, skipped or busy one does not. `oats session start --resume` run by hand is neither
   bounded nor counted.
+  A stop of the current start with the host is different: a successful
+  restore after that administrative stop neither spends nor resets the
+  crash budget, and the crash ceiling cannot prevent it. A failed or
+  blocked restore keeps its failure accounting; prior refusals and loss
+  eligibility checks still apply. A stop receipt from an earlier start
+  cannot grant this exception.
+  For a validated current-start host stop, the in-boot gap is measured
+  from the last running observation to the stop receipt's time, excluding
+  container downtime. A running observation during the stop's grace period
+  may be later than the receipt; that gap is zero and the receipt remains
+  valid. Thus a clean stop lasting more than 24 hours can
+  still resume. The first-observed-loss age limit and prior judgement
+  still apply; unknown, pre-start, future and other-start receipts relax
+  none of these guards.
 - The boot is the boot time on macOS and the kernel's boot id
   (`/proc/sys/kernel/random/boot_id`) on Linux. Elsewhere there
   is no boot: nothing is noted or counted, and every sweep tries again.
-- **Inside a container a boot is one run of the container.** A container
-  shares its host's kernel, so the kernel's boot id stays the same when the
-  container is stopped and started, restarted or made again, while every
-  process in it, its terminal server and its sessions included, is gone. The
-  boot there is the kernel's boot id together with the start time of the
-  container's PID 1 (field 22 of `/proc/1/stat`, clock ticks after the
-  kernel's boot): PID 1 starts once per run and its end ends the run, so the
-  identity is the same for every `oats` process of one run and another one
-  in the next, and the boot id keeps it apart from a run after the host's
-  restart. Each run has its own count of 3 starts per home, takes over a lock
-  the run before left, and clause 4 does not reach from one run into the
-  next. Both values are read without privileges and nothing is written for
-  them.
-  - OATS takes itself to be in a container when one of these is there: the
-    file `/.dockerenv` (Docker), the file `/run/.containerenv` (Podman), or
-    the environment variable `KUBERNETES_SERVICE_HOST` (every Kubernetes
-    pod). A container runtime that sets none of them is read as a host: give
-    its containers `KUBERNETES_SERVICE_HOST` or one of the files.
-  - Without one of them PID 1's start is not read. A command that a harness
-    runs in a sandbox with a PID namespace of its own (bubblewrap's
-    `--unshare-pid`) has that sandbox's PID 1, and is on the host's boot all
-    the same.
-  - When PID 1's start cannot be read in a container (a `/proc` mounted with
-    `hidepid`, say) the boot is the boot id alone. Every run on one host boot
-    is then the same boot: the count runs across them and clause 4 applies
-    across them, so a sweep starts fewer homes, never more.
-  - A container that shares its host's PID namespace (`--pid=host`), and a
-    Kubernetes pod with `shareProcessNamespace: true`, read a PID 1 that
-    outlives the container, so their boot is the same in every run.
-  - Inside a container, a command run in a sandbox with a PID namespace of
-    its own reads the sandbox's PID 1 and records a boot of its own. Run the
-    sweep outside such a sandbox there.
+- **Containers and PID sandboxes share their host kernel's boot.** No
+  environment variable, marker file or PID 1 lookup changes that identity.
+  An SSH command and the entrypoint in the same PID namespace therefore
+  agree on the boot and holder identity. An unmarked bubblewrap PID
+  namespace keeps the host's boot string. Holder liveness still requires
+  that the reader can see the holder's pid; equal boot strings do not
+  provide cross-PID-namespace process visibility or pid translation.
+  - A lock left by an earlier container run is reclaimed when its recorded
+    pid is gone or has another process start time. A live holder is never
+    reclaimed; an unreadable or missing start stays unknown and held.
+  - Old Linux boot IDs of the form `<kernel UUID>:<PID 1 start>` compare as
+    that kernel UUID. Across an upgrade, a qualifier alone cannot make a
+    live holder another boot. This comparison is read-only; it never edits
+    the holder's record. Run one OATS version per machine: an already
+    running older binary still applies its older comparison.
+  - Failure counts, prior refusals and clause 4 carry across container
+    restarts on the same kernel, including when read from older qualified
+    records. A kernel reboot gives a fresh budget. Loss judgements remain
+    per start, and a running look of a newly resumed start resets its prior
+    seen/lost judgement. Every new `oats host run` invokes the sweep;
+    successful restores after a host stop remain eligible as described above.
 - The lock, the per-boot note and the record of what status saw live in
   `session-resume/` under `~/.oats` (`$OATS_HOME_DIR` when set). All three
   are kernel-private, not a contract.

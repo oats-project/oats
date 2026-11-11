@@ -272,8 +272,10 @@ What the image's files fix for that:
 
 `oats host run` refuses to start while another one holds the container's
 lock (`E_HOST_RUN_BUSY`); the container then exits 1 and the restart policy
-starts it again. A lock left by an earlier run of the container is taken
-over.
+starts it again. A lock left by an earlier run is taken over when its pid
+is gone or has another process start time. A visible live holder, or a
+holder whose start cannot be read, stays held; see
+[Session recovery](execution-targets.md#which-losses-come-back).
 
 The schedule tick covers only registered deployments. Register the
 deployment once, after `server connect`

@@ -24,6 +24,7 @@ import { SESSION_END } from "../lib/session-resume-contract.mjs";
 import { readSeen, resumeEligible, homeKey } from "../lib/session-seen.mjs";
 import { lostLine } from "../lib/status-words.mjs";
 import { processStartToken } from "../lib/worktree-hooks.mjs";
+import { bootId, noteSweep, readBootNote, RESUME_LIMIT, resumeSessions } from "../lib/session-resume.mjs";
 
 const STOP_CHILD = fileURLToPath(new URL("../lib/host-stop-child.mjs", import.meta.url));
 const hasTmux = !spawnSync("tmux", ["-V"], { stdio: "ignore" }).error;
@@ -81,18 +82,30 @@ test.afterEach(() => { for (const fx of fixtures.splice(0)) fx.cleanup(); });
 /** A deployment with one home whose session, once started on the fixture's own `oats` server, runs
  *  a fixture in place of a harness: it writes its pid to `harness-ready` in the home and execs a
  *  sleep (as test/schedule-gone-server.test.mjs does). → { fx, home, instance }. */
-async function runningHome(t, purpose) {
+async function runningHome(t, purpose, { canResume = false } = {}) {
   const fx = v2Deployment({ souls: { dev: { soul: { work: "directory" } } } });
   fixtures.push(fx);
   t.after(leaveEnclosingInstance(fx.base)); // this worker starts a tmux server: as no instance
   const harness = join(fx.base, "fixture-harness");
   writeFileSync(harness, `#!/bin/sh\necho $$ > "$OATS_INSTANCE_HOME/harness-ready.tmp"\n/bin/mv "$OATS_INSTANCE_HOME/harness-ready.tmp" "$OATS_INSTANCE_HOME/harness-ready"\nexec sleep 600\n`, { mode: 0o755 });
+  if (canResume) {
+    // A current, restartable launch recipe, with only the harness executable replaced. The
+    // older stop-only fixtures below deliberately exercise homes without a recipe.
+    writeFileSync(join(fx.base, "runtime-stub", "claude"), `#!/bin/sh
+case "$1" in --version) echo 'Claude Code v2.1.308'; exit 0;; --help) exit 0;; esac
+test -n "$OATS_INSTANCE_HOME" || exit 2
+${shq(process.execPath)} -e 'const fs=require("node:fs"),path=require("node:path");const id="00000000-0000-4000-8000-000000001874",dir=path.join(process.env.HOME,".claude","projects","fixture");fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,id+".jsonl"),JSON.stringify({type:"user",cwd:process.cwd(),sessionId:id})+"\\n");'
+echo $$ > "$OATS_INSTANCE_HOME/harness-ready.tmp"
+/bin/mv "$OATS_INSTANCE_HOME/harness-ready.tmp" "$OATS_INSTANCE_HOME/harness-ready"
+exec sleep 600
+`, { mode: 0o755 });
+  }
   const r = fx.cli(["spawn", "dev", "--purpose", purpose, "--harness", "claude", "--no-launch", "--json"]);
   assert.equal(r.status, 0, `${r.stderr}\n${r.stdout}`);
   const { home, instance } = r.json().result;
   const metaPath = join(home, "instance.json");
   const { launch: _recipe, ...meta } = readJson(metaPath);
-  writeFileSync(metaPath, JSON.stringify({ ...meta, command: `OATS_INSTANCE=${shq(instance)} OATS_INSTANCE_HOME=${shq(home)} ${shq(harness)} --dangerously-skip-permissions -- "$(cat TASK.md)"`, launched: false }));
+  if (!canResume) writeFileSync(metaPath, JSON.stringify({ ...meta, command: `OATS_INSTANCE=${shq(instance)} OATS_INSTANCE_HOME=${shq(home)} ${shq(harness)} --dangerously-skip-permissions -- "$(cat TASK.md)"`, launched: false }));
   await fx.inEnv(() => startInstanceSession(home));
   const sleeps = () => {
     try {
@@ -207,4 +220,52 @@ test("oats host run as a real process: SIGTERM stops the running home with the h
   await waitUntil(() => existsSync(join(home, ".oats-start-exited")), "the session's start wrapper to exit");
   assert.equal((await rowOf(fx, home)).sessionEnd, SESSION_END.LOST);
   assert.equal(existsSync(join(fx.env.OATS_HOME_DIR, "host-run", "lock")), false, "the lock is released");
+});
+
+test("a new host run restores a cleanly stopped home on the same kernel without spending or resetting its failure budget", async (t) => {
+  assert.ok(hasTmux, "this restart regression requires tmux");
+  const { fx, home } = await runningHome(t, "same-kernel-restart", { canResume: true });
+  assert.equal(fx.cli(["deployments", "add", fx.dep, "--json"]).status, 0);
+  const boot = bootId(), key = homeKey(home), other = homeKey(join(fx.base, "refused-home"));
+  const refusal = { home: other, startId: "failed-start", code: "E_FIXTURE", message: "fixture refusal", at: new Date().toISOString() };
+  await fx.inEnv(() => {
+    for (let n = 0; n < RESUME_LIMIT; n++) noteSweep({ launched: [key] }, boot);
+    noteSweep({ refusals: [refusal] }, boot);
+  });
+  const budget = () => fx.inEnv(() => readBootNote(boot));
+  const startHost = async () => {
+    const proc = spawn(process.execPath, [CLI, "host", "run", "--stop-grace", "5", "--json"], { cwd: fx.base, env: fx.env, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "", stderr = "";
+    proc.stdout.on("data", (d) => { stdout += d; }); proc.stderr.on("data", (d) => { stderr += d; });
+    const closed = new Promise((resolve, reject) => { proc.once("error", reject); proc.once("close", (code) => resolve(code)); });
+    t.after(async () => { if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL"); await closed; });
+    await waitUntil(() => /oats host run: resume sweep:/.test(stderr) || proc.exitCode !== null, "host startup sweep", 120000);
+    return { proc, text: () => stderr, async stop() { proc.kill("SIGTERM"); assert.equal(await closed, 0, stderr); return JSON.parse(stdout).result; } };
+  };
+  const firstStart = readJson(join(home, "instance.json")).startId;
+  const first = await startHost();
+  assert.match(first.text(), /resume sweep: 1 already-running/);
+  await first.stop();
+  await waitUntil(() => existsSync(join(home, ".oats-start-exited")), "first host stop");
+  assert.equal((await rowOf(fx, home)).sessionEnd, SESSION_END.LOST);
+  assert.equal(lostReasonOf(home, { startId: firstStart }), HOST_STOP_REASON);
+  const second = await startHost();
+  assert.notEqual(second.proc.pid, first.proc.pid, "a distinct host-run start on the same kernel");
+  if (!/resume sweep: 1 (resumed|fresh)/.test(second.text())) assert.fail(JSON.stringify((await second.stop()).sweep.rows));
+  assert.match(second.text(), /resume sweep: 1 (resumed|fresh)/, "a full crash budget cannot suppress a clean host restart");
+  await waitUntil(() => fx.inEnv(() => { try { return inspectInstanceSession(home).running === true; } catch { return false; } }), "restored fixture harness");
+  assert.notEqual(readJson(join(home, "instance.json")).startId, firstStart);
+  assert.equal((await budget()).resumes[key], RESUME_LIMIT, "restoration neither spends nor resets the prior budget");
+  assert.deepEqual((await budget()).refused, [refusal], "other start refusals remain");
+  await rowOf(fx, home); // This new start is seen running; its prior loss judgement is gone.
+  const harnessPid = Number(readFileSync(join(home, "harness-ready"), "utf8").trim());
+  process.kill(harnessPid, "SIGKILL");
+  await waitUntil(() => fx.inEnv(() => { try { return inspectInstanceSession(home).running === false; } catch { return false; } }), "unplanned harness loss");
+  const swept = await fx.inEnv(() => resumeSessions({ deployment: fx.dep, boot, start: () => assert.fail("an exhausted crash budget starts no child") }));
+  assert.equal(swept.rows.find((r) => homeKey(r.home) === key).reason, "keeps-getting-lost");
+  assert.equal((await budget()).resumes[key], RESUME_LIMIT);
+  const restored = await second.stop();
+  const resumed = restored.sweep.rows.find((r) => homeKey(r.home) === key);
+  assert.equal(resumed.outcome, "resumed", "the same conversation is resumed, not a fresh launch");
+  assert.equal(resumed.sessionId, "00000000-0000-4000-8000-000000001874");
 });
