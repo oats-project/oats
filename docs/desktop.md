@@ -170,8 +170,9 @@ recently added workspaces there, once.
 opened, or your home directory when there is none (never ~/Downloads);
 **Choose oats…** opens in the directory of the chosen or discovered CLI.
 
-Launch flags for scripted use: `--dir <workspace>`, `--instance <name>` and
-`OATS_DESKTOP_PORT`.
+Launch flags for scripted use: `--dir <workspace>` and `--instance <name>`.
+The app always starts its own backend server, on a private socket (below); it
+never uses a server it did not start.
 
 ### Opening on an instance
 
@@ -1116,9 +1117,23 @@ unknown or unreported harness shows "?". Sources and licences are in
 
 ## Security posture
 
-- The bundled backend binds **127.0.0.1 only** and guards against DNS
-  rebinding (loopback Host on every request, loopback Origin on POSTs).
-  Do not expose it: it can type into your agent terminals.
+- The bundled backend listens on a **private socket only the app's main
+  process can reach**: a Unix domain socket in a directory of its own, owned
+  by you and closed to group and others (under `$XDG_RUNTIME_DIR` on Linux
+  when it is private, else the system temporary directory). It opens no TCP
+  port. The renderer reaches it only through main.
+- **Every request carries the per-launch credential** main hands its server
+  over a private pipe when it starts it: 32 random bytes, fresh for each
+  server, never on a command line, in an environment, a URL, a log or the
+  renderer. A request without it is refused (401) before anything else
+  happens. The Host guard (a loopback Host on every request) and the Origin
+  guard (a loopback Origin on POSTs) stay. Main only ever talks to the
+  server it started, and discards a reply from a server it has since
+  replaced. Do not expose the socket: the server can type into your agent
+  terminals.
+- **The CLI binary is chosen only through the app's own file dialog**
+  (**Choose oats…**): main saves the pick, and the server reads it at each
+  probe. No request to the server names a binary.
 - The app never imports framework code from a checkout and accepts no
   framework-root environment override; deployments are read with an
   app-owned read-only reader. Lifecycle actions run the installed `oats` CLI
@@ -1145,7 +1160,8 @@ unknown or unreported harness shows "?". Sources and licences are in
 | Terminals fail to open ("could not attach") | tmux missing, or no live session for that instance. Install tmux (`tmux -V`); check `tmux -L oats ls` (the OATS tmux server, where instances run) and `tmux ls` (your default server, where an instance started by an earlier kernel may still be). |
 | Can't select/copy text in a terminal tab | A plain drag selects, and copying is a separate step: ⌘C / Edit › Copy (macOS), Ctrl+Shift+C (Linux/Windows) or right-click › Copy ([Copy from a terminal](#copy-from-a-terminal)). A drag selects only what is on screen: scroll back first (wheel up, Shift+PgUp or Ctrl+B then `[`) for older output. In `oats session attach` in your own terminal, hold **Option** (iTerm2, Ghostty, Terminal.app) or **Shift** while dragging. |
 | macOS "app is damaged / can't be opened" | Ad-hoc-signed (not notarized) build + quarantine. Right-click → Open, or clear the quarantine attribute (above). If it persists, verify the bundle: `codesign --verify --deep --strict --verbose=2 "/Applications/OATS Desktop.app"` — a non-zero exit means a broken artifact, report it. |
-| Log says `server on 4820 — this app's server at version X (this app is Y), not started by this app — left running — starting a dedicated one on 4821` | Another OATS Desktop server holds the default port: another installed version or a dev checkout that is running, or one an earlier Desktop left running. The app serves from the port it names and never stops a server it did not start. From 0.49.0 a server the app starts exits when the app ends, however it ends (quit, crash or kill). A server left by an earlier Desktop (seen on Linux, where it outlived the app in its own `app-…scope`) must be stopped once by hand: find it with `ss -ltnp 'sport = :4820'` (or `lsof -iTCP:4820 -sTCP:LISTEN` on macOS) and stop that pid, or its scope (`systemctl --user stop <scope>`), then restart the app. |
+| Log says `the backend server's socket path is N bytes, over the limit of 103` | The directory for the server's private socket (`$XDG_RUNTIME_DIR` on Linux, else `$TMPDIR`) is too deep for a Unix socket path. Start the app with `TMPDIR` set to a shorter directory of your own (on Linux, also when `$XDG_RUNTIME_DIR` is unusual). The app never falls back to a TCP port. |
+| A backend server of an earlier Desktop is still running | From 0.49.0 a server the app starts exits when the app ends, however it ends (quit, crash or kill), and the app never uses a server it did not start. A server left by a Desktop older than 0.49.0 (seen on Linux, where it outlived the app in its own `app-…scope`) is harmless to a newer app but may be stopped once by hand: find it with `ss -ltnp 'sport = :4820'` (or `lsof -iTCP:4820 -sTCP:LISTEN` on macOS) and stop that pid, or its scope (`systemctl --user stop <scope>`). |
 | Roster empty | The opened directory isn't an OATS deployment (it needs `oats-local.yaml` and `agents/`). Use **Add local workspace…** (the **+** at the top of the sidebar) to select the right folder. |
 
 For bugs, attach the terminal output of the app (`OATS Desktop` prints

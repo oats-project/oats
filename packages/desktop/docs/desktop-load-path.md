@@ -251,7 +251,9 @@ show nothing new.
 
 ## The CLI probe is compared, not trusted by identity
 
-A window focus re-probes the CLI (`POST /api/cli/reprobe`). The probe
+A window focus re-probes the CLI (`POST /api/cli/reprobe`, whose body names
+nothing: the chosen binary is the choice file main writes after its own file
+dialog, which the server reads as each probe starts). The probe
 generation — the revision every pending deployment read is admitted under —
 moves only when `probeSignature` (`packages/client/cli-probe-contract.mjs`:
 everything but `probedAt`, `tried`, `source` and the warm reader's `reader`) changes. An unchanged probe
@@ -360,6 +362,8 @@ is a 404 `E_WORKSPACE_NOT_SERVED`, never the first workspace's answer
   coalescing, the unchanged-focus no-op, the catalog landing before and after
   publication, the mutation follow-up and the `--max-age` gate on and off, in
   a few seconds (50/50 in a loop under a saturated CPU).
-- Against a real deployment: `node server/oats-web.mjs start --port <p> --dir
-  <deployment> --oats-bin <timing shim>` and poll the endpoints; never launch
-  the packaged app for this.
+- Against a real deployment: `node server/oats-web.mjs start --socket <private
+  dir>/s --token-file <0600 file> --dir <deployment> --oats-bin <timing shim>`
+  (the README's [server entry](../README.md) shows how to make both) and poll
+  the endpoints over the socket with the credential; never launch the packaged
+  app for this.

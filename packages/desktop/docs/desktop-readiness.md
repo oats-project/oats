@@ -18,7 +18,7 @@ neither `--soul` nor `--home` (`E_BAD_ARGS`), and the scope-wide lists are
 
 Body size is limited to 64 KiB. Duplicate/extra/missing query or body keys
 refuse. Workspace-addressed route families are pinned in the main-process
-proxy; the backend's loopback Host/Origin guards and IPC
+proxy; the backend's credential check, loopback Host/Origin guards and IPC
 main-frame/navigation/epoch guards precede dispatch. Domain errors resolve with
 stable codes, not raw exceptions. A remote instance's readiness is read on its
 own machine (`readiness --server S --home H --soul A --agents-root R`, with the

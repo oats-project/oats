@@ -37,7 +37,8 @@ this is an algorithmic-shape measurement, not a native latency benchmark.
   any await. Pending/revoked inspection, awaiting-ready, closing, active attachment
   work and uncertain partial creation remain counted until settlement/confirmation.
   No unbounded queue, fulfilled preparation cache, eviction or conflicting overwrite.
-- Remote preparation uses bounded loopback cached CLI metadata, the installed
+- Remote preparation uses bounded cached CLI metadata read from main's own
+  backend (`backendFetch`, over its private socket), the installed
   CLI's positive remote capability advertisement and fixed inspect/attach argv.
   It checks backend context/CLI identity before creation and both completion paths.
   Metadata reads are≤1MiB/5s, inspection≤1MiB/20s, overall preparation30s.

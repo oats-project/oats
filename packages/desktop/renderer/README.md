@@ -2349,11 +2349,18 @@ chosen destination without a transient return to the old control.
 `harness.html` supplies a stub `ctx` and tab chrome for ALL views — including
 the Markdown tab (it prompts for a file path;
 `ctx.openFile` routes into the markdown view); `harness-server.mjs`
-serves it and proxies `/api/*` to a running backend server (same-origin, so
-GETs and guarded POSTs both work exactly as in the real shell):
+serves it and proxies `/api/*` to a backend server you started by hand, over
+its socket (same-origin, so GETs and guarded POSTs both work exactly as in the
+real shell). The backend's credential stays in the harness: it makes a token of
+its own at start and prints the page's URL with it, and every `/api/` request
+must carry that token (`x-oats-harness-token`, which `harness.html` sends from
+the URL's `#t=`), else 401. The token file must not be inside a directory the
+harness serves (the renderer, `node_modules`, `packages/client`):
 
 ```sh
-node packages/desktop/server/oats-web.mjs start --port 4821 --dir <workspace>
-node packages/desktop/renderer/harness-server.mjs --port 4899 --api http://127.0.0.1:4821
-open "http://127.0.0.1:4899/"
+dir=$(mktemp -d) && chmod 700 "$dir"
+( umask 077; node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64url"))' > "$dir/token" )
+node packages/desktop/server/oats-web.mjs start --socket "$dir/s" --token-file "$dir/token" --dir <workspace>
+node packages/desktop/renderer/harness-server.mjs --port 4899 --api-socket "$dir/s" --token-file "$dir/token"
+# open the URL it prints: http://127.0.0.1:4899/harness.html#t=<its token>
 ```

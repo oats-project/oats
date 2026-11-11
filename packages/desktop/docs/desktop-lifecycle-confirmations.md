@@ -14,7 +14,7 @@ trial invocation establishes support: older `retire` ignores unknown `--plan`
 and retires. Missing/malformed advertisement means unavailable, zero invocation.
 
 **POST `/api/instance-lifecycle?ws=<id>`** is the only Desktop K3 route. It uses
-loopback Host / POST Origin guards, exactly one advertised workspace and no
+the server-wide credential check, loopback Host / POST Origin guards, exactly one advertised workspace and no
 extra query arguments. The privileged proxy pins the entire body-addressed
 instance family. Bodies are strict JSON objects up to64 KiB:
 
