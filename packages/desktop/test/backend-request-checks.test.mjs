@@ -3,7 +3,7 @@
 // fd 3), and raw requests over its socket with node:http (`socketPath`), never fetch.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync, renameSync, chmodSync } from 'node:fs';
+import { mkdtempSync, realpathSync, writeFileSync, readFileSync, rmSync, existsSync, renameSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { backendRequest, startBackendThroughSpec, READY_LINE } from './helpers/backend-server.mjs';
@@ -28,7 +28,8 @@ function fakeCli(dir, name = 'oats') {
 }
 
 async function started(t, { cli } = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'oats-t-cli-'));
+  // Canonical, as the CLI locator reports a candidate (macOS's temporary directory is under a /var link).
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'oats-t-cli-')));
   const fake = cli ? fakeCli(dir) : null;
   const choice = join(dir, 'oats-cli-choice.json');
   if (fake) writeFileSync(choice, JSON.stringify({ bin: fake.bin }));
