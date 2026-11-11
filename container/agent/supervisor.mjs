@@ -33,14 +33,16 @@ export async function supervise({
         state.ended = true;
         state.code = code;
         if (role !== "status") say(`${role} exited (${signal || code})`);
-        if (!stopping && role !== "status" && role !== "sshd") { failed = true; stop(); }
+        if ((role === "broker" && !state.stopRequested) || (!stopping && role === "host run")) { failed = true; stop(); }
         resolve();
       });
     });
     return state;
   };
   const finish = async (state) => {
-    if (!state || state.ended) return;
+    if (!state) return;
+    state.stopRequested = true;
+    if (state.ended) return;
     state.child.kill("SIGTERM");
     const escalation = setTimeout(() => { failed = true; state.child.kill("SIGKILL"); }, childStopMs);
     try { await state.done; } finally { clearTimeout(escalation); }
@@ -94,8 +96,7 @@ export async function supervise({
     if (host && !host.ended) { host.child.kill("SIGTERM"); await host.done; }
   } finally {
     stopping = true;
-    await finish(ssh);
-    await finish(broker);
+    await Promise.all([finish(ssh), finish(broker)]);
     unlisten();
   }
   return failed ? 1 : 0;

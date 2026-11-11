@@ -250,8 +250,9 @@ What the image's files fix for that:
 
 - **PID-only tini signals the Node supervisor.** It forwards TERM to host
   run alone and keeps the wake broker alive until host run finishes stopping
-  the agents. Then it stops sshd and the broker. A broker or host-run exit is
-  reported and drains the other children before a nonzero container exit, so
+  the agents. Then it stops sshd and the broker in parallel. A broker or
+  host-run exit is reported and drains the other children before a nonzero
+  container exit, so
   the restart policy can restart it. The broker runs as the agent uid; its
   default state directory is `/state/home/.config/aw/wake`, so registrations
   survive container replacement and it starts again even with no spawn.

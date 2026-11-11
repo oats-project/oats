@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -291,7 +291,7 @@ test("acceptance refuses drift in the admitted container settings", async () => 
 });
 
 
-async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false } = {}) {
+async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false, stubbornFinish = false } = {}) {
   const supervisor = new URL("../container/agent/supervisor.mjs", import.meta.url);
   assert.ok(existsSync(supervisor), "the image must own broker readiness and ordered child shutdown");
   const { supervise } = await import(supervisor);
@@ -304,7 +304,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
     const log = text => fs.appendFileSync(events, text + "\\n");
     log(role + " started");
     if (role === "status") {
-      const running = (mode === "ready" && fs.readFileSync(events, "utf8").includes("broker started")) || (mode === "after-exit" && fs.readFileSync(events, "utf8").includes("broker exited"));
+      const running = ((mode === "ready" || mode === "stubborn") && fs.readFileSync(events, "utf8").includes("broker started")) || (mode === "after-exit" && fs.readFileSync(events, "utf8").includes("broker exited"));
       if (running) log("broker ready");
       process.stdout.write(JSON.stringify({daemon_running: running}));
       process.exit(0);
@@ -312,8 +312,10 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
     if (role === "broker" && mode === "after-exit") { log("broker exited"); process.exit(0); }
     process.on("SIGTERM", () => {
       log(role + " TERM");
+      if (mode === "stubborn" && (role === "ssh" || role === "broker")) return;
       setTimeout(() => { log(role + " ended"); process.exit(0); }, role === "host" ? 80 : 0);
     });
+    log(role + " listening");
     setInterval(() => {}, 1000);
   `);
   const children = new Map(), said = [];
@@ -321,8 +323,8 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
   const running = supervise({
     spawnChild(file, args, options) {
       const role = file === "aw" ? (args[1] === "run" ? "broker" : "status") : file === "oats" ? "host" : "ssh";
-      const mode = statusTrueAfterBrokerExit ? "after-exit" : ready ? "ready" : "not-ready";
-      writeFileSync(events, readFileSync(events, "utf8") + role + " spawned\n");
+      const mode = statusTrueAfterBrokerExit ? "after-exit" : stubbornFinish ? "stubborn" : ready ? "ready" : "not-ready";
+      appendFileSync(events, role + " spawned\n");
       const failProbe = role === "status" && statusSpawnFailsOnce && !statusFailed;
       if (failProbe) statusFailed = true;
       const child = spawn(failProbe ? join(dir, "missing-probe") : process.execPath, failProbe ? [] : [childFile, role, events, mode], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
@@ -330,7 +332,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
       return child;
     },
     onSignal(handler) { signal = handler; return () => { signal = null; }; },
-    say(line) { said.push(line); }, pollMs: 10, startupMs: 1000, childStopMs: 500,
+    say(line) { said.push(line); appendFileSync(events, "supervisor " + line + "\n"); }, pollMs: 10, startupMs: 1000, childStopMs: 500,
   });
   t.after(async () => {
     for (const child of children.values()) child.kill("SIGKILL");
@@ -411,4 +413,28 @@ test("a status-probe spawn error is retried before broker readiness expires", as
   assert.equal(fx.text().split("status spawned").length-1 >= 2,true,"readiness was retried");
   fx.term();
   assert.equal(await fx.running,0,"transient status failure does not fail the container");
+});
+
+
+test("broker death while host run drains is a failed container stop", async (t) => {
+  const fx = await supervisorFixture(t);
+  await fx.until(() => fx.text().includes("host started"));
+  fx.term();
+  await fx.until(() => fx.text().includes("host TERM"));
+  assert.doesNotMatch(fx.text(), /host ended/, "the host must still be draining when delivery dies");
+  fx.children.get("broker").kill("SIGKILL");
+  assert.equal(await fx.running, 1, "delivery lost before host drain completes cannot be a clean stop");
+  assert.match(fx.text(), /host ended/);
+});
+
+
+test("SSH and broker final cleanup share one grace span after host run ends", async (t) => {
+  const fx = await supervisorFixture(t, {stubbornFinish:true});
+  await fx.until(() => fx.text().includes("ssh listening") && fx.text().includes("host listening"));
+  fx.term();
+  assert.equal(await fx.running,1,"forced cleanup is reported as a failed stop");
+  const events=fx.text().split("\n");
+  assert.ok(events.indexOf("host ended") < events.indexOf("broker TERM"),fx.text());
+  assert.ok(events.indexOf("broker TERM") < events.indexOf("supervisor sshd exited (SIGKILL)"),"broker must be asked to stop before SSH consumes its entire grace: "+fx.text());
+  assert.ok(events.includes("supervisor broker exited (SIGKILL)"));
 });
