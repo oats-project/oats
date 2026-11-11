@@ -3642,8 +3642,10 @@ its absence.
   and no `runtimeState`. What the lifecycle commands answer for such a home:
   [below](#unreadable-record).
 - **`spawnInProgress`** (feature `worktree-event`, OATS 0.49.0): `true` only
-  while a spawn that is running its `worktree` hooks is verifiably alive (its
-  pid runs with the recorded start time). Such a home holds the quarantine marker
+  while a spawn that wrote its in-progress marker is verifiably alive (its
+  pid runs with the recorded start time): one running its `worktree` hooks,
+  or one that has reached its spawn hooks and not yet written its record,
+  when a capability with a spawn hook has a retire hook. Such a home holds the quarantine marker
   with an `inProgress` field ([capabilities.md](capabilities.md#manifest)),
   and its row carries `spawnInProgress: true` and **no**
   `rollbackIncomplete`: a live spawn, not a failed one. Once that process is
@@ -6487,14 +6489,17 @@ Git reads as the top level of a `work/` whose `core.worktree` names another
 one),
 `E_SESSION_UNKNOWN`, `E_AMBIGUOUS_INSTANCE`,
 `E_UNIDENTIFIED_INSTANCE_HOME` (a home with no `instance.json` and no cleanup
-descriptor, or a rollback marker that cannot drive a retry, until `--force`;
+descriptor, or a rollback marker that cannot drive a retry, or an
+`instance.json` that names no repository and does not show that no capability
+has a retire hook, what a spawn killed before its record leaves
+([capabilities.md](capabilities.md#manifest)), until `--force`;
 a home whose `instance.json` [cannot be read](#unreadable-record), `--plan`
 and `--force` included),
 `E_NO_ROOT`, `E_LIFECYCLE_FAILED`, `E_LIFECYCLE_BUSY` (another retire of the
 home is running or scheduled, or a stop of it is running, `--force`
 included: one retire or stop of a home at a time, above; or, feature
-`worktree-event`: the home is a spawn still running its `worktree` hooks, a
-row with `spawnInProgress: true`, `--force` included; or one whose start time
+`worktree-event`: the home is a spawn still running its spawn or `worktree`
+hooks, a row with `spawnInProgress: true`, `--force` included; or one whose start time
 cannot be read, a `rollbackIncomplete` row, until `--force`; or a hook or git
 group whose leader's start cannot be read, until `--force`; every one is
 answered before any effect and carries [`details.holder`](#busy-holder)). The
