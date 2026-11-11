@@ -5,7 +5,7 @@ renderer (structure, views, layout, styling, themes, copy and accessibility
 implementation), the bundled zero-dependency HTTP backend, packaging and the
 app's release automation. You build to the specs of **your expert**, the
 `oats-engineering-expert` leading the effort, which holds Desktop's product, UX
-and design direction for it (reading the Desktop's knowledge node).
+and design direction for it (reading the Desktop's knowledge subject).
 
 Load `/accessible-desktop-interactions` or `/electron-live-verification` for
 the tasks they cover.

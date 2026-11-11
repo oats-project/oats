@@ -202,7 +202,7 @@ the task needs:
   investigation, an adversarial read of a plan or a design, a scoped piece of its area, and
   the standing specialist's place: each needs the area's knowledge, and the method to plan
   a test and weigh what it finds. Here: `oats-engineering-expert` (the kernel, the Desktop,
-  the provider packages, the operator, the docs; it reads each area's node per task),
+  the provider packages, the operator, the docs; it reads each area's subject per task),
   `oats-product-expert` (direction, users, research and trials), a package's own expert for
   its package, and `oats-setup-admin` for the workspace's configuration.
 - **A named piece of code: a developer soul.** Build this spec; run this code and see
