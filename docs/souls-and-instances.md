@@ -1892,7 +1892,9 @@ limits are [a retire's](#retire-filter-drivers).
   refused with `E_WORK_INSPECTION_FAILED` and rolled back, and
   `oats worktree add` with `E_GIT_FAILED`, its tree removed.
 
-The clone's Git hooks (`post-checkout`) and `core.fsmonitor` are not part of
+The same checkouts, and the fetch of `oats worktree add` between its two,
+run with `core.fsmonitor=false`: a file monitor command the repository's
+configuration names is not run, and a checkout has no use for one. The clone's Git hooks (`post-checkout` among them) are not part of
 this: they run in a checkout as they do for the operator's own Git.
 
 After the spawn hooks succeed, the spawn fires the

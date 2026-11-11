@@ -19,9 +19,16 @@
     `git worktree add` and no longer at the baseline's status, with the
     message `could not make the instance worktree: git worktree add was not
     run in <clone>: …`; `oats worktree add` answers `E_GIT_FAILED`.
+- **A checkout OATS makes does not run the file monitor the repository's
+  configuration names.** The same three commands, and the fetch of
+  `oats worktree add`, ran the `core.fsmonitor` command of the clone's
+  configuration when they read the index of the tree. They run with
+  `core.fsmonitor=false`. The clone's Git
+  hooks (`post-checkout` among them) still run at these checkouts.
 - **A driver of the operator's that has no `process` command runs where the
-  repository's configuration names the same driver.** A retire, a worktree
-  removal and a checkout override that driver with the operator's values.
+  repository's configuration names the same driver.** This reaches every
+  command that takes these overrides: a retire and `oats worktree remove` as
+  well as a checkout. Each overrides that driver with the operator's values.
   They also set its `process` to nothing, which made Git skip the operator's
   `clean` and `smudge` commands. `process` is left alone when neither
   configuration defines it. When the repository defines it and the operator
