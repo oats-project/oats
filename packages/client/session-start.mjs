@@ -119,7 +119,14 @@ export async function startInstance(cli, row, choices = {}, { restart = false, d
     harnessFlag: harnessFlag(cli), yolo: choices.yolo, restart, workspaceDir: local ? dirname(row.agentsRoot) : localCwd, server: row.server },
   { ...(exec ? { exec } : {}), ...(after ? { after } : {}), ...(wait !== undefined ? { wait } : {}) }); }
   catch { return { ok: false, outcome: 'uncertain', code: 'E_CLI_FAILED', sentence: CLI_FAILED, detail: null, ran: true }; }
-  if (envelope?.ok === true) return { ok: true, result: envelope.result };
+  if (envelope?.ok === true) {
+    // Above the client's tested bound (#1879, cli-locator.mjs aboveTested) a start is reported started only on an
+    // answer in the shape it knows: a record naming the row's instance. Any other is an outcome not known, never a
+    // start; nothing more is run. Within the bound the answer is taken as before.
+    if (cli?.aboveTested === true && !(envelope.result !== null && typeof envelope.result === 'object' && !Array.isArray(envelope.result)
+      && envelope.result.instance === row.instance)) return { ok: false, outcome: 'uncertain', code: 'E_CLI_PROTOCOL', sentence: null, detail: null, ran: true };
+    return { ok: true, result: envelope.result };
+  }
   const code = typeof envelope?.error?.code === 'string' ? envelope.error.code : 'E_CLI_PROTOCOL';
   const detail = displayLine(envelope?.error?.message);
   if (CLAIM_STARTED_NOTHING_CODES.includes(code)) {

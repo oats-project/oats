@@ -6,25 +6,30 @@ import assert from "node:assert/strict";
 import { delimiter } from "node:path";
 import { readFileSync } from "node:fs";
 import {
-  acceptProbe, parseSemver, parseProbeStdout, candidates, discover, cliRecord, DESKTOP_API,
-  ACCEPT_RANGE, ACCEPT_RANGE_TEXT, PROBE_NAME,
+  acceptProbe, parseSemver, parseProbeStdout, candidates, discover as locatorDiscover, cliRecord, DESKTOP_API,
+  ACCEPT_RANGE, acceptRangeText, testedBound, testedThroughText, PROBE_NAME,
 } from "../../client/cli-locator.mjs";
 
 const PROBE = (v = "0.26.0") => ({ schemaVersion: 1, name: "@awebai/oats", version: v, desktopApi: 1 });
+// This Desktop's own release version: its tested bound (#1879). The tests that are not about the bound judge
+// against it, as the server does (oats-web.mjs cliIo.testedVersion); the bound's own tests name versions.
+const DESKTOP = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+const accept = (payload) => acceptProbe(payload, DESKTOP);
+const discover = (io, probe) => locatorDiscover({ testedVersion: DESKTOP, ...io }, probe);
 
 test("acceptProbe: either npm name of the CLI is the oats CLI, and a refusal lists both", () => {
   assert.deepEqual(PROBE_NAME, ["@awebai/oats", "@oats-project/oats"]);
-  for (const name of PROBE_NAME) assert.equal(acceptProbe({ ...PROBE(), name }).ok, true, name);
-  const refused = acceptProbe({ ...PROBE(), name: "@other/oats" });
+  for (const name of PROBE_NAME) assert.equal(accept({ ...PROBE(), name }).ok, true, name);
+  const refused = accept({ ...PROBE(), name: "@other/oats" });
   assert.equal(refused.ok, false);
   for (const name of [...PROBE_NAME, "@other/oats"]) assert.ok(refused.reason.includes(name), refused.reason);
-  assert.equal(acceptProbe({ ...PROBE(), name: undefined }).ok, false);
+  assert.equal(accept({ ...PROBE(), name: undefined }).ok, false);
 });
 
 test("acceptProbe: exact v1 payload accepted; every deviation rejected with a reason", () => {
-  assert.equal(acceptProbe(PROBE()).ok, true);
-  assert.equal(acceptProbe(PROBE("0.26.0")).ok, true, "the 0.26 kernel line is inside the band");
-  assert.equal(acceptProbe(PROBE("0.26.12")).ok, true);
+  assert.equal(accept(PROBE()).ok, true);
+  assert.equal(accept(PROBE("0.26.0")).ok, true, "the 0.26 kernel line is inside the band");
+  assert.equal(accept(PROBE("0.26.12")).ok, true);
   const cases = [
     [null, /no probe/],
     [{ ...PROBE(), schemaVersion: 2 }, /schemaVersion/],
@@ -32,12 +37,10 @@ test("acceptProbe: exact v1 payload accepted; every deviation rejected with a re
     [{ ...PROBE(), desktopApi: 2 }, /desktopApi 2/],
     [{ ...PROBE(), desktopApi: undefined }, /desktopApi missing/],
     [PROBE("0.25.9"), /outside/],
-    [PROBE("0.70.0"), /outside/],
-    [PROBE("1.0.0"), /outside/],
     [PROBE("not-a-version"), /unparsable/],
   ];
   for (const [payload, re] of cases) {
-    const r = acceptProbe(payload);
+    const r = accept(payload);
     assert.equal(r.ok, false, JSON.stringify(payload));
     assert.match(r.reason, re);
   }
@@ -45,7 +48,7 @@ test("acceptProbe: exact v1 payload accepted; every deviation rejected with a re
 
 test("acceptProbe: API version is authoritative — a 0.22.x CLI without desktopApi is rejected", () => {
   // Source adjacency / same version number is NOT enough: the probe field decides.
-  const r = acceptProbe({ schemaVersion: 1, name: "@awebai/oats", version: "0.26.0" });
+  const r = accept({ schemaVersion: 1, name: "@awebai/oats", version: "0.26.0" });
   assert.equal(r.ok, false);
   assert.match(r.reason, /desktopApi/);
 });
@@ -60,63 +63,71 @@ test("parseSemver handles pre-release/build suffixes and rejects garbage", () =>
 
 test("acceptProbe: prereleases are rejected — 0.26.0-rc.1 precedes 0.26.0 (review 53a20c7)", () => {
   for (const v of ["0.25.9-rc.1", "0.25.9-0", "0.25.10-beta.2", "0.26.0-rc.1", "0.26.0-0", "0.26.5-beta.2"]) {
-    const r = acceptProbe(PROBE(v));
+    const r = accept(PROBE(v));
     assert.equal(r.ok, false, v);
     assert.match(r.reason, /prerelease/, v);
   }
-  assert.equal(acceptProbe(PROBE("0.26.0+build.7")).ok, true, "build metadata does not affect precedence");
+  assert.equal(accept(PROBE("0.26.0+build.7")).ok, true, "build metadata does not affect precedence");
 });
 
-// Release-gate invariant. Desktop and the kernel ship from ONE tag, and the
-// release workflow bumps packages/desktop to that tag version BEFORE running
-// this suite — so an app whose band excludes its own version would be caught
-// here instead of shipping an observation-only Desktop (the 0.19.0 blocker:
-// the band still ended at 0.19.0 while the release published kernel 0.19.0).
-test("the accepted band admits the kernel version this Desktop ships with", () => {
-  const version = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
-  const r = acceptProbe(PROBE(version));
-  assert.equal(r.ok, true, `Desktop ${version} rejects the same-version oats CLI: ${r.reason} — widen ACCEPT_RANGE for this kernel minor`);
+// Release-gate invariant. Desktop and the kernel ship from ONE tag: an app that held anything back from the
+// kernel of its own release would ship degraded (the 0.19.0 blocker was its refusal). Inside its own tested
+// bound by construction (#1879): the bound is that version's minor.
+test("the kernel version this Desktop ships with is accepted inside its tested bound, with no notice", () => {
+  assert.deepEqual(accept(PROBE(DESKTOP)), { ok: true }, `Desktop ${DESKTOP} holds back or refuses the same-version oats CLI`);
 });
 
-test("the human-readable band is derived from the enforced numbers", () => {
-  assert.equal(ACCEPT_RANGE_TEXT, `>=${ACCEPT_RANGE.min.join(".")} <${ACCEPT_RANGE.maxExclusive.join(".")}`);
-  assert.match(acceptProbe(PROBE("0.70.0")).reason, new RegExp(ACCEPT_RANGE_TEXT.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+test("the human-readable range is derived from the enforced floor and the tested bound", () => {
+  assert.equal(acceptRangeText("0.69.17"), ">=0.26.0, tested through 0.69");
+  assert.equal(acceptRangeText("1.4.0-rc.2"), ">=0.26.0, tested through 1.4");
+  assert.equal(acceptRangeText(DESKTOP), `>=${ACCEPT_RANGE.min.join(".")}, tested through ${testedThroughText(testedBound(DESKTOP))}`);
+  assert.match(accept(PROBE("0.25.0")).reason, new RegExp(acceptRangeText(DESKTOP).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
-// F2b band contract, spelled with LITERALS on purpose. The tests above
-// derive from ACCEPT_RANGE (so they follow any widening); these pin the exact
-// edges this release promises, so a stray re-narrowing — or a widening past
-// the v1 surface without a deliberate DESKTOP_API decision — fails here.
-test("band edges: 0.26.0 through 0.69.x are accepted; 0.25.x and 0.70.0 are not (the feature fences are the real gate)", () => {
+// The floor, spelled with LITERALS on purpose: it is hand-set (#1879 keeps it), and the feature fences are the
+// real gate. There is no ceiling: every released v1 CLI at or above the floor is accepted.
+test("floor: 0.25.x is refused; every released v1 CLI from 0.26.0 is accepted (the feature fences are the real gate)", () => {
   // Floor 0.26.0: the first kernel the feature gates let through (it is the
   // first to advertise packages-no-approval); those fences stay the real gate.
-  // 0.27 is the harness rename (feature `harness`); 0.28 adds package souls + triggers; 0.29 adds
-  // workspace automations and desktop facts (all additive, feature-gated); 0.30 is team model v2 (feature
-  // team-model-2, BREAKING in the kernel; the Desktop reads 0.29 and 0.30 shapes, gated on the feature).
-  // Ceiling 0.70.0: 0.31 removes Herdr and routes per-instance reads and plans by --server/--home (probe `remote`
-  // entries readiness, instance-events, instance-git, lifecycle-plans); 0.32 through 0.43 are admitted on the same gates (0.33's spawn-preview-max-age, 0.34's capability-show, 0.35's capture-file and 0.36's workspace-identity are feature-gated; 0.37's launch preview needs no new gate; 0.38 is team model 3, feature team-model-3, BREAKING for the team views, which are gated on their feature; 0.39 adds server connect, the capability route and servers per workspace, features server-connect, capability-route and servers-per-workspace; 0.40 adds needs input, feature waiting-on-you; 0.41 refuses retire --delete-branch, which the Desktop no longer offers, and starts new sessions on the OATS tmux server, named by each row's recorded socket; 0.42 adds recovery notes to retire plans and `home`, `notCopied` and `afterHooks` to a retire receipt's workRecovery, which the lifecycle readers accept; 0.43 adds `description` to every schedule and trigger row and description-only updates, feature automation-descriptions, which gates the Desktop's summary writes; 0.44 adds the launch-prompt shapes (preview `launchPromptAnswers`, `E_SPAWN_INCOMPLETE` `launchPrompts`, the `launch-prompt` event), which the Desktop reads as optional, and needs no new gate; 0.45 adds `capabilities` to `oats souls --json` rows, feature souls-capabilities, which gates Capabilities' Used by; 0.46 adds opt-in `inspect --soul --instructions`, feature soul-composed-instructions, which the Desktop does not read yet, so no new gate).
-  assert.deepEqual(ACCEPT_RANGE, { min: [0, 26, 0], maxExclusive: [0, 70, 0] });
-  assert.equal(ACCEPT_RANGE_TEXT, ">=0.26.0 <0.70.0");
-  assert.equal(DESKTOP_API, 1, "Desktop API stays v1 across the v0.25.0 kernel bump (workspace model)");
-  // inside — including both edges of the newly admitted minor
-  for (const v of ["0.26.0", "0.26.0+build.7", "0.26.1", "0.26.99", "0.27.0", "0.27.99", "0.28.0", "0.28.99", "0.29.0", "0.29.99", "0.30.0", "0.30.99", "0.31.0", "0.31.99", "0.32.0", "0.32.99", "0.33.0", "0.33.99", "0.34.0", "0.34.99", "0.35.0", "0.35.99", "0.36.0", "0.36.99", "0.37.0", "0.37.99", "0.38.0", "0.38.99", "0.39.0", "0.39.99", "0.40.0", "0.40.99", "0.41.0", "0.41.99", "0.42.0", "0.42.99", "0.43.0", "0.43.99", "0.44.0", "0.44.99", "0.45.0", "0.45.99", "0.46.0", "0.46.99", "0.47.0", "0.47.99", "0.48.0", "0.48.99", "0.49.0", "0.49.99", "0.50.0", "0.50.99", "0.51.0", "0.51.99", "0.52.0", "0.52.99", "0.53.0", "0.53.99", "0.54.0", "0.54.99", "0.55.0", "0.55.99", "0.56.0", "0.56.99", "0.57.0", "0.57.99", "0.58.0", "0.58.99", "0.59.0", "0.59.99", "0.60.0", "0.60.99", "0.61.0", "0.61.99", "0.62.0", "0.62.99", "0.63.0", "0.63.99", "0.64.0", "0.64.99", "0.65.0", "0.65.99", "0.66.0", "0.66.99", "0.67.0", "0.67.99", "0.68.0", "0.68.99", "0.69.0", "0.69.99"]) {
-    assert.equal(acceptProbe(PROBE(v)).ok, true, `${v} must be accepted`);
+  assert.deepEqual(ACCEPT_RANGE, { min: [0, 26, 0] });
+  assert.equal(DESKTOP_API, 1, "Desktop API stays v1");
+  for (const v of ["0.26.0", "0.26.0+build.7", "0.26.99", "0.40.0", "0.53.0", "0.69.0", "0.69.99", "0.70.0", "0.99.0", "1.0.0"]) {
+    assert.equal(acceptProbe(PROBE(v), "0.69.17").ok, true, `${v} must be accepted`);
   }
-  // outside — every 0.25 kernel, the exclusive ceiling and everything above it
-  for (const v of ["0.22.0", "0.25.0", "0.25.7", "0.25.8", "0.25.9", "0.25.99", "0.70.0", "0.70.1", "1.0.0"]) {
-    const r = acceptProbe(PROBE(v));
+  for (const v of ["0.22.0", "0.25.0", "0.25.9", "0.25.99"]) {
+    const r = acceptProbe(PROBE(v), "0.69.17");
     assert.equal(r.ok, false, `${v} must be rejected`);
-    assert.match(r.reason, /outside >=0\.26\.0 <0\.70\.0/, v);
+    assert.match(r.reason, /outside >=0\.26\.0, tested through 0\.69/, v);
   }
-  // a PRERELEASE of the new minor is still not a released kernel
-  const pre = acceptProbe(PROBE("0.26.0-rc.1"));
-  assert.equal(pre.ok, false);
-  assert.match(pre.reason, /prerelease/);
+  // a PRERELEASE is never a released kernel, below the bound or above it
+  for (const v of ["0.26.0-rc.1", "0.69.18-rc.1", "0.70.0-rc.1"]) {
+    const pre = acceptProbe(PROBE(v), "0.69.17");
+    assert.equal(pre.ok, false, v);
+    assert.match(pre.reason, /prerelease/, v);
+  }
+});
+
+test("acceptProbe refuses without a tested version: a new caller can never fall back to no bound", () => {
+  for (const missing of [undefined, null, "", "not-a-version", 69]) {
+    const r = acceptProbe(PROBE(DESKTOP), missing);
+    assert.equal(r.ok, false, String(missing));
+    assert.match(r.reason, /no tested client version/);
+  }
+  assert.equal(testedBound(undefined), null);
+  assert.deepEqual(testedBound("0.69.17"), [0, 69]);
+  assert.deepEqual(testedBound("0.70.0-rc.1"), [0, 70], "a prerelease Desktop tests its release's minor");
+});
+
+test("discover refuses every candidate when its io names no tested version", async () => {
+  const r = await locatorDiscover({ persisted: () => "/fixture/oats", env: { PATH: "" }, isExecutableFile: () => true, canonicalize: (p) => p },
+    async () => ({ stdout: JSON.stringify(PROBE(DESKTOP)) }));
+  assert.equal(r.ok, false);
+  assert.match(r.tried[0].reason, /no tested client version/);
 });
 
 test("0.24 version acceptance does not grant API2 or unadvertised execution capabilities", async () => {
-  assert.equal(acceptProbe({ ...PROBE("0.26.0"), desktopApi: 2 }).ok, false);
-  assert.equal(acceptProbe({ ...PROBE("0.26.0"), schemaVersion: 2 }).ok, false);
+  assert.equal(accept({ ...PROBE("0.26.0"), desktopApi: 2 }).ok, false);
+  assert.equal(accept({ ...PROBE("0.26.0"), schemaVersion: 2 }).ok, false);
   const cli = await discover({ persisted: () => "/fixture/oats", env: { PATH: "" }, isExecutableFile: () => true },
     async () => ({ stdout: JSON.stringify(PROBE("0.26.0")) }));
   assert.equal(cli.ok, true); assert.equal(cli.version, "0.26.0");
@@ -234,41 +245,46 @@ test("discover: full failure returns per-candidate stable diagnostics", async ()
   assert.match(r.tried[1].reason, /probe failed/);
   assert.match(r.tried[2].reason, /outside/);
   assert.equal(r.tried[2].version, "0.21.5", "rejected version surfaces for the degradation card");
-  assert.equal(Object.hasOwn(r.tried[2], "above"), false, "below the band is not above it");
+  assert.equal(Object.hasOwn(r.tried[2], "newerApi"), false, "below the floor is not a newer API");
 });
 
-test("acceptProbe: `above` only for a released, parseable version at or past the ceiling whose every other check passed", () => {
+test("acceptProbe: `newerApi` only for a refusal whose sole failure is an integer desktopApi above this client's", () => {
   const TABLE = [
-    ["below the band", PROBE("0.25.9"), false, false],
-    ["at the floor", PROBE("0.26.0"), true, false],
-    ["inside", PROBE("0.40.3"), true, false],
-    ["the last version inside", PROBE("0.69.99"), true, false],
-    ["at maxExclusive", PROBE("0.70.0"), false, true],
-    ["above", PROBE("0.70.2"), false, true],
-    ["a major above", PROBE("1.0.0"), false, true],
-    ["above, with build metadata (a released version)", PROBE("0.70.0+build.3"), false, true],
-    ["a prerelease above", PROBE("0.70.0-rc.1"), false, false],
-    ["a prerelease far above", PROBE("0.70.0-beta"), false, false],
-    ["unparsable", PROBE("0.70"), false, false],
-    ["no version", { ...PROBE(), version: undefined }, false, false],
-    ["above, another desktop API", { ...PROBE("0.70.0"), desktopApi: 2 }, false, false],
-    ["above, not the oats CLI", { ...PROBE("0.70.0"), name: "@other/pkg" }, false, false],
-    ["above, another schema", { ...PROBE("0.70.0"), schemaVersion: 2 }, false, false],
+    ["desktop API 2", { ...PROBE("0.69.3"), desktopApi: 2 }, true],
+    ["desktop API 7, above the bound too", { ...PROBE("0.70.0"), desktopApi: 7 }, true],
+    ["desktop API 0", { ...PROBE("0.69.3"), desktopApi: 0 }, false],
+    ["desktop API missing", { ...PROBE("0.69.3"), desktopApi: undefined }, false],
+    ["desktop API as text", { ...PROBE("0.69.3"), desktopApi: "2" }, false],
+    ["desktop API 2.5", { ...PROBE("0.69.3"), desktopApi: 2.5 }, false],
+    ["desktop API 2, not the oats CLI", { ...PROBE("0.69.3"), desktopApi: 2, name: "@other/pkg" }, false],
+    ["desktop API 2, another schema", { ...PROBE("0.69.3"), desktopApi: 2, schemaVersion: 2 }, false],
+    ["a version above the bound alone (accepted)", PROBE("0.70.0"), false],
+    ["below the floor", PROBE("0.25.9"), false],
   ];
-  for (const [name, payload, ok, above] of TABLE) {
-    const r = acceptProbe(payload);
-    assert.equal(r.ok, ok, name);
-    if (above) assert.equal(r.above, true, name); else assert.equal(Object.hasOwn(r, "above"), false, name);
+  for (const [name, payload, newer] of TABLE) {
+    const r = acceptProbe(payload, "0.69.17");
+    if (newer) { assert.equal(r.ok, false, name); assert.equal(r.newerApi, true, name); }
+    else assert.equal(Object.hasOwn(r, "newerApi"), false, name);
   }
+  assert.equal(Object.hasOwn(acceptProbe(PROBE("0.70.0"), "0.69.17"), "above"), false, "the old flag is gone: a version is never refused for being above");
 });
 
-test("discover: a candidate refused only for being above the band carries `above: true` on its diagnostics entry, and no other does", async () => {
-  const versions = { "/below/oats": "0.21.5", "/pre/oats": "0.70.0-rc.1", "/above/oats": "0.70.1" };
-  const io = { persisted: () => null, env: { PATH: ["/below", "/pre", "/above"].join(delimiter) }, isExecutableFile: () => true, canonicalize: (p) => p };
-  const r = await discover(io, async (path) => ({ stdout: JSON.stringify(PROBE(versions[path])) }));
-  assert.equal(r.ok, false);
-  assert.deepEqual(r.tried.map(t => [t.path, t.version, t.above]), [["/below/oats", "0.21.5", undefined], ["/pre/oats", "0.70.0-rc.1", undefined], ["/above/oats", "0.70.1", true]]);
-  assert.deepEqual(r.tried.map(t => Object.hasOwn(t, "above")), [false, false, true]);
+test("discover: an accepted CLI above the bound carries aboveTested and testedThrough; a newer API's refusal carries newerApi on its diagnostics entry", async () => {
+  const io = (versions) => ({ persisted: () => null, env: { PATH: Object.keys(versions).map((p) => p.replace(/\/oats$/, "")).join(delimiter) },
+    isExecutableFile: () => true, canonicalize: (p) => p, testedVersion: "0.69.17" });
+  const payloads = { "/api2/oats": { ...PROBE("0.69.1"), desktopApi: 2 }, "/pre/oats": PROBE("0.70.0-rc.1"), "/above/oats": PROBE("0.70.1") };
+  const r = await locatorDiscover(io(payloads), async (path) => ({ stdout: JSON.stringify(payloads[path]) }));
+  assert.equal(r.ok, true);
+  assert.equal(r.bin, "/above/oats");
+  assert.equal(r.aboveTested, true);
+  assert.equal(r.testedThrough, "0.69");
+  const refused = await locatorDiscover(io({ "/api2/oats": 1, "/pre/oats": 1 }), async (path) => ({ stdout: JSON.stringify(payloads[path]) }));
+  assert.equal(refused.ok, false);
+  assert.deepEqual(refused.tried.map((t) => [t.path, t.newerApi]), [["/api2/oats", true], ["/pre/oats", undefined]]);
+  const inside = await locatorDiscover({ ...io({ "/in/oats": 1 }) }, async () => ({ stdout: JSON.stringify(PROBE("0.69.25")) }));
+  assert.equal(inside.ok, true);
+  assert.equal(Object.hasOwn(inside, "aboveTested"), false, "inside the bound the record is as before");
+  assert.equal(Object.hasOwn(inside, "testedThrough"), false);
 });
 
 test("discover: symlinked duplicates canonicalize and probe once", async () => {
@@ -391,7 +407,7 @@ test("cliRecord: the record made from an accepted payload and its path is what d
     assert.equal(found.ok, true, what);
     // What a client that probes one known kernel does: read the answer, accept it, make the record.
     const read = Object.freeze(parseProbeStdout(stdout));
-    assert.equal(acceptProbe(read).ok, true, what);
+    assert.equal(accept(read).ok, true, what);
     const record = cliRecord(read, { bin: "/bin/oats", source: found.source });
     assert.deepEqual(record, found, what);
     assert.equal(JSON.stringify(record), JSON.stringify(found), `${what}: the same keys in the same order`);
@@ -401,4 +417,27 @@ test("cliRecord: the record made from an accepted payload and its path is what d
   // The lists are the payload's own, as discover always answered them: the record copies none.
   const full = payloads["every field its gate reads"];
   assert.equal(cliRecord(full, { bin: "/bin/oats", source: "persisted" }).features, full.features);
+});
+
+// #1879 acceptance 1 (Locator), for two Desktop versions so the bound cannot be hard-coded: a Desktop X.Y.Z
+// accepts X.Y.0 and X.Y.99 with no notice, X.(Y+1).0 and (X+1).0.0 flagged above its tested bound, and refuses
+// X.(Y+1).0-rc.1 (a prerelease), desktopApi 2, and a CLI below the floor.
+for (const desktop of ["0.69.18", "1.4.2"]) {
+  test(`acceptance (locator): a Desktop of ${desktop} — its own minor without a notice, a later minor or major above its tested bound, the refusals as before`, () => {
+    const [x, y] = desktop.split(".").map(Number);
+    const through = `${x}.${y}`;
+    for (const v of [`${x}.${y}.0`, `${x}.${y}.99`]) assert.deepEqual(acceptProbe(PROBE(v), desktop), { ok: true }, v);
+    for (const v of [`${x}.${y + 1}.0`, `${x + 1}.0.0`]) assert.deepEqual(acceptProbe(PROBE(v), desktop), { ok: true, aboveTested: true, testedThrough: through }, v);
+    const pre = acceptProbe(PROBE(`${x}.${y + 1}.0-rc.1`), desktop);
+    assert.equal(pre.ok, false); assert.match(pre.reason, /prerelease/);
+    const api = acceptProbe({ ...PROBE(`${x}.${y}.0`), desktopApi: 2 }, desktop);
+    assert.equal(api.ok, false); assert.equal(api.newerApi, true);
+    const below = acceptProbe(PROBE("0.25.9"), desktop);
+    assert.equal(below.ok, false); assert.match(below.reason, /outside >=0\.26\.0/);
+  });
+}
+
+test("acceptance (locator): a CLI below the Desktop's own minor but at or above the floor is accepted with no notice", () => {
+  assert.deepEqual(acceptProbe(PROBE("0.60.0"), "0.69.18"), { ok: true });
+  assert.deepEqual(acceptProbe(PROBE("0.69.25"), "0.69.18"), { ok: true }, "a later patch of the same minor is inside the bound");
 });

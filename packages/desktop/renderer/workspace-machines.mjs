@@ -18,6 +18,11 @@ import { box } from './workspace-setup.mjs';
 import { iconElement } from './shell-icons.mjs';
 import { openAddMachineDialog } from './add-machine-dialog.mjs';
 import { followBackfill, BACKFILL_POLL_MS } from '../../client/machine-contract.mjs';
+import { cliHeldBack } from './views/cli-status.mjs';
+
+/** Above the tested bound (#1879) a machine's Check, Remove and Add are held back (packages/client/above-tested.mjs):
+ * the notice for one, or null. */
+const machineHeld = verb => cliHeldBack(`POST /api/server-${verb}`);
 
 export const machinesCSS = `
 /* One grid per box, each machine a subgrid row (Setup's members grammar). */
@@ -89,6 +94,7 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
   function addButton() {
     if (add) return add;
     add = el('button', 'Add a machine to this workspace…', 'machines-add'); add.type = 'button';
+    if (machineHeld('connect')) { add.disabled = true; add.title = machineHeld('connect'); }
     add.addEventListener('click', () => {
       if (!live() || !answer?.deployment) return;
       dialog.current?.close({ restoreFocus: false });
@@ -133,9 +139,10 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
       row.append(name, el('span', m.sshHost, 'machine-cell mono ssh'), folder, el('span', version, 'machine-cell muted version'), badge);
       const acts = el('span', undefined, 'machine-acts');
       const check = el('button', 'Check', 'machine-act machine-check'); check.type = 'button'; check.setAttribute('aria-label', `Check ${m.id}`);
-      check.disabled = checking.has(m.id);
+      check.disabled = checking.has(m.id) || !!machineHeld('check'); check.title = machineHeld('check') ?? '';
       check.addEventListener('click', () => void runCheck(m.id, { focus: true }));
       const remove = el('button', 'Remove', 'machine-act machine-remove'); remove.type = 'button'; remove.setAttribute('aria-label', `Remove ${m.id}`);
+      if (machineHeld('remove')) { remove.disabled = true; remove.title = machineHeld('remove'); }
       remove.addEventListener('click', () => { confirming = m.id; rowErrors.delete(m.id); render(); body.querySelector(`[data-machine="${m.id}"] .machine-confirm-cancel`)?.focus(); });
       acts.append(check, remove); row.append(acts);
       if (confirming === m.id) {
@@ -184,6 +191,8 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
     backgroundChecks();
   }
   function backgroundChecks() {
+    // A check held back above the tested bound is not run in the background either: nothing to be refused.
+    if (machineHeld('check')) return;
     const due = (answer?.servers || []).filter(m => !m.check && !checkedThisRun.has(m.id));
     for (const m of due) { checkedThisRun.add(m.id); checking.add(m.id); }
     if (!due.length) return;

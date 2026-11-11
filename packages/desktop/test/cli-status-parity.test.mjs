@@ -133,6 +133,27 @@ for (const shape of ["parsed", "response"]) {
   });
 }
 
+// #1879: /api/cli gains aboveTested and testedThrough; both shapes keep them, and the notice takes the card's place.
+const aboveTested = { ...compatible, version: "0.23.1", aboveTested: true, testedThrough: "0.22", required: { range: ">=0.22.0, tested through 0.22", desktopApi: 1 } };
+for (const shape of ["parsed", "response"]) {
+  for (const method of ["refreshCli", "reprobeCli"]) {
+    test(`${method}: ${shape} an accepted CLI above the tested bound keeps aboveTested and testedThrough, and shows the notice, not the card`, async () => {
+      cs.resetCliStateForTests();
+      const ctx = context(shape, async () => reply(aboveTested));
+      const d = new JSDOM("<!doctype html><body></body>", { url: "http://127.0.0.1/" });
+      const notice = cs.aboveTestedCard(d.window.document, ctx);
+      try {
+        await cs[method](ctx, method === "reprobeCli" ? "/chosen/oats" : undefined);
+        assert.deepEqual(cs.cliStatus(), aboveTested);
+        assert.equal(cs.cliAvailable(), true);
+        assert.equal(cs.cliKnownUnavailable(), false, "no card");
+        assert.equal(notice.el.hidden, false);
+        assert.match(notice.el.querySelector(".cli-notice").textContent, /tested with oats CLIs up to 0\.22; the installed CLI is 0\.23\.1\./);
+      } finally { notice.dispose(); d.window.close(); cs.resetCliStateForTests(); }
+    });
+  }
+}
+
 test("actual card tolerates incomplete diagnostics without inventing binary absence", async () => {
   const c = card(cs, {});
   try {

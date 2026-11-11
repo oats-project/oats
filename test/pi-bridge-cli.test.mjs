@@ -72,7 +72,10 @@ const install = (folder) => `pi install ${SPEC} | folder=${folder} | prefer_onli
 const lastLine = (text) => text.trimEnd().split("\n").pop();
 /** The line under the steps when the CLI's install is of another minor (#1107); the fixture's
  *  NEXT is another major than the kernel under test. */
-const desktopFirst = (version) => `OATS Desktop refuses a CLI newer than its own minor version: if you use it, install OATS Desktop ${version} first.`;
+// #1879: a Desktop above its tested bound holds back what it was not tested with; the last hard-ceiling Desktop refuses.
+const desktopFirst = (version) => `An OATS Desktop older than ${version.split(".").slice(0, 2).join(".").replace(/-.*$/, "")} holds actions back with this CLI. `
+  + `Stop, Remove, schedules, triggers and every other change except Spawn, Start, Restart, colour and background are off until you install OATS Desktop ${version}. `
+  + "(An OATS Desktop of 0.69.17 or older refuses this CLI until then.)";
 
 /** Every kind of folder a deployment can name, beside the default one. */
 function everyKind(t) {

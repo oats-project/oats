@@ -85,6 +85,7 @@ import { automationsRequest, automationsFailure } from "./automations.mjs";
 import { soulRows } from "../../client/soul-rows.mjs";
 import { harnessFlag, HARNESSES } from "../../client/harness-names.mjs";
 import { probeChanged } from "../../client/cli-probe-contract.mjs";
+import { aboveTestedRefusal, postOperation } from "../../client/above-tested.mjs";
 import { workspaceNotServed } from "../renderer/deployment-header.mjs";
 import { createRemoteIdentityStore } from "./remote-identity.mjs";
 import { DESKTOP_TERMS } from "../renderer/desktop-terms.mjs";
@@ -96,6 +97,18 @@ import { rosterRows, kernelLiveness, livenessInput, livenessAnswers, panelInstan
 import { deployments, viewFor, deploymentFor, surfaceDeployment, viewForgeContext, deploymentRows, isServed, teamMembersFor, machineScope, panelData, cliReadsRemotes, rosterWorkspaceKeys } from "../../client/panel-views.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+// Identity for compatibility probes (GET /api/version): the desktop app must
+// not reuse an OLDER server that answers /api/panel but lacks the
+// desktop endpoints (/api/brain, /api/file...). The bundled
+// server's identity is the desktop package's name and version.
+// The same version is this Desktop's TESTED BOUND (packages/client/cli-locator.mjs testedBound): the
+// newest CLI minor it accepts without holding anything back. It is the Desktop's own manifest, the
+// version of the app installed, which the version-bump PR moves with the kernel's; the release checks
+// (scripts/check-package-dry-runs.mjs checkReleaseVersions) refuse a checkout where they differ.
+const MANIFEST = (() => {
+  const p = JSON.parse(readFileSync(join(HERE, "..", "package.json"), "utf8"));
+  return { capability: p.name, version: p.version };
+})();
 
 const args = process.argv.slice(2);
 const sub = args[0];
@@ -416,6 +429,7 @@ const PATH_ERROR = typeof flag("path-error") === "string" ? flag("path-error") :
 const cliIo = {
   persisted: () => chosenBin,
   env: process.env,
+  testedVersion: MANIFEST.version,
   isExecutableFile: (p) => {
     try { const st = statSync(p); if (!st.isFile()) return false; accessSync(p, fsConstants.X_OK); return true; }
     catch { return false; }
@@ -468,7 +482,11 @@ function cliStatus() {
     bin: cliState.bin || null,
     version: cliState.version || null,
     source: cliState.source || null,
-    required: { desktopApi: locator.DESKTOP_API, range: locator.ACCEPT_RANGE_TEXT },
+    required: { desktopApi: locator.DESKTOP_API, range: locator.acceptRangeText(MANIFEST.version) },
+    // Above the tested bound (oats-project/oats#1879): the CLI is accepted, and only the operations
+    // packages/client/above-tested.mjs allows stay on. `testedThrough` is this Desktop's own bound, "X.Y".
+    aboveTested: cliState.ok === true && cliState.aboveTested === true,
+    testedThrough: locator.testedThroughText(locator.testedBound(MANIFEST.version)),
     // The recovery command the degradation card offers, DERIVED rather than
     // spelled: Desktop and the kernel publish in lockstep from one tag, so
     // this app's own version names the exactly-matching CLI — always inside
@@ -1108,14 +1126,6 @@ function fileData(requested) {
 }
 
 // ---- HTTP ----
-// Identity for compatibility probes (GET /api/version): the desktop app must
-// not reuse an OLDER server that answers /api/panel but lacks the
-// desktop endpoints (/api/brain, /api/file...). The bundled
-// server's identity is the desktop package's name and version.
-const MANIFEST = (() => {
-  const p = JSON.parse(readFileSync(join(HERE, "..", "package.json"), "utf8"));
-  return { capability: p.name, version: p.version };
-})();
 const send = (res, code, body, type = "application/json") => {
   const data = type === "application/json" ? JSON.stringify(body) : body;
   res.writeHead(code, { "content-type": `${type}; charset=utf-8`, "cache-control": "no-store" });
@@ -1148,6 +1158,15 @@ const readStrictBody = (req, limit = 65536, measured = false) => new Promise((ok
   req.on("error", bad);
   req.on("aborted", bad);
 });
+
+/* Above the tested bound (oats-project/oats#1879; packages/client/above-tested.mjs). Every POST handler
+   below asks `heldBack(...)` with its (route, action) once its body is read and before it runs anything: an
+   operation the allowlist does not name is answered with the notice sentence, and no CLI process starts.
+   One answer for every route: 409, { status: "refused", code, error, reason: { code, message }, release }.
+   test/above-tested-inventory.test.mjs holds every POST route here to a class there. */
+const heldBack = (route, action) => aboveTestedRefusal(cliState, postOperation(route, action));
+const refuseHeld = (res, refusal) => send(res, 409, { status: "refused", code: refusal.code, error: refusal.message,
+  reason: { code: refusal.code, message: refusal.message }, ...(refusal.release ? { release: refusal.release } : {}) });
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
@@ -1186,6 +1205,8 @@ const server = createServer(async (req, res) => {
       const asked = url.searchParams.get("ws");
       try {
         const request = await readBody(req);
+        const refused = heldBack(path, request?.action);
+        if (refused) return refuseHeld(res, refused);
         const workspace = surfaceDeployment(held(), asked, request, DESKTOP_TERMS);
         const result = await launchConfigRequest(request, {
           workspace, cli: cliState, localCwd: ctxs[0] ?? homedir(),
@@ -1209,6 +1230,8 @@ const server = createServer(async (req, res) => {
         const epoch = req.headers[FORGE_EPOCH_HEADER] ?? "standalone:0";
         if (!validForgeEpoch(epoch)) throw new Error("bad epoch");
         const request = await readStrictBody(req);
+        const refused = heldBack(path, path === "/api/instance-review-threads" ? request?.action : undefined);
+        if (refused) return refuseHeld(res, refused);
         if (path === "/api/forge-connections") {
           if (url.search) throw new Error("unexpected query");
           return send(res, 200, await forgeBoundary.connections(request, epoch));
@@ -1240,6 +1263,8 @@ const server = createServer(async (req, res) => {
       try {
         if (url.searchParams.getAll('ws').length !== 1 || !url.searchParams.get('ws') || [...url.searchParams.keys()].some(k => k !== 'ws')) throw new Error('bad query');
         const request = await readStrictBody(req, 16384);
+        const refused = heldBack(path, request?.action);
+        if (refused) return refuseHeld(res, refused);
         const getContext = () => {
           const workspace = deployments(held()).find(w => w.id === url.searchParams.get('ws'));
           return { workspace, cli: cliState, epoch: cliProbeGeneration, localCwd: ctxs[0] ?? homedir(),
@@ -1257,6 +1282,8 @@ const server = createServer(async (req, res) => {
         // A suggest-name read (feature instance-suggest-name, awebai/oats#1490 §2) carries the task as well.
         const suggest = request.action === 'suggest' || request.action === 'suggest-name';
         if (!suggest && bytes > 16384) throw new Error('body too large');
+        const refused = heldBack(path, request?.action);
+        if (refused) return refuseHeld(res, refused);
         const getContext = () => {
           const workspace = deploymentFor(held(), url.searchParams.get('ws'), DESKTOP_TERMS);
           return { workspace, cli: cliState, agents: workspace && !workspace.remote && !workspace.server ? agentsData(workspace.id).agents : [],
@@ -1274,6 +1301,8 @@ const server = createServer(async (req, res) => {
       try {
         if (url.searchParams.getAll('ws').length !== 1 || !url.searchParams.get('ws') || [...url.searchParams.keys()].some(k => k !== 'ws')) throw new Error('bad query');
         const request = await readStrictBody(req);
+        const refused = heldBack(path, request?.action);
+        if (refused) return refuseHeld(res, refused);
         const getContext = () => {
           const workspace = deployments(held()).find(w => w.id === url.searchParams.get('ws'));
           return { workspace, cli: cliState, agents: workspace && !workspace.remote && !workspace.server ? agentsData(workspace.id).agents : [],
@@ -1288,6 +1317,8 @@ const server = createServer(async (req, res) => {
       try {
         if (url.searchParams.getAll('ws').length !== 1 || !url.searchParams.get('ws') || [...url.searchParams.keys()].some(k => k !== 'ws')) throw new Error('bad query');
         const request = await readStrictBody(req, 4096);
+        const refused = heldBack(path, request?.action);
+        if (refused) return refuseHeld(res, refused);
         const getContext = () => ({ workspace: deploymentFor(held(), url.searchParams.get('ws'), DESKTOP_TERMS), cli: cliState });
         const result = await (path === '/api/workspace-teams' ? teamsRequest : soulTeamsRequest)(request, getContext);
         // The writing actions change oats-local.yaml; inspect reports a soul's teams, so the held inspections go
@@ -1314,6 +1345,8 @@ const server = createServer(async (req, res) => {
       try {
         if (url.searchParams.getAll('ws').length !== 1 || !url.searchParams.get('ws') || [...url.searchParams.keys()].some(k => k !== 'ws')) throw new Error('bad query');
         const request = await readStrictBody(req, 4096);
+        const refused = heldBack(path);
+        if (refused) return refuseHeld(res, refused);
         const getContext = () => {
           const workspace = deployments(held()).find(w => w.id === url.searchParams.get('ws'));
           return { workspace, cli: cliState, localCwd: ctxs[0] ?? homedir(), instances: workspace ? snapshot.byWs.get(workspace.id)?.instances || [] : [] };
@@ -1330,6 +1363,8 @@ const server = createServer(async (req, res) => {
       try {
         if (url.searchParams.getAll('ws').length !== 1 || !url.searchParams.get('ws') || [...url.searchParams.keys()].some(k => k !== 'ws')) throw new Error('bad query');
         const request = await readStrictBody(req);
+        const refused = heldBack(path, request?.action);
+        if (refused) return refuseHeld(res, refused);
         const getContext = () => {
           const workspace = deployments(held()).find(w => w.id === url.searchParams.get('ws'));
           return { workspace, cli: cliState, localCwd: ctxs[0] ?? homedir(), instances: workspace ? snapshot.byWs.get(workspace.id)?.instances || [] : [] };
@@ -1352,6 +1387,8 @@ const server = createServer(async (req, res) => {
           throw Object.assign(new Error("Expected one workspace selector"), { code: "E_BAD_ARGS" });
         }
         const request = await readStrictBody(req);
+        const refused = heldBack(path, request?.action);
+        if (refused) return refuseHeld(res, refused);
         const workspace = deployments(held()).find(w => w.id === url.searchParams.get("ws"));
         // Never collect Git here or fall back to another workspace.
         // An absent exact snapshot is unavailable; refreshing the roster is
@@ -1371,6 +1408,8 @@ const server = createServer(async (req, res) => {
       try {
         if (url.searchParams.getAll("ws").length !== 1 || !url.searchParams.get("ws") || [...url.searchParams.keys()].some(k => k !== "ws")) throw new Error("bad query");
         const request = await readStrictBody(req, 16384);
+        const refused = heldBack(path, request?.action);
+        if (refused) return refuseHeld(res, refused);
         const workspace = deploymentFor(held(), url.searchParams.get("ws"), DESKTOP_TERMS);
         const result = await workspaceSyncRequest(request, { workspace, cli: cliState });
         if (request?.action === "sync" && result.status === "ok") {
@@ -1383,6 +1422,8 @@ const server = createServer(async (req, res) => {
       const asked = url.searchParams.get("ws");
       try {
         const request = await readStrictBody(req);
+        const refused = heldBack(path, request?.action);
+        if (refused) return refuseHeld(res, refused);
         const workspace = surfaceDeployment(held(), asked, request, DESKTOP_TERMS);
         if (request?.action === "show" || request?.action === "file") {
           // What a capability ships (server/capability-show.mjs): its own gate (capability-show), not the
@@ -1423,6 +1464,9 @@ const server = createServer(async (req, res) => {
       let request;
       try { ({ body: request } = await readStrictBody(req, 4096, true)); } catch { return send(res, 400, automationsFailure('E_BAD_ARGS')); }
       if (url.searchParams.getAll('ws').length !== 1 || !url.searchParams.get('ws') || [...url.searchParams.keys()].some(k => k !== 'ws')) return send(res, 400, automationsFailure('E_BAD_ARGS'));
+      // The operation is `<kind>:<action>`: a list is a read, every switch, run and description is held back.
+      const refused = heldBack(path, typeof request?.kind === 'string' && typeof request?.action === 'string' ? `${request.kind}:${request.action}` : null);
+      if (refused) return refuseHeld(res, refused);
       const workspace = deploymentFor(held(), url.searchParams.get('ws'), DESKTOP_TERMS);
       return send(res, 200, await automationsRequest(request, { workspace, cli: cliState }));
     }
@@ -1432,6 +1476,8 @@ const server = createServer(async (req, res) => {
       if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed', code: 'E_METHOD_NOT_ALLOWED' });
       let request;
       try { ({ body: request } = await readStrictBody(req, 65536, true)); } catch { return send(res, 400, { error: 'Invalid schedule request', code: 'E_BAD_ARGS' }); }
+      const refused = heldBack(path);
+      if (refused) return refuseHeld(res, refused);
       // No default workspace: a mutation names its workspace.
       const workspace = surfaceDeployment(held(), url.searchParams.get('ws'), request, DESKTOP_TERMS);
       try {
@@ -1453,6 +1499,8 @@ const server = createServer(async (req, res) => {
       // POST (not GET) so the CSRF Origin guard above covers this
       // command-running route — see the model-catalog SECURITY note.
       const body = await readBody(req);
+      const refused = heldBack(path);
+      if (refused) return refuseHeld(res, refused);
       const harness = typeof body.harness === "string" && body.harness ? body.harness : "pi";
       if (!HARNESSES.includes(harness)) return send(res, 400, { error: `unknown harness "${harness}" (pi|claude|codex)` });
       return send(res, 200, { harness, models: await modelsData(harness) });
@@ -1488,6 +1536,8 @@ const server = createServer(async (req, res) => {
       if (url.searchParams.getAll("ws").length !== 1 || [...url.searchParams.keys()].some((k) => k !== "ws")) return send(res, 400, { error: "Expected one workspace selector", code: "E_BAD_ARGS" });
       let body;
       try { body = await readStrictBody(req, 4096); } catch (e) { return send(res, 400, { error: e.message, code: "E_BAD_ARGS" }); }
+      const refused = heldBack(path);
+      if (refused) return refuseHeld(res, refused);
       const scope = machineScope(held(), url.searchParams.get("ws"), DESKTOP_TERMS);
       if (!scope) return send(res, 400, { error: "Select a known workspace", code: "E_WORKSPACE_UNKNOWN" });
       try {
@@ -1511,6 +1561,8 @@ const server = createServer(async (req, res) => {
       if (url.search) return send(res, 400, forgetNotRun("E_BAD_ARGS"));
       let body;
       try { body = await readStrictBody(req, 4096); } catch { return send(res, 400, forgetNotRun("E_BAD_ARGS")); }
+      const refused = heldBack(path);
+      if (refused) return refuseHeld(res, refused);
       const { http, ran, answer } = await serverForget.forget(body);
       if (ran) { try { void refreshRemoteSnapshotAfter().catch(() => {}); } catch { /* a re-read must not erase the outcome */ } }
       return send(res, http, answer);
@@ -1525,6 +1577,8 @@ const server = createServer(async (req, res) => {
       let body;
       try { body = await readStrictBody(req, 1024); } catch { return send(res, 400, { error: "body needs { focused: boolean }", code: "E_BAD_ARGS" }); }
       if (typeof body.focused !== "boolean" || Object.keys(body).length !== 1) return send(res, 400, { error: "body needs { focused: boolean }", code: "E_BAD_ARGS" });
+      const refused = heldBack(path);
+      if (refused) return refuseHeld(res, refused);
       refreshLoop.setFocused(body.focused); remoteLoop.setFocused(body.focused);
       return send(res, 200, { focused: refreshLoop.focused() });
     }
@@ -1539,6 +1593,8 @@ const server = createServer(async (req, res) => {
       const views = body?.views;
       if (Object.keys(body ?? {}).length !== 1 || !Array.isArray(views) || views.length > MAX_WINDOW_VIEWS || !views.every((v) => v === null || validWorkspaceId(v)))
         return send(res, 400, { error: "body needs { views: [view id | null] }", code: "E_BAD_ARGS" });
+      const refused = heldBack(path);
+      if (refused) return refuseHeld(res, refused);
       const terms = DESKTOP_TERMS, before = rosterWorkspaceKeys(held(), windowViews, terms);
       windowViews = [...views];
       const after = rosterWorkspaceKeys(held(), windowViews, terms);
@@ -1549,6 +1605,8 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && path === "/api/remote-roster/refresh") {
       // A remote window's Retry (#1117): the read the background loop runs, now, or the one already in flight.
       // Its outcome is held (the panels republished) before this answers; /api/panel then serves it.
+      const refused = heldBack(path);
+      if (refused) return refuseHeld(res, refused);
       await refreshRemoteSnapshot();
       return send(res, 200, { refreshed: true });
     }
@@ -1557,6 +1615,8 @@ const server = createServer(async (req, res) => {
       // after choosing a binary — main/renderer call this; body may carry a
       // user-chosen absolute path which becomes the top-priority candidate.
       const body = await readBody(req);
+      const refused = heldBack(path);
+      if (refused) return refuseHeld(res, refused);
       const chosen = typeof body.bin === "string" && body.bin.startsWith("/") ? body.bin : undefined;
       await reprobeCli(chosen);
       return send(res, 200, servedCliStatus());
@@ -1566,6 +1626,9 @@ const server = createServer(async (req, res) => {
       let body;
       try { body = await readStrictBody(req, 65536); }
       catch { const failure = spawnApplyFailure('E_BAD_ARGS'); return send(res, 400, { ...failure, code: failure.reason.code, error: failure.reason.message }); }
+      // The operation is the body's action (prepare, apply, result), or an execution-server spawn without one.
+      const refused = heldBack(path, Object.hasOwn(body, 'action') ? body.action : 'execution-server');
+      if (refused) return refuseHeld(res, refused);
       if (Object.hasOwn(body, 'action')) {
         if (url.searchParams.getAll('ws').length !== 1 || !url.searchParams.get('ws') || [...url.searchParams.keys()].some(k => k !== 'ws')) {
           const failure = spawnApplyFailure('E_BAD_ARGS'); return send(res, 400, { ...failure, code: failure.reason.code, error: failure.reason.message });
@@ -1610,6 +1673,8 @@ const server = createServer(async (req, res) => {
     }
     const hm = path.match(/^\/api\/(retire|start|restart)\/([A-Za-z0-9._-]+)$/);
     if (hm && req.method === "POST") {
+      const refused = heldBack(`/api/${hm[1]}`);
+      if (refused) return refuseHeld(res, refused);
       if (hm[1] === 'retire') return send(res, 409, { code: 'E_PLAN_REQUIRED', error: 'Open a fresh Retire confirmation. Unguarded retirement is unavailable, including remote retirement.' });
       // The caller only names an instance: the home a start launches in is the one this privileged
       // backend RESOLVED (and, for a local row, verified); it can never steer it.

@@ -12,7 +12,7 @@
 // functions (client.mjs), which decide what a roster, a row and a failed read are, once, for both
 // clients: the TUI never writes "stopped" for a row and never builds the collector's input by hand.
 import { execFile as nodeExecFile, spawn as nodeSpawn } from "node:child_process";
-import { closeSync, fstatSync, lstatSync, mkdtempSync, openSync, readSync, realpathSync, rmdirSync, statSync, unlinkSync } from "node:fs";
+import { closeSync, fstatSync, lstatSync, mkdtempSync, openSync, readFileSync, readSync, realpathSync, rmdirSync, statSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,6 +38,13 @@ export function tellable(stream) {
  *  URL from this file. Every kernel call is `node <this path> …`, so the TUI depends on no shebang,
  *  no execute bit and no `PATH`, and never talks to another install's kernel. */
 export const KERNEL_BIN = fileURLToPath(new URL("../../../bin/oats.mjs", import.meta.url));
+/** The version of that kernel's own package (its package.json, beside bin/): the TUI's tested version, which
+ *  the shared acceptProbe requires (cli-locator.mjs). The kernel the TUI runs is this one, so it is never above
+ *  it. null when the manifest cannot be read: the probe then refuses, as acceptProbe does without one. */
+export const KERNEL_VERSION = (() => {
+  try { const version = JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8")).version; return typeof version === "string" ? version : null; }
+  catch { return null; }
+})();
 
 /** How long the probe waits for `version --json`. */
 const PROBE_TIMEOUT_MS = 10_000;
@@ -106,7 +113,8 @@ export function admitDeployment(path, io = {}) {
 
 /** Run the kernel once with `version --json` and make its record:
  *  -> Promise<{ ok: true, cli } | { ok: false, reason }>, never rejected.
- *  The answer is read with the shared parseProbeStdout and judged by the shared acceptProbe; an
+ *  The answer is read with the shared parseProbeStdout and judged by the shared acceptProbe, against
+ *  `testedVersion` (KERNEL_VERSION: the kernel it ships with); an
  *  accepted one becomes `cliRecord(payload, { bin, source: "tui" })`, the record every shared gate
  *  reads. `reason` is acceptProbe's own when it refused, and one of the TUI's four when there was
  *  no answer to judge. A nonzero exit or a timeout is a refusal even when stdout looks valid: a
@@ -115,7 +123,7 @@ export function admitDeployment(path, io = {}) {
  *  the caller shows it as it shows any kernel text.
  *  NOT detached, unlike every later child: it runs before the terminal is taken, and a Ctrl+C then
  *  must end it with the TUI. `timeoutMs` is for tests. */
-export function probeKernel({ bin = KERNEL_BIN, env = process.env, execFile = nodeExecFile, timeoutMs = PROBE_TIMEOUT_MS } = {}) {
+export function probeKernel({ bin = KERNEL_BIN, env = process.env, execFile = nodeExecFile, timeoutMs = PROBE_TIMEOUT_MS, testedVersion = KERNEL_VERSION } = {}) {
   return new Promise((done) => {
     const refuse = (reason) => done({ ok: false, reason });
     try {
@@ -123,7 +131,10 @@ export function probeKernel({ bin = KERNEL_BIN, env = process.env, execFile = no
         if (error) return refuse(typeof error.syscall === "string" && error.syscall.startsWith("spawn") ? "it did not start" : error.killed === true ? `it did not answer within ${timeoutMs / 1000} seconds` : "it failed");
         const payload = parseProbeStdout(stdout);
         if (!payload) return refuse("it answered something that is not a version record");
-        const verdict = acceptProbe(payload);
+        const verdict = acceptProbe(payload, testedVersion);
+        // A kernel newer than the TUI's own is not the kernel it shipped with: the TUI holds nothing back
+        // (it has no allowlist), so it refuses it, as before the Desktop's soft ceiling (#1879).
+        if (verdict.ok && verdict.aboveTested) return refuse(`version ${payload.version} is newer than this TUI's kernel ${testedVersion}`);
         return verdict.ok ? done({ ok: true, cli: cliRecord(payload, { bin, source: "tui" }) }) : refuse(verdict.reason);
       });
     } catch { refuse("it did not start"); }

@@ -3,7 +3,7 @@ import { iconElement } from './shell-icons.mjs';
 import { ageText } from './age-text.mjs';
 import { createSoulMark, createRuntimeBadge, harnessName } from './identity-marks.mjs';
 import { reasonLine, unsupportedLine } from './speaker-line.mjs';
-import { instanceActs } from '../../client/instance-acts.mjs';
+import { desktopActs } from './desktop-acts.mjs';
 import { needsInputReportingGap } from '../../client/needs-input-reporting-gap.mjs';
 import { rowReason, serverLabel, shownLabel, unaddressableSentence } from '../../client/remote-address.mjs';
 let workNotes = 0;
@@ -674,7 +674,7 @@ export function createContextPanel({
     // control; a limited one (#802: a spawn or a retire left it half cleaned) Retire alone. A listed act that is not
     // enabled (Start on a Herdr-recorded row) stays visible, disabled, its reason as its title, said as the row says it.
     // A secondary act (#1247: Retire on a home being retired) gets no control here: the roster menu keeps it.
-    const { blocked, limited, acts } = instanceActs(instance), offered = new Map(acts.filter(act => !act.secondary).map(act => [act.verb, act]));
+    const { blocked, limited, acts } = desktopActs(instance), offered = new Map(acts.filter(act => !act.secondary).map(act => [act.verb, act]));
     for (const [verb, b] of [['restart', restartControl], ['start', startControl], ['stop', stopControl], ['retire', retireControl]]) {
       const act = offered.get(verb);
       b.hidden = !act; b.disabled = !act?.enabled;

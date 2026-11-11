@@ -13,8 +13,11 @@
 // Every candidate is canonicalized to an absolute executable and accepted
 // ONLY if executable and `<bin> version --json` returns the v1 probe:
 //   {"schemaVersion":1,"name":"@awebai/oats","version":"0.24.x","desktopApi":1}
-// Desktop accepts desktopApi === 1 and semver >=0.26.0 <0.70.0 (the band is
-// spelled ONCE, in ACCEPT_RANGE below — this line only paraphrases it).
+// Desktop accepts desktopApi === 1 and a released semver at or above the floor
+// (ACCEPT_RANGE.min). There is no ceiling: a CLI of a later minor than the
+// client's own release (its TESTED BOUND, testedBound below) is accepted and
+// flagged `aboveTested`, and the client then holds back every operation its
+// allowlist does not name (above-tested.mjs, oats-project/oats#1879).
 // API version — not source adjacency — is authoritative.
 //
 // Pure/injected: all process, fs and exec effects come through `io` so the
@@ -24,39 +27,34 @@ import { delimiter, isAbsolute, join } from "node:path";
 import { harnessList } from "./harness-names.mjs";
 
 export const DESKTOP_API = 1;
-// The accepted band is per-minor and widened DELIBERATELY, once per kernel
-// minor, after confirming the Desktop v1 surface (`version --json` probe,
-// `spawn --json`, `okf harvest --json` — test/cli-json-contract.test.mjs) is
-// unchanged. It must always admit the kernel version shipped by the SAME
-// release: Desktop and the kernel are built from one tag, so a band that
-// excluded its own kernel would ship an app that degrades to observation-only
-// against the CLI it was released with (the 0.19.0 readiness blocker).
-// Rebased to >=0.22.0 <0.23.0 for the OATS rename (v0.22.0, first release
-// under the new name): the CLI binary and probe name changed to `oats` /
-// `@awebai/oats`, so the pre-rename band pointed at versions that will never
-// exist under the new name. The Desktop v1 surface is UNCHANGED across that
-// kernel bump (`version --json`, `spawn --json`, `okf harvest --json` —
-// test/cli-json-contract.test.mjs), so DESKTOP_API stays 1.
-// Widened through 0.24.x for the retained-execution first cut. Desktop CLI API
-// v1 and the 0.22.x floor remain unchanged; individual capability/refusal gates
-// still apply. Version acceptance does not assert captured UI/backend parity.
-// Widened through 0.25.x for the workspace model (v0.25.0): the Desktop v1
-// surface (`version --json` probe, `spawn --json`, the retained lifecycle
-// verbs — test/cli-json-contract.test.mjs) is unchanged; the removed verbs
-// (`catalog`, install/use/…) surface as typed E_USAGE through the adapter.
-// Widened through 0.26.x for package-approval removal (F2b). The floor is
-// the first kernel the Desktop's feature gates let through (workspace-cli
-// WORKSPACE_FEATURES, deployment-contract DEPLOYMENT_FEATURES); those gates
-// stay the REAL gate.
-// Widened through 0.43.x for the 0.43.0 release: schedule and trigger rows
-// carry a `description` for every kind and `<kind> update <id> --description`
-// sets one (feature `automation-descriptions`, which gates the Desktop's
-// summary writes). The Desktop v1 surface is otherwise unchanged.
-export const ACCEPT_RANGE = { min: [0, 26, 0], maxExclusive: [0, 70, 0] };
-/** The band as humans read it — derived, never hand-spelled, so the probe
- * rejection reason, the backend's /api status and the degradation card can
- * never disagree with the numbers actually enforced above. */
-export const ACCEPT_RANGE_TEXT = `>=${ACCEPT_RANGE.min.join(".")} <${ACCEPT_RANGE.maxExclusive.join(".")}`;
+// The floor is hand-set: the first kernel the Desktop's feature gates let through (workspace-cli
+// WORKSPACE_FEATURES, deployment-contract DEPLOYMENT_FEATURES); those gates stay the REAL gate.
+//
+// The upper bound is not spelled here, nor anywhere (oats-project/oats#1879, option 3). It is the
+// TESTED BOUND: the minor of the client's own release version, which the caller passes in (the
+// Desktop server its own manifest, packages/desktop/package.json; `oats tui` its kernel's
+// package.json, which is the kernel it runs). Until 0.69.x it was an exclusive ceiling widened by
+// hand at every minor, and every installed Desktop lost every action at each kernel minor until it
+// was reinstalled. Now a CLI of a later minor or major is accepted with `aboveTested: true`, and
+// only the operations above-tested.mjs allows stay on. The version-bump PR moves the bound with the
+// manifests; nothing in release prep moves it by hand.
+export const ACCEPT_RANGE = Object.freeze({ min: Object.freeze([0, 26, 0]) });
+/** [major, minor] of a client's release version: the newest CLI minor it was tested with. A
+ * prerelease or build of a release counts as that release (0.70.0-rc.1 tests 0.70). null for a value
+ * that is not a version. */
+export function testedBound(releaseVersion) {
+  const v = parseSemver(releaseVersion);
+  return v ? [v.nums[0], v.nums[1]] : null;
+}
+/** The bound as people read it: "X.Y". */
+export const testedThroughText = (bound) => `${bound[0]}.${bound[1]}`;
+/** The accepted range as humans read it, derived and never hand-spelled, so the probe rejection
+ * reason, the backend's /api/cli and the degradation card can never disagree with what is enforced:
+ * the floor, then the tested bound of `releaseVersion` (">=0.26.0, tested through 0.69"). */
+export function acceptRangeText(releaseVersion) {
+  const bound = testedBound(releaseVersion);
+  return `>=${ACCEPT_RANGE.min.join(".")}${bound ? `, tested through ${testedThroughText(bound)}` : ""}`;
+}
 // The npm names of the oats CLI. `version --json` answers the first under either, until a later minor flips it.
 export const PROBE_NAME = Object.freeze(["@awebai/oats", "@oats-project/oats"]);
 // Spawn-time agent relations (--relation/--relative-to) AND the anchor
@@ -108,24 +106,38 @@ export function parseSemver(v) {
 }
 const cmp = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
 
-/** Accept/reject one probe payload. Returns { ok } or { ok:false, reason }, and { ok:false, reason, above:true }
- * when the payload's sole failure is a released version at or above the band's ceiling: every other check
- * passed first, so a prerelease, an unparsable version or another API is never `above`. A Desktop older than
- * its CLI says so from this flag (views/cli-status.mjs), never from the reason's words. */
-export function acceptProbe(payload) {
+/** Accept/reject one probe payload against the client's own release version (`testedVersion`,
+ * required: see ACCEPT_RANGE). Returns:
+ *   { ok: true }                                             a CLI of the tested minor or older, down to the floor;
+ *   { ok: true, aboveTested: true, testedThrough: "X.Y" }    a released CLI of a later minor or major;
+ *   { ok: false, reason }                                    refused, and { ok: false, reason, newerApi: true }
+ *                                                            when the payload's sole failure is a desktopApi
+ *                                                            above this client's: the Desktop is the older of the
+ *                                                            two (views/cli-status.mjs reads the flag, never the
+ *                                                            reason's words).
+ * Without a tested version it refuses: a caller that forgot it never falls back to "no bound". */
+export function acceptProbe(payload, testedVersion) {
+  const bound = testedBound(testedVersion);
+  if (!bound) return { ok: false, reason: "no tested client version given: the probe is not judged without one" };
   if (!payload || typeof payload !== "object") return { ok: false, reason: "no probe payload" };
   if (payload.schemaVersion !== 1) return { ok: false, reason: `unexpected schemaVersion ${payload.schemaVersion}` };
   if (!PROBE_NAME.includes(payload.name)) return { ok: false, reason: `not the oats CLI (name: ${payload.name || "missing"}, not ${PROBE_NAME.join(" or ")})` };
-  if (payload.desktopApi !== DESKTOP_API) return { ok: false, reason: `desktopApi ${payload.desktopApi ?? "missing"} (need ${DESKTOP_API})` };
+  if (payload.desktopApi !== DESKTOP_API) {
+    // Another API, newer than this client's: the client is the older (the card's older-Desktop branch). Only an
+    // integer counts; every other check already passed.
+    const newer = Number.isSafeInteger(payload.desktopApi) && payload.desktopApi > DESKTOP_API;
+    return { ok: false, reason: `desktopApi ${payload.desktopApi ?? "missing"} (need ${DESKTOP_API})`, ...(newer ? { newerApi: true } : {}) };
+  }
   const v = parseSemver(payload.version);
   if (!v) return { ok: false, reason: `unparsable version "${payload.version}"` };
+  const range = acceptRangeText(testedVersion);
   // Prerelease policy: prereleases are NOT accepted. Precedence-wise
   // 0.18.0-rc.1 < 0.18.0 (below the minimum), and a prerelease of any
-  // in-range version is not a released CLI — Desktop pairs with released
-  // kernels only.
-  if (v.prerelease) return { ok: false, reason: `prerelease version ${payload.version} not accepted (need a released ${ACCEPT_RANGE_TEXT})` };
-  if (cmp(v.nums, ACCEPT_RANGE.maxExclusive) >= 0) return { ok: false, reason: `version ${payload.version} outside ${ACCEPT_RANGE_TEXT}`, above: true };
-  if (cmp(v.nums, ACCEPT_RANGE.min) < 0) return { ok: false, reason: `version ${payload.version} outside ${ACCEPT_RANGE_TEXT}` };
+  // version is not a released CLI — Desktop pairs with released kernels only,
+  // above its tested bound as below it.
+  if (v.prerelease) return { ok: false, reason: `prerelease version ${payload.version} not accepted (need a released ${range})` };
+  if (cmp(v.nums, ACCEPT_RANGE.min) < 0) return { ok: false, reason: `version ${payload.version} outside ${range}` };
+  if (v.nums[0] > bound[0] || (v.nums[0] === bound[0] && v.nums[1] > bound[1])) return { ok: true, aboveTested: true, testedThrough: testedThroughText(bound) };
   return { ok: true };
 }
 
@@ -212,11 +224,14 @@ export function cliRecord(payload, { bin, source }) {
  * looks valid (review 53a20c7: a binary that prints a plausible probe and
  * then fails/hangs must never become the mutation binary). Sources are
  * evaluated lazily: expensive helpers never run once a candidate wins.
+ * `io.testedVersion` is the client's own release version (acceptProbe): required, and without it
+ * every candidate is refused.
  * Returns:
- *   { ok:true,  bin, source, version }
+ *   { ok:true,  bin, source, version, aboveTested?, testedThrough? }  — the cliRecord, flagged when the
+ *                                                    CLI is of a later minor than the tested bound
  *   { ok:false, tried: [{path, source, reason}] }   — stable diagnostics; an entry whose probe was
- *                                                    refused only for being above the band also has
- *                                                    `version` and `above: true` (acceptProbe)
+ *                                                    refused only for a newer desktopApi also has
+ *                                                    `version` and `newerApi: true` (acceptProbe)
  */
 export async function discover(io, probe) {
   const tried = [];
@@ -241,9 +256,9 @@ export async function discover(io, probe) {
         tried.push({ path, source: src.source, reason: `probe failed: ${String(e.message || e).slice(0, 120)}` });
         continue;
       }
-      const a = acceptProbe(payload);
-      if (a.ok) return cliRecord(payload, { bin: path, source: src.source });
-      tried.push({ path, source: src.source, reason: a.reason, version: payload?.version, ...(a.above === true ? { above: true } : {}) });
+      const a = acceptProbe(payload, io.testedVersion);
+      if (a.ok) return { ...cliRecord(payload, { bin: path, source: src.source }), ...(a.aboveTested === true ? { aboveTested: true, testedThrough: a.testedThrough } : {}) };
+      tried.push({ path, source: src.source, reason: a.reason, version: payload?.version, ...(a.newerApi === true ? { newerApi: true } : {}) });
     }
   }
   return { ok: false, tried };

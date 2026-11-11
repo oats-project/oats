@@ -28,6 +28,10 @@ import { iconElement } from './shell-icons.mjs';
 import { createSoulMark } from './identity-marks.mjs';
 import { deploymentLabel, shortPath } from '../../client/deployment-label.mjs';
 import { DESKTOP_TERMS } from './desktop-terms.mjs';
+import { cliHeldBack } from './views/cli-status.mjs';
+
+/** Above the tested bound (#1879) every team write is held back (packages/client/above-tested.mjs): the notice, or null. */
+const writesHeld = () => cliHeldBack('POST /api/workspace-teams add');
 import { ageText } from './age-text.mjs';
 import { captureFocusState } from './loading.mjs';
 import { pageBar } from './capability-page.mjs';
@@ -655,10 +659,10 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
     const actions = el(doc, 'div', null, 'ct-actions');
     // Make default writes oats-local.yaml's defaultTeam: only where this deployment may declare it.
     if (!team.default && localAllowed(current)) actions.append(button('Make default', '', () => { confirming = team.label; render(); focusIn(`[data-team="${team.label}"] .ct-confirm .primary`, root()); },
-      { disabled: !team.team, title: team.team ? '' : 'A team with no provider id yet cannot be the default.', aria: `Make ${team.label} the default team`, key: 'team:make-default' }));
+      { disabled: !team.team || !!writesHeld(), title: writesHeld() ?? (team.team ? '' : 'A team with no provider id yet cannot be the default.'), aria: `Make ${team.label} the default team`, key: 'team:make-default' }));
     const why = team.from === 'local' ? teamInUse(current, team.label) : null;
     if (team.from === 'local') actions.append(button('Remove', '', () => run({ action: 'remove', label: team.label }, { label: team.label }),
-      { disabled: !!why, title: why || '', aria: why ? `Remove ${team.label}: ${why}` : `Remove ${team.label}`, key: 'team:remove' }));
+      { disabled: !!why || !!writesHeld(), title: writesHeld() ?? (why || ''), aria: why ? `Remove ${team.label}: ${why}` : `Remove ${team.label}`, key: 'team:remove' }));
     if (actions.childElementCount) header.append(actions);
     card.append(header);
     // What blocks comes first, then the facts, then the team's warnings and why Remove is off.
@@ -781,7 +785,7 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
   }
   function paintBoard() {
     body.replaceChildren();
-    addButton.disabled = pending; addButton.setAttribute('aria-expanded', String(adding));
+    addButton.disabled = pending || !!writesHeld(); addButton.title = writesHeld() ?? ''; addButton.setAttribute('aria-expanded', String(adding));
     addButton.hidden = !!current && !localAllowed(current);
     if (!current) { status.textContent = pending ? 'Reading the teams on this computer (oats teams)…' : status.textContent; if (cardError) body.append(problemBox(cardError)); return; }
     // The page's own problems (no team card holds them), failures first: team model 3's local-teams-closed leads.
@@ -800,7 +804,7 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
     if (!local.length && !adding && !localAllowed(current)) localSection.append(el(doc, 'p', `No local teams: ${LOCAL_TEAMS_CLOSED}.`, 'ct-dashed'));
     else if (!local.length && !adding) {
       const empty = emptyCard("No local teams. A local team lives in this computer's oats-local.yaml and is visible only here.");
-      empty.append(button('Add a local team', 'ct-link', () => openAdd('link')));
+      empty.append(button('Add a local team', 'ct-link', () => openAdd('link'), { disabled: !!writesHeld(), title: writesHeld() ?? '' }));
       localSection.append(empty);
     }
     if (cardError) localSection.append(problemBox(cardError));

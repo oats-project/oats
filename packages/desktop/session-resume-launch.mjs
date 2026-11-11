@@ -13,6 +13,8 @@
    - The Desktop shows nothing of a sweep (the product owner, 2026-10-27): every reading but `failed` is
      dropped. `failed` logs one line with its code only: no kernel text is logged. */
 
+import { aboveTestedRefusal } from "../client/above-tested.mjs";
+
 const CODE = /^E_[A-Z0-9_]{1,64}$/;
 
 /**
@@ -23,8 +25,22 @@ const CODE = /^E_[A-Z0-9_]{1,64}$/;
  * @param {(line: string) => void} io.error                a failed sweep
  */
 export function createResumeWiring({ createTrigger, cli, error }) {
+  // Above the tested bound (oats-project/oats#1879) the sweep is held back: the trigger is handed no probe,
+  // so nothing runs, and one line names the refusal's code, once until the CLI is back within the bound.
+  let skipped = false;
+  const gate = (probe) => {
+    const refused = aboveTestedRefusal(probe, "main session-resume");
+    if (!refused) { skipped = false; return probe; }
+    if (!skipped) { skipped = true; error(`oats-desktop: the session resume sweep was skipped: ${refused.code}`); }
+    return null;
+  };
   return createTrigger({
-    cli,
+    // A sync probe stays sync (the trigger runs a sweep in the same call); a promise is gated when it settles.
+    cli: () => {
+      let probe;
+      try { probe = cli(); } catch { return null; }
+      return typeof probe?.then === "function" ? probe.then(gate, () => null) : gate(probe);
+    },
     onReading(reading) {
       if (reading?.kind === "failed") error(`oats-desktop: the session resume sweep failed: ${typeof reading.code === "string" && CODE.test(reading.code) ? reading.code : "E_CLI_PROTOCOL"}`);
     },

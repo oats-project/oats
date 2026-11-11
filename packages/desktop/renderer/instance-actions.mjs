@@ -4,7 +4,7 @@
  * workspace row's is; no button is drawn for it): its labels and icons, the caller's own items in front, and
  * why it opens nothing while it is held (an act in flight, a stale roster, a blocked row). */
 import { instanceId } from "../../client/instance-tree.mjs";
-import { instanceActs } from "../../client/instance-acts.mjs";
+import { desktopActs } from "./desktop-acts.mjs";
 import { iconElement } from "./shell-icons.mjs";
 import { reasonLine } from "./speaker-line.mjs";
 import { keymapTakes } from "./keybindings.mjs";
@@ -82,7 +82,7 @@ export function instanceActions(doc, instance, { row, invoke, openLifecycle, ope
   // The act the menu opens on: the first enabled one that is not secondary (#1247: a retiring row's Retire stays
   // listed and reachable, never the default). With none, focus lands on the menu itself and the arrows reach it.
   const defaultItem = () => items.find(item => !item.disabled && item.dataset.secondary !== 'true');
-  const offer = instanceActs(instance);
+  const offer = desktopActs(instance);
   // A remote row the kernel does not report addressable has no actions here; the row says why when asked. The one
   // exception is the Desktop's own: a row its host no longer lists offers Forget… (forget-dialog.mjs).
   const forgets = offer.blocked?.code === 'unaddressable' && offer.blocked.key === 'missing' && typeof openForget === 'function';

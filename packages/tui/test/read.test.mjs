@@ -12,7 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { COLLECTOR, DETACH_KEY_FEATURE, INSTANCE_VARIABLES, MAX_DEPLOYMENT_OBSERVATIONS, acceptProbe, cliReadsRemotes, cliRecord, cliRemoteRoster, createResumeTrigger, failedEntry, livenessInput, observeIdentities, prepareRemoteTerm, remoteRosterState } from "../lib/client.mjs";
-import { CHANGE_FILES, IDENTITY_BUDGET_MS, KERNEL_BIN, admitDeployment, createIdentityReads, createReader, findDeployment, leaveInstance, probeKernel, startExec } from "../lib/read.mjs";
+import { CHANGE_FILES, IDENTITY_BUDGET_MS, KERNEL_BIN, KERNEL_VERSION, admitDeployment, createIdentityReads, createReader, findDeployment, leaveInstance, probeKernel, startExec } from "../lib/read.mjs";
 import { PANEL_FS } from "../lib/panel.mjs";
 import { resumeObservation } from "../lib/model.mjs";
 import { initialState, reduce } from "../lib/store.mjs";
@@ -253,6 +253,22 @@ test("KERNEL_BIN is this install's own bin/oats.mjs, and its `version --json` is
   for (const feature of FEATURES) assert.equal(probe.cli.features.includes(feature), true, feature);
 });
 
+test("#1879: the TUI judges its kernel against that kernel's own version, so on its own kernel it never sees aboveTested; a newer kernel is refused", async () => {
+  assert.equal(KERNEL_VERSION, VERSION, "the tested version is the kernel package's own");
+  const probe = await probeKernel({ env: CLEAN_ENV });
+  assert.equal(probe.ok, true, probe.reason);
+  assert.equal(Object.hasOwn(probe.cli, "aboveTested"), false);
+  assert.equal(Object.hasOwn(probe.cli, "testedThrough"), false);
+  assert.equal(acceptProbe(record(), KERNEL_VERSION).aboveTested, undefined, "its own record is inside its own bound");
+  const [major, minor] = VERSION.split(".").map(Number);
+  const newer = makeWorld({ version: { stdout: JSON.stringify(record({ version: `${major}.${minor + 1}.0` })), stderr: STDERR } });
+  const refused = await probeKernel({ bin: newer.bin, env: CLEAN_ENV });
+  assert.deepEqual(refused, { ok: false, reason: `version ${major}.${minor + 1}.0 is newer than this TUI's kernel ${VERSION}` });
+  const untested = await probeKernel({ env: CLEAN_ENV, testedVersion: null });
+  assert.equal(untested.ok, false, "without its kernel's version the probe refuses, as acceptProbe does");
+  assert.match(untested.reason, /no tested client version/);
+});
+
 test("this suite knows its own process group on Linux and on macOS: no test that compares a child's group with it is skipped there", () => {
   if (process.platform !== "linux" && process.platform !== "darwin") return;
   assert.equal(Number.isInteger(OWN_GROUP) && OWN_GROUP > 0, true, `the group of pid ${process.pid} reads ${OWN_GROUP}`);
@@ -284,8 +300,9 @@ test("probeKernel refuses with acceptProbe's own reason, or with one of its four
     return answer.reason;
   };
   for (const refused of [record({ name: "other" }), record({ version: "0.1.0" }), record({ desktopApi: 7 }), record({ version: `${VERSION}-rc.1` })]) {
-    assert.equal(acceptProbe(refused).ok, false);
-    assert.equal(await probe({ stdout: JSON.stringify(refused), stderr: STDERR }), acceptProbe(refused).reason);
+    // Judged against the TUI's own kernel's version, as the probe judges it (KERNEL_VERSION).
+    assert.equal(acceptProbe(refused, VERSION).ok, false);
+    assert.equal(await probe({ stdout: JSON.stringify(refused), stderr: STDERR }), acceptProbe(refused, VERSION).reason);
   }
   assert.equal(reasons[0][0], "not the oats CLI (name: other, not @awebai/oats or @oats-project/oats)");
   assert.match(reasons[1][0], new RegExp("^version 0\\.1\\.0 outside >="));
