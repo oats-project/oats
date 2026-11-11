@@ -150,10 +150,25 @@ authorizedKeys:
 must have an `authorized_keys` key containing the operator's public SSH keys.
 It mounts read-only at `/etc/agent-ssh/authorized_keys`. Key changes take
 effect after the pod is replaced, because subPath mounts are not refreshed.
-The login Secret mounts read-only at `/etc/agent-login`, with mode 0440; Kubernetes projects
-Secret files through symlinks. Provision its `claude-token` key only through
-the operator's credential route. Never put its contents in Helm values,
-ConfigMaps, environment variables, a rendered manifest or a command line.
+The login Secret mounts read-only at `/etc/agent-login`, with mode 0440.
+Kubernetes projects the files through symlinks and assigns their group to
+the pod's `fsGroup`; the agent receives that supplementary group, so it can
+read the token without write permission.
+
+Provision the `claude-token` key with the cluster's Secret tooling. Pipe it
+from the operator's approved credential reader to stdin, for example
+(replace `credential-command` with that reader):
+
+```sh
+credential-command | kubectl --context operator-cluster --namespace team create secret generic team-harness-login --from-file=claude-token=/dev/stdin
+```
+
+The token stays out of argv and temporary files. Never put its contents in
+Helm values, ConfigMaps, environment variables or a rendered manifest.
+`oats harness token set` requires the host's forced-command operator SSH
+receiver and does not provision this Secret. The fingerprint and rotation
+report from `oats harness token status` does not apply to this Secret route;
+manage and audit its rotation with the cluster's Secret tooling.
 
 | Value | Default / meaning |
 | --- | --- |
