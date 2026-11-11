@@ -279,7 +279,11 @@ if(command==='oats host run --plan --json'){
  if(process.env.O1B_FIXTURE_INVALID_JSON==='plan')console.log('fixture-private-ssh-banner');
  else console.log(JSON.stringify({ok:true,result:{plan:process.env.O1B_FIXTURE_INVALID_JSON==='plan-value'?'fixture-private-plan-value':true,refusals:[{code:'E_HOST_RUN_BUSY',details:process.env.O1B_FIXTURE_LOCK_FOUND==='missing'?{}:{found:process.env.O1B_FIXTURE_LOCK_FOUND||'running'}}]}}));
 }
-else if(command.startsWith('node -e '))console.log('PASS fixture SSH boundary (no real runtime assertions)');
+else if(command.startsWith('node -e ')){
+ if(process.env.O1B_FIXTURE_PROBE_REPLY==='empty')process.exit(0);
+ if(process.env.O1B_FIXTURE_PROBE_REPLY)console.log('fixture-private-success-output');
+ if(process.env.O1B_FIXTURE_PROBE_REPLY!=='other')console.log('OATS_KUBE_PROBE_PASS');
+}
 else process.exit(2);
 `, { mode: 0o755 });
     const script = fileURLToPath(new URL("../container/agent/accept-kube.sh", import.meta.url));
@@ -310,6 +314,15 @@ else process.exit(2);
     assert.notEqual(failed.status, 0);
     assert.match(failed.stderr, /runtime probe failed: uid/);
     assert.doesNotMatch(failed.stdout + failed.stderr, /fixture-sensitive-(stdout|stderr)|AssertionError/);
+    for (const reply of ["other", "empty", "extra"]) {
+      rmSync(join(dir, "known-host-path"), { force: true });
+      const unconfirmed = spawnSync("sh", [script, "--values", join(dir, "values.json"), "--namespace", "proof", "--release", "proof", "--context", "fixture-context", "--pod", pod.metadata.name, "--ssh-key", join(dir, "key")], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, O1B_FIXTURE_PROBE_REPLY: reply }, timeout: 10_000 });
+      assert.notEqual(unconfirmed.status, 0, `${reply} zero-exit stdout must not prove runtime checks`);
+      assert.match(unconfirmed.stderr, /runtime probe did not confirm all checks/);
+      assert.doesNotMatch(unconfirmed.stdout + unconfirmed.stderr, /fixture-private-success-output|entrypoint host run holds its lock/);
+    }
+    assert.match(r.stdout, /\[ssh\] PASS uid=20001 gid=20001; CapEff=0; NoNewPrivs=1/);
+    assert.doesNotMatch(r.stdout, /OATS_KUBE_PROBE_PASS/);
     for (const source of ["plan", "pod", "plan-value"]) {
       rmSync(join(dir, "known-host-path"), { force: true });
       const invalid = spawnSync("sh", [script, "--values", join(dir, "values.json"), "--namespace", "proof", "--release", "proof", "--context", "fixture-context", "--pod", pod.metadata.name, "--ssh-key", join(dir, "key")], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, O1B_FIXTURE_INVALID_JSON: source }, timeout: 10_000 });

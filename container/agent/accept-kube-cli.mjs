@@ -83,7 +83,7 @@ function runtimeProbe(uid, gid) {
     process.exitCode = 1;
     return;
   }
-  console.log(`PASS uid=${uid} gid=${gid}; CapEff=0; NoNewPrivs=1; no SA token; /state,/tmp writable; root and login/key/resolver mounts not writable`);
+  console.log("OATS_KUBE_PROBE_PASS");
 }
 
 async function forwarded(kube, pod) {
@@ -144,7 +144,9 @@ async function shutdown(kube, pod, expectedUID) {
 
 function sshProof(port, key, knownHosts, uid, gid, phase = "ssh") {
   const ssh = ["-F", "/dev/null", "-T", "-oBatchMode=yes", "-oIdentitiesOnly=yes", "-oIdentityAgent=none", `-oStrictHostKeyChecking=${phase === "replacement" ? "yes" : "accept-new"}`, "-oHostKeyAlias=oats-kube-accept", `-oUserKnownHostsFile=${knownHosts}`, "-oConnectTimeout=10", "-p", port, "-i", key, "agent@127.0.0.1"];
-  report(phase, command("ssh", [...ssh, `node -e ${quote(`(${runtimeProbe.toString()})(${uid},${gid})`)}`], { probe: true }).trim());
+  const confirmed = command("ssh", [...ssh, `node -e ${quote(`(${runtimeProbe.toString()})(${uid},${gid})`)}`], { probe: true }).trim();
+  assert.ok(confirmed === "OATS_KUBE_PROBE_PASS", "runtime probe did not confirm all checks");
+  report(phase, `PASS uid=${uid} gid=${gid}; CapEff=0; NoNewPrivs=1; no SA token; /state,/tmp writable; root and login/key/resolver mounts not writable`);
   const plan = json(command("ssh", [...ssh, "oats host run --plan --json"]), "host plan");
   assert.equal(plan.ok, true, "host run plan failed");
   assert.equal(plan.result.plan, true, "host run plan answer");
