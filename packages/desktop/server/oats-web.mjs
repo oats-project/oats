@@ -112,10 +112,9 @@ import { rosterRows, kernelLiveness, livenessInput, livenessAnswers, panelInstan
 import { deployments, viewFor, deploymentFor, surfaceDeployment, viewForgeContext, deploymentRows, isServed, teamMembersFor, machineScope, panelData, cliReadsRemotes, rosterWorkspaceKeys } from "../../client/panel-views.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-// Identity for compatibility probes (GET /api/version): the desktop app must
-// not reuse an OLDER server that answers /api/panel but lacks the
-// desktop endpoints (/api/brain, /api/file...). The bundled
-// server's identity is the desktop package's name and version.
+// Identity (GET /api/version): main checks that the server it started is this
+// package's (server-compat.mjs `serverCompatible`). The bundled server's
+// identity is the desktop package's name and version.
 // The same version is this Desktop's TESTED BOUND (packages/client/cli-locator.mjs testedBound): the
 // newest CLI minor it accepts without holding anything back. It is the Desktop's own manifest, the
 // version of the app installed, which the version-bump PR moves with the kernel's; the release checks
