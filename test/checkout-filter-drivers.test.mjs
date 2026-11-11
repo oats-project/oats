@@ -3,6 +3,8 @@
 // carries the `filter` attribute, and whoever works in a clone can write its configuration. The
 // checkouts are a spawn's `git worktree add`, and the `git worktree add` and `git switch` of
 // `oats worktree add`. The files are written as their committed bytes.
+// Nor does one run the file monitor that configuration names (`core.fsmonitor`), which Git asks
+// when a checkout refreshes the index of the tree it writes.
 // Real Git and real filter commands: each one records that it ran in a marker file.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -102,4 +104,32 @@ test("oats worktree add in a repository with a filter driver whose name Git's -c
   assert.equal(existsSync(ran), false, "the filter did not run");
   assert.equal(existsSync(w.tree), false, "no tree is left");
   assert.equal(w.git(w.fx.member, "worktree", "list", "--porcelain").split("\n").filter((line) => line.startsWith("worktree ")).length, 1, "no worktree is left registered");
+});
+
+/** A file monitor command under `base` that records each directory Git ran it in (`ranIn()`). */
+function fileMonitor(base) {
+  const marker = join(base, "file-monitor-ran");
+  const command = join(base, "file-monitor.sh");
+  write(command, `#!/bin/sh\npwd -P >> '${marker}'\n`, 0o700);
+  return { command, ranIn: () => (existsSync(marker) ? readFileSync(marker, "utf8").trim().split("\n") : []) };
+}
+
+test("a spawn into a worktree does not run the file monitor the repository's configuration names", () => {
+  const f = fixture();
+  const monitor = fileMonitor(f.base);
+  fixtureGit(f.repo, ["config", "core.fsmonitor", monitor.command]);
+  const spawned = cli(f, ["spawn", "dev", "--purpose", "monitor", "--no-launch", "--json"]);
+  assert.equal(spawned.status, 0, spawned.stdout + spawned.stderr);
+  assert.deepEqual(monitor.ranIn(), [], "the spawn ran no file monitor");
+  assert.equal(readFileSync(join(JSON.parse(spawned.stdout).result.home, "work", "tracked.txt"), "utf8"), "base\n");
+});
+
+test("oats worktree add does not run the file monitor the repository's configuration names, in its worktree add or in its switch", async (t) => {
+  const w = await addFixture(t);
+  const monitor = fileMonitor(w.fx.base);
+  w.git(w.fx.member, "config", "core.fsmonitor", monitor.command);
+  const added = w.add();
+  assert.equal(added.status, 0, added.stdout + added.stderr);
+  assert.deepEqual(monitor.ranIn(), [], "the add ran no file monitor");
+  assert.equal(readFileSync(join(w.tree, "tracked.txt"), "utf8"), "committed on the remote\n");
 });
