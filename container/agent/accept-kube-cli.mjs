@@ -113,6 +113,16 @@ async function shutdown(kube, pod, expectedUID) {
   } finally { clearTimeout(timer); log.kill(); }
 }
 
+function sshProof(port, key, knownHosts, uid, gid, phase = "ssh") {
+  const ssh = ["-F", "/dev/null", "-T", "-oBatchMode=yes", "-oIdentitiesOnly=yes", "-oIdentityAgent=none", "-oStrictHostKeyChecking=accept-new", `-oUserKnownHostsFile=${knownHosts}`, "-oConnectTimeout=10", "-p", port, "-i", key, "agent@127.0.0.1"];
+  report(phase, command("ssh", [...ssh, `node -e ${quote(`(${runtimeProbe.toString()})(${uid},${gid})`)}`]).trim());
+  const plan = JSON.parse(command("ssh", [...ssh, "oats host run --plan --json"]));
+  assert.equal(plan.ok, true, "host run plan failed");
+  assert.equal(plan.result.plan, true, "host run plan answer");
+  assert.ok(plan.result.refusals.some((r) => r.code === "E_HOST_RUN_BUSY"), "entrypoint host run must already hold its lock");
+  report(phase, "PASS oats host run --plan: plan=true; entrypoint host run holds its lock (E_HOST_RUN_BUSY)");
+}
+
 async function main() {
   const o = options(process.argv.slice(2)), chart = fileURLToPath(new URL("./chart", import.meta.url));
   const args = ["--values", o["--values"], "--namespace", o["--namespace"]];
@@ -140,14 +150,8 @@ async function main() {
   let tunnel;
   try {
     tunnel = await forwarded(kube, pod.metadata.name);
-    const ssh = ["-F", "/dev/null", "-T", "-oBatchMode=yes", "-oIdentitiesOnly=yes", "-oIdentityAgent=none", "-oStrictHostKeyChecking=accept-new", `-oUserKnownHostsFile=${join(dir, "known_hosts")}`, "-oConnectTimeout=10", "-p", tunnel.port, "-i", o["--ssh-key"], "agent@127.0.0.1"];
     const s = set.spec.template.spec.securityContext;
-    report("ssh", command("ssh", [...ssh, `node -e ${quote(`(${runtimeProbe.toString()})(${s.runAsUser},${s.runAsGroup})`)}`]).trim());
-    const plan = JSON.parse(command("ssh", [...ssh, "oats host run --plan --json"]));
-    assert.equal(plan.ok, true, "host run plan failed");
-    assert.equal(plan.result.plan, true, "host run plan answer");
-    assert.ok(plan.result.refusals.some((r) => r.code === "E_HOST_RUN_BUSY"), "entrypoint host run must already hold its lock");
-    report("ssh", "PASS oats host run --plan: plan=true; entrypoint host run holds its lock (E_HOST_RUN_BUSY)");
+    sshProof(tunnel.port, o["--ssh-key"], join(dir, "known_hosts"), s.runAsUser, s.runAsGroup);
     if (o.delete) await shutdown(kube, pod.metadata.name, pod.metadata.uid);
     else report("stop", "NOT RUN: deletion requires --delete-pod (only for a disposable acceptance deployment)");
   } finally { tunnel?.child.kill(); rmSync(dir, { recursive: true, force: true }); }
