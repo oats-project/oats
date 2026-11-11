@@ -124,7 +124,9 @@ export function checkPod(docs, pod) {
   same(resources(c.resources), resources(wanted.resources), "resource quantities");
   for (const key of ["livenessProbe", "readinessProbe"]) for (const field of ["tcpSocket", "initialDelaySeconds", "periodSeconds"]) same(c[key][field] ?? (field === "initialDelaySeconds" ? 0 : 10), wanted[key][field] ?? (field === "initialDelaySeconds" ? 0 : 10), `${key}.${field}`);
   const approved = [...expected.volumes, { name: "state", persistentVolumeClaim: { claimName: `state-${set.metadata.name}-0` } }];
-  same([...p.volumes].sort((a, b) => a.name.localeCompare(b.name)), approved.sort((a, b) => a.name.localeCompare(b.name)), "admitted volumes");
+  // The API canonicalizes quantities (1024Mi becomes 1Gi); other volume fields stay exact.
+  const volumes = (list) => list.map((v) => v.name === "tmp" && v.emptyDir ? { ...v, emptyDir: { ...v.emptyDir, sizeLimit: quantity(v.emptyDir.sizeLimit) } } : v).sort((a, b) => a.name.localeCompare(b.name));
+  same(volumes(p.volumes), volumes(approved), "admitted volumes");
   return set;
 }
 

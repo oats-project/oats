@@ -130,6 +130,19 @@ test("acceptance rejects admitted pod security or mount drift", async () => {
   }
 });
 
+test("admitted tmp volumes accept equivalent quantities and reject changed sizes", async () => {
+  const { checkPod } = await import("../container/agent/accept-kube.mjs");
+  for (const [size, canonical] of [["1024Mi", "1Gi"], ["0.5Gi", "512Mi"], ["1073741824", "1Gi"]]) {
+    const docs = render("--set-string", `tmpSize=${size}`), set = docs.find((d) => d.kind === "StatefulSet");
+    const pod = { metadata: { name: `${set.metadata.name}-0`, namespace: "proof", ownerReferences: [{ kind: "StatefulSet", name: set.metadata.name, controller: true }] }, spec: structuredClone(set.spec.template.spec) };
+    pod.spec.volumes.push({ name: "state", persistentVolumeClaim: { claimName: `state-${set.metadata.name}-0` } });
+    pod.spec.volumes.find((v) => v.name === "tmp").emptyDir.sizeLimit = canonical;
+    checkPod(docs, pod);
+    pod.spec.volumes.find((v) => v.name === "tmp").emptyDir.sizeLimit = "2Gi";
+    assert.throws(() => checkPod(docs, pod), /admitted volumes/);
+  }
+});
+
 test("rendered acceptance rejects unapproved workload objects and weakened limits", async () => {
   const { checkRendered } = await import("../container/agent/accept-kube.mjs");
   for (const mutate of [
