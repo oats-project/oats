@@ -394,7 +394,8 @@ test("a validated host-stop time excludes container downtime from only the in-bo
   const now = T("09:00:00.000"), runningAt = now - 30 * 60 * 60_000, stoppedAt = runningAt + 60_000;
   const record = { startId: "s1", lastSeenRunningAt: new Date(runningAt).toISOString(), lastSeenRunningBoot: KERNEL_BOOT, firstNotRunningAt: new Date(now).toISOString(), firstNotRunningBoot: KERNEL_BOOT, judgedBy: null };
   assert.deepEqual(resumeEligible(record, lost(), { now, hostStoppedAt: stoppedAt }), { eligible: true });
-  for (const at of [null, NaN, runningAt - 1, now + 1]) assert.equal(resumeEligible(record, lost(), { now, hostStoppedAt: at }).eligible, false);
+  for (const at of [null, NaN, now + 1]) assert.equal(resumeEligible(record, lost(), { now, hostStoppedAt: at }).eligible, false);
+  assert.deepEqual(resumeEligible(record, lost(), { now, hostStoppedAt: runningAt - 1 }), { eligible: true }, "a validated current-start receipt may precede a running look during stop grace");
   assert.equal(resumeEligible({ ...record, judgedBy: { outcome: "refused" } }, lost(), { now, hostStoppedAt: stoppedAt }).eligible, false);
   assert.equal(resumeEligible(record, lost("other-start"), { now, hostStoppedAt: stoppedAt }).eligible, false);
   assert.equal(resumeEligible(record, lost(), { now: now + DAY, hostStoppedAt: stoppedAt }).eligible, false, "first observed loss age still applies");
@@ -414,9 +415,19 @@ test("host-stop timestamps must name the current start and fall within its obser
   }
 });
 
+test("a running look during stop grace does not invalidate a current-start host stop", () => {
+  const stoppedAt = T("09:00:00.000"), now = stoppedAt + 30 * 60 * 60_000;
+  const row = { ...lost(), home: H, launched: true, running: true };
+  let homes = nextSeen({}, [row], { now: stoppedAt - 10 * 60_000, boot: KERNEL_BOOT }).homes;
+  homes = nextSeen(homes, [row], { now: stoppedAt + 5000, boot: KERNEL_BOOT }).homes;
+  homes = nextSeen(homes, [{ ...row, running: false }], { now, boot: KERNEL_BOOT }).homes;
+  assert.equal(homes[H].lastSeenRunningAt, new Date(stoppedAt + 5000).toISOString());
+  assert.deepEqual(resumeEligible(homes[H], row, { now, hostStoppedAt: stoppedAt }), { eligible: true });
+});
+
 test("a same-kernel startup after 30 hours restores clean stops and preserves blocked, refused and stale-receipt accounting", async (t) => {
   const fx = v2Deployment({ t, souls: { dev: { soul: { work: "directory" } } } });
-  const names = ["success", "blocked", "refused", "prior", "other-start", "other-start-short", "future"], homes = {};
+  const names = ["success", "blocked", "refused", "prior", "other-start", "other-start-short", "future", "status-after-stop", "status-after-stop-short"], homes = {};
   for (const name of names) {
     const { home } = await fx.spawn("dev", { name, harness: "claude" });
     const path = join(home, "instance.json"), meta = JSON.parse(readFileSync(path, "utf8"));
@@ -424,10 +435,13 @@ test("a same-kernel startup after 30 hours restores clean stops and preserves bl
     writeFileSync(path, JSON.stringify({ ...meta, launched: true, startId }));
     homes[name] = { home, instance: name, startId, launched: true, running: true };
   }
-  const stopped = Date.now(), now = stopped + 30 * 60 * 60_000, boot = bootId();
+  const stopped = Date.now() + 10 * 60_000, now = stopped + 30 * 60 * 60_000, boot = bootId();
   const prior = { home: homeKey(homes.prior.home), startId: homes.prior.startId, code: "E_PRIOR", message: "prior fixture refusal", at: new Date(stopped).toISOString() };
   await fx.inEnv(() => {
-    recordSeen(join(fx.dep, "agents"), Object.values(homes), { now: stopped, boot });
+    recordSeen(join(fx.dep, "agents"), Object.values(homes), { now: stopped - 10 * 60_000, boot });
+    // A listing during the stop's grace can refresh the running observation after its receipt.
+    recordSeen(join(fx.dep, "agents"), Object.values(homes).map((r) => ({ ...r, running: r.instance === "status-after-stop" ? true : null })), { now: stopped + 5000, boot });
+    recordSeen(join(fx.dep, "agents"), Object.values(homes).map((r) => ({ ...r, running: r.instance === "status-after-stop-short" ? true : null })), { now: now - 5000, boot });
     // A short ordinary loss with an other-start receipt still obeys the crash ceiling.
     recordSeen(join(fx.dep, "agents"), Object.values(homes).map((r) => r.instance === "other-start-short" ? { ...r, startId: "fixture-new-short" } : { ...r, running: null }), { now: now - 1000, boot });
     const short = homes["other-start-short"], path = join(short.home, "instance.json");
@@ -437,7 +451,7 @@ test("a same-kernel startup after 30 hours restores clean stops and preserves bl
     noteSweep({ refusals: [prior] }, boot);
   });
   for (const [name, row] of Object.entries(homes)) {
-    write(row.home, ".oats-stop.json", { startId: name.startsWith("other-start") ? "old-start" : row.startId, at: new Date(name === "future" ? now + 1 : stopped + 1).toISOString(), resume: true, reason: "host-stop" });
+    write(row.home, ".oats-stop.json", { startId: name.startsWith("other-start") ? "old-start" : row.startId, at: new Date(name === "future" ? now + 1 : name === "status-after-stop-short" ? now - 10_000 : stopped + 1).toISOString(), resume: true, reason: "host-stop" });
   }
   const realNow = Date.now, called = [];
   let answer;
@@ -445,15 +459,17 @@ test("a same-kernel startup after 30 hours restores clean stops and preserves bl
     Date.now = () => now;
     answer = await fx.inEnv(() => resumeSessions({ deployment: fx.dep, boot, start: async (row) => {
       called.push(row.instance);
-      if (row.instance === "success") return { ok: true, result: { resume: { resumed: true, sessionId: "fixture-conversation" } } };
+      if (["success", "status-after-stop", "status-after-stop-short"].includes(row.instance)) return { ok: true, result: { resume: { resumed: true, sessionId: "fixture-conversation" } } };
       if (row.instance === "blocked") return { ok: true, result: { resume: { resumed: true, waiting: "resume-confirmation" } } };
       if (row.instance === "refused") return { ok: false, error: { code: "E_FIXTURE", message: "fixture start refused" } };
       assert.fail(`an ineligible or already-refused home was started: ${row.instance}`);
     } }));
   } finally { Date.now = realNow; }
   const rows = Object.fromEntries(answer.rows.map((r) => [r.instance, r]));
-  assert.deepEqual(called.sort(), ["blocked", "refused", "success"]);
+  assert.deepEqual(called.sort(), ["blocked", "refused", "status-after-stop", "status-after-stop-short", "success"]);
   assert.equal(rows.success.outcome, OUTCOME.RESUMED);
+  assert.equal(rows["status-after-stop"].outcome, OUTCOME.RESUMED);
+  assert.equal(rows["status-after-stop-short"].outcome, OUTCOME.RESUMED);
   assert.equal(rows.blocked.outcome, OUTCOME.BLOCKED);
   assert.equal(rows.refused.code, "E_FIXTURE");
   assert.equal(rows.prior.reason, ROW_REASON.REFUSED_THIS_BOOT);

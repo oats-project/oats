@@ -1477,7 +1477,9 @@ refused. A home removed between the read and its start is reported
   cannot grant this exception.
   For a validated current-start host stop, the in-boot gap is measured
   from the last running observation to the stop receipt's time, excluding
-  container downtime. Thus a clean stop lasting more than 24 hours can
+  container downtime. A running observation during the stop's grace period
+  may be later than the receipt; that gap is zero and the receipt remains
+  valid. Thus a clean stop lasting more than 24 hours can
   still resume. The first-observed-loss age limit and prior judgement
   still apply; unknown, pre-start, future and other-start receipts relax
   none of these guards.
