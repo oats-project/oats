@@ -71,14 +71,19 @@ Inside one trust group, none of these hold:
 
 ## Keys outside the group
 
-One part of the line is enforced by something other than OATS. In the aweb
-human-assurance design, the keys of a human, of a namespace and of a team's
-controller are held by a protected signer outside every agent group, and no
-agent can read them. The deployment root's agent key is inside the group by
-design. What it can do is bounded by its admission policy, so its loss is the
-loss of that group and of nothing above it.
+One part of the line is enforced by something other than OATS: where a
+team's keys are kept. A hosted aweb team's controller key is kept by the
+service, outside every agent group, and no agent can read it. That holds
+today.
 
-Deployments that bring their own team do not all have this yet. An existing
-one still holds its team keys under the agents' user, in `~/.awid/team-keys`
-and `.aweb-roots`. Under rule 1 those keys are compromised along with any
-agent in that group, until they are moved to the signer.
+The aweb human-assurance design goes further. In it, the keys of a human, of
+a namespace and of a team's controller will be held by a protected signer
+outside every agent group. The deployment root's agent key will stay inside
+the group by design, and what it can do will be bounded by its admission
+policy, so that its loss is the loss of that group and of nothing above it.
+The signer is not shipped.
+
+No deployment that brings its own team has this yet. Each still holds its
+team keys under the agents' user, in `~/.awid/team-keys` and `.aweb-roots`.
+Under rule 1 those keys are compromised along with any agent in that group,
+until they are moved to the signer.
