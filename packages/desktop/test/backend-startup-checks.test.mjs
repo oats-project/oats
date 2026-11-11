@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
-import { chmodSync, chownSync, existsSync, linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, chownSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -101,6 +101,16 @@ test('A3: a socket under a 0755 directory, a symlinked directory or a missing on
   symlinkSync(real, join(dir, 'linked'));
   refused(await run(['--socket', join(dir, 'linked', 's'), '--token-fd', '3'], { fd3: secret }), join(real, 's'), '--socket', secret);
   refused(await run(['--socket', join(dir, 'absent', 's'), '--token-fd', '3'], { fd3: secret }), join(dir, 'absent', 's'), '--socket', secret);
+});
+
+test('something other than a socket at --socket is refused and left as it was', async (t) => {
+  const { socketPath, remove } = privateSocketDir(); t.after(remove);
+  const secret = backendSecret();
+  writeFileSync(socketPath, 'not a socket\n');
+  const r = await run(['--socket', socketPath, '--token-fd', '3'], { fd3: secret });
+  assert.notEqual(r.code, 0, r.stderr);
+  assert.ok(r.stderr.includes('--socket'), r.stderr);
+  assert.equal(readFileSync(socketPath, 'utf8'), 'not a socket\n', 'the file is not removed');
 });
 
 test('A15(a): the server listens only on its socket; --port is refused', async (t) => {
