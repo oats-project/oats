@@ -161,3 +161,23 @@ test('A11 (backend): the --token-file is never served by /api/file, by its path,
     assert.equal(r.text.includes(s.secret), false, `${name}: no content`);
   }
 });
+
+test('the server holds no end of the credential pipe once it is ready', async (t) => {
+  const { socketPath, remove } = privateSocketDir(); t.after(remove);
+  const child = spawn(process.execPath, [SERVER, 'start', '--socket', socketPath, '--token-fd', '3'],
+    { stdio: ['ignore', 'pipe', 'pipe', 'pipe'], env: HERMETIC });
+  t.after(() => { try { child.kill('SIGKILL'); } catch { /* gone */ } });
+  let stdout = '';
+  child.stdout.on('data', (d) => { stdout += d; });
+  const pipe = child.stdio[3];
+  pipe.on('error', () => {});
+  const ended = new Promise((ok) => pipe.once('end', () => ok(true)));
+  pipe.resume();
+  pipe.end(backendSecret());
+  for (let n = 0; !stdout.includes('oats-desktop-server ready'); n++) {
+    if (n > 400) throw new Error('never ready');
+    await new Promise((ok) => setTimeout(ok, 25));
+  }
+  assert.equal(await Promise.race([ended, new Promise((ok) => setTimeout(() => ok(false), 3000))]), true,
+    'its end of fd 3 is closed: nothing it runs can inherit it');
+});

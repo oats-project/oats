@@ -63,14 +63,15 @@ async function fakeBackend(t) {
     req.on("end", () => { seen.push({ method: req.method, url: req.url, headers: req.headers, body }); res.writeHead(200, { "content-type": "application/json", "x-backend-extra": "1" }); res.end('{"answered":true}'); });
   });
   await new Promise((ok) => server.listen(socket.socketPath, ok));
-  t.after(() => { server.close(); socket.remove(); });
+  // closeAllConnections: a request left unanswered must not keep the test process alive.
+  t.after(() => { server.closeAllConnections(); server.close(); socket.remove(); });
   return { socketPath: socket.socketPath, seen };
 }
 async function harness(t, apiSocket, secret, options = {}) {
   const harnessToken = backendSecret();
   const server = createHarnessServer({ apiSocket, secret, harnessToken, ...options });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  t.after(() => server.close());
+  t.after(() => { server.closeAllConnections(); server.close(); });
   const port = server.address().port;
   const raw = (path, { method = "GET", headers = {}, body } = {}) => new Promise((resolve, reject) => {
     const rq = httpRequest({ host: "127.0.0.1", port, path, method, headers: { host: `127.0.0.1:${port}`, ...headers } }, (rs) => {

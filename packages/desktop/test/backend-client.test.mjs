@@ -2,11 +2,11 @@
 // generation) and backend-socket.mjs (where the socket lives), through their exports. The HTTP
 // transport is the one boundary replaced (an injected `request`), and child processes are fakes:
 // the server itself is driven in backend-request-checks.test.mjs.
-import test from 'node:test';
+import nodeTest from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
@@ -15,11 +15,15 @@ import { createBackendClient, createSocketLossRecovery, watchReadyLine, READY_LI
 import { createServerHost, launchServerChild } from '../server-host.mjs';
 import { makeSocketDir, socketBase, socketPathFits, sweepStaleSocketDirs, SOCKET_PATH_LIMIT, SocketPathTooLong } from '../backend-socket.mjs';
 
+// A guard that goes missing lets a request reach the transport double, which waits to be answered:
+// each test is bounded, so that fails as a timeout instead of hanging the run.
+const test = (name, fn) => nodeTest(name, { timeout: 10_000 }, fn);
 const SECRET = 'A'.repeat(43);
 const tick = () => new Promise((ok) => setImmediate(ok));
 
-/** A node:http `request` double: records every request; the test answers it. */
-function transport() {
+/** A node:http `request` double: records every request; the test answers it. With `ignoreAbort`, it
+ * goes on delivering after the request's signal aborts (a transport that ignores the signal). */
+function transport({ ignoreAbort = false } = {}) {
   const made = [];
   const request = (options) => {
     const req = new EventEmitter();
@@ -27,7 +31,7 @@ function transport() {
     req.write = (chunk) => { entry.body += chunk; };
     req.end = () => { entry.ended = true; };
     req.destroy = (error) => { if (entry.res) entry.res.destroy(error); else req.emit('error', error ?? new Error('destroyed')); };
-    options.signal?.addEventListener('abort', () => {
+    if (!ignoreAbort) options.signal?.addEventListener('abort', () => {
       const error = Object.assign(new Error('aborted'), { name: 'AbortError' });
       if (entry.res) entry.res.destroy(error); else req.emit('error', error);
     }, { once: true });
@@ -119,6 +123,21 @@ test('A7: a revocation after the headers, during the body, rejects the reply', a
   client.revoke(lease);
   res.end('[]}');
   await assert.rejects(pending, { code: 'E_BACKEND_REVOKED' });
+});
+
+test('A7: even through a transport that ignores the abort, a reply finished after its lease was revoked is discarded', async () => {
+  const t = transport({ ignoreAbort: true });
+  const client = createBackendClient({ request: t.request });
+  const lease = client.begin({ child: {}, socketPath: '/run/oats-d-x/s', secret: SECRET });
+  client.markReady(lease);
+  const pending = client.fetch('/api/panel');
+  await tick();
+  const res = t.last().respond(200);
+  res.write('{"workspaces":');
+  await tick();
+  client.revoke(lease);
+  res.end('[]}');
+  await assert.rejects(pending, { code: 'E_BACKEND_REVOKED' }, 'checked after the last byte, not only through the signal');
 });
 
 test('A7: a reply resolves only once its last byte is in, and over budget it fails', async () => {
@@ -283,6 +302,17 @@ test('A12: the socket directory is 0700 and this uid\'s, and goes when its gener
     assert.match(dir, /\/oats-d-[^/]+$/);
     child.emit('exit', 0, null);
     assert.equal(existsSync(dir), false, 'removed when its generation ended');
+  } finally { rmSync(base, { recursive: true, force: true }); }
+});
+
+test('A12: a socket directory that is not private once made is removed and refused', () => {
+  const base = mkdtempSync(join(tmpdir(), 'oats-t-base-'));
+  try {
+    for (const st of [{ mode: 0o40755, uid: 1000 }, { mode: 0o40700, uid: 1001 }, { mode: 0o120777, uid: 1000 }]) {
+      const fake = { mkdtempSync, rmSync, lstatSync: () => ({ ...st, isDirectory: () => (st.mode & 0o170000) === 0o040000 }) };
+      assert.throws(() => makeSocketDir(base, { uid: 1000, fs: fake }), /not private to this user/, JSON.stringify(st));
+    }
+    assert.deepEqual(readdirSync(base), [], 'each directory made is removed');
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
 
