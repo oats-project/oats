@@ -242,6 +242,18 @@ test("discover: rejected failure envelopes retain their message and discovery co
   assert.equal(found.bin, "/next/oats");
 });
 
+test("discover: rejected failure envelope messages are bounded diagnostics", async () => {
+  const message = "oats needs Node.js 22 or later; " + "x".repeat(300);
+  const io = { persisted: () => "/unsupported/oats", env: { PATH: "/next" }, isExecutableFile: () => true };
+  const result = await discover(io, async () => {
+    throw Object.assign(new Error("exit 1"), { stdout: JSON.stringify({ schemaVersion: 1, ok: false, error: { message } }) });
+  });
+  assert.deepEqual(result, { ok: false, tried: [
+    { path: "/unsupported/oats", source: "persisted", reason: message.slice(0, 200) },
+    { path: "/next/oats", source: "path", reason: message.slice(0, 200) },
+  ] });
+});
+
 test("discover: rejected probes without a failure envelope keep the execFile diagnostic", async () => {
   const io = { persisted: () => "/broken/oats", env: { PATH: "" }, isExecutableFile: () => true };
   for (const stdout of [

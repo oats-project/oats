@@ -239,8 +239,9 @@ export async function discover(io, probe) {
         // Probe REJECTED (nonzero exit, timeout, spawn failure) — the
         // candidate is out even if it printed a plausible payload first.
         const failure = parseProbeStdout(e.stdout);
+        // Candidate stdout reaches the CLI status payload and change comparison; bound it.
         const reason = failure?.schemaVersion === 1 && failure.ok === false && typeof failure.error?.message === "string"
-          ? failure.error.message : `probe failed: ${String(e.message || e).slice(0, 120)}`;
+          ? failure.error.message.slice(0, 200) : `probe failed: ${String(e.message || e).slice(0, 120)}`;
         tried.push({ path, source: src.source, reason });
         continue;
       }
