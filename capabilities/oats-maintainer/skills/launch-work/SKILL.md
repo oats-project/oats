@@ -209,18 +209,19 @@ An instance is **finished** when all of these hold:
   is not landed: it may still be needed for fixes and rebases;
 - nothing waits on it: no open PR, review, question or hand-back of its own, and its own
   children are retired;
-- with a harvest duty (your knowledge layer says whether you have one), its final harvest
-  checkpoint ("you finish a task") is recorded in its log.md with the harvester's name, and
-  the harvester is launched. The harvester snapshots its evidence at spawn and the retire
-  keeps a recovery copy, so nobody waits for the harvester to finish.
+- with a duty to propose knowledge (your knowledge layer says whether you have one), its
+  final knowledge checkpoint ("you finish a task") is run and its outcome recorded, as that
+  layer says. A proposal it opened at any knowledge checkpoint is in the knowledge layer's
+  hands from then on, not one of its PRs above: nobody waits for it.
 
-- **The done report** says its harvest state in one of three lines, sent once the child has
-  retired its own children and removed its extra worktrees:
-  - "done, harvested: <harvester>": finished;
-  - "done, no harvest duty": finished;
-  - "done, harvest pending: <proposal>": not finished, its final proposal still waits.
-    Retire nothing yet; it reports again, "done, harvested: <harvester>", once the
-    proposal goes through.
+- **The done report** says its final knowledge checkpoint's outcome in one of four lines,
+  sent once the child has retired its own children and removed its extra worktrees:
+  - "done, proposed: <PR URLs>": finished;
+  - "done, nothing to propose: <reason>": finished;
+  - "done, no duty to propose": finished;
+  - "done, proposal pending: <slug and why>": not finished, its final proposal is not
+    open yet. Retire nothing yet; it reports again, with one of the first three lines,
+    once the proposal is settled.
 
   Ask for the line when a done report lacks it. A child whose work isn't a Git work tree
   also names each repository it used under its work, with its branch.
@@ -239,8 +240,8 @@ An instance is **finished** when all of these hold:
   none, the instance itself). Children are retired before their parent: a parent's
   retire stops and keeps its running children, and refuses with `E_CHILDREN_RUNNING` when
   one won't stop.
-- **Never reuse a name:** a new instance never takes a retired one's name, which couldn't
-  harvest.
+- **Never reuse a name:** a new instance never takes a retired one's name, which the
+  records it left and the provenance of the knowledge it proposed still name.
 - **Not you, nor a maintainer you launched:** a maintainer holds a standing seat, not a
   task (`/cross-review-peer`, "Leaving a lane"). Your overflow seat holds none: retire it
   like any finished child (Launching an overflow seat).
