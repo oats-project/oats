@@ -2998,13 +2998,28 @@ reads it or its session is still there.
   The answer nobody read is the home's record, and a spawn that brought
   `--expect-decision` and `--idempotency-key` answers it again when it is
   repeated (below).
+- The same holds for the verbs that act under a home's
+  [lifecycle claim](#lifecycle-pairs): `oats retire`, `oats session start`,
+  `oats session restart` and `oats instance stop --apply`. With no reader
+  the act completes, a line it writes on stderr while it acts (a start
+  that starts the OATS tmux server writes one) is dropped with the answer,
+  and the exit status is the act's own, never the `1` of an unhandled
+  `EPIPE`. What was done is on disk: the home is gone, the session runs, or
+  the stop's receipt is stored, and a stop or a guarded retire repeated
+  with its `--idempotency-key` answers the receipt again. Their plans
+  (`--plan`) and every reading command are as before: a reader that goes
+  away ends them.
 - SIGINT, SIGTERM or SIGHUP never ends the process with a home that has no
   record. While the capabilities are copied into the new home, and while
   its `worktree` hooks run, the signal is held and the spawn is rolled back:
   `E_INTERRUPTED`, exit 128 + the signal number
   ([Spawn errors](#spawn-errors)). At any other moment the signal reaches
   the process once the spawn has returned: the home is complete, the answer
-  is written, and the process then exits 128 + the signal number.
+  is written, and the process then exits 128 + the signal number. This is
+  the spawn's rule alone: a retire, a start, a restart and a stop apply
+  hold no signal, and one that is signalled ends where it stands, its claim
+  left for the next command of that home to
+  [take over](#lifecycle-pairs).
 
 **Idempotency** (feature `spawn-idempotency-2`): `--idempotency-key <key>`
 with `--expect-decision` records the key and decision in `instance.json`.

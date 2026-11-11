@@ -1316,8 +1316,9 @@ function instanceWaitingCmd(sub, bail) {
  *  session that ended) has only stopped reading: the command goes on to its consistent end, what it
  *  can no longer print is dropped, and its exit status is the one it would have had. Unhandled,
  *  that EPIPE would end this process where it stands: a `worktree add` mid-hook, with no rollback; a
- *  spawn that has completed, as if it had failed. For the verbs that change state and run long:
- *  `worktree` and `spawn`. */
+ *  spawn, a retire, a start or a stop that has completed, as if it had failed. For the verbs that
+ *  change state: `worktree`, `spawn`, `retire`, `session start`, `session restart` and
+ *  `instance stop --apply`. */
 function outliveReader() {
   const readerGone = (e) => { if (e?.code !== "EPIPE" && e?.code !== "ERR_STREAM_DESTROYED") throw e; };
   process.stdout.on("error", readerGone);
@@ -1567,6 +1568,7 @@ async function instanceCmd() {
       }
       const rev = flag("plan-revision"), key = flag("idempotency-key"), grace = flag("grace-ms");
       if (rev === true || key === true || grace === true) return bail("E_BAD_ARGS", usage);
+      outliveReader();
       const receipt = applyStop(dirFlag(), root, name, { home: homeOpt, recursive, planRevision: rev, idempotencyKey: key, ...(grace !== undefined ? { graceMs: Number(grace) } : {}) });
       // Not part of the receipt, whose shape is contract: on stderr in both modes.
       for (const w of receipt[STOP_WARNINGS] || []) console.error(`oats: warning: ${w}`);
@@ -3018,6 +3020,7 @@ function retireCmd() {
   const isSelf = process.env.OATS_INSTANCE === name;
   if (isSelf && !args.includes("--self")) die(`"${name}" is the calling instance — self-retire is irreversible; if your task is complete and you were told to retire, re-run with --self (finish your memory files FIRST; your session dies ~8s after)`);
   if (!isSelf && args.includes("--self")) die(`--self given but "${name}" is not the calling instance`);
+  outliveReader();
   const root = ensureRoot(dirFlag());
   // K3: a GUI-driven Remove carries the plan revision it showed and an
   // idempotency key. The revision is revalidated against a fresh plan
@@ -3477,6 +3480,7 @@ async function sessionCmd() {
     if (args[1] === "inspect") result = inspectInstanceSession(home);
     else if (args[1] === "recompose") throw Object.assign(new Error('unknown command "session recompose" — removed by the workspace model v2; use a re-spawn: an instance never changes under itself'), { code: "E_UNKNOWN_COMMAND" });
     else if (args[1] === "start" || args[1] === "restart") {
+      outliveReader();
       const bad = (msg) => { throw Object.assign(new Error(msg), { code: "E_BAD_ARGS" }); };
       const model = flag("model");
       if (model === true) bad("--model needs a model id; omit it to keep the recorded model");
