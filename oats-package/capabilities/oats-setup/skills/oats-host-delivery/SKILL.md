@@ -166,9 +166,9 @@ installed.
    `delivery: channel` for the whole host, or per spawn with
    `--provider oats.aweb delivery=channel`. With channel delivery, pi uses its
    `@awebai/pi` extension and Codex always uses the host broker.
-5. **pi seats**: the setup expert runs `pi install npm:@awebai/pi`, then makes
-   its entry in the pi folder's `settings.json` (`PI_CODING_AGENT_DIR`, else
-   `~/.pi/agent`) `{"source": "npm:@awebai/pi", "skills": []}`: no bundled skills.
+5. **pi seats**: the setup expert runs `pi install npm:@awebai/pi`; below 0.5.0, which bundles skills, it also makes the
+   entry in the pi folder's `settings.json` (`PI_CODING_AGENT_DIR`, else `~/.pi/agent`) `{"source": "npm:@awebai/pi", "skills": []}`.
+   Never install `@awebai/claude-skills` in a pi folder OATS homes use: a home's skills come from its capabilities.
 
 **Effects:** a machine-wide Claude policy file and host settings; no home
 changes. **Existing homes** keep the delivery and channel mode recorded at

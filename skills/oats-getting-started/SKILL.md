@@ -544,8 +544,11 @@ wakes an agent when mail arrives (skip this without messaging): Claude
 `claude plugin marketplace add awebai/claude-plugins && claude plugin install aweb-channel@awebai-marketplace`;
 pi `pi install npm:@awebai/pi`, then its entry in pi's `settings.json` set
 to load none of the skills it bundles (pi's extension is installed without
-its skills, so it puts none on the computer; each agent gets its own);
-Codex nothing (the setup expert sets up its wake). Claude's aweb channel
+its skills, so it puts none on the computer; each agent gets its own;
+from 0.5.0 it bundles none, and the setting is harmless, so set it
+whatever the version). Never install `@awebai/claude-skills` in that pi
+folder: its skills would load in every agent there, and each agent gets
+its own skills from OATS. Codex nothing (the setup expert sets up its wake). Claude's aweb channel
 plugin still carries one skill of its own, until aweb ships it without
 (a known gap). The pi entry, which matches `npm:@awebai/pi` alone or with
 `@` and a version, never another `@awebai/pi-…` package, and prints it so

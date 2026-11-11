@@ -370,6 +370,8 @@ test("pi's aweb extension is installed without its bundled skills", () => {
   assert.ok(skill.includes('process.env.PI_CODING_AGENT_DIR||path.join(os.homedir(),".pi","agent")'));
   assert.ok(skill.includes("skills:[]}:e)"));
   assert.ok(flat.includes("pi's aweb extension, without its skills (pi only)"));
+  assert.ok(flat.includes("from 0.5.0 it bundles none, and the setting is harmless, so set it whatever the version"));
+  assert.ok(flat.includes("Never install `@awebai/claude-skills` in that pi folder"));
 });
 
 // The onboarding VM campaign's second round of newcomer runs on fresh VMs (#1665).
