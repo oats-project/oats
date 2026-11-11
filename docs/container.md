@@ -156,15 +156,20 @@ the pod's `fsGroup`; the agent receives that supplementary group, so it can
 read the token without write permission.
 
 Provision the `claude-token` key with the cluster's Secret tooling. Pipe it
-from the operator's approved credential reader to stdin, for example
-(replace `credential-command` with that reader):
+from the operator's approved [credential source](servers.md#harness-credentials)
+to stdin. This example creates a new Secret and requires that it does not
+already exist:
 
 ```sh
-credential-command | kubectl --context operator-cluster --namespace team create secret generic team-harness-login --from-file=claude-token=/dev/stdin
+credential-source | kubectl --context operator-cluster --namespace team create secret generic team-harness-login --from-file=claude-token=/dev/stdin
 ```
 
-The token stays out of argv and temporary files. Never put its contents in
-Helm values, ConfigMaps, environment variables or a rendered manifest.
+For an existing Secret (including an empty login Secret) or a rotation,
+use the cluster's credential tooling to update it directly from stdin;
+the create command above does not update an existing Secret.
+
+Never put the token's contents in Helm values, ConfigMaps, environment
+variables, a rendered manifest, a command-line argument or a temporary file.
 `oats harness token set` requires the host's forced-command operator SSH
 receiver and does not provision this Secret. The fingerprint and rotation
 report from `oats harness token status` does not apply to this Secret route;
