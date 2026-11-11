@@ -1312,6 +1312,18 @@ function instanceWaitingCmd(sub, bail) {
   } catch (e) { return bail(e.code || "E_EVENTS_FAILED", e.message, e.candidates ? { candidates: e.candidates } : undefined); }
 }
 
+/** A caller that closes its end of stdout or stderr (a tool shell killed, Desktop gone, an ssh
+ *  session that ended) has only stopped reading: the command goes on to its consistent end, what it
+ *  can no longer print is dropped, and its exit status is the one it would have had. Unhandled,
+ *  that EPIPE would end this process where it stands: a `worktree add` mid-hook, with no rollback; a
+ *  spawn that has completed, as if it had failed. For the verbs that change state and run long:
+ *  `worktree` and `spawn`. */
+function outliveReader() {
+  const readerGone = (e) => { if (e?.code !== "EPIPE" && e?.code !== "ERR_STREAM_DESTROYED") throw e; };
+  process.stdout.on("error", readerGone);
+  process.stderr.on("error", readerGone);
+}
+
 /** `oats worktree add|remove` (#796, feature worktree-event): an instance's extra trees,
  *  `<home>/.work-<purpose>`, made from its home (lib/worktree.mjs). The home is
  *  $OATS_INSTANCE_HOME (or $OATS_HOME), else the home enclosing the working directory.
@@ -1327,12 +1339,7 @@ async function worktreeCmd() {
   const home = homeVariable ? process.env[homeVariable] : enclosingInstanceHome(logicalCwd());
   if (!home) return bail("E_BAD_ARGS", `oats worktree runs from an instance home: run it in the home (or below it), or with $OATS_INSTANCE_HOME set; ${usage}`);
   const W = await import("../lib/worktree.mjs");
-  // A caller that closes its end of stdout or stderr (a tool shell killed, Desktop gone) has only
-  // stopped reading: the add or remove goes on to its consistent end, and what it can no longer
-  // print is dropped. Unhandled, that EPIPE would end this process mid-hook, with no rollback.
-  const readerGone = (e) => { if (e?.code !== "EPIPE" && e?.code !== "ERR_STREAM_DESTROYED") throw e; };
-  process.stdout.on("error", readerGone);
-  process.stderr.on("error", readerGone);
+  outliveReader();
   try {
     if (sub === "remove") {
       const r = await W.worktreeRemove(resolve(home), { purpose: value("purpose") });
@@ -2673,6 +2680,8 @@ function printSpawnPreview(r, { server, soulFetched = false } = {}) {
   for (const w of r.warnings || []) console.log(`  WARNING: ${terminalText(w)}`);
 }
 async function spawnCmd() {
+  // The spawn does not need its caller to finish: see outliveReader.
+  outliveReader();
   // JSON mode: contract envelope, stable error codes, stderr-only progress.
   const bail = (code, msg, details, exit) => (JSON_MODE ? jsonFail(code, msg, details, exit) : die(msg, exit));
   const note = (msg) => (JSON_MODE ? console.error(msg) : console.log(msg));

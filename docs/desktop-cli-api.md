@@ -2987,6 +2987,25 @@ Feature `spawn-apply-2`, `spawnApplyApi: 1`. The Desktop gates on
   Without `--expect-decision` the flag is `E_BAD_ARGS`
   ([Observation reuse](#observation-reuse-feature-observe-max-age-oats-0311)).
 
+<a id="spawn-caller-gone"></a>**A caller that goes away.** A spawn does not
+depend on its caller to finish: once it has made the home it ends with the
+home complete or with the home rolled back, whether or not anyone still
+reads it or its session is still there.
+- A reader that closes stdout or stderr (an ssh session that ended, a
+  Desktop that quit) only stops reading: the spawn runs to its end, what it
+  could not print is dropped, and its exit status is the spawn's own, `0`
+  for a spawn that completed, as for [`oats worktree add`](#oats-worktree).
+  The answer nobody read is the home's record, and a spawn that brought
+  `--expect-decision` and `--idempotency-key` answers it again when it is
+  repeated (below).
+- SIGINT, SIGTERM or SIGHUP never ends the process with a home that has no
+  record. While the capabilities are copied into the new home, and while
+  its `worktree` hooks run, the signal is held and the spawn is rolled back:
+  `E_INTERRUPTED`, exit 128 + the signal number
+  ([Spawn errors](#spawn-errors)). At any other moment the signal reaches
+  the process once the spawn has returned: the home is complete, the answer
+  is written, and the process then exits 128 + the signal number.
+
 **Idempotency** (feature `spawn-idempotency-2`): `--idempotency-key <key>`
 with `--expect-decision` records the key and decision in `instance.json`.
 - Recovery runs right after naming, before placement or preflight. A retry
@@ -3307,7 +3326,7 @@ kernel stage raised as well.
 | `E_HARNESS_RESOURCE_MISSING` | | a harness package a capability requires for the selected harness is not installed, disabled, or cannot be verified ([capabilities.md](capabilities.md)); raised before any home exists, at a preview too, and again by an apply after the home, the work and the hooks when the pane it got differs from the one it checked in a name the probe reads, or selects another program (another creator started the OATS tmux server): then the spawn is rolled back, with `details.unconfirmed` when that cannot finish. A start, a restart and a launch plan's `harness-packages` check answer the same code |
 | `E_LAUNCH_SHIM` | | the home's `oats` (`<home>/.oats/bin/oats`) cannot be written; the spawn is rolled back |
 | `E_SCHEDULE_INVALID` | | a bad wake (`--wake-json`, `--wake-file`, `--wake-*`) |
-| `E_INTERRUPTED` | `{signal, hooks}` | SIGINT, SIGTERM or SIGHUP while the spawn's `worktree` hooks ran (feature `worktree-event`): the running hook's process group is ended, the spawn is rolled back as for a required hook failure, and the process exits 128 + the signal number |
+| `E_INTERRUPTED` | `{signal, hooks}` | SIGINT, SIGTERM or SIGHUP while the spawn's `worktree` hooks ran (feature `worktree-event`): the running hook's process group is ended, the spawn is rolled back as for a required hook failure, and the process exits 128 + the signal number. Also while the capabilities were copied into the new home, before any hook: the signal is held until the copy ends, the home is removed, `hooks` is `[]`, and the exit status is the same ([a caller that goes away](#spawn-caller-gone)) |
 | `E_REQUIRED_HOOK_FAILED` | `{hooks}`, plus `unconfirmed: true` when compensation cannot finish | a required `spawn` or `worktree` hook failed or timed out; the spawn is rolled back. `hooks` holds the receipt of the event that failed: one entry per hook that ran, `{capability, ok, required, log, exitCode?, signal?, timedOut?, contract?}`, paths only. `log` is `null` for a spawn hook (it keeps no log) and once the rollback removed the home; a retained home keeps a `worktree` hook's log path. Never `home`. Before 0.49.0 a required spawn hook's failure answered `E_SPAWN_FAILED` |
 | `E_HOOK_ENVIRONMENT_CONTRACT` | the same as `E_REQUIRED_HOOK_FAILED`, the failed entry with `contract: "environment"` | a `spawn` hook answered an `env` its manifest does not allow, or a `worktree` hook answered `env` at all |
 | `E_RUNTIME_ENDPOINT_UNKNOWN` | | the session cannot be established: the OATS tmux server cannot be read at an apply (before any effect, or after the home, the work and the hooks), or the pane's `PATH`, `HOME` or harness folder cannot be read for the harness package check ([the checks read the pane](execution-targets.md#the-checks-read-the-pane)), before anything is probed or created, or at the apply's second check after the hooks, as for `E_HARNESS_RESOURCE_MISSING`. Once the home exists the spawn is rolled back, with `details.unconfirmed` when that cannot finish. A start and a restart answer the same code |
@@ -6346,7 +6365,19 @@ zombie) has died: its claim is taken over without waiting for that reap
 (0.52.0, #870; before, the retire was refused as running until the reap). The
 claim does not end what the killed retire left running: one of its retire
 hooks may still be running when the next retire takes the claim over and
-runs the hooks again (#865). Until
+runs that hook again (#865). <a id="retire-hooks-in-claim"></a>The retire
+that takes over does not run again a retire hook the killed one had
+finished: a retire records each hook that ended in its claim, as
+`retireHooks: [{capability, meta?}]` (the `meta` that hook answered) with
+`retireHooksFor`, the home's `createdAt`, and the next holder skips those
+hooks and judges the cleanup, and writes its `retired` row, with their
+`meta` as if it had run them. A hook that had not ended is run again. Only
+a take-over reads the list: a retire that returns removes its claim, so
+the retry of a quarantined home, and each retry a self-retire's completion
+makes of a cleanup its hooks left incomplete, runs every hook again. A
+claim without the list, or whose list names another incarnation, skips
+nothing, and of a list only the entries that name a capability of this
+home with a retire hook count. Until
 that name is retired again its claim file stays where it is, and it is safe
 to remove once its pid is gone. A retire that ends removes its claim file;
 the `claims/` directory itself stays, empty.
