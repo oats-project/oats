@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { test } from 'node:test';
-import { acquireCaptureLock, captureLockPath, holderLiveness, readCaptureLockOwner } from '../lib/capture-lock.mjs';
+import { acquireCaptureLock, captureLockPath, readCaptureLockOwner } from '../lib/capture-lock.mjs';
+import { holderIdentity, holderLiveness } from '../lib/lock-holder.mjs';
 const host=hostname(),start='2026-01-01T00:00:00.000Z';
 function fixture(t){const root=fs.mkdtempSync(join(tmpdir(),'capture-worker-lock-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));return root;}
 function plant(root,worker){const dir=captureLockPath(root);fs.mkdirSync(dir,{recursive:true});const owner={pid:100,nonce:'parent',host,startedAt:start,worker};fs.writeFileSync(join(dir,'owner.json'),JSON.stringify(owner));return owner;}
@@ -19,7 +20,7 @@ test('dead supervisor cannot release its registered live, reused, unknown, forei
   ['missing time',{...worker,startedAt:null},'dead'],
  ]){
   fs.rmSync(captureLockPath(root),{recursive:true,force:true});const owner=plant(root,value);
-  const lock=acquireCaptureLock(root,{pid:102,liveness:pid=>pid===100?'dead':status});
+  const lock=acquireCaptureLock(root,{pid:102,liveness:({pid})=>pid===100?'dead':status});
   assert.equal(lock.release,undefined,description);assert.deepEqual(readCaptureLockOwner(root),owner,description);
  }
  fs.rmSync(captureLockPath(root),{recursive:true,force:true});plant(root,worker);
@@ -32,7 +33,7 @@ test('worker publication is private, fsynced before return and blocks release un
  const lock=acquireCaptureLock(root,{liveness:()=>state,io:{fsyncSync:fd=>{events.push(fs.fstatSync(fd).isDirectory()?'directory':'file');fs.fsyncSync(fd);}}});
  const worker={pid:99999999,nonce:'worker-nonce',startedAt:start};lock.registerWorker(worker);
  assert.deepEqual(events,['file','directory','directory']);
- assert.deepEqual(readCaptureLockOwner(root).worker,{...worker,host});
+ assert.deepEqual(readCaptureLockOwner(root).worker,{...worker,host,...holderIdentity(worker.pid)});
  assert.equal(fs.statSync(captureLockPath(root)).mode&0o777,0o700);
  assert.equal(fs.statSync(join(captureLockPath(root),'owner.json')).mode&0o777,0o600);
  assert.equal(lock.release().reason,'worker-active');state='unknown';assert.equal(lock.release().reason,'worker-active');
@@ -88,7 +89,7 @@ test('owner readers reject links, special files and oversized markers without bl
  fs.writeFileSync(marker,'x'.repeat(4097));assert.equal(readCaptureLockOwner(root),undefined);
  const kill=process.kill;let calls=0;
  process.kill=()=>{calls++;throw Object.assign(Error('probe'),{code:'EIO'});};
- try{for(const pid of [0,-1,NaN,Infinity,2147483648])assert.equal(holderLiveness(pid),'unknown');assert.equal(calls,0);assert.equal(holderLiveness(123),'unknown');}
+ try{for(const pid of [0,-1,NaN,Infinity,2147483648])assert.equal(holderLiveness({pid}),'unknown');assert.equal(calls,0);assert.equal(holderLiveness({pid:123}),'unknown');}
  finally{process.kill=kill;}
 });
 
@@ -99,7 +100,7 @@ test('an actual owned idle child keeps its supervisor lock until it is reaped',a
  try{
   await once(child.stdout,'data');lock.registerWorker({pid:child.pid,nonce:'owned-child',startedAt:start});
   assert.equal(lock.release().reason,'worker-active');
-  const deadParent=acquireCaptureLock(root,{pid:99999998,liveness:pid=>pid===process.pid?'dead':holderLiveness(pid)});
+  const deadParent=acquireCaptureLock(root,{pid:99999998,liveness:holder=>holder.pid===process.pid?'dead':holderLiveness(holder)});
   assert.equal(deadParent.release,undefined,'even a proven dead supervisor cannot expose the still-live worker');
   child.kill('SIGTERM');await ended;assert.deepEqual(lock.release(),{released:true});
  }finally{if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await ended;}}
@@ -129,6 +130,6 @@ test('continuation replaces only the exact positively dead worker without droppi
  assert.throws(()=>lock.registerWorker(next,{previous:{...prior,nonce:'different'}}),/not proven dead/);
  lock.registerWorker(next,{previous:prior});
  assert.equal(readCaptureLockOwner(root).nonce,original.nonce);
- assert.deepEqual(readCaptureLockOwner(root).worker,{...next,host});
+ assert.deepEqual(readCaptureLockOwner(root).worker,{...next,host,...holderIdentity(next.pid)});
  assert.deepEqual(lock.release(),{released:true});
 });

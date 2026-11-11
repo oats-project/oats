@@ -24,5 +24,4 @@
   other users could read agents' conversations. It now creates files with
   mode `0600` and directories with mode `0700`:
   [Store layout](../../packages/record/docs/turn-record-sot.md#store-layout)
-  has the rule, and what it does not cover (a root that a capture pass's
-  lock is the first to create).
+  has the rule.

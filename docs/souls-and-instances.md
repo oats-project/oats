@@ -533,6 +533,16 @@ takes a final capture of notes and the session record into durable custody; an
 incomplete capture keeps the home for a retry. Retirement never waits for a
 model or GitHub: processing continues after the home is gone.
 
+A spawn that is killed after its spawn hooks started and before it wrote the
+home's record (SIGKILL, a container stop, a dropped connection) leaves a home
+`oats retire` still cleans up: the spawn records, before its first spawn hook,
+which retire hooks a retire must run, and the retire runs them before it
+removes the home. A home whose record does not say which retire hooks to run,
+and that has no such marker, is refused with `E_UNIDENTIFIED_INSTANCE_HOME`
+and kept; `--force` removes it without running a hook, once what its
+capabilities registered is cleaned up by hand
+([A spawn in progress](capabilities.md#manifest)).
+
 A retire hook's warning, such as an action someone must still take, is in the
 retire's `warnings` and stays readable after the home is gone: each one is a
 `retire-warning` event in the instance's workspace log, read with

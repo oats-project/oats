@@ -657,6 +657,45 @@ test("a live holder of the cache write lock is waited for (bounded) and never st
   } finally { holder.kill(); }
 });
 
+test("a cache write lock whose owner's liveness cannot be judged is waited for (bounded) and never reclaimed: a pid check that fails with neither ESRCH nor EPERM", async (t) => {
+  const f = fixture();
+  // A pid that does not exist, whose check answers an error that says nothing: every other kill is the real one.
+  const pid = 999999998, kill = process.kill;
+  process.kill = (target, signal) => {
+    if (target === pid) throw Object.assign(new Error("probe"), { code: "EIO" });
+    return kill.call(process, target, signal);
+  };
+  t.after(() => { process.kill = kill; });
+  const lock = holdWriteLock(f, pid);
+  const before = readFileSync(lock, "utf8");
+  const session = createReadSession({ cacheWriteWaitMs: 800 });
+  const started = Date.now();
+  const e = await observeRemote(f.bare, { cacheDir: f.cacheDir, at: f.commit, session }).then(() => assert.fail("expected a refusal"), (x) => x);
+  await session.close();
+  assert.ok(Date.now() - started >= 700, "it waited");
+  assert.equal(e.code, "E_REMOTE_UNREADABLE");
+  assert.deepEqual([e.details.reason, e.details.stage, e.details.holderPid, e.details.lock], ["cache", "fetch", pid, lock]);
+  assert.match(e.message, heldLockRefusal(pid, lock));
+  assert.equal(readFileSync(lock, "utf8"), before, "the lock is untouched");
+  assert.equal(existsSync(f.repoDir), false, "nothing was written");
+});
+
+test("a cache write lock whose record names no process ID is waited for and never reclaimed, and the refusal says so instead of naming a process", async () => {
+  for (const pid of [0, -5, 2147483648]) {
+    const f = fixture();
+    const lock = holdWriteLock(f, pid, { bootId: `another-boot-than-${thisBoot()}`, processStart: "proc:1" });
+    const before = readFileSync(lock, "utf8");
+    const session = createReadSession({ cacheWriteWaitMs: 300 });
+    const e = await observeRemote(f.bare, { cacheDir: f.cacheDir, at: f.commit, session }).then(() => assert.fail(`expected a refusal (${pid})`), (x) => x);
+    await session.close();
+    assert.equal(e.code, "E_REMOTE_UNREADABLE");
+    assert.deepEqual([e.details.reason, e.details.stage, e.details.lock, "holderPid" in e.details], ["cache", "fetch", lock, false], String(pid));
+    assert.ok(e.message.endsWith(`its write lock ${lock} names ${pid}, which is no process ID, as its holder; it is safe to remove once no oats process is running`), e.message);
+    assert.doesNotMatch(e.message, /process -?\d+ has been writing|is an oats process/);
+    assert.equal(readFileSync(lock, "utf8"), before, `${pid}: the lock is untouched`);
+  }
+});
+
 test("a live holder named by its boot and start is waited for (bounded) and never stolen from: reason cache naming its pid", async () => {
   const f = fixture();
   const holder = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], { stdio: "ignore" });

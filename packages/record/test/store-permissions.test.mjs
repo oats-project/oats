@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { finishTurn } from "../lib/canonical.mjs";
+import { acquireCaptureLock } from "../lib/capture-lock.mjs";
 import { createCaptureScratch } from "../lib/capture-scratch.mjs";
 import { RecordIndex } from "../lib/index-db.mjs";
 import { RecordStore, StoreError } from "../lib/store.mjs";
@@ -83,4 +84,12 @@ test("capture scratch creates the store root private", { skip }, (t) => {
   const root = absentRoot(t);
   createCaptureScratch(root, "receipt");
   assertPrivate(root, [".capture-tmp"]);
+});
+
+test("a capture pass's lock that comes before the store creates the root private", { skip }, (t) => {
+  const root = absentRoot(t);
+  const held = acquireCaptureLock(root);
+  t.after(() => held.release?.());
+  const open = modes(root).filter((entry) => entry.mode !== (entry.directory ? "700" : "600"));
+  assert.deepEqual(open, [], "the root, the lock directory and its record are private");
 });

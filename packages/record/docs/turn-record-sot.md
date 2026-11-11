@@ -209,9 +209,8 @@ at the center of the model.
   mode is given at creation and the store never changes the permissions of
   what already exists: a root, a directory or a file made beforehand keeps
   the permissions it has until its owner tightens them
-  (`chmod -R go-rwx <record-root>`). One directory is outside the rule: a
-  capture pass's lock creates a root that does not exist yet with the
-  process's default mode. What is created below it is private as above.
+  (`chmod -R go-rwx <record-root>`). A capture pass's lock that comes before
+  the store creates the root the same way.
 
 ## Synchronization contract
 

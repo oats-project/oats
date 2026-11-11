@@ -258,15 +258,18 @@ Appends and merges run under a per-stream lockfile (`streams/<id>/.lock`),
 because the torn-tail repair is a read-truncate-write sequence and hooks,
 watchers and manual passes can fire concurrently for the same owner.
 
-The lock carries an **owner token** — the holder's pid, its hostname, and a
-random nonce — written by hard-linking a fully-written temp file into place,
-so a lock that exists is always readable in full. Two guarantees rest on
-that token:
+The lock carries an **owner token** — the holder's pid, its hostname, a
+random nonce, and the boot it was taken in and the holder's process start
+(`bootId`, `processStart`) — written by hard-linking a fully-written temp
+file into place, so a lock that exists is always readable in full. Two
+guarantees rest on that token:
 
 - **A live holder is never stolen from, at any age.** Staleness is proven
   from the holder's liveness, not from how long ago the lock was created.
-  A contender that finds the holder's pid alive on this host waits, and
-  fails with a timeout naming the holder — it does not reclaim. (The
+  A contender that finds the holder running (its pid alive with the
+  recorded start, in this boot) waits, and fails with a timeout naming the
+  holder — it does not reclaim, whatever host the token names. A holder
+  whose start cannot be read is waited for too. (The
   earlier design judged a lock stale by age while the waiter's timeout
   started when the contender arrived; a contender arriving late therefore
   reclaimed a lock whose holder was still inside its critical section, and
@@ -276,9 +279,19 @@ that token:
   reclaimed cannot delete the replacement lock out from under its new
   owner.
 
-**Crash recovery is immediate, not timed**: a lock whose pid is gone from
-this host is provably stale and is reclaimed at once, without waiting out
-any threshold.
+**Crash recovery is immediate, not timed**: a lock whose holder is gone is
+provably stale and is reclaimed at once, without waiting out any threshold.
+A holder is gone when its pid is gone, when its pid runs with another start
+than the recorded one (the pid went to another process), or when the lock
+was taken in another boot. A run of a container counts as a boot, so a lock
+left on a volume by a container that was stopped is reclaimed by the next
+one, whatever its hostname and whichever process holds the pid there. The
+kernel judges its own claims by the same rule, with the same code
+(`lib/process-identity.mjs`).
+
+A token that names neither boot nor start, as an earlier version writes
+it, is judged as that version judges it: by its pid alone when it names
+this host, and by the lock's age (`lockStaleMs`) when it names another.
 
 A lock that cannot be read at all (anything but "not there" — a permission
 error, a directory in its place) is not retried: acquisition fails at once
@@ -288,8 +301,9 @@ lock judged stale whose removal keeps failing — is bounded by
 `lockTimeoutMs` and reports why on timeout.
 
 `lockStaleMs` (30 s by default) is the fallback for the two cases where
-liveness cannot be checked here: a lock created on **another host** (file
-sync can copy one in) and a lock with **no readable token** (written by an
+liveness cannot be checked here: a lock that names neither boot nor start
+and was created on **another host** (file sync can copy one in) and a lock
+with **no readable token** (written by an
 older version of this package, or by hand). Those are still reclaimed by
 age. `lockTimeoutMs` (10 s) is how long a contender waits; the two
 thresholds are independent, and neither ordering of them is required or
@@ -297,8 +311,9 @@ assumed.
 
 Honest limits:
 
-- **Pid reuse across a reboot.** A lock left by a process whose pid was
-  later reused by an unrelated live process reads as held forever, and
+- **Pid reuse, for a token that names neither boot nor start.** Such a
+  lock, left by a process whose pid was
+  later reused by an unrelated live process, reads as held forever, and
   contenders on that stream time out until it is deleted by hand. The
   timeout message names the lock path and the recorded holder. This is the
   chosen direction of failure: refusing to write is recoverable, writing
@@ -311,8 +326,15 @@ Honest limits:
   detection, not an exclusion: a replacement landing in the window between
   the recheck and the unlink is not seen and is removed. Nothing here
   defends against that window.
-- **Sync tools may copy a `.lock` file.** That cannot corrupt data, but a
-  synced-in lock from another host is judged by age, so it can delay a local
+- **One machine at a time writes a record root.** A record root must not
+  be shared by two machines. A boot is one machine's:
+  a lock taken on another machine was taken in another boot and is
+  reclaimed at once, while its holder may be running there. The stream lock
+  and the capture lock serialize the processes of one machine (or one
+  container run), never two machines that write one directory (NFS).
+- **Sync tools may copy a `.lock` file.** That cannot corrupt data: a
+  synced-in lock from another machine is reclaimed at once, or, when it
+  names neither boot nor start, judged by age, so it can delay a local
   `mergeStreamCopy` on that stream by up to 30 s — excluding `.lock` from
   sync patterns remains the right configuration.
 
@@ -322,16 +344,29 @@ expose) — the guarantee is OS-crash-level, not power-loss-level.
 
 **One capture pass at a time.** A pass takes the record root's
 `.capture.lock` directory, whose `owner.json` records the pid, a nonce, the
-start time and the host. A pass that finds the lock held skips (the next
-pass catches up). A pass that is killed (a hook or caller timeout) runs no
-cleanup, so the next pass reclaims a lock whose recorded owner is dead on
-this host:
+start time, the host, and the boot the lock was taken in and the holder's
+process start (`bootId`, `processStart`). A pass that finds the lock held
+skips and says so, naming the holder (the next pass catches up). A pass
+that is killed (a hook or caller timeout, a container stop) runs no
+cleanup, so the next pass reclaims a lock whose recorded owner is dead, and
+its registered worker too:
 
+- An owner, a worker or a reclaimer is dead when its pid is gone, when its
+  pid runs with another start than the recorded one (the pid went to
+  another process), or when its record was taken in another boot. A run of
+  a container counts as a boot: a lock left on a volume by a container that
+  was stopped is reclaimed by the first pass of the next one, whatever its
+  hostname and whichever process holds the pid there. The host a record
+  names does not enter this judgement. One whose start cannot be read is
+  unknowable, and never dead.
+- A record that names neither boot nor start, as an earlier version writes
+  it, is judged as that version judges it: dead only when it names this
+  host (or no host, below) and its pid is gone.
 - Reclaimers are serialized by a guard, `.capture.lock.reclaim`, taken by
   exclusive create. Under it the record is read again and removed only if it
   still belongs to that dead owner.
 - A live or unknowable owner, an owner-less (initializing) lock and another
-  host's lock are never touched.
+  host's lock that names neither boot nor start are never touched.
 - A guard left by a reclaimer that died is never removed. It is named, with
   the exact recovery.
 - Records that name no host predate host recording and live under this
