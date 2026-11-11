@@ -36,7 +36,9 @@ function options(argv) {
     out[k] = argv[++i];
   }
   for (const k of ["--values", "--namespace", "--release"]) assert.ok(out[k], usage);
-  for (const k of ["--namespace", "--release", "--pod"]) if (out[k]) assert.match(out[k], /^[a-z0-9][a-z0-9.-]*$/, "invalid resource name");
+  for (const k of ["--namespace", "--pod"]) if (out[k]) assert.match(out[k], /^[a-z0-9][a-z0-9.-]*$/, "invalid resource name");
+  assert.match(out["--release"], /^[a-z]([-a-z0-9]*[a-z0-9])?$/, "release name must be a DNS-1035 label");
+  assert.ok(out["--release"].length <= 36, "release name must be at most 36 characters");
   assert.ok(!out["--pod"] || (out["--context"] && out["--ssh-key"]), "live pod requires --context and --ssh-key");
   assert.ok(!out.delete || out["--pod"], "--delete-pod requires an explicit live pod");
   assert.ok(!out["--ssh-key"] || out["--pod"], "--ssh-key requires --pod");

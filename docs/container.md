@@ -171,9 +171,11 @@ ConfigMaps, environment variables, a rendered manifest or a command line.
 | `forwarder.networkPolicy` | `false`; optional egress policy, requires forwarder DNS and nonempty selectors. |
 | `forwarder.namespaceLabels`, `forwarder.podLabels` | Labels selecting the forwarder/resolver namespace and pods together. |
 
-Helm release names are limited to 36 characters, leaving room in the
-StatefulSet's revision label for its fixed name suffix and revision hash.
-Longer names are refused at render.
+Use a DNS-1035 release label: a lowercase letter first, then lowercase
+letters, digits or hyphens, ending in a letter or digit. This chart limits
+it to 36 characters, leaving room in the StatefulSet's revision label for
+its fixed name suffix and revision hash. Invalid names are refused at
+render and acceptance.
 
 Resource defaults fit clusters that enforce admission limits like these.
 All six quantities are values under `resources.requests` and
@@ -256,7 +258,8 @@ Helm 3, and, for a live check, kubectl and an operator SSH test key. It prints
 labelled PASS/FAIL evidence and exits nonzero on a failed check. By default
 it only renders and validates the chart. Runtime failures name a fixed
 check such as `uid`, `root` or `host-key-mode`; arbitrary remote output is
-withheld on failure.
+withheld on failure. Runtime success requires explicit confirmation of
+every check; its PASS evidence is built locally.
 
 Render and validate:
 

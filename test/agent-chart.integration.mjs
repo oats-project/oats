@@ -89,6 +89,29 @@ test("chart refuses names that cannot fit the StatefulSet revision label", async
   assert.throws(() => checkRendered(docs), /StatefulSet name/);
 });
 
+test("release names are DNS-1035 labels at render and acceptance boundaries", async () => {
+  const { checkRendered } = await import("../container/agent/accept-kube.mjs");
+  for (const name of ["a", "team-1", "a9b"]) {
+    const docs = parseAllDocuments(helm("template", name, chart, "--namespace", "proof", ...values, "--set", "service.enabled=true")).map((d) => d.toJSON());
+    checkRendered(docs);
+  }
+  for (const name of ["a.b", "9team", "team-", "-team", "A-team", "team_1"]) {
+    const r = spawnSync(process.env.HELM || "helm", ["template", name, chart, ...values], { encoding: "utf8" });
+    assert.ifError(r.error);
+    assert.notEqual(r.status, 0, `${name} must not render an invalid release label`);
+    const docs = render(), set = docs.find((d) => d.kind === "StatefulSet");
+    set.spec.selector.matchLabels["app.kubernetes.io/instance"] = name;
+    assert.throws(() => checkRendered(docs), /release.*DNS-1035/);
+  }
+  const docs = render();
+  docs.find((d) => d.kind === "StatefulSet").metadata.name = "a.b-oats-team-agent";
+  assert.throws(() => checkRendered(docs), /StatefulSet name.*DNS-1035/);
+  const script = fileURLToPath(new URL("../container/agent/accept-kube.sh", import.meta.url));
+  const r = spawnSync("sh", [script, "--values", "unused", "--namespace", "proof", "--release", "a.b"], { encoding: "utf8" });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /release.*DNS-1035/);
+});
+
 test("acceptance rejects admitted pod security or mount drift", async () => {
   const { checkRendered, checkPod } = await import("../container/agent/accept-kube.mjs");
   const docs = render();

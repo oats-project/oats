@@ -63,6 +63,10 @@ export function checkRendered(docs) {
   for (const kind of allowed) assert.ok(docs.filter((d) => d.kind === kind).length <= 1, `duplicate ${kind}`);
   const set = one(docs, "StatefulSet"), sa = one(docs, "ServiceAccount"), pdb = one(docs, "PodDisruptionBudget");
   assert.ok(typeof set.metadata.name === "string" && set.metadata.name.length <= 52, "StatefulSet name must leave room for its revision label");
+  const dnsLabel = /^[a-z]([-a-z0-9]*[a-z0-9])?$/, release = set.spec.selector?.matchLabels?.["app.kubernetes.io/instance"];
+  assert.ok(dnsLabel.test(set.metadata.name), "StatefulSet name must be a DNS-1035 label");
+  assert.ok(typeof release === "string" && dnsLabel.test(release), "release name must be a DNS-1035 label");
+  assert.ok(release.length <= 36, "release name must be at most 36 characters");
   assert.equal(set.spec.replicas, 1, "replicas must stay at one");
   const p = set.spec.template.spec;
   isolation(p);

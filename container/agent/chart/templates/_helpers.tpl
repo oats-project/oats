@@ -1,4 +1,7 @@
 {{- define "agent.name" -}}
+{{- if not (regexMatch "^[a-z]([-a-z0-9]*[a-z0-9])?$" .Release.Name) -}}
+{{- fail "release name must be a DNS-1035 label" -}}
+{{- end -}}
 {{- $name := printf "%s-oats-team-agent" .Release.Name -}}
 {{- if gt (len $name) 52 -}}
 {{- fail "release name must be at most 36 characters (StatefulSet name limit 52)" -}}
