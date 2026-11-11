@@ -1,8 +1,8 @@
 template: oats-project/oats-engineering-coordination
-release: template-v3.0.2
-commit: 38ddac7aedef8b808b3895e3721da774ded48898
+release: template-v3.1.1
+commit: 28f7bf1c16038b40d444f100be66113df20b6a40
 capabilities: oats.dispatcher, oats.engineering-expert, oats.developer, oats.build, oats.code-review, oats.maintainer, oats.landing-rules
 souls: code-reviewer, dispatcher
 license: MIT, the template's notice in TEMPLATE-LICENSE beside this file; the sources four build skills and the developer's quality floor adapt, in THIRD-PARTY-NOTICES.md, which differs from the tag's by one added paragraph, its path map (capabilities/<name>/ is capabilities/oats-<name>/ here, so capabilities/build/ is capabilities/oats-build/)
-history: copied at template-v2.0.0 (1032ec8030ce375987cebf2be62e9f9f1806dc04), template-v2.1.0 ported, template-v3.0.0 ported from template-v2.1.0 (taking in template-v2.2.0), template-v3.0.1 ported, template-v3.0.2 ported
+history: copied at template-v2.0.0 (1032ec8030ce375987cebf2be62e9f9f1806dc04), template-v2.1.0 ported, template-v3.0.0 ported from template-v2.1.0 (taking in template-v2.2.0), template-v3.0.1 ported, template-v3.0.2 ported, template-v3.1.0 and template-v3.1.1 ported
 adapted: each capability is the template's text, changed only at its adapt markers (their answers replace them), in its oats.json description and where an OATS rule wins, each such place marked <!-- OATS: <reason> --> in its paragraph (a skill's description, in front matter, is marked just below it); oats.maintainer drops support-maintainer, its inject line and its oats.json entry (the support-desk adapt marker: no desk)

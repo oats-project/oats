@@ -10,10 +10,10 @@ owner's own work runs on the defaults below until then. No rule sets a deadline 
 if someone is silent: a request waits for its answer. These rules are copied into each
 instance at spawn: after a change, whoever wrote it tells each standing instance (the
 dispatchers, the maintainers) and the lead of each open effort (the effort records name
-them) by message, with the change at its commit; each lead tells its developers. Each
-recipient records the change, at its commit, in its state file (a lead on its effort's
-record too), and from then on reads these rules with the changes it recorded, which win,
-compaction or not.
+them) by message, with the change at its commit; each lead tells its running children (its
+developers and its helpers, a standing specialist included). Each recipient records the
+change, at its commit, in its state file (a lead on its effort's record too), and from then
+on reads these rules with the changes it recorded, which win, compaction or not.
 
 **Lanes and their owners.**
 OATS's lanes are on its lane map, the pinned issue "Lane map for awebai/oats",

@@ -49,8 +49,8 @@ release it came from in its description, and the copy records it as a whole in
 
 | Template | Latest release | Way of working |
 | --- | --- | --- |
-| `oats-project/oats-engineering-coordination` | `template-v3.0.1` | Work that lands as pull requests: a dispatcher, a lead for each effort that builds a change itself or sends developers, whoever builds it iterating with a fresh reviewer each round, and a maintainer where a lane needs one. |
-| `oats-project/oats-research-coordination` | `template-v2.0.0` | Work that ends in a finding or a report: a dispatcher, a research lead for each question that researches a single small angle itself or sends a researcher for each, and a verifier briefed to disprove, which checks the lead's own claims too. A report lands when the person who asked accepts it. |
+| `oats-project/oats-engineering-coordination` | `template-v3.1.1` | Work that lands as pull requests: a dispatcher, a lead for each effort that builds a change itself or sends developers, whoever builds it iterating with a fresh reviewer each round, and a maintainer where a lane needs one. |
+| `oats-project/oats-research-coordination` | `template-v2.1.0` | Work that ends in a finding or a report: a dispatcher, a research lead for each question that researches a single small angle itself or sends a researcher for each, and a verifier briefed to disprove, which checks the lead's own claims too. A report lands when the person who asked accepts it. |
 | `oats-project/oats-scientific-research-coordination` | `template-v2.0.0` | Studies that end in claims a person is accountable for: a dispatcher, a study lead for each study, an analyst for each arm of a locked protocol, fresh study reviewers for the methods, an independent check, leakage and citations, and a record steward that locks protocols and keeps the study records. A claim lands when the scientist accepts it; one that leaves the group needs a check that isn't LLM judgement. |
 
 The package `oats.engineering` is frozen at `v1.18.0`. Its entry and its four
