@@ -188,9 +188,9 @@ async function main() {
     const admitted = json(command("kubectl", [...kube, "get", object.kind, object.metadata.name, "-o", "json"]), "admitted workload");
     if (object.kind === "ServiceAccount") {
       checkAccount(object, admitted, o["--release"]);
-    } else if (object.kind === "PodDisruptionBudget") { assert.equal(admitted.spec.maxUnavailable, 1); assert.deepEqual(admitted.spec.selector, object.spec.selector); }
-    else if (object.kind === "NetworkPolicy") assert.deepEqual(admitted.spec, object.spec);
-    else assert.equal(admitted.spec.type, "ClusterIP");
+    } else if (object.kind === "PodDisruptionBudget") { assert.equal(admitted.spec.maxUnavailable, 1, "PDB maxUnavailable"); assert.deepEqual(admitted.spec.selector, object.spec.selector, "PDB selector"); }
+    else if (object.kind === "NetworkPolicy") assert.deepEqual(admitted.spec, object.spec, "NetworkPolicy spec differs from the approved chart");
+    else assert.equal(admitted.spec.type, "ClusterIP", "Service type");
   }
   const dir = mkdtempSync(join(tmpdir(), "oats-kube-accept-"));
   let tunnel;

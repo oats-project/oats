@@ -225,6 +225,11 @@ if(a[0]==='get'){
  const docs=JSON.parse(fs.readFileSync(path.join(root,'objects.json')));
  const found=docs.find(d=>d.kind.toLowerCase()===a[1].toLowerCase());
  if(!found)process.exit(3);
+ const drift=process.env.O1B_FIXTURE_ADMISSION;
+ if(found.kind==='PodDisruptionBudget'&&drift==='pdb-max')found.spec.maxUnavailable=2;
+ if(found.kind==='PodDisruptionBudget'&&drift==='pdb-selector')found.spec.selector={matchLabels:{purpose:'fixture-private-selector'}};
+ if(found.kind==='NetworkPolicy'&&drift==='policy')found.spec.egress[0].to[0].namespaceSelector.matchLabels.purpose='fixture-private-policy';
+ if(found.kind==='Service'&&drift==='service')found.spec.type='NodePort';
  if(found.kind==='Pod'&&fs.existsSync(path.join(root,'stop'))){
   const f=path.join(root,'replacement-reads'),n=fs.existsSync(f)?Number(fs.readFileSync(f))+1:1;fs.writeFileSync(f,String(n));
   found.metadata.uid=n===1?'fixture-uid':'replacement-uid';
@@ -344,6 +349,21 @@ else process.exit(2);
       assert.match(stopped.stderr, /host run reported a shutdown failure/);
       assert.match(stopped.stdout, failure === "stop" ? /could not stop \/fixture/ : /listing failed/);
       assert.doesNotMatch(stopped.stdout, /PASS ordered host shutdown|PASS replacement pod/);
+    }
+    // Include optional objects so each live admission failure has its own safe label.
+    const optionalValues = { image: { repository: "example.invalid/agent", digest: `sha256:${"a".repeat(64)}` }, loginSecret: "fixture-login", authorizedKeys: { name: "fixture-keys" }, service: { enabled: true }, forwarder: { enabled: true, resolverIP: "10.96.0.9", networkPolicy: true, namespaceLabels: { purpose: "egress" }, podLabels: { role: "forwarder" } } };
+    writeFileSync(join(dir, "values.json"), JSON.stringify(optionalValues));
+    const optionalDocs = render("--values", join(dir, "values.json")), optionalSet = optionalDocs.find((d) => d.kind === "StatefulSet");
+    const optionalPod = { ...pod, spec: structuredClone(optionalSet.spec.template.spec) };
+    optionalPod.spec.volumes.push({ name: "state", persistentVolumeClaim: { claimName: `state-${optionalSet.metadata.name}-0` } });
+    writeFileSync(join(dir, "objects.json"), JSON.stringify([...optionalDocs, optionalPod]));
+    rmSync(join(dir, "stop"), { force: true });
+    for (const [field, label] of [["pdb-max", "PDB maxUnavailable"], ["pdb-selector", "PDB selector"], ["policy", "NetworkPolicy spec differs from the approved chart"], ["service", "Service type"]]) {
+      const drift = spawnSync("sh", [script, "--values", join(dir, "values.json"), "--namespace", "proof", "--release", "proof", "--context", "fixture-context", "--pod", pod.metadata.name, "--ssh-key", join(dir, "key")], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, O1B_FIXTURE_ADMISSION: field }, timeout: 10_000 });
+      assert.notEqual(drift.status, 0);
+      assert.ok(drift.stderr.includes(label), `${field} must name its check: ${drift.stderr}`);
+      assert.doesNotMatch(drift.stdout + drift.stderr, /fixture-private/);
+      assert.doesNotMatch(drift.stderr, /NodePort/);
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
