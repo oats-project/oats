@@ -14,6 +14,7 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { setTimeout as delay } from "node:timers/promises";
 import { HOST_RUN_SCHEMA, acquireHostRunLock, hostRun, hostRunLockPath, hostRunPlan } from "../lib/host-run.mjs";
 import { registerWorkspace } from "../lib/schedule.mjs";
 import { isStartToken, processStartToken } from "../lib/worktree-hooks.mjs";
@@ -405,4 +406,164 @@ test("SIGTERM while the sweep runs: the sweep is waited for, no minute is ever a
   const answer = await running;
   assert.deepEqual([answer.stopped, w.stops], [[], []]);
   assert.ok(w.said.includes("listing failed (E_DEPLOYMENTS_INVALID): the deployments list cannot be read: no instance is stopped"), w.said.join("\n"));
+});
+
+
+test("a private host-stop fence prevents a second scheduled command after cancellation", async (t) => {
+  const base = oatsHome(t), ws = deployment(base, "scope"), log = join(base, "commands");
+  const workModule = new URL("../lib/host-run-work.mjs", import.meta.url);
+  assert.ok(existsSync(workModule), "host run needs owned children carrying the admission fence");
+  const { hostRunWork } = await import(workModule);
+  const { addSchedule } = await import("../lib/schedule.mjs");
+  const script = join(base, "command.mjs");
+  writeFileSync(script, `import { appendFileSync } from "node:fs";
+    if (!['first','second'].includes(process.argv[2])) { console.log('{"ok":true,"result":{}}'); process.exit(0); }
+    appendFileSync(${JSON.stringify(log)}, process.argv[2] + "\\n");
+    if(process.argv[2] === "first") { process.on("SIGTERM",()=>process.exit(0)); setInterval(()=>{},1000); }
+    else console.log('{"ok":true,"result":{}}');`);
+  for (const [id, name] of [["a", "first"], ["b", "second"]]) {
+    addSchedule(ws, {id, enabled:true, kind:"command", cron:"* * * * *", tz:"UTC", cwd:ws, argv:["oats", name]});
+  }
+  registerWorkspace(ws, { maxConcurrent: 2 });
+  const tick = join(base, "tick.mjs");
+  writeFileSync(tick, `import { tickHost } from ${JSON.stringify(new URL("../lib/schedule.mjs", import.meta.url).href)}; console.log(JSON.stringify(tickHost({io:{oatsBin:${JSON.stringify(script)}}})));`);
+  const work = hostRunWork({kernel:{execPath:process.execPath,bin:tick},env:{...process.env,PATH:"/usr/bin:/bin"},naturalMs:100,cancelMs:3500});
+  const answered = work.run([]);
+  t.after(() => work.close());
+  for (let tries = 0; !existsSync(log) && tries < 300; tries += 1) await delay(10);
+  assert.equal(readFileSync(log,"utf8"), "first\n");
+  await work.drain();
+  await answered;
+  assert.equal(readFileSync(log,"utf8"), "first\n", "the tick must not admit the second command after its interrupted first command");
+  const state = JSON.parse(readFileSync(join(ws, ".agents/schedules/state.json"), "utf8"));
+  assert.equal(state.jobs.a.lastRun.outcome, "unknown", "interruption is not converted to success by exit0");
+  assert.ok(state.jobs.a.attempt, "unconfirmed launch still requires reconcile");
+  assert.equal(state.jobs.b?.attempt, undefined, "an unadmitted job has no launch attempt");
+});
+
+
+test("owned host-run work gives a launch natural grace then cancels its group before drain completes", {skip:process.platform === "win32"}, async (t) => {
+  const base = oatsHome(t), workModule = new URL("../lib/host-run-work.mjs", import.meta.url);
+  assert.ok(existsSync(workModule), "host run must own cancellation rather than race an unbounded child");
+  const { hostRunWork } = await import(workModule);
+  const bin = join(base, "work.mjs"), ready = join(base, "ready"), ended = join(base, "ended");
+  writeFileSync(bin, `import { writeFileSync } from "node:fs";
+    writeFileSync(${JSON.stringify(ready)}, String(process.pid));
+    process.on('SIGTERM',()=> {writeFileSync(${JSON.stringify(ended)},'TERM'); process.exit(0);});
+    setInterval(()=>{},1000);`);
+  const work = hostRunWork({kernel:{execPath:process.execPath,bin},env:process.env, naturalMs:150, cancelMs:200});
+  t.after(() => work.close());
+  const answer = work.run([]);
+  for(let i=0;!existsSync(ready)&&i<200;i+=1) await delay(10);
+  const pid = Number(readFileSync(ready,"utf8"));
+  const drain = work.drain();
+  await delay(30);
+  assert.equal(existsSync(ended),false,"a launch first gets time to complete naturally");
+  assert.doesNotThrow(()=>process.kill(pid,0));
+  await drain;
+  assert.equal(readFileSync(ended,"utf8"),"TERM");
+  assert.throws(()=>process.kill(pid,0),{code:"ESRCH"});
+  assert.equal((await answer).ok,false,"an interrupted child with no envelope is not confirmed");
+});
+
+
+test("TERM during a real startup sweep reaches the final read within the stop window", async (t) => {
+  const base = oatsHome(t), bin = join(base,"kernel.mjs"), ready = join(base,"sweep-pid");
+  writeFileSync(bin, `import {writeFileSync} from 'node:fs';
+    if(process.argv.includes('--plan')) console.log(JSON.stringify({ok:true,result:{rows:[]}}));
+    else { writeFileSync(${JSON.stringify(ready)}, String(process.pid)); process.on('SIGTERM',()=>process.exit(0)); setInterval(()=>{},1000); }`);
+  let signal, ownedPid;
+  const said=[];
+  const running = hostRun({kernel:{execPath:process.execPath,bin},hostStatus:NO_TIMER,onSignal:fn=>{signal=fn;return()=>{};},say:line=>said.push(line)});
+  t.after(async()=>{
+    signal?.('SIGTERM');
+    if(ownedPid) {try{process.kill(ownedPid,'SIGKILL');}catch{/* owned fixture already gone */}}
+    await running;
+  });
+  for(let i=0;!existsSync(ready)&&i<200;i+=1) await delay(10);
+  assert.ok(existsSync(ready),'the startup sweep actually runs');
+  ownedPid=Number(readFileSync(ready,'utf8'));
+  const at=Date.now();
+  signal('SIGTERM');
+  let timeout;
+  const answer=await Promise.race([running,new Promise((_,reject)=>{timeout=setTimeout(()=>reject(new Error('startup sweep exceeded its bounded cancellation window')),12000);})]).finally(()=>clearTimeout(timeout));
+  assert.ok(Date.now()-at >= 9000,'a live launch gets the accepted natural grace');
+  assert.equal(answer.signal,'SIGTERM');
+  assert.equal(answer.sweep.error.code,'E_HOST_RUN_FAILED');
+  assert.match(said.join('\n'),/admissions fenced/);
+  assert.equal(existsSync(hostRunLockPath()),false,'the claim is released only after the owned work ends');
+});
+
+
+test("owned cancellation waits for a TERM-ignoring descendant after its leader exits", {skip:process.platform === "win32"}, async (t) => {
+  const base=oatsHome(t), bin=join(base,'group.mjs'), ready=join(base,'child-pid');
+  const {hostRunWork}=await import('../lib/host-run-work.mjs');
+  writeFileSync(bin, `import {spawn} from 'node:child_process';
+    const program="require('node:fs').writeFileSync("+${JSON.stringify(JSON.stringify(ready))}+", String(process.pid));process.on('SIGTERM',()=>{});setInterval(()=>{},1000)";
+    spawn(process.execPath,['-e',program],{stdio:'ignore'});
+    process.on('SIGTERM',()=>process.exit(0));setInterval(()=>{},1000);`);
+  const work=hostRunWork({kernel:{execPath:process.execPath,bin},env:process.env,naturalMs:50,cancelMs:200});
+  let pid;
+  t.after(async()=>{if(pid){try{process.kill(pid,'SIGKILL');}catch{/* own fixture gone */}} await work.close();});
+  const answer=work.run([]);
+  for(let i=0;!existsSync(ready)&&i<200;i+=1) await delay(10);
+  pid=Number(readFileSync(ready,'utf8'));
+  const at=Date.now();
+  await work.drain();
+  await answer;
+  assert.ok(Date.now()-at>=200,'leader close cannot stand in for descendant cleanup');
+  assert.throws(()=>process.kill(pid,0),{code:'ESRCH'});
+});
+
+
+test("owned cancellation ends a detached kernel child even if its launcher cannot handle TERM", {skip:process.platform === "win32"}, async (t) => {
+  const base=oatsHome(t), bin=join(base,'launcher.mjs'), inner=join(base,'inner.mjs'), ready=join(base,'inner-pid'), stopped=join(base,'launcher-stopped');
+  const {hostRunWork}=await import('../lib/host-run-work.mjs');
+  writeFileSync(inner, `import {writeFileSync} from 'node:fs';writeFileSync(${JSON.stringify(ready)},String(process.pid));process.on('SIGTERM',()=>process.exit(0));setInterval(()=>{},1000);`);
+  writeFileSync(bin, `import {spawn} from 'node:child_process';import {existsSync,writeFileSync} from 'node:fs';
+    import {hostRunChildArgs} from ${JSON.stringify(new URL('../lib/host-run-admission.mjs',import.meta.url).href)};
+    spawn(process.execPath,hostRunChildArgs(${JSON.stringify(inner)},[],true),{detached:true,stdio:'ignore'});
+    const wait=setInterval(()=>{if(existsSync(${JSON.stringify(ready)})){clearInterval(wait);writeFileSync(${JSON.stringify(stopped)},'yes');process.kill(process.pid,'SIGSTOP');}},10);`);
+  const work=hostRunWork({kernel:{execPath:process.execPath,bin},env:process.env,naturalMs:50,cancelMs:200});
+  let pid;
+  t.after(async()=>{if(pid){try{process.kill(pid,'SIGKILL');}catch{/* own fixture gone */}} await work.close();});
+  const answer=work.run([]);
+  for(let i=0;!existsSync(stopped)&&i<300;i+=1) await delay(10);
+  assert.ok(existsSync(stopped),'the real launcher is stopped after its detached child starts');
+  pid=Number(readFileSync(ready,'utf8'));
+  await work.drain(); await answer;
+  assert.throws(()=>process.kill(pid,0),{code:'ESRCH'},'a killed launcher cannot stand in for its detached kernel child');
+});
+
+
+test("a closed private fence keeps trigger events pending and blocks wake or direct starts", (t) => {
+  const base=oatsHome(t), ws=deployment(base,'admission'), fence=join(base,'fence'), bin=join(base,'boundaries.mjs'), fake=join(base,'fake.mjs'), calls=join(base,'launches');
+  const home=join(ws,'agents/dev/instances/one');mkdirSync(home,{recursive:true});
+  writeFileSync(join(home,'instance.json'),JSON.stringify({instance:'one',agent:'dev',createdAt:'2026-01-01T00:00:00Z'}));
+  writeFileSync(fence,'stop');
+  writeFileSync(fake,`import {appendFileSync} from 'node:fs';appendFileSync(${JSON.stringify(calls)},'kernel child');console.log(JSON.stringify({ok:true,result:{instance:'one',home:${JSON.stringify(home)},stem:'dev'}}));`);
+  writeFileSync(join(ws,'oats-schedules.json'),JSON.stringify({version:1,jobs:{
+    wake:{id:'wake',kind:'wake',enabled:true,cron:'* * * * *',tz:'UTC',home,message:'fixture'},
+    trigger:{id:'trigger',kind:'trigger',enabled:true,on:{source:'github.pull_request',repo:'github.com/acme/repo',events:['opened'],labels:[],base:'main',poll:'1m'},spawn:{soul:'dev',purpose:'pr-{number}',task:'fixture',teams:[]},concurrency:{max:2,perKey:1}}
+  }}));
+  writeFileSync(bin,`import assert from 'node:assert/strict';
+    import {tickWorkspace} from ${JSON.stringify(new URL('../lib/schedule.mjs',import.meta.url).href)};
+    import {tickTriggers} from ${JSON.stringify(new URL('../lib/triggers.mjs',import.meta.url).href)};
+    import {spawnInstanceAsync,startInstanceSession} from ${JSON.stringify(new URL('../lib/core.mjs',import.meta.url).href)};
+    let starts=0,polls=0;
+    const ws=${JSON.stringify(ws)}, home=${JSON.stringify(home)}, now=new Date('2026-11-11T00:00:00Z');
+    const io={oatsBin:${JSON.stringify(fake)},inspect:()=>({present:false}),start:()=>{starts++;return{home,instance:'one'};},gh:()=>{polls++;return{status:0,stdout:JSON.stringify([{number:1,html_url:'https://example.invalid/pr/1',draft:false,head:{sha:'a'.repeat(40)},base:{ref:'main'},labels:[],created_at:'2026-11-10T00:00:00Z',updated_at:'2026-11-10T00:00:00Z'}])};}};
+    tickWorkspace(ws,{now,io,reg:{},wsList:[ws]});
+    const rows=tickTriggers(ws,{now,io,reg:{},wsList:[ws]});
+    assert.equal(starts,0,'wake start refused at admission');
+    assert.equal(polls,1,JSON.stringify(rows));
+    await assert.rejects(spawnInstanceAsync(ws,{}),e=>e.code==='E_HOST_RUN_FAILED');
+    assert.throws(()=>startInstanceSession(home,{resume:true}),e=>e.code==='E_HOST_RUN_FAILED');
+    console.log('PASS closed admissions');`);
+  const result=spawnSync(process.execPath,[fileURLToPath(new URL('../lib/host-run-child.mjs',import.meta.url)),bin,fence,'member'],{env:process.env,encoding:'utf8',timeout:10000});
+  assert.equal(result.status,0,result.stderr+result.stdout);
+  assert.match(result.stdout,/PASS closed admissions/);
+  assert.equal(existsSync(calls),false,'pending trigger never previews or spawns a child');
+  const state=JSON.parse(readFileSync(join(ws,'.agents/schedules/triggers.json'),'utf8'));
+  assert.equal(Object.keys(state.triggers['local/trigger'].pending).length,1,'the event is retained for the next live tick');
 });

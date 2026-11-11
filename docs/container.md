@@ -232,11 +232,17 @@ foreground process that lasts as long as the container.
   deployments the container's host schedule registry lists and lists the
   instances. With no deployment registered it ticks nothing and says so.
 - **On the runtime's SIGTERM** (`docker stop`, `docker restart`, a Compose
-  `down` or a recreate) it starts no further minute, waits for a tick that
-  is running, and stops every running agent side by side: SIGTERM to the
+  `down` or a recreate) it starts no further minute. Active launch work gets
+  10 seconds to finish naturally; then a private admission fence prevents
+  further schedule, trigger, wake or resume launches and owned children get
+  a 5-second cancellation phase. An interrupted launch stays `unknown` and
+  needs reconciliation; a timeout does not prove that nothing ran. Host run
+  then lists and stops every running agent side by side: SIGTERM to the
   harness and a wait of 20 seconds, never escalated. Each home's stop record
   says it was stopped with the host, so the home reads `lost` and the next
-  start's sweep resumes it. Then it exits 0 and the container ends.
+  start's sweep resumes it. Then it exits 0 and the supervisor stops the
+  broker. Work that cannot be killed retains the host-run claim; the runtime's
+  final kill is a failed stop, never proof of an ordered shutdown.
 - **Its progress** is one line per event on standard error, beside sshd's
   log, in `docker logs`.
 
