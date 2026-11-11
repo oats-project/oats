@@ -2,7 +2,7 @@
 // argv of the local ssh process, and not in the remote command line that ssh carries. It goes to
 // the host on the ssh session's standard input, to its preview and to its apply alike, and the
 // host reads it there (`--task-file -`, feature spawn-task-stdin). A host that does not advertise
-// the feature is not sent the task at all.
+// the feature cannot read it there: it is sent the task as an argument, and the answer says so.
 // The end-to-end test runs the real kernel behind a fake `ssh` that records how it was called.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -60,8 +60,8 @@ test("a routed spawn with a task: neither the ssh argv nor the remote command ho
 
 /** A host that answers the probe with `features`, a roster, and a spawn's preview and apply.
  *  `calls` is every ssh call it saw: its argv, and the bytes given to its standard input. */
-function fakeHost(features) {
-  const KEYED = ["spawn-preview-2", "spawn-apply-2", "spawn-idempotency-2"];
+function fakeHost(features, { keyed = true } = {}) {
+  const KEYED = keyed ? ["spawn-preview-2", "spawn-apply-2", "spawn-idempotency-2"] : [];
   const probe = { schemaVersion: 1, name: "@awebai/oats", version: "0.24.9", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features: [...KEYED, ...features] };
   const status = { schemaVersion: 1, ok: true, result: { root: "/w/agents", agents: [{ name: "dev", harness: "pi", instances: [] }] } };
   const decision = { instance: "dev-1", revision: "0123456789abcdef01234567" };
@@ -101,19 +101,73 @@ test("a routed spawn gives the host's preview and its apply the same task on sta
   assert.deepEqual(host.calls.filter((call) => !call.command.includes(" spawn ")).map((call) => call.input), [undefined, undefined], "the probe and the roster read are given nothing");
 });
 
-test("a routed spawn with a task to a host that does not advertise spawn-task-stdin is refused here: no spawn is sent, and the task is on no command line", (t) => {
-  const host = fakeHost([]);
-  assert.throws(() => routed(t, ["dev", "--task", "the ZEBRA-OLD-HOST-2be77 task", "--no-launch"], host), (e) => {
-    assert.equal(e.code, "E_REMOTE_INCOMPATIBLE");
-    assert.match(e.message, /^remote oats 0\.24\.9 at h does not advertise spawn-task-stdin; /);
-    assert.equal(e.message.includes("ZEBRA"), false, "the refusal does not quote the task");
-    return true;
-  });
-  assert.deepEqual(host.calls.filter((call) => call.command.includes(" spawn ")), [], "no spawn reached the host");
-  for (const call of host.calls) assert.equal(call.argv.join("\n").includes("ZEBRA"), false, call.command);
-  assert.equal(host.calls.some((call) => call.input !== undefined), false, "nothing was given to any call's standard input");
+const taskWarning = "remote oats 0.24.9 at h does not advertise spawn-task-stdin, so the task was passed as an argument, visible in this machine's process list (the ssh command) and the host's while the spawn runs; upgrade the host";
 
-  // A spawn with no task needs nothing of that host.
-  const { envelope } = routed(t, ["dev", "--no-launch"], host);
+test("a routed spawn with a task to a host that does not advertise spawn-task-stdin sends the task as an argument, to the preview and to the apply, and its answer says so once", (t) => {
+  const host = fakeHost([]);
+  const { envelope } = routed(t, ["dev", "--task", "the ZEBRA-OLD-HOST-2be77 task", "--no-launch"], host);
   assert.equal(envelope.ok, true, JSON.stringify(envelope));
+  const spawns = host.calls.filter((call) => call.command.includes(" spawn "));
+  assert.equal(spawns[0].command, "oats spawn dev --task 'the ZEBRA-OLD-HOST-2be77 task' --no-launch --preview --dir /w --json");
+  assert.match(spawns[1].command, /^oats spawn dev --task 'the ZEBRA-OLD-HOST-2be77 task' --no-launch --expect-decision 0123456789abcdef01234567 --idempotency-key \S+ --dir \/w --json$/);
+  assert.equal(spawns.length, 2);
+  assert.equal(host.calls.some((call) => call.input !== undefined), false, "nothing was given to any call's standard input");
+  assert.deepEqual(envelope.result.warnings, [taskWarning], "one warning for the two calls");
+
+  // A preview of its own is one call, and says the same.
+  const previewing = fakeHost([]);
+  const previewed = routed(t, ["dev", "--task", "the ZEBRA-OLD-HOST-2be77 task", "--no-launch", "--preview"], previewing).envelope;
+  assert.deepEqual(previewing.calls.filter((call) => call.command.includes(" spawn ")).map((call) => call.command), ["oats spawn dev --task 'the ZEBRA-OLD-HOST-2be77 task' --no-launch --preview --dir /w --json"]);
+  assert.deepEqual(previewed.result.warnings, [taskWarning]);
+
+  // A spawn with no task has no such warning, and a host with the feature none either.
+  assert.deepEqual(routed(t, ["dev", "--no-launch"], fakeHost([])).envelope.result.warnings, []);
+  assert.deepEqual(routed(t, ["dev", "--task", "a task", "--no-launch"], fakeHost([FEATURE])).envelope.result.warnings, []);
+});
+
+test("a host with neither the keyed spawn nor spawn-task-stdin gets one spawn with the task as an argument, and each of the two warnings once", (t) => {
+  const host = fakeHost([], { keyed: false });
+  const { envelope } = routed(t, ["dev", "--task", "the ZEBRA-OLDEST-HOST-0c41d task", "--no-launch"], host);
+  assert.equal(envelope.ok, true, JSON.stringify(envelope));
+  assert.deepEqual(host.calls.filter((call) => call.command.includes(" spawn ")).map((call) => call.command), ["oats spawn dev --task 'the ZEBRA-OLDEST-HOST-0c41d task' --no-launch --dir /w --json"]);
+  assert.equal(envelope.result.warnings.length, 2, JSON.stringify(envelope.result.warnings));
+  assert.match(envelope.result.warnings[0], /^remote oats 0\.24\.9 at h does not advertise spawn-preview-2, spawn-apply-2, spawn-idempotency-2: /);
+  assert.equal(envelope.result.warnings[1], taskWarning);
+
+  // The keyed spawn missing, spawn-task-stdin there: one spawn, the task on its standard input.
+  const reads = fakeHost([FEATURE], { keyed: false });
+  const answered = routed(t, ["dev", "--task", "the ZEBRA-STDIN-ONLY-77aa1 task", "--no-launch"], reads).envelope;
+  const spawns = reads.calls.filter((call) => call.command.includes(" spawn "));
+  assert.deepEqual(spawns.map((call) => [call.command, call.input]), [["oats spawn dev --task-file - --no-launch --dir /w --json", "the ZEBRA-STDIN-ONLY-77aa1 task"]]);
+  assert.equal(answered.result.warnings.length, 1, JSON.stringify(answered.result.warnings));
+  assert.match(answered.result.warnings[0], /does not advertise spawn-preview-2, spawn-apply-2, spawn-idempotency-2: /);
+});
+
+test("a routed spawn with a task through a host whose oats does not advertise spawn-task-stdin succeeds: the instance there has the task, the remote command carried it, and the answer warns once", (t) => {
+  const base = mkdtempSync("/tmp/oats-rto-");
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const fx = v2Deployment({ souls: { dev: { soul: { work: "checkout" }, agents: "You are dev.\n" } } });
+  t.after(fx.cleanup);
+  const { bin, log, tools } = fakeBin(base);
+  // The host's oats: this kernel, its probe answered without the feature.
+  const older = join(base, "older-oats");
+  writeFileSync(older, `#!/bin/sh\nif [ "$1" = version ]; then node '${CLI}' "$@" | sed 's/,"${FEATURE}"//'; else exec node '${CLI}' "$@"; fi\n`, { mode: 0o755 });
+  const env = { ...process.env, PATH: bin, OATS_HOME_DIR: join(base, "oats-home"), HOME: join(base, "home") };
+  mkdirSync(env.HOME, { recursive: true }); mkdirSync(env.OATS_HOME_DIR, { recursive: true });
+  for (const k of Object.keys(env)) if (/^(OATS_INSTANCE|PI_AGENT)/.test(k)) delete env[k];
+  const oats = (args) => spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env, cwd: env.HOME });
+  let r = oats(["server", "add", "build", "--ssh", "build-host", "--workspace", fx.dep, "--oats", older, "--path", tools, "--json"]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  const from = readFileSync(log, "utf8").length;
+  const task = "the ZEBRA-OLDER-E2E-6d0f3 task\n";
+  r = oats(["spawn", "dev", "--server", "build", "--purpose", "older", "--task", task, "--no-launch", "--json"]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  const result = JSON.parse(r.stdout).result;
+  assert.equal(readFileSync(join(result.home, "TASK.md"), "utf8").includes(task.trim()), true, "the instance on the host has the task");
+  const spawns = readFileSync(log, "utf8").slice(from).split("\n--\n").map((call) => call.split("\n").slice(call.split("\n").findIndex((line) => line.includes(" spawn "))).join("\n")).filter((command) => command.includes(" spawn "));
+  assert.equal(spawns.length, 2, spawns.join("\n"));
+  for (const command of spawns) assert.ok(command.includes("ZEBRA-OLDER-E2E-6d0f3") && !command.includes("--task-file"), `the task is in the remote command, which is the last argument of the local ssh: ${command}`);
+  const warned = result.warnings.filter((warning) => warning.includes("spawn-task-stdin"));
+  assert.equal(warned.length, 1, JSON.stringify(result.warnings));
+  assert.match(warned[0], /^remote oats \S+ at build-host does not advertise spawn-task-stdin, so the task was passed as an argument, visible in this machine's process list (the ssh command) and the host's while the spawn runs; upgrade the host$/);
 });
