@@ -1,9 +1,10 @@
 ## Upgrade
 
-- **A server before its clients.** Where a spawn is routed with `--server`,
-  upgrade the host first: a client with this release cannot route a spawn
-  that has a task to an older host (`E_REMOTE_INCOMPATIBLE`, nothing is
-  sent). A spawn without a task is routed to an older host as before.
+- **Upgrade hosts to keep tasks off their command line.** A spawn routed
+  with `--server` keeps its task off every command line only on a host that
+  runs this release. An older host still gets the task as an argument, and
+  the spawn's answer warns that it was readable in both machines' process
+  lists.
 
 ## Added
 
@@ -13,7 +14,8 @@
 
 ## Fixed
 
-- **A spawn through a server keeps the task off every command line.**
+- **A spawn through a server that runs this release keeps the task off every
+  command line.**
   `oats spawn <soul> --server <id>` with `--task` or `--task-file` put the
   whole task text in the remote command, so it was in the arguments of the
   local `ssh` process and of the server's `oats` for as long as each ran,
@@ -23,7 +25,10 @@
   ([a routed spawn's task](../servers.md#a-routed-spawns-task)). A task
   file over Linux's limit for one argument (128 KiB) is sent like any
   other.
-- **A server that does not advertise `spawn-task-stdin` is refused a spawn
-  with a task,** before any spawn is sent (`E_REMOTE_INCOMPATIBLE`): the task
-  is never sent to it as an argument. Upgrade OATS on the server, or spawn
-  without a task. A spawn without one is routed as before.
+- **A spawn with a task through a server that does not advertise
+  `spawn-task-stdin` says where the task was readable.** Such a server gets
+  the task as an argument, as before, and the answer's warnings gain one
+  line: `remote oats <version> at <host> does not advertise
+  spawn-task-stdin, so the task was passed as an argument, visible in this
+  machine's process list (the ssh command) and the host's while the spawn
+  runs; upgrade the host`.

@@ -169,5 +169,5 @@ test("a routed spawn with a task through a host whose oats does not advertise sp
   for (const command of spawns) assert.ok(command.includes("ZEBRA-OLDER-E2E-6d0f3") && !command.includes("--task-file"), `the task is in the remote command, which is the last argument of the local ssh: ${command}`);
   const warned = result.warnings.filter((warning) => warning.includes("spawn-task-stdin"));
   assert.equal(warned.length, 1, JSON.stringify(result.warnings));
-  assert.match(warned[0], /^remote oats \S+ at build-host does not advertise spawn-task-stdin, so the task was passed as an argument, visible in this machine's process list (the ssh command) and the host's while the spawn runs; upgrade the host$/);
+  assert.match(warned[0], /^remote oats \S+ at build-host does not advertise spawn-task-stdin, so the task was passed as an argument, visible in this machine's process list \(the ssh command\) and the host's while the spawn runs; upgrade the host$/);
 });

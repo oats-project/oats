@@ -4620,7 +4620,7 @@ async function serverRouteCmd() {
   // Everything after the command word travels, minus the routing flags; a
   // local --task-file is read here and handed on as --task text, since the
   // remote cannot read this machine's files. A spawn's task is then sent on
-  // the remote command's stdin, never as an argument (routeCommand).
+  // the remote command's stdin to a host that reads it there (routeCommand).
   const rest = [];
   for (let i = 1; i < args.length; i++) {
     const a = args[i];

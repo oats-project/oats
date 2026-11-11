@@ -938,9 +938,9 @@ test("routed spawn --name needs a host that advertises spawn-name: refused befor
       (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.25.0 at h does not advertise spawn-name; upgrade it there; nothing was sent");
     assert.deepEqual(old.spawned(), []);
     // A purpose needs no spawn-name: today's route, unchanged.
-    const purposeOnly = remote(["spawn-task-stdin"]);
+    const purposeOnly = remote([]);
     routeCommand("build", "spawn", ["dev", "--purpose", "api-v2", "--task", "Ship it"], { server, execFileSync: purposeOnly.exec });
-    assert.match(purposeOnly.spawned()[0], / spawn dev --purpose api-v2 --task-file - --dir \/w --json$/);
+    assert.match(purposeOnly.spawned()[0], / spawn dev --purpose api-v2 --task 'Ship it' --dir \/w --json$/);
     rmSync(REMOTE_SNAPSHOT_DIR(), { recursive: true, force: true });
     // A host with spawn-name: --name travels untouched, and the route is saved under the name the host reports.
     const current = remote(["spawn-name", "spawn-task-stdin"]);
