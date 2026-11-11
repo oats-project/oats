@@ -945,7 +945,9 @@ test("two adds racing for one branch: the loser's rollback keeps the winner's br
   const { home } = await fx.spawn("dev", { instance: "dev-race", work: "checkout" });
   const argv = (p) => ["worktree", "add", "--purpose", p, "--branch", "agents/shared", "--base", "main", "--json"];
   // Both pass the branch precheck: "one" runs its switch only once "two" reached its own, and "two" only after "one" made the branch.
-  const one1 = `a[1].endsWith(".work-one")`;
+  // Each is told by the tree its switch runs in, the argument after -C: the -c overrides before it are
+  // key=value pairs, and a filter override's value is the operator's own command, which may be any path.
+  const one1 = `a.includes("-C") && a[a.indexOf("-C") + 1].endsWith(".work-one")`;
   const path = gatedGit(fx, "race", { gate: `a.includes("switch") && a.includes("-c")`,
     entered: `${one1} ? "one-at-switch" : "two-at-switch"`, release: `${one1} ? "two-at-switch" : "one-done"`, after: `${one1} ? "one-done" : null` });
   const one = cliChild(fx, argv("one"), { cwd: home, env: { OATS_INSTANCE_HOME: home, PATH: path } });
