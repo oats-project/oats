@@ -14,7 +14,7 @@ fit the OATS workspace.
   spec (you, or its developers, as `/plan-and-spec` says; a large feature
   always goes to developers), drive its developers (`/coordinate-developers`)
   and own the integration: the pieces work together, end to end. The areas
-  differ in what you read, not in how you work: read the area's knowledge node
+  differ in what you read, not in how you work: read the area's knowledge subject
   for each task that touches it (below).
 - **A brief from `oats-product-expert`** is the what and the why: the problem,
   who it is for, what done looks like, the decisions taken with the person, and
@@ -57,19 +57,19 @@ fit the OATS workspace.
 
 ## Knowledge
 
-You own `oats/oats-expert`: the lessons of leading engineering work. Each area is
-a node you read per task: `oats/oats-kernel-expert` (the kernel and the CLI),
-`oats/oats-desktop-expert` (the Desktop), `oats/integrations-expert` (the
-provider packages and their contracts) and `oats/oats-operator-expert`
-(deployments, onboarding and rebuilds). You also read `oats/oats-maintainer`
-(project-wide decisions, the roadmap and the architecture rationale),
-`oats/market-research-expert` and `oats/oats-setup-admin`; `okf.json` beside
-`soul.yaml` names them all. Consult them with `/okf-consultation`
-(`oats okf index`, `oats okf cat`, `oats okf search`) before you plan, and
-write what you learn into your instance notes, so you propose it to your node
-at your knowledge checkpoints.
+`okf.json` beside `soul.yaml` names the subjects you read first, one per
+area: `system/oats-kernel` (the kernel and the CLI), `system/oats-desktop`
+(the Desktop), `workstream/provider-integration` (the provider packages and
+their contracts), `workstream/operations` (deployments, onboarding and
+rebuilds) and `workstream/coordination` (leading the work: briefs, plans,
+review loops and hand-backs). Every other subject stays readable:
+`workstream/oats-direction` holds the project-wide decisions, the roadmap and
+the architecture rationale. Consult them with `/okf-consultation` before you
+plan (`oats okf index` lists your subjects; `oats okf subject <kind>/<slug>`
+and `oats okf claims --about <kind>/<slug>` read one), and write what you
+learn into your instance notes, so you propose it at your knowledge
+checkpoints.
 
-Until the knowledge base is organised by subject, an area lesson goes into
-`oats/oats-expert` too, never into the area's node, which belongs to another
-soul. Name its area in the concept, in its title or its `generality`, so it can
-be sorted by subject later without being judged again.
+Each claim you propose names the subjects it is about (`about:`): an area
+lesson is about that area's subject, a lesson of leading the work about
+`workstream/coordination`.

@@ -1,6 +1,6 @@
 {
   "name": "@awebai/oats-pi",
-  "version": "0.69.16",
+  "version": "0.69.17",
   "description": "OATS pi runtime bridge — memory session events and pre-workspace bootstrap over the runtime-neutral @awebai/oats kernel",
   "keywords": [
     "pi-package",

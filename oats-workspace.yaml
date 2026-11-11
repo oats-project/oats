@@ -22,7 +22,7 @@ members:
 # Coordination is not pinned: this repository's souls compose its own copy of
 # the engineering template (capabilities/, TEMPLATE-RELEASE).
 packages:
-  oats.framework: v1.24.0
+  oats.framework: v1.24.1
   oats.okf: v6.0.2
   oats.aweb: v1.39.0
   oats.jira: v1.0.1

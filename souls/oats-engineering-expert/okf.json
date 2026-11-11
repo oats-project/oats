@@ -1,16 +1,10 @@
 {
-  "version": 1,
-  "owner": "c448f593-9b2d-4c48-a679-1c468bda5beb",
-  "owns": [
-    "oats/oats-expert"
-  ],
-  "reads": [
-    "oats/oats-maintainer",
-    "oats/oats-kernel-expert",
-    "oats/oats-desktop-expert",
-    "oats/integrations-expert",
-    "oats/oats-operator-expert",
-    "oats/market-research-expert",
-    "oats/oats-setup-admin"
+  "version": 2,
+  "subjects": [
+    "system/oats-kernel",
+    "system/oats-desktop",
+    "workstream/provider-integration",
+    "workstream/operations",
+    "workstream/coordination"
   ]
 }

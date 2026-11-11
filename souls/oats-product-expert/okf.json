@@ -1,15 +1,7 @@
 {
-  "version": 1,
-  "owner": "2a073e37-2114-474d-917d-29cf3333932f",
-  "owns": [
-    "oats/market-research-expert"
-  ],
-  "reads": [
-    "oats/oats-maintainer",
-    "oats/oats-expert",
-    "oats/oats-kernel-expert",
-    "oats/oats-desktop-expert",
-    "oats/integrations-expert",
-    "oats/oats-operator-expert"
+  "version": 2,
+  "subjects": [
+    "workstream/oats-direction",
+    "workstream/positioning"
   ]
 }
