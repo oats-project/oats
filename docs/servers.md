@@ -425,7 +425,9 @@ Every routed ssh call carries these options, before `--` and the host:
   failed: …`). When ssh never started on this machine, the `--json` envelope
   says so with `error.details: {"sshStarted": false}`; without details, ssh
   ran and the link failed
-  ([desktop-cli-api.md](desktop-cli-api.md#ssh-failures-e_ssh)).
+  ([desktop-cli-api.md](desktop-cli-api.md#ssh-failures-e_ssh)). A link that
+  fails under a routed spawn carries the decision and the key to run it
+  again with ([Run there](#run-there)).
 
 ## Run there
 
@@ -442,7 +444,7 @@ sent as text or on stdin, never as paths.
 
 | Command | Where it runs | The server must advertise |
 |---|---|---|
-| `spawn` | registered workspace | the requested harness, backend and yolo option; `launch-config` for `--launch-config`; `schedule` for a wake schedule; `spawn-name` for `--name`; `spawn-preview-2` for `--preview`; `spawn-suggest-name` for `--suggest-name` on a preview, `spawn-apply-suggest-name` on an apply; `instance-background` for `--background` or `--no-background`; `instance-same-work` for `--same-work` |
+| `spawn` | registered workspace | the requested harness, backend and yolo option; `launch-config` for `--launch-config`; `schedule` for a wake schedule; `spawn-name` for `--name`; `spawn-preview-2` for `--preview`; `spawn-preview-2`, `spawn-apply-2` and `spawn-idempotency-2` for a spawn bound to its preview and a key (without them: one call and a warning); `spawn-suggest-name` for `--suggest-name` on a preview, `spawn-apply-suggest-name` on an apply; `instance-background` for `--background` or `--no-background`; `instance-same-work` for `--same-work` |
 | `status` | registered workspace | |
 | `retire` | the instance's home | `retire-home` to retire by exact home |
 | `session inspect`, `session attach` | the instance's home | `session`; `session-attach-detach-key` for `attach --detach-key`; `session-attach-no-status-line` for `attach --no-status-line`, which a host without it ignores |
@@ -471,6 +473,44 @@ missing feature (`E_REMOTE_INCOMPATIBLE`), before anything is sent. A spawn is
 checked against the harness it would use (the flag, or the soul's default as
 the remote roster reports it). A host that advertises no harness list is
 assumed to run only pi and claude, on tmux, with no launch options.
+
+**A routed spawn.** `oats spawn <soul> --server <id>` runs the spawn's checks
+here (`E_ROUTE_CHANGED`, `E_ROUTE_EXISTS`, the harness and options), then
+asks the server's kernel in two calls:
+
+1. its preview (`spawn … --preview`), which decides the name and everything
+   else and creates nothing;
+2. the spawn itself, bound to that decision and to a key made for this
+   request (`--expect-decision <revision> --idempotency-key <key>`).
+
+The answer is the server's keyed answer (`decision`, `replayed`, `wake`
+beside the rest) plus `server`, `target` and `snapshot`, and the route is
+saved. With `--suggest-name` the preview chooses the name and the spawn
+carries it as `--name`; the answer keeps the preview's `naming`. This needs
+the server's `spawn-suggest-name` and `spawn-name` too.
+
+- **A link that fails under the second call** (a lost connection, a
+  timeout) is `E_SSH`, and the server may have started the spawn. The
+  message ends with the fix, and `--json` carries it:
+  `error.details: {decision, idempotencyKey, fix}`. Run the same spawn again
+  with `--expect-decision <decision.revision> --idempotency-key
+  <idempotencyKey>` (and `--name <decision.instance>` in place of
+  `--suggest-name`): the server answers the instance the first attempt
+  created (`replayed: true`), or creates it, and the route is saved. An
+  attempt still running there answers `E_SPAWN_INCOMPLETE`, naming the
+  instance. Run again without the two flags, the spawn is a separate request
+  and may create a second instance.
+- **A name taken between the two calls** (another spawn on the server took
+  it) is `E_DECISION_STALE`; nothing was created. Run the spawn again.
+- **A spawn that brings `--expect-decision` or `--idempotency-key`** travels
+  as given, in one call: the caller previewed (`--server <id> --preview`) and
+  holds the key.
+- **A server that does not advertise `spawn-preview-2`, `spawn-apply-2` and
+  `spawn-idempotency-2`** gets the spawn in one call, as given, and the
+  answer carries a warning: if the link drops while it spawns, the spawn
+  cannot be retried safely, since the instance may exist there and a second
+  run would create another. Check `oats status --server <id>` before running
+  it again, or upgrade OATS there.
 
 **A routed preview.** `oats spawn <soul> --server <id> --preview` runs the
 spawn's checks here (`E_ROUTE_CHANGED`, `E_ROUTE_EXISTS`, the harness and

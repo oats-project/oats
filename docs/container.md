@@ -186,6 +186,49 @@ Select it with `--launch-config team-claude`. The operator provisions only a
 by every agent in the same trust group; read-only mounting does not hide it
 or narrow its authority. Never share the mount across trust groups.
 
+## The kernel's periodic work
+
+The image's entrypoint starts sshd and nothing else. A container has no
+launchd and no systemd user manager, so in it nothing resumes the sessions
+that were lost when it last stopped, nothing runs the schedule tick, and
+nothing stops the agents in order when the runtime stops it: they are killed
+with the container and read `lost`.
+
+`oats host run`
+([desktop-cli-api.md](desktop-cli-api.md#the-host-run-oats-host-run)) is the
+kernel command that does those three things in one foreground process. The
+image's pinned OATS does not have it, and the image does not run it. An operator can run it by hand in a
+container whose OATS has it, and the entrypoint of a derived image can end
+in it. What such an entrypoint has to respect:
+
+- **`oats host run` is the process the runtime's signal must reach and
+  wait for.** Under `tini -g` that is tini's direct child: start sshd in the
+  background, then `exec oats host run`. `tini -g` signals its child's
+  process group; the OATS tmux server and the harnesses under it are in
+  sessions of their own, outside that group, so they run until `oats host
+  run` stops them. Measured with tini 0.19.0 and tmux 3.3a.
+- **The runtime's stop timeout must be longer than the stop.** On SIGTERM
+  `oats host run` waits for a tick that is running, lists the instances and
+  gives each harness `--stop-grace` seconds (default 20). Docker's default
+  stop timeout is 10 seconds.
+- **It does not supervise sshd.** If sshd ends while it runs, the agents and
+  the tick go on and the operator's route is gone.
+- **The tmux server a resume starts gets its environment**, its `PATH`
+  included.
+
+It ticks the deployments the container's host schedule registry lists. To
+register one where no timer can be installed:
+
+```sh
+oats schedule host install --register-only --dir /state/deploy
+```
+
+([schedules.md](schedules.md#without-a-host-timer)). Plain `host install`
+fails in a container after registering, since there is no systemd user
+manager. Over the route (`--server team-agent`) the option is refused
+(`E_REMOTE_INCOMPATIBLE`, nothing sent) unless the container's OATS
+advertises `schedule-host-register-only`; the image's pin does not.
+
 ## Acceptance and evidence
 
 The host needs Docker and Node 22.5+. Export the same plain variables used for
