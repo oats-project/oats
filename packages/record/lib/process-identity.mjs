@@ -1,7 +1,8 @@
 /** Process identity: what a lock record names its holder by, and how a recorded holder is judged.
  *  The start token of a pid (processStart, processStartToken), whether the process a record names
- *  can still act (processLiveness), this boot's identity (bootId, thisBoot) and the rule for a
- *  record taken in another boot (takenInAnotherBoot), with the lookup of the system tools they run
+ *  can still act (processLiveness), this boot's identity (bootId, thisBoot), the rule for a
+ *  record taken in another boot (takenInAnotherBoot) and the state of the holder a lock record
+ *  names, which composes them (identityHolderState), with the lookup of the system tools they run
  *  (systemTool: `ps`, `sysctl`). The kernel reads all of them from here (lib/system-tools.mjs,
  *  lib/worktree-hooks.mjs, lib/session-seen.mjs), and so do this package's locks. Dependency-free. */
 import { execFileSync, spawnSync } from "node:child_process";
@@ -277,3 +278,24 @@ export const thisBoot = () => (processBoot === undefined ? (processBoot = bootId
  *  container, a boot is one run: bootId). Without a boot id on either side the process alone is
  *  judged. */
 export const takenInAnotherBoot = (boot) => (holder) => Boolean(boot) && typeof holder.bootId === "string" && holder.bootId !== "" && holder.bootId !== boot;
+
+/** Whether a lock record names the boot it was taken in or its holder's start (`bootId`,
+ *  `processStart`), whatever their values. */
+export const namesIdentity = (holder) => "bootId" in holder || "processStart" in holder;
+
+/** The state of the holder a lock record names → "gone" | "alive" | "unknown". The one place the
+ *  rule is composed, for a cache write lock (lib/remote.mjs ownerGone) and the turn record's
+ *  capture and stream locks (lock-holder.mjs holderLiveness):
+ *   - a record that names its identity (namesIdentity) is gone when taken in another boot
+ *     (takenInAnotherBoot), and has its process's state otherwise (processLiveness): gone when its
+ *     pid is gone, runs with another start (a reused pid) or is a zombie; unknown when its start
+ *     cannot be read, or when it names none while its pid runs;
+ *   - a record that names neither is judged by its pid alone (existence): alive when the pid
+ *     exists, another user's too, and unknown when that cannot be read.
+ *  A claim's holder is judged by lib/claim.mjs holderLiveness, which takes its caller's own
+ *  `holderGone`. `boot`, `liveness` and `exists` are seams for tests. */
+export function identityHolderState(holder, { boot = thisBoot(), liveness = processLiveness, exists = existence } = {}) {
+  if (namesIdentity(holder)) return takenInAnotherBoot(boot)(holder) ? "gone" : liveness(holder).state;
+  const { state } = exists(holder.pid);
+  return state === "exists" ? "alive" : state;
+}
