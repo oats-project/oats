@@ -348,8 +348,10 @@ and `verdicts` is read by subject (the okf-authoring skill, and the README's
   path is where a claim is, the id is what it is.
 - **Regenerate and validate the whole base before you merge:**
   `okf-reindex.mjs <base>` then `OKF_STRICT_EXIT=1 okf-validate.mjs <base>
-  --strict`. A stale index or a missing id on the accepted branch makes the
-  base invalid for every 6.0 reader.
+  --strict`. A stale index or a missing id on the accepted branch fails
+  this gate, migration and publication; readers only warn
+  (`W_INDEX_STALE`, `W_ID_MISSING`) until you repair it, and `oats okf
+  propose` reports an accepted claim's missing id as `W_ID_MISSING` too.
 - **Verdict candidates.** The PR body lists the proposer's
   `oats okf verdicts --check` candidates (an exact title hash): resolve each
   to its canonical id, and judge whether the claim is the same, a
@@ -363,6 +365,20 @@ and `verdicts` is read by subject (the okf-authoring skill, and the README's
   gets its id at rejection. Only you write `verdicts/**`: it rides in your
   amend of the PR it rules on, or in your own reviewed change when the PR
   closes.
+
+### A claim merged without its id
+
+An unprotected accepted branch lets someone merge a proposal without your
+amend-and-merge, so a `claims/` concept can reach the base with no `id:`.
+Until you stamp it, readers (spawn, the subject verbs, `oats okf bases`) read
+the base and warn `W_ID_MISSING: N claims lack an id at <alias@commit>; the
+maintainer stamps them (knowledge-review)`; `okf-validate.mjs --strict` and
+every writer still report it. Stamp it in your own PR: add `id:` to each such
+claim, computed as at acceptance (the form above, from the type and its path
+on the accepted branch), regenerate with `okf-reindex.mjs`, validate with
+`OKF_STRICT_EXIT=1 okf-validate.mjs --strict`, and merge it through this gate
+like any other change. Then protect the branch (`oats okf bases` shows
+`protection:`).
 
 ## 7. Retire
 

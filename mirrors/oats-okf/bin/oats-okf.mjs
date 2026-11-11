@@ -112,7 +112,8 @@ else {
     else if(event==='read') fail('E_REMOVED','okf 4.0.0 removed read: use `oats okf cat --base ALIAS PATH` (same path, text and receipt)');
     else if(consult) {
       const answer=CONSULT[event](consultSource(home),flags,positionals);result=answer.result;text=answer.text;
-      // okf 6.0: a stale generated index is read as committed, with a warning.
+      // okf 6.0: a stale generated index (6.0.2: or a claim merged without id)
+      // is read as committed, with a warning.
       const warnings=takeWarnings();
       if(warnings.length) {for(const w of warnings) process.stderr.write(`${w}\n`);result={...result,warnings};}
     }
@@ -130,8 +131,9 @@ else {
         const start=decl.version===2
           ?`\`oats okf index\` for your subjects:\n${subjectBriefLines(bindings,decl,accepted).map(l=>`- ${l}`).join('\n')}\nthen \`oats okf subject KIND/SLUG\`, \`oats okf claims --about KIND/SLUG\``
           :`\`oats okf index\` (owns: ${nodes(decl.owns)}; reads: ${nodes(decl.reads.filter(r=>!decl.owns.includes(r)))})`;
-        const {stale=[]}=seat;
-        result={brief:`Your soul knowledge is read remotely at its accepted state; there is no local copy. Start every task with your instance knowledge (STATE.md, log.md, notes/), then ${start} and \`oats okf cat --base ALIAS PATH\` for the concepts the task needs; \`oats okf search\` before re-deriving a decision. Load okf-consultation and okf-instance-knowledge. Never edit accepted knowledge.${stale.length?`\n${stale.join('\n')}`:''}`,
+        // okf 6.0/6.0.2: the readers' warnings (W_INDEX_STALE, W_ID_MISSING) end the brief.
+        const {tolerated=[]}=seat;
+        result={brief:`Your soul knowledge is read remotely at its accepted state; there is no local copy. Start every task with your instance knowledge (STATE.md, log.md, notes/), then ${start} and \`oats okf cat --base ALIAS PATH\` for the concepts the task needs; \`oats okf search\` before re-deriving a decision. Load okf-consultation and okf-instance-knowledge. Never edit accepted knowledge.${tolerated.length?`\n${tolerated.join('\n')}`:''}`,
           ...(warnings.length?{warning:`oats-okf: ${warnings.join('; ')}`}:{})};
       }
     } else if(event==='inspect') result=inspect(consultSource(home));

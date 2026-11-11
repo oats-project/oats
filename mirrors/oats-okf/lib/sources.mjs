@@ -8,7 +8,7 @@ import { fs, join, safePath, readJSON, atomic, fail } from './io.mjs';
 import { loadBindings, declaration, settings, validateBindings, resolveNodes, resolveSubjects } from './config.mjs';
 import { short } from './consult.mjs';
 import { loadInvocationKnowledgeBinding } from './binding-wire.mjs';
-import { validateBase, staleWarning } from './stores.mjs';
+import { validateBase, readerWarnings } from './stores.mjs';
 
 const primeBasesScript=fileURLToPath(new URL('./prime-bases.mjs',import.meta.url));
 
@@ -26,11 +26,11 @@ const firstLine=text=>String(text||'unknown error').split(/\r?\n/).map(s=>s.trim
 function validateRefs(bindings,decl,primed={}) {
   const accepted={},referenced=refsByAlias(decl,bindings);
   for(const [alias,base] of Object.entries(bindings.bases)) if(base.kind==='directory' && Object.hasOwn(referenced,alias)) {
-    const validated=validateBase(base.path,base,{reader:true});accepted[alias]={nodes:validated.meta.nodes,subjects:validated.subjects,stale:validated.stale,at:`${alias}@directory`};
+    const validated=validateBase(base.path,base,{reader:true});accepted[alias]={nodes:validated.meta.nodes,subjects:validated.subjects,stale:validated.stale,unstamped:validated.unstamped,at:`${alias}@directory`};
   }
   for(const [alias,v] of Object.entries(primed)) {
     if(!v?.ok) fail(v?.error?.code || 'E_VALIDATION',`base "${alias}" at ${short(v?.receipt || {base:alias,kind:'git',commit:'unknown'})}: ${v?.error?.message || 'base is not a validated knowledge tree'}`);
-    accepted[alias]={nodes:v.nodes,subjects:v.subjects ?? null,stale:v.stale ?? 0,at:short(v.receipt || {base:alias,kind:'git',commit:'unknown'})};
+    accepted[alias]={nodes:v.nodes,subjects:v.subjects ?? null,stale:v.stale ?? 0,unstamped:v.unstamped ?? 0,at:short(v.receipt || {base:alias,kind:'git',commit:'unknown'})};
   }
   const unprimedGit=new Set(Object.entries(bindings.bases).filter(([alias,base])=>base.kind==='git' && !Object.hasOwn(primed,alias)).map(([alias])=>alias));
   const notSkipped=ref=>!unprimedGit.has(ref.split('/')[0]);
@@ -101,7 +101,9 @@ export function checkSeat(home) {
     accepted=validateRefs(bindings,decl,priming.primed);
   }
   // okf 6.0: a base whose generated indexes are stale is read as committed,
-  // with one warning per base (the maintainer regenerates).
-  const stale=Object.values(accepted).filter(a=>a.stale>0).map(a=>staleWarning(a.stale,a.at));
-  return {decl,bindings,accepted,warnings:[...priming.warnings,...stale],stale};
+  // with one warning per base (the maintainer regenerates). okf 6.0.2 (#138):
+  // so is a base holding claims/ concepts merged without id (the maintainer
+  // stamps them). Each line goes into the brief and the hook's warning.
+  const tolerated=Object.values(accepted).flatMap(a=>readerWarnings(a,a.at));
+  return {decl,bindings,accepted,warnings:[...priming.warnings,...tolerated],tolerated};
 }

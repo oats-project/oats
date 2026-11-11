@@ -34,7 +34,7 @@ export function runWorker(bindings, alias, refs = null, decl = null, refreshDue 
     const v = verdict(ctx, { fetchMissing: !ctx.offline }), wanted = Array.isArray(refs?.[alias]) ? refs[alias] : null;
     const nodes = v.ok ? Object.fromEntries((wanted || []).filter(node => Object.hasOwn(v.nodes, node)).map(node => [node, v.nodes[node]])) : v.nodes;
     return v.ok
-      ? { alias, primed: true, ok: true, receipt: ctx.receipt, digest: v.digest, nodes, subjects: v.subjects ?? null, stale: v.stale ?? 0 }
+      ? { alias, primed: true, ok: true, receipt: ctx.receipt, digest: v.digest, nodes, subjects: v.subjects ?? null, stale: v.stale ?? 0, unstamped: v.unstamped ?? 0 }
       : { alias, primed: true, ok: false, receipt: ctx.receipt, error: v.error };
   };
   return withBase(bindings, alias, { preferCached: true }, ctx => {
