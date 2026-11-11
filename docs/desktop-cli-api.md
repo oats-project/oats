@@ -3729,7 +3729,7 @@ its absence.
   | the marker, and the result file `.oats-retired-<instance>.json` with `ok: false` | `failed`, with `code` and `message` | `true` | the result's `completedAt`, else the marker's `requestedAt` |
   | the marker, no failed result, its completion process alive | `running` | `true` | the marker's `requestedAt` |
   | the marker, no failed result, the completion's liveness cannot be read, or the marker names no completion process | `unknown` | `true` | the marker's `requestedAt` |
-  | the marker, no failed result, its completion process gone | `interrupted` | `true` | the marker's `requestedAt` |
+  | the marker, no failed result, its completion process gone (it ended, its pid runs with another start, or the marker's `completionBoot` is another boot) | `interrupted` | `true` | the marker's `requestedAt` |
   | a marker that cannot be read as an object | `unknown` | `true` | the marker file's modification time |
   | no marker; the home's claim held by a retire whose holder is alive | `running` | `false` | the claim's `since` |
   | no marker; the same, the holder's liveness cannot be read | `unknown` | `false` | the claim's `since` |
@@ -6403,8 +6403,9 @@ line and says that nothing was done:
   Then the command again.
 
 A scheduled self-retire counts from the moment it is scheduled. Its pending
-marker (`pendingMarker`) records the completion process as `completionPid`
-and `completionStart` (`null` when the start could not be read). While that
+marker (`pendingMarker`) records the completion process as `completionPid`,
+`completionStart` and `completionBoot`, the boot it runs in (each of the two
+`null` when it could not be read). While that
 process lives, every other retire of the instance is refused the same way,
 `--self --keep-dir` included: `a retire of <name> is already scheduled (its
 completion, pid <pid>, requested at <requestedAt>); nothing was done — wait
@@ -6418,7 +6419,10 @@ claim, it is refused the claim and answers `E_LIFECYCLE_BUSY` like any other
 retire, where it answered `alreadyScheduled: true` before 0.51.0. The marker refuses nothing once its completion has
 left its outcome at `resultPath` (it failed) or is gone (it died; a
 completion that is a zombie, not reaped by its parent, has died: 0.52.0,
-#870), nor when
+#870; one whose marker names another boot than this one is gone whatever
+its pid reads as, since a boot ends every process and a pid and a start can
+both come again in the next; a marker that names no boot is judged by its
+process alone), nor when
 it names no completion (a marker written before 0.51.0): `oats retire
 <instance>` then retries the retirement, as before. The completion does not
 start its retire while the retire that scheduled it holds the claim: it
