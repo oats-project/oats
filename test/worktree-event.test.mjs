@@ -1148,7 +1148,10 @@ test("a switch that meets the branch's ref lock held by another git answers E_GI
   const fx = deployment(t, { hookless: true });
   const { home } = await fx.spawn("dev", { instance: "dev-lock", work: "checkout" });
   const common = gitIn(fx, fx.member, "rev-parse", "--path-format=absolute", "--git-common-dir");
-  assert.equal(gitIn(fx, fx.member, "rev-parse", "--show-ref-format"), "files", "a loose ref's lock is a file beside it");
+  // The files backend, where a loose ref's lock is a file beside it: no `extensions.refStorage`, or
+  // `files` (read from the config, which every Git answers; `rev-parse --show-ref-format` is Git 2.44+).
+  const storage = spawnSync("git", ["-C", fx.member, "config", "--get", "extensions.refStorage"], { encoding: "utf8", env: fx.env }).stdout.trim();
+  assert.ok(storage === "" || storage === "files", `the clone stores its refs in the files backend, not ${storage}`);
   const lock = join(common, "refs", "heads", "agents", "lock.lock");
   mkdirSync(join(lock, ".."), { recursive: true }); writeFileSync(lock, "");
   const r = add(fx, home, "lock");
