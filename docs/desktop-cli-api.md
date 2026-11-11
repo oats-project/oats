@@ -5072,8 +5072,15 @@ oats instance stop <instance> --plan [--no-recursive] [--home <abs>] [--dir <d>]
 - `retiring` and `stopPending`, booleans on every target, say who holds the
   target's home when the plan is read (OATS 0.52.0, feature
   `lifecycle-claim-stop`). `retiring`: a self-retire is scheduled for it
-  (its pending marker is there), or a retire holds its
-  [claim](#retire-one-at-a-time). From 0.53.0 the marker outlasts a
+  (its pending marker is there, and the completion the marker names is not
+  gone: it lives, its liveness cannot be read, or the marker names none),
+  or a retire holds its
+  [claim](#retire-one-at-a-time). A marker whose completion is gone (it
+  ended, its pid runs with another start, or the marker was written in
+  another boot) is `retiring: false`, and the apply stops the target: the
+  home is owed its retire and nothing carries it out
+  ([a completion that was killed](souls-and-instances.md#self-retire-interrupted)).
+  From 0.53.0 the marker outlasts a
   completion that did not complete only when a retire hook was started or
   the removal of the home began
   ([a completion that does not complete](souls-and-instances.md#self-retire-not-completed)).
@@ -5136,7 +5143,8 @@ this order:
    retired since the plan was shown answers `E_SESSION_UNKNOWN`; one whose
    `instance.json` can no longer be read, `E_UNIDENTIFIED_INSTANCE_HOME`; a
    child in that state is no longer a target, which is a changed plan.
-6. It refuses a target for which a self-retire is scheduled
+6. It refuses a target for which a self-retire is scheduled, unless the
+   completion its marker names is gone
    (`E_INSTANCE_RETIRING`, with `details.plan`).
 7. It stops each target, writes the receipt and releases the claims.
 
@@ -5450,7 +5458,9 @@ answers. The following stop/retire notes describe the original table.
   ([a completion that does not complete](souls-and-instances.md#self-retire-not-completed)).
   A retire reads the marker under the claim, while
   the completion lives (`E_LIFECYCLE_BUSY`, [below](#retire-one-at-a-time)).
-  A stop apply reads it in the plan it makes under its claims: a plan that
+  A stop apply reads it in the plan it makes under its claims, and it holds
+  the home against a stop while its completion is not gone
+  ([`retiring`](#stop-claim)): a plan that
   showed `retiring: true` is answered `E_INSTANCE_RETIRING`, and an apply
   whose plan was shown before the retire was scheduled is answered
   `E_PLAN_STALE` first, with the fresh plan.

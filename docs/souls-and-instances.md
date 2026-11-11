@@ -1313,9 +1313,12 @@ leaves what happened on disk (OATS 0.53.0):
 - **Its pending marker, only when the home is owed a retire:** when a retire
   hook was started or the removal of the home began. The usual quarantine
   marker is there too when hooks reported incomplete cleanup. The instance
-  then reads as retiring: `oats instance stop --apply` and `oats session
-  start` answer `E_INSTANCE_RETIRING`, and `oats retire <instance>`
-  continues. In every other case the completion removes its marker.
+  is then owed a retire: `oats session start` answers
+  `E_INSTANCE_RETIRING`, and `oats retire <instance>` continues. `oats
+  instance stop --apply` is not refused: the completion has ended, so
+  nothing holds the home against a stop
+  ([a completion that was killed](#self-retire-interrupted)). In every
+  other case the completion removes its marker.
   Nothing of the home was changed, so the instance is a stopped or a
   running instance like any other: a start works, and a wake schedule may
   start it. A session or a child that the completion stopped on its way
@@ -1328,8 +1331,12 @@ leaves what happened on disk (OATS 0.53.0):
 pending marker stays. The marker names the completion by its pid, its start
 and its boot, and the rule is: a pending marker holds its home only while
 the completion it names can still act; once that completion is gone,
-`oats retire <instance>` takes the retire over and completes it, and
-`oats session start` is refused with that command in its message. A
+`oats retire <instance>` takes the retire over and completes it,
+`oats session start` is refused with that command in its message, and a
+stop is not refused: `oats instance stop --apply`, the stop a retire makes
+of a recorded child, and the stop `oats host run` makes of every running
+home when the host stops all stop a session that still runs there, and the
+marker stays. A
 completion is gone when its process has ended, when its pid runs with
 another start, and when the marker was written in another boot, whatever
 its pid reads as there. `oats status` shows the row's `retire` as
@@ -1339,7 +1346,8 @@ interrupted): finish it with` and the retire to run, because the home is
 never started again: the completion may have run retire hooks before it
 was killed, and a start would bring back an instance whose identity is
 gone. A marker that names no completion (one an OATS before 0.51.0 wrote)
-is refused by a start as before, and `oats retire <instance>` completes it.
+refuses a start and a stop as before, since whether its retire runs cannot
+be told, and `oats retire <instance>` completes it.
 
 <a id="self-retire-hook-retry"></a>**A completion retries a cleanup that only
 retire hooks left incomplete** (oats-project/oats#1747), because a provider's
