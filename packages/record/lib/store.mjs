@@ -33,6 +33,7 @@ import {
 } from "node:fs";
 import { DerivedState, fileVersion, sameVersion, invalidateLegacyMaps } from "./derived-state.mjs";
 import { captureContext } from "./capture-context.mjs";
+import { holderIdentity, holderLiveness, namesIdentity } from "./lock-holder.mjs";
 import { PRIVATE_FILE, makePrivateDir } from "./private-files.mjs";
 import { randomBytes } from "node:crypto";
 import { hostname } from "node:os";
@@ -150,7 +151,8 @@ export function parseJournal(input) {
 // ----------------------------------------------------------- stream lock
 //
 // The per-stream lock is an exclusive-create lockfile carrying an OWNER
-// TOKEN: the creating process's pid, its hostname, and a random nonce.
+// TOKEN: the creating process's pid, its hostname, a random nonce, and the
+// boot and process start its holder is judged by (`bootId`, `processStart`).
 // Two properties follow from the token that a bare lockfile cannot give:
 //
 //   - staleness is judged against the HOLDER'S LIVENESS, not the lock's
@@ -160,20 +162,27 @@ export function parseJournal(input) {
 //     nonce, so a holder whose lock was reclaimed cannot delete the
 //     replacement lock out from under its new owner.
 //
-// Crash recovery is preserved: a lock whose pid is gone from this host is
-// provably stale and is reclaimed at once, without waiting out any age.
+// Crash recovery is preserved: a lock whose holder is gone is provably
+// stale and is reclaimed at once, without waiting out any age. A token that
+// names its boot or start is judged by them (lock-holder.mjs
+// holderLiveness), whatever host it names: gone when taken in another boot
+// (a container that is created again), or when its pid is gone or runs with
+// another start (a reused pid). A token that names neither is judged by its
+// pid alone, on this host.
 //
 // Age remains the fallback for the two cases where liveness is not
-// knowable here: a lock created on another host (file sync can copy one
-// in) and a lock with no readable token (written by an older version, or
-// by hand).
+// knowable here: a lock that names neither boot nor start and was created
+// on another host (file sync can copy one in) and a lock with no readable
+// token (written by an older version, or by hand).
 
-function newLockToken() {
+// `identity` is the holder's boot and process start (holderIdentity).
+function newLockToken(identity) {
   return {
     pid: process.pid,
     host: hostname(),
     nonce: randomBytes(12).toString("hex"),
     acquiredAt: new Date().toISOString(),
+    ...identity,
   };
 }
 
@@ -184,7 +193,7 @@ function newLockToken() {
 function createLock(lockPath, dir, token) {
   const tmp = join(dir, `.lock.tmp-${token.pid}-${token.nonce}`);
   try {
-    writeFileSync(tmp, JSON.stringify(token) + "\n");
+    writeFileSync(tmp, JSON.stringify(token) + "\n", { mode: PRIVATE_FILE });
     try {
       linkSync(tmp, lockPath);
       return true;
@@ -238,16 +247,12 @@ function readLock(lockPath) {
 }
 
 // true / false when the holder's liveness is knowable from this process,
-// null when it is not (the lock was created on another host). EPERM means
-// the process exists and belongs to another user: alive.
+// null when it is not (the token names neither boot nor start, and the lock
+// was created on another host). Only a holder that is proven gone is not
+// alive: one whose liveness cannot be read is waited for.
 function holderAlive(token) {
-  if (token.host !== hostname()) return null;
-  try {
-    process.kill(token.pid, 0);
-    return true;
-  } catch (err) {
-    return err.code === "ESRCH" ? false : true;
-  }
+  if (!namesIdentity(token) && token.host !== hostname()) return null;
+  return holderLiveness(token) !== "dead";
 }
 
 function lockIsProvenStale(held, staleMs) {
@@ -359,7 +364,8 @@ export class RecordStore {
     const dir = join(this.streamsDir(), streamId);
     makePrivateDir(dir);
     const lockPath = join(dir, ".lock");
-    const token = newLockToken();
+    // This process's start is read once per store: it never changes.
+    const token = newLockToken((this.lockIdentity ??= holderIdentity(process.pid)));
     const deadline = Date.now() + this.lockTimeoutMs;
     // Every iteration that fails to acquire falls through to ONE deadline
     // check and one sleep — there is deliberately no `continue` above them,

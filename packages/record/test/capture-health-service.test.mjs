@@ -249,7 +249,7 @@ test("unfinished overdeadline is a warning, not a guessed kill/timeout cause or 
 test("early death requires unchanged matching local registration and both processes dead", t => {
   const f = fixture(t), saved = unfinished(f), owner = lock(f, saved), path = join(f.root, ".capture.lock/owner.json");
   f.hook();
-  const observed = [], liveness = pid => { observed.push(pid); return "dead"; };
+  const observed = [], liveness = ({ pid }) => { observed.push(pid); return "dead"; };
   assert.deepEqual(codes(f.health({ liveness })), ["capture-pass-failed"]); assert.deepEqual(observed, [123, 321]);
   for (const mutate of [o => o.host = "off-host", o => delete o.host, o => o.worker.host = "off-host",
     o => o.worker.pid++, o => o.startedAt = at(1), o => o.worker.nonce = "", o => o.worker.startedAt = at(-1)]) {
@@ -258,7 +258,7 @@ test("early death requires unchanged matching local registration and both proces
   }
   write(path, JSON.stringify(owner));
   for (const live of ["alive", "unknown"]) assert.deepEqual(codes(f.health({ liveness: () => live })), []);
-  assert.deepEqual(codes(f.health({ liveness: pid => pid === owner.pid ? "dead" : "alive" })), []);
+  assert.deepEqual(codes(f.health({ liveness: ({ pid }) => pid === owner.pid ? "dead" : "alive" })), []);
   assert.deepEqual(codes(f.health({ liveness: pid => { write(path, JSON.stringify({ ...owner, nonce: "replacement" })); return "dead"; } })), []);
   fs.rmSync(join(f.root, ".capture.lock"), { recursive: true }); assert.deepEqual(codes(f.health()), []);
   assert.deepEqual(JSON.parse(fs.readFileSync(join(f.root, "capture-status.json"))), saved);

@@ -275,8 +275,9 @@ A failure newer than success and current unresolved stream failures produce
 beyond its recorded deadline also warns, without inventing its termination cause.
 Before that deadline, death evidence requires an unchanged local lock registration
 whose worker PID matches the receipt and whose acquisition predates the run,
-with both supervisor and worker positively dead. Missing/off-host/hostless,
-changed or uncertain registration and live/reused PIDs supply no death proof.
+with both supervisor and worker positively dead (each judged by the boot and
+process start its record names). Missing/off-host/hostless,
+changed or uncertain registration and live PIDs supply no death proof.
 The receipt is reread before accepting that observation; health never repairs,
 reclaims, signals termination, writes counters or invents a finished receipt.
 Owned legacy watcher definitions additionally produce `capture-setup-required`,
@@ -810,12 +811,14 @@ transaction, and identical state values do not produce redundant row updates.
 
 The private supervisor transport admits one child at a time under the root lock. The child
 announces its nonce and stays idle until the supervisor durably publishes its
-identity in that lock and sends permission to start. A live, reused or unknown
-worker PID prevents reclamation after supervisor death. Release occurs only
+identity in that lock, with the boot and the child's process start, and sends
+permission to start. A worker that runs, or whose liveness is unknown,
+prevents reclamation after supervisor death; one whose PID is gone or runs with
+another start, or whose record is of another boot, does not. Release occurs only
 after the owned child exits; signals target the spawned child handle, never a
 PID inferred from an abandoned lock or a process group. Continuation retains the
 same root lock: it replaces only the exact previously registered worker identity
-after positive death proof. Reused or uncertain PIDs prevent replacement.
+after positive death proof. A worker of uncertain liveness prevents replacement.
 Workers check their parent and lock identity between work units; the same read
 carries the supervisor's cooperative stop request, which the supervisor
 publishes into that owner record exactly as it publishes a worker. The supervisor never writes status
