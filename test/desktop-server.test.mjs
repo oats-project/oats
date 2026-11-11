@@ -2,14 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync, symlinkSync, realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { request as httpRequest } from "node:http";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, dirname, basename, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { verifiedLocalHome as localHomeIn } from "../packages/client/session-start.mjs";
 import { closeGroup, startGroup } from "./helpers/process-group.mjs";
 import { privateTmuxTmpdir } from "./helpers/host-fixture.mjs";
+import { authorizedHeaders, privateSocketDir, startBackend } from "../packages/desktop/test/helpers/backend-server.mjs";
 
 // Inert server tests: the backend runs against a FAKE installed CLI that
 // replays JSON captured from a real `oats` run on the hand-built Northwind
@@ -21,16 +20,6 @@ const SRV = join(ROOT, "packages", "desktop", "server", "oats-web.mjs");
 const FAKE = join(ROOT, "test", "helpers", "desktop-fake-oats.mjs");
 const SOUL = "release-manager", INSTANCE = "release-manager-cap";
 
-async function freePort() {
-  const server = createServer();
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const { port } = server.address();
-  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-  return port;
-}
 
 /** The servers this file has started, and the temporary directories it has made. */
 const servers = [], made = [];
@@ -82,29 +71,37 @@ function northwindDeployment() {
   return { scope, agent, soul, home };
 }
 
-/** Start the real backend with the fake CLI as its only discovery candidate. */
+/** A loopback Origin, as a page of the app's own would send it. */
+const LOOPBACK = { origin: "http://localhost" };
+
+/** Start the real backend (a fresh credential on fd 3, a private socket: helpers/backend-server.mjs) with
+ * `args` after its --dirs, as the leader of a process group of its own (startGroup). */
+async function startBackendGroup({ dirs = [], args = [], env, cwd } = {}) {
+  const socket = privateSocketDir(); made.push(socket.dir);
+  const s = await startBackend({ dirs, args, env, cwd, socket, spawn: (command, argv, options) => { const proc = startGroup(command, argv, options); servers.push(proc); return proc; } });
+  return s;
+}
+
+/** Start the real backend with the fake CLI as its only discovery candidate. `raw` sends exactly the
+ * headers given (add `authorizedHeaders(secret, …)` to carry the credential). */
 async function startServer(dir, { env = {}, drop = [], observed = true } = {}) {
   const tools = tempDir("oatsweb-fake-cli-");
   const bin = join(tools, "oats"), log = join(tools, "calls.jsonl");
   writeFileSync(bin, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(FAKE)} "$@"\n`);
   chmodSync(bin, 0o755);
-  const port = await freePort();
-  const proc = startGroup(process.execPath, [SRV, "start", "--port", String(port), "--dir", dir], {
-    stdio: "ignore",
-    env: { ...process.env, TMUX_TMPDIR: tmuxTmpdir(), OATS_DESKTOP_OATS_BIN: bin, FAKE_OATS_LOG: log, FAKE_OATS_DROP_FEATURES: drop.join(","), ...env },
-  });
-  servers.push(proc);
+  const s = await startBackendGroup({ dirs: [dir],
+    env: { ...process.env, TMUX_TMPDIR: tmuxTmpdir(), OATS_DESKTOP_OATS_BIN: bin, FAKE_OATS_LOG: log, FAKE_OATS_DROP_FEATURES: drop.join(","), ...env } });
   let panel = null;
   for (let i = 0; i < 100; i++) {
     await new Promise((r) => setTimeout(r, 100));
-    try { panel = await (await fetch(`http://127.0.0.1:${port}/api/panel`)).json(); } catch { continue; }
+    try { panel = await (await s.request("/api/panel")).json(); } catch { continue; }
     if (!observed || panel.deployment?.status !== "pending") break;
   }
   assert.ok(panel, "server came up");
   if (observed) assert.equal(panel.deployment?.status, "observed", JSON.stringify(panel.deployment));
   const calls = () => { try { return readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse); } catch { return []; } };
-  return { port, proc, panel, calls, get: (p) => fetch(`http://127.0.0.1:${port}${p}`),
-    post: (p, body, headers = {}) => fetch(`http://127.0.0.1:${port}${p}`, { method: "POST",
+  return { proc: s.child, secret: s.secret, raw: s.raw, panel, calls, get: (p) => s.request(p),
+    post: (p, body, headers = {}) => s.request(p, { method: "POST",
       headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) }) };
 }
 
@@ -128,19 +125,16 @@ test("desktop server: the retired collect helper is refused; no deployment reade
 
 test("desktop server: POST origin guard rejects hostile/null origins without crashing", async () => {
   const { scope } = northwindDeployment();
-  const { port, proc, post, get } = await startServer(scope);
+  const { proc, post, get, raw, secret } = await startServer(scope);
   try {
     // An instance-addressed POST that would run a command (start launches a harness in the instance's terminal).
     assert.equal((await post("/api/start/x", {}, { origin: "null" })).status, 403, "Origin: null is rejected, not a crash");
     assert.equal((await post("/api/start/x", {}, { origin: "http://evil.com" })).status, 403);
-    // fetch can't override Host — use a raw request for the rebinding case
-    const hostStatus = await new Promise((resolve, reject) => {
-      const rq = httpRequest({ host: "127.0.0.1", port, path: "/api/start/x", method: "POST",
-        headers: { "content-type": "application/json", host: "evil.com" } }, (rs) => resolve(rs.statusCode));
-      rq.on("error", reject); rq.end("{}");
-    });
+    // A raw request for the rebinding case, carrying the credential: the Host guard alone refuses it.
+    const hostStatus = (await raw({ path: "/api/start/x", method: "POST", body: "{}",
+      headers: authorizedHeaders(secret, { "content-type": "application/json", host: "evil.com" }) })).status;
     assert.equal(hostStatus, 403, "non-loopback Host is rejected");
-    const passed = await post("/api/start/x", {}, { origin: `http://127.0.0.1:${port}` });
+    const passed = await post("/api/start/x", {}, LOOPBACK);
     assert.equal(passed.status, 404, "loopback origin passes the guard (unknown instance)");
     assert.deepEqual(await passed.json(), { error: 'unknown instance "x"' }, "the 404 is instance resolution's, not routing's");
     assert.equal((await get("/api/panel")).status, 200, "server survived the malformed origin");
@@ -149,9 +143,9 @@ test("desktop server: POST origin guard rejects hostile/null origins without cra
 
 test("desktop server: no route reads a pane, types into it or reads its session log by instance name (#609, #627)", async (t) => {
   const { scope } = northwindDeployment();
-  const { port, proc, post, get } = await startServer(scope);
+  const { proc, post, get, raw, secret } = await startServer(scope);
   try {
-    const loopback = { origin: `http://127.0.0.1:${port}` };
+    const loopback = LOOPBACK;
     const unknown = await get("/api/no-such-route");
     assert.equal(unknown.status, 404);
     const notFound = await unknown.json();
@@ -175,15 +169,12 @@ test("desktop server: no route reads a pane, types into it or reads its session 
       }
     }
     // The guards run before routing: an unknown path is still refused to a foreign origin, and every
-    // path, a GET included, to a non-loopback Host (fetch cannot override Host, so a raw request).
+    // path, a GET included, to a non-loopback Host (a raw request carrying the credential).
     for (const path of ["/api/keys/x", "/api/interrupt/x", `/api/chat/${INSTANCE}`]) {
       assert.equal((await post(path, { data: "x" }, { origin: "http://evil.com" })).status, 403, path);
     }
     for (const path of [`/api/chat/${INSTANCE}`, "/api/no-such-route"]) {
-      const hostStatus = await new Promise((resolve, reject) => {
-        const rq = httpRequest({ host: "127.0.0.1", port, path, method: "GET", headers: { host: "evil.com" } }, (rs) => { rs.resume(); resolve(rs.statusCode); });
-        rq.on("error", reject); rq.end();
-      });
+      const hostStatus = (await raw({ path, headers: authorizedHeaders(secret, { host: "evil.com" }) })).status;
       assert.equal(hostStatus, 403, `${path}: a non-loopback Host is refused before routing`);
     }
     // A kept read of an agent's files, by name, still answers.
@@ -194,9 +185,9 @@ test("desktop server: no route reads a pane, types into it or reads its session 
 
 test("desktop server: no dedicated harvest route: POST /api/harvest/<name> answers as an unknown route does (#818)", async (t) => {
   const { scope, home } = northwindDeployment();
-  const { port, proc, post, calls } = await startServer(scope);
+  const { proc, post, calls, raw, secret } = await startServer(scope);
   try {
-    const loopback = { origin: `http://127.0.0.1:${port}` };
+    const loopback = LOOPBACK;
     const unknown = await post("/api/no-such-route", {}, loopback);
     assert.equal(unknown.status, 404);
     const notFound = await unknown.json();
@@ -213,13 +204,10 @@ test("desktop server: no dedicated harvest route: POST /api/harvest/<name> answe
       });
     }
     assert.equal(calls().some((argv) => argv[0] === "operation"), false, "no provider operation ran");
-    // The guards run before routing: a foreign Origin, and a non-loopback Host (a raw request: fetch cannot set it).
+    // The guards run before routing: a foreign Origin, and a non-loopback Host (a raw request carrying the credential).
     assert.equal((await post(`/api/harvest/${INSTANCE}`, {}, { origin: "http://evil.com" })).status, 403);
-    const hostStatus = await new Promise((resolve, reject) => {
-      const rq = httpRequest({ host: "127.0.0.1", port, path: `/api/harvest/${INSTANCE}`, method: "POST",
-        headers: { "content-type": "application/json", host: "evil.com" } }, (rs) => { rs.resume(); resolve(rs.statusCode); });
-      rq.on("error", reject); rq.end("{}");
-    });
+    const hostStatus = (await raw({ path: `/api/harvest/${INSTANCE}`, method: "POST", body: "{}",
+      headers: authorizedHeaders(secret, { "content-type": "application/json", host: "evil.com" }) })).status;
     assert.equal(hostStatus, 403, "a non-loopback Host is refused before routing");
   } finally { proc.kill(); rmSync(scope, { recursive: true, force: true }); }
 });
@@ -428,12 +416,9 @@ test("desktop server: POST /api/models serves harness-scoped catalogs, coalesces
   writeFileSync(fakePi, `#!/bin/sh\necho x >> ${countFile}\nsleep 0.3\ncat <<'EOF'\nprovider        model                       context\nanthropic       claude-opus-4-5             200K\nanthropic       claude-sonnet-4-5           200K\nopenai          gpt-5.2                     400K\nEOF\n`);
   chmodSync(fakePi, 0o755);
   const { scope } = northwindDeployment();
-  const { port, proc } = await startServer(scope, { env: { PATH: `${bindir}:${process.env.PATH}` } });
+  const { proc, get, post: send } = await startServer(scope, { env: { PATH: `${bindir}:${process.env.PATH}` } });
   try {
-    const post = (harness, headers = {}) => fetch(`http://127.0.0.1:${port}/api/models`, {
-      method: "POST", headers: { "content-type": "application/json", ...headers },
-      body: JSON.stringify(harness === undefined ? {} : { harness }),
-    });
+    const post = (harness, headers = {}) => send("/api/models", harness === undefined ? {} : { harness }, headers);
     // concurrent COLD misses (both runtimes) fan in to ONE child-process run
     const burst = await Promise.all([post("pi"), post("claude"), post("pi"), post("claude"), post("pi")]);
     for (const r of burst) assert.equal(r.status, 200);
@@ -456,16 +441,15 @@ test("desktop server: POST /api/models serves harness-scoped catalogs, coalesces
     // command-running route sits behind the POST Origin guard — a hostile
     // page can never fan out child processes cross-origin (review 9b1e3ff)
     assert.equal((await post("pi", { origin: "http://evil.com" })).status, 403, "hostile origin rejected");
-    assert.equal((await fetch(`http://127.0.0.1:${port}/api/models?runtime=pi`)).status, 404, "no GET surface for the command-running route");
+    assert.equal((await get("/api/models?runtime=pi")).status, 404, "no GET surface for the command-running route");
   } finally { proc.kill(); }
 });
 
 test("desktop server: /api/models degrades to an empty list when pi is not installed", async () => {
   const { scope } = northwindDeployment();
-  const { port, proc } = await startServer(scope, { env: { PATH: "/nonexistent", SHELL: "/bin/false" } });
+  const { proc, post: send } = await startServer(scope, { env: { PATH: "/nonexistent", SHELL: "/bin/false" } });
   try {
-    const post = (harness) => fetch(`http://127.0.0.1:${port}/api/models`, {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ harness }) });
+    const post = (harness) => send("/api/models", { harness });
     const pi = await (await post("pi")).json();
     assert.deepEqual(pi.models, [], "no pi → empty catalog, not an error");
     const cl = await (await post("claude")).json();
@@ -577,16 +561,13 @@ test("desktop server: /api/file serves kernel-reported soul files; a symlinked s
 
 test("desktop server: hostile Host header is rejected on GET file APIs (DNS rebinding)", async () => {
   const { scope } = northwindDeployment();
-  const { port, proc } = await startServer(scope);
+  const { proc, get, raw, secret } = await startServer(scope);
   try {
-    const rawGet = (path) => new Promise((resolve, reject) => {
-      const rq = httpRequest({ host: "127.0.0.1", port, path, method: "GET",
-        headers: { host: "attacker.example" } }, (rs) => resolve(rs.statusCode));
-      rq.on("error", reject); rq.end();
-    });
+    // Carrying the credential: the Host guard alone refuses these.
+    const rawGet = async (path) => (await raw({ path, headers: authorizedHeaders(secret, { host: "attacker.example" }) })).status;
     assert.equal(await rawGet(`/api/file?path=${encodeURIComponent(join(scope, "agents", "release-manager", "soul", "AGENTS.md"))}`), 403, "rebinding host cannot read files");
     assert.equal(await rawGet("/api/panel"), 403, "rebinding host cannot enumerate roots");
-    assert.equal((await fetch(`http://127.0.0.1:${port}/api/panel`)).status, 200, "loopback host still serves");
+    assert.equal((await get("/api/panel")).status, 200, "loopback host still serves");
   } finally { proc.kill(); }
 });
 
@@ -596,21 +577,18 @@ test("desktop server: started with no --dir it serves no local deployment, never
   writeFileSync(bin, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(FAKE)} "$@"\n`);
   chmodSync(bin, 0o755);
   const cwd = realpathSync(tempDir("oatsweb-not-a-deployment-"));
-  const port = await freePort();
-  const proc = startGroup(process.execPath, [SRV, "start", "--port", String(port)], {
-    cwd, stdio: "ignore", env: { ...process.env, TMUX_TMPDIR: tmuxTmpdir(), OATS_DESKTOP_OATS_BIN: bin },
-  });
-  servers.push(proc);
+  const s = await startBackendGroup({ cwd, env: { ...process.env, TMUX_TMPDIR: tmuxTmpdir(), OATS_DESKTOP_OATS_BIN: bin } });
+  const proc = s.child;
   try {
     let panel = null;
     for (let i = 0; i < 100 && !panel; i++) {
       await new Promise((r) => setTimeout(r, 100));
-      try { panel = await (await fetch(`http://127.0.0.1:${port}/api/panel`)).json(); } catch { /* not up yet */ }
+      try { panel = await (await s.request("/api/panel")).json(); } catch { /* not up yet */ }
     }
     assert.ok(panel, "server came up");
     const local = (panel.workspaces || []).filter((w) => w.id.startsWith("/"));
     assert.deepEqual(local, [], `no local workspace is served: ${JSON.stringify(panel.workspaces)}`);
     assert.ok(!(panel.workspaces || []).some((w) => w.id === cwd || w.id === "/"), "never the cwd, never /");
-    assert.equal((await fetch(`http://127.0.0.1:${port}/api/cli`)).ok, true, "the CLI probe still answers");
+    assert.equal((await s.request("/api/cli")).ok, true, "the CLI probe still answers");
   } finally { proc.kill(); rmSync(cwd, { recursive: true, force: true }); rmSync(tools, { recursive: true, force: true }); }
 });
