@@ -8,10 +8,11 @@
 // Real Git and real filter commands: each one records that it ran in a marker file.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { cli, fixture, fixtureGit, write } from "./helpers/retire-work-safety-fixture.mjs";
+import { CLI, FIXTURE_GIT_ENV, cli, fixture, fixtureGit, write } from "./helpers/retire-work-safety-fixture.mjs";
 import { v2Deployment } from "./helpers/v2-deployment.mjs";
 
 const ATTRIBUTES = "tracked.txt filter=smudged\nprocessed.txt filter=proc\n";
@@ -132,4 +133,28 @@ test("oats worktree add does not run the file monitor the repository's configura
   assert.equal(added.status, 0, added.stdout + added.stderr);
   assert.deepEqual(monitor.ranIn(), [], "the add ran no file monitor");
   assert.equal(readFileSync(join(w.tree, "tracked.txt"), "utf8"), "committed on the remote\n");
+});
+
+test("oats package remove, which asks Git whether oats-workspace.yaml is tracked in the checkout that holds it, does not run the file monitor that checkout's configuration names", (t) => {
+  const base = mkdtempSync(join(tmpdir(), "oats-workspace-checkout-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const checkout = join(base, "workspace");
+  fixtureGit(null, ["init", "-q", checkout]);
+  write(join(checkout, "oats-workspace.yaml"), "schemaVersion: 2\nname: fixture\n");
+  fixtureGit(checkout, ["add", "oats-workspace.yaml"]);
+  fixtureGit(checkout, ["commit", "-q", "-m", "workspace"]);
+  const monitor = fileMonitor(base);
+  fixtureGit(checkout, ["config", "core.fsmonitor", monitor.command]);
+  const remove = () => spawnSync(process.execPath, [CLI, "package", "remove", "absent", "--json", "--dir", checkout],
+    { cwd: base, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: { ...FIXTURE_GIT_ENV, OATS_HOME_DIR: join(base, "oats-home"), OATS_REMOTE_CACHE: join(base, "cache") } });
+  // The file is read as tracked: the refusal is the tracked checkout's, naming the file.
+  const tracked = { code: "E_PACKAGE_MISSING", message: `packages.absent is not in ${join(checkout, "oats-workspace.yaml")}`, details: { id: "absent", path: join(checkout, "oats-workspace.yaml") } };
+  const refused = remove();
+  assert.equal(refused.status, 1, refused.stdout + refused.stderr);
+  assert.deepEqual(JSON.parse(refused.stdout).error, tracked);
+  assert.deepEqual(monitor.ranIn(), [], "the command ran no file monitor");
+
+  // The same answer as in a checkout that names no file monitor.
+  fixtureGit(checkout, ["config", "--unset", "core.fsmonitor"]);
+  assert.deepEqual(JSON.parse(remove().stdout).error, tracked);
 });
