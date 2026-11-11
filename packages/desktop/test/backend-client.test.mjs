@@ -5,8 +5,9 @@
 import nodeTest from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { createServer as createNetServer } from 'node:net';
 import { PassThrough } from 'node:stream';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
@@ -388,17 +389,37 @@ test('A14: ENOENT on the current lease revokes it and replaces once; again withi
   assert.equal(replaced.length, 1);
 });
 
+/** Set a directory's modification time `seconds` ago (a directory a Desktop made that long ago). */
+const age = (dir, seconds) => { const t = new Date(Date.now() - seconds * 1000); utimesSync(dir, t, t); return dir; };
+
 test('the stale-directory sweep removes only our own dead socket directories', async () => {
   const base = mkdtempSync(join(tmpdir(), 'oats-t-sweep-'));
   try {
-    const mk = (name, mode = 0o700) => { const d = join(base, name); mkdirSync(d); chmodSync(d, mode); return d; };
+    const mk = (name, mode = 0o700) => { const d = join(base, name); mkdirSync(d); chmodSync(d, mode); return age(d, 120); };
     const empty = mk('oats-d-empty');
-    const other = mk('oats-d-other'); writeFileSync(join(other, 'note'), 'x');
+    const other = mk('oats-d-other'); writeFileSync(join(other, 'note'), 'x'); age(other, 120);
     const open = mk('oats-d-open', 0o755);
     const notOurs = mk('something-else');
     const removed = await sweepStaleSocketDirs(base, { answers: async () => false });
     assert.deepEqual(removed, [empty]);
     for (const d of [other, open, notOurs]) assert.equal(existsSync(d), true, d);
+  } finally { rmSync(base, { recursive: true, force: true }); }
+});
+
+test('the sweep keeps a directory another Desktop may still be setting up: one modified in the last 60 s', async () => {
+  const base = mkdtempSync(join(tmpdir(), 'oats-t-sweep-'));
+  try {
+    const mk = (name) => { const d = join(base, name); mkdirSync(d); chmodSync(d, 0o700); return d; };
+    // Between another Desktop's mkdtemp and its server's listen: empty, or its socket bound but not yet answering.
+    const fresh = mk('oats-d-fresh');
+    const binding = mk('oats-d-binding');
+    const bound = createNetServer(); await new Promise((ok) => bound.listen(join(binding, 's'), ok));
+    const old = age(mk('oats-d-old'), 61);
+    let removed;
+    try { removed = await sweepStaleSocketDirs(base, { answers: async () => false }); } finally { bound.close(); }
+    assert.deepEqual(removed, [old], 'only the directory older than 60 s');
+    assert.equal(existsSync(fresh), true, 'a fresh empty directory survives');
+    assert.equal(existsSync(binding), true, 'a fresh directory with a socket that does not answer yet survives');
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
 

@@ -78,13 +78,17 @@ function socketAnswers(path) {
   });
 }
 
+/** A directory modified more recently than this may be another Desktop's, between its mkdtemp and its
+ * server's listen (binding the socket modifies the directory): the sweep leaves it. */
+export const SWEEP_MIN_AGE_MS = 60_000;
+
 /**
  * Sweep the socket directories a crashed Desktop left under `base`: only a directory of ours by
- * name, owned by this uid, private, holding nothing but our socket, and that socket answering no
- * one (a live server of another Desktop of this user is left alone). Best effort; resolves the
- * directories removed.
+ * name, owned by this uid, private, unmodified for SWEEP_MIN_AGE_MS, holding nothing but our
+ * socket, and that socket answering no one (a live server of another Desktop of this user is left
+ * alone). Best effort; resolves the directories removed.
  */
-export async function sweepStaleSocketDirs(base, { uid = process.getuid?.(), fs = { readdirSync, lstatSync, rmSync }, answers = socketAnswers } = {}) {
+export async function sweepStaleSocketDirs(base, { uid = process.getuid?.(), fs = { readdirSync, lstatSync, rmSync }, answers = socketAnswers, now = Date.now } = {}) {
   const removed = [];
   let names;
   try { names = fs.readdirSync(base); } catch { return removed; }
@@ -92,7 +96,8 @@ export async function sweepStaleSocketDirs(base, { uid = process.getuid?.(), fs 
     if (!name.startsWith(SOCKET_DIR_PREFIX)) continue;
     const dir = join(base, name);
     try {
-      if (!privateDirectory(fs.lstatSync(dir), uid)) continue;
+      const st = fs.lstatSync(dir);
+      if (!privateDirectory(st, uid) || now() - st.mtimeMs < SWEEP_MIN_AGE_MS) continue;
       const inside = fs.readdirSync(dir);
       if (inside.length > 1 || (inside.length === 1 && inside[0] !== SOCKET_NAME)) continue;
       if (inside.length === 1) {
