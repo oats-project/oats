@@ -8,6 +8,20 @@ then runs `oats host run`
 ([The kernel's periodic work](#the-kernels-periodic-work)). Deployment setup
 and seat admission belong to the operator.
 
+## One team, one trust group
+
+The service runs every agent, sshd and `oats host run` as one user, so the
+container is one trust group ([trust-model.md](trust-model.md)):
+
+- **It is the unit of compromise.** If one agent in it is subverted, treat
+  every agent, seat and credential in it as subverted. Each agent can read
+  every seat under `/state/seats`, the Claude token and sshd's host keys,
+  rewrite the launch configurations in `/state/deploy` and the schedule
+  registry in `/state/home`, and stop sshd or `oats host run`.
+- **It holds one team, never several.** Agents that must not be able to read
+  each other's identities or affect each other's work get separate
+  containers. Nothing in OATS makes sharing one safe.
+
 ## Configuration contract
 
 The same inputs apply to a Compose service or a platform's container spec:
