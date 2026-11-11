@@ -142,6 +142,14 @@ A self-contained package has an `oats.json`:
   Doctor without `--soul` reads every member and locked package capability
   from this machine's cache only. What the cache cannot answer is reported as
   unchecked (`hook-events-unchecked` in its information), never as no warning.
+- **A retire hook must be safe to run when its spawn hook did not finish, and
+  when it has run before.** It runs after a spawn that was killed while the
+  spawn hook ran (below), which may have registered everything, something or
+  nothing, and then gets an empty `OATS_META`: the spawn hook never answered
+  its receipt. It runs again on every retry of an incomplete cleanup. It
+  reads what there is to undo from the home and from the service it
+  registered with, and answers `meta: { retired: false, reason:
+  "nothing-to-delete" }` when there is nothing: that is a complete cleanup.
 - A capability declaring a **required** spawn hook should declare a `retire` hook
   too. Without one, OATS has no way to undo what the spawn hook did and no way to
   know whether it did anything, so a failure quarantines the home rather than
@@ -169,7 +177,17 @@ A self-contained package has an `oats.json`:
   with `git branch <b>: could not verify whether it still exists (…)`. A retry that still cannot
   finish keeps the home again, names what is outstanding, and exits nonzero.
 - The **escape hatch is `oats retire <instance> --force`**, for a home OATS cannot
-  identify at all: no `instance.json` and no **usable** cleanup descriptor. Usable
+  identify at all: no `instance.json` and no **usable** cleanup descriptor, or an
+  `instance.json` that does not say which retire hooks to run and no usable
+  descriptor beside it. Such a record names no repository (`repo`), which the
+  retire hooks are run for, and does not show (`capabilityRuntime`) that no
+  capability has a retire hook: the stub a spawn leaves when it is killed
+  before its record, where no marker was written before its hooks (a spawn by
+  a kernel before this rule, or a marker since removed). Retire refuses it
+  with `E_UNIDENTIFIED_INSTANCE_HOME` before anything is stopped, run or
+  removed: the spawn hooks may have registered an identity that only the
+  retire hooks would release. Clean up by hand what the capabilities
+  registered, then `--force` removes the home, running no hook. Usable
   means it satisfies the versioned cleanup contract the rollback writes, checked
   to the depth the retry consumes it: `version`, a context `repo`, a recognised
   `work` mode (plus a `branch` for `worktree` — an unknown mode would skip the
@@ -187,17 +205,34 @@ A self-contained package has an `oats.json`:
   success, and every Git step it records must be re-run and verified. A retry that resolves no
   capabilities — a hand-edited descriptor, or config drift since the spawn — is an
   incomplete cleanup, not a clean one, and the home stays.
-- **A spawn in progress** (0.49.0). A `work: worktree` spawn that fires
-  [`worktree` hooks](#the-worktree-event) writes the same marker just before
-  the first of them, so a parent killed while they run (SIGKILL included)
-  leaves a home `oats retire` can clean up. Its `outstanding` holds the retire
-  hooks of the capabilities whose spawn hooks ran, plus the Git steps
-  `worktree` and `branch`. It adds an optional top-level `inProgress: { pid,
-  processStart, startedAt, branch, baseOid, hookPgid?, hookStart? }`: the
-  spawning process, identified by its pid and start time, the branch the spawn
-  created and the commit it created it at, and the process group of the hook
-  running. The spawn removes the marker once its final `instance.json` and
-  baseline are written; a failure's compensation replaces it in one rename.
+- **A spawn in progress** (0.49.0). A spawn writes the same marker before
+  the first hook whose effects a retire would have to undo, so a parent
+  killed from there on (SIGKILL, a container stop, a dropped connection)
+  leaves a home `oats retire` can clean up:
+  - before its first **spawn hook**, in every work mode, when a capability
+    with a spawn hook also has a retire hook. Until the spawn writes its
+    final `instance.json`, the home's record is a stub that names neither the
+    repository nor the capabilities, and the marker is the only record of
+    which retire hooks to run. Its `outstanding.hooks` holds the retire hooks
+    of every capability with a spawn hook; once the spawn hooks have
+    answered, the marker is written again with their receipt
+    (`cleanup.capabilityMeta`, a retire hook's `OATS_META`). Its `cleanup`
+    also holds the record's `workspace`, `teams` and `defaultTeam`, so the
+    retire hooks get the team and workspace environment a retire of a whole
+    home gives them;
+  - before its first [`worktree` hook](#the-worktree-event), for a `work:
+    worktree` spawn that fires them. Its `outstanding` holds the retire
+    hooks of the capabilities whose spawn hooks ran, plus the Git steps
+    `worktree` and `branch` (a `work: worktree` marker written before the
+    spawn hooks holds those Git steps too).
+
+  It adds an optional top-level `inProgress: { pid,
+  processStart, startedAt, branch?, baseOid?, hookPgid?, hookStart? }`: the
+  spawning process, identified by its pid and start time, the branch of the
+  work and, for a `work: worktree` spawn, the commit the spawn created it at,
+  and the process group of the worktree hook running. The spawn removes the marker
+  once its final `instance.json` is written, before it takes the final
+  baseline; a failure's compensation replaces it in one rename.
   Such a marker satisfies every rule above, so a reader that does not know
   `inProgress` reads it as a quarantine. While the spawning process is
   verifiably alive (its pid runs with the recorded start time):
@@ -867,6 +902,13 @@ and must not be encoded into this persisted spawn command.
 Spawn order is by capability name; retirement reverses successful
 spawn order. Hooks run from the instance's own copy
 (`<home>/.oats/modules/<cap>/`).
+
+A retire hook must be safe to run again, and safe to run beside itself. A
+retire whose process is killed while one of its retire hooks runs leaves that
+hook running. A later retire takes the home's claim over, does not run again
+the hooks the claim records as finished
+([one retire at a time](desktop-cli-api.md#retire-hooks-in-claim)), and runs
+the unfinished one again, possibly while the first run of it is still going.
 
 ### A declared name is the provider's
 

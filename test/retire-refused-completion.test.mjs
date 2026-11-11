@@ -54,6 +54,7 @@ import { SCHEDULING_WAIT_MS, deferredRetireResultPath, processesInHome, retireIn
 import { RETIRE_REFUSED_REASON_MAX } from "../lib/instance-events.mjs";
 import { startGated } from "./helpers/fs-gate-preload.mjs";
 import { hostProcessState, killAndReap, waitUntil } from "./helpers/host-fixture.mjs";
+import { bootId } from "../lib/session-seen.mjs";
 import { processStartToken } from "../lib/worktree-hooks.mjs";
 import { v2Deployment } from "./helpers/v2-deployment.mjs";
 
@@ -342,11 +343,11 @@ test("a scheduled self-retire whose removal of the home fails part way, with no 
   if (ROOT) { t.skip(SKIP_FOR_ROOT); return; }
   const f = deployment(t);
   const i = await f.spawn("partial");
-  // A home whose record names no repository, as an earlier kernel spawned it: its retire starts no
-  // hook, so what keeps the marker here is the removal alone.
+  // A home whose record names no repository and says that no capability has a retire hook: its
+  // retire starts no hook, so what keeps the marker here is the removal alone.
   const { repo, ...record } = readJson(join(i.home, "instance.json"));
   assert.equal(typeof repo, "string", "fixture premise: the spawn recorded the repository");
-  writeFileSync(join(i.home, "instance.json"), JSON.stringify(record, null, 2) + "\n");
+  writeFileSync(join(i.home, "instance.json"), JSON.stringify({ ...record, capabilityRuntime: [] }, null, 2) + "\n");
   // The inspections and the recovery copy read it; the removal cannot empty it.
   mkdirSync(join(i.home, "notes", "ro"), { recursive: true });
   writeFileSync(join(i.home, "notes", "ro", "f"), "in a read-only directory\n");
@@ -619,7 +620,7 @@ for (const [what, gate, unwritable] of [
       assert.equal(readJson(claimOf(i)).pid, run.child.pid, "fixture premise: the scheduling holds the home's claim");
       // The marker's format is what it was: who scheduled the completion is told to the completion
       // alone, in its environment.
-      if (existsSync(i.marker)) assert.deepEqual(Object.keys(readJson(i.marker)).sort(), ["agent", "completionPid", "completionStart", "delaySec", "instance", "options", "requestedAt", "requestedByPid", "resultPath", "root"]);
+      if (existsSync(i.marker)) assert.deepEqual(Object.keys(readJson(i.marker)).sort(), ["agent", "completionBoot", "completionPid", "completionStart", "delaySec", "instance", "options", "requestedAt", "requestedByPid", "resultPath", "root"]);
       else assert.deepEqual(gate(i), { fn: "writeFileSync", path: i.marker }, "fixture premise: only a scheduling held before its marker's write has none");
       // What a person sees while a completion waits: a live instance until the marker is written.
       assert.equal(Object.hasOwn(f.status(i).row, "retirePending"), existsSync(i.marker), "oats status reads the instance as retiring from the marker's write on, and as live before");
@@ -871,4 +872,87 @@ test("a scheduling that fails before it wrote its marker leaves the marker that 
     });
     assert.equal(readFileSync(i.marker, "utf8"), earlier, "the marker this scheduling did not write is left, as it was");
   } finally { chmodSync(i.marker, 0o644); }
+});
+
+// A scheduled self-retire whose completion was killed (a SIGKILL, a container stop) before it ran:
+// its marker stays, and names a completion that is gone. The home is owed the retire, and nothing
+// carries it out: a retire takes it over and completes it, and a start is refused, with the retire
+// to run in its message. A completion is gone when its process ended, when its pid runs with
+// another start, and when the marker was written in another boot.
+/** How `oats <argv> --json` ends → `{ status: 0 }`, or `{ status, code, message }` of its error.
+ *  `env`: what the command's environment adds to the fixture's. */
+const answerOf = (f, argv, env = {}) => {
+  const r = f.fx.cli([...argv, "--json"], { env });
+  return r.status === 0 ? { status: 0 } : { status: r.status, code: r.json().error.code, message: r.json().error.message };
+};
+/** What a start answers for a home whose self-retire was interrupted. */
+const owedSaid = (i) => `${i.name} is owed a retire (its retire was interrupted): finish it with \`oats retire ${i.name} --home ${i.home}\`; nothing was started`;
+
+test("a scheduled self-retire whose completion was killed: the row reads interrupted, a start is refused and names the retire to run, and a retire completes it with its hook run once", async (t) => {
+  const f = deployment(t);
+  const i = await f.spawn("killed");
+  const { completionPid } = await f.scheduling(i);
+  f.track(completionPid);
+  await killAndReap(completionPid);
+  const marker = readJson(i.marker);
+  assert.equal(marker.completionPid, completionPid, "fixture premise: the marker of the killed completion is left, and names it");
+  // Its boot too. Null where it cannot be read, as under this fixture on macOS (its kernel's system tools have no sysctl).
+  assert.ok(Object.hasOwn(marker, "completionBoot") && [null, bootId()].includes(marker.completionBoot), `the marker names the boot its completion runs in: ${JSON.stringify(marker.completionBoot)}`);
+  assert.equal(f.status(i).row.retire.state, "interrupted");
+
+  assert.deepEqual(answerOf(f, ["session", "start", "--home", i.home]), { status: 1, code: "E_INSTANCE_RETIRING", message: owedSaid(i) }, "a home owed a retire is never started");
+  assert.deepEqual([existsSync(i.marker), f.hookRuns()], [true, 0], "the refused start left the marker, and the completion was killed before it ran a hook");
+
+  const retire = answerOf(f, ["retire", "killed"]);
+  assert.equal(retire.status, 0, `${retire.code} ${retire.message}`);
+  assert.equal(existsSync(i.home), false, "the retire the marker promised is completed: the home is gone");
+  assert.equal(f.hookRuns(), 1, "the retire hook ran once in all");
+  assert.deepEqual(besideTheHomes(dirname(i.home)), [], "no marker and no outcome is left");
+});
+
+test("a scheduled self-retire whose completion lives: a start and a retire are refused, and nothing is retired", async (t) => {
+  const f = deployment(t);
+  const i = await f.spawn("carried");
+  const { completionPid } = await f.scheduling(i);
+  f.track(completionPid);
+  assert.equal(f.status(i).row.retire.state, "running");
+  assert.deepEqual(answerOf(f, ["session", "start", "--home", i.home]), { status: 1, code: "E_INSTANCE_RETIRING", message: `carried is being retired (${i.marker} is present); nothing was started` });
+  const retire = answerOf(f, ["retire", "carried"]);
+  assert.deepEqual([retire.status, retire.code], [1, "E_LIFECYCLE_BUSY"], retire.message);
+  assert.ok(retire.message.includes(`pid ${completionPid}`), retire.message);
+  assert.deepEqual([existsSync(i.home), existsSync(i.marker), f.hookRuns(), gone(completionPid)], [true, true, 0, false], "the home, its marker and its completion are as they were");
+});
+
+test("a marker written in another boot names a completion that is gone, whatever its pid reads as now: a start names the retire to run and a retire takes the retire over; in this boot the same marker refuses both", async (t) => {
+  const boot = bootId();
+  if (!boot) { t.skip("this host gives no boot identity: a marker is judged by its process alone"); return; }
+  const f = deployment(t);
+  // The fixture's kernel takes its system tools from a directory of its own, which has no sysctl:
+  // on macOS these commands are given the system's, after it, so that they read the boot.
+  const env = process.platform === "darwin" ? { OATS_TEST_SYSTEM_TOOL_DIRS: `${f.fx.env.OATS_TEST_SYSTEM_TOOL_DIRS}:/usr/sbin` } : {};
+  const i = await f.spawn("rebooted");
+  // The pid and the start the marker names are those of a process that runs: this test's.
+  const named = { ...f.intent(i), completionPid: process.pid, completionStart: processStartToken(process.pid), completionBoot: boot };
+  writeFileSync(i.marker, JSON.stringify(named, null, 2) + "\n");
+  assert.deepEqual(answerOf(f, ["session", "start", "--home", i.home], env), { status: 1, code: "E_INSTANCE_RETIRING", message: `rebooted is being retired (${i.marker} is present); nothing was started` });
+  const here = answerOf(f, ["retire", "rebooted"], env);
+  assert.deepEqual([here.status, here.code], [1, "E_LIFECYCLE_BUSY"], `in the boot the marker names, a completion that runs holds the home: ${here.message}`);
+  assert.ok(here.message.includes(`pid ${process.pid}`), here.message);
+
+  writeFileSync(i.marker, JSON.stringify({ ...named, completionBoot: `${boot}-earlier` }, null, 2) + "\n");
+  assert.deepEqual(answerOf(f, ["session", "start", "--home", i.home], env), { status: 1, code: "E_INSTANCE_RETIRING", message: owedSaid(i) });
+  const retire = answerOf(f, ["retire", "rebooted"], env);
+  assert.equal(retire.status, 0, `${retire.code} ${retire.message}`);
+  assert.deepEqual([existsSync(i.home), f.hookRuns(), besideTheHomes(dirname(i.home))], [false, 1, []]);
+});
+
+test("a marker that names no completion (an earlier OATS wrote it): whether its retire runs cannot be told, so a start is refused as beside a retire that runs, and a retire completes it", async (t) => {
+  const f = deployment(t);
+  const i = await f.spawn("unnamed");
+  writeFileSync(i.marker, JSON.stringify(f.intent(i), null, 2) + "\n");
+  assert.equal(f.status(i).row.retire.state, "unknown");
+  assert.deepEqual(answerOf(f, ["session", "start", "--home", i.home]), { status: 1, code: "E_INSTANCE_RETIRING", message: `unnamed is being retired (${i.marker} is present); nothing was started` });
+  const retire = answerOf(f, ["retire", "unnamed"]);
+  assert.equal(retire.status, 0, `${retire.code} ${retire.message}`);
+  assert.deepEqual([existsSync(i.home), f.hookRuns(), besideTheHomes(dirname(i.home))], [false, 1, []]);
 });

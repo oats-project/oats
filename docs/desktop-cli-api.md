@@ -3676,8 +3676,10 @@ its absence.
   and no `runtimeState`. What the lifecycle commands answer for such a home:
   [below](#unreadable-record).
 - **`spawnInProgress`** (feature `worktree-event`, OATS 0.49.0): `true` only
-  while a spawn that is running its `worktree` hooks is verifiably alive (its
-  pid runs with the recorded start time). Such a home holds the quarantine marker
+  while a spawn that wrote its in-progress marker is verifiably alive (its
+  pid runs with the recorded start time): one running its `worktree` hooks,
+  or one that has reached its spawn hooks and not yet written its record,
+  when a capability with a spawn hook has a retire hook. Such a home holds the quarantine marker
   with an `inProgress` field ([capabilities.md](capabilities.md#manifest)),
   and its row carries `spawnInProgress: true` and **no**
   `rollbackIncomplete`: a live spawn, not a failed one. Once that process is
@@ -3763,7 +3765,7 @@ its absence.
   | the marker, and the result file `.oats-retired-<instance>.json` with `ok: false` | `failed`, with `code` and `message` | `true` | the result's `completedAt`, else the marker's `requestedAt` |
   | the marker, no failed result, its completion process alive | `running` | `true` | the marker's `requestedAt` |
   | the marker, no failed result, the completion's liveness cannot be read, or the marker names no completion process | `unknown` | `true` | the marker's `requestedAt` |
-  | the marker, no failed result, its completion process gone | `interrupted` | `true` | the marker's `requestedAt` |
+  | the marker, no failed result, its completion process gone (it ended, its pid runs with another start, or the marker's `completionBoot` is another boot) | `interrupted` | `true` | the marker's `requestedAt` |
   | a marker that cannot be read as an object | `unknown` | `true` | the marker file's modification time |
   | no marker; the home's claim held by a retire whose holder is alive | `running` | `false` | the claim's `since` |
   | no marker; the same, the holder's liveness cannot be read | `unknown` | `false` | the claim's `since` |
@@ -6368,7 +6370,19 @@ zombie) has died: its claim is taken over without waiting for that reap
 (0.52.0, #870; before, the retire was refused as running until the reap). The
 claim does not end what the killed retire left running: one of its retire
 hooks may still be running when the next retire takes the claim over and
-runs the hooks again (#865). Until
+runs that hook again (#865). <a id="retire-hooks-in-claim"></a>The retire
+that takes over does not run again a retire hook the killed one had
+finished: a retire records each hook that ended in its claim, as
+`retireHooks: [{capability, meta?}]` (the `meta` that hook answered) with
+`retireHooksFor`, the home's `createdAt`, and the next holder skips those
+hooks and judges the cleanup, and writes its `retired` row, with their
+`meta` as if it had run them. A hook that had not ended is run again. Only
+a take-over reads the list: a retire that returns removes its claim, so
+the retry of a quarantined home, and each retry a self-retire's completion
+makes of a cleanup its hooks left incomplete, runs every hook again. A
+claim without the list, or whose list names another incarnation, skips
+nothing, and of a list only the entries that name a capability of this
+home with a retire hook count. Until
 that name is retired again its claim file stays where it is, and it is safe
 to remove once its pid is gone. A retire that ends removes its claim file;
 the `claims/` directory itself stays, empty.
@@ -6437,8 +6451,9 @@ line and says that nothing was done:
   Then the command again.
 
 A scheduled self-retire counts from the moment it is scheduled. Its pending
-marker (`pendingMarker`) records the completion process as `completionPid`
-and `completionStart` (`null` when the start could not be read). While that
+marker (`pendingMarker`) records the completion process as `completionPid`,
+`completionStart` and `completionBoot`, the boot it runs in (each of the two
+`null` when it could not be read). While that
 process lives, every other retire of the instance is refused the same way,
 `--self --keep-dir` included: `a retire of <name> is already scheduled (its
 completion, pid <pid>, requested at <requestedAt>); nothing was done — wait
@@ -6452,7 +6467,10 @@ claim, it is refused the claim and answers `E_LIFECYCLE_BUSY` like any other
 retire, where it answered `alreadyScheduled: true` before 0.51.0. The marker refuses nothing once its completion has
 left its outcome at `resultPath` (it failed) or is gone (it died; a
 completion that is a zombie, not reaped by its parent, has died: 0.52.0,
-#870), nor when
+#870; one whose marker names another boot than this one is gone whatever
+its pid reads as, since a boot ends every process and a pid and a start can
+both come again in the next; a marker that names no boot is judged by its
+process alone), nor when
 it names no completion (a marker written before 0.51.0): `oats retire
 <instance>` then retries the retirement, as before. The completion does not
 start its retire while the retire that scheduled it holds the claim: it
@@ -6521,14 +6539,17 @@ Git reads as the top level of a `work/` whose `core.worktree` names another
 one),
 `E_SESSION_UNKNOWN`, `E_AMBIGUOUS_INSTANCE`,
 `E_UNIDENTIFIED_INSTANCE_HOME` (a home with no `instance.json` and no cleanup
-descriptor, or a rollback marker that cannot drive a retry, until `--force`;
+descriptor, or a rollback marker that cannot drive a retry, or an
+`instance.json` that names no repository and does not show that no capability
+has a retire hook, what a spawn killed before its record leaves
+([capabilities.md](capabilities.md#manifest)), until `--force`;
 a home whose `instance.json` [cannot be read](#unreadable-record), `--plan`
 and `--force` included),
 `E_NO_ROOT`, `E_LIFECYCLE_FAILED`, `E_LIFECYCLE_BUSY` (another retire of the
 home is running or scheduled, or a stop of it is running, `--force`
 included: one retire or stop of a home at a time, above; or, feature
-`worktree-event`: the home is a spawn still running its `worktree` hooks, a
-row with `spawnInProgress: true`, `--force` included; or one whose start time
+`worktree-event`: the home is a spawn still running its spawn or `worktree`
+hooks, a row with `spawnInProgress: true`, `--force` included; or one whose start time
 cannot be read, a `rollbackIncomplete` row, until `--force`; or a hook or git
 group whose leader's start cannot be read, until `--force`; every one is
 answered before any effect and carries [`details.holder`](#busy-holder)). The
