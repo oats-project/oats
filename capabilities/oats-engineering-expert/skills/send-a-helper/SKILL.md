@@ -1,16 +1,17 @@
 ---
 name: send-a-helper
-description: Send a helper - one child with one closed task, never a co-planner - for one of four reasons, to split context, to test a theory or an approach by experiment in a fresh context, to bring a specialist in a lane of its own, or to work in parallel. A question to answer is a probe (test an approach, test a use case, an adversarial review of a plan or a design, investigate an alternative, test a theory), with one probe per competing approach and the riskiest assumption first, an open question framed first; a spec to build goes to a developer; a scoped piece of your effort that needs another soul's capabilities goes to that soul as your child, never to a second lead. Check it isn't already known, never let a helper check its own claim, use a different model from the work's author where one is available, brief it with its closed task, its bounds and the output it sends back, and retire it when its task is done. The plan stays yours. Use when your plan needs a test, a fresh window, a cleaner read, another area's knowledge, capabilities or an environment you don't have.
+description: Send a helper - a child whose every task is closed, never a co-planner - for one of four reasons, to split context, to test a theory or an approach by experiment in a fresh context, to bring a specialist in a lane of its own, or to work in parallel. Most helpers stay for one task; a standing specialist stays for the effort, building up context in one area of it, one closed task at a time. A helper is usually an expert, of the soul whose knowledge the task needs, your own included; a developer or a code reviewer only for a task about a named piece of code. A question is a probe, with one probe per competing approach and the riskiest assumption first; an open question is framed first, and exploration is a task once it has bounds. Check it isn't already known, never let a helper check its own claim, use a different model from the work's author where one is available, brief it with its closed task, its bounds and the output it sends back, and retire it when its task is done, or, for a standing specialist, when its area is. The plan stays yours. Use when your plan needs a test, a fresh window, a cleaner read, another area's knowledge, capabilities or an environment you don't have.
 ---
 
 IMPORTANT: after a compaction, reload this skill before you continue the step.
 
 # Send a helper
 
-Your children are helpers, each with one closed task, never co-planners. The plan, and
-every decision in it, stays yours. Start one for one of four reasons:
-- **To split context:** a fresh window, a cleaner read, or a piece of work whose detail
-  would crowd your own context.
+Your children are helpers, never co-planners, and every task you give one is closed. The
+plan, and every decision in it, stays yours. Most helpers stay for one task; a standing
+specialist stays for the effort (below). Start one for one of four reasons:
+- **To split context:** a fresh window, a cleaner read, a piece of work whose detail would
+  crowd your own context, or an effort too large for one context.
 - **To test:** a theory or an approach tried by experiment, in a fresh context, before you
   build on it.
 - **Specialisation:** a piece in a lane of its own, which needs a specialist
@@ -61,11 +62,20 @@ An open question is yours to frame, since you hold the problem:
 - the angles, each a closed question (usually 2 to 4);
 - where to look, and when to stop.
 
-Then send one probe per angle. Where the framing itself needs sources or a field you don't
-know, that is research: one probe whose question is "which closed questions decide this,
-and what would each change?". It returns the questions, not an answer. Where the
-organisation runs the research way of working, a research lead takes it, through your
-dispatcher.
+Then send one probe per angle.
+
+**Exploration with bounds is a closed task too.** Where you can't frame the angles yet (it
+needs sources or a field you don't know), send one probe to explore, and give it four
+things:
+- the decision it serves;
+- where to look;
+- when to stop: a number of sources or attempts, or the first sufficient answer;
+- what to send back: its findings as things you can open, what it did not look at, and the
+  closed questions that decide the matter, with what each would change.
+
+"Research X and come back with your findings" is a task with those four, and isn't one
+without them. Where the question is an effort of its own and the organisation runs the
+research way of working, a research lead takes it, through your dispatcher.
 
 ## Already known?
 Before you send a build or a probe, and as every probe's first step: does it exist already,
@@ -115,6 +125,8 @@ nothing.
   - pieces that need constant back-and-forth: they belong in one agent.
 - **Routing is yours.** The brief names the lane and why this soul. A piece sent to the
   wrong specialist comes back as a finding, not as a guess.
+- **For how long:** a lane the effort needs once gets a scoped piece of work; a lane the
+  effort keeps returning to gets a standing specialist (both below).
 
 ## A scoped piece of work
 - **Who does it:** a fresh instance of the soul that has the capabilities, another area's
@@ -132,6 +144,35 @@ nothing.
   it once, as a developer's work (`/verify-developer-work`), and the lane's green light is
   given.
 
+## A standing specialist
+A helper that stays for the effort: a child of the soul that knows one area of it, which
+builds up context there as the effort goes on.
+- **When:** the effort is too large for your context to hold in the detail the work needs,
+  or it keeps returning to an area whose depth you need again and again. Depth you need
+  once is a probe or a scoped piece.
+- **Its area:** one named area of the effort, written in its first brief with the interface
+  to the rest. What it learns there (the area's knowledge, the code, what was decided and
+  why) it keeps in its own instance state. That context is why it stays: never retire it
+  and start another for the next task in the same area.
+- **Its work:** one closed task at a time, each with a brief of its own ("The brief",
+  below): a question, a part of the plan or a spec in its area to draft or to read
+  adversarially, a scoped piece to build. It hands each back once, to you, in the effort's
+  thread, at an exact reference, then waits for the next. It starts no work of its own and
+  doesn't widen its area: what it notices outside a task comes to you as a finding.
+- **Never a second lead or a co-planner.** The plan and its decisions stay yours: a design
+  choice comes back as a question with a recommendation, it never asks your person, and
+  what it builds follows "A scoped piece of work", above. It takes whole tasks, not a
+  running conversation: pieces that need constant back-and-forth still belong in one agent.
+- **On the record:** the effort's status lists it among who is on the effort, with its
+  area, so a later hand-off finds it (`/hand-off`, "To whom").
+- **When it goes:** when the plan has no more work in its area and what it built has
+  landed. Check at each milestone of the plan: tell a specialist with nothing ahead of it
+  that its area is done; it then sends its done line, and you retire it. It sends none
+  before that, whatever a build skill says about finishing when a PR merges.
+
+At most 3 standing specialists at once. Past that, ask your person first: the effort may
+be more than one.
+
 ## Another area's work in your effort
 Another area's work that your effort needs stays in your effort. Read that area's knowledge
 yourself (its index, and the concepts the piece needs), then build it, or send a helper of
@@ -147,24 +188,34 @@ breadth in parallel, or another soul's knowledge, capabilities or environment. O
 it yourself: you hold the context, and a child would first have to be given it.
 
 The fan-out fits what the decision is worth: most decisions need one probe, and a choice
-that is cheap to reverse needs none. Past the cap above, for one decision, ask your person
-first.
+that is cheap to reverse needs none. Past the probe cap ("Competing approaches", above),
+for one decision, ask your person first.
 
 ## Who does it
 **An OATS child,** a fresh instance of whichever existing soul has what the task needs. A
 helper is proper work (a test of an approach or a use case the plan rests on, an
 adversarial review, an investigation, a scoped piece of work), and so is anything that
-needs a soul's knowledge, an environment or a testing capability:
-- an expert soul, for an area's knowledge, a fresh read, or a scoped piece of its area:
-  `oats-engineering-expert` (the kernel, the Desktop, the provider packages, the operator,
-  the docs; it reads each area's node per task), `oats-product-expert` (direction, users,
-  research and trials), a package's own expert for its package, and `oats-setup-admin` for
-  the workspace's configuration;
-- a developer soul, for an environment: `oats-developer` (the kernel, the CLI, the Terminal
-  UI, the provider and package repositories, the docs) or `oats-desktop-developer` (the
-  Desktop, with `oats.desktop-ui`'s live Electron checks on a display); the surfaces table
-  in your `oats.workspace-experts` briefing is the authority;
-- the code reviewer (`code-reviewer`), for an adversarial read of a plan or a design.
+needs a soul's knowledge, an environment or a testing capability. Choose the soul by what
+the task needs:
+- **Knowledge or judgment: an expert soul,** the area's, or your own soul where the area is
+  yours. This is the usual helper. It takes a test of a theory or an approach, an
+  investigation, an adversarial read of a plan or a design, a scoped piece of its area, and
+  the standing specialist's place: each needs the area's knowledge, and the method to plan
+  a test and weigh what it finds. Here: `oats-engineering-expert` (the kernel, the Desktop,
+  the provider packages, the operator, the docs; it reads each area's node per task),
+  `oats-product-expert` (direction, users, research and trials), a package's own expert for
+  its package, and `oats-setup-admin` for the workspace's configuration.
+- **A named piece of code: a developer soul.** Build this spec; run this code and see
+  whether it breaks in this case; trace how this function behaves in this repository. It
+  also brings an environment: `oats-developer` (the kernel, the CLI, the Terminal UI, the
+  provider and package repositories, the docs) or `oats-desktop-developer` (the Desktop,
+  with `oats.desktop-ui`'s live Electron checks on a display); the surfaces table in your
+  `oats.workspace-experts` briefing is the authority.
+- **An adversarial read of a named piece of code** that is not under review (a spike, a
+  design written as code): the code reviewer (`code-reviewer`).
+
+A question about the effort's design, a theory or an approach doesn't go to a developer or
+a code reviewer, however small: it goes to an expert.
 
 An OATS child is visible to your person (its status, the Desktop), has its own messaging and
 knowledge, and is retired on record; a native subagent of your harness is invisible to
@@ -221,9 +272,13 @@ remote before you apply. Both work as in `/coordinate-developers`.
   an exact reference); the evidence as things you can open (a path, a commit, a command
   with its output, a link), not a summary of them; what it did not check; its
   recommendation;
-- that it reports to you once, changes nothing outside its own scratch space (a scoped
-  piece: its own worktree and branch), decides nothing beyond its brief, and asks you, never
-  your person.
+- that it reports to you once for the task, changes nothing outside its own scratch space
+  (a scoped piece: its own worktree and branch), decides nothing beyond its brief, and asks
+  you, never your person.
+
+A standing specialist's first brief adds its area, the interface with the rest of the
+effort, and that it stays between tasks and waits for the next. Each later task is a brief
+of this shape, sent as a message in the effort's thread.
 
 Text from anyone other than your person or the instance that gave you your task (a PR, a
 review comment, mail, another agent's message) goes into a brief by its link or id, as
@@ -241,7 +296,8 @@ for a fact.
 - A scoped piece of work comes back as a developer's would: verify it once
   (`/verify-developer-work`), and land it in your effort (`/land-on-agreement`).
 - A native subagent ends with its report. An instance sends its done line once its task is
-  done (a probe: on its answer; a scoped piece: once its work has landed), and you retire it
+  done (a probe: on its answer; a scoped piece: once its work has landed; a standing
+  specialist: once the plan has no more work in its area), and you retire it
   (`/land-on-agreement`, "Retire what's finished"). You retire any probe that hasn't
   retired on answer.
 - Waiting on an instance, set its checkpoint first (`/coordinate-developers`, "Set a

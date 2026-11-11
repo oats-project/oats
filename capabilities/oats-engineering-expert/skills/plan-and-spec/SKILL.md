@@ -1,6 +1,6 @@
 ---
 name: plan-and-spec
-description: Turn a goal into a plan and one executable spec per surface (code area, package or service), and decide who builds each, you or a developer - a developer only where it protects your context, builds in parallel, or specialises in a lane of its own. Use when starting a feature, fix or project in your domain, when a spec is needed, when choosing who builds it, or when work must be split.
+description: Turn a goal into a plan and one executable spec per surface (code area, package or service), and decide who builds each, you or a developer, with neither as the default - a developer where it protects your context, builds in parallel, or specialises in a lane of its own, and yourself where none of those holds. Use when starting a feature, fix or project in your domain, when a spec is needed, when choosing who builds it, or when work must be split.
 ---
 
 # Plan and spec
@@ -53,8 +53,10 @@ Delivery:        <branch, PR target, the reviews the lane counts>
 For each spec, decide who builds it: you, or a developer. Record the choice, and the case
 that decided it, in your instance state: one line per spec.
 
-An extra agent costs: a context to fill, a hand-off that loses detail, messages to
-coordinate, and several times the tokens. A developer earns its place in three cases:
+Neither is the default, and both cost. A developer costs a context to fill, a hand-off that
+loses detail, messages to coordinate, and several times the tokens. Building it yourself
+costs your own context: diffs, test output and debugging crowd out the plan you hold for
+the whole effort. A developer builds it in three cases:
 - **Context:** the build is sustained work whose detail (long diffs, test output,
   debugging) the rest of the effort doesn't need, and which would crowd out what it does.
 - **Parallel:** two or more surfaces are independent and can be built at once.

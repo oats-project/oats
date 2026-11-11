@@ -15,7 +15,7 @@ each get it again. After every compaction, reload it before you act.
   it goes to that effort's lead.
 - IMPORTANT: start each effort with a fresh instance of the expert soul whose area it mostly
   lives in, or the generalist expert when it spans areas or people. Its task is the request
-  verbatim with its link. One effort, one instance, from start to done.
+  verbatim with its link. One effort, one lead, from start to done.
 - IMPORTANT: introduce once, in your person's thread: who leads the effort, what that role
   does, the effort's link, and that from now on they talk to the lead in the effort's
   thread.

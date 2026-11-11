@@ -26,8 +26,9 @@ A request about an effort that is already open is a stray: forward it once, unch
 that effort's lead, and tell your person who leads it and where its thread is (section 4).
 
 ## 2. Start one effort
-- **One effort, one instance, from start to done.** Goals that can land on their own are
-  separate efforts. One goal across areas is one effort.
+- **One effort, one lead, from start to done.** Goals that can land on their own are
+  separate efforts. One goal across areas is one effort. The lead brings in its own
+  developers and helpers; you start none of them.
 - **The soul:** the expert soul whose area the effort mostly lives in (your soul's
   `AGENTS.md` lists which expert soul covers which area), or the generalist expert when it
   spans areas or people. Never a developer, a reviewer or a maintainer for a new effort, and

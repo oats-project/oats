@@ -1,10 +1,10 @@
 {
   "capability": "oats.code-review",
-  "version": "3.0.2",
+  "version": "3.1.0",
   "compatibility": {
     "oats": ">=0.69.7"
   },
-  "description": "The adversarial code reviewer's role and method: review one author's piece of work (a developer's, or a lead's own spec) in its worktree, try to break it, prove each finding, cover security and simplification, keep the noise out, and list in every report what it checked: one fresh round of the author's review loop at one head, then re-reading that round's minor deltas; or, sent by an expert as a probe, give an adversarial read of a plan or a design at its exact version. The forge's review bot can be the reviewer too; the author that built the change answers it. Assigned to the code-reviewer soul. Copied from the engineering template, template-v3.0.2.",
+  "description": "The adversarial code reviewer's role and method: review one author's piece of work (a developer's, or a lead's own spec) in its worktree, try to break it, prove each finding, cover security and simplification, keep the noise out, and list in every report what it checked: one fresh round of the author's review loop at one head, then re-reading that round's minor deltas; or, sent by an expert as a probe, give an adversarial read of a named piece of code that is not under review (a spike, a design written as code) at its exact version. The forge's review bot can be the reviewer too; the author that built the change answers it. Assigned to the code-reviewer soul. Copied from the engineering template, template-v3.1.0.",
   "requires": [],
   "inject": "injects/reviewer.md",
   "skills": [
