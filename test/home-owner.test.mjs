@@ -26,10 +26,17 @@ test("another user is refused with the owner, the user and the fix", () => {
     assert.deepEqual(e.details, { instance: "dev-1", home: "/homes/dev-1", owner: 20001, user: 501 });
     assert.match(e.message, /^Nothing was done: /);
     assert.match(e.message, /\/homes\/dev-1 belongs to uid 20001/);
-    assert.match(e.message, /oats retire of dev-1 runs as uid 501\b/);
-    assert.match(e.message, /Run it as that user: sudo -u '#20001' oats retire /);
+    assert.match(e.message, /this retire of dev-1 runs as uid 501\b/);
+    assert.match(e.message, /Run the same command as that user, with that user's HOME: sudo -H -u '#20001' oats retire …$/);
     return true;
   });
+});
+
+test("the fix names the command as it is typed, for every verb that takes a claim", () => {
+  const typed = { start: "session start", resume: "session start --resume", stop: "instance stop", retire: "retire", upgrade: "instance upgrade" };
+  for (const [verb, command] of Object.entries(typed)) {
+    assert.throws(() => refuseHomeOfAnotherUser(verb, "dev-1", "/homes/dev-1", { euid: 501, stat: ownedBy(20001) }), (e) => e.message.endsWith(`sudo -H -u '#20001' oats ${command} …`), verb);
+  }
 });
 
 test("root is refused like any other user, and told so", () => {

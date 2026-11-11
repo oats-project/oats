@@ -5661,7 +5661,9 @@ lifecycle claim (a start, a resume, a stop, a retire, an upgrade) when the
 user it runs as does not own the home. It is answered before the claim is
 written, root is refused like any other user, and `details` carries
 `instance`, `home`, `owner` and `user` (the two uids). The fix is to run the
-command as the home's owner ([trust model](trust-model.md#the-line), rule 3).
+same command as the home's owner, with that user's `HOME`
+(`sudo -H -u '#<owner>' oats …`): OATS keeps its own state under it
+([trust model](trust-model.md#the-line), rule 3).
 
 The last three are the router's (`--server`): they are answered before the
 command is sent to the host. The list is about the envelope's `error.code`.
