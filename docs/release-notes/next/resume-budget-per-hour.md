@@ -8,7 +8,9 @@
   minutes at most, until the loss is 24 hours old. A home that keeps getting
   lost is still started at most 3 times, now in an hour instead of in a boot,
   and a sweep starts it again when the oldest of those starts is an hour old.
-  Both the count and the delays are kept for one boot.
+  Both the count and the delays are kept for one boot. On upgrade, a home's
+  count of starts for the current boot begins at zero once: the earlier
+  kernel's note holds no start times.
 
   **Contract change for clients of `oats session resume --json`**
   ([the machine sweep](../desktop-cli-api.md#the-machine-sweep-oats-session-resume)):
