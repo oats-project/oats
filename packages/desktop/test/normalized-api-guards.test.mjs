@@ -1,4 +1,4 @@
-// Real API composition callback + real specialized guards, with inert fetch.
+// Real API composition callback + real specialized guards, with an inert backendFetch.
 // The generic guard intentionally matches production's URL-only check, so a
 // same-URL subframe proves that normalized aliases need the specialized guard.
 import test from 'node:test';
@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { withWindowGlobals } from './helpers/main-window-globals.mjs';
-import { apiUrl, apiInit, classifyApiRoute, servedSelectors } from '../api-url.mjs';
+import { apiUrl, apiInit, classifyApiRoute, requestPath, servedSelectors } from '../api-url.mjs';
 import { forgeProxyOptions, trustedForgeFrame, FORGE_EPOCH_HEADER } from '../forge-proxy.mjs';
 import { forgeFailure } from '../renderer/forge-contract.mjs';
 import { lifecycleFailure } from '../../client/lifecycle-contract.mjs';
@@ -17,7 +17,8 @@ import { view as readinessView } from './helpers/readiness-fixture.mjs';
 const source = readFileSync(new URL('../main.mjs', import.meta.url), 'utf8');
 const start = source.indexOf('ipcMain.handle("api",'), end = source.indexOf('// ---- IPC: workstation forge auth', start);
 assert.ok(start >= 0 && end > start);
-const callback = source.slice(start, end), base = 'http://127.0.0.1:4820', renderer = 'file:///fixture/index.html';
+// backendFetch takes a request path; the fixture reads it as a URL on the origin apiUrl resolves against.
+const callback = source.slice(start, end), origin = 'http://oats-backend.invalid', renderer = 'file:///fixture/index.html';
 const routes = [
   ['/api/workspace-readiness', 'readiness'], ['/api/instance-lifecycle', 'lifecycle'],
   ['/api/forge-connections', 'forge'], ['/api/instance-forge', 'forge'], ['/api/forge-roster', 'forge'], ['/api/instance-review-threads', 'forge'],
@@ -34,35 +35,36 @@ function aliases(path) {
 function fixture({ classify = classifyApiRoute, fetch } = {}) {
   let handler;
   const frame = { url: renderer }, sender = { mainFrame: frame, isDestroyed: () => false }, event = { sender, senderFrame: frame }, calls = [];
-  const fakeFetch = async (url, init) => {
-    calls.push({ url, init });
+  const fakeFetch = async (path, init) => {
+    const url = new URL(path, origin);
+    calls.push({ path, url, init });
     if (fetch) return fetch(url, init);
     const body = url.pathname === '/api/workspace-readiness' ? readinessView() : { marker: 'fixture-result', workspaces: [{ id: 'team' }, { id: 'other' }] };
     return { ok: true, status: 200, text: async () => JSON.stringify(body) };
   };
   const context = { ipcMain: { handle: (_channel, fn) => handler = fn }, apiUrl, apiInit, servedSelectors, classifyApiRoute: classify, forgeProxyOptions,
     trustedForgeFrame, FORGE_EPOCH_HEADER, forgeFailure, lifecycleFailure, lifecycleFrameRefusal, DESKTOP_TERMS,
-    proxyReadiness: (event, path, opts, deps) => proxyReadiness(event, path, opts, { ...deps, fetch: fakeFetch }),
+    proxyReadiness: (event, path, opts, deps) => { assert.equal(deps.fetch, fakeFetch, 'the readiness proxy is handed main\'s backendFetch'); return proxyReadiness(event, path, opts, deps); },
     RENDERER_URL: renderer, serverEpoch: 0, forgeEpoch: 'fixture:0', inTransition: false,
     unservedRefusal: () => null, serverHost: { inTransition: () => context.inTransition }, currentForgeEpoch: () => context.forgeEpoch,
-    base: () => base, wsId: 'team', allowedWs: new Set(['team', 'other']), Set,
-    fetch: fakeFetch, AbortSignal: { timeout: ms => ({ timeout: ms }) },
+    wsId: 'team', allowedWs: new Set(['team', 'other']), Set,
+    backendFetch: fakeFetch, requestPath, AbortSignal: { timeout: ms => ({ timeout: ms }) },
     guard: event => { const url = event.senderFrame?.url || ''; if (url !== renderer && !url.startsWith(`${renderer}#`)) throw Error('forbidden generic frame'); },
   };
   runInNewContext(callback, withWindowGlobals(context));
   return { context, event, calls, call: (path, opts = { method: 'POST', body: '{}' }, eventOverride = event) => handler(eventOverride, path, opts) };
 }
 for (const [path, kind] of routes) test(`${kind} ${path}: one classifier uses the exact normalized pathname`, () => {
-  for (const alias of aliases(path)) for (const suffix of ['', '?ws=team#fragment']) assert.equal(classifyApiRoute(alias + suffix, base), kind, alias);
+  for (const alias of aliases(path)) for (const suffix of ['', '?ws=team#fragment']) assert.equal(classifyApiRoute(alias + suffix), kind, alias);
   for (const other of [path + '/', path + '-other', path.replace('/api/', '/api%2f/'), `/elsewhere?next=${path}`, `/elsewhere#${path}`]) {
-    assert.equal(classifyApiRoute(other, base), null, 'no extra decoding or prefix match');
+    assert.equal(classifyApiRoute(other), null, 'no extra decoding or prefix match');
   }
 });
 test('classification is not authority: malformed input is harmless and off-origin aliases still fail apiUrl', () => {
-  for (const bad of [null, undefined, {}, [], 1, 'http://[']) assert.equal(classifyApiRoute(bad, base), null);
+  for (const bad of [null, undefined, {}, [], 1, 'http://[']) assert.equal(classifyApiRoute(bad), null);
   for (const [path, kind] of guarded) for (const input of [`//evil.invalid${path}`, `/${slash}evil.invalid${path}`, `https://evil.invalid${path}`]) {
-    assert.equal(classifyApiRoute(input, base), kind);
-    assert.throws(() => apiUrl(input, base, 'team'));
+    assert.equal(classifyApiRoute(input), kind);
+    assert.throws(() => apiUrl(input, 'team'));
   }
 });
 async function assertDenied(path, classify = classifyApiRoute) {
@@ -87,7 +89,8 @@ for (const [path, kind] of routes) test(`${path}: valid aliases preserve workspa
     const result = await f.call(`${alias}${kind === 'forge' && path.endsWith('connections') ? '' : '?ws=team'}`, { method: 'POST', body,
       headers: { 'X-Oats-Forge-Epoch': 'forged', 'x-oats-forge-epoch': 'forged-again' } });
     assert.equal(result.ok, true); assert.equal(f.calls.length, 1);
-    const { url, init } = f.calls[0]; assert.equal(url.pathname, path); assert.equal(url.origin, base); assert.equal(init.body, body);
+    const { path: sent, url, init } = f.calls[0]; assert.equal(url.pathname, path); assert.equal(sent, requestPath(url), 'backendFetch is handed a path, never a URL');
+    assert.equal(url.origin, origin); assert.equal(init.body, body);
     if (kind === 'lifecycle' || kind === 'readiness' || path === '/api/instance-forge') assert.equal(url.searchParams.get('ws'), 'team');
     if (kind === 'forge') {
       assert.deepEqual(Object.entries(init.headers).filter(([k]) => k.toLowerCase() === FORGE_EPOCH_HEADER), [[FORGE_EPOCH_HEADER, 'fixture:0']]);
@@ -144,7 +147,7 @@ test('duplicate workspace query survives normalization for strict backend refusa
   }
 });
 for (const [path, kind] of guarded) test(`mutation: ${kind} ${path} denial fails when normalization is removed`, async () => {
-  const original = classifyApiRoute.toString(), from = 'new URL(pathname, base).pathname';
+  const original = classifyApiRoute.toString(), from = 'new URL(pathname, ORIGIN).pathname';
   assert.equal(original.split(from).length, 2);
   const mutant = runInNewContext(`(${original.replace(from, "pathname.split(/[?#]/, 1)[0]")})`, { URL });
   await assert.rejects(assertDenied(path, mutant), /specialized main-frame guard must execute BEFORE fetch/);

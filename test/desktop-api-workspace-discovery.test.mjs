@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { apiUrl, apiInit, classifyApiRoute, servedSelectors } from "../packages/desktop/api-url.mjs";
+import { apiUrl, apiInit, classifyApiRoute, requestPath, servedSelectors } from "../packages/desktop/api-url.mjs";
 import * as forge from '../packages/desktop/forge-proxy.mjs';
 import { forgeFailure } from '../packages/desktop/renderer/forge-contract.mjs';
 import { frameWorkspace } from '../packages/desktop/renderer/window-binding.mjs';
@@ -24,8 +24,10 @@ function bridge() {
   let heldResponse = null;
   let inTransition = false, forgeInvalidations = 0, terminalInvalidations = 0;
   const requests = [];
-  const fetch = async (input) => {
-    const url = new URL(input);
+  // Main's backendFetch: it takes the request's path (and search), which main sends over its socket.
+  const backendFetch = async (input) => {
+    assert.ok(typeof input === "string" && input.startsWith("/api/"), `backendFetch takes a path: ${input}`);
+    const url = new URL(input, "http://oats-backend.invalid");
     requests.push(url);
     const ok = !(panelFails && url.pathname === "/api/panel");
     const asked = url.searchParams.get("ws");
@@ -38,15 +40,15 @@ function bridge() {
     if (hold) await hold;
     return { ok, status: ok ? 200 : 503, text: async () => JSON.stringify(body) };
   };
-  const setup = 'const base = () => "http://127.0.0.1:4820"; const wsId = "/"; let allowedWs = new Set(["/"]); let advertisedBefore = new Set(); let serverEpoch = 0;\n'
+  const setup = 'const wsId = "/"; let allowedWs = new Set(["/"]); let advertisedBefore = new Set(); let serverEpoch = 0;\n'
     + 'const unservedRefusal = () => null; // the unserved-deployment refusal is covered by packages/desktop/test/unserved-deployment.test.mjs\n'
     + 'const { forgeProxyOptions, trustedForgeFrame, FORGE_EPOCH_HEADER } = forge; const currentForgeEpoch = () => "fixture:0"; const RENDERER_URL = "file:///fixture/index.html";\n'
     // One window per workspace (#481): these requests come from no bound window (no sender frame), as main's.
     + 'const { frameWorkspace, windowRefusal, scopedRequest, workspaceNotServed } = windowGlobals; const advertisedNow = () => (allowedWs.size ? allowedWs : advertisedBefore); const noteServed = () => {};\n'
     + 'const choosers = new Set(); const BrowserWindow = { fromWebContents: () => null }; // no window here has chosen to have no workspace\n'
     + source.slice(apiStart, apiEnd) + '\nreturn () => {' + invalidation + '};';
-  const invalidate = new Function("fetch", "apiUrl", "apiInit", "classifyApiRoute", "servedSelectors", "ipcMain", "guard", "serverHost", "forge", "forgeFailure", "invalidateForgeReads", "invalidateTerminalPreparations", "windowGlobals", setup)(
-    fetch, apiUrl, apiInit, classifyApiRoute, servedSelectors, { handle: (name, fn) => { assert.equal(name, "api"); handler = fn; } }, () => {},
+  const invalidate = new Function("backendFetch", "apiUrl", "apiInit", "classifyApiRoute", "requestPath", "servedSelectors", "ipcMain", "guard", "serverHost", "forge", "forgeFailure", "invalidateForgeReads", "invalidateTerminalPreparations", "windowGlobals", setup)(
+    backendFetch, apiUrl, apiInit, classifyApiRoute, requestPath, servedSelectors, { handle: (name, fn) => { assert.equal(name, "api"); handler = fn; } }, () => {},
     { inTransition: () => inTransition }, forge, forgeFailure, () => { forgeInvalidations++; }, () => { terminalInvalidations++; },
     { frameWorkspace, windowRefusal, scopedRequest, workspaceNotServed },
   );

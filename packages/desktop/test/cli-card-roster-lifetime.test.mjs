@@ -47,7 +47,8 @@ for (const noSouls of [false, true]) test(`pending Choose survives roster repain
   assert.equal(u.doc.activeElement, button, 'polling must not tear focused recovery controls out of the DOM');
   u.choose.resolve({ path: '/fixture/chosen-oats' }); await tick();
   assert.equal(u.requests.length, 1);
-  assert.deepEqual(u.requests[0].body, { bin: '/fixture/chosen-oats' });
+  // Main wrote the pick (cli:pick); the reprobe that follows names no binary.
+  assert.deepEqual(u.requests[0].body, {});
   u.requests[0].resolve(unavailable); await tick();
   assert.match(card.querySelector('.cli-status').textContent, /Could not verify/);
   assert.match(card.textContent, /fixture-band/);
@@ -74,7 +75,8 @@ for (const tab of ['capabilities', 'sources']) test(`CLI recovery stays visible 
   card.querySelector('.cli-choose').click(); await u.poll();
   u.choose.resolve({ path: '/fixture/chosen-oats' }); await tick();
   assert.equal(u.requests.length, 1);
-  assert.deepEqual(u.requests[0].body, { bin: '/fixture/chosen-oats' });
+  // Main wrote the pick (cli:pick); the reprobe that follows names no binary.
+  assert.deepEqual(u.requests[0].body, {});
   u.requests[0].resolve(unavailable); await tick();
   assert.equal(card.closest('[hidden]'), null);
   assert.match(card.querySelector('.cli-status').textContent, /Could not verify/);

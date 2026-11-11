@@ -13,16 +13,17 @@ import { eventsFailure } from '../../client/instance-events-contract.mjs';
 import { eventsData } from '../renderer/instance-events-data.mjs';
 import { cli, context, target, request, data, envelope, deferred } from './helpers/instance-events-fixture.mjs';
 import { deploymentDoubles } from './helpers/deployment-doubles.mjs';
+import { handlerAuth, authorized } from './helpers/handler-auth.mjs';
 const view = (t = target, value = data()) => ({ instanceEventsViewApi: 1, status: 'available', target: t, data: eventsData(value, t), reason: null });
 function http() {
   const source = readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8');
   const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\nserver.on("error",');
   const c = context(), calls = [];
   const deps = { createServer: fn => fn, eventsFailure, instanceEventsRequest: createInstanceEventsBoundary({ invoke: async (_cli, opts) => { calls.push(opts); return envelope(); } }),
-    ...deploymentDoubles(() => [c.workspace]), ctxs: ['/Users/me/work'], cliState: c.cli, cliProbeGeneration: 1, snapshot: { byWs: new Map([['ws', { instances: c.instances }]]) } };
+    ...deploymentDoubles(() => [c.workspace]), ctxs: ['/Users/me/work'], cliState: c.cli, cliProbeGeneration: 1, snapshot: { byWs: new Map([['ws', { instances: c.instances }]]) }, ...handlerAuth };
   const handler = new Function(...Object.keys(deps), `${source.slice(start, end)}\nreturn server;`)(...Object.values(deps));
   return { c, calls, async request({ url = '/api/instance-events?ws=ws', method = 'POST', body = JSON.stringify(request()), headers = { host: 'localhost:4820', origin: 'http://localhost:4820' } } = {}) {
-    const req = new EventEmitter(); Object.assign(req, { url, method, headers }); let result;
+    const req = new EventEmitter(); Object.assign(req, { url, method, headers: authorized(headers) }); let result;
     const res = { writeHead(status, headers) { result = { status, headers }; }, end(text) { result.body = JSON.parse(text); } };
     const done = handler(req, res); req.emit('data', Buffer.from(body)); req.emit('end'); await done; return result;
   } };
@@ -53,7 +54,7 @@ test('shipped handler refuses old CLI/remote/extra paths/flags/write actions wit
 });
 function proxy(fetch = async () => new Response(JSON.stringify(view()))) {
   const renderer = 'file:///fixture/index.html', frame = { url: renderer }, event = { senderFrame: frame, sender: { mainFrame: frame, isDestroyed: () => false } };
-  const connection = { base: 'http://localhost:4820', wsId: 'ws', allowedWs: new Set(['ws']), epoch: 0, transition: false };
+  const connection = { wsId: 'ws', allowedWs: new Set(['ws']), epoch: 0, transition: false };
   return { event, connection, deps: { rendererURL: renderer, connection: () => connection, fetch }, opts: { method: 'POST', body: request() } };
 }
 test('real main classifier routes every normalized alias through the specialized same-frame guard', async () => {
@@ -61,8 +62,9 @@ test('real main classifier routes every normalized alias through the specialized
   let handler, calls = 0;
   const f = proxy(async () => { calls++; return new Response(JSON.stringify(view())); });
   const deps = { ipcMain: { handle: (_name, fn) => handler = fn }, classifyApiRoute, RENDERER_URL: f.deps.rendererURL,
-    proxyInstanceEvents: (event, path, opts, deps) => proxyInstanceEvents(event, path, opts, { ...deps, fetch: f.deps.fetch }),
-    base: () => f.connection.base, wsId: 'ws', allowedWs: f.connection.allowedWs, serverEpoch: 0, unservedRefusal: () => null, serverHost: { inTransition: () => false },
+    backendFetch: f.deps.fetch,
+    proxyInstanceEvents: (event, path, opts, deps) => { assert.equal(deps.fetch, f.deps.fetch, 'main hands the proxy its backendFetch'); return proxyInstanceEvents(event, path, opts, deps); },
+    wsId: 'ws', allowedWs: f.connection.allowedWs, serverEpoch: 0, unservedRefusal: () => null, serverHost: { inTransition: () => false },
     guard: () => assert.fail('events must never use generic proxy') };
   runInNewContext(source.slice(start, end), withWindowGlobals(deps));
   for (const path of ['/api/instance-events', '/api/./instance-events', '/api/x/../instance-events', '/api/%2e/instance-events', '/api' + String.fromCharCode(92) + 'instance-events', '/a\tpi/instance-events']) {
@@ -72,13 +74,12 @@ test('real main classifier routes every normalized alias through the specialized
   const out = await handler(f.event, '/api/x/../instance-events', f.opts);
   assert.equal(out.body.status, 'available'); assert.equal(calls, 1);
 });
-for (const reject of [false, true]) for (const change of ['frame', 'navigation', 'epoch', 'base', 'workspace', 'transition']) test(`proxy revokes late ${reject ? 'rejection' : 'success'} on ${change}`, async () => {
+for (const reject of [false, true]) for (const change of ['frame', 'navigation', 'epoch', 'workspace', 'transition']) test(`proxy revokes late ${reject ? 'rejection' : 'success'} on ${change}`, async () => {
   const gate = deferred(), f = proxy(() => gate.promise);
   const pending = proxyInstanceEvents(f.event, '/api/instance-events', f.opts, f.deps);
   if (change === 'frame') f.event.sender.mainFrame = { url: f.deps.rendererURL };
   if (change === 'navigation') f.event.senderFrame.url = 'https://evil';
   if (change === 'epoch') f.connection.epoch++;
-  if (change === 'base') f.connection.base = 'http://localhost:4999';
   if (change === 'workspace') f.connection.wsId = 'other';
   if (change === 'transition') f.connection.transition = true;
   if (reject) gate.reject(Error('PRIVATE')); else gate.resolve(new Response(JSON.stringify(view())));
@@ -96,7 +97,7 @@ test('proxy checks ownership after stream consumption, not only response headers
 });
 test('proxy rejects wrong origin/path/method/query/body before fetch and pins known workspace', async () => {
   let calls = 0;
-  const f = proxy(async (url, opts) => { calls++; assert.equal(url.searchParams.get('ws'), 'ws'); assert.equal(opts.method, 'POST'); assert.ok(opts.signal instanceof AbortSignal); return new Response(JSON.stringify(view())); });
+  const f = proxy(async (path, opts) => { calls++; assert.equal(typeof path, 'string'); assert.equal(new URL(path, 'http://oats-backend.invalid').searchParams.get('ws'), 'ws'); assert.equal(opts.method, 'POST'); assert.ok(opts.signal instanceof AbortSignal); return new Response(JSON.stringify(view())); });
   for (const path of ['//evil/api/instance-events', 'http://evil/api/instance-events', '/api/other', '/api/instance-events?ws=ws&ws=ws', '/api/instance-events?since=now']) assert.equal((await proxyInstanceEvents(f.event, path, f.opts, f.deps)).body.reason.code, 'E_BAD_ARGS');
   for (const body of ['x'.repeat(16385), JSON.stringify(request()) + ' '.repeat(16384), '{', 'null', JSON.stringify({ ...request(), since: 'now' })]) assert.equal((await proxyInstanceEvents(f.event, '/api/instance-events', { method: 'POST', body }, f.deps)).body.reason.code, 'E_BAD_ARGS');
   assert.equal((await proxyInstanceEvents(f.event, '/api/instance-events', { method: 'GET' }, f.deps)).body.reason.code, 'E_BAD_ARGS');

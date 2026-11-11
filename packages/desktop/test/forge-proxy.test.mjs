@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { withWindowGlobals } from './helpers/main-window-globals.mjs';
 import { forgeProxyOptions, installForgeAuthHandlers, trustedForgeFrame, FORGE_EPOCH_HEADER } from '../forge-proxy.mjs';
-import { apiUrl, apiInit, classifyApiRoute } from '../api-url.mjs';
+import { apiUrl, apiInit, classifyApiRoute, requestPath } from '../api-url.mjs';
 import { forgeFailure } from '../renderer/forge-contract.mjs';
 import { deferred } from './helpers/forge-fixture.mjs';
 const url = 'file:///app/renderer/index.html';
@@ -16,10 +16,10 @@ test('privileged forge proxy pins workspace and overwrites ALL renderer epoch he
   assert.equal(opts.init.body, body); assert.equal(opts.timeout, 50000);
   assert.deepEqual(Object.entries(opts.init.headers).filter(([key]) => key.toLowerCase() === FORGE_EPOCH_HEADER), [[FORGE_EPOCH_HEADER, 'main:1']]);
   assert.equal(forgeProxyOptions('/api/forge-connections', {}, 'main:1').timeout, 25000);
-  for (const path of ['/api/instance-forge', '/api/instance-forge?ws=foreign']) assert.equal(apiUrl(path, 'http://127.0.0.1:4820', 'allowed', new Set(['allowed'])).searchParams.get('ws'), 'allowed');
-  assert.equal(apiUrl('/api/forge-connections', 'http://127.0.0.1:4820', 'allowed').search, '');
-  assert.equal(apiUrl('/api/instance-future', 'http://127.0.0.1:4820', 'allowed').searchParams.get('ws'), 'allowed');
-  assert.deepEqual(apiUrl('/api/instance-forge?ws=foreign&ws=allowed', 'http://127.0.0.1:4820', 'allowed').searchParams.getAll('ws'), ['foreign', 'allowed']);
+  for (const path of ['/api/instance-forge', '/api/instance-forge?ws=foreign']) assert.equal(apiUrl(path, 'allowed', new Set(['allowed'])).searchParams.get('ws'), 'allowed');
+  assert.equal(apiUrl('/api/forge-connections', 'allowed').search, '');
+  assert.equal(apiUrl('/api/instance-future', 'allowed').searchParams.get('ws'), 'allowed');
+  assert.deepEqual(apiUrl('/api/instance-forge?ws=foreign&ws=allowed', 'allowed').searchParams.getAll('ws'), ['foreign', 'allowed']);
 });
 test('every auth IPC requires exact trusted top-level frame and resolves stable domain refusals', async () => {
   const handlers = new Map(), calls = [], methods = ['connect', 'disconnect', 'key', 'resize', 'close'];
@@ -40,8 +40,9 @@ function realApi(fetch) {
   const start = source.indexOf('ipcMain.handle("api",'), end = source.indexOf('// ---- IPC: workstation forge auth', start);
   const context = { ipcMain: { handle: (_name, fn) => { handler = fn; } }, apiUrl, apiInit, classifyApiRoute, forgeProxyOptions, trustedForgeFrame,
     FORGE_EPOCH_HEADER, forgeFailure, RENDERER_URL: url, serverEpoch: 0, forgeEpoch: 'main:0',
-    currentForgeEpoch: () => context.forgeEpoch, unservedRefusal: () => null, serverHost: { inTransition: () => false }, base: () => 'http://127.0.0.1:4820',
-    wsId: 'team', allowedWs: new Set(['team']), fetch, AbortSignal,
+    currentForgeEpoch: () => context.forgeEpoch, unservedRefusal: () => null, serverHost: { inTransition: () => false },
+    wsId: 'team', allowedWs: new Set(['team']), requestPath, AbortSignal,
+    backendFetch: (path, init) => { assert.equal(path, '/api/forge-connections', 'backendFetch takes a path'); return fetch(path, init); },
     guard: event => { assert.ok(trustedForgeFrame(event, url)); } };
   runInNewContext(source.slice(start, end), withWindowGlobals(context));
   return { handler, context };

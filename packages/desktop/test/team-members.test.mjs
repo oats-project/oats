@@ -106,10 +106,9 @@ test('a view with two local deployments: each member is addressed to its own dep
 });
 
 test('/api/team-members is workspace-scoped at the proxy: an unadvertised ws is replaced, duplicates are kept for the server to refuse', () => {
-  const base = 'http://127.0.0.1:4820';
-  assert.equal(apiUrl('/api/team-members?ws=evil', base, '/w', new Set(['/w'])).searchParams.get('ws'), '/w');
-  assert.equal(apiUrl('/api/team-members', base, '/w', new Set(['/w'])).searchParams.get('ws'), '/w');
-  assert.deepEqual(apiUrl('/api/team-members?ws=/w&ws=/x', base, '/w', new Set(['/w'])).searchParams.getAll('ws'), ['/w', '/x']);
+  assert.equal(apiUrl('/api/team-members?ws=evil', '/w', new Set(['/w'])).searchParams.get('ws'), '/w');
+  assert.equal(apiUrl('/api/team-members', '/w', new Set(['/w'])).searchParams.get('ws'), '/w');
+  assert.deepEqual(apiUrl('/api/team-members?ws=/w&ws=/x', '/w', new Set(['/w'])).searchParams.getAll('ws'), ['/w', '/x']);
 });
 
 test('GET /api/team-members over the shipped handler: Host guard, one ws, the VIEW\'s members (any view), served from the held snapshot', async () => {

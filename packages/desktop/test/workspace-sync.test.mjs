@@ -12,6 +12,7 @@ import { cliWorkspace, workspaceArgv, validWorkspaceRef, WORKSPACE_READ_TIMEOUT,
 import { syncData, capabilitiesData, onboardData } from '../../client/deployment-data.mjs';
 import { createWorkspaceSyncBoundary } from '../server/workspace-sync.mjs';
 import { deploymentDoubles } from './helpers/deployment-doubles.mjs';
+import { handlerAuth, authorized } from './helpers/handler-auth.mjs';
 import { DESKTOP_TERMS } from '../renderer/desktop-terms.mjs';
 import { syncProblem } from '../renderer/workspace-sync-view.mjs';
 
@@ -237,13 +238,13 @@ function httpHarness(workspaceSyncRequest) {
   let refreshes = 0;
   const dependencies = {
     createServer: callback => callback, workspaceSyncRequest, syncFailure, observeMutation: () => { refreshes++; },
-    cliState: cli(), ctxs: [deployment], ...deploymentDoubles(() => [workspace]),
+    cliState: cli(), ctxs: [deployment], ...deploymentDoubles(() => [workspace]), ...handlerAuth,
   };
   const handler = new Function(...Object.keys(dependencies), `${source.slice(errorStart, errorEnd)}\n${source.slice(start, end)}\nreturn server;`)(...Object.values(dependencies));
   return {
     refreshes: () => refreshes,
     async request({ url = `/api/workspace-sync?ws=${encodeURIComponent(deployment)}`, body = '{}', headers = { host: '127.0.0.1:4820', origin: 'http://localhost:4820' } } = {}) {
-      const req = new EventEmitter(); req.url = url; req.method = 'POST'; req.headers = headers;
+      const req = new EventEmitter(); req.url = url; req.method = 'POST'; req.headers = authorized(headers);
       let result;
       const res = { writeHead(status) { result = { status }; }, end(raw) { result.body = JSON.parse(raw); } };
       const completion = handler(req, res);

@@ -12,6 +12,7 @@ import { previewFailure } from '../../client/spawn-preview-contract.mjs';
 import { spawnApplyFailure } from '../../client/spawn-apply-contract.mjs';
 import { context, request, target, data, envelope, view, deferred } from './helpers/spawn-preview-fixture.mjs';
 import { deploymentDoubles } from './helpers/deployment-doubles.mjs';
+import { handlerAuth, authorized } from './helpers/handler-auth.mjs';
 function http() {
   const source = readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8');
   const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\nserver.on("error",');
@@ -19,10 +20,10 @@ function http() {
   const deps = { createServer: fn => fn, previewFailure, spawnAgent: assert.fail,
     spawnApplyFailure, spawnApplyRequest: assert.fail,
     spawnPreview: createSpawnPreview({ invoke: async (cli, opts) => { calls.push(opts); return envelope(data(opts.target)); } }),
-    ...deploymentDoubles(() => [c.workspace]), cliState: c.cli, agentsData: () => ({ agents: c.agents }), snapshot: { byWs: new Map([['northwind', { instances: c.instances }]]) } };
+    ...deploymentDoubles(() => [c.workspace]), cliState: c.cli, agentsData: () => ({ agents: c.agents }), snapshot: { byWs: new Map([['northwind', { instances: c.instances }]]) }, ...handlerAuth };
   const handler = new Function(...Object.keys(deps), `${source.slice(start, end)}\nreturn server;`)(...Object.values(deps));
   return { c, calls, async request({ url = '/api/workspace-spawn-preview?ws=northwind', method = 'POST', body = JSON.stringify(request()), headers = { host: 'localhost:4820', origin: 'http://localhost:4820' } } = {}) {
-    const req = new EventEmitter(); Object.assign(req, { url, method, headers }); let result;
+    const req = new EventEmitter(); Object.assign(req, { url, method, headers: authorized(headers) }); let result;
     const res = { writeHead(status, headers) { result = { status, headers }; }, end(text) { result.body = JSON.parse(text); } };
     const done = handler(req, res); req.emit('data', Buffer.from(body)); req.emit('end'); await done; return result;
   } };
@@ -62,14 +63,15 @@ test('the unguarded spawn route is execution-server only: a local body needs the
 });
 function proxy(fetch) {
   const renderer = 'file:///fixture/index.html', frame = { url: renderer }, event = { senderFrame: frame, sender: { mainFrame: frame, isDestroyed: () => false } };
-  const connection = { base: 'http://localhost:4820', wsId: 'northwind', allowedWs: new Set(['northwind']), epoch: 0, transition: false };
+  const connection = { wsId: 'northwind', allowedWs: new Set(['northwind']), epoch: 0, transition: false };
   return { event, connection, deps: { rendererURL: renderer, connection: () => connection, fetch }, opts: { method: 'POST', body: request() } };
 }
 test('main normalizes every preview alias into the real specialized guard; same-URL subframes execute zero fetches', async () => {
   const source = readFileSync(new URL('../main.mjs', import.meta.url), 'utf8'), start = source.indexOf('ipcMain.handle("api",'), end = source.indexOf('// ---- IPC: workstation forge auth', start);
   let handler, calls = 0; const f = proxy(async () => { calls++; return { ok: true, status: 200, text: async () => JSON.stringify(view()) }; });
   const deps = { ipcMain: { handle: (_n, fn) => handler = fn }, classifyApiRoute, RENDERER_URL: f.deps.rendererURL,
-    proxySpawnPreview: (e, path, opts, d) => proxySpawnPreview(e, path, opts, { ...d, fetch: f.deps.fetch }), base: () => f.connection.base,
+    backendFetch: f.deps.fetch,
+    proxySpawnPreview: (e, path, opts, d) => { assert.equal(d.fetch, f.deps.fetch, 'main hands the proxy backendFetch'); return proxySpawnPreview(e, path, opts, d); },
     wsId: 'northwind', allowedWs: f.connection.allowedWs, serverEpoch: 0, unservedRefusal: () => null, serverHost: { inTransition: () => false },
     forgeFailure: () => ({}), lifecycleFailure: () => ({}), guard: () => assert.fail('preview must use specialized frame guard') };
   runInNewContext(source.slice(start, end), withWindowGlobals(deps));

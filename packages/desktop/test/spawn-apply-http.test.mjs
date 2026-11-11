@@ -11,6 +11,7 @@ import { spawnApplyFailure, spawnApplyView } from '../../client/spawn-apply-cont
 import { selector, target, deferred } from './helpers/spawn-preview-fixture.mjs';
 import { applyContext, applyPreview, creation, envelope } from './helpers/spawn-apply-fixture.mjs';
 import { deploymentDoubles } from './helpers/deployment-doubles.mjs';
+import { handlerAuth, authorized } from './helpers/handler-auth.mjs';
 const ref = 'a'.repeat(64);
 const prepared = () => ({ spawnApplyViewApi: 1, status: 'prepared', target, spawnRef: ref, preview: applyPreview(target), wakeRequested: false, receipt: null, reason: null });
 const draft = () => ({ action: 'prepare', selector, choices: {}, task: 'PRIVATE task' });
@@ -29,10 +30,10 @@ function http({ invoke, timer, awaitSpawned, ctxs = ['northwind'] } = {}) {
     observeMutation: ws => order.push(`observe:${ws}`),
     spawnAgent: async body => { serverSpawns.push(body); return { instance: 'dev-1', home: '/fixture/dev-1', agent: 'dev', launched: true }; },
     spawnErrorPayload: () => assert.fail('unexpected execution-server error'), ...deploymentDoubles(() => [c.workspace]), cliState: c.cli,
-    agentsData: () => ({ agents: c.agents }), snapshot: { byWs: new Map([['northwind', { instances: c.instances }]]) } };
+    agentsData: () => ({ agents: c.agents }), snapshot: { byWs: new Map([['northwind', { instances: c.instances }]]) }, ...handlerAuth };
   const handler = new Function(...Object.keys(deps), `${source.slice(start, end)}\nreturn server;`)(...Object.values(deps));
   return { c, reads, calls, serverSpawns, order, async request({ url = '/api/spawn?ws=northwind', method = 'POST', body = draft(), headers = { host: 'localhost:4820', origin: 'http://localhost:4820' } } = {}) {
-    const req = new EventEmitter(); Object.assign(req, { url, method, headers }); let result;
+    const req = new EventEmitter(); Object.assign(req, { url, method, headers: authorized(headers) }); let result;
     const res = { writeHead(status, headers) { result = { status, headers }; }, end(text) { result.body = JSON.parse(text); } };
     const done = handler(req, res); req.emit('data', Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))); req.emit('end'); await done; return result;
   } };
@@ -70,7 +71,7 @@ test('every local raw request requires the plan, whatever the CLI; only a real e
 });
 function proxy(fetch) {
   const renderer = 'file:///fixture/index.html', frame = { url: renderer }, event = { senderFrame: frame, sender: { mainFrame: frame, isDestroyed: () => false } };
-  const connection = { base: 'http://localhost:4820', wsId: 'northwind', allowedWs: new Set(['northwind']), epoch: 0, transition: false };
+  const connection = { wsId: 'northwind', allowedWs: new Set(['northwind']), epoch: 0, transition: false };
   return { event, connection, deps: { rendererURL: renderer, connection: () => connection, fetch }, opts: { method: 'POST', body: draft() } };
 }
 const aliases = ['/api/spawn', '/api/./spawn', '/api/x/../spawn', '/api/%2e/spawn', '/api' + String.fromCharCode(92) + 'spawn', '/a\tpi/spawn'];
@@ -79,31 +80,31 @@ test('main composition normalizes all spawn aliases to specialized guard, includ
   let handler, calls = 0;
   const f = proxy(async () => { calls++; return { ok: true, status: 200, text: async () => JSON.stringify(prepared()) }; });
   const deps = { ipcMain: { handle: (_n, fn) => handler = fn }, classifyApiRoute, RENDERER_URL: f.deps.rendererURL,
-    proxySpawnApply: (e, path, opts, d) => proxySpawnApply(e, path, opts, { ...d, fetch: f.deps.fetch }), base: () => f.connection.base,
+    backendFetch: f.deps.fetch,
+    proxySpawnApply: (e, path, opts, d) => { assert.equal(d.fetch, f.deps.fetch, 'main hands the proxy backendFetch'); return proxySpawnApply(e, path, opts, d); },
     wsId: 'northwind', allowedWs: f.connection.allowedWs, serverEpoch: 0, unservedRefusal: () => null, serverHost: { inTransition: () => false },
     forgeFailure: () => ({}), lifecycleFailure: () => ({}), guard: () => assert.fail('spawn must use specialized guard') };
   runInNewContext(source.slice(start, end), withWindowGlobals(deps));
   for (const pathname of aliases) {
-    assert.equal(classifyApiRoute(pathname, f.connection.base), 'spawn-apply');
+    assert.equal(classifyApiRoute(pathname), 'spawn-apply');
     for (const body of [draft(), { agent: 'dev', agentsRoot: '/team/agents' }]) assert.equal((await handler({ ...f.event, senderFrame: { url: f.deps.rendererURL } }, pathname, { method: 'POST', body })).body.reason.code, 'E_FORBIDDEN_FRAME');
   }
   assert.equal(calls, 0); assert.equal((await handler(f.event, '/api/./spawn', f.opts)).body.status, 'prepared'); assert.equal(calls, 1);
 });
-for (const action of ['prepare', 'apply', 'result', 'server']) for (const reject of [false, true]) for (const change of ['frame', 'navigation', 'epoch', 'base']) test(`${action} guards late ${reject ? 'rejection' : 'success'} after ${change}`, async () => {
+for (const action of ['prepare', 'apply', 'result', 'server']) for (const reject of [false, true]) for (const change of ['frame', 'navigation', 'epoch']) test(`${action} guards late ${reject ? 'rejection' : 'success'} after ${change}`, async () => {
   const d = deferred(), f = proxy(() => d.promise);
   const body = action === 'prepare' ? draft() : action === 'server' ? { agent: 'dev', agentsRoot: '/team/agents' } : { action, spawnRef: ref };
   const pending = proxySpawnApply(f.event, '/api/spawn', { method: 'POST', body }, f.deps);
   if (change === 'frame') f.event.sender.mainFrame = { url: f.deps.rendererURL };
   if (change === 'navigation') f.event.senderFrame.url = 'https://evil';
   if (change === 'epoch') f.connection.epoch++;
-  if (change === 'base') f.connection.base = 'http://localhost:4830';
   if (reject) d.reject(Error('PRIVATE')); else d.resolve({ ok: true, status: 200, text: async () => JSON.stringify(prepared()) });
   const r = await pending, mutation = action === 'apply' || action === 'server';
   assert.equal(r.body.status, mutation ? 'unknown' : 'unavailable'); assert.equal(r.body.reason.code, mutation ? 'E_OUTCOME_UNKNOWN' : ['frame', 'navigation'].includes(change) ? 'E_FORBIDDEN_FRAME' : 'E_PLAN_CHANGED');
   assert.doesNotMatch(JSON.stringify(r), /PRIVATE/);
 });
 test('workspace duplicates survive pinning and are refused before fetch; output targets/refs are bound', async () => {
-  assert.deepEqual(apiUrl('/api/spawn?ws=northwind&ws=other', 'http://localhost:4820', 'northwind').searchParams.getAll('ws'), ['northwind', 'other']);
+  assert.deepEqual(apiUrl('/api/spawn?ws=northwind&ws=other', 'northwind').searchParams.getAll('ws'), ['northwind', 'other']);
   const f = proxy(assert.fail);
   for (const path of ['/api/spawn?ws=northwind&ws=other', '/api/spawn?ws=northwind&extra=1', '//evil/api/spawn']) assert.equal((await proxySpawnApply(f.event, path, f.opts, f.deps)).ok, false);
   for (const alter of [p => p.target.workspace = 'other', p => p.target.selector.soul = 'other', p => p.preview.decision.effective.model = 'other']) {
