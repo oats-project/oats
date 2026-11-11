@@ -3,7 +3,7 @@
 // (lib/remote.mjs) and this package's capture and stream locks (lib/lock-holder.mjs).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { identityHolderState, namesIdentity, processStartToken, thisBoot } from "../lib/process-identity.mjs";
+import { identityHolderState, namesIdentity, processStartToken, thisBoot, validPid } from "../lib/process-identity.mjs";
 
 const BOOT = "boot-a";
 const never = (what) => () => assert.fail(`${what} was consulted`);
@@ -40,6 +40,35 @@ test("a record that names its identity has its process's state: alive, gone (a r
 
 test("a record that names neither boot nor start is judged by its pid alone: one that exists (another user's too) is alive, one that is gone is gone, one that cannot be read is unknown", () => {
   for (const [pid, expected] of [["exists", "alive"], ["gone", "gone"], ["unknown", "unknown"]]) assert.equal(state({ pid: 7 }, { pid }), expected, pid);
+});
+
+const NO_PROCESS_IDS = [0, -5, 1.5, NaN, Infinity, 2147483648, "7", null, undefined];
+
+test("a record whose pid is no process ID is unknown, and nothing is read: with no identity (zero, a negative number, anything that is no pid)", () => {
+  for (const pid of NO_PROCESS_IDS) assert.equal(state({ pid }), "unknown", String(pid));
+  assert.equal(state({}), "unknown", "no pid at all");
+  assert.equal(state(undefined), "unknown", "no record");
+});
+
+test("a record whose pid is no process ID is unknown, and nothing is read: with an identity in this boot", () => {
+  for (const pid of NO_PROCESS_IDS) assert.equal(state({ pid, bootId: BOOT, processStart: "proc:1" }), "unknown", String(pid));
+});
+
+test("a record whose pid is no process ID is unknown, and nothing is read: with an identity of another boot", () => {
+  for (const pid of NO_PROCESS_IDS) assert.equal(state({ pid, bootId: "boot-b", processStart: "proc:1" }), "unknown", String(pid));
+});
+
+test("a pid whose existence cannot be read (kill fails with neither ESRCH nor EPERM) is unknown, with an identity or without", (t) => {
+  const kill = process.kill;
+  process.kill = () => { throw Object.assign(new Error("probe"), { code: "EIO" }); };
+  t.after(() => { process.kill = kill; });
+  assert.equal(identityHolderState({ pid: 999999999 }), "unknown", "by its pid alone");
+  assert.equal(identityHolderState({ pid: 999999999, bootId: thisBoot(), processStart: "proc:1" }), "unknown", "with an identity in this boot");
+});
+
+test("validPid: a positive integer a process can have", () => {
+  for (const pid of [1, 424242, 2147483647]) assert.equal(validPid(pid), true, String(pid));
+  for (const pid of NO_PROCESS_IDS) assert.equal(validPid(pid), false, String(pid));
 });
 
 test("without seams it reads this boot and the real processes", () => {
