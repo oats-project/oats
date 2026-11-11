@@ -8,20 +8,20 @@ the copied engineering capabilities beside it.
 "Who builds it"), launch the developer that owns the surface; for work across surfaces,
 one developer per surface. Every engineering effort,
 in one surface or across several, is led by `oats-engineering-expert`, a fresh instance per
-effort: it writes the spec and plan, reads each surface's knowledge node for the tasks that
-touch it, and owns the integration. A brief from `oats-product-expert` reaches it at an exact
+effort: it writes the spec and plan, reads each surface's knowledge node or subject for the tasks
+that touch it, and owns the integration. A brief from `oats-product-expert` reaches it at an exact
 version: the brief is the what and the why, the technical plan is the engineering expert's.
 
-| Surface | Paths | Developer soul | Expert | Knowledge node it reads |
+| Surface | Paths | Developer soul | Expert | Knowledge it reads |
 |---|---|---|---|---|
-| Kernel & CLI | `lib/`, `bin/`, `docs/*.schema.json` | `oats-developer` | `oats-engineering-expert` | `oats/oats-kernel-expert` |
-| Desktop | `packages/desktop/` (incl. renderer views, styles, copy) | `oats-desktop-developer` | `oats-engineering-expert` | `oats/oats-desktop-expert` |
-| Provider packages | `oats-aweb`, `oats-okf`, and the other package repos | `oats-developer` | `oats-engineering-expert` (and the package's own expert) | `oats/integrations-expert` |
-| Terminal UI (provisional) | `packages/tui/` | `oats-developer` | `oats-engineering-expert` | `oats/oats-expert` (its own node) |
-| Docs & skills | `docs/`, `oats-package/`, `skills/` | the developer of the surface they document | `oats-engineering-expert` | the surface's node |
+| Kernel & CLI | `lib/`, `bin/`, `docs/*.schema.json` | `oats-developer` | `oats-engineering-expert` | `oats/oats-kernel-expert` (subject `system/oats-kernel`) |
+| Desktop | `packages/desktop/` (incl. renderer views, styles, copy) | `oats-desktop-developer` | `oats-engineering-expert` | `oats/oats-desktop-expert` (subject `system/oats-desktop`) |
+| Provider packages | `oats-aweb`, `oats-okf`, and the other package repos | `oats-developer` | `oats-engineering-expert` (and the package's own expert) | `oats/integrations-expert` (subject `workstream/provider-integration`) |
+| Terminal UI (provisional) | `packages/tui/` | `oats-developer` | `oats-engineering-expert` | `oats/oats-expert` (subject `workstream/coordination`) |
+| Docs & skills | `docs/`, `oats-package/`, `skills/` | the developer of the surface they document | `oats-engineering-expert` | the surface's node or subject |
 
 Work on operating a deployment (onboarding, rebuilds, multi-machine layout, cutovers) is led
-the same way, reading `oats/oats-operator-expert`; its changes land in the surfaces above.
+the same way, reading `oats/oats-operator-expert` (subject `workstream/operations`); its changes land in the surfaces above.
 
 The Terminal UI row is provisional while `oats tui` is a preview: its ownership is settled when it
 leaves preview. The readers it shares with the Desktop (`packages/client/`) belong to the Desktop row.
