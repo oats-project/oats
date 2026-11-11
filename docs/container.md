@@ -148,8 +148,9 @@ authorizedKeys:
 
 `authorizedKeys.kind` accepts `Secret` or `ConfigMap`; the referenced object
 must have an `authorized_keys` key containing the operator's public SSH keys.
-It mounts read-only at `/etc/agent-ssh/authorized_keys`. The login Secret
-mounts read-only at `/etc/agent-login`, with mode 0440; Kubernetes projects
+It mounts read-only at `/etc/agent-ssh/authorized_keys`. Key changes take
+effect after the pod is replaced, because subPath mounts are not refreshed.
+The login Secret mounts read-only at `/etc/agent-login`, with mode 0440; Kubernetes projects
 Secret files through symlinks. Provision its `claude-token` key only through
 the operator's credential route. Never put its contents in Helm values,
 ConfigMaps, environment variables, a rendered manifest or a command line.

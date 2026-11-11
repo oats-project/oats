@@ -245,7 +245,8 @@ if(process.env.O1B_FIXTURE_UID_FAILURE==='1'&&command.startsWith('node -e ')){
  require('node:vm').runInNewContext(program,{require,console,process:remote});
  process.exit(remote.exitCode||7);
 }
-if(!args.includes('-oStrictHostKeyChecking=accept-new'))process.exit(3);
+const strict=fs.existsSync(path.join(__dirname,'stop'))?'yes':'accept-new';
+if(!args.includes('-oStrictHostKeyChecking='+strict))process.exit(3);
 const known=args.find(a=>a.startsWith('-oUserKnownHostsFile='))?.slice('-oUserKnownHostsFile='.length);
 if(!known)process.exit(4);
 const prior=path.join(__dirname,'known-host-path');
@@ -273,7 +274,7 @@ else process.exit(2);
     assert.equal(sshCalls.filter((a) => a.at(-1).startsWith("node -e ")).length, 2, "runtime is checked before and after replacement");
     assert.equal(sshCalls.filter((a) => a.at(-1) === "oats host run --plan --json").length, 2);
     assert.ok(sshCalls.every((a) => a.includes("-oHostKeyAlias=oats-kube-accept")), "one known host key must survive a new forwarded port");
-    assert.ok(sshCalls.every((a) => a.includes("-oStrictHostKeyChecking=accept-new")), "replacement must reject a changed host key");
+    assert.deepEqual(sshCalls.map((a) => a.find((arg) => arg.startsWith("-oStrictHostKeyChecking="))), ["-oStrictHostKeyChecking=accept-new", "-oStrictHostKeyChecking=accept-new", "-oStrictHostKeyChecking=yes", "-oStrictHostKeyChecking=yes"], "replacement requires the already-persisted host key");
     assert.equal(new Set(sshCalls.map((a) => a.find((arg) => arg.startsWith("-oUserKnownHostsFile=")))).size, 1, "one known_hosts file must survive replacement");
     for (const args of sshCalls.filter((a) => a.at(-1).startsWith("node -e "))) {
       assert.match(args.at(-1), /assert\.equal\(fs\.statSync\("\/state\/ssh\/ssh_host_ed25519_key"\)\.mode & 0o777, 0o600[,)]/, "the shipped probe must enforce the persisted host-key mode");
@@ -282,6 +283,7 @@ else process.exit(2);
     assert.ok(calls.every((args) => !args.includes("exec")), "operator route needs no exec permission");
     assert.ok(calls.find((args) => args.includes("logs") && args.includes("--tail=1")));
     assert.ok(calls.find((args) => args.includes("delete") && args.includes("--wait=false")));
+    rmSync(join(dir, "stop"));
     const failed = spawnSync("sh", [script, "--values", join(dir, "values.json"), "--namespace", "proof", "--release", "proof", "--context", "fixture-context", "--pod", pod.metadata.name, "--ssh-key", join(dir, "key")], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, O1B_FIXTURE_UID_FAILURE: "1" }, timeout: 10_000 });
     assert.notEqual(failed.status, 0);
     assert.match(failed.stderr, /runtime probe failed: uid/);

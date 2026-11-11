@@ -140,7 +140,7 @@ async function shutdown(kube, pod, expectedUID) {
 }
 
 function sshProof(port, key, knownHosts, uid, gid, phase = "ssh") {
-  const ssh = ["-F", "/dev/null", "-T", "-oBatchMode=yes", "-oIdentitiesOnly=yes", "-oIdentityAgent=none", "-oStrictHostKeyChecking=accept-new", "-oHostKeyAlias=oats-kube-accept", `-oUserKnownHostsFile=${knownHosts}`, "-oConnectTimeout=10", "-p", port, "-i", key, "agent@127.0.0.1"];
+  const ssh = ["-F", "/dev/null", "-T", "-oBatchMode=yes", "-oIdentitiesOnly=yes", "-oIdentityAgent=none", `-oStrictHostKeyChecking=${phase === "replacement" ? "yes" : "accept-new"}`, "-oHostKeyAlias=oats-kube-accept", `-oUserKnownHostsFile=${knownHosts}`, "-oConnectTimeout=10", "-p", port, "-i", key, "agent@127.0.0.1"];
   report(phase, command("ssh", [...ssh, `node -e ${quote(`(${runtimeProbe.toString()})(${uid},${gid})`)}`], { probe: true }).trim());
   const plan = json(command("ssh", [...ssh, "oats host run --plan --json"]), "host plan");
   assert.equal(plan.ok, true, "host run plan failed");
