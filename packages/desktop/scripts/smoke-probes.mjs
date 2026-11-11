@@ -197,6 +197,12 @@ export function listeningTcpPorts(pid, fs = { readdirSync, readlinkSync, readFil
   return ports;
 }
 
+/** The listening TCP ports of each process other than `allowedPort` (the smoke's remote-debugging port).
+ * A child holds the allowed port too when it inherited main's listener: that is still not a port of its own. */
+export function unexpectedTcpListeners(held, allowedPort) {
+  return Object.fromEntries(Object.entries(held).map(([name, ports]) => [name, ports.filter((p) => p !== allowedPort)]));
+}
+
 /** The pid of `parent`'s child whose command line matches `pattern` (Linux /proc), or null. */
 export function childPidMatching(parent, pattern, fs = { readdirSync, readFileSync }) {
   let names; try { names = fs.readdirSync("/proc"); } catch { return null; }

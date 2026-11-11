@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createReaper } from "../scripts/proc-reaper.mjs";
-import { runBackendProbe, runMainImportsProbe, relativeImportsOf, sharedHomeInventory, packagedNode, NO_CLI_ENV } from "../scripts/smoke-probes.mjs";
+import { runBackendProbe, runMainImportsProbe, relativeImportsOf, sharedHomeInventory, packagedNode, unexpectedTcpListeners, NO_CLI_ENV } from "../scripts/smoke-probes.mjs";
 import { serverSpawnSpec, LIFELINE_FLAG } from "../server-host.mjs";
 
 const SERVER = fileURLToPath(new URL("../server/", import.meta.url));
@@ -84,7 +84,8 @@ test("success: the backend answers, exits when its stdin closes, and the collect
   assert.equal(o.env.HOME, o.home, "a temporary home");
   assert.equal(existsSync(o.home), false, "the temporary home is removed");
   assert.match(r.lines[0], /^backend: .*oats-web\.mjs started through serverSpawnSpec .*\(credential on fd 3, private socket\).* answered GET \/api\/cli through the backend client over the authenticated socket \(HTTP 200\)$/);
-  assert.match(r.lines[1], /^backend: holds no listening TCP socket \(\/proc\/\d+\)$/);
+  // The probe is told the target is Linux; it inspects the listeners only where this host has /proc (a macOS runner has none).
+  assert.match(r.lines[1], existsSync('/proc/self/fd') ? /^backend: holds no listening TCP socket \(\/proc\/\d+\)$/ : /^backend: TCP listeners not inspected on linux \(no \/proc\)$/);
   assert.equal(r.lines[2], "lifeline (#698): closing the backend's stdin ended it (exit 0) and closed its socket");
   assert.match(r.lines[3], /^collector: .*liveness-main\.mjs .* answered \[\] to \[\]$/);
   assert.match(r.lines[4], /^not exercised by this phase: the GUI \(phase 5\), nor the AppImage's launcher and runtime \(APPDIR, its PATH and library-path entries\)/,
@@ -220,6 +221,12 @@ test("dist-smoke runs the phase after the ABI probe and before the launch skip, 
 });
 
 // ── Phase 4b: what main loads, and phase 1's check of the shared home ────────
+
+test("unexpectedTcpListeners: the remote-debugging port is allowed in main and in a child that inherited it; any other port is not", () => {
+  assert.deepEqual(unexpectedTcpListeners({ main: [43889], backend: [43889] }, 43889), { main: [], backend: [] }, "the backend holding main's inherited CDP listener");
+  assert.deepEqual(unexpectedTcpListeners({ main: [43889, 4820], backend: [] }, 43889), { main: [4820], backend: [] });
+  assert.deepEqual(unexpectedTcpListeners({ main: [43889], backend: [4820, 43889] }, 43889), { main: [], backend: [4820] });
+});
 
 test("relativeImportsOf: each relative import of a source, with the names taken from it", () => {
   const source = [

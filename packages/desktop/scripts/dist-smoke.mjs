@@ -48,7 +48,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createLaunchFixtureSource } from "../test/helpers/launch-fixture.mjs";
 import { createReaper } from "./proc-reaper.mjs";
-import { runAbiProbe, runBackendProbe, runMainImportsProbe, sharedHomeInventory, listeningTcpPorts, childPidMatching } from "./smoke-probes.mjs";
+import { runAbiProbe, runBackendProbe, runMainImportsProbe, sharedHomeInventory, listeningTcpPorts, childPidMatching, unexpectedTcpListeners } from "./smoke-probes.mjs";
 import { verifyAppSignature } from "./codesign-verify.mjs";
 import { checkLinuxFloor } from "./linux-floor.mjs";
 import { WATCHDOG_MS, PHASE_BUDGET_MS, boundedTail, readDevToolsPort, awaitClose } from "./launch-probe.mjs";
@@ -460,9 +460,11 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
           if (!backendPid) throw new Error(`the packaged app's backend server process was not found among its children; output tail:\n${await drainTail()}`);
           const held = { main: listeningTcpPorts(child.pid), backend: listeningTcpPorts(backendPid) };
           if (held.main === null || held.backend === null) throw new Error("the listening sockets of the app or its backend could not be read from /proc");
-          const extra = [...held.main.filter((p) => p !== port), ...held.backend];
-          if (extra.length) throw new Error(`the packaged app or its backend listens on TCP port(s) ${extra.join(", ")} besides the remote-debugging port ${port}`);
-          ok(`the app (pid ${child.pid}) listens on no TCP port but the smoke's remote-debugging port ${port}, and its backend (pid ${backendPid}) on none: it is reached over its private socket`);
+          const extra = unexpectedTcpListeners(held, port);
+          if (extra.main.length || extra.backend.length) {
+            throw new Error(`the packaged app or its backend listens on TCP besides the remote-debugging port ${port}: main ${extra.main.join(", ") || "none"}, backend ${extra.backend.join(", ") || "none"}`);
+          }
+          ok(`the app (pid ${child.pid}) listens on no TCP port but the smoke's remote-debugging port ${port}, and its backend (pid ${backendPid}) on none of its own (${held.backend.length ? "it holds only that inherited listener" : "it holds none"}): it is reached over its private socket`);
         }
         if (instance) {
           const expected = `oats-desktop: launch --instance smoke-probe: selecting it in ${deployment}`;
