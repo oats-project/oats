@@ -753,8 +753,9 @@ way.
   failed: the retire refuses with `E_WORK_INSPECTION_FAILED` at its first
   inspection, as for any [status that fails](#retire-status-fails), with
   `--discard-worktree` and `--force` too. A spawn into a worktree of such a
-  repository is refused the same way and rolled back. Remove or rename the
-  driver in the repository's configuration, then retry.
+  repository is refused with the same code before its checkout and rolled
+  back ([a checkout runs no filter driver](#checkout-filter-drivers)). Remove
+  or rename the driver in the repository's configuration, then retry.
 - A driver that the operator's global or system configuration defines is
   the operator's own and runs with the operator's command, in the worktree
   and in the recovery alike. That holds when the repository's configuration
@@ -762,7 +763,10 @@ way.
   `git lfs install`): the repository's values for it are replaced by the
   operator's, so a command the repository gives that name never runs. The
   operator's configuration is the human's; the repository's is the agent's
-  to write.
+  to write. One case runs neither: the repository defines `process` for that
+  name and the operator's configuration does not. Git has no way to unset a
+  variable on its command line, and a `process` set to nothing turns the
+  driver's `clean` and `smudge` off with it, so the file is read unfiltered.
 - The recovery has no local configuration, so it has none of the
   repository's drivers. Its status must still be the worktree's, and for a
   file such a filter applies to it can differ: the worktree reads an
@@ -1864,6 +1868,33 @@ a `--repo` that is not a clone of the soul's repository starts at its `HEAD`.
 The spawn result and `instance.json` record the start point as
 `base: {ref, oid}`.
 
+<a id="checkout-filter-drivers"></a>
+**A checkout runs no filter driver of the repository.** Every Git command
+OATS runs that writes a tree's files (the spawn's `git worktree add` here,
+and the `git worktree add` and `git switch` of
+[`oats worktree add`](#extra-trees)) runs with every filter driver the
+repository's own configuration defines overridden to no command, so a
+`filter.<name>.smudge` or `.process` command that configuration names is
+never run and a file carrying the `filter` attribute is written as its
+committed bytes. The read of the configuration, the override and their
+limits are [a retire's](#retire-filter-drivers).
+
+- A driver that the operator's global or system configuration defines is
+  the operator's own and runs. Git LFS set up with `git lfs install` is one:
+  its files are checked out as before. A driver of that name in the
+  repository's configuration is replaced by the operator's values.
+- A driver only the repository's configuration defines does not run. With
+  Git LFS set up by `git lfs install --local` alone, a tree OATS checks out
+  holds the pointer files, not their content: run `git lfs install` for the
+  operator, or `git lfs pull` in the tree.
+- A driver whose name cannot be passed on Git's command line (it holds `=`
+  or is not UTF-8) cannot be overridden, so Git is not run: the spawn is
+  refused with `E_WORK_INSPECTION_FAILED` and rolled back, and
+  `oats worktree add` with `E_GIT_FAILED`, its tree removed.
+
+The clone's Git hooks (`post-checkout`) and `core.fsmonitor` are not part of
+this: they run in a checkout as they do for the operator's own Git.
+
 After the spawn hooks succeed, the spawn fires the
 [`worktree` event](capabilities.md#the-worktree-event) for `work/`: the
 `worktree` hook of each capability the soul composes runs once, with `work/`
@@ -2061,6 +2092,10 @@ git -C <home>/.work-<p> fetch --refmap= origin <base>
 git -C <home>/.work-<p> switch -c <branch> <the fetched commit>
 ```
 
+- Neither checkout (`worktree add`, `switch`) runs a filter driver the
+  repository's configuration defines: the files are written as their
+  committed bytes ([a checkout runs no filter
+  driver](#checkout-filter-drivers)).
 - The tree starts from the remote's current state, never from a local branch
   of the clone, which may be stale. A fetch that fails is
   `E_REMOTE_UNREADABLE`; a HEAD that is not the fetched commit is
