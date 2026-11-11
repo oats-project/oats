@@ -34,6 +34,9 @@ what the kernel reads and writes.
    `--server` runs `oats` on the home's side
    ([servers.md](servers.md)); the Desktop and the TUI start the local `oats`
    and run no kernel code of their own on what a remote home contains.
+   The kernel holds itself to this: a start, a resume, a stop, a retire or
+   an upgrade of a home that the user running it does not own is refused
+   with `E_HOME_NOT_OWNED` before anything is written, root included.
    One piece of the package does run as root, and it is outside this rule:
    the harness-credential receiver `share/oats-login-receive`
    ([servers.md](servers.md#harness-credentials)). It runs under a forced
