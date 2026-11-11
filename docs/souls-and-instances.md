@@ -1893,15 +1893,14 @@ limits are [a retire's](#retire-filter-drivers).
   `oats worktree add` with `E_GIT_FAILED`, its tree removed.
 
 <a id="no-file-monitor"></a>
-**No file monitor.** Every Git command OATS runs that reads or writes an
-instance's work tree, an extra tree or their index runs with
-`core.fsmonitor=false`, so a file monitor command the repository's
-configuration names is never run: these checkouts and the fetch of
-`oats worktree add` between its two, `oats worktree remove`, a retire and its
-recovery copy, the status a spawn's baseline is taken from, and the reads of
-`oats instance git` and `oats instance diff`. One read outside those trees
-does not carry the setting: the check that `oats-workspace.yaml` is tracked
-in the workspace checkout that holds it (`git ls-files`). The clone's Git hooks (`post-checkout` among them) are not part of
+**No file monitor.** Every Git command OATS runs that reads or writes a work
+tree's files or its index runs with `core.fsmonitor=false`, so a file
+monitor command the repository's configuration names is never run: these
+checkouts and the fetch of `oats worktree add` between its two,
+`oats worktree remove`, a retire and its recovery copy, the status a spawn's
+baseline is taken from, the reads of `oats instance git` and
+`oats instance diff`, and the check `oats package add|remove` makes that
+`oats-workspace.yaml` is tracked in the checkout that holds it. The clone's Git hooks (`post-checkout` among them) are not part of
 this: they run in a checkout as they do for the operator's own Git.
 
 After the spawn hooks succeed, the spawn fires the

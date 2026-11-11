@@ -19,13 +19,15 @@
     `git worktree add` and no longer at the baseline's status, with the
     message `could not make the instance worktree: git worktree add was not
     run in <clone>: …`; `oats worktree add` answers `E_GIT_FAILED`.
-- **A checkout OATS makes and `oats worktree remove` do not run the file
+- **No Git command OATS runs on a work tree's files or index runs the file
   monitor the repository's configuration names.** The same three commands,
-  the fetch of `oats worktree add`, and the reads of a removal (its status,
-  the clean check inside `git worktree remove`, the comparison of an
-  unregistered tree's surviving files) ran the `core.fsmonitor` command of
-  the clone's configuration when they read the index of the tree. They run
-  with `core.fsmonitor=false`, as a retire and `oats instance git` do
+  the fetch of `oats worktree add`, the reads of `oats worktree remove` (its
+  status, the clean check inside `git worktree remove`, the comparison of an
+  unregistered tree's surviving files) and the check `oats package
+  add|remove` makes that `oats-workspace.yaml` is tracked ran the
+  `core.fsmonitor` command of the repository's configuration when they read
+  the index of the tree. They run with `core.fsmonitor=false`, as a retire
+  and `oats instance git` do
   ([no file monitor](../souls-and-instances.md#no-file-monitor)). The clone's Git
   hooks (`post-checkout` among them) still run at these checkouts.
 - **A driver of the operator's that has no `process` command runs where the
