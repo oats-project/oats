@@ -10,7 +10,8 @@ messaging, delivery, readiness, a team or a grant looks wrong.** Never guess
 a flag: run `aw <command> --help`.
 
 Run `aw` and `oats aweb` from your instance home, never from `./work`; ALWAYS
-`--body-file`:
+`--body-file`, with a new private file per message (`/oats-aweb` section 3),
+never a fixed or shared `/tmp` path:
 
 ```bash
 oats aweb roster                                           # who is on the team
