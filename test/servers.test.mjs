@@ -188,7 +188,7 @@ test("oats server + --server: registry, check, remote spawn with a hostile task,
     assert.equal(sp.result.instance, "dev-probe");
     const home = join(repo, "agents", "dev", "instances", "dev-probe");
     assert.equal(existsSync(home), true, "the remote kernel created the home in the registered workspace");
-    assert.equal(readFileSync(join(home, "TASK.md"), "utf8").includes(hostile.trim()), true, "task text intact through ssh quoting");
+    assert.equal(readFileSync(join(home, "TASK.md"), "utf8").includes(hostile.trim()), true, "task text intact through the route");
     assert.equal(existsSync(join(process.cwd(), "NEVER_RUN")), false);
     const snap = JSON.parse(readFileSync(join(env.OATS_HOME_DIR, "remote", "build", "dev-probe.json"), "utf8"));
     assert.equal(snap.target.workspace, repo); assert.equal(snap.home, home); assert.equal(snap.remote.schemaVersion, 1);
@@ -555,6 +555,138 @@ test("routed spawn: a success reply without a home never replaces an existing sa
   }
 });
 
+test("routed spawn: bound to the host's preview and a key of the request; a link that drops under the apply answers E_SSH with the decision and the key, and the same spawn with them answers the one instance", () => {
+  const base = mkdtempSync("/tmp/oats-rsi-"); // short: the control socket path must fit in 104 bytes
+  const prevHomeDir = process.env.OATS_HOME_DIR; process.env.OATS_HOME_DIR = join(base, "oats-home"); mkdirSync(process.env.OATS_HOME_DIR);
+  try {
+    const { bin, tools } = fakeBin(base);
+    const { dep: repo } = remoteDeployment();
+    const env = { ...process.env, PATH: bin, HOME: join(base, "home") };
+    mkdirSync(env.HOME, { recursive: true });
+    for (const k of Object.keys(env)) if (/^(OATS_INSTANCE|PI_AGENT)/.test(k)) delete env[k];
+    const server = { id: "build", sshHost: "h", workspace: repo, oatsPath: CLI, path: tools };
+    // The transport: the fake ssh runs each call on the REAL kernel. The first spawn that is not a
+    // preview runs there to its end, and its answer is lost as ssh loses it when the link drops
+    // (exit 255, nothing on stdout).
+    let drops = 0;
+    const spawns = [];
+    const exec = (file, argv, options) => {
+      const word = String(argv.at(-1));
+      const spawning = word.includes(" spawn ");
+      if (spawning) spawns.push(word);
+      const out = execFileSync(join(bin, "ssh"), argv, { ...options, env });
+      if (spawning && !word.includes("--preview") && drops++ === 0) throw Object.assign(new Error("ssh exited 255"), { status: 255, stdout: "", stderr: "client_loop: send disconnect: Broken pipe\n" });
+      return out;
+    };
+    const homes = () => readdirSync(join(repo, "agents", "dev", "instances")).filter((n) => !n.startsWith("."));
+    const args = ["dev", "--no-launch"];
+    let lost;
+    try { routeCommand("build", "spawn", args, { server, execFileSync: exec }); } catch (e) { lost = e; }
+    assert.equal(lost?.code, "E_SSH", String(lost?.stack));
+    assert.equal(spawns.length, 2, spawns.join("\n"));
+    assert.match(spawns[0], / spawn dev --no-launch --preview --dir \S+ --json$/, "the host's preview first");
+    const { decision, idempotencyKey, fix } = lost.details;
+    assert.match(decision.revision, /^[0-9a-f]{24}$/);
+    assert.match(idempotencyKey, /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
+    assert.ok(spawns[1].includes(` spawn dev --no-launch --expect-decision ${decision.revision} --idempotency-key ${idempotencyKey} --dir `), `the apply is bound to the previewed decision and the key: ${spawns[1]}`);
+    assert.ok(fix.includes(`--expect-decision ${decision.revision} --idempotency-key ${idempotencyKey}`), fix);
+    assert.ok(lost.message.includes(fix), "text mode prints the message alone: it carries the fix");
+    assert.deepEqual(homes(), [decision.instance], "the host created the instance before the link dropped");
+    assert.equal(existsSync(snapshotPath("build", decision.instance)), false, "no route was saved for the lost answer");
+
+    // The same spawn with the decision and the key: forwarded as given, no preview; the host replays.
+    const routed = routeCommand("build", "spawn", [...args, "--expect-decision", decision.revision, "--idempotency-key", idempotencyKey], { server, execFileSync: exec });
+    assert.equal(spawns.length, 3, spawns.join("\n")); assert.equal(spawns[2], spawns[1]);
+    assert.equal(routed.envelope.ok, true, JSON.stringify(routed.envelope));
+    assert.deepEqual(homes(), [decision.instance], "exactly one instance on the host");
+    assert.equal(routed.envelope.result.instance, decision.instance, "the answer names the instance the first attempt created");
+    assert.equal(routed.envelope.result.home, join(repo, "agents", "dev", "instances", decision.instance));
+    assert.equal(routed.envelope.result.replayed, true);
+    assert.equal(JSON.parse(readFileSync(snapshotPath("build", decision.instance), "utf8")).home, routed.envelope.result.home, "its route is saved");
+
+    // A link that holds: the host's keyed answer, relayed as it gave it, and one more instance.
+    const held = routeCommand("build", "spawn", ["dev", "--purpose", "held", "--no-launch"], { server, execFileSync: exec }).envelope;
+    assert.equal(held.ok, true, JSON.stringify(held));
+    assert.equal(held.result.instance, "dev-held"); assert.equal(held.result.replayed, false);
+    assert.match(held.result.decision.revision, /^[0-9a-f]{24}$/);
+    assert.deepEqual(held.result.wake, { requested: false, saved: null, error: null });
+    assert.deepEqual(held.result.warnings, []);
+    assert.deepEqual(homes().sort(), [decision.instance, "dev-held"].sort());
+  } finally {
+    if (prevHomeDir === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = prevHomeDir;
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("routed spawn: a host that does not advertise the keyed spawn gets one spawn as given, and its answer warns that a dropped link cannot be retried safely; --suggest-name previews with it and applies the previewed name", () => {
+  const base = mkdtempSync("/tmp/oats-rsk-");
+  const prevHomeDir = process.env.OATS_HOME_DIR; process.env.OATS_HOME_DIR = join(base, "oats-home"); mkdirSync(process.env.OATS_HOME_DIR);
+  try {
+    const server = { id: "build", sshHost: "h", workspace: "/w", oatsPath: "oats" };
+    const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.24.9", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features });
+    const status = { schemaVersion: 1, ok: true, result: { root: "/w/agents", agents: [{ name: "dev", harness: "pi", instances: [] }] } };
+    const spawned = (instance, more = {}) => ({ schemaVersion: 1, ok: true, result: { instance, agent: "dev", home: `/w/agents/dev/instances/${instance}`, launched: false, warnings: ["the host's own warning"], ...more } });
+    const remote = (features, answers) => {
+      const sent = [];
+      const exec = (bin, argv) => {
+        const word = String(argv.at(-1));
+        if (word.includes("version --json")) return JSON.stringify(probe(features));
+        if (word.includes(" status ")) return JSON.stringify(status);
+        if (word.includes(" spawn ")) { sent.push(word); return JSON.stringify(answers[word.includes("--preview") ? "preview" : "apply"]); }
+        throw new Error(`unexpected remote call: ${word}`);
+      };
+      return { sent, exec };
+    };
+    const KEYED = ["spawn-preview-2", "spawn-apply-2", "spawn-idempotency-2"];
+
+    // Each of the three features is needed: without one, the spawn travels once, as given.
+    for (const missing of KEYED) {
+      const host = remote(KEYED.filter((f) => f !== missing), { apply: spawned(`dev-${missing}`) });
+      const { envelope } = routeCommand("build", "spawn", ["dev", "--no-launch"], { server, execFileSync: host.exec });
+      assert.deepEqual(host.sent, ["oats spawn dev --no-launch --dir /w --json"], missing);
+      assert.equal(envelope.ok, true);
+      assert.equal(envelope.result.warnings.length, 2, JSON.stringify(envelope.result.warnings));
+      assert.equal(envelope.result.warnings[0], "the host's own warning");
+      assert.match(envelope.result.warnings[1], new RegExp(`oats 0\\.24\\.9 at h does not advertise ${missing}: .*link.*cannot be retried safely`), envelope.result.warnings[1]);
+      assert.equal(typeof envelope.result.snapshot, "string", "its route is saved as before");
+    }
+
+    // --suggest-name: the preview carries it; the apply carries the name the preview chose, and the answer how it was chosen.
+    const naming = { source: "suggested", harness: "pi", model: null, ms: 12 };
+    const preview = { schemaVersion: 1, ok: true, result: { spawnPreviewApi: 2, preview: true, agent: "dev", instance: "dev-tidy", home: "/w/agents/dev/instances/dev-tidy", naming, decision: { instance: "dev-tidy", revision: "0123456789abcdef01234567" } } };
+    const host = remote([...KEYED, "spawn-suggest-name", "spawn-apply-suggest-name", "spawn-name", "spawn-task-stdin"], { preview, apply: spawned("dev-tidy", { decision: preview.result.decision, replayed: false }) });
+    const { envelope } = routeCommand("build", "spawn", ["dev", "--suggest-name", "--task", "tidy up", "--no-launch"], { server, execFileSync: host.exec });
+    assert.equal(host.sent.length, 2, host.sent.join("\n"));
+    assert.equal(host.sent[0], "oats spawn dev --suggest-name --task-file - --no-launch --preview --dir /w --json");
+    assert.match(host.sent[1], /^oats spawn dev --task-file - --no-launch --name dev-tidy --expect-decision 0123456789abcdef01234567 --idempotency-key \S+ --dir \/w --json$/);
+    assert.equal(envelope.result.instance, "dev-tidy"); assert.deepEqual(envelope.result.naming, naming);
+    assert.deepEqual(envelope.result.warnings, ["the host's own warning"]);
+
+    // A link that drops under that apply: the fix names the previewed name too.
+    const dropping = remote([...KEYED, "spawn-suggest-name", "spawn-apply-suggest-name", "spawn-name"], { preview });
+    const drop = (bin, argv) => { const word = String(argv.at(-1)); if (word.includes(" spawn ") && !word.includes("--preview")) throw Object.assign(new Error("ssh exited 255"), { status: 255, stdout: "", stderr: "Connection to h closed by remote host.\n" }); return dropping.exec(bin, argv); };
+    assert.throws(() => routeCommand("build", "spawn", ["dev", "--suggest-name", "--no-launch"], { server, execFileSync: drop }), (e) => {
+      assert.equal(e.code, "E_SSH"); assert.deepEqual(e.details.decision, preview.result.decision);
+      assert.match(e.details.fix, /--name dev-tidy in place of --suggest-name/); assert.ok(e.details.fix.includes(`--expect-decision 0123456789abcdef01234567 --idempotency-key ${e.details.idempotencyKey}`));
+      return true;
+    });
+
+    // The host's refusal of the preview is the spawn's answer: relayed, and nothing is applied.
+    const refusal = { schemaVersion: 1, ok: false, error: { code: "E_SOUL_UNKNOWN", message: "soul \"dev\" is not in /w/agents" } };
+    const refusing = remote(KEYED, { preview: refusal });
+    assert.deepEqual(routeCommand("build", "spawn", ["dev", "--no-launch"], { server, execFileSync: refusing.exec }).envelope, refusal);
+    assert.equal(refusing.sent.length, 1);
+
+    // A caller's own decision or key travels as given: no preview, no second key.
+    const own = remote(KEYED, { apply: spawned("dev-own") });
+    routeCommand("build", "spawn", ["dev", "--no-launch", "--expect-decision", "r1", "--idempotency-key", "k1"], { server, execFileSync: own.exec });
+    assert.deepEqual(own.sent, ["oats spawn dev --no-launch --expect-decision r1 --idempotency-key k1 --dir /w --json"]);
+  } finally {
+    if (prevHomeDir === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = prevHomeDir;
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
 /** Every file and directory under `dir`, by relative path, with its bytes: two
  *  captures are equal only when nothing was added, removed or rewritten. */
 function treeBytes(dir, { skip = [] } = {}) {
@@ -603,7 +735,7 @@ test("routed spawn --preview (#610): the host's preview, printed as the local on
     const made = instances();
 
     // Text: the local preview's line naming the server, and none of the apply's lines.
-    // A --task-file travels as --task text, --harness in the host's names.
+    // A --task-file's text travels on the remote command's stdin (--task-file -), --harness in the host's names.
     const taskFile = join(base, "task.md"); writeFileSync(taskFile, "preview me\n");
     let mark = readFileSync(log, "utf8").length;
     r = oats(env, ["spawn", "dev", "--server", "build", "--purpose", "pv", "--harness", "pi", "--task-file", taskFile, "--no-launch", "--preview"]);
@@ -612,7 +744,7 @@ test("routed spawn --preview (#610): the host's preview, printed as the local on
     assert.match(lines[0], /^preview dev → dev-pv on build \(checkout\) harness pi .*; nothing was created/, r.stdout);
     for (const apply of [/Spawned/, /remote home:/, /route snapshot:/, /attach:/]) assert.doesNotMatch(r.stdout, apply);
     const sent = readFileSync(log, "utf8").slice(mark);
-    assert.ok(sent.includes(` spawn dev --purpose pv --harness pi --task ${remoteQuote("preview me\n")} --no-launch --preview --dir `), sent);
+    assert.ok(sent.includes(" spawn dev --purpose pv --harness pi --task-file - --no-launch --preview --dir "), sent);
     unchanged("text preview");
     assert.deepEqual(instances(), made, "nothing was created on the host");
     // The same line as a local preview of that deployment prints, with " on build" added.
@@ -767,12 +899,12 @@ test("routed spawn --preview --suggest-name (#1421 §3) needs a host that advert
     assert.throws(() => routeCommand("build", "spawn", args, { server, execFileSync: old.exec }),
       (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.67.0 at h does not advertise spawn-suggest-name; upgrade it there; nothing was sent");
     assert.deepEqual(old.spawned(), []);
-    const current = remote(["spawn-preview-2", "spawn-suggest-name"]);
+    const current = remote(["spawn-preview-2", "spawn-suggest-name", "spawn-task-stdin"]);
     const routed = routeCommand("build", "spawn", args, { server, execFileSync: current.exec });
     assert.deepEqual(routed.envelope.result.naming, naming);
     assert.equal(routed.envelope.result.instance, "fix-login-dev");
     assert.equal(current.spawned().length, 1);
-    assert.match(current.spawned()[0], / spawn dev --preview --suggest-name --task 'Fix the login bug' --dir \/w --json$/);
+    assert.match(current.spawned()[0], / spawn dev --preview --suggest-name --task-file - --dir \/w --json$/);
   } finally {
     if (prevHomeDir === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = prevHomeDir;
     rmSync(base, { recursive: true, force: true });
@@ -811,10 +943,10 @@ test("routed spawn --name needs a host that advertises spawn-name: refused befor
     assert.match(purposeOnly.spawned()[0], / spawn dev --purpose api-v2 --task 'Ship it' --dir \/w --json$/);
     rmSync(REMOTE_SNAPSHOT_DIR(), { recursive: true, force: true });
     // A host with spawn-name: --name travels untouched, and the route is saved under the name the host reports.
-    const current = remote(["spawn-name"]);
+    const current = remote(["spawn-name", "spawn-task-stdin"]);
     const routed = routeCommand("build", "spawn", args, { server, execFileSync: current.exec });
     assert.equal(current.spawned().length, 1);
-    assert.match(current.spawned()[0], / spawn dev --name api-v2-dev --task 'Ship it' --dir \/w --json$/);
+    assert.match(current.spawned()[0], / spawn dev --name api-v2-dev --task-file - --dir \/w --json$/);
     assert.equal(routed.envelope.result.instance, "api-v2-dev");
     assert.equal(routed.envelope.result.snapshot, snapshotPath("build", "api-v2-dev"));
     // That name now has a saved route here: a second --name spawn of it is refused before the spawn is sent.
@@ -857,7 +989,7 @@ test("routed spawn --suggest-name on an apply (#1490 §3) needs the host's spawn
       (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.67.0 at h does not advertise spawn-apply-suggest-name; upgrade it there; nothing was sent");
     assert.deepEqual(previewsOnly.spawned(), []);
     // A host that names applies only: a preview still needs spawn-suggest-name.
-    const appliesOnly = remote(["spawn-preview-2", "spawn-apply-suggest-name"]);
+    const appliesOnly = remote(["spawn-preview-2", "spawn-apply-suggest-name", "spawn-task-stdin"]);
     assert.throws(() => routeCommand("build", "spawn", preview, { server, execFileSync: appliesOnly.exec }),
       (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message.includes("does not advertise spawn-suggest-name"));
     assert.deepEqual(appliesOnly.spawned(), []);
@@ -865,7 +997,7 @@ test("routed spawn --suggest-name on an apply (#1490 §3) needs the host's spawn
     assert.deepEqual(routed.envelope.result.naming, naming);
     assert.equal(routed.envelope.result.instance, "fix-login-dev");
     assert.equal(appliesOnly.spawned().length, 1);
-    assert.match(appliesOnly.spawned()[0], / spawn dev --suggest-name --task 'Fix the login bug' --dir \/w --json$/);
+    assert.match(appliesOnly.spawned()[0], / spawn dev --suggest-name --task-file - --dir \/w --json$/);
   } finally {
     if (prevHomeDir === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = prevHomeDir;
     rmSync(base, { recursive: true, force: true });

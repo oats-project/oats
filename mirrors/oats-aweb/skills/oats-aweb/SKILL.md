@@ -88,9 +88,25 @@ Always put the body in a file: inline `--body "…"` breaks on quotes,
 backticks, `$(…)` and newlines. There is **no positional recipient** for mail
 and **no `--reply-to`**.
 
+**Make a new private file for every message**, and never use a fixed or shared
+`/tmp` path: other agents and users on the host share `/tmp`, so a fixed name
+there lets another agent overwrite your draft (and your mail carries its text),
+and anyone can read it. Run this from your home; it prints a new path:
+
 ```bash
-aw mail send --to <alias> --subject "<short subject>" --body-file /tmp/msg.md
-aw mail reply <message-id> --body-file /tmp/reply.md    # stay in the thread
+(umask 077; mkdir -p "${OATS_INSTANCE_HOME:?}/.oats-aweb/drafts" && mktemp "$OATS_INSTANCE_HOME/.oats-aweb/drafts/XXXXXXXX")
+```
+
+Write the body to the path it printed and pass that path as `<body-file>`
+below. Use the printed path itself: a shell variable does not survive between
+your tool calls. Keep the `X`s last (macOS `mktemp` replaces only trailing
+`X`s, so `XXXXXX.md` is one fixed name). The directory is owner-only, and
+retirement neither keeps nor copies it. Once the message is sent you may
+delete its draft (`rm -f <body-file>`); drafts you leave go at retirement.
+
+```bash
+aw mail send --to <alias> --subject "<short subject>" --body-file <body-file>
+aw mail reply <message-id> --body-file <body-file>      # stay in the thread
 aw mail inbox                                          # UNREAD only
 aw mail inbox --show-all --json                       # recovery, including affected Pi interrupts (section 4); page with --cursor
 aw mail show --message-id <id> --json                  # exact delivered message recovery
@@ -101,12 +117,12 @@ aw mail ack <message-id>                               # mark one read without r
 Chat is synchronous: use it only when someone must answer before you can go on.
 
 ```bash
-aw chat send-and-wait <alias> --body-file /tmp/q.md --start-conversation   # ask and wait
-aw chat send-and-leave <alias> --body-file /tmp/answer.md                   # answer, don't wait
-aw chat extend-wait <alias> --body-file /tmp/status.md                      # "need 5 more minutes"
+aw chat send-and-wait <alias> --body-file <body-file> --start-conversation   # ask and wait
+aw chat send-and-leave <alias> --body-file <body-file>                      # answer, don't wait
+aw chat extend-wait <alias> --body-file <body-file>                         # "need 5 more minutes"
 aw chat pending                                                             # chats waiting on you
 aw chat history <alias>                                                     # past exchange
-aw chat send --session-id <session-id> --body-file /tmp/more.md             # continue a known session
+aw chat send --session-id <session-id> --body-file <body-file>              # continue a known session
 ```
 
 `aw chat send` has **no `--to`**: it only continues an existing session. Start a
@@ -116,7 +132,7 @@ chat with `send-and-wait` / `send-and-leave`.
 nothing else changes:
 
 ```bash
-aw --identity-home <identityHome> mail send --to <alias> --subject "…" --body-file /tmp/msg.md
+aw --identity-home <identityHome> mail send --to <alias> --subject "…" --body-file <body-file>
 aw --identity-home <identityHome> mail inbox
 aw --identity-home <identityHome> chat pending
 ```
@@ -433,7 +449,8 @@ oats readiness --home "$PWD" --json   # the provider's readiness answer for this
 | `channel-cache-unrecognized` (start) | the failure cache is not in the shape the provider reads (Claude Code 2.1.300's), so it was left alone | nobody; `channel-not-connected` follows if Claude skips the channel |
 | `channel-cache-changed` (start) | another Claude kept writing the failure cache while the start read it, so it was left alone rather than overwrite that write | nobody; `channel-not-connected` follows if Claude skips the channel |
 | `channel-cache-unchecked` (spawn, start) | the start's Claude config dir is not known: every spawn (the kernel gives hooks no resolved config dir, awebai/oats#1503), or a start whose recorded `CLAUDE_CONFIG_DIR` is not a literal path. The cache was not checked | nobody; `channel-not-connected` follows if Claude skips the channel |
-| `pi-extension-skills-loaded` (warning, pi homes) | the pi folder of the home's launch lists `npm:@awebai/pi` without `"skills": []` in its `settings.json`, so pi loads the skills bundled with the extension in every session using that folder; a home gets its skills through its OATS capabilities only | operator: make the entry `{"source": "npm:@awebai/pi", "skills": []}` as the message says, keeping any version and the other entries (README, "The pi extension without its skills"); `pi install` and `pi update` keep the filter |
+| `pi-extension-skills-loaded` (warning, pi homes) | the pi folder of the home's launch lists `npm:@awebai/pi` without `"skills": []` in its `settings.json`, and the `@awebai/pi` installed there is below 0.5.0, or its version is unknown, so pi loads the skills bundled with the extension in every session using that folder; a home gets its skills through its OATS capabilities only | operator: update `@awebai/pi` to 0.5.0 or later, which bundles no skills, or make the entry `{"source": "npm:@awebai/pi", "skills": []}` as the message says, keeping any version and the other entries (README, "The pi extension without its skills"); `pi install` and `pi update` keep the filter |
+| `pi-skills-package-loaded` (warning, pi homes) | the pi folder of the home's launch lists `npm:@awebai/claude-skills` without `"skills": []` in its `settings.json`, so pi loads its aweb skills in every session using that folder, whatever the extension's version; a home gets its skills through its OATS capabilities only | operator: remove the entry, or filter it with `"skills": []`, as the message says (README, "The pi extension without its skills") |
 
 A registered channel still reads `native-receive-unproven`: registration proves
 Claude took the channel for this start, not that the plugin's aweb event stream
@@ -502,6 +519,8 @@ named blocker; do not substitute a value or ask permission again at each step.
 
 ### Version and selected context
 
+The aw this provider supports is in the capability's `aw-compat.json`: `min`, the client floor every path is held to, and `tested`, the highest aw its CI journeys pass on (the package README, "aw-compat.json").
+
 These are source-qualified cards, not an installation or live-acceptance receipt.
 
 | Selected version | Supported boundary |
@@ -555,7 +574,43 @@ as did earlier versions; provider 1.23.0 users follow the reference above.
 |---|---|---|---|
 | First hosted account, provider 1.22.2 (#66); selected account name, explicit root alias and empty LOCAL root | `oats aweb setup --soul S --username <selected-user> --name <root-alias>` | Runs `aw init --new-account --username <selected-user> --name <root-alias> --do-not-touch-agents-md`; root identity/workspace and hosted account/team. Success: returned canonical membership matches selected account. Next: `/oats-teams` records mapping/default. | `--username requires --name <alias>; invalid alias: ...` → supply an explicit 1–64 character alias (letter/digit first, then letters/digits/`-`/`_`); no soul-derived default. Older provider versions cannot pass this pair; require the fix before effects. `choose exactly one onboarding authority (...)` → remove unrelated credential input from the protected child environment and use the authorized branch. |
 | Existing hosted team's first LOCAL root, released provider 1.21.1; selected team provisioning key | `oats aweb setup --soul S` with key only in protected `AWEB_API_KEY` child environment | `aw init --do-not-touch-agents-md`, LOCAL root/workspace; returned membership must match intended team. Next: `/oats-teams` mapping/default readback. | `Workspace initialized, but no membership matching "<T>".` → use LOCAL join below with an appropriate owner invite; not fresh GLOBAL init. |
-| Additional controller-owned team, released provider 1.21.1; actual controller authority for owned namespace | `oats aweb setup --soul S --create L --namespace <owned-domain>` | Normalizes label, creates team, accepts/connects a per-team root, records `roots[T]`; success is returned canonical membership plus recorded root. Where `localTeams: true`, records local label; otherwise prints `teams:`/`defaultTeam:` to commit in `oats-workspace.yaml`, with eligibility in a `souls:` entry. Next: `/oats-teams` declaration/readback. | `could not tell whether this workspace allows local teams (...); nothing was created` → repair selected kernel/configuration read before retry. No invented controller authority. |
+| Additional controller-owned team, released provider 1.21.1; actual controller authority for owned namespace: its namespace controller key on this machine, for this user; the aweb service from `AWEB_URL` (the server's public URL; hosted aweb is `https://app.aweb.ai/api`), else an existing messaging root's `.aw/workspace.yaml` `aweb_url` | `oats aweb setup --soul S --create L --namespace <owned-domain> [--name <alias>]` (`--service` is refused with `--create`; `--name` names the per-team root's identity, and a fresh deployment with no root identity needs it) | Needs aw 1.36.53 or later (refused up front below it; `--install-aw` installs aw-compat.json's `tested`). Normalizes label; resolves the service before any aw call; settles the alias (`--name`, else the root identity's) before any team key is written; `aw id team create` (T, team key written locally); reads T's AWID team-server record (`aw id team show-server`) and refuses one that names another URL; `aw id team register --service <url> --team <team id>` registers T with that service; publishes the record for that service (`aw id team set-server --url <service>`, skipped when it already names it) and verifies it; mints a local invite with that team key (`aw id team invite`), skipped when the per-team root already holds an accepted identity; accepts it into a per-team root, connects it to the service, records `roots[T]`; success is returned canonical membership plus recorded root. Where `localTeams: true`, records local label; otherwise prints `teams:`/`defaultTeam:` to commit in `oats-workspace.yaml`, with eligibility in a `souls:` entry. A re-run of the same command resumes a partial create: no second team, no `-2` suffix, no second invite once the identity is accepted. The result names the team key's path (`team key: <path>`), never the key. Next: `/oats-teams` declaration/readback. | `--create --namespace needs aw >= 1.36.53 (this host has <version>)` → `npm install -g @awebai/aw@<tested>` as it names, or re-run with `--install-aw`, then re-run. `--name <alias> is required when no root identity is available ...; nothing was created` → re-run with `--name <alias>`; after a partial create, the same command with `--name` resumes it. `could not tell whether this workspace allows local teams (...); nothing was created` → repair selected kernel/configuration read before retry. `set AWEB_URL to the server's public URL (hosted aweb is https://app.aweb.ai/api) and re-run; nothing was created` → set `AWEB_URL` to the server's public URL, then re-run. `team T's AWID team-server record names <url>, not <service>` → the team's owner republishes it for `<service>` with `aw id team set-server`, or set `AWEB_URL` to the published URL; setup does not replace a record it finds. A refused publish, or `did not verify as <service>` → T exists, its key kept: fix what it names, then re-run the same command. A refused registration (HTTP status and the server's short code, e.g. `http 422 ... service_url_mismatch`; T exists, its key kept) → fix what it names, then re-run the same command: it resumes. `the namespace controller key for this namespace is not on this machine` → as this user, `aw id namespace prepare-controller --domain <owned-domain>`, or create the team where that key is, then re-run. `the team key is not on this machine` → run setup as the user whose `~/.awid/team-keys/<owned-domain>/` holds it, then re-run. `team <name>:<owned-domain> already exists in the registry, and its team key is not on this machine` → choose another label, or run setup as the user that holds its key; setup never tries another name, and nothing was created. aw's raw output is never relayed. No invented controller authority. |
+
+Operator notes for this card:
+
+- **One trust boundary.** The namespace controller key
+  (`~/.awid/controllers/<domain>.key`) and each team key
+  (`~/.awid/team-keys/<domain>/<team>.key`) are user-wide on the deployment
+  host, not inside the deployment. Every process that user runs can read them:
+  the operator's shell, the deployment and every agent instance spawned there.
+  Whoever runs as that user can add members to the team and, with the
+  controller key, create teams in the namespace. aw also keeps each local
+  invite, its secret included, in `~/.config/aw/team-invites/<id>.json` until
+  it is accepted. Setup passes the token only through memory and accept's
+  stdin.
+- Spawned instances join with `aw init --join-from <root> --join-team <T>`,
+  which mints a local invite with that same team key: spawns work only as the
+  user that holds it.
+- Setup publishes the team's coordination server at AWID (`aw id team
+  set-server`, after register) and verifies it (`aw id team show-server`: the
+  team, its current key and the service URL). It reads the record before
+  register and again just before publishing: one that names the same URL is
+  left as it is; one that names another URL stops setup, naming both URLs, and
+  is not replaced. aw has no publish-if-absent, so a record published between
+  setup's last read and its `set-server` is replaced unnoticed. The service URL is canonicalized first (no trailing slash);
+  one a record cannot hold (http outside loopback, a literal IP, a query) is
+  refused before anything is created.
+- A local-controller invite can be accepted only where the team key is: the
+  same user on the same machine. Run setup, and the deployment's instances, as
+  that user; another user's deployment on that machine cannot accept it. aw
+  then falls back to a hosted invite, which a self-hosted server answers with
+  404.
+- A self-hosted aweb accepts signed requests only for its public origin:
+  `AWEB_URL` must be the server's public URL, not a port forward.
+- Without `AWEB_URL`, the team is registered with the service an existing
+  root already uses, which may be hosted aweb. To create on a self-hosted
+  server, set `AWEB_URL` first. Setup names the service
+  before it creates anything.
 
 For created or joined LOCAL teams, one identity owns each separate `.aw`; never
 accept a second LOCAL team into an existing identity. Intended new root is

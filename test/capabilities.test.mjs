@@ -5,6 +5,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
+import YAML from "yaml";
 import {
   KERNEL_HOME_RECEIPTS, capabilityManifest, completeDeferredRetirement, composeInstanceAgentsMd, deferredRetireResultPath, findAgent, findInstanceHomes, retirePendingMarkerPath,
   FAILED_SPAWN_BRANCH_LEFT, listInstances, RETIRE_DELETE_BRANCH_REFUSED, retireInstance, runLifecycleHooks, spawnInstanceAsync,
@@ -1324,7 +1325,9 @@ test("rollback detects a still-registered canonical worktree through a symlinked
   // Git wrapper delegates normally, but can force selected cleanup/probe operations to fail.
   const bin = join(base, "bin"); mkdirSync(bin, { recursive: true });
   const realGit = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
-  write(join(bin, "git"), `#!/bin/sh\nif [ "$GIT_FAKE_VANISH_AFTER_ADD" = "1" ] && [ "$3" = "worktree" ] && [ "$4" = "add" ]; then ${realGit} "$@"; s=$?; if [ $s -eq 0 ]; then /bin/rm -rf "$5"; fi; exit $s; fi\nif [ "$GIT_FAKE_FAIL_REMOVE" = "1" ] && [ "$3" = "worktree" ] && [ "$4" = "remove" ]; then echo forced-remove-failure >&2; exit 7; fi\nif [ "$GIT_FAKE_FAIL_PRUNE" = "1" ] && [ "$3" = "worktree" ] && [ "$4" = "prune" ]; then echo forced-prune-failure >&2; exit 6; fi\nif [ "$GIT_FAKE_FAIL_LIST" = "1" ] && [ "$3" = "worktree" ] && [ "$4" = "list" ]; then echo forced-list-failure >&2; exit 8; fi\nif [ "$GIT_FAKE_FAIL_REVP" = "1" ] && [ "$3" = "rev-parse" ] && [ "$4" = "--verify" ]; then echo forced-rev-parse-failure >&2; exit 9; fi\nexec ${realGit} "$@"\n`);
+  // The command's words are read after any leading `-c name=value` pairs: c3, c4 and c5 are the third,
+  // fourth and fifth words of `git -C <repo> <command> <verb> <path>`.
+  write(join(bin, "git"), `#!/bin/sh\ni=0; lead=1; skip=0; c3=; c4=; c5=\nfor a in "$@"; do\n  if [ $skip = 1 ]; then skip=0; continue; fi\n  if [ $lead = 1 ] && [ "$a" = "-c" ]; then skip=1; continue; fi\n  lead=0; i=$((i+1))\n  if [ $i = 3 ]; then c3=$a; fi; if [ $i = 4 ]; then c4=$a; fi; if [ $i = 5 ]; then c5=$a; fi\ndone\nif [ "$GIT_FAKE_VANISH_AFTER_ADD" = "1" ] && [ "$c3" = "worktree" ] && [ "$c4" = "add" ]; then ${realGit} "$@"; s=$?; if [ $s -eq 0 ]; then /bin/rm -rf "$c5"; fi; exit $s; fi\nif [ "$GIT_FAKE_FAIL_REMOVE" = "1" ] && [ "$c3" = "worktree" ] && [ "$c4" = "remove" ]; then echo forced-remove-failure >&2; exit 7; fi\nif [ "$GIT_FAKE_FAIL_PRUNE" = "1" ] && [ "$c3" = "worktree" ] && [ "$c4" = "prune" ]; then echo forced-prune-failure >&2; exit 6; fi\nif [ "$GIT_FAKE_FAIL_LIST" = "1" ] && [ "$c3" = "worktree" ] && [ "$c4" = "list" ]; then echo forced-list-failure >&2; exit 8; fi\nif [ "$GIT_FAKE_FAIL_REVP" = "1" ] && [ "$c3" = "rev-parse" ] && [ "$c4" = "--verify" ]; then echo forced-rev-parse-failure >&2; exit 9; fi\nexec ${realGit} "$@"\n`);
   for (const t of ["pi", "claude"]) write(join(bin, t), "#!/bin/sh\nexit 0\n");
   execFileSync("chmod", ["-R", "+x", bin]);
   const oldPath = process.env.PATH;
@@ -3291,7 +3294,6 @@ test("the package mirrors carry the versions package-catalog.json pins", () => {
   // each capability; a capability a package exports under another identity is
   // mapped, not assumed.
   const expected = { "oats-okf": "oats.okf", "oats-aweb": "oats.aweb", "oats-aweb-tasks": "oats.aweb", "oats-jira": "oats.jira", "oats-linear": "oats.linear", "oats-authoring": "oats.authoring",
-    "oats-engineering-expert": "oats.engineering", "oats-developer": "oats.engineering", "oats-code-review": "oats.engineering", "oats-maintainer": "oats.engineering",
     "oats-folio": "oats.apps", "oats-library": "oats.apps" };
   for (const [slug, pkg] of Object.entries(expected)) {
     const ref = catalog.packages[pkg]?.ref;
@@ -3299,15 +3301,16 @@ test("the package mirrors carry the versions package-catalog.json pins", () => {
     const manifest = JSON.parse(readFileSync(join(pkgRoot, "mirrors", slug, "oats.json"), "utf8"));
     assert.equal(manifest.version, String(ref).replace(/^v/, ""), `mirrors/${slug} must carry the version ${pkg} is pinned at`);
   }
-  // oats.engineering exports four capabilities under their own ids; the
-  // catalog aliases each to the package, and the reviewer is a package soul.
-  for (const [slug, id] of [["oats-engineering-expert", "oats.engineering-expert"], ["oats-developer", "oats.developer"], ["oats-code-review", "oats.code-review"], ["oats-maintainer", "oats.maintainer"]]) {
-    const manifest = JSON.parse(readFileSync(join(pkgRoot, "mirrors", slug, "oats.json"), "utf8"));
-    assert.equal(manifest.capability, id);
-    assert.equal(catalog.capabilities[id], "oats.engineering", `${id} is supplied by the oats.engineering package`);
-    assert.equal(Object.hasOwn(manifest, "agents"), false, `${id} declares no capability agent: the code-reviewer is oats.engineering's package soul`);
-  }
+  // oats.engineering is frozen at v1.18.0: its entry and its four aliases stay, so
+  // existing pins resolve. This workspace doesn't pin it (its souls compose the
+  // member copy of the engineering template), so it has no mirror here (as oats.cloning).
   assert.equal(catalog.packages["oats.engineering"].ref, "v1.18.0");
+  const workspacePackages = YAML.parse(readFileSync(join(pkgRoot, "oats-workspace.yaml"), "utf8")).packages;
+  assert.equal(Object.hasOwn(workspacePackages, "oats.engineering"), false, "this workspace no longer pins oats.engineering");
+  for (const [slug, id] of [["oats-engineering-expert", "oats.engineering-expert"], ["oats-developer", "oats.developer"], ["oats-code-review", "oats.code-review"], ["oats-maintainer", "oats.maintainer"]]) {
+    assert.equal(catalog.capabilities[id], "oats.engineering", `${id} is still aliased to the frozen oats.engineering package`);
+    assert.equal(existsSync(join(pkgRoot, "mirrors", slug)), false, `mirrors/${slug}: no mirror of an unpinned package`);
+  }
   // oats.cloning exports one capability under the package's own id: no alias; the cloner is a package soul.
   // This workspace does not pin it, so it has no mirror here (as oats.machine).
   assert.equal(catalog.packages["oats.cloning"].ref, "v1.1.0");
@@ -3350,15 +3353,15 @@ test("no shipped instructional surface teaches settling in the work tree (mainta
   }
 });
 
-test("the independently targetable oats.engineering capabilities assume no knowledge or messaging layer", () => {
+test("the independently targetable coordination capabilities (the member copy of the engineering template) assume no knowledge or messaging layer", () => {
   // Each may be composed into a deployment that has replaced or disabled either
   // layer — `requires` is for host commands and harness packages, never
   // capability dependencies (maintainer ruling). These are BOUNDED, observable
   // properties. Provider neutrality as a whole is not machine-decidable from
   // prose: when these surfaces change, it needs semantic review by the
   // maintainer, which the PR process already provides.
-  for (const slug of ["oats-engineering-expert", "oats-developer", "oats-code-review", "oats-maintainer"]) {
-    const dir = resolve(new URL(`../mirrors/${slug}`, import.meta.url).pathname);
+  for (const slug of ["oats-engineering-expert", "oats-developer", "oats-code-review", "oats-maintainer", "oats-landing-rules", "oats-dispatcher"]) {
+    const dir = resolve(new URL(`../capabilities/${slug}`, import.meta.url).pathname);
     const manifest = JSON.parse(readFileSync(join(dir, "oats.json"), "utf8"));
     for (const r of manifest.requires || []) {
       assert.ok(!r.capability && !r.layer, `${slug}: requires must not carry layer dependencies: ${JSON.stringify(r)}`);
@@ -3374,7 +3377,7 @@ test("the independently targetable oats.engineering capabilities assume no knowl
   }
   // The reviewer's report states the no-layer delivery: what an instance needs
   // to behave correctly with, and without, a messaging layer.
-  const reviewer = readFileSync(resolve(new URL("../mirrors/oats-code-review/injects/reviewer.md", import.meta.url).pathname), "utf8");
+  const reviewer = readFileSync(resolve(new URL("../capabilities/oats-code-review/injects/reviewer.md", import.meta.url).pathname), "utf8");
   assert.match(reviewer, /messaging layer if one is active[\s\S]*otherwise print it as your final message/, "the reviewer's report falls back to its own session");
 });
 
@@ -3780,7 +3783,8 @@ console.log(JSON.stringify({ meta: { retired: true } }));`,
     // The completion is an ORDINARY retirement: the hook runs, reports it did
     // not finish, and the home is retained under quarantine with an explicit
     // failed outcome beside it — never a silent success.
-    assert.equal(completeDeferredRetirement(retirePendingMarkerPath(home), { delaySec: 0 }), false);
+    // Not retried: what a retry does is test/retire-hook-retry.test.mjs's.
+    assert.equal(completeDeferredRetirement(retirePendingMarkerPath(home), { delaySec: 0, retryDelaysMs: [] }), false);
     assert.equal(existsSync(retireRan), true, "the retire hook ran in the completion");
     assert.equal(existsSync(home), true, "an incomplete hook retains the home");
     assert.equal(JSON.parse(readFileSync(r.resultPath, "utf8")).result?.workRecovery, undefined, "the caller changed no home bytes, so nothing was needlessly preserved");

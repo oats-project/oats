@@ -28,7 +28,11 @@ A Git repository **contains** a package at `oats-package/`:
 ```
 
 `oats-package.json` must declare `package` and `capabilities` (a list of
-directories relative to the package root, each holding an `oats.json`). It may
+directories relative to the package root, each holding an `oats.json`). The
+`package` must equal the `packages:` key the package is pinned under: a
+package is locked under its own id, and its souls are named after it
+(`<package>/<soul>`). `sync` refuses a pin whose manifest names another id
+(`E_PACKAGE_INTEGRITY { why: "package-id" }`, see [`oats sync`](#oats-sync--the-one-command-for-the-common-path)). It may
 also declare `souls`: soul directories the package ships, see
 [Package souls](#package-souls). A
 directory entry need not equal the capability's name
@@ -51,7 +55,7 @@ packages:
 - **Bare version** (`v5.8.0`, `5.8.0`, `1.0.0-rc.1`): the id is looked up in
   the official catalog — `package-catalog.json` in the `oats` repo, or the file
   named by `OATS_PACKAGE_CATALOG` — which supplies the repo url, the tag
-  convention (`v5.8.0` or `oats-framework/v1.22.1`) and the payload path. An id
+  convention (`v5.8.0` or `oats-framework/v1.23.0`) and the payload path. An id
   the catalog does not know is `E_PACKAGE_MISSING` ("use `git:<repo>@<ref>` for
   a package outside the catalog"). The catalog is the reviewed official list
   ([official-catalog.md](official-catalog.md)) and the only way a
@@ -74,9 +78,9 @@ members:
   - git:github.com/acme/agents
   - git:github.com/acme/platform
 packages:
-  oats.framework: v1.22.1
+  oats.framework: v1.23.0
   oats.okf: v5.8.0
-  oats.aweb: v1.37.0
+  oats.aweb: v1.39.0
 teams:
   platform: { team: "platform:acme.aweb.ai", description: Platform engineering }
 defaults:
@@ -117,12 +121,29 @@ lock       oats-lock.json
 
 1. discovers the workspace over the remotes and confirms every member;
 2. resolves each `packages:` entry to a commit (`observeRemote`), reads its
-   manifests, computes the **integrity** (content digest of the package tree)
-   and records `url`, `path`, `version`, `commit`, `integrity`, `capabilities`;
+   manifests, checks that `oats-package.json` names the `packages:` key it is
+   pinned under, computes the **integrity** (content digest of the package
+   tree) and records `url`, `path`, `version`, `commit`, `integrity`,
+   `capabilities`. A manifest naming another package is refused before
+   anything is written: `E_PACKAGE_INTEGRITY { why: "package-id", id,
+   manifestPackage, commit }`, whose message names the line to write instead:
+   - a catalog version whose named package is in the catalog: `<named>: <the
+     same version>`;
+   - a catalog version whose named package is not: `<named>:
+     git:<the catalog entry's repo>@<the resolved tag>` (no line when the
+     catalog entry reads another `path` than `oats-package/`, which a `git:`
+     pin cannot reach);
+   - a `git:` pin: `<named>: <the same git: value>`.
+
+   The other way out is a version of the key's package whose manifest names
+   that key;
 3. for an entry already locked at the same version/source/path: the commit must
    be unchanged (else `E_PACKAGE_INTEGRITY` — "the tag moved; a version string
-   must change when its content does") and the integrity must match
-   (`E_PACKAGE_INTEGRITY`);
+   must change when its content does"), the integrity must match
+   (`E_PACKAGE_INTEGRITY`), and the manifest must still name the key
+   (`why: "package-id"`, as in step 2: a lock an older kernel wrote under
+   another package's id is refused at the next sync; spawns from it keep
+   working until then);
 4. writes `oats-lock.json` and reports the diff. Entries dropped from
    `packages:` are dropped from the lock.
 
@@ -134,7 +155,7 @@ Declaring a package in the workspace's `packages:` is the trust decision
 ## `oats package add | remove`
 
 ```bash
-oats package add oats.aweb v1.37.0                         # a catalog version
+oats package add oats.aweb v1.39.0                         # a catalog version
 oats package add acme.tools git:github.com/acme/tools@v0.4.0
 oats package remove acme.tools
 ```
@@ -202,9 +223,12 @@ Member capabilities are trusted by membership; **a package is trusted by its
 declaration in the workspace's `packages:`**. People declare a package only
 when they trust it, so there is no second, per-version approval step. The lock is reproducibility, not approval: it pins
 the exact commit and the content integrity, a moved tag or drifted content is
-`E_PACKAGE_INTEGRITY`, and at spawn the lock's capability list must match what
-the package declares at the locked commit (`E_PACKAGE_INTEGRITY { why:
-"capabilities" }`).
+`E_PACKAGE_INTEGRITY`, a package pinned under another package's id is
+`E_PACKAGE_INTEGRITY { why: "package-id" }` at sync, and at spawn the lock's
+capability list must match what the package declares at the locked commit
+(`E_PACKAGE_INTEGRITY { why: "capabilities" }`) and the package tree there must
+digest to the lock's `integrity`
+([The integrity check at spawn](#the-integrity-check-at-spawn)).
 
 ## Materialization from a package
 
@@ -216,6 +240,56 @@ against what the fetch reported; skills are copied to
 `{ kind: "package", package, version, commit, integrity, repoKey }`. Bumping
 `packages:` and syncing affects **only new spawns**; `oats status` shows a
 running instance's package module as `moved` once the lock points elsewhere.
+
+### The integrity check at spawn
+
+A spawn copies a package's capabilities only when the package is the content
+the lock records. For each package the soul composes a capability from, the
+kernel digests the package tree (the lock entry's `path`) at the lock's
+`commit`, as `oats sync` does, and compares the digest with the lock's
+`integrity`.
+
+- **When.** After the soul is resolved and before the spawn writes anything:
+  no soul copy, no worktree, no instance home. `oats spawn --preview` makes
+  the same check. `oats instance upgrade` makes it for each package it moves
+  a module to.
+- **The refusal** is `E_PACKAGE_INTEGRITY` with `details: {package, version,
+  commit, expected, actual}`: `expected` is the lock's `integrity`, `actual`
+  the digest of the tree as this computer reads it. The message names the
+  package, the commit and both digests. Two things produce it: a lock whose
+  `commit` and `integrity` describe different content (a hand edit, a bad
+  merge), which is fixed by restoring the lock; and a copy of the
+  package in this computer's remote cache that changed after it was fetched,
+  which is fixed by removing the cache (`$OATS_REMOTE_CACHE`, default
+  `~/.cache/oats/remotes`).
+- **Once per package version and computer.** A tree that matched is recorded
+  under the remote cache, in `.verified/`, one file per (repository key,
+  commit, path, integrity). The record also holds the state of the cached
+  repository the tree was read from: every file under it, by path, size,
+  mode, inode, modification time and status-change time. A later spawn
+  believes a record only when each of its fields is the one asked for and the
+  cached repository is still in that state, and then digests nothing. Any
+  file added, removed, replaced or rewritten there (a later fetch of the same
+  repository included) makes the next spawn digest the tree again. Nothing
+  is recorded when the cached repository changed while the tree was read (the
+  first fetch of the package's files): the next spawn digests it again. With
+  a missing or unreadable record the tree is digested, and a cached
+  repository that reads objects from outside itself (a symbolic link, an
+  alternates file) is digested every time. A record older than 30 days is
+  removed when the cache is next pruned. The records are the kernel's own and
+  no contract: deleting them only costs the next spawn a digest.
+- **What a record does not see.**
+  - A change to the cached repository that leaves every file's size, mode,
+    inode and both times as they were. That takes writing to the disk under
+    the filesystem, setting the clock back, or, on a filesystem that keeps
+    times to the second, rewriting a file in place to the same size within
+    the second it was last changed.
+  - A record written by whoever changed the cache: both live in the same
+    directory, so the cache is as trusted as the account that owns it.
+  - What Git reads outside the cached repository: its own configuration and
+    environment.
+  - A change made between the check and the copy of the modules a moment
+    later in the same spawn.
 
 ## Package souls
 
@@ -273,7 +347,12 @@ oats-package/
   { id, version, commit, digest, path }` and the soul id `package:<id>#<soul>`;
   in `oats status` the soul is `moved` once the package pin moves.
 - **Disabled** by `oats-local.yaml` `souls.disabled` by its qualified or bare
-  name (`E_SOUL_DISABLED` at spawn).
+  name (`E_SOUL_DISABLED` at spawn). An entry is matched by name only, so an
+  entry naming a soul that no longer exists fails open: after a pin's removal
+  or rename, the soul it was meant to keep off spawns again under its new
+  name. After removing or renaming a pin, or a soul it provided, run
+  `oats doctor` and fix what it reports, and check `souls.disabled` by hand: an
+  older kernel's doctor doesn't report such an entry.
 - **Trusted** as the package's capabilities are: declaring the package is the
   trust decision.
 
@@ -353,11 +432,11 @@ A soul that names one of the package's capabilities with
   "policy": "docs/official-catalog.md",
   "packages": {
     "oats.okf":       { "url": "https://github.com/awebai/oats-okf.git", "ref": "v5.8.0", "path": "oats-package" },
-    "oats.framework": { "url": "https://github.com/awebai/oats.git", "ref": "oats-framework/v1.22.1", "path": "oats-package" }
+    "oats.framework": { "url": "https://github.com/awebai/oats.git", "ref": "oats-framework/v1.23.0", "path": "oats-package" }
   }
 }
 ```
 
-`ref` carries the tag convention: a workspace's `oats.framework: v1.22.1`
-resolves to tag `oats-framework/v1.22.1`. Resolving through the catalog never
+`ref` carries the tag convention: a workspace's `oats.framework: v1.23.0`
+resolves to tag `oats-framework/v1.23.0`. Resolving through the catalog never
 advances a lock by itself: `oats sync` does, and says so.

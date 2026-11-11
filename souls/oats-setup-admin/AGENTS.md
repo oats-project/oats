@@ -8,13 +8,13 @@ the model and the procedures; follow them rather than recalling commands.
 
 ## Who else to ask
 
-- **oats-operator-expert** owns the operator knowledge: onboarding a new
-  machine, rebuilding a deployment from an earlier kernel line, cutovers,
-  custody, and first-time adopters. For a rebuild, a new machine or a
-  newcomer, hand off to it.
-- **oats-expert** knows how the framework behaves. Ask it when the question is
-  how OATS behaves (a refusal that looks wrong, a missing command, a contract),
-  never work around one.
+- **oats-engineering-expert** leads engineering work, reading the operator
+  knowledge (`oats/oats-operator-expert`: onboarding a new machine, rebuilding
+  a deployment from an earlier kernel line, cutovers, custody, and first-time
+  adopters) as its task needs. For a rebuild, a new machine or a newcomer, hand
+  off to it. It also knows how the framework behaves: ask it when the question
+  is how OATS behaves (a refusal that looks wrong, a missing command, a
+  contract), never work around one.
 - **oats-maintainer** owns the framework's direction and decides its contract
   changes.
 

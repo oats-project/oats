@@ -11,13 +11,13 @@ description: >-
   Use for "get started with OATS", "set up / install / adopt OATS", "set up
   OATS for this project", "join our OATS workspace", or when someone gives
   you this file or its URL. Download this file whole (`curl -fsSL
-  https://raw.githubusercontent.com/awebai/oats/main/skills/oats-getting-started/SKILL.md`)
+  https://raw.githubusercontent.com/oats-project/oats/main/skills/oats-getting-started/SKILL.md`)
   and follow it as written: a summary of it is not the procedure.
 ---
 
 **Read this whole file, never a summary of it.** If you only have a summary
 (a web fetch that summarises, say), download it whole with
-`curl -fsSL https://raw.githubusercontent.com/awebai/oats/main/skills/oats-getting-started/SKILL.md`
+`curl -fsSL https://raw.githubusercontent.com/oats-project/oats/main/skills/oats-getting-started/SKILL.md`
 and follow it as written.
 
 # Getting started with OATS
@@ -33,7 +33,8 @@ A **workspace** is one Git repository declaring which repositories belong to
 an organisation and which packages it trusts. A **soul** is a durable agent
 role defined in Git; an **instance** is a soul at work, in its own home and
 terminal. A new workspace's setup expert is `oats.framework`'s soul
-`oats-setup-expert` (capabilities `oats.setup` and `oats.onboarding`),
+`oats-setup-expert` (capabilities `oats.setup` and `oats.onboarding`, and
+`oats.coordination-setup` from oats.framework 1.23.0),
 spawned as `<workspace>-oats-setup-expert`.
 
 **A machine found-list** is a JSON file in your prompt whose
@@ -352,7 +353,7 @@ On Linux x64, also check the Desktop's system libraries, ALSA and FUSE 2
 for l in libasound.so.2 libfuse.so.2; do PATH="$PATH:/sbin:/usr/sbin" ldconfig -p | grep -q "$l" || echo "MISSING $l"; done
 ```
 
-- **Versions:** Node 22 or later; Git 2.45 or later recommended (partial
+- **Versions:** Node 22.5 or later; Git 2.45 or later recommended (partial
   caches; older Git works with whole-tree fetches); `gh` 2.49 or later
   (step 3 uses `gh attestation`).
 - **The harness** they chose must be installed and logged in (`claude
@@ -399,18 +400,26 @@ for l in libasound.so.2 libfuse.so.2; do PATH="$PATH:/sbin:/usr/sbin" ldconfig -
   whole-tree fetches, and go on.
 - **npm's global folder** must be writable for step 4's installs
   (`test -w "$(npm prefix -g)/lib"`). If it is not (a system Node under
-  `/usr`, as NodeSource installs it), set a per-user prefix,
-  `npm config set prefix ~/.local`, as step 1's list said (when Node will
-  come from NodeSource, the list names the per-user folder and its PATH
-  line). Then start each later command of yours with
-  `export PATH="$HOME/.local/bin:$PATH"`, and add that line to their shell's
-  startup file yourself, so their own terminal finds `oats` too, and tell
-  them: `~/.zshrc` when `$SHELL` ends in `zsh`, else `~/.bashrc` (for fish,
-  `fish -c 'fish_add_path ~/.local/bin'` instead).
+  `/usr`, as NodeSource installs it), make the two changes step 1's list
+  named for it (when Node will come from NodeSource, the list names the
+  per-user folder and its PATH line), each as its own command, never
+  joined into one:
+  - **npm's per-user folder** (in `~/.npmrc`):
 
-  ```bash
-  RC="$HOME/.bashrc"; case "$SHELL" in *zsh) RC="$HOME/.zshrc";; esac; grep -qsF '$HOME/.local/bin' "$RC" || printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$RC"; echo "$RC"
-  ```
+    ```bash
+    npm config set prefix ~/.local
+    ```
+  - **The line that puts it on their PATH** in their shell's startup file:
+    `~/.zshrc` when `$SHELL` ends in `zsh`, else `~/.bashrc` (for fish,
+    `fish -c 'fish_add_path ~/.local/bin'` instead), so their own terminal
+    finds `oats` too. Tell them which file.
+
+    ```bash
+    RC="$HOME/.bashrc"; case "$SHELL" in *zsh) RC="$HOME/.zshrc";; esac; grep -qsF '$HOME/.local/bin' "$RC" || printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$RC"; echo "$RC"
+    ```
+
+  Your own shell doesn't read their startup file, so start each later
+  command of yours with `export PATH="$HOME/.local/bin:$PATH"`.
 - **Windows** is not supported.
 
 ## 3. Log in to GitHub
@@ -489,8 +498,20 @@ file: `oats-desktop-V-linux-x86_64.AppImage` on Linux x64,
 checksum and the release's attestation all pass:
 
 ```bash
-W="$(mktemp -d)" && echo "$W" && { nohup sh -c 'cd "$1" && gh release download "vV" -R awebai/oats -p "F" -p SHA256SUMS.txt && grep " F\$" SHA256SUMS.txt | sha256sum -c - && gh attestation verify "F" --repo awebai/oats && echo VERIFIED; echo DONE' sh "$W" </dev/null >"$W.log" 2>&1 & }
+W="$(mktemp -d)" && echo "$W" && { nohup sh -c 'cd "$1" && gh release download "vV" -R oats-project/oats -p "F" -p SHA256SUMS.txt && L=$(grep " F\$" SHA256SUMS.txt) && printf "%s\n" "$L" | sha256sum -c - && { gh attestation verify "F" --repo oats-project/oats --signer-workflow oats-project/oats/.github/workflows/release.yml --source-ref refs/tags/vV || case vV in v0.[0-9].*|v0.[1-5][0-9].*|v0.6[0-8].*|v0.69.[0-9]|v0.69.1[0-2]) gh attestation verify "F" --owner awebai --signer-workflow awebai/oats/.github/workflows/release.yml --source-ref refs/tags/vV;; *) false;; esac; } && echo VERIFIED; echo DONE' sh "$W" </dev/null >"$W.log" 2>&1 & }
 ```
+
+The attestation has two forms because the repository moved:
+- **Releases after 0.69.12** are attested in `oats-project/oats`.
+- **Releases up to 0.69.12** were signed in `awebai/oats`, and their
+  attestations stayed with the `awebai` organisation. The `case` tries this
+  second form only for those versions.
+
+Each form accepts only its own repository's release workflow, run for the
+tag `vV`. On an older release the log shows the first form's `HTTP 404`
+before the second passes; that is not a failure. The checksum counts only
+when `SHA256SUMS.txt` has a line for `F`, because on macOS `sha256sum` passes
+empty or malformed input; the attestation checks the file itself.
 
 Write the folder it prints in as `<W>` in step 4.
 
@@ -512,7 +533,7 @@ installed CLI's catalog:
 node -e 'const c=require(process.argv[1]);console.log(c.packages["oats.framework"].ref,c.packages["oats.aweb"].ref)' "$(oats root)/package-catalog.json"
 ```
 
-It prints the two refs, for example `oats-framework/v1.22.1 v1.37.0`. If the
+It prints the two refs, for example `oats-framework/v1.23.0 v1.39.0`. If the
 framework's version (after the `/`) is below `1.19.0`, or with aweb
 `oats.aweb`'s is below `v1.33.1`, this OATS release is older than this
 skill: stop, and tell the person to wait for the next OATS
@@ -747,8 +768,8 @@ name: acme
 members:
   - git:github.com/acme/acme-oats     # the host; the setup expert adds the others
 packages:
-  oats.framework: v1.22.1             # the installed CLI's catalog versions (below)
-  oats.aweb: v1.37.0                  # messaging: agent identities, mail and chat
+  oats.framework: v1.23.0             # the installed CLI's catalog versions (below)
+  oats.aweb: v1.39.0                  # messaging: agent identities, mail and chat
   oats.machine: v0.1.1                # on a machine found-list only: the machine's steward
 defaults:
   capabilities:
@@ -814,6 +835,14 @@ oats onboard D --workspace W --json
 - **The host must be `confirmed`;** a host that can't be read is a GitHub
   access problem (step 3). Another member with `cannot-read` is an access
   question for the setup expert, not a reason to stop.
+- **On Git under 2.45** (step 2; Ubuntu 24.04 ships 2.43), a warning
+  that this Git can't keep a partial cache, so OATS fetches whole trees, is
+  expected. A recent OATS prints it at most once per command that starts or
+  rebuilds caches; an older one prints it once for each repository it
+  starts a cache for. Either form is harmless. Don't show it to the person
+  as an error, and don't try to fix it now: a Git of 2.45 or later,
+  installed later, removes it, and caches already made with whole trees
+  stay that way.
 - **`E_ALREADY_ONBOARDED`:** `D` already is a deployment. Stop and ask the
   person whether to use it as it is or to choose another directory.
 
@@ -867,6 +896,15 @@ first:
 oats soul launch set <key> --harness <its harness> --model <its model> --dir D --plan
 oats soul launch set <key> --harness <its harness> --model <its model> --dir D
 ```
+
+Check a reviewer soul by its model too, since `'*'` replaces the model as
+well as the harness: where it declares `<harness>` but another model, give
+it its own entry the same way, with `--harness <its harness> --model <its
+model>`. Then its `oats spawn <key> --preview --json --dir D` must show a
+`launch.effective` model from a family other than the developers'. Where
+its declared model can't run here, set one that can, from another family;
+with none, name it in the hand-over ("For the person, later"): its reviews
+share the developers' model.
 
 `S` is the exception: it always keeps `<harness>`, the person's choice in
 step 1. When `S` declares another harness, give it its own entry with
@@ -953,25 +991,54 @@ readiness still reports a problem.
    whose own agent runs
    `oats aweb invite --soul <their soul> --label L --json` in their
    deployment. The answer's `result.token` is the invite token,
-   passed to the person privately, never by ordinary mail. From oats.aweb
-   1.33.1 the answer's `result.awebUrl` is the service URL `U`, no secret,
-   which the member passes too. When it is `null` or absent, leave
-   `--service U` out of item 4: the join then takes the service from the
-   invite, or fails and item 5 stops. This machine's messaging root is
+   passed to the person privately, never by ordinary mail. **The token is
+   all they pass** when this machine has oats.aweb 1.36.0 or later (the
+   `version` of the `oats.aweb` row in the `oats inspect` answer's
+   `result.capabilities`, above) and aw 1.36.53 or later (`aw.version` in
+   item 1's check): the join reads the team and the service from the
+   invite itself. Otherwise the member passes the service URL `U` too:
+   from oats.aweb 1.33.1 the answer's `result.awebUrl`, no secret. When it
+   is `null` or absent, leave `--service U` out of item 4's labelled form:
+   the join then takes the service from the invite, or fails and item 5
+   stops. This machine's messaging root is
    `A` = `<workspace>-<this machine's name>` (step 1), with the workspace's
    name from step 8: don't ask. Only a hosted team works: if the invite is
    refused, or the join says the team is not hosted, stop; the workspace's
    owner decides.
 4. **Existing workspace: the person joins in their own terminal,** which you
-   open for them ("How to work"), typing the token at the hidden prompt,
-   with `D`, `S`, `L`, `A` and `U` filled in:
+   open for them ("How to work"), pasting the token at the hidden prompt,
+   with `D`, `S` and `A` filled in:
+
+   ```text
+   cd "D" && sh -c 'stty -echo; printf "Invite token: "; read -r T; stty echo; echo; printf "%s\n" "$T" | oats aweb setup --soul S --invite-stdin --name A'
+   ```
+
+   Before redeeming anything, it refuses an invite it can't use here: one
+   expired, used up or revoked, one for a team this workspace doesn't name
+   (unless the workspace allows local teams and this machine's own
+   `oats-local.yaml` sets its default team), one whose team's label is
+   already another team here, one for a global identity, or one for a team
+   this machine is already in. The person sees why in the window, and
+   item 5 stops. In that exception, an invite for a team the workspace
+   doesn't name is redeemed instead: this machine joins that team under a
+   label of its own, and item 5 catches it. With an older
+   oats.aweb or aw (item 3), open the labelled form instead, with `L` and
+   `U` filled in too:
 
    ```text
    cd "D" && sh -c 'stty -echo; printf "Invite token: "; read -r T; stty echo; echo; printf "%s\n" "$T" | oats aweb setup --soul S --join L --invite-stdin --name A --service U'
    ```
 
 5. **After items 2 to 4, check again** (item 1), and expect `"member": true`.
-   On `"member": false`, stop and spawn nothing: tell the person the run
+   On `"member": false`, stop and spawn nothing. With `"root": null` after
+   item 4's invite-only form, look first, read-only:
+   `ls -d "D"/.aweb-roots/*/.aw 2>/dev/null`. Nothing printed: the join
+   refused before redeeming anything: ask the person for the `E_SETUP_`
+   code their window shows (a code, no secret), tell them in plain words
+   what it means, and that a new invite is the inviter's to send. A path
+   printed for a label other than `L`: the invite was for that team, and
+   this machine joined it instead: tell them so, and that an invite for
+   `L` is the inviter's to send. Otherwise tell the person the run
    left this machine's root outside `L`, with what the check shows, and
    don't rerun the signup or the join (you can't see the join's output).
    When another machine of the same name may already be in the team, say

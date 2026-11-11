@@ -13,6 +13,8 @@ import {
   classifyRemoteFailure, contentDigest, createReadSession, fetchRemoteTree, listRemoteFiles, listRemoteTree, observeRemote, parseRepoRef, readRemoteFile, runGit, scrubGitLine,
   FILE_BUDGET, GIT_LINE_MAX, OATS_ALIAS_SYMLINK, PARTIAL_FETCH_GIT, SMALL_BLOB_LIMIT, gitVersion, keepsPartialCache,
 } from "../lib/remote.mjs";
+import { thisBoot } from "../lib/session-seen.mjs";
+import { processStartToken } from "../lib/worktree-hooks.mjs";
 import { PARTIAL_GIT, olderGitNotice, skipPartialMechanics } from "./helpers/partial-git.mjs";
 
 const GIT_ENV = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t",
@@ -99,7 +101,7 @@ test("a commit arrives with its trees and its small blobs only (with an older gi
       assert.deepEqual(session.notices, []);
     } else {
       assert.equal(git(f.repoDir, "config", "--get", "oats.fetch"), "full");
-      assert.deepEqual(session.notices, [olderGitNotice(f.bare)]);
+      assert.deepEqual(session.notices, [olderGitNotice()]);
     }
     assert.throws(() => git(f.repoDir, "config", "--get-all", "remote.origin.url"), "the url (it may carry credentials) is never written");
   } finally { await session.close(); }
@@ -364,7 +366,24 @@ test(`a git older than ${PARTIAL_FETCH_GIT.join(".")} (no GIT_NO_LAZY_FETCH) fet
     assert.ok(fetches.length > 0 && fetches.every((a) => !a.some((x) => x.startsWith("--filter"))), `no fetch asks the (partial-capable) server for a filter: ${JSON.stringify(fetches)}`);
     assert.deepEqual(f.present("assets/huge-1.bin"), { "assets/huge-1.bin": true }, "a whole tree, never a partial one");
     assert.equal(git(f.repoDir, "config", "--get", "oats.fetch"), "full");
-    assert.deepEqual(session.notices, [olderGitNotice(f.bare, "2.43.0")]);
+    assert.deepEqual(session.notices, [olderGitNotice("2.43.0")]);
+  } finally { await session.close(); }
+});
+
+test(`a git older than ${PARTIAL_FETCH_GIT.join(".")} says so once per session, however many caches it starts or rebuilds`, async () => {
+  const a = fixture(), b = fixture(), c = fixture();
+  // c's cache exists before the session: partial where this git keeps one, so the older git must rebuild it.
+  await observeRemote(c.bare, { cacheDir: c.cacheDir, at: c.commit });
+  assert.equal(git(c.repoDir, "config", "--get", "oats.fetch"), PARTIAL_GIT ? "partial" : "full");
+  const exec = olderGit("2.43.0");
+  const session = createReadSession();
+  try {
+    for (const f of [a, b, c]) {
+      assert.ok((await readRemoteFile(f.bare, f.commit, "elsewhere/tools/data/model.bin", { cacheDir: f.cacheDir, exec, session })).bytes.equals(noise(SMALL_BLOB_LIMIT * 3, "model")));
+      assert.equal(git(f.repoDir, "config", "--get", "oats.fetch"), "full", "every cache records whole-tree fetches");
+    }
+    assert.deepEqual(c.present("assets/huge-1.bin"), { "assets/huge-1.bin": true }, "the rebuilt cache holds the whole tree");
+    assert.deepEqual(session.notices, [olderGitNotice("2.43.0")], "one line for two new caches and a rebuild");
   } finally { await session.close(); }
 });
 
@@ -608,13 +627,16 @@ test("a git lock git names OUTSIDE the cache repo is never removed", async () =>
   assert.equal(existsSync(outside), true, "never deleted");
 });
 
-/** The cache repo's write lock file, held by `pid` (a JSON owner as this kernel writes it). */
-function holdWriteLock(f, pid) {
+/** The cache repo's write lock file, held by `pid` (a JSON owner as this kernel writes it), with the
+ *  holder's `identity` (`{ bootId, processStart }`) when given; without it, the record an earlier kernel writes. */
+function holdWriteLock(f, pid, identity = {}) {
   const lock = join(f.cacheDir, ".locks", `${f.repoDir.split("/").pop()}.lock`);
   mkdirSync(join(lock, ".."), { recursive: true });
-  writeFileSync(lock, JSON.stringify({ pid, token: "t".repeat(24), startedAt: "2026-10-01T00:00:00.000Z" }) + "\n");
+  writeFileSync(lock, JSON.stringify({ pid, token: "t".repeat(24), startedAt: "2026-10-01T00:00:00.000Z", ...identity }) + "\n");
   return lock;
 }
+/** The refusal a write lock held past the deadline ends in: the holder's pid, and how to tell whether the lock is safe to remove. */
+const heldLockRefusal = (pid, lock) => new RegExp(`(?<!oats )process ${pid} has been writing it since .*; try again once it finishes; check whether pid ${pid} is an oats process: once no oats process holds it, the lock ${lock.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} is safe to remove$`);
 
 test("a live holder of the cache write lock is waited for (bounded) and never stolen from: reason cache naming its pid", async () => {
   const f = fixture();
@@ -629,10 +651,110 @@ test("a live holder of the cache write lock is waited for (bounded) and never st
     assert.ok(Date.now() - started >= 700, "it waited");
     assert.equal(e.code, "E_REMOTE_UNREADABLE");
     assert.deepEqual([e.details.reason, e.details.stage, e.details.holderPid, e.details.lock], ["cache", "fetch", holder.pid, lock]);
-    assert.match(e.message, new RegExp(`oats process ${holder.pid} has been writing it since .*; try again once it finishes$`));
+    assert.match(e.message, heldLockRefusal(holder.pid, lock));
     assert.equal(readFileSync(lock, "utf8"), before, "the live holder's lock is untouched");
     assert.equal(existsSync(f.repoDir), false, "nothing was written");
   } finally { holder.kill(); }
+});
+
+test("a cache write lock whose owner's liveness cannot be judged is waited for (bounded) and never reclaimed: a pid check that fails with neither ESRCH nor EPERM", async (t) => {
+  const f = fixture();
+  // A pid that does not exist, whose check answers an error that says nothing: every other kill is the real one.
+  const pid = 999999998, kill = process.kill;
+  process.kill = (target, signal) => {
+    if (target === pid) throw Object.assign(new Error("probe"), { code: "EIO" });
+    return kill.call(process, target, signal);
+  };
+  t.after(() => { process.kill = kill; });
+  const lock = holdWriteLock(f, pid);
+  const before = readFileSync(lock, "utf8");
+  const session = createReadSession({ cacheWriteWaitMs: 800 });
+  const started = Date.now();
+  const e = await observeRemote(f.bare, { cacheDir: f.cacheDir, at: f.commit, session }).then(() => assert.fail("expected a refusal"), (x) => x);
+  await session.close();
+  assert.ok(Date.now() - started >= 700, "it waited");
+  assert.equal(e.code, "E_REMOTE_UNREADABLE");
+  assert.deepEqual([e.details.reason, e.details.stage, e.details.holderPid, e.details.lock], ["cache", "fetch", pid, lock]);
+  assert.match(e.message, heldLockRefusal(pid, lock));
+  assert.equal(readFileSync(lock, "utf8"), before, "the lock is untouched");
+  assert.equal(existsSync(f.repoDir), false, "nothing was written");
+});
+
+test("a cache write lock whose record names no process ID is waited for and never reclaimed, and the refusal says so instead of naming a process", async () => {
+  for (const pid of [0, -5, 2147483648]) {
+    const f = fixture();
+    const lock = holdWriteLock(f, pid, { bootId: `another-boot-than-${thisBoot()}`, processStart: "proc:1" });
+    const before = readFileSync(lock, "utf8");
+    const session = createReadSession({ cacheWriteWaitMs: 300 });
+    const e = await observeRemote(f.bare, { cacheDir: f.cacheDir, at: f.commit, session }).then(() => assert.fail(`expected a refusal (${pid})`), (x) => x);
+    await session.close();
+    assert.equal(e.code, "E_REMOTE_UNREADABLE");
+    assert.deepEqual([e.details.reason, e.details.stage, e.details.lock, "holderPid" in e.details], ["cache", "fetch", lock, false], String(pid));
+    assert.ok(e.message.endsWith(`its write lock ${lock} names ${pid}, which is no process ID, as its holder; it is safe to remove once no oats process is running`), e.message);
+    assert.doesNotMatch(e.message, /process -?\d+ has been writing|is an oats process/);
+    assert.equal(readFileSync(lock, "utf8"), before, `${pid}: the lock is untouched`);
+  }
+});
+
+test("a live holder named by its boot and start is waited for (bounded) and never stolen from: reason cache naming its pid", async () => {
+  const f = fixture();
+  const holder = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], { stdio: "ignore" });
+  try {
+    await new Promise((r) => holder.on("spawn", r));
+    const lock = holdWriteLock(f, holder.pid, { bootId: thisBoot(), processStart: processStartToken(holder.pid) });
+    const before = readFileSync(lock, "utf8");
+    const session = createReadSession({ cacheWriteWaitMs: 800 });
+    const started = Date.now();
+    const e = await observeRemote(f.bare, { cacheDir: f.cacheDir, at: f.commit, session }).then(() => assert.fail("expected a refusal"), (x) => x);
+    await session.close();
+    assert.ok(Date.now() - started >= 700, "it waited");
+    assert.equal(e.code, "E_REMOTE_UNREADABLE");
+    assert.deepEqual([e.details.reason, e.details.stage, e.details.holderPid, e.details.lock], ["cache", "fetch", holder.pid, lock]);
+    assert.match(e.message, heldLockRefusal(holder.pid, lock));
+    assert.equal(readFileSync(lock, "utf8"), before, "the live holder's lock is untouched");
+    assert.equal(existsSync(f.repoDir), false, "nothing was written");
+  } finally { holder.kill(); }
+});
+
+test("a cache write lock taken in another boot is reclaimed at once, though its pid is alive with the recorded start", { skip: thisBoot() === null && "this host reads no boot id (bootId), so no lock can be told to be of another boot" }, async () => {
+  const f = fixture();
+  const holder = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], { stdio: "ignore" });
+  try {
+    await new Promise((r) => holder.on("spawn", r));
+    const lock = holdWriteLock(f, holder.pid, { bootId: `another-boot-than-${thisBoot()}`, processStart: processStartToken(holder.pid) });
+    // A lock waited for to the deadline is refused: a write that succeeds reclaimed it.
+    const session = createReadSession({ cacheWriteWaitMs: 10_000 });
+    const r = await observeRemote(f.bare, { cacheDir: f.cacheDir, at: f.commit, session });
+    await session.close();
+    assert.equal(r.commit, f.commit);
+    assert.equal(existsSync(lock), false, "reclaimed, then released");
+  } finally { holder.kill(); }
+});
+
+test("a cache write lock whose pid runs with another start (a reused pid) is reclaimed at once", async () => {
+  const f = fixture();
+  // This process's own pid, recorded with a start it never had: the pid of a holder that is gone, now another process's.
+  const lock = holdWriteLock(f, process.pid, { bootId: thisBoot(), processStart: "proc:1" });
+  // A lock waited for to the deadline is refused: a write that succeeds reclaimed it.
+  const session = createReadSession({ cacheWriteWaitMs: 10_000 });
+  const r = await observeRemote(f.bare, { cacheDir: f.cacheDir, at: f.commit, session });
+  await session.close();
+  assert.equal(r.commit, f.commit);
+  assert.equal(existsSync(lock), false, "reclaimed, then released");
+});
+
+test("the cache write lock this kernel takes names its holder by pid, token, start, boot and process start", async () => {
+  const f = fixture();
+  const lockDir = join(f.cacheDir, ".locks");
+  const seen = [];
+  const watcher = setInterval(() => {
+    try { for (const n of readdirSync(lockDir)) if (n.endsWith(".lock")) seen.push(JSON.parse(readFileSync(join(lockDir, n), "utf8"))); } catch { /* not yet */ }
+  }, 1);
+  try { await observeRemote(f.bare, { cacheDir: f.cacheDir, at: f.commit }); } finally { clearInterval(watcher); }
+  assert.ok(seen.length > 0, "the lock was seen while held");
+  const [record] = seen;
+  assert.deepEqual(Object.keys(record).sort(), ["bootId", "pid", "processStart", "startedAt", "token"]);
+  assert.deepEqual([record.pid, record.bootId, record.processStart], [process.pid, thisBoot(), processStartToken(process.pid)]);
 });
 
 test("a dead holder's cache write lock is reclaimed at once, and the fetch proceeds", async () => {

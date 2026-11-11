@@ -2217,21 +2217,21 @@ let terminalOpening = null; // the newest terminal open (openTerminalTabFlow): {
  * bare-name open and a sidebar open of the same identity share one tab —
  * and an existing tab can never be activated for a name that has since
  * become ambiguous (resolution refuses before dedup can activate). */
-async function openTerminalTab(ref, { quiet = false, inSplit = false, expected = null, valid = () => true, followed = false, onError, refuse } = {}) {
+async function openTerminalTab(ref, { quiet = false, inSplit = false, expected = null, valid = () => true, followed = false, onError, refuse, focusContent = true } = {}) {
   const notify = onError || (quiet ? (msg) => console.warn(`[terminal open] ${msg}`) : (msg) => alert(msg));
   // Quiet opens must NEVER reject either (review ff70e1c nit): the refusal
   // messages route through notify, but transport failures (the panel fetch,
   // the tab mount) would still escape as an unhandled rejection from an
   // automated caller that does not await. runOpenFlow catches every quiet
   // rejection into notify; interactive opens keep throwing.
-  return runOpenFlow(() => openTerminalTabFlow(ref, notify, { inSplit, expected, valid, followed, refuse }), { quiet, notify });
+  return runOpenFlow(() => openTerminalTabFlow(ref, notify, { inSplit, expected, valid, followed, refuse, focusContent }), { quiet, notify });
 }
 
 async function openTerminalTabFlow(ref, notify, options = {}) {
   if (options.valid && !options.valid()) return;
-  // The post-spawn open (#1246): the roster read that showed the row ready is the current one (no read started
-  // since, same workspace), so the open resolves against its rows instead of reading /api/panel again. Taken
-  // before this open's own repaint below, which starts a read. Every other open reads.
+  // Opens following an observed row (post-spawn or launch) reuse that roster while it is current (no read
+  // started since, same workspace), instead of reading /api/panel again. Taken before this open's own repaint
+  // below, which starts a read. Other opens read for themselves.
   const shown = options.followed && shownRoster?.gen === contextRosterGen && shownRoster.ws === currentWorkspace() ? shownRoster : null;
   const planned = options.inSplit ? instanceSplitPlan(splitOpenState()) : null;
   const layoutIdentity = planned ? instanceSplitIdentity(splitOpenState()) : null;
@@ -2286,15 +2286,13 @@ async function openTerminalTabFlow(ref, notify, options = {}) {
     try { await whenKeyFree(key); }
     catch (e) { if (!owns()) return; throw e; }
     if (!owns()) return;
-    // Every jump path through here is user-initiated (palette, roster row,
-    // quick-open, post-spawn open) — activating an existing tab focuses its
-    // terminal input so the user can type into tmux immediately.
+    // Explicit jumps focus terminal input. Launch opens opt out, including tab reuse and readiness.
     // Only a tab of this incarnation (#1237): a respawn under the same home opens its own tab.
     for (const [tid, t] of tabs) if (t.key === key && !otherIncarnation(t.origin?.incarnation, inst.createdAt)) {
       if (!commitDestination()) return notify('The terminal destination changed. Select the instance again.');
       t.instanceRef = inst;
       split = fillEmptyGroup(split, tid);
-      selectTab(tid, { intent: owns, focusContent: true }); return;
+      selectTab(tid, { intent: owns, focusContent: options.focusContent !== false }); return;
     }
     // A caller's own refusal of a NEW tab for the resolved row (the palette's: a held home opens nothing new, #802,
     // #1247); its tab already open is shown above, as any open tab is.
@@ -2304,7 +2302,7 @@ async function openTerminalTabFlow(ref, notify, options = {}) {
     if (pendingTerms.has(pending)) return; // an open for this key is already in flight
     pendingTerms.add(pending);
     try {
-      await openTerminalTabInner(inst, ws, key, owns, notify, commitDestination, read);
+      await openTerminalTabInner(inst, ws, key, owns, notify, commitDestination, read, options.focusContent !== false);
     } finally {
       pendingTerms.delete(pending);
     }
@@ -2313,7 +2311,7 @@ async function openTerminalTabFlow(ref, notify, options = {}) {
   }
 }
 
-async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert(msg), commitDestination = () => true, read = 0) {
+async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert(msg), commitDestination = () => true, read = 0, focusContent = true) {
   // inst is the RESOLVED roster instance (openTerminalTab resolves + keys
   // before dedup; review 7d740f9). Re-check ownership here — whenKeyFree
   // may have waited across a workspace switch.
@@ -2406,7 +2404,7 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
     onShow: () => { requestAnimationFrame(() => { try { glyphs.ensure(); fitTerminal(term, fit); } catch {} }); },
     // user-initiated activation → keyboard lands in the xterm textarea
     focusContent: () => tab.focus(),
-    focusOnActivate: true, // addTab's own dedup here is a user jump too
+    focusOnActivate: focusContent, // also applies to addTab's dedup and delayed terminal readiness
     term, // the GPU-restart recovery clears its glyph atlas
   });
   if (!made) { unwire(); term.dispose(); return; } // lost a race to an identical tab
@@ -3363,10 +3361,28 @@ onKeymapChange(() => applyChordTitles());
 applyChordTitles();
 
 // A launch's --instance (launch-focus.mjs): its row is selected as "show in roster" selects it, once an observed
-// roster read lists it, unless the person chose something first. Only selects: no terminal opens, nothing starts.
+// roster read lists it, unless the person chose something first. Running rows open through the click's path,
+// keeping keyboard focus on the roster. Other rows select only; a launch never starts an instance.
 const launchFocus = createLaunchFocus({
   watch: () => tabOpenIntents.watch(), operator,
   select: (row) => showInRoster(row, { read: false }),
+  open: async (row, valid) => {
+    const selected = showInRoster(row, { read: false });
+    // showInRoster selects synchronously with read:false, invalidating the previous ticket itself.
+    let owns = tabOpenIntents.watch();
+    try {
+      if (!await selected || !owns() || !valid()) return;
+      if (heldHome(shownRows([row])[0]) || rosterStale || rowStale(row, contextDeployments) || !canAddressRemote(row)) return;
+      const target = instanceActionTarget(currentWorkspace(), row);
+      if (!target) return;
+      const opening = openTerminalTab(row, { expected: target, valid, followed: true, focusContent: false });
+      // The opener begins its own selection intent; failures belong to that intent from here on.
+      owns = tabOpenIntents.watch();
+      await opening;
+    } catch (error) {
+      if (owns() && valid()) alert(error?.message || String(error));
+    }
+  },
   notify: (text) => notifications.notify(text),
 });
 window.addEventListener('pagehide', () => launchFocus.dispose(), { once: true });

@@ -9,7 +9,7 @@ retires and schedules agents.
 ## Install
 
 Download the installer for your platform from the
-[GitHub Release](https://github.com/awebai/oats/releases) assets:
+[GitHub Release](https://github.com/oats-project/oats/releases) assets:
 
 | Platform | Artifacts | Notes |
 | --- | --- | --- |
@@ -25,8 +25,21 @@ the app was tested on.
 Windows and Linux arm64 are not supported.
 
 Verify downloads against the release's `SHA256SUMS.txt`. GitHub
-build-provenance attestations are published for every asset
-(`gh attestation verify <file> --repo awebai/oats`).
+build-provenance attestations are published for every asset. Where they live
+depends on where the release was built:
+
+- **Releases after 0.69.12**, built in `oats-project/oats`:
+  `gh attestation verify <file> --repo oats-project/oats --signer-workflow oats-project/oats/.github/workflows/release.yml --source-ref refs/tags/v<version>`.
+- **Releases up to 0.69.12**, built in `awebai/oats` before the repository
+  moved. Their attestations stayed with the `awebai` organisation, so
+  `--repo` finds none (`HTTP 404`):
+  `gh attestation verify <file> --owner awebai --signer-workflow awebai/oats/.github/workflows/release.yml --source-ref refs/tags/v<version>`.
+  Use it only for these versions. For a later release it would trust the old
+  organisation in place of the new one.
+
+Both forms accept only that repository's release workflow, run for the
+release's tag. They accept no other workflow of the owner and no run from a
+branch.
 
 ### macOS: ad-hoc signed build
 
@@ -161,11 +174,16 @@ Launch flags for scripted use: `--dir <workspace>`, `--instance <name>` and
 `--instance <name>` beside `--dir <deployment>` opens the deployment's window
 with that instance selected in the roster, as **Show in roster** selects it:
 its row is revealed (a collapsed parent or the Background section opens) and
-takes the keyboard focus. Press Enter to open its terminal. On a first launch
-and on a launch while Desktop runs, it behaves the same way.
+takes the keyboard focus. If the row is running, its terminal tab opens in
+the main area through the same path as a click. Keyboard focus stays on the
+roster row: no key reaches the terminal until you click into it or use
+**Terminal: focus the active terminal input**. First and repeated launches
+behave the same way.
 
-- **It only selects.** Nothing starts, attaches or is written, and Desktop
-  reads nothing for it beyond the roster reads it makes anyway.
+- **Only a running local row opens.** Stopped, never-launched, unknown, held,
+  unavailable or stale rows stay selected only, with no Start dialog. Nothing
+  starts, stops, is written or receives input. The only kernel calls are the
+  roster reads and the viewer attach a click makes.
 - **The name must be an instance name**, the one `oats spawn --name` takes. Any
   other value is ignored, and the window says the instance named at launch
   isn't a valid instance name, without repeating the value.
@@ -173,7 +191,9 @@ and on a launch while Desktop runs, it behaves the same way.
   other workspaces never match. A name that isn't there yet (a spawn still
   finishing) is waited for, over the roster's next reads, for about 30
   seconds; then the window says "No instance <name> in this workspace". A name
-  two of its instances share selects nothing, and the window says so.
+  two of its instances share selects nothing, and the window says so. A row
+  first observed running opens; one first observed stopped stays selected
+  only even if it later starts.
 - **Your choice wins.** Selecting anything, typing or clicking while it waits
   drops it. A later launch's `--instance` replaces it.
 - Without `--dir`, with a `--dir` that isn't a deployment, or from a folder
@@ -1125,6 +1145,14 @@ unknown or unreported harness shows "?". Sources and licences are in
 
 For bugs, attach the terminal output of the app (`OATS Desktop` prints
 server and CLI-discovery logs to stdout) and your platform/arch.
+On Linux, a launch from a terminal writes to that terminal; redirect stdout
+and stderr to a file to capture it. A launch through a systemd user unit
+(including `systemd-run --user`) normally goes to that unit's journal:
+`journalctl --user -u <unit>`. Desktop does not maintain a separate log file.
+A launch carrying `--instance` prints one disposition line: `selecting it in
+<dir>` when main sends the selection request, or `not selected (<reason>)`
+when it cannot. This records the request, not whether the renderer has found
+the instance yet.
 
 ## Building from source
 
@@ -1141,8 +1169,26 @@ the bundled backend, of its liveness collector and of every module main
 imports, from `app.asar` and the `client/` directory beside it, no GUI
 launch). The Linux leg then runs the
 smoke once more with its launch phase, under a virtual display; no macOS leg
-launches the window. A local interactive run may also exercise the launch
-phase. The headless run starts the backend as the app does, checks that it
-answers and that it exits when its stdin closes, and runs the collector once;
+launches the window. The GUI phase retains the empty-directory picker launch
+and adds fresh AppImage probes with `--dir <fixture> --instance smoke-probe`,
+asserting main's selection-request diagnostic. Repeated launches of the same
+arguments reach the running app. Both launches of the running fixture must
+open its terminal tab in the main area while keeping keyboard focus on its
+roster row. Before the repeated running launch, the smoke switches to Workspace
+overview, then requires that launch to reactivate the retained tab with exactly
+one viewer and no terminal focus event. CDP sends a key to the window;
+independent tmux pane/output reads prove no input reached the inert harness. The stopped fixture stays selected
+only, with no tab or Start dialog, on Workspace overview. The smoke also
+asserts that viewer cleanup restores its private tmux baseline. The fixture's
+workspace/member source, soul definition and inert harness executable are authored by the test-only
+[`launch-fixture.mjs`](../packages/desktop/test/helpers/launch-fixture.mjs).
+The checkout's CLI creates the deployment and lock through `onboard`, creates
+the stopped fixture through `spawn --no-launch` and the running fixture
+through an ordinary spawn using the inert harness, and checks their status.
+Each fresh app uses private home,
+OATS, tmux and profile directories. The AppImage runtime extracts and runs
+without requiring FUSE, retaining its private extraction until both launches
+are reaped. The headless run starts the backend as the app does,
+checks that it answers and that it exits when its stdin closes, and runs the collector once;
 it does not exercise the GUI or, on Linux, the AppImage's launcher and
 runtime (the glibc floor runs the runtime only to unpack the AppImage).

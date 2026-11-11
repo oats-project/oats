@@ -20,7 +20,8 @@ Flags/env:
 - `--dir <workspace>` / `OATS_DESKTOP_DIR` — the OATS workspace the panel shows
   (default: this repo's root).
 - `--instance <name>` — beside `--dir`, the instance the window selects in the
-  roster; it only selects ([docs/desktop.md](../../docs/desktop.md#opening-on-an-instance)).
+  roster, opening its terminal when running while keyboard focus stays on the row
+  ([docs/desktop.md](../../docs/desktop.md#opening-on-an-instance)).
 - `OATS_DESKTOP_PORT` — backend server port (default 4820).
 
 ## Brand artwork

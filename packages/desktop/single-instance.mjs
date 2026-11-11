@@ -153,6 +153,27 @@ export function launchInstance(argv) {
   return validInstanceName(value) ? { ok: true, name: value } : { ok: false };
 }
 
+/** One stdout disposition per launch carrying --instance. Call with null only after the IPC send;
+ * otherwise give the reason no request was sent. Never retain or print an invalid argv name. Paths
+ * may contain line breaks, so escape controls to keep the diagnostic a single terminal line. */
+export function createLaunchReporter(argv, dir, log = console.log) {
+  const carriesInstance = Array.isArray(argv) && argv.includes("--instance");
+  const hasDir = !!switchValue(argv, "--dir");
+  const instance = launchInstance(argv);
+  const linePath = String(dir).replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]/g,
+    (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  let reported = false;
+  return (reason = null) => {
+    if (!carriesInstance || reported) return;
+    reported = true;
+    if (!hasDir) reason = "no --dir";
+    else if (!instance?.ok) reason = "not a valid instance name";
+    const detail = reason === "no window" ? `no window for ${linePath}` : reason;
+    log(detail ? `oats-desktop: launch --instance: not selected (${detail})`
+      : `oats-desktop: launch --instance ${instance.name}: selecting it in ${linePath}`);
+  };
+}
+
 /**
  * What a launch naming `dir` does in the running app.
  * @param {object} io
@@ -167,14 +188,17 @@ export function launchInstance(argv) {
  * in the window of the deployment it names: a launch that focuses the most recent window selects nothing.
  */
 export function createLaunchOpener({ isDeployment, admit, open, focusRecent, select }) {
-  return async function openLaunch(dir, instance = null) {
+  return async function openLaunch(dir, instance = null, report = () => {}) {
     let deployment = false;
     try { deployment = !!dir && isDeployment(dir); } catch { deployment = false; }
-    if (!deployment) return focusRecent();
-    const key = await admit(dir);
-    if (!key) return focusRecent();
+    if (!deployment) { report("--dir is not an OATS deployment"); return focusRecent(); }
+    let key;
+    try { key = await admit(dir); }
+    catch (error) { report("no window"); throw error; }
+    if (!key) { report("no window"); return focusRecent(); }
     const win = open(key);
-    if (instance && win) select(win, instance, dir);
+    if (instance && win) select(win, instance, dir, report);
+    else report("no window");
     return win;
   };
 }

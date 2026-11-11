@@ -1,18 +1,19 @@
 // The shell's side of a launch's --instance (D3 of #1665): main's ask (onLaunchFocus) becomes a request of the
-// shipped launch focus, the rows the window already shows answer it at once, and the one act it takes is
-// showInRoster. No terminal opens, nothing starts, and no read or write is made for it. The shipped shell.mjs
+// shipped launch focus; running rows open through the ordinary terminal opener, without input focus.
+// Other rows select only. Nothing starts and there is no roster read of its own. The shipped shell.mjs
 // lines run in a vm over fakes that record every call.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { createLaunchFocus } from '../renderer/launch-focus.mjs';
+import { instanceActionTarget } from '../renderer/instance-action-target.mjs';
 
 const source = readFileSync(new URL('../renderer/shell.mjs', import.meta.url), 'utf8');
 const between = (from, to) => { const a = source.indexOf(from), b = source.indexOf(to, a); assert.ok(a >= 0 && b > a, from); return source.slice(a, b); };
 const creation = between("// A launch's --instance (launch-focus.mjs): its row is selected", '// Persistent recursive instance tree');
 const subscription = between('// A launch asks this window to select an instance', '/** Another window took `workspace` over.');
-const row = (instance) => ({ instance, home: `/d/acme/agents/x/instances/${instance}`, deployment: { id: '/d/acme' } });
+const row = (instance, extra = {}) => ({ instance, agent: 'x', agentsRoot: '/d/acme/agents', home: `/d/acme/agents/x/instances/${instance}`, deployment: { id: '/d/acme' }, ...extra });
 
 const fn = (name) => { const found = source.match(new RegExp(`(?:async )?function ${name}\\([^]*?\\n\\}`)); assert.ok(found, name); return found[0]; };
 
@@ -25,7 +26,7 @@ function shell({ shown = null, rows = shown?.instances ?? [], gen = shown?.gen ?
   const forbidden = (name) => () => { throw new Error(`${name} must not run for a launch's --instance`); };
   const element = (i) => ({ dataset: { treeInstance: i.home } });
   const c = {
-    createLaunchFocus, calls,
+    createLaunchFocus, instanceActionTarget, calls,
     tabOpenIntents: { watch: () => { const mine = ticket; return () => mine === ticket; }, invalidate: () => { ticket++; } },
     operator: { input: () => 0, pointer: () => pointer },
     notifications: { notify: (text) => calls.push(['notify', text]) },
@@ -39,7 +40,9 @@ function shell({ shown = null, rows = shown?.instances ?? [], gen = shown?.gen ?
     rosterParentId: () => null, collapsedInstances: new Set(), collapseKey: (ws, id) => `${ws}\n${id}`,
     instanceId: (i) => i.home, renderContextRoster() {},
     setRovingRow: (_list, target) => calls.push(['select', target.dataset.treeInstance.split('/').at(-1)]),
-    openTerminalTab: forbidden('openTerminalTab'), openInstanceStart: forbidden('openInstanceStart'), api: forbidden('api'),
+    heldHome: (row) => row.held, shownRows: rows => rows, rosterStale: false, contextDeployments: [], rowStale: row => row.stale, canAddressRemote: row => row.addressable !== false,
+    alert: text => calls.push(['error', text]),
+    openTerminalTab: (row, options) => { calls.push(['open', row.instance, options]); ticket++; }, openInstanceStart: forbidden('openInstanceStart'), api: forbidden('api'),
   };
   runInNewContext(`${fn('showInRoster')}\n${creation}\n${subscription}\nglobalThis.launchFocus = launchFocus;`, c);
   // A person's choice is a press that selects something: both generations move on.
@@ -115,4 +118,54 @@ test('the shell feeds the launch focus only observed reads of this computer\'s r
   const paint = read.indexOf('renderContextRoster(contextInstances);\n  }\n'), feed = read.indexOf('if (!reportedFailure && !panel.workspace?.remote) launchFocus.observe(contextInstances);');
   assert.ok(paint > 0 && feed > paint, 'observed after the rows are painted');
   assert.equal(read.split('launchFocus.').length - 1, 1, 'one place');
+});
+
+
+test('first and second launch select then open a running row through the click opener with no focus request', async () => {
+  for (const first of [true, false]) {
+    const rows = [row('dev-2', { running: true })];
+    const s = shell(first ? { rows } : { shown: { gen: 3, ws: 'ws:acme', instances: rows } });
+    s.ask({ deployment: '/d/acme', name: 'dev-2' });
+    if (first) s.c.launchFocus.observe(rows);
+    await settle();
+    assert.deepEqual(s.c.calls.map(call => call.slice(0, 2)), [['select', 'dev-2'], ['open', 'dev-2']]);
+    const opts = s.c.calls[1][2];
+    assert.equal(opts.focusContent, false);
+    assert.equal(opts.followed, true, 'reuse painted roster; no additional resolution read');
+    assert.deepEqual(opts.expected, instanceActionTarget('ws:acme', rows[0]));
+    assert.equal(opts.valid(), true, 'our own selection does not cancel the open');
+    s.choose();
+    assert.equal(opts.valid(), false, 'operator activity cancels it');
+  }
+});
+
+test('held, stale and unavailable running rows select only', async () => {
+  for (const extra of [{ held: { kind: 'retiring' } }, { stale: true }, { addressable: false }]) {
+    const s = shell({ shown: { gen: 3, ws: 'ws:acme', instances: [row('dev-2', { running: true, ...extra })] } });
+    s.ask({ deployment: '/d/acme', name: 'dev-2' });
+    await settle();
+    assert.deepEqual(s.c.calls, [['select', 'dev-2']]);
+  }
+});
+
+test('a newer choice between selection and opening prevents the open', async () => {
+  const s = shell({ shown: { gen: 3, ws: 'ws:acme', instances: [row('dev-2', { running: true })] } });
+  s.ask({ deployment: '/d/acme', name: 'dev-2' });
+  s.choose();
+  await settle();
+  assert.deepEqual(s.c.calls, [['select', 'dev-2']]);
+});
+
+test('current failed opens report the click error; stale success and rejection have no later effect', async () => {
+  for (const stale of [false, true]) for (const rejects of [false, true]) {
+    const s = shell({ shown: { gen: 3, ws: 'ws:acme', instances: [row('dev-2', { running: true })] } });
+    let finish;
+    s.c.openTerminalTab = () => new Promise((resolve, reject) => { finish = () => rejects ? reject(new Error('session gone')) : resolve(); });
+    s.ask({ deployment: '/d/acme', name: 'dev-2' });
+    await settle();
+    if (stale) s.choose();
+    finish();
+    await settle();
+    assert.deepEqual(s.c.calls, [['select', 'dev-2'], ...(!stale && rejects ? [['error', 'session gone']] : [])]);
+  }
 });

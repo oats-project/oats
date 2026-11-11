@@ -142,7 +142,8 @@ only by that repo's souls.
 
 **Each workspace has a setup expert:** a soul that holds `oats.setup`. From
 OATS 0.69.8 (`oats.framework` 1.18.0) it is the framework's package soul
-`oats-setup-expert`, with `oats.setup` and `oats.onboarding`, and its instance
+`oats-setup-expert`, with `oats.setup` and `oats.onboarding` (and
+`oats.coordination-setup` from oats.framework 1.23.0), and its instance
 is named `<workspace>-oats-setup-expert` (on a machine joining an existing
 workspace, `<workspace>-<machine>-oats-setup-expert`; `<workspace>-oats-setup`
 when a soul of the workspace already holds the first name, and no `--name`,

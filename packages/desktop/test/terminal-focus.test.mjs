@@ -30,8 +30,8 @@ test("terminal tabs provide readiness-aware focusContent and fresh-open dedup fo
   const src = read("renderer/shell.mjs");
   assert.match(src, /focusContent: \(\) => tab\.focus\(\)/,
     "terminal tab requests readiness-aware input focus");
-  assert.match(src, /focusOnActivate: true/,
-    "addTab's dedup inside openTerminalTabInner is a user jump");
+  assert.match(src, /focusOnActivate: focusContent/,
+    "addTab dedup follows the opener focus option");
 });
 
 test("existing-terminal jumps focus input, fill an empty split without another attach, and ignore stale workspaces", async () => {

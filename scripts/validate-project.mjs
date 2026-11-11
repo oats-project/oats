@@ -7,7 +7,7 @@ import { parse as parseYamlFull } from "yaml";
 import { entriesDir } from "./assemble-release-notes.mjs";
 import { checkOkfMirror } from "./check-okf-mirror.mjs";
 import { checkKnowledgeTheoryPackage } from "./check-knowledge-theory-package.mjs";
-import { checkReleaseVersions } from "./check-package-dry-runs.mjs";
+import { checkNodeFloor, checkReleaseVersions } from "./check-package-dry-runs.mjs";
 import { checkWorkspaceFiles } from "./check-workspace-files.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -50,6 +50,7 @@ if (!validatePackage(json(theoryManifest))) fail(`oats-package/oats-package.json
 try { checkKnowledgeTheoryPackage({ repoRoot: root }); } catch (error) { fail(`optional knowledge theory: ${error.message}`); }
 try { checkOkfMirror({ repoRoot: root }); } catch (error) { fail(`standalone OKF mirror: ${error.message}`); }
 try { checkReleaseVersions(root); } catch (error) { fail(`release manifests: ${error.message}`); }
+try { checkNodeFloor(root); } catch (error) { fail(`Node floor: ${error.message}`); }
 // The repository's own oats-workspace.yaml and package-catalog.json, read by the kernel's readers,
 // and no unresolved merge-conflict markers in any tracked text file.
 for (const failure of checkWorkspaceFiles(root)) fail(failure);

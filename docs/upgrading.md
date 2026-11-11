@@ -6,11 +6,11 @@ host that comes from it.
 
 ## Upgrading to the latest version
 
-The latest version is **OATS 0.69.12** ([release notes](release-notes/v0.69.12.md)).
-The 0.69.12 Desktop accepts OATS CLIs `>=0.26.0 <0.70.0`.
+The latest version is **OATS 0.69.15** ([release notes](release-notes/v0.69.15.md)).
+The 0.69.15 Desktop accepts OATS CLIs `>=0.26.0 <0.70.0`.
 
 **First, read the `## Upgrade` section of every release after yours, up to
-0.69.12,** in the [release notes](release-notes/): it says what to do before
+0.69.15,** in the [release notes](release-notes/): it says what to do before
 the CLI changes, and what else must change with it (the Desktop, another
 tool, a package pin). [Coming from an older version](#coming-from-an-older-version)
 names the releases that ask for more than the steps below. `oats version`
@@ -19,8 +19,8 @@ prints the version you have.
 Then, on each host:
 
 ```sh
-                                     # 0. where the Desktop is installed: Desktop 0.69.12 first
-npm install -g @awebai/oats@0.69.12  # 1. the CLI
+                                     # 0. where the Desktop is installed: Desktop 0.69.15 first
+npm install -g @awebai/oats@0.69.15  # 1. the CLI
 oats update                          # 2. in each deployment: the plan, then it asks before it runs
 oats doctor                          # 3. in the same deployment
 ```
@@ -122,6 +122,8 @@ oats session start --home <absolute-home>
 Read the plan before applying it. It lists every moving package module,
 skill/inject/hook changes and provider adoption decisions, modules kept
 because their package is no longer locked, and member drift for information.
+A kept package module moves only by a respawn; `oats session start` and
+`restart` say so in one warning that names each one.
 One provider refusal refuses the whole move. A running or unreadable session
 refuses with `E_SESSION_RUNNING`; stop it first. A stale plan returns
 `E_PLAN_STALE` and a fresh plan to review.
@@ -202,6 +204,19 @@ of the Desktop and the CLI, and an optional package pin. A change a script
 must follow is in its release's Upgrade section whether or not it is listed
 here.
 
+- **[0.69.15](release-notes/v0.69.15.md#upgrade):** Node 22.5.0 or later
+  before the CLI; on a shared host, `chmod -R go-rwx` each turn-record root;
+  a record root is written from one machine at a time; release a schedule
+  slot an earlier OATS left without its record (`oats doctor` lists it).
+- **[0.69.14](release-notes/v0.69.14.md#upgrade):** 0.69.13 was tagged but
+  never published, so its steps (below) are this release's; the remaining
+  state-changing commands refuse a flag they do not define.
+- **[0.69.13](release-notes/v0.69.13.md#upgrade):** the catalog pins
+  oats.framework 1.23.0. Remove a sweep lock (`~/.oats/session-resume/lock`)
+  or a home's start lock (`<home>/.oats-start.lock`) an earlier OATS left;
+  check each `git:` package pin names its own id; a deployment of OATS's
+  own workspace takes the four hand steps for the reviewer soul's new name,
+  then respawns its homes onto the new souls and starts a dispatcher.
 - **[0.69.12](release-notes/v0.69.12.md#upgrade):** the catalog pins
   oats.okf 5.8.0, oats.aweb 1.37.0 and oats.framework 1.22.1. Where
   `oats.aweb-tasks` is composed, readiness warns until the host wake daemon
@@ -551,6 +566,22 @@ It also warns about a folder it could not look at (one that does not
 resolve, or a bridge that cannot be read). A folder that does not exist or
 holds no bridge is not a skew, and it says nothing about it. The warnings are
 in the text output only; `oats doctor --json` does not carry them.
+
+`oats doctor` also reports this machine's session resume lock when it needs a
+person, as a `resume-lock-stuck` problem with the path and what to do: after
+an upgrade that is a lock directory left by the earlier OATS
+(`~/.oats/session-resume/lock/`), which `oats session resume` refuses with
+`E_RESUME_LOCK_STUCK` and never removes. Remove the directory once no earlier
+`oats` is running on the machine
+([The sweep](execution-targets.md#the-sweep)).
+
+`oats doctor` reports a schedule slot whose record cannot be read as a
+`schedule-slot-unreadable` problem, naming the deployment, the job and the
+remedy. After an upgrade that is a slot directory an earlier OATS left
+without its `owner.json`. The tick reports that job invalid and runs the
+deployment's other jobs. Check `oats schedule show <id>`; once its last run
+is not running, `oats schedule reconcile <id> --clear` releases the slot
+([Schedules](schedules.md#files)).
 
 ## After a change of Node version
 

@@ -257,7 +257,14 @@ for (const receipt of [true, false]) {
     assert.equal(seen.facts.work.untracked, 1);
     assert.ok(seen.notes.includes(`the record names no repository for the work tree: the retire uses the one Git names for it, ${repo}, and does not write it into the record`), JSON.stringify(seen.notes));
     assert.ok(seen.notes.includes("0 changed and 1 untracked file(s) would be retained with the worktree"), JSON.stringify(seen.notes));
-    const result = d.retired(inst.instance);
+    // A stub does not say which retire hooks to run: the retire refuses it, and --force is the way
+    // through (test/retire-after-interrupted-spawn.test.mjs). What it does with the tree is the same.
+    if (!receipt) {
+      const error = d.refused(inst.instance, [], "E_UNIDENTIFIED_INSTANCE_HOME");
+      assert.equal(error.details.reached.phase, "before-effects");
+      assert.equal(readFileSync(join(work, FILE), "utf8"), BYTES);
+    }
+    const result = d.retired(inst.instance, receipt ? [] : ["--force"]);
     assert.equal(result.removedDir, true);
     assert.equal(result.retention.worktree, "retained");
     assert.equal(result.retention.branch, branch);

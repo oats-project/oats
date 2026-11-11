@@ -2297,11 +2297,16 @@ which never carries the value. The push is one-way: no renderer→main call answ
 ask until the shell subscribes (`onLaunchFocus`). `createLaunchFocus` holds the one pending request:
 - Each observed roster read of this computer's rows (`refreshContextRoster`, after the paint) is checked with
   `launchFocusMatch`, which counts only that deployment's local rows (a spawning home included, a remote row never).
-- One match is selected through `showInRoster`, nothing else. Two or more say so. None waits
+- One match observed `running === true` is selected through `showInRoster` then opened by `openTerminalTab`,
+  the row click's path. The opener uses the painted roster (`followed`) and `focusContent: false` for new and
+  retained tabs, including delayed readiness: keyboard focus stays on the row. Held, unavailable or stale rows
+  select only. A match observed not running selects only and consumes the request, even if it later starts.
+  Nothing starts or receives input. Two or more say so. None waits
   `LAUNCH_FOCUS_PENDING_MS`, then says "No instance <name> in this workspace" from a timer, with no read of its own.
 - A person's choice drops the request: the selection-ownership ticket (`tabOpenIntents.watch()`, taken at the first
   roster read so the window's own binding does not count), or input or a pointer press (`watchOperator`).
-- A later ask replaces the request. Rows the window already shows answer an ask at once.
+- A later ask replaces the request, including the validity of an open still awaiting. The shell checks selection
+  ownership across selection and open, on both success and rejection. Rows already shown answer at once.
 
 ## Supporting read-only files
 

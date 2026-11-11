@@ -1,7 +1,7 @@
 {
   "capability": "oats.aweb",
   "command": "aweb",
-  "version": "1.37.0",
+  "version": "1.39.0",
   "compatibility": {
     "oats": ">=0.68.0"
   },
@@ -18,7 +18,7 @@
       "runtime": "pi",
       "package": "npm:@awebai/pi",
       "why": "the aweb channel extension for pi sessions — real-time mail/chat awakenings; without it a pi instance can send with `aw` but is never woken by incoming messages",
-      "install": "pi install npm:@awebai/pi, then make its entry {\"source\": \"npm:@awebai/pi\", \"skills\": []} in the pi folder's settings.json (PI_CODING_AGENT_DIR, else ~/.pi/agent), so pi loads the extension without its bundled skills (README, \"The pi extension without its skills\")",
+      "install": "pi install npm:@awebai/pi, then, if the @awebai/pi installed is below 0.5.0, make its entry {\"source\": \"npm:@awebai/pi\", \"skills\": []} in the pi folder's settings.json (PI_CODING_AGENT_DIR, else ~/.pi/agent), so pi loads the extension without its bundled skills. Never install @awebai/claude-skills in a pi folder that OATS homes use: a home's skills come from its capabilities (README, \"The pi extension without its skills\")",
       "when": {
         "delivery": "channel"
       }
@@ -41,7 +41,7 @@
         "delivery": "session"
       },
       "why": "an ambient aweb pi extension, if one is installed, must honour AWEB_DELIVERY=session (0.3.10 and later); an older one would open a second event stream beside the wake broker; no extension at all is fine",
-      "install": "pi install npm:@awebai/pi@latest, then make its entry {\"source\": \"npm:@awebai/pi@latest\", \"skills\": []} in the pi folder's settings.json (PI_CODING_AGENT_DIR, else ~/.pi/agent), so pi loads the extension without its bundled skills (README, \"The pi extension without its skills\")",
+      "install": "pi install npm:@awebai/pi@latest, then, if the @awebai/pi installed is below 0.5.0, make its entry {\"source\": \"npm:@awebai/pi@latest\", \"skills\": []} in the pi folder's settings.json (PI_CODING_AGENT_DIR, else ~/.pi/agent), so pi loads the extension without its bundled skills. Never install @awebai/claude-skills in a pi folder that OATS homes use: a home's skills come from its capabilities (README, \"The pi extension without its skills\")",
       "ifInstalled": true
     },
     {

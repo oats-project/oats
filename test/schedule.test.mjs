@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -18,6 +18,7 @@ const S = await import("../lib/schedule.mjs");
 const H = await import("../lib/schedule-host.mjs");
 const A = await import("../lib/automations.mjs");
 const { scheduleRemote } = await import("../lib/servers.mjs");
+const { selfIdentity } = await import("../lib/worktree-hooks.mjs");
 test.after(() => rmSync(base, { recursive: true, force: true }));
 
 let n = 0;
@@ -618,6 +619,48 @@ test("remote host cap options require explicit support before forwarding, includ
   assert.deepEqual(capsOnly.mutations, [], "the schedule feature remains required too");
 });
 
+test("a routed host install --register-only is refused here unless the host advertises schedule-host-register-only: a host without it would ignore the flag and install a unit", () => {
+  const server = { sshHost: "container-host", workspace: "/state/deploy" };
+  const result = { scheduler: { registered: true, installed: false }, warnings: [] };
+  const peer = (features) => {
+    const sent = [];
+    return { sent, server, execFileSync: (_bin, argv) => {
+      const command = argv.at(-1);
+      sent.push(command);
+      if (command.includes("version --json")) return JSON.stringify({ schemaVersion: 1, desktopApi: 1, version: "0.69.14", features });
+      return JSON.stringify({ schemaVersion: 1, ok: true, result });
+    } };
+  };
+  const refused = (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.details === undefined
+    && e.message === "remote oats at container-host (team) does not confirm required features schedule and schedule-host-register-only, so --register-only was not sent: a host without it ignores the option and installs a timer; upgrade oats on that destination";
+  for (const features of [undefined, [], ["schedule"], ["schedule", "schedule-host-caps"], ["schedule-host-register-only"]]) {
+    for (const flags of [["--register-only"], ["--register-only", "--max-concurrent", "2"]]) {
+      const io = peer(features);
+      assert.throws(() => scheduleRemote("team", ["host", "install", ...flags], io), refused, `${JSON.stringify(features)} ${flags.join(" ")}`);
+      assert.deepEqual(io.sent, ["oats version --json"], "only the probe reached the host: no install was sent");
+    }
+  }
+  // A probe this kernel cannot read establishes no support: refused the same way.
+  for (const payload of ["not JSON", JSON.stringify({ schemaVersion: 1, desktopApi: 2, version: "0.40.0", features: ["schedule", "schedule-host-register-only"] })]) {
+    const sent = [];
+    assert.throws(() => scheduleRemote("team", ["host", "install", "--register-only"], { server, execFileSync: (_bin, argv) => { sent.push(argv.at(-1)); return payload; } }), refused, payload);
+    assert.deepEqual(sent, ["oats version --json"]);
+  }
+  const io = peer(["schedule", "schedule-host-register-only"]);
+  const out = scheduleRemote("team", ["host", "install", "--register-only"], io);
+  assert.deepEqual(out.envelope.result, { ...result, server: "team" });
+  assert.deepEqual(io.sent, ["oats version --json", "oats schedule host install --register-only --dir /state/deploy --json"], "a host that advertises it is sent the option as given");
+  // With caps, both features are required.
+  const noCaps = peer(["schedule", "schedule-host-register-only"]);
+  assert.throws(() => scheduleRemote("team", ["host", "install", "--register-only", "--max-concurrent", "2"], noCaps), (e) => e.code === "E_REMOTE_INCOMPATIBLE" && /schedule-host-caps/.test(e.message));
+  assert.deepEqual(noCaps.sent, ["oats version --json"]);
+});
+
+test("this kernel advertises schedule-host-register-only in its probe", async () => {
+  const { KERNEL_FEATURES } = await import("../lib/kernel-features.mjs");
+  assert.ok(KERNEL_FEATURES.includes("schedule-host-register-only"));
+});
+
 test("remote cap installs give actionable compatibility errors for unknown probes without masking transport errors", () => {
   const server = { sshHost: "caps-host", workspace: "/remote/workspace" };
   const unknown = { schemaVersion: 1, desktopApi: 2, version: "0.40.0", features: ["schedule"] };
@@ -1100,17 +1143,33 @@ test("a command whose envelope names a capability agent's home is tracked throug
   assert.equal(S.parseEnvelopeText("garbage"), null);
 });
 
-test("the host lock is never reclaimed: an unreadable or dead owner is refused with the directory to remove", () => {
-  const dir = join(process.env.OATS_HOME_DIR, "schedules", "host.lock");
-  mkdirSync(dir, { recursive: true }); // the pre-owner-publication state of a live acquirer
-  assert.throws(() => S.withHostLock(() => "entered"), (e) => e.code === "E_SCHEDULER_BUSY" && e.message.includes(dir) && /not readable/.test(e.message));
-  assert.ok(existsSync(dir), "the contender did not delete the other acquirer's lock");
-  writeFileSync(join(dir, "owner.json"), JSON.stringify({ pid: 999999, at: "x" }));
-  assert.throws(() => S.withHostLock(() => "entered"), (e) => e.code === "E_SCHEDULER_BUSY" && /gone/.test(e.message));
-  assert.ok(existsSync(dir), "a dead owner is reported, not reclaimed");
-  rmSync(dir, { recursive: true, force: true });
+test("the host lock is taken over from a holder that is gone; a holder that runs, a record that cannot be judged and an earlier kernel's lock directory are E_SCHEDULER_BUSY with the path to remove, and are left as they are", () => {
+  const lock = join(process.env.OATS_HOME_DIR, "schedules", "host.lock");
+  mkdirSync(join(process.env.OATS_HOME_DIR, "schedules"), { recursive: true });
+  const refused = (why) => (e) => e.code === "E_SCHEDULER_BUSY" && e.message === `the host scheduler is locked (${why}). If no oats schedule process is running, remove ${lock} and retry; nothing was changed.`;
+  // A tick that was killed while it held the lock: the next one takes the lock over.
+  const exited = spawnSync(process.execPath, ["-e", ""]).pid;
+  writeFileSync(lock, JSON.stringify({ pid: exited, processStart: "proc:1", nonce: "a".repeat(32), at: "2026-10-10T00:00:00.000Z", what: "the host scheduler" }) + "\n");
   assert.equal(S.withHostLock(() => "entered"), "entered");
-  assert.equal(existsSync(dir), false, "own lock removed in finally");
+  assert.equal(existsSync(lock), false, "its own lock is removed in finally");
+  // A holder that runs.
+  const live = JSON.stringify({ ...selfIdentity(), nonce: "a".repeat(32), at: "2026-10-10T00:00:00.000Z", what: "the host scheduler" }) + "\n";
+  writeFileSync(lock, live);
+  assert.throws(() => S.withHostLock(() => "entered"), refused(`pid ${process.pid} holds it`));
+  assert.equal(readFileSync(lock, "utf8"), live, "the holder's lock is not touched");
+  // A record that does not parse.
+  writeFileSync(lock, "{half a record");
+  assert.throws(() => S.withHostLock(() => "entered"), refused(`the record at ${lock} is unreadable`));
+  assert.equal(readFileSync(lock, "utf8"), "{half a record");
+  rmSync(lock);
+  // The lock directory of an earlier kernel, whoever its owner.json names.
+  mkdirSync(lock);
+  writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: 999999, at: "x" }));
+  assert.throws(() => S.withHostLock(() => "entered"), refused(`${lock} is a lock directory written by an earlier kernel`));
+  assert.equal(readFileSync(join(lock, "owner.json"), "utf8"), JSON.stringify({ pid: 999999, at: "x" }), "the directory is reported, never removed");
+  rmSync(lock, { recursive: true, force: true });
+  assert.equal(S.withHostLock(() => "entered"), "entered");
+  assert.equal(existsSync(lock), false);
 });
 
 test("dry-run touches no lock, state or definition; a retiring home keeps its slot; run-now observes before judging a lock", () => {

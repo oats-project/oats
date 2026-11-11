@@ -7,7 +7,9 @@
 // provider's own source (mirrors/oats-aweb), so they cannot drift from what the
 // provider prints.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -18,6 +20,7 @@ const skill = read("skills/oats-getting-started/SKILL.md");
 const catalog = JSON.parse(read("package-catalog.json"));
 const residentSource = read("mirrors/oats-aweb/lib/resident.mjs");
 const providerVersion = JSON.parse(read("mirrors/oats-aweb/oats.json")).version;
+const setupInviteSources = () => read("mirrors/oats-aweb/lib/setup-invite.mjs") + read("mirrors/oats-aweb/bin/oats-aweb.mjs");
 const atLeast = (v, min) => {
   const a = v.split(".").map(Number), b = min.split(".").map(Number);
   for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
@@ -194,7 +197,7 @@ test("getting-started: one yes covers the computer's changes; a refused step is 
   assert.ok(!/Ask for (?:its|their) (?:GitHub )?owner/.test(flat), "the host's owner is derived, not asked");
 });
 
-test("getting-started: an existing workspace names its setup expert after this machine, and joins with the invite's service URL", () => {
+test("getting-started: an existing workspace names its setup expert after this machine, and joins with the invite alone", () => {
   const flat = read("skills/oats-getting-started/SKILL.md").replace(/\s+/g, " ");
   assert.ok(flat.includes("`--name <workspace>-<this machine's name>-oats-setup-expert`"));
   assert.ok(flat.includes("short hostname (`hostname -s`, never the full domain name)"));
@@ -206,9 +209,35 @@ test("getting-started: an existing workspace names its setup expert after this m
   assert.ok(flat.includes("A new workspace keeps `next.spawn` as it is."));
   assert.ok(flat.includes("`I` is its instance name: the `--name` you spawned with"));
   assert.ok(!/Choose with the person a name `A`/.test(flat), "the messaging root's name is derived, not asked");
-  // awebUrl is new in oats.aweb 1.33.1 and may be null: the join works without --service.
-  assert.ok(flat.includes("From oats.aweb 1.33.1 the answer's `result.awebUrl` is the service URL `U`"));
-  assert.ok(flat.includes("When it is `null` or absent, leave `--service U` out of item 4"));
+  // The one-paste join (awebai/oats-aweb#56, oats.aweb 1.36.0, aw 1.36.53): the token alone, no --join, no --service.
+  assert.ok(flat.includes("**The token is all they pass** when this machine has oats.aweb 1.36.0 or later"));
+  assert.ok(flat.includes("| oats aweb setup --soul S --invite-stdin --name A'"), "the joiner's command takes the token alone");
+  // Each refusal the skill names is one the provider makes before redeeming; a service is refused only for an explicit
+  // --service, which the invite-only form never passes, so the skill names none.
+  assert.ok(flat.includes("Before redeeming anything, it refuses an invite it can't use here"));
+  assert.ok(!/refuses an invite[^.]*another service/.test(flat), "no service refusal is promised for the invite-only form");
+  const providerSources = setupInviteSources();
+  for (const code of ["E_SETUP_INVITE_INSPECT", "E_SETUP_INVITE_SCOPE", "E_SETUP_LABEL_COLLISION", "E_SETUP_ALREADY_MEMBER"])
+    assert.ok(providerSources.includes(code), `the provider refuses with ${code}`);
+  // A team the workspace doesn't name is refused before redeeming: E_SETUP_POLICY where local teams are closed, and
+  // E_SETUP_DEFAULT_PRESERVE where the default comes from the workspace file. Only a machine whose own oats-local.yaml
+  // sets the default redeems it and maps that team under a label of its own; item 5 tells the two apart read-only,
+  // because a per-team root is made only by a redemption.
+  assert.ok(flat.includes("one for a team this workspace doesn't name (unless the workspace allows local teams and this machine's own `oats-local.yaml` sets its default team)"));
+  const teamDefault = read("mirrors/oats-aweb/lib/setup-team-default.mjs");
+  assert.ok(teamDefault.includes("throw setupFailure('E_SETUP_POLICY', 'local-teams-closed"), "the provider refuses an unnamed team where local teams are closed");
+  assert.ok(teamDefault.includes("doc.defaultTeam.from !== 'deployment'") && teamDefault.includes("throw setupFailure('E_SETUP_DEFAULT_PRESERVE'"), "the provider refuses an unnamed team where the default is the workspace's");
+  assert.ok(flat.includes("In that exception, an invite for a team the workspace doesn't name is redeemed instead"));
+  assert.ok(setupInviteSources().includes('join(resolve(base), ".aweb-roots", normalizeAwebTeamName(label))'), "a redemption makes the per-team root item 5 looks for");
+  assert.ok(flat.includes("With `\"root\": null` after item 4's invite-only form, look first, read-only: `ls -d \"D\"/.aweb-roots/*/.aw 2>/dev/null`. Nothing printed: the join refused before redeeming anything"), "a refusal is not read as a root left outside L");
+  assert.ok(flat.includes("A path printed for a label other than `L`: the invite was for that team, and this machine joined it instead"), "a redeemed invite for another team is not read as a refusal");
+  const setupInvite = read("mirrors/oats-aweb/lib/setup-invite.mjs");
+  const awFloor = setupInvite.match(/AW_INVITE_INSPECT = '([0-9.]+)'/);
+  assert.ok(awFloor && flat.includes(`aw ${awFloor[1]} or later (\`aw.version\` in item 1's check)`), "the skill's aw floor is the provider's");
+  // Older providers keep the labelled form; awebUrl is new in oats.aweb 1.33.1 and may be null: that join works without --service.
+  assert.ok(flat.includes("from oats.aweb 1.33.1 the answer's `result.awebUrl`, no secret"));
+  assert.ok(flat.includes("When it is `null` or absent, leave `--service U` out of item 4's labelled form"));
+  assert.ok(flat.includes("| oats aweb setup --soul S --join L --invite-stdin --name A --service U'"));
   assert.ok(!flat.includes("default service"), "the provider has no default service: the join fails without one");
   const invite = read("mirrors/oats-aweb/lib/invite.mjs");
   const [maj, min, pat] = providerVersion.split(".").map(Number);
@@ -223,6 +252,61 @@ test("the Desktop's background download is installed only once its checksum and 
   const installs = skill.match(/grep -qx VERIFIED "<W>\.log" && [^\n]*cd "<W>"/g) || [];
   assert.equal(installs.length, 3, "the Linux install, the macOS check and the macOS install are each gated on VERIFIED");
   assert.ok(skill.includes("never install or open this download before its\nattestation has passed"));
+});
+
+test("the download names the new owner, and VERIFIED follows only a passing download, checksum and one pinned attestation", () => {
+  // After the move to oats-project, attestations of releases up to 0.69.12 stayed with the awebai
+  // organisation; later ones are in oats-project/oats. The awebai form is tried only for those
+  // versions, each form is pinned to its own repository's release workflow at the release's tag,
+  // and neither stands in for a failed download or checksum.
+  const start = skill.match(/\{ nohup sh -c '([^']*)' sh "\$W"/);
+  assert.ok(start);
+  const bodyFor = (v) => start[1].replaceAll("vV", `v${v}`).replaceAll('"F"', '"f.AppImage"').replaceAll(" F\\$", " f.AppImage\\$");
+  const body = bodyFor("0.69.12");
+  assert.ok(body.includes('gh release download "v0.69.12" -R oats-project/oats '));
+  assert.doesNotMatch(body, /-R awebai\/oats|--repo awebai\/oats/);
+  const forms = body.match(/gh attestation verify [^;|&]*/g).map((f) => f.trim());
+  assert.deepEqual(forms, [
+    'gh attestation verify "f.AppImage" --repo oats-project/oats --signer-workflow oats-project/oats/.github/workflows/release.yml --source-ref refs/tags/v0.69.12',
+    'gh attestation verify "f.AppImage" --owner awebai --signer-workflow awebai/oats/.github/workflows/release.yml --source-ref refs/tags/v0.69.12',
+  ]);
+  // Run the real command line with stand-ins for gh and sha256sum, failing each step in turn. The
+  // stand-ins answer only for the expected file, tag and checksum line.
+  const dir = mkdtempSync(join(tmpdir(), "oats-verify-"));
+  try {
+    const bin = join(dir, "bin"); mkdirSync(bin);
+    writeFileSync(join(bin, "gh"), `#!/bin/sh
+case "$1 $2" in
+  "release download") [ "$DL" = ok ] || exit 1; echo "x  \${SUMS_FILE:-f.AppImage}" > SHA256SUMS.txt; : > f.AppImage;;
+  "attestation verify")
+    case "$*" in *"f.AppImage"*"--source-ref refs/tags/$TAG") ;; *) exit 9;; esac
+    case "$*" in *"--repo oats-project/oats --signer-workflow oats-project/oats/"*) [ "$NEW" = ok ];; *"--owner awebai --signer-workflow awebai/oats/"*) [ "$OLD" = ok ];; *) exit 9;; esac;;
+  *) exit 9;;
+esac
+`, { mode: 0o755 });
+    // Like macOS's sha256sum, it passes empty input; only the expected line and SUM=ok pass otherwise.
+    writeFileSync(join(bin, "sha256sum"), `#!/bin/sh\nin=$(cat); [ -z "$in" ] && exit 0; [ "$in" = "x  f.AppImage" ] && [ "$SUM" = ok ]\n`, { mode: 0o755 });
+    const run = (env, v = "0.69.12") => {
+      const w = mkdtempSync(join(dir, "w-"));
+      const r = spawnSync("sh", ["-c", bodyFor(v), "sh", w], { env: { PATH: `${bin}:${process.env.PATH}`, TAG: `v${v}`, ...env }, encoding: "utf8" });
+      return r.stdout.split("\n").filter((l) => l === "VERIFIED" || l === "DONE").join(" ");
+    };
+    const ok = { DL: "ok", SUM: "ok", NEW: "ok", OLD: "ok" };
+    assert.equal(run(ok), "VERIFIED DONE");
+    assert.equal(run({ ...ok, NEW: "no" }), "VERIFIED DONE", "a release attested in awebai passes by the second form");
+    assert.equal(run({ ...ok, NEW: "no" }, "0.9.1"), "VERIFIED DONE");
+    assert.equal(run({ ...ok, OLD: "no" }), "VERIFIED DONE");
+    assert.equal(run({ ...ok, OLD: "no" }, "0.70.0"), "VERIFIED DONE");
+    assert.equal(run({ ...ok, NEW: "no", OLD: "no" }), "DONE", "no attestation, no VERIFIED");
+    for (const v of ["0.69.13", "0.70.0", "1.0.0", "0.100.0"]) {
+      assert.equal(run({ ...ok, NEW: "no" }, v), "DONE", `${v} is not trusted on an awebai attestation`);
+    }
+    assert.equal(run({ ...ok, SUM: "no" }), "DONE", "a failed checksum never falls through to the second form");
+    assert.equal(run({ ...ok, SUMS_FILE: "other.AppImage" }), "DONE", "a SHA256SUMS.txt with no line for the file is no checksum");
+    assert.equal(run({ ...ok, DL: "no" }), "DONE");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("the skill's minimums are framework 1.19.0 and oats.aweb 1.33.1, and the catalog meets both", () => {
@@ -292,7 +376,7 @@ test("pi's aweb extension is installed without its bundled skills", () => {
 
 // The onboarding VM campaign's second round of newcomer runs on fresh VMs (#1665).
 test("getting-started: the whole file is read, never a summary", () => {
-  const raw = "curl -fsSL https://raw.githubusercontent.com/awebai/oats/main/skills/oats-getting-started/SKILL.md";
+  const raw = "curl -fsSL https://raw.githubusercontent.com/oats-project/oats/main/skills/oats-getting-started/SKILL.md";
   const [, front, body] = skill.split(/^---\n/m);
   const description = front.replace(/\s+/g, " ");
   assert.ok(description.includes(`Download this file whole (\`${raw}\`) and follow it as written: a summary of it is not the procedure.`), "the front-matter description says so");
@@ -423,6 +507,25 @@ test("a soul whose declared harness differs from this machine's '*' gets its own
     assert.ok(text.includes("plan first (from OATS 0.53.0)"), `${name} names the OATS version that has the command`);
     assert.match(text, /differs from [^.]*and is installed and logged in on this machine/, `${name} keeps a declared harness only when it is installed here`);
     assert.ok(text.includes("A declared harness that isn't installed here stays under `'*'`, so the soul can run; tell the person."), `${name} leaves a missing harness under '*'`);
+  }
+  // '*' replaces the model too: a reviewer on the developers' harness with another model keeps it, and its preview proves it.
+  for (const [name, text] of [["oats-tailor-workspace", tailor], ["oats-package-pins", pins], ["oats-getting-started", skill.replace(/\s+/g, " ")]]) {
+    assert.match(text, /Check (a|the|a new) reviewer soul by its model too, since `'\*'` replaces the model as well as the harness/, `${name} checks the reviewer's model`);
+    assert.match(text, /where it declares (the same harness as `'\*'`|`<harness>`) but another model, give it its own entry the same way, with `--harness <its harness> --model <its model>`/, `${name} gives a same-harness reviewer its own entry with its model`);
+    assert.ok(text.includes("must show a `launch.effective` model from a family other than the developers'"), `${name} checks the reviewer's preview`);
+    assert.ok(text.includes("Where its declared model can't run here, set one that can, from another family;"), `${name} falls back to a runnable model from another family`);
+    assert.match(text, /with none, (tell the person|name it in the hand-over \("For the person, later"\):) its reviews share the developers' model\./, `${name} tells the person when no other family can run`);
+  }
+});
+
+// Only OATS 0.69.13 and later ship the catalog's "Coordination templates", and oats.framework admits older kernels: the skills name the template.
+test("onboarding names the engineering template's repository, not only the installed kernel's catalog", () => {
+  const adapt = read("oats-package/capabilities/oats-coordination-setup/skills/adapt-to-the-organisation/SKILL.md").replace(/\s+/g, " ");
+  const tailor = read("oats-package/capabilities/oats-onboarding/skills/oats-tailor-workspace/SKILL.md").replace(/\s+/g, " ");
+  for (const [name, text] of [["adapt-to-the-organisation", adapt], ["oats-tailor-workspace", tailor]]) {
+    assert.ok(text.includes("the engineering template, `oats-project/oats-engineering-coordination`"), `${name} names the template's repository`);
+    assert.ok(text.includes("latest `template-v*` tag"), `${name} copies the latest template release`);
+    assert.ok(text.includes("from OATS 0.69.13, the installed kernel's `docs/official-catalog.md`") || text.includes("From OATS 0.69.13, the installed kernel's `docs/official-catalog.md`"), `${name} dates the catalog's list`);
   }
 });
 

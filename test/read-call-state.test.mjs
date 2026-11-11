@@ -98,8 +98,8 @@ test("every module-level state the deployment reads write has its row in READ_ST
   assert.ok(closure.size > 20, "the closure was read");
   const modules = new Set([...closure.keys()].map(rel));
   for (const leaf of ["lib/roster-read.mjs", "lib/workspace-read.mjs", "lib/read-call.mjs", "lib/member-clone.mjs", "lib/drift.mjs", "lib/deployments.mjs"]) assert.ok(modules.has(leaf), `${leaf} is in the closure`);
-  // Leaves: never core.mjs, nor bin.
-  for (const m of modules) assert.ok(m.startsWith("lib/") && m !== "lib/core.mjs", `${m} may not be in the reads' closure`);
+  // Leaves: never core.mjs, nor bin. Of the packages, only the process identity the kernel's locks are judged by.
+  for (const m of modules) assert.ok(m === "packages/record/lib/process-identity.mjs" || (m.startsWith("lib/") && m !== "lib/core.mjs"), `${m} may not be in the reads' closure`);
   const rows = new Map(READ_STATE.map((row) => [`${row.module} ${row.binding}`, row]));
   const found = new Set(closureState(closure));
   const missing = [...found].filter((key) => !rows.has(key));

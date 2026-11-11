@@ -141,5 +141,5 @@ test("the shell makes one recovery for the window, over every terminal in the ta
   assert.match(shellSource, /onRecovered: \(\) => atlasRecovery\.schedule\(\) \}\);/, "the glyph renderer's reload after a loss enters the same debounce");
   assert.match(shellSource, /function addTab\(\{[^\n]*term = null \}\) \{/);
   assert.match(shellSource, /tabs\.set\(id, \{[^\n]*focusContent, term \}\);/, "addTab keeps the tab's terminal");
-  assert.match(shellSource, /focusOnActivate: true, \/\/ addTab's own dedup here is a user jump too\n    term, /, "a terminal tab hands its xterm to addTab");
+  assert.match(shellSource, /focusOnActivate: focusContent,[^\n]*\n    term, /, "a terminal tab hands its xterm to addTab");
 });

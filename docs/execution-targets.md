@@ -7,6 +7,8 @@ Closing a viewer, or the Desktop, stops neither the agent nor its session.
 
 All session commands run on the execution host, the machine that holds the
 home. To run them on another machine, see [servers.md](servers.md).
+For a team container reached over the same SSH route, see
+[the agent container contract](container.md).
 
 ## Harnesses
 
@@ -1226,6 +1228,7 @@ for its current start (`startId` in `instance.json`):
 | What the home holds for its current start | `sessionEnd` | Resumed |
 |---|---|---|
 | a stop's record that names it (or, a record from before 0.69, written after the start) | `stopped` | no |
+| a stop's record that names it and says `resume: true`: OATS stopped it with the host (`oats host run`, [desktop-cli-api.md](desktop-cli-api.md#the-host-run-oats-host-run)), whatever the exit marker says | `lost` | when the sweep can vouch for the loss |
 | an exit marker that names it with an exit status below 128 (`/exit`, Ctrl-C handled by the harness, its own error), or the marker of a kernel before 0.69 | `exited` | no: the row offers Start, as before |
 | an exit marker that names it with a signal's status (128 and up: the harness alone was killed, an out-of-memory kill for example) | `lost` | when the sweep can vouch for the loss ([below](#which-losses-come-back)) |
 | neither (the host went down, or the tmux server died under the live harness) | `lost` | when the sweep can vouch for the loss |
@@ -1236,13 +1239,21 @@ without `sessionEnd`, prints `idle`, with one line under it naming the way
 back: `oats session start --resume --home <home>`, or the next sweep (`oats
 session resume`, which OATS Desktop and `oats tui` run when they open) when
 it can vouch for the loss. Both act on this machine's homes only, so a row
-of another host names the host to run them on.
+of another host names the host to run them on. A local row whose home was
+stopped with the host says so in that line: `lost (stopped with the host):
+…`. The reason is read from the home's stop record; `sessionEnd` has no
+fourth value and the row carries no reason.
 
 The window a spawn or a start makes writes the exit marker,
 `.oats-start-exited`, when the harness exits; `oats instance stop` writes its
 record, `.oats-stop.json`, and so do a retire, before it ends the window
 (0.69.2), and `oats session restart`, before it stops the harness (#1601). Both are kernel-private files of the home, not a
-contract: read `sessionEnd`. A shutdown kills the window's shell with the
+contract: read `sessionEnd`. One part of the stop record is a contract: when
+`oats host run` stops a home because the host is stopping, the record says
+`"resume": true` and `"reason": "host-stop"`, and is written before the
+harness is signalled, so a host that is killed while the harness ends still
+leaves a home that reads `lost`. Such a home is brought back by the sweep of
+the host's next start, under the rules below like any other loss. A shutdown kills the window's shell with the
 harness, so a lost session leaves no marker. A home spawned before 0.69 and
 never restarted since names no start: it reads `stopped` only after a stop,
 and otherwise `lost`, also when its harness ended by itself. It comes back only
@@ -1279,9 +1290,9 @@ a signed-in host.
 
 #### The launch environment a resume runs under
 
-A resume starts only under the `{fromEnv: SRC}` values the start it brings
-back ran with. Every start that renders a recipe, the spawn's own launch
-included, records them. A resume compares them, after the check that every
+A resume starts only under the reference values (`fromEnv` or `fromFile`)
+the start it brings back ran with. Every start that renders a recipe, the
+spawn's own launch included, records them. A resume compares them, after the check that every
 reference is set (`E_LAUNCH_ENV_MISSING`, which comes first):
 
 - **A changed value** refuses the resume before anything is launched:
@@ -1413,8 +1424,36 @@ refused. A home removed between the read and its start is reported
 `--plan` says what it would do and starts nothing. Its answer is in
 [desktop-cli-api.md](desktop-cli-api.md#the-machine-sweep-oats-session-resume).
 
-- One sweep runs per machine: a second one answers `E_RESUME_BUSY`. A lock
-  left by a process that is gone, or by another boot, is taken over.
+- One sweep runs per machine: a second one answers `E_RESUME_BUSY`, at once,
+  and starts nothing. The lock is one file, `session-resume/lock`, that names
+  the sweep holding it by pid, by the time that process started and by the
+  boot it was taken in.
+  - A lock left by a sweep that is gone (it exited, was killed, or its pid
+    belongs to another process) is taken over at once by the next sweep. A
+    sweep ended by a signal, a container's stop included, releases nothing:
+    its lock is one of these.
+  - A lock taken in another boot is taken over whatever its pid reads as: a
+    boot ends every process, and a pid and a start time counted from the boot
+    can both come again in the next.
+  - A lock that needs a person is refused with `E_RESUME_LOCK_STUCK`, never
+    with `E_RESUME_BUSY`, and left as it is. The message says which was
+    found and what to remove: a record that cannot be read, a holder that
+    cannot be told to be running or gone, a gone holder's record that cannot
+    be taken over, a lock that was taken again each time the sweep found it
+    free, or a sweep that cannot read its own start time. Remove the file
+    the message names once no `oats session resume` is running, and run the
+    sweep again. No sweep starts anything on this machine until then.
+  - A directory at the lock's path is the lock of an OATS that locked with
+    one. It is refused with `E_RESUME_LOCK_STUCK` too, whoever its owner is,
+    and is never removed for you: remove the directory once no earlier
+    `oats` is running on this machine. That OATS, meeting the file, answers
+    `E_RESUME_BUSY` for the file's first minute and takes the lock over
+    after it, also from a sweep that still runs: run one OATS version per
+    machine.
+  - `oats doctor` reports a lock in any of those states as one
+    `resume-lock-stuck` problem, with the path and what to do. It reads the
+    lock and takes nothing. A free lock, a sweep that runs and a lock a gone
+    sweep left are not reported.
 - A loss is answered once: whatever a sweep did with it (resumed, refused,
   skipped or blocked), no later sweep starts it again, in this boot or after
   a reboot; a later sweep reports it `not-seen-recently`. A `lifecycle-busy`
@@ -1430,8 +1469,41 @@ refused. A home removed between the read and its start is reported
   has answered, so a sweep killed while other starts run has counted it; a
   refused, skipped or busy one does not. `oats session start --resume` run by hand is neither
   bounded nor counted.
-- The boot is the boot id on Linux and the boot time on macOS. Elsewhere there
+- The boot is the boot time on macOS and the kernel's boot id
+  (`/proc/sys/kernel/random/boot_id`) on Linux. Elsewhere there
   is no boot: nothing is noted or counted, and every sweep tries again.
+- **Inside a container a boot is one run of the container.** A container
+  shares its host's kernel, so the kernel's boot id stays the same when the
+  container is stopped and started, restarted or made again, while every
+  process in it, its terminal server and its sessions included, is gone. The
+  boot there is the kernel's boot id together with the start time of the
+  container's PID 1 (field 22 of `/proc/1/stat`, clock ticks after the
+  kernel's boot): PID 1 starts once per run and its end ends the run, so the
+  identity is the same for every `oats` process of one run and another one
+  in the next, and the boot id keeps it apart from a run after the host's
+  restart. Each run has its own count of 3 starts per home, takes over a lock
+  the run before left, and clause 4 does not reach from one run into the
+  next. Both values are read without privileges and nothing is written for
+  them.
+  - OATS takes itself to be in a container when one of these is there: the
+    file `/.dockerenv` (Docker), the file `/run/.containerenv` (Podman), or
+    the environment variable `KUBERNETES_SERVICE_HOST` (every Kubernetes
+    pod). A container runtime that sets none of them is read as a host: give
+    its containers `KUBERNETES_SERVICE_HOST` or one of the files.
+  - Without one of them PID 1's start is not read. A command that a harness
+    runs in a sandbox with a PID namespace of its own (bubblewrap's
+    `--unshare-pid`) has that sandbox's PID 1, and is on the host's boot all
+    the same.
+  - When PID 1's start cannot be read in a container (a `/proc` mounted with
+    `hidepid`, say) the boot is the boot id alone. Every run on one host boot
+    is then the same boot: the count runs across them and clause 4 applies
+    across them, so a sweep starts fewer homes, never more.
+  - A container that shares its host's PID namespace (`--pid=host`), and a
+    Kubernetes pod with `shareProcessNamespace: true`, read a PID 1 that
+    outlives the container, so their boot is the same in every run.
+  - Inside a container, a command run in a sandbox with a PID namespace of
+    its own reads the sandbox's PID 1 and records a boot of its own. Run the
+    sweep outside such a sandbox there.
 - The lock, the per-boot note and the record of what status saw live in
   `session-resume/` under `~/.oats` (`$OATS_HOME_DIR` when set). All three
   are kernel-private, not a contract.
@@ -1838,7 +1910,10 @@ conversation (OATS 0.69, #1559). In a fresh conversation the instance resumes
 its work from its own state files, as its knowledge capability prescribes.
 
 The task's text never travels on a command line, where any local user could
-read it in the process list:
+read it in the process list. A spawn through a server sends it on the ssh
+session's standard input to a server that advertises `spawn-task-stdin`; an
+older server gets it as an argument, and the answer warns
+([servers.md](servers.md#a-routed-spawns-task)). To the harness:
 
 - pi and Claude Code get `@TASK.md`, which each harness reads as the file.
   pi sends it as the session's first prompt and refuses it if another

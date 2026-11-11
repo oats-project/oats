@@ -1,6 +1,6 @@
 {
   "name": "@awebai/oats",
-  "version": "0.69.12",
+  "version": "0.69.15",
   "description": "OATS (Open Agent Team Specification) — durable souls, disposable instances, targetable capability packages, and the runtime-neutral oats CLI/kernel.",
   "keywords": [
     "agents",
@@ -13,6 +13,9 @@
   },
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
   "scripts": {
     "test": "node scripts/run-tests.mjs",
     "test:session": "node scripts/test-session-inheritance.mjs",
@@ -30,6 +33,7 @@
   "files": [
     "bin/",
     "lib/",
+    "share/oats-login-receive",
     "skills/",
     "injects/",
     "docs/",

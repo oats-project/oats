@@ -18,6 +18,39 @@ oats server remove build
 To put a workspace on a machine that has no deployment yet, use
 [`oats server connect`](#connect-a-machine) instead of `server add`.
 
+`server add` and `server connect` also accept `--operator-ssh <alias>`.
+It records the optional operator route separately in
+`~/.oats/server-operator-routes.json`:
+
+```json
+{ "build": { "operatorSshHost": "build-operator" } }
+```
+
+`server list` (text and JSON) and connect's `registration` join that route
+with the server registration. The alias follows the same rules as `--ssh`:
+letters, digits, dot, underscore and dash, beginning with a letter or digit;
+no `user@host`, spaces or SSH options. Put the user and forced-command key in
+OpenSSH configuration under that alias. Registrations without it remain valid.
+Older kernels never read this separate file; `servers.json` retains the field
+set they accept.
+
+The operator alias is reserved for credential provisioning. Registering it
+runs no operator command: every existing remote operation continues to use
+`sshHost`, and saved instance targets contain no operator route. To change an
+existing registration, pass `--replace`; connect keeps an existing value
+without it. With `--replace`, the operator route is kept unless you give
+`--operator-ssh <alias>` to change it or `--no-operator-ssh` to clear it.
+The two flags cannot be combined. `server remove` deletes the operator route
+too. Both files are changed under the same `~/.oats/servers.lock`.
+A fresh add or connect starts with no operator route unless `--operator-ssh`
+is given; a route left behind by an older kernel is discarded for that new
+registration.
+For example:
+
+```bash
+oats server add build --ssh build-host --operator-ssh build-operator --workspace /srv/team
+```
+
 - `--ssh` is an OpenSSH host alias or host name, never `user@host` or an
   option. Users, keys and host verification belong in `~/.ssh/config`.
   Connections are non-interactive (`BatchMode=yes`): a prompt fails fast.
@@ -36,10 +69,14 @@ To put a workspace on a machine that has no deployment yet, use
 - Registrations live in `~/.oats/servers.json` on this machine, never in a
   repository. Every change to the file (add, remove, a learned workspace key,
   connect) is a short read-modify-write of the file as it is then, under the
-  lock directory `~/.oats/servers.lock`, so concurrent commands never lose each
-  other's registrations. A lock still held after 5 s, or left by a process
-  that died, is refused with `E_SERVERS_BUSY`, naming the directory to remove
-  once no oats process is changing the registry.
+  lock `~/.oats/servers.lock`, so concurrent commands never lose each
+  other's registrations. The lock is a file that names the process holding it.
+  One left by a command that was killed is taken over by the next command. One
+  whose holder is still running after 5 s is refused with `E_SERVERS_BUSY`. So
+  are a lock file whose record is unreadable, a holder that cannot be told to
+  be running or gone, and a lock directory written by an earlier kernel: the
+  message says which it found and names the path to remove once no oats
+  process is changing the registry.
 
 **Which workspace a server serves.** A registration records `workspaceKey`:
 the canonical key of the workspace its host deployment realizes, as the
@@ -54,7 +91,8 @@ never typed:
 - A key is recorded only on the registration that was asked: if the
   registration is removed or pointed elsewhere while the host is being asked,
   the answer is dropped (`server add` warns), never written onto the new
-  entry or used to bring a removed one back.
+  entry or used to bring a removed one back. The add result reports no
+  workspace key when the registration changed during the request.
 - A host reporting a different key than the recorded one is
   `E_SERVER_WORKSPACE_MISMATCH` (`details: {recorded, reported}`) and the
   registration is not rewritten. If the host now serves another workspace,
@@ -67,6 +105,143 @@ never typed:
 `server check` also asks the host whether its Git reads the workspace remote
 (`workspaceReadable`; the host's [`onboard --check`](#what-connect-runs-on-the-host)),
 which is where a [macOS keychain](#git-on-a-macos-host) problem shows up.
+
+## Harness credentials
+
+Install, inspect or remove a harness credential through the operator route:
+
+```bash
+credential-source | oats harness token set claude --server build --name team --stdin
+oats harness token status claude --server build --name team
+oats harness token remove claude --server build --name team
+```
+
+Here `credential-source` stands for a command that supplies an existing
+credential on stdout without putting it in arguments, files or terminal
+output elsewhere. OATS never accepts the credential as an argument or writes
+it on this machine. `--stdin` refuses a terminal, whose normal echo would
+show the value.
+
+The harness is `claude`, `codex`, `pi` or `opencode`. `--name` is the
+receiver's configured team name: lowercase letters, digits and dashes,
+starting with a letter or digit, at most 63 characters. When omitted, the
+server label is used only if it already matches that grammar; otherwise
+give `--name`. OATS never guesses a slug from a display label.
+
+These commands use the separate operator SSH alias and its forced-command
+receiver, with the usual noninteractive SSH options and `ControlPath=none`.
+They never reuse the agent connection or fall back to the agent alias.
+An unknown server id refuses before SSH, even if an orphan operator route exists.
+Without an operator route, OATS refuses with `E_HARNESS_TOKEN_ROUTE` and
+prints a complete `oats server add <id> --ssh <agent-alias> --workspace <path>
+--operator-ssh <alias> --replace` remedy, preserving the registration's
+existing `--label`, `--oats` and `--path` values. Replace `<alias>` with the
+operator alias; `oats server list --json` shows the current registration.
+The receiver answers only a fingerprint and replacement time; it never
+returns a credential. Removal deletes the delivered credential file; revoke
+the original credential with its provider too.
+
+The forced command is `oats-login-receive`, installed root-owned
+and bound to a dedicated key. It accepts `install|status|remove <harness> <name>`
+through `SSH_ORIGINAL_COMMAND`; the destination is the receiver's root-owned
+configuration, never a client-supplied path. See the
+[CLI JSON contract](desktop-cli-api.md#harness-token) and
+[receiver installation](#install-the-credential-receiver).
+
+`set` maps to the receiver's `install`, with the credential on stdin. The
+receiver writes atomically to its configured root-owned file, normally
+`/srv/oats-team/<name>/login/<harness>-token`, readable by the agent group
+and not writable by it. OATS validates the returned fingerprint against the
+bytes it sent. Re-running `set` rotates the file; sessions keep their
+current credential until their next start. The output lists instances of the
+same harness on that server whose last start predates or falls within the
+reported replacement second. The receiver records whole seconds, so sessions
+started during that second may still have read the previous credential.
+It never restarts them. If listing fails after installation, the command
+still succeeds, with a warning and an unknown older-session list.
+
+Input is at most 65,536 bytes of strict UTF-8. Leading and trailing ASCII
+whitespace is stripped as the receiver strips it; the result must be one
+non-empty line, contain no NUL, and fit in 65,535 bytes so the installed final
+newline fits the 64 KiB file-reference cap. Claude tokens must begin
+`sk-ant-oat` and fit in 512 bytes, matching the receiver's check. Other
+harness inputs are opaque provider API keys.
+
+| Harness | Credential supplied through stdin | Agent launch binding | Login and revocation |
+|---|---|---|---|
+| Claude | inference-only setup-token | `CLAUDE_CODE_OAUTH_TOKEN` with `fromFile` | Created on the person's machine; revoke by signing the session out in claude.ai settings |
+| Codex | non-refreshing OpenAI API key | `OPENAI_API_KEY` with `fromFile` | Obtain and revoke on the provider's key page |
+| pi | non-refreshing provider API key | the provider's env variable, such as `ANTHROPIC_API_KEY`, with `fromFile` | Provider-specific key page |
+| opencode | opaque provider API key | provider binding must be configured separately; OATS does not choose one | Provider-specific key page |
+
+OATS runs no harness login for this stdin path. Claude interactive capture
+is unavailable. Codex ChatGPT sign-in and pi OAuth are refused: their credentials
+refresh on the agent host and rewrite an auth file, which does not fit a
+read-only operator-delivered credential. No interactive opencode adapter is
+available. For pi, `--name` is the team, not a provider selection. Configure
+the provider's launch environment yourself; these commands never edit launch
+configurations. See [file references](configuration.md#launch-configurations).
+
+`--debug` prints SSH exit and known transport error codes on stderr.
+It never forwards receiver stdout or raw diagnostics: an unexpected peer
+could echo all or part of its stdin. Public failures distinguish an unreachable
+server, a receiver refusal and an unexpected reply without exposing a value.
+
+### Install the credential receiver
+
+The npm package ships `share/oats-login-receive`. On the receiving server,
+its installed path is
+`$(npm root -g)/@awebai/oats/share/oats-login-receive`. The receiver requires
+Python 3 at `/usr/bin/python3`; its shebang runs Python in isolated mode (`-I`).
+After installing OATS on that server, install the receiver as root, mode 0755:
+
+```bash
+sudo install -d -o root -g root -m 0755 /usr/local/sbin /etc/oats-login
+sudo install -o root -g root -m 0755 \
+  "$(npm root -g)/@awebai/oats/share/oats-login-receive" \
+  /usr/local/sbin/oats-login-receive
+sudoedit /etc/oats-login/receiver.json
+```
+
+The root-owned `/etc/oats-login/receiver.json` selects the allowed teams,
+read groups, harnesses and destinations. This is the format from the
+receiver's docstring, with a concrete team and group:
+
+```json
+{
+  "teams": {
+    "team": {
+      "group": "oats-team",
+      "harnesses": ["claude", "codex", "pi", "opencode"],
+      "path": "/srv/oats-team/{name}/login/{harness}-token"
+    }
+  }
+}
+```
+
+Replace `team` and `oats-team` with the receiver's configured team name and
+an existing group whose members may read its credentials. `path` is optional;
+the default is `/srv/oats-team/{name}/login/{harness}-token`. Keep both the
+configuration file and `/etc/oats-login` root-owned and not writable by group
+or others:
+
+```bash
+sudo chown root:root /etc/oats-login/receiver.json
+sudo chmod 0644 /etc/oats-login/receiver.json
+```
+
+Add the dedicated operator public key to root's `authorized_keys` with this
+forced command, replacing `<key>` with that public key:
+
+```text
+restrict,command="/usr/local/sbin/oats-login-receive" <key>
+```
+
+The operator SSH alias selects that key and the root account. The agent SSH
+alias uses its separate account and key. The receiver creates credential
+files root-owned, group-readable and mode 0440; the login directory is mode
+0750, and its parents must be root-owned, not writable by others and not
+symlinks. Neither the caller's command nor stdin chooses a destination path.
 
 ## Connect a machine
 
@@ -84,6 +259,7 @@ missing, so after a human step you run the same command again.
 | `--dir <path>` | none, inside a deployment too: the folder on the host for this deployment, absolute or `~/…` (resolved by the host). Without it: `E_BAD_ARGS` "--dir <path on the host> is required: the folder on `<host>` for this deployment (absolute, or ~/… resolved there)". A registration made before it was required is unchanged |
 | `--workspace-ref <ref>` | this deployment's `oats-local.yaml` `workspace:` |
 | `--oats <path>`, `--path <dirs>`, `--label <text>` | as for `server add`; `--path` is where the host finds `npm`, `oats` and the harnesses. Without it, connect uses the PATH of the host user's [login shell](#the-hosts-login-shell-path) |
+| `--operator-ssh <alias>`, `--no-operator-ssh` | set or clear the separate operator route; with `--replace`, omitting both keeps it. Same alias validation as `--ssh` |
 | `--install-oats` | off: a missing or older OATS is a human step |
 | `--replace` | off: an id registered for another host or directory is refused |
 
@@ -249,7 +425,9 @@ Every routed ssh call carries these options, before `--` and the host:
   failed: …`). When ssh never started on this machine, the `--json` envelope
   says so with `error.details: {"sshStarted": false}`; without details, ssh
   ran and the link failed
-  ([desktop-cli-api.md](desktop-cli-api.md#ssh-failures-e_ssh)).
+  ([desktop-cli-api.md](desktop-cli-api.md#ssh-failures-e_ssh)). A link that
+  fails under a routed spawn carries the decision and the key to run it
+  again with ([Run there](#run-there)).
 
 ## Run there
 
@@ -264,9 +442,27 @@ Arguments are quoted for the remote shell. Local files (`--task-file`,
 `--wake-file`, a schedule or launch-configuration `--file`) are read here and
 sent as text or on stdin, never as paths.
 
+<a id="a-routed-spawns-task"></a>
+**A routed spawn's task is on no command line, for a server that advertises
+`spawn-task-stdin`.** The text of `--task` or of `--task-file` goes to such a
+server on the standard input of the ssh session, to the server's preview and
+to its spawn alike, and the remote command carries `--task-file -` in its
+place: the text is in the arguments of neither the local `ssh` process nor
+the server's `oats`, where every user of either machine could read it in the
+process list. A server that does not advertise `spawn-task-stdin` cannot read
+it there, and gets it as an argument of the remote command: the spawn
+succeeds, the task is readable in both process lists while it runs (this
+machine's, in the `ssh` command, and the server's), and the answer carries
+one warning that says so: `remote oats <version> at <host> does not
+advertise spawn-task-stdin, so the task was passed as an argument, visible
+in this machine's process list (the ssh command) and the host's while the
+spawn runs; upgrade the host`. Upgrade OATS on the server to keep tasks off
+both command lines. A `--wake-message` and a
+schedule's spec still travel as arguments.
+
 | Command | Where it runs | The server must advertise |
 |---|---|---|
-| `spawn` | registered workspace | the requested harness, backend and yolo option; `launch-config` for `--launch-config`; `schedule` for a wake schedule; `spawn-name` for `--name`; `spawn-preview-2` for `--preview`; `spawn-suggest-name` for `--suggest-name` on a preview, `spawn-apply-suggest-name` on an apply; `instance-background` for `--background` or `--no-background`; `instance-same-work` for `--same-work` |
+| `spawn` | registered workspace | the requested harness, backend and yolo option; `launch-config` for `--launch-config`; `schedule` for a wake schedule; `spawn-name` for `--name`; `spawn-task-stdin` for a `--task` or `--task-file` kept off the command line (without it: the task as an argument, and a warning; [a routed spawn's task](#a-routed-spawns-task)); `spawn-preview-2` for `--preview`; `spawn-preview-2`, `spawn-apply-2` and `spawn-idempotency-2` for a spawn bound to its preview and a key (without them: one call and a warning); `spawn-suggest-name` for `--suggest-name` on a preview, `spawn-apply-suggest-name` on an apply; `instance-background` for `--background` or `--no-background`; `instance-same-work` for `--same-work` |
 | `status` | registered workspace | |
 | `retire` | the instance's home | `retire-home` to retire by exact home |
 | `session inspect`, `session attach` | the instance's home | `session`; `session-attach-detach-key` for `attach --detach-key`; `session-attach-no-status-line` for `attach --no-status-line`, which a host without it ignores |
@@ -295,6 +491,44 @@ missing feature (`E_REMOTE_INCOMPATIBLE`), before anything is sent. A spawn is
 checked against the harness it would use (the flag, or the soul's default as
 the remote roster reports it). A host that advertises no harness list is
 assumed to run only pi and claude, on tmux, with no launch options.
+
+**A routed spawn.** `oats spawn <soul> --server <id>` runs the spawn's checks
+here (`E_ROUTE_CHANGED`, `E_ROUTE_EXISTS`, the harness and options), then
+asks the server's kernel in two calls:
+
+1. its preview (`spawn … --preview`), which decides the name and everything
+   else and creates nothing;
+2. the spawn itself, bound to that decision and to a key made for this
+   request (`--expect-decision <revision> --idempotency-key <key>`).
+
+The answer is the server's keyed answer (`decision`, `replayed`, `wake`
+beside the rest) plus `server`, `target` and `snapshot`, and the route is
+saved. With `--suggest-name` the preview chooses the name and the spawn
+carries it as `--name`; the answer keeps the preview's `naming`. This needs
+the server's `spawn-suggest-name` and `spawn-name` too.
+
+- **A link that fails under the second call** (a lost connection, a
+  timeout) is `E_SSH`, and the server may have started the spawn. The
+  message ends with the fix, and `--json` carries it:
+  `error.details: {decision, idempotencyKey, fix}`. Run the same spawn again
+  with `--expect-decision <decision.revision> --idempotency-key
+  <idempotencyKey>` (and `--name <decision.instance>` in place of
+  `--suggest-name`): the server answers the instance the first attempt
+  created (`replayed: true`), or creates it, and the route is saved. An
+  attempt still running there answers `E_SPAWN_INCOMPLETE`, naming the
+  instance. Run again without the two flags, the spawn is a separate request
+  and may create a second instance.
+- **A name taken between the two calls** (another spawn on the server took
+  it) is `E_DECISION_STALE`; nothing was created. Run the spawn again.
+- **A spawn that brings `--expect-decision` or `--idempotency-key`** travels
+  as given, in one call: the caller previewed (`--server <id> --preview`) and
+  holds the key.
+- **A server that does not advertise `spawn-preview-2`, `spawn-apply-2` and
+  `spawn-idempotency-2`** gets the spawn in one call, as given, and the
+  answer carries a warning: if the link drops while it spawns, the spawn
+  cannot be retried safely, since the instance may exist there and a second
+  run would create another. Check `oats status --server <id>` before running
+  it again, or upgrade OATS there.
 
 **A routed preview.** `oats spawn <soul> --server <id> --preview` runs the
 spawn's checks here (`E_ROUTE_CHANGED`, `E_ROUTE_EXISTS`, the harness and

@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import {
-  ROOT, checkJavaScript, checkKernelPackFiles, checkReleaseVersions, shippedJavaScript,
+  ROOT, checkJavaScript, checkKernelPackFiles, checkNodeFloor, checkReleaseVersions, shippedJavaScript,
 } from "../scripts/check-package-dry-runs.mjs";
 import { EXPERT_PATH, checkKnowledgeTheoryPackage, treeFiles } from "../scripts/check-knowledge-theory-package.mjs";
 import { MIRROR_PATHS } from "../scripts/check-okf-mirror.mjs";
@@ -65,6 +66,26 @@ test("release alignment rejects stale lock metadata even when all three manifest
   assert.throws(() => checkReleaseVersions(root), /root entry version differs/);
 });
 
+// CI runs Node 22, and the record package the kernel ships needs node:sqlite (22.5).
+test("the kernel declares its Node floor, the lock carries it, and no package declares a lower one", (t) => {
+  assert.equal(checkNodeFloor(), "22.5.0");
+  assert.deepEqual(json("package.json").engines, { node: ">=22.5.0" });
+  const fixture = (change) => {
+    const root = scratch(t);
+    const files = { "package.json": json("package.json"), "package-lock.json": json("package-lock.json"), "packages/record/package.json": json("packages/record/package.json") };
+    change(files);
+    for (const [file, value] of Object.entries(files)) write(join(root, file), JSON.stringify(value));
+    return root;
+  };
+  assert.equal(checkNodeFloor(fixture(() => {})), "22.5.0");
+  assert.throws(() => checkNodeFloor(fixture((files) => { delete files["package.json"].engines; })), /package\.json declares no engines\.node/);
+  assert.throws(() => checkNodeFloor(fixture((files) => { files["package.json"].engines.node = "22"; })), /package\.json engines\.node must be ">=x\.y\.z", not "22"/);
+  assert.throws(() => checkNodeFloor(fixture((files) => { delete files["package-lock.json"].packages[""].engines; })), /package-lock\.json root entry engines differ/);
+  assert.throws(() => checkNodeFloor(fixture((files) => { files["packages/record/package.json"].engines.node = ">=22.4.9"; })), /packages\/record\/package\.json engines\.node >=22\.4\.9 is below the kernel's >=22\.5\.0/);
+  const noFloor = fixture((files) => { delete files["packages/record/package.json"].engines; });
+  assert.equal(checkNodeFloor(noFloor), "22.5.0", "a package that declares no floor declares no lower one");
+});
+
 test("v2 preparation aligns standalone OKF and Git-only theory catalog pins", () => {
   for (const cap of MIRROR_PATHS) {
     assert.equal(json(`${cap}/oats.json`).version, "5.8.0");
@@ -73,7 +94,7 @@ test("v2 preparation aligns standalone OKF and Git-only theory catalog pins", ()
   assert.equal(json("package-catalog.json").packages["oats.okf"].ref, "v5.8.0");
   // The getting-started skill writes a workspace file pinning oats.framework only (#1314): that version is the catalog's.
   const gettingStarted = readFileSync(join(ROOT, "skills/oats-getting-started/SKILL.md"), "utf8");
-  assert.match(gettingStarted, /^  oats\.framework: v1\.22\.1\b/m, "the getting-started skill shows the catalog's oats.framework version");
+  assert.match(gettingStarted, /^  oats\.framework: v1\.23\.0\b/m, "the getting-started skill shows the catalog's oats.framework version");
   const catalog = json("package-catalog.json");
   const onboarding = readFileSync(join(ROOT, "oats-package/capabilities/oats-setup/skills/oats-onboarding/SKILL.md"), "utf8");
   const okfVersion = catalog.packages["oats.okf"].ref.slice(1);
@@ -83,7 +104,7 @@ test("v2 preparation aligns standalone OKF and Git-only theory catalog pins", ()
   assert.ok(onboarding.includes("kernel ≥ " + okfFloor), "onboarding carries the mirrored provider's kernel floor");
   assert.equal(catalog.packages["oats.knowledge-theory"], undefined, "the theory package identity was renamed to oats.framework");
   const framework = catalog.packages["oats.framework"];
-  assert.equal(framework.ref, "oats-framework/v1.22.1", "catalog uses the published distribution tag, not a pending kernel release tag");
+  assert.equal(framework.ref, "oats-framework/v1.23.0", "catalog uses the published distribution tag, not a pending kernel release tag");
   assert.equal(framework.path, "oats-package");
   for (const id of ["oats.knowledge-theory", "oats.core", "oats.setup", "oats.onboarding"]) assert.equal(catalog.capabilities[id], "oats.framework");
 });
@@ -111,7 +132,7 @@ test("actual npm inventory ships public docs but no partial optional package, ca
   const files = checkKernelPackFiles(pack);
   const canonical = ["docs/knowledge-capability-authoring.md", ...treeFiles(join(ROOT, "docs/knowledge-reference")).map((file) => `docs/knowledge-reference/${file}`)];
   // The terminal client and the shared reader it imports ship inside the kernel package.
-  for (const file of ["bin/oats.mjs", "package-catalog.json", "packages/tui/bin/tui.mjs", "packages/tui/lib/client.mjs", "packages/client/display-text.mjs", ...canonical]) {
+  for (const file of ["bin/oats.mjs", "package-catalog.json", "share/oats-login-receive", "packages/tui/bin/tui.mjs", "packages/tui/lib/client.mjs", "packages/client/display-text.mjs", ...canonical]) {
     assert.ok(files.has(file));
     assert.throws(() => checkKernelPackFiles({ ...pack, files: pack.files.filter((f) => f.path !== file) }), (error) => error.message.includes(`missing ${file}`));
   }
@@ -146,6 +167,16 @@ test("actual npm inventory ships public docs but no partial optional package, ca
   const soul = join(ROOT, "oats-package", EXPERT_PATH);
   assert.equal(readlinkSync(join(soul, "CLAUDE.md")), "AGENTS.md");
   assert.equal(lstatSync(join(soul, "AGENTS.md")).isFile(), true);
+});
+
+test("the credential receiver ships byte-identical and executable in the npm tarball", { timeout: 60_000 }, (t) => {
+  const destination = scratch(t);
+  const [pack] = JSON.parse(execFileSync("npm", ["pack", "--ignore-scripts", "--json", "--pack-destination", destination], { cwd: ROOT, encoding: "utf8" }));
+  const files = checkKernelPackFiles(pack);
+  assert.ok(files.has("share/oats-login-receive"));
+  const bytes = execFileSync("tar", ["-xOf", join(destination, pack.filename), "package/share/oats-login-receive"]);
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), "7ad3ac4aea73519a8c69751cf6ea6e978f9259f8a820b7e3a7cfef0e569bce10");
+  assert.equal(pack.files.find((file) => file.path === "share/oats-login-receive").mode & 0o777, 0o755);
 });
 
 

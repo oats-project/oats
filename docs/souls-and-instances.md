@@ -107,7 +107,9 @@ souls, and keeping its messages to other instances few and short:
 `oats.core: off`. **`oats.setup`** (same package) carries the whole-architecture
 knowledge an onboarding expert needs, **`oats.onboarding`** (same package)
 is how the package soul `oats-setup-expert` tailors a new workspace to its use
-case, and **`oats.support`** (same package)
+case, **`oats.coordination-setup`** (same package) is how it shapes OATS's
+coordination practices to that organisation, and **`oats.support`** (same
+package)
 is the support desk role: a publicly reachable soul that tickets requests and
 hands them to a support maintainer. None of them is kernel magic; the kernel still
 composes its own instance-boundary and work-mode briefings, and the "You run
@@ -531,6 +533,30 @@ takes a final capture of notes and the session record into durable custody; an
 incomplete capture keeps the home for a retry. Retirement never waits for a
 model or GitHub: processing continues after the home is gone.
 
+A spawn that is killed after its spawn hooks started and before it wrote the
+home's record (SIGKILL, a container stop, a dropped connection) leaves a home
+`oats retire` still cleans up: the spawn records, before its first spawn hook,
+which retire hooks a retire must run, and the retire runs them before it
+removes the home. A home whose record does not say which retire hooks to run,
+and that has no such marker, is refused with `E_UNIDENTIFIED_INSTANCE_HOME`
+and kept; `--force` removes it without running a hook, once what its
+capabilities registered is cleaned up by hand
+([A spawn in progress](capabilities.md#manifest)).
+
+A retire hook's warning, such as an action someone must still take, is in the
+retire's `warnings` and stays readable after the home is gone: each one is a
+`retire-warning` event in the instance's workspace log, read with
+`oats instance events <instance>` ([Events](desktop-cli-api.md#events)).
+
+`oats retire <instance>` reads these flags: `--plan`, `--plan-revision <rev>`
+with `--idempotency-key <key>`, `--home <path>`, `--dir <d>`, `--server <id>`,
+`--self`, `--discard-worktree`, `--keep-dir`, `--force` and `--json`. Any
+other flag, and any argument after the instance, is refused with `E_BAD_ARGS`
+before anything happens: before a plan is read, a child is stopped, a hook
+runs, or a routed retire is sent to its server. The refusal names the flag
+(`oats retire: unknown flag --keep-dirs`) and prints the usage, so a mistyped
+`--keep-dir` never removes the home.
+
 One retire of an instance runs at a time. A retire holds the instance's claim
 from the moment it has resolved the home until it ends: the file
 `.oats-retirement/claims/<instance>.lock` in the agent's instances directory,
@@ -700,9 +726,64 @@ them, and without them a status can read differently (a global
 `core.excludesFile`, `core.autocrlf`, a filter), which would add a copy
 attempt to every existing instance's retire. They are the operator's own;
 what the retire guards against is configuration the retired agent could
-write. One limit remains: a filter driver that the repository's own
-configuration names and its `.gitattributes` select can still run during
-`git status`. Turning it off would change what status reports.
+write.
+
+<a id="retire-filter-drivers"></a>
+**Filter drivers of the repository are not run.** Git runs a
+`filter.<name>.clean` or `.process` command when a status compares a
+work-tree file that carries the `filter` attribute (`.gitattributes`, or
+`info/attributes` in the Git directory), and it has no switch that turns
+filters off. Before each `git status` of the worktree, of a repository under
+it and of a recovery, and before a recovery's `git checkout`, the retire
+reads the repository's own configuration (`git config --list`, which runs
+nothing and follows `include.path` and `includeIf`) and overrides every
+filter driver it defines to no command (`clean`, `smudge`, `process`) and
+not required. The status the spawn baseline is taken from is read the same
+way.
+
+- A file such a filter applies to is compared as its bytes are in the work
+  tree, not as the filter would store them. An untouched file still reads as
+  unchanged, by the size and times the index recorded for it. One that was
+  rewritten, or whose times Git cannot tell from the index's, reads as
+  changed even when its filtered form is what is stored: it is work to
+  preserve, the retire copies it, and a worktree holding it is not removed
+  as a clean one.
+- A driver whose name cannot be passed on Git's command line (it holds `=`
+  or is not UTF-8) cannot be overridden. Git is not run, and the status has
+  failed: the retire refuses with `E_WORK_INSPECTION_FAILED` at its first
+  inspection, as for any [status that fails](#retire-status-fails), with
+  `--discard-worktree` and `--force` too. A spawn into a worktree of such a
+  repository is refused with the same code before its checkout and rolled
+  back ([a checkout runs no filter driver](#checkout-filter-drivers)). Remove
+  or rename the driver in the repository's configuration, then retry.
+- A driver that the operator's global or system configuration defines is
+  the operator's own and runs with the operator's command, in the worktree
+  and in the recovery alike. That holds when the repository's configuration
+  defines a driver of the same name too (`git lfs install --local` beside
+  `git lfs install`): the repository's values for it are replaced by the
+  operator's, so a command the repository gives that name never runs. The
+  operator's configuration is the human's; the repository's is the agent's
+  to write. One case runs neither: the repository defines `process` for that
+  name and the operator's configuration does not. Git has no way to unset a
+  variable on its command line, and a `process` set to nothing turns the
+  driver's `clean` and `smudge` off with it, so the file is read unfiltered.
+- The recovery has no local configuration, so it has none of the
+  repository's drivers. Its status must still be the worktree's, and for a
+  file such a filter applies to it can differ: the worktree reads an
+  untouched file as unchanged by the size and times its index recorded,
+  while the copy, whose files are written anew, compares its bytes with the
+  stored form. The copy then cannot be verified: the retire refuses with
+  `E_WORK_PRESERVATION_FAILED` and removes nothing. This is so only for a
+  driver the repository alone defines.
+- Not covered: a driver written into the configuration between that read
+  and the Git command that follows it, and a filter a **submodule's own**
+  configuration defines. Git runs inside each populated submodule to learn
+  whether it is dirty, and the overrides name the repository's drivers, not
+  the submodule's. Where the agent and whoever retires it are one system
+  user, which is the usual arrangement, such a filter runs nothing the agent
+  could not run itself. Where they are separate users, it runs the agent's
+  command as the retiring user: do not retire a worktree with populated
+  submodules across users.
 
 **A worktree whose top level is another directory.** A worktree's
 per-worktree configuration can set `core.worktree` to a directory other
@@ -961,6 +1042,7 @@ That changes no digest and no error, and it is bounded: at most four files
 are read at once, each through a 1 MiB buffer, and never more than 64 MiB or
 4096 files ahead of the digest.
 
+<a id="retire-status-fails"></a>
 A worktree whose `git status` fails refuses the retire with
 `E_WORK_INSPECTION_FAILED` at the first inspection: no recovery was written,
 nothing was deleted, and the retire has not stopped the instance's session.
@@ -1235,9 +1317,12 @@ leaves what happened on disk (OATS 0.53.0):
 - **Its pending marker, only when the home is owed a retire:** when a retire
   hook was started or the removal of the home began. The usual quarantine
   marker is there too when hooks reported incomplete cleanup. The instance
-  then reads as retiring: `oats instance stop --apply` and `oats session
-  start` answer `E_INSTANCE_RETIRING`, and `oats retire <instance>`
-  continues. In every other case the completion removes its marker.
+  is then owed a retire: `oats session start` answers
+  `E_INSTANCE_RETIRING`, and `oats retire <instance>` continues. `oats
+  instance stop --apply` is not refused: the completion has ended, so
+  nothing holds the home against a stop
+  ([a completion that was killed](#self-retire-interrupted)). In every
+  other case the completion removes its marker.
   Nothing of the home was changed, so the instance is a stopped or a
   running instance like any other: a start works, and a wake schedule may
   start it. A session or a child that the completion stopped on its way
@@ -1245,9 +1330,71 @@ leaves what happened on disk (OATS 0.53.0):
 - **One event,** `retire-refused`, which says which of the two it was
   ([Events](desktop-cli-api.md#retire-refused-event)).
 
-Nothing retries by itself: `oats retire <instance>` does. A completion
-removes only the marker of its own scheduling, so the marker of a later
-`--self` is left for that one's completion.
+<a id="self-retire-interrupted"></a>**A completion that was killed** (a
+`SIGKILL`, a container that stopped, a reboot) leaves no outcome, and its
+pending marker stays. The marker names the completion by its pid, its start
+and its boot, and the rule is: a pending marker holds its home only while
+the completion it names can still act; once that completion is gone,
+`oats retire <instance>` takes the retire over and completes it,
+`oats session start` is refused with that command in its message, and a
+stop is not refused: `oats instance stop --apply`, the stop a retire makes
+of a recorded child, and the stop `oats host run` makes of every running
+home when the host stops all stop a session that still runs there, and the
+marker stays. A
+completion is gone when its process has ended, when its pid runs with
+another start, and when the marker was written in another boot, whatever
+its pid reads as there. `oats status` shows the row's `retire` as
+`interrupted`, and `oats doctor` lists the home. A start answers
+`E_INSTANCE_RETIRING`, `<instance> is owed a retire (its retire was
+interrupted): finish it with` and the retire to run, because the home is
+never started again: the completion may have run retire hooks before it
+was killed, and a start would bring back an instance whose identity is
+gone. A marker that names no completion (one an OATS before 0.51.0 wrote)
+refuses a start and a stop as before, since whether its retire runs cannot
+be told, and `oats retire <instance>` completes it.
+
+<a id="self-retire-hook-retry"></a>**A completion retries a cleanup that only
+retire hooks left incomplete** (oats-project/oats#1747), because a provider's
+failure is often transient. When the retire ends with the home quarantined,
+and what it owes is retire hooks and nothing else, the completion runs the
+same retire again: up to three times, about 1, 5 and 15 minutes after each
+failed attempt. Every attempt is an ordinary retire of the home, under its
+claim. Its quarantine retry clears only once the owed hooks are shown to have
+run.
+
+- **A retry whose hooks pass ends as a first success does.** The home is
+  removed and nothing is left beside it.
+- **After the last failed attempt** the completion leaves what it leaves
+  today: the outcome, the pending marker, the quarantine and one
+  `retire-refused` event. The outcome adds `attempts`, the number of attempts
+  that ran.
+- **Every attempt has its own `retired` event** with its `hooks` list, so
+  `oats instance events <instance>` shows each one and how its hooks ended.
+- **What is never retried.** A quarantine that also owes a Git step,
+  directory preservation or an orphaned work directory, or whose descriptor
+  could not be stored in the home. A capability that declares no retire
+  hook, or hooks that cannot be rerun. The retries also stop at an attempt
+  that answers an error, and at one whose debt is no longer hooks alone. No
+  retry starts once the home is gone or the pending marker is no longer this
+  completion's: the retry checks that after its wait and again under the
+  home's claim, and leaves a later scheduling's marker as it is.
+- **While the completion waits**, `oats status` reads the retire as
+  `running`. Any other retire of the home is refused with `E_LIFECYCLE_BUSY`,
+  for up to about 21 minutes after a hook failure. The refusal names the next
+  attempt and the earliest time the last one starts. The time is only a lower
+  bound: how long each attempt runs cannot be known in advance. The completion
+  keeps this in a file of its own beside the home,
+  `.oats-retire-retry-<instance>.json`, kernel-internal. It is removed on
+  every way out, and by any retire that removes the home.
+- **A completion killed while it waits** leaves the instance `interrupted`,
+  as before.
+
+After that, nothing retries by itself: `oats retire <instance>` does, and
+`oats doctor` lists every retirement left open as a `retire-incomplete`
+problem, with that command and the capability whose hook failed last
+([doctor](desktop-cli-api.md)). A completion removes only the marker of its
+own scheduling, so the marker of a later `--self` is left for that one's
+completion. Plain retires are not retried: their caller gets the answer.
 
 A completion does not start its retire while its scheduling still holds
 the home's claim (OATS 0.53.0). A scheduling that the host holds up
@@ -1729,6 +1876,41 @@ a `--repo` that is not a clone of the soul's repository starts at its `HEAD`.
 The spawn result and `instance.json` record the start point as
 `base: {ref, oid}`.
 
+<a id="checkout-filter-drivers"></a>
+**A checkout runs no filter driver of the repository.** Every Git command
+OATS runs that writes a tree's files (the spawn's `git worktree add` here,
+and the `git worktree add` and `git switch` of
+[`oats worktree add`](#extra-trees)) runs with every filter driver the
+repository's own configuration defines overridden to no command, so a
+`filter.<name>.smudge` or `.process` command that configuration names is
+never run and a file carrying the `filter` attribute is written as its
+committed bytes. The read of the configuration, the override and their
+limits are [a retire's](#retire-filter-drivers).
+
+- A driver that the operator's global or system configuration defines is
+  the operator's own and runs. Git LFS set up with `git lfs install` is one:
+  its files are checked out as before. A driver of that name in the
+  repository's configuration is replaced by the operator's values.
+- A driver only the repository's configuration defines does not run. With
+  Git LFS set up by `git lfs install --local` alone, a tree OATS checks out
+  holds the pointer files, not their content: run `git lfs install` for the
+  operator, or `git lfs pull` in the tree.
+- A driver whose name cannot be passed on Git's command line (it holds `=`
+  or is not UTF-8) cannot be overridden, so Git is not run: the spawn is
+  refused with `E_WORK_INSPECTION_FAILED` and rolled back, and
+  `oats worktree add` with `E_GIT_FAILED`, its tree removed.
+
+<a id="no-file-monitor"></a>
+**No file monitor.** Every Git command OATS runs that reads or writes a work
+tree's files or its index runs with `core.fsmonitor=false`, so a file
+monitor command the repository's configuration names is never run: these
+checkouts and the fetch of `oats worktree add` between its two,
+`oats worktree remove`, a retire and its recovery copy, the status a spawn's
+baseline is taken from, the reads of `oats instance git` and
+`oats instance diff`, and the check `oats package add|remove` makes that
+`oats-workspace.yaml` is tracked in the checkout that holds it. The clone's Git hooks (`post-checkout` among them) are not part of
+this: they run in a checkout as they do for the operator's own Git.
+
 After the spawn hooks succeed, the spawn fires the
 [`worktree` event](capabilities.md#the-worktree-event) for `work/`: the
 `worktree` hook of each capability the soul composes runs once, with `work/`
@@ -1904,10 +2086,17 @@ option.
   rework an existing one).
 - `--repo`: the instance's repository by default. A member key is looked up
   as a spawn looks up a clone (`oats-local.yaml` `clones:`, then
-  `<deployment>/<member name>`; `E_CLONE_MISSING` when there is none). A path
-  (absolute, or starting with `.` or `~`) is used as given. It must be a
-  clone, not a linked worktree (`E_CLONE_MISMATCH`), and have an `origin`
-  remote (`E_CLONE_MISMATCH`). Not a Git repository: `E_CLONE_MISSING`.
+  `<deployment>/<member name>`; `E_CLONE_MISSING` when there is none). A name
+  that isn't a repository key (`oats`, `awebai/oats`, `oats.git`) names no
+  member and is refused as before: `E_CLONE_MISMATCH` when a clone is at its
+  convention path or `clones:` names one for it, `E_CLONE_MISSING` when there
+  is none. When that clone has a remote of that name (its key is the name or ends
+  in `/<name>`), the refusal names the key to pass, `--repo <key>`, and the
+  clone's path as the other spelling that works. It never suggests repointing
+  the clone. A path (absolute, or starting with `.` or `~`) is used as given.
+  It must be a clone, not a linked worktree (`E_CLONE_MISMATCH`), and have an
+  `origin` remote (`E_CLONE_MISMATCH`). Not a Git repository:
+  `E_CLONE_MISSING`.
 
 **What `add` does.** It writes a record, `<home>/.oats/trees/<p>.json`, in
 state `creating`, with its own pid and start time. Then it runs, as argument
@@ -1919,6 +2108,10 @@ git -C <home>/.work-<p> fetch --refmap= origin <base>
 git -C <home>/.work-<p> switch -c <branch> <the fetched commit>
 ```
 
+- Neither checkout (`worktree add`, `switch`) runs a filter driver the
+  repository's configuration defines: the files are written as their
+  committed bytes ([a checkout runs no filter
+  driver](#checkout-filter-drivers)).
 - The tree starts from the remote's current state, never from a local branch
   of the clone, which may be stale. A fetch that fails is
   `E_REMOTE_UNREADABLE`; a HEAD that is not the fetched commit is
@@ -2005,6 +2198,22 @@ output. This never changes the clone's index. Cleanup grants directories
 owner read, write and search access, and keeps `.git` until all other entries
 are deleted, so a failed deletion can be retried.
 An unreadable branch or a failed inspection keeps the tree and record.
+
+`remove` runs no file monitor the repository's configuration names
+([no file monitor](#no-file-monitor)), and no filter driver it defines
+(`filter.<name>.clean`, `.process`): its own status of the tree, the clean
+check inside `git worktree remove` and the comparison of an unregistered
+tree's surviving files are each preceded by one read of that configuration,
+and every driver it defines is overridden to no command, [as a retire does
+it](#retire-filter-drivers). A file such a filter applies to is compared as
+its bytes are in the tree, so one that was rewritten is uncommitted work
+(`E_WORKTREE_DIRTY`)
+even when its filtered form is what the branch stores. A driver whose name
+cannot be passed on Git's command line (it holds `=` or is not UTF-8)
+refuses the removal with `E_WORK_PRESERVATION_FAILED` before Git is run on
+the tree: no files were removed, and the record is kept. The same limits
+hold: a driver written between that read and the Git command, and a
+submodule's own configuration.
 Failures after Git started removing files say that removal may be partial
 and name the retry. If Git already removed `.git` too, automatic comparison
 is refused: save any work and remove the directory by hand, then run

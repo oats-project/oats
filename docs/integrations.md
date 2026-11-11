@@ -41,7 +41,7 @@ arrives from.
 # oats-workspace.yaml: one default per slot, for every soul
 packages:
   oats.okf: v5.8.0
-  oats.aweb: v1.37.0
+  oats.aweb: v1.39.0
   oats.linear: v1.0.1
   oats.jira: v1.0.1
 defaults:
@@ -139,8 +139,9 @@ The pinned versions and each package's capabilities and souls are in the
 
 ## Building an integration
 
-Building an integration is implementing a contract. The framework's
-`integrations-expert` soul is the specialist for contract design.
+Building an integration is implementing a contract. In the framework's own
+workspace, `oats-engineering-expert` leads contract design, reading the
+integrations knowledge node (`oats/integrations-expert`).
 
 **Any slot.**
 

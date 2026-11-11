@@ -102,11 +102,11 @@ Name an instance `<descriptive>-<role>`, with `--name`:
 - **Descriptive:** a few lowercase kebab-case words for what this incarnation
   does (`desktop-improvements`, `release-0-26`), not an opaque number.
 - **Role:** the last word of the soul's name, after any package qualifier:
-  `oats-desktop-expert` → `expert`, `oats-kernel-developer` → `developer`,
+  `oats-engineering-expert` → `expert`, `oats-desktop-developer` → `developer`,
   `code-reviewer` → `reviewer`. A one-word soul's role is its name.
-- So `oats spawn oats-desktop-expert --name desktop-improvements-expert`, not
+- So `oats spawn oats-engineering-expert --name desktop-improvements-expert`, not
   `--purpose desktop-improvements` (which gives
-  `oats-desktop-expert-desktop-improvements`).
+  `oats-engineering-expert-desktop-improvements`).
 
 `--name` is used exactly as given: it must be a slug, at most 64 characters,
 and not a soul name. A name built this way can be a soul's name

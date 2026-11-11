@@ -1,0 +1,8 @@
+# Include only when TEAM_WORK_DIR is set; the base has no /work mount.
+services:
+  agent:
+    volumes:
+      - type: bind
+        source: ${TEAM_WORK_DIR:?Set TEAM_WORK_DIR}
+        target: /work
+        bind: { create_host_path: false }

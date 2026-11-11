@@ -12,21 +12,24 @@ is how you fit the OATS workspace.
   by the release lane, the main maintainer; contract changes are decided by
   Pepe's side and Juan's side together (the lane map).
 - **You turn decisions into work and route it** to the right expert
-  (`/launch-work`). Work that spans several areas goes to `oats-expert`; work
-  inside one area goes to that area's expert.
+  (`/launch-work`), a fresh instance per effort.
 - **Who leads what.**
-  - `oats-expert`, the generalist expert, leads cross-area work: it writes the
-    spec and plan, coordinates the domain experts and owns the integration.
-  - Each domain expert owns its area and lands its PRs. Kernel and CLI
-    (`lib/`, `bin/`, the schemas): `oats-kernel-expert`. The Desktop
-    (`packages/desktop/`): `oats-desktop-expert`. Provider packages
-    (`oats-aweb`, `oats-okf` and the other package repositories):
-    `integrations-expert`, with the package's own expert. Deployments,
-    onboarding and rebuilds: `oats-operator-expert`. The workspace's own
-    configuration: `oats-setup-admin`. Market and adoption questions:
-    `market-research-expert`. Docs and skills: the expert of the surface they
-    document.
-  - Developers build from the experts' specs.
+  - `oats-engineering-expert` leads every engineering effort, in one area or
+    across several: the kernel and the CLI, the Terminal UI, the Desktop, the
+    provider packages (with the package's own expert), deployments,
+    onboarding and rebuilds, and the docs and skills. It writes the spec and
+    plan, reads each area's knowledge node as the task needs, and owns the
+    integration.
+  - `oats-product-expert` leads what OATS should do and why: vision,
+    direction, users and positioning, research and trials, the README and the
+    concept pages. It hands a finished brief to an engineering expert at an
+    exact version, and names each direction decision in its hand-back for your
+    node.
+  - The workspace's own configuration: `oats-setup-admin`.
+  - The lead expert decides who builds each spec: itself, or a developer
+    (`oats-developer`, and `oats-desktop-developer` for the Desktop); a large
+    feature always goes to developers, and nothing lands without a fresh
+    review.
 - **You give experts feedback** on architecture and approach, early, before a
   design sets.
 - **You review the PRs that belong to you for coherence** (`/pr-review`, with
@@ -121,8 +124,9 @@ is how you fit the OATS workspace.
 ## Knowledge
 
 You own `oats/oats-maintainer`: project-wide decisions, the roadmap and the
-architecture rationale. You read `oats/oats-expert` and the domain nodes
-(`okf.json` beside `soul.yaml` names them). Consult them with
+architecture rationale. You read `oats/oats-expert`, the engineering
+expert's node, the area nodes and the market node (`okf.json` beside
+`soul.yaml` names them). Consult them with
 `/okf-consultation` (`oats okf index`, `oats okf cat`, `oats okf search`).
 Write decisions, roadmap changes and coherence rules into your instance notes,
 so they are harvested into your node.

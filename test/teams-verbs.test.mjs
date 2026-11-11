@@ -4,7 +4,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { selfIdentity } from "../lib/worktree-hooks.mjs";
 import YAML from "yaml";
 import { teamsAdd, teamsDefault, teamsRemove } from "../lib/teams-verbs.mjs";
 
@@ -206,8 +207,9 @@ test("plain add and default are unchanged: the first add becomes the default, ev
 test("every mutation runs under <deployment>/.agents/locks/local.lock: one held elsewhere is E_LOCAL_BUSY, nothing written, the lock left alone", (t) => {
   const fx = fixture(t, MINE);
   const lock = join(fx.ctx().deployment, ".agents", "locks", "local.lock");
-  mkdirSync(lock, { recursive: true });
-  writeFileSync(join(lock, "owner.json"), JSON.stringify({ pid: process.pid, at: new Date().toISOString(), what: "a test" }));
+  mkdirSync(dirname(lock), { recursive: true });
+  const held = JSON.stringify({ ...selfIdentity(), nonce: "a".repeat(32), at: new Date().toISOString(), what: "a test" }) + "\n";
+  writeFileSync(lock, held);
   const before = fx.text();
   assert.throws(() => teamsDefault(fx.ctx(), "mine", { ifAbsent: true }), (e) => {
     assert.equal(e.code, "E_LOCAL_BUSY");
@@ -216,8 +218,8 @@ test("every mutation runs under <deployment>/.agents/locks/local.lock: one held 
     return true;
   });
   assert.equal(fx.text(), before);
-  assert.ok(existsSync(join(lock, "owner.json")), "the holder's lock is not touched");
-  rmSync(lock, { recursive: true });
+  assert.equal(readFileSync(lock, "utf8"), held, "the holder's lock is not touched");
+  rmSync(lock);
   assert.equal(teamsRemove(fx.ctx(), "spare").changed, true);
   assert.equal(existsSync(lock), false, "released after the write");
 });

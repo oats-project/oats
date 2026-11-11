@@ -5,5 +5,6 @@ work: directory
 # oats.core and the oats.okf knowledge slot come from the workspace defaults.
 # What this soul owns and reads in the central base is okf.json beside this file.
 capabilities:
-  oats.maintainer: { from: package }           # the maintainer role: overview, launching work, direction gate, review and merge, releases, peers, knowledge
+  oats.maintainer: { from: here }              # the maintainer role: overview, launching work, direction gate, review and merge, releases, peers, knowledge
+  oats.landing-rules: { from: here }           # how work lands here: the lane map, the agreements, who merges
 launch: { harness: claude, model: claude-opus-5-5 }   # the role's preference; each machine may override it

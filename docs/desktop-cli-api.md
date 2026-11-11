@@ -171,6 +171,8 @@ see the [official catalog](official-catalog.md) for current pins.
 | `spawn-attribution` | the kernel validates who spawned an instance: `spawnedBy` (`{instance, home}` or `null`) in `instance.json`, on the `spawned` event and on `oats status --json` rows and remote rows, and `OATS_SPAWNER_HOME` for spawn hooks ([Spawned by](#spawned-by)); `attributedHuman` on `oats status --json` rows and on remote rows ([Attributed human](#attributed-human)). Absent: no `spawnedBy` and no `attributedHuman`, and a capability must not read a missing `OATS_SPAWNER_HOME` as a person's spawn | |
 | `workspace-tasks-payload` | oats-workspace.yaml may carry a top-level `tasks:` payload, merged for the capability that fills the tasks slot exactly as `messaging:` is for the messaging one; its leaves' `settingsOrigins` are `{kind: "workspace", at: "oats-workspace.yaml#/tasks"}` ([Provider payloads have three homes](workspaces.md#provider-payloads-have-three-homes)). A kernel without it refuses a workspace file that carries `tasks:` (unknown property) | |
 | `settings-committed-only` | a manifest `settings.<key>.committedOnly: true` is enforced: that key in oats-local.yaml `settings.<cap>` or a `--provider <cap>` flag is refused `E_WORKSPACE_SCHEMA` reason `committed-only-key`, with `details.layer`, `details.at` and `details.allowed` ([Commands and hooks](capabilities.md#commands-and-hooks)). A kernel without it ignores the flag and merges the key | |
+| `schedule-host-register-only` | `oats schedule host install --register-only`: the scope is recorded in the host schedule registry and no timer is installed ([`oats schedule`](#oats-schedule)). Routed with `--server`, the option is sent only to a host that lists this and `schedule`; otherwise it is refused here with `E_REMOTE_INCOMPATIBLE` before anything is sent, since a host without it ignores the option and installs a timer | |
+| `spawn-task-stdin` | `oats spawn <soul> --task-file -` reads the task from standard input. A spawn routed with `--server` sends its `--task` or `--task-file` text that way, to the preview and to the apply, to a host that lists this, and not as an argument; a host that does not list it gets the text as an argument, and the answer's `warnings` gains one line that says it was readable in both machines' process lists ([servers.md](servers.md#a-routed-spawns-task)) |
 
 Payload-only integers, never in the probe: `onboardApi: 2`, `syncApi: 1`,
 `workspaceStatusApi: 1`, `capabilitiesApi: 1`, the `oats souls` document's
@@ -296,6 +298,120 @@ accepted, and its value is only ever the message. A capability command's own fla
 typed; the kernel reads only its dispatch flag (`--soul`). There is no feature
 string for this: to support older kernels, use the spaced form.
 
+<a id="command-flags"></a>
+### The flags a command defines
+
+These commands change state (and `oats teams`, `oats server check`,
+`oats trigger poll` and `test`, which sit beside them), and each refuses a
+flag it does not define before anything happens: before a plan is read, a
+file is written, a process is stopped or started, and before a `--server`
+command is sent to its host. A typo of a protective flag (`--no-recursve`
+for `--no-recursive`) is never ignored.
+
+| Command | Arguments | Flags that take a value | Switches | Refused in their own words | Its own answers |
+|---|---|---|---|---|---|
+| `oats retire` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir`, `--server` | `--plan`, `--self`, `--discard-worktree`, `--keep-dir`, `--force`, `--json` | `--delete-branch` | none |
+| `oats spawn` | `<soul>` | `--agents-root`, `--backend`, `--base`, `--branch`, `--dir`, `--expect-decision`, `--harness`, `--herdr-socket`, `--idempotency-key`, `--instance`, `--launch-config`, `--max-age`, `--model`, `--name`, `--parent`, `--provider` (2 words), `--purpose`, `--relation`, `--relative-root`, `--relative-to`, `--repo`, `--runtime`, `--server`, `--task`, `--task-file`, `--trigger-event`, `--wake-cron`, `--wake-every`, `--wake-file`, `--wake-json`, `--wake-message`, `--wake-message-file`, `--wake-tz`, `--work`, `--work-dir` | `--allow-child-spawns`, `--background`, `--json`, `--no-background`, `--no-child-spawns`, `--no-launch`, `--no-yolo`, `--preview`, `--same-work`, `--suggest-name`, `--yolo` | `--instructions-file`, `--def-file`, `--ephemeral` | an unknown flag, an argument after the last |
+| `oats sync` | none | `--dir` | `--plan`, `--json` | `--approve` | none |
+| `oats instance stop` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--grace-ms`, `--home`, `--dir`, `--server` | `--plan`, `--apply`, `--no-recursive`, `--json` | none | none |
+| `oats instance upgrade` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir` | `--undo`, `--plan`, `--json` | `--server` | none |
+| `oats instance color` | `<instance>` `[<color>]` | `--home`, `--dir`, `--server` | `--clear`, `--json` | none | none |
+| `oats instance background` | `<instance>` `<state>` | `--home`, `--dir`, `--server` | `--json` | none | none |
+| `oats instance same-work` | `<instance>` `<state>` | `--home`, `--dir`, `--server` | `--json` | none | none |
+| `oats instance waiting set` | none | `--producer`, `--reason`, `--message`, `--home`, `--dir` | `--json` | none | none |
+| `oats instance waiting clear` | none | `--producer`, `--reason`, `--message`, `--home`, `--dir` | `--json` | none | none |
+| `oats instance attention` | none | `--message` | `--clear`, `--json` | `--home`, `--dir`, `--producer`, `--reason` | none |
+| `oats instance suggest-name` | none | `--soul`, `--task`, `--task-file`, `--harness`, `--model`, `--launch-config`, `--dir` | `--json` | `--server` | none |
+| `oats worktree add` | none | `--purpose`, `--branch`, `--base`, `--repo` | `--preview`, `--json` | `--server`, `--dir`, `--home` | none |
+| `oats worktree remove` | none | `--purpose` | `--json` | `--server`, `--dir`, `--home` | none |
+| `oats session start` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json`, `--resume` | `--native-record` | none |
+| `oats session restart` | none | `--home`, `--instance`, `--launch-config`, `--harness`, `--runtime`, `--model`, `--server`, `--stop-grace` | `--reselect-launch`, `--yolo`, `--no-yolo`, `--json` | `--native-record`, `--resume` | none |
+| `oats session resume` | none | `--deployment` | `--plan`, `--json` | `--native-record`, `--server` | none |
+| `oats session input` | none | `--home`, `--text-file` | `--json` | `--native-record` | none |
+| `oats session receive` | none | `--home`, `--name` | `--json` | `--native-record` | none |
+| `oats session upload` | none | `--file`, `--home`, `--instance`, `--server` | `--json` | `--native-record` | none |
+| `oats session attach` | none | `--detach-key`, `--home`, `--instance`, `--server` | `--no-status-line`, `--print`, `--json` | `--native-record` | none |
+| `oats schedule add` | `[<id>]` | `--file`, `--spec-json`, `--description`, `--workspace`, `--runs-on`, `--owner`, `--dir`, `--server` | `--json` | none | none |
+| `oats schedule update` | `<id>` | `--file`, `--spec-json`, `--description`, `--dir`, `--server` | `--json` | none | none |
+| `oats schedule remove` | `<id>` | `--dir`, `--server` | `--force`, `--json` | none | none |
+| `oats schedule run` | `<id>` | `--dir`, `--server` | `--force`, `--json` | none | none |
+| `oats schedule enable` | `<id>` | `--dir`, `--server` | `--json` | none | none |
+| `oats schedule disable` | `<id>` | `--dir`, `--server` | `--json` | none | none |
+| `oats schedule reconcile` | `<id>` | `--dir`, `--server` | `--clear`, `--json` | none | none |
+| `oats schedule tick` | none | `--dir`, `--server` | `--dry-run`, `--host`, `--json` | none | none |
+| `oats schedule host install` | none | `--max-concurrent`, `--triggers-max-concurrent`, `--os`, `--dir`, `--server` | `--register-only`, `--print`, `--json` | none | none |
+| `oats schedule host uninstall` | none | `--dir`, `--server` | `--json` | none | none |
+| `oats host run` | none | `--stop-grace` | `--plan`, `--json` | none | none |
+| `oats trigger add` | none | `--file`, `--from`, `--set`, `--id`, `--description`, `--workspace`, `--runs-on`, `--owner`, `--dir` | `--json` | none | none |
+| `oats trigger poll` | `<id>` | `--dir`, `--max-age` | `--run-source`, `--json` | none | none |
+| `oats trigger test` | `<id>` | `--dir` | `--run-source`, `--json` | none | none |
+| `oats trigger remove` | `<id>` | `--dir` | `--json` | none | none |
+| `oats trigger enable` | `<id>` | `--dir` | `--json` | none | none |
+| `oats trigger disable` | `<id>` | `--dir` | `--json` | none | none |
+| `oats teams` | none | `--dir`, `--max-age` | `--json` | none | an unknown flag, an argument after the last |
+| `oats teams add` | `<label>` | `--dir`, `--team`, `--description` | `--no-default`, `--json` | none | an unknown flag |
+| `oats teams remove` | `<label>` | `--dir` | `--json` | none | an unknown flag |
+| `oats teams default` | `<label>` | `--dir`, `--expect` | `--if-absent`, `--json` | none | an unknown flag |
+| `oats soul launch set` | `<soul>` | `--dir`, `--launch-config`, `--harness`, `--model` | `--plan`, `--json` | none | an unknown flag, an argument after the last |
+| `oats soul launch remove` | `<soul or key>` | `--dir` | `--plan`, `--json` | none | an unknown flag, an argument after the last |
+| `oats server check` | `<id>` | none | `--json` | none | none |
+| `oats server remove` | `<id>` | none | `--json` | none | none |
+| `oats server forget` | `<id>` | `--instance` | `--json` | none | none |
+| `oats package add` | `<id>` `<version>` | `--dir` | `--json` | none | none |
+| `oats package remove` | `<id>` | `--dir` | `--json` | none | none |
+| `oats launch-config set` | `<name>` | `--file`, `--dir`, `--server` | `--keep-env`, `--json` | `--home`, `--soul` | none |
+| `oats launch-config remove` | `<name>` | `--dir`, `--server` | `--json` | `--home`, `--soul` | none |
+| `oats automations refresh` | none | `--dir` | `--json` | none | none |
+| `oats update` | none | `--dir` | `--check`, `--yes`, `--json` | `--to` | an argument after the last |
+
+An argument in brackets (`[<color>]`) is one the command may go without.
+A flag marked with a number of words (`--provider`, two: `--provider
+<capability> key=value`) takes that many.
+
+The refusal is `E_BAD_ARGS`, with the command's usage line after the
+message, and comes from the first problem from the left:
+
+- a flag the command does not define: `oats <command>: unknown flag
+  <flag>`, `error.details: {flag}`;
+- a value on a switch: `oats <command>: <flag> takes no value (got
+  <flag>=<value>)`, `error.details: {flag}`;
+- an argument after the last one the command takes: `oats <command>:
+  unexpected argument "<word>" after the <name> "<value>": <command> takes
+  one <name>`, or `<command> takes no argument`, `error.details: {argument}`;
+- a flag refused in its own words: that message (for example
+  `--delete-branch` on retire, `--server` on `oats instance upgrade`),
+  `error.details: {flag}`.
+
+A command whose last column names an answer gives that one in its own words:
+
+- `oats spawn`: `oats spawn: unknown flag <flag>`, and `oats spawn:
+  unexpected argument "<word>" after the soul "<soul>": spawn takes one
+  soul` (for a `key=value` word, `a capability setting is given as
+  --provider <capability> key=value`), `E_BAD_ARGS` with no usage line and
+  no `details`;
+- `oats teams` and its forms, `oats soul launch set` and `remove`: the
+  flag is `E_USAGE {flag}` in their words ([`oats teams`](#oats-teams),
+  [`oats soul launch`](#oats-soul-launch)); a word where `oats teams`
+  takes a form is `E_USAGE` with its usage; a second soul of `oats soul
+  launch` is `E_BAD_ARGS`, `takes one soul, and got <n>: …`, naming
+  every one;
+- `oats update <word>`: ``oats update takes no package: pin package
+  versions in oats-workspace.yaml (`oats package add <id> <version>`), then
+  `oats sync`; …``, `E_BAD_ARGS`, `error.details: {argument}`.
+
+Then, for a command given `--server`, a missing argument it requires is
+`E_USAGE`, with the usage line as `error.message` and no `details`, and
+nothing is sent. On this machine each command answers a missing argument
+itself, as before (`oats retire` with no instance is `E_USAGE` too).
+
+A flag that takes a value takes the next word (its number of words) unless
+it starts with `--`; a value after `=` is its first. A value flag given
+none (no word, or one that starts with `--`) ends the check there: it is
+that flag's own refusal, by the command, before any flag after it. `--` is a flag like any other, and none of
+these commands defines it. `--runtime` is the pre-0.27 name of
+`--harness`. `--help` and `-h` print the usage first, as for every
+kernel command.
+
 ### Dispatch errors
 
 | Code | When |
@@ -320,6 +436,11 @@ failure as `E_SSH`, message `ssh to <host> failed: …`:
   retrying cannot help.
 - No `details`: ssh ran and the link failed (unreachable host, refused key,
   lost connection, timeout); a retry may succeed.
+- `error.details` is `{decision, idempotencyKey, fix}` when the link failed
+  under the apply of a routed spawn the route bound itself
+  ([Idempotency](#spawn-idempotency-routed)): the host may have started the
+  spawn, and the same spawn with `--expect-decision <decision.revision>
+  --idempotency-key <idempotencyKey>` answers that one instance.
 
 (0.31.0; before it `E_SSH` never carried details.)
 
@@ -803,7 +924,13 @@ and ships the soul at the locked commit, and the soul's copy is intact: for
 `--home`, the home's copy matches the digest it recorded, and a lock still
 at that commit records the same digest. The copy is digested on every read.
 It fails otherwise, with `code: "E_PACKAGE_INTEGRITY"` on a digest mismatch
-and the remedy naming `oats sync` or a fresh spawn.
+and the remedy naming `oats sync` or a fresh spawn. When the package is no
+longer locked, readiness cannot tell a deliberate drop from an accidental
+unpin or a pending sync, so the `--home` remedy names both, the respawn
+first: if the workspace dropped the package on purpose, spawn a new instance
+from a soul the workspace offers, then retire this one; otherwise declare the
+package in `packages:` and `oats sync`. For `--soul` it is declaring the
+package and `oats sync`.
 
 **`providers`** (producer `provider binding check`): for each module whose
 manifest declares `binding`, the kernel runs its `binding.check` and relays
@@ -1180,6 +1307,13 @@ applies: gate `sync --plan` on `version` 0.44.0 or later, never by trying.
 - Errors: `E_LOCAL_MISSING`, `E_WORKSPACE_SCHEMA {path, problems}`,
   `E_REMOTE_UNREADABLE`, `E_LOCK_SCHEMA`, `E_PACKAGE_MISSING`,
   `E_PACKAGE_INTEGRITY`, `E_PACKAGE_MANIFEST`, `E_REPO_REF`, `E_BAD_ARGS`.
+  `E_PACKAGE_INTEGRITY` names its case in `details.why`: `branch`,
+  `package-id`, and `capabilities` or `souls` for an edited lock; a tag or
+  content that moved carries none
+  ([`oats sync`](packages.md#oats-sync--the-one-command-for-the-common-path)).
+  The Desktop's sync sheet words the refusal per `why`, and gives no `why`, or
+  one it doesn't know, the code's general meaning; its Details show the
+  kernel's message.
 
 ### `oats package add` and `remove`
 
@@ -1578,6 +1712,45 @@ line that gives each kind's total, and at most 50 items per kind
 ([After a retire](souls-and-instances.md#after-a-retire-inspect-restore-dispose)).
 Each element is one line of text with no newline. The answer has no new key.
 
+`oats doctor --json` lists each retirement left open as one
+`retire-incomplete` problem in `problems[]`, `{code, message, remedy}`
+(oats-project/oats#1747). Text prints it as `! retire-incomplete: <message>`
+with the remedy on the next line. A retirement is open when the home reads
+quarantined (`rollbackIncomplete`), when its self-retire is `failed` or
+`interrupted`, or when a failed self-retire left its outcome beside a home
+that is still there. A home whose retire is `running` or `unknown`, a spawn
+in progress, and an outcome whose home is gone are not listed. The message
+names the instance, the home, what is open and since when. The remedy is
+`oats retire <name> --home <home>`, each word quoted for a shell, and names
+the capability whose retire hook failed last, or says that none is recorded.
+Doctor reads this as `oats status` does, offline and read-only. Its exit
+status does not change: doctor exits 0 with problems. A deployment with no
+open retirement sees no change.
+
+`oats doctor --json` lists this machine's session resume lock, when it needs a
+person, as one `resume-lock-stuck` problem in `problems[]`, `{code, message,
+remedy}` ([The machine sweep](#the-machine-sweep-oats-session-resume),
+`E_RESUME_LOCK_STUCK`). It is the machine's, the same from every deployment.
+
+`oats doctor --json` lists each schedule slot whose record cannot be read, in
+the deployment and the others the host ticks, as one `schedule-slot-unreadable`
+problem in `problems[]`, `{code, severity: "warning", scope, id, message,
+remedy}` (text: `! schedule-slot-unreadable: <message>`, the remedy on the
+next line). The remedy is to check `oats schedule show <id>`, then run `oats
+schedule reconcile <id> --clear` ([Schedules](schedules.md#files)); for a
+workspace schedule this host does not run, or cannot tell it runs, the
+message says why and the remedy is to remove the slot by hand, at the path it
+names, once `oats status` shows no run of it here. A slot
+whose schedule is gone (a local one not in `oats-schedules.json`, a workspace
+one not in the saved snapshot, whose time it names), readable or not, is one
+`schedule-slot-orphaned` problem of the same shape, naming the run and the
+instance its record names; its remedy is to check `oats status`, then run
+`oats schedule reconcile <id> --clear`. A workspace schedule absent from the
+snapshot that cannot be shown gone (its member is not in it, or has a schedule
+file that could not be read) is the same problem, with the step that applies:
+remove the slot by hand at the path it names, or fix that file and run `oats
+automations refresh`.
+
 ### Desktop facts
 
 Feature `desktop-facts`: facts the kernel reports so the Desktop never derives
@@ -1848,9 +2021,14 @@ oats teams default <label> [--if-absent | --expect <label>] --json
   Among concurrent `oats teams` writers on one deployment, a conditional write
   therefore never overwrites a default another of them set: when two race, the
   later one sees the earlier result and refuses with
-  `E_TEAM_DEFAULT_MISMATCH`. A lock still held after 5 s is `E_LOCAL_BUSY
-  {path, lock}`, naming the directory to remove when no oats process is
-  editing; nothing was written. The limits: a person or tool editing
+  `E_TEAM_DEFAULT_MISMATCH`. The lock is a file that names the process
+  holding it: one left by a command that was killed is taken over by the next
+  command. A lock whose holder is still running after 5 s is `E_LOCAL_BUSY
+  {path, lock}`, and so is one that cannot be judged: a record that is
+  unreadable, a holder that cannot be told to be running or gone, or a lock
+  directory written by an earlier kernel. The message says which was found and
+  names the path to remove when no oats process is editing; nothing was
+  written. The limits: a person or tool editing
   `oats-local.yaml` directly does not take the lock (the content compare still
   catches most such edits, but not one landing between the compare and the
   rename), and changes to the committed `oats-workspace.yaml` (a pull, a
@@ -2009,7 +2187,7 @@ problem's own keys.
 | `default-team-changed` | warning | `recorded`, `current` | `--home` with live teams: the default changed since the spawn |
 | `E_TEAM_UNKNOWN` | failure | `label`, `at` | a local default no file declares |
 | `E_WORKSPACE_SCHEMA` | failure | `condition: "local-teams-closed"`, `path`, `keys` | `oats-local.yaml` declares `teams` / `defaultTeam` and the workspace does not allow local teams |
-| `team-soul-unknown` | warning | `key`, `at` | a `souls:` key that is neither `"*"` nor `<name>/*` nor a discovered soul's key (a typo guard) |
+| `team-soul-unknown` | warning | `key`, `at` | a `souls:` key that is no discovered soul's key, or a `<name>/*` pattern that matches none of them; never `"*"` (a typo guard; a pattern's `message` and `fix` are its own) |
 
 `E_TEAM_UNKNOWN` and local-teams-closed are also spawn, preview and inspect
 refusals (local-teams-closed as `E_WORKSPACE_SCHEMA` with details `{reason,
@@ -2128,7 +2306,7 @@ Every object shape here is closed.
   souls:
     launch:
       "*": opus                                          # every soul on this machine
-      oats-expert: opus                                  # a launch configuration
+      oats-engineering-expert: opus                      # a launch configuration
       oats.engineering/code-reviewer: {harness: codex}   # an inline preference
   ```
 - **Migration.** 0.29.x refuses an unknown soul.yaml key, and members are read
@@ -2268,6 +2446,39 @@ shows the drift as `launch-changed`.
   set '*' --launch-config <name>)". A start or restart of an existing
   home, `--reselect-launch` included, is never refused this way.
 - `E_WORKSPACE_SCHEMA`: a malformed `launch` or `souls.launch`, path named.
+
+**A `souls.disabled` entry that names no soul** (oats-project/oats#1772) keeps
+no soul off this machine, and spawn does not refuse because of it: a stale
+entry fails open, where a stale `souls.launch` key fails closed. `oats doctor`
+reports it with the launch check's discipline, offline, from the same read of
+this machine's cache:
+- An entry matches when spawn's own rule (`E_SOUL_DISABLED`) holds for a soul
+  the workspace offers: its bare name, or its qualified name (`<package>/<soul>`
+  or `<member>/<soul>`). A disabled soul is still offered. Spawn's rule is
+  exact: `<member>/<soul>` for a soul that only another member offers does not
+  match.
+- `problems[]` gains `{code: "disabled-soul-unmatched", entry, at,
+  suggestions, message, remedy}` per entry that matches nothing, in file
+  order (text: `! disabled-soul-unmatched: <message>`, then the remedy). `at`
+  is `oats-local.yaml#/souls/disabled/<index>`. `suggestions` holds at most
+  three qualified names of offered souls, ranked as the launch rows rank
+  theirs: the same bare name first, then a bare name within two edits. The
+  message says that it speaks about this machine's last read and that a spawn
+  reads the workspace itself and is the authority. The remedy is the hand
+  edit, replace the entry with the soul it was meant for or remove it: no
+  command writes `souls.disabled`.
+- An entry is *not checked*, and gets an `information[]` line that starts
+  `disabled-soul-unchecked:` instead of a row, when the source that could
+  hold its soul was not read, for the reasons of the launch check: an entry
+  under a package that is declared and not locked, or one of whose souls was
+  skipped; any entry not under the package of an offered package soul while
+  a member is not confirmed or a member's or an external soul was skipped (a
+  bare name, `<member>/<soul>`, or a prefix that may be a member's name);
+  every entry in the standalone view of a workspace whose host cannot be
+  read, or a read that kept no record of what it skipped. When the cache
+  cannot answer at all, one such line names the entries.
+- Doctor still exits 0. With no `souls.disabled`, or an empty list, nothing is
+  added. Spawn, `oats souls`, readiness and inspect do not change.
 
 ### The launch report (`Launch`)
 
@@ -2777,6 +2988,40 @@ Feature `spawn-apply-2`, `spawnApplyApi: 1`. The Desktop gates on
   Without `--expect-decision` the flag is `E_BAD_ARGS`
   ([Observation reuse](#observation-reuse-feature-observe-max-age-oats-0311)).
 
+<a id="spawn-caller-gone"></a>**A caller that goes away.** A spawn does not
+depend on its caller to finish: once it has made the home it ends with the
+home complete or with the home rolled back, whether or not anyone still
+reads it or its session is still there.
+- A reader that closes stdout or stderr (an ssh session that ended, a
+  Desktop that quit) only stops reading: the spawn runs to its end, what it
+  could not print is dropped, and its exit status is the spawn's own, `0`
+  for a spawn that completed, as for [`oats worktree add`](#oats-worktree).
+  The answer nobody read is the home's record, and a spawn that brought
+  `--expect-decision` and `--idempotency-key` answers it again when it is
+  repeated (below).
+- The same holds for the verbs that act under a home's
+  [lifecycle claim](#lifecycle-pairs): `oats retire`, `oats session start`,
+  `oats session restart` and `oats instance stop --apply`. With no reader
+  the act completes, a line it writes on stderr while it acts (a start
+  that starts the OATS tmux server writes one) is dropped with the answer,
+  and the exit status is the act's own, never the `1` of an unhandled
+  `EPIPE`. What was done is on disk: the home is gone, the session runs, or
+  the stop's receipt is stored, and a stop or a guarded retire repeated
+  with its `--idempotency-key` answers the receipt again. Their plans
+  (`--plan`) and every reading command are as before: a reader that goes
+  away ends them.
+- SIGINT, SIGTERM or SIGHUP never ends the process with a home that has no
+  record. While the capabilities are copied into the new home, and while
+  its `worktree` hooks run, the signal is held and the spawn is rolled back:
+  `E_INTERRUPTED`, exit 128 + the signal number
+  ([Spawn errors](#spawn-errors)). At any other moment the signal reaches
+  the process once the spawn has returned: the home is complete, the answer
+  is written, and the process then exits 128 + the signal number. This is
+  the spawn's rule alone: a retire, a start, a restart and a stop apply
+  hold no signal, and one that is signalled ends where it stands, its claim
+  left for the next command of that home to
+  [take over](#lifecycle-pairs).
+
 **Idempotency** (feature `spawn-idempotency-2`): `--idempotency-key <key>`
 with `--expect-decision` records the key and decision in `instance.json`.
 - Recovery runs right after naming, before placement or preflight. A retry
@@ -2790,6 +3035,23 @@ with `--expect-decision` records the key and decision in `instance.json`.
   for that intent's retries.
 - `wake: {requested, saved, error}` is recorded and replayed; `saved: null`
   means the outcome was not recorded.
+- A replay answers `attach` as the first apply did; its `launch` is `null`
+  (nothing runs again).
+- <a id="spawn-idempotency-routed"></a>**Routed (`--server`).** A spawn that
+  brings neither `--expect-decision` nor `--idempotency-key` is bound by the
+  route: it asks the host for its preview, then applies with that decision
+  and a key it makes for the request, and relays the host's keyed answer
+  (`decision`, `replayed: false`, `wake`). A link that fails under that apply
+  is `E_SSH` with `error.details: {decision, idempotencyKey, fix}`: `decision`
+  is the previewed decision, `idempotencyKey` the key the apply carried and
+  `fix` the sentence naming the two flags (and `--name <decision.instance>`
+  in place of `--suggest-name`). The same spawn with them is forwarded as
+  given and answers the one instance. A spawn that brings either flag is
+  forwarded as given. A host without `spawn-preview-2`, `spawn-apply-2` and
+  `spawn-idempotency-2` (and, for `--suggest-name`, `spawn-suggest-name` and
+  `spawn-name`) gets one unbound spawn, and the answer's `warnings` say that
+  a dropped link cannot be retried safely there
+  ([servers.md](servers.md#run-there)).
 
 **Result** (`oats spawn <soul> … --json`):
 
@@ -3061,6 +3323,7 @@ kernel stage raised as well.
 | `E_NOT_A_MEMBER`, `E_MEMBERSHIP_UNCONFIRMED` | | the soul's repository is not a confirmed member |
 | `E_CAPABILITY_MISSING`, `E_CAPABILITY_PRIVATE`, `E_CAPABILITY_INCOMPATIBLE`, `E_COMPATIBILITY` | | a capability cannot be resolved |
 | `E_PACKAGE_MISSING`, `E_PACKAGE_INTEGRITY`, `E_LOCK_SCHEMA` | | the lock does not provide it (standalone: `{…, standalone: true, reason: "no-catalog", catalog}`) |
+| `E_PACKAGE_INTEGRITY` | `{package, version, commit, expected, actual}` | a composed package's tree at the locked commit does not digest to the lock's `integrity` (`expected`); `actual` is the digest read. Preview and apply, before anything is written ([The integrity check at spawn](packages.md#the-integrity-check-at-spawn)) |
 | `E_SLOT_CONFLICT`, `E_SKILL_DUPLICATE` | | the composition conflicts |
 | `E_WORKSPACE_SCHEMA` | `{path, key, reason}` | a removed key or invalid payload |
 | `E_CLONE_MISSING`, `E_CLONE_MISMATCH` | | the member's clone is missing or wrong |
@@ -3075,10 +3338,11 @@ kernel stage raised as well.
 | `E_LAUNCH_*`, `E_MODEL_UNKNOWN`, `E_UNSUPPORTED_HARNESS` | | the launch selection is refused |
 | `E_HARNESS_UNAVAILABLE` | `{harness, from, at, fix}` | the chosen harness has no executable on this machine ([launch preferences](#soul-launch-preferences-feature-launch-preference-oats-0300)) |
 | `E_CLAUDE_CONFIG_REMOVED` | `{file, executable, fix}` | a new claude launch with an `oats-claude-config` in reach ([configuration.md](configuration.md)) |
+| `E_CLAUDE_LOGIN_CREDENTIAL` | | the effective Claude configuration has a `/login` credential file while OATS sets `CLAUDE_CODE_OAUTH_TOKEN`; remove the login credential and use the token route ([configuration.md](configuration.md)). Spawn preflight checks predictable values before effects, and the actual pane is checked after hooks |
 | `E_HARNESS_RESOURCE_MISSING` | | a harness package a capability requires for the selected harness is not installed, disabled, or cannot be verified ([capabilities.md](capabilities.md)); raised before any home exists, at a preview too, and again by an apply after the home, the work and the hooks when the pane it got differs from the one it checked in a name the probe reads, or selects another program (another creator started the OATS tmux server): then the spawn is rolled back, with `details.unconfirmed` when that cannot finish. A start, a restart and a launch plan's `harness-packages` check answer the same code |
 | `E_LAUNCH_SHIM` | | the home's `oats` (`<home>/.oats/bin/oats`) cannot be written; the spawn is rolled back |
 | `E_SCHEDULE_INVALID` | | a bad wake (`--wake-json`, `--wake-file`, `--wake-*`) |
-| `E_INTERRUPTED` | `{signal, hooks}` | SIGINT, SIGTERM or SIGHUP while the spawn's `worktree` hooks ran (feature `worktree-event`): the running hook's process group is ended, the spawn is rolled back as for a required hook failure, and the process exits 128 + the signal number |
+| `E_INTERRUPTED` | `{signal, hooks}` | SIGINT, SIGTERM or SIGHUP while the spawn's `worktree` hooks ran (feature `worktree-event`): the running hook's process group is ended, the spawn is rolled back as for a required hook failure, and the process exits 128 + the signal number. Also while the capabilities were copied into the new home, before any hook: the signal is held until the copy ends, the home is removed, `hooks` is `[]`, and the exit status is the same ([a caller that goes away](#spawn-caller-gone)) |
 | `E_REQUIRED_HOOK_FAILED` | `{hooks}`, plus `unconfirmed: true` when compensation cannot finish | a required `spawn` or `worktree` hook failed or timed out; the spawn is rolled back. `hooks` holds the receipt of the event that failed: one entry per hook that ran, `{capability, ok, required, log, exitCode?, signal?, timedOut?, contract?}`, paths only. `log` is `null` for a spawn hook (it keeps no log) and once the rollback removed the home; a retained home keeps a `worktree` hook's log path. Never `home`. Before 0.49.0 a required spawn hook's failure answered `E_SPAWN_FAILED` |
 | `E_HOOK_ENVIRONMENT_CONTRACT` | the same as `E_REQUIRED_HOOK_FAILED`, the failed entry with `contract: "environment"` | a `spawn` hook answered an `env` its manifest does not allow, or a `worktree` hook answered `env` at all |
 | `E_RUNTIME_ENDPOINT_UNKNOWN` | | the session cannot be established: the OATS tmux server cannot be read at an apply (before any effect, or after the home, the work and the hooks), or the pane's `PATH`, `HOME` or harness folder cannot be read for the harness package check ([the checks read the pane](execution-targets.md#the-checks-read-the-pane)), before anything is probed or created, or at the apply's second check after the hooks, as for `E_HARNESS_RESOURCE_MISSING`. Once the home exists the spawn is rolled back, with `details.unconfirmed` when that cannot finish. A start and a restart answer the same code |
@@ -3241,16 +3505,16 @@ A failed `add` reports the same facts about its rollback in `details`:
 | `E_CLONE_MISSING` | the repository is not found, or is not a Git repository |
 | `E_CLONE_MISMATCH` | the path is a linked worktree, or the clone has no `origin` |
 | `E_BRANCH_EXISTS` | the branch exists in the clone (before the tree is made, or made by another `add` at the same moment); `details.remedy` is `<instance>/<branch>` |
-| `E_GIT_FAILED` | a Git step failed on its own (`git worktree add`, or `git switch` while the branch does not exist), with Git's message: `git <sub> failed in <dir>: …`; the tree is removed |
+| `E_GIT_FAILED` | a Git step failed on its own (`git worktree add`, or `git switch` while the branch does not exist), with Git's message: `git <sub> failed in <dir>: …`; or a checkout was not run because the repository's configuration defines a filter driver whose name cannot be overridden ([a checkout runs no filter driver](souls-and-instances.md#checkout-filter-drivers)); the tree is removed |
 | `E_PLACEMENT_TAKEN` | a `ready` record with another clone, branch or base (`details.differ`); `.work-<p>` with no record, or a file or symbolic link there; an unreadable record |
 | `E_LIFECYCLE_BUSY` | an add of that purpose is still running (pid and start time verified); another add or remove of that purpose holds its claim (`details.lock`); a file at the claim's path is no claim this kernel can read or take over (`details.lock`); the claim was taken again, the last time by a process that is gone, each of the five times the command found it without a live holder (`run the command again`); an interrupted add's rollback could not be completed (`details.owed`; the message says what to deal with and to run `oats worktree remove --purpose <purpose>`, which finishes the rollback); or, `add` only (OATS 0.52.0), the home's claim is held by a retire whose liveness cannot be read, or is a file that is no readable claim (`no tree was made`; [Commands that meet on one home](#lifecycle-pairs)). Every one carries [`details.holder`](#busy-holder) |
 | `E_REMOTE_UNREADABLE` | the fetch of `<base>` from `origin` failed; the tree is removed |
 | `E_BASE_UNKNOWN` | the new HEAD is not the fetched commit; the message names both |
 | `E_REQUIRED_HOOK_FAILED`, `E_HOOK_ENVIRONMENT_CONTRACT` | a required `worktree` hook failed or timed out, or a hook answered `env`; the tree is removed (`details.hooks`, `details.rolledBack`) |
 | `E_INTERRUPTED` | SIGINT, SIGTERM or SIGHUP while the hooks ran; the tree is removed and the process exits 128 + the signal number (`details.signal`) |
-| `E_WORKTREE_DIRTY` | `remove`: Git refused a tree with uncommitted or untracked work (`details.git` is Git's message), or an unregistered residue differs from the recorded branch (the message and `details.git` list the modified or nonignored untracked paths). The record is kept. Save the changes, or discard, then retry |
+| `E_WORKTREE_DIRTY` | `remove`: Git refused a tree with uncommitted or untracked work (`details.git` is Git's message), or an unregistered residue differs from the recorded branch (the message and `details.git` list the modified or nonignored untracked paths). No filter driver the repository's configuration defines is run for either: a file such a filter applies to is compared as its bytes are in the tree. The record is kept. Save the changes, or discard, then retry |
 | `E_CHILDREN_RUNNING` | `remove`: an instance attached to the tree has a session that is running, or that cannot be read. Answered under the purpose's claim, before Git is asked anything: nothing is removed and the record is kept. `details: {purpose, path, children: [{instance, home, session}]}`, `session` being `"running"` or `"unknown"`; only the instances that refuse are listed. The message names each one and what was seen, and the step: `oats instance stop <instance>`, or retire it, then remove again. No flag removes anyway. It is the code [a retire](#retire-children-running) answers, with other `details`: a retire answers it for a child it asked to stop and that did not; `remove` for an attached instance it found running or unread, and it asks nobody to stop, so there is no `childrenStopped` |
-| `E_WORK_PRESERVATION_FAILED` | `remove`: Git refused for another reason, removal could not be verified, or an unregistered residue could not be checked against its recorded branch or deleted; the record is kept. A failure after Git started removal reports possible partial deletion and the retry, never that nothing was removed. A missing or invalid `.git` marker names the manual step: save any work, remove the directory by hand, then run `remove` again to drop the record. See [extra-tree removal recovery](souls-and-instances.md#extra-trees) |
+| `E_WORK_PRESERVATION_FAILED` | `remove`: Git refused for another reason, removal could not be verified, an unregistered residue could not be checked against its recorded branch or deleted, or the repository's configuration defines a filter driver whose name cannot be overridden on Git's command line (it holds `=` or is not UTF-8; Git is not run on the tree, since it would run that filter: [filter drivers](souls-and-instances.md#retire-filter-drivers)); the record is kept. A failure after Git started removal reports possible partial deletion and the retry, never that nothing was removed. A missing or invalid `.git` marker names the manual step: save any work, remove the directory by hand, then run `remove` again to drop the record. See [extra-tree removal recovery](souls-and-instances.md#extra-trees) |
 | `E_LIFECYCLE_FAILED` | an error that is not the kernel's; with [`details.cause`](#kernel-codes) when it has a code of its own or is a defect, and without it when it is a refusal without a code. When it is the purpose's claim that could not be taken (`<home>/.oats/trees` cannot be made, the claim's file cannot be written), the message is `the claim <path> could not be taken (…); nothing was done`. Also a command that was refused the claim after its takeover had ended a dead command's git step: the message names the group it ended first, then the refusal, and `details` are that refusal's (a refusal of the kernel's has no `details.cause`; anything else has it by the same rule) |
 
 A rollback that cannot finish keeps the record and says so in the message
@@ -3413,8 +3677,10 @@ its absence.
   and no `runtimeState`. What the lifecycle commands answer for such a home:
   [below](#unreadable-record).
 - **`spawnInProgress`** (feature `worktree-event`, OATS 0.49.0): `true` only
-  while a spawn that is running its `worktree` hooks is verifiably alive (its
-  pid runs with the recorded start time). Such a home holds the quarantine marker
+  while a spawn that wrote its in-progress marker is verifiably alive (its
+  pid runs with the recorded start time): one running its `worktree` hooks,
+  or one that has reached its spawn hooks and not yet written its record,
+  when a capability with a spawn hook has a retire hook. Such a home holds the quarantine marker
   with an `inProgress` field ([capabilities.md](capabilities.md#manifest)),
   and its row carries `spawnInProgress: true` and **no**
   `rollbackIncomplete`: a live spawn, not a failed one. Once that process is
@@ -3440,8 +3706,9 @@ its absence.
   reading `null` unless a harness runs there.
 - <a id="row-session-end"></a>**`sessionEnd`** (feature `session-resume`, OATS
   0.69): how the last session of a launched home that does not run ended:
-  `lost` (the host went down, its tmux server died, or the harness was killed
-  by a signal: the sweep brings it back when it can vouch for the loss,
+  `lost` (the host went down, its tmux server died, the harness was killed
+  by a signal, or `oats host run` stopped it because the host was stopping:
+  the sweep brings it back when it can vouch for the loss,
   [Which losses come back](execution-targets.md#which-losses-come-back)), `stopped` (stopped with OATS:
   `oats instance stop`, Desktop's Stop, or an `oats session restart` whose
   relaunch did not happen) or `exited` (the harness ended by
@@ -3499,7 +3766,7 @@ its absence.
   | the marker, and the result file `.oats-retired-<instance>.json` with `ok: false` | `failed`, with `code` and `message` | `true` | the result's `completedAt`, else the marker's `requestedAt` |
   | the marker, no failed result, its completion process alive | `running` | `true` | the marker's `requestedAt` |
   | the marker, no failed result, the completion's liveness cannot be read, or the marker names no completion process | `unknown` | `true` | the marker's `requestedAt` |
-  | the marker, no failed result, its completion process gone | `interrupted` | `true` | the marker's `requestedAt` |
+  | the marker, no failed result, its completion process gone (it ended, its pid runs with another start, or the marker's `completionBoot` is another boot) | `interrupted` | `true` | the marker's `requestedAt` |
   | a marker that cannot be read as an object | `unknown` | `true` | the marker file's modification time |
   | no marker; the home's claim held by a retire whose holder is alive | `running` | `false` | the claim's `since` |
   | no marker; the same, the holder's liveness cannot be read | `unknown` | `false` | the claim's `since` |
@@ -3879,16 +4146,19 @@ oats server check <id> --json
 ```
 
 `server list` is an envelope whose `result` is `{file, servers}`; each row is
-the registration (`id`, `sshHost`, `workspace`, and `oatsPath`, `path`,
-`label` when set) plus `workspaceKey` (`null` when not known yet), `target`
-and `snapshots`. With `--workspace-ref <ref>`, `servers` holds only the rows
-whose `workspaceKey` is the canonical key of `<ref>` (`parseRepoRef`; any
+the registration (`id`, `sshHost`, `workspace`, and `operatorSshHost`,
+`oatsPath`, `path`, `label` when set) plus `workspaceKey` (`null` when not known
+yet), `target` and `snapshots`. `operatorSshHost` is the optional `--operator-ssh` alias,
+joined from `~/.oats/server-operator-routes.json`; it is absent from `servers.json`.
+Older kernels never read the separate file;
+existing routing and `target` use only `sshHost`. With `--workspace-ref <ref>`,
+`servers` holds only the rows whose `workspaceKey` is the canonical key of `<ref>` (`parseRepoRef`; any
 spelling of the repository), and `result.unknownWorkspace` lists the ids
 whose key is not known; an unparsable ref is `E_REPO_REF`.
 
 ```json
 {"file":"/Users/me/.oats/servers.json",
- "servers":[{"id":"altair-aweb","sshHost":"altair","workspace":"/Users/me/acme","path":"/opt/homebrew/bin","label":"altair",
+ "servers":[{"id":"altair-aweb","sshHost":"altair","operatorSshHost":"altair-operator","workspace":"/Users/me/acme","path":"/opt/homebrew/bin","label":"altair",
              "workspaceKey":"github.com/awebai/ac",
              "target":{"sshHost":"altair","workspace":"/Users/me/acme","oatsPath":"oats","path":"/opt/homebrew/bin"},"snapshots":0}],
  "unknownWorkspace":["build"]}
@@ -3909,7 +4179,7 @@ contradicts fails the check with `E_SERVER_WORKSPACE_MISMATCH`, `details:
 
 ```text
 oats server connect <id> --ssh <host> --dir </abs/path or ~/path on the host> [--workspace-ref <ref>]
-                    [--oats <path>] [--path <dirs>] [--label <text>] [--install-oats] [--replace] --json
+                    [--operator-ssh <alias> | --no-operator-ssh] [--oats <path>] [--path <dirs>] [--label <text>] [--install-oats] [--replace] --json
 ```
 
 An envelope, `ok: true` whenever no step failed, human steps included
@@ -3941,10 +4211,13 @@ An envelope, `ok: true` whenever no step failed, human steps included
   some codes, `details`. `skipped` steps say `waits for <step>`.
 - `registration` is the registration as written or found (`sshHost`,
   `workspace`: the absolute path the host resolved for `--dir`, never `~`;
-  `workspaceKey`; and `oatsPath`, `path`,
-  `label` when set, given or, without `--path`, read from the host user's
+  `workspaceKey`; optional `operatorSshHost` joined from the separate operator-route file; and
+  `oatsPath`, `path`, `label` when set, given or, without `--path`, read from the host user's
   [login shell](servers.md#the-hosts-login-shell-path)), `null` until the
   `register` step has run.
+  With `--replace`, an existing operator route is kept unless `--operator-ssh`
+  sets it again or `--no-operator-ssh` clears it. `server remove` deletes the
+  separate route too. Both files are updated under `servers.lock`.
 - `human` lists the remedies of the `needs-human` steps, in order. A
   `readiness` step that needs a human has one line per problem
   (`<souls>: <subject>: <reason>[ → <remedy>]`, plus `readiness not checked
@@ -4294,6 +4567,39 @@ readOnly: {helpers: "disabled", optionalLocks: "off", objectsWritten: 0}}`.
   (`readOnly`). An object a partial clone lacks is not fetched: the read
   fails with `E_GIT_FAILED` (with Git 2.44 or later; an older Git ignores
   `GIT_NO_LAZY_FETCH`).
+- **Filter drivers are not run.** Git runs a `filter.<name>.clean` or
+  `.process` command when a status or a diff compares a work-tree file that
+  carries the `filter` attribute, and it has no switch that turns filters
+  off. Before the Git commands that read a work-tree file, `oats instance
+  git` and `oats instance diff` read the configuration Git would use (`git config --list`, which runs
+  nothing and follows `include.path` and `includeIf`) and override every
+  filter driver it defines to no command (`clean`, `smudge`, `process`) and
+  not required. An observation makes that read once, before its status, for
+  its status and its line counts; each command of a diff is preceded by its
+  own.
+  - A file such a filter applies to (a Git LFS file, for one) is compared as
+    its bytes are in the work tree, not as the filter would store them. An
+    untouched file still reads as unchanged, by its recorded size and times.
+    One that was rewritten, or whose times Git cannot tell from the index's,
+    reads as `changed` even when its filtered form is what is stored; its
+    line counts and its diff are the stored form (an LFS pointer) against the
+    work tree's bytes. The observation then carries a note that the
+    repository's configuration defines a filter driver.
+  - A driver whose name cannot be passed on Git's command line (it holds `=`
+    or is not UTF-8) cannot be overridden: Git is not run, and the read fails
+    with `E_GIT_FAILED`.
+  - Not covered: a driver written into the configuration between that read
+    and a Git command it covers (for an observation, up to its line counts,
+    which follow its status and its reads of HEAD, the index and the refs),
+    and a filter a **submodule's own**
+    configuration defines. Git runs inside each populated submodule to learn
+    whether it is dirty, and the overrides name the repository's drivers, not
+    the submodule's. A dirty submodule stays visible in the status for that
+    reason. Where the agent and the reader of its worktree are one system
+    user, which is the usual arrangement, such a filter runs nothing the agent
+    could not run itself. Where they are separate users, it runs the agent's
+    command as the reader's user: do not read a worktree with populated
+    submodules across users.
 - If HEAD or the index moved, the id is not in the current observation, or
   anything moved during the read: `E_STALE_OBSERVATION` with
   `details.observation`. Re-observe; never render a diff of another tree.
@@ -4337,6 +4643,12 @@ oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--
   `branch-deleted` (not written since 0.41.0: no retire deletes a branch;
   older logs hold it), `child-spawn-refused`, `launch-warning` (0.30: a
   `launch` hook's warning at session start/restart, `data: {message}`),
+  `retire-warning` (a retire hook's warning, `data: {message}`: one row per
+  entry of the retire hooks' `warnings`, a hook's own `warning` and the
+  kernel's lines about those hooks alike, in their order; written to the
+  workspace log only, as soon as the hooks return, so a retire that then
+  refuses or ends quarantined keeps them, and each run of the hooks, a retry
+  among them, adds its own; older clients read it as an unknown kind),
   `recomposed` (from earlier kernels), `waiting` (0.40: a producer's claim,
   [Waiting on you](#waiting-on-you)), `wake-held` (feature `wake-hold`: a
   scheduled wake began to hold, one row per hold, `data: {schedule, since,
@@ -4349,6 +4661,12 @@ oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--
   credentials, `member` a key or `null`, `hooks` the `worktree` hooks'
   receipt). `producer` is `kernel`, a capability id,
   or another producer id (`agent`). Older rows may carry `eventsApi: 1`.
+  The `message` of a `launch-warning` or `retire-warning` row is the
+  warning's text as stored: control, bidi and hidden characters replaced
+  with U+FFFD, cut to 2048 UTF-16 code units ending in `…` (never through a
+  surrogate pair); a warning that is not a string is stored as its JSON.
+  Clients show it as plain text. The answer that carried the warning
+  (`warnings`) keeps it as it was said.
   `launched` is written by spawn and, since 0.40, once per session start or
   restart, as soon as the session exists (`data: {harness, backend,
   launchConfig, phase, startId}`; spawn's row has neither `phase` nor
@@ -4363,7 +4681,8 @@ oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--
 - `retired` (`data: {agent, keepDir, self, quarantine, workRecovery, hooks,
   reason?}`) is written to the workspace log only,
   `<deployment>/.agents/events/<agent>--<instance>.jsonl`, which outlives the
-  home. `reason` is present only when
+  home. What its hooks warned is not in it: those are the `retire-warning`
+  rows written before it. `reason` is present only when
   the retire completed a self-retire an older OATS recorded with
   `--delete-branch` (since 0.41.0: `this self-retire was requested with
   --delete-branch by an older OATS; retirement no longer deletes branches, so
@@ -4488,8 +4807,8 @@ before whether or not a claim is set. `attention` never marks a screen an Enter
 answers: a producer that wants one uses `question`, and review catches that.
 
 ```text
-oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message <text>] [--home <abs>] [--dir <d>] --json
-oats instance attention [--message <text>] [--clear] --json
+oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] --json
+oats instance attention [--message=<text>] [--clear] --json
 ```
 
 ```json
@@ -4769,8 +5088,15 @@ oats instance stop <instance> --plan [--no-recursive] [--home <abs>] [--dir <d>]
 - `retiring` and `stopPending`, booleans on every target, say who holds the
   target's home when the plan is read (OATS 0.52.0, feature
   `lifecycle-claim-stop`). `retiring`: a self-retire is scheduled for it
-  (its pending marker is there), or a retire holds its
-  [claim](#retire-one-at-a-time). From 0.53.0 the marker outlasts a
+  (its pending marker is there, and the completion the marker names is not
+  gone: it lives, its liveness cannot be read, or the marker names none),
+  or a retire holds its
+  [claim](#retire-one-at-a-time). A marker whose completion is gone (it
+  ended, its pid runs with another start, or the marker was written in
+  another boot) is `retiring: false`, and the apply stops the target: the
+  home is owed its retire and nothing carries it out
+  ([a completion that was killed](souls-and-instances.md#self-retire-interrupted)).
+  From 0.53.0 the marker outlasts a
   completion that did not complete only when a retire hook was started or
   the removal of the home began
   ([a completion that does not complete](souls-and-instances.md#self-retire-not-completed)).
@@ -4833,7 +5159,8 @@ this order:
    retired since the plan was shown answers `E_SESSION_UNKNOWN`; one whose
    `instance.json` can no longer be read, `E_UNIDENTIFIED_INSTANCE_HOME`; a
    child in that state is no longer a target, which is a changed plan.
-6. It refuses a target for which a self-retire is scheduled
+6. It refuses a target for which a self-retire is scheduled, unless the
+   completion its marker names is gone
    (`E_INSTANCE_RETIRING`, with `details.plan`).
 7. It stops each target, writes the receipt and releases the claims.
 
@@ -5116,12 +5443,21 @@ The sweep reports each of these `skipped`, `lifecycle-busy`
 apply refuses a home that is not stopped, so it stops nothing: beside a
 resume that is still starting, it meets the claim.
 
-Upgrade requires a stopped session. It also holds the start's
-`.oats-start.lock` mutex until its final invocation receipt is persisted. A
-start reaches that mutex only once it holds the claim, so beside an upgrade
-that runs it is refused at the claim (`E_LIFECYCLE_BUSY`); the mutex answers
-(`E_SESSION_START_BUSY`, naming the same-key retry) only when an upgrade that
-died left it. A partial receipt refuses starts through the remaining
+Upgrade requires a stopped session. It also keeps a file at the home's
+`.oats-start.lock` until its final invocation receipt is persisted. A start
+makes nothing at that path and reads it only once it holds the claim, so
+beside an upgrade that runs it is refused at the claim (`E_LIFECYCLE_BUSY`);
+the file answers (`E_SESSION_START_BUSY`, naming the same-key retry) only
+when an upgrade that died left it. A directory at that path is the start lock
+of an earlier OATS: a start refuses it with `E_SESSION_START_LOCK_STUCK`,
+`<path> is the start lock directory of an earlier OATS; nothing was stopped
+or started. Once no earlier oats is running, remove that directory and
+retry`, and never removes it. Anything else there is refused with the same
+code: `<path> is neither a package upgrade's file nor an earlier OATS's start
+lock directory; nothing was stopped or started. Remove it and retry`. An
+upgrade apply that meets such a directory answers `E_SESSION_RUNNING`, `<name>:
+<path> is a start lock left by an earlier OATS; upgrade never removes it.
+Once no earlier oats is running, remove that directory and retry`. A partial receipt refuses starts through the remaining
 finalization (`E_UPGRADE_PARTIAL`): the CLI checks it first, before it reads
 the home's live teams, except while an upgrade holds the claim, which then
 answers. The following stop/retire notes describe the original table.
@@ -5138,7 +5474,9 @@ answers. The following stop/retire notes describe the original table.
   ([a completion that does not complete](souls-and-instances.md#self-retire-not-completed)).
   A retire reads the marker under the claim, while
   the completion lives (`E_LIFECYCLE_BUSY`, [below](#retire-one-at-a-time)).
-  A stop apply reads it in the plan it makes under its claims: a plan that
+  A stop apply reads it in the plan it makes under its claims, and it holds
+  the home against a stop while its completion is not gone
+  ([`retiring`](#stop-claim)): a plan that
   showed `retiring: true` is answered `E_INSTANCE_RETIRING`, and an apply
   whose plan was shown before the retire was scheduled is answered
   `E_PLAN_STALE` first, with the fresh plan.
@@ -5305,6 +5643,7 @@ had begun.
 | Code | `oats instance stop` | `oats retire` |
 |---|---|---|
 | `E_BAD_ARGS` | yes | yes |
+| `E_USAGE` | yes | yes |
 | `E_PLAN_STALE` | yes | yes |
 | `E_INSTANCE_RETIRING` | yes | yes |
 | `E_LIFECYCLE_BUSY` | yes | yes |
@@ -5763,6 +6102,18 @@ extra tree that is not clean is moved the same way; a clean one is removed.
 oats retire <instance> [--plan-revision <rev> --idempotency-key <key>] [--discard-worktree] [--home <abs>] --json
 ```
 
+A flag retire does not read, or an argument after the instance, is refused
+with `E_BAD_ARGS` before any effect, `--plan` and `--server` included:
+`oats retire: unknown flag <flag>` with `error.details.flag`, or `oats retire:
+unexpected argument "<word>" after the instance "<instance>": retire takes one
+instance` with `error.details.argument`, each followed by the usage line. The
+flags are `--plan`, `--plan-revision`, `--idempotency-key`, `--home`, `--dir`,
+`--server`, `--self`, `--discard-worktree`, `--keep-dir`, `--force` and
+`--json` ([souls-and-instances.md](souls-and-instances.md#retire)).
+A retire with no instance is `E_USAGE`, with the usage line as
+`error.message`: one envelope under `--json`, the usage line on stderr
+without it. An unknown flag before the instance is still `E_BAD_ARGS`.
+
 A first retire prints the **raw receipt**, not an envelope:
 
 ```json
@@ -6030,7 +6381,19 @@ zombie) has died: its claim is taken over without waiting for that reap
 (0.52.0, #870; before, the retire was refused as running until the reap). The
 claim does not end what the killed retire left running: one of its retire
 hooks may still be running when the next retire takes the claim over and
-runs the hooks again (#865). Until
+runs that hook again (#865). <a id="retire-hooks-in-claim"></a>The retire
+that takes over does not run again a retire hook the killed one had
+finished: a retire records each hook that ended in its claim, as
+`retireHooks: [{capability, meta?}]` (the `meta` that hook answered) with
+`retireHooksFor`, the home's `createdAt`, and the next holder skips those
+hooks and judges the cleanup, and writes its `retired` row, with their
+`meta` as if it had run them. A hook that had not ended is run again. Only
+a take-over reads the list: a retire that returns removes its claim, so
+the retry of a quarantined home, and each retry a self-retire's completion
+makes of a cleanup its hooks left incomplete, runs every hook again. A
+claim without the list, or whose list names another incarnation, skips
+nothing, and of a list only the entries that name a capability of this
+home with a retire hook count. Until
 that name is retired again its claim file stays where it is, and it is safe
 to remove once its pid is gone. A retire that ends removes its claim file;
 the `claims/` directory itself stays, empty.
@@ -6099,8 +6462,9 @@ line and says that nothing was done:
   Then the command again.
 
 A scheduled self-retire counts from the moment it is scheduled. Its pending
-marker (`pendingMarker`) records the completion process as `completionPid`
-and `completionStart` (`null` when the start could not be read). While that
+marker (`pendingMarker`) records the completion process as `completionPid`,
+`completionStart` and `completionBoot`, the boot it runs in (each of the two
+`null` when it could not be read). While that
 process lives, every other retire of the instance is refused the same way,
 `--self --keep-dir` included: `a retire of <name> is already scheduled (its
 completion, pid <pid>, requested at <requestedAt>); nothing was done — wait
@@ -6114,7 +6478,10 @@ claim, it is refused the claim and answers `E_LIFECYCLE_BUSY` like any other
 retire, where it answered `alreadyScheduled: true` before 0.51.0. The marker refuses nothing once its completion has
 left its outcome at `resultPath` (it failed) or is gone (it died; a
 completion that is a zombie, not reaped by its parent, has died: 0.52.0,
-#870), nor when
+#870; one whose marker names another boot than this one is gone whatever
+its pid reads as, since a boot ends every process and a pid and a start can
+both come again in the next; a marker that names no boot is judged by its
+process alone), nor when
 it names no completion (a marker written before 0.51.0): `oats retire
 <instance>` then retries the retirement, as before. The completion does not
 start its retire while the retire that scheduled it holds the claim: it
@@ -6183,14 +6550,17 @@ Git reads as the top level of a `work/` whose `core.worktree` names another
 one),
 `E_SESSION_UNKNOWN`, `E_AMBIGUOUS_INSTANCE`,
 `E_UNIDENTIFIED_INSTANCE_HOME` (a home with no `instance.json` and no cleanup
-descriptor, or a rollback marker that cannot drive a retry, until `--force`;
+descriptor, or a rollback marker that cannot drive a retry, or an
+`instance.json` that names no repository and does not show that no capability
+has a retire hook, what a spawn killed before its record leaves
+([capabilities.md](capabilities.md#manifest)), until `--force`;
 a home whose `instance.json` [cannot be read](#unreadable-record), `--plan`
 and `--force` included),
 `E_NO_ROOT`, `E_LIFECYCLE_FAILED`, `E_LIFECYCLE_BUSY` (another retire of the
 home is running or scheduled, or a stop of it is running, `--force`
 included: one retire or stop of a home at a time, above; or, feature
-`worktree-event`: the home is a spawn still running its `worktree` hooks, a
-row with `spawnInProgress: true`, `--force` included; or one whose start time
+`worktree-event`: the home is a spawn still running its spawn or `worktree`
+hooks, a row with `spawnInProgress: true`, `--force` included; or one whose start time
 cannot be read, a `rollbackIncomplete` row, until `--force`; or a hook or git
 group whose leader's start cannot be read, until `--force`; every one is
 answered before any effect and carries [`details.holder`](#busy-holder)). The
@@ -6569,6 +6939,11 @@ results with package drift include `drift:[{capability, recorded:{version,commit
 locked:{version,commit}}]` for package modules behind the deployment lock,
 and omit the field when none are behind. Text prints one line after the start:
 `<n> package module(s) behind the lock (<cap> <version> @ <shortcommit> → <version> @ <shortcommit>); to move them: oats instance stop <instance>; oats instance upgrade <instance> --plan`.
+`drift` lists only modules an upgrade moves in place. Package modules an
+upgrade keeps, because their package is no longer locked or no longer
+provides the capability, add one string to `warnings`, printed as a
+`WARNING:` line:
+`<n> package module(s) cannot move in place (<cap>: package <id> is no longer locked; <cap>: package <id> no longer provides it); an upgrade keeps them as they are, so respawn this instance to move it onto the lock`.
 Restart has no upgrade flag. A partial upgrade receipt refuses a start with
 `E_UPGRADE_PARTIAL`, naming the retry with the original idempotency key.
 A committed receipt with `steps.cleaned: false` permits start and adds one
@@ -6628,13 +7003,20 @@ warning naming the same-key cleanup retry.
   `E_UNIDENTIFIED_INSTANCE_HOME` (the home's `instance.json`
   [cannot be read](#unreadable-record): nothing was started, `start` and
   `restart`),
-  `E_SESSION_START_BUSY`, `E_INSTANCE_RETIRING`, `E_LIFECYCLE_BUSY` (feature
+  `E_SESSION_START_BUSY`, `E_SESSION_START_LOCK_STUCK` (a start lock
+  directory an earlier OATS left at `<home>/.oats-start.lock`, or anything
+  else there that is not a package upgrade's file; the message names it and
+  what to remove; nothing was started or stopped:
+  [Commands that meet on one home](#lifecycle-pairs)),
+  `E_INSTANCE_RETIRING`, `E_LIFECYCLE_BUSY` (feature
   `lifecycle-claim-start`: a stop or an upgrade of the home holds its
   lifecycle claim, or the claim cannot be read or taken; `details.holder`,
   `details.action`; nothing was started or stopped:
   [Commands that meet on one home](#lifecycle-pairs)), `E_LAUNCH_*` (among them
   `E_LAUNCH_SHIM`: the home's `oats` link cannot be written, nothing was
   started), `E_MODEL_UNKNOWN`, `E_UNSUPPORTED_HARNESS`,
+  `E_CLAUDE_LOGIN_CREDENTIAL` (the effective Claude config has a `/login`
+  credential file alongside an OATS-set token; other harnesses are unaffected),
   `E_HARNESS_RESOURCE_MISSING` (a harness package an active capability
   requires is not installed, disabled, or cannot be verified: nothing was
   started; `E_HARNESS_PACKAGE` before 0.56.0), `E_SESSION_FAILED`
@@ -6693,10 +7075,10 @@ answer is the ordinary start answer plus one object:
 - Refused `E_RESUME_NOT_LOST` when the home did not lose its session
   (`stopped`, `exited`, never launched), read under the claim and the start
   lock before any launch hook runs; nothing was started.
-- Refused `E_LAUNCH_ENV_CHANGED` when a `{fromEnv}` value differs from the
-  one the start it brings back ran with (checked after `E_LAUNCH_ENV_MISSING`):
-  the message names the variables, sorted, never a value; nothing was
-  started. A home with no record of its last start's values (last started
+- Refused `E_LAUNCH_ENV_CHANGED` when a reference value (`fromEnv` or
+  `fromFile`) differs from the one the start it brings back ran with (checked after `E_LAUNCH_ENV_MISSING`):
+  the message names the sources (an environment name or `file:<path>`),
+  sorted, never a value; nothing was started. A home with no record of its last start's values (last started
   by an earlier kernel, or a record that does not read) is resumed, and
   `warnings` carries once `<instance>'s launch environment could not be
   verified this once (it was last started before OATS recorded it); its
@@ -6801,11 +7183,93 @@ whatever the rows say:
   launched something: `resumed`, `fresh`, `blocked`) are kernel-private,
   not a contract. Without a boot id (neither Linux nor macOS) nothing is
   noted or counted.
-- Errors: `E_RESUME_BUSY`; `E_BAD_ARGS` (`--deployment` that is not a
+- **A lock that needs a person.** `E_RESUME_LOCK_STUCK`, through the same
+  envelope at exit 1, when the sweep's lock cannot be taken and no sweep is
+  known to run; nothing was started, and no sweep starts anything on this
+  machine until it can be. `error.details` is `{lock, found}`: `lock` is
+  the lock's absolute path, and `found` is one of
+
+  | `found` | what is at the lock's path | what to do |
+  |---|---|---|
+  | `unreadable` | a record that cannot be read | remove the file once no sweep runs |
+  | `unknown` | a holder that cannot be told to be running or gone | remove the file once no sweep runs |
+  | `cannot-take-over` | a gone holder's record that cannot be taken over | remove the file |
+  | `held-again` | a lock that was taken again each time the sweep found it free | run the sweep again |
+  | `own-start-unreadable` | nothing in the way: the sweep cannot read its own start time, so it could not hold the lock | run the sweep again; nothing is to be removed |
+  | `directory` | a directory, the lock of an OATS that locked with one; it is never removed for the operator | remove the directory once no earlier `oats` runs |
+
+  The message says the same in words, with what to do
+  ([The sweep](execution-targets.md#the-sweep)). It is never
+  `E_RESUME_BUSY`: that code is a sweep that runs. `readResumeSweep` reads
+  it as `failed` with the code. `oats doctor --json` lists the same states
+  as one `resume-lock-stuck` problem in `problems[]`, `{code, message,
+  remedy}` (text: `! resume-lock-stuck: <message>`, the remedy on the next
+  line), read without taking the lock; a free lock, a sweep that runs and a
+  lock a gone sweep left are not listed, and doctor's exit status does not
+  change.
+- Errors: `E_RESUME_BUSY`; `E_RESUME_LOCK_STUCK`; `E_BAD_ARGS` (`--deployment` that is not a
   deployment directory, `--server`, an unknown flag or an argument); without
   `--deployment`, the list's own errors (`E_DEPLOYMENTS_INVALID`,
   `E_DEPLOYMENTS_VERSION`). A home's start failure is a row, never the
   sweep's failure.
+
+### The host run (`oats host run`)
+
+`oats host run [--stop-grace <seconds>] [--plan] [--json]` runs
+the kernel's periodic work in one foreground process, for a host where no
+timer can ([container.md](container.md#the-kernels-periodic-work)). It is
+this machine's: it takes no `--server`. It runs until SIGTERM or SIGINT.
+
+- **Refused before any effect**, through the standard failure envelope, exit 1:
+  - `E_USAGE`: `OATS_INSTANCE_HOME` is set (it runs as the host, never inside
+    an instance session);
+  - `E_HOST_RUN_TIMER_ACTIVE`: the host timer is active, so two tickers would
+    run; `error.details` `{unit}`. Unit files that are installed and not
+    active are a warning, not a refusal;
+  - `E_HOST_RUN_BUSY`: another `oats host run` holds this machine's lock
+    (`<OATS_HOME_DIR>/host-run/lock`, a kernel-private file), or the lock
+    cannot be judged; `error.details` `{lock, found}`, `found` as
+    `E_RESUME_LOCK_STUCK` names it, and `running` for a host run that runs.
+    A lock whose holder is gone, or that was taken in another boot (in a
+    container, another run), is taken over;
+  - `E_BAD_ARGS`: a flag it does not define, an argument, a `--stop-grace`
+    that is not 1 to 300 seconds, a verb other than `run`.
+
+  Any other failure of the run itself is `E_HOST_RUN_FAILED`, which says
+  nothing of how far it got. A child that ended without an answer is
+  reported under that code too, in `sweep.error` or on stderr, and does not
+  end the run.
+- **What it runs, in order.** The resume sweep once (`oats session resume`).
+  Then at second 0 of every minute: `oats schedule tick --host` when the
+  host schedule registry lists a scope, and a listing of every deployment's
+  instances, which records what runs for the next start's sweep. Each is a
+  child process. A minute whose tick still runs is skipped; a minute missed
+  is never replayed. With no scope registered it ticks nothing and says so.
+- **On SIGTERM or SIGINT.** No further minute starts; a tick or a sweep that
+  runs is waited for; it lists once; then it stops every running home, side
+  by side, each with the stop `oats session restart` uses: SIGTERM to the
+  harness, a wait of `--stop-grace` seconds (default 20), never escalated.
+  Each home's stop record is written before its harness is signalled and
+  says `"resume": true, "reason": "host-stop"`, so the home reads
+  `sessionEnd: "lost"` and the next start's sweep resumes it. It exits 0.
+- **Progress** is one line per event on stderr (`oats host run: …`), in both
+  modes. **The answer** is written once, when the run ends:
+  `result` `{schemaVersion: 1, plan: false, signal, warnings, sweep, ticks, stopped}`.
+  `signal` is `"SIGTERM"` or `"SIGINT"`; `warnings` an array of strings;
+  `sweep` the sweep's own `result`
+  ([The machine sweep](#the-machine-sweep-oats-session-resume)), or
+  `{error: {code, message}}` when it failed (the run goes on); `ticks`
+  `{run, skipped, failed, noScope}`, minutes counted; `stopped` one row per
+  home that ran when it stopped: `{ok: true, home, stopped, alreadyIdle, state}`
+  or `{ok: false, home, code, message, stillRunning}` (`stillRunning`: the
+  pids the stop established as alive, or `null`). A home that did not stop is
+  a row, never the run's failure.
+- **`--plan`** starts nothing, takes no lock and writes nothing: `result`
+  `{schemaVersion: 1, plan: true, refusals, warnings, scopes, sweep}`.
+  `refusals` is every refusal a run would meet now, in a run's order, each
+  `{code, message, details?}`; `scopes` the registered scopes it would tick;
+  `sweep` the sweep's `--plan` result. It exits 0 also when `refusals` is not
+  empty.
 
 ### Upload
 
@@ -6900,7 +7364,7 @@ reading asks it for a live read, and every other reading for nothing
   passes its own exec must keep those three properties: detached, file-backed,
   and never signalling the child.
 - It answers the kernel's envelope: the result at exit 0, and an `ok:false`
-  envelope whatever the exit (`E_RESUME_BUSY` exits 1). Otherwise it answers
+  envelope whatever the exit (`E_RESUME_BUSY` and `E_RESUME_LOCK_STUCK` exit 1). Otherwise it answers
   a code of its own, with no message: `E_CLI_OUTPUT_LIMIT` (more than 4 MiB),
   `E_CLI_PROTOCOL` (no envelope), `E_CLI_FAILED` (a nonzero exit without an
   `ok:false` envelope, or an exec that throws). No stderr and no exception text
@@ -6937,15 +7401,17 @@ accept `--server <id>`.
 ```json
 {"context":"/w","level":"/w","file":"/w/oats-local.yaml","selected":null,
  "configurations":[{"name":"reviewers","harness":"claude","executable":null,"args":["--permission-mode","plan"],
-                    "env":{"ANTHROPIC_API_KEY":{"fromEnv":"REVIEW_KEY"},"REVIEW_MODE":{"redacted":true}},
+                    "env":{"ANTHROPIC_API_KEY":{"fromEnv":"REVIEW_KEY"},"CLAUDE_CODE_OAUTH_TOKEN":{"fromFile":"/etc/agent-login/claude-token"},"REVIEW_MODE":{"redacted":true}},
                     "model":"opus","yolo":null,"default":false,"source":"/w/oats-local.yaml","shadows":[]}]}
 ```
 
 - **list**: `selected` is `null`, `{home, instance}` or `{soul, agentsRoot}`;
   `level` and `file` are `null` without an `oats-local.yaml` (the set is then
   empty). An environment literal is `{redacted: true}`, a reference
-  `{fromEnv}`; values never leave the file. `default` (0.32, feature
-  `launch-config-default`) is always a boolean: `true` marks this host's
+  `{fromEnv: NAME}` or `{fromFile: /absolute/path}`; resolved values are never
+  returned. File references hold credential values; directory selectors require
+  a literal or `fromEnv` ([configuration.md](configuration.md)). `default`
+  (0.32, feature `launch-config-default`) is always a boolean: `true` marks this host's
   default for the configuration's harness.
 - **set**/**remove**: `{name, action, level, file, before, after,
   effective}`. `set --file` takes `{harness, executable?, args?, env?, model?,
@@ -6981,8 +7447,8 @@ accept `--server <id>`.
 - **preview** (read-only) answers `{context, selected, selection: {source,
   launchConfig, harness, model, yolo}, harness, model, modelSource, yolo,
   launchConfig, launchConfigSource, launchConfigDefault, executable: {path,
-  declared, resolvedFrom}, argv, environment: [{name, fromEnv} | {name, redacted:
-  true} | {name, reference: true}], command (redacted), prompt, hooks,
+  declared, resolvedFrom}, argv, environment: [{name, fromEnv} | {name, fromFile}
+  | {name, redacted: true} | {name, reference: true}], command (redacted), prompt, hooks,
   preflight: [{check, ok, detail, code?}], ok}`. A failed check carries the
   code a start would refuse with; the `harness-packages` check's is the
   gate's own, `E_HARNESS_RESOURCE_MISSING` (`E_HARNESS_PACKAGE` before
@@ -7069,6 +7535,27 @@ oats schedule update <id> --description=<text> [--dir <d>] --json
   `command` or `operation` attempt with `exited: true` (0.40.0) holds no host
   slot (`running: false`) but still blocks its own job; show it as needing
   `oats schedule reconcile <id>` (or `--clear`) either way.
+- **A slot whose record cannot be read** keeps `running: true`. The tick
+  reports its job `invalid` (`E_SCHEDULE_INVALID`) and runs the scope's
+  other jobs; `reconcile <id>` answers `{reconciled: "unknown", remedy}`
+  and `reconcile <id> --clear` releases the slot (`reconciled: "cleared"`).
+  `oats doctor --json` lists it as a `schedule-slot-unreadable` problem,
+  `{code, severity, scope, id, message, remedy}`
+  ([Schedules](schedules.md#files)).
+- **A slot whose schedule is gone** (a local one not in
+  `oats-schedules.json`; a workspace one not in the saved snapshot, decided
+  without refreshing it), readable or not, is counted by every tick until it
+  is released. `reconcile <id>` answers `{schedule: null, reconciled:
+  "unknown", remedy}` naming the run its record names, and `reconcile <id>
+  --clear` releases it, resolves a retained attempt as cleared and removes
+  the job's state: `{schedule: null, reconciled: "cleared", cleared}`,
+  `cleared` listing `"slot"`, `"attempt"` and `"state"` as each was there;
+  a gone schedule with retained state and no slot is reconciled the same
+  way (`cleared: ["attempt", "state"]`).
+  A workspace schedule that is disabled, untrusted or placed elsewhere is
+  not gone (`E_AUTOMATION_NOT_HERE`). `oats doctor --json` lists the slot as
+  a `schedule-slot-orphaned` problem of the same shape
+  ([Schedules](schedules.md#files)).
 - **Schedule IDs**: local and workspace schedule definition names permit 1–100
   lowercase letters, digits and dashes; trigger names retain their 40-character
   limit. Desktop accepts these schedule names for creation, editing and row
@@ -7123,6 +7610,13 @@ oats schedule update <id> --description=<text> [--dir <d>] --json
   `disable` → `{schedule}`. `run [--force]`, `remove [--force]`, `reconcile
   [--clear]` → the action's receipt. `tick [--dry-run] [--host]` →
   `{tickedAt, considered, scheduler}`; `host install` → `{scheduler, warnings}`;
+  `host install --register-only` → the same answer, the scope recorded in the
+  host registry and no unit installed (`scheduler.registered: true`,
+  `installed: false`, `warnings: []`), for a host whose ticker is
+  [`oats host run`](#the-host-run-oats-host-run); it does not go with
+  `--print` (`E_BAD_ARGS`), and with `--server` the host must advertise
+  `schedule` and `schedule-host-register-only` (`E_REMOTE_INCOMPATIBLE`
+  otherwise, before anything is sent: nothing is installed there);
   `host uninstall | status` → `{scheduler}`; `host install --print [--os
   darwin|linux]` → `{kind, files: {<path>: <content>}, warnings}`, writing
   nothing.
@@ -7438,6 +7932,47 @@ One warning per command, however many old spellings it read:
 
 The `--server` routes translate for a host without the `harness` feature:
 they send `--runtime` and `runtime` keys and read its `runtimes` list.
+
+<a id="harness-token"></a>
+### `harness token`
+
+`oats harness token set|status|remove <harness> --server <id> [--name <team>] [--stdin] [--debug] --json`
+runs on the operator's machine. Its `--server` selects that registration's
+separate operator route, never a remote invocation of this CLI. The harness
+is `claude`, `codex`, `pi` or `opencode`; the name defaults to a valid
+server label and otherwise is required. The ordinary schemaVersion 1 envelope's
+result is:
+
+```json
+{"server":"build","action":"status","harness":"claude","name":"team","fingerprint":"sha256:0123456789abcdef","replacedAt":"2026-11-10T00:00:00Z","warnings":[]}
+```
+
+For `remove`, `action` is `remove` and `fingerprint` is `null`.
+`set --stdin` returns `action: "set"` and also `staleInstances`, an array
+of `{instance, agent, home, startedAt}` from that server's status rows, with
+the same harness and a last-start time before or during the second named by
+`replacedAt`. The receiver records whole seconds, so starts during that second
+are included conservatively: they may still use the previous credential. If
+that roster cannot be read, `staleInstances` is `null` and `warnings` holds
+a plain explanation; the installation remains successful. No automatic
+restart is performed. Only `set` accepts stdin, as bounded credential bytes;
+there is no credential argument, result field, event or file on the client.
+The receiver's single JSON line and exit status must agree, name the requested
+harness and team, and carry valid metadata. Malformed or oversized replies fail
+closed as unexpected replies. Text-mode refusal messages escape remote control
+characters for the terminal. C0 controls and DEL in refusal reasons become
+spaces in both modes; JSON retains the remaining characters without terminal escaping.
+The submitted credential is redacted in both modes.
+Refusals: `E_BAD_ARGS` for unsupported arguments or names,
+`E_SERVER_UNKNOWN` for a server id without a registration, even with an orphan operator route,
+`E_HARNESS_TOKEN_ROUTE` for a missing operator alias,
+`E_HARNESS_TOKEN_INPUT` for invalid, too-large or terminal stdin,
+`E_HARNESS_TOKEN_UNSUPPORTED` for unavailable interactive capture or a
+refreshing sign-in, and
+`E_HARNESS_TOKEN_DELIVERY` for connection failure, receiver refusal or an
+unexpected reply. Public errors do not forward raw SSH or malformed receiver
+output. `--debug` adds transport facts on stderr, never stdin or raw receiver
+output that might echo it. See [servers](servers.md#harness-credentials).
 
 ### `harness trust`
 

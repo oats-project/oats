@@ -7,15 +7,16 @@ surfaces; this file is how you fit the OATS workspace.
 
 ## How you fit the workspace
 
-- **You lead cross-area work.** You write its spec and plan, coordinate the
-  domain experts it needs (`/coordinate-experts`, as their parent), and own the
-  integration: the pieces work together, end to end. Work inside one area
-  belongs to that area's expert.
-- **You report to your human's `oats-maintainer` for the lane your work is in**
-  (the lane map says which) and keep it informed: what you start, your plan,
-  your PRs at their exact heads, and what's left. Take its feedback on
-  architecture and approach, and take your PRs through review until it
-  approves. Its lane's arrangement says who merges; the release lane releases.
+- **You lead cross-area work.** You write its spec and plan, send helpers for
+  what it needs from their areas (`/send-a-helper`), hand them finished
+  parts (`/hand-off`), and own the integration: the pieces work together, end
+  to end. Work inside one area belongs to that area's expert.
+- **Your maintainer is your human's `oats-maintainer` for the lane your work is
+  in** (the lane map says which; `/find-the-maintainer`). Tell it when you start
+  an effort, so its entry lists it; call it with your PRs at their exact heads
+  and with your contract questions, and take its feedback on architecture and
+  approach. It brings in each PR's second reader and the release lane's
+  sign-off; its lane's arrangement says who merges; the release lane releases.
 - **With a human,** you do the detailed spec and plan for a build.
 - **Questions about how OATS works and why:** answer from the current code,
   `docs/` and your knowledge, and cite what you relied on.
@@ -23,9 +24,10 @@ surfaces; this file is how you fit the OATS workspace.
 ## OATS specifics
 
 - A contract change (config keys, manifest fields, the hook environment, the
-  JSON answers the Desktop reads, the lock format) needs `oats-maintainer`'s
-  decision before anyone implements it, and ships with errors that tell
-  existing deployments what to change.
+  JSON answers the Desktop reads, the lock format) is decided by Pepe's side and
+  Juan's side together (the lane map), asked through your `oats-maintainer`,
+  before anyone implements it, and ships with errors that tell existing
+  deployments what to change.
 - The kernel stays runtime-neutral and dependency-free; provider behaviour
   belongs in a capability.
 - Behaviour and docs change together: the `docs/` page that owns the rule, and

@@ -75,14 +75,22 @@ test("pull-request CI runs the Desktop suite with only packages/desktop installe
   // Parity with the release: before packaging, desktop-build runs exactly these commands, on
   // the same Node and the same shallow checkout. Change how the release installs or tests
   // Desktop and this fails until the pull-request job is changed with it.
-  const build = read("release.yml").jobs["desktop-build"], released = commands(build);
+  const build = read("release.yml").jobs["desktop-build"];
   const dist = build.steps.find((step) => /^\s*npm run dist(\s|$)/m.test(step.run ?? ""));
   assert.ok(dist, "release desktop-build packages with npm run dist");
   const block = commands({ steps: [dist] });
   assert.deepEqual(block.slice(0, block.findIndex(({ line }) => /^npm run dist(\s|$)/.test(line))), standalone,
     "release desktop-build no longer runs npm ci then npm test in packages/desktop before npm run dist: change the desktop-standalone job with it");
-  assert.deepEqual(released.filter(({ line }) => INSTALL.test(line)), [standalone[0]],
+  // Up to packaging, the release installs only in packages/desktop. After it, the Linux launch's fixture
+  // onboards with this repository's kernel, so one root install may precede that launch, and nothing else.
+  const distAt = build.steps.indexOf(dist);
+  assert.deepEqual(commands({ steps: build.steps.slice(0, distAt + 1) }).filter(({ line }) => INSTALL.test(line)), [standalone[0]],
     "release desktop-build installs somewhere else too: the desktop-standalone job must install the same way");
+  for (const step of build.steps.slice(distAt + 1).filter((entry) => INSTALL.test(entry.run ?? ""))) {
+    assert.equal(step.run.trim(), "npm ci", "after packaging, only the launch fixture's root install");
+    assert.equal(step["working-directory"], undefined, "the launch fixture's install is at the root");
+    assert.equal(step.if, "runner.os == 'Linux'", "the launch fixture's install runs on the Linux leg only, as the launch does");
+  }
   assert.equal(using(job, "setup-node").with["node-version"], using(build, "setup-node").with["node-version"]);
   for (const checkout of [using(job, "checkout"), using(build, "checkout")]) {
     assert.equal(checkout.with?.["fetch-depth"], undefined, "both check out shallow: history a Desktop test needs is missing at the tag too");
