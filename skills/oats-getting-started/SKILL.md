@@ -1050,12 +1050,12 @@ readiness still reports a problem.
    machine) is the workspace owner's. Never take the other machine's name.
 6. **Codex, or `delivery: session`: the wake broker runs before the spawn.**
    Skip this item when the setup expert's harness is Claude or pi and the
-   soul's `oats.aweb` settings don't set `delivery: session`: its own
-   channel wakes it (step 4). Any other setup expert is woken only by the
-   host wake broker, and oats.aweb refuses to spawn or start it while no
-   broker runs (`wake-daemon-not-running`). The broker is the person's own
-   user service, so it is theirs to start. Open their own terminal ("How to
-   work") running this, with `D` filled in:
+   effective `oats.aweb` settings (the soul's or this host's) don't set
+   `delivery: session`: its own channel wakes it (step 4). Any other setup
+   expert is woken only by the host wake broker, and oats.aweb refuses to
+   spawn or start it while no broker runs (`wake-daemon-not-running`). The
+   broker is the person's own user service, so it is theirs to start. Open
+   their own terminal ("How to work") running this, with `D` filled in:
 
    ```text
    cd "D" && oats aweb wake install
@@ -1068,7 +1068,7 @@ readiness still reports a problem.
    Then check it yourself:
 
    ```bash
-   oats aweb wake status --dir D --json
+   cd "D" && oats aweb wake status --json
    ```
 
    Go on to step 10 only when it reports `"daemon": { "running": true }`.

@@ -556,12 +556,12 @@ test("getting-started: a setup expert the wake broker delivers to is spawned onl
   const item = flat.slice(flat.indexOf("6. **Codex, or `delivery: session`: the wake broker runs before the spawn.**"), flat.indexOf("## 10. Spawn the setup expert"));
   assert.ok(item.length > 0, "step 9 carries the item, before step 10");
   // Claude and pi have their own channel; everything else is refused by oats.aweb with no broker.
-  assert.ok(item.includes("Skip this item when the setup expert's harness is Claude or pi and the soul's `oats.aweb` settings don't set `delivery: session`"));
+  assert.ok(item.includes("Skip this item when the setup expert's harness is Claude or pi and the effective `oats.aweb` settings (the soul's or this host's) don't set `delivery: session`"));
   assert.ok(item.includes("oats.aweb refuses to spawn or start it while no broker runs (`wake-daemon-not-running`)"));
   // The person starts their own user service; the agent only checks.
   assert.ok(item.includes('cd "D" && oats aweb wake install'));
   assert.ok(item.includes("the line is `aw wake run`, kept running as a supervised process"));
-  assert.ok(item.includes("oats aweb wake status --dir D --json"));
+  assert.ok(item.includes('cd "D" && oats aweb wake status --json'));
   assert.ok(item.includes('Go on to step 10 only when it reports `"daemon": { "running": true }`. Otherwise stop, spawn nothing'));
   // Step 4 no longer leaves Codex's wake to the setup expert.
   assert.doesNotMatch(flat, /the setup expert sets up its wake/);
