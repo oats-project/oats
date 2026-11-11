@@ -2811,7 +2811,13 @@ async function spawnCmd() {
   if (taskText === true) bail("E_BAD_ARGS", "--task needs a value (use --task-file for long tasks)");
   const taskFileFlag = flag("task-file");
   if (taskFileFlag === true) bail("E_BAD_ARGS", "--task-file needs a path");
-  if (taskFileFlag && !existsSync(taskFileFlag)) bail("E_BAD_ARGS", `--task-file not found: ${taskFileFlag}`);
+  // `--task-file -` (feature spawn-task-stdin): the task's bytes arrive on stdin, which is how a
+  // routed spawn sends them (lib/servers.mjs routeCommand), so that they are on no command line.
+  let stdinTask;
+  if (taskFileFlag === "-") {
+    if (process.stdin.isTTY) bail("E_BAD_ARGS", "--task-file - reads the task from stdin");
+    try { stdinTask = (await readStreamBounded(process.stdin, MAX_ATTACHMENT_BYTES)).toString("utf8"); } catch (e) { bail("E_BAD_ARGS", `--task-file -: the task could not be read from stdin (${e.message})`); }
+  } else if (taskFileFlag && !existsSync(taskFileFlag)) bail("E_BAD_ARGS", `--task-file not found: ${taskFileFlag}`);
   // --trigger-event <file>: the event a trigger spawns this instance for (lib/triggers.mjs). It is
   // copied to <home>/.oats/trigger-event.json (OATS_TRIGGER_EVENT_FILE) and recorded as instance.json.trigger.
   let triggerEvent;
@@ -2886,7 +2892,7 @@ async function spawnCmd() {
     if (flag("base") === true) bail("E_BAD_ARGS", "--base needs a ref");
     { const spawnOpts = {
       prepared,
-      purpose: flag("purpose"), ...(nameFlag !== undefined ? { name: String(nameFlag) } : {}), task: taskText, taskFile: taskFileFlag, relation, relativeTo, relativeRoot,
+      purpose: flag("purpose"), ...(nameFlag !== undefined ? { name: String(nameFlag) } : {}), task: taskText ?? stdinTask, taskFile: stdinTask === undefined ? taskFileFlag : undefined, relation, relativeTo, relativeRoot,
       ...(args.includes("--allow-child-spawns") ? { allowChildSpawns: true } : args.includes("--no-child-spawns") ? { allowChildSpawns: false } : {}),
       // Feature instance-same-work: the kernel binds it to the parent the new home records, or refuses.
       ...(args.includes("--same-work") ? { sameWork: true } : {}),
@@ -4609,10 +4615,12 @@ async function serverRouteCmd() {
     const local = args.slice(1).filter((a, i, all) => a !== "--server" && all[i - 1] !== "--server");
     const problem = suggestNameProblem(local) ?? backgroundProblem(local);
     if (problem) bail("E_BAD_ARGS", problem);
+    if (flag("task") === true) bail("E_BAD_ARGS", "--task needs a value (use --task-file for long tasks)");
   }
   // Everything after the command word travels, minus the routing flags; a
-  // local --task-file is read here and travels as --task text, since the
-  // remote cannot read this machine's files.
+  // local --task-file is read here and handed on as --task text, since the
+  // remote cannot read this machine's files. A spawn's task is then sent on
+  // the remote command's stdin, never as an argument (routeCommand).
   const rest = [];
   for (let i = 1; i < args.length; i++) {
     const a = args[i];
