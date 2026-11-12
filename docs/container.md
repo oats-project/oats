@@ -395,10 +395,13 @@ pins must match the committed image lock. The image's OATS pin cannot be
 newer than the release tag. The image owner updates those pins after their
 final releases; a release candidate cannot pass this guard.
 
-The release job builds and accepts its own tagged checkout. It then copies
-the accepted Docker image to a private OCI layout and requires the OCI
-configuration digest to equal the accepted Docker image ID. This binds the
-published configuration and root filesystem to the tested image. Skopeo
+The release job builds and accepts its own tagged checkout. It exports the
+accepted local image by immutable ID with `docker save`, then copies that
+archive to a private OCI layout. Docker's CLI negotiates the Engine API;
+Skopeo reads archive bytes without its own daemon connection. The OCI
+configuration digest must equal the hash of the archive's raw configuration,
+binding the published configuration and root filesystem to the tested image
+on both classic and containerd image stores. Skopeo
 [copies with preserved digests](https://github.com/containers/skopeo/blob/main/docs/skopeo-copy.1.md)
 to the registry's `repository@sha256:...` reference, creating no mutable
 image tag. The digest is a job output, appears in the run summary and is

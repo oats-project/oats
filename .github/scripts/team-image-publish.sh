@@ -10,15 +10,21 @@ trap 'rm -rf -- "$receipt"' EXIT
 layout="$receipt/image"
 authfile="$receipt/auth.json"
 
-# Read only this run's local Docker image. No rebuild or PR artifact download.
-# OCI fixes the registry manifest and layer digests before the authenticated copy.
-skopeo copy "docker-daemon:$AGENT_IMAGE" "oci:$layout:accepted"
+# Docker's CLI negotiates the Engine API; the distro Skopeo's daemon client
+# does not. Export the immutable local ID, then give Skopeo only archive bytes.
+tested=$(docker image inspect --format '{{.Id}}' "$AGENT_IMAGE")
+docker save "$tested" --output "$receipt/image.tar"
+skopeo inspect --config --raw "docker-archive:$receipt/image.tar" > "$receipt/config.json"
+expected="sha256:$(shasum -a 256 "$receipt/config.json" | cut -d' ' -f1)"
+# OCI fixes the registry manifest and layer digests before authentication.
+skopeo copy "docker-archive:$receipt/image.tar" "oci:$layout:accepted"
 digest=$(jq -er '.manifests | select(length == 1) | .[0].digest' "$layout/index.json")
 [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
 manifest="$layout/blobs/sha256/${digest#sha256:}"
 config=$(jq -er '.config.digest' "$manifest")
-tested=$(docker image inspect --format '{{.Id}}' "$AGENT_IMAGE")
-if [ "$config" != "$tested" ]; then
+# The config is bound to the exported archive, independent of whether Docker
+# uses a config digest (classic store) or manifest/index digest (containerd) ID.
+if [ "$config" != "$expected" ]; then
   echo '::error::OCI image configuration differs from the accepted Docker image' >&2
   exit 1
 fi

@@ -110,7 +110,9 @@ test("publication requires the final aw release in both image manifest and lock"
 
 test("publishing preserves the accepted image and records an immutable digest receipt", () => {
   const script = read(".github/scripts/team-image-publish.sh");
-  assert.match(script, /docker-daemon:\$AGENT_IMAGE/);
+  assert.match(script, /docker save "\$tested" --output/);
+  assert.match(script, /docker-archive:/);
+  assert.doesNotMatch(script, /docker-daemon:/);
   assert.match(script, /config\.digest/);
   assert.match(script, /docker image inspect/);
   assert.match(script, /skopeo copy --preserve-digests/);
@@ -128,7 +130,8 @@ test("the publisher copies by digest, retains release notes and rejects a substi
     mkdirSync(bin);
     // Docker, the registry client and GitHub are system boundaries. No real
     // credential, network, Docker daemon or release is used by this fixture.
-    const config = `sha256:${"1".repeat(64)}`;
+    const configBlob = '{"rootfs":{"type":"layers","diff_ids":[]},"config":{"User":"agent"}}';
+    const config = `sha256:${createHash("sha256").update(configBlob).digest("hex")}`;
     const manifest = JSON.stringify({ config: { digest: config } });
     const digest = `sha256:${createHash("sha256").update(manifest).digest("hex")}`;
     const boundary = `#!/usr/bin/env node
@@ -136,15 +139,28 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { basename, join } from "node:path";
 const args = process.argv.slice(2), dir = process.env.FIXTURE_DIR;
 const tool = basename(process.argv[1]);
-if (tool === "docker") {
-  console.log(process.env.SUBSTITUTE === "yes" ? "sha256:wrong" : ${JSON.stringify(config)});
+const imageID = process.env.IMAGE_STORE === "containerd" ? "sha256:" + "2".repeat(64) : ${JSON.stringify(config)};
+if (tool === "docker" && args[0] === "image") {
+  console.log(imageID);
+} else if (tool === "docker" && args[0] === "save") {
+  if (args[1] !== imageID || args[2] !== "--output") process.exit(2);
+  writeFileSync(args[3], ${JSON.stringify(configBlob)});
+  writeFileSync(join(dir, "saved-id"), args[1]);
 } else if (tool === "skopeo" && args[0] === "login") {
   writeFileSync(join(dir, "login"), "called");
 } else if (tool === "skopeo" && args[1]?.startsWith("docker-daemon:")) {
+  console.error("client version 1.22 is too old");
+  process.exit(1);
+} else if (tool === "skopeo" && args[0] === "inspect") {
+  if (!args.includes("--raw") || !args.includes("--config")) process.exit(2);
+  process.stdout.write(readFileSync(args.at(-1).slice("docker-archive:".length)));
+} else if (tool === "skopeo" && args[1]?.startsWith("docker-archive:")) {
+  if (readFileSync(args[1].slice("docker-archive:".length), "utf8") !== ${JSON.stringify(configBlob)}) process.exit(2);
   const layout = args[2].slice(4, -9);
+  const manifest = process.env.SUBSTITUTE === "yes" ? '{"config":{"digest":"sha256:wrong"}}' : ${JSON.stringify(manifest)};
   mkdirSync(join(layout, "blobs", "sha256"), { recursive: true });
   writeFileSync(join(layout, "index.json"), JSON.stringify({ manifests: [{ digest: ${JSON.stringify(digest)} }] }));
-  writeFileSync(join(layout, "blobs", "sha256", ${JSON.stringify(digest.slice(7))}), ${JSON.stringify(manifest)});
+  writeFileSync(join(layout, "blobs", "sha256", ${JSON.stringify(digest.slice(7))}), manifest);
 } else if (tool === "skopeo" && args[0] === "copy") {
   writeFileSync(join(dir, "copy.json"), JSON.stringify(args));
 } else if (tool === "gh" && args[1] === "view") {
@@ -173,6 +189,10 @@ if (tool === "docker") {
     assert.equal(readFileSync(env.GITHUB_OUTPUT, "utf8"), `digest=${digest}\n`);
     assert.match(readFileSync(join(dir, "notes.md"), "utf8"), /^Existing release notes\./);
     assert.ok(readFileSync(join(dir, "notes.md"), "utf8").includes(`ghcr.io/oats-project/team-agent@${digest}`));
+    assert.equal(readFileSync(join(dir, "saved-id"), "utf8"), config);
+    const containerd = run({ IMAGE_STORE: "containerd" });
+    assert.equal(containerd.status, 0, containerd.stderr);
+    assert.equal(readFileSync(join(dir, "saved-id"), "utf8"), `sha256:${"2".repeat(64)}`);
     for (const file of ["copy.json", "login", "notes.md"]) rmSync(join(dir, file));
     const substituted = run({ SUBSTITUTE: "yes" });
     assert.notEqual(substituted.status, 0);
