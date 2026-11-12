@@ -146,7 +146,7 @@ test("agent Compose service retains the isolation contract", () => {
   const compose = parse(read("compose.agent.yaml"));
   assert.deepEqual(Object.keys(compose.services), ["agent"]);
   const agent = compose.services.agent;
-  assert.deepEqual(Object.keys(agent).sort(), ["image", "container_name", "user", "cap_drop", "security_opt", "privileged", "read_only", "tmpfs", "pids_limit", "mem_limit", "cpus", "restart", "stop_grace_period", "healthcheck", "volumes", "networks"].sort(), "only reviewed service keys may be present");
+  assert.deepEqual(Object.keys(agent).sort(), ["image", "container_name", "user", "environment", "cap_drop", "security_opt", "privileged", "read_only", "tmpfs", "pids_limit", "mem_limit", "cpus", "restart", "stop_grace_period", "healthcheck", "volumes", "networks"].sort(), "only reviewed service keys may be present");
   assert.equal(agent.container_name, "oats-agent-${TEAM:?Set TEAM}");
   assert.equal(agent.user, "${AGENT_UID:-20001}:${AGENT_GID:-20001}");
   assert.deepEqual(agent.cap_drop, ["ALL"]);
@@ -508,4 +508,10 @@ test("every Dockerfile COPY source is admitted by the closed build context", () 
     }
   }
   assert.deepEqual([...admitted].sort(), [...required].sort(), "do not admit unrelated files into the image");
+});
+
+test("container image and Compose declare broker session delivery", () => {
+  const agent=parse(read("compose.agent.yaml")).services.agent;
+  assert.deepEqual(agent.environment,{AWEB_DELIVERY:"session"});
+  assert.match(read("Dockerfile"),/^ENV AWEB_DELIVERY=session$/m);
 });

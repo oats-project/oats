@@ -164,6 +164,25 @@ the override: the base has no `/work` mount. With multiple Compose files,
 paths resolve relative to the first file; use absolute host paths. Container
 down/upgrade preserves `/state`; the operator owns provisioning and rollback.
 
+## Broker delivery before launch
+
+Container deployments use the in-container broker with session delivery. Before
+any spawn or resume, the bootstrap wrapper writes the existing setting in the
+deployment's `oats-local.yaml`:
+
+```yaml
+settings:
+  oats.aweb:
+    delivery: session
+```
+
+A contradictory existing value must stop bootstrap with a fix naming
+`settings.oats.aweb.delivery`; correct the deployment setting before restarting
+it. Verify the effective value with `oats inspect` or the spawn preview's
+`settings.oats.aweb`. The image and Compose also declare `AWEB_DELIVERY=session`
+to silence ambient channel extensions; that variable alone does not select the
+provider setting. The image has no Claude channel plugin.
+
 ## OATS over SSH
 
 The operator's SSH alias selects the key, host-key verification, port 2222
