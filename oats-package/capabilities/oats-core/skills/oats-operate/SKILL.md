@@ -241,10 +241,11 @@ overrides its start point. When the clone is of the soul's repository, the
 default is the commit observed by spawn, even when the local clone is behind.
 A `--repo` that is not a clone of the soul's repository starts at its `HEAD`.
 
-**Naming.** Name an instance for its work, with the soul's role last:
-`--name <descriptive>-<role>`, for example `--name desktop-improvements-expert`
-for an `oats-desktop-expert`. `/oats-souls` has the rules, and when spawn's
-`--purpose` fits instead.
+**Naming.** Name an instance for its work, with its role in your coordination
+last: `--name <descriptive>-<role>`, for example
+`--name desktop-improvements-developer` for the developer of the Desktop
+improvements. `/oats-souls` has the rules, and when spawn's `--purpose` fits
+instead.
 
 **Teams to join.** The preview's `teams` lists the teams the soul may join
 (`default` first, each with `via`: why), and `defaultTeam` the one its
