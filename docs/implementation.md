@@ -17,9 +17,10 @@ reference pages ([workspaces](workspaces.md), [souls and instances](souls-and-in
   [tui.md](tui.md)), and the directory of readers the terminal client shares
   with the Desktop (`packages/client/`, below), which has no dependency
   either. None of their tests is packed. The package's
-  manifest declares three runtime dependencies: `yaml` (the kernel reads and
-  writes the configuration files with it), `croner` (schedule expressions) and
-  `@awebai/pi` (pi's aweb messaging extension). The terminal client adds none
+  manifest declares two runtime dependencies: `yaml` (the kernel reads and
+  writes the configuration files with it) and `croner` (schedule expressions).
+  The pi SDK is a development dependency for adapter tests; pi's aweb
+  messaging extension is installed by its capability. The terminal client adds none
   and may never add one: with a dependency it could no longer ship in this
   tarball.
 - **`@awebai/oats-pi`** (`packages/pi/`): a thin pi adapter that exposes an

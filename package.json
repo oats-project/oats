@@ -52,7 +52,6 @@
     "packages/tui/package.json"
   ],
   "dependencies": {
-    "@awebai/pi": "^0.2.1",
     "croner": "10.0.1",
     "yaml": "2.9.1"
   },
@@ -60,6 +59,7 @@
     "oats": "./bin/oats.mjs"
   },
   "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.80.3",
     "ajv": "8.17.1"
   }
 }
