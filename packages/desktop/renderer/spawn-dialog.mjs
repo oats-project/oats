@@ -26,7 +26,6 @@ import { postJson, workspaceGeneration, wsQuery } from './views/common.mjs';
 import { previewSupported, previewChoices, previewData, previewTarget, previewFailure, INSTANCE_NAME_MAX, suggestSupported,
   instanceSuggestSupported, instanceSuggestion, APPLY_SUGGEST_FEATURE, SUGGEST_HARNESSES } from '../../client/spawn-preview-contract.mjs';
 import { SUGGEST_DEBOUNCE_MS, SUGGEST_MIN_WORDS, taskWords, namingKey, numberedLine } from '../../client/spawn-naming.mjs';
-import { nameWithRole } from '../../client/instance-name.mjs';
 import { answeringFeatures } from '../../client/lifecycle-contract.mjs';
 import { spawnApplySupported, spawnPrepareInput, spawnApplyReason, ROLLED_BACK_CODES } from '../../client/spawn-apply-contract.mjs';
 import { createSpawnTransaction } from '../../client/spawn-transaction.mjs';
@@ -615,8 +614,8 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
   const keyHint = target => { const k = el('kbd', '', 'shortcut-hint spawn-key-hint'); k.setAttribute('aria-hidden', 'true'); k.hidden = true; keyHints[target] = k; return k; };
   const selectionSummary = el('span', `Selected soul ${soul.name}${soul.server ? ` on ${soul.server}` : ''}`, 'workspace-sr-only');
   selectionSummary.id = 'spawn-selection-summary'; dialog.setAttribute('aria-describedby', selectionSummary.id);
-  // Name (optional, the last field): what is typed gets the soul's role as its suffix and goes as
-  // --name <typed>-<role> (packages/client/instance-name.mjs) where the CLI advertises spawn-name and,
+  // Name (optional, the last field): what is typed goes as --name exactly as typed, lowercased, with nothing
+  // appended, where the CLI advertises spawn-name and,
   // for a spawn on another machine, so does that host (roleNamed); elsewhere (an older kernel on either
   // side, or a host whose features are unknown) it is a purpose, named <soul>-<typed>, with that prefix
   // shown. Empty: the kernel numbers it, or, where the CLI advertises spawn-suggest-name and the field was never typed in, names it from its task (the suggestion below).
@@ -988,7 +987,7 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
     openAddMachine({ select: true });
   });
   const local = () => !remoteTarget() && (!!deploymentField || !workspace()?.remote && !workspace()?.server);
-  /** A typed name goes as --name with the soul's role where the CLI advertises spawn-name and, on another machine,
+  /** A typed name goes as --name, as typed, where the CLI advertises spawn-name and, on another machine,
    * the host does too: its registered group's last roster read relayed a list that names it (answeringFeatures).
    * Unknown is a purpose: never decided from a refusal, never by probing. */
   const roleNamed = () => !!cli()?.features?.includes('spawn-name') && (local() || hostAdvertises('spawn-name'));
@@ -1004,9 +1003,9 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
    * the view's local one; null when the view has none here. */
   const suggestDeployment = () => deploymentField ? deploymentsAtOpen.find(d => d.local === true)?.id ?? null
     : !workspace()?.remote && !workspace()?.server ? address() ?? null : null;
-  /** The instance name a typed value gives: <typed>-<role> (once), or <soul>-<purpose>. --name is used exactly as
-   * given (the kernel slugs a purpose, never a name), so a typed name is lowercased first; PURPOSE admits only ASCII. */
-  const finalName = (typed, named) => named ? nameWithRole(typed.toLowerCase(), soul.name) : `${soul.name}-${typed}`;
+  /** The instance name a typed value gives: the name as typed, or <soul>-<purpose>. --name is used exactly as
+   * given (the kernel slugs a purpose, never a name), so a typed name is lowercased; PURPOSE admits only ASCII. */
+  const finalName = (typed, named) => named ? typed.toLowerCase() : `${soul.name}-${typed}`;
   // The server admits the workspace against its own registry (absolute scope, local); /api/panel carries only the id.
   const previewable = () => local() && previewSupported(cli()) && !!address() && soul.work !== 'attached';
   const applicable = () => previewable() && spawnApplySupported(cli()) && !soul.captured;
@@ -1070,7 +1069,7 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
     const p = purpose.value.trim(), suggestion = suggested && !p ? suggestionNow() : null;
     if (p && !PURPOSE.test(p)) return { error: 'Use letters, digits and dashes in the name (start with a letter or digit).', field: 'name' };
     const named = roleNamed();
-    // The final name is what the kernel caps (#159): <typed>-<role>, or <soul>-<purpose>.
+    // The final name is what the kernel caps (#159): the typed name itself, or <soul>-<purpose>.
     if (p && finalName(p, named).length > INSTANCE_NAME_MAX) {
       return { error: `Instance names are at most ${INSTANCE_NAME_MAX} characters. Shorten the name.`, field: 'name' };
     }
@@ -1128,7 +1127,7 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
     nameInput.classList.toggle('unprefixed', named);
     // The suggestion is the placeholder, only for the text it was made for: it never names what Spawn would not create.
     const suggestion = suggestionNow();
-    purpose.placeholder = suggestion ? suggestion : named ? 'e.g. desktop-improvements' : 'purpose, e.g. api-v2';
+    purpose.placeholder = suggestion ? suggestion : named ? 'e.g. pricing-page-lead' : 'purpose, e.g. api-v2';
     // The kernel's name refusals belong next to the field, not only in the footer.
     const nameRefusal = !local() ? hostNameRefusal?.sent === remoteNamingKey() ? hostNameRefusal : null
       : shown?.failure && shown.key === choiceKey(draftChoice.value) && NAME_REFUSALS.includes(shown.failure.code) ? shown.failure : null;
@@ -1673,8 +1672,8 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
       if (flight === token) { flight = null; if (alive) syncButton(); }
     }
   }
-  /** What a remote spawn sends as its name: role-named, the final name, as for a local spawn; else the purpose as
-   * typed (the host prefixes it); empty, the host names it from its task where it can (hostNames), else numbers it. The
+  /** What a remote spawn sends as its name: where it takes --name (roleNamed), the typed name, as for a local spawn;
+   * else the purpose as typed (the host prefixes it); empty, the host names it from its task where it can (hostNames), else numbers it. The
    * key adds the target, so a refusal speaks only for the same name on the same host. */
   const remoteNaming = () => {
     if (!roleNamed()) return { purpose: purpose.value.trim() };
@@ -1891,7 +1890,7 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
   function restoreDraft(restore) {
     const c = restore?.choices;
     if (c && typeof c === 'object') {
-      // A name comes back as sent (<typed>-<role>, which nameWithRole leaves as it is); a purpose as typed.
+      // A name comes back as sent, and goes again as it is; a purpose as typed.
       if (typeof c.name === 'string') purpose.value = c.name;
       else if (typeof c.purpose === 'string') purpose.value = c.purpose;
       worktree.checked = c.work === 'worktree' && soul.work === 'checkout';
