@@ -138,6 +138,11 @@ test("the publisher copies by digest, retains release notes and rejects a substi
     const config = `sha256:${createHash("sha256").update(configBlob).digest("hex")}`;
     const manifest = JSON.stringify({ config: { digest: config } });
     const digest = `sha256:${createHash("sha256").update(manifest).digest("hex")}`;
+    // Skopeo 1.13.3 uses logrus.Fatal; redirected stderr is quoted key=value
+    // output. Keep this exact format rather than a bare registry error string.
+    const registryError = (reason) => String.raw`time="2026-11-12T20:00:00Z" level=fatal msg="Error parsing image name \"docker://ghcr.io/oats-project/team-agent:0.69.18\": reading manifest 0.69.18 in ghcr.io/oats-project/team-agent: ${reason}"`;
+    const missing = registryError("manifest unknown"), unauthorized = registryError("unauthorized"), denied = registryError("denied");
+    const unknownRepository = registryError("name unknown");
     const boundary = `#!/usr/bin/env node
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -157,10 +162,13 @@ if (tool === "docker" && args[0] === "image") {
   console.error("client version 1.22 is too old");
   process.exit(1);
 } else if (tool === "skopeo" && args[0] === "inspect" && args.at(-1).startsWith("docker://")) {
-  if (process.env.TAG_STATE === "auth-failure") { console.error("unauthorized"); process.exit(1); }
+  if (process.env.TAG_STATE === "auth-failure") { console.error(${JSON.stringify(unauthorized)}); process.exit(1); }
+  if (process.env.TAG_STATE === "bare-missing") { console.error("manifest unknown"); process.exit(1); }
+  if (process.env.TAG_STATE === "unknown-repository") { console.error(${JSON.stringify(unknownRepository)}); process.exit(1); }
+  if (process.env.TAG_STATE === "denied") { console.error(${JSON.stringify(denied)}); process.exit(1); }
   if (process.env.TAG_STATE === "conflict") { process.stdout.write('{"config":{"digest":"sha256:other"}}'); }
   else if (process.env.TAG_STATE === "same" || existsSync(join(dir, "tag-copy.json"))) process.stdout.write(${JSON.stringify(manifest)});
-  else { console.error("manifest unknown"); process.exit(1); }
+  else { console.error(${JSON.stringify(missing)}); process.exit(1); }
 } else if (tool === "skopeo" && args[0] === "inspect") {
   if (!args.includes("--raw") || !args.includes("--config")) process.exit(2);
   process.stdout.write(readFileSync(args.at(-1).slice("docker-archive:".length)));
@@ -237,7 +245,7 @@ if (tool === "docker" && args[0] === "image") {
     assert.equal(readFileSync(join(dir, "saved-id"), "utf8"), `sha256:${"2".repeat(64)}`);
     for (const file of ["copy.json", "login", "notes.md"]) rmSync(join(dir, file));
     rmSync(join(dir, "tag-copy.json"));
-    for (const state of ["conflict", "auth-failure"]) {
+    for (const state of ["conflict", "auth-failure", "denied", "bare-missing", "unknown-repository"]) {
       const refused = run({ TAG_STATE: state });
       assert.notEqual(refused.status, 0, state);
       assert.equal(existsSync(join(dir, "copy.json")), false, state);

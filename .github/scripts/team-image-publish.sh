@@ -60,7 +60,8 @@ printf '%s' "$GITHUB_TOKEN" | skopeo login --authfile "$authfile" \
   --username "$GITHUB_ACTOR" --password-stdin ghcr.io
 # Inspect raw manifest bytes: formatted inspect can select a platform and report
 # a different digest for an index. Only an explicit manifest-unknown permits a
-# new tag; auth, transport and other lookup errors remain failures.
+# new tag. Pinned Skopeo redirects logrus fatal output as a quoted message;
+# auth, transport, name-unknown and other lookup errors remain failures.
 existing=
 if skopeo inspect --authfile "$authfile" --raw "docker://$IMAGE_REPOSITORY:$version" \
     > "$receipt/tag.json" 2> "$receipt/tag-error"; then
@@ -69,7 +70,7 @@ if skopeo inspect --authfile "$authfile" --raw "docker://$IMAGE_REPOSITORY:$vers
     echo '::error::Release image tag already points at another digest; refusing overwrite' >&2
     exit 1
   fi
-elif ! grep -Eq '(^|: )manifest unknown$' "$receipt/tag-error"; then
+elif ! grep -Eq '^time="[^"]+" level=fatal msg=".*: manifest unknown"$' "$receipt/tag-error"; then
   cat "$receipt/tag-error" >&2
   exit 1
 fi

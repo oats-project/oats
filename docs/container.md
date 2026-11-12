@@ -518,11 +518,23 @@ The `publish-team-image` job in
 job, so npm publication and the GitHub Release precede the image. Its
 single job-level `if: ${{ false }}` keeps publication disabled pending the
 registry decision for the proposed `ghcr.io/oats-project/team-agent` target.
-That decision includes visibility: GHCR creates a new package as private
-by default, so public pulls need a visibility change or private pulls need
-credentials.
-Verification remains enabled. Enabling publication requires that decision
-and a reviewed change to the switch.
+GHCR creates a new package as private by default. Verification remains
+enabled. Enabling publication requires the registry decision and a reviewed
+change to the switch.
+
+Before enabling, the registry owner must complete these separately authorized
+setup steps and include their evidence as a checklist in the enabling PR:
+
+1. Push the approved digest from a verified run.
+2. Set the package visibility to public.
+3. Grant this repository's Actions write access.
+4. Record the pinned-client observation that an unused exact version tag
+   returns `manifest unknown`.
+
+Package creation is this manual setup step, never an automatic release-job
+bootstrap. The job treats only `manifest unknown` as an absent tag. It refuses
+`name unknown`, `denied`, authentication and transport errors. The registry
+owner resolves bootstrap and access problems without broadening the matcher.
 
 Publication requires a stable `vX.Y.Z` release tag (at least 0.69.18).
 The release job copies only the tagged image's literal `.dockerignore`
@@ -585,8 +597,11 @@ viewer, governance, platform containment and network/egress-bypass checks
 remain **NOT RUN**. Version and lock checks do not prove supervisor startup
 or agent readiness; those claims need direct acceptance coverage.
 
-Only that job has `packages: write`; `contents: write` lets it append the
-release receipt. Its publish step receives only `GITHUB_TOKEN`, stores
+Only that job has `packages: write`; `contents: write` lets it replace its
+owned receipt block. Among run-step environments, only the publish step
+receives `GITHUB_TOKEN`. The SHA-pinned first-party checkout and setup-node
+actions use their default action token inputs; checkout does not persist
+credentials. The publish step stores
 registry authentication in a private temporary file and removes it on exit.
 It receives no npm publish credential. To roll back a deployed image, select
 the previous reviewed digest in the deployment configuration.
