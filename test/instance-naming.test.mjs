@@ -3,9 +3,9 @@
 // says why. CI has no real harness: a fake executable stands in, recording what the call gave it.
 //
 // What is pinned here:
-// - the role: the kernel's soulRole on the clients' very rows (test/client-instance-name.test.mjs
-//   ROLE_CASES), and the name built from a reply on NAME_CASES where a reply and a typed name mean the same;
-// - the name: first non-empty line, slug, trailing roles stripped, 4 words, the length budget, -2/-3;
+// - the name is the model's whole `<work>-<role>`: the first non-empty line as a slug, its last word the
+//   role, always kept; at most 5 words and 64 characters (dropping the descriptive words nearest the
+//   role), -2/-3 when taken; one word is invalid-reply; nothing reads the soul's name for it;
 // - the prompt (the maintainer's words) and each harness's argv, exactly; codex has none;
 // - the call's isolation: the prompt on stdin and never in argv, a fresh empty working directory
 //   removed afterwards, no OATS_INSTANCE* variable, its own process group (killed on timeout, what it
@@ -25,15 +25,14 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import { join } from "node:path";
 import { fixtureBase } from "./helpers/host-fixture.mjs";
 import { v2Deployment } from "./helpers/v2-deployment.mjs";
-import { NAME_CASES, ROLE_CASES } from "./client-instance-name.test.mjs";
 import { spawnPreparedData } from "../packages/client/spawn-apply-contract.mjs";
 import {
   NAMING_CALLS, NAMING_OUTPUT_MAX, NAMING_PROMPT, NAMING_REASONS, NAMING_TASK_MAX, NAMING_TIMEOUT_MS,
-  descriptiveWords, namingCall, namingEnvironment, namingPrompt, soulRole, suggestInstanceName, uniqueName,
+  nameFromReply, namingCall, namingEnvironment, namingPrompt, suggestInstanceName,
 } from "../lib/instance-naming.mjs";
 
 const never = () => false;
-const named = (reply, soul, taken = never) => { const role = soulRole(soul); return uniqueName(descriptiveWords(reply, role), role, taken); };
+const name = (reply, taken = never) => nameFromReply(reply, taken);
 
 /** A fake harness: it records its argv, working directory (and what is in it), environment names,
  *  stdin, pid and process group to $FAKE_RECORD, then prints $FAKE_REPLY (default a name) and exits
@@ -63,45 +62,66 @@ process.stdin.on("end", () => {
 }
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 
-test("soulRole is the clients' rule: every ROLE_CASES row", () => {
-  for (const [soul, role] of ROLE_CASES) assert.equal(soulRole(soul), role, soul);
-  for (const v of [undefined, null, 7, {}]) assert.equal(soulRole(v), "");
+test("a reply that is already a whole name is the name; taken, -2", () => {
+  assert.equal(name("onboarding-vm-campaign-lead"), "onboarding-vm-campaign-lead");
+  assert.equal(name("onboarding-vm-campaign-lead", (n) => n === "onboarding-vm-campaign-lead"), "onboarding-vm-campaign-lead-2");
 });
 
-test("a reply's name agrees with the clients' nameWithRole wherever a reply means what a typed name does", () => {
-  // A reply is a model's answer, not a typed name: it is slugged first (case is not the operator's),
-  // and one that is only the role, or empty, describes no work (invalid-reply, never a name).
-  const kernelOwn = new Map([["expert · oats-desktop-expert", null], ["cloner · cloner", null], ["Desktop-Expert · oats-desktop-expert", "desktop-expert"], [" · oats-desktop-expert", null]]);
-  for (const [typed, soul, final] of NAME_CASES) {
-    const key = `${typed} · ${soul}`;
-    assert.equal(named(typed, soul), kernelOwn.has(key) ? kernelOwn.get(key) : final, key);
-  }
+test("over five words: the descriptive words nearest the role are dropped, the role kept", () => {
+  assert.equal(name("a-b-c-d-e-lead"), "a-b-c-d-lead");
 });
 
-test("the name: the first non-empty line as a slug, trailing roles stripped, at most 4 words, within 64, -2 and -3 when taken", () => {
-  assert.equal(named("\n  \nFix the Login Bug!\nsecond line", "oats-developer"), "fix-the-login-bug-developer");
-  assert.equal(named("desktop-improvements-expert-expert", "oats-desktop-expert"), "desktop-improvements-expert", "one or more trailing roles");
-  assert.equal(named("one-two-three-four-five-six", "code-reviewer"), "one-two-three-four-reviewer", "4 words");
-  assert.equal(named("`release-notes`", "oats-maintainer"), "release-notes-maintainer");
-  for (const reply of ["", "   \n\n", "!!!", "reviewer", "reviewer-reviewer"]) assert.equal(named(reply, "code-reviewer"), null, JSON.stringify(reply));
-  // The budget: 64 − 1 − len(role), cut at a word boundary.
-  const long = ["a".repeat(30), "b".repeat(20), "c".repeat(20)].join("-");
-  assert.equal(named(long, "code-reviewer"), `${"a".repeat(30)}-${"b".repeat(20)}-reviewer`);
-  assert.ok(named(long, "code-reviewer").length <= 64);
-  assert.equal(named("x".repeat(70), "code-reviewer"), null, "one word past the budget leaves nothing");
-  // Taken (an instance, a soul, a live window): -2, -3; a suffix past 64 drops a word first.
+test("over 64 characters: ends in the role, within 64, the first word's leading characters kept", () => {
+  const long = name(`${"x".repeat(30)}-${"y".repeat(30)}-developer`);
+  assert.ok(long.endsWith("-developer"), long);
+  assert.ok(long.length <= 64, long);
+  assert.ok(long.startsWith("x"), long);
+  assert.equal(long, `${"x".repeat(30)}-developer`, "the word nearest the role went, the first stayed whole");
+});
+
+test("one word is no name: only the role describes no work", () => {
+  for (const reply of ["lead", "Lead.\n", "", "   \n\n", "!!!"]) assert.equal(name(reply), null, JSON.stringify(reply));
+});
+
+test("the name is the reply's first non-empty line, slugged, with nothing added or taken away", () => {
+  assert.equal(name("\n  \nFix the Login Bug Developer!\nsecond-line-lead"), "fix-the-login-bug-developer", "first non-empty line; capitals and punctuation slugged");
+  assert.equal(name("`release-notes-maintainer`"), "release-notes-maintainer");
+  assert.equal(name("desktop-improvements-expert-expert"), "desktop-improvements-expert-expert", "a repeated last word is the model's, not stripped");
+  assert.equal(name("pr-42-review"), "pr-42-review", "no role is appended");
+  // A tool-call block or prose: whatever its first non-empty line slugs to (the validator is the guard).
+  assert.equal(name("<tool_call>\nname: x-lead"), "tool-call");
+  assert.equal(name("Sure! Here is a name: fix-login-lead"), "sure-here-is-a-lead");
+});
+
+test("the length rule: descriptive words nearest the role go first; the one word left is cut; a role that leaves no room is invalid-reply", () => {
+  const role = "r".repeat(20);
+  // 20 + 20 + 20 + 3 hyphens + role (20) = 83: the two words nearest the role go, the first stays.
+  assert.equal(name(`${"a".repeat(20)}-${"b".repeat(20)}-${"c".repeat(20)}-${role}`), `${"a".repeat(20)}-${"b".repeat(20)}-${role}`);
+  assert.equal(name(`${"a".repeat(20)}-${"b".repeat(20)}-${"c".repeat(20)}-${role}`).length, 62);
+  // One descriptive word too long: its characters are cut to fit.
+  assert.equal(name(`${"a".repeat(70)}-${role}`), `${"a".repeat(43)}-${role}`);
+  // The role alone leaves no room for one character and a hyphen: invalid-reply.
+  assert.equal(name(`a-${"r".repeat(62)}`), "a-" + "r".repeat(62), "exactly 64 fits");
+  assert.equal(name(`a-${"r".repeat(63)}`), null);
+});
+
+test("taken: -2, -3 at the end; a suffix past 64 drops a descriptive word, and a suffix that leaves no room is invalid-reply", () => {
   const taken = new Set(["fix-login-developer", "fix-login-developer-2"]);
-  assert.equal(named("fix-login", "oats-developer", (n) => taken.has(n)), "fix-login-developer-3");
-  const full = `${"a".repeat(30)}-${"b".repeat(22)}`; // 53 + "-developer" (10) = 63
-  const fullName = `${full}-developer`;
-  assert.equal(fullName.length, 63);
-  assert.equal(named(full, "oats-developer", (n) => n === fullName), `${"a".repeat(30)}-developer-2`);
-  // No role: the descriptive name alone.
-  assert.equal(named("mirror-sync", "trailing-"), "mirror-sync");
+  assert.equal(name("fix-login-developer", (n) => taken.has(n)), "fix-login-developer-3");
+  const full = `${"a".repeat(30)}-${"b".repeat(22)}-developer`; // 63
+  assert.equal(full.length, 63);
+  assert.equal(name(full, (n) => n === full), `${"a".repeat(30)}-developer-2`);
+  // One word left: its characters are cut for the suffix.
+  const one = `${"a".repeat(53)}-developer`; // 63
+  assert.equal(name(one, (n) => n === one), `${"a".repeat(52)}-developer-2`);
+  assert.equal(name(one, (n) => n === one).length, 64);
+  // The role fills 64 with one character: -2 leaves no room.
+  const tight = `a-${"r".repeat(62)}`;
+  assert.equal(name(tight, (n) => n === tight), null);
 });
 
 test("the prompt is the maintainer's words, the task cut to 4000 characters", () => {
-  assert.equal(NAMING_PROMPT, "Name an agent for this task: 2–4 lowercase words joined by hyphens, describing the work, not the role. Reply with the name only.");
+  assert.equal(NAMING_PROMPT, "Name an agent for this task: <work>-<role>, at most five lowercase words joined by hyphens. First a few words for the work, then, last, one word for the agent's role as the task gives it; if the task gives no role, one word for what the agent does in it. Reply with the name only.");
   assert.equal(namingPrompt("Fix it."), `${NAMING_PROMPT}\n\nTask:\nFix it.`);
   assert.equal(NAMING_TASK_MAX, 4000);
   const task = "🙂".repeat(5000);
@@ -177,10 +197,12 @@ test("the closed reasons: no-task and unsupported-harness make no call; harness-
   // stdout is read up to 4 KiB.
   const big = await call({ env: { FAKE_REPLY: `fix-login\n${"x".repeat(10000)}` } });
   assert.equal(Buffer.byteLength(big.reply), NAMING_OUTPUT_MAX);
-  const invalid = await suggestInstanceName({ soulName: "code-reviewer", taken: never, harness: "claude", bin: fake.bin, instanceModel: null, task: "Review it", env: () => ({ ...process.env, FAKE_REPLY: "Reviewer.\n" }) });
-  assert.deepEqual([invalid.naming.source, invalid.naming.reason, invalid.naming.message, invalid.name], ["numbered", "invalid-reply", "claude's reply holds no name", undefined]);
-  const good = await suggestInstanceName({ soulName: "code-reviewer", taken: never, harness: "pi", bin: fake.bin, instanceModel: "github-copilot/gpt-6-astra", task: "Review it", env: () => ({ ...process.env, FAKE_REPLY: "pr-42-review\n" }) });
-  assert.equal(good.name, "pr-42-review-reviewer");
+  for (const reply of ["Reviewer.\n", "lead\n"]) {
+    const invalid = await suggestInstanceName({ taken: never, harness: "claude", bin: fake.bin, instanceModel: null, task: "Review it", env: () => ({ ...process.env, FAKE_REPLY: reply }) });
+    assert.deepEqual([invalid.naming.source, invalid.naming.reason, invalid.naming.message, invalid.name], ["numbered", "invalid-reply", "claude's reply holds no name", undefined], reply);
+  }
+  const good = await suggestInstanceName({ taken: never, harness: "pi", bin: fake.bin, instanceModel: "github-copilot/gpt-6-astra", task: "Review it", env: () => ({ ...process.env, FAKE_REPLY: "pr-42-review\n" }) });
+  assert.equal(good.name, "pr-42-review", "the reply's whole name: nothing appended");
   assert.deepEqual({ ...good.naming, ms: 0 }, { source: "suggested", ms: 0, harness: "pi", model: "github-copilot/gpt-6-astra" });
   // An environment that cannot be built is a failure of the call, not an error.
   const noEnv = await namingCall({ harness: "claude", bin: fake.bin, task: "x", env: () => { throw Object.assign(new Error("no"), { code: "E_RUNTIME_ENDPOINT_UNKNOWN" }); } });
@@ -206,11 +228,11 @@ test("oats spawn --preview --suggest-name: the suggested name previewed as --nam
   const fx = v2Deployment({ t, local });
   const taskFile = join(fake.dir, "task.md");
   writeFileSync(taskFile, "Fix the flaky login test in the auth service.\n");
-  const env = { FAKE_RECORD: fake.record, FAKE_REPLY: "fix-flaky-login\n", OATS_INSTANCE: "caller-x" };
+  const env = { FAKE_RECORD: fake.record, FAKE_REPLY: "fix-flaky-login-fixer\n", OATS_INSTANCE: "caller-x" };
   const preview = (extra = [], e = env) => fx.cli(["spawn", "dev", "--preview", "--suggest-name", "--launch-config", "fake", "--task-file", taskFile, ...extra, "--json"], { env: e });
 
   const suggested = okResult(preview(), "suggest");
-  assert.equal(suggested.instance, "fix-flaky-login-dev");
+  assert.equal(suggested.instance, "fix-flaky-login-fixer");
   assert.deepEqual({ ...suggested.naming, ms: 0 }, { source: "suggested", ms: 0, harness: "claude", model: "haiku" });
   assert.equal(fake.read().stdin, namingPrompt("Fix the flaky login test in the auth service.\n"));
   assert.equal(fake.read().env.includes("OATS_INSTANCE"), false);
@@ -220,9 +242,9 @@ test("oats spawn --preview --suggest-name: the suggested name previewed as --nam
   assert.equal("naming" in plain, false, "a preview without --suggest-name has no naming");
   // An apply of that decision matches it.
   const applied = okResult(fx.cli(["spawn", "dev", "--name", suggested.instance, "--launch-config", "fake", "--task-file", taskFile, "--expect-decision", suggested.decision.revision, "--no-launch", "--json"]), "apply");
-  assert.equal(applied.instance, "fix-flaky-login-dev");
+  assert.equal(applied.instance, "fix-flaky-login-fixer");
   // The name is now taken: -2.
-  assert.equal(okResult(preview(), "again").instance, "fix-flaky-login-dev-2");
+  assert.equal(okResult(preview(), "again").instance, "fix-flaky-login-fixer-2");
 
   // Numbered, with its reason, never an error: the name is today's numbered one.
   const numberedName = okResult(fx.cli(["spawn", "dev", "--preview", "--launch-config", "fake", "--json"]), "numbered").instance;
@@ -255,6 +277,15 @@ test("oats spawn --preview --suggest-name: the suggested name previewed as --nam
   assert.ok(JSON.parse(fx.cli(["version", "--json"]).stdout).features.includes("spawn-suggest-name"));
 });
 
+test("the soul's name never appears unless the model wrote it: spawning oats-engineering-expert with the reply pricing-page-lead", async (t) => {
+  const fake = fakeHarness(t);
+  const local = { "launch-configs": { fake: { harness: "claude", executable: fake.bin } } };
+  const fx = v2Deployment({ t, local, souls: { "oats-engineering-expert": {} } });
+  const spawn = (extra) => fx.cli(["spawn", "oats-engineering-expert", "--suggest-name", "--launch-config", "fake", "--task", "Lead the pricing page", ...extra, "--json"], { env: { FAKE_REPLY: "pricing-page-lead\n" } });
+  assert.equal(okResult(spawn(["--preview"]), "preview").instance, "pricing-page-lead");
+  assert.equal(okResult(spawn(["--no-launch"]), "apply").instance, "pricing-page-lead");
+});
+
 test("the name is chosen before anything that depends on it, within the preview's one preflight budget", async (t) => {
   const fake = fakeHarness(t);
   const local = { "launch-configs": { fake: { harness: "claude", executable: fake.bin } } };
@@ -264,9 +295,9 @@ test("the name is chosen before anything that depends on it, within the preview'
   execFileSync("git", ["-C", fx.member, "branch", "agents/dev-1"], { stdio: "ignore" });
   const refusedPlain = refused(fx.cli(["spawn", "dev", "--preview", "--launch-config", "fake", "--json"]), "plain");
   assert.equal(refusedPlain.code, "E_BRANCH_EXISTS");
-  const env = { FAKE_REPLY: "fix-login\n" };
+  const env = { FAKE_REPLY: "fix-login-fixer\n" };
   const r = okResult(fx.cli(["spawn", "dev", "--preview", "--suggest-name", "--launch-config", "fake", "--task", "Fix login", "--json"], { env }), "suggest");
-  assert.deepEqual([r.instance, r.branch, r.naming.source], ["fix-login-dev", "agents/fix-login-dev", "suggested"]);
+  assert.deepEqual([r.instance, r.branch, r.naming.source], ["fix-login-fixer", "agents/fix-login-fixer", "suggested"]);
   // One budget: the naming call's time is in the preview's preflight, and the budget bounds the call.
   assert.equal(r.preflight.budgetMs, 20000);
   assert.ok(r.preflight.elapsedMs >= r.naming.ms, `${r.preflight.elapsedMs} ≥ ${r.naming.ms}`);
@@ -290,10 +321,10 @@ test("the naming call takes what the harness package probes leave of the budget:
     capabilities: { "test.chat": { manifest: { requires: [{ harness: "claude", package: "chat@acme-market", why: "the fixture's" }] } } },
   });
   const installed = JSON.stringify([{ id: "chat@acme-market", version: "1.0.0", scope: "user", enabled: true, installPath: plugin }]);
-  const preview = (env, extra = []) => fx.cli(["spawn", "dev", "--preview", "--suggest-name", "--launch-config", "fake", "--task", "Fix login", ...extra, "--json"], { env: { FAKE_REPLY: "fix-login\n", ...env } });
+  const preview = (env, extra = []) => fx.cli(["spawn", "dev", "--preview", "--suggest-name", "--launch-config", "fake", "--task", "Fix login", ...extra, "--json"], { env: { FAKE_REPLY: "fix-login-fixer\n", ...env } });
   // Premises: the package is required (missing, the preview is refused), and installed it passes.
   assert.equal(refused(preview({ FAKE_PLUGINS: "[]" }), "missing").code, "E_HARNESS_RESOURCE_MISSING");
-  assert.equal(okResult(preview({ FAKE_PLUGINS: installed }), "installed").instance, "fix-login-dev");
+  assert.equal(okResult(preview({ FAKE_PLUGINS: installed }), "installed").instance, "fix-login-fixer");
   const numberedName = okResult(fx.cli(["spawn", "dev", "--preview", "--launch-config", "fake", "--json"], { env: { FAKE_PLUGINS: installed } }), "numbered").instance;
   // A naming call slower than the budget: the probes ran first, so the preview is the numbered one.
   const slow = okResult(preview({ FAKE_PLUGINS: installed, FAKE_SLEEP_MS: "8000", OATS_PREVIEW_PREFLIGHT_BUDGET_MS: "1500" }), "slow");
@@ -323,31 +354,31 @@ test("the naming call runs the executable the preview reports: a relative PATH e
   writeFileSync(right, readFileSync(fake.bin));
   writeFileSync(wrong, `#!/bin/sh\necho wrong > ${JSON.stringify(join(fake.dir, "wrong"))}\necho wrong-harness\n`);
   for (const bin of [right, wrong]) chmodSync(bin, 0o755);
-  const r = okResult(fx.cli(["spawn", "dev", "--preview", "--suggest-name", "--launch-config", "rel", "--task", "Fix login", "--json"], { env: { FAKE_RECORD: fake.record, FAKE_REPLY: "fix-login\n" } }), "relative");
+  const r = okResult(fx.cli(["spawn", "dev", "--preview", "--suggest-name", "--launch-config", "rel", "--task", "Fix login", "--json"], { env: { FAKE_RECORD: fake.record, FAKE_REPLY: "fix-login-fixer\n" } }), "relative");
   assert.equal(r.executable, right, "the preview's executable, looked up from the home");
-  assert.deepEqual([r.instance, r.naming.source], ["fix-login-dev", "suggested"]);
+  assert.deepEqual([r.instance, r.naming.source], ["fix-login-fixer", "suggested"]);
   assert.deepEqual(fake.read().argv, NAMING_CALLS.claude.argv("haiku"), "the naming call ran that executable");
   assert.equal(existsSync(join(fake.dir, "wrong")), false, "and not the one instances/ would find");
 });
 
-test("oats spawn --suggest-name on an apply (#1490 §3): named <descriptive>-<role> and placed as --name, unique as today, numbered on any failure, with its own time limit", async (t) => {
+test("oats spawn --suggest-name on an apply (#1490 §3): named by the reply's whole name and placed as --name, unique as today, numbered on any failure, with its own time limit", async (t) => {
   const fake = fakeHarness(t);
   const local = { "launch-configs": { fake: { harness: "claude", executable: fake.bin } } };
   const fx = v2Deployment({ t, local });
-  const env = { FAKE_RECORD: fake.record, FAKE_REPLY: "fix-login\n" };
+  const env = { FAKE_RECORD: fake.record, FAKE_REPLY: "fix-login-fixer\n" };
   const apply = (extra = [], e = env) => fx.cli(["spawn", "dev", "--suggest-name", "--launch-config", "fake", "--task", "Fix the login bug", "--no-launch", ...extra, "--json"], { env: e });
 
   const first = okResult(apply(), "apply");
-  assert.equal(first.instance, "fix-login-dev");
-  assert.equal(first.home, join(fx.root, "dev", "instances", "fix-login-dev"));
+  assert.equal(first.instance, "fix-login-fixer");
+  assert.equal(first.home, join(fx.root, "dev", "instances", "fix-login-fixer"));
   assert.ok(existsSync(join(first.home, "instance.json")), "placed");
   assert.deepEqual({ ...first.naming, ms: 0 }, { source: "suggested", ms: 0, harness: "claude", model: "haiku" });
   assert.equal(fake.read().stdin, namingPrompt("Fix the login bug"));
   assert.deepEqual(fake.read().argv, NAMING_CALLS.claude.argv("haiku"));
   // Taken now: made unique as today.
-  assert.equal(okResult(apply(), "again").instance, "fix-login-dev-2");
+  assert.equal(okResult(apply(), "again").instance, "fix-login-fixer-2");
   // The preview's budget is not the apply's: an apply's call takes its own NAMING_TIMEOUT_MS.
-  assert.equal(okResult(apply([], { ...env, FAKE_REPLY: "budget-free\n", OATS_PREVIEW_PREFLIGHT_BUDGET_MS: "1" }), "no preview budget").instance, "budget-free-dev");
+  assert.equal(okResult(apply([], { ...env, FAKE_REPLY: "budget-free-fixer\n", OATS_PREVIEW_PREFLIGHT_BUDGET_MS: "1" }), "no preview budget").instance, "budget-free-fixer");
   // Any failure numbers the instance as today, and says why; never an error.
   const numberedName = () => okResult(fx.cli(["spawn", "dev", "--preview", "--launch-config", "fake", "--json"]), "numbered preview").instance;
   for (const [e, reason] of [[{ FAKE_EXIT: "1" }, "harness-failed"], [{ FAKE_SLEEP_MS: "5000", OATS_TEST_NAMING_TIMEOUT_MS: "300" }, "timeout"], [{ FAKE_REPLY: "dev\n" }, "invalid-reply"]]) {
@@ -365,9 +396,9 @@ test("oats spawn --suggest-name on an apply (#1490 §3): named <descriptive>-<ro
   assert.equal("naming" in plain, false);
   assert.equal(existsSync(fake.record), false, "no naming call without --suggest-name");
   // Its human answer says how the name was chosen.
-  const human = fx.cli(["spawn", "dev", "--suggest-name", "--launch-config", "fake", "--task", "Fix the login bug", "--no-launch"], { env: { ...env, FAKE_REPLY: "human-answer\n" } });
+  const human = fx.cli(["spawn", "dev", "--suggest-name", "--launch-config", "fake", "--task", "Fix the login bug", "--no-launch"], { env: { ...env, FAKE_REPLY: "human-answer-fixer\n" } });
   assert.equal(human.status, 0, human.stderr);
-  assert.match(human.stdout, /^Spawned human-answer-dev /m);
+  assert.match(human.stdout, /^Spawned human-answer-fixer /m);
   assert.match(human.stdout, /^ {2}name: {3}suggested by claude \(haiku\) in \d+ ms$/m);
 
   // --suggest-name chooses the name: with --name, --purpose or --expect-decision it is refused, by the
@@ -394,25 +425,26 @@ test("oats instance suggest-name (#1490 §2): the preview's name for a soul that
     unset: { harness: "claude", executable: fake.bin, env: { ACME_TOKEN: { fromEnv: "OATS_TEST_SURELY_UNSET" } } },
   } };
   const fx = v2Deployment({ t, local });
-  const env = { FAKE_RECORD: fake.record, FAKE_REPLY: "fix-flaky-login\n" };
+  const env = { FAKE_RECORD: fake.record, FAKE_REPLY: "fix-flaky-login-fixer\n" };
   const suggest = (extra, e = env) => fx.cli(["instance", "suggest-name", ...extra, "--json"], { env: e });
 
-  // The soul is only a name: oats-developer is no soul of this deployment. claude, through the
+  // --soul is optional and doesn't change the name: the reply's whole name. claude, through the
   // machine's default configuration for it.
-  const r = okResult(suggest(["--soul", "oats-developer", "--task", "Fix the flaky login test"]), "suggest");
+  const r = okResult(suggest(["--task", "Fix the flaky login test"]), "suggest");
   assert.deepEqual(Object.keys(r).sort(), ["name", "naming"]);
-  assert.equal(r.name, "fix-flaky-login-developer");
+  assert.equal(r.name, "fix-flaky-login-fixer");
   assert.deepEqual({ ...r.naming, ms: 0 }, { source: "suggested", ms: 0, harness: "claude", model: "haiku" });
   assert.deepEqual(fake.read().argv, NAMING_CALLS.claude.argv("haiku"));
   assert.equal(fake.read().stdin, namingPrompt("Fix the flaky login test"));
-  // A package-qualified soul gives its role; the words, role and length rules are the preview's.
-  assert.equal(okResult(suggest(["--soul", "acme/pkg--ops-lead", "--task", "x"]), "qualified").name, "fix-flaky-login-lead");
-  const long = okResult(suggest(["--soul", "oats-developer", "--task", "x"], { ...env, FAKE_REPLY: `${"abcdefghijklmnop-".repeat(6)}\n` }), "long").name;
-  assert.equal(long, named(`${"abcdefghijklmnop-".repeat(6)}\n`, "oats-developer"));
-  assert.ok(long.length <= 64 && long.endsWith("-developer"), long);
+  // Given (installed Desktops send it), the soul is only shape-checked: two different souls, the same
+  // reply, the same name; neither needs to exist here.
+  for (const soul of ["oats-developer", "acme/pkg--ops-lead"]) assert.equal(okResult(suggest(["--soul", soul, "--task", "x"]), soul).name, "fix-flaky-login-fixer", soul);
+  // The word and length rules are the preview's.
+  const long = okResult(suggest(["--soul", "oats-developer", "--task", "x"], { ...env, FAKE_REPLY: `${"abcdefghijklmnop-".repeat(6)}developer\n` }), "long").name;
+  assert.equal(long, "abcdefghijklmnop-abcdefghijklmnop-abcdefghijklmnop-developer");
   // Not made unique: a name taken in this deployment is answered as it is (the landing host decides).
-  okResult(fx.cli(["spawn", "dev", "--name", "fix-login-dev", "--launch-config", "fake", "--no-launch", "--json"]), "premise: taken");
-  assert.equal(okResult(suggest(["--soul", "dev", "--task", "x"], { ...env, FAKE_REPLY: "fix-login\n" }), "taken").name, "fix-login-dev");
+  okResult(fx.cli(["spawn", "dev", "--name", "fix-login-fixer", "--launch-config", "fake", "--no-launch", "--json"]), "premise: taken");
+  assert.equal(okResult(suggest(["--soul", "dev", "--task", "x"], { ...env, FAKE_REPLY: "fix-login-fixer\n" }), "taken").name, "fix-login-fixer");
   // pi: the configuration's model, else --model; --harness agrees with the configuration or is refused.
   const pi = okResult(suggest(["--soul", "dev", "--task", "x", "--launch-config", "fakepi"]), "pi");
   assert.deepEqual([pi.naming.harness, pi.naming.model], ["pi", "acme/pi-model"]);
@@ -462,7 +494,7 @@ test("oats instance suggest-name (#1490 §2): the preview's name for a soul that
   writeFileSync(join(outside, "bin", "claude"), readFileSync(fake.bin));
   chmodSync(join(outside, "bin", "claude"), 0o755);
   const bare = fx.cli(["instance", "suggest-name", "--soul", "dev", "--task", "x", "--dir", outside, "--json"], { cwd: outside, env: { ...env, PATH: `${join(outside, "bin")}:${fx.env.PATH}` } });
-  assert.equal(okResult(bare, "outside").name, "fix-flaky-login-dev");
+  assert.equal(okResult(bare, "outside").name, "fix-flaky-login-fixer");
 
   // It writes nothing and reserves nothing in the deployment (this computer's deployments list:
   // test/deployments.test.mjs, outside the temporary directories).
@@ -474,7 +506,6 @@ test("oats instance suggest-name (#1490 §2): the preview's name for a soul that
   // Refusals: bad arguments are errors.
   for (const [argv, code, words] of [
     [["--soul", "dev", "--task", "x", "--server", "build"], "E_BAD_ARGS", "takes no --server"],
-    [["--task", "x"], "E_BAD_ARGS", "--soul is required"],
     [["--soul", "Bad Soul", "--task", "x"], "E_BAD_ARGS", "is not a soul name"],
     [["--soul", "dev"], "E_BAD_ARGS", "one of --task or --task-file"],
     [["--soul", "dev", "--task", "x", "--task-file", empty], "E_BAD_ARGS", "one of --task or --task-file"],
@@ -492,7 +523,7 @@ test("oats instance suggest-name (#1490 §2): the preview's name for a soul that
   // Text: the name, or how it was numbered.
   const text = fx.cli(["instance", "suggest-name", "--soul", "dev", "--task", "x"], { env });
   assert.equal(text.status, 0, text.stderr);
-  assert.equal(text.stdout, "fix-flaky-login-dev\n");
+  assert.equal(text.stdout, "fix-flaky-login-fixer\n");
   const textNumbered = fx.cli(["instance", "suggest-name", "--soul", "dev", "--task", " "], { env });
   assert.equal(textNumbered.stdout, "numbered (no-task: the task is empty: there is nothing to name the instance from)\n");
   assert.ok(JSON.parse(fx.cli(["version", "--json"]).stdout).features.includes("instance-suggest-name"));
