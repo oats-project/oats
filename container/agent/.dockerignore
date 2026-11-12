@@ -6,3 +6,4 @@
 !supervisor.mjs
 !sshd_config
 !liveness.mjs
+!agent-trust.sh

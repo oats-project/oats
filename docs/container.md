@@ -164,7 +164,14 @@ certificates, at most 64 KiB, with no private key. Go keeps its normal certifica
 directories and Node extends its normal roots. The acceptance check validates
 the file and the exact mount/environment pair; it permits no general environment
 override. The broker and its Node verification child receive the same trust
-settings. A successful probe using an explicit CA does not establish that the
+settings. The immutable `/etc/profile.d/agent-trust.sh` also supplies the two
+settings to the agent's captured login environment and tmux children when the
+fixed CA file is readable. The image sources that same profile at the start of
+the system bashrc, before its noninteractive return, for bash's SSH startup
+path. sshd also fixes `BASH_ENV` to that profile for other noninteractive bash
+commands; user environment and SSH rc overrides remain disabled. Without the
+CA mount, the profile exports neither setting.
+A successful probe using an explicit CA does not establish that the
 real broker trusts it; prove that through the deployment's HTTPS registry.
 
 Include `compose.agent.mirrors.yaml` only when `agents.mirrorsDir` is configured.

@@ -19,5 +19,6 @@ UseDNS no
 PrintMotd no
 LogLevel VERBOSE
 # sshd constructs a fresh environment for commands; keep runtime NSS there.
-SetEnv HOME=/state/home PATH=/usr/local/bin:/usr/bin:/bin LD_PRELOAD=/usr/local/lib/libnss_wrapper.so NSS_WRAPPER_PASSWD=/state/ssh/passwd NSS_WRAPPER_GROUP=/state/ssh/group
+# Noninteractive bash commands source the same conditional trust profile as login.
+SetEnv HOME=/state/home PATH=/usr/local/bin:/usr/bin:/bin LD_PRELOAD=/usr/local/lib/libnss_wrapper.so NSS_WRAPPER_PASSWD=/state/ssh/passwd NSS_WRAPPER_GROUP=/state/ssh/group BASH_ENV=/etc/profile.d/agent-trust.sh
 Subsystem sftp internal-sftp

@@ -624,6 +624,22 @@ test("optional public CA fragment has one fixed mount and two named trust settin
   }}});
 });
 
+test("login and SSH trust use one immutable conditional profile", () => {
+  const profile = read("agent-trust.sh");
+  assert.match(profile, /^if \[ -r \/etc\/agent-trust\/ca\.pem \]; then\n/m);
+  assert.deepEqual([...profile.matchAll(/^\s*export (.+)$/gm)].map(match => match[1]).sort(), [
+    "NODE_EXTRA_CA_CERTS=/etc/agent-trust/ca.pem", "SSL_CERT_FILE=/etc/agent-trust/ca.pem",
+  ]);
+  assert.match(read("Dockerfile"), /^COPY --chmod=644 agent-trust\.sh \/etc\/profile\.d\/agent-trust\.sh$/m);
+  assert.match(read("Dockerfile"), /^RUN sed -i '1i \. \/etc\/profile\.d\/agent-trust\.sh' \/etc\/bash\.bashrc$/m);
+  assert.doesNotMatch(read("Dockerfile"), /^ENV .*\b(?:SSL_CERT_FILE|NODE_EXTRA_CA_CERTS|BASH_ENV)\b/m);
+  const config = sshSettings(read("sshd_config"));
+  assert.equal(config.setenv, "HOME=/state/home PATH=/usr/local/bin:/usr/bin:/bin LD_PRELOAD=/usr/local/lib/libnss_wrapper.so NSS_WRAPPER_PASSWD=/state/ssh/passwd NSS_WRAPPER_GROUP=/state/ssh/group BASH_ENV=/etc/profile.d/agent-trust.sh");
+  assert.equal(config.permituserenvironment, "no");
+  assert.equal(config.permituserrc, "no");
+  assert.equal(config.acceptenv, undefined);
+});
+
 test("public CA acceptance rejects private keys, malformed files and writable trust", async () => {
   const {publicCACheck}=await import("../container/agent/accept.mjs");
   assert.equal(typeof publicCACheck,"function","a real mounted-CA check is required");

@@ -24,6 +24,9 @@ COPY --chmod=755 entrypoint.sh /usr/local/bin/agent-entrypoint
 COPY --chmod=644 supervisor.mjs /usr/local/lib/agent-supervisor.mjs
 COPY --chmod=644 liveness.mjs /usr/local/lib/agent-liveness.mjs
 COPY --chmod=644 sshd_config /etc/agent-sshd_config
+COPY --chmod=644 agent-trust.sh /etc/profile.d/agent-trust.sh
+# Bash's SSH startup path reads the system bashrc instead of BASH_ENV.
+RUN sed -i '1i . /etc/profile.d/agent-trust.sh' /etc/bash.bashrc
 ENV HOME=/state/home
 ENV AWEB_DELIVERY=session
 # A child WORKDIR would be created by Docker as root inside a fresh mount.
