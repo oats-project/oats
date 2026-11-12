@@ -25,7 +25,7 @@ test.after(() => {
   rmSync(base, { recursive: true, force: true });
 });
 
-const PROBE = { schemaVersion: 1, name: "@awebai/oats", version: "0.31.0", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["session"], features: ["harness"] };
+const PROBE = { schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["session"], features: ["harness"] };
 const target = { sshHost: "h", workspace: "/w", oatsPath: "oats" };
 
 /** A transport that answers the version probe and counts it. */

@@ -278,7 +278,7 @@ test("readRetireState: since is required; code and message belong to failed only
 
 // ---- remote rows: relayed only when present, by the same rule ------------------------------------------
 
-const PROBE = { schemaVersion: 1, name: "@awebai/oats", version: "0.58.0", desktopApi: 1, harnesses: ["claude"], sessionBackends: ["tmux"], launchOptions: [], remote: ["session"], features: ["harness"] };
+const PROBE = { schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, harnesses: ["claude"], sessionBackends: ["tmux"], launchOptions: [], remote: ["session"], features: ["harness"] };
 const HOME = (name) => `/srv/ws/agents/dev/instances/${name}`;
 const hostRow = (name, extra = {}) => ({ instance: name, home: HOME(name), harness: "claude", running: true, tmux: { session: "oats-agents", window: name }, ...extra });
 /** The one group rosterGroups builds from a fake host answering `status --json` with `rows`, plus a

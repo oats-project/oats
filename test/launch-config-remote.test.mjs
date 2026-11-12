@@ -14,7 +14,7 @@ process.env.OATS_HOME_DIR = base;
 test.after(() => { if (oldHome === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = oldHome; rmSync(base, { recursive: true, force: true }); });
 const target = { sshHost: "original-host", workspace: "/original/team", oatsPath: "/installed/oats" };
 writeServers({ s: { sshHost: "new-host", workspace: "/new/team" } });
-writeSnapshot("s", target, { version: "0.22.17", schemaVersion: 1 }, { instance: "dev-one", home: "/original/home", agent: "dev" });
+writeSnapshot("s", target, { version: "0.69.15", schemaVersion: 1 }, { instance: "dev-one", home: "/original/home", agent: "dev" });
 const envelope = result => JSON.stringify({ schemaVersion: 1, ok: true, result });
 const allFeatures = ["session-start", "session-restart", "launch-config", "harness"];
 function transport(features = allFeatures, response = { instance: "dev-one" }) {
@@ -22,7 +22,7 @@ function transport(features = allFeatures, response = { instance: "dev-one" }) {
   return { calls, execFileSync(bin, argv, options) {
     assert.equal(bin, "ssh"); calls.push({ command: argv.at(-1), host: argv.at(-2), options });
     return argv.at(-1).includes("version --json")
-      ? envelope({ desktopApi: 1, version: "0.22.17", remote: ["session"], features })
+      ? envelope({ desktopApi: 1, version: "0.69.15", remote: ["session"], features })
       : envelope(response);
   } };
 }
@@ -123,7 +123,7 @@ test("a host without the harness feature (0.26.x and older) is sent its own name
 });
 
 test("remote named-config spawns gate support without substituting the soul harness for the configuration", () => {
-  const remote = { version: "0.22.17", features: ["launch-config"], harnesses: ["codex"], sessionBackends: [], launchOptions: [], advertised: true };
+  const remote = { version: "0.69.15", features: ["launch-config"], harnesses: ["codex"], sessionBackends: [], launchOptions: [], advertised: true };
   const roster = { agents: [{ name: "dev", harness: "claude" }] };
   const args = ["dev", "--launch-config", "personal"];
   assert.equal(checkRemoteSupport(remote, target, args, roster).harness, undefined);

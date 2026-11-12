@@ -226,7 +226,7 @@ test("the feature: oats version --json advertises automation-descriptions; a rem
     writeFileSync(join(process.env.OATS_HOME_DIR, "servers.json"), JSON.stringify({ servers: { s: { sshHost: "h", workspace: "/w" } } }));
     const sent = [];
     const remote = (features) => ({ execFileSync: (b, argv) => { const a = argv.join(" "); sent.push(argv.at(-1));
-      return a.includes("version --json") ? JSON.stringify({ schemaVersion: 1, ok: true, result: { desktopApi: 1, version: "0.42.1", remote: ["schedule"], features, scheduleApi: 2 } })
+      return a.includes("version --json") ? JSON.stringify({ schemaVersion: 1, ok: true, result: { desktopApi: 1, version: "0.69.15", remote: ["schedule"], features, scheduleApi: 2 } })
         : JSON.stringify({ schemaVersion: 1, ok: true, result: {} }); } });
     assert.throws(() => scheduleRemote("s", ["update", "mine", "--description=x"], remote(["schedule", "harness"])), (e) => e.code === "E_REMOTE_INCOMPATIBLE" && /automation-descriptions/.test(e.message));
     assert.equal(sent.some((c) => c.includes("schedule update")), false, "nothing forwarded");

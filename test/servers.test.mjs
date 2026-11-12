@@ -19,6 +19,7 @@ import { attachArgv, checkRemoteSupport, hostFeatures, hostSessionViewer, listSn
 
 const CLI = resolve(new URL("../bin/oats.mjs", import.meta.url).pathname);
 /** This kernel's own features: what a roster relays from a host that runs it (feature server-probe-features). */
+const SPAWN_FEATURES = ["spawn-task-stdin", "spawn-preview-2", "spawn-apply-2", "spawn-idempotency-2"];
 const KERNEL_FEATURES = JSON.parse(execFileSync(process.execPath, [CLI, "version", "--json"], { encoding: "utf8" })).features;
 
 // In-process routes prepare the ssh control directory under OATS_HOME_DIR:
@@ -103,7 +104,7 @@ test("runRemote: a bare retire answer with cleanup still owed is not ok, so a ro
   // Through the route, the failed envelope still names the server and target (R2).
   // With no saved route, the name resolves through the host's roster first.
   const roster = JSON.stringify({ root: "/srv/agents", agents: [{ name: "dev", instances: [{ instance: "dev-x", home: "/srv/agents/dev/instances/dev-x" }] }] });
-  const routed = routeCommand("build", "retire", ["dev-x"], { server: { id: "build", sshHost: "h", workspace: "/w", oatsPath: "oats" }, execFileSync: (bin, argv) => (String(argv.at(-1)).includes("version --json") ? JSON.stringify({ schemaVersion: 1, name: "@awebai/oats", version: "0.22.2", desktopApi: 1 }) : String(argv.at(-1)).includes("status --json") ? roster : exec()) });
+  const routed = routeCommand("build", "retire", ["dev-x"], { server: { id: "build", sshHost: "h", workspace: "/w", oatsPath: "oats" }, execFileSync: (bin, argv) => (String(argv.at(-1)).includes("version --json") ? JSON.stringify({ schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1 }) : String(argv.at(-1)).includes("status --json") ? roster : exec()) });
   assert.equal(routed.envelope.ok, false);
   assert.equal(routed.envelope.result.server, "build");
   assert.equal(routed.envelope.result.target.sshHost, "h");
@@ -528,7 +529,7 @@ test("routed spawn: a success reply without a home never replaces an existing sa
     mkdirSync(dirname(snapshotPath("build", "dev-x")), { recursive: true });
     const prior = { serverId: "build", target, remote: { version: "0.22.3", schemaVersion: 1 }, instance: "dev-x", agent: "dev", home: "/w/agents/dev/instances/dev-x", agentsRoot: "/w/agents", spawnedAt: "2026-09-05T00:00:00.000Z" };
     writeFileSync(snapshotPath("build", "dev-x"), JSON.stringify(prior));
-    const probe = { schemaVersion: 1, name: "@awebai/oats", version: "0.22.3", desktopApi: 1, runtimes: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "retire", "status", "session", "roster", "harvest"], features: ["retire-home"] };
+    const probe = { schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, runtimes: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "retire", "status", "session", "roster", "harvest"], features: ["retire-home", ...SPAWN_FEATURES] };
     const status = { schemaVersion: 1, ok: true, result: { root: "/w/agents", agents: [{ name: "dev", runtime: "pi", instances: [] }] } };
     let calls = 0;
     const exec = (bin, argv) => {
@@ -539,7 +540,7 @@ test("routed spawn: a success reply without a home never replaces an existing sa
       if (word.includes(" spawn ")) return JSON.stringify({ schemaVersion: 1, ok: true, result: { instance: "dev-x", agent: "dev", launched: false, warnings: [] } });
       throw new Error(`unexpected remote call: ${word}`);
     };
-    const routed = routeCommand("build", "spawn", ["dev", "--purpose", "x", "--no-launch"], { server, execFileSync: exec });
+    const routed = routeCommand("build", "spawn", ["dev", "--purpose", "x", "--no-launch", "--expect-decision", "r1", "--idempotency-key", "k1"], { server, execFileSync: exec });
     assert.equal(calls, 3);
     assert.equal(routed.envelope.ok, true);
     assert.equal(routed.envelope.result.snapshot, null, "no route written for a home-less result");
@@ -547,7 +548,7 @@ test("routed spawn: a success reply without a home never replaces an existing sa
     assert.deepEqual(JSON.parse(readFileSync(snapshotPath("build", "dev-x"), "utf8")), prior, "the existing route survives byte for byte");
     // The same home in the reply is the same route: replaced, no conflict.
     const same = (bin, argv) => (String(argv.at(-1)).includes(" spawn ") ? JSON.stringify({ schemaVersion: 1, ok: true, result: { instance: "dev-x", agent: "dev", home: prior.home, launched: false, warnings: [] } }) : exec(bin, argv));
-    const again = routeCommand("build", "spawn", ["dev", "--purpose", "x", "--no-launch"], { server, execFileSync: same });
+    const again = routeCommand("build", "spawn", ["dev", "--purpose", "x", "--no-launch", "--expect-decision", "r1", "--idempotency-key", "k1"], { server, execFileSync: same });
     assert.equal(again.envelope.result.routeConflict, undefined); assert.equal(typeof again.envelope.result.snapshot, "string");
   } finally {
     if (prevHomeDir === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = prevHomeDir;
@@ -618,12 +619,12 @@ test("routed spawn: bound to the host's preview and a key of the request; a link
   }
 });
 
-test("routed spawn: a host that does not advertise the keyed spawn gets one spawn as given, and its answer warns that a dropped link cannot be retried safely; --suggest-name previews with it and applies the previewed name", () => {
+test("routed spawn: a host that does not advertise the keyed spawn is refused before a spawn is sent; --suggest-name previews with it and applies the previewed name", () => {
   const base = mkdtempSync("/tmp/oats-rsk-");
   const prevHomeDir = process.env.OATS_HOME_DIR; process.env.OATS_HOME_DIR = join(base, "oats-home"); mkdirSync(process.env.OATS_HOME_DIR);
   try {
     const server = { id: "build", sshHost: "h", workspace: "/w", oatsPath: "oats" };
-    const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.24.9", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features });
+    const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features });
     const status = { schemaVersion: 1, ok: true, result: { root: "/w/agents", agents: [{ name: "dev", harness: "pi", instances: [] }] } };
     const spawned = (instance, more = {}) => ({ schemaVersion: 1, ok: true, result: { instance, agent: "dev", home: `/w/agents/dev/instances/${instance}`, launched: false, warnings: ["the host's own warning"], ...more } });
     const remote = (features, answers) => {
@@ -637,18 +638,14 @@ test("routed spawn: a host that does not advertise the keyed spawn gets one spaw
       };
       return { sent, exec };
     };
-    const KEYED = ["spawn-preview-2", "spawn-apply-2", "spawn-idempotency-2"];
+    const KEYED = [...SPAWN_FEATURES];
 
-    // Each of the three features is needed: without one, the spawn travels once, as given.
+    // Missing any mandatory feature refuses before a spawn is sent.
     for (const missing of KEYED) {
       const host = remote(KEYED.filter((f) => f !== missing), { apply: spawned(`dev-${missing}`) });
-      const { envelope } = routeCommand("build", "spawn", ["dev", "--no-launch"], { server, execFileSync: host.exec });
-      assert.deepEqual(host.sent, ["oats spawn dev --no-launch --dir /w --json"], missing);
-      assert.equal(envelope.ok, true);
-      assert.equal(envelope.result.warnings.length, 2, JSON.stringify(envelope.result.warnings));
-      assert.equal(envelope.result.warnings[0], "the host's own warning");
-      assert.match(envelope.result.warnings[1], new RegExp(`oats 0\\.24\\.9 at h does not advertise ${missing}: .*link.*cannot be retried safely`), envelope.result.warnings[1]);
-      assert.equal(typeof envelope.result.snapshot, "string", "its route is saved as before");
+      assert.throws(() => routeCommand("build", "spawn", ["dev", "--no-launch"], { server, execFileSync: host.exec }),
+        (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message.includes(missing));
+      assert.deepEqual(host.sent, [], missing);
     }
 
     // --suggest-name: the preview carries it; the apply carries the name the preview chose, and the answer how it was chosen.
@@ -800,7 +797,7 @@ test("routed spawn --preview (#610): the host's preview, printed as the local on
     }
     // The old host (no features): its version, the missing feature, nothing sent.
     const version = JSON.parse(execFileSync(process.execPath, [CLI, "version", "--json"], { encoding: "utf8" })).version;
-    assert.equal(r.json().error.message, `remote oats ${version} at old-host does not advertise spawn-preview-2; upgrade it there; nothing was sent`);
+    assert.equal(r.json().error.message, `remote oats ${version} at old-host: missing required spawn features; run npm install -g @awebai/oats@latest there; does not advertise ${SPAWN_FEATURES.join(", ")}`);
     assert.deepEqual(instances(), made, "nothing was created on the host");
   } finally {
     if (prevHomeDir === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = prevHomeDir;
@@ -814,7 +811,7 @@ test("routeCommand spawn --preview (#610): the host's result with server and tar
   try {
     const server = { id: "build", sshHost: "h", workspace: "/w", oatsPath: "oats" };
     const target = { sshHost: "h", workspace: "/w", oatsPath: "oats" };
-    const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.55.0", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features });
+    const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features: [...SPAWN_FEATURES.filter((f) => f !== "spawn-preview-2"), ...features] });
     const status = { schemaVersion: 1, ok: true, result: { root: "/w/agents", agents: [{ name: "dev", harness: "pi", instances: [] }] } };
     const hostPreview = { spawnPreviewApi: 2, preview: true, warnings: ["the host's own warning"], agent: "dev", kind: "persistent", instance: "dev-x", home: "/w/agents/dev/instances/dev-x", work: "checkout", harness: "pi", modelSource: "harness default", decision: { revision: "r1" } };
     const remote = (features, spawnAnswer) => {
@@ -857,7 +854,7 @@ test("routeCommand spawn --preview (#610): the host's result with server and tar
     // A host without spawn-preview-2 might spawn for real: refused, the spawn never sent.
     host = remote(["harness"], ok);
     assert.throws(() => routeCommand("build", "spawn", args, { server, execFileSync: host.exec }),
-      (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.55.0 at h does not advertise spawn-preview-2; upgrade it there; nothing was sent");
+      (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.69.15 at h: missing required spawn features; run npm install -g @awebai/oats@latest there; does not advertise spawn-preview-2");
     assert.deepEqual(host.spawned(), []);
     // The apply's refusals come first, as the apply orders them: a retargeted registration before anything is asked.
     mkdirSync(dirname(snapshotPath("build", "dev-old")), { recursive: true });
@@ -888,7 +885,7 @@ test("routed spawn --preview --suggest-name (#1421 §3) needs a host that advert
   const prevHomeDir = process.env.OATS_HOME_DIR; process.env.OATS_HOME_DIR = join(base, "oats-home"); mkdirSync(process.env.OATS_HOME_DIR);
   try {
     const server = { id: "build", sshHost: "h", workspace: "/w", oatsPath: "oats" };
-    const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.67.0", desktopApi: 1, harnesses: ["pi", "claude"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features });
+    const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, harnesses: ["pi", "claude"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features: [...SPAWN_FEATURES, ...features] });
     const status = { schemaVersion: 1, ok: true, result: { root: "/w/agents", agents: [{ name: "dev", harness: "claude", instances: [] }] } };
     const naming = { source: "suggested", ms: 2310, harness: "claude", model: "haiku" };
     const hostPreview = { spawnPreviewApi: 2, preview: true, agent: "dev", kind: "persistent", instance: "fix-login-dev", home: "/w/agents/dev/instances/fix-login-dev", work: "checkout", harness: "claude", modelSource: "harness default", decision: { revision: "r1" }, naming };
@@ -907,7 +904,7 @@ test("routed spawn --preview --suggest-name (#1421 §3) needs a host that advert
     const args = ["dev", "--preview", "--suggest-name", "--task", "Fix the login bug"];
     const old = remote(["spawn-preview-2"]);
     assert.throws(() => routeCommand("build", "spawn", args, { server, execFileSync: old.exec }),
-      (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.67.0 at h does not advertise spawn-suggest-name; upgrade it there; nothing was sent");
+      (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.69.15 at h does not advertise spawn-suggest-name; upgrade it there; nothing was sent");
     assert.deepEqual(old.spawned(), []);
     const current = remote(["spawn-preview-2", "spawn-suggest-name", "spawn-task-stdin"]);
     const routed = routeCommand("build", "spawn", args, { server, execFileSync: current.exec });
@@ -926,7 +923,7 @@ test("routed spawn --name needs a host that advertises spawn-name: refused befor
   const prevHomeDir = process.env.OATS_HOME_DIR; process.env.OATS_HOME_DIR = join(base, "oats-home"); mkdirSync(process.env.OATS_HOME_DIR);
   try {
     const server = { id: "build", sshHost: "h", workspace: "/w", oatsPath: "oats" };
-    const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.25.0", desktopApi: 1, harnesses: ["pi", "claude"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features });
+    const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, harnesses: ["pi", "claude"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features: [...SPAWN_FEATURES, ...features] });
     const status = { schemaVersion: 1, ok: true, result: { root: "/w/agents", agents: [{ name: "dev", harness: "claude", instances: [] }] } };
     const made = { instance: "api-v2-dev", agent: "dev", home: "/w/agents/dev/instances/api-v2-dev", launched: false, warnings: [] };
     const remote = (features) => {
@@ -936,7 +933,7 @@ test("routed spawn --name needs a host that advertises spawn-name: refused befor
         sent.push(word);
         if (word.includes("version --json")) return JSON.stringify(probe(features));
         if (word.includes(" status ")) return JSON.stringify(status);
-        if (word.includes(" spawn ")) return JSON.stringify({ schemaVersion: 1, ok: true, result: made });
+        if (word.includes(" spawn ")) return JSON.stringify({ schemaVersion: 1, ok: true, result: word.includes(" --preview ") ? { ...made, spawnPreviewApi: 2, preview: true, decision: { revision: "r1" } } : made });
         throw new Error(`unexpected remote call: ${word}`);
       };
       return { sent, exec, spawned: () => sent.filter((w) => w.includes(" spawn ")) };
@@ -945,18 +942,18 @@ test("routed spawn --name needs a host that advertises spawn-name: refused befor
     // A host before 0.26 takes no exact name: refused here, nothing sent.
     const old = remote(["spawn-preview-2"]);
     assert.throws(() => routeCommand("build", "spawn", args, { server, execFileSync: old.exec }),
-      (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.25.0 at h does not advertise spawn-name; upgrade it there; nothing was sent");
+      (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.69.15 at h does not advertise spawn-name; upgrade it there; nothing was sent");
     assert.deepEqual(old.spawned(), []);
     // A purpose needs no spawn-name: today's route, unchanged.
     const purposeOnly = remote([]);
     routeCommand("build", "spawn", ["dev", "--purpose", "api-v2", "--task", "Ship it"], { server, execFileSync: purposeOnly.exec });
-    assert.match(purposeOnly.spawned()[0], / spawn dev --purpose api-v2 --task 'Ship it' --dir \/w --json$/);
+    assert.match(purposeOnly.spawned().at(-1), / spawn dev --purpose api-v2 --task-file - --expect-decision r1 --idempotency-key \S+ --dir \/w --json$/);
     rmSync(REMOTE_SNAPSHOT_DIR(), { recursive: true, force: true });
     // A host with spawn-name: --name travels untouched, and the route is saved under the name the host reports.
     const current = remote(["spawn-name", "spawn-task-stdin"]);
     const routed = routeCommand("build", "spawn", args, { server, execFileSync: current.exec });
-    assert.equal(current.spawned().length, 1);
-    assert.match(current.spawned()[0], / spawn dev --name api-v2-dev --task-file - --dir \/w --json$/);
+    assert.equal(current.spawned().length, 2);
+    assert.match(current.spawned().at(-1), / spawn dev --name api-v2-dev --task-file - --expect-decision r1 --idempotency-key \S+ --dir \/w --json$/);
     assert.equal(routed.envelope.result.instance, "api-v2-dev");
     assert.equal(routed.envelope.result.snapshot, snapshotPath("build", "api-v2-dev"));
     // That name now has a saved route here: a second --name spawn of it is refused before the spawn is sent.
@@ -974,7 +971,7 @@ test("routed spawn --suggest-name on an apply (#1490 §3) needs the host's spawn
   const prevHomeDir = process.env.OATS_HOME_DIR; process.env.OATS_HOME_DIR = join(base, "oats-home"); mkdirSync(process.env.OATS_HOME_DIR);
   try {
     const server = { id: "build", sshHost: "h", workspace: "/w", oatsPath: "oats" };
-    const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.67.0", desktopApi: 1, harnesses: ["pi", "claude"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features });
+    const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, harnesses: ["pi", "claude"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features: [...SPAWN_FEATURES, ...features] });
     const status = { schemaVersion: 1, ok: true, result: { root: "/w/agents", agents: [{ name: "dev", harness: "claude", instances: [] }] } };
     const naming = { source: "suggested", ms: 2310, harness: "claude", model: "haiku" };
     const hostApply = { instance: "fix-login-dev", agent: "dev", home: "/w/agents/dev/instances/fix-login-dev", work: "checkout", harness: "claude", launched: true, naming };
@@ -991,12 +988,12 @@ test("routed spawn --suggest-name on an apply (#1490 §3) needs the host's spawn
       };
       return { sent, exec, spawned: () => sent.filter((w) => w.includes(" spawn ")) };
     };
-    const apply = ["dev", "--suggest-name", "--task", "Fix the login bug"];
+    const apply = ["dev", "--suggest-name", "--task", "Fix the login bug", "--expect-decision", "r1", "--idempotency-key", "k1"];
     const preview = ["dev", "--preview", "--suggest-name", "--task", "Fix the login bug"];
     // A host that names previews only: an apply's flag is refused, never dropped.
     const previewsOnly = remote(["spawn-preview-2", "spawn-suggest-name"]);
     assert.throws(() => routeCommand("build", "spawn", apply, { server, execFileSync: previewsOnly.exec }),
-      (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.67.0 at h does not advertise spawn-apply-suggest-name; upgrade it there; nothing was sent");
+      (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.69.15 at h does not advertise spawn-apply-suggest-name; upgrade it there; nothing was sent");
     assert.deepEqual(previewsOnly.spawned(), []);
     // A host that names applies only: a preview still needs spawn-suggest-name.
     const appliesOnly = remote(["spawn-preview-2", "spawn-apply-suggest-name", "spawn-task-stdin"]);
@@ -1007,7 +1004,7 @@ test("routed spawn --suggest-name on an apply (#1490 §3) needs the host's spawn
     assert.deepEqual(routed.envelope.result.naming, naming);
     assert.equal(routed.envelope.result.instance, "fix-login-dev");
     assert.equal(appliesOnly.spawned().length, 1);
-    assert.match(appliesOnly.spawned()[0], / spawn dev --suggest-name --task-file - --dir \/w --json$/);
+    assert.match(appliesOnly.spawned()[0], / spawn dev --suggest-name --task-file - --expect-decision r1 --idempotency-key k1 --dir \/w --json$/);
   } finally {
     if (prevHomeDir === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = prevHomeDir;
     rmSync(base, { recursive: true, force: true });
@@ -1019,7 +1016,7 @@ test("routed spawn --same-work (#1577) needs the host's instance-same-work: refu
   const prevHomeDir = process.env.OATS_HOME_DIR; process.env.OATS_HOME_DIR = join(base, "oats-home"); mkdirSync(process.env.OATS_HOME_DIR);
   try {
     const server = { id: "build", sshHost: "h", workspace: "/w", oatsPath: "oats" };
-    const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.68.1", desktopApi: 1, harnesses: ["pi", "claude"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features });
+    const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, harnesses: ["pi", "claude"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features: [...SPAWN_FEATURES, ...features] });
     const status = { schemaVersion: 1, ok: true, result: { root: "/w/agents", agents: [{ name: "dev", harness: "claude", instances: [] }] } };
     const made = { instance: "dev-kid", agent: "dev", home: "/w/agents/dev/instances/dev-kid", work: "checkout", harness: "claude", launched: false, parent: "boss" };
     const preview = { spawnPreviewApi: 2, preview: true, agent: "dev", kind: "persistent", instance: "dev-kid", home: "/w/agents/dev/instances/dev-kid", work: "checkout", harness: "claude", modelSource: "harness default", decision: { revision: "r1" }, parentInstance: "boss" };
@@ -1039,25 +1036,25 @@ test("routed spawn --same-work (#1577) needs the host's instance-same-work: refu
     for (const args of [apply, [...apply, "--preview"]]) {
       const old = remote(["spawn-preview-2"]);
       assert.throws(() => routeCommand("build", "spawn", args, { server, execFileSync: old.exec }),
-        (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.68.1 at h does not advertise instance-same-work; upgrade it there; nothing was sent", args.join(" "));
+        (e) => e.code === "E_REMOTE_INCOMPATIBLE" && e.message === "remote oats 0.69.15 at h does not advertise instance-same-work; upgrade it there; nothing was sent", args.join(" "));
       assert.deepEqual(old.spawned(), [], `${args.join(" ")}: nothing was sent`);
     }
     // Without the flag, nothing about the feature is asked.
     const without = remote([]);
     routeCommand("build", "spawn", ["dev", "--purpose", "kid", "--parent", "boss"], { server, execFileSync: without.exec });
-    assert.equal(without.spawned().length, 1);
+    assert.equal(without.spawned().length, 2);
     rmSync(REMOTE_SNAPSHOT_DIR(), { recursive: true, force: true });
     const current = remote(["spawn-preview-2", "instance-same-work"]);
     routeCommand("build", "spawn", apply, { server, execFileSync: current.exec });
-    assert.equal(current.spawned().length, 1);
-    assert.match(current.spawned()[0], / spawn dev --purpose kid --parent boss --same-work --dir \/w --json$/);
+    assert.equal(current.spawned().length, 2);
+    assert.match(current.spawned().at(-1), / spawn dev --purpose kid --parent boss --same-work --expect-decision r1 --idempotency-key \S+ --dir \/w --json$/);
   } finally {
     if (prevHomeDir === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = prevHomeDir;
     rmSync(base, { recursive: true, force: true });
   }
 });
 
-test("routed spawn --preview (#610), text: the host's answer picks the printer: a pre-0.27 host's preview reads its runtime, its default launch configuration is the server's; an answer that spawned prints as the spawn it was, its route saved", () => {
+test("routed spawn --preview (#610), text: the host's answer picks the printer: a host's legacy preview field reads its runtime, its default launch configuration is the server's; an answer that spawned prints as the spawn it was, its route saved", () => {
   const base = mkdtempSync("/tmp/oats-pvt-");
   const prevHomeDir = process.env.OATS_HOME_DIR;
   try {
@@ -1066,12 +1063,12 @@ test("routed spawn --preview (#610), text: the host's answer picks the printer: 
     mkdirSync(env.HOME, { recursive: true }); mkdirSync(env.OATS_HOME_DIR, { recursive: true });
     for (const k of Object.keys(env)) if (/^(OATS_INSTANCE|PI_AGENT)/.test(k)) delete env[k];
     process.env.OATS_HOME_DIR = env.OATS_HOME_DIR;
-    // A 0.26.0 host, scripted: it advertises spawn-preview-2 and names the harness `runtime`;
+    // A scripted host advertises the required spawn features and names the harness `runtime`;
     // its spawn answers whatever FAKE_SPAWN holds.
     const host = join(base, "host-oats");
     write(host, `#!${process.execPath}
 const a = process.argv.slice(2), out = (v) => process.stdout.write(JSON.stringify(v));
-if (a[0] === "version") out({ schemaVersion: 1, name: "@awebai/oats", version: "0.26.0", desktopApi: 1, runtimes: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features: ["spawn-preview-2"] });
+if (a[0] === "version") out({ schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, runtimes: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features: ["spawn-task-stdin", "spawn-preview-2", "spawn-apply-2", "spawn-idempotency-2"] });
 else if (a[0] === "status") out({ schemaVersion: 1, ok: true, result: { root: "/srv/ws/agents", agents: [{ name: "dev", runtime: "pi", instances: [] }] } });
 else if (a[0] === "spawn") out({ schemaVersion: 1, ok: true, result: JSON.parse(process.env.FAKE_SPAWN) });
 else process.exit(9);
@@ -1541,7 +1538,7 @@ exec ${JSON.stringify(process.execPath)} ${JSON.stringify(CLI)} "$@"
 
 test("routed inspect --instructions needs a remote that advertises soul-composed-instructions: refused before anything is sent, else the flag travels", () => {
   const server = { id: "build", sshHost: "h", workspace: "/w", oatsPath: "oats" };
-  const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.46.0", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features, operationsApi: 2 });
+  const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features, operationsApi: 2 });
   const remote = (features) => {
     const sent = [];
     const exec = (bin, argv) => {
@@ -1574,7 +1571,7 @@ test("routed inspect --instructions needs a remote that advertises soul-composed
 
 test("routed inspect --skills needs a remote that advertises soul-skills: refused before anything is sent, else the flag travels (with --instructions too)", () => {
   const server = { id: "build", sshHost: "h", workspace: "/w", oatsPath: "oats" };
-  const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.56.0", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features, operationsApi: 2 });
+  const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features, operationsApi: 2 });
   const remote = (features) => {
     const sent = [];
     const exec = (bin, argv) => {
@@ -1610,7 +1607,7 @@ test("routed inspect --skills needs a remote that advertises soul-skills: refuse
 
 test("routed inspect --composed-skills needs a remote that advertises soul-composed-skills: refused before anything is sent, else the flag travels (with --instructions too)", () => {
   const server = { id: "build", sshHost: "h", workspace: "/w", oatsPath: "oats" };
-  const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.66.0", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features, operationsApi: 2 });
+  const probe = (features) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features, operationsApi: 2 });
   const remote = (features) => {
     const sent = [];
     const exec = (bin, argv) => {
@@ -1875,7 +1872,7 @@ exec sh -c "$1"
 test("attachArgv with a detach key: validated before anything is asked of the host; the probe runs even where the version check is skipped; a host without the feature is refused on the probe alone, also one without the session commands", () => {
   const server = { id: "build", sshHost: "h", workspace: "/w", oatsPath: "oats" };
   const home = "/srv/dk/agents/dev/instances/dev-dk";
-  const probe = (features, remote) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.50.0", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote, features });
+  const probe = (features, remote) => ({ schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote, features });
   /** A host: every remote command word it was sent, the version probe included. Its roster, when
    *  it has one, holds the instance dev-dk at `home`. */
   const host = (features, remote = ["spawn", "status", "session"], { roster = false } = {}) => {

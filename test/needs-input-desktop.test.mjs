@@ -29,7 +29,7 @@ test.after(() => {
   rmSync(base, { recursive: true, force: true });
 });
 
-const PROBE = { schemaVersion: 1, name: "@awebai/oats", version: "0.40.2", desktopApi: 1, harnesses: ["claude"], sessionBackends: ["tmux"], launchOptions: [], remote: ["session"], features: ["harness", "waiting-on-you"] };
+const PROBE = { schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, harnesses: ["claude"], sessionBackends: ["tmux"], launchOptions: [], remote: ["session"], features: ["harness", "waiting-on-you"] };
 const HOME = (name) => `/srv/ws/agents/dev/instances/${name}`;
 const CLAIM = { since: "2026-10-03T12:00:00.000Z", producer: "oats.core", reason: "permission", message: "Which branch?" };
 /** A running row as a host's `oats status --json` reports it; `extra` adds or omits `waitingOnYou`. */
