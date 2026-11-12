@@ -56,12 +56,21 @@ const server=h2.createSecureServer({allowHTTP1:true,SNICallback:(name,done)=>Obj
 server.on('request',(req,res)=>{
  const authority=req.headers[':authority']||req.headers.host,sni=req.socket.servername;
  const matched=authority===sni||authority===sni+':443';
+ const pathname=new URL(req.url,'https://example.invalid').pathname;
+ const humanAuthority=authority==='approve.example.invalid'||authority==='approve.example.invalid:443';
+ const fault='/logs/secrets-fault-sni';
+ if(humanAuthority&&fs.existsSync(fault)&&sni===fs.readFileSync(fault,'utf8').trim()){
+   fs.appendFileSync('/logs/secrets-delivery.log',pathname+'\\n');
+   if(pathname==='/ready'||pathname==='/live')fs.appendFileSync('/logs/secrets.example.invalid.log',req.url+'\\n');
+   res.writeHead(421);res.end();return;
+ }
  const weak=fs.existsSync('/logs/weak-route')&&sni==='aweb.example.invalid'&&(authority==='approve.example.invalid'||authority==='approve.example.invalid:443');
  if(!matched&&!weak){res.writeHead(421);res.end();return}
  const host=authority.split(':')[0];
- if(!Object.hasOwn(paths,host)||new URL(req.url,'https://example.invalid').pathname!==paths[host]){res.writeHead(404);res.end();return}
- fs.appendFileSync('/logs/'+host+'.log',req.url+'\\n');
- res.writeHead(matched?200:421);res.end('control');
+ if(!Object.hasOwn(paths,host)){res.writeHead(404);res.end();return}
+ if(host!=='secrets.example.invalid'||pathname==='/ready'||pathname==='/live')
+   fs.appendFileSync('/logs/'+host+'.log',req.url+'\\n');
+ res.writeHead(!matched?421:pathname===paths[host]?200:404);res.end('control');
 });
 server.listen(443,'0.0.0.0',()=>console.log('TLS_CONTROLS_READY'));
 """)
@@ -78,27 +87,53 @@ server.listen(443,'0.0.0.0',()=>console.log('TLS_CONTROLS_READY'));
         time.sleep(0.1)
     else:
         raise RuntimeError("TLS control listener did not become ready")
-    args = ["docker", "run", "--rm", "--network", network, *security, *mount(policy_file, "/input/policy.json"), *mount(route_file, "/input/route-logs.json"), *mount(scratch / "ca.pem", "/input/ca.pem"), *mount(logs, "/logs"), "--entrypoint", "node", image, "/opt/egress/probe-ingress.mjs", "--address", "172.27.94.10", "--request-origin", "https://" + hosts["signer"], "--human-origin", "https://" + human, "--human-log", "/logs/" + human + ".log", "--human-path", paths[human], "--ca-file", "/input/ca.pem", "--policy", "/input/policy.json", "--route-logs", "/input/route-logs.json"]
-    partial_args = args[:args.index("--policy")] + ["--request-log", "/logs/" + hosts["signer"] + ".log", "--request-path", paths[hosts["signer"]]]
+    args = ["docker", "run", "--rm", "--network", network, *security, *mount(policy_file, "/input/policy.json"), *mount(route_file, "/input/route-logs.json"), *mount(scratch / "ca.pem", "/input/ca.pem"), *mount(logs, "/logs"), "--entrypoint", "node", image, "/opt/egress/probe-ingress.mjs", "--address", "172.27.94.10", "--request-origin", "https://" + hosts["signer"], "--human-origin", "https://" + human, "--human-log", "/logs/" + human + ".log", "--human-path", paths[human], "--ca-file", "/input/ca.pem", "--policy", "/input/policy.json", "--route-logs", "/input/route-logs.json", "--audit-path", "/ready"]
+    partial_args = args[:args.index("--policy")] + ["--request-log", "/logs/" + hosts["signer"] + ".log", "--request-path", paths[hosts["signer"]], "--audit-path", "/ready"]
     result = subprocess.run(partial_args, text=True, capture_output=True)
     print("partial packaged probe:", result.returncode, result.stdout.strip(), flush=True)
     assert result.returncode != 0 and "OATS_EGRESS_INGRESS_PASS" not in result.stdout
     assert all(not (logs / (host + ".log")).read_text() for host in [*hosts.values(), human])
     print("PASS signer-only call cannot emit the admission token or send controls", flush=True)
+    result = subprocess.run(args[:-2], text=True, capture_output=True)
+    assert result.returncode != 0 and "OATS_EGRESS_INGRESS_PASS" not in result.stdout
+    assert all(not (logs / (host + ".log")).read_text() for host in [*hosts.values(), human])
+    print("PASS missing common audit path cannot emit the admission token or send controls", flush=True)
     result = subprocess.run(args, text=True, capture_output=True)
     print("strict packaged full probe:", result.returncode, result.stdout.strip(), result.stderr.strip(), flush=True)
     assert result.returncode == 0 and result.stdout == "OATS_EGRESS_INGRESS_PASS\n"
     counts = {host: len((logs / (host + ".log")).read_text().splitlines()) for host in [*hosts.values(), human]}
-    assert all(counts[host] == 4 for host in hosts.values()) and counts[human] == 2, counts
-    print("PASS six backend logs: exactly twenty-two H1/H2 initial/final matched requests, no forbidden delivery", flush=True)
+    assert all(counts[host] == 8 for host in hosts.values()) and counts[human] == 6, counts
+    human_lines = (logs / (human + ".log")).read_text().splitlines()
+    assert sum(line.startswith("/handoff-assets/handoff.css?") for line in human_lines) == 2
+    assert sum(line.startswith("/ready?") for line in human_lines) == 4
+    print("PASS six backend logs: 22 valid service controls plus 24 common-path coverage controls; human CSS200 retained", flush=True)
     write("logs/weak-route", "aweb-only fixture fault")
     result = subprocess.run(args, text=True, capture_output=True)
     print("forwarded non-signer forbidden authority:", result.returncode, result.stdout.strip(), result.stderr.strip(), flush=True)
     assert result.returncode != 0 and "OATS_EGRESS_INGRESS_PASS" not in result.stdout
     for host in hosts.values():
-        assert len((logs / (host + ".log")).read_text().splitlines()) == 8
-    assert len((logs / (human + ".log")).read_text().splitlines()) == 8
+        assert len((logs / (host + ".log")).read_text().splitlines()) == 16
+    assert len((logs / (human + ".log")).read_text().splitlines()) == 16
     print("PASS backend421 cannot hide non-signer domain fronting", flush=True)
+    (logs / "weak-route").unlink()
+    for role in ["secrets", "registry"]:
+        before = {host: len((logs / (host + ".log")).read_text().splitlines()) for host in [*hosts.values(), human]}
+        write("logs/secrets-fault-sni", hosts[role])
+        write("logs/secrets-delivery.log", "")
+        (logs / "secrets-delivery.log").chmod(0o666)
+        result = subprocess.run(args, text=True, capture_output=True)
+        print(role + " misdelivery into health-only Secrets:", result.returncode, result.stdout.strip(), flush=True)
+        assert result.returncode != 0 and "OATS_EGRESS_INGRESS_PASS" not in result.stdout
+        assert (logs / "secrets-delivery.log").read_text().splitlines() == ["/ready"] * 4
+        for host in hosts.values():
+            count = len((logs / (host + ".log")).read_text().splitlines()) - before[host]
+            assert count == (12 if host == hosts["secrets"] else 8), (role, host, count)
+        assert len((logs / (human + ".log")).read_text().splitlines()) - before[human] == 6
+        print("PASS all four H1/H2 human-authority deliveries reach Secrets and are detected despite backend421", flush=True)
+    (logs / "secrets-fault-sni").unlink()
+    result = subprocess.run(args[:-1] + ["/audit-unlogged"], text=True, capture_output=True)
+    assert result.returncode != 0 and "OATS_EGRESS_INGRESS_PASS" not in result.stdout
+    print("PASS a common path without the Secrets log witness cannot qualify", flush=True)
 finally:
     subprocess.run(["docker", "rm", "-f", front], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if created:

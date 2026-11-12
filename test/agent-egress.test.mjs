@@ -297,7 +297,9 @@ test("the shared ingress probe proves both protocol refusals before backend deli
     ...Object.fromEntries(["aweb","secrets","logs","registry"].map(role=>[role+".example.invalid",{path:role==="registry"?"/health":"/ready",log:join(dir,role+".log")}]))
   };
   for(const route of Object.values(serviceRoutes))writeFileSync(route.log,"");
-  let strict=true, strictTls=false, weakSni=null, delayRegistryPort=false;
+  let strict=true, strictTls=false, weakSni=null, delayRegistryPort=false, misrouteSecrets=false;
+  let misrouteSecretsSni="secrets.example.invalid", coverageStatus=404;
+  let secretsMisdeliveries=0;
   const pendingRegistry=[];
   const {createSecureContext}=await import("node:tls");
   const context=createSecureContext({key:readFileSync(join(dir,"key.pem")),cert:readFileSync(join(dir,"cert.pem"))});
@@ -311,22 +313,30 @@ test("the shared ingress probe proves both protocol refusals before backend deli
     const authority=req.headers[":authority"]||req.headers.host;
     const sni=req.socket.servername;
     const matched=authority===sni || authority===sni+":443";
+    if(misrouteSecrets&&sni===misrouteSecretsSni&&(authority==="approve.example.invalid"||authority==="approve.example.invalid:443")) {
+      secretsMisdeliveries++;
+      // This backend deliberately retains only health-request lines.
+      if(["/ready","/live"].includes(new URL(req.url,"https://fixture.invalid").pathname))
+        appendFileSync(serviceRoutes["secrets.example.invalid"].log,req.url+"\n");
+      res.writeHead(421);res.end();return;
+    }
     const delayed=delayRegistryPort&&req.httpVersionMajor===2&&sni==="registry.example.invalid"&&authority==="registry.example.invalid:444";
     if(strict&&!matched&&sni!==weakSni&&!delayed){res.writeHead(421);res.end();return}
     const host=authority?.split(":")[0];
     if(!Object.hasOwn(serviceRoutes,host)){res.writeHead(421);res.end();return}
-    const wanted=serviceRoutes[host].path;
-    if(new URL(req.url,"https://fixture.invalid").pathname!==wanted){res.writeHead(404);res.end();return}
+    const pathname=new URL(req.url,"https://fixture.invalid").pathname, wanted=serviceRoutes[host].path;
+    const loggable=host!=="secrets.example.invalid"||["/ready","/live"].includes(pathname);
     if(host==="registry.example.invalid"&&matched&&pendingRegistry.length)
       appendFileSync(serviceRoutes[host].log,pendingRegistry.splice(0).join("\n")+"\n");
     if(delayed)pendingRegistry.push(req.url);
-    else appendFileSync(serviceRoutes[host].log,req.url+"\n");
+    else if(loggable)appendFileSync(serviceRoutes[host].log,req.url+"\n");
     // A misrouted backend may itself return 421: status alone proves nothing.
-    res.writeHead(matched?200:421);res.end();
+    const status=!matched?421:pathname===wanted?200:coverageStatus;
+    res.writeHead(status,status===302?{Location:"https://outside.egress-probe.invalid/not-followed"}:{});res.end();
   });
   await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
   t.after(()=>new Promise(resolve=>{for(const s of sessions)s.destroy();server.closeAllConnections?.();server.close(resolve)}));
-  const options={address:"127.0.0.1",port:server.address().port,requestOrigin:"https://prepare.example.invalid",humanOrigin:"https://approve.example.invalid",ca:readFileSync(join(dir,"cert.pem")),requestLog,humanLog,requestPath:"/readyz",humanPath:"/handoff-assets/handoff.css"};
+  const options={address:"127.0.0.1",port:server.address().port,requestOrigin:"https://prepare.example.invalid",humanOrigin:"https://approve.example.invalid",ca:readFileSync(join(dir,"cert.pem")),requestLog,humanLog,requestPath:"/readyz",humanPath:"/handoff-assets/handoff.css",auditPath:"/ready"};
   assert.equal(await probeIngress(options),true);
   const policy=proxyPolicy();
   const routeLogs=Object.fromEntries(Object.entries(policy.targets).map(([role,target])=>{
@@ -334,8 +344,31 @@ test("the shared ingress probe proves both protocol refusals before backend deli
   }));
   const full={...options,address:policy.targets.signer.addresses[0],policy,routeLogs,exchange:args=>statusOf({...args,address:"127.0.0.1",port:options.port})};
   const before=Object.fromEntries(Object.entries(routeLogs).map(([role,route])=>[role,readFileSync(route.log,"utf8").length]));
+  const humanBefore=readFileSync(humanLog,"utf8").length;
   assert.equal(await probeIngress(full),true);
-  for(const [role,route] of Object.entries(routeLogs))assert.equal((readFileSync(route.log,"utf8").slice(before[role]).match(/oats_egress_probe=/g)||[]).length,4,role+" needs H1/H2 initial and final backend controls");
+  const humanLines=readFileSync(humanLog,"utf8").slice(humanBefore).trim().split("\n");
+  assert.equal(humanLines.filter(line=>line.startsWith("/handoff-assets/handoff.css?")).length,2,"valid human200 controls keep their CSS path");
+  assert.equal(humanLines.filter(line=>line.startsWith("/ready?")).length,4,"separate human log-coverage controls use the common audit path");
+  for(const [role,route] of Object.entries(routeLogs))assert.equal((readFileSync(route.log,"utf8").slice(before[role]).match(/oats_egress_probe=/g)||[]).length,8,role+" needs H1/H2 service controls and initial/final audit coverage");
+  misrouteSecrets=true;
+  await assert.rejects(()=>probeIngress(full),/forbidden probe reached a backend/,
+    "health-only Secrets logging must expose a delivered human-authority request even when its backend returns421");
+  assert.equal(secretsMisdeliveries,4,"the H1/H2 bare/explicit human authorities must actually reach the backend");
+  secretsMisdeliveries=0;misrouteSecretsSni="registry.example.invalid";
+  await assert.rejects(()=>probeIngress(full),/forbidden probe reached a backend/,
+    "a registry health-route misdelivery into Secrets must use the common observed path");
+  assert.equal(secretsMisdeliveries,4);
+  misrouteSecrets=false;
+  await assert.rejects(()=>probeIngress({...full,auditPath:"/audit-unlogged"}),/backend audit did not confirm/,
+    "a4xx without the route's common-path log witness cannot qualify coverage");
+  coverageStatus=503;
+  await assert.rejects(()=>probeIngress(full),/backend audit coverage control did not succeed/);
+  coverageStatus=302;
+  assert.equal(await probeIngress(full),true,"coverage redirects are observed without following a new destination");
+  coverageStatus=404;
+  await assert.rejects(()=>probeIngress({...full,exchange:args=>args.sni==="registry.example.invalid"&&args.authority===args.sni&&args.path.startsWith("/ready?")
+    ?Promise.reject(Object.assign(new Error("coverage timeout"),{code:"EGRESS_PROBE_TIMEOUT",tlsEstablished:true,beforeHttpResponse:true}))
+    :full.exchange(args)}),error=>error.code==="EGRESS_PROBE_TIMEOUT","coverage timeout cannot become a refusal PASS");
   delayRegistryPort=true;
   await assert.rejects(()=>probeIngress(full),/forbidden probe reached a backend/,
     "a route's buffered forbidden delivery must be flushed by a later matched control");
@@ -404,9 +437,9 @@ test("the shared ingress probe proves both protocol refusals before backend deli
 test("ingress control paths cannot select another origin or inject a fragment", async () => {
   const {probeIngress}=await import("../container/agent/egress/probe-ingress.mjs");
   for (const path of ["/\\other.invalid/ready","//other.invalid/ready","https://other.invalid/ready","/ready#fragment","/ready\r\nInjected"]) {
-    for (const field of ["requestPath","humanPath"]) await assert.rejects(()=>probeIngress({
+    for (const field of ["requestPath","humanPath","auditPath"]) await assert.rejects(()=>probeIngress({
       address:"127.0.0.1",requestOrigin:"https://prepare.example.invalid",humanOrigin:"https://approve.example.invalid",
-      [field]:path,requestLog:"/missing-audit",humanLog:"/missing-audit",
+      auditPath:"/ready",[field]:path,requestLog:"/missing-audit",humanLog:"/missing-audit",
     }),/ingress probe path is invalid/);
   }
 });

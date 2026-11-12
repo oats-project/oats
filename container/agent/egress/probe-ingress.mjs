@@ -76,7 +76,7 @@ function backendLog(path) {
 }
 
 export async function probeIngress({ address, port = 443, requestOrigin, humanOrigin, requestLog, humanLog,
-  ca, path = "/ready", requestPath, humanPath = path, policy, routeLogs, exchange = statusOf }) {
+  ca, path = "/ready", requestPath, humanPath = path, auditPath, policy, routeLogs, exchange = statusOf }) {
   const requestHost = originHost(requestOrigin), humanHost = originHost(humanOrigin);
   assert.ok(requestHost !== humanHost && isIP(address) === 4, "ingress probe needs distinct origins and an IPv4 address");
   assert.ok(Number.isInteger(port) && port > 0 && port <= 65535, "ingress probe port is invalid");
@@ -98,7 +98,7 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
     if(requestLog !== undefined)assert.equal(requestLog,signer.log,"signer backend log differs from per-route audit input");
     if(requestPath !== undefined)assert.equal(requestPath,signer.path,"signer control path differs from per-route audit input");
   } else routes=[{role:"signer",origin:requestOrigin,host:requestHost,addresses:[address],path:requestPath ?? path,log:requestLog}];
-  for (const controlPath of [humanPath,...routes.map(route=>route.path)]) {
+  for (const controlPath of [auditPath,humanPath,...routes.map(route=>route.path)]) {
     assert.ok(typeof controlPath === "string" && controlPath.startsWith("/") && !controlPath.startsWith("//")
       && !/[\\\u0000-\u0020\u007f#]/.test(controlPath), "ingress probe path is invalid");
     assert.equal(new URL(controlPath,requestOrigin).origin,new URL(requestOrigin).origin,"ingress probe path is invalid");
@@ -108,13 +108,15 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
   const matched=[],forbidden=[];
   const send=async(protocol,route,targetAddress,sni,authority,kind)=>{
     const id="oats-egress-"+randomUUID();
-    if(kind==="forbidden")forbidden.push(id);else matched.push({id,log:kind==="human"?humanLog:route.log});
-    const controlPath=authority===humanHost||authority===humanHost+":443"?humanPath:route.path;
+    if(kind==="forbidden")forbidden.push(id);else matched.push({id,log:kind==="human"||kind==="human-coverage"?humanLog:route.log});
+    const coverage=kind==="coverage"||kind==="human-coverage";
+    const controlPath=kind==="forbidden"||coverage?auditPath:kind==="human"?humanPath:route.path;
     const url=new URL(controlPath,route.origin);url.searchParams.set("oats_egress_probe",id);
     try {
       const status=await exchange({protocol,address:targetAddress,port,sni,authority,
         expectedHost:sni===humanHost?humanHost:route.host,path:url.pathname+url.search,ca});
-      assert.equal(status,kind==="forbidden"?421:200,
+      if(coverage)assert.ok(Number.isInteger(status)&&status>=200&&status<500,"backend audit coverage control did not succeed");
+      else assert.equal(status,kind==="forbidden"?421:200,
         kind==="forbidden"?"ingress did not refuse a forbidden authority":"matched ingress control did not succeed");
     } catch(error) {
       const refused=new Set(["ECONNRESET","EPIPE","ERR_SSL_TLSV1_UNRECOGNIZED_NAME","ERR_SSL_SSLV3_ALERT_HANDSHAKE_FAILURE","ERR_SSL_TLSV1_ALERT_UNRECOGNIZED_NAME"]);
@@ -129,6 +131,11 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
     }
   };
   for(const protocol of ["h1","h2"]) {
+    // Coverage controls establish logging at every backend for the same path
+    // used by negatives. Their 4xx responses never replace readiness controls.
+    for(const route of routes)for(const targetAddress of route.addresses)
+      await send(protocol,route,targetAddress,route.host,route.host,"coverage");
+    await send(protocol,routes.find(route=>route.role==="signer"),address,humanHost,humanHost,"human-coverage");
     const unknownChecked=new Set();
     for(const route of routes)for(const targetAddress of route.addresses) {
       await send(protocol,route,targetAddress,route.host,route.host,"matched");
@@ -142,6 +149,9 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
     // Each backend needs a later matched record to flush preceding deliveries.
     for(const route of routes)for(const targetAddress of route.addresses)
       await send(protocol,route,targetAddress,route.host,route.host,"matched");
+    for(const route of routes)for(const targetAddress of route.addresses)
+      await send(protocol,route,targetAddress,route.host,route.host,"coverage");
+    await send(protocol,routes.find(route=>route.role==="signer"),address,humanHost,humanHost,"human-coverage");
     await send(protocol,routes.find(route=>route.role==="signer"),address,humanHost,humanHost,"human");
   }
   const deadline=Date.now()+2000;
@@ -160,14 +170,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     const flags = { "--address":"address", "--request-origin":"requestOrigin", "--human-origin":"humanOrigin",
       "--request-log":"requestLog", "--human-log":"humanLog", "--ca-file":"caFile", "--path":"path",
-      "--request-path":"requestPath", "--human-path":"humanPath", "--policy":"policyFile", "--route-logs":"routeLogsFile" };
+      "--request-path":"requestPath", "--human-path":"humanPath", "--policy":"policyFile", "--route-logs":"routeLogsFile", "--audit-path":"auditPath" };
     const options = {};
     for (let index = 2; index < process.argv.length; index += 2) {
       const key = flags[process.argv[index]], value = process.argv[index + 1];
       assert.ok(key && !Object.hasOwn(options, key) && value && !value.startsWith("--"), "ingress probe arguments are invalid");
       options[key] = value;
     }
-    assert.ok(options.policyFile && options.routeLogsFile,"ingress admission requires the derived policy and per-route audit inputs");
+    assert.ok(options.policyFile && options.routeLogsFile && options.auditPath,"ingress admission requires the derived policy and audit inputs");
     const readJson=(file,max)=>{const stat=statSync(file);assert.ok(stat.isFile()&&stat.size<=max,"probe input file is invalid");return JSON.parse(readFileSync(file,"utf8"));};
     if(options.policyFile)options.policy=readJson(options.policyFile,65536);
     if(options.routeLogsFile)options.routeLogs=readJson(options.routeLogsFile,128*1024);

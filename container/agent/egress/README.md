@@ -83,7 +83,7 @@ listeners or upstreams. Exact authority and port comparisons are required.
 ## Ingress admission probe
 
 Both wrappers run the same probe from services-side connectivity before admitting
-agents. Capture the actual request and human backend access logs first; the logs
+agents. Capture all actual service and human backend access logs first; the logs
 must include request query strings. Do not use the TLS frontend access log as
 proof that a backend received nothing.
 
@@ -95,6 +95,7 @@ node /opt/egress/probe-ingress.mjs \
   --human-log <human-backend-log> \
   --ca-file <public-ca.pem> \
   --human-path /handoff-assets/handoff.css \
+  --audit-path /ready \
   --policy <derived-policy.json> \
   --route-logs <runtime-audit.json>
 ```
@@ -102,10 +103,23 @@ node /opt/egress/probe-ingress.mjs \
 The files are operator-side probe inputs; never mount backend logs into an agent.
 Log entries may name one file when surfaces share a backend process. Choose
 an existing, harmless endpoint returning 200 for each route in `--route-logs`;
-`--human-path` names the human surface. Forbidden human-authority cases use that
-human path. Certificate chain and service-name checks stay on.
+`--human-path` names the human surface. These matched service controls must
+return 200 at their existing paths, including the human CSS route.
+Certificate chain and service-name checks stay on.
 Without `--ca-file`, Node's normal trust configuration applies.
 
+`--audit-path` declares one common path whose request tags every backend can
+witness, such as `/ready` with health-only service logging. Before and after the
+negatives, separate matched-SNI/Host coverage controls call this path on every
+role/address and the human surface over HTTP/1.1 and HTTP/2. Coverage controls
+require verified TLS, an ordinary 2xx–4xx response and their tags in the
+appropriate backend logs. A 404 on this extra control can demonstrate logging;
+it never replaces a valid 200 service or human control. Redirects are observed
+without following another destination. A missing witness, TLS error, timeout or
+5xx fails qualification.
+
+All forbidden cases use that same witnessed audit path, so a cross-route
+misdelivery remains visible even to a backend that logs health paths only.
 The probe sends matched controls and forbidden authorities over HTTP/1.1 and
 HTTP/2. It includes the human host, explicit port 443, a wrong port, a hostname
 suffix, unknown SNI and absent SNI. Only 421 or specific connection/TLS refusals
@@ -117,13 +131,14 @@ response, and only for the enumerated unknown/absent-SNI cases. The same alert
 fails for known SNI or a matched control. Unique
 query tags must appear for matched controls in the appropriate backend log, and
 all forbidden tags must be absent from every supplied log. Final matched controls
-on each route and address, plus the human surface, provide later log records
-after the negative cases. Responses and log contents
+and common-path coverage on each route/address and the human surface provide
+later log records after the negative cases. Responses and log contents
 are never printed. Success prints exactly `OATS_EGRESS_INGRESS_PASS`; require
 that token and exit 0 before enabling the signer route and admitting agents.
 
 The CLI requires `--policy <derived-policy.json>` and
-`--route-logs <runtime-audit.json>` together; a partial signer-only call fails
+`--route-logs <runtime-audit.json>` and `--audit-path <common-path>` together;
+a partial signer-only call or missing audit path fails
 without an admission token. The latter file has exactly the policy's five role
 keys, each holding `{ "path": "/ready", "log": "/logs/aweb.log" }` for that
 role's harmless 200 endpoint and actual backend log. Use signer `/readyz` and
@@ -139,8 +154,9 @@ with matched controls and human-authority, wrong-port and suffix refusals.
 Unknown/absent SNI is tested per distinct address. Matched tags must reach their
 own backend log, including a final matched control after the negatives; no
 forbidden tag may reach any supplied backend. The wrappers require this complete
-proof before admission. `--ca-file` adds its public
-certificates to Node's normal public roots.
+proof before admission. The evidence covers the tested authority/path
+combinations, not arbitrary path-dependent forwarding or rewrites. `--ca-file`
+adds its public certificates to Node's normal public roots.
 
 ## Build and prove
 
@@ -165,7 +181,9 @@ capability restrictions.
 `python3 test/agent-egress-ingress-image.py IMAGE` exercises the packaged ingress
 CLI against disposable real HTTP/1.1 and HTTP/2 TLS routes with separate backend
 logs. It requires a signer-only call to fail, a complete five-route call to pass,
-and a forwarded human authority returning backend 421 to fail. It creates only
+and a forwarded human authority returning backend 421 to fail. It retains
+health-only Secrets and registry-to-Secrets misdelivery mutants, common-path
+witness refusal and the valid human CSS control. It creates only
 its own containers, internal network and temporary public trust fixture, and
 removes its private test key at cleanup. Python 3, OpenSSL and Docker are required;
 this is a transport regression, not an identity or mail-wake fixture.
