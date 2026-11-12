@@ -570,6 +570,26 @@ test("a home that used up its starts of the hour is reported keeps-getting-lost 
   assert.deepEqual([again.started, again.row.outcome], [1, OUTCOME.RESUMED], "the oldest start left the hour");
 });
 
+test("a home the sweep started that is lost again before any listing saw it running is started by the next sweeps, up to the hour's budget", { skip: bootId() ? false : "no boot id on this platform: nothing is counted" }, async (t) => {
+  const now = Date.now() + 60 * 60_000;
+  const f = await lostHome(t, "dies-at-once", now);
+  const path = join(f.home, "instance.json");
+  // A start gives the home a new start id; here its harness is gone before the sweep's answer.
+  let starts = 0;
+  const startsAndDies = async () => {
+    starts += 1;
+    writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, "utf8")), startId: `fixture-dies-at-once-${starts}` }));
+    return RESUMES();
+  };
+
+  for (let n = 0; n < RESUME_LIMIT; n += 1) {
+    const swept = await f.sweep(now + n * 60_000, startsAndDies);
+    assert.deepEqual([swept.started, swept.row.outcome], [1, OUTCOME.RESUMED], `sweep ${n + 1} starts it`);
+  }
+  const spent = await f.sweep(now + RESUME_LIMIT * 60_000, () => assert.fail("started with its starts of the hour used up"));
+  assert.deepEqual([spent.started, spent.row.outcome, spent.row.reason], [0, OUTCOME.REFUSED, ROW_REASON.KEEPS_GETTING_LOST]);
+});
+
 test("used-up hours are in a row when each begins less than an hour after the one before cleared; the same hour is counted once; only an hour without one begins again", () => {
   const at = (min) => new Date(T("12:00:00.000") + min * 60_000).toISOString();
   assert.deepEqual(spentHours(undefined, at(0)), { hours: 1, since: at(0) });

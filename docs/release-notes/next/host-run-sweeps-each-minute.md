@@ -8,6 +8,10 @@
   in a row. Before, a container that stayed up never started a lost agent
   again; only a restart of the container did.
 
+  A home the sweep started counts as seen running for that start. A home
+  that is lost again within the minute, before any read saw it running, is
+  therefore started again and counted, not left as `not-seen-recently`.
+
   The sweep replaces the listing `oats host run` ran each minute, and records
   what that listing recorded. A sweep that still runs at the next minute is
   not run beside itself. Progress says a sweep only when its outcomes differ

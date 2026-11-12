@@ -1350,7 +1350,9 @@ The sweep resumes a lost home only when OATS can vouch for the loss, from
 what its own reads of that home saw (`oats status`, OATS Desktop and `oats
 tui` reading it, and the sweep's own read). All four must hold:
 
-1. OATS saw the home running for its current start.
+1. OATS saw the home running for its current start. A start the sweep itself
+   made counts as seen, so a home that is lost again before any read saw it
+   running is still started again, within the hour's count below.
 2. No earlier sweep answered this loss. A sweep answers each lost home once,
    whatever it did with it (resumed, started fresh, blocked, refused or
    skipped), except a home it skipped because OATS was stopping, upgrading
