@@ -667,7 +667,7 @@ test('Teams tab: a poll that only re-stamps the workspace status keeps the page 
 test('Teams: a card opens its team\'s page in place of the tabs; Esc and Back return to the board, focus on that team\'s name; a tab change closes it', async t => {
   const u = await setup(t, { cli: { ...CLI, features: [...CLI.features, 'team-model-2'] }, teams: () => ({ status: 'ok', teams: K1_TEAMS() }),
     members: () => ({ members: [{ workspace: '/team', server: null, serverLabel: null, instance: 'rm-1', agent: 'release-manager', agentsRoot: dir, home: `${dir}/agents/release-manager/instances/rm-1`,
-      team: 'mine:juan.aweb.ai', running: true, addressable: true, missingRemotely: false, reason: null, reasonLabel: null, createdAt: null }], servers: [], notReached: [] }) });
+      team: 'mine:alex.aweb.ai', running: true, addressable: true, missingRemotely: false, reason: null, reasonLabel: null, createdAt: null }], servers: [], notReached: [] }) });
   await u.tab('teams');
   const page = u.doc.querySelector('.workspace-team-page'), header = u.doc.querySelector('.workspace-header'), board = u.doc.querySelector('.workspace-discovery');
   assert.equal(page.hidden, true); assert.equal(page.getAttribute('aria-label'), 'Team details');
@@ -695,10 +695,10 @@ test('Teams: a card opens its team\'s page in place of the tabs; Esc and Back re
 // A Make default confirmation opened on a team's page ends with the page: Esc leaves no confirmation behind on
 // the board's card, and the board's redraw barrier is released, so a roster change repaints it.
 test('Teams: Esc on a team\'s page with its Make default confirmation open closes both, and the board redraws again', async t => {
-  const doc = () => { const d = K1_TEAMS(); d.teams.push({ label: 'spare', team: 'spare:juan.aweb.ai', from: 'local', default: false, description: null }); return d; };
+  const doc = () => { const d = K1_TEAMS(); d.teams.push({ label: 'spare', team: 'spare:alex.aweb.ai', from: 'local', default: false, description: null }); return d; };
   const rm = (instance, team) => ({ workspace: '/team', server: null, serverLabel: null, instance, agent: 'release-manager', agentsRoot: dir, home: `${dir}/agents/release-manager/instances/${instance}`,
     team, running: true, addressable: true, missingRemotely: false, reason: null, reasonLabel: null, createdAt: null });
-  let members = [rm('rm-1', 'spare:juan.aweb.ai')];
+  let members = [rm('rm-1', 'spare:alex.aweb.ai')];
   const u = await setup(t, { cli: { ...CLI, features: [...CLI.features, 'team-model-2'] }, teams: () => ({ status: 'ok', teams: doc() }),
     members: () => ({ members, servers: [], notReached: [] }) });
   await u.tab('teams');
@@ -713,14 +713,14 @@ test('Teams: Esc on a team\'s page with its Make default confirmation open close
   assert.equal(u.doc.querySelector('.workspace-discovery .ct-confirm'), null, 'no confirmation left on the board\'s card');
   assert.equal(u.doc.activeElement, u.doc.querySelector('.ct-card[data-team="spare"] .ct-open'), 'back on the team\'s name');
   u.doc.activeElement.blur();
-  members = [rm('rm-1', 'spare:juan.aweb.ai'), rm('rm-2', 'spare:juan.aweb.ai')];
+  members = [rm('rm-1', 'spare:alex.aweb.ai'), rm('rm-2', 'spare:alex.aweb.ai')];
   await u.poll('2026-09-30T07:28:04.414Z');
   assert.equal(sum(), '2 of your instances', 'the roster change repaints the board');
   assert.deepEqual(u.calls.filter(c => c.path.startsWith('/api/workspace-teams')).map(c => c.body), [{ action: 'list' }], 'nothing sent');
 });
 
 test('Teams: removing the team from its page closes the page once the document answers, and focus goes to the Teams tab', async t => {
-  const doc = () => { const d = K1_TEAMS(); d.teams.push({ label: 'spare', team: 'spare:juan.aweb.ai', from: 'local', default: false, description: null }); return d; };
+  const doc = () => { const d = K1_TEAMS(); d.teams.push({ label: 'spare', team: 'spare:alex.aweb.ai', from: 'local', default: false, description: null }); return d; };
   let removed = false;
   const u = await setup(t, { cli: { ...CLI, features: [...CLI.features, 'team-model-2'] },
     teams: body => { if (body?.action === 'remove') removed = true; const d = doc(); if (removed) d.teams = d.teams.filter(x => x.label !== 'spare'); return { status: 'ok', teams: d }; } });
@@ -767,7 +767,7 @@ for (const outcome of ['success', 'rejection']) test(`Teams: opening a team supe
 // The Workspace pages do not name the deployment they read (the product owner, 2026-10-23): in a view of two
 // deployments a team's page edits the primary, as before (#482), with no "On <deployment>" line.
 test('Teams: in a view of two deployments a team\'s page shows no "On <deployment>" line', async t => {
-  const doc = () => { const d = K1_TEAMS(); d.teams.push({ label: 'spare', team: 'spare:juan.aweb.ai', from: 'local', default: false, description: null }); return d; };
+  const doc = () => { const d = K1_TEAMS(); d.teams.push({ label: 'spare', team: 'spare:alex.aweb.ai', from: 'local', default: false, description: null }); return d; };
   const u = await setup(t, { cli: { ...CLI, features: [...CLI.features, 'team-model-2'] }, teams: () => ({ status: 'ok', teams: doc() }) });
   t.after(resetViewDeployments);
   const deployments = second => [
@@ -795,7 +795,7 @@ test('#482: in a view of two deployments the Workspace pages read the primary th
   t.after(resetViewDeployments);
   const deployments = [
     { id: '/d1', machine: 'This Mac', path: '/Users/ana/Agents/first', label: '~/Agents/first', local: true, primary: true, reachable: true },
-    { id: '/d2', machine: 'altair', path: '/srv/first', label: '~/first', local: false, primary: false, reachable: true },
+    { id: '/d2', machine: 'devbox', path: '/srv/first', label: '~/first', local: false, primary: false, reachable: true },
   ];
   const u = await setup(t, { cli: { ...CLI, features: [...CLI.features, 'team-model-2'] }, teams: () => ({ status: 'ok', teams: K1_TEAMS() }),
     workspace: { primary: '/d1' }, beforeMount: () => notePanel({ workspace: { id: '/team', primary: '/d1' }, deployments }) });
@@ -803,7 +803,7 @@ test('#482: in a view of two deployments the Workspace pages read the primary th
   for (const tab of ['souls', 'capabilities', 'teams', 'sources']) {
     await u.tab(tab);
     assert.equal(u.doc.querySelector('.workspace-main .deployment-scope'), null, `${tab}: no "On <deployment>" line`);
-    assert.doesNotMatch(u.doc.querySelector('.workspace-main').textContent, /On This Mac|~\/Agents\/first|altair/, `${tab}: no deployment named`);
+    assert.doesNotMatch(u.doc.querySelector('.workspace-main').textContent, /On This Mac|~\/Agents\/first|devbox/, `${tab}: no deployment named`);
   }
   // A capability's page and a soul's page: no line either.
   await u.tab('capabilities');

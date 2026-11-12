@@ -202,7 +202,7 @@ test("main observes once, in the api handler, inside the accepted-panel-reply co
 test("main's shipped accepted-panel block observes only accepted panel replies, with their local deployments, and updates workspaces as before", () => {
   const { source } = acceptedBlock();
   const instances = [{ home: "/h/a" }], workspaces = [{ id: "w" }];
-  const deployments = [{ id: "/d", local: true }, { id: "remote:altair:a1", local: false }, { id: "/e", local: true }];
+  const deployments = [{ id: "/d", local: true }, { id: "remote:devbox:a1", local: false }, { id: "/e", local: true }];
   const run = ({ epoch = 7, serverEpoch = 7, transition = false, generation = true, ok = true, route = "panel", json = { instances, workspaces, deployments } } = {}) => {
     const seen = { observed: [], options: [], served: [] };
     const context = {

@@ -9,7 +9,7 @@ import { apiUrl, workspaceScoped, windowRefusal } from '../api-url.mjs';
 
 const VERIFIED = '/d/first';
 const WINDOW = 'ws:0123456789abcdef0123';
-const ADVERTISED = new Set([VERIFIED, WINDOW, '/d/second', 'remote:altair:/srv/agents']);
+const ADVERTISED = new Set([VERIFIED, WINDOW, '/d/second', 'remote:devbox:/srv/agents']);
 const SCOPED = ['/api/panel', '/api/agents', '/api/spawn', '/api/automations', '/api/forge-roster', '/api/team-members',
   '/api/instance-lifecycle', '/api/instance-git', '/api/instance-events', '/api/workspace-readiness', '/api/workspace-spawn-preview',
   '/api/workspace-sync', '/api/brain/notes', '/api/start/dev', '/api/restart/dev'];
@@ -42,7 +42,7 @@ test('bound window: an unadvertised workspace is refused on every workspace-scop
     // The window's own workspace, implicit, when the server stopped serving it.
     assert.equal(windowRefusal(path, '/d/gone', ADVERTISED), '/d/gone', path);
     // An explicit selector the server does not advertise: a path, a view id, a remote, any id.
-    for (const id of ['/d/gone', 'ws:ffffffffffffffffffff', 'remote:rigel:/x', 'anything']) {
+    for (const id of ['/d/gone', 'ws:ffffffffffffffffffff', 'remote:build:/x', 'anything']) {
       assert.equal(windowRefusal(`${path}?ws=${encodeURIComponent(id)}`, WINDOW, ADVERTISED), id, `${path} ${id}`);
     }
     // A duplicate selector naming one unadvertised id is refused too.
@@ -140,14 +140,14 @@ test('shipped api: a bound window\'s implicit read is its own workspace; an unbo
 });
 
 test('shipped api: a start or restart is pinned to its window, refused for an unserved workspace before the backend, and passes a served one unchanged (#818)', async () => {
-  const REMOTE = 'remote:altair:/srv/agents';
+  const REMOTE = 'remote:devbox:/srv/agents';
   for (const ep of ['start', 'restart']) {
     // No ws: the window's own workspace, the row's qualifiers untouched.
     const implicit = shippedApi({ window: WINDOW });
     assert.equal((await implicit.call(`/api/${ep}/dev?home=%2Fh`)).status, 200, ep);
     assert.deepEqual(implicit.fetched.map((u) => [u.pathname, u.searchParams.get('ws'), u.searchParams.get('home')]), [[`/api/${ep}/dev`, WINDOW, '/h']], ep);
     // An unserved ws, explicit (a path, a view id, a remote) or the window's own: refused, nothing fetched.
-    for (const id of ['/d/gone', 'ws:ffffffffffffffffffff', 'remote:rigel:/x']) {
+    for (const id of ['/d/gone', 'ws:ffffffffffffffffffff', 'remote:build:/x']) {
       const api = shippedApi({ window: WINDOW });
       const reply = await api.call(`/api/${ep}/dev?ws=${encodeURIComponent(id)}&home=%2Fh`);
       assert.equal(reply.status, 404, `${ep} ${id}`); assert.equal(reply.body.code, NOT_SERVED_CODE, `${ep} ${id}`); assert.equal(reply.body.workspace, id);
@@ -157,7 +157,7 @@ test('shipped api: a start or restart is pinned to its window, refused for an un
     assert.equal((await gone.call(`/api/${ep}/dev`)).body.code, NOT_SERVED_CODE, `${ep}: the window's own, no longer served`);
     assert.deepEqual(gone.fetched, []);
     // A served ws (a local deployment, a remote one): passed unchanged.
-    for (const [id, query] of [['/d/second', 'home=%2Fh'], [REMOTE, 'home=%2Fsrv%2Fh&server=altair']]) {
+    for (const [id, query] of [['/d/second', 'home=%2Fh'], [REMOTE, 'home=%2Fsrv%2Fh&server=devbox']]) {
       const api = shippedApi({ window: WINDOW });
       assert.equal((await api.call(`/api/${ep}/dev?${query}&ws=${encodeURIComponent(id)}`)).status, 200, `${ep} ${id}`);
       assert.equal(api.fetched.length, 1, `${ep} ${id}`);

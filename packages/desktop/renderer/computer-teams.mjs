@@ -424,7 +424,7 @@ export function openBlocked(m) {
 }
 /** A member's deployment (#482: `{id, machine, path}`, its `workspace` is that id), or null from an older route. */
 const memberDeployment = m => m.deployment && typeof m.deployment === 'object' && text(m.deployment.id) ? m.deployment : null;
-/** Members by deployment (#482), each headed by its machine label ("This Mac · ~/acme", "altair ·
+/** Members by deployment (#482), each headed by its machine label ("This Mac · ~/acme", "devbox ·
  * ~/acme"): this computer's first, then the other machines by label (code points), the server id, then the
  * deployment id breaking ties; within one, by instance name, then home. An answer without deployments (an older
  * route) groups by machine: "This computer", then each server. A group is not reached when every roster group its

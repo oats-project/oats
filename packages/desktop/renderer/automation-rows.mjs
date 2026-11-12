@@ -220,7 +220,7 @@ export function ownerParts(owner) {
   return m ? { host: m[1], login: m[2] } : null;
 }
 
-/** Who this machine's gh is logged in as on the owner's GitHub host: "github.com/pepe",
+/** Who this machine's gh is logged in as on the owner's GitHub host: "github.com/alex",
  * "not logged in", or null when the kernel does not say. */
 export function hostLogin(host, owner) {
   const parts = ownerParts(owner);

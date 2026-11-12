@@ -129,7 +129,7 @@ test("a pending spawn row that joins a cluster by its parent counts as a member"
 
 test("several deployments: a cluster's size is counted inside its section, and a collapse in one section moves nothing in another", () => {
   const D1 = { id: "/a", machine: "This Mac", path: "/a", label: "~/a", local: true, reachable: true, primary: true };
-  const D2 = { id: "remote:altair:b", machine: "altair", path: "/b", label: "~/b", local: false, reachable: true, primary: false };
+  const D2 = { id: "remote:devbox:b", machine: "devbox", path: "/b", label: "~/b", local: false, reachable: true, primary: false };
   const inD = (d, instance, extra = {}) => ({ instance, agent: "dev", home: `${d.path}/agents/dev/instances/${instance}`, agentsRoot: `${d.path}/agents`,
     running: true, deployment: { id: d.id }, ...extra });
   const roster = [

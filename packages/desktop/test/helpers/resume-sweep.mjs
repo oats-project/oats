@@ -37,7 +37,7 @@ export const deploymentTag = (id, machine = 'This computer', path = id) => ({ id
 /** The local deployment ids of a read (the trigger's `localDeploymentIds`): SWEEP_DEPLOYMENT alone. */
 export const SWEEP_LOCAL = Object.freeze([SWEEP_DEPLOYMENT]);
 /** A remote deployment's tag, as panelData gives a server's rows. */
-export const REMOTE_TAG = Object.freeze(deploymentTag('remote:altair:a1', 'altair', '/home/juan/oats'));
+export const REMOTE_TAG = Object.freeze(deploymentTag('remote:devbox:a1', 'devbox', '/home/alex/oats'));
 /** A roster instance row (as /api/panel serves one) of SWEEP_DEPLOYMENT whose session was lost and is not
  * running; `more` over it. */
 export const lostInstance = (instance, more = {}) =>

@@ -34,11 +34,11 @@ test("a repeated launch during startup waits for it, then is handed its argv and
   assert.equal(startSingleInstance(app, (argv, cwd) => launches.push([argv, cwd]), async () => {
     calls.push("start"); await pending;
   }), true);
-  app.emit("second-instance", {}, ["/Applications/OATS Desktop.app/Contents/MacOS/OATS Desktop", "--dir", "/d/a"], "/Users/juan");
+  app.emit("second-instance", {}, ["/Applications/OATS Desktop.app/Contents/MacOS/OATS Desktop", "--dir", "/d/a"], "/Users/alex");
   await tick();
   assert.deepEqual(calls, ["lock", "ready", "start"]); assert.deepEqual(launches, []);
   finish(); await tick();
-  assert.deepEqual(launches, [[["/Applications/OATS Desktop.app/Contents/MacOS/OATS Desktop", "--dir", "/d/a"], "/Users/juan"]]);
+  assert.deepEqual(launches, [[["/Applications/OATS Desktop.app/Contents/MacOS/OATS Desktop", "--dir", "/d/a"], "/Users/alex"]]);
   app.emit("second-instance", {}, [], "/"); await tick();
   assert.equal(calls.filter((x) => x === "start").length, 1, "one startup, one server");
   assert.equal(launches.length, 2);
@@ -51,8 +51,8 @@ const REORDERED = ["/x/Electron", "--user-data-dir=/u", "--dir", "--allow-file-a
 
 test("a second instance sends its own argv and working directory with the lock request", () => {
   const { app } = fixture(false);
-  startSingleInstance(app, () => {}, () => {}, { argv: ["/x/Electron", "/app", "--dir", "/d/beta"], workingDirectory: "/Users/juan" });
-  assert.deepEqual(app.lockData, { argv: ["/x/Electron", "/app", "--dir", "/d/beta"], workingDirectory: "/Users/juan" });
+  startSingleInstance(app, () => {}, () => {}, { argv: ["/x/Electron", "/app", "--dir", "/d/beta"], workingDirectory: "/Users/alex" });
+  assert.deepEqual(app.lockData, { argv: ["/x/Electron", "/app", "--dir", "/d/beta"], workingDirectory: "/Users/alex" });
 });
 
 test("the running instance reads the launch's own argv, not Chromium's reordered one", async () => {
@@ -60,9 +60,9 @@ test("the running instance reads the launch's own argv, not Chromium's reordered
   const launches = [];
   startSingleInstance(app, (argv, cwd) => launches.push([argv, cwd]), async () => {});
   await tick();
-  app.emit("second-instance", {}, REORDERED, "/", { argv: ["/x/Electron", "/app", "--dir", "/d/beta"], workingDirectory: "/Users/juan" });
+  app.emit("second-instance", {}, REORDERED, "/", { argv: ["/x/Electron", "/app", "--dir", "/d/beta"], workingDirectory: "/Users/alex" });
   await tick();
-  assert.deepEqual(launches, [[["/x/Electron", "/app", "--dir", "/d/beta"], "/Users/juan"]]);
+  assert.deepEqual(launches, [[["/x/Electron", "/app", "--dir", "/d/beta"], "/Users/alex"]]);
 });
 
 test("launch data of the wrong shape is not used: the event's own argv and directory are", async () => {
@@ -80,10 +80,10 @@ test("launch data of the wrong shape is not used: the event's own argv and direc
 // ── A launch of another version (an installer replaced while Desktop runs) ──
 
 test("a launch sends its version and what relaunches its copy: the AppImage file when there is one", () => {
-  const proc = (env) => ({ argv: ["/tmp/.mount_x/oats-desktop", "--dir", "/d"], cwd: () => "/home/j", env, execPath: "/tmp/.mount_x/oats-desktop" });
+  const proc = (env) => ({ argv: ["/tmp/.mount_x/oats-desktop", "--dir", "/d"], cwd: () => "/home/alex", env, execPath: "/tmp/.mount_x/oats-desktop" });
   const app = { getVersion: () => "0.67.1" };
-  assert.deepEqual(ownLaunch(app, proc({ APPIMAGE: "/home/j/OATS-Desktop-0.67.1.AppImage" })), { argv: ["/tmp/.mount_x/oats-desktop", "--dir", "/d"],
-    workingDirectory: "/home/j", version: "0.67.1", execPath: "/home/j/OATS-Desktop-0.67.1.AppImage" });
+  assert.deepEqual(ownLaunch(app, proc({ APPIMAGE: "/home/alex/OATS-Desktop-0.67.1.AppImage" })), { argv: ["/tmp/.mount_x/oats-desktop", "--dir", "/d"],
+    workingDirectory: "/home/alex", version: "0.67.1", execPath: "/home/alex/OATS-Desktop-0.67.1.AppImage" });
   assert.equal(ownLaunch(app, proc({})).execPath, "/tmp/.mount_x/oats-desktop", "a DEB or a checkout: its executable");
   assert.equal(ownLaunch(app, proc({ APPIMAGE: "" })).execPath, "/tmp/.mount_x/oats-desktop");
 });
@@ -106,7 +106,7 @@ async function handOver(data, { running = "0.65.0", handled = "win" } = {}) {
   for (let i = 0; i < 4; i++) await tick();
   return log;
 }
-const SENT = { argv: ["/m/oats-desktop", "--dir", "/d/a"], workingDirectory: "/w", version: "0.67.1", execPath: "/home/j/OATS.AppImage" };
+const SENT = { argv: ["/m/oats-desktop", "--dir", "/d/a"], workingDirectory: "/w", version: "0.67.1", execPath: "/home/alex/OATS.AppImage" };
 
 test("a different version: the launch is handled first, then handed on with its validated launch and window", async () => {
   assert.deepEqual(await handOver(SENT), [["launch", SENT.argv], ["other-version", SENT, "win"]]);
@@ -145,10 +145,10 @@ test("a launch whose handling fails is not followed by the version box", async (
 });
 
 test("the box: Restart into the launched version (default) or Keep the running one (cancel, Esc)", () => {
-  assert.deepEqual(versionHandoffBox("0.67.1", "0.65.0", "/home/j/OATS.AppImage"), {
+  assert.deepEqual(versionHandoffBox("0.67.1", "0.65.0", "/home/alex/OATS.AppImage"), {
     type: "info", title: "OATS Desktop", noLink: true,
     message: "OATS Desktop 0.67.1 was opened, but 0.65.0 is still running.",
-    detail: "The version you opened takes effect only after this one quits. Restarting closes Desktop's windows and starts 0.67.1 from /home/j/OATS.AppImage; your agents keep running in their sessions.",
+    detail: "The version you opened takes effect only after this one quits. Restarting closes Desktop's windows and starts 0.67.1 from /home/alex/OATS.AppImage; your agents keep running in their sessions.",
     buttons: ["Restart into 0.67.1", "Keep 0.65.0"], defaultId: 0, cancelId: 1,
   });
 });
@@ -163,7 +163,7 @@ test("the box with no usable relaunch path: one OK, and how to switch by hand", 
 });
 
 test("relaunch options: the sent execPath and the sent argv after its executable", () => {
-  assert.deepEqual(relaunchOptions(SENT), { execPath: "/home/j/OATS.AppImage", args: ["--dir", "/d/a"] });
+  assert.deepEqual(relaunchOptions(SENT), { execPath: "/home/alex/OATS.AppImage", args: ["--dir", "/d/a"] });
   assert.deepEqual(relaunchOptions({ ...SENT, argv: ["/m/oats-desktop"] }).args, []);
   assert.deepEqual(relaunchOptions({ ...SENT, argv: [] }).args, []);
 });
@@ -410,7 +410,7 @@ test("second launch with --dir and --instance: the workspace's window is opened 
 
 test("--instance only selects in the --dir deployment's window: no deployment, or a failed add, selects nothing", async () => {
   const instance = { ok: true, name: "dev-2" };
-  for (const [dir, o] of [["/Users/juan", opener()], [null, opener()], ["/d/new", opener({ admitFails: true })]]) {
+  for (const [dir, o] of [["/Users/alex", opener()], [null, opener()], ["/d/new", opener({ admitFails: true })]]) {
     assert.equal(await o.open(dir, instance), "recent window");
     assert.ok(!o.log.some(([k]) => k === "select"), String(dir));
   }
@@ -432,7 +432,7 @@ test("second launch with --dir for an open workspace: the add path finds it serv
 });
 
 test("second launch with a non-deployment, or no dir: nothing is admitted; the most recent window is focused", async () => {
-  for (const dir of ["/Users/juan", null]) {
+  for (const dir of ["/Users/alex", null]) {
     const o = opener();
     await o.open(dir);
     assert.deepEqual(o.log, [["focus-recent"]], String(dir));

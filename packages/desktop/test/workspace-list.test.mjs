@@ -24,7 +24,7 @@ const view = (name, fields = {}) => ({ id: `ws:${name.padEnd(20, "0")}`, name, t
 const A = view("alpha"), B = view("beta"), C = view("gamma");
 // A stale `shown` (main no longer sends it) changes nothing.
 const HELD = view("held", { shown: true });
-const LOOSE = view("loose", { id: "remote:vega:loose", deployments: ["remote:vega:loose"], machines: ["vega"], deploymentLabels: ["vega · loose"],
+const LOOSE = view("loose", { id: "remote:laptop:loose", deployments: ["remote:laptop:loose"], machines: ["laptop"], deploymentLabels: ["laptop · loose"],
   unattached: true, short: "Not reached" });
 
 function setup(t, overrides = {}) {
@@ -102,7 +102,7 @@ test("a row is one line, the roster's circle and the name: no other mark, icon, 
     }
     assert.equal(button.textContent, name.textContent);
     assert.equal(button.title, name.textContent, "the tooltip is the name");
-    assert.ok(!/This Mac|vega|\/h\/|~\//.test(button.title), "no machine, no path");
+    assert.ok(!/This Mac|laptop|\/h\/|~\//.test(button.title), "no machine, no path");
   }
   assert.deepEqual(s.rows().map((b) => b.textContent), ["alpha", "held", "busy", "loose"]);
   assert.equal(s.row(HELD.id).dataset.otherWindow, undefined, "not marked as another window's");
@@ -124,11 +124,11 @@ test("two of one name without keys are never told apart by where they are: no fo
   const s = setup(t);
   // Local folders (an older server, an unmatched deployment) and remote ones, named alike, with no workspace key.
   const a = { id: "/org-a/oats", name: "oats" }, b = { id: "/org-b/oats", name: "oats" };
-  const c = { id: "remote:vega:t1", name: "tsm", machines: ["vega"] }, d = { id: "remote:rigel:t2", name: "tsm", machines: ["rigel"], team: { name: "Acme" } };
+  const c = { id: "remote:laptop:t1", name: "web", machines: ["laptop"] }, d = { id: "remote:build:t2", name: "web", machines: ["build"], team: { name: "Acme" } };
   s.controller.begin()(a, [a, b, c, d]); await tick();
-  assert.deepEqual(s.rows().map((r) => r.textContent), ["oats", "oats", "tsm", "tsm — Acme"], "a team names a workspace; a folder or a machine does not");
-  assert.deepEqual(s.rows().map((r) => r.title), ["oats", "oats", "tsm", "tsm — Acme"]);
-  for (const r of s.rows()) assert.doesNotMatch(`${r.textContent} ${r.title}`, /org-a|org-b|\/|vega|rigel/);
+  assert.deepEqual(s.rows().map((r) => r.textContent), ["oats", "oats", "web", "web — Acme"], "a team names a workspace; a folder or a machine does not");
+  assert.deepEqual(s.rows().map((r) => r.title), ["oats", "oats", "web", "web — Acme"]);
+  for (const r of s.rows()) assert.doesNotMatch(`${r.textContent} ${r.title}`, /org-a|org-b|\/|laptop|build/);
   // The list's description names the current workspace the same way: a screen reader hears no folder either.
   assert.equal(s.document.getElementById("ws-list").getAttribute("aria-description"), "Current workspace: oats");
 });

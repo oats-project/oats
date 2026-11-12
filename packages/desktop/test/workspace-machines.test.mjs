@@ -5,8 +5,8 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createWorkspaceMachines, resetMachineChecks } from '../renderer/workspace-machines.mjs';
 
-const WS = 'ws:0123456789abcdef0123', KEY = 'github.com/awebai/ac', DEPLOYMENT = '/Users/juanre/Agents/aweb';
-const machine = (id, extra = {}) => ({ id, label: id.split('-')[0], sshHost: id.split('-')[0], workspace: `/home/j/${id}`, workspaceKey: KEY, check: null, ...extra });
+const WS = 'ws:0123456789abcdef0123', KEY = 'github.com/example/ac', DEPLOYMENT = '/Users/alex/Agents/aweb';
+const machine = (id, extra = {}) => ({ id, label: id.split('-')[0], sshHost: id.split('-')[0], workspace: `/home/alex/${id}`, workspaceKey: KEY, check: null, ...extra });
 const answer = (servers, extra = {}) => ({ servers, filtered: true, key: KEY, deployment: DEPLOYMENT, aweb: false, ...extra });
 const settle = async () => { for (let i = 0; i < 10; i++) await new Promise(r => setImmediate(r)); };
 
@@ -35,7 +35,7 @@ test('lists this workspace\'s machines (name, host, folder, OATS version, reacha
   let released;
   const gate = new Promise(r => { released = r; });
   const u = setup(t, {
-    '/api/servers': () => answer([machine('altair-aweb'), machine('vega-aweb', { check: { reachable: false, version: null, error: 'ssh to vega failed: timeout' } })]),
+    '/api/servers': () => answer([machine('devbox-aweb'), machine('laptop-aweb', { check: { reachable: false, version: null, error: 'ssh to laptop failed: timeout' } })]),
     '/api/server-check': async body => { await gate; return { id: body.id, check: { reachable: true, version: '0.39.0', error: null } }; },
   });
   await settle();
@@ -45,16 +45,16 @@ test('lists this workspace\'s machines (name, host, folder, OATS version, reacha
   assert.equal(u.q('.setup-scope'), null);
   assert.deepEqual([...u.q('.setup-box-head').children].map(c => c.className), ['', 'setup-box-lead', 'machines-add']);
   assert.deepEqual(u.calls.map(c => c.path), [`/api/servers?ws=${encodeURIComponent(WS)}`, `/api/server-check?ws=${encodeURIComponent(WS)}`]);
-  assert.deepEqual(u.cells('altair-aweb'), ['altair-aweb', 'altair', '/home/j/altair-aweb', '', 'checking…']);
-  assert.deepEqual(u.cells('vega-aweb'), ['vega-aweb', 'vega', '/home/j/vega-aweb', '', 'not reachable'], 'a held check is shown, not re-run');
-  assert.equal(u.row('vega-aweb').querySelector('.machine-state').title, 'ssh to vega failed: timeout');
-  assert.equal(u.row('vega-aweb').querySelector('.machine-state').dataset.reachable, 'false', 'the warn chip');
+  assert.deepEqual(u.cells('devbox-aweb'), ['devbox-aweb', 'devbox', '/home/alex/devbox-aweb', '', 'checking…']);
+  assert.deepEqual(u.cells('laptop-aweb'), ['laptop-aweb', 'laptop', '/home/alex/laptop-aweb', '', 'not reachable'], 'a held check is shown, not re-run');
+  assert.equal(u.row('laptop-aweb').querySelector('.machine-state').title, 'ssh to laptop failed: timeout');
+  assert.equal(u.row('laptop-aweb').querySelector('.machine-state').dataset.reachable, 'false', 'the warn chip');
   // Narrow rows hide the ssh host, folder and version: the name's title keeps them.
-  assert.equal(u.row('vega-aweb').querySelector('.machine-cell.name').title, 'vega-aweb · vega · vega · /home/j/vega-aweb');
+  assert.equal(u.row('laptop-aweb').querySelector('.machine-cell.name').title, 'laptop-aweb · laptop · laptop · /home/alex/laptop-aweb');
   released(); await settle();
-  assert.deepEqual(u.cells('altair-aweb'), ['altair-aweb', 'altair', '/home/j/altair-aweb', 'oats 0.39.0', 'reachable']);
-  assert.ok(u.row('altair-aweb').querySelector('.machine-state[data-reachable=true] svg'), 'reachable: a check and a muted word');
-  assert.equal(u.row('altair-aweb').querySelector('.machine-cell.name').title, 'altair-aweb · altair · altair · /home/j/altair-aweb · oats 0.39.0');
+  assert.deepEqual(u.cells('devbox-aweb'), ['devbox-aweb', 'devbox', '/home/alex/devbox-aweb', 'oats 0.39.0', 'reachable']);
+  assert.ok(u.row('devbox-aweb').querySelector('.machine-state[data-reachable=true] svg'), 'reachable: a check and a muted word');
+  assert.equal(u.row('devbox-aweb').querySelector('.machine-cell.name').title, 'devbox-aweb · devbox · devbox · /home/alex/devbox-aweb · oats 0.39.0');
   u.ui.refresh(); await settle();
   assert.equal(u.calls.filter(c => c.path.startsWith('/api/server-check')).length, 1, 'once per machine per run');
 });
@@ -62,51 +62,51 @@ test('lists this workspace\'s machines (name, host, folder, OATS version, reacha
 test('Check re-runs the check for that machine and shows what it said', async t => {
   let n = 0;
   const u = setup(t, {
-    '/api/servers': () => answer([machine('altair-aweb', { check: { reachable: true, version: '0.38.0', error: null } })]),
+    '/api/servers': () => answer([machine('devbox-aweb', { check: { reachable: true, version: '0.38.0', error: null } })]),
     '/api/server-check': body => ({ id: body.id, check: ++n === 1 ? { reachable: false, version: null, error: 'ssh failed' } : null }),
   });
   await settle();
   assert.equal(u.calls.length, 1, 'checked already: no background check');
-  const check = u.row('altair-aweb').querySelector('.machine-check');
-  assert.equal(check.getAttribute('aria-label'), 'Check altair-aweb');
+  const check = u.row('devbox-aweb').querySelector('.machine-check');
+  assert.equal(check.getAttribute('aria-label'), 'Check devbox-aweb');
   check.click(); await settle();
-  assert.deepEqual(u.calls.at(-1), { path: `/api/server-check?ws=${encodeURIComponent(WS)}`, body: { id: 'altair-aweb' } });
-  assert.equal(u.cells('altair-aweb')[4], 'not reachable');
-  assert.equal(u.doc.activeElement, u.row('altair-aweb').querySelector('.machine-check'), 'focus stays on Check');
+  assert.deepEqual(u.calls.at(-1), { path: `/api/server-check?ws=${encodeURIComponent(WS)}`, body: { id: 'devbox-aweb' } });
+  assert.equal(u.cells('devbox-aweb')[4], 'not reachable');
+  assert.equal(u.doc.activeElement, u.row('devbox-aweb').querySelector('.machine-check'), 'focus stays on Check');
 });
 
 test('Remove asks first; Cancel keeps it; confirming removes it through the CLI and re-reads the list', async t => {
-  let servers = [machine('altair-aweb', { check: { reachable: true, version: '0.39.0', error: null } })];
+  let servers = [machine('devbox-aweb', { check: { reachable: true, version: '0.39.0', error: null } })];
   const u = setup(t, {
     '/api/servers': () => answer(servers),
     '/api/server-remove': body => { servers = []; return { schemaVersion: 1, ok: true, result: { removed: body.id, remoteInstancesStillTracked: [] } }; },
   });
   await settle();
-  u.row('altair-aweb').querySelector('.machine-remove').click();
-  const confirm = u.row('altair-aweb').querySelector('.machine-confirm');
-  assert.equal(confirm.querySelector('p').textContent, 'Remove altair-aweb? Instances spawned there keep running and can still be retired from here.');
+  u.row('devbox-aweb').querySelector('.machine-remove').click();
+  const confirm = u.row('devbox-aweb').querySelector('.machine-confirm');
+  assert.equal(confirm.querySelector('p').textContent, 'Remove devbox-aweb? Instances spawned there keep running and can still be retired from here.');
   assert.equal(u.doc.activeElement, confirm.querySelector('.machine-confirm-cancel'));
   confirm.querySelector('.machine-confirm-cancel').click();
-  assert.equal(u.row('altair-aweb').querySelector('.machine-confirm'), null);
-  assert.equal(u.doc.activeElement, u.row('altair-aweb').querySelector('.machine-remove'));
+  assert.equal(u.row('devbox-aweb').querySelector('.machine-confirm'), null);
+  assert.equal(u.doc.activeElement, u.row('devbox-aweb').querySelector('.machine-remove'));
   assert.equal(u.calls.filter(c => c.path.startsWith('/api/server-remove')).length, 0);
-  u.row('altair-aweb').querySelector('.machine-remove').click();
-  u.row('altair-aweb').querySelector('.machine-confirm-remove').click(); await settle();
-  assert.deepEqual(u.calls.find(c => c.path.startsWith('/api/server-remove')).body, { id: 'altair-aweb' });
-  assert.equal(u.row('altair-aweb'), null);
+  u.row('devbox-aweb').querySelector('.machine-remove').click();
+  u.row('devbox-aweb').querySelector('.machine-confirm-remove').click(); await settle();
+  assert.deepEqual(u.calls.find(c => c.path.startsWith('/api/server-remove')).body, { id: 'devbox-aweb' });
+  assert.equal(u.row('devbox-aweb'), null);
   assert.equal(u.q('.setup-empty').textContent, 'No machine runs this workspace yet.');
   assert.equal(u.doc.activeElement, u.q('.machines-add'));
 });
 
 test('a refused Remove is said in the row, in the CLI\'s words', async t => {
   const u = setup(t, {
-    '/api/servers': () => answer([machine('altair-aweb', { check: { reachable: true, version: '0.39.0', error: null } })]),
+    '/api/servers': () => answer([machine('devbox-aweb', { check: { reachable: true, version: '0.39.0', error: null } })]),
     '/api/server-remove': () => ({ schemaVersion: 1, ok: false, error: { code: 'E_SERVERS_UNREADABLE', message: 'servers.json is not valid JSON' } }),
   });
   await settle();
-  u.row('altair-aweb').querySelector('.machine-remove').click();
-  u.row('altair-aweb').querySelector('.machine-confirm-remove').click(); await settle();
-  assert.equal(u.row('altair-aweb').querySelector('.machine-error').textContent, 'servers.json is not valid JSON (E_SERVERS_UNREADABLE)');
+  u.row('devbox-aweb').querySelector('.machine-remove').click();
+  u.row('devbox-aweb').querySelector('.machine-confirm-remove').click(); await settle();
+  assert.equal(u.row('devbox-aweb').querySelector('.machine-error').textContent, 'servers.json is not valid JSON (E_SERVERS_UNREADABLE)');
 });
 
 test('Add a machine opens the dialog for this workspace; an added machine is listed', async t => {
@@ -121,11 +121,11 @@ test('Add a machine opens the dialog for this workspace; an added machine is lis
   u.q('.machines-add').click();
   assert.ok(u.q('.machine-dialog'));
   assert.equal(u.q('.machine-folder').value, '', 'no folder is suggested');
-  const host = u.q('.machine-host'); host.value = 'altair'; host.dispatchEvent(new u.dom.window.Event('input', { bubbles: true }));
+  const host = u.q('.machine-host'); host.value = 'devbox'; host.dispatchEvent(new u.dom.window.Event('input', { bubbles: true }));
   const folder = u.q('.machine-folder'); folder.value = '~/aweb'; folder.dispatchEvent(new u.dom.window.Event('input', { bubbles: true }));
   u.q('.machine-primary').click(); await settle();
   assert.equal(u.q('.machine-dialog'), null);
-  assert.ok(u.row('altair-aweb'));
+  assert.ok(u.row('devbox-aweb'));
   assert.equal(u.doc.activeElement, u.q('.machines-add'));
 });
 
@@ -135,7 +135,7 @@ test('no workspace key: the box says why and offers nothing; gates off: no box a
   await settle();
   assert.equal(u.q('.machines-reason').textContent, reason);
   assert.equal(u.q('.machines-add'), null);
-  const off = setup(t, { '/api/servers': () => ({ servers: [{ id: 'altair-tsm', label: 'altair', sshHost: 'altair', workspace: '/srv' }] }) });
+  const off = setup(t, { '/api/servers': () => ({ servers: [{ id: 'devbox-web', label: 'devbox', sshHost: 'devbox', workspace: '/srv' }] }) });
   await settle();
   assert.equal(off.ui.element.hidden, true);
 });
@@ -162,23 +162,23 @@ test('the registry could not be read (the route\'s own answer): the CLI\'s words
 });
 
 test('while the server learns unknown keys the box reads again, and shows the machines it found', async t => {
-  const answers = [answer([machine('altair-aweb', { check: { reachable: true, version: '0.39.0', error: null } })], { backfilling: true }),
-    answer([machine('altair-aweb', { check: { reachable: true, version: '0.39.0', error: null } }), machine('legacy', { check: { reachable: true, version: '0.38.0', error: null } })])];
+  const answers = [answer([machine('devbox-aweb', { check: { reachable: true, version: '0.39.0', error: null } })], { backfilling: true }),
+    answer([machine('devbox-aweb', { check: { reachable: true, version: '0.39.0', error: null } }), machine('legacy', { check: { reachable: true, version: '0.38.0', error: null } })])];
   const u = setup(t, { '/api/servers': () => answers.length > 1 ? answers.shift() : answers[0] }, { backfillDelay: 0 });
   for (let i = 0; i < 4; i++) { await settle(); await new Promise(r => setTimeout(r, 0)); }
-  assert.deepEqual(u.qa('[data-machine]').map(r => r.dataset.machine), ['altair-aweb', 'legacy']);
+  assert.deepEqual(u.qa('[data-machine]').map(r => r.dataset.machine), ['devbox-aweb', 'legacy']);
   assert.equal(u.calls.filter(c => c.path.startsWith('/api/servers')).length, 2);
 });
 
 test('a Check that answers late leaves focus where a newer press put it', async t => {
   let release;
   const u = setup(t, {
-    '/api/servers': () => answer([machine('altair-aweb', { check: { reachable: true, version: '0.39.0', error: null } })]),
-    '/api/server-check': () => new Promise(r => { release = () => r({ id: 'altair-aweb', check: { reachable: true, version: '0.39.0', error: null } }); }),
+    '/api/servers': () => answer([machine('devbox-aweb', { check: { reachable: true, version: '0.39.0', error: null } })]),
+    '/api/server-check': () => new Promise(r => { release = () => r({ id: 'devbox-aweb', check: { reachable: true, version: '0.39.0', error: null } }); }),
   });
   await settle();
-  u.row('altair-aweb').querySelector('.machine-check').click(); await settle();
-  u.row('altair-aweb').querySelector('.machine-remove').click();
+  u.row('devbox-aweb').querySelector('.machine-check').click(); await settle();
+  u.row('devbox-aweb').querySelector('.machine-remove').click();
   assert.equal(u.doc.activeElement.className, 'machine-confirm-cancel');
   release(); await settle();
   assert.equal(u.doc.activeElement.className, 'machine-confirm-cancel');
@@ -188,11 +188,11 @@ test('an owner that moved on: no answer renders or starts the next step, and the
   let owned = true, release;
   const u = setup(t, {
     '/api/servers': () => answer([], { aweb: true }),
-    '/api/server-connect': body => body.phase === 'connect' ? new Promise(r => { release = () => r({ schemaVersion: 1, ok: true, result: { id: 'altair-aweb', ready: true, steps: [{ step: 'register', status: 'done' }] } }); }) : assert.fail('no messaging step'),
+    '/api/server-connect': body => body.phase === 'connect' ? new Promise(r => { release = () => r({ schemaVersion: 1, ok: true, result: { id: 'devbox-aweb', ready: true, steps: [{ step: 'register', status: 'done' }] } }); }) : assert.fail('no messaging step'),
   }, { owns: () => owned });
   await settle();
   u.q('.machines-add').click();
-  const host = u.q('.machine-host'); host.value = 'altair'; host.dispatchEvent(new u.dom.window.Event('input', { bubbles: true }));
+  const host = u.q('.machine-host'); host.value = 'devbox'; host.dispatchEvent(new u.dom.window.Event('input', { bubbles: true }));
   const folder = u.q('.machine-folder'); folder.value = '~/aweb'; folder.dispatchEvent(new u.dom.window.Event('input', { bubbles: true }));
   u.q('.machine-primary').click(); await settle();
   owned = false; release(); await settle();
@@ -208,7 +208,7 @@ test('#1879: above the tested bound Add, Check and Remove are held back with the
   await cs.refreshCli(cliCtx);
   t.after(() => cs.resetCliStateForTests());
   const u = setup(t, {
-    '/api/servers': () => answer([machine('altair-aweb')]),
+    '/api/servers': () => answer([machine('devbox-aweb')]),
     '/api/server-check': body => ({ id: body.id, check: { reachable: true, version: '0.70.1', error: null } }),
   });
   await settle();

@@ -512,7 +512,7 @@ answers the view that holds it; no `?ws=` answers the first view.
   stale?, reason?, short?, fix?, note?}`. `machine` is "This Mac" (the Desktop's label for the
   machine it runs on, `thisMachine` of `renderer/desktop-terms.mjs`) or the server's label, else its
   id. `deploymentLabel` (`packages/client/deployment-label.mjs`) shows it as "This
-  Mac · ~/acme" or "altair · ~/northwind": the home directory as
+  Mac · ~/acme" or "devbox · ~/northwind": the home directory as
   `~` (on a remote, a `/Users/<name>` or `/home/<name>` prefix, a display
   guess) and the last two segments of a long path. A deployment is live
   (`reachable`), not reached (with its `reason`), remembered
@@ -630,8 +630,8 @@ writes the file when that answer says the memory changed.
 
 - Only a reached group with an identity is a report, and a fresh report
   always wins. A group that reports another workspace moves to that view, and
-  its deployment says so for the session ("altair now reports workspace
-  tsm.").
+  its deployment says so for the session ("devbox now reports workspace
+  web.").
 - An unreachable group with a remembered identity stays in its view, not
   reached, with `identityFrom: "remembered"`.
 - Memory never attaches a local deployment.
@@ -647,8 +647,8 @@ switcher ("ssh needs a prompt", "OATS too old to report its workspace");
 `reason`, the one plain sentence; and `fix`, the plain steps (none when the
 sentence already says what happens next, as for a timeout). The sentences:
 
-- ssh needs a prompt or a host key (`E_SSH`): "altair needs ssh to connect
-  without a prompt; run `ssh altair` once in a terminal."
+- ssh needs a prompt or a host key (`E_SSH`): "devbox needs ssh to connect
+  without a prompt; run `ssh devbox` once in a terminal."
 - Timed out (`E_CLI_TIMEOUT`). The kernel reports an ssh that timed out as
   `E_SSH`, with ssh's own text or, when its own deadline ended the call,
   "timed out: no answer within N s", so a timeout is recognised from that

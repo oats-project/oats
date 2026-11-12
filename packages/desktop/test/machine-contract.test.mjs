@@ -17,20 +17,20 @@ test('gates: servers-per-workspace and server-connect from the probe; the aweb s
 });
 
 test('the Name default: <host>-<deployment dir basename> made a valid id (Folder has none, #1390)', () => {
-  assert.equal(machineName('altair', '/Users/juanre/Agents/aweb'), 'altair-aweb');
-  assert.equal(machineName('Altair.local', '/Users/j/My Agents_v2'), 'altair-local-my-agents-v2');
-  assert.equal(machineName('', '/Users/j/aweb'), '', 'no host yet: no name');
+  assert.equal(machineName('devbox', '/Users/alex/Agents/aweb'), 'devbox-aweb');
+  assert.equal(machineName('Devbox.local', '/Users/alex/My Agents_v2'), 'devbox-local-my-agents-v2');
+  assert.equal(machineName('', '/Users/alex/aweb'), '', 'no host yet: no name');
   assert.equal(machineName('a'.repeat(70), '/x/y'), 'a'.repeat(64), 'bounded to the id length');
 });
 
 test('field problems: the kernel\'s own rules (id, ssh host, a folder on the host)', () => {
-  const ok = { id: 'altair-aweb', host: 'altair', folder: '~/aweb' };
+  const ok = { id: 'devbox-aweb', host: 'devbox', folder: '~/aweb' };
   assert.equal(machineFieldProblem(ok), null);
   assert.equal(machineFieldProblem({ ...ok, folder: '/srv/aweb' }), null);
   assert.deepEqual(machineFieldProblem({ ...ok, host: '' }), { field: 'host', text: 'Type the machine\'s ssh host alias.' });
-  assert.equal(machineFieldProblem({ ...ok, host: 'juan@altair' }).field, 'host');
+  assert.equal(machineFieldProblem({ ...ok, host: 'alex@devbox' }).field, 'host');
   assert.equal(machineFieldProblem({ ...ok, host: '-oProxyCommand=x' }).field, 'host');
-  assert.equal(machineFieldProblem({ ...ok, id: 'Altair' }).field, 'id');
+  assert.equal(machineFieldProblem({ ...ok, id: 'Devbox' }).field, 'id');
   assert.equal(machineFieldProblem({ ...ok, id: '' }).field, 'id');
   assert.equal(machineFieldProblem({ ...ok, folder: 'aweb' }).field, 'folder');
   assert.deepEqual(machineFieldProblem({ ...ok, folder: '' }), { field: 'folder', text: 'The folder is a path on that machine, starting with / or ~/.' }, 'required: no default fills it');
@@ -41,16 +41,16 @@ test('field problems: the kernel\'s own rules (id, ssh host, a folder on the hos
 const STEPS = [
   { step: 'ssh', status: 'ok' },
   { step: 'oats', status: 'done', detail: 'installed @awebai/oats 0.39.0 (was missing)' },
-  { step: 'git', status: 'needs-human', code: 'E_REMOTE_UNREADABLE', detail: 'altair cannot read github.com/awebai/ac',
-    remedy: 'On altair run `gh auth login`, then `gh auth setup-git`.', hint: 'keychain-non-interactive' },
+  { step: 'git', status: 'needs-human', code: 'E_REMOTE_UNREADABLE', detail: 'devbox cannot read github.com/example/ac',
+    remedy: 'On devbox run `gh auth login`, then `gh auth setup-git`.', hint: 'keychain-non-interactive' },
   { step: 'deployment', status: 'skipped', detail: 'waits for git' },
   { step: 'register', status: 'skipped' },
   { step: 'readiness', status: 'skipped' },
 ];
 
 test('a connect result: its steps as the CLI sent them, ready and the registration', () => {
-  const out = connectOutcome({ ok: true, result: { id: 'altair-aweb', ready: false, registration: { sshHost: 'altair' }, steps: STEPS, human: [] } });
-  assert.equal(out.ok, true); assert.equal(out.ready, false); assert.equal(out.id, 'altair-aweb');
+  const out = connectOutcome({ ok: true, result: { id: 'devbox-aweb', ready: false, registration: { sshHost: 'devbox' }, steps: STEPS, human: [] } });
+  assert.equal(out.ok, true); assert.equal(out.ready, false); assert.equal(out.id, 'devbox-aweb');
   assert.deepEqual(out.steps, STEPS);
   assert.equal(out.error, null);
 });
@@ -64,8 +64,8 @@ test('a failed connect: the steps so far (error.details.steps), then the failed 
 });
 
 test('a refusal with no steps keeps its code and message; a shape the contract does not allow is dropped, never guessed', () => {
-  assert.deepEqual(connectOutcome({ ok: false, error: { code: 'E_SERVER_WORKSPACE_MISMATCH', message: 'altair reports another workspace' } }),
-    { ok: false, ready: false, id: null, steps: [], error: { code: 'E_SERVER_WORKSPACE_MISMATCH', message: 'altair reports another workspace' } });
+  assert.deepEqual(connectOutcome({ ok: false, error: { code: 'E_SERVER_WORKSPACE_MISMATCH', message: 'devbox reports another workspace' } }),
+    { ok: false, ready: false, id: null, steps: [], error: { code: 'E_SERVER_WORKSPACE_MISMATCH', message: 'devbox reports another workspace' } });
   const odd = connectOutcome({ ok: true, result: { ready: true, steps: [{ step: 'ssh', status: 'weird' }, { step: 'oats' }, 'x', { step: 'git', status: 'ok', detail: 7 }] } });
   assert.deepEqual(odd.steps, [{ step: 'git', status: 'ok' }]);
   assert.equal(connectOutcome(null).ok, false);

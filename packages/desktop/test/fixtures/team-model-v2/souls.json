@@ -18,7 +18,7 @@
         "teams": [
           {
             "label": "mine",
-            "team": "mine:juan.aweb.ai",
+            "team": "mine:alex.aweb.ai",
             "default": true,
             "from": "local"
           },
@@ -31,7 +31,7 @@
         ],
         "defaultTeam": {
           "label": "mine",
-          "team": "mine:juan.aweb.ai",
+          "team": "mine:alex.aweb.ai",
           "from": "deployment"
         },
         "private": false,
@@ -57,7 +57,7 @@
         "teams": [
           {
             "label": "mine",
-            "team": "mine:juan.aweb.ai",
+            "team": "mine:alex.aweb.ai",
             "default": true,
             "from": "local"
           },
@@ -70,7 +70,7 @@
         ],
         "defaultTeam": {
           "label": "mine",
-          "team": "mine:juan.aweb.ai",
+          "team": "mine:alex.aweb.ai",
           "from": "deployment"
         },
         "private": false,
@@ -96,7 +96,7 @@
         "teams": [
           {
             "label": "mine",
-            "team": "mine:juan.aweb.ai",
+            "team": "mine:alex.aweb.ai",
             "default": true,
             "from": "local"
           },
@@ -109,7 +109,7 @@
         ],
         "defaultTeam": {
           "label": "mine",
-          "team": "mine:juan.aweb.ai",
+          "team": "mine:alex.aweb.ai",
           "from": "deployment"
         },
         "private": false,
@@ -135,7 +135,7 @@
         "teams": [
           {
             "label": "mine",
-            "team": "mine:juan.aweb.ai",
+            "team": "mine:alex.aweb.ai",
             "default": true,
             "from": "local"
           },
@@ -148,7 +148,7 @@
         ],
         "defaultTeam": {
           "label": "mine",
-          "team": "mine:juan.aweb.ai",
+          "team": "mine:alex.aweb.ai",
           "from": "deployment"
         },
         "private": false,
@@ -174,7 +174,7 @@
         "teams": [
           {
             "label": "mine",
-            "team": "mine:juan.aweb.ai",
+            "team": "mine:alex.aweb.ai",
             "default": true,
             "from": "local"
           },
@@ -187,7 +187,7 @@
         ],
         "defaultTeam": {
           "label": "mine",
-          "team": "mine:juan.aweb.ai",
+          "team": "mine:alex.aweb.ai",
           "from": "deployment"
         },
         "private": false,
@@ -225,7 +225,7 @@
           },
           {
             "label": "mine",
-            "team": "mine:juan.aweb.ai",
+            "team": "mine:alex.aweb.ai",
             "default": false,
             "from": "local"
           }
@@ -258,7 +258,7 @@
         "teams": [
           {
             "label": "mine",
-            "team": "mine:juan.aweb.ai",
+            "team": "mine:alex.aweb.ai",
             "default": true,
             "from": "local"
           },
@@ -271,7 +271,7 @@
         ],
         "defaultTeam": {
           "label": "mine",
-          "team": "mine:juan.aweb.ai",
+          "team": "mine:alex.aweb.ai",
           "from": "deployment"
         },
         "private": false,
@@ -297,7 +297,7 @@
         "teams": [
           {
             "label": "mine",
-            "team": "mine:juan.aweb.ai",
+            "team": "mine:alex.aweb.ai",
             "default": true,
             "from": "local"
           },
@@ -310,7 +310,7 @@
         ],
         "defaultTeam": {
           "label": "mine",
-          "team": "mine:juan.aweb.ai",
+          "team": "mine:alex.aweb.ai",
           "from": "deployment"
         },
         "private": false,
@@ -336,7 +336,7 @@
         "teams": [
           {
             "label": "mine",
-            "team": "mine:juan.aweb.ai",
+            "team": "mine:alex.aweb.ai",
             "default": true,
             "from": "local"
           },
@@ -349,7 +349,7 @@
         ],
         "defaultTeam": {
           "label": "mine",
-          "team": "mine:juan.aweb.ai",
+          "team": "mine:alex.aweb.ai",
           "from": "deployment"
         },
         "private": false,

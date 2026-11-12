@@ -38,7 +38,7 @@ test("real capture: the soul's teams here, its default (the workspace's), and wh
   assert.equal(u.card.element.dataset.card, 'Teams here'); assert.equal(u.q('.page-card-lead').textContent, 'on this computer');
   assert.equal(u.q('.sth-default').textContent, "Default: mine (the workspace's default on this computer)");
   const rows = [...u.card.element.querySelectorAll('.sth-row')].map(r => [r.dataset.team, !!r.querySelector('.page-tag'), ...[...r.querySelectorAll('.sth-meta')].map(m => m.textContent)]);
-  assert.deepEqual(rows, [['mine', true, 'mine:juan.aweb.ai · local', "the workspace's default here · added for this soul"],
+  assert.deepEqual(rows, [['mine', true, 'mine:alex.aweb.ai · local', "the workspace's default here · added for this soul"],
     ['engineering', false, 'no provider id yet · shared', 'added for this soul'], ['global', false, 'no provider id yet · shared', 'every soul may join it']]);
   assert.ok(u.row('engineering').querySelector('.sth-meta.warn'), 'no provider id yet is a warning');
   assert.equal(u.q('.sth-blocking'), null);

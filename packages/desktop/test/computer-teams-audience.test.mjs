@@ -1,7 +1,7 @@
 // Spec A (Teams says whose default it is): teamAudience reads, from the committed souls: map alone, whose
 // default a team is and who else may join it (docs/design/2026-10-02-team-model-3.md: a soul's teams come from
 // its most specific key, its default from the most specific key that sets one), and each card says so in two
-// labelled rows. The documents are the rigs' shapes (lfx: three member repos, local teams closed; solo: one repo,
+// labelled rows. The documents are the rigs' shapes (lab: three member repos, local teams closed; solo: one repo,
 // local teams open) as `oats teams --json` (teamsApi 2) answers them.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,12 +12,12 @@ const shared = (label, extra = {}) => ({ label, team: `${label}:acme.aweb.ai`, d
 const local = (label, extra = {}) => ({ ...shared(label, extra), from: 'local' });
 const v3 = ({ teams, souls, defaultTeam = null, localTeams = false, problems = [] }) => ({ teamsApi: 2, deployment: '/d', localTeams, defaultTeam,
   teams: teams.map(t => ({ ...t, default: t.label === defaultTeam?.label })), souls, problems });
-const lfx = () => v3({
-  teams: [shared('lfx-ai-team', { description: 'The AI engineering agents and their reviewers.' }), shared('lfx-all'), shared('lfx-platform-team')],
-  defaultTeam: { label: 'lfx-all', team: 'lfx-all:acme.aweb.ai', from: 'workspace' },
-  souls: { '*': { teams: [] }, 'lfx-ai-engineering/*': { default: 'lfx-ai-team', teams: ['lfx-all'] },
-    'lfx-ai-engineering/ai-reviewer': { default: 'lfx-ai-team', teams: ['lfx-all', 'lfx-platform-team'] },
-    'lfx-platform/*': { default: 'lfx-platform-team', teams: ['lfx-all'] }, 'lfx-agents/*': { teams: 'any' } } });
+const lab = () => v3({
+  teams: [shared('lab-ai-team', { description: 'The AI engineering agents and their reviewers.' }), shared('lab-all'), shared('lab-platform-team')],
+  defaultTeam: { label: 'lab-all', team: 'lab-all:acme.aweb.ai', from: 'workspace' },
+  souls: { '*': { teams: [] }, 'lab-ai-engineering/*': { default: 'lab-ai-team', teams: ['lab-all'] },
+    'lab-ai-engineering/ai-reviewer': { default: 'lab-ai-team', teams: ['lab-all', 'lab-platform-team'] },
+    'lab-platform/*': { default: 'lab-platform-team', teams: ['lab-all'] }, 'lab-agents/*': { teams: 'any' } } });
 const solo = () => v3({
   teams: [shared('engineering'), shared('docs', { team: null }), local('mine'), local('pairing')], localTeams: true,
   defaultTeam: { label: 'mine', team: 'mine:acme.aweb.ai', from: 'deployment' },
@@ -26,13 +26,13 @@ const solo = () => v3({
 const repo = (r) => ({ kind: 'repo', key: `${r}/*`, repo: r });
 const soul = (r, s) => ({ kind: 'soul', key: `${r}/${s}`, repo: r, soul: s });
 
-test('lfx: each team is the default of one repo\'s souls; who else may join, without repeating an implied entry', () => {
-  const doc = lfx();
-  assert.deepEqual(teamAudience(doc, 'lfx-ai-team'), { defaultFor: [repo('lfx-ai-engineering')], mayJoin: [repo('lfx-agents')] },
-    'ai-reviewer\'s own default is implied by lfx-ai-engineering/*');
-  assert.deepEqual(teamAudience(doc, 'lfx-platform-team'), { defaultFor: [repo('lfx-platform')], mayJoin: [repo('lfx-agents'), soul('lfx-ai-engineering', 'ai-reviewer')] });
-  assert.deepEqual(teamAudience(doc, 'lfx-all'), { defaultFor: [{ kind: 'fallback', from: 'workspace' }],
-    mayJoin: [repo('lfx-agents'), repo('lfx-ai-engineering'), repo('lfx-platform')] }, 'any: every shared team; ai-reviewer implied by lfx-ai-engineering/*');
+test('lab: each team is the default of one repo\'s souls; who else may join, without repeating an implied entry', () => {
+  const doc = lab();
+  assert.deepEqual(teamAudience(doc, 'lab-ai-team'), { defaultFor: [repo('lab-ai-engineering')], mayJoin: [repo('lab-agents')] },
+    'ai-reviewer\'s own default is implied by lab-ai-engineering/*');
+  assert.deepEqual(teamAudience(doc, 'lab-platform-team'), { defaultFor: [repo('lab-platform')], mayJoin: [repo('lab-agents'), soul('lab-ai-engineering', 'ai-reviewer')] });
+  assert.deepEqual(teamAudience(doc, 'lab-all'), { defaultFor: [{ kind: 'fallback', from: 'workspace' }],
+    mayJoin: [repo('lab-agents'), repo('lab-ai-engineering'), repo('lab-platform')] }, 'any: every shared team; ai-reviewer implied by lab-ai-engineering/*');
 });
 
 test('solo: this deployment\'s default replaces the workspace\'s; a single soul\'s default; local teams for every soul', () => {
@@ -102,27 +102,27 @@ async function mount(t, document, readMembers = null) {
   return { doc, page, row, fact };
 }
 
-test('lfx cards: Default for first under the description, then May join, then the address; the default team\'s card leads', async t => {
-  const u = await mount(t, lfx());
-  assert.deepEqual([...u.page.element.querySelectorAll('[data-section=shared] .ct-card')].map(c => c.dataset.team), ['lfx-all', 'lfx-ai-team', 'lfx-platform-team']);
-  assert.equal(u.fact('lfx-ai-team', 'default'), 'all souls of lfx-ai-engineering');
-  assert.equal(u.fact('lfx-ai-team', 'join'), 'souls of lfx-agents');
-  assert.equal(u.fact('lfx-platform-team', 'default'), 'all souls of lfx-platform');
-  assert.equal(u.fact('lfx-platform-team', 'join'), 'souls of lfx-agents · ai-reviewer (lfx-ai-engineering)');
-  assert.equal(u.fact('lfx-all', 'default'), 'every soul without its own default');
-  assert.equal(u.fact('lfx-all', 'join'), 'souls of lfx-agents, lfx-ai-engineering and lfx-platform');
-  assert.equal(u.row('lfx-all').querySelector('.ct-tag').textContent, 'Default team');
-  assert.equal(u.row('lfx-all').querySelector('.ct-from').textContent, 'set by the workspace');
+test('lab cards: Default for first under the description, then May join, then the address; the default team\'s card leads', async t => {
+  const u = await mount(t, lab());
+  assert.deepEqual([...u.page.element.querySelectorAll('[data-section=shared] .ct-card')].map(c => c.dataset.team), ['lab-all', 'lab-ai-team', 'lab-platform-team']);
+  assert.equal(u.fact('lab-ai-team', 'default'), 'all souls of lab-ai-engineering');
+  assert.equal(u.fact('lab-ai-team', 'join'), 'souls of lab-agents');
+  assert.equal(u.fact('lab-platform-team', 'default'), 'all souls of lab-platform');
+  assert.equal(u.fact('lab-platform-team', 'join'), 'souls of lab-agents · ai-reviewer (lab-ai-engineering)');
+  assert.equal(u.fact('lab-all', 'default'), 'every soul without its own default');
+  assert.equal(u.fact('lab-all', 'join'), 'souls of lab-agents, lab-ai-engineering and lab-platform');
+  assert.equal(u.row('lab-all').querySelector('.ct-tag').textContent, 'Default team');
+  assert.equal(u.row('lab-all').querySelector('.ct-from').textContent, 'set by the workspace');
   // The card: its head (the description under the label), then the facts: Default for, May join, the address.
-  const card = u.row('lfx-ai-team');
+  const card = u.row('lab-ai-team');
   assert.deepEqual([...card.children].map(c => c.className), ['ct-head', 'ct-facts']);
   assert.equal(card.querySelector('.ct-head > .ct-desc').textContent, 'The AI engineering agents and their reviewers.');
   assert.deepEqual([...card.querySelectorAll('.ct-fact')].map(r => r.dataset.fact), ['default', 'join', 'address']);
   assert.deepEqual([...card.querySelectorAll('.ct-fact dt')].map(d => d.textContent), ['Default for', 'May join', 'Address']);
-  assert.equal(card.querySelector('dd.ct-address').textContent, 'lfx-ai-team:acme.aweb.ai');
+  assert.equal(card.querySelector('dd.ct-address').textContent, 'lab-ai-team:acme.aweb.ai');
   // Names are bold, each titled with the souls: key it comes from.
-  assert.deepEqual([...u.row('lfx-platform-team').querySelectorAll('b.ct-name')].map(b => [b.textContent, b.title]),
-    [['lfx-platform', 'lfx-platform/*'], ['lfx-agents', 'lfx-agents/*'], ['ai-reviewer', 'lfx-ai-engineering/ai-reviewer']]);
+  assert.deepEqual([...u.row('lab-platform-team').querySelectorAll('b.ct-name')].map(b => [b.textContent, b.title]),
+    [['lab-platform', 'lab-platform/*'], ['lab-agents', 'lab-agents/*'], ['ai-reviewer', 'lab-ai-engineering/ai-reviewer']]);
   assert.equal(u.page.element.querySelector('[data-fact=who]'), null, 'no team model 2 Who may join row');
   // Local teams closed: a shared card has no actions at all.
   assert.equal(card.querySelector('.ct-actions'), null);
@@ -179,10 +179,10 @@ test('hostile labels and keys only ever enter as text', async t => {
 
 test('members: the board card lists none of them; its foot sums them up (their rows are on the team\'s page)', async t => {
   const m = instance => ({ workspace: '/d', server: null, serverLabel: null, instance, agent: 'eng', agentsRoot: '/d/agents', home: `/d/agents/eng/instances/${instance}`,
-    team: 'lfx-ai-team:acme.aweb.ai', running: true, addressable: true, missingRemotely: false, reason: null, deployment: { id: '/d', machine: '', path: '/d' } });
-  const u = await mount(t, lfx(), async () => ({ members: [m('a'), m('b')], servers: [], notReached: [] }));
+    team: 'lab-ai-team:acme.aweb.ai', running: true, addressable: true, missingRemotely: false, reason: null, deployment: { id: '/d', machine: '', path: '/d' } });
+  const u = await mount(t, lab(), async () => ({ members: [m('a'), m('b')], servers: [], notReached: [] }));
   await tick();
-  const card = u.row('lfx-ai-team');
+  const card = u.row('lab-ai-team');
   assert.equal(card.querySelector('.ct-irow, .ct-member-name, .ct-member-term'), null, 'no member rows on the board');
   assert.equal(card.lastElementChild.className, 'ct-foot');
   assert.equal(card.querySelector('.ct-foot').textContent, '2 of your instances');

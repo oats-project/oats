@@ -232,26 +232,26 @@ test('status → /api/panel: sessionEnd travels with the instance; absent stays 
 test('end to end: a lost row of a local deployment, through the real readers and panelData, is named by lostLocalHomes with the reply\'s local ids; a remote deployment\'s lost row, a running or a not-lost row is not', () => {
   /** The oats view as /api/panel serves it (panelData over the server's held, helpers/workspace-views-fixture.mjs): local A,
    * whose rows are the status fixture read by the real readers (deploymentStatusData → rosterRows) with its instance's
-   * sessionEnd and running set, local B, and the remote altair whose row also reads lost. */
-  const FAR = '/home/juan/oats';
+   * sessionEnd and running set, local B, and the remote devbox whose row also reads lost. */
+  const FAR = '/home/alex/oats';
   const panelOf = (sessionEnd, running) => {
     const raw = JSON.stringify(fx('status')), captured = dirname(fx('status').root);
     const doc = JSON.parse(raw.split(captured).join(VA)), instance = doc.agents.find(a => a.instances.length).instances[0];
     Object.assign(instance, { sessionEnd, running });
     const rows = rosterRows(deploymentStatusData(doc, VA), { features: [] });
-    const far = viewGroup('altair:a1', 'altair', FAR, viewIdentity(), [viewRemoteRow('far-a', FAR, { sessionEnd: SESSION_ENDS.lost, running: false })]);
+    const far = viewGroup('devbox:a1', 'devbox', FAR, viewIdentity(), [viewRemoteRow('far-a', FAR, { sessionEnd: SESSION_ENDS.lost, running: false })]);
     const byWs = new Map([[VA, viewObserved(VA, { reachable: true, ...viewIdentity() }, rows)], [VB, viewObserved(VB, { reachable: true, ...viewIdentity() }, [viewRow(VB, 'dev-b')])]]);
     return loadViews({ ctxs: [VA, VB], snapshot: { byWs }, remoteGroups: [far] }).panelData(V_OATS);
   };
   const panel = panelOf(SESSION_ENDS.lost, false), ids = localDeploymentIds(panel);
-  assert.deepEqual(panel.deployments.map(d => [d.id, d.local]), [[VA, true], [VB, true], ['remote:altair:a1', false]]);
+  assert.deepEqual(panel.deployments.map(d => [d.id, d.local]), [[VA, true], [VB, true], ['remote:devbox:a1', false]]);
   assert.deepEqual(ids, [VA, VB]);
-  const local = panel.instances.find(i => i.deployment.id === VA), far = panel.instances.find(i => i.deployment.id === 'remote:altair:a1');
+  const local = panel.instances.find(i => i.deployment.id === VA), far = panel.instances.find(i => i.deployment.id === 'remote:devbox:a1');
   assert.equal(local.sessionEnd, SESSION_ENDS.lost);
   assert.equal(far.sessionEnd, SESSION_ENDS.lost, 'the remote row reads lost too');
   assert.deepEqual(lostLocalHomes(panel.instances, ids), [local.home], 'only the local deployment\'s home');
   assert.deepEqual(lostLocalHomes(panel.instances), [], 'no local ids: nothing is local');
-  assert.deepEqual(lostLocalHomes(panel.instances, [VA, VB, 'remote:altair:a1']), [local.home, far.home], 'the id is the one rule');
+  assert.deepEqual(lostLocalHomes(panel.instances, [VA, VB, 'remote:devbox:a1']), [local.home, far.home], 'the id is the one rule');
   // A running or not-lost local row is not named; nor is an out-of-contract value, which the reader drops.
   assert.deepEqual(lostLocalHomes(panelOf(SESSION_ENDS.lost, true).instances, ids), [], 'lost but running');
   for (const end of [SESSION_ENDS.stopped, SESSION_ENDS.exited, undefined, 'crashed']) {

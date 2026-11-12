@@ -62,7 +62,7 @@ const candidateName = (candidate) => candidate?.name
   || "Workspace";
 
 /** Each row's name, in order: the workspace's name, else a local folder's last segment, else "Workspace". Two
- * of one name are told apart by what names the workspace, its team and its key ("tsm — github.com/a/tsm"),
+ * of one name are told apart by what names the workspace, its team and its key ("web — github.com/a/web"),
  * never by where it is: no folder, no machine (the shared workspaceChoiceLabels falls back to those, for the
  * TUI's switcher). Twins with nothing of the kind keep the same name. */
 export function rowNames(choices) {

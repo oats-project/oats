@@ -13,18 +13,18 @@ import { clientTerms } from '../../client/client-terms.mjs';
 import { createWorkspaceSwitcher } from '../renderer/workspace-switcher.mjs';
 import { onDeploymentTabRequest } from '../renderer/deployment-tabs.mjs';
 import { mountShellIcons } from '../renderer/shell-icons.mjs';
-import { CLI, juanState, A, B, L, R, V, V_OATS, V_LAB } from './helpers/workspace-views-fixture.mjs';
+import { CLI, alexState, A, B, L, R, V, V_OATS, V_LAB } from './helpers/workspace-views-fixture.mjs';
 
 const SHORT = 'OATS too old to report its workspace';
-const OATS = { id: 'ws:aaaaaaaaaaaaaaaaaaaa', name: 'oats', team: null, key: 'github.com/org/oats', deployments: ['/Users/op/Agents/oats', 'remote:altair:tsm'],
-  deploymentLabels: ['This Mac · ~/Agents/oats', 'altair · ~/Agents/tsm'], machines: ['This Mac', 'altair'], notLive: 1 };
+const OATS = { id: 'ws:aaaaaaaaaaaaaaaaaaaa', name: 'oats', team: null, key: 'github.com/org/oats', deployments: ['/Users/op/Agents/oats', 'remote:devbox:web'],
+  deploymentLabels: ['This Mac · ~/Agents/oats', 'devbox · ~/Agents/web'], machines: ['This Mac', 'devbox'], notLive: 1 };
 const LOOSE = { id: '/Users/op/Agents/loose', name: 'loose', team: null, deployments: ['/Users/op/Agents/loose'], unattached: true, ref: 'github.com/org/loose@main',
   reason: "This deployment's workspace reference names a member whose workspace isn't known yet; run oats sync there.", short: SHORT,
   deploymentLabels: ['This Mac · ~/Agents/loose'], machines: ['This Mac'], notLive: 0 };
-const TSM = { id: 'ws:bbbbbbbbbbbbbbbbbbbb', name: 'tsm', team: null, key: 'github.com/org/tsm', deployments: ['remote:vega:t1'], server: 'vega', remote: true,
-  deploymentLabels: ['vega · /srv/tsm'], machines: ['vega'], notLive: 0 };
-const RIGEL = { id: 'remote:rigel:cccccccccccc', name: 'rigel', team: null, deployments: ['remote:rigel:cccccccccccc'], machines: ['rigel'], notLive: 1,
-  unattached: true, short: SHORT, server: 'rigel', remote: true };
+const WEB = { id: 'ws:bbbbbbbbbbbbbbbbbbbb', name: 'web', team: null, key: 'github.com/org/web', deployments: ['remote:laptop:t1'], server: 'laptop', remote: true,
+  deploymentLabels: ['laptop · /srv/web'], machines: ['laptop'], notLive: 0 };
+const BUILD = { id: 'remote:build:cccccccccccc', name: 'build', team: null, deployments: ['remote:build:cccccccccccc'], machines: ['build'], notLive: 1,
+  unattached: true, short: SHORT, server: 'build', remote: true };
 const frozen = (value) => {
   if (value && typeof value === 'object' && !Object.isFrozen(value)) { Object.freeze(value); Object.values(value).forEach(frozen); }
   return value;
@@ -32,52 +32,52 @@ const frozen = (value) => {
 const row = (choice, others = []) => workspaceChoiceRows([choice, ...others])[0];
 
 test('a row per choice, in the same order: the name, one line, the not-live count and its words, the tooltip, the deployment', () => {
-  assert.deepEqual(workspaceChoiceRows([OATS, LOOSE, TSM]), [
-    { id: OATS.id, label: 'oats', place: 'This Mac · altair', notLive: 1, notLiveText: '1 deployment not live', unattached: false,
-      tooltip: 'This Mac · ~/Agents/oats, altair · ~/Agents/tsm', deployment: null },
+  assert.deepEqual(workspaceChoiceRows([OATS, LOOSE, WEB]), [
+    { id: OATS.id, label: 'oats', place: 'This Mac · devbox', notLive: 1, notLiveText: '1 deployment not live', unattached: false,
+      tooltip: 'This Mac · ~/Agents/oats, devbox · ~/Agents/web', deployment: null },
     { id: LOOSE.id, label: 'loose', place: `This Mac · ${SHORT}`, notLive: 0, notLiveText: '', unattached: true, tooltip: 'This Mac · ~/Agents/loose', deployment: '/Users/op/Agents/loose' },
-    { id: TSM.id, label: 'tsm', place: 'vega', notLive: 0, notLiveText: '', unattached: false, tooltip: 'vega · /srv/tsm', deployment: null },
+    { id: WEB.id, label: 'web', place: 'laptop', notLive: 0, notLiveText: '', unattached: false, tooltip: 'laptop · /srv/web', deployment: null },
   ]);
   assert.deepEqual(workspaceChoiceRows([]), []);
-  assert.deepEqual(workspaceChoiceRows([TSM, OATS]).map(r => r.id), [TSM.id, OATS.id], 'the order given, not the menu\'s sections');
+  assert.deepEqual(workspaceChoiceRows([WEB, OATS]).map(r => r.id), [WEB.id, OATS.id], 'the order given, not the menu\'s sections');
   assert.equal(UNMATCHED_SECTION, 'Not matched to a workspace');
 });
 
 test('label: two choices of one name are told apart by a suffix, and a row\'s label is workspaceChoiceLabels\' answer', () => {
-  const twins = [{ id: 'ws:1', name: 'tsm', key: 'github.com/a/tsm', deployments: [] }, { id: 'ws:2', name: 'tsm', key: 'github.com/b/tsm', deployments: [] }];
-  assert.deepEqual(workspaceChoiceRows(twins).map(r => r.label), ['tsm — github.com/a/tsm', 'tsm — github.com/b/tsm']);
+  const twins = [{ id: 'ws:1', name: 'web', key: 'github.com/a/web', deployments: [] }, { id: 'ws:2', name: 'web', key: 'github.com/b/web', deployments: [] }];
+  assert.deepEqual(workspaceChoiceRows(twins).map(r => r.label), ['web — github.com/a/web', 'web — github.com/b/web']);
   // A folder's last two segments, the machines, a team's name before either; never an id, never a full path.
-  const mixed = [{ id: '/a/x/oats', name: 'oats', team: { name: 'alpha' } }, { id: 'remote:vega:oats', name: 'oats', machines: ['vega'] }, { id: 'remote:vega:o2', name: 'oats' }, { id: '/docs', name: 'docs' }];
-  assert.deepEqual(workspaceChoiceRows(mixed).map(r => r.label), ['oats — alpha · x/oats', 'oats — vega', 'oats', 'docs']);
-  for (const list of [twins, mixed, [OATS, LOOSE, TSM, RIGEL], [{ id: 'remote:vega:t1' }, { id: '/Users/op/Agents/unnamed' }]]) {
+  const mixed = [{ id: '/a/x/oats', name: 'oats', team: { name: 'alpha' } }, { id: 'remote:laptop:oats', name: 'oats', machines: ['laptop'] }, { id: 'remote:laptop:o2', name: 'oats' }, { id: '/docs', name: 'docs' }];
+  assert.deepEqual(workspaceChoiceRows(mixed).map(r => r.label), ['oats — alpha · x/oats', 'oats — laptop', 'oats', 'docs']);
+  for (const list of [twins, mixed, [OATS, LOOSE, WEB, BUILD], [{ id: 'remote:laptop:t1' }, { id: '/Users/op/Agents/unnamed' }]]) {
     assert.deepEqual(workspaceChoiceRows(list).map(r => r.label), workspaceChoiceLabels(list));
   }
-  assert.deepEqual(workspaceChoiceRows([{ id: 'remote:vega:t1' }, { id: '/Users/op/Agents/unnamed' }]).map(r => r.label), ['Workspace', 'unnamed'], 'a remote id is never a name');
+  assert.deepEqual(workspaceChoiceRows([{ id: 'remote:laptop:t1' }, { id: '/Users/op/Agents/unnamed' }]).map(r => r.label), ['Workspace', 'unnamed'], 'a remote id is never a name');
 });
 
 test('place: a matched view\'s machines; an unattached one\'s machine and short reason, without the machine when the label already is it', () => {
-  assert.equal(row(OATS).place, 'This Mac · altair');
+  assert.equal(row(OATS).place, 'This Mac · devbox');
   assert.equal(row(OATS).place, workspaceChoicePlace(OATS));
   assert.equal(row(LOOSE).place, `This Mac · ${SHORT}`);
   // An unattached remote is named by its server: its line does not repeat the name.
-  assert.deepEqual([row(RIGEL).label, row(RIGEL).place], ['rigel', SHORT]);
+  assert.deepEqual([row(BUILD).label, row(BUILD).place], ['build', SHORT]);
   // Two unattached remotes of one name carry a suffix, so the label is no longer the machine and the line says it.
-  const [first] = workspaceChoiceRows([RIGEL, { ...RIGEL, id: 'remote:rigel:dddddddddddd', deployments: ['remote:rigel:dddddddddddd'] }]);
-  assert.deepEqual([first.label, first.place], ['rigel — rigel', `rigel · ${SHORT}`]);
+  const [first] = workspaceChoiceRows([BUILD, { ...BUILD, id: 'remote:build:dddddddddddd', deployments: ['remote:build:dddddddddddd'] }]);
+  assert.deepEqual([first.label, first.place], ['build — build', `build · ${SHORT}`]);
   // Only the first machine of an unattached view, and only a short reason that is a short string.
-  assert.equal(row({ ...LOOSE, machines: ['This Mac', 'altair'] }).place, `This Mac · ${SHORT}`);
+  assert.equal(row({ ...LOOSE, machines: ['This Mac', 'devbox'] }).place, `This Mac · ${SHORT}`);
   for (const short of [undefined, '', 7, null, 'x'.repeat(257)]) assert.equal(row({ ...LOOSE, short }).place, 'This Mac', String(short).slice(0, 9));
   assert.equal(row({ ...LOOSE, machines: [], short: undefined }).place, '');
   // The full reason is never the line.
-  for (const r of workspaceChoiceRows([OATS, LOOSE, TSM, RIGEL])) assert.doesNotMatch(r.place, /run oats sync|ws:|remote:|\/Users\//);
+  for (const r of workspaceChoiceRows([OATS, LOOSE, WEB, BUILD])) assert.doesNotMatch(r.place, /run oats sync|ws:|remote:|\/Users\//);
 });
 
 test('place: no `machines` (an older answer), or machines that are not short strings, say nothing in their place', () => {
-  const old = { id: 'ws:cccccccccccccccccccc', name: 'old', team: null, deployments: ['remote:vega:t1', '/Users/op/x'] };
+  const old = { id: 'ws:cccccccccccccccccccc', name: 'old', team: null, deployments: ['remote:laptop:t1', '/Users/op/x'] };
   assert.deepEqual([row(old).place, row(old).tooltip], ['', '']);
-  assert.equal(row({ ...old, id: 'remote:vega:t2', unattached: true }).place, '');
-  assert.equal(row({ ...OATS, machines: ['This Mac', '', 7, null, 'x'.repeat(257), 'altair'] }).place, 'This Mac · altair');
-  for (const machines of [undefined, null, 'altair', { 0: 'altair' }, []]) assert.equal(row({ ...OATS, machines }).place, '', JSON.stringify(machines));
+  assert.equal(row({ ...old, id: 'remote:laptop:t2', unattached: true }).place, '');
+  assert.equal(row({ ...OATS, machines: ['This Mac', '', 7, null, 'x'.repeat(257), 'devbox'] }).place, 'This Mac · devbox');
+  for (const machines of [undefined, null, 'devbox', { 0: 'devbox' }, []]) assert.equal(row({ ...OATS, machines }).place, '', JSON.stringify(machines));
 });
 
 test('notLive: the count of a matched view when it is a positive integer, else 0, with its words', () => {
@@ -90,11 +90,11 @@ test('notLive: the count of a matched view when it is a positive integer, else 0
   assert.deepEqual((({ notLive: _absent, ...rest }) => { const r = row(rest); return [r.notLive, r.notLiveText]; })(OATS), [0, ''], 'no count at all (an older answer)');
   // An unattached view carries no count, whatever it reports.
   assert.deepEqual(said(1, { unattached: true }), [0, '']);
-  assert.deepEqual([row(RIGEL).notLive, row(RIGEL).notLiveText], [0, '']);
+  assert.deepEqual([row(BUILD).notLive, row(BUILD).notLiveText], [0, '']);
 });
 
 test('tooltip: the deployments\' labels when there is one per deployment, else a local folder\'s path, else nothing', () => {
-  assert.equal(row(OATS).tooltip, 'This Mac · ~/Agents/oats, altair · ~/Agents/tsm');
+  assert.equal(row(OATS).tooltip, 'This Mac · ~/Agents/oats, devbox · ~/Agents/web');
   // A label list of the wrong length, or with an entry that is not a short string, is not shown.
   for (const deploymentLabels of [['This Mac · ~/Agents/oats'], ['a', 'b', 'c'], ['a', ''], ['a', 7], ['a', 'x'.repeat(513)], 'a, b', undefined, null]) {
     assert.equal(row({ ...OATS, deploymentLabels }).tooltip, '', JSON.stringify(deploymentLabels)?.slice(0, 40));
@@ -102,28 +102,28 @@ test('tooltip: the deployments\' labels when there is one per deployment, else a
   }
   // No deployments and no labels: nothing for a view, the path for a local folder; never an id.
   assert.equal(row({ id: 'ws:1', name: 'x', deployments: [], deploymentLabels: [] }).tooltip, '');
-  assert.equal(row({ id: 'remote:vega:t1', name: 'x' }).tooltip, '');
+  assert.equal(row({ id: 'remote:laptop:t1', name: 'x' }).tooltip, '');
   assert.equal(row({ id: '/a/b', name: 'b' }).tooltip, '/a/b');
-  for (const r of workspaceChoiceRows([OATS, TSM, RIGEL])) assert.doesNotMatch(r.tooltip, /ws:|remote:/);
-  assert.deepEqual([isLocalPath('/a/b'), isLocalPath('ws:1'), isLocalPath('remote:vega:t1'), isLocalPath(undefined), isLocalPath(7)], [true, false, false, false, false]);
+  for (const r of workspaceChoiceRows([OATS, WEB, BUILD])) assert.doesNotMatch(r.tooltip, /ws:|remote:/);
+  assert.deepEqual([isLocalPath('/a/b'), isLocalPath('ws:1'), isLocalPath('remote:laptop:t1'), isLocalPath(undefined), isLocalPath(7)], [true, false, false, false, false]);
 });
 
 test('deployment: an unattached view\'s first deployment id, else null', () => {
   assert.equal(row(LOOSE).deployment, '/Users/op/Agents/loose');
-  assert.equal(row({ ...LOOSE, deployments: ['remote:rigel:r1', '/Users/op/Agents/loose'] }).deployment, 'remote:rigel:r1');
+  assert.equal(row({ ...LOOSE, deployments: ['remote:build:r1', '/Users/op/Agents/loose'] }).deployment, 'remote:build:r1');
   assert.equal(row(OATS).deployment, null, 'a matched view opens no deployment');
-  for (const deployments of [[], undefined, null, 'remote:rigel:r1', [''], [undefined, '/x']]) assert.equal(row({ ...LOOSE, deployments }).deployment, null, JSON.stringify(deployments));
+  for (const deployments of [[], undefined, null, 'remote:build:r1', [''], [undefined, '/x']]) assert.equal(row({ ...LOOSE, deployments }).deployment, null, JSON.stringify(deployments));
   // `unattached` is read as the menu reads it: any truthy value.
   assert.deepEqual([row({ ...LOOSE, unattached: 'yes' }).unattached, row({ ...LOOSE, unattached: 0 }).unattached, row(OATS).unattached], [true, false, false]);
   assert.equal(row({ ...LOOSE, unattached: 0 }).deployment, null);
 });
 
 test('choiceMatches: the label and the place, lower-cased, against what was typed, trimmed and lower-cased', () => {
-  const rows = workspaceChoiceRows([OATS, LOOSE, TSM]);
+  const rows = workspaceChoiceRows([OATS, LOOSE, WEB]);
   const kept = (query) => rows.filter(r => choiceMatches(r, query)).map(r => r.id);
-  for (const none of ['', '   ', undefined, null]) assert.deepEqual(kept(none), [OATS.id, LOOSE.id, TSM.id], JSON.stringify(none));
-  assert.deepEqual(kept('altair'), [OATS.id], 'a machine finds its view');
-  assert.deepEqual(kept('  ALTAIR '), [OATS.id]);
+  for (const none of ['', '   ', undefined, null]) assert.deepEqual(kept(none), [OATS.id, LOOSE.id, WEB.id], JSON.stringify(none));
+  assert.deepEqual(kept('devbox'), [OATS.id], 'a machine finds its view');
+  assert.deepEqual(kept('  DEVBOX '), [OATS.id]);
   assert.deepEqual(kept('too old'), [LOOSE.id], 'the short reason is searchable');
   assert.deepEqual(kept('this mac'), [OATS.id, LOOSE.id]);
   assert.deepEqual(kept('oats this'), [OATS.id], 'a query may span the name and the line: they are joined by one space');
@@ -139,28 +139,28 @@ test('choiceMatches: the label and the place, lower-cased, against what was type
 });
 
 test('nothing given is changed, and the same call answers the same', () => {
-  const given = frozen(structuredClone([OATS, LOOSE, TSM, RIGEL, { id: 'ws:1', name: 'oats', team: { name: 'alpha' }, machines: ['vega'], deployments: [] }]));
+  const given = frozen(structuredClone([OATS, LOOSE, WEB, BUILD, { id: 'ws:1', name: 'oats', team: { name: 'alpha' }, machines: ['laptop'], deployments: [] }]));
   const before = JSON.stringify(given);
   const rows = workspaceChoiceRows(given);
   assert.deepEqual(workspaceChoiceRows(given), rows);
   assert.equal(JSON.stringify(given), before);
-  for (const r of frozen(rows)) for (const query of ['', 'oats', ' Vega']) choiceMatches(r, query);
+  for (const r of frozen(rows)) for (const query of ['', 'oats', ' Laptop']) choiceMatches(r, query);
   // A row shares nothing with its choice that a caller could change through it.
   for (const r of rows) for (const value of Object.values(r)) assert.ok(value === null || typeof value !== 'object');
 });
 
 test('the rows of what panel-views.mjs `workspaceChoices` answers: the switcher of a second client, in its own terms', () => {
   const TUI = clientTerms({ name: 'oats tui', self: 'oats tui', selfInitial: 'oats tui', update: 'OATS', thisMachine: 'This machine' });
-  const { state } = juanState();
+  const { state } = alexState();
   const held = { ctxs: state.ctxs, snapshot: state.snapshot, remoteGroups: state.remoteGroups, remembered: { get: () => null, note: () => null, all: () => [] }, rosterAnswered: true, rosterFailure: null,
-    cli: CLI, observing: new Set(), remoteCollecting: false, home: '/Users/juan', at: '2026-10-11T12:00:00.000Z' };
+    cli: CLI, observing: new Set(), remoteCollecting: false, home: '/Users/alex', at: '2026-10-11T12:00:00.000Z' };
   const rows = workspaceChoiceRows(workspaceChoices(held, TUI));
   assert.deepEqual(rows.map(r => [r.id, r.label, r.place, r.notLiveText, r.unattached]), [
-    [V_OATS, 'oats', 'This machine · altair', '', false],
-    [V_LAB, 'lab', 'vega', '', false],
+    [V_OATS, 'oats', 'This machine · devbox', '', false],
+    [V_LAB, 'lab', 'laptop', '', false],
     [L, 'loose', 'This machine · Not observed', '', true],
   ]);
-  assert.equal(rows[0].tooltip, 'This machine · ~/Agents/oats, This machine · ~/awebai/oats-v2, altair · ~/oats');
+  assert.equal(rows[0].tooltip, 'This machine · ~/Agents/oats, This machine · ~/example/oats-qa, devbox · ~/oats');
   assert.deepEqual(rows.map(r => r.deployment), [null, null, L]);
   assert.ok([A, B, R, V].every(id => !rows.some(r => r.id === id)), 'views, not deployments');
 });
@@ -186,8 +186,8 @@ const drawnFrom = (rows, current = rows[0]?.id) => [...rows.filter(r => !r.unatt
   .map(r => ({ id: r.id, parts: [r.id === current ? 'ctx-dot on' : 'ctx-dot off', 'ws-option-name'], label: r.label, tooltip: r.label }));
 
 test('the Desktop\'s list shows each row\'s label and nothing else of the choice', (t) => {
-  const twin = { ...TSM, id: 'ws:dddddddddddddddddddd', key: 'github.com/other/tsm', machines: ['altair'], notLive: 2, deploymentLabels: ['altair · /srv/tsm'] };
-  const list = [OATS, LOOSE, TSM, RIGEL, twin, { id: 'ws:eeeeeeeeeeeeeeeeeeee', name: 'old', team: null, deployments: ['remote:vega:t9', '/Users/op/x'] }];
+  const twin = { ...WEB, id: 'ws:dddddddddddddddddddd', key: 'github.com/other/web', machines: ['devbox'], notLive: 2, deploymentLabels: ['devbox · /srv/web'] };
+  const list = [OATS, LOOSE, WEB, BUILD, twin, { id: 'ws:eeeeeeeeeeeeeeeeeeee', name: 'old', team: null, deployments: ['remote:laptop:t9', '/Users/op/x'] }];
   const rows = workspaceChoiceRows(list);
   assert.deepEqual(menu(t, list).shown(), drawnFrom(rows));
   // The list has no filter: every row is drawn, always (the TUI's switcher still filters with choiceMatches).
