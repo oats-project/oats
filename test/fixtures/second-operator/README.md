@@ -16,7 +16,7 @@ transport. No test here contacts the captured public repositories.
   each SHA256 `684ec4340a04d74ef5edcfb707df7cd761efa8f04a1e9c07f927b6f66a87bb79`.
 - `trust-dir-*` / `lock-v3-keys.json`: classic trust rejected the prepared v3 lock.
   The key inventory is evidence, **not a valid lock to install or synthesize**.
-- `antares-raw-artifacts.md`: original narrative and absent-deployment repro note;
+- `builder-raw-artifacts.md`: original narrative and absent-deployment repro note;
   preserve historical claims as supplied, not as proof of causation.
 
 ## Important scope correction

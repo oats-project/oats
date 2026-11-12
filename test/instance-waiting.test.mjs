@@ -89,7 +89,7 @@ test("message validation: 200 characters OK, 201 refused; control characters, li
   }
   // Everything else is allowed: ZWJ and ZWNJ (emoji sequences, Persian), LRM, RLM, ALM,
   // the soft hyphen, and characters just outside the refused ranges.
-  const allowed = ["need the npm token from Pepe", "¿listo? ✓ — 日本語 🚀", "שלום world", "👩‍💻 review needed", "می‌خواهم", "a\u200cb", "a\u200db", "a\u200eb", "a\u200fb", "a\u061cb", "a\u00adb", "a\u2065b", "a\u206ab", "a\u{e0080}b"];
+  const allowed = ["need the npm token from Alex", "¿listo? ✓ — 日本語 🚀", "שלום world", "👩‍💻 review needed", "می‌خواهم", "a\u200cb", "a\u200db", "a\u200eb", "a\u200fb", "a\u061cb", "a\u00adb", "a\u2065b", "a\u206ab", "a\u{e0080}b"];
   for (const ok of allowed) assert.equal(validWaitingMessage(ok), true, JSON.stringify(ok));
   assert.equal(w.rows().length, 0, "a refused message appends nothing");
   setWaiting(w.home, { producer: "agent", waiting: true, reason: "attention", message: "👩‍💻 می‌خواهم" });
@@ -371,11 +371,11 @@ test("CLI: waiting set/clear answer and idempotency; status rows carry waitingOn
   assert.equal(cli(["session", "inspect", "--home", idle, "--json"]).doc.result.waitingOnYou, null);
 
   // The agent's attention, from inside its session: shown on plain status with its message.
-  const att = cli(["instance", "attention", "--message", "need the npm token from Pepe", "--json"], { OATS_INSTANCE_HOME: run });
+  const att = cli(["instance", "attention", "--message", "need the npm token from Alex", "--json"], { OATS_INSTANCE_HOME: run });
   assert.equal(att.status, 0, att.stdout + att.stderr);
-  assert.deepEqual({ producer: att.doc.result.producer, changed: att.doc.result.changed, reason: att.doc.result.waitingOnYou.reason, message: att.doc.result.waitingOnYou.message }, { producer: "agent", changed: true, reason: "attention", message: "need the npm token from Pepe" });
+  assert.deepEqual({ producer: att.doc.result.producer, changed: att.doc.result.changed, reason: att.doc.result.waitingOnYou.reason, message: att.doc.result.waitingOnYou.message }, { producer: "agent", changed: true, reason: "attention", message: "need the npm token from Alex" });
   const plain = cli(["status"]);
-  assert.match(plain.stdout, /• w-run\s+RUNNING[^\n]*\n {10}! needs input \(attention\) since (?:[A-Z][a-z]{2} \d{1,2} |\d{4}-\d{2}-\d{2} )?\d{2}:\d{2}, under a minute: need the npm token from Pepe\n/, plain.stdout);
+  assert.match(plain.stdout, /• w-run\s+RUNNING[^\n]*\n {10}! needs input \(attention\) since (?:[A-Z][a-z]{2} \d{1,2} |\d{4}-\d{2}-\d{2} )?\d{2}:\d{2}, under a minute: need the npm token from Alex\n/, plain.stdout);
   assert.doesNotMatch(plain.stdout, /• w-idle[^\n]*\n {10}! needs input/, "no marker on a row that is not running");
   // The emitter-style clear of oats.core leaves the agent's claim; --clear clears it.
   cli(["instance", "waiting", "clear", "--producer", "oats.core", "--home", run, "--json"]);

@@ -2,7 +2,7 @@
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Accessing workspace:
 
- /Users/juanre/Agents/oats/agents/oats-kernel-expert/instances/oats-kernel-expert-wake-lifecycle/work/708-fix
+ /Users/person/Agents/oats/agents/oats-kernel-expert/instances/oats-kernel-expert-wake-lifecycle/work/708-fix
  tures/private-run/target
 
  Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open

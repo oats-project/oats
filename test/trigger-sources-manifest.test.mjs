@@ -21,8 +21,8 @@ const src = (extra = {}) => ({ command: "go", events: ["opened"], ...extra });
 const bySchema = (ts) => validate(manifest(ts));
 const byUse = (ts) => triggerSourcesOf(manifest(ts)).problems.length === 0;
 
-// LFX's real declaration (lfx-oats-workspace 9f639e90, capabilities/lfx-omnigraph-maintenance/oats.json).
-const LFX = { "harvest-branches": { command: "review-source", description: "Harvest branches ready for review on the lfx graph, one event per judged head; identifiers only.", events: ["opened", "updated"],
+// lab's real declaration (lab-oats-workspace 9f639e90, capabilities/lab-omnigraph-maintenance/oats.json).
+const LAB = { "harvest-branches": { command: "review-source", description: "Harvest branches ready for review on the lab graph, one event per judged head; identifiers only.", events: ["opened", "updated"],
   fields: { graph: { pattern: "^[a-z0-9-]{1,40}$" }, branch: { pattern: "^harvest/[A-Za-z0-9._-]{1,191}$" }, headCommit: { pattern: "^[A-Za-z0-9.]{1,120}$" } } } };
 
 /** The shared fixture set: [name, triggerSources, accepted]. Both judges must give `accepted`. */
@@ -73,7 +73,7 @@ const SHARED = [
   ["a wildcard URL host", { a: src({ urlHosts: ["*.example.org"] }) }, false],
   ["a duplicate URL host", { a: src({ urlHosts: ["a.example", "a.example"] }) }, false],
   ["seventeen URL hosts", { a: src({ urlHosts: Array.from({ length: 17 }, (_, i) => `h${i}.example`) }) }, false],
-  ["LFX's real declaration", LFX, true],
+  ["lab's real declaration", LAB, true],
 ];
 /** The rules JSON Schema cannot say: the schema accepts these, use refuses them. */
 const USE_TIME_ONLY = [
@@ -94,16 +94,16 @@ test("the schema and the use-time validator accept and refuse the same triggerSo
     assert.equal(bySchema(ts), true, `use-time only, the schema accepts ${name}: ${JSON.stringify(validate.errors)}`);
     assert.equal(byUse(ts), false, `use-time only, use refuses ${name}`);
   }
-  // LFX's whole manifest shape (its command present) validates too.
-  assert.equal(validate({ ...base, commands: { "review-source": "bin/oats-omnigraph-maintenance.mjs review-source" }, triggerSources: LFX }), true, JSON.stringify(validate.errors));
+  // lab's whole manifest shape (its command present) validates too.
+  assert.equal(validate({ ...base, commands: { "review-source": "bin/oats-omnigraph-maintenance.mjs review-source" }, triggerSources: LAB }), true, JSON.stringify(validate.errors));
 });
 
-test("triggerSourcesOf: the normalized source; LFX's real declaration is well formed", () => {
-  const lfx = triggerSourcesOf({ commands: { "review-source": "bin/oats-omnigraph-maintenance.mjs review-source" }, triggerSources: LFX });
-  assert.deepEqual(lfx.problems, []);
-  const s = lfx.sources["harvest-branches"];
+test("triggerSourcesOf: the normalized source; lab's real declaration is well formed", () => {
+  const lab = triggerSourcesOf({ commands: { "review-source": "bin/oats-omnigraph-maintenance.mjs review-source" }, triggerSources: LAB });
+  assert.deepEqual(lab.problems, []);
+  const s = lab.sources["harvest-branches"];
   assert.deepEqual({ ...s, fields: Object.keys(s.fields) }, { name: "harvest-branches", command: "review-source", script: "bin/oats-omnigraph-maintenance.mjs", args: ["review-source"],
-    description: LFX["harvest-branches"].description, events: ["opened", "updated"], parameters: {}, fields: ["graph", "branch", "headCommit"], urlHosts: [] });
+    description: LAB["harvest-branches"].description, events: ["opened", "updated"], parameters: {}, fields: ["graph", "branch", "headCommit"], urlHosts: [] });
   assert.equal(s.fields.branch.pattern.test("harvest/2026-10-08.a"), true);
   assert.equal(s.fields.branch.pattern.test("main"), false);
 

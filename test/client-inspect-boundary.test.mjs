@@ -115,7 +115,7 @@ test('the admission is the same function for run: the same request is refused th
   const cases = {
     'no workspace': [{ selector: { home: HOME } }, { ...CONTEXT, workspace: null }],
     'an old CLI': [{ selector: { home: HOME } }, { ...CONTEXT, cli: { ...CLI, operationsApi: 1 } }],
-    'a remote workspace with no route': [{ selector: { home: HOME } }, { ...CONTEXT, workspace: { ...WORKSPACE, remote: true, server: 'altair', registrationPresent: true }, cli: { ...CLI, remote: [] } }],
+    'a remote workspace with no route': [{ selector: { home: HOME } }, { ...CONTEXT, workspace: { ...WORKSPACE, remote: true, server: 'devbox', registrationPresent: true }, cli: { ...CLI, remote: [] } }],
     'a home and a soul': [{ selector: { home: HOME, soul: 'dev' } }, CONTEXT],
     'an unknown home': [{ selector: { home: '/elsewhere' } }, CONTEXT],
     'an unknown soul': [{ selector: { soul: 'ops', agentsRoot: ROOT } }, CONTEXT],

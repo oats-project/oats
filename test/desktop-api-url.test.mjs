@@ -39,7 +39,7 @@ test("pins the verified workspace on scoped endpoints, overwriting unknown ws", 
 });
 
 test("allows switching to a workspace the server advertises", () => {
-  const ws = "/Users/me/oats", other = "/Users/me/lfx";
+  const ws = "/Users/me/oats", other = "/Users/me/lab";
   const allowed = new Set([ws, other]);
   assert.equal(apiUrl(`/api/panel?ws=${other}`, ws, allowed).searchParams.get("ws"), other);
   assert.equal(apiUrl(`/api/agents?ws=${other}`, ws, allowed).searchParams.get("ws"), other);
@@ -48,7 +48,7 @@ test("allows switching to a workspace the server advertises", () => {
 });
 
 test("pins ws on /api/brain/* like the other scoped endpoints", () => {
-  const ws = "/Users/me/oats", other = "/Users/me/lfx";
+  const ws = "/Users/me/oats", other = "/Users/me/lab";
   // no caller ws → verified id pinned
   assert.equal(apiUrl("/api/brain/tui-dev", ws).searchParams.get("ws"), ws);
   // unknown/stale caller ws → overwritten
@@ -59,7 +59,7 @@ test("pins ws on /api/brain/* like the other scoped endpoints", () => {
 });
 
 test("pins ws on the path-addressed brain route; the removed chat route is no longer pinned (#627)", () => {
-  const ws = "/Users/me/oats", other = "/Users/me/lfx";
+  const ws = "/Users/me/oats", other = "/Users/me/lab";
   assert.equal(apiUrl("/api/chat/inst-a", ws).searchParams.get("ws"), null, "chat: no route, nothing pinned");
   assert.equal(apiUrl("/api/chat/inst-a?ws=/stale", ws, new Set([ws, other])).searchParams.get("ws"), "/stale", "chat: nothing overwritten");
   // omitted ws → fails safe to the verified workspace
@@ -71,7 +71,7 @@ test("pins ws on the path-addressed brain route; the removed chat route is no lo
 });
 
 test("pins ws on the path-addressed start and restart like brain (#818)", () => {
-  const ws = "/Users/me/oats", other = "/Users/me/lfx", remote = "remote:altair:3f2a00000000";
+  const ws = "/Users/me/oats", other = "/Users/me/lab", remote = "remote:devbox:3f2a00000000";
   const allowed = new Set([ws, other, remote]);
   for (const ep of ["start", "restart"]) {
     // omitted ws → fails safe to the verified workspace; the row's qualifiers ride along untouched
@@ -83,8 +83,8 @@ test("pins ws on the path-addressed start and restart like brain (#818)", () => 
     assert.equal(apiUrl(`/api/${ep}/inst-a?ws=/stale`, ws).searchParams.get("ws"), ws, `${ep}: stale overwritten, nothing advertised`);
     // server-advertised caller ws → kept (a row's own deployment, a remote one included)
     assert.equal(apiUrl(`/api/${ep}/inst-a?ws=${other}`, ws, allowed).searchParams.get("ws"), other, `${ep}: advertised kept`);
-    const routed = apiUrl(`/api/${ep}/inst-a?home=%2Fh&server=altair&ws=${encodeURIComponent(remote)}`, ws, allowed);
-    assert.deepEqual([routed.searchParams.get("ws"), routed.searchParams.get("server"), routed.searchParams.get("home")], [remote, "altair", "/h"], `${ep}: remote kept`);
+    const routed = apiUrl(`/api/${ep}/inst-a?home=%2Fh&server=devbox&ws=${encodeURIComponent(remote)}`, ws, allowed);
+    assert.deepEqual([routed.searchParams.get("ws"), routed.searchParams.get("server"), routed.searchParams.get("home")], [remote, "devbox", "/h"], `${ep}: remote kept`);
   }
 });
 

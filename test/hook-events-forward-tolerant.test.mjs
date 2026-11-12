@@ -1,4 +1,4 @@
-// Forward-tolerant hook events (0.49.0, lfx-oats-workspace#22). A capability declaring a hook event this
+// Forward-tolerant hook events (0.49.0, lab-oats-workspace#22). A capability declaring a hook event this
 // kernel does not run (a newer kernel's) still composes: the event never runs, and every reader that
 // shows the capability carries the warning `hook-event-unsupported` (capabilities show, inspect, doctor,
 // readiness, spawn --preview and the spawn itself). The same event declared `required: true` is refused

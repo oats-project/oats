@@ -1311,13 +1311,13 @@ test("roster (#1117): a target that never answers fails with its own timeout; th
 });
 
 test("roster (#1117): five targets of which the first four never answer: the fifth is probed and ok, and nothing reports a budget", async () => {
-  const hung = ["altair", "altair-aweb", "altair-jro", "altair-oats"];
-  const answers = { "nactiva-host": () => after(50, statusOf("nactiva")) };
+  const hung = ["devbox", "devbox-aweb", "devbox-dev", "devbox-oats"];
+  const answers = { "garnet-host": () => after(50, statusOf("garnet")) };
   for (const id of hung) answers[`${id}-host`] = neverAnswers;
-  const { out, elapsed, groups } = await parallelRoster([...hung, "nactiva"], answers);
-  assert.deepEqual(out.groups.map((g) => g.server), [...hung, "nactiva"]);
-  assert.deepEqual(groups.nactiva.probe, { ok: true, features: null, sessionViewer: null });
-  assert.deepEqual(groups.nactiva.instances.map((i) => i.instance), ["dev-nactiva"]);
+  const { out, elapsed, groups } = await parallelRoster([...hung, "garnet"], answers);
+  assert.deepEqual(out.groups.map((g) => g.server), [...hung, "garnet"]);
+  assert.deepEqual(groups.garnet.probe, { ok: true, features: null, sessionViewer: null });
+  assert.deepEqual(groups.garnet.instances.map((i) => i.instance), ["dev-garnet"]);
   for (const id of hung) assert.match(groups[id].probe.error.message, new RegExp(`^ssh to ${id}-host timed out: no answer within `), id);
   assert.deepEqual([...new Set(out.groups.filter((g) => !g.probe.ok).map((g) => g.probe.error.code))], ["E_SSH"]);
   assert.deepEqual(Object.keys(out.bounds).sort(), ["budgetMs", "elapsedMs", "perTargetTimeoutMs"]);
