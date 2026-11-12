@@ -516,6 +516,8 @@ Manual verification offers two additional proofs:
   An incompatible baseline fails explicitly, with no registry-kernel fallback
   and no wider lock allowance. The committed baseline needs final OATS
   0.69.18+ and aw 1.36.59+ with the compatible exact runtime closure.
+  With the committed baseline, the packed job refuses; its positive real
+  packed-image acceptance is **NOT RUN** until that compatible baseline lands.
 
 Packing disables lifecycle scripts and uses a private npm home/cache, empty
 user/global configs and an explicit public registry. Every packed file must
@@ -542,9 +544,11 @@ commits may share a version. Separately resolved nested dependencies remain
 governed by the image lock. A changed inventory artifact or installed file
 fails before digest preparation. The closed context, tarball, generated
 manifest/lock, source inventory and build metadata are retained as artifacts;
-npm config/cache are outside the uploaded context. The job records source
-SHA, integrity/inventory/lock hashes and the accepted image ID. These checks
-do not broaden the receipt's supervisor, agent or containment claims.
+npm config/cache are outside the uploaded context. Source SHA and
+integrity/inventory/lock hashes are retained in those artifacts. Acceptance
+reports the image ID in its log and passes it between workflow steps to bind
+the export to the accepted image. These checks do not broaden the receipt's
+supervisor, agent or containment claims.
 
 The shared fixture, `.github/scripts/team-image-accept.sh`, starts the
 committed Compose service on a disposable internal bridge with IPv6 off and
