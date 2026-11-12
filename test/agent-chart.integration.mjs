@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after } from "node:test";
 import { parseAllDocuments } from "yaml";
+import { rootCertificates } from "node:tls";
 
 const library = fileURLToPath(new URL("../container/agent/chart", import.meta.url));
 // Test infrastructure only: depend on the real component, with the caller's context.
@@ -329,6 +330,7 @@ if(a[0]==='get'){
  if(found.kind==='PodDisruptionBudget'&&drift==='pdb-selector')found.spec.selector={matchLabels:{purpose:'fixture-private-selector'}};
  if(found.kind==='NetworkPolicy'&&drift==='policy')found.spec.egress[0].to[0].podSelector.matchLabels.purpose='fixture-private-policy';
  if(found.kind==='Service'&&drift==='service')found.spec.type='NodePort';
+ if(found.kind==='ConfigMap'&&drift==='ca')found.data['ca.pem']='fixture-private-ca';
  if(found.kind==='Pod'&&fs.existsSync(path.join(root,'stop'))){
   const f=path.join(root,'replacement-reads'),n=fs.existsSync(f)?Number(fs.readFileSync(f))+1:1;fs.writeFileSync(f,String(n));
   found.metadata.uid=n===1?'fixture-uid':'replacement-uid';
@@ -453,20 +455,22 @@ else process.exit(2);
     // Include optional objects so each live admission failure has its own safe label.
     const optionalValues = structuredClone(config);
     optionalValues.agents.kubernetes.service.enabled = true;
+    optionalValues.agents.caFile = "/operator/public-ca.pem";
+    writeFileSync(join(chart, "generated/agent-ca.pem"), rootCertificates[0]);
     writeFileSync(join(dir, "values.json"), JSON.stringify(optionalValues));
     const optionalDocs = render("--values", join(dir, "values.json")), optionalSet = optionalDocs.find((d) => d.kind === "StatefulSet");
     const optionalPod = { ...pod, spec: structuredClone(optionalSet.spec.template.spec) };
     optionalPod.spec.volumes.push({ name: "state", persistentVolumeClaim: { claimName: `state-${optionalSet.metadata.name}-0` } });
     writeFileSync(join(dir, "objects.json"), JSON.stringify([...optionalDocs, optionalPod]));
     rmSync(join(dir, "stop"), { force: true });
-    for (const [field, label] of [["pdb-max", "PDB maxUnavailable"], ["pdb-selector", "PDB selector"], ["policy", "NetworkPolicy spec differs from the approved chart"], ["service", "Service type"]]) {
+    for (const [field, label] of [["ca", "agent CA ConfigMap differs from the approved chart"], ["pdb-max", "PDB maxUnavailable"], ["pdb-selector", "PDB selector"], ["policy", "NetworkPolicy spec differs from the approved chart"], ["service", "Service type"]]) {
       const drift = spawnSync("sh", [script, "--chart", chart, "--values", join(dir, "values.json"), "--namespace", "proof", "--release", "proof", "--context", "fixture-context", "--pod", pod.metadata.name, "--ssh-key", join(dir, "key")], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, O1B_FIXTURE_ADMISSION: field }, timeout: 10_000 });
       assert.notEqual(drift.status, 0);
       assert.ok(drift.stderr.includes(label), `${field} must name its check: ${drift.stderr}`);
       assert.doesNotMatch(drift.stdout + drift.stderr, /fixture-private/);
       assert.doesNotMatch(drift.stderr, /NodePort/);
     }
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally { rmSync(dir, { recursive: true, force: true }); rmSync(join(chart, "generated/agent-ca.pem"), { force: true }); }
 });
 
 test("canonical inputs refuse unsafe images, IDs, bytes, budgets and object names", () => {
@@ -480,6 +484,7 @@ test("canonical inputs refuse unsafe images, IDs, bytes, budgets and object name
     ["agents.cpus", 0.25], ["agents.memory", 1073741824],
     ["agents.kubernetes.authorizedKeys.kind", "Pod"], ["agents.kubernetes.imagePullPolicy", "sometimes"],
     ["agents.kubernetes.service.enabled", "false"],
+    ...["relative.pem", "", false, 42].map(value => ["agents.caFile", value]),
     ...["secrets", "kubernetes.authorizedKeys.name", "kubernetes.storageClass"].flatMap(key => ["bad/name", "bad\nname", "x".repeat(254)].map(value => [`agents.${key}`, value])),
     ...["resolver.invalid", "::1", "256.0.0.1", "10.0.0.01"].map(value => ["agents.resolverIp", value]),
   ];
@@ -594,4 +599,57 @@ test("proxy destinations are only the artifact's pinned targets, including norma
     assert.deepEqual(net.spec.egress, [{ to: [{ ipBlock: { cidr: "10.20.0.10/32" } }, { ipBlock: { cidr: "93.184.216.34/32" } }], ports: [{ protocol: "TCP", port: 443 }] }]);
     assert.deepEqual(JSON.parse(docs.find(d => d.kind === "ConfigMap").data["policy.json"]), input);
   } finally { writeFileSync(path, JSON.stringify(policy)); }
+});
+
+test("optional public CA uses the root artifact and exactly two fixed trust settings", async () => {
+  const { checkRendered, checkPod, checkWorkload } = await import("../container/agent/accept-kube.mjs");
+  const path = join(chart, "ca-values.json"), artifact = join(chart, "generated/agent-ca.pem"), pem = rootCertificates[0];
+  try {
+    writeFileSync(path, JSON.stringify({ agents: { caFile: "/operator/public-ca.pem" } }));
+    writeFileSync(artifact, pem);
+    const docs = render("--values", path), set = docs.find(d => d.kind === "StatefulSet"), p = set.spec.template.spec;
+    assert.deepEqual(p.containers[0].env, [{ name: "SSL_CERT_FILE", value: "/etc/agent-trust/ca.pem" }, { name: "NODE_EXTRA_CA_CERTS", value: "/etc/agent-trust/ca.pem" }]);
+    assert.deepEqual(p.containers[0].volumeMounts.at(-1), { name: "agent-ca", mountPath: "/etc/agent-trust/ca.pem", subPath: "ca.pem", readOnly: true });
+    assert.deepEqual(p.volumes.at(-1), { name: "agent-ca", configMap: { name: "proof-oats-team-agent-ca", defaultMode: 292, items: [{ key: "ca.pem", path: "ca.pem" }] } });
+    const ca = docs.find(d => d.kind === "ConfigMap" && d.metadata.name === "proof-oats-team-agent-ca");
+    assert.deepEqual(ca.data, { "ca.pem": pem });
+    assert.equal(ca.binaryData, undefined);
+    checkRendered(docs);
+    checkWorkload(docs, set);
+    const pod = { metadata: { name: `${set.metadata.name}-0`, namespace: "proof", labels: structuredClone(set.spec.template.metadata.labels), ownerReferences: [{ kind: "StatefulSet", name: set.metadata.name, controller: true }] }, spec: structuredClone(p) };
+    pod.spec.volumes.push({ name: "state", persistentVolumeClaim: { claimName: `state-${set.metadata.name}-0` } });
+    checkPod(docs, pod);
+    for (const mutate of [
+      p => { p.spec.containers[0].env[0].value = "/other/ca.pem"; },
+      p => { p.spec.containers[0].env[0] = { name: "SSL_CERT_FILE", valueFrom: { secretKeyRef: { name: "unapproved", key: "ca" } } }; },
+      p => { p.spec.containers[0].env.push({ name: "NODE_TLS_REJECT_UNAUTHORIZED", value: "0" }); },
+      p => { p.spec.containers[0].env.push(p.spec.containers[0].env[0]); },
+      p => { delete p.spec.containers[0].env; },
+      p => { p.spec.containers[0].volumeMounts.at(-1).readOnly = false; },
+      p => { p.spec.containers[0].volumeMounts.push({ name: "agent-ca", mountPath: "/other-ca", readOnly: false }); },
+      p => { p.spec.volumes.find(v => v.name === "agent-ca").configMap.defaultMode = 420; },
+      p => { p.spec.volumes.find(v => v.name === "agent-ca").configMap.name = "other-ca"; },
+      p => { p.spec.volumes.find(v => v.name === "agent-ca").hostPath = { path: "/operator" }; },
+    ]) { const bad = structuredClone(pod); mutate(bad); assert.throws(() => checkPod(docs, bad)); }
+    assert.throws(() => checkPod(render(), pod), /differs|volumes/);
+    for (const material of ["not a certificate", pem.replace("-----END CERTIFICATE-----", "ZmFrZQ==\n-----END CERTIFICATE-----"), pem + "\n-----BEGIN PRIVATE KEY-----\nfixture-no-key-material\n-----END PRIVATE KEY-----\n", "-----BEGIN CERTIFICATE-----\nZmFrZQ==\n-----END CERTIFICATE-----\n"]) {
+      const bad = structuredClone(docs);
+      bad.find(d => d.metadata.name === ca.metadata.name).data["ca.pem"] = material;
+      assert.throws(() => checkRendered(bad), /public.*certificate/i);
+    }
+  } finally { rmSync(path, { force: true }); rmSync(artifact, { force: true }); }
+});
+
+test("configured CA refuses absent or non-public artifacts with withheld material", () => {
+  const path = join(chart, "ca-values.json"), artifact = join(chart, "generated/agent-ca.pem");
+  try {
+    writeFileSync(path, JSON.stringify({ agents: { caFile: "/operator/public-ca.pem" } }));
+    for (const pem of [undefined, "fixture-private-sensitive", rootCertificates[0] + "\nfixture-private-sensitive", rootCertificates[0] + "\n-----BEGIN PRIVATE KEY-----\nfixture-private-sensitive\n-----END PRIVATE KEY-----", " ".repeat(1048577)]) {
+      if (pem === undefined) rmSync(artifact, { force: true }); else writeFileSync(artifact, pem);
+      const r = spawnSync(process.env.HELM || "helm", ["template", "proof", chart, "--values", path], { encoding: "utf8" });
+      assert.notEqual(r.status, 0);
+      assert.match(r.stderr, /generated\/agent-ca.pem/);
+      assert.doesNotMatch(r.stderr, /fixture-private-sensitive/);
+    }
+  } finally { rmSync(path, { force: true }); rmSync(artifact, { force: true }); }
 });

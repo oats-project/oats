@@ -1,6 +1,6 @@
 {{- define "oats.agent.resources" -}}
 {{- include "oats.agent.validate" . -}}
-{{- range $template := list "serviceaccount" "statefulset" "pdb" "service" "networkpolicy" "egress" -}}
+{{- range $template := list "ca" "serviceaccount" "statefulset" "pdb" "service" "networkpolicy" "egress" -}}
 {{- $resource := include (printf "oats.agent.%s" $template) $ | trim -}}
 {{- if $resource }}
 ---

@@ -1,6 +1,7 @@
 // Host-side acceptance only. This module adds no kernel or image dependency.
 import assert from "node:assert/strict";
 import { isIP } from "node:net";
+import { X509Certificate } from "node:crypto";
 
 const ordered = (v) => Array.isArray(v) ? v.map(ordered) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, ordered(x)])) : v;
 // Compare without including values in errors: admission may have injected a secret.
@@ -23,6 +24,15 @@ function resources(value) {
   assert.ok(normalized.limits.cpu <= 2 && normalized.limits.memory <= 4 * 1024 ** 3, "limits exceed the chart's admission budget");
   return normalized;
 }
+function publicCertificates(pem) {
+  const message = "agent CA must contain only public X.509 certificates";
+  assert.ok(typeof pem === "string" && Buffer.byteLength(pem) > 0 && Buffer.byteLength(pem) <= 1048576, message);
+  const pattern = /-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+\r?\n-----END CERTIFICATE-----/g;
+  const blocks = pem.match(pattern);
+  assert.ok(blocks?.length && /^[ \t\r\n]*$/.test(pem.replace(pattern, "")), message);
+  try { for (const block of blocks) new X509Certificate(block); }
+  catch { throw new Error(message); }
+}
 function isolation(p) {
   assert.equal(p.automountServiceAccountToken, false, "service-account token must be disabled");
   assert.equal(p.enableServiceLinks, false, "service links must be disabled");
@@ -41,10 +51,12 @@ function isolation(p) {
   assert.equal(c.name, "agent", "container name");
   // The API's non-pointer bool fields omit false when serializing an admitted pod.
   assert.equal(c.stdin ?? false, false, "stdin"); assert.equal(c.tty ?? false, false, "tty");
-  for (const key of ["command", "args", "env", "envFrom"]) assert.equal(c[key]?.length ?? 0, 0, `unapproved container ${key}`);
+  const ca = p.volumes?.some(v => v.name === "agent-ca");
+  same(c.env ?? [], ca ? [{ name: "SSL_CERT_FILE", value: "/etc/agent-trust/ca.pem" }, { name: "NODE_EXTRA_CA_CERTS", value: "/etc/agent-trust/ca.pem" }] : [], "approved trust settings");
+  for (const key of ["command", "args", "envFrom"]) assert.equal(c[key]?.length ?? 0, 0, `unapproved container ${key}`);
   assert.ok(!c.lifecycle, "no lifecycle hooks");
   assert.match(c.image, /^[^\s@]+@sha256:[a-f0-9]{64}$/, "image must be pinned by digest");
-  same(c.volumeMounts, [{ name: "state", mountPath: "/state" }, { name: "tmp", mountPath: "/tmp" }, { name: "login", mountPath: "/etc/agent-login", readOnly: true }, { name: "authorized-keys", mountPath: "/etc/agent-ssh/authorized_keys", subPath: "authorized_keys", readOnly: true }], "approved mounts");
+  same(c.volumeMounts, [{ name: "state", mountPath: "/state" }, { name: "tmp", mountPath: "/tmp" }, { name: "login", mountPath: "/etc/agent-login", readOnly: true }, { name: "authorized-keys", mountPath: "/etc/agent-ssh/authorized_keys", subPath: "authorized_keys", readOnly: true }, ...(ca ? [{ name: "agent-ca", mountPath: "/etc/agent-trust/ca.pem", subPath: "ca.pem", readOnly: true }] : [])], "approved mounts");
   same(c.ports, [{ name: "ssh", containerPort: 2222, protocol: "TCP" }], "container ports");
   same(c.livenessProbe?.exec, { command: ["node", "/usr/local/lib/agent-liveness.mjs"] }, "liveness must check the host supervisor");
   assert.ok(!c.livenessProbe.tcpSocket && !c.livenessProbe.httpGet && !c.livenessProbe.grpc, "liveness must use the supervisor helper only");
@@ -52,6 +64,7 @@ function isolation(p) {
   assert.ok(!c.readinessProbe.exec && !c.readinessProbe.httpGet && !c.readinessProbe.grpc, "readiness must use TCP only");
   assert.ok(!c.startupProbe, "no SSH startup probe may restart the team");
   resources(c.resources);
+  return ca;
 }
 
 /** Select the agent component inside an installable deployment root. Proxy and
@@ -64,14 +77,14 @@ export function agentObjects(docs) {
     d.spec?.template?.spec?.containers?.some(c => c.name === "agent")));
   assert.equal(sets.length, 1, "expected one agent StatefulSet");
   const set = sets[0], release = set.spec?.selector?.matchLabels?.["app.kubernetes.io/instance"];
-  const names = [set.metadata.name, `${release}-oats-team-agent`, set.spec?.template?.spec?.serviceAccountName];
+  const names = [set.metadata.name, `${set.metadata.name}-ca`, `${release}-oats-team-agent`, set.spec?.template?.spec?.serviceAccountName];
   return docs.filter(d => d === set || names.includes(d.metadata?.name) || d.metadata?.labels?.["app.kubernetes.io/name"] === "oats-team-agent");
 }
 
 /** Validate rendered objects independently before trusting them as the live baseline. */
 export function checkRendered(docs) {
   docs = agentObjects(docs);
-  const allowed = ["StatefulSet", "ServiceAccount", "PodDisruptionBudget", "Service", "NetworkPolicy"];
+  const allowed = ["StatefulSet", "ServiceAccount", "PodDisruptionBudget", "Service", "NetworkPolicy", "ConfigMap"];
   for (const d of docs) {
     assert.ok(allowed.includes(d.kind), "unapproved rendered object kind");
     assert.ok(!d.metadata?.annotations?.["helm.sh/hook"], "no Helm hooks");
@@ -88,7 +101,17 @@ export function checkRendered(docs) {
   same(set.spec.template.metadata.labels, labels, "agent template labels");
   assert.equal(set.spec.replicas, 1, "replicas must stay at one");
   const p = set.spec.template.spec;
-  isolation(p);
+  const ca = isolation(p);
+  const bundles = docs.filter(d => d.kind === "ConfigMap");
+  assert.equal(bundles.length, ca ? 1 : 0, "only the configured agent CA ConfigMap is approved");
+  if (ca) {
+    const bundle = bundles[0];
+    same(bundle.metadata.name, `${set.metadata.name}-ca`, "agent CA ConfigMap name");
+    same(bundle.metadata.namespace, set.metadata.namespace, "agent CA ConfigMap namespace");
+    same(keys(bundle.data), ["ca.pem"], "agent CA ConfigMap keys");
+    same(bundle.binaryData ?? {}, {}, "agent CA binary data");
+    publicCertificates(bundle.data["ca.pem"]);
+  }
   assert.equal(p.serviceAccountName, sa.metadata.name, "dedicated service account");
   assert.notEqual(sa.metadata.name, "default", "dedicated service account");
   assert.equal(sa.automountServiceAccountToken, false, "SA token off");
@@ -101,8 +124,9 @@ export function checkRendered(docs) {
   assert.equal(pvc.metadata.name, "state", "PVC name");
   same(pvc.spec.accessModes, ["ReadWriteOnce"], "PVC access mode");
   assert.ok(quantity(pvc.spec.resources.requests.storage) > 0, "PVC size");
-  same(keys(p.volumes.reduce((a, v) => ({ ...a, [v.name]: v }), {})), ["authorized-keys", "login", "tmp"], "rendered volumes");
+  same(keys(p.volumes.reduce((a, v) => ({ ...a, [v.name]: v }), {})), ["authorized-keys", "login", "tmp", ...(ca ? ["agent-ca"] : [])].sort(), "rendered volumes");
   const v = Object.fromEntries(p.volumes.map((v) => [v.name, v]));
+  if (ca) same(v["agent-ca"], { name: "agent-ca", configMap: { name: `${set.metadata.name}-ca`, defaultMode: 292, items: [{ key: "ca.pem", path: "ca.pem" }] } }, "agent CA projection");
   same(v.tmp, { name: "tmp", emptyDir: { medium: "Memory", sizeLimit: v.tmp.emptyDir?.sizeLimit } }, "tmp volume");
   assert.ok(quantity(v.tmp.emptyDir.sizeLimit) > 0, "tmp size");
   same(v.login, { name: "login", secret: { secretName: v.login.secret?.secretName, defaultMode: 288 } }, "login secret reference");
@@ -131,6 +155,7 @@ function baseline(p, expected) {
   same(p.dnsPolicy ?? "ClusterFirst", expected.dnsPolicy ?? "ClusterFirst", "DNS policy");
   same(p.dnsConfig, expected.dnsConfig, "DNS config");
   const c = p.containers[0], wanted = expected.containers[0];
+  same(c.env ?? [], wanted.env ?? [], "trust settings");
   for (const key of ["image", "imagePullPolicy"]) same(c[key], wanted[key], key);
   same(resources(c.resources), resources(wanted.resources), "resource quantities");
   const probe = value => ({ initialDelaySeconds: 0, periodSeconds: 10, timeoutSeconds: 1, successThreshold: 1, failureThreshold: 3, ...value });

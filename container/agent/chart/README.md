@@ -22,9 +22,12 @@ Do not pass `.Values.agents` as the context. The renderer reads literal root
 not read dependency-scoped values, an alias or `global`. It has no `values.yaml`
 and no `values.schema.json`. The wrapper validates the single canonical aweb
 `deploy/team/config.schema.json` and supplies normalized inputs through its
-shared `render_env.py normalize(config)` path. This library supplies no defaults.
+shared `render_env.py normalize(config)` path. This library supplies no defaults. The wrapper preserves absent platform
+subsections; a Kubernetes caller must explicitly supply `agents.kubernetes`,
+including its required public-key source. Once present, its child defaults come
+from that one shared normalizer.
 The integration reference is aweb commit
-`bbde137cb796a882bb7f6761116565861877c21a`, including `descriptors/agents.md`,
+`0bd24fb05b5096b2ebfe1b9a44f662bd3f997f77`, including `descriptors/agents.md`,
 `descriptors/egress.md` and `egress_policy.py` in `deploy/team/`.
 
 ## Consumed canonical fields
@@ -33,6 +36,7 @@ The integration reference is aweb commit
 | --- | --- |
 | `agents.image`, `egress.image` | Complete image references pinned by SHA-256 digest. |
 | `agents.uid`, `agents.gid`, `agents.kubernetes.fsGroup` | Positive non-root integer IDs, at most 2147483647. |
+| `agents.caFile` | Optional public PEM source; the wrapper stages root `generated/agent-ca.pem` for the fixed trust projection below. |
 | `agents.secrets` | Existing harness-login Secret, read-only at `/etc/agent-login`, mode 0440. |
 | `agents.cpus`, `agents.memory` | Agent CPU and memory limits. Memory is an integer byte count. |
 | `agents.tmpSize` | Integer bytes for the memory-backed `/tmp` emptyDir. |
@@ -94,6 +98,31 @@ live allowed/denied paths, node/backend bypass resistance and exact SNI/Host and
 HTTP/2 authority enforcement before admitting agents. A cluster unable to enforce
 the policy or admit the security settings must fail admission, not weaken them.
 The fixed `egress` Service name assumes one team deployment per namespace.
+
+## Optional public CA
+
+When `agents.caFile` is configured, the root wrapper reads that public source
+and stages its bytes at `generated/agent-ca.pem`. This library never reads the
+operator's absolute path or turns it into a hostPath/Secret. It emits a dedicated
+agent CA ConfigMap, mode 0444, projected read-only at
+`/etc/agent-trust/ca.pem`. Only `SSL_CERT_FILE` and `NODE_EXTRA_CA_CERTS` are set,
+both to that exact path. Kubernetes supplies these settings before the image's
+entrypoint and supervisor start; no TLS verification bypass or arbitrary env
+injection is accepted. The image must support this approved trust contract.
+
+The artifact must contain only public `CERTIFICATE` PEM blocks, at most 1 MiB.
+Helm checks its envelope and bound; host acceptance parses every block as X.509
+and rejects private-key material or other data. The wrapper must validate the
+public certificates before deployment. Missing configured artifacts fail with
+a fixed diagnostic that withholds the source content. Without `agents.caFile`,
+no CA ConfigMap, extra mount or trust setting is added, even if an unused artifact
+is present in the root. A public checksum in the pod template triggers replacement
+on certificate changes; the subPath projection itself is not refreshed in place.
+
+Agent acceptance checks the rendered bundle, admitted ConfigMap, exact read-only
+projection and the two declared trust settings. These are metadata/content checks;
+real certificate-chain verification and supervisor inheritance still need native
+image/deployment evidence. The chart creates no CA key or certificate authority.
 
 ## Agent lifecycle and acceptance
 

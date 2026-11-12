@@ -30,6 +30,11 @@
 
 {{- define "oats.agent.validate" -}}
 {{- $a := required "normalized root agents is required" .Values.agents -}}
+{{- if hasKey $a "caFile" -}}
+{{- if or (not (kindIs "string" $a.caFile)) (not (hasPrefix "/" (toString $a.caFile))) -}}
+{{- fail "agents.caFile must be an absolute public certificate source path" -}}
+{{- end -}}
+{{- end -}}
 {{- $k := required "normalized agents.kubernetes is required" $a.kubernetes -}}
 {{- $e := required "normalized root egress is required" .Values.egress -}}
 {{- range $field, $image := dict "agents.image" $a.image "egress.image" $e.image -}}
