@@ -35,7 +35,7 @@ if (host !== 'loopback-test') throw Error('unexpected SSH target');
 const input = fs.readFileSync(0);
 fs.appendFileSync(process.env.OATS_REMOTE_SEAM_LOG, JSON.stringify({ command, bytes: input.length, input: input.toString() }) + '\n');
 if (process.env.OATS_REMOTE_SEAM_OLD && command.includes('version --json')) {
-  console.log(JSON.stringify({ schemaVersion: 1, ok: true, result: { version: '0.22.17', desktopApi: 1, remote: ['session'], features: ['session-start'] } }));
+  console.log(JSON.stringify({ schemaVersion: 1, ok: true, result: { version: '0.69.15', desktopApi: 1, remote: ['session'], features: ['session-start'] } }));
 } else {
   const env = { ...process.env, OATS_HOME_DIR: process.env.OATS_REMOTE_SEAM_HOME };
   const r = cp.spawnSync('/bin/sh', ['-c', command], { env, input, encoding: 'utf8', timeout: 20000 });

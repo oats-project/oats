@@ -554,7 +554,7 @@ test("the CLI advertises session-start and routes it only to a remote that adver
     const io = (features) => ({ execFileSync: (b, argv) => {
       const args = argv.join(" ");
       calls.push(args);
-      if (args.includes("version --json")) return JSON.stringify({ schemaVersion: 1, ok: true, result: { desktopApi: 1, version: "0.22.8", remote: ["session"], features } });
+      if (args.includes("version --json")) return JSON.stringify({ schemaVersion: 1, ok: true, result: { desktopApi: 1, version: "0.69.15", remote: ["session"], features } });
       return JSON.stringify({ schemaVersion: 1, ok: true, result: { instance: "r", home: "/remote/home", backend: "tmux", reused: "new" } });
     } });
     assert.throws(() => startRemote("s", { home: "/remote/home", model: "m" }, io(["retire-home"])), (e) => e.code === "E_REMOTE_INCOMPATIBLE" && /session-start/.test(e.message));

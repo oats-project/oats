@@ -188,7 +188,7 @@ see the [official catalog](official-catalog.md) for current pins.
 | `settings-committed-only` | a manifest `settings.<key>.committedOnly: true` is enforced: that key in oats-local.yaml `settings.<cap>` or a `--provider <cap>` flag is refused `E_WORKSPACE_SCHEMA` reason `committed-only-key`, with `details.layer`, `details.at` and `details.allowed` ([Commands and hooks](capabilities.md#commands-and-hooks)). A kernel without it ignores the flag and merges the key | |
 | `schedule-host-register-only` | `oats schedule host install --register-only`: the scope is recorded in the host schedule registry and no timer is installed ([`oats schedule`](#oats-schedule)). Routed with `--server`, the option is sent only to a host that lists this and `schedule`; otherwise it is refused here with `E_REMOTE_INCOMPATIBLE` before anything is sent, since a host without it ignores the option and installs a timer | |
 | `instance-board` | the agent's board: `oats instance board set\|unset\|ask\|ask --clear`, run by the agent in its own home; `board` on `oats status --json` instance rows and `oats server roster --json` rows; `oats inspect --home <h> --board` for each fact's history and each question's context; the `oats.board` needs-input claim, reason `attention` ([The agent's board](#the-agents-board-oats-instance-board)). Gate on the probe, locally or in the host's `probe.features`: an older kernel refuses `oats instance board` (`E_BAD_ARGS`) and its rows have no `board` | `boardApi: 1` |
-| `spawn-task-stdin` | `oats spawn <soul> --task-file -` reads the task from standard input. A spawn routed with `--server` sends its `--task` or `--task-file` text that way, to the preview and to the apply, to a host that lists this, and not as an argument; a host that does not list it gets the text as an argument, and the answer's `warnings` gains one line that says it was readable in both machines' process lists ([servers.md](servers.md#a-routed-spawns-task)) |
+| `spawn-task-stdin` | `oats spawn <soul> --task-file -` reads the task from standard input. A spawn routed with `--server` sends its `--task` or `--task-file` text that way, to the preview and to the apply, to a host that lists this, and not as an argument; a host that does not list it is refused with `E_REMOTE_INCOMPATIBLE` before any spawn is sent ([servers.md](servers.md#a-routed-spawns-task)) |
 
 Payload-only integers, never in the probe: `onboardApi: 2`, `syncApi: 1`,
 `workspaceStatusApi: 1`, `capabilitiesApi: 1`, the `oats souls` document's
@@ -3200,11 +3200,11 @@ with `--expect-decision` records the key and decision in `instance.json`.
   `fix` the sentence naming the two flags (and `--name <decision.instance>`
   in place of `--suggest-name`). The same spawn with them is forwarded as
   given and answers the one instance. A spawn that brings either flag is
-  forwarded as given. A host without `spawn-preview-2`, `spawn-apply-2` and
-  `spawn-idempotency-2` (and, for `--suggest-name`, `spawn-suggest-name` and
-  `spawn-name`) gets one unbound spawn, and the answer's `warnings` say that
-  a dropped link cannot be retried safely there
-  ([servers.md](servers.md#run-there)).
+  forwarded as given. Every routed spawn requires a host at least 0.69.15
+  that advertises `spawn-task-stdin`, `spawn-preview-2`, `spawn-apply-2` and
+  `spawn-idempotency-2`; a host missing any is refused before any spawn is
+  sent. An automatically named apply also needs `spawn-suggest-name` and
+  `spawn-name` for its bound preview ([servers.md](servers.md#run-there)).
 
 **Result** (`oats spawn <soul> … --json`):
 
