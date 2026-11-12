@@ -2,8 +2,8 @@
 // not a dependency of this repository: the case runs where a pi on PATH
 // resolves to an SDK (@earendil-works/pi-coding-agent) of the 0.85 line the
 // PiHost models, and skips, saying why, where none does. Under npm the first
-// pi on PATH is node_modules/.bin's, the peer of the root's @awebai/pi
-// dependency, which can be older; the search goes on past it.
+// pi on PATH is node_modules/.bin's, the root's development dependency,
+// which can be older; the search goes on past it.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";

@@ -68,7 +68,7 @@ test('lostLocalHomes: a lost, not running row of a local deployment, with an abs
     null, 'row', [lost('array')], 7,
   ], L), []);
   // Locality is the deployment id alone: a row's own `server` or `remote` keys say nothing (the panel never sets them).
-  assert.deepEqual(lostLocalHomes([lost('keyed', { server: 'altair', remote: true })], L), [H('keyed')]);
+  assert.deepEqual(lostLocalHomes([lost('keyed', { server: 'devbox', remote: true })], L), [H('keyed')]);
   // The ids: any iterable of strings; missing, empty or not an iterable: no row is local.
   assert.deepEqual(lostLocalHomes([lost('a')], new Set(L)), [H('a')]);
   assert.deepEqual(lostLocalHomes([lost('a')], ['/x', 7, SWEEP_DEPLOYMENT]), [H('a')]);
@@ -80,7 +80,7 @@ test('lostLocalHomes: a lost, not running row of a local deployment, with an abs
 
 test('localDeploymentIds: a panel reply\'s deployments with local: true, in order; anything else, none', () => {
   const entry = (id, local) => ({ ...deploymentTag(id), label: id, local, reachable: true });
-  assert.deepEqual(localDeploymentIds({ deployments: [entry('/a', true), entry('remote:altair:a1', false), entry('/b', true), entry('/c', 'true'), null, { local: true }, { id: 7, local: true }] }), ['/a', '/b']);
+  assert.deepEqual(localDeploymentIds({ deployments: [entry('/a', true), entry('remote:devbox:a1', false), entry('/b', true), entry('/c', 'true'), null, { local: true }, { id: 7, local: true }] }), ['/a', '/b']);
   for (const panel of [undefined, null, {}, { deployments: 'x' }, { deployments: null }, []]) assert.deepEqual(localDeploymentIds(panel), []);
 });
 

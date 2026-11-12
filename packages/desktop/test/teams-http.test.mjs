@@ -58,10 +58,10 @@ test('oats teams: list/add/remove/default as one argv each (option values as sin
   const listed = await h.request();
   assert.deepEqual([listed.status, listed.body.status, listed.body.teams.teamsApi, listed.body.teams.deployment, listed.body.teams.defaultTeam, listed.headers['cache-control']], [200, 'ok', 1, DEPLOYMENT, 'mine', 'no-store']);
   assert.deepEqual(Object.keys(listed.body), ['status', 'teams']);
-  await h.request({ body: { action: 'add', label: 'antares-oats', team: 'antares-oats:juan.aweb.ai', description: 'Mine' } });
+  await h.request({ body: { action: 'add', label: 'builder-oats', team: 'builder-oats:alex.aweb.ai', description: 'Mine' } });
   await h.request({ body: { action: 'remove', label: 'old' } });
   await h.request({ body: { action: 'default', label: 'oats' } });
-  assert.deepEqual(h.calls, [['teams', '--dir', DEPLOYMENT, '--json'], ['teams', 'add', 'antares-oats', '--team=antares-oats:juan.aweb.ai', '--description=Mine', '--dir', DEPLOYMENT, '--json'],
+  assert.deepEqual(h.calls, [['teams', '--dir', DEPLOYMENT, '--json'], ['teams', 'add', 'builder-oats', '--team=builder-oats:alex.aweb.ai', '--description=Mine', '--dir', DEPLOYMENT, '--json'],
     ['teams', 'remove', 'old', '--dir', DEPLOYMENT, '--json'], ['teams', 'default', 'oats', '--dir', DEPLOYMENT, '--json']]);
   assert.deepEqual(h.invalidated, [DEPLOYMENT, DEPLOYMENT, DEPLOYMENT], 'each write drops the inspections held under the workspace SCOPE (not its id); the list did not');
   assert.deepEqual(h.previewsInvalidated, ['team', 'team', 'team'], 'and the spawn previews held under the workspace ID (a preview reports the soul\'s teams)');
@@ -102,7 +102,7 @@ test('oats soul teams: show/add/remove/default/clear-default argv; the document 
 test('the REAL kernel refusals pass through verbatim (E_TEAM_IN_USE usedBy, E_TEAM_SHARED at, E_TEAM_EXISTS, E_TEAM_UNKNOWN)', async () => {
   let doc; const h = http({ reply: () => doc }), url = '/api/workspace-soul-teams?ws=team';
   for (const [name, request, route] of [['teams-remove-in-use', { action: 'remove', label: 'mine' }], ['teams-remove-shared', { action: 'remove', label: 'engineering' }],
-    ['teams-add-exists', { action: 'add', label: 'mine', team: 'mine:juan.aweb.ai' }], ['teams-add-shared', { action: 'add', label: 'engineering', team: 'eng:northwind.aweb.ai' }],
+    ['teams-add-exists', { action: 'add', label: 'mine', team: 'mine:alex.aweb.ai' }], ['teams-add-shared', { action: 'add', label: 'engineering', team: 'eng:northwind.aweb.ai' }],
     ['soul-teams-unknown', { action: 'add', soul: 'release-manager', labels: ['nope'] }, url]]) {
     doc = read(`team-model-v2/${name}`);
     const r = await h.request({ ...(route ? { url: route } : {}), body: request });

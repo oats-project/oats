@@ -4,18 +4,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { pickerDefaultPath, workspacePickerCandidates, cliPickerCandidates, parseLastWorkspaceParent, lastWorkspaceParentState } from "../picker-default-path.mjs";
 
-const HOME = "/Users/juan";
+const HOME = "/Users/alex";
 const existing = (...dirs) => (dir) => dirs.includes(dir);
 
 test("workspace picker opens in the remembered parent of the last added or opened workspace", () => {
   // main.mjs writes lastWorkspaceParentState on every successful add or open
   // and reads it back on the next pick, including after a relaunch.
-  const last = parseLastWorkspaceParent(lastWorkspaceParentState("/Users/juan/Agents/team-b"));
-  assert.equal(last, "/Users/juan/Agents");
-  const candidates = workspacePickerCandidates({ last, open: ["/Users/juan/work/team-a"] });
-  assert.equal(candidates[0], "/Users/juan/Agents");
-  assert.equal(pickerDefaultPath({ candidates, exists: existing("/Users/juan/Agents", "/Users/juan/work"), home: HOME }),
-    "/Users/juan/Agents");
+  const last = parseLastWorkspaceParent(lastWorkspaceParentState("/Users/alex/Agents/team-b"));
+  assert.equal(last, "/Users/alex/Agents");
+  const candidates = workspacePickerCandidates({ last, open: ["/Users/alex/work/team-a"] });
+  assert.equal(candidates[0], "/Users/alex/Agents");
+  assert.equal(pickerDefaultPath({ candidates, exists: existing("/Users/alex/Agents", "/Users/alex/work"), home: HOME }),
+    "/Users/alex/Agents");
 });
 
 test("a newer open beats an older add: the remembered parent outranks the open set", () => {
@@ -41,17 +41,17 @@ test("malformed remembered state is ignored", () => {
 });
 
 test("a remembered directory that no longer exists falls through to the next candidate", () => {
-  const candidates = workspacePickerCandidates({ last: "/Volumes/gone", open: ["/Users/juan/work/team-a"] });
-  assert.equal(pickerDefaultPath({ candidates, exists: existing("/Users/juan/work"), home: HOME }), "/Users/juan/work");
-  const throwing = (dir) => { if (dir === "/Volumes/gone") throw new Error("EACCES"); return dir === "/Users/juan/work"; };
-  assert.equal(pickerDefaultPath({ candidates, exists: throwing, home: HOME }), "/Users/juan/work");
+  const candidates = workspacePickerCandidates({ last: "/Volumes/gone", open: ["/Users/alex/work/team-a"] });
+  assert.equal(pickerDefaultPath({ candidates, exists: existing("/Users/alex/work"), home: HOME }), "/Users/alex/work");
+  const throwing = (dir) => { if (dir === "/Volumes/gone") throw new Error("EACCES"); return dir === "/Users/alex/work"; };
+  assert.equal(pickerDefaultPath({ candidates, exists: throwing, home: HOME }), "/Users/alex/work");
 });
 
 test("no history opens the home directory", () => {
   const candidates = workspacePickerCandidates({ open: [] });
   assert.deepEqual(candidates, []);
   assert.equal(pickerDefaultPath({ candidates, exists: () => true, home: HOME }), HOME);
-  assert.equal(pickerDefaultPath({ candidates: ["/Users/juan/gone"], exists: () => false, home: HOME }), HOME);
+  assert.equal(pickerDefaultPath({ candidates: ["/Users/alex/gone"], exists: () => false, home: HOME }), HOME);
 });
 
 test("never returns ~/Downloads, the location the OS would otherwise reuse", () => {
@@ -68,11 +68,11 @@ test("relative, empty and non-string candidates are ignored", () => {
 });
 
 test("CLI picker opens in the chosen CLI's directory, then the resolved one's, else home", () => {
-  const both = cliPickerCandidates({ chosen: "/opt/homebrew/bin/oats", resolved: "/Users/juan/.npm-global/bin/oats" });
-  assert.deepEqual(both, ["/opt/homebrew/bin", "/Users/juan/.npm-global/bin"]);
+  const both = cliPickerCandidates({ chosen: "/opt/homebrew/bin/oats", resolved: "/Users/alex/.npm-global/bin/oats" });
+  assert.deepEqual(both, ["/opt/homebrew/bin", "/Users/alex/.npm-global/bin"]);
   assert.equal(pickerDefaultPath({ candidates: both, exists: () => true, home: HOME }), "/opt/homebrew/bin");
-  assert.equal(pickerDefaultPath({ candidates: both, exists: existing("/Users/juan/.npm-global/bin"), home: HOME }),
-    "/Users/juan/.npm-global/bin");
+  assert.equal(pickerDefaultPath({ candidates: both, exists: existing("/Users/alex/.npm-global/bin"), home: HOME }),
+    "/Users/alex/.npm-global/bin");
   const resolvedOnly = cliPickerCandidates({ chosen: null, resolved: "/usr/local/bin/oats" });
   assert.equal(pickerDefaultPath({ candidates: resolvedOnly, exists: () => true, home: HOME }), "/usr/local/bin");
   assert.equal(pickerDefaultPath({ candidates: cliPickerCandidates({}), exists: () => true, home: HOME }), HOME);

@@ -53,9 +53,9 @@ test('real capture: the page head; the shared and local sections with their lead
     [['engineering', false], ['global', false], ['marketing', false], ['mine', true]], 'a local team\'s card is the dashed one');
   const cards = s => [...u.q(`[data-section=${s}]`).querySelectorAll('.ct-card')].map(c => [c.dataset.team, c.querySelector('[data-fact=address] dd').textContent, c.querySelector('[data-fact=who] .ct-join').textContent, !!c.querySelector('.ct-tag')]);
   assert.deepEqual(cards('shared'), [['engineering', 'no provider id yet', '1 soul', false], ['global', 'no provider id yet', 'every soul', false], ['marketing', 'no provider id yet', 'No soul yet', false]], "the kernel's order; who may join per card");
-  assert.deepEqual(cards('local'), [['mine', 'mine:juan.aweb.ai', '1 soul', true]]);
+  assert.deepEqual(cards('local'), [['mine', 'mine:alex.aweb.ai', '1 soul', true]]);
   assert.ok(u.row('marketing').querySelector('.ct-join.none'), 'no soul yet: muted'); assert.equal(u.row('mine').querySelector('.ct-join.none'), null);
-  assert.deepEqual([...u.row('mine').querySelectorAll('.ct-facts .ct-fact')].map(f => [f.querySelector('dt').textContent, f.querySelector('dd').textContent]), [['Address', 'mine:juan.aweb.ai'], ['Who may join', '1 soul']]);
+  assert.deepEqual([...u.row('mine').querySelectorAll('.ct-facts .ct-fact')].map(f => [f.querySelector('dt').textContent, f.querySelector('dd').textContent]), [['Address', 'mine:alex.aweb.ai'], ['Who may join', '1 soul']]);
   assert.equal(u.row('mine').querySelector('[data-fact=address] dd').title, 'Address: the team on the messaging provider');
   assert.ok(u.row('engineering').querySelector('[data-fact=address] dd.ct-address.none'), 'no provider id yet: the warn value');
   assert.deepEqual([...u.row('mine').querySelectorAll('.ct-id .ct-tag, .ct-id .ct-from')].map(e => e.textContent), ['Default team', 'on this computer'], 'the default: a tag and where it comes from');
@@ -83,10 +83,10 @@ const route = (rows, { remote = [], servers = [], notReached = [] } = {}) =>
 
 test('the board card sums up your instances on the team, for the members whose identity.team is its id; no member rows on the board', async t => {
   const rows = [
-    { instance: 'rm-1', agent: 'release-manager', agentsRoot: '/a', identity: { team: 'mine:juan.aweb.ai' }, running: true },
-    { instance: 'rm-2', agent: 'release-manager', agentsRoot: '/a', identity: { team: 'mine:juan.aweb.ai' }, running: false },
-    { instance: 'w-3', agent: 'writer', agentsRoot: '/a', identity: { team: 'mine:juan.aweb.ai' }, running: true },
-    { instance: 'w-4', agent: 'writer', agentsRoot: '/a', identity: { team: 'mine:juan.aweb.ai' }, running: true },
+    { instance: 'rm-1', agent: 'release-manager', agentsRoot: '/a', identity: { team: 'mine:alex.aweb.ai' }, running: true },
+    { instance: 'rm-2', agent: 'release-manager', agentsRoot: '/a', identity: { team: 'mine:alex.aweb.ai' }, running: false },
+    { instance: 'w-3', agent: 'writer', agentsRoot: '/a', identity: { team: 'mine:alex.aweb.ai' }, running: true },
+    { instance: 'w-4', agent: 'writer', agentsRoot: '/a', identity: { team: 'mine:alex.aweb.ai' }, running: true },
     { instance: 'e-1', agent: 'engineer', agentsRoot: '/a', identity: { team: 'engineering:northwind.aweb.ai' }, running: true },
     { instance: 'x-1', agent: 'stray', agentsRoot: '/a', identity: { team: null }, running: true },
     { instance: 'x-2', agent: 'legacy', agentsRoot: '/a', running: true },
@@ -106,12 +106,12 @@ test('the board card sums up your instances on the team, for the members whose i
 });
 
 test('syncRoster: a roster poll that changes who is in a team redraws the cards; an unchanged one, an open form or keyboard focus does not', async t => {
-  let rows = [{ instance: 'rm-1', agent: 'release-manager', agentsRoot: '/a', identity: { team: 'mine:juan.aweb.ai' }, running: true }];
+  let rows = [{ instance: 'rm-1', agent: 'release-manager', agentsRoot: '/a', identity: { team: 'mine:alex.aweb.ai' }, running: true }];
   const u = await mount(t, () => mapped(), { readMembers: async () => route(rows) });
   const before = u.row('mine');
   assert.equal(before.querySelector('.ct-sum').textContent, '1 of your instances');
   u.card.syncRoster(); await tick(); assert.equal(u.row('mine'), before, 'the same roster: nothing redrawn');
-  rows = [...rows, { instance: 'w-2', agent: 'writer', agentsRoot: '/a', identity: { team: 'mine:juan.aweb.ai' }, running: true }];
+  rows = [...rows, { instance: 'w-2', agent: 'writer', agentsRoot: '/a', identity: { team: 'mine:alex.aweb.ai' }, running: true }];
   u.card.syncRoster(); await tick();
   assert.notEqual(u.row('mine'), before); assert.equal(u.row('mine').querySelector('.ct-sum').textContent, '2 of your instances');
   // A state change redraws too (the team's page follows it; the board's barrier is the same).
@@ -188,17 +188,17 @@ test("Add a local team: label + an existing id; the kernel's refusals (captured)
   const type = (name, value) => { const input = u.q(`.ct-form input[name=${name}]`); input.value = value; input.dispatchEvent(new u.dom.window.Event('input', { bubbles: true })); };
   await submit();
   assert.equal(u.q('.ct-error p').textContent, 'A local team needs a label and its provider team id.'); assert.equal(u.calls.length, 1, 'nothing sent');
-  type('label', 'Mine'); type('team', 'mine:juan.aweb.ai'); await submit();
+  type('label', 'Mine'); type('team', 'mine:alex.aweb.ai'); await submit();
   assert.equal(u.q('.ct-error p').textContent, 'A label is lowercase letters and digits, with . _ or - after the first character.'); assert.equal(u.calls.length, 1, "the kernel's grammar, said before sending");
   type('label', 'engineering'); await submit();
-  assert.deepEqual(u.calls.at(-1), { action: 'add', label: 'engineering', team: 'mine:juan.aweb.ai' });
+  assert.deepEqual(u.calls.at(-1), { action: 'add', label: 'engineering', team: 'mine:alex.aweb.ai' });
   assert.equal(u.q('.ct-error p').textContent, 'team engineering is already declared (shared, in oats-workspace.yaml)', 'real: a shared label is E_TEAM_EXISTS');
   assert.equal(u.q('.ct-error pre').textContent, 'E_TEAM_EXISTS');
   type('label', 'mine'); await submit();
   assert.equal(u.q('.ct-error p').textContent, 'team mine is already declared (local, in oats-local.yaml): remove it first (`oats teams remove`) to redefine it');
   assert.equal(u.q('.ct-form input[name=label]').value, 'mine', 'kept for a fix');
   type('label', 'scratch'); type('description', '  Try-outs  '); await submit();
-  assert.deepEqual(u.calls.at(-1), { action: 'add', label: 'scratch', team: 'mine:juan.aweb.ai', description: 'Try-outs' });
+  assert.deepEqual(u.calls.at(-1), { action: 'add', label: 'scratch', team: 'mine:alex.aweb.ai', description: 'Try-outs' });
   assert.equal(u.q('.ct-form'), null, 'added: the form closes');
 });
 

@@ -26,7 +26,7 @@ import { validWorkspaceId } from '../renderer/workspace-id.mjs';
 import { DESKTOP_TERMS } from '../renderer/desktop-terms.mjs';
 import { deploymentState, rowStale } from '../../client/roster-sections.mjs';
 import { createRemoteIdentityStore } from '../server/remote-identity.mjs';
-import { SOURCE, HELD, viewDeps, loadServer, juanState, group, identity, remoteRow, observed, row,
+import { SOURCE, HELD, viewDeps, loadServer, alexState, group, identity, remoteRow, observed, row,
   OATS, LAB, A, L, R, V, V_OATS, V_LAB } from './helpers/workspace-views-fixture.mjs';
 
 const T1 = '2026-10-14T10:00:00.000Z', T2 = '2026-10-14T10:00:10.000Z', T3 = '2026-10-14T10:00:20.000Z', T4 = '2026-10-14T10:00:30.000Z';
@@ -78,17 +78,17 @@ test('argv: a key the kernel would refuse is refused here, before anything runs'
 
 /* ── which keys ───────────────────────────────────────────────────────────── */
 
-/** The server's `held` (cut out of oats-web.mjs) over Juan's fixture, with `over` laid on. */
+/** The server's `held` (cut out of oats-web.mjs) over Alex's fixture, with `over` laid on. */
 function heldOf(over = {}) {
-  const { state } = juanState(over);
+  const { state } = alexState(over);
   const deps = viewDeps(state);
   return new Function(...Object.keys(deps), `${HELD}\nreturn held;`)(...Object.values(deps))();
 }
 const keys = (windows, over) => shared.rosterWorkspaceKeys(heldOf(over), windows, DESKTOP_TERMS);
 const MEMBER = 'github.com/acme/member-of', ODD = 'github.com/odd key';
 const memberIdentity = { ...identity(MEMBER, 'acme:m'), keyFrom: 'member' };
-const sirius = (ws, extra = {}) => group('sirius:s1', 'sirius', '/srv/s', ws, [remoteRow('s-a', '/srv/s')], extra);
-const S = 'remote:sirius:s1';
+const builder = (ws, extra = {}) => group('builder:s1', 'builder', '/srv/s', ws, [remoteRow('s-a', '/srv/s')], extra);
+const S = 'remote:builder:s1';
 
 test('which keys: one per distinct usable key of the windows\' views, sorted', () => {
   assert.deepEqual(keys([]), [], 'no window: no key (the caller reads unfiltered)');
@@ -98,73 +98,73 @@ test('which keys: one per distinct usable key of the windows\' views, sorted', (
   assert.deepEqual(keys([L]), [], 'a local deployment with no key: no key, and nothing of another machine to lose');
   assert.deepEqual(keys([V_OATS, L]), [OATS]);
   // Two views of one key (another default team): one key.
-  const otherTeam = group('rigel:r1', 'rigel', '/srv/r', identity(OATS, 'aweb:other'), []);
-  const both = keys([V_OATS, viewId(OATS, 'aweb:other')], { remoteGroups: [juanState().altair, juanState().vega, otherTeam] });
+  const otherTeam = group('build:r1', 'build', '/srv/r', identity(OATS, 'aweb:other'), []);
+  const both = keys([V_OATS, viewId(OATS, 'aweb:other')], { remoteGroups: [alexState().devbox, alexState().laptop, otherTeam] });
   assert.deepEqual(both, [OATS]);
 });
 
 test('which keys: an unattached view gives its deployment\'s key, member-derived included, reported or remembered', () => {
   // A host whose key is member-derived is registered under that key (the kernel records the host's key, whatever its keyFrom).
-  const { altair, vega } = juanState();
-  assert.deepEqual(keys([S], { remoteGroups: [altair, vega, sirius(memberIdentity)] }), [MEMBER]);
+  const { devbox, laptop } = alexState();
+  assert.deepEqual(keys([S], { remoteGroups: [devbox, laptop, builder(memberIdentity)] }), [MEMBER]);
   // A machine not reached keeps the key remembered for it.
   const remoteIdentities = createRemoteIdentityStore({ file: null });
-  remoteIdentities.observe([sirius(memberIdentity)]);
-  const down = sirius(null, { probe: { ok: false, error: { code: 'E_SSH', message: 'ssh failed' } } });
-  assert.deepEqual(keys([S], { remoteGroups: [altair, vega, down], remoteIdentities }), [MEMBER]);
+  remoteIdentities.observe([builder(memberIdentity)]);
+  const down = builder(null, { probe: { ok: false, error: { code: 'E_SSH', message: 'ssh failed' } } });
+  assert.deepEqual(keys([S], { remoteGroups: [devbox, laptop, down], remoteIdentities }), [MEMBER]);
 });
 
 test('which keys: unfiltered (null) wherever a window\'s machines could not be named', () => {
-  const { altair, vega } = juanState();
+  const { devbox, laptop } = alexState();
   assert.equal(keys(null), null, 'no window set yet: main has not posted');
   assert.equal(keys(undefined), null);
   assert.equal(keys([V_OATS], { rosterAnswered: false }), null, 'no roster answer yet: the first read holds every machine');
   assert.equal(keys([V_OATS, null]), null, 'a window showing the switcher lists every workspace');
   assert.equal(keys(['ws:nosuch']), null, 'a view this server does not serve (a window ahead of the served list)');
-  const down = sirius(null, { probe: { ok: false, error: { code: 'E_SSH', message: 'ssh failed' } } });
-  assert.equal(keys([V_OATS, S], { remoteGroups: [altair, vega, down] }), null, 'a machine whose key is unknown, neither reported nor remembered');
+  const down = builder(null, { probe: { ok: false, error: { code: 'E_SSH', message: 'ssh failed' } } });
+  assert.equal(keys([V_OATS, S], { remoteGroups: [devbox, laptop, down] }), null, 'a machine whose key is unknown, neither reported nor remembered');
   // A key the kernel would refuse is no registration's: on another machine's view the read is unfiltered, on a local one it adds nothing.
-  assert.equal(keys([S], { remoteGroups: [altair, vega, sirius({ ...identity(ODD), keyFrom: 'member' })] }), null);
-  assert.equal(keys([S], { remoteGroups: [altair, vega, sirius({ ...identity('--odd'), keyFrom: 'member' })] }), null);
+  assert.equal(keys([S], { remoteGroups: [devbox, laptop, builder({ ...identity(ODD), keyFrom: 'member' })] }), null);
+  assert.equal(keys([S], { remoteGroups: [devbox, laptop, builder({ ...identity('--odd'), keyFrom: 'member' })] }), null);
   const oddLocal = { ...observed(L, { reachable: true, ...identity(ODD), keyFrom: 'member' }, [row(L, 'l-a')]) };
-  const { state } = juanState();
+  const { state } = alexState();
   assert.deepEqual(keys([V_OATS, L], { snapshot: { byWs: new Map([...state.snapshot.byWs, [L, oddLocal]]) } }), [OATS]);
 });
 
 /* ── a filtered answer, merged ────────────────────────────────────────────── */
 
-const altairG = () => juanState().altair, vegaG = () => juanState().vega;
-const unknownG = () => group('deneb:d1', 'deneb', '/srv/d', null, [], { probe: { ok: false, error: { code: 'E_SSH', message: 'ssh failed' } } });
+const devboxG = () => alexState().devbox, laptopG = () => alexState().laptop;
+const unknownG = () => group('box:d1', 'box', '/srv/d', null, [], { probe: { ok: false, error: { code: 'E_SSH', message: 'ssh failed' } } });
 const answered = (groups) => ({ remoteGroups: groups, rosterAnswered: true, rosterFailure: null });
 const askedFor = (keyList, remembered = identityMemory({ memory: new Map(), notes: new Map() })) => ({ keys: keyList, keyOf: (g) => lastKnownKey(g, remembered) });
 
 test('a filtered answer replaces what it could list, and keeps, as last read, what it did not ask for', () => {
-  const before = answered([altairG(), vegaG(), unknownG()]);
-  const fresh = { ...altairG(), instances: [] };
+  const before = answered([devboxG(), laptopG(), unknownG()]);
+  const fresh = { ...devboxG(), instances: [] };
   const next = remoteRosterState(before, { envelope: ok([fresh]), asked: askedFor([OATS]) }, T2);
-  assert.deepEqual(next.remoteGroups.map((g) => g.id), ['altair:a1', 'vega:v1'], 'vega (another workspace) is kept; deneb (key unknown) was probed and is gone');
+  assert.deepEqual(next.remoteGroups.map((g) => g.id), ['devbox:a1', 'laptop:v1'], 'laptop (another workspace) is kept; box (key unknown) was probed and is gone');
   assert.equal(next.remoteGroups[0], fresh, 'a group the answer lists is the answer\'s');
   assert.equal(next.remoteGroups[1], before.remoteGroups[1], 'a kept group is the object held, unchanged');
-  assert.deepEqual(next.kept, ['vega:v1']);
-  assert.deepEqual(next.reported.map((g) => g.id), ['altair:a1', 'vega:v1'], 'the memory is handed the kept groups too');
+  assert.deepEqual(next.kept, ['laptop:v1']);
+  assert.deepEqual(next.reported.map((g) => g.id), ['devbox:a1', 'laptop:v1'], 'the memory is handed the kept groups too');
   assert.deepEqual([next.rosterAnswered, next.rosterFailure], [true, null]);
   // A group inside the asked set that the answer does not list is gone, as after any answer.
   const gone = remoteRosterState(before, { envelope: ok([]), asked: askedFor([OATS]) }, T2);
-  assert.deepEqual(gone.remoteGroups.map((g) => g.id), ['vega:v1']);
+  assert.deepEqual(gone.remoteGroups.map((g) => g.id), ['laptop:v1']);
   assert.deepEqual(remoteRosterState(before, { envelope: ok([]), asked: askedFor([OATS, LAB]) }, T2).remoteGroups, []);
 });
 
 test('an unfiltered outcome is what it always was: the TUI, which passes no keys, sees no change', () => {
-  const before = answered([altairG(), vegaG()]);
-  const next = remoteRosterState(before, { envelope: ok([altairG()]) }, T2);
+  const before = answered([devboxG(), laptopG()]);
+  const next = remoteRosterState(before, { envelope: ok([devboxG()]) }, T2);
   assert.deepEqual(Object.keys(next).sort(), ['remoteGroups', 'reported', 'rosterAnswered', 'rosterFailure'], 'no `kept`');
-  assert.deepEqual(next.remoteGroups.map((g) => g.id), ['altair:a1']);
+  assert.deepEqual(next.remoteGroups.map((g) => g.id), ['devbox:a1']);
   const tui = readFileSync(new URL('../../../test/tui-boundary.test.mjs', import.meta.url), 'utf8');
   assert.ok(tui.includes('"cli-adapter.mjs": ["cliRemoteRoster"]'), 'the TUI reads through the same adapter, with no keys');
 });
 
 test('an E_BAD_ARGS answer, or any failure, of a filtered read reads as a failed roster read, as today', () => {
-  const before = answered([altairG(), vegaG()]);
+  const before = answered([devboxG(), laptopG()]);
   const refused = { schemaVersion: 1, ok: false, error: { code: 'E_BAD_ARGS', message: '--workspace-key takes a value' } };
   assert.deepEqual(remoteRosterState(before, { envelope: refused, asked: askedFor([OATS]) }, T2), remoteRosterState(before, { envelope: refused }, T2));
   assert.deepEqual(remoteRosterState(before, { envelope: refused, asked: askedFor([OATS]) }, T2).remoteGroups, unavailableGroups(before.remoteGroups, refused.error));
@@ -173,15 +173,15 @@ test('an E_BAD_ARGS answer, or any failure, of a filtered read reads as a failed
 
 test('lastKnownKey: what the last reached read reported, else what is remembered, else unknown', () => {
   const store = createRemoteIdentityStore({ file: null });
-  store.observe([vegaG()]);
-  const remembered = identityMemory({ memory: new Map([['vega:v1', store.get('vega:v1')]]), notes: new Map() });
-  assert.equal(lastKnownKey(altairG(), remembered), OATS);
-  assert.equal(lastKnownKey(sirius(memberIdentity), remembered), MEMBER, 'member-derived counts');
-  const vegaDown = { ...vegaG(), probe: { ok: false, error: { code: 'E_SSH', message: 'x' } }, workspace: null };
-  assert.equal(lastKnownKey(vegaDown, remembered), LAB, 'not reached: remembered');
+  store.observe([laptopG()]);
+  const remembered = identityMemory({ memory: new Map([['laptop:v1', store.get('laptop:v1')]]), notes: new Map() });
+  assert.equal(lastKnownKey(devboxG(), remembered), OATS);
+  assert.equal(lastKnownKey(builder(memberIdentity), remembered), MEMBER, 'member-derived counts');
+  const laptopDown = { ...laptopG(), probe: { ok: false, error: { code: 'E_SSH', message: 'x' } }, workspace: null };
+  assert.equal(lastKnownKey(laptopDown, remembered), LAB, 'not reached: remembered');
   assert.equal(lastKnownKey(unknownG(), remembered), null);
-  assert.equal(lastKnownKey({ ...altairG(), workspace: { reachable: true } }, remembered), null, 'a host that reports no identity');
-  assert.equal(lastKnownKey(sirius({ ...identity(), key: null, keyFrom: null }), remembered), null);
+  assert.equal(lastKnownKey({ ...devboxG(), workspace: { reachable: true } }, remembered), null, 'a host that reports no identity');
+  assert.equal(lastKnownKey(builder({ ...identity(), key: null, keyFrom: null }), remembered), null);
 });
 
 test('a kept group keeps its read time: a filtered read never makes it look newer; an unfiltered answer reads it again', () => {
@@ -193,47 +193,47 @@ test('a kept group keeps its read time: a filtered read never makes it look newe
     held = next;
     return next;
   };
-  take({ envelope: ok([altairG(), vegaG()]) }, T1);
+  take({ envelope: ok([devboxG(), laptopG()]) }, T1);
   assert.deepEqual([...times], []);
-  take({ envelope: ok([altairG()]), asked: askedFor([OATS]) }, T2);
-  assert.deepEqual([...times], [['vega:v1', T1]], 'read by the answer at T1');
-  take({ envelope: ok([altairG()]), asked: askedFor([OATS]) }, T3);
-  assert.deepEqual([...times], [['vega:v1', T1]], 'still T1');
+  take({ envelope: ok([devboxG()]), asked: askedFor([OATS]) }, T2);
+  assert.deepEqual([...times], [['laptop:v1', T1]], 'read by the answer at T1');
+  take({ envelope: ok([devboxG()]), asked: askedFor([OATS]) }, T3);
+  assert.deepEqual([...times], [['laptop:v1', T1]], 'still T1');
   take({ thrown: 'boom' }, T4);
-  assert.deepEqual([...times], [['vega:v1', T1]], 'a failed read changes no read time');
+  assert.deepEqual([...times], [['laptop:v1', T1]], 'a failed read changes no read time');
   const panels = new Map(remotePanelEntries(held.remoteGroups, T4, times));
   assert.equal(panels.get(V).generatedAt, T1, 'the kept group\'s panel says when it was read');
   assert.equal(panels.get(R).generatedAt, T4);
   assert.deepEqual(remotePanelEntries(held.remoteGroups, T4).map(([, p]) => p.generatedAt), [T4, T4], 'without times, as before');
-  take({ envelope: ok([altairG(), vegaG()]) }, T4);
+  take({ envelope: ok([devboxG(), laptopG()]) }, T4);
   assert.deepEqual([...times], [], 'read again: no kept time');
   assert.deepEqual([...keptReadTimes(new Map([['x', T1]]), { remoteGroups: [], reported: null }, T2)], [], 'gated: nothing held');
 });
 
 test('the memory keeps a kept group\'s identity: a filtered answer forgets only what it could have listed', () => {
-  const first = observeIdentities({ memory: new Map(), notes: new Map() }, [altairG(), vegaG()], T1);
-  const next = remoteRosterState(answered([altairG(), vegaG()]), { envelope: ok([altairG()]), asked: askedFor([OATS]) }, T2);
+  const first = observeIdentities({ memory: new Map(), notes: new Map() }, [devboxG(), laptopG()], T1);
+  const next = remoteRosterState(answered([devboxG(), laptopG()]), { envelope: ok([devboxG()]), asked: askedFor([OATS]) }, T2);
   const after = observeIdentities(first, next.reported, T2);
-  assert.deepEqual([...after.memory.keys()], ['altair:a1', 'vega:v1']);
-  assert.equal(after.memory.get('vega:v1').reportedAt, T1, 'not reported again: its time is kept');
+  assert.deepEqual([...after.memory.keys()], ['devbox:a1', 'laptop:v1']);
+  assert.equal(after.memory.get('laptop:v1').reportedAt, T1, 'not reported again: its time is kept');
   assert.equal(after.changed, false);
 });
 
 test('only a registered group is kept: one known only from saved routes is always probed, and the memory drops it', () => {
-  const routeOnly = group('mira:m1', 'mira', '/srv/m', identity(LAB, 'aweb:lab'), [remoteRow('m-a', '/srv/m', { savedRoute: true })], { registrationPresent: false });
-  const before = answered([altairG(), vegaG(), routeOnly]);
-  const next = remoteRosterState(before, { envelope: ok([altairG()]), asked: askedFor([OATS]) }, T2);
-  assert.deepEqual(next.remoteGroups.map((g) => g.id), ['altair:a1', 'vega:v1'], 'mira (last known LAB, not asked for) is gone: the read probed it');
-  assert.deepEqual(next.kept, ['vega:v1']);
+  const routeOnly = group('kb-host:m1', 'kb-host', '/srv/m', identity(LAB, 'aweb:lab'), [remoteRow('m-a', '/srv/m', { savedRoute: true })], { registrationPresent: false });
+  const before = answered([devboxG(), laptopG(), routeOnly]);
+  const next = remoteRosterState(before, { envelope: ok([devboxG()]), asked: askedFor([OATS]) }, T2);
+  assert.deepEqual(next.remoteGroups.map((g) => g.id), ['devbox:a1', 'laptop:v1'], 'kb-host (last known LAB, not asked for) is gone: the read probed it');
+  assert.deepEqual(next.kept, ['laptop:v1']);
   const first = observeIdentities({ memory: new Map(), notes: new Map() }, before.remoteGroups, T1);
-  assert.ok(first.memory.has('mira:m1'));
-  assert.deepEqual([...observeIdentities(first, next.reported, T2).memory.keys()], ['altair:a1', 'vega:v1'], 'its identity is forgotten');
+  assert.ok(first.memory.has('kb-host:m1'));
+  assert.deepEqual([...observeIdentities(first, next.reported, T2).memory.keys()], ['devbox:a1', 'laptop:v1'], 'its identity is forgotten');
 });
 
 test('a kept group reaches the panel and the switcher as last read: stale with its read time, its rows held, never live', async () => {
-  const { state } = juanState();
+  const { state } = alexState();
   const at = (kept) => loadServer({ ...state, keptReadAt: new Map(kept) });
-  const { request, views } = await at([['vega:v1', T1]]);
+  const { request, views } = await at([['laptop:v1', T1]]);
   for (const ws of [V_LAB, V]) {
     const panel = (await request({ url: `/api/panel?ws=${encodeURIComponent(ws)}` })).body;
     assert.equal(panel.generatedAt, T1, `${ws}: made at its read time, not now`);
@@ -251,8 +251,8 @@ test('a kept group reaches the panel and the switcher as last read: stale with i
   assert.deepEqual([panel.deployments[0].stale, deploymentState(panel.deployments[0]).key], [undefined, 'live']);
   assert.equal(fresh.views.workspaceChoices().find((w) => w.id === V_LAB).notLive, 0);
   // A held group the kept times do not name, and a not-reached one, read as they always did.
-  const down = juanState({ remoteGroups: [altairG(), { ...vegaG(), probe: { ok: false, error: { code: 'E_SSH', message: 'x' } } }] });
-  const unreached = (await (await loadServer({ ...down.state, keptReadAt: new Map([['vega:v1', T1]]) })).request({ url: `/api/panel?ws=${encodeURIComponent(V)}` })).body;
+  const down = alexState({ remoteGroups: [devboxG(), { ...laptopG(), probe: { ok: false, error: { code: 'E_SSH', message: 'x' } } }] });
+  const unreached = (await (await loadServer({ ...down.state, keptReadAt: new Map([['laptop:v1', T1]]) })).request({ url: `/api/panel?ws=${encodeURIComponent(V)}` })).body;
   assert.equal(deploymentState(unreached.deployments[0]).key, 'unreached', 'a machine not reached is not reached, kept or not');
 });
 
@@ -315,10 +315,10 @@ test('main posts the set on every change of the window set and at each served-li
 
 /* ── the backend ──────────────────────────────────────────────────────────── */
 
-/** The shipped handler over Juan's state, with a remote loop that counts its requests. */
+/** The shipped handler over Alex's state, with a remote loop that counts its requests. */
 async function windowsRoute(over = {}, features = ['workspace-identity', WORD]) {
   const requests = [];
-  const { state } = juanState(over);
+  const { state } = alexState(over);
   const { request } = await loadServer({ ...state, cliState: { ok: true, bin: '/oats', features, remote: ['roster'] } },
     { windowViews: null, MAX_WINDOW_VIEWS, validWorkspaceId, remoteLoop: { request: () => { requests.push(1); } } });
   const post = (body, headers) => request({ url: '/api/windows', method: 'POST', body, ...(headers ? { headers } : {}) });
@@ -363,7 +363,7 @@ test('POST /api/windows: a new workspace reads at once; a window closing or the 
 test('POST /api/windows: a set says what the next read asks for, never what the last read covered: a workspace opened after an unfiltered set reads now', async () => {
   // A filtered read of oats has landed (lab kept); no read runs between the posts.
   for (const between of [[L], []]) {
-    const r = await windowsRoute({ keptReadAt: new Map([['vega:v1', T1]]) });
+    const r = await windowsRoute({ keptReadAt: new Map([['laptop:v1', T1]]) });
     await r.post({ views: [V_OATS] });
     const before = r.requests.length;
     await r.post({ views: between }); assert.equal(r.requests.length, before, `${JSON.stringify(between)}: no key to add`);
@@ -390,7 +390,7 @@ test('the read is gated on the feature word of the CLI that answers, never on a 
   const without = { ok: true, bin: '/oats', version: '99.0.0', features: ['workspace-identity'], remote: ['roster'] };
   const asked = rosterAsk({ windowViews: [V_OATS, V_LAB] })(withWord);
   assert.deepEqual(asked.keys, [OATS, LAB]);
-  assert.equal(asked.keyOf(vegaG()), LAB);
+  assert.equal(asked.keyOf(laptopG()), LAB);
   assert.equal(rosterAsk({ windowViews: [V_OATS, V_LAB] })(without), null, 'no word: today\'s read, whatever the version');
   assert.equal(rosterAsk({ windowViews: [V_OATS, V_LAB] })({ ...withWord, features: null }), null);
   assert.equal(rosterAsk({ windowViews: [] })(withWord), null, 'no usable key: no flag');

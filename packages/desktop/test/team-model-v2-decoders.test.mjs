@@ -23,7 +23,7 @@ test('oats teams (real): shared + local teams, the default, souls as written, pr
   const t = teamsData(v2('teams-after'), DEPLOYMENT);
   assert.equal(t.defaultTeam, 'mine');
   assert.deepEqual(t.teams.map(r => [r.label, r.team, r.from, r.default]), [['engineering', null, 'shared', false], ['global', null, 'shared', false],
-    ['marketing', null, 'shared', false], ['mine', 'mine:juan.aweb.ai', 'local', true]]);
+    ['marketing', null, 'shared', false], ['mine', 'mine:alex.aweb.ai', 'local', true]]);
   assert.deepEqual([t.teams[3].description, t.teams[3].at], ['My own team', 'oats-local.yaml#/teams/mine']);
   assert.match(t.teams[0].at, /oats-workspace\.yaml#\/teams\/engineering$/);
   assert.deepEqual(t.souls, { teams: { 'release-manager': ['mine', 'engineering'], '*': ['global'] }, default: { 'release-manager': 'engineering' } });
@@ -54,7 +54,7 @@ test('oats soul teams (real): rows with via in the kernel\'s order, the default,
 test('souls rows and /api/agents (real): teams and defaultTeam pass through; 0.29 rows gain no keys', () => {
   const souls = soulsData(v2('souls')).souls, rm = souls.find(s => s.name === 'release-manager');
   assert.deepEqual(rm.teams.map(t => [t.label, t.team, t.default, t.from, t.mapped]), [['engineering', null, true, 'shared', false], ['global', null, false, 'shared', false],
-    ['mine', 'mine:juan.aweb.ai', false, 'local', true]]);
+    ['mine', 'mine:alex.aweb.ai', false, 'local', true]]);
   assert.deepEqual(rm.defaultTeam, { label: 'engineering', team: null, from: 'soul' }, 'an unmapped default names its label');
   for (const s of soulsData(read('workspace-v2/desktop-facts/souls')).souls) assert.equal(Object.hasOwn(s, 'teams') || Object.hasOwn(s, 'defaultTeam'), false, '0.29: no v2 keys invented');
   const bad = v2('souls'); bad.result.souls.find(s => s.name === 'release-manager').teams[0] = { label: 'x', team: 't', mapped: true }; // a 0.29 row in a v2 list
@@ -88,7 +88,7 @@ test('argv: oats teams and oats soul teams, validated before any exec, never opt
   const calls = [], exec = (bin, argv, opts, done) => { calls.push(argv); done(null, JSON.stringify({ schemaVersion: 1, ok: true, result: {} })); };
   const ws = '/w';
   await cliTeams('/oats', { workspaceDir: ws }, { exec });
-  await cliTeams('/oats', { action: 'add', label: 'antares-oats', team: 'antares-oats:juan.aweb.ai', description: 'Mine', workspaceDir: ws }, { exec });
+  await cliTeams('/oats', { action: 'add', label: 'builder-oats', team: 'builder-oats:alex.aweb.ai', description: 'Mine', workspaceDir: ws }, { exec });
   await cliTeams('/oats', { action: 'remove', label: 'old', workspaceDir: ws }, { exec });
   await cliTeams('/oats', { action: 'default', label: 'oats', workspaceDir: ws }, { exec });
   await cliSoulTeams('/oats', { soul: 'oats-expert', add: ['oats', 'reviewers'], remove: ['old'], defaultLabel: 'oats', workspaceDir: ws }, { exec });
@@ -96,7 +96,7 @@ test('argv: oats teams and oats soul teams, validated before any exec, never opt
   await cliSoulTeams('/oats', { soul: '*', add: ['oats'], workspaceDir: ws }, { exec });
   assert.deepEqual(calls, [
     ['teams', '--dir', ws, '--json'],
-    ['teams', 'add', 'antares-oats', '--team=antares-oats:juan.aweb.ai', '--description=Mine', '--dir', ws, '--json'],
+    ['teams', 'add', 'builder-oats', '--team=builder-oats:alex.aweb.ai', '--description=Mine', '--dir', ws, '--json'],
     ['teams', 'remove', 'old', '--dir', ws, '--json'], ['teams', 'default', 'oats', '--dir', ws, '--json'],
     ['soul', 'teams', 'oats-expert', '--add=oats,reviewers', '--remove=old', '--default=oats', '--dir', ws, '--json'],
     ['soul', 'teams', 'oats.okf/harvester', '--clear-default', '--dir', ws, '--json'],
@@ -136,7 +136,7 @@ test('readiness (real): team items in checks.configured (no fifth check) keep co
 
 test('team ids follow the kernel\'s provider-neutral rule in every generic reader (the aweb form stays the route\'s)', async () => {
   const { teamRow, defaultTeamOf, TEAM_ID } = await import('../../client/team-rows.mjs');
-  for (const id of ['mine:juan.aweb.ai', 'team@example.org', 'org/team+eng', 'a', 'A'.repeat(256)]) {
+  for (const id of ['mine:alex.aweb.ai', 'team@example.org', 'org/team+eng', 'a', 'A'.repeat(256)]) {
     assert.ok(TEAM_ID.test(id), id);
     assert.ok(teamRow({ label: 'x', team: id, default: false, from: 'local' }), id);
     assert.ok(defaultTeamOf({ label: 'x', team: id, from: 'soul' }), id);

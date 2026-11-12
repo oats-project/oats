@@ -1,6 +1,6 @@
 {
   "name": "@awebai/oats",
-  "version": "0.69.17",
+  "version": "0.69.18",
   "description": "OATS (Open Agent Team Specification) — durable souls, disposable instances, targetable capability packages, and the runtime-neutral oats CLI/kernel.",
   "keywords": [
     "agents",
@@ -52,7 +52,6 @@
     "packages/tui/package.json"
   ],
   "dependencies": {
-    "@awebai/pi": "^0.2.1",
     "croner": "10.0.1",
     "yaml": "2.9.1"
   },
@@ -60,6 +59,7 @@
     "oats": "./bin/oats.mjs"
   },
   "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.80.3",
     "ajv": "8.17.1"
   }
 }

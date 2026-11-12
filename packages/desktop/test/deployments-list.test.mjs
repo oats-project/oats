@@ -99,10 +99,10 @@ function userData({ recents, open }) {
 }
 
 test("the import: recents ∪ the saved open set, as written, once; the kernel answered, so the recents file is renamed and never read again", async () => {
-  const u = userData({ recents: JSON.stringify(["/h/acme", "relative", "/h/gone", "/h/acme/", 7]), open: JSON.stringify(["/h/tsm", "/h/acme", "/Volumes/x/team"]) });
+  const u = userData({ recents: JSON.stringify(["/h/acme", "relative", "/h/gone", "/h/acme/", 7]), open: JSON.stringify(["/h/web", "/h/acme", "/Volumes/x/team"]) });
   try {
     assert.deepEqual(await u.run({ ok: true, value: { imported: true, at: "2026-10-19T10:00:00.000Z", added: [] } }), { status: "imported" });
-    assert.deepEqual(u.asked, [["/h/acme", "/h/gone", "/h/acme/", "/h/tsm", "/Volumes/x/team"]], "every absolute path as written, each once, whatever its state");
+    assert.deepEqual(u.asked, [["/h/acme", "/h/gone", "/h/acme/", "/h/web", "/Volumes/x/team"]], "every absolute path as written, each once, whatever its state");
     assert.equal(existsSync(u.recentsFile), false);
     assert.equal(readFileSync(u.imported, "utf8"), JSON.stringify(["/h/acme", "relative", "/h/gone", "/h/acme/", 7]), "renamed whole");
     assert.equal(existsSync(u.openFile), true, "the open set is the Desktop's own, kept");
@@ -113,14 +113,14 @@ test("the import: recents ∪ the saved open set, as written, once; the kernel a
 
 test("the import: an import done before (a crash before the rename) also renames; a refusal or a CLI without the list keeps the file", async () => {
   const again = userData({ recents: "[]" });
-  const kept = userData({ recents: "not json", open: JSON.stringify(["/h/tsm"]) });
+  const kept = userData({ recents: "not json", open: JSON.stringify(["/h/web"]) });
   try {
     assert.deepEqual(await again.run({ ok: true, value: { imported: false, at: "2026-10-19T10:00:00.000Z", added: [] } }), { status: "already" });
     assert.deepEqual(again.asked, [[]], "nothing to name is still the import: the kernel sets its marker");
     assert.equal(existsSync(again.imported), true);
     const refused = await kept.run({ ok: false, reason: { code: "E_DEPLOYMENTS_BUSY", message: "locked" } });
     assert.deepEqual(refused, { status: "kept", reason: "locked" });
-    assert.deepEqual(kept.asked, [["/h/tsm"]], "a recents file that is not JSON names nothing; the open set still goes");
+    assert.deepEqual(kept.asked, [["/h/web"]], "a recents file that is not JSON names nothing; the open set still goes");
     assert.equal(existsSync(kept.recentsFile), true, "kept for the next launch");
     assert.equal((await kept.run({ ok: false, reason: { code: "E_DEPLOYMENTS_FEATURE", message: "no list" } })).status, "kept");
     assert.equal(existsSync(kept.imported), false);

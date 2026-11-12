@@ -294,7 +294,7 @@ test('the side panel\'s soul inspector names the deployment it reads in a view o
   t.after(resetViewDeployments);
   const two = [
     { id: '/d1', machine: 'This Mac', path: '/Users/ana/Agents/first', label: '~/Agents/first', local: true, primary: true, reachable: true },
-    { id: '/d2', machine: 'altair', path: '/srv/first', label: '~/first', local: false, primary: false, reachable: true },
+    { id: '/d2', machine: 'devbox', path: '/srv/first', label: '~/first', local: false, primary: false, reachable: true },
   ];
   notePanel({ workspace: { id: '/team' }, deployments: two });
   const side = await rendered(t, soulSelection, soul);

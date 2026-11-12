@@ -11,7 +11,7 @@
 // session-attach.mjs with an injected runner.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadServer, juanState, A } from './helpers/workspace-views-fixture.mjs';
+import { loadServer, alexState, A } from './helpers/workspace-views-fixture.mjs';
 import { createResumeWiring } from '../session-resume-launch.mjs';
 import { createResumeTrigger } from '../../client/session-resume-trigger.mjs';
 import { prepareRemoteTerm } from '../../client/session-attach.mjs';
@@ -29,7 +29,7 @@ const HOME = `${A}/agents/dev/instances/dev-a`;
 async function serve(cli) {
   const ran = [];
   const exec = (name, answer = {}) => async () => { ran.push(name); return answer; };
-  const { state } = juanState();
+  const { state } = alexState();
   const { request } = await loadServer({ ...state, cliState: cli }, {
     lifecycleRequest: exec('lifecycle', { lifecycleApi: 1, status: 'unavailable' }),
     scheduleRequest: exec('schedules'),
@@ -70,13 +70,13 @@ const HELD = [
   ['a trigger description', `/api/automations${WS}`, { kind: 'trigger', action: 'describe', key: 'pr-review', description: 'x' }],
   ['workspace sync', `/api/workspace-sync${WS}`, { action: 'sync' }],
   ['a capability run', `/api/capabilities${WS}`, { action: 'run', selector: { home: HOME }, operation: 'messaging:teams' }],
-  ['server connect', `/api/server-connect${WS}`, { id: 'altair', host: 'altair', folder: '/home/juan/oats' }],
-  ['server check', `/api/server-check${WS}`, { id: 'altair' }],
-  ['server remove', `/api/server-remove${WS}`, { id: 'altair' }],
+  ['server connect', `/api/server-connect${WS}`, { id: 'devbox', host: 'devbox', folder: '/home/alex/oats' }],
+  ['server check', `/api/server-check${WS}`, { id: 'devbox' }],
+  ['server remove', `/api/server-remove${WS}`, { id: 'devbox' }],
   ['server forget', '/api/server-forget', { server: 'build', instance: 'dev-a' }],
   ['a team write', `/api/workspace-teams${WS}`, { action: 'add', label: 'x', team: 'a:b' }],
   ['a launch-configuration write', `/api/launch-configs${WS}`, { action: 'set', name: 'x', selector: { context: A } }],
-  ['an execution-server spawn', `/api/spawn${WS}`, { agent: 'dev', agentsRoot: `${A}/agents`, serverId: 'altair' }],
+  ['an execution-server spawn', `/api/spawn${WS}`, { agent: 'dev', agentsRoot: `${A}/agents`, serverId: 'devbox' }],
   ['an action no table names yet', `/api/instance-git${WS}`, { action: 'rewrite', selector: { home: HOME } }],
 ];
 

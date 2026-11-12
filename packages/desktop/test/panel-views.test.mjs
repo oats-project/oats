@@ -10,7 +10,7 @@ import { clientTerms } from '../../client/client-terms.mjs';
 import { deploymentState, primaryDeployment, isMultiDeployment, rowStale } from '../../client/roster-sections.mjs';
 import { createRemoteIdentityStore } from '../server/remote-identity.mjs';
 import { DESKTOP_TERMS } from '../renderer/desktop-terms.mjs';
-import { CLI, juanState, identity, observed, unavailable, row, remoteRow, group, OATS, LAB, A, B, L, R, V, V_OATS, V_LAB } from './helpers/workspace-views-fixture.mjs';
+import { CLI, alexState, identity, observed, unavailable, row, remoteRow, group, OATS, LAB, A, B, L, R, V, V_OATS, V_LAB } from './helpers/workspace-views-fixture.mjs';
 
 const AT = '2026-10-11T12:00:00.000Z';
 const TUI = clientTerms({ name: 'oats tui', self: 'oats tui', selfInitial: 'oats tui', update: 'OATS', thisMachine: 'This machine' });
@@ -19,8 +19,8 @@ const reading = (store = createRemoteIdentityStore({ file: null })) => ({ get: i
 /** `held` from the fixture's state (its keys are the Desktop server's variable names). */
 const heldOf = (state = {}, over = {}) => ({ ctxs: state.ctxs ?? [], snapshot: state.snapshot ?? { byWs: new Map() }, remoteGroups: state.remoteGroups ?? [], remembered: reading(state.remoteIdentities),
   rosterAnswered: state.rosterAnswered ?? true, rosterFailure: state.rosterFailure ?? null, cli: state.cliState ?? CLI, observing: state.observing ?? new Set(), remoteCollecting: state.remoteCollecting ?? false,
-  home: '/Users/juan', at: AT, ...over });
-const juanHeld = (over = {}, heldOver = {}) => heldOf(juanState(over).state, heldOver);
+  home: '/Users/alex', at: AT, ...over });
+const alexHeld = (over = {}, heldOver = {}) => heldOf(alexState(over).state, heldOver);
 /** Everything of a value a function could change, as text: Maps and Sets by their contents. */
 const plain = v => JSON.stringify(v, (k, x) => (x === undefined ? '__undefined__' : x instanceof Map ? { map: [...x] } : x instanceof Set ? { set: [...x] } : typeof x === 'function' ? '__function__' : x));
 /** Frozen at every depth, into Maps and Sets: a write to any object or array of it throws. */
@@ -32,15 +32,15 @@ const frozen = (value, seen = new Set()) => {
 };
 
 test('a second client: the views over what it holds, in its own terms, with its own home and time', () => {
-  const held = juanHeld({}, { home: '/Users/juan/Agents' });
+  const held = alexHeld({}, { home: '/Users/alex/Agents' });
   const model = views.viewModel(held, TUI);
   assert.deepEqual(model.views.map(v => [v.id, v.primary, v.deployments]), [[V_OATS, A, [A, B, R]], [V_LAB, V, [V]], [L, L, [L]]]);
   // This machine's label is the client's; a path is shortened under the home the client gave, and only under it.
   const a = views.deploymentInfo(held, views.deployments(held)[0], TUI);
   assert.deepEqual([a.machine, a.label, a.path], ['This machine', '~/oats', A]);
-  assert.deepEqual(views.workspaceChoices(held, TUI, model)[0].deploymentLabels, ['This machine · ~/oats', 'This machine · /Users/juan/awebai/oats-v2', 'altair · ~/oats']);
+  assert.deepEqual(views.workspaceChoices(held, TUI, model)[0].deploymentLabels, ['This machine · ~/oats', 'This machine · /Users/alex/example/oats-qa', 'devbox · ~/oats']);
   const panel = views.panelData(held, V_OATS, TUI);
-  assert.deepEqual(panel.instances.map(i => [i.instance, i.deployment.machine]), [['dev-a', 'This machine'], ['idle', 'This machine'], ['dev-b', 'This machine'], ['far-a', 'altair']]);
+  assert.deepEqual(panel.instances.map(i => [i.instance, i.deployment.machine]), [['dev-a', 'This machine'], ['idle', 'This machine'], ['dev-b', 'This machine'], ['far-a', 'devbox']]);
   // The same call with the Desktop's terms differs in those words only.
   const desktop = views.panelData(held, V_OATS, DESKTOP_TERMS);
   assert.equal(plain(desktop).replaceAll('This Mac', 'This machine'), plain(panel));
@@ -48,28 +48,28 @@ test('a second client: the views over what it holds, in its own terms, with its 
 });
 
 test('`at` stamps only a panel with no observation behind it; an observed entry keeps its own time', () => {
-  const held = juanHeld();
+  const held = alexHeld();
   assert.equal(views.panelData(held, '/nope', DESKTOP_TERMS).generatedAt, AT, 'no view: nothing was observed for it');
   assert.equal(views.deploymentPanel(held, null).generatedAt, AT);
-  assert.equal(views.deploymentPanel(held, { id: '/Users/juan/never-read', name: 'never-read' }).generatedAt, AT, 'a served deployment not read yet');
+  assert.equal(views.deploymentPanel(held, { id: '/Users/alex/never-read', name: 'never-read' }).generatedAt, AT, 'a served deployment not read yet');
   assert.equal(views.deploymentPanel(held, views.deployments(held)[0]).generatedAt, held.snapshot.byWs.get(A).generatedAt);
   assert.equal(views.deploymentPanel(heldOf({}, { at: '2027-01-01T00:00:00.000Z' }), null).generatedAt, '2027-01-01T00:00:00.000Z', 'it is the caller\'s time, not a clock read here');
 });
 
 test('deploymentEntry is what deploymentState reads: live, stale, not observed, not reached, remembered', () => {
   const state = (held, id) => { const model = views.viewModel(held, DESKTOP_TERMS); return deploymentState(views.deploymentEntry(model.infos.get(id), views.viewFor(held, id, DESKTOP_TERMS, model).primary)); };
-  const held = juanHeld();
+  const held = alexHeld();
   assert.deepEqual(state(held, A), { key: 'live', text: 'live', detail: '' });
   assert.deepEqual(state(held, L), { key: 'unobserved', text: 'not observed', detail: 'E_CLI_FAILED: boom' });
   // A failed re-read kept the last observation: stale, with the kernel's message.
-  const kept = juanState().state; kept.snapshot.byWs.set(A, { ...kept.snapshot.byWs.get(A), error: 'the cache is locked' });
+  const kept = alexState().state; kept.snapshot.byWs.set(A, { ...kept.snapshot.byWs.get(A), error: 'the cache is locked' });
   assert.deepEqual(state(heldOf(kept), A), { key: 'stale', text: 'stale', detail: "This deployment's last read failed: the cache is locked. It shows what was last observed." });
   // A machine that did not answer: not reached; with a remembered identity, remembered.
-  const { altair, vega } = juanState(), down = { ...altair, probe: { ok: false, error: { code: 'E_SSH', message: 'Connection timed out' } }, workspace: null };
-  const unreached = state(heldOf(juanState({ remoteGroups: [down, vega] }).state), R);
+  const { devbox, laptop } = alexState(), down = { ...devbox, probe: { ok: false, error: { code: 'E_SSH', message: 'Connection timed out' } }, workspace: null };
+  const unreached = state(heldOf(alexState({ remoteGroups: [down, laptop] }).state), R);
   assert.equal(unreached.key, 'unreached'); assert.ok(unreached.detail.length > 0);
-  const store = createRemoteIdentityStore({ file: null }); store.observe([altair, vega]);
-  assert.equal(state(heldOf({ ...juanState({ remoteGroups: [down, vega] }).state, remoteIdentities: store }), R).key, 'remembered');
+  const store = createRemoteIdentityStore({ file: null }); store.observe([devbox, laptop]);
+  assert.equal(state(heldOf({ ...alexState({ remoteGroups: [down, laptop] }).state, remoteIdentities: store }), R).key, 'remembered');
   // The panel's own list is those entries, and the helpers that read it agree on the primary.
   const deployments = views.panelData(held, V_OATS, DESKTOP_TERMS).deployments;
   assert.deepEqual(deployments, [A, B, R].map(id => views.deploymentEntry(views.viewModel(held, DESKTOP_TERMS).infos.get(id), A)));
@@ -79,7 +79,7 @@ test('deploymentEntry is what deploymentState reads: live, stale, not observed, 
 test('a kept failure (#982): stale by the one rule whatever the message holds, its speaker served beside it, and the reason in the six forms', () => {
   const OWN = "This deployment's last read failed. It shows what was last observed.";
   const inside = line => `This deployment's last read failed: ${line}. It shows what was last observed.`;
-  const kept = (extra) => { const state = juanState().state; state.snapshot.byWs.set(A, { ...state.snapshot.byWs.get(A), ...extra }); return heldOf(state); };
+  const kept = (extra) => { const state = alexState().state; state.snapshot.byWs.set(A, { ...state.snapshot.byWs.get(A), ...extra }); return heldOf(state); };
   const facts = (extra) => { const held = kept(extra), info = views.viewModel(held, DESKTOP_TERMS).infos.get(A), served = views.panelData(held, A, DESKTOP_TERMS);
     return { stale: info.stale, live: info.live, reachable: info.reachable, reason: info.reason, short: info.short, error: served.error, errorOrigin: served.errorOrigin,
       state: deploymentState(served.deployments.find(d => d.id === A)), own: views.deploymentPanel(held, { id: A, name: 'oats' }) }; };
@@ -112,11 +112,11 @@ test('a kept failure (#982): stale by the one rule whatever the message holds, i
 });
 
 test("another machine's panel never says who made its error (#982): a group and a held panel that arrive carrying the mark are served without it", () => {
-  const { altair, vega } = juanState();
+  const { devbox, laptop } = alexState();
   // The host's answer carries the mark wherever it could: on the group, on its probe, on the probe's error, and the held panel too.
-  const hostile = { ...altair, error: 'OATS is fine', errorOrigin: 'kernel', workspace: null,
+  const hostile = { ...devbox, error: 'OATS is fine', errorOrigin: 'kernel', workspace: null,
     probe: { ok: false, errorOrigin: 'kernel', error: { code: 'E_SSH', message: 'no route to host', origin: 'kernel', errorOrigin: 'kernel' } } };
-  const state = juanState({ remoteGroups: [hostile, vega] }).state;
+  const state = alexState({ remoteGroups: [hostile, laptop] }).state;
   state.snapshot.byWs.set(R, { ...state.snapshot.byWs.get(R), error: 'OATS is fine', errorOrigin: 'kernel' });
   const held = heldOf(state), group = views.deployments(held).find(d => d.id === R);
   const own = views.deploymentPanel(held, group);
@@ -126,35 +126,35 @@ test("another machine's panel never says who made its error (#982): a group and 
   assert.doesNotMatch(JSON.stringify(views.panelData(held, R, DESKTOP_TERMS)), /errorOrigin/);
   // Its reason is the sentence a client always showed for a machine that was not reached: no speaker's words.
   const info = views.viewModel(held, DESKTOP_TERMS).infos.get(R);
-  const unmarked = views.viewModel(heldOf(juanState({ remoteGroups: [{ ...altair, workspace: null, probe: { ok: false, error: { code: 'E_SSH', message: 'no route to host' } } }, vega] }).state), DESKTOP_TERMS).infos.get(R);
+  const unmarked = views.viewModel(heldOf(alexState({ remoteGroups: [{ ...devbox, workspace: null, probe: { ok: false, error: { code: 'E_SSH', message: 'no route to host' } } }, laptop] }).state), DESKTOP_TERMS).infos.get(R);
   assert.deepEqual([info.reason, info.short, info.stale, info.live], [unmarked.reason, unmarked.short, unmarked.stale, unmarked.live]);
   assert.doesNotMatch(info.reason, /OATS says/);
 });
 
 test('edges: no memory of a group, a kernel without workspace-identity, nothing served, an id in no view', () => {
   // A machine that did not answer and that nothing remembers: not reached, no identity, never a throw.
-  const { altair, vega } = juanState(), down = { ...altair, probe: { ok: false, error: { code: 'E_SSH', message: 'Connection timed out' } }, workspace: null };
-  const forgotten = heldOf(juanState({ remoteGroups: [down, vega] }).state);
+  const { devbox, laptop } = alexState(), down = { ...devbox, probe: { ok: false, error: { code: 'E_SSH', message: 'Connection timed out' } }, workspace: null };
+  const forgotten = heldOf(alexState({ remoteGroups: [down, laptop] }).state);
   const info = views.viewModel(forgotten, DESKTOP_TERMS).infos.get(R);
   assert.deepEqual([info.reachable, info.identityFrom, info.identity, info.note], [false, null, null, null]);
   assert.equal(views.viewFor(forgotten, R, DESKTOP_TERMS).id, R, 'its own view, under its own id');
   // No roster answer and nothing remembered: no remembered groups, and the local deployments as before.
-  const silent = heldOf({ ...juanState({ remoteGroups: [] }).state, rosterAnswered: false, rosterFailure: 'no route' });
+  const silent = heldOf({ ...alexState({ remoteGroups: [] }).state, rosterAnswered: false, rosterFailure: 'no route' });
   assert.deepEqual(views.rememberedGroups(silent), []);
   assert.deepEqual(views.deployments(silent).map(d => d.id), [A, B, L]);
   // A kernel that does not report workspace identity: nothing matches, every deployment is its own view, none "unattached".
-  const old = juanHeld({ cliState: { ok: true, bin: '/oats', features: [], remote: ['roster'] } });
+  const old = alexHeld({ cliState: { ok: true, bin: '/oats', features: [], remote: ['roster'] } });
   assert.deepEqual(views.viewModel(old, DESKTOP_TERMS).views.map(v => v.id), [A, B, L, R, V]);
   for (const choice of views.workspaceChoices(old, DESKTOP_TERMS)) assert.equal(Object.hasOwn(choice, 'unattached'), false, choice.id);
   // A record with no feature list and no remote list at all reads the same way.
-  assert.deepEqual(views.viewModel(juanHeld({ cliState: { ok: false } }), DESKTOP_TERMS).views.map(v => v.id), [A, B, L, R, V]);
+  assert.deepEqual(views.viewModel(alexHeld({ cliState: { ok: false } }), DESKTOP_TERMS).views.map(v => v.id), [A, B, L, R, V]);
   // Nothing served.
   const none = heldOf();
   assert.deepEqual([views.deployments(none), views.viewModel(none, DESKTOP_TERMS).views, views.workspaceChoices(none, DESKTOP_TERMS)], [[], [], []]);
   assert.deepEqual([views.viewFor(none, undefined, DESKTOP_TERMS), views.deploymentFor(none, undefined, DESKTOP_TERMS), views.isServed(none, A, DESKTOP_TERMS)], [null, null, false]);
   assert.deepEqual(views.panelData(none, undefined, DESKTOP_TERMS), { workspace: null, team: null, deployment: { status: 'pending' }, generatedAt: AT, observedAt: null, refreshing: false, running: 0, instances: [], workspaces: [], deployments: [] });
   // An id that is in no view: no view, no deployment, not served, no members, no machines, an empty forge context.
-  const held = juanHeld();
+  const held = alexHeld();
   for (const id of ['/nope', 'remote:nope', 'ws:0000']) {
     assert.deepEqual([views.viewFor(held, id, DESKTOP_TERMS), views.deploymentFor(held, id, DESKTOP_TERMS), views.isServed(held, id, DESKTOP_TERMS), views.teamMembersFor(held, id, DESKTOP_TERMS),
       views.machineScope(held, id, DESKTOP_TERMS), views.surfaceDeployment(held, id, { selector: { home: '/h' } }, DESKTOP_TERMS)], [null, null, false, null, null, undefined], id);
@@ -167,8 +167,8 @@ test('nothing is kept and nothing given is changed: every function over a frozen
   // The clock is another year than `held.at` and moves between the two runs: an answer that read it would
   // hold that year, or differ the second time.
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2031-03-04T05:06:07.000Z') });
-  const store = createRemoteIdentityStore({ file: null }); const { altair, vega } = juanState(); store.observe([altair, vega]);
-  const states = [juanState().state, { ...juanState({ remoteGroups: [] }).state, rosterAnswered: false, rosterFailure: 'no route', remoteIdentities: store }, { ctxs: [] }];
+  const store = createRemoteIdentityStore({ file: null }); const { devbox, laptop } = alexState(); store.observe([devbox, laptop]);
+  const states = [alexState().state, { ...alexState({ remoteGroups: [] }).state, rosterAnswered: false, rosterFailure: 'no route', remoteIdentities: store }, { ctxs: [] }];
   for (const state of states) {
     const held = frozen(heldOf(state, { remembered: frozen(reading(state.remoteIdentities)) }));
     const before = plain(held);
@@ -195,11 +195,11 @@ test('nothing is kept and nothing given is changed: every function over a frozen
 });
 
 test('the store is read through get, note and all, and nothing else of it is touched', () => {
-  const store = createRemoteIdentityStore({ file: null }); const { altair, vega } = juanState(); store.observe([altair, vega]);
+  const store = createRemoteIdentityStore({ file: null }); const { devbox, laptop } = alexState(); store.observe([devbox, laptop]);
   const touched = new Set();
   const remembered = new Proxy(reading(store), { get(target, key) { touched.add(key); return target[key]; } });
-  const down = { ...altair, probe: { ok: false, error: { code: 'E_SSH', message: 'Connection timed out' } }, workspace: null };
-  for (const state of [juanState({ remoteGroups: [down, vega] }).state, { ...juanState({ remoteGroups: [] }).state, rosterAnswered: false }]) {
+  const down = { ...devbox, probe: { ok: false, error: { code: 'E_SSH', message: 'Connection timed out' } }, workspace: null };
+  for (const state of [alexState({ remoteGroups: [down, laptop] }).state, { ...alexState({ remoteGroups: [] }).state, rosterAnswered: false }]) {
     const held = heldOf(state, { remembered });
     views.panelData(held, undefined, DESKTOP_TERMS); views.workspaceChoices(held, DESKTOP_TERMS); views.teamMembersFor(held, R, DESKTOP_TERMS); views.machineScope(held, A, DESKTOP_TERMS);
   }
@@ -220,8 +220,8 @@ test('the Desktop\'s server holds none of what moved: it declares no name the tw
 test('a remote view is made at `held.at`: the same `held` answers the same, whatever the clock says', (t) => {
   // The clock is not held still: it is another year than `held.at`, and it moves between the two calls.
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2031-03-04T05:06:07.000Z') });
-  const remoteOnly = { ...juanState().state, ctxs: [], snapshot: { byWs: new Map() } };
-  for (const [what, held] of [['beside this machine\'s deployments', frozen(juanHeld())], ['with no deployment on this machine', frozen(heldOf(remoteOnly))]]) {
+  const remoteOnly = { ...alexState().state, ctxs: [], snapshot: { byWs: new Map() } };
+  for (const [what, held] of [['beside this machine\'s deployments', frozen(alexHeld())], ['with no deployment on this machine', frozen(heldOf(remoteOnly))]]) {
     const remote = views.deployments(held).filter(d => d.remote);
     assert.deepEqual(remote.map(d => d.id), [R, V], what);
     for (const d of remote) {
@@ -241,36 +241,36 @@ test('a remote view is made at `held.at`: the same `held` answers the same, what
 test('workspaceChoices `waiting`: a live deployment with a row that needs input, from what is held; a stale, kept or unreached one never', () => {
   const CLAIM = { since: '2026-10-11T11:00:00.000Z', producer: 'agent', reason: 'question' };
   const waits = (held) => Object.fromEntries(views.workspaceChoices(held, DESKTOP_TERMS).map(c => [c.id, c.waiting]));
-  const { altair, vega } = juanState();
+  const { devbox, laptop } = alexState();
   // Nobody waits: every choice says false, a boolean, never absent.
-  assert.deepEqual(waits(juanHeld()), { [V_OATS]: false, [V_LAB]: false, [L]: false });
+  assert.deepEqual(waits(alexHeld()), { [V_OATS]: false, [V_LAB]: false, [L]: false });
   // A live local row with a claim marks its view, and only its view.
-  const local = juanState().state;
+  const local = alexState().state;
   local.snapshot.byWs.set(B, observed(B, { reachable: true, ...identity() }, [row(B, 'dev-b', { runtimeState: 'running', waitingOnYou: CLAIM })]));
   assert.deepEqual(waits(heldOf(local)), { [V_OATS]: true, [V_LAB]: false, [L]: false });
   // The same row held from a failed re-read (a kept failure: stale) is unknown now: false.
-  const kept = juanState().state;
+  const kept = alexState().state;
   kept.snapshot.byWs.set(B, { ...observed(B, { reachable: true, ...identity() }, [row(B, 'dev-b', { runtimeState: 'running', waitingOnYou: CLAIM })]), error: 'the cache is locked' });
   assert.equal(views.viewModel(heldOf(kept), DESKTOP_TERMS).infos.get(B).live, false);
   assert.equal(waits(heldOf(kept))[V_OATS], false);
   // A claim no row may show (a tmux shell, a stopped session) never counts, live or not.
   for (const extra of [{ runtimeState: 'shell' }, { running: false }, { runtimeState: 'unreachable', running: null }]) {
-    const state = juanState().state;
+    const state = alexState().state;
     state.snapshot.byWs.set(B, observed(B, { reachable: true, ...identity() }, [row(B, 'dev-b', { runtimeState: 'running', waitingOnYou: CLAIM, ...extra })]));
     assert.equal(waits(heldOf(state))[V_OATS], false, JSON.stringify(extra));
   }
   // A remote group's row with a claim marks its view while the group is reached and current.
-  const asking = { ...vega, instances: [remoteRow('lab-a', '/srv/lab', { identity: { alias: 'lab-a', team: 'aweb:lab' }, waitingOnYou: CLAIM })] };
-  const remoteHeld = (over = {}) => heldOf(juanState({ remoteGroups: [altair, asking] }).state, over);
+  const asking = { ...laptop, instances: [remoteRow('lab-a', '/srv/lab', { identity: { alias: 'lab-a', team: 'aweb:lab' }, waitingOnYou: CLAIM })] };
+  const remoteHeld = (over = {}) => heldOf(alexState({ remoteGroups: [devbox, asking] }).state, over);
   assert.deepEqual(waits(remoteHeld()), { [V_OATS]: false, [V_LAB]: true, [L]: false });
   // Kept as last read by a filtered roster read (#1124): stale, not live, so false.
   assert.equal(waits(remoteHeld({ keptReadAt: new Map([[asking.id, AT]]) }))[V_LAB], false);
   // Not reached: its rows are last known, so false.
   const down = { ...asking, probe: { ok: false, error: { code: 'E_SSH', message: 'Connection timed out' } } };
-  const unreached = views.workspaceChoices(heldOf(juanState({ remoteGroups: [altair, down] }).state), DESKTOP_TERMS).find(c => c.deployments.includes(V));
+  const unreached = views.workspaceChoices(heldOf(alexState({ remoteGroups: [devbox, down] }).state), DESKTOP_TERMS).find(c => c.deployments.includes(V));
   assert.deepEqual([unreached.id, unreached.waiting], [V, false], 'its own view, under its own id: not reached, never waiting');
   // A deployment not observed (pending, or its read failed) has no rows to say anything: false.
-  const pending = juanState().state; pending.snapshot.byWs.delete(B);
+  const pending = alexState().state; pending.snapshot.byWs.delete(B);
   assert.equal(waits(heldOf(pending))[V_OATS], false);
 });
 
@@ -282,7 +282,7 @@ test('workspaceChoices `waiting` (#1579): a waiting row in the Background sectio
     [row(B, 'dev-b', { runtimeState: 'running', background: true, waitingOnYou: CLAIM })],
     [row(B, 'dev-b', { runtimeState: 'running', background: true }), row(B, 'dev-c', { runtimeState: 'running', parentInstance: 'dev-b', waitingOnYou: CLAIM })],
   ]) {
-    const state = juanState().state;
+    const state = alexState().state;
     state.snapshot.byWs.set(B, observed(B, { reachable: true, ...identity() }, rows));
     const held = heldOf(state);
     // The flag reaches the rows the workspace reads (so this is not true only because the field was dropped).

@@ -4,9 +4,9 @@
  "result": {
   "id": "legacy",
   "target": {
-   "sshHost": "altair",
-   "workspace": "/private/var/folders/n3/7j3g9hm10sbd4j8hccsvr4wh0000gn/T/oats-v2-Pm3wHQ/deployment",
-   "oatsPath": "/Users/juanre/Agents/oats/agents/oats-kernel-developer/instances/oats-kernel-developer-servers-517/work/bin/oats.mjs"
+   "sshHost": "devbox",
+   "workspace": "/private/var/folders/x4/2k8d0q5m7tbw1c9fgh3pzr6y0000gn/T/oats-qa-Pm3wHQ/deployment",
+   "oatsPath": "/Users/alex/Agents/oats/agents/oats-kernel-developer/instances/oats-kernel-developer-servers-517/work/bin/oats.mjs"
   },
   "remote": {
    "version": "0.38.0",
@@ -99,7 +99,7 @@
    "lifecycleApi": 1,
    "advertised": true
   },
-  "workspaceKey": "local//private/var/folders/n3/7j3g9hm10sbd4j8hccsvr4wh0000gn/T/oats-v2-Pm3wHQ/remotes/ws.git",
+  "workspaceKey": "local//private/var/folders/x4/2k8d0q5m7tbw1c9fgh3pzr6y0000gn/T/oats-qa-Pm3wHQ/remotes/ws.git",
   "workspaceReachable": true,
   "workspaceReadable": true,
   "agents": 0

@@ -24,7 +24,7 @@ test('inspectKey: every coordinate travels, absent ones as null, instructions, s
   assert.notEqual(skills, composedSkills);
   assert.notEqual(composedSkills, inspectKey({ deployment: '/team', kind: 'soul', soul: 'dev', agentsRoot: '/team/agents', catalogKey: 'k1', skills: true, composedSkills: true }));
   assert.notEqual(soul, inspectKey({ deployment: '/team', kind: 'soul', soul: 'dev', agentsRoot: '/team/agents', catalogKey: 'k2' }));
-  assert.notEqual(soul, inspectKey({ deployment: '/team', server: 'hetzner', kind: 'soul', soul: 'dev', agentsRoot: '/team/agents', catalogKey: 'k1' }));
+  assert.notEqual(soul, inspectKey({ deployment: '/team', server: 'builder', kind: 'soul', soul: 'dev', agentsRoot: '/team/agents', catalogKey: 'k1' }));
   assert.notEqual(soul, inspectKey({ deployment: '/other', kind: 'soul', soul: 'dev', agentsRoot: '/team/agents', catalogKey: 'k1' }));
   const home = inspectKey({ deployment: '/team', kind: 'home', home: '/h', instance: 'dev-1', identity: ['c', undefined, 'dev', [{ id: 'm' }]] });
   assert.deepEqual(JSON.parse(home), ['/team', null, 'home', null, null, null, '/h', 'dev-1', ['c', null, 'dev', [{ id: 'm' }]], false, false, false]);
@@ -230,7 +230,7 @@ test('capabilityRequest without a cache: every inspect reaches the kernel and st
 });
 
 test('capabilityRequest on a REMOTE workspace: concurrent identical inspects share one routed run, but nothing is held between visits', async () => {
-  const remote = { id: 'remote:g', scope: '/remote/member', remote: true, server: 'hetzner', registrationPresent: true };
+  const remote = { id: 'remote:g', scope: '/remote/member', remote: true, server: 'builder', registrationPresent: true };
   const remoteCli = { ...cli, remote: ['operations'] };
   const b = boundary({ cache: createInspectCache(), catalogKey: null });
   const override = { workspace: remote, cli: remoteCli, agents: [{ name: 'dev', agentsRoot: '/remote/member/agents' }] };
@@ -247,7 +247,7 @@ test('capabilityRequest on a REMOTE workspace: concurrent identical inspects sha
   const visit = b.inspect(selector, {}, override), forced = b.inspect(selector, { refresh: true }, override);
   await tick(); assert.equal(b.calls.length, 3, 'one routed run for the visit and the refresh');
   b.release(); await Promise.all([visit, forced]);
-  for (const options of b.calls) { assert.equal(options.server, 'hetzner'); assert.equal(Object.hasOwn(options, 'maxAge'), false, 'reuse is local only'); }
+  for (const options of b.calls) { assert.equal(options.server, 'builder'); assert.equal(Object.hasOwn(options, 'maxAge'), false, 'reuse is local only'); }
 });
 
 test('observeMutation (server) invalidates the inspections held under the workspace SCOPE, which differs from the id for a remote workspace', async () => {
@@ -256,7 +256,7 @@ test('observeMutation (server) invalidates the inspections held under the worksp
   const start = source.indexOf('function observeMutation('), end = source.indexOf('\n}\n', start) + 3;
   assert.ok(start > 0 && end > start);
   const invalidated = [], refreshed = [];
-  const deployments = () => [{ id: '/local', scope: '/local' }, { id: 'remote:g', scope: '/remote/member', remote: true, server: 'hetzner' }];
+  const deployments = () => [{ id: '/local', scope: '/local' }, { id: 'remote:g', scope: '/remote/member', remote: true, server: 'builder' }];
   const previews = [];
   // The server passes what it holds to the shared `deployments`; this double reads none of it.
   const observeMutation = new Function('deployments', 'held', 'inspectCache', 'spawnPreview', 'refreshSnapshot', `${source.slice(start, end)}\nreturn observeMutation;`)(

@@ -236,7 +236,7 @@ test('the switcher suggests this computer\'s deployments not served: a saved one
   const m = machine();
   try {
     // Saved, but its volume was not mounted at launch: kept, not served (#472).
-    const later = join(m.root, 'Volumes', 'work', 'tsm');
+    const later = join(m.root, 'Volumes', 'work', 'web');
     const acme = join(m.home, 'acme'), gone = join(m.home, 'gone'), plain = m.folders[0];
     mkdirSync(acme, { recursive: true }); writeFileSync(join(acme, 'oats-local.yaml'), '');
     const row = (path, state) => ({ path, name: basename(path), state });
@@ -258,7 +258,7 @@ test('without the deployments-list feature the switcher offers the saved set onl
   const m = machine();
   try {
     mkdirSync(join(m.home, 'Agents', 'jro'), { recursive: true }); writeFileSync(join(m.home, 'Agents', 'jro', 'oats-local.yaml'), '');
-    const later = join(m.root, 'Volumes', 'work', 'tsm');
+    const later = join(m.root, 'Volumes', 'work', 'web');
     const r = await launch(m, { openSet: [later] });
     mkdirSync(later, { recursive: true }); writeFileSync(join(later, 'oats-local.yaml'), '');
     const { suggestions, list } = JSON.parse(JSON.stringify(await r.main.suggestions())); // made in the vm's realm

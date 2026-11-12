@@ -469,22 +469,22 @@ test("readLock: missing file → empty v3; lockfileVersion 2 → E_LOCK_SCHEMA n
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-// ---------- deprecated shims ----------
+// ---------- package exports and file safety ----------
 
-test("phase-A shims: kernel-imported names still exist and throw E_REMOVED pointing at the contract", () => {
-  const shims = [
+test("pre-workspace package refusals are no longer exported", () => {
+  const removed = [
     "aggregateMissingRequirements", "applyFromOasScope", "beginRunJournal", "discoverMigrationScopes", "discoverOasScopes", "discoverWorkspaceScopes", "planFromOasScope",
     "adoptedTemplateDir", "applyConfigMerge", "lockedPackageCapabilities", "planConfigMerge", "readAdoptedTemplate", "requirementInstallPlan",
     "runRequirementInstall", "selectConfigTemplate", "validateConfigTemplate", "writeAdoptedTemplate",
     "capabilityRuntimeTargets", "commandOnPath", "splitConfigLines", "normalizeRequirement", "packageSpecIdentity", "runtimePackageInstalled", "runtimePackageStatus",
     "oasRenameMap", "transformOasConfigText",
   ];
-  for (const name of shims) {
-    assert.equal(typeof packages[name], "function", name);
-    assert.throws(() => packages[name](), (e) => e.code === "E_REMOVED" && e.message.includes(name) && /workspace-module-contracts/.test(e.message), name);
+  for (const name of [...removed, "REQUIREMENT_MANAGERS"]) {
+    assert.equal(Object.hasOwn(packages, name), false, name);
   }
-  assert.throws(() => packages.REQUIREMENT_MANAGERS.npm, (e) => e.code === "E_REMOVED");
-  // Generic file-safety helpers are NOT removed: bin/oats.mjs uses them outside package code.
+});
+
+test("generic file-safety helpers remain available", () => {
   for (const kept of ["writeFileAtomic", "copyFileAtomic", "assertNoSymlinkedParents"]) assert.equal(typeof packages[kept], "function", kept);
   const dir = mkdtempSync(join(tmpdir(), "oats-atomic-"));
   try {

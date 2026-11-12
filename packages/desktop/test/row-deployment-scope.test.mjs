@@ -16,39 +16,39 @@ const row = (deployment, extra = {}) => ({ instance: 'dev-1', agent: 'dev', agen
 const withView = (fn) => { const prev = common.currentWorkspace(); try { common.setWorkspace(VIEW); return fn(); } finally { common.setWorkspace(prev); } };
 
 test('rowDeployment: a tagged row is addressed to its deployment; an untagged row to the selected workspace', () => withView(() => {
-  assert.equal(common.rowDeployment(row('/Users/juan/awebai/oats-v2')), '/Users/juan/awebai/oats-v2');
-  assert.equal(common.rowDeployment({ instance: 'x', deployment: { id: 'remote:altair:3f2a00000000' } }), 'remote:altair:3f2a00000000');
+  assert.equal(common.rowDeployment(row('/Users/alex/example/oats-qa')), '/Users/alex/example/oats-qa');
+  assert.equal(common.rowDeployment({ instance: 'x', deployment: { id: 'remote:devbox:3f2a00000000' } }), 'remote:devbox:3f2a00000000');
   assert.equal(common.rowDeployment({ instance: 'x' }), VIEW, 'a row served before views belonged to the selected (deployment) workspace');
   assert.equal(common.rowDeployment({ instance: 'x', deployment: { id: '' } }), VIEW);
 }));
 
 test('instanceApiPath: the start/restart family goes to the row\'s deployment, not the view', () => withView(() => {
-  const local = row('/Users/juan/awebai/oats-v2');
+  const local = row('/Users/alex/example/oats-qa');
   for (const kind of ['start', 'restart']) {
     const url = new URL(common.instanceApiPath(kind, local), 'http://127.0.0.1');
-    assert.equal(url.searchParams.get('ws'), '/Users/juan/awebai/oats-v2', kind);
+    assert.equal(url.searchParams.get('ws'), '/Users/alex/example/oats-qa', kind);
     assert.equal(url.searchParams.get('home'), local.home, kind);
   }
-  const remote = row('/srv/tsm', { server: 'altair', deployment: { id: 'remote:altair:3f2a00000000', machine: 'altair', path: '/srv/tsm' } });
+  const remote = row('/srv/web', { server: 'devbox', deployment: { id: 'remote:devbox:3f2a00000000', machine: 'devbox', path: '/srv/web' } });
   const url = new URL(common.instanceApiPath('start', remote), 'http://127.0.0.1');
-  assert.deepEqual([url.searchParams.get('ws'), url.searchParams.get('server')], ['remote:altair:3f2a00000000', 'altair']);
+  assert.deepEqual([url.searchParams.get('ws'), url.searchParams.get('server')], ['remote:devbox:3f2a00000000', 'devbox']);
   assert.equal(common.instanceApiPath('restart', 'solo'), `/api/restart/solo?ws=${encodeURIComponent(VIEW)}`, 'a bare name keeps the selected workspace');
 }));
 
 test('instance action targets: owned by the view, addressed to the row\'s deployment; descriptors round-trip it', () => {
-  const r = row('/Users/juan/awebai/oats-v2');
+  const r = row('/Users/alex/example/oats-qa');
   const target = instanceActionTarget(VIEW, r, { requireBirth: true });
   assert.equal(target.workspace, VIEW);
-  assert.equal(target.deployment, '/Users/juan/awebai/oats-v2');
+  assert.equal(target.deployment, '/Users/alex/example/oats-qa');
   assert.equal(sameInstanceActionTarget(target, r, VIEW), true);
-  assert.equal(sameInstanceActionTarget(target, { ...r, deployment: { id: '/Users/juan/Agents/oats' } }, VIEW), false, 'the same home in another deployment is another target');
+  assert.equal(sameInstanceActionTarget(target, { ...r, deployment: { id: '/Users/alex/Agents/oats' } }, VIEW), false, 'the same home in another deployment is another target');
   const descriptor = spawnOpenDescriptor({ kind: 'open-instance', target, connectionEpoch: 0 });
-  assert.equal(descriptor.target.deployment, '/Users/juan/awebai/oats-v2');
+  assert.equal(descriptor.target.deployment, '/Users/alex/example/oats-qa');
   assert.equal(instanceActionTarget('/w', { ...r, deployment: undefined }).deployment, '/w', 'an untagged row: the workspace is its deployment');
 });
 
 test('the context panel addresses its instance sections to the instance\'s deployment', () => {
-  assert.equal(instanceDeployment({ workspace: VIEW, instance: row('/Users/juan/Agents/oats') }), '/Users/juan/Agents/oats');
+  assert.equal(instanceDeployment({ workspace: VIEW, instance: row('/Users/alex/Agents/oats') }), '/Users/alex/Agents/oats');
   assert.equal(instanceDeployment({ workspace: VIEW, instance: { instance: 'x' } }), VIEW);
   assert.equal(instanceDeployment({ workspace: VIEW, instance: null }), VIEW);
 });

@@ -15,7 +15,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadServer, juanState, A, HANDLER } from './helpers/workspace-views-fixture.mjs';
+import { loadServer, alexState, A, HANDLER } from './helpers/workspace-views-fixture.mjs';
 import { OPERATIONS, CLI_MODULES, READS } from '../../client/above-tested.mjs';
 import { FORGE_EPOCH_HEADER, validForgeEpoch } from '../forge-proxy.mjs';
 
@@ -146,7 +146,7 @@ test('acceptance (inventory): a route added in a form the test reads is found, a
 });
 
 test("acceptance (inventory): the handler's GET-only routes run nothing for a POST", async () => {
-  const { request } = await loadServer(juanState().state);
+  const { request } = await loadServer(alexState().state);
   const routes = handlerRoutes();
   for (const route of GET_ONLY) {
     const answer = await request({ url: `${route}${routes.get(route) === 'family' ? '/dev' : ''}?ws=${encodeURIComponent(A)}`, method: 'POST', body: {} });
@@ -162,7 +162,7 @@ test('acceptance (inventory): every POST route asks the gate first, with its rou
   // would record a call.
   const ran = [];
   const boundary = (name) => async () => { ran.push(name); return {}; };
-  const { request } = await loadServer(juanState().state, { FORGE_EPOCH_HEADER, validForgeEpoch, MAX_WINDOW_VIEWS: 16,
+  const { request } = await loadServer(alexState().state, { FORGE_EPOCH_HEADER, validForgeEpoch, MAX_WINDOW_VIEWS: 16,
     instanceColorRequest: boundary('instance-color'), instanceColorNotRun: boundary('instance-color'),
     instanceBackgroundRequest: boundary('instance-background'), instanceBackgroundNotRun: boundary('instance-background'),
     aboveTestedRefusal: (cli, operation) => { asked.push(operation); return refusal; } });

@@ -23,6 +23,10 @@ container is one trust group ([trust-model.md](trust-model.md)):
 - **It holds one team, never several.** Agents that must not be able to read
   each other's identities or affect each other's work get separate
   containers. Nothing in OATS makes sharing one safe.
+- **Its Git credentials must not reach the workspace's own code.** A
+  workspace member is used at its latest commit, so an agent that can push to
+  a member's default branch changes what every deployment of that workspace
+  runs ([trust-model.md](trust-model.md#code-from-outside-the-group)).
 
 ## Configuration contract
 
@@ -200,6 +204,94 @@ Preview runs no provider hook and does not validate a missing seat. Apply
 only after reviewing it and provisioning its seat; use the same arguments
 without `--preview`. Keep the team and controller keys outside the container.
 
+### Making a seat
+
+`identity.source` is the legacy route of `oats.aweb`: the spawn copies an
+existing aweb identity into the new home and connects it. It is the route
+that works in a container today, and it stays labelled legacy until the
+package has a route that admits a seat itself.
+
+A seat is the `.aw` directory of one admitted team member. On both routes
+below the seat's signing key is created in the container, over the SSH
+route, so it is on `/state` and never leaves it; the team's controller key
+stays outside. Which route applies depends on who holds that controller key.
+
+**A team whose controller key the operator holds** (a self-hosted server, or
+a team the operator brought). The seat asks, the controller admits it, the
+seat fetches its certificate:
+
+```sh
+# 1. In the container, once per seat. Prints the add-member command.
+mkdir -p /state/seats/<alias> && cd /state/seats/<alias>
+aw id team request --create-local-key --team <team>:<domain> --name <alias>
+
+# 2. Outside the container, where the team's controller key is: run the
+#    printed `aw id team add-member` command. It answers a certificate id.
+
+# 3. In the container, in the same directory:
+aw id team fetch-cert --team <team> --namespace <domain> --cert-id <certificate-id>
+aw workspace connect --service <the team's aweb server>
+```
+
+An invite cannot be used here: a token made with the operator's own
+controller key is redeemed only on the machine that holds that key
+(`aw id team accept-invite --help`).
+
+**A team hosted by the aweb service.** The service holds the controller key
+and issues an invite token (`aw_inv_…`); the seat redeems it:
+
+```sh
+# In the container, once per seat:
+mkdir -p /state/seats/<alias> && cd /state/seats/<alias>
+aw id team accept-invite <token> --name <alias>
+aw workspace connect --service <the team's aweb server>
+```
+
+The commands are as `aw` 1.36.57 documents them in its own `--help`. The
+sequences have not yet been run in a container.
+
+Before it copies anything, the spawn checks three things and refuses the
+seat when one is missing:
+
+- `signing.key`, the member's key;
+- the server: `aweb_url` in `workspace.yaml` (`aw workspace connect` writes
+  it);
+- the team: the deployment's default team, or else the active team in
+  `teams.yaml`.
+
+The member's certificate under `team-certs/` is not checked at that point,
+and the seat does not work without it: the spawn copies the seat, fails when
+it connects or reads the identity back, and removes the copy.
+
+One seat serves one instance at a time. The spawn writes
+`.aw-retained-seat.json` beside the seat's `.aw` and refuses a second spawn
+while the first instance's home exists; retiring that instance releases the
+seat. Two cases need the operator:
+
+- **The holder's home exists and its runtime is known to be dead.** Spawn
+  with `identity.takeOver=true`. If that runtime is in fact alive, there are
+  then two seats with one key; stop the old one.
+- **The holder's home is gone without a retire** (a home removed by hand, a
+  volume restored). Every later spawn is still refused, as "taken by another
+  spawn a moment ago", and `identity.takeOver` does not apply. Remove
+  `.aw-retained-seat.json` by hand once the home is confirmed gone
+  ([awebai/oats-aweb#227](https://github.com/awebai/oats-aweb/issues/227)).
+
+Retiring never revokes the member's certificate: on a server that is not the
+hosted service, whoever holds the controller key removes a member
+(`aw id team remove-member`).
+
+Known limits of this route, until their fixes are released:
+
+- **A restart can lose the seat's identity.** A seat made this way may not
+  get `AWEB_IDENTITY_HOME` at a restart
+  ([awebai/oats-aweb#226](https://github.com/awebai/oats-aweb/issues/226)).
+  Check `aw whoami` in the home after a restart; if it is not the seat, retire
+  the instance and spawn it again.
+- **Do not interrupt a seat's spawn.** A spawn killed after it connected can
+  delete the standing identity's workspace at the server
+  ([awebai/oats-aweb#228](https://github.com/awebai/oats-aweb/issues/228)).
+
 The pinned OATS release supports this file-backed launch configuration:
 
 ```yaml
@@ -216,6 +308,43 @@ Select it with `--launch-config team-claude`. The operator provisions only a
 `claude setup-token` result through the supported token route. It is readable
 by every agent in the same trust group; read-only mounting does not hide it
 or narrow its authority. Never share the mount across trust groups.
+
+### After changing a credential
+
+A resume starts an agent under the values its last start recorded. When the
+value behind a reference has changed, such as a new token in
+`/etc/agent-login/claude-token`, every resume of that home is refused with
+`E_LAUNCH_ENV_CHANGED`, by the sweep and by hand
+([execution-targets.md](execution-targets.md#resume-after-a-shutdown)). The
+agents do not come back when the container restarts, and host run's log
+shows them as `refused`.
+
+So after replacing a referenced credential, start each agent once yourself.
+An ordinary start does not compare; it uses the new value and records it:
+
+```sh
+# In the container:
+oats session restart --home <abs>   # an agent that runs
+oats session start --home <abs>     # one that is stopped
+```
+
+An ordinary start begins a new conversation; it does not resume the earlier
+one.
+
+### Where conversations are stored
+
+With `CLAUDE_CONFIG_DIR: /state/home/.claude`, Claude Code writes each
+session's transcript under that directory. It holds what the agents read and
+wrote, tool output included: mail they opened, and the results of calls made
+on their behalf.
+
+- It is one directory for every agent of the container, and every agent can
+  read it ([One team, one trust group](#one-team-one-trust-group)).
+- It is on `/state`, so it outlives the container and is in any copy of the
+  volume.
+- OATS neither trims nor deletes it. Retiring an instance removes its home,
+  not its transcripts. The operator decides how long they are kept and
+  removes them.
 
 ## The kernel's periodic work
 

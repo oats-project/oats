@@ -140,7 +140,7 @@ test('server: a CLI without server-probe-features never routes it', async () => 
     assert.deepEqual(await argvFor({ cli, workspace, agents, skills: true }), await argvFor({ cli, workspace, agents }), JSON.stringify(cli.features));
   // A remote workspace with no held row at all, through a CLI that reports skills but does not relay host features.
   const calls = [], invoke = async (_bin, options) => { calls.push(options); return JSON.parse(envelope({ subject: { kind: 'soul' } })); };
-  const remote = { id: 'remote:hetzner', scope: '/remote/member', remote: true, server: 'hetzner', registrationPresent: true };
+  const remote = { id: 'remote:builder', scope: '/remote/member', remote: true, server: 'builder', registrationPresent: true };
   await capabilityRequest({ action: 'inspect', selector: { soul: 'dev', agentsRoot: '/remote/member/agents' }, skills: true },
     { workspace: remote, cli: cliWith([SKILLS_FEATURE]), agents: [{ name: 'dev', agentsRoot: '/remote/member/agents' }], instances: [], localCwd: '/l', invoke });
   assert.equal(Object.hasOwn(calls[0], 'skills'), false, 'the host’s features are not held: never routed');

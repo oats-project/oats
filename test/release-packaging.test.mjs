@@ -22,6 +22,18 @@ function scratch(t) {
 function write(path, text) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, text); }
 const json = (file) => JSON.parse(readFileSync(join(ROOT, file), "utf8"));
 
+test("a production kernel install brings no pi messaging extension or harness", () => {
+  const manifest = json("package.json");
+  const lock = json("package-lock.json");
+  assert.equal(manifest.dependencies["@awebai/pi"], undefined);
+  assert.equal(lock.packages["node_modules/@awebai/pi"], undefined);
+  for (const [path, entry] of Object.entries(lock.packages)) {
+    if (/node_modules\/(?:@awebai\/pi|@earendil-works\/pi-[^/]+)$/.test(path)) {
+      assert.equal(entry.dev, true, `${path} must not be installed in production`);
+    }
+  }
+});
+
 test("all release manifests and lock roots agree; Desktop accepts the actual CLI probe", () => {
   const version = checkReleaseVersions();
   const probe = JSON.parse(execFileSync(process.execPath, [join(ROOT, "bin/oats.mjs"), "version", "--json"], { encoding: "utf8" }));
@@ -123,7 +135,7 @@ test("v2 preparation aligns standalone OKF and Git-only theory catalog pins", ()
   assert.equal(json("package-catalog.json").packages["oats.okf"].ref, "v6.0.3");
   // The getting-started skill writes a workspace file pinning oats.framework only (#1314): that version is the catalog's.
   const gettingStarted = readFileSync(join(ROOT, "skills/oats-getting-started/SKILL.md"), "utf8");
-  assert.match(gettingStarted, /^  oats\.framework: v1\.24\.1\b/m, "the getting-started skill shows the catalog's oats.framework version");
+  assert.match(gettingStarted, /^  oats\.framework: v1\.25\.0\b/m, "the getting-started skill shows the catalog's oats.framework version");
   const catalog = json("package-catalog.json");
   const onboarding = readFileSync(join(ROOT, "oats-package/capabilities/oats-setup/skills/oats-onboarding/SKILL.md"), "utf8");
   const okfVersion = catalog.packages["oats.okf"].ref.slice(1);
@@ -133,7 +145,7 @@ test("v2 preparation aligns standalone OKF and Git-only theory catalog pins", ()
   assert.ok(onboarding.includes("kernel ≥ " + okfFloor), "onboarding carries the mirrored provider's kernel floor");
   assert.equal(catalog.packages["oats.knowledge-theory"], undefined, "the theory package identity was renamed to oats.framework");
   const framework = catalog.packages["oats.framework"];
-  assert.equal(framework.ref, "oats-framework/v1.24.1", "catalog uses the published distribution tag, not a pending kernel release tag");
+  assert.equal(framework.ref, "oats-framework/v1.25.0", "catalog uses the published distribution tag, not a pending kernel release tag");
   assert.equal(framework.path, "oats-package");
   for (const id of ["oats.knowledge-theory", "oats.core", "oats.setup", "oats.onboarding"]) assert.equal(catalog.capabilities[id], "oats.framework");
 });

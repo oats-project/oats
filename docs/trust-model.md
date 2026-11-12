@@ -79,6 +79,26 @@ Inside one trust group, none of these hold:
   on none. Where a harness restricts what its agent can write, that is the
   harness's property and not a promise of OATS.
 
+## Code from outside the group
+
+What an agent's home runs comes from the workspace: packages, pinned by the
+deployment's lock, and member repositories, which are not pinned. A member's
+souls and capabilities are used at the member's latest commit, trusted by
+membership ([capabilities.md](capabilities.md#mental-model)).
+
+So the default branch of the workspace host and of every member is outside
+every agent group, and it is the operator's to keep there. A commit on it
+becomes the hooks and commands of the next spawn of every soul that composes
+that member, in every deployment of the workspace, and of the next capability
+command an operator runs on their own machine.
+
+OATS does not enforce this. An agent holds whatever Git credential its
+deployment gives it. If that credential can push to a member's default
+branch, one subverted agent reaches every other team and the operator, and
+rule 1 no longer bounds the loss. Give agents a credential that cannot:
+branch protection that requires another identity's approval, or a repository
+that is not a member of the workspace.
+
 ## Keys outside the group
 
 One part of the line is enforced by something other than OATS: where a

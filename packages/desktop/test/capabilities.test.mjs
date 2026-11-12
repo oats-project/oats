@@ -35,8 +35,8 @@ test('scope boundary keeps same-named souls distinct, rejects foreign homes and 
   await assert.rejects(capabilityRequest({ action: 'inspect' }, { ...options, workspace: undefined }), /known workspace/);
   await assert.rejects(capabilityRequest({ action: 'inspect' }, { ...options, workspace: { ...workspace, remote: true } }), /registered server/);
   await assert.rejects(capabilityRequest({ action: 'inspect' }, { ...options, cli: { ...cli, operationsApi: undefined } }), /Update/);
-  await capabilityRequest({ action: 'inspect', selector: { soul: 'dev', agentsRoot: agents[1].agentsRoot } }, { ...options, workspace: { ...workspace, remote: true, server: 'hetzner', registrationPresent: true } });
-  assert.equal(calls.at(-1).server, 'hetzner'); assert.equal(calls.at(-1).context, '/team/two'); assert.equal(calls.at(-1).localCwd, '/local');
+  await capabilityRequest({ action: 'inspect', selector: { soul: 'dev', agentsRoot: agents[1].agentsRoot } }, { ...options, workspace: { ...workspace, remote: true, server: 'builder', registrationPresent: true } });
+  assert.equal(calls.at(-1).server, 'builder'); assert.equal(calls.at(-1).context, '/team/two'); assert.equal(calls.at(-1).localCwd, '/local');
   assert.ok(calls.every(call => ['inspect', 'run'].includes(call.action)), 'only read and provider-operation calls reach the CLI');
   // observe-max-age contract: the probe's features travel so the adapter can decide on --max-age; without a
   // configured max-age the key is absent, and every inspect result reports when it was observed.
@@ -51,9 +51,9 @@ test('adapter: inspect and provider operations only — soul set and use are ref
     await assert.rejects(cliCapability(cli.bin, { action, soul: 'dev', agentsRoot: '/team/two/agents' }, { exec: assert.fail }), { code: 'E_BAD_ARGS', message: 'Unknown capability action' });
   }
   let argv;
-  await cliCapability(cli.bin, { action: 'inspect', context: '/remote/member', server: 'hetzner', soul: 'dev', agentsRoot: '/remote/member/agents', localCwd: '/local' },
+  await cliCapability(cli.bin, { action: 'inspect', context: '/remote/member', server: 'builder', soul: 'dev', agentsRoot: '/remote/member/agents', localCwd: '/local' },
     { exec(bin, args, opts, done) { argv = args; assert.equal(opts.cwd, '/local'); done(null, JSON.stringify({ schemaVersion: 1, ok: true, result: {} })); } });
-  assert.deepEqual(argv, ['inspect', '--dir', '/remote/member', '--server', 'hetzner', '--soul', 'dev', '--agents-root', '/remote/member/agents', '--json']);
+  assert.deepEqual(argv, ['inspect', '--dir', '/remote/member', '--server', 'builder', '--soul', 'dev', '--agents-root', '/remote/member/agents', '--json']);
 });
 
 test('scheduled actions require an available declaration on the selected home', async () => {
@@ -130,13 +130,13 @@ test('inspector preserves current provider, availability, kind and required-argu
 });
 
 test('a remote home is inspected when the kernel reports it addressable, never on savedRoute alone', async () => {
-  const calls = [], remoteWs = { ...workspace, name: 'Build box', remote: true, server: 'hetzner', registrationPresent: true };
-  const row = { instance: 'dev-seat', home, agentsRoot: agents[1].agentsRoot, server: 'hetzner', savedRoute: false, addressable: true };
+  const calls = [], remoteWs = { ...workspace, name: 'Build box', remote: true, server: 'builder', registrationPresent: true };
+  const row = { instance: 'dev-seat', home, agentsRoot: agents[1].agentsRoot, server: 'builder', savedRoute: false, addressable: true };
   const options = { workspace: remoteWs, cli, agents, localCwd: '/local', invoke: async (bin, args) => { calls.push(args); return envelope({}); } };
   await capabilityRequest({ action: 'inspect', selector: { home } }, { ...options, instances: [row] });
-  assert.equal(calls.at(-1).server, 'hetzner'); assert.equal(calls.at(-1).home, home);
+  assert.equal(calls.at(-1).server, 'builder'); assert.equal(calls.at(-1).home, home);
   await assert.rejects(capabilityRequest({ action: 'inspect', selector: { home } }, { ...options, instances: [{ ...row, addressable: false, missingRemotely: true }] }),
-    { code: 'E_SNAPSHOT_UNKNOWN', message: 'dev-seat is no longer on Build box. Remove it from this computer with: oats server forget hetzner --instance dev-seat' });
+    { code: 'E_SNAPSHOT_UNKNOWN', message: 'dev-seat is no longer on Build box. Remove it from this computer with: oats server forget builder --instance dev-seat' });
   assert.equal(calls.length, 1);
 });
 

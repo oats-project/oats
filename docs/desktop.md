@@ -559,12 +559,11 @@ scroll down with the fields to read it.
 
 The dialog's last field before **Developer settings** is **Name · optional**.
 Left empty, the kernel numbers the new instance (`<soul>-<n>`). A name you type
-is used in lowercase and gets the soul's role, the last word of the soul's
-name, as its suffix:
-`desktop-improvements` for `oats-desktop-expert` becomes
-`desktop-improvements-expert`. A name that already ends in the role, or is
-the role, stays as typed. The line under the field shows the final name, and a
-name that is too long, invalid or already taken is explained there. A spawn
+is used in lowercase, as typed: nothing is appended to it, and the soul is
+shown beside the instance. What to name it is
+[oats.core's naming rule](../oats-package/capabilities/oats-core/skills/oats-souls/SKILL.md#name-the-instance)
+(oats-souls, "Name the instance"). The line under the field shows the name,
+and a name that is too long, invalid or already taken is explained there. A spawn
 on a server takes the exact name the same way when that machine's OATS can
 take one (feature `spawn-name`, read from its last roster answer), and its
 name is explained there too when that machine refuses it. With an OATS older
@@ -576,8 +575,9 @@ instance is named `<soul>-<purpose>`, and the field shows that prefix.
 `spawn-suggest-name`), the help under an empty Name reads "Left empty, the
 instance is named from its task." Once the Opening instruction holds at
 least seven words, the Desktop asks OATS for a name as you type. The soul's
-own harness reads the instruction and replies with a short name for the work,
-and the role is added as its suffix. The name shows as the field's
+own harness reads the instruction and replies with a short name: a few words
+for the work, then the instance's role as the instruction gives it. The name
+shows as the field's
 placeholder ("release-notes-manager"), on the line under the field ("(from
 the task)") and in **What will be created**. It belongs to the instruction it
 was made for: when you change the instruction it goes, and the Desktop asks

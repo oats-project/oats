@@ -671,6 +671,16 @@ test("routed spawn: a host that does not advertise the keyed spawn gets one spaw
       return true;
     });
 
+    // The host's oats killed under that apply (ssh relays its status, nothing on stdout): the host
+    // may have started the spawn as well, so the decision and the key come back the same way.
+    const killed = (bin, argv) => { const word = String(argv.at(-1)); if (word.includes(" spawn ") && !word.includes("--preview")) throw Object.assign(new Error("ssh exited 137"), { status: 137, stdout: "", stderr: "Killed\n" }); return dropping.exec(bin, argv); };
+    assert.throws(() => routeCommand("build", "spawn", ["dev", "--suggest-name", "--no-launch"], { server, execFileSync: killed }), (e) => {
+      assert.equal(e.code, "E_REMOTE_ENVELOPE"); assert.deepEqual(e.details.decision, preview.result.decision);
+      assert.ok(e.details.fix.includes(`--expect-decision 0123456789abcdef01234567 --idempotency-key ${e.details.idempotencyKey}`));
+      assert.ok(e.message.includes(e.details.fix), "text mode prints the message alone: it carries the fix");
+      return true;
+    });
+
     // The host's refusal of the preview is the spawn's answer: relayed, and nothing is applied.
     const refusal = { schemaVersion: 1, ok: false, error: { code: "E_SOUL_UNKNOWN", message: "soul \"dev\" is not in /w/agents" } };
     const refusing = remote(KEYED, { preview: refusal });

@@ -32,7 +32,7 @@ const { mountShellIcons } = await import("../renderer/shell-icons.mjs");
 
 const SERVED = { id: "/Users/op/OATS", name: "OATS" };
 const OTHER = { id: "/Users/op/other", name: "other" };
-const REMOTE = { id: "remote:antares", name: "antares", server: "antares", remote: true };
+const REMOTE = { id: "remote:builder", name: "builder", server: "builder", remote: true };
 const MISMATCH = "The roster reply belongs to a different workspace. Choose the workspace again.";
 const reply = (workspace, workspaces, instance = "served-1") => ({
   instances: [{ instance, running: true }], workspace, workspaces,
@@ -55,10 +55,10 @@ test("staleWorkspaceSelection: stale only when non-empty and absent from the ser
 
 test("staleWorkspaceSelection (#482): a deployment id saved before views is stale once a view holds it, so its view is adopted", () => {
   const stale = common.staleWorkspaceSelection;
-  const view = { id: "ws:0123456789abcdef0123", name: "oats", deployments: ["/Users/op/Agents/oats", "remote:altair:tsm-1"] };
-  const loose = { id: "remote:vega:x", name: "vega", deployments: ["remote:vega:x"], unattached: true };
+  const view = { id: "ws:0123456789abcdef0123", name: "oats", deployments: ["/Users/op/Agents/oats", "remote:devbox:web-1"] };
+  const loose = { id: "remote:laptop:x", name: "laptop", deployments: ["remote:laptop:x"], unattached: true };
   assert.equal(stale("/Users/op/Agents/oats", { workspace: view, workspaces: [view, loose] }), true, "a local path answered with its view");
-  assert.equal(stale("remote:altair:tsm-1", { workspace: view, workspaces: [view, loose] }), true, "a remote group answered with its view");
+  assert.equal(stale("remote:devbox:web-1", { workspace: view, workspaces: [view, loose] }), true, "a remote group answered with its view");
   assert.equal(stale(view.id, { workspace: view, workspaces: [view, loose] }), false, "the view id itself");
   assert.equal(stale(loose.id, { workspace: loose, workspaces: [view, loose] }), false, "an unattached view's id IS its deployment id: nothing moves");
   assert.equal(stale(loose.id, { workspace: view, workspaces: [view, loose] }), false, "a served unattached view answered with another view stays a mismatch");

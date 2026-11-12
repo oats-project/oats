@@ -934,7 +934,7 @@ test('the shipped poll across a connection change with a read unresolved: the ne
 test('an empty deployment\'s observed answer, as the server sends it, settles to the empty roster (never "Reading the deployment…")', async t => {
   const s = shell(t);
   // /api/panel for an observed deployment with no souls and no instances (unserved-deployment-server.test.mjs).
-  await s.reply(0, panelOf('A', [], { deployment: { status: 'observed', root: '/d/A/agents', workspace: { name: 'tsm', key: 'k' }, reachable: { reachable: true }, withheld: [],
+  await s.reply(0, panelOf('A', [], { deployment: { status: 'observed', root: '/d/A/agents', workspace: { name: 'web', key: 'k' }, reachable: { reachable: true }, withheld: [],
     catalog: { souls: [], ambiguous: [], reason: null, observedAt: null, refreshing: false }, catalogKey: undefined }, observedAt: '2026-10-02T00:00:00.000Z', refreshing: false, running: 0 }));
   assert.equal(s.text(), 'No instances.'); assert.equal(s.context.rosterState.state, 'empty');
   assert.equal(s.list().getAttribute('aria-busy'), null); assert.doesNotMatch(s.text(), /Reading the deployment/);
