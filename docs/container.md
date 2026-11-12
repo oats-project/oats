@@ -250,20 +250,47 @@ aw workspace connect --service <the team's aweb server>
 The commands are as `aw` 1.36.57 documents them in its own `--help`. The
 sequences have not yet been run in a container.
 
-The spawn refuses a seat it cannot use, before copying anything. The
-directory must hold:
+Before it copies anything, the spawn checks three things and refuses the
+seat when one is missing:
 
 - `signing.key`, the member's key;
-- `workspace.yaml` with the server in `aweb_url` (`aw workspace connect`
-  writes it);
-- `teams.yaml` with the active team, and the certificate under `team-certs/`.
+- the server: `aweb_url` in `workspace.yaml` (`aw workspace connect` writes
+  it);
+- the team: the deployment's default team, or else the active team in
+  `teams.yaml`.
+
+The member's certificate under `team-certs/` is not checked at that point,
+and the seat does not work without it: the spawn copies the seat, fails when
+it connects or reads the identity back, and removes the copy.
 
 One seat serves one instance at a time. The spawn writes
 `.aw-retained-seat.json` beside the seat's `.aw` and refuses a second spawn
-while the first instance's home exists; retiring that instance releases it.
+while the first instance's home exists; retiring that instance releases the
+seat. Two cases need the operator:
+
+- **The holder's home exists and its runtime is known to be dead.** Spawn
+  with `identity.takeOver=true`. If that runtime is in fact alive, there are
+  then two seats with one key; stop the old one.
+- **The holder's home is gone without a retire** (a home removed by hand, a
+  volume restored). Every later spawn is still refused, as "taken by another
+  spawn a moment ago", and `identity.takeOver` does not apply. Remove
+  `.aw-retained-seat.json` by hand once the home is confirmed gone
+  ([awebai/oats-aweb#227](https://github.com/awebai/oats-aweb/issues/227)).
+
 Retiring never revokes the member's certificate: on a server that is not the
 hosted service, whoever holds the controller key removes a member
 (`aw id team remove-member`).
+
+Known limits of this route, until their fixes are released:
+
+- **A restart can lose the seat's identity.** A seat made this way may not
+  get `AWEB_IDENTITY_HOME` at a restart
+  ([awebai/oats-aweb#226](https://github.com/awebai/oats-aweb/issues/226)).
+  Check `aw whoami` in the home after a restart; if it is not the seat, retire
+  the instance and spawn it again.
+- **Do not interrupt a seat's spawn.** A spawn killed after it connected can
+  delete the standing identity's workspace at the server
+  ([awebai/oats-aweb#228](https://github.com/awebai/oats-aweb/issues/228)).
 
 The pinned OATS release supports this file-backed launch configuration:
 
