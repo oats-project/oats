@@ -704,3 +704,9 @@ Network membership, CNI enforcement and ingress Host/SNI agreement require runti
 proof before launching agents. An internal bridge, a NetworkPolicy object or a
 healthy proxy alone does not prove the boundary. The [service descriptor](../container/agent/egress/descriptor.md)
 supplies the wrapper mapping without a separate operator schema.
+
+For Kubernetes, liveness runs `node /usr/local/lib/agent-liveness.mjs` to check
+the supervisor process. SSH on port 2222 is readiness: losing SSH must not
+restart the whole team while its agents and broker are still running. The
+container's 45-second termination window includes the kernel and supervisor
+shutdown phases; the nominal phase sum leaves little overhead margin.

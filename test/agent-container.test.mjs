@@ -525,3 +525,23 @@ test("the runtime account keeps a bash login shell at any UID", () => {
 test("Compose keeps the cache-lock hostname stable across recreation", () => {
   assert.equal(parse(read("compose.agent.yaml")).services.agent.hostname,"oats-agent");
 });
+
+test("supervisor liveness stays healthy when SSH is gone", async t => {
+  const url=new URL("../container/agent/liveness.mjs",import.meta.url);
+  assert.ok(existsSync(url),"Kubernetes liveness must observe the supervisor independently of SSH");
+  const {supervisorAlive}=await import(url);
+  const {mkdirSync,symlinkSync}=await import("node:fs");
+  const procRoot=mkdtempSync(join(tmpdir(),"oats-agent-proc-"));
+  t.after(()=>rmSync(procRoot,{recursive:true,force:true}));
+  for(const pid of ["8","38"])mkdirSync(join(procRoot,pid));
+  writeFileSync(join(procRoot,"8","cmdline"),"node\0/usr/local/lib/agent-supervisor.mjs\0");
+  symlinkSync(process.execPath,join(procRoot,"8","exe"));
+  writeFileSync(join(procRoot,"38","cmdline"),"/usr/sbin/sshd\0-D\0");
+  assert.equal(supervisorAlive({procRoot}),true);
+  rmSync(join(procRoot,"38"),{recursive:true});
+  assert.equal(supervisorAlive({procRoot}),true,"losing SSH affects readiness, not team liveness");
+  writeFileSync(join(procRoot,"8","cmdline"),"node\0-e\0contains /usr/local/lib/agent-supervisor.mjs\0");
+  assert.equal(supervisorAlive({procRoot}),false,"a probe's own argument text is not the supervisor");
+  writeFileSync(join(procRoot,"8","cmdline"),"");
+  assert.equal(supervisorAlive({procRoot}),false,"an exited/zombie supervisor is not live");
+});

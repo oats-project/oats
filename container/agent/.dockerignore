@@ -5,3 +5,4 @@
 !entrypoint.sh
 !supervisor.mjs
 !sshd_config
+!liveness.mjs
