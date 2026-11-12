@@ -110,7 +110,7 @@ the UID-only form proves startup and SSH support, not token access.
 | `/etc/agent-login` | root:runtime-GID, 0750; `claude-token` root:runtime-GID, 0440 | Read-only |
 | `/etc/agent-ssh/authorized_keys` | root-owned regular file, 0644 | Read-only |
 | `/etc/resolv.conf` | Operator-provided resolver file | Read-only |
-| `/tmp` | tmpfs, rw,nosuid,nodev,mode=1777 | Ephemeral |
+| `/tmp` | tmpfs, rw,nosuid,nodev,size=AGENT_TMP_SIZE,mode=1777 | Ephemeral; bounded by the configured byte limit |
 
 All binds use `create_host_path: false`: a missing path fails startup.
 `/state/home`, `/state/ssh` and `/state/deploy` are created 0700 by the agent.
@@ -141,6 +141,7 @@ Supply these plain variables to the bundle's env file:
 | `AUTHORIZED_KEYS_FILE` | Absolute host public-key file. |
 | `RESOLV_CONF_FILE` | Absolute host resolver file; always required. |
 | `AGENT_PIDS`, `AGENT_MEMORY`, `AGENT_CPUS` | Positive limits; memory uses bytes, k, m or g. |
+| `AGENT_TMP_SIZE` | Positive integer bytes from the shared configuration's `agents.tmpSize`; bounds the `/tmp` tmpfs. |
 | `AGENTS_NETWORK`, `AGENT_IP` | Installer-created external network and container address. |
 
 The bundle owns the network, resolver, forwarder, firewall and their bypass

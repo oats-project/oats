@@ -66,7 +66,10 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc") {
   equal("environment names differing from reviewed image (values withheld)", changedNames.sort(), []);
   equal("devices", h.Devices || [], []);
   equal("device requests", h.DeviceRequests || [], []);
-  equal("tmpfs", h.Tmpfs, { "/tmp": "rw,nosuid,nodev,mode=1777" });
+  const tmpSize = required(env, "AGENT_TMP_SIZE");
+  assert.match(tmpSize, /^[1-9]\d*$/, "AGENT_TMP_SIZE must be positive bytes");
+  assert.ok(Number.isSafeInteger(Number(tmpSize)), "AGENT_TMP_SIZE must be safe integer bytes");
+  equal("tmpfs", h.Tmpfs, { "/tmp": `rw,nosuid,nodev,size=${tmpSize},mode=1777` });
   equal("restart policy", h.RestartPolicy.Name, "unless-stopped");
   equal("stop grace period (seconds)", info.Config.StopTimeout, 45);
   equal("healthcheck (sshd on 2222)", info.Config.Healthcheck, { Test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2222"], Interval: 30e9, Timeout: 5e9, StartPeriod: 10e9, Retries: 3 });

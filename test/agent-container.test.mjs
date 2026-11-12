@@ -153,7 +153,7 @@ test("agent Compose service retains the isolation contract", () => {
   assert.deepEqual(agent.security_opt, ["no-new-privileges:true"]);
   assert.equal(agent.read_only, true);
   assert.equal(agent.privileged, false);
-  assert.deepEqual(agent.tmpfs, ["/tmp:rw,nosuid,nodev,mode=1777"]);
+  assert.deepEqual(agent.tmpfs, ["/tmp:rw,nosuid,nodev,size=${AGENT_TMP_SIZE:?Set AGENT_TMP_SIZE},mode=1777"]);
   assert.equal(agent.pids_limit, "${AGENT_PIDS:?Set AGENT_PIDS}");
   assert.equal(agent.mem_limit, "${AGENT_MEMORY:?Set AGENT_MEMORY}");
   assert.equal(agent.cpus, "${AGENT_CPUS:?Set AGENT_CPUS}");
@@ -205,14 +205,14 @@ test("Claude auth acceptance excludes the instance project settings", () => {
 
 test("acceptance refuses drift in the admitted container settings", async () => {
   const { inspectAgent } = await import("../container/agent/accept.mjs");
-  const env = { AGENT_IMAGE: "oats-agent:reviewed", AGENT_UID: "20001", AGENT_GID: "20001", TEAM_STATE_DIR: "/srv/team/state", TEAM_LOGIN_DIR: "/srv/team/login", AUTHORIZED_KEYS_FILE: "/srv/team/authorized_keys", RESOLV_CONF_FILE: "/srv/team/resolv.conf", AGENT_PIDS: "512", AGENT_MEMORY: "3g", AGENT_CPUS: "2", AGENTS_NETWORK: "team-agents", AGENT_IP: "172.30.0.2" };
+  const env = { AGENT_IMAGE: "oats-agent:reviewed", AGENT_UID: "20001", AGENT_GID: "20001", TEAM_STATE_DIR: "/srv/team/state", TEAM_LOGIN_DIR: "/srv/team/login", AUTHORIZED_KEYS_FILE: "/srv/team/authorized_keys", RESOLV_CONF_FILE: "/srv/team/resolv.conf", AGENT_PIDS: "512", AGENT_TMP_SIZE: "134217728", AGENT_MEMORY: "3g", AGENT_CPUS: "2", AGENTS_NETWORK: "team-agents", AGENT_IP: "172.30.0.2" };
   const image = { Id: "sha256:" + "1".repeat(64), Config: { Env: ["PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/state/home"], Entrypoint: ["/usr/bin/tini", "--", "/usr/local/bin/agent-entrypoint"], Cmd: null } };
   const inspected = {
     Image: image.Id,
     State: { Running: true },
     Config: { Image: env.AGENT_IMAGE, Hostname:"oats-agent", User: "20001:20001", Env: [...image.Config.Env], Entrypoint: [...image.Config.Entrypoint], Cmd: null, StopTimeout: 45,
       Healthcheck: { Test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2222"], Interval: 30000000000, Timeout: 5000000000, StartPeriod: 10000000000, Retries: 3 } },
-    HostConfig: { CapDrop: ["ALL"], CapAdd: null, SecurityOpt: ["no-new-privileges:true"], ReadonlyRootfs: true, Privileged: false, PidMode: "", IpcMode: "private", GroupAdd: null, UsernsMode: "", UTSMode: "", CgroupnsMode: "private", Sysctls: null, PortBindings: {}, ExtraHosts: [], Dns: null, NetworkMode: "team-agents", PidsLimit: 512, Memory: 3221225472, NanoCpus: 2000000000, Tmpfs: { "/tmp": "rw,nosuid,nodev,mode=1777" }, Binds: [], Mounts: [], Devices: [], DeviceRequests: null, RestartPolicy: { Name: "unless-stopped" } },
+    HostConfig: { CapDrop: ["ALL"], CapAdd: null, SecurityOpt: ["no-new-privileges:true"], ReadonlyRootfs: true, Privileged: false, PidMode: "", IpcMode: "private", GroupAdd: null, UsernsMode: "", UTSMode: "", CgroupnsMode: "private", Sysctls: null, PortBindings: {}, ExtraHosts: [], Dns: null, NetworkMode: "team-agents", PidsLimit: 512, Memory: 3221225472, NanoCpus: 2000000000, Tmpfs: { "/tmp": "rw,nosuid,nodev,size=134217728,mode=1777" }, Binds: [], Mounts: [], Devices: [], DeviceRequests: null, RestartPolicy: { Name: "unless-stopped" } },
     NetworkSettings: { Networks: { "team-agents": { IPAddress: "172.30.0.2" } } },
     Mounts: [
       { Source: "/srv/team/state", Destination: "/state", Type: "bind", RW: true },
@@ -224,6 +224,12 @@ test("acceptance refuses drift in the admitted container settings", async () => 
   inspected.HostConfig.Mounts = inspected.Mounts.map((m) => ({ Type: "bind", Source: m.Source, Target: m.Destination, ReadOnly: !m.RW, BindOptions: {} }));
   Object.assign(inspected.HostConfig, { Runtime: "runc", MemorySwap: 6442450944, OomKillDisable: false, DeviceCgroupRules: null, ShmSize: 67108864 });
   assert.ok(inspectAgent(inspected, env, image).length >= 8);
+  for (const tmp of [undefined, "0", "-1", "1g", "1,exec", "9007199254740992"]) {
+    assert.throws(() => inspectAgent(inspected, {...env, AGENT_TMP_SIZE:tmp}, image), /AGENT_TMP_SIZE/);
+  }
+  const wrongTmpSize = structuredClone(inspected);
+  wrongTmpSize.HostConfig.Tmpfs["/tmp"] = "rw,nosuid,nodev,size=268435456,mode=1777";
+  assert.throws(() => inspectAgent(wrongTmpSize,env,image), /tmpfs/);
   const withoutCmd = structuredClone(image);
   delete withoutCmd.Config.Cmd;
   assert.ok(inspectAgent(inspected, env, withoutCmd).length >= 8, "Docker image metadata omits Cmd while container metadata uses null");

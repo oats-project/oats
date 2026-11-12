@@ -13,7 +13,7 @@ services:
     privileged: false
     read_only: true
     tmpfs:
-      - /tmp:rw,nosuid,nodev,mode=1777
+      - /tmp:rw,nosuid,nodev,size=${AGENT_TMP_SIZE:?Set AGENT_TMP_SIZE},mode=1777
     pids_limit: ${AGENT_PIDS:?Set AGENT_PIDS}
     mem_limit: ${AGENT_MEMORY:?Set AGENT_MEMORY}
     cpus: ${AGENT_CPUS:?Set AGENT_CPUS}
