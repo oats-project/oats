@@ -298,3 +298,24 @@ else process.exit(2);
     assert.match(changed.stderr, /payload differs/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("packed verification is manual-only until the compatible baseline lands", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { parseConfigData } = await import("../lib/config-data.mjs");
+  const workflow = JSON.parse(JSON.stringify(parseConfigData(readFileSync(new URL("../.github/workflows/team-image.yml", import.meta.url), "utf8")).value));
+  assert.equal(workflow.on.workflow_dispatch.inputs.packed_kernel.default, false);
+  assert.equal(workflow.on.workflow_dispatch.inputs.default_payload_proof.default, false);
+  assert.deepEqual(workflow.permissions, { contents: "read" });
+  const packed = workflow.jobs.packed;
+  assert.equal(packed.if, "${{ github.event_name == 'workflow_dispatch' && inputs.packed_kernel }}");
+  const prepare = packed.steps.findIndex((s) => s.run === "node .github/scripts/team-image-pr-context.mjs");
+  const build = packed.steps.findIndex((s) => s.run?.startsWith("docker build "));
+  assert.ok(prepare >= 0 && build > prepare);
+  assert.equal(packed.steps[prepare].env.TEAM_IMAGE_SOURCE_SHA, "${{ github.sha }}");
+  assert.match(packed.steps[build].run, /"\$TEAM_IMAGE_BUILD_CONTEXT"$/);
+  const accept = packed.steps.find((s) => s.run === "bash .github/scripts/team-image-accept.sh");
+  assert.equal(accept.env.TEAM_IMAGE_PACKED_INVENTORY_DIGEST, "${{ steps.context.outputs.inventory-digest }}");
+  const defaultProof = workflow.jobs.verify.steps.find((s) => s.run === "bash .github/scripts/team-image-default-proof.sh");
+  assert.equal(defaultProof.if, "${{ github.event_name == 'workflow_dispatch' && inputs.default_payload_proof }}");
+  assert.doesNotMatch(JSON.stringify(packed), /GITHUB_TOKEN|packages: write|pull_request_target/);
+});

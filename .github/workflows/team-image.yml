@@ -3,6 +3,15 @@ name: Team image
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      default_payload_proof:
+        description: Compare registry-installed payloads with and without the context mount
+        type: boolean
+        default: false
+      packed_kernel:
+        description: Verify the packed HEAD kernel (requires the compatible image baseline)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -30,12 +39,24 @@ jobs:
         with:
           node-version: 22
 
+      - name: Check packed inputs and workflow contracts for the manual proof
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.default_payload_proof }}
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          node --test test/team-image-packed-kernel.test.mjs test/team-image-release-context.test.mjs test/team-image-workflow.test.mjs test/workflow-no-cache.test.mjs
+
       - name: Build the reviewed image
         run: docker build --platform linux/amd64 --tag "$AGENT_IMAGE" container/agent
 
       - name: Accept the real container
         id: accept
         run: bash .github/scripts/team-image-accept.sh
+
+      - name: Compare the default installed payload across the mount seam
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.default_payload_proof }}
+        run: bash .github/scripts/team-image-default-proof.sh
+        env:
+          ACCEPTED_IMAGE_ID: ${{ steps.accept.outputs.image-id }}
 
       - name: Install the registry copy tool
         run: |
@@ -44,6 +65,67 @@ jobs:
           printf 'Skopeo package: `%s`\n' "$(dpkg-query -W -f='${Version}' skopeo)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify export and registry manifest preparation without publishing
+        run: bash .github/scripts/team-image-publish.sh --verify
+        env:
+          ACCEPTED_IMAGE_ID: ${{ steps.accept.outputs.image-id }}
+
+  # The strict baseline guard currently refuses the old committed closure.
+  # Keep this manual-only until the image owner's compatible baseline lands.
+  packed:
+    name: Team image / packed kernel (manual)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.packed_kernel }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      AGENT_IMAGE: oats-team-agent-packed:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Prepare the exact HEAD kernel context
+        id: context
+        run: node .github/scripts/team-image-pr-context.mjs
+        env:
+          TEAM_IMAGE_SOURCE_SHA: ${{ github.sha }}
+
+      # The context is closed HEAD input plus the verified public kernel pack;
+      # npm config/cache live outside it. Retain its private .dockerignore too.
+      - name: Retain packed image inputs and HEAD inventory
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: team-image-packed-inputs
+          path: |
+            ${{ steps.context.outputs.context }}
+            ${{ steps.context.outputs.inventory }}
+            ${{ steps.context.outputs.metadata }}
+          include-hidden-files: true
+          if-no-files-found: error
+
+      - name: Build the HEAD kernel image
+        run: docker build --platform linux/amd64 --tag "$AGENT_IMAGE" "$TEAM_IMAGE_BUILD_CONTEXT"
+        env:
+          TEAM_IMAGE_BUILD_CONTEXT: ${{ steps.context.outputs.context }}
+
+      - name: Accept the real container and installed HEAD files
+        id: accept
+        run: bash .github/scripts/team-image-accept.sh
+        env:
+          TEAM_IMAGE_PACKED_INVENTORY: ${{ steps.context.outputs.inventory }}
+          TEAM_IMAGE_PACKED_INVENTORY_DIGEST: ${{ steps.context.outputs.inventory-digest }}
+
+      - name: Install and record the registry copy tool
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends skopeo
+          printf 'Skopeo package: `%s`\n' "$(dpkg-query -W -f='${Version}' skopeo)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the accepted packed image without publishing
         run: bash .github/scripts/team-image-publish.sh --verify
         env:
           ACCEPTED_IMAGE_ID: ${{ steps.accept.outputs.image-id }}
