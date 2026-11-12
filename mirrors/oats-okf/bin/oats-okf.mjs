@@ -36,7 +36,7 @@ also accept --home PATH. PATH is /node/x.md from the base root, relative to
 oats okf init --base ALIAS --nodes FILE [--output PATH | --confirm] [--json]
 oats okf migrate --legacy PATH --base ALIAS --node NODE --output PATH [--json]
 oats okf migrate --deliver FILE | --cutover FILE --soul-dir PATH | --forget ID [--json]
-oats okf unlock --lock PATH --token TOKEN [--json]
+oats okf unlock --lock PATH --token TOKEN [--host-gone HOST] [--json]
 oats okf setup --remove-legacy-settings [--plan] --soul SOUL [--json]
   (from the deployment: deletes only settings.oats.okf.harvest/harvest-runtime/harvest-model
   from its oats-local.yaml; --plan writes nothing)
@@ -101,7 +101,7 @@ else {
       subjects:['home','base','kind','fresh'],subject:['home','base','fresh'],claims:['home','base','about','type','kind','fresh'],verdicts:['home','base','check','fresh'],
       setup:['remove-legacy-settings','plan','harvest','enable','disable','install-host','remove-schedules'],init:['base','nodes','output','confirm'],
       propose:['home','plan','check','apply','slug','digest'],
-      migrate:['source-home','legacy','base','node','output','deliver','cutover','soul-dir','forget'],unlock:['lock','token']
+      migrate:['source-home','legacy','base','node','output','deliver','cutover','soul-dir','forget'],unlock:['lock','token','host-gone']
     };
     for(const k of Object.keys(flags)) if(!['json','soul',...(accepted[event] || [])].includes(k)) fail('E_USAGE',`unknown flag --${k} for ${event}`);
     if(!cleanup && loadInvocationKnowledgeBinding().kind==='captured' && ['setup','init','migrate','unlock'].includes(event)) fail('E_MIGRATION',`captured ${event} is not supported; use an explicit operator administration path`);
@@ -152,7 +152,7 @@ else {
       else if(flags.deliver) result=deliverMigration(resolve(flags.deliver));
       else if(flags.cutover) result=cutoverMigration(resolve(flags.cutover),flags['soul-dir']);
       else result=migrate(loadBindings(),{legacy:flags.legacy,alias:flags.base,node:flags.node,output:flags.output});
-    } else if(event==='unlock') result=unlock(resolve(flags.lock),flags.token);
+    } else if(event==='unlock') result=unlock(resolve(flags.lock),flags.token,flags['host-gone']);
     else fail('E_USAGE',`unknown command ${event}; see --help`);
     answer=hook?result:{schemaVersion:1,ok:true,result};
   } catch(e) {const code=e.code || 'E_OKF',message=redactUrls(e.message);exit=1;answer=hook?{warning:`oats-okf ${code}: ${message}`}:{schemaVersion:1,ok:false,error:{code,message,...(e.result?{result:e.result}:{})}};}

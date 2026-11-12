@@ -99,7 +99,11 @@ each and answer `E_USAGE: base <alias> has no subject layout` on a plain
 base; with several bound bases pass `--base`. A `W_INDEX_STALE` warning
 means the base's generated indexes lag its claims: the answer is the
 committed index as it is; say so when it matters (the maintainer
-regenerates). `read` (the okf 2.x spelling of `cat`) is removed in 4.0.0
+regenerates). A `W_BASE_INVALID` warning means the base fails validation
+(it names the first finding): the answer still comes from the committed
+indexes, new spawns and proposals on that base are refused, and
+`oats okf bases` shows the error; report it to the knowledge maintainer and
+say so when you rely on the answer. `read` (the okf 2.x spelling of `cat`) is removed in 4.0.0
 (`E_REMOVED`): use `cat`.
 
 ## Navigating
