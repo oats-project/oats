@@ -260,3 +260,41 @@ process.stdout.write(cp.execFileSync(process.execPath, ["-e", args[5], process.e
     assert.equal(existsSync(output), false);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("the default-path proof compares installed payloads without requiring image-ID equality", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { spawnSync } = await import("node:child_process");
+  const root = mkdtempSync(join(tmpdir(), "oats-default-proof-test-"));
+  try {
+    for (const dir of ["bin", "current", "legacy"]) mkdirSync(join(root, dir));
+    for (const dir of ["current", "legacy"]) writeFileSync(join(root, dir, "installed"), "same payload\n");
+    writeFileSync(join(root, "bin/docker"), `#!/usr/bin/env node
+const fs = require("node:fs"), cp = require("node:child_process"), assert = require("node:assert/strict"), path = require("node:path");
+const args = process.argv.slice(2), root = process.env.FIXTURE_DIR;
+if (args[0] === "image" && args[1] === "inspect") console.log("sha256:" + (args.at(-1).includes("default") ? "b" : "a").repeat(64));
+else if (args[0] === "build") {
+  const file = fs.readFileSync(path.join(args.at(-1), "Dockerfile"), "utf8");
+  assert.ok(file.includes("RUN npm ci --ignore-scripts --no-audit --no-fund"));
+  assert.ok(!file.includes("--mount=type=bind"));
+} else if (args[0] === "run") {
+  assert.ok(args.includes("--read-only") && args.includes("--network=none"));
+  const image = args.find((arg) => arg.startsWith("sha256:"));
+  const source = path.join(root, image === "sha256:" + "a".repeat(64) ? "current" : "legacy");
+  process.stdout.write(cp.execFileSync(process.execPath, ["-e", args[args.indexOf("-e") + 1], source]));
+} else if (args[0] === "image" && args[1] === "rm") fs.writeFileSync(path.join(root, "cleaned"), "yes");
+else process.exit(2);
+`, { mode: 0o755 });
+    const script = new URL("../.github/scripts/team-image-default-proof.sh", import.meta.url);
+    const env = { PATH: `${join(root, "bin")}:${process.env.PATH}`, FIXTURE_DIR: root, RUNNER_TEMP: root,
+      AGENT_IMAGE: "oats-team-agent:fixture", ACCEPTED_IMAGE_ID: `sha256:${"a".repeat(64)}`, GITHUB_SHA: "c".repeat(40), GITHUB_STEP_SUMMARY: join(root, "summary") };
+    const run = () => spawnSync("bash", [script.pathname], { env, encoding: "utf8" });
+    const equal = run(); assert.equal(equal.status, 0, equal.stderr);
+    assert.match(readFileSync(env.GITHUB_STEP_SUMMARY, "utf8"), /Default installed payload.*PASS/);
+    assert.equal(readFileSync(join(root, "cleaned"), "utf8"), "yes");
+    writeFileSync(join(root, "legacy/installed"), "changed payload\n");
+    const changed = run(); assert.notEqual(changed.status, 0);
+    assert.match(changed.stderr, /payload differs/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
