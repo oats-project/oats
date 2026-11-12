@@ -16,3 +16,9 @@
   ConfigMap projection at mode 0444, and exactly the two fixed trust settings
   before container startup. Admission rejects unexpected trust data, mounts,
   environment settings and TLS bypasses; native trust proof remains separate.
+- Optional `agents.kubernetes.mirrorsClaim` mounts an existing operator mirror
+  PVC read-only at `/mirrors` outside state, without creating a store or fetching
+  sources. Kubernetes refuses a host directory without that explicit claim,
+  its own writable state claim as a source, and writable alternate mounts.
+  Source/ref/refresh evidence remains operator-owned; PVC presence proves no
+  freshness.

@@ -85,6 +85,9 @@ spec:
             {{- if hasKey $a "caFile" }}
             - { name: agent-ca, mountPath: /etc/agent-trust/ca.pem, subPath: ca.pem, readOnly: true }
             {{- end }}
+            {{- if hasKey $k "mirrorsClaim" }}
+            - { name: mirrors, mountPath: /mirrors, readOnly: true }
+            {{- end }}
       volumes:
         - name: tmp
           emptyDir: { medium: Memory, sizeLimit: {{ include "oats.agent.bytes" $a.tmpSize | quote }} }
@@ -109,6 +112,12 @@ spec:
             name: {{ include "agent.name" . }}-ca
             defaultMode: 292 # 0444
             items: [{ key: ca.pem, path: ca.pem }]
+        {{- end }}
+        {{- if hasKey $k "mirrorsClaim" }}
+        - name: mirrors
+          persistentVolumeClaim:
+            claimName: {{ $k.mirrorsClaim | quote }}
+            readOnly: true
         {{- end }}
   volumeClaimTemplates:
     - metadata:

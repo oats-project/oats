@@ -51,12 +51,12 @@ function isolation(p) {
   assert.equal(c.name, "agent", "container name");
   // The API's non-pointer bool fields omit false when serializing an admitted pod.
   assert.equal(c.stdin ?? false, false, "stdin"); assert.equal(c.tty ?? false, false, "tty");
-  const ca = p.volumes?.some(v => v.name === "agent-ca");
+  const ca = p.volumes?.some(v => v.name === "agent-ca"), mirrors = p.volumes?.some(v => v.name === "mirrors");
   same(c.env ?? [], ca ? [{ name: "SSL_CERT_FILE", value: "/etc/agent-trust/ca.pem" }, { name: "NODE_EXTRA_CA_CERTS", value: "/etc/agent-trust/ca.pem" }] : [], "approved trust settings");
   for (const key of ["command", "args", "envFrom"]) assert.equal(c[key]?.length ?? 0, 0, `unapproved container ${key}`);
   assert.ok(!c.lifecycle, "no lifecycle hooks");
   assert.match(c.image, /^[^\s@]+@sha256:[a-f0-9]{64}$/, "image must be pinned by digest");
-  same(c.volumeMounts, [{ name: "state", mountPath: "/state" }, { name: "tmp", mountPath: "/tmp" }, { name: "login", mountPath: "/etc/agent-login", readOnly: true }, { name: "authorized-keys", mountPath: "/etc/agent-ssh/authorized_keys", subPath: "authorized_keys", readOnly: true }, ...(ca ? [{ name: "agent-ca", mountPath: "/etc/agent-trust/ca.pem", subPath: "ca.pem", readOnly: true }] : [])], "approved mounts");
+  same(c.volumeMounts, [{ name: "state", mountPath: "/state" }, { name: "tmp", mountPath: "/tmp" }, { name: "login", mountPath: "/etc/agent-login", readOnly: true }, { name: "authorized-keys", mountPath: "/etc/agent-ssh/authorized_keys", subPath: "authorized_keys", readOnly: true }, ...(ca ? [{ name: "agent-ca", mountPath: "/etc/agent-trust/ca.pem", subPath: "ca.pem", readOnly: true }] : []), ...(mirrors ? [{ name: "mirrors", mountPath: "/mirrors", readOnly: true }] : [])], "approved mounts");
   same(c.ports, [{ name: "ssh", containerPort: 2222, protocol: "TCP" }], "container ports");
   same(c.livenessProbe?.exec, { command: ["node", "/usr/local/lib/agent-liveness.mjs"] }, "liveness must check the host supervisor");
   assert.ok(!c.livenessProbe.tcpSocket && !c.livenessProbe.httpGet && !c.livenessProbe.grpc, "liveness must use the supervisor helper only");
@@ -64,7 +64,7 @@ function isolation(p) {
   assert.ok(!c.readinessProbe.exec && !c.readinessProbe.httpGet && !c.readinessProbe.grpc, "readiness must use TCP only");
   assert.ok(!c.startupProbe, "no SSH startup probe may restart the team");
   resources(c.resources);
-  return ca;
+  return { ca, mirrors };
 }
 
 /** Select the agent component inside an installable deployment root. Proxy and
@@ -101,7 +101,7 @@ export function checkRendered(docs) {
   same(set.spec.template.metadata.labels, labels, "agent template labels");
   assert.equal(set.spec.replicas, 1, "replicas must stay at one");
   const p = set.spec.template.spec;
-  const ca = isolation(p);
+  const { ca, mirrors } = isolation(p);
   const bundles = docs.filter(d => d.kind === "ConfigMap");
   assert.equal(bundles.length, ca ? 1 : 0, "only the configured agent CA ConfigMap is approved");
   if (ca) {
@@ -124,8 +124,14 @@ export function checkRendered(docs) {
   assert.equal(pvc.metadata.name, "state", "PVC name");
   same(pvc.spec.accessModes, ["ReadWriteOnce"], "PVC access mode");
   assert.ok(quantity(pvc.spec.resources.requests.storage) > 0, "PVC size");
-  same(keys(p.volumes.reduce((a, v) => ({ ...a, [v.name]: v }), {})), ["authorized-keys", "login", "tmp", ...(ca ? ["agent-ca"] : [])].sort(), "rendered volumes");
+  same(keys(p.volumes.reduce((a, v) => ({ ...a, [v.name]: v }), {})), ["authorized-keys", "login", "tmp", ...(ca ? ["agent-ca"] : []), ...(mirrors ? ["mirrors"] : [])].sort(), "rendered volumes");
   const v = Object.fromEntries(p.volumes.map((v) => [v.name, v]));
+  if (mirrors) {
+    const claim = v.mirrors.persistentVolumeClaim?.claimName;
+    assert.ok(typeof claim === "string" && claim.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(claim), "mirrors must reference an existing approved claim");
+    assert.notEqual(claim, `state-${set.metadata.name}-0`, "mirrors must not alias the writable agent state claim");
+    same(v.mirrors, { name: "mirrors", persistentVolumeClaim: { claimName: claim, readOnly: true } }, "read-only mirror volume");
+  }
   if (ca) same(v["agent-ca"], { name: "agent-ca", configMap: { name: `${set.metadata.name}-ca`, defaultMode: 292, items: [{ key: "ca.pem", path: "ca.pem" }] } }, "agent CA projection");
   same(v.tmp, { name: "tmp", emptyDir: { medium: "Memory", sizeLimit: v.tmp.emptyDir?.sizeLimit } }, "tmp volume");
   assert.ok(quantity(v.tmp.emptyDir.sizeLimit) > 0, "tmp size");
@@ -154,6 +160,7 @@ function baseline(p, expected) {
   for (const key of ["securityContext", "serviceAccountName", "imagePullSecrets"]) same(p[key] ?? [], expected[key] ?? [], key);
   same(p.dnsPolicy ?? "ClusterFirst", expected.dnsPolicy ?? "ClusterFirst", "DNS policy");
   same(p.dnsConfig, expected.dnsConfig, "DNS config");
+  same(p.volumes?.find(v => v.name === "mirrors"), expected.volumes?.find(v => v.name === "mirrors"), "mirror source");
   const c = p.containers[0], wanted = expected.containers[0];
   same(c.env ?? [], wanted.env ?? [], "trust settings");
   for (const key of ["image", "imagePullPolicy"]) same(c[key], wanted[key], key);

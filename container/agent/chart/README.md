@@ -47,6 +47,7 @@ The integration reference is aweb commit
 | `agents.kubernetes.authorizedKeys.kind`, `.name` | Existing ConfigMap or Secret with `authorized_keys`, mounted read-only with mode 0444. |
 | `agents.kubernetes.imagePullSecrets` | List of existing Secret names, converted to Kubernetes `{name: ...}` entries for both images. |
 | `agents.kubernetes.imagePullPolicy` | Kubernetes image pull policy for both images. |
+| `agents.kubernetes.mirrorsClaim` | Optional existing operator-provisioned mirror PVC, read-only at `/mirrors`; never the generated state claim. |
 | `agents.kubernetes.service.enabled` | Optional agent ClusterIP Service on TCP 2222. |
 | `egress.privateIngressAddresses` | Cross-check of the derived artifact's explicit private ingress exceptions. |
 
@@ -123,6 +124,29 @@ Agent acceptance checks the rendered bundle, admitted ConfigMap, exact read-only
 projection and the two declared trust settings. These are metadata/content checks;
 real certificate-chain verification and supervisor inheritance still need native
 image/deployment evidence. The chart creates no CA key or certificate authority.
+
+## Optional operator-maintained mirrors
+
+`agents.kubernetes.mirrorsClaim` selects an **existing** operator-provisioned PVC
+of bare Git mirrors. It works without `agents.mirrorsDir`; Kubernetes never reads
+that Compose host path. If `agents.mirrorsDir` is configured without an explicit
+claim, rendering refuses it and names `agents.kubernetes.mirrorsClaim`.
+
+The claim is mounted at `/mirrors`, outside writable `/state`, with both the PVC
+volume source and the mount read-only. The chart refuses its own generated writable
+state claim (`state-<agent-StatefulSet-name>-0`) as a mirror source. Acceptance
+also refuses another writable mount, a changed admitted claim, hostPath sources,
+or alternate paths. The one agent state claim template remains unchanged; no
+mirror PVC/store, fetch process, credentials, init container or extra environment
+setting is created. Read-only mounts cannot detect an unknown storage-level alias;
+the operator must provision a genuinely separate, credential-free mirror source.
+
+The operator owns source URLs, approved refs and the source/ref/refresh manifest,
+and refreshes the mirrors outside the agent. No repository credentials belong in
+this PVC. The existing team-state Git configuration can rewrite canonical URLs
+to `file:///mirrors/`; it remains operator-maintained. PVC presence is **not** proof
+of mirror freshness, source integrity or successful cloning. Native mount and
+Git-consumer evidence remains a separate deployment check.
 
 ## Agent lifecycle and acceptance
 

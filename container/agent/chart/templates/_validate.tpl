@@ -36,6 +36,16 @@
 {{- end -}}
 {{- end -}}
 {{- $k := required "normalized agents.kubernetes is required" $a.kubernetes -}}
+{{- if and (hasKey $a "mirrorsDir") (not (hasKey $k "mirrorsClaim")) -}}
+{{- fail "Kubernetes mirrors require agents.kubernetes.mirrorsClaim; mirrorsDir is not a Kubernetes volume source" -}}
+{{- end -}}
+{{- if hasKey $k "mirrorsClaim" -}}
+{{- include "oats.agent.objectName" (dict "field" "agents.kubernetes.mirrorsClaim" "value" $k.mirrorsClaim) -}}
+{{- if gt (len $k.mirrorsClaim) 63 -}}{{- fail "agents.kubernetes.mirrorsClaim must be at most 63 characters" -}}{{- end -}}
+{{- if eq $k.mirrorsClaim (printf "state-%s-0" (include "agent.name" .)) -}}
+{{- fail "agents.kubernetes.mirrorsClaim must not alias the writable agent state claim" -}}
+{{- end -}}
+{{- end -}}
 {{- $e := required "normalized root egress is required" .Values.egress -}}
 {{- range $field, $image := dict "agents.image" $a.image "egress.image" $e.image -}}
 {{- if or (not (kindIs "string" $image)) (not (regexMatch "^[a-z0-9][a-z0-9._/:-]*@sha256:[0-9a-f]{64}$" (toString $image))) -}}

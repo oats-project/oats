@@ -653,3 +653,66 @@ test("configured CA refuses absent or non-public artifacts with withheld materia
     }
   } finally { rmSync(path, { force: true }); rmSync(artifact, { force: true }); }
 });
+
+test("explicit mirrorsClaim mounts an existing read-only PVC without mirrorsDir or store creation", async () => {
+  const { checkRendered, checkPod, checkWorkload } = await import("../container/agent/accept-kube.mjs");
+  const docs = render("--set", "agents.kubernetes.mirrorsClaim=operator-mirrors"), set = docs.find(d => d.kind === "StatefulSet"), p = set.spec.template.spec;
+  assert.deepEqual(p.volumes.at(-1), { name: "mirrors", persistentVolumeClaim: { claimName: "operator-mirrors", readOnly: true } });
+  assert.deepEqual(p.containers[0].volumeMounts.at(-1), { name: "mirrors", mountPath: "/mirrors", readOnly: true });
+  assert.equal(p.containers[0].env, undefined, "mirrors add no environment exception");
+  assert.equal(set.spec.volumeClaimTemplates.length, 1, "only RW state is provisioned by the chart");
+  assert.equal(docs.some(d => d.kind === "PersistentVolumeClaim"), false, "operator provisions the mirror store");
+  assert.equal(p.volumes.some(v => v.hostPath), false);
+  checkRendered(docs);
+  checkWorkload(docs, set);
+  const pod = { metadata: { name: `${set.metadata.name}-0`, namespace: "proof", labels: structuredClone(set.spec.template.metadata.labels), ownerReferences: [{ kind: "StatefulSet", name: set.metadata.name, controller: true }] }, spec: structuredClone(p) };
+  pod.spec.volumes.push({ name: "state", persistentVolumeClaim: { claimName: `state-${set.metadata.name}-0` } });
+  checkPod(docs, pod);
+  for (const mutate of [
+    p => { p.spec.volumes.find(v => v.name === "mirrors").persistentVolumeClaim.readOnly = false; },
+    p => { delete p.spec.volumes.find(v => v.name === "mirrors").persistentVolumeClaim.readOnly; },
+    p => { p.spec.volumes.find(v => v.name === "mirrors").persistentVolumeClaim.claimName = `state-${set.metadata.name}-0`; },
+    p => { p.spec.volumes.find(v => v.name === "mirrors").persistentVolumeClaim.claimName = "other-mirrors"; },
+    p => { p.spec.volumes.find(v => v.name === "mirrors").hostPath = { path: "/operator/mirrors" }; },
+    p => { p.spec.containers[0].volumeMounts.at(-1).readOnly = false; },
+    p => { p.spec.containers[0].volumeMounts.at(-1).mountPath = "/state/mirrors"; },
+    p => { p.spec.containers[0].volumeMounts.push({ name: "mirrors", mountPath: "/other-mirrors", readOnly: false }); },
+    p => { p.spec.volumes.push({ name: "alternate", persistentVolumeClaim: { claimName: "operator-mirrors" } }); p.spec.containers[0].volumeMounts.push({ name: "alternate", mountPath: "/other-mirrors" }); },
+  ]) { const bad = structuredClone(pod); mutate(bad); assert.throws(() => checkPod(docs, bad)); }
+  const changed = structuredClone(set);
+  changed.spec.template.spec.volumes.find(v => v.name === "mirrors").persistentVolumeClaim.claimName = "other-mirrors";
+  assert.throws(() => checkWorkload(docs, changed), /mirror/);
+  const aliased = structuredClone(docs);
+  aliased.find(d => d.kind === "StatefulSet").spec.template.spec.volumes.find(v => v.name === "mirrors").persistentVolumeClaim.claimName = `state-${set.metadata.name}-0`;
+  assert.throws(() => checkRendered(aliased), /state claim/);
+  assert.throws(() => checkPod(render(), pod));
+});
+
+test("Kubernetes refuses inferred mirrors and aliases of its writable state claim", () => {
+  for (const args of [
+    ["--set", "agents.mirrorsDir=/operator/mirrors"],
+    ...["", "bad/name", "name.with.dot", "x".repeat(64), "state-proof-oats-team-agent-0"].map(name => ["--set-string", `agents.kubernetes.mirrorsClaim=${name}`]),
+  ]) {
+    const r = spawnSync(process.env.HELM || "helm", ["template", "proof", chart, ...args], { encoding: "utf8" });
+    assert.notEqual(r.status, 0, "unsafe or inferred mirror source must not render");
+    assert.match(r.stderr, /agents.kubernetes.mirrorsClaim/);
+  }
+  const docs = render("--set", "agents.mirrorsDir=/path/that/Helm/must/not/read", "--set", "agents.kubernetes.mirrorsClaim=operator-mirrors");
+  assert.equal(docs.find(d => d.kind === "StatefulSet").spec.template.spec.volumes.at(-1).persistentVolumeClaim.claimName, "operator-mirrors");
+  const release = "r".repeat(36), r = spawnSync(process.env.HELM || "helm", ["template", release, chart, "--set", `agents.kubernetes.mirrorsClaim=state-${release}-oats-team-agent-0`], { encoding: "utf8" });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /mirrorsClaim.*state claim/);
+});
+
+test("CA and mirrors keep independent bounded projections when configured together", async () => {
+  const { checkRendered } = await import("../container/agent/accept-kube.mjs");
+  const path = join(chart, "ca-mirrors-values.json"), artifact = join(chart, "generated/agent-ca.pem");
+  try {
+    writeFileSync(path, JSON.stringify({ agents: { caFile: "/operator/public-ca.pem", kubernetes: { mirrorsClaim: "operator-mirrors" } } }));
+    writeFileSync(artifact, rootCertificates[0]);
+    const docs = render("--values", path), p = docs.find(d => d.kind === "StatefulSet").spec.template.spec;
+    checkRendered(docs);
+    assert.deepEqual(p.containers[0].volumeMounts.slice(-2), [{ name: "agent-ca", mountPath: "/etc/agent-trust/ca.pem", subPath: "ca.pem", readOnly: true }, { name: "mirrors", mountPath: "/mirrors", readOnly: true }]);
+    assert.deepEqual(p.containers[0].env, [{ name: "SSL_CERT_FILE", value: "/etc/agent-trust/ca.pem" }, { name: "NODE_EXTRA_CA_CERTS", value: "/etc/agent-trust/ca.pem" }]);
+  } finally { rmSync(path, { force: true }); rmSync(artifact, { force: true }); }
+});
