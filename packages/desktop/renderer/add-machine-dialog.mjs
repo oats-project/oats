@@ -104,7 +104,7 @@ export function openAddMachineDialog(doc, { ctx, ws, deployment, aweb = false, o
     wrap.append(node('span', label), input); fields.append(wrap); return input;
   };
   const host = field('Machine', 'machine-host'), name = field('Name', 'machine-name'), folder = field('Folder on that machine', 'machine-folder', true);
-  host.placeholder = 'ssh host alias, e.g. altair';
+  host.placeholder = 'ssh host alias, e.g. devbox';
   folder.placeholder = 'A path on that machine, starting with / or ~/';
   const installRow = node('label', undefined, 'machine-install-row'), install = node('input', undefined, 'machine-install');
   install.type = 'checkbox'; install.checked = true; installRow.append(install, node('span', 'Install OATS there if it\'s missing')); fields.append(installRow);
