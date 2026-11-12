@@ -351,7 +351,10 @@ and `verdicts` is read by subject (the okf-authoring skill, and the README's
   --strict`. A stale index or a missing id on the accepted branch fails
   this gate, migration and publication; readers only warn
   (`W_INDEX_STALE`, `W_ID_MISSING`) until you repair it, and `oats okf
-  propose` reports an accepted claim's missing id as `W_ID_MISSING` too.
+  propose` reports an accepted concept's missing id (under `claims/` or in an
+  old node) as `W_ID_MISSING` too. Any other finding on the accepted branch
+  refuses spawns and proposals; running homes' subject verbs still answer,
+  warning `W_BASE_INVALID` with the first finding, until you repair it.
 - **Verdict candidates.** The PR body lists the proposer's
   `oats okf verdicts --check` candidates (an exact title hash): resolve each
   to its canonical id, and judge whether the claim is the same, a
@@ -373,7 +376,9 @@ amend-and-merge, so a `claims/` concept can reach the base with no `id:`.
 Until you stamp it, readers (spawn, the subject verbs, `oats okf bases`) read
 the base and warn `W_ID_MISSING: N claims lack an id at <alias@commit>; the
 maintainer stamps them (knowledge-review)`; `okf-validate.mjs --strict` and
-every writer still report it. Stamp it in your own PR: add `id:` to each such
+every writer still report it. An old-node concept merged the same way (a
+version-1 soul's proposal) is counted in `propose --check`'s `W_ID_MISSING`
+and reported by `--strict`; readers do not count it. Stamp either in your own PR: add `id:` to each such
 claim, computed as at acceptance (the form above, from the type and its path
 on the accepted branch), regenerate with `okf-reindex.mjs`, validate with
 `OKF_STRICT_EXIT=1 okf-validate.mjs --strict`, and merge it through this gate

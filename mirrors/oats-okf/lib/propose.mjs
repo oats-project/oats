@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, relative, sep } from 'node:path';
 import { fs, join, resolve, dirname, safePath, atomic, hash, cleanEnv, exec, fail } from './io.mjs';
 import { settings, resolveNodes, gitTimeoutMs } from './config.mjs';
-import { git as rawGit, gitEnv, preflightLocalRepository, unavailable, validateBase, UNSTAMPED_ERROR, unstampedWarning } from './stores.mjs';
+import { git as rawGit, gitEnv, preflightLocalRepository, unavailable, validateBase, ID_WARNING, unstampedWarning } from './stores.mjs';
 import { consultSource } from './sources.mjs';
 import { harvestPolicy } from './harvest-policy.mjs';
 import { isBridgedMeta } from './okf-reindex.mjs';
@@ -600,9 +600,10 @@ function prepare(source, dir, plan) {
       };
       // okf 6.0.2 (#138): a claims/ concept the base already holds without id
       // (merged without the maintainer's stamp) does not refuse the proposal;
-      // it is reported as the readers report it, W_ID_MISSING.
+      // it is reported as the readers report it, W_ID_MISSING. 6.0.3 (#140):
+      // so is an old-node concept merged the same way (a version-1 proposal).
       allow = findings => {
-        const rest = proposalFindings(findings, changed), kept = rest.filter(f => !UNSTAMPED_ERROR.test(f));
+        const rest = proposalFindings(findings, changed), kept = rest.filter(f => !ID_WARNING.test(f));
         unstamped = rest.length - kept.length;
         return kept;
       };
