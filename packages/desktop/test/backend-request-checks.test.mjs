@@ -15,22 +15,43 @@ const HERMETIC = { ...process.env, ...NO_CLI_ENV };
 
 /** A fake `oats` (a shell script: it holds no descriptor of its own at 3) that answers `version --json`
  * as a compatible CLI and records each run: its argv, its environment and whether its fd 3 is open. */
-function fakeCli(dir, name = 'oats') {
-  const log = join(dir, `${name}.log`);
+function fakeCli(dir, name = 'oats', { gate = false } = {}) {
+  const log = join(dir, `${name}.log`), startedLog = join(dir, `${name}.started`);
   const bin = join(dir, name);
+  const gateFile = join(dir, `${name}.gate`);
+  // With a gate, a `server roster` run writes its first lines and then waits (bounded) for the gate file before
+  // it writes its environment: a run held mid-record.
+  const hold = gate ? `case "$1 $2" in "server roster") i=0; while [ ! -e '${gateFile}' ] && [ $i -lt 400 ]; do /bin/sleep 0.05; i=$((i+1)); done;; esac; ` : '';
   writeFileSync(join(dir, `${name}.version.json`), VERSION);
+  // Each run notes its start, writes its record to a file of its own and only then appends it to the log, in one
+  // write: the log holds whole records only, never one half-written or two interleaved.
   writeFileSync(bin, `#!/bin/sh
-{ echo "run $*"; if [ -e /proc/$$/fd/3 ]; then echo "fd3 open"; else echo "fd3 closed"; fi; /usr/bin/env; echo "end"; } >> '${log}'
+echo "run $*" >> '${startedLog}'
+record='${log}.'$$
+{ echo "run $*"; if [ -e /proc/$$/fd/3 ]; then echo "fd3 open"; else echo "fd3 closed"; fi; ${hold}/usr/bin/env; echo "end"; } > "$record"
+/bin/cat "$record" >> '${log}'; /bin/rm -f "$record"
 /bin/cat '${join(dir, `${name}.version.json`)}'
 `, { mode: 0o700 });
+  /** The runs recorded so far: whole records, each a finished run. */
   const runs = () => (existsSync(log) ? readFileSync(log, 'utf8').split('\nend\n').filter((r) => r.startsWith('run ')) : []);
-  return { bin, log, runs, probes: () => runs().filter((r) => r.startsWith('run version --json\n')).length };
+  /** Every run that has started, finished or not: its `run …` line. */
+  const started = () => (existsSync(startedLog) ? readFileSync(startedLog, 'utf8').split('\n').filter((l) => l.startsWith('run ')) : []);
+  /** The recorded runs once every run that has started is recorded (none in flight), bounded. */
+  const settled = async () => {
+    for (let n = 0; n < 400; n++) {
+      const done = runs();
+      if (done.length >= started().length) return done;
+      await new Promise((ok) => setTimeout(ok, 25));
+    }
+    throw new Error(`a CLI run never finished: ${started().length} started, ${runs().length} recorded`);
+  };
+  return { bin, log, gate: gateFile, runs, started, settled, probes: () => started().filter((l) => l === 'run version --json').length };
 }
 
-async function started(t, { cli } = {}) {
+async function started(t, { cli, gate = false } = {}) {
   // Canonical, as the CLI locator reports a candidate (macOS's temporary directory is under a /var link).
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'oats-t-cli-')));
-  const fake = cli ? fakeCli(dir) : null;
+  const fake = cli ? fakeCli(dir, 'oats', { gate }) : null;
   const choice = join(dir, 'oats-cli-choice.json');
   if (fake) writeFileSync(choice, JSON.stringify({ bin: fake.bin }));
   const s = await startBackendThroughSpec({ env: HERMETIC, cliChoiceFile: choice, home: dir, remoteIdentityFile: join(dir, 'remote-identity.json') });
@@ -96,7 +117,8 @@ test('A4: the credential is on no argv and in no environment; the CLI the server
   // The spec main used for this very server holds no secret.
   assert.equal(JSON.stringify(s.spec.args).includes(s.secret), false, 'not on argv');
   assert.equal(JSON.stringify(s.spec.options.env).includes(s.secret), false, 'not in the environment');
-  const runs = fake.runs();
+  // Every run the server made, each once it has finished (a run still in flight is waited for, never judged half-written).
+  const runs = await fake.settled();
   assert.ok(runs.length >= 1);
   for (const run of runs) {
     assert.match(run, /\nPATH=\/nonexistent\n/, 'the run recorded its environment');
@@ -104,6 +126,29 @@ test('A4: the credential is on no argv and in no environment; the CLI the server
     if (process.platform === 'linux') assert.match(run, /\nfd3 closed\n/, 'fd 3 is not open in the CLI child');
   }
   if (process.platform !== 'linux') t.diagnostic('fd 3 of the CLI child not inspected: no /proc on this platform');
+});
+
+test("A4's record of the CLI runs: a run still in flight is waited for, never judged half-written", async (t) => {
+  // The server's remote-roster read starts as the start-up probe lands, so a check right after start-up can meet
+  // it mid-run. Here that run is held halfway (its first lines written, its environment not yet) until the gate opens.
+  const { s, fake } = await started(t, { cli: true, gate: true });
+  const inFlight = async () => {
+    for (let n = 0; n < 400; n++) {
+      if (fake.started().some((r) => r.startsWith('run server roster '))) return;
+      await new Promise((ok) => setTimeout(ok, 25));
+    }
+    throw new Error('the roster read never started');
+  };
+  await inFlight();
+  assert.equal(fake.runs().some((r) => r.startsWith('run server roster ')), false, 'a run in flight is not a recorded run');
+  const settled = fake.settled();
+  setTimeout(() => writeFileSync(fake.gate, ''), 100);
+  const runs = await settled;
+  const roster = runs.find((r) => r.startsWith('run server roster '));
+  assert.ok(roster, 'once it has finished, it is recorded and judged with the others');
+  assert.match(roster, /\nPATH=\/nonexistent\n/, 'its environment is the server\'s');
+  assert.equal(roster.includes(s.secret), false);
+  if (process.platform === 'linux') assert.match(roster, /\nfd3 closed\n/);
 });
 
 test('A5: the server prints its ready line and never the secret', async (t) => {
