@@ -248,7 +248,7 @@ function world(t, { at, scopes = [] }) {
 }
 const D = "2026-11-10T";
 
-test("the loop: the sweep once, then at second 0 of each minute the listing and, when a scope is registered, the tick; a minute whose tick still runs is skipped, and a missed minute is never replayed", async (t) => {
+test("the loop: the sweep at the start, then at second 0 of each minute the sweep again and, when a scope is registered, the tick; a minute whose tick still runs is skipped, and a missed minute is never replayed", async (t) => {
   const w = world(t, { at: `${D}10:00:20.500Z` });
   const running = hostRun(w.options);
   await settle();
@@ -260,48 +260,53 @@ test("the loop: the sweep once, then at second 0 of each minute the listing and,
   assert.deepEqual(w.armed().map((timer) => new Date(timer.at).toISOString()), [`${D}10:01:00.000Z`], "armed for second 0 of the next minute");
   assert.ok(w.said.includes("resume sweep: 2 resumed, 1 skipped"), w.said.join("\n"));
 
-  // No scope is registered: the listing alone, and it says so, once.
+  // No scope is registered: the sweep alone, and it says so, once. A sweep is said when its
+  // outcomes differ from those of the sweep before.
   await w.fire(`${D}10:01:00.004Z`);
-  assert.deepEqual(w.next(), [`10:01:00.004 ${LIST}`]);
-  await w.answer(LIST, ok({ rows: [] }));
+  assert.deepEqual(w.next(), [`10:01:00.004 ${SWEEP}`]);
+  await w.answer(SWEEP, ok({ rows: [{ outcome: "already-running" }, { outcome: "resumed" }, { outcome: "refused" }] }));
+  assert.ok(w.said.includes("resume sweep: 1 already-running, 1 resumed, 1 refused"), w.said.join("\n"));
+  const saidSweeps = () => w.said.filter((line) => line.startsWith("resume sweep")).length;
+  const before = saidSweeps();
   await w.fire(`${D}10:02:00.001Z`);
-  assert.deepEqual(w.next(), [`10:02:00.001 ${LIST}`]);
-  await w.answer(LIST, ok({ rows: [] }));
+  assert.deepEqual(w.next(), [`10:02:00.001 ${SWEEP}`]);
+  await w.answer(SWEEP, ok({ rows: [{ outcome: "already-running" }, { outcome: "resumed" }, { outcome: "refused" }] }));
+  assert.equal(saidSweeps(), before, "a sweep with the outcomes of the one before says nothing");
   assert.equal(w.said.filter((line) => line.startsWith("no scope is registered, so nothing is ticked")).length, 1);
 
   // A scope is registered while it runs: the next minute ticks.
   w.scopes = ["/srv/deploy"];
   await w.fire(`${D}10:03:00.000Z`);
-  assert.deepEqual(w.next(), [`10:03:00.000 ${TICK}`, `10:03:00.000 ${LIST}`]);
+  assert.deepEqual(w.next(), [`10:03:00.000 ${TICK}`, `10:03:00.000 ${SWEEP}`]);
   assert.ok(w.said.includes("ticking 1 scope each minute: /srv/deploy"), w.said.join("\n"));
-  await w.answer(LIST, ok({ rows: [] }));
-  // That tick still runs at the next minute: the minute is skipped, the listing is not.
+  await w.answer(SWEEP, ok({ rows: [] }));
+  // That tick still runs at the next minute: the minute is skipped, the sweep is not.
   await w.fire(`${D}10:04:00.002Z`);
-  assert.deepEqual(w.next(), [`10:04:00.002 ${LIST}`]);
-  await w.answer(LIST, ok({ rows: [] }));
+  assert.deepEqual(w.next(), [`10:04:00.002 ${SWEEP}`]);
+  await w.answer(SWEEP, ok({ rows: [] }));
   w.time = Date.parse(`${D}10:04:30.000Z`);
   await w.answer(TICK, ok({ considered: [] }));
   await w.fire(`${D}10:05:00.000Z`);
-  assert.deepEqual(w.next(), [`10:05:00.000 ${TICK}`, `10:05:00.000 ${LIST}`]);
+  assert.deepEqual(w.next(), [`10:05:00.000 ${TICK}`, `10:05:00.000 ${SWEEP}`]);
   await w.answer(TICK, ok({ considered: [] }));
-  await w.answer(LIST, ok({ rows: [] }));
+  await w.answer(SWEEP, ok({ rows: [] }));
 
   // The process did not run for four minutes: one tick when it wakes, then the next minute's.
   await w.fire(`${D}10:09:17.000Z`);
-  assert.deepEqual(w.next(), [`10:09:17.000 ${TICK}`, `10:09:17.000 ${LIST}`]);
+  assert.deepEqual(w.next(), [`10:09:17.000 ${TICK}`, `10:09:17.000 ${SWEEP}`]);
   assert.deepEqual(w.armed().map((timer) => new Date(timer.at).toISOString()), [`${D}10:10:00.000Z`], "the missed minutes are not armed again");
   await w.answer(TICK, ok({ considered: [] }));
-  await w.answer(LIST, ok({ rows: [] }));
+  await w.answer(SWEEP, ok({ rows: [] }));
   // A timer that fires just before the minute runs nothing: a tick started then would evaluate the minute before.
   await w.fire(`${D}10:09:59.998Z`);
   assert.deepEqual(w.next(), []);
   assert.deepEqual(w.armed().map((timer) => new Date(timer.at).toISOString()), [`${D}10:10:00.000Z`]);
   await w.fire(`${D}10:10:00.000Z`);
-  assert.deepEqual(w.next(), [`10:10:00.000 ${TICK}`, `10:10:00.000 ${LIST}`]);
+  assert.deepEqual(w.next(), [`10:10:00.000 ${TICK}`, `10:10:00.000 ${SWEEP}`]);
   // A tick that fails is said and counted, and the next minute ticks again.
   await w.answer(TICK, { schemaVersion: 1, ok: false, error: { code: "E_SCHEDULER_BUSY", message: "the host scheduler is locked" } });
   assert.ok(w.said.includes("tick failed (E_SCHEDULER_BUSY): the host scheduler is locked"), w.said.join("\n"));
-  await w.answer(LIST, ok({ rows: [] }));
+  await w.answer(SWEEP, ok({ rows: [] }));
 
   // The host stops it: nothing runs, so it ends at once, with what it did.
   w.time = Date.parse(`${D}10:10:40.000Z`);
@@ -324,9 +329,9 @@ test("a sweep that fails does not end the run: it is said, and the minutes go on
   assert.ok(w.said.includes("resume sweep failed (E_RESUME_BUSY): another session resume holds the lock"), w.said.join("\n"));
   assert.ok(w.said.some((line) => line.startsWith("warning: the host timer's unit files are installed but not active")), w.said.join("\n"));
   await w.fire(`${D}10:01:00.000Z`);
-  assert.deepEqual(w.next(), [`10:00:00.000 ${SWEEP}`, `10:01:00.000 ${TICK}`, `10:01:00.000 ${LIST}`]);
+  assert.deepEqual(w.next(), [`10:00:00.000 ${SWEEP}`, `10:01:00.000 ${TICK}`, `10:01:00.000 ${SWEEP}`]);
   await w.answer(TICK, ok({ considered: [] }));
-  await w.answer(LIST, ok({ rows: [] }));
+  await w.answer(SWEEP, ok({ rows: [] }));
   w.signal("SIGINT");
   await settle();
   await w.answer(LIST, ok({ rows: [] }));
@@ -342,8 +347,8 @@ test("SIGTERM: ticking ends first, a tick that runs is waited for, then one list
   await settle();
   await w.answer(SWEEP, ok({ rows: [] }));
   await w.fire(`${D}10:01:00.000Z`);
-  await w.answer(LIST, ok({ rows: [] }));
-  assert.deepEqual(w.next(), [`10:00:00.000 ${SWEEP}`, `10:01:00.000 ${TICK}`, `10:01:00.000 ${LIST}`]);
+  await w.answer(SWEEP, ok({ rows: [] }));
+  assert.deepEqual(w.next(), [`10:00:00.000 ${SWEEP}`, `10:01:00.000 ${TICK}`, `10:01:00.000 ${SWEEP}`]);
   assert.equal(w.pending(TICK).length, 1, "a tick runs");
 
   w.time = Date.parse(`${D}10:01:20.000Z`);

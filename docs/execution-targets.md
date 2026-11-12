@@ -1518,7 +1518,7 @@ refused. A home removed between the read and its start is reported
     restarts on the same kernel, including when read from older qualified
     records. A kernel reboot gives a fresh budget. Loss judgements remain
     per start, and a running look of a newly resumed start resets its prior
-    seen/lost judgement. Every new `oats host run` invokes the sweep;
+    seen/lost judgement. Every `oats host run` invokes the sweep at its start and each minute;
     successful restores after a host stop remain eligible as described above.
 - The lock, the per-boot note and the record of what status saw live in
   `session-resume/` under `~/.oats` (`$OATS_HOME_DIR` when set). All three
