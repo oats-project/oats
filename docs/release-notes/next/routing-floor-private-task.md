@@ -2,7 +2,8 @@
 
 - **Anyone routing to an execution host older than OATS 0.69.15 must upgrade
   that host first:** run `npm install -g @awebai/oats@latest` on the host.
-  The router refuses older hosts with `E_REMOTE_INCOMPATIBLE` before a spawn.
+  The router refuses every routed command except `status` against older hosts
+  with `E_REMOTE_INCOMPATIBLE`, including retire, session, schedule and operations.
   A host at or above that version must also advertise `spawn-task-stdin`,
   `spawn-preview-2`, `spawn-apply-2` and `spawn-idempotency-2`.
 
