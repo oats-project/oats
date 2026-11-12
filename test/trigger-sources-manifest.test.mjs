@@ -21,7 +21,8 @@ const src = (extra = {}) => ({ command: "go", events: ["opened"], ...extra });
 const bySchema = (ts) => validate(manifest(ts));
 const byUse = (ts) => triggerSourcesOf(manifest(ts)).problems.length === 0;
 
-// lab's real declaration (lab-oats-workspace 9f639e90, capabilities/lab-omnigraph-maintenance/oats.json).
+// lab's real declaration (lab-oats-workspace 9f639e90, capabilities/lab-omnigraph-maintenance/oats.json), its
+// names replaced by invented ones; its shape is the original's.
 const LAB = { "harvest-branches": { command: "review-source", description: "Harvest branches ready for review on the lab graph, one event per judged head; identifiers only.", events: ["opened", "updated"],
   fields: { graph: { pattern: "^[a-z0-9-]{1,40}$" }, branch: { pattern: "^harvest/[A-Za-z0-9._-]{1,191}$" }, headCommit: { pattern: "^[A-Za-z0-9.]{1,120}$" } } } };
 

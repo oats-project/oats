@@ -667,8 +667,9 @@ test("containment: a malformed triggerSources never refuses its capability (spaw
   assert.match(fx.cli(["capabilities", "show", "acme.graph"]).stdout, /trigger source problem: \/triggerSources\/bad\/command/);
 });
 
-/** lab's real producer answer (lab-oats-workspace 9f639e90, lab.omnigraph-maintenance review-source),
- *  recorded byte for byte: one JSON document and a trailing newline. */
+/** lab's producer answer (lab-oats-workspace 9f639e90, lab.omnigraph-maintenance review-source): a real
+ *  recording with its names replaced by invented ones of the same length, so its wire shape, byte count and
+ *  trailing newline are the recording's: one JSON document and a trailing newline. */
 const LAB_ANSWER = '{"schemaVersion":1,"phase":"poll","capability":"lab.omnigraph-maintenance","source":"harvest-branches","ok":true,"result":{"events":[{"key":"harvest/lab-2026-10-07-roadmap:9f3c1a2b7d4e","subject":"harvest/lab-2026-10-07-roadmap","event":"opened","fields":{"graph":"lab","branch":"harvest/lab-2026-10-07-roadmap","headCommit":"9f3c1a2b7d4e"}}],"skipped":[{"subject":"harvest/lab-2026-10-06-notes","why":"no Harvest row yet (not delivered)"}]}}\n';
 const LAB_SOURCES = { "harvest-branches": { command: "review-source", description: "Harvest branches ready for review on the lab graph, one event per judged head; identifiers only.", events: ["opened", "updated"],
   fields: { graph: { pattern: "^[a-z0-9-]{1,40}$" }, branch: { pattern: "^harvest/[A-Za-z0-9._-]{1,191}$" }, headCommit: { pattern: "^[A-Za-z0-9.]{1,120}$" } } } };
