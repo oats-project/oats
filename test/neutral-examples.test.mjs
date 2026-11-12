@@ -1,11 +1,15 @@
-// Examples and fixtures under packages/ use invented owners, never a real person's home directory:
-// an owner's home path belongs to that deployment, not to what OATS ships or tests. This test fails
-// when an example's `/Users/<name>` or `/home/<name>` (or Claude's encoded `-Users-<name>-`) names
-// someone not on the list of invented owners below.
+// Examples and fixtures under packages/, test/ and docs/ use invented owners, never a real person's
+// home directory: an owner's home path belongs to that deployment, not to what OATS ships or tests.
+// This test fails when an example's `/Users/<name>` or `/home/<name>` (or Claude's encoded
+// `-Users-<name>-`) names someone not on the list of invented owners below.
 //
 // It covers home paths only, and among them the homes named like a login (below). Other
 // deployment specifics (a real machine's name, a private repository) have no generic shape to
 // check for; review catches them.
+//
+// It reads all of packages/, test/ and docs/ but the released notes, docs/release-notes/v*.md:
+// they are history and never edited (the entries for the next release, under
+// docs/release-notes/next/, are read).
 //
 // It sits in test/, the kernel's test directory: the root runner's `test/**/*.test.mjs` glob
 // (scripts/run-tests.mjs) runs it in every CI shard, with or without the Desktop's dependencies,
@@ -17,18 +21,25 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, extname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const SELF = fileURLToPath(import.meta.url), ROOT = dirname(dirname(SELF)), PACKAGES = join(ROOT, 'packages');
+const SELF = fileURLToPath(import.meta.url), ROOT = dirname(dirname(SELF));
+const READ = ['packages', 'test', 'docs'];
+const RELEASED = /^docs\/release-notes\/v[^/]*\.md$/;
+/** Is the file at `rel` (from the repository root, `/`-separated) one this test reads? */
+const isRead = rel => READ.some(dir => rel.startsWith(`${dir}/`)) && !RELEASED.test(rel);
 
 // The invented owners an example's home directory may name. A new one must be obviously invented
-// (`alex`, `user`), never someone's login. The last few are folders a fixture puts right under a
-// bare /home or a temporary root's home/, not owners.
+// (`alex`, `user`), never someone's login (`runner` is CI's). The last few are folders a fixture
+// puts right under a bare /home or a temporary root's home/, and segments that only follow a
+// `/home/` in other words (a JSON pointer's index, a regular expression's flag,
+// `instance/home/branch`), not owners.
 const INVENTED_HOMES = new Set([
-  'a', 'abcd-1234', 'agent', 'alex', 'ana', 'birth', 'builder', 'context', 'dev', 'dev-fail', 'dev-held',
-  'dev-pending', 'dev-wait', 'empty', 'fixture', 'h1', 'host', 'me', 'o', 'op', 'operator', 'ops', 'options',
-  'person', 'server', 'someone', 'u', 'user', 'work', 'workdir', 'x', 'zo', 'zoe',
+  'a', 'abcd-1234', 'agent', 'alex', 'ana', 'birth', 'bo', 'builder', 'context', 'dev', 'dev-fail', 'dev-held',
+  'dev-pending', 'dev-wait', 'elsewhere', 'empty', 'fixture', 'h1', 'host', 'me', 'o', 'op', 'operator', 'ops',
+  'options', 'person', 'remote', 'runner', 'server', 'someone', 'u', 'user', 'v', 'work', 'workdir', 'x', 'zo', 'zoe',
   // invented owners beyond ASCII, for the tests of paths in other scripts (compared in NFC)
   'zo\u00eb', '\u5c71\u7530', '\u{20000}',
-  '.config', 'agents', 'library', 'oats',
+  '.agents', '.claude', '.config', '.oats', 'agents', 'library', 'oats',
+  '.', '0', '1', 'branch', 'm',
 ]);
 
 // Not read: installed dependencies, build output, and binary assets (any other file holding a NUL
@@ -42,7 +53,8 @@ function* textFiles(dir) {
     if (entry.isDirectory()) { if (!SKIP_DIRS.has(entry.name)) yield* textFiles(path); continue; }
     // This file's own cases name an owner on purpose.
     if (!entry.isFile() || path === SELF || BINARY.has(extname(entry.name).toLowerCase())) continue;
-    const rel = relative(PACKAGES, path).split('\\').join('/');
+    const rel = relative(ROOT, path).split('\\').join('/');
+    if (!isRead(rel)) continue;
     const text = readFileSync(path, 'utf8');
     if (!text.includes('\0')) yield { rel, text };
   }
@@ -107,8 +119,15 @@ test('an owner home directory fails unless its owner is an invented one', () => 
   assert.deepEqual(ownerHomes('/home/|robin/work /home/*robin/work'), [':1: /…/|robin', ':1: /…/*robin']);
 });
 
-test('no example or fixture under packages/ names a real owner\'s home directory', () => {
+test('the guard reads packages/, test/ and docs/, but not the released notes', () => {
+  for (const rel of ['packages/tui/README.md', 'test/fixtures/x.json', 'docs/tui.md', 'docs/release-notes/next/entry.md',
+    'docs/release-notes/oats-framework-v1.1.3.md']) assert.equal(isRead(rel), true, rel);
+  for (const rel of ['docs/release-notes/v0.18.2.md', 'docs/release-notes/v1.0.0.md', 'lib/x.mjs', 'bin/oats.mjs', 'testing/x.md'])
+    assert.equal(isRead(rel), false, rel);
+});
+
+test('no example or fixture under packages/, test/ or docs/ names a real owner\'s home directory', () => {
   const found = [];
-  for (const { rel, text } of textFiles(PACKAGES)) found.push(...ownerHomes(text, `packages/${rel}`));
+  for (const dir of READ) for (const { rel, text } of textFiles(join(ROOT, dir))) found.push(...ownerHomes(text, rel));
   assert.deepEqual(found, [], 'use an invented owner (alex, user) that keeps the example\'s point, or add an invented one to INVENTED_HOMES');
 });
