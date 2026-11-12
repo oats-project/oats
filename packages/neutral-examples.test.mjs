@@ -52,7 +52,7 @@ function* textFiles(dir) {
 
 // `/Users/<name>` or `/home/<name>`: the whole segment, any characters, up to the next path or
 // quoting separator, so a name that only starts like an invented one is checked whole.
-// Whitespace, quotes, brackets and the list separators `,` `;` `:` (a PATH value, a list in
+// Whitespace, quotes, brackets (`()[]{}<>`) and the list separators `,` `;` `:` (a PATH value, a list in
 // prose) end the segment, as they end a path in prose and in code. So the guard covers homes named
 // like a login (the default, and what a pasted path shows); a home directory whose own name holds
 // one of those characters is not checked, and review catches it, as it does every other
@@ -61,7 +61,7 @@ function* textFiles(dir) {
 // the characters they write first; any other backslash ends the segment (it starts an escape, not
 // a name's letter). Interpolation is the code's, not an example, and is skipped: `${…}` (its
 // segment is the `$` before the `{`) and a shell variable (`$USER`).
-const HOME = /\/(?:Users|home)\/([^/\\\s'"`(){}\[\],;:<>|*]+)|-Users-([^-/\\\s'"`(){}\[\],;:<>|*]+)-/gu;
+const HOME = /\/(?:Users|home)\/([^/\\\s'"`(){}\[\]<>,;:]+)|-Users-([^-/\\\s'"`(){}\[\]<>,;:]+)-/gu;
 const ESCAPE = /\\u\{([0-9a-fA-F]{1,6})\}|\\u([0-9a-fA-F]{4})/g;
 const unescaped = line => line.replace(ESCAPE, (_, braced, four) => String.fromCodePoint(parseInt(braced ?? four, 16)));
 
@@ -72,9 +72,9 @@ function ownerHomes(text, where = '') {
     const read = unescaped(line);
     for (const match of read.matchAll(HOME)) {
       const segment = match[1] ?? match[2], after = read[match.index + match[0].length];
-      if ((segment === '$' && after === '{') || /^\$[A-Za-z_][A-Za-z0-9_]*$/.test(segment)) continue;
       const owned = match[2] !== undefined || after === '/'; // a `/` (or the encoded form's dash) follows: its dots are the name's
       const name = (owned ? segment : segment.replace(/\.+$/, '')).normalize('NFC');
+      if ((name === '$' && after === '{') || /^\$[A-Za-z_][A-Za-z0-9_]*$/.test(name)) continue;
       if (!INVENTED_HOMES.has(name.toLowerCase())) out.push(`${where}:${i + 1}: /…/${name}`);
     }
   });
@@ -102,6 +102,11 @@ test('an owner home directory fails unless its owner is an invented one', () => 
   // Interpolation is skipped; anything else that starts with `$` is a name like any other.
   assert.deepEqual(ownerHomes('`/home/${who}/x`, "/home/$USER/x", /home/$who_2'), []);
   assert.deepEqual(ownerHomes('/home/$robin.x/work /home/$/work'), [':1: /…/$robin.x', ':1: /…/$']);
+  assert.deepEqual(ownerHomes('Use /home/$USER. Or /Users/$USER.'), [], 'a full stop after a variable is the sentence\'s');
+  assert.deepEqual(ownerHomes('/home/$USER./work'), [':1: /…/$USER.'], 'before a slash the dot is the name\'s');
+  // `|` and `*` are a name's characters here, not separators.
+  assert.deepEqual(ownerHomes('/home/alex|review/work /Users/alex*review/work'), [':1: /…/alex|review', ':1: /…/alex*review']);
+  assert.deepEqual(ownerHomes('/home/|robin/work /home/*robin/work'), [':1: /…/|robin', ':1: /…/*robin']);
 });
 
 test('no example or fixture under packages/ names a real owner\'s home directory', () => {
