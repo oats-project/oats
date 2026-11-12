@@ -195,12 +195,26 @@ provider setting. The image has no Claude channel plugin.
 
 ## OATS over SSH
 
-The operator's SSH alias selects the key, host-key verification, port 2222
-and jump route. The equivalent connection is:
+The operator's SSH alias selects the key and verifies the provisioned SSH host
+key. The isolated agents bridge has no host gateway, so use the operator's
+existing Docker context as a stdio relay to port 2222 inside the container:
 
-```sh
-ssh -J <provisioner>@<host> -p 2222 agent@<container-ip>
+```sshconfig
+Host team-agent
+  HostName oats-agent
+  User agent
+  Port 2222
+  IdentityFile <operator-key-path>
+  IdentitiesOnly yes
+  UserKnownHostsFile <provisioned-known-hosts-file>
+  StrictHostKeyChecking yes
+  ProxyCommand docker --context <operator-context> exec -i <container> node -e 'const s=require("node:net").connect(2222,"127.0.0.1");process.stdin.pipe(s);s.pipe(process.stdout);s.on("error",()=>process.exit(1));'
 ```
+
+Provision the public host key in that known-hosts file before connecting. The
+Docker context belongs only to the operator; the agent receives no engine socket,
+additional network or published port. `ssh team-agent` then uses the same SSH
+authentication and host-key checks as an ordinary SSH transport.
 
 Register an already provisioned deployment, or connect it from the operator's
 deployment using its source reference:
@@ -221,9 +235,11 @@ deployment for the schedule tick `oats host run` runs in the container
 oats schedule host install --register-only --server team-agent
 ```
 
-The operator places
-two independently admitted ordinary-member identities at
-`/state/seats/<alias>/.aw`; each spawn selects one:
+The legacy VM migration route copies an already admitted ordinary-member
+identity's private state into `/state/seats/<alias>/.aw`; each spawn selects one
+through the existing `identity.source` input. Treat that copy as credential
+provisioning, keep it private, and do not use a team or namespace controller
+identity:
 
 ```sh
 oats spawn <soul> --server team-agent --harness claude --preview --provider oats.aweb identity.source=/state/seats/<alias>/.aw
