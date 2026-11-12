@@ -158,6 +158,7 @@ export const CLI_MODULES = Object.freeze({
   'packages/desktop/login-path.mjs': read('version'),
   'packages/desktop/main.mjs': held('runs the deployments list, onboard and the resume sweep; each refused where main calls it'),
   'packages/desktop/readiness-cli.mjs': read('readiness'),
+  'packages/desktop/server-host.mjs': allowed("starts the Desktop's own backend server (a node process), not the CLI; the server's CLI runs are classified under packages/desktop/server/oats-web.mjs"),
   'packages/desktop/terminal-attachments.mjs': allowed("terminals: files attached to an agent's terminal (main terminal upload)"),
   'packages/desktop/terminal-io.mjs': allowed('terminals: the terminal broker'),
   'packages/desktop/server/oats-web.mjs': held('the POST handlers, each refused by (route, action) before it runs anything'),
