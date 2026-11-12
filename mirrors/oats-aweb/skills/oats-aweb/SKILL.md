@@ -65,12 +65,20 @@ membership certificates (`aw id team members`) and its workspaces
 - **Who coordinates.** aw does not mark the team's coordinator, and a
   workspace's `role` is its own setting. Look among the global identities and
   ask your expert or coordinator which one coordinates.
-- **Whether an entry is retired.** A certificate with no workspace record may
-  belong to an instance that was retired, one that runs elsewhere, or one that
-  aw never recorded. Offline is not retired.
+- **Whether an entry is retired**, beyond the leftovers below. A certificate
+  with no workspace record may belong to an instance that was retired, one that
+  runs elsewhere, or one that aw never recorded. Offline is not retired.
 - **The whole team, when it prints `Incomplete:`.** That line names the source
   that could not be read, or says presence is past its 200-workspace cap. The
   roster then lists what it has and claims nothing about the rest.
+
+**Leftovers of a retire.** In a team whose controller key is held by people,
+retire cannot remove the instance's member certificate. A line that ends
+`; retired by OATS on this host <date>; the team controller removes it with:
+<command>` is such a leftover: don't message it. Only the team's controller can
+remove it, by running that command; tell your human if you are not the
+controller. The record lives on the host where the retire ran, so a roster read
+on another host does not show those leftovers.
 
 - A `deployment root` (for example `altair-aweb`) is a machine's minting
   identity, not an agent: don't send work to it.
@@ -376,6 +384,7 @@ minting authority for its canonical T. Run from H, not the caller's worktree.
 | Plan a join | `oats aweb join --labels L --plan [--json]` | Read-only: per label, team, root, the setting that chose it (`roots[team]` or `root`) and whether membership was confirmed; no invite or state. Next: the join below. | `refused: …` names why the join would refuse → section 8 LOCAL join. |
 | Join | `oats aweb join --labels L` | Mints separate per-team identity and receive registration; success: `joined` readback has intended T/home/receive. Next: section 4 receive verification. | `E_TEAM_NOT_ELIGIBLE` → correct declaration with `/oats-teams`; `cannot join team …: the deployment's live settings could not be read (…); nothing was minted` → run the `oats inspect … --json` it names and fix what it reports; `cannot join team …: <no or non-member root>; nothing was minted` → section 8 LOCAL join; `aw team invite failed … nothing was joined; … root R (from S)` → the cause in the parentheses, then `--plan`. |
 | Leave | `oats aweb leave --labels L` | Releases membership/receive registration; success: joined entry is absent after confirmed release. Next: `oats aweb teams --json` readback. | `E_TEAM_DEFAULT: <label> is the default team and cannot be left` → stop; policy change does not migrate this identity. |
+| Finish or release an unfinished join | `oats aweb join --labels L`, or `oats aweb leave --labels L` | A start warned `unfinished join of team L …`: a join was killed after aw accepted its invite, before the home recorded it. The join adopts it (connects and records it, no second invite); the leave adopts it and releases it. Success: as for Join or Leave. | `… could not be checked: aw id team list failed …; kept it and its identity home` → rerun once aw answers; `hosted accept interrupted: the server may hold the membership; …` → a person reruns the same `aw id team accept-invite` with the original invite, or the team's controller removes the member and the marker is deleted; then the leave; `failed to leave team L; kept …` → as for a failed leave. |
 
 Homes composed before provider 1.22.0 can hold stale captured minting roots;
 require the 1.22.0 fix to be composed instead of borrowing another identity.
@@ -991,6 +1000,9 @@ They stay in the home until the kernel removes it, so retire hooks see them, and
 an incomplete cleanup keeps the home with them; a retry reads them from the home,
 never from recovery. A joined-team leave that needs its member key (any failure
 but `team_not_hosted`) makes retire exit nonzero, so the home and that key stay.
+The same holds for an unfinished join (`pendingJoins` in `.oats-aweb/teams.json`,
+a join killed after aw accepted its invite): retire adopts it and releases it,
+and keeps it and its key while that release fails.
 After `oats retire --force` no copy of the key remains: the team's controller or
 owner removes the membership. Exceptions: a failed spawn's preservation (directory
 mode) copies the whole home, keys included, and homes spawned before 1.24.0 are
