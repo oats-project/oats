@@ -1,3 +1,10 @@
+## Upgrade
+
+- A legacy lock written before 0.69.15 without `processStart` may need a
+  one-time operator clear after a container restart. OATS keeps an unknown
+  holder held instead of taking it over: once no holder runs, clear the
+  reported lock path and start again.
+
 ## Fixed
 
 - Linux lock holders and readers use the kernel boot UUID consistently,

@@ -17,7 +17,9 @@ container is one trust group ([trust-model.md](trust-model.md)):
   every agent, seat and credential in it as subverted. Each agent can read
   every seat under `/state/seats`, the Claude token and sshd's host keys,
   rewrite the launch configurations in `/state/deploy` and the schedule
-  registry in `/state/home`, and stop sshd or `oats host run`.
+  registry in `/state/home`, rewrite the wake registrations under
+  `/state/home/.config/aw/wake`, and stop sshd, `oats host run`, the wake
+  broker or its supervisor.
 - **It holds one team, never several.** Agents that must not be able to read
   each other's identities or affect each other's work get separate
   containers. Nothing in OATS makes sharing one safe.
@@ -62,7 +64,7 @@ must succeed during the build.
 
 `libnss-wrapper` is the extra OS package needed for arbitrary UID support.
 No credentials or SSH host keys are baked in. The build context allowlist
-excludes everything except the image's five inputs.
+excludes everything except the explicitly listed image inputs.
 
 A derived image may add reviewed OS tools with `USER root` and `RUN`, then
 restore `USER agent`. Those build steps use the system passwd/group database.
@@ -218,8 +220,10 @@ or narrow its authority. Never share the mount across trust groups.
 ## The kernel's periodic work
 
 A container has no launchd and no systemd user manager, so no timer runs
-the kernel's periodic work in it. The image's entrypoint does: it starts
-sshd in the background and then runs `oats host run`
+the kernel's periodic work in it. After the entrypoint prepares NSS and
+SSH host keys, an image-local Node supervisor starts `aw wake run`. It waits
+for `aw wake status --json` to report `daemon_running: true` and name that
+live child's PID as `daemon_pid`, then starts sshd and `oats host run`
 ([desktop-cli-api.md](desktop-cli-api.md#the-host-run-oats-host-run)), one
 foreground process that lasts as long as the container.
 
@@ -230,31 +234,36 @@ foreground process that lasts as long as the container.
   deployments the container's host schedule registry lists and lists the
   instances. With no deployment registered it ticks nothing and says so.
 - **On the runtime's SIGTERM** (`docker stop`, `docker restart`, a Compose
-  `down` or a recreate) it starts no further minute, waits for a tick that
-  is running, and stops every running agent side by side: SIGTERM to the
+  `down` or a recreate) it starts no further minute. Active launch work gets
+  10 seconds to finish naturally; then a private admission fence prevents
+  further schedule, trigger, wake or resume launches and owned children get
+  a 5-second cancellation phase. An interrupted launch stays `unknown` and
+  needs reconciliation; a timeout does not prove that nothing ran. Host run
+  then lists and stops every running agent side by side: SIGTERM to the
   harness and a wait of 20 seconds, never escalated. Each home's stop record
   says it was stopped with the host, so the home reads `lost` and the next
-  start's sweep resumes it. Then it exits 0 and the container ends.
+  start's sweep resumes it. Then it exits 0 and the supervisor stops the
+  broker. Work that cannot be killed retains the host-run claim; the runtime's
+  final kill is a failed stop, never proof of an ordered shutdown.
 - **Its progress** is one line per event on standard error, beside sshd's
   log, in `docker logs`.
 
 What the image's files fix for that:
 
-- **`oats host run` is tini's direct child**, the process the runtime's
-  signal reaches and the container waits for: the entrypoint's last line is
-  `exec oats host run`, after sshd is started in the background. `tini -g`
-  signals its child's process group; the OATS tmux server and the harnesses
-  under it are in sessions of their own, outside that group, so they run
-  until `oats host run` stops them. Measured in `oats-agent:o1-local` with
-  tini 0.19.0 and tmux 3.3a: on `docker stop` both members of the group
-  received the TERM, and two seconds later the tmux server and its pane were
-  alive and the pane had received nothing.
+- **PID-only tini signals the Node supervisor.** It forwards TERM to host
+  run alone and keeps the wake broker alive until host run finishes stopping
+  the agents. Then it stops sshd and the broker in parallel. A broker or
+  host-run exit is reported and drains the other children before a nonzero
+  container exit, so
+  the restart policy can restart it. The broker runs as the agent uid; its
+  default state directory is `/state/home/.config/aw/wake`, so registrations
+  survive container replacement and it starts again even with no spawn.
 - **`stop_grace_period: 45s`** in the Compose service. Docker's default is
   10 seconds, shorter than the 20 seconds each harness is given; a container
   killed at the timeout leaves agents that were not stopped in order. A
   platform that does not read the Compose file needs the same stop timeout
   in its container spec.
-- **A healthcheck on sshd.** `oats host run` does not supervise sshd: if
+- **A healthcheck on sshd.** The supervisor reports an sshd exit; if
   sshd ends, the agents and the tick go on and the operator's route is gone.
   The service's healthcheck opens `127.0.0.1:2222` every 30 seconds (5
   second timeout, 3 retries, 10 second start period), so the container then
