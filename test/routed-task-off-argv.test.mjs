@@ -38,6 +38,8 @@ test("a routed spawn with a task: neither the ssh argv nor the remote command ho
   const cases = [
     { purpose: "from-file", token: "ZEBRA-FILE-7f3a9", flags: (task) => { const file = join(base, "task.md"); writeFileSync(file, task); return ["--task-file", file]; } },
     { purpose: "inline", token: "ZEBRA-INLINE-51c2e", flags: (task) => ["--task", task] },
+    { purpose: "equals", token: "ZEBRA-EQUALS-329a2", flags: (task) => [`--task=${task}`] },
+    { purpose: "file-equals", token: "ZEBRA-FILE-EQUALS-3d4a8", flags: (task) => { const file = join(base, "task.md"); writeFileSync(file, task); return [`--task-file=${file}`]; } },
   ];
   for (const { purpose, token, flags } of cases) {
     const task = `Review \`this\` and $(touch NEVER_RUN) 'quotes'\nthe ${token} line\n`;
@@ -132,6 +134,34 @@ test("a routed spawn gives the host's preview and its apply the same task on sta
   assert.match(spawns[1].command, /^oats spawn dev --task-file - --no-launch --expect-decision 0123456789abcdef01234567 --idempotency-key \S+ --dir \/w --json$/);
   assert.deepEqual(spawns.map((call) => call.input), [task, task], "the preview and the apply read the same task");
   assert.deepEqual(host.calls.filter((call) => !call.command.includes(" spawn ")).map((call) => call.input), [undefined, undefined], "the probe and the roster read are given nothing");
+});
+
+test("direct routing strips both task spellings and keeps the first task on preview and apply", (t) => {
+  const first = "ZEBRA-FIRST task\n", later = "ZEBRA-LATER task";
+  for (const extra of [[], ["--preview"]]) {
+    for (const flags of [[`--task=${first}`], [`--task=${first}`, "--task", later], ["--task", first, `--task=${later}`], [`--task=${first}`, `--task=${later}`]]) {
+      const host = fakeHost([FEATURE]);
+      assert.equal(routed(t, ["dev", ...flags, ...extra], host).envelope.ok, true);
+      assert.equal(host.calls.some((call) => call.argv.join("\n").includes("ZEBRA")), false);
+      const spawns = host.calls.filter((call) => call.command.includes(" spawn "));
+      assert.equal(spawns.length, extra.length ? 1 : 2);
+      for (const call of spawns) {
+        assert.equal(call.input, first);
+        assert.ok(call.command.includes("--task-file -"));
+      }
+    }
+  }
+});
+
+test("direct routing leaves a caller's remote task-file path unchanged", (t) => {
+  const host = fakeHost([FEATURE]);
+  assert.equal(routed(t, ["dev", "--task-file", "/remote/task.md"], host).envelope.ok, true);
+  const spawns = host.calls.filter((call) => call.command.includes(" spawn "));
+  assert.equal(spawns.length, 2);
+  for (const call of spawns) {
+    assert.ok(call.command.includes("--task-file /remote/task.md"));
+    assert.equal(call.input, undefined);
+  }
 });
 
 test("a host below the routing floor is refused with the upgrade command before any spawn", (t) => {
