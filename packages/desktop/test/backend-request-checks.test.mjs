@@ -5,9 +5,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, realpathSync, writeFileSync, readFileSync, rmSync, existsSync, renameSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { once } from 'node:events';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { backendRequest, startBackendThroughSpec, READY_LINE } from './helpers/backend-server.mjs';
 import { serverSpawnSpec } from '../server-host.mjs';
 import { NO_CLI_ENV } from '../scripts/smoke-probes.mjs';
@@ -78,12 +78,13 @@ async function serverRuns(fake) {
  * from it has ended. Called once that server has exited: it starts no run after that, and each run it started was
  * already executing (a spawn returns once its exec has), so the process table holds every one until it ends,
  * whether or not it has noted its start in the fake's records. A fake's run is `/bin/sh <dir>/<name> …`, and each
- * child it waits on runs under it. */
+ * child it waits on runs under it. A path is matched by `dir`'s own name (mkdtemp's, ASCII and random): `ps`
+ * renders the bytes of a non-ASCII component above it as `?`. */
 async function runsEnded(dir) {
   const inDir = () => {
     const ps = spawnSync('ps', ['-A', '-ww', '-o', 'args='], { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } });
     if (ps.status !== 0) throw new Error(`ps failed: ${ps.error?.message ?? ps.stderr}`);
-    return ps.stdout.split('\n').filter((args) => args.includes(`${dir}/`));
+    return ps.stdout.split('\n').filter((args) => args.includes(`/${basename(dir)}/`));
   };
   for (let n = 0; n < 400; n++) {
     if (!inDir().length) return;
@@ -271,4 +272,22 @@ test('teardown: a later CLI run, launched but not yet noted when the server stop
   writeFileSync(other.gate, '');
   await closing;
   assert.equal(existsSync(dir), false, 'removed once that run has finished');
+});
+
+test('teardown: a run is seen in the process table whatever the directory\'s parent path holds', async (t) => {
+  // `ps` renders the bytes of a non-ASCII path component as `?`: a run under such a parent is still seen.
+  const parent = realpathSync(mkdtempSync(join(tmpdir(), 'oats-t-\u00e9-')));
+  const dir = mkdtempSync(join(parent, 'oats-t-cli-'));
+  const fake = fakeCli(dir, 'oats', { gate: true });
+  const run = spawn(fake.bin, ['server', 'roster', '--json'], { stdio: 'ignore' });
+  t.after(() => { run.kill('SIGKILL'); rmSync(parent, { recursive: true, force: true }); });
+  await fake.startedRun('server roster ');
+  let ended = false;
+  const ending = runsEnded(dir).then(() => { ended = true; });
+  await new Promise((ok) => setTimeout(ok, 200));
+  assert.equal(ended, false, 'the run is alive, so its directory\'s runs have not ended');
+  const exited = once(run, 'exit');
+  writeFileSync(fake.gate, '');
+  await Promise.all([ending, exited]);
+  assert.equal(fake.runs().length, 1, 'the run finished its record before the wait ended');
 });
