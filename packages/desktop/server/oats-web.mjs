@@ -1680,11 +1680,13 @@ const server = createServer(async (req, res) => {
       // Re-probe triggers (contract): launch, app focus, explicit Retry, and
       // after choosing a binary. The body names nothing: `{}` or empty. The
       // chosen binary is the choice file's (--cli-choice), read by the probe.
-      let body;
-      try { body = await readStrictBody(req, 1024); } catch { return send(res, 400, { error: "the body must be {} or empty", code: "E_BAD_ARGS" }); }
-      if (Object.keys(body).length) return send(res, 400, { error: "the body must be {} or empty", code: "E_BAD_ARGS" });
+      // The gate is asked once the body is read, as at every POST, and before the body is judged:
+      // either refusal runs nothing.
+      let body = null;
+      try { body = await readStrictBody(req, 1024); } catch { /* refused below */ }
       const refused = heldBack(path);
       if (refused) return refuseHeld(res, refused);
+      if (!body || Object.keys(body).length) return send(res, 400, { error: "the body must be {} or empty", code: "E_BAD_ARGS" });
       await reprobeCli();
       return send(res, 200, servedCliStatus());
     }
