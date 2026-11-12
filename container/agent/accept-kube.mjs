@@ -25,12 +25,12 @@ function resources(value) {
   return normalized;
 }
 function publicCertificates(pem) {
-  const message = "agent CA must contain only public X.509 certificates";
-  assert.ok(typeof pem === "string" && Buffer.byteLength(pem) > 0 && Buffer.byteLength(pem) <= 1048576, message);
+  const message = "agent CA must contain only public X.509 CA certificates";
+  assert.ok(typeof pem === "string" && Buffer.byteLength(pem) > 0 && Buffer.byteLength(pem) <= 65536, message);
   const pattern = /-----BEGIN CERTIFICATE-----\r?\n[A-Za-z0-9+/=\r\n]+\r?\n-----END CERTIFICATE-----/g;
   const blocks = pem.match(pattern);
   assert.ok(blocks?.length && /^[ \t\r\n]*$/.test(pem.replace(pattern, "")), message);
-  try { for (const block of blocks) new X509Certificate(block); }
+  try { for (const block of blocks) assert.equal(new X509Certificate(block).ca, true, message); }
   catch { throw new Error(message); }
 }
 function isolation(p) {

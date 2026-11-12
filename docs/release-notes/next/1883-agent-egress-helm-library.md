@@ -14,7 +14,9 @@
   This change publishes no chart or image and makes no CNI enforcement claim.
 - Optional `agents.caFile` uses root `generated/agent-ca.pem`, a public-only
   ConfigMap projection at mode 0444, and exactly the two fixed trust settings
-  before container startup. Admission rejects unexpected trust data, mounts,
+  before container startup. The artifact is limited to 65536 bytes; host acceptance
+  requires every parsed certificate to be a CA, matching Compose, and rejects
+  valid non-CA certificates. Admission rejects unexpected trust data, mounts,
   environment settings and TLS bypasses; native trust proof remains separate.
 - Optional `agents.kubernetes.mirrorsClaim` mounts an existing operator mirror
   PVC read-only at `/mirrors` outside state, without creating a store or fetching

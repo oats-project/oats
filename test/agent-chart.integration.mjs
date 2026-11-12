@@ -8,6 +8,7 @@ import { join } from "node:path";
 import test, { after } from "node:test";
 import { parseAllDocuments } from "yaml";
 import { rootCertificates } from "node:tls";
+import { X509Certificate } from "node:crypto";
 
 const library = fileURLToPath(new URL("../container/agent/chart", import.meta.url));
 // Test infrastructure only: depend on the real component, with the caller's context.
@@ -644,7 +645,7 @@ test("configured CA refuses absent or non-public artifacts with withheld materia
   const path = join(chart, "ca-values.json"), artifact = join(chart, "generated/agent-ca.pem");
   try {
     writeFileSync(path, JSON.stringify({ agents: { caFile: "/operator/public-ca.pem" } }));
-    for (const pem of [undefined, "fixture-private-sensitive", rootCertificates[0] + "\nfixture-private-sensitive", rootCertificates[0] + "\n-----BEGIN PRIVATE KEY-----\nfixture-private-sensitive\n-----END PRIVATE KEY-----", " ".repeat(1048577)]) {
+    for (const pem of [undefined, "fixture-private-sensitive", rootCertificates[0] + "\nfixture-private-sensitive", rootCertificates[0] + "\n-----BEGIN PRIVATE KEY-----\nfixture-private-sensitive\n-----END PRIVATE KEY-----", " ".repeat(65537)]) {
       if (pem === undefined) rmSync(artifact, { force: true }); else writeFileSync(artifact, pem);
       const r = spawnSync(process.env.HELM || "helm", ["template", "proof", chart, "--values", path], { encoding: "utf8" });
       assert.notEqual(r.status, 0);
@@ -715,4 +716,48 @@ test("CA and mirrors keep independent bounded projections when configured togeth
     assert.deepEqual(p.containers[0].volumeMounts.slice(-2), [{ name: "agent-ca", mountPath: "/etc/agent-trust/ca.pem", subPath: "ca.pem", readOnly: true }, { name: "mirrors", mountPath: "/mirrors", readOnly: true }]);
     assert.deepEqual(p.containers[0].env, [{ name: "SSL_CERT_FILE", value: "/etc/agent-trust/ca.pem" }, { name: "NODE_EXTRA_CA_CERTS", value: "/etc/agent-trust/ca.pem" }]);
   } finally { rmSync(path, { force: true }); rmSync(artifact, { force: true }); }
+});
+
+
+test("Helm accepts a 65536-byte CA artifact and refuses one extra byte", () => {
+  const artifact = join(chart, "generated/agent-ca.pem"), pem = (rootCertificates[0] + "\n").padEnd(65536, " ");
+  try {
+    assert.equal(Buffer.byteLength(pem), 65536);
+    writeFileSync(artifact, pem);
+    render("--set", "agents.caFile=/operator/public-ca.pem");
+    writeFileSync(artifact, pem + " ");
+    const r = spawnSync(process.env.HELM || "helm", ["template", "proof", chart, "--set", "agents.caFile=/operator/public-ca.pem"], { encoding: "utf8" });
+    assert.notEqual(r.status, 0, "65537-byte public CA must not render");
+    assert.match(r.stderr, /generated\/agent-ca.pem/);
+    assert.doesNotMatch(r.stderr, /BEGIN CERTIFICATE/);
+  } finally { rmSync(artifact, { force: true }); }
+});
+
+test("host acceptance enforces the same 65536-byte CA artifact boundary", async () => {
+  const { checkRendered } = await import("../container/agent/accept-kube.mjs");
+  const artifact = join(chart, "generated/agent-ca.pem"), pem = (rootCertificates[0] + "\n").padEnd(65536, " ");
+  try {
+    writeFileSync(artifact, pem);
+    const docs = render("--set", "agents.caFile=/operator/public-ca.pem");
+    checkRendered(docs);
+    docs.find(d => d.metadata.name === "proof-oats-team-agent-ca").data["ca.pem"] = pem + " ";
+    assert.throws(() => checkRendered(docs), /public.*CA certificates/);
+  } finally { rmSync(artifact, { force: true }); }
+});
+
+test("host acceptance refuses a valid non-CA certificate in any bundle position", async () => {
+  const { checkRendered } = await import("../container/agent/accept-kube.mjs");
+  // Public self-signed fixture only: no private key is stored or needed by this test.
+  const leaf = "-----BEGIN CERTIFICATE-----\nMIIBdzCCAR2gAwIBAgIUX/HNl1jeCxhma/JPxtdb68KazE0wCgYIKoZIzj0EAwIw\nIzEhMB8GA1UEAwwYbm90LWEtY2EuZXhhbXBsZS5pbnZhbGlkMB4XDTI2MTExMjE5\nMzk1MFoXDTM2MTEwOTE5Mzk1MFowIzEhMB8GA1UEAwwYbm90LWEtY2EuZXhhbXBs\nZS5pbnZhbGlkMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAETCS3tmbI7a93QpBG\nTvO4p3uDTyop1HcNm3JFuNj2VE7UE/Mm8/2Kc4xe6+RfbzCmrc7Mwg/6PDcg/OgC\niV6kcqMvMC0wHQYDVR0OBBYEFPURah18mMWRuHZM/30TTKvLdhriMAwGA1UdEwEB\n/wQCMAAwCgYIKoZIzj0EAwIDSAAwRQIhAIiH/HNcO41aiFpROzuweg2unTBTPjNi\nIGrrfOvRR0srAiA5ysaAe5WrjwxS9Sh86yje/bvihAR4EeCjXKFuGrghXw==\n-----END CERTIFICATE-----\n";
+  const parsed = new X509Certificate(leaf);
+  assert.equal(parsed.ca, false, "fixture must be a parsed non-CA certificate");
+  assert.equal(parsed.verify(parsed.publicKey), true, "fixture has a valid signature");
+  const artifact = join(chart, "generated/agent-ca.pem");
+  try {
+    for (const pem of [leaf, rootCertificates[0] + "\n" + leaf, leaf + "\n" + rootCertificates[0]]) {
+      writeFileSync(artifact, pem);
+      const docs = render("--set", "agents.caFile=/operator/public-ca.pem");
+      assert.throws(() => checkRendered(docs), /public.*CA certificates/);
+    }
+  } finally { rmSync(artifact, { force: true }); }
 });

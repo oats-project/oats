@@ -111,9 +111,11 @@ both to that exact path. Kubernetes supplies these settings before the image's
 entrypoint and supervisor start; no TLS verification bypass or arbitrary env
 injection is accepted. The image must support this approved trust contract.
 
-The artifact must contain only public `CERTIFICATE` PEM blocks, at most 1 MiB.
+The artifact must contain only public `CERTIFICATE` PEM blocks, at most 64 KiB (65536 bytes).
 Helm checks its envelope and bound; host acceptance parses every block as X.509
-and rejects private-key material or other data. The wrapper must validate the
+and requires `X509Certificate.ca === true` for each one. It rejects valid leaf
+certificates, private-key material and other data. This matches the Compose CA
+contract. The wrapper must validate the
 public certificates before deployment. Missing configured artifacts fail with
 a fixed diagnostic that withholds the source content. Without `agents.caFile`,
 no CA ConfigMap, extra mount or trust setting is added, even if an unused artifact
