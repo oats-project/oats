@@ -219,10 +219,10 @@ here.
 
 - **[0.69.18](release-notes/v0.69.18.md#upgrade):** from this Desktop on,
   the Desktop and the CLI go in either order (a Desktop of 0.69.17 or older
-  still goes first); the catalog pins oats.aweb 1.40.0, oats.okf 6.0.3 and
+  still goes first); the catalog pins oats.aweb 1.41.0, oats.okf 6.0.3 and
   oats.framework 1.25.0. Start the host's wake broker before a Codex or
-  `delivery: session` home's next start: oats.aweb 1.40.0 refuses such a
-  home while none runs. Respawn instances to take the new naming and model
+  `delivery: session` home's next start: oats.aweb 1.40.0 and later refuse
+  such a home while none runs. Respawn instances to take the new naming and model
   floor texts.
 - **[0.69.17](release-notes/v0.69.17.md#upgrade):** the catalog pins
   oats.okf 6.0.2 and oats.framework 1.24.1; respawn each running
