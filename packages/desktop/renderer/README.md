@@ -826,14 +826,14 @@ and **Name · optional**. Below `SPAWN_NARROW` (760px, one column) the preview c
 into the form's scroll area after its last field, above the footer (`placePreview`, a
 `matchMedia` listener): moved in the document, so reading and Tab order stay the order on screen. Name: with `spawn-name` on a local spawn
 (`roleNamed()`), a typed name goes as `--name`, lowercased (the kernel uses a
-name exactly as given) and with the soul's role as its suffix (`finalName` →
-`nameWithRole`, `packages/client/instance-name.mjs`), and
+name exactly as given) and with nothing appended (`finalName`), and
 an empty one reads "Left empty, the kernel numbers it." (with `spawn-suggest-name`
 and a field never typed in: "Left empty, the instance is named from its task.", and the
 task's suggested name is the placeholder and the choices' `name`; the suggest read is in
 `packages/desktop/docs/desktop-spawn-preview.md`); otherwise (an older
 kernel, a remote target, whose `/api/spawn` takes a purpose) it is a purpose
-with the `<soul>-` prefix shown. The 64-character check runs on the final name;
+with the `<soul>-` prefix shown. The 64-character check runs on the final name
+(the typed name itself, or `<soul>-<purpose>`);
 the kernel's name refusals show under the field. **Developer settings** is collapsed: work area (base | branch,
 the worktree path relative to the deployment, *Use a worktree instead* for
 checkout souls), permissions, **messaging identity** (Default / Local /

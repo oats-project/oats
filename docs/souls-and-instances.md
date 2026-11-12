@@ -336,8 +336,8 @@ skill oats-souls, "Name the instance"
 automations and scripts that know only the soul and a purpose.
 Names are unique per deployment (a workspace-model deployment has one agents
 root): a derived name in use gets `-2`, `-3`…; an explicit `--name` in use is
-refused (`E_INSTANCE_NAME_TAKEN`). The Desktop's spawn dialog adds the role to
-a typed name.
+refused (`E_INSTANCE_NAME_TAKEN`). The Desktop's spawn dialog sends a typed
+name as typed, lowercased.
 `oats spawn <soul> --preview --suggest-name --task-file <f>` asks the soul's
 own harness for the whole name, `<work>-<role>` with the role as the task
 gives it, from the task, in one call that starts
