@@ -30,6 +30,7 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc") {
     evidence.push(key + " matches reviewed image (arguments withheld)");
   }
   equal("uid:gid", info.Config.User, `${uid}:${gid}`);
+  equal("stable cache-lock hostname", info.Config.Hostname, "oats-agent");
   const h = info.HostConfig;
   equal("capabilities dropped", h.CapDrop, ["ALL"]);
   equal("capabilities added", h.CapAdd || [], []);

@@ -146,7 +146,7 @@ test("agent Compose service retains the isolation contract", () => {
   const compose = parse(read("compose.agent.yaml"));
   assert.deepEqual(Object.keys(compose.services), ["agent"]);
   const agent = compose.services.agent;
-  assert.deepEqual(Object.keys(agent).sort(), ["image", "container_name", "user", "environment", "cap_drop", "security_opt", "privileged", "read_only", "tmpfs", "pids_limit", "mem_limit", "cpus", "restart", "stop_grace_period", "healthcheck", "volumes", "networks"].sort(), "only reviewed service keys may be present");
+  assert.deepEqual(Object.keys(agent).sort(), ["image", "container_name", "hostname", "user", "environment", "cap_drop", "security_opt", "privileged", "read_only", "tmpfs", "pids_limit", "mem_limit", "cpus", "restart", "stop_grace_period", "healthcheck", "volumes", "networks"].sort(), "only reviewed service keys may be present");
   assert.equal(agent.container_name, "oats-agent-${TEAM:?Set TEAM}");
   assert.equal(agent.user, "${AGENT_UID:-20001}:${AGENT_GID:-20001}");
   assert.deepEqual(agent.cap_drop, ["ALL"]);
@@ -210,7 +210,7 @@ test("acceptance refuses drift in the admitted container settings", async () => 
   const inspected = {
     Image: image.Id,
     State: { Running: true },
-    Config: { Image: env.AGENT_IMAGE, User: "20001:20001", Env: [...image.Config.Env], Entrypoint: [...image.Config.Entrypoint], Cmd: null, StopTimeout: 45,
+    Config: { Image: env.AGENT_IMAGE, Hostname:"oats-agent", User: "20001:20001", Env: [...image.Config.Env], Entrypoint: [...image.Config.Entrypoint], Cmd: null, StopTimeout: 45,
       Healthcheck: { Test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2222"], Interval: 30000000000, Timeout: 5000000000, StartPeriod: 10000000000, Retries: 3 } },
     HostConfig: { CapDrop: ["ALL"], CapAdd: null, SecurityOpt: ["no-new-privileges:true"], ReadonlyRootfs: true, Privileged: false, PidMode: "", IpcMode: "private", GroupAdd: null, UsernsMode: "", UTSMode: "", CgroupnsMode: "private", Sysctls: null, PortBindings: {}, ExtraHosts: [], Dns: null, NetworkMode: "team-agents", PidsLimit: 512, Memory: 3221225472, NanoCpus: 2000000000, Tmpfs: { "/tmp": "rw,nosuid,nodev,mode=1777" }, Binds: [], Mounts: [], Devices: [], DeviceRequests: null, RestartPolicy: { Name: "unless-stopped" } },
     NetworkSettings: { Networks: { "team-agents": { IPAddress: "172.30.0.2" } } },
@@ -234,6 +234,7 @@ test("acceptance refuses drift in the admitted container settings", async () => 
   otherDaemon.HostConfig.Runtime = "runsc";
   assert.ok(inspectAgent(otherDaemon, env, image, "runsc").length >= 8, "runtime must match the independently read daemon default");
   for (const mutate of [
+    (v) => { v.Config.Hostname = "ephemeral-container-id"; },
     (v) => { v.Config.User = "0"; },
     (v) => { v.Config.User = "20001"; },
     (v) => { v.HostConfig.CapAdd = ["SYS_ADMIN"]; },
@@ -519,4 +520,8 @@ test("container image and Compose declare broker session delivery", () => {
 test("the runtime account keeps a bash login shell at any UID", () => {
   assert.match(read("Dockerfile"),/--shell \/bin\/bash agent/);
   assert.ok(read("entrypoint.sh").includes("/state/home:/bin/bash\\n"));
+});
+
+test("Compose keeps the cache-lock hostname stable across recreation", () => {
+  assert.equal(parse(read("compose.agent.yaml")).services.agent.hostname,"oats-agent");
 });

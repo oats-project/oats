@@ -3,6 +3,7 @@ services:
   agent:
     image: ${AGENT_IMAGE:?Set AGENT_IMAGE}
     container_name: oats-agent-${TEAM:?Set TEAM}
+    hostname: oats-agent
     user: "${AGENT_UID:-20001}:${AGENT_GID:-20001}"
     # Bootstrap also selects settings.oats.aweb.delivery: session before launch.
     environment:

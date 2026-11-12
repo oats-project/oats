@@ -168,6 +168,11 @@ The image account and the runtime NSS entry use `/bin/bash` as the login shell.
 This lets OATS capture a fresh login environment rather than inheriting the tmux
 creator's environment after a failed shell capture.
 
+Compose fixes the container hostname to `oats-agent`, so replacement keeps the
+hostname used by cache locks. Container names and network addresses still belong
+to the deployment wrapper. A lock written under a former ephemeral hostname may
+need one manual cleanup after checking that its holder is no longer running.
+
 ## Broker delivery before launch
 
 Container deployments use the in-container broker with session delivery. Before
