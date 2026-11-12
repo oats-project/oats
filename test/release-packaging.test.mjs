@@ -22,6 +22,18 @@ function scratch(t) {
 function write(path, text) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, text); }
 const json = (file) => JSON.parse(readFileSync(join(ROOT, file), "utf8"));
 
+test("a production kernel install brings no pi messaging extension or harness", () => {
+  const manifest = json("package.json");
+  const lock = json("package-lock.json");
+  assert.equal(manifest.dependencies["@awebai/pi"], undefined);
+  assert.equal(lock.packages["node_modules/@awebai/pi"], undefined);
+  for (const [path, entry] of Object.entries(lock.packages)) {
+    if (/node_modules\/(?:@awebai\/pi|@earendil-works\/pi-[^/]+)$/.test(path)) {
+      assert.equal(entry.dev, true, `${path} must not be installed in production`);
+    }
+  }
+});
+
 test("all release manifests and lock roots agree; Desktop accepts the actual CLI probe", () => {
   const version = checkReleaseVersions();
   const probe = JSON.parse(execFileSync(process.execPath, [join(ROOT, "bin/oats.mjs"), "version", "--json"], { encoding: "utf8" }));
