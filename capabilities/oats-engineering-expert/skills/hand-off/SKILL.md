@@ -32,8 +32,8 @@ lane), then resolve it:
        what you were working on. Say the rate-limit effort finds that the gateway sends no
        `Retry-After` on any of its errors: its lead is your sibling.
        ```bash
-       oats spawn <soul> --relation sibling --relative-to "$OATS_INSTANCE" --purpose <slug> \
-         --task-file <message.md>
+       oats spawn <soul> --relation sibling --relative-to "$OATS_INSTANCE" \
+         --name <effort-slug>-lead --task-file <message.md>
        ```
        The two show together in your person's status and sidebar, and it outlives your
        retirement, which a child would not. A sibling records no parent, so it takes no
@@ -45,7 +45,7 @@ lane), then resolve it:
        the right lane.
      - **Unrelated:** a finding with nothing to do with your effort's subject. Say the
        same effort notices a broken link on the pricing page: its owner is independent of
-       you, `oats spawn <soul> --relation unrelated --purpose <slug> --task-file
+       you, `oats spawn <soul> --relation unrelated --name <effort-slug>-lead --task-file
        <message.md>`.
 
      Either way your message is its task, and the new effort gets its own record, linked
@@ -57,8 +57,11 @@ lane), then resolve it:
      (`/across-people`); where they have none, ask them;
    - a lane's maintainer: `/find-the-maintainer`. Never a second while one is active, even
      a stopped one.
-3. **Its name.** Give each new instance a name no instance has had. Never reuse a retired
-   instance's name.
+3. **Its name.** `<task>-<role>`: the task first, and last the role it plays in the
+   coordination (lead, developer, reviewer, helper, specialist, maintainer, dispatcher),
+   never its soul, which the sidebar already shows (`retry-after-lead`). Keep it short: five
+   words at most, the role included. Give each new instance a name no instance has had,
+   never a retired one's: when the name is taken, make the task's part more specific.
 
 ## The message
 One message, in the effort's thread with that role:

@@ -228,7 +228,7 @@ knowledge and no testing capability (where something is defined, what a file say
 to a native subagent. So may any child your person asks to be one, and the agents of your
 harness's multi-agent workflow mode when it is in use.
 
-<!-- OATS: the workspace's direction (recorded 2026-10-31, for every team) rules certain models out and names none in any text, and a machine's souls.launch picks a soul's model; so diversity compares model families, never names a model, and picks only a model this workspace allows. -->
+<!-- OATS: the workspace's direction (recorded 2026-10-31, for every team) rules certain models out and names no model version in any text (the floor's tiers, named in the landing rules and the code reviewer's briefing, are the exception), and a machine's souls.launch picks a soul's model; so diversity compares model families, never names a model, and picks only a model this workspace allows. -->
 **A probe runs on a different model from the author's,** where the organisation has one:
 every kind of probe checks work or validates an idea, and agents of one model share blind
 spots, so their agreement is not independent. The author is whoever made the work or the
@@ -248,9 +248,26 @@ reports your own: its status line, or its model command), with `--harness <h> --
 this host defines (`oats launch-config list`). If none is available, or you can't
 establish a difference, use the effective one and say so where you use its answer.
 
-Spawn it as your child, the brief as its task, with a name no instance has had:
+**The floor comes first.** Every helper, probe or not, OATS child or native subagent, runs
+at or above the floor your landing rules set ("The models children run on"). Check the
+model it would launch on against that floor before anything above: the effective one from
+the preview as much as one you pass with `--model`, and a native subagent's too. A smaller,
+faster or cheaper model is not a different one. An effective model below the floor is not
+used, even where it differs from the author's: pass `--harness`/`--model` for one at or
+above the floor that this workspace allows, and tell your person once that the configuration is below it.
+<!-- OATS: the floor is absolute here, so your own model is the fallback only where it meets the floor. -->
+Where no other family has a model at or above the floor, or you can't establish its tier,
+use your own model where that meets the floor, otherwise a model of your own family that
+does and that this workspace allows, and say, where you use the answer, that diversity was lost. Where no allowed model
+at or above the floor is available, send no helper: tell your person.
+
+Spawn it as your child, the brief as its task. Name it for its task, with its role in your
+effort last: `<task-slug>-helper` (`retry-header-helper`), or `<area-slug>-specialist` for
+a standing specialist (`billing-api-specialist`). Never name it for its soul, which the
+sidebar already shows, and give it a name no instance has had: when the name is taken,
+make the task's part more specific.
 ```bash
-oats spawn <soul> --parent "$OATS_INSTANCE" --same-work --purpose <helper-slug> --task-file <brief.md>
+oats spawn <soul> --parent "$OATS_INSTANCE" --same-work --name <task-slug>-helper --task-file <brief.md>
 ```
 `--same-work` records that the helper does your work, and your person's sidebar draws its
 line to you. It shares no work tree: a helper of a worktree soul gets its own worktree and

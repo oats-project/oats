@@ -170,7 +170,7 @@ see the [official catalog](official-catalog.md) for current pins.
 | `instance-same-work` | `oats instance same-work <instance> on\|off` and `oats spawn … --same-work`, local and `--server` ([Same work as the parent](#same-work-as-the-parent-oats-instance-same-work)); `sameWork: true` on `oats status --json` instance rows and on `oats server roster --json` rows while the instance's flag is bound to its current `parentInstance`, the key absent otherwise ([`sameWork`](#row-same-work)). Gate on the probe, locally or in the host's `probe.features`: an older kernel's rows never carry `sameWork`, and it refuses the flag and the verb (`E_BAD_ARGS`) | |
 | `deployments-list` | `oats deployments [list]\|add\|remove\|import --json`, this computer's list of its deployments (`~/.oats/config/deployments.json`); `listed` on `oats onboard --json`; a kernel command run in an unlisted deployment lists it ([This computer's deployments](#this-computers-deployments-oats-deployments)). Gate on the probe: there is no fallback scan | `deploymentsApi: 1` |
 | `status-retire-state` | `retire` on `oats status --json` instance rows and on remote roster rows: whether a retire of the home is running, cannot be told, failed or was interrupted, read only from the files beside the home, OATS 0.59.0 ([`retire`](#row-retire)). `retirePending` is unchanged. Gate on the probe: a kernel without it never carries the field, so its absence there says nothing | |
-| `instance-suggest-name` | `oats instance suggest-name --soul <soul> (--task <t> \| --task-file <f>) [--harness claude\|pi] [--model <m>] [--launch-config <n>] --json`: the name a `--suggest-name` spawn of `<soul>` would get, chosen on this machine for a spawn that may land on another, not made unique ([A name for a spawn elsewhere](#a-name-for-a-spawn-elsewhere-oats-instance-suggest-name)). Local only: `--server` is `E_BAD_ARGS`. Gate on the local probe; without it, the spawn goes unnamed (numbered, or named where it lands) | |
+| `instance-suggest-name` | `oats instance suggest-name [--soul <soul>] (--task <t> \| --task-file <f>) [--harness claude\|pi] [--model <m>] [--launch-config <n>] --json`: the name a `--suggest-name` spawn would get, chosen on this machine for a spawn that may land on another, not made unique ([A name for a spawn elsewhere](#a-name-for-a-spawn-elsewhere-oats-instance-suggest-name)). Local only: `--server` is `E_BAD_ARGS`. Gate on the local probe; without it, the spawn goes unnamed (numbered, or named where it lands) | |
 | `spawn-apply-suggest-name` | `--suggest-name` on a spawn apply, without `--preview`: the apply names the instance as a preview's `--suggest-name` would, on the machine that spawns, and its result carries `naming` ([On an apply](#on-an-apply-feature-spawn-apply-suggest-name)). Routed, the host needs the feature (`E_REMOTE_INCOMPATIBLE`, nothing sent): gate on the host's `probe.features` and don't send the flag to a host without it | |
 | `instance-background` | background instances (awebai/oats#1579): `soul.yaml` `background:`; `oats spawn … --background\|--no-background`, whose preview and result carry `background` and `backgroundFrom`; `oats instance background <instance> on\|off`, local and `--server`; `background: true` on `oats status --json` instance rows, `oats server roster --json` rows, `oats inspect --home` `instance` and `oats souls --json` soul rows, absent otherwise ([Background instances](#background-instances-oats-instance-background)). Gate on the probe, locally or in the host's `probe.features`: an older kernel refuses the flags and the verb, and its rows have no `background`. A routed spawn with either flag needs the host's feature (`E_REMOTE_INCOMPATIBLE`, nothing sent) | `instanceBackgroundApi: 1` (payload only) |
 | `session-resume` | sessions come back after a shutdown, OATS 0.69 (#1559): `sessionEnd` on `oats status --json` instance rows ([`sessionEnd`](#row-session-end)); `oats session start --resume --home <abs>` and its `resume` answer ([Resume a lost session](#resume-a-lost-session---resume)); the machine sweep `oats session resume [--deployment <dir>] [--plan] --json` ([`oats session resume`](#the-machine-sweep-oats-session-resume)); `E_RESUME_BUSY`, `E_RESUME_NOT_LOST`. Local only: `--server` is `E_BAD_ARGS`. Gate a client's resume-on-open on the probe: a kernel without it has no `session resume` | |
@@ -2826,7 +2826,7 @@ or `--task <text>`). Like every preview it writes nothing and runs no hooks.
   configuration's `env`, not its `args`), with this prompt on stdin, never in
   argv:
 
-  > Name an agent for this task: 2–4 lowercase words joined by hyphens, describing the work, not the role. Reply with the name only.
+  > Name an agent for this task: <work>-<role>, at most five lowercase words joined by hyphens. First a few words for the work, then, last, one word for the agent's role as the task gives it; if the task gives no role, one word for what the agent does in it. Reply with the name only.
   >
   > Task:
   > <the task text, at most 4000 characters>
@@ -2867,15 +2867,23 @@ or `--task <text>`). Like every preview it writes nothing and runs no hooks.
     --no-context-files --no-approve [--model <m>]`.
   - **codex** is not supported. Its naming call is not proven to start
     nothing, so a codex soul is numbered with `unsupported-harness`.
-- **The name.**
-  1. The reply's first non-empty line, as a slug.
-  2. Without one or more trailing `-<role>`. The role is the last word of the
-     soul's name, after any package qualifier.
-  3. At most 4 words, cut at a word boundary to fit
-     `64 − 1 − len(role)`.
-  4. Nothing left, or only the role, is `invalid-reply`.
-  5. The name is `<descriptive>-<role>`. A name that is taken (an instance,
-     a soul or a live window, as for `--name`) gets `-2`, `-3`, and so on.
+- **The name** is the model's whole `<work>-<role>`. Nothing appends a
+  role, and nothing reads the soul's name for it.
+  1. The reply's first non-empty line, as a slug. Its last word is the role,
+     and is always kept.
+  2. Fewer than two words is `invalid-reply`: one word names no work and
+     role.
+  3. Over 5 words, the descriptive words nearest the role are dropped
+     (`a-b-c-d-e-lead` → `a-b-c-d-lead`).
+  4. Over 64 characters, counting any `-<n>` below, the same: descriptive
+     words nearest the role are dropped, and the first word's characters
+     are cut only when it is the one descriptive word left. A role that
+     leaves no room for one character of a first word is `invalid-reply`.
+  5. A name that is taken (an instance, a soul or a live window, as for
+     `--name`) gets `-2`, `-3`, and so on, at the end.
+
+  A reply that is prose, or a tool-call block, is named by whatever its
+  first non-empty line slugs to: the rules above are the only guard.
 - **The answer** is the full preview, plus `naming`:
 
   ```json
@@ -2916,8 +2924,8 @@ oats spawn <soul> --suggest-name --task-file <f> [the flags of a real spawn] [--
 An apply with `--suggest-name` and no `--name`, `--purpose` or
 `--expect-decision` names the instance on the machine that spawns, by the
 preview's call and rules above, through the soul's harness.
-- The name is `<descriptive>-<role>`, made unique as a preview's is, and it is
-  placed exactly as `--name <name>` would be.
+- The name is the reply's whole name, by the preview's rules, made unique as
+  a preview's is, and it is placed exactly as `--name <name>` would be.
 - On any failure the instance is numbered as it is today, and `naming` says
   why. A failed call is never an error: the spawn goes on.
 - The call is made before anything is placed, after the executable is
@@ -3139,7 +3147,7 @@ Feature `spawn-name`. `--name <slug>` is the exact name, with no prefix.
   `E_REMOTE_INCOMPATIBLE` otherwise, with nothing sent. A saved route here
   under that name is `E_ROUTE_EXISTS`, before the spawn is sent.
 - `--preview --suggest-name` (feature `spawn-suggest-name`) chooses a
-  descriptive name for the task, `<descriptive>-<role>`, which the apply then
+  name for the task, the model's whole `<work>-<role>`, which the apply then
   passes as `--name` ([The suggested name](#the-suggested-name-feature-spawn-suggest-name)).
   An apply with `--suggest-name` (feature `spawn-apply-suggest-name`) chooses
   it itself ([On an apply](#on-an-apply-feature-spawn-apply-suggest-name)).
@@ -3152,10 +3160,10 @@ Feature `spawn-name`. `--name <slug>` is the exact name, with no prefix.
 Feature `instance-suggest-name`.
 
 ```text
-oats instance suggest-name --soul <soul> (--task <t> | --task-file <f>) [--harness claude|pi] [--model <m>] [--launch-config <n>] [--dir <d>] --json
+oats instance suggest-name [--soul <soul>] (--task <t> | --task-file <f>) [--harness claude|pi] [--model <m>] [--launch-config <n>] [--dir <d>] --json
 ```
 
-The name a spawn of `<soul>` would get by `--suggest-name`, chosen on the
+The name a spawn would get by `--suggest-name`, chosen on the
 machine that asks (a Desktop's, with the spawn dialog open) for a spawn that
 may land on another.
 
@@ -3165,11 +3173,12 @@ may land on another.
   directory) and the OATS tmux server's environment, as a spawn's pane would
   have it; it resolves no souls, members, lock or remote. The deployment it
   reads is not added to this computer's deployments list.
-- **The soul is only a name.** It gives the role (the last word of the name,
-  after any package qualifier) and needn't exist on this machine. It is
-  checked as a soul name's shape (`<soul>`, `<package>/<soul>`,
-  `<package>--<soul>`), never resolved.
-- **Not made unique.** The words, role and length rules are the preview's
+- **`--soul` is optional, and not used for the name.** Installed Desktops
+  send it, so when given it is still checked as a soul name's shape
+  (`<soul>`, `<package>/<soul>`, `<package>--<soul>`, else `E_BAD_ARGS`),
+  never resolved, and needn't exist on this machine. Two souls with the same
+  reply get the same name.
+- **Not made unique.** The word and length rules are the preview's
   ([The suggested name](#the-suggested-name-feature-spawn-suggest-name)), but no
   `-2` is added: the machine the spawn lands on owns uniqueness, and a name
   taken there is its `E_INSTANCE_NAME_TAKEN` at the apply.
@@ -3207,8 +3216,8 @@ may land on another.
   - A naming failure is not an error: `ok: true` with
     `naming.source: "numbered"`.
   - The text answer is the name, or `numbered (<reason>: <message>)`.
-- **Refusals** (`E_BAD_ARGS` unless named): no `--soul`, or one that is not
-  a soul name's shape; neither or both of `--task` and `--task-file`, or one
+- **Refusals** (`E_BAD_ARGS` unless named): a `--soul` that is not a soul
+  name's shape; neither or both of `--task` and `--task-file`, or one
   that cannot be read; a `--harness` other than pi, claude or codex; a
   `--harness` that is not the named configuration's; a flag or argument it
   does not take; `--server`. An unknown `--launch-config` is
