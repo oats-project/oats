@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { createBackendClient, createSocketLossRecovery, watchReadyLine, READY_LINE } from '../backend-client.mjs';
 import { createServerHost, launchServerChild } from '../server-host.mjs';
+import { shippedMainApi } from './helpers/shipped-main-api.mjs';
 import { makeSocketDir, socketBase, socketPathFits, sweepStaleSocketDirs, SOCKET_PATH_LIMIT, SocketPathTooLong } from '../backend-socket.mjs';
 
 // A guard that goes missing lets a request reach the transport double, which waits to be answered:
@@ -432,4 +433,101 @@ test('watchReadyLine fires once, on the exact line only', () => {
   stream.emit('data', 'oats-desktop-server ready\r\n');
   stream.emit('data', 'oats-desktop-server ready\n');
   assert.equal(n, 1);
+});
+
+/* ── A caller that commits after a later await checks its generation right before the commit ── */
+test('held(): true while its generation is the current, ready one; false once it ends, is replaced or stopped', async () => {
+  const { client, h, spawned } = host();
+  assert.equal(h.held()(), false, 'no generation: nothing is held');
+  h.start([]);
+  const unready = h.held();
+  assert.equal(unready(), false, 'not ready yet');
+  spawned[0].child.stdout.write(`${READY_LINE}\n`); await h.whenReady();
+  const first = h.held();
+  assert.equal(first(), true);
+  assert.equal(unready(), true, 'the same generation, ready now');
+  const replacing = h.replace([]);
+  assert.equal(first(), false, 'revoked at the start of a replacement');
+  spawned[0].child.emit('exit', 0, null); await replacing;
+  spawned[1].child.stdout.write(`${READY_LINE}\n`); await h.whenReady();
+  assert.equal(first(), false, 'a successor never counts for the generation it replaced');
+  const second = h.held();
+  assert.equal(second(), true);
+  client.revoke(h.lease());
+  assert.equal(second(), false, 'a lost socket revokes the lease while the generation is still current');
+  assert.equal(h.held()(), false);
+  const { h: other, spawned: others } = host();
+  other.start([]); others[0].child.stdout.write(`${READY_LINE}\n`); await other.whenReady();
+  const exiting = other.held();
+  others[0].child.emit('exit', 1, null);
+  assert.equal(exiting(), false, 'an exit ends it');
+  const { h: last, spawned: lasts } = host();
+  last.start([]); lasts[0].child.stdout.write(`${READY_LINE}\n`); await last.whenReady();
+  const third = last.held();
+  last.stop();
+  assert.equal(third(), false, 'stopped');
+});
+
+/** Main's api IPC handler over the real client and host: the backend answers `body` for /api/panel, and
+ * `exitDuringText` ends the child after the client has read the whole reply, before the handler resumes. */
+async function panelThroughIpc({ exitDuringText }) {
+  const { t, client, h, spawned } = host();
+  h.start([]); spawned[0].child.stdout.write(`${READY_LINE}\n`); await h.whenReady();
+  const api = shippedMainApi({ window: '/d/first', advertised: new Set(['/d/first']) });
+  const commits = [], observed = [];
+  Object.assign(api.context, { serverHost: h, noteServed: (list) => commits.push(list),
+    resumeTrigger: { observed: (rows) => observed.push(rows) }, localDeploymentIds: () => [] });
+  api.context.backendFetch = async (path, init) => {
+    const r = await client.fetch(path, init);
+    return { ok: r.ok, status: r.status, text: async () => { const text = await r.text(); if (exitDuringText) spawned[0].child.emit('exit', 0, null); return text; } };
+  };
+  const pending = api.call('/api/panel', { method: 'GET' });
+  await tick();
+  t.last().respond(200).end(JSON.stringify({ workspaces: [{ id: '/d/served' }], instances: [] }));
+  const result = await pending;
+  return { result, commits, observed, allowedWs: [...api.context.allowedWs] };
+}
+
+test('the api IPC handler commits a panel reply of the current generation', async () => {
+  const { result, commits, observed, allowedWs } = await panelThroughIpc({ exitDuringText: false });
+  assert.equal(result.ok, true);
+  assert.deepEqual(commits, [[{ id: '/d/served' }]]);
+  assert.equal(observed.length, 1);
+  assert.deepEqual(allowedWs, ['/d/served']);
+});
+
+test('the api IPC handler commits nothing from a panel reply whose child exited before the handler resumed', async () => {
+  const { commits, observed, allowedWs } = await panelThroughIpc({ exitDuringText: true });
+  assert.deepEqual(commits, [], 'noteServed is not called');
+  assert.deepEqual(observed, [], 'the resume trigger does not see its rows');
+  assert.deepEqual(allowedWs, ['/d/first'], 'the advertised set is left as it was');
+});
+
+/** Main's forge readConnection over the real client and host; `exitDuringJson` ends the child after the
+ * client has read the whole reply, before readConnection resumes. */
+async function readConnectionThrough({ exitDuringJson }) {
+  const source = readFileSync(new URL('../main.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf('  readConnection: async connectionRef => {'), end = source.indexOf('\n  },\n', start) + 5;
+  assert.ok(start > 0 && end > start);
+  const { t, client, h, spawned } = host();
+  h.start([]); spawned[0].child.stdout.write(`${READY_LINE}\n`); await h.whenReady();
+  const backendFetch = async (path, init) => {
+    const r = await client.fetch(path, init);
+    return { ok: r.ok, status: r.status, json: async () => { const v = await r.json(); if (exitDuringJson) spawned[0].child.emit('exit', 0, null); return v; } };
+  };
+  const context = { backendFetch, serverHost: h, serverEpoch: 0, currentForgeEpoch: () => 'fixture:0', FORGE_EPOCH_HEADER: 'x-forge-epoch',
+    forgeFailure: (code) => ({ failed: code }), AbortSignal, JSON };
+  runInNewContext(`this.readConnection = {\n${source.slice(start, end)}}.readConnection;`, context);
+  const pending = context.readConnection('ref');
+  await tick();
+  t.last().respond(200).end(JSON.stringify({ readEpoch: 'fixture:0', state: 'connected' }));
+  return pending;
+}
+
+test("main's forge readConnection hands on a reply of the current generation", async () => {
+  assert.deepEqual(await readConnectionThrough({ exitDuringJson: false }), { readEpoch: 'fixture:0', state: 'connected' });
+});
+
+test("main's forge readConnection refuses a reply whose child exited before it resumed", async () => {
+  assert.deepEqual(await readConnectionThrough({ exitDuringJson: true }), { failed: 'E_CONNECTION_CHANGED' });
 });

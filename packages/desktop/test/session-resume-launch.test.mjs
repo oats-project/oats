@@ -207,7 +207,7 @@ test("main's shipped accepted-panel block observes only accepted panel replies, 
     const seen = { observed: [], options: [], served: [] };
     const context = {
       epoch, serverEpoch, r: { ok }, route, json, allowedWs: "before",
-      serverHost: { inTransition: () => transition },
+      serverHost: { inTransition: () => transition, held: () => () => true },
       servedSelectors: (list) => `selectors of ${list.length}`,
       noteServed: (list) => seen.served.push(list),
       resumeTrigger: { observed: (rows, options) => { seen.observed.push(rows); seen.options.push(options); return Promise.resolve(); } },

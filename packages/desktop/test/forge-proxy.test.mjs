@@ -40,7 +40,7 @@ function realApi(fetch) {
   const start = source.indexOf('ipcMain.handle("api",'), end = source.indexOf('// ---- IPC: workstation forge auth', start);
   const context = { ipcMain: { handle: (_name, fn) => { handler = fn; } }, apiUrl, apiInit, classifyApiRoute, forgeProxyOptions, trustedForgeFrame,
     FORGE_EPOCH_HEADER, forgeFailure, RENDERER_URL: url, serverEpoch: 0, forgeEpoch: 'main:0',
-    currentForgeEpoch: () => context.forgeEpoch, unservedRefusal: () => null, serverHost: { inTransition: () => false },
+    currentForgeEpoch: () => context.forgeEpoch, unservedRefusal: () => null, serverHost: { inTransition: () => false, held: () => () => true },
     wsId: 'team', allowedWs: new Set(['team']), requestPath, AbortSignal,
     backendFetch: (path, init) => { assert.equal(path, '/api/forge-connections', 'backendFetch takes a path'); return fetch(path, init); },
     guard: event => { assert.ok(trustedForgeFrame(event, url)); } };

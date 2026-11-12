@@ -688,6 +688,9 @@ ipcMain.handle("api", async (e, pathname, opts) => {
     : route === 'automations' ? 90_000 : route === 'instance-git' || route === 'instance-color' || route === 'instance-background' ? 50_000 : route === 'machine-connect' ? 980_000 : route === 'machines' ? 130_000
     : route === 'instance-start' || route === 'remote-roster' ? 70_000 : 20_000);
   const init = { ...(forge?.init ?? apiInit(opts)), signal: AbortSignal.timeout(timeout) };
+  // The generation this request is made under: the panel's advertised set below is committed only while
+  // that generation is still the current, ready one (an exit while the handler awaits commits nothing).
+  const held = serverHost.held();
   const r = await backendFetch(requestPath(url), init);
   const text = await r.text();
   if ((forge || lifecycle) && !ownsForgeFrame()) return { ok: false, status: 403, body: forbidden() };
@@ -698,7 +701,7 @@ ipcMain.handle("api", async (e, pathname, opts) => {
       ? failure(mutation ? 'E_OUTCOME_UNKNOWN' : 'E_PLAN_CHANGED', { status: mutation ? 'unknown' : 'unavailable' }) : forgeFailure('E_CONNECTION_CHANGED');
   // Remote discovery can finish after startup. Accept the same server-owned
   // choices the menu receives, without adding requests to workspace polling.
-  if (epoch === serverEpoch && !serverHost.inTransition() && r.ok && route === 'panel') {
+  if (epoch === serverEpoch && !serverHost.inTransition() && held() && r.ok && route === 'panel') {
     if (Array.isArray(json?.workspaces)) {
       allowedWs = servedSelectors(json.workspaces);
       noteServed(json.workspaces);
@@ -724,7 +727,7 @@ const currentForgeEpoch = () => `${forgeClient}:${forgeAuth.generation()}`;
 const forgeAuth = createForgeAuthBroker({
   env: forgeEnv,
   readConnection: async connectionRef => {
-    const serverLease = serverEpoch, readEpoch = currentForgeEpoch();
+    const serverLease = serverEpoch, readEpoch = currentForgeEpoch(), held = serverHost.held();
     if (serverHost.inTransition()) return forgeFailure('E_CONNECTION_CHANGED');
     try {
       const response = await backendFetch("/api/forge-connections", {
@@ -732,7 +735,7 @@ const forgeAuth = createForgeAuthBroker({
         body: JSON.stringify({ hostRef: connectionRef }), signal: AbortSignal.timeout(25_000),
       });
       const result = await response.json();
-      if (!response.ok || serverLease !== serverEpoch || serverHost.inTransition() || readEpoch !== currentForgeEpoch()
+      if (!response.ok || serverLease !== serverEpoch || serverHost.inTransition() || !held() || readEpoch !== currentForgeEpoch()
         || result?.readEpoch !== readEpoch) return forgeFailure('E_CONNECTION_CHANGED');
       return result;
     } catch { return forgeFailure('E_GH_FAILED'); }

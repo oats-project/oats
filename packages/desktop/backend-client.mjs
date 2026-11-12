@@ -10,7 +10,7 @@
 // whole reply: revoking it aborts every request in flight on it, body included, and a reply whose
 // lease is no longer current and ready after its last byte is discarded (a transport failure).
 // Without a current ready lease nothing is sent. A caller that commits state after a later await
-// keeps its own generation check right before the commit.
+// keeps its own generation check right before the commit (server-host.mjs `held()`, with main's epoch).
 //
 // The secret lives in the lease only: never in a URL, a log line, an error message or a reply.
 import { request as httpRequest } from "node:http";

@@ -42,7 +42,7 @@ export function shippedMainApi({ window: bound, chooser = false, holds = (id) =>
   const context = withWindowGlobals({
     ipcMain: { handle: (_name, fn) => { handler = fn; } }, apiUrl, apiInit, classifyApiRoute, requestPath, servedSelectors, forgeProxyOptions, trustedForgeFrame,
     FORGE_EPOCH_HEADER, forgeFailure, lifecycleFailure, lifecycleFrameRefusal, DESKTOP_TERMS, RENDERER_URL: RENDERER, serverEpoch: 0, unservedRefusal: () => null,
-    serverHost: { inTransition: () => false }, currentForgeEpoch: () => 'fixture:0', wsId, allowedWs: advertised, servedList: served,
+    serverHost: { inTransition: () => false, held: () => () => true }, currentForgeEpoch: () => 'fixture:0', wsId, allowedWs: advertised, servedList: served,
     // The re-read of the advertised set (main's panelWorkspaces): `reread` is what the server advertises now.
     panelWorkspaces: async () => { calls.rereads++; if (reread) context.allowedWs = reread; return context.servedList; },
     BrowserWindow: { fromWebContents: () => sendingWindow }, choosers: new Set(chooser ? [sendingWindow] : []),

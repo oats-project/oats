@@ -182,7 +182,7 @@ test('the shipped api handler answers a known unserved deployment with 404 E_WOR
   const context = { ipcMain: { handle: (_name, fn) => { handler = fn; } }, apiUrl, apiInit, servedSelectors, classifyApiRoute, forgeProxyOptions, trustedForgeFrame,
     FORGE_EPOCH_HEADER, forgeFailure, lifecycleFailure, lifecycleFrameRefusal, DESKTOP_TERMS, RENDERER_URL: renderer, serverEpoch: 0, currentForgeEpoch: () => 'main:0',
     unservedRefusal: createUnservedRefusal({ state: () => ({ allowedWs, known }), body: workspaceNotServed }),
-    serverHost: { inTransition: () => false }, wsId: '/d/Agents/aweb', allowedWs, guard: () => {}, AbortSignal: { timeout: ms => ({ ms }) },
+    serverHost: { inTransition: () => false, held: () => () => true }, wsId: '/d/Agents/aweb', allowedWs, guard: () => {}, AbortSignal: { timeout: ms => ({ ms }) },
     requestPath, backendFetch: async path => { assert.equal(typeof path, 'string', 'backendFetch takes a path'); fetched.push(path); return { ok: true, status: 200, text: async () => JSON.stringify({ workspace: { id: '/d/Agents/aweb' }, workspaces: [{ id: '/d/Agents/aweb' }] }) }; } };
   runInNewContext(source.slice(start, end), withWindowGlobals(context));
   const refused = await handler(event, `/api/panel?ws=${encodeURIComponent('/d/oats-v2')}`, {});

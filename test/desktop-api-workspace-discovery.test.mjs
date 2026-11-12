@@ -49,7 +49,7 @@ function bridge() {
     + source.slice(apiStart, apiEnd) + '\nreturn () => {' + invalidation + '};';
   const invalidate = new Function("backendFetch", "apiUrl", "apiInit", "classifyApiRoute", "requestPath", "servedSelectors", "ipcMain", "guard", "serverHost", "forge", "forgeFailure", "invalidateForgeReads", "invalidateTerminalPreparations", "windowGlobals", setup)(
     backendFetch, apiUrl, apiInit, classifyApiRoute, requestPath, servedSelectors, { handle: (name, fn) => { assert.equal(name, "api"); handler = fn; } }, () => {},
-    { inTransition: () => inTransition }, forge, forgeFailure, () => { forgeInvalidations++; }, () => { terminalInvalidations++; },
+    { inTransition: () => inTransition, held: () => () => true }, forge, forgeFailure, () => { forgeInvalidations++; }, () => { terminalInvalidations++; },
     { frameWorkspace, windowRefusal, scopedRequest, workspaceNotServed },
   );
   return {

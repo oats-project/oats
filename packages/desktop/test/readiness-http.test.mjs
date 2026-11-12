@@ -63,7 +63,7 @@ test('shipped main binding actually delegates readiness to guarded proxy with cu
   const deps = { classifyApiRoute, ipcMain: { handle: (_key, fn) => handler = fn }, RENDERER_URL: f.deps.rendererURL,
     forgeFailure: () => ({}), lifecycleFailure: () => ({}), guard: () => assert.fail('readiness must not fall through the generic proxy'),
     proxyReadiness: (e, path, opts, deps) => { seen = { e, path, opts, c: deps.connection(), fetch: deps.fetch }; return 'guarded'; },
-    backendFetch, wsId: 'team', allowedWs: new Set(['team']), serverEpoch: 7, unservedRefusal: () => null, serverHost: { inTransition: () => false } };
+    backendFetch, wsId: 'team', allowedWs: new Set(['team']), serverEpoch: 7, unservedRefusal: () => null, serverHost: { inTransition: () => false, held: () => () => true } };
   runInNewContext(source.slice(start, end), withWindowGlobals(deps));
   for (const path of ['/api/workspace-readiness', '/api/x/../workspace-readiness', '/api' + String.fromCharCode(92) + 'workspace-readiness', '/api/%2e/workspace-readiness', '/api/workspace-\treadiness']) {
     assert.equal(await handler(f.event, path, f.opts), 'guarded', `normalized ${path} uses the dedicated frame boundary`);

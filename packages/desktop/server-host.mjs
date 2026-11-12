@@ -144,6 +144,17 @@ export function createServerHost(io) {
     current: () => generation?.child ?? null,
     /** The current generation's lease, or null. */
     lease: () => generation?.lease ?? null,
+    /**
+     * The current generation, as a check: true while its lease is ready. Every end of a generation revokes
+     * its lease (exit, error, replace, stop, a lost socket), and a revoked lease is never ready again
+     * (backend-client.mjs), so it is false from then on and a successor never counts for it. A caller that
+     * commits a reply after a later await (the reply's own read is covered by backendFetch) asks it right
+     * before the commit.
+     */
+    held() {
+      const lease = generation?.lease ?? null;
+      return () => lease !== null && lease.ready;
+    },
     /** Resolves once the current generation is ready; rejects if it ends first or there is none. */
     whenReady: () => (generation ? io.client.whenReady(generation.lease) : Promise.reject(new Error("no backend server was started"))),
     /** Start the first child (no predecessor). */
