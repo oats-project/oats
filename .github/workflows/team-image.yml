@@ -1,0 +1,37 @@
+name: Team image
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: team-image-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    name: Team image / amd64 acceptance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      AGENT_IMAGE: oats-team-agent:${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      # The PR's image inputs and acceptance script must come from its head,
+      # rather than GitHub's synthetic merge commit or the default branch.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Build the reviewed image
+        run: docker build --platform linux/amd64 --tag "$AGENT_IMAGE" container/agent
+
+      - name: Accept the real container
+        run: bash .github/scripts/team-image-accept.sh

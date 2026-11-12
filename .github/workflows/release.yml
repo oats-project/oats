@@ -439,3 +439,50 @@ jobs:
           # reviewed act and never this job's.
         env:
           GH_TOKEN: ${{ github.token }}
+
+  # The image must use the released kernel, after npm and the GitHub Release
+  # exist. This job never inherits the npm publish token.
+  publish-team-image:
+    needs: publish
+    # Publication is disabled until Juan confirms the registry/repository.
+    # This is the single publication switch; verification is always enabled.
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write  # Append the immutable image reference to release notes.
+      packages: write
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
+    env:
+      AGENT_IMAGE: oats-team-agent:${{ github.sha }}
+      IMAGE_REPOSITORY: ghcr.io/oats-project/team-agent
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Require a release tag and a released image kernel
+        run: node .github/scripts/check-team-image-release.mjs
+
+      - name: Build the reviewed image
+        run: docker build --platform linux/amd64 --tag "$AGENT_IMAGE" container/agent
+
+      - name: Accept the real container
+        run: bash .github/scripts/team-image-accept.sh
+
+      - name: Install the registry copy tool
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends skopeo
+
+      - name: Publish the accepted image by digest and record it
+        id: image
+        run: bash .github/scripts/team-image-publish.sh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

@@ -180,21 +180,23 @@ runs the same installer steps, so it names the same commits. So does
 lane's call of 2026-10-27: it runs a branch's code on the release's own
 actions, and its run is that pull request's macOS evidence, so it names them
 at the commits that were read
-([Implementation](implementation.md#the-tuis-tests-on-macos)). Every other
+([Implementation](implementation.md#the-tuis-tests-on-macos)).
+`team-image.yml` also names these commits for
+[image acceptance](container.md#image-ci-and-publication). Every other
 workflow keeps tags (`actions/checkout@v4`): nothing is published from them.
 
 `test/workflow-no-cache.test.mjs` holds this. Its table of the actions that
-were read has a row for each action: `action`, `id`, `version`. In the three
+were read has a row for each action: `action`, `id`, `version`. In these four
 files every `uses:` is a row's id, the same action is the same id in all of
 them, and the comment beside an id is the row's version. In every other
 workflow a `uses:` is the major of a row's version.
 
 **An id is moved by a pull request, reviewed like any change to that
-workflow.** It changes these together, and nothing else in the three workflow
+workflow.** It changes these together, and nothing else in these four workflow
 files:
 
 - the id and the version comment, on every `uses:` line of that action in
-  `release.yml`, `build-installers.yml` and `tui-macos.yml`;
+  `release.yml`, `build-installers.yml`, `tui-macos.yml` and `team-image.yml`;
 - the action's row in the table.
 
 **The id is read from an exact version tag of the action's own repository**
