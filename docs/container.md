@@ -586,6 +586,14 @@ preflight is not a registry compare-and-swap against independent writers.
 Deployments, chart values, deploy/team and release receipts continue to use
 the digest reference. The version tag is for retention and human inspection.
 
+After the version tag is written, a failed final verification or receipt edit
+requires manual recovery of that published digest: verify the existing tag
+against the original run's retained build inputs and acceptance evidence, then
+restore its owned receipt block. Use the original digest output/summary when
+available; a failed final inspect may precede that output. A workflow rerun
+rebuilds and can yield a different digest that correctly refuses. Never retag
+to make the rerun pass.
+
 The digest is a job output and appears in the run summary. An owned block
 in the existing GitHub Release notes records the immutable image reference,
 source tag and commit, installed kernel, generated lock hash and npm kernel
