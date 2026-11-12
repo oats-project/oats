@@ -32,6 +32,13 @@ its skills flat into `<home>/.agents/skills/<skill>/`), and the instance's `AGEN
 generated without changing the canonical soul. Nothing is installed or
 activated at a deployment.
 
+Trust is decided once, where the workspace declares the member or the
+package. When the kernel later reports a capability as trusted, it has
+checked only that what it is about to run is the copy made at spawn and where
+that copy came from. It judges nothing about the code, and the copy is in the
+home its agent can write, so the check is no defence against that agent
+([trust-model.md](trust-model.md)).
+
 ## Manifest
 
 A self-contained package has an `oats.json`:

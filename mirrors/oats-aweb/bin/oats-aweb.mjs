@@ -48,6 +48,7 @@ if ((process.env.OATS_EVENT || process.argv[2]) === 'invite') process.exit(invit
 import { residentMain } from '../lib/resident.mjs';
 if ((process.env.OATS_EVENT || process.argv[2]) === 'resident') process.exit(await residentMain(process.argv.slice(3)));
 import { wakeMain } from '../lib/wake-service.mjs';
+import { unitManager } from '../lib/custody-unit.mjs';
 if ((process.env.OATS_EVENT || process.argv[2]) === 'wake') process.exit(await wakeMain(process.argv.slice(3)));
 // Loaded only for `health`: the publisher is opt-in, and no other command or
 // hook depends on its modules.
@@ -78,7 +79,7 @@ import { newSeatId, seatGrantLabel, sweepSeatGrants, unrevokedGrant } from "../l
 import { custodyPreflight } from "../lib/grant-custody.mjs";
 import { residentRegistryEnv } from "../lib/resident-registry.mjs";
 import { channelCacheNote, clearChannelFailure, recordedClaudeConfigDir } from "../lib/claude-channel.mjs";
-import { selectClaudeChannel, launchChannelWarning, brokerDelivers, joinedTeamsPolled, recordedRuntime, recordedStart, statusListsHome, wakeRegistration } from "../lib/wake-receive.mjs";
+import { selectClaudeChannel, launchChannelWarning, brokerDelivers, joinedTeamsPolled, recordedRuntime, recordedStart, statusListsHome, wakeBrokerRefusal, wakeRegistration } from "../lib/wake-receive.mjs";
 
 /** Run a command as ARGV — never a shell string. Team ids, aliases, instance
  * names and invite tokens all flow through here; quoting them correctly is a
@@ -573,9 +574,23 @@ function syncPrimaryDelivery(identityHome) {
  *  has finished: aw drops the home from the broker's map before its runner
  *  stops (aweb-abna). An unreadable status counts as still registered. */
 function wakeStillRegistered(instanceHome) {
-  let status;
-  try { status = JSON.parse(String(run(["aw", "wake", "status", "--json"], instanceHome, 60000))); } catch { return true; }
-  return statusListsHome(status, instanceHome);
+  const status = wakeStatusOf(instanceHome);
+  return status === undefined || statusListsHome(status, instanceHome);
+}
+/** `aw wake status --json`, parsed; undefined when it cannot be read. */
+function wakeStatusOf(instanceHome) {
+  try { return JSON.parse(String(run(["aw", "wake", "status", "--json"], instanceHome, 60000))); } catch { return undefined; }
+}
+/** Refuse a start the host wake broker delivers to while no broker runs,
+ *  before the start changes anything. */
+function requireWakeBroker() {
+  if (!deliveryFor().broker) return;
+  const refusal = wakeBrokerRefusal({
+    readStatus: () => wakeStatusOf(home),
+    wait: (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms),
+    serviceManager: unitManager(process.platform) !== null,
+  });
+  if (refusal) fatal(refusal);
 }
 /** The meta a start records: the delivery setting it ran under and its runtime. */
 const startedMeta = (meta = {}) => {
@@ -1759,6 +1774,7 @@ if (event === "launch") {
     const note = channelCacheNote(configDir && clearChannelFailure(configDir), "this start's Claude config dir is not known (the home's recorded CLAUDE_CONFIG_DIR is not a literal path)");
     if (note) outNotes.push(note);
   }
+  requireWakeBroker();
   syncPrimaryDelivery(primaryIdentityHomeOf(started));
   if (globalLaunch) globalGrantRenew(started);
   let oldMeta = withProviderTeams(started);
@@ -1812,6 +1828,8 @@ if (event === "launch") {
   if (untested) outNotes.push(`aw-newer-than-tested — ${untested}`);
   if (identityMode === "global" && identitySettings.source) fatal('identity.mode "global" cannot be combined with identity.source; use identity.mode "local" with identity.source for a retained seat, or identity.mode "global" with identity.resident for a resident grant');
   if (identityMode === "global" && requestedJoinLabels().length) fatal('settings.oats.aweb.join is supported only with local per-team identities; identity.mode "global" is explicit resident-grant mode');
+  if (identityMode === "global") checkedGrantTTL(); // a setting that cannot be used refuses before the broker is asked
+  requireWakeBroker();
   if (identityMode === "global") globalGrantSpawn();
   if (identityMode === "local" && settings.identity && typeof settings.identity === "object" && settings.identity.source) retainedSeatSpawn(String(settings.identity.source), settings.identity.takeOver === true);
   let joinRows;

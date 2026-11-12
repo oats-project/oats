@@ -5658,12 +5658,22 @@ had begun.
 | `E_INSTANCE_RETIRING` | yes | yes |
 | `E_LIFECYCLE_BUSY` | yes | yes |
 | `E_HOME_MISMATCH` | yes | yes |
+| `E_HOME_NOT_OWNED` | yes | yes |
 | `E_SESSION_UNKNOWN` | yes | yes |
 | `E_AMBIGUOUS_INSTANCE` | yes | yes |
 | `E_UNIDENTIFIED_INSTANCE_HOME` | yes | yes |
 | `E_REMOTE_INCOMPATIBLE` | yes | yes |
 | `E_AMBIGUOUS` | yes | yes |
 | `E_SNAPSHOT_UNKNOWN` | yes | yes |
+
+`E_HOME_NOT_OWNED` is the answer of every command that takes a home's
+lifecycle claim (a start, a resume, a stop, a retire, an upgrade) when the
+user it runs as does not own the home. It is answered before the claim is
+written, root is refused like any other user, and `details` carries
+`instance`, `home`, `owner` and `user` (the two uids). The fix is to run the
+same command as the home's owner, with that user's `HOME`
+(`sudo -H -u '#<owner>' oats …`): OATS keeps its own state under it
+([trust model](trust-model.md#the-line), rule 3).
 
 The last three are the router's (`--server`): they are answered before the
 command is sent to the host. The list is about the envelope's `error.code`.
@@ -7192,7 +7202,12 @@ whatever the rows say:
   the per-boot note (refusals, and each home's count of sweep starts that
   launched something: `resumed`, `fresh`, `blocked`) are kernel-private,
   not a contract. Without a boot id (neither Linux nor macOS) nothing is
-  noted or counted.
+  noted or counted. A validated current-start host-stop receipt excludes
+  downtime from the in-boot eligibility gap and exempts a successful restore
+  from the crash ceiling and count; it preserves prior failure counts and
+  refusals. Blocked restores still count. See
+  [Which losses come back](execution-targets.md#which-losses-come-back)
+  for receipt validation and the independent loss-age and judgement guards.
 - **A lock that needs a person.** `E_RESUME_LOCK_STUCK`, through the same
   envelope at exit 1, when the sweep's lock cannot be taken and no sweep is
   known to run; nothing was started, and no sweep starts anything on this
@@ -7240,8 +7255,10 @@ this machine's: it takes no `--server`. It runs until SIGTERM or SIGINT.
     (`<OATS_HOME_DIR>/host-run/lock`, a kernel-private file), or the lock
     cannot be judged; `error.details` `{lock, found}`, `found` as
     `E_RESUME_LOCK_STUCK` names it, and `running` for a host run that runs.
-    A lock whose holder is gone, or that was taken in another boot (in a
-    container, another run), is taken over;
+    A lock whose holder is gone, or that was taken in another kernel boot,
+    is taken over. A container restart on the same kernel is judged by the
+    holder's pid and process start; old qualified Linux boot IDs compare
+    as their kernel UUID, so an upgrade cannot reclaim a live holder;
   - `E_BAD_ARGS`: a flag it does not define, an argument, a `--stop-grace`
     that is not 1 to 300 seconds, a verb other than `run`.
 

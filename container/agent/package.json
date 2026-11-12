@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "dependencies": {
     "@awebai/oats": "0.69.15",
-    "@awebai/aw": "1.36.56",
+    "@awebai/aw": "1.36.58",
     "@anthropic-ai/claude-code": "2.1.322"
   }
 }

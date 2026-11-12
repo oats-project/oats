@@ -264,8 +264,12 @@ home, every `delivery: session` home and every joined team, except a Claude
 channel home's joined teams (below). The provider registers a home at spawn and
 launch. `aw wake register` accepts a
 registration even while the daemon is down, and the registration takes
-effect when the daemon starts. Readiness reads the daemon's own status
-(section 7). Without a running daemon, every such home reads `unavailable`
+effect when the daemon starts. So the provider asks first: a spawn or a start
+of a home the broker delivers to is refused with `wake-daemon-not-running`
+while no daemon runs, because the home would never be woken. The refusal
+names the start for the host: `oats aweb wake install`, or `aw wake run`
+where there is no service manager. Readiness reads the daemon's own status
+(section 7). A daemon that stops later leaves every such home `unavailable`
 with `wake-daemon-not-running`, and each joined team adds
 `joined-team-poll-only`.
 

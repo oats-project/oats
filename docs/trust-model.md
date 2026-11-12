@@ -34,6 +34,15 @@ what the kernel reads and writes.
    `--server` runs `oats` on the home's side
    ([servers.md](servers.md)); the Desktop and the TUI start the local `oats`
    and run no kernel code of their own on what a remote home contains.
+   The kernel holds itself to this: a start, a resume, a stop, a retire or
+   an upgrade of a home that the user running it does not own is refused
+   with `E_HOME_NOT_OWNED` before anything is written, root included.
+   One piece of the package does run as root, and it is outside this rule:
+   the harness-credential receiver `share/oats-login-receive`
+   ([servers.md](servers.md#harness-credentials)). It runs under a forced
+   command, reads only its standard input, writes only the credential file
+   its root-owned configuration names and touches no home, so it is not the
+   kernel acting on a home.
 4. **An agent's home is untrusted as data, and trusted as code only inside
    its own group.** The kernel executes what it finds there, such as
    lifecycle hooks and a module's commands, because doing so gives the agent
