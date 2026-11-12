@@ -128,10 +128,10 @@ test('a failed poll with data goes stale: content kept, the view notice with Ret
 test('Retry on a remote window reads its servers again first (#1117): the refresh route, and only once it answered the panel; a local window\'s Retry asks no server', async t => {
   const REFRESH = '/api/remote-roster/refresh';
   const remote = (instances, extra = {}) => panel(instances, currentWorkspace(), { workspace: { id: currentWorkspace(), remote: true }, ...extra });
-  const paths = []; let answer = () => remote([], { error: 'ssh to nactiva-host timed out: no answer within 20 s' });
+  const paths = []; let answer = () => remote([], { error: 'ssh to garnet-host timed out: no answer within 20 s' });
   const refreshed = deferred();
   const u = await setup(t, { api: path => { paths.push(path); return path === REFRESH ? refreshed.promise : answer(); } }); await tick();
-  assert.match(u.notice(), /^Roster unavailable: ssh to nactiva-host timed out/, 'the window\'s one server was not reached');
+  assert.match(u.notice(), /^Roster unavailable: ssh to garnet-host timed out/, 'the window\'s one server was not reached');
   answer = () => remote([instance('a')]);
   paths.length = 0; u.retry(); await tick();
   assert.deepEqual(paths, [REFRESH], 'the servers are read again before the roster is');
