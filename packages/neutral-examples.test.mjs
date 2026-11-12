@@ -24,6 +24,8 @@ const INVENTED_HOMES = new Set([
   'a', 'abcd-1234', 'agent', 'alex', 'ana', 'birth', 'builder', 'context', 'dev', 'dev-fail', 'dev-held',
   'dev-pending', 'dev-wait', 'empty', 'fixture', 'h1', 'host', 'me', 'o', 'op', 'operator', 'ops', 'options',
   'person', 'server', 'someone', 'u', 'user', 'work', 'workdir', 'x', 'zo', 'zoe',
+  // invented owners beyond ASCII, for the tests of paths in other scripts (compared in NFC)
+  'zo\u00eb', '\u5c71\u7530', '\u{20000}',
   '.config', 'agents', 'library', 'oats',
 ]);
 
@@ -47,16 +49,23 @@ function* textFiles(dir) {
   }
 }
 
-// `/Users/<name>` or `/home/<name>`: the segment up to the next separator (an interpolated `${…}`
-// is the code's, not an example, and does not match). `-Users-<name>-`: Claude's encoded form.
-const HOME = /\/(?:Users|home)\/([A-Za-z0-9._-]+)|-Users-([A-Za-z0-9._]+)-/g;
+// `/Users/<name>` or `/home/<name>`: the whole segment, any characters, up to the next path or
+// quoting separator, so a name that only starts like an invented one is checked whole.
+// `-Users-<name>-`: Claude's encoded form, up to the next dash. A line's `\u` escapes are read as
+// the characters they write first; any other backslash ends the segment (it starts an escape, not
+// a name's letter). An interpolated `${…}` is the code's, not an example: its segment stops at the
+// `{`, and a segment starting with `$` is skipped.
+const HOME = /\/(?:Users|home)\/([^/\\\s'"`(){}\[\],;:<>|*]+)|-Users-([^-/\\\s'"`(){}\[\],;:<>|*]+)-/gu;
+const ESCAPE = /\\u\{([0-9a-fA-F]{1,6})\}|\\u([0-9a-fA-F]{4})/g;
+const unescaped = line => line.replace(ESCAPE, (_, braced, four) => String.fromCodePoint(parseInt(braced ?? four, 16)));
 
 /** `where:line` for each home directory in `text` that names an owner not on the list. */
 function ownerHomes(text, where = '') {
   const out = [];
   text.split('\n').forEach((line, i) => {
-    for (const [, slashed, encoded] of line.matchAll(HOME)) {
-      const name = (slashed ?? encoded).replace(/\.+$/, ''); // a sentence's full stop is not the name's
+    for (const [, slashed, encoded] of unescaped(line).matchAll(HOME)) {
+      if ((slashed ?? encoded).startsWith('$')) continue;
+      const name = (slashed ?? encoded).replace(/\.+$/, '').normalize('NFC'); // a sentence's full stop is not the name's
       if (!INVENTED_HOMES.has(name.toLowerCase())) out.push(`${where}:${i + 1}: /…/${name}`);
     }
   });
@@ -69,6 +78,15 @@ test('an owner home directory fails unless its owner is an invented one', () => 
   assert.deepEqual(ownerHomes('a\nroot: /home/robin.'), [':2: /…/robin']);
   assert.deepEqual(ownerHomes('dir: "-Users-robin-private"'), [':1: /…/robin']);
   assert.deepEqual(ownerHomes('dir: "-Users-alex-private"'), []);
+  // The whole segment is the owner, whatever its characters: not an invented one's prefix.
+  assert.deepEqual(ownerHomes('/home/\u6d4b\u8bd5/work'), [':1: /…/\u6d4b\u8bd5']);
+  assert.deepEqual(ownerHomes('/Users/alex\u00e9/work'), [':1: /…/alex\u00e9']);
+  assert.deepEqual(ownerHomes('/Users/user+review/work'), [':1: /…/user+review']);
+  assert.deepEqual(ownerHomes('-Users-\u00e9xample-work'), [':1: /…/\u00e9xample']);
+  assert.deepEqual(ownerHomes('-Users-alex\u00e9-work'), [':1: /…/alex\u00e9']);
+  // Written as escapes in source, read as the characters; composed and decomposed are one name.
+  assert.deepEqual(ownerHomes(String.raw`"/home/robin\u00e9/x", "/home/zo\u00eb/x", "/home/zoe\u0308/x", "/home/\u{20000}/x"`), [':1: /…/robin\u00e9']);
+  assert.deepEqual(ownerHomes(String.raw`"/home/a\0b"`), [], 'an escape ends the segment');
 });
 
 test('no example or fixture under packages/ names a real owner\'s home directory', () => {
