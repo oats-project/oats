@@ -111,7 +111,10 @@ Without `--ca-file`, Node's normal trust configuration applies.
 The probe sends matched controls and forbidden authorities over HTTP/1.1 and
 HTTP/2. It includes the human host, explicit port 443, a wrong port, a hostname
 suffix, unknown SNI and absent SNI. Only 421 or specific connection/TLS refusals
-count as rejections; a timeout or certificate-validation error fails. Unique
+count as rejections; a timeout or certificate-validation error fails. A peer
+`internal_error` alert is accepted only before TLS completes and before any HTTP
+response, and only for the enumerated unknown/absent-SNI cases. The same alert
+fails for known SNI or a matched control. Unique
 query tags must appear for matched controls in the appropriate backend log, and
 all forbidden tags must be absent from both logs. Final human controls establish
 that logging still works after the negative cases. Responses and log contents

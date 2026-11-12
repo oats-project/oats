@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
-import { request as httpsRequest } from "node:https";
+import { Agent as HttpsAgent, request as httpsRequest } from "node:https";
 import { connect as connectHttp2 } from "node:http2";
 import { isIP } from "node:net";
 import { checkServerIdentity, connect as connectTls } from "node:tls";
@@ -12,13 +12,18 @@ import { originHost } from "./policy.mjs";
 
 export function statusOf({ protocol, address, port, sni, authority, expectedHost, path, ca }) {
   return new Promise((resolve, reject) => {
-    let finished = false, request, session, socket;
+    let finished = false, request, session, socket, agent, tlsEstablished = false, receivedResponse = false;
     const done = (error, status) => {
       if (finished) return;
       finished = true;
       clearTimeout(timer);
-      request?.destroy(); session?.destroy(); socket?.destroy();
-      if (error) reject(error); else resolve(status);
+      request?.destroy(); session?.destroy(); socket?.destroy(); agent?.destroy();
+      if (error) {
+        error.beforeHttpResponse = !receivedResponse;
+        error.peerHandshakeRefusal = !tlsEstablished && !receivedResponse
+          && error.code === "ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR";
+        reject(error);
+      } else resolve(status);
     };
     const timer = setTimeout(() => done(Object.assign(new Error("timeout"), { code:"EGRESS_PROBE_TIMEOUT" })), 3000);
     const tlsOptions = { host:address, port, servername:sni, ca, rejectUnauthorized:true,
@@ -33,19 +38,30 @@ export function statusOf({ protocol, address, port, sni, authority, expectedHost
       stream.resume();
     };
     try {
-      if (protocol === "h1") {
-        request = httpsRequest({ ...tlsOptions, method:"GET", path, agent:false, headers:{ Host:authority } }, response => consume(response, () => response.statusCode));
-        request.once("error", error => done(error)); request.end();
-      } else {
-        socket = connectTls({ ...tlsOptions, ALPNProtocols:["h2"] });
-        socket.once("error", error => done(error));
-        session = connectHttp2("https://" + expectedHost, { createConnection:() => socket });
-        session.once("error", error => done(error));
-        request = session.request({ ":method":"GET", ":path":path, ":authority":authority });
-        let status;
-        request.once("response", headers => { status = headers[":status"]; });
-        consume(request, () => status); request.end();
-      }
+      socket = connectTls({ ...tlsOptions, ALPNProtocols:protocol === "h2" ? ["h2"] : ["http/1.1"] });
+      socket.once("error", error => done(error));
+      // Wait for authenticated TLS before writing HTTP. Otherwise an early peer
+      // alert can surface as a generic HTTP write EPROTO instead of a TLS alert.
+      socket.once("secureConnect", () => {
+        tlsEstablished = true;
+        try {
+          if (protocol === "h1") {
+            agent = new HttpsAgent({ keepAlive:false });
+            agent.createConnection = () => socket;
+            request = httpsRequest({ hostname:expectedHost, port, method:"GET", path, agent, headers:{ Host:authority } }, response => {
+              receivedResponse = true; consume(response, () => response.statusCode);
+            });
+            request.once("error", error => done(error)); request.end();
+          } else {
+            session = connectHttp2("https://" + expectedHost, { createConnection:() => socket });
+            session.once("error", error => done(error));
+            request = session.request({ ":method":"GET", ":path":path, ":authority":authority });
+            let status;
+            request.once("response", headers => { receivedResponse = true; status = headers[":status"]; });
+            consume(request, () => status); request.end();
+          }
+        } catch (error) { done(error); }
+      });
     } catch (error) { done(error); }
   });
 }
@@ -82,7 +98,11 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
         kind === "forbidden" ? "ingress did not refuse a forbidden authority" : "matched ingress control did not succeed");
     } catch (error) {
       const refused = new Set(["ECONNRESET", "EPIPE", "ERR_SSL_TLSV1_UNRECOGNIZED_NAME", "ERR_SSL_SSLV3_ALERT_HANDSHAKE_FAILURE", "ERR_SSL_TLSV1_ALERT_UNRECOGNIZED_NAME"]);
-      if (kind !== "forbidden" || !refused.has(error.code)) throw error;
+      const noServiceSni = sni === "unlisted.egress-probe.invalid" || sni === "";
+      const peerInternalRefusal = noServiceSni && error.code === "ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR"
+        && error.peerHandshakeRefusal === true;
+      const otherRefusal = refused.has(error.code) && error.beforeHttpResponse === true;
+      if (kind !== "forbidden" || (!peerInternalRefusal && !otherRefusal)) throw error;
     }
   };
   for (const protocol of ["h1", "h2"]) {

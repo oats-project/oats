@@ -270,7 +270,7 @@ test("an internal bridge with a reachable host gateway is not isolated", () => {
 test("the shared ingress probe proves both protocol refusals before backend delivery", async t => {
   const moduleUrl=new URL("../container/agent/egress/probe-ingress.mjs",import.meta.url);
   assert.ok(existsSync(moduleUrl),"the shared runtime ingress refusal probe is required");
-  const {probeIngress}=await import(moduleUrl);
+  const {probeIngress,statusOf}=await import(moduleUrl);
   const {mkdtempSync,writeFileSync,appendFileSync,rmSync}=await import("node:fs");
   const {tmpdir}=await import("node:os");
   const {join}=await import("node:path");
@@ -310,7 +310,36 @@ test("the shared ingress probe proves both protocol refusals before backend deli
   assert.equal(await probeIngress(options),true);
   strictTls=true;
   assert.equal(await probeIngress(options),true);
-  strictTls=false; strict=false;
+  strictTls=false;
+  const {createServer}=await import("node:net");
+  let hang=false;
+  const alertSockets=new Set();
+  // TLS 1.2 fatal internal_error (RFC 5246 alert description 80), before HTTP.
+  const alertServer=createServer(socket=>{
+    alertSockets.add(socket);socket.on("close",()=>alertSockets.delete(socket));
+    socket.once("data",()=>{if(!hang)socket.end(Buffer.from([21,3,3,0,2,2,80]))});
+  });
+  await new Promise(resolve=>alertServer.listen(0,"127.0.0.1",resolve));
+  t.after(()=>new Promise(resolve=>{for(const socket of alertSockets)socket.destroy();alertServer.close(resolve)}));
+  const alertPort=alertServer.address().port;
+  const unlisted=sni=>sni==="unlisted.egress-probe.invalid"||sni==="";
+  const unknownRefusal=args=>statusOf({...args,port:unlisted(args.sni)?alertPort:options.port});
+  assert.equal(await probeIngress({...options,exchange:unknownRefusal}),true,
+    "unknown/empty SNI fatal handshake refusals still require live matched controls and backend audit");
+  const knownRefusal=args=>statusOf({...args,port:args.sni==="prepare.example.invalid"&&args.authority==="approve.example.invalid"?alertPort:options.port});
+  await assert.rejects(()=>probeIngress({...options,exchange:knownRefusal}),error=>error.code==="ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR");
+  await assert.rejects(()=>probeIngress({...options,exchange:args=>statusOf({...args,port:alertPort})}),error=>error.code==="ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR",
+    "a matched control cannot turn its TLS failure into a pass");
+  await assert.rejects(()=>probeIngress({...options,ca:[]}),error=>error.code==="DEPTH_ZERO_SELF_SIGNED_CERT");
+  await assert.rejects(()=>probeIngress({...options,exchange:args=>{
+    if(unlisted(args.sni))return Promise.reject(Object.assign(new Error("post-response transport error"),{
+      code:"ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR",beforeHttpResponse:false,peerHandshakeRefusal:false,
+    }));
+    return statusOf({...args,port:options.port});
+  }}),error=>error.code==="ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR", "an alert after HTTP is not a handshake refusal");
+  hang=true;
+  await assert.rejects(()=>probeIngress({...options,exchange:unknownRefusal}),error=>error.code==="EGRESS_PROBE_TIMEOUT");
+  hang=false; strict=false;
   await assert.rejects(()=>probeIngress(options),/forbidden probe reached a backend/);
 });
 
