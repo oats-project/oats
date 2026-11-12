@@ -7,12 +7,12 @@ scratch=$(mktemp -d)
 name="oats-egress-smoke-$$"
 plain="oats-egress-plain-$$"
 isolated="oats-egress-isolated-$$"
-canary="oats-egress-canary-$$"
+probe="oats-egress-network-probe-$$"
 cleanup() {
   docker logs "$name" > "$scratch/container.log" 2>&1 || true
   if test -n "${EGRESS_SMOKE_EVIDENCE:-}"; then cp "$scratch/container.log" "$EGRESS_SMOKE_EVIDENCE"; fi
   docker rm -f "$name" >/dev/null 2>&1 || true
-  docker rm -f "$canary" >/dev/null 2>&1 || true
+  docker rm -f "$probe" >/dev/null 2>&1 || true
   docker network rm "$plain" "$isolated" >/dev/null 2>&1 || true
   rm -rf "$scratch"
 }
@@ -43,18 +43,6 @@ printf '%s\n' 'PASS proxy image: UID 10001, dropped capabilities, read-only root
 docker network create --internal "$plain" >/dev/null
 docker network create --internal --opt com.docker.network.bridge.gateway_mode_ipv4=isolated "$isolated" >/dev/null
 gateway=$(docker network inspect --format '{{(index .IPAM.Config 0).Gateway}}' "$plain")
-docker run -d --name "$canary" --network host --user 10001:10001 --cap-drop ALL --security-opt no-new-privileges:true --read-only --entrypoint node "$image" -e 'require("node:net").createServer(s=>{console.log("CANARY_HIT");s.end("canary")}).listen(0,process.argv[1],function(){console.log("CANARY_PORT="+this.address().port)})' "$gateway" >/dev/null
-attempt=0
-while :; do
-  port=$(docker logs "$canary" | sed -n 's/^CANARY_PORT=//p')
-  if test -n "$port"; then break; fi
-  attempt=$((attempt+1));test "$attempt" -lt 10;sleep 1
-done
-client() {
-  docker run --rm --network "$1" --user 10001:10001 --cap-drop ALL --security-opt no-new-privileges:true --read-only --entrypoint node "$image" -e 'const c=require("node:net").connect({host:process.argv[1],port:Number(process.argv[2])});c.setTimeout(1500,()=>{c.destroy();console.log("DENIED")});c.on("data",data=>{console.log(data.toString()==="canary"?"CONNECTED":"UNEXPECTED");c.destroy()});c.on("error",()=>console.log("DENIED"))' "$gateway" "$port"
-}
-test "$(client "$plain")" = CONNECTED
-test "$(client "$isolated")" = DENIED
-test "$(client "$plain")" = CONNECTED
-test "$(docker logs "$canary" | grep -c '^CANARY_HIT$')" = 2
+docker run -d --name "$probe" --network "$isolated" --user 10001:10001 --cap-drop ALL --security-opt no-new-privileges:true --read-only --entrypoint sleep "$image" infinity >/dev/null
+node --input-type=module -e 'const {checkDockerGateway}=await import(process.argv[1]);await checkDockerGateway({image:process.argv[2],controlNetwork:process.argv[3],gatewayAddress:process.argv[4],probeContainer:process.argv[5]})' "$root/container/agent/egress/canary.mjs" "$image" "$plain" "$gateway" "$probe"
 printf '%s\n' 'PASS host gateway: live positive controls; isolated agent bridge denied'

@@ -34,12 +34,16 @@ export function assertComposeBoundary({ agent, egress, agentsNetwork, servicesNe
   for (const mount of agent.Mounts) {
     assert.ok(typeof mount.Destination === "string" && mount.Destination.startsWith("/")
       && !posix.normalize(mount.Destination).startsWith("/run/secrets"), "agent must not mount service secrets");
-    assert.ok(typeof mount.Source === "string" && mount.Source.startsWith("/"), "agent mount source must be an absolute runtime path");
-    const source = posix.normalize(mount.Source);
-    for (const protectedSource of [...protectedSources, "/run/docker.sock", "/var/run/docker.sock"]) {
-      assert.ok(typeof protectedSource === "string" && protectedSource.startsWith("/"), "agent protected-source inventory is invalid");
-      const secret = posix.normalize(protectedSource);
-      assert.ok(source !== secret && !source.startsWith(secret + "/") && !secret.startsWith(source.endsWith("/") ? source : source + "/"), "agent mount overlaps a protected service source");
-    }
+    assertPublicMountSource(mount.Source, protectedSources);
+  }
+}
+
+export function assertPublicMountSource(value, protectedSources, label = "agent") {
+  assert.ok(typeof value === "string" && value.startsWith("/"), `${label} mount source must be an absolute runtime path`);
+  const source = posix.normalize(value);
+  for (const protectedSource of [...protectedSources, "/run/docker.sock", "/var/run/docker.sock"]) {
+    assert.ok(typeof protectedSource === "string" && protectedSource.startsWith("/"), `${label} protected-source inventory is invalid`);
+    const secret = posix.normalize(protectedSource);
+    assert.ok(source !== secret && !source.startsWith(secret + "/") && !secret.startsWith(source.endsWith("/") ? source : source + "/"), `${label} mount overlaps a protected service source`);
   }
 }

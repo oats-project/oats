@@ -352,3 +352,29 @@ test("ingress control paths cannot select another origin or inject a fragment", 
     }),/ingress probe path is invalid/);
   }
 });
+
+test("the reusable gateway canary has one live TCP client body", async t => {
+  const url=new URL("../container/agent/egress/canary.mjs",import.meta.url);
+  assert.ok(existsSync(url),"the actual-network probe must reuse the smoke canary body");
+  const {serveCanary,tcpReachable}=await import(url);
+  const child=spawn(process.execPath,["--input-type=module","-e",`(${serveCanary.toString()})("127.0.0.1")`],{stdio:["ignore","pipe","pipe"]});
+  let out="";
+  child.stdout.on("data",data=>{out+=data});
+  const port=await new Promise((resolve,reject)=>{
+    child.once("error",reject);
+    const read=data=>{const match=String(data).match(/CANARY_PORT=(\d+)/);if(match){child.stdout.off("data",read);resolve(Number(match[1]))}};
+    child.stdout.on("data",read);
+  });
+  t.after(async()=>{child.kill("SIGKILL");await new Promise(resolve=>child.exitCode!==null||child.signalCode!==null?resolve():child.once("close",resolve))});
+  assert.equal(await tcpReachable("127.0.0.1",port,{payload:true}),true);
+  assert.equal(await tcpReachable("127.0.0.1",port),true);
+  await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(new Error("canary positive control was not received")),1000);
+    const check=()=>{if((out.match(/CANARY_HIT/g)||[]).length===2){clearTimeout(timer);child.stdout.off("data",check);resolve()}};
+    child.stdout.on("data",check);check();
+  });
+  child.kill("SIGKILL");await new Promise(resolve=>child.once("close",resolve));
+  assert.equal(await tcpReachable("127.0.0.1",port),false,"a dead listener cannot serve as the positive control");
+  assert.equal(out.match(/CANARY_HIT/g)?.length,2);
+});
+
