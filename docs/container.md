@@ -492,3 +492,58 @@ fixtures. The SSH guard requires flat
 `Keyword value` lines and refuses duplicate keywords, `Match`/`Include`,
 equals-delimited keywords and quoted keywords. Follow the repository's
 local check limits; full suites run in CI.
+
+## Image CI and publication
+
+[Team image](../.github/workflows/team-image.yml) builds `container/agent`
+from the pull request's exact head commit, on an Ubuntu 24.04 amd64 runner.
+It also supports a manual verification run at the selected ref. Actions are
+pinned by commit, and the verification token has only `contents: read`.
+After acceptance, verification also runs the real Docker export, Skopeo
+compression and configuration-digest checks used before publication, without
+a registry credential or any registry/release write.
+
+The shared fixture, `.github/scripts/team-image-accept.sh`, starts the
+committed Compose service on a disposable internal bridge with IPv6 off and
+an isolated gateway (Docker Engine 28+). It provisions private state, a
+throwaway SSH public key, a resolver file and an empty root:20001 0750 login
+directory, waits for the service's SSH healthcheck, then runs the image's
+unmodified `accept.sh --evidence target-amd64`. Cleanup removes the service,
+network and fixture paths on success or failure. This is image acceptance;
+it provisions no seat or inference token. The script's `NOT RUN` items
+remain outside this check.
+
+The `publish-team-image` job in
+[Release](../.github/workflows/release.yml) waits for the existing `publish`
+job, so npm publication and the GitHub Release precede the image. Its
+single job-level `if: ${{ false }}` keeps publication disabled pending the
+registry decision for the proposed `ghcr.io/oats-project/team-agent` target.
+Verification remains enabled. Enabling publication requires that decision
+and a reviewed change to the switch.
+
+Publication requires a stable release tag, an exact stable image OATS pin
+of at least 0.69.18, and an exact stable aw pin of at least 1.36.59. Both
+pins must match the committed image lock. The image's OATS pin cannot be
+newer than the release tag. The image owner updates those pins after their
+final releases; a release candidate cannot pass this guard.
+
+The release job builds and accepts its own tagged checkout. It exports the
+accepted local image by immutable ID with `docker save`, then copies that
+archive to a private directory with compressed layers, preserving its Docker
+v2s2 manifest type. Docker's CLI negotiates the Engine API; Skopeo reads
+archive bytes without its own daemon connection. Keeping the manifest type
+avoids a format conversion that rewrites configuration bytes. The prepared
+configuration digest must equal the hash of the archive's raw configuration,
+binding the published configuration and root filesystem to the tested image
+on both classic and containerd image stores. Skopeo
+[copies with preserved digests](https://github.com/containers/skopeo/blob/main/docs/skopeo-copy.1.md)
+to the registry's `repository@sha256:...` reference, creating no mutable
+image tag. The digest is a job output, appears in the run summary and is
+appended to the existing GitHub Release notes. A same-digest retry leaves
+one receipt; another build records its own digest.
+
+Only that job has `packages: write`; `contents: write` lets it append the
+release receipt. Its publish step receives only `GITHUB_TOKEN`, stores
+registry authentication in a private temporary file and removes it on exit.
+It receives no npm publish credential. To roll back a deployed image, select
+the previous reviewed digest in the deployment configuration.
