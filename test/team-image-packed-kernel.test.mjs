@@ -117,3 +117,54 @@ test("installed packed files match exact paths, sizes, hashes and modes", async 
     } finally { rmSync(root, { recursive: true, force: true }); }
   }
 });
+
+function localLockFixture() {
+  const integrity = `sha512-${Buffer.alloc(64, 1).toString("base64")}`;
+  const deps = { croner: "10.0.1", yaml: "2.9.1" };
+  const sourceManifest = { name: "oats-agent-image", version: "1.0.0", private: true, dependencies: {
+    "@awebai/oats": "0.69.18", "@awebai/aw": "1.36.59", "@anthropic-ai/claude-code": "2.1.322",
+  } };
+  const metadata = Object.fromEntries(Object.entries(deps).map(([name, version]) => [name, { name, version,
+    dist: { integrity, tarball: `https://registry.npmjs.org/${name}/-/${name}-${version}.tgz` } }]));
+  const sourceLock = { name: sourceManifest.name, version: "1.0.0", lockfileVersion: 3, packages: {
+    "": structuredClone(sourceManifest),
+    "node_modules/@awebai/oats": { version: "0.69.18", dependencies: deps },
+    "node_modules/@awebai/aw": { version: "1.36.59" },
+    "node_modules/@anthropic-ai/claude-code": { version: "2.1.322" },
+    ...Object.fromEntries(Object.entries(metadata).map(([name, m]) => [`node_modules/${name}`, { version: m.version, integrity, resolved: m.dist.tarball }])),
+  } };
+  const manifest = structuredClone(sourceManifest), lock = structuredClone(sourceLock);
+  const spec = "file:../oats-build-inputs/oats-pr-kernel.tgz";
+  manifest.dependencies["@awebai/oats"] = spec;
+  lock.packages[""].dependencies["@awebai/oats"] = spec;
+  Object.assign(lock.packages["node_modules/@awebai/oats"], { resolved: spec, integrity });
+  const kernel = { name: "@awebai/oats", version: "0.69.18", integrity, manifest: { name: "@awebai/oats", version: "0.69.18", dependencies: deps } };
+  return { sourceManifest, sourceLock, manifest, lock, kernel, metadata };
+}
+
+test("the PR image lock accepts only its bound local pack and exact dependencies", async () => {
+  const { checkPrImageLock } = await import("../.github/scripts/team-image-pr-context.mjs");
+  assert.doesNotThrow(() => checkPrImageLock(localLockFixture()));
+  for (const change of [
+    (f) => { f.lock.packages["node_modules/@awebai/oats"].integrity = "different"; },
+    (f) => { f.lock.packages["node_modules/@awebai/oats"].resolved = "https://registry.npmjs.org/other"; },
+    (f) => { f.lock.packages["node_modules/@awebai/aw"].version = "1.36.60"; },
+    (f) => { delete f.lock.packages["node_modules/@anthropic-ai/claude-code"]; },
+    (f) => { f.lock.packages["node_modules/new"] = { version: "1.0.0" }; },
+    (f) => { f.kernel.manifest.dependencies.yaml = "^2.9.1"; },
+    (f) => { f.manifest.private = false; },
+    (f) => { f.lock.lockfileVersion = 4; },
+    (f) => { f.sourceManifest.dependencies["@awebai/oats"] = "0.69.15"; },
+  ]) { const f = localLockFixture(); change(f); assert.throws(() => checkPrImageLock(f)); }
+});
+
+test("the image uses only the owner's additive read-only npm-ci context mount", async () => {
+  const { readFileSync } = await import("node:fs");
+  const current = readFileSync(new URL("../container/agent/Dockerfile", import.meta.url), "utf8");
+  const mounted = "RUN --mount=type=bind,source=.,target=/opt/oats-build-inputs,readonly npm ci --ignore-scripts --no-audit --no-fund";
+  assert.ok(current.includes(mounted));
+  assert.equal([...current.matchAll(/npm ci --ignore-scripts/g)].length, 1);
+  assert.match(current, /&& node -e 'require\.resolve\("@awebai\/aw-linux-"/);
+  assert.match(current, /RUN --network=none npm rebuild @awebai\/aw --ignore-scripts=false --offline/);
+  assert.doesNotMatch(current, /^ARG |^COPY .*oats-pr-kernel/m);
+});

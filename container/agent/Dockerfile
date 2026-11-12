@@ -10,7 +10,7 @@ RUN apt-get update \
 
 WORKDIR /opt/agent
 COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts --no-audit --no-fund \
+RUN --mount=type=bind,source=.,target=/opt/oats-build-inputs,readonly npm ci --ignore-scripts --no-audit --no-fund \
     && node -e 'require.resolve("@awebai/aw-linux-" + process.arch + "/bin/aw")'
 # No lifecycle script except aw's may run. No unlocked download fallback.
 RUN --network=none npm rebuild @awebai/aw --ignore-scripts=false --offline \
