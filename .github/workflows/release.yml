@@ -467,22 +467,47 @@ jobs:
         with:
           node-version: 22
 
-      - name: Require a release tag and a released image kernel
-        run: node .github/scripts/check-team-image-release.mjs
+      - name: Prepare the exact release kernel context
+        id: context
+        run: node .github/scripts/team-image-release-context.mjs
+
+      - name: Require the effective image kernel to equal the release tag
+        run: node .github/scripts/check-team-image-release.mjs "$TEAM_IMAGE_BUILD_CONTEXT"
+        env:
+          TEAM_IMAGE_BUILD_CONTEXT: ${{ steps.context.outputs.context }}
+
+      - name: Retain the effective image build inputs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: team-image-release-inputs
+          path: |
+            ${{ steps.context.outputs.context }}/package.json
+            ${{ steps.context.outputs.context }}/package-lock.json
+            ${{ steps.context.outputs.metadata }}
+          if-no-files-found: error
 
       - name: Build the reviewed image
-        run: docker build --platform linux/amd64 --tag "$AGENT_IMAGE" container/agent
+        run: docker build --platform linux/amd64 --tag "$AGENT_IMAGE" "$TEAM_IMAGE_BUILD_CONTEXT"
+        env:
+          TEAM_IMAGE_BUILD_CONTEXT: ${{ steps.context.outputs.context }}
 
       - name: Accept the real container
+        id: accept
         run: bash .github/scripts/team-image-accept.sh
+        env:
+          EXPECTED_OATS_VERSION: ${{ steps.context.outputs.kernel-version }}
 
       - name: Install the registry copy tool
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends skopeo
+          sudo apt-get install -y --no-install-recommends skopeo=1.13.3+ds1-2ubuntu0.24.04.3
+          test "$(dpkg-query -W -f='${Version}' skopeo)" = 1.13.3+ds1-2ubuntu0.24.04.3
 
-      - name: Publish the accepted image by digest and record it
+      - name: Publish the accepted image and exact release retention tag
         id: image
         run: bash .github/scripts/team-image-publish.sh
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ACCEPTED_IMAGE_ID: ${{ steps.accept.outputs.image-id }}
+          INSTALLED_OATS_VERSION: ${{ steps.accept.outputs.kernel-version }}
+          BUILD_INPUTS: ${{ steps.context.outputs.metadata }}

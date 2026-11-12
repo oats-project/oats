@@ -518,32 +518,100 @@ The `publish-team-image` job in
 job, so npm publication and the GitHub Release precede the image. Its
 single job-level `if: ${{ false }}` keeps publication disabled pending the
 registry decision for the proposed `ghcr.io/oats-project/team-agent` target.
-Verification remains enabled. Enabling publication requires that decision
-and a reviewed change to the switch.
+GHCR creates a new package as private by default. Verification remains
+enabled. Enabling publication requires the registry decision and a reviewed
+change to the switch.
 
-Publication requires a stable release tag, an exact stable image OATS pin
-of at least 0.69.18, and an exact stable aw pin of at least 1.36.59. Both
-pins must match the committed image lock. The image's OATS pin cannot be
-newer than the release tag. The image owner updates those pins after their
-final releases; a release candidate cannot pass this guard.
+Before enabling, the registry owner must complete these separately authorized
+setup steps and include their evidence as a checklist in the enabling PR:
 
-The release job builds and accepts its own tagged checkout. It exports the
-accepted local image by immutable ID with `docker save`, then copies that
-archive to a private directory with compressed layers, preserving its Docker
-v2s2 manifest type. Docker's CLI negotiates the Engine API; Skopeo reads
-archive bytes without its own daemon connection. Keeping the manifest type
-avoids a format conversion that rewrites configuration bytes. The prepared
-configuration digest must equal the hash of the archive's raw configuration,
-binding the published configuration and root filesystem to the tested image
-on both classic and containerd image stores. Skopeo
-[copies with preserved digests](https://github.com/containers/skopeo/blob/main/docs/skopeo-copy.1.md)
-to the registry's `repository@sha256:...` reference, creating no mutable
-image tag. The digest is a job output, appears in the run summary and is
-appended to the existing GitHub Release notes. A same-digest retry leaves
-one receipt; another build records its own digest.
+1. Push the approved digest from a verified run.
+2. Set the package visibility to public.
+3. Grant this repository's Actions write access.
+4. Record the pinned-client observation that an unused exact version tag
+   returns `manifest unknown`.
 
-Only that job has `packages: write`; `contents: write` lets it append the
-release receipt. Its publish step receives only `GITHUB_TOKEN`, stores
+Package creation is this manual setup step, never an automatic release-job
+bootstrap. The job treats only `manifest unknown` as an absent tag. It refuses
+`name unknown`, `denied`, authentication and transport errors. The registry
+owner resolves bootstrap and access problems without broadening the matcher.
+
+Publication requires a stable `vX.Y.Z` release tag (at least 0.69.18).
+The release job copies only the tagged image's literal `.dockerignore`
+allowlist into a private build context, sets its OATS dependency to exactly
+`X.Y.Z`, and regenerates that copy's lock with npm scripts disabled and the
+public registry selected explicitly. The source checkout and Dockerfile
+stay unchanged. The committed aw pin must be a final version of at least
+1.36.59 and match its lock; prereleases cannot pass the guard.
+
+The generated lock may change only the OATS entry, its root dependency
+specification and its own exact runtime dependencies. Other entries,
+including aw, Claude and unrelated transitive packages, must remain equal
+to the committed lock, including additions and removals. Registry version,
+tarball URL and SHA512 integrity must match the new kernel and its exact
+dependencies. A missing compatible committed baseline fails the build;
+it does not widen the allowance. The image owner maintains that baseline.
+The effective manifest, generated lock and source/version/integrity metadata
+are retained as a run artifact. Lock regeneration is audited rather than
+claimed to reproduce the entire image across retries.
+
+After building the private context, the release job runs the existing real
+acceptance and separately executes `oats version --json` in that same
+container. The installed kernel must equal `X.Y.Z` before registry login.
+The fixture records the accepted container's image ID. Export must inspect
+that same ID, then use `docker save` on the immutable ID. Skopeo reads the
+archive and compresses layers into a private directory, preserving its
+Docker v2s2 manifest type. Docker's CLI negotiates the Engine API; Skopeo
+uses no daemon connection. The release lane installs and verifies the
+reviewed Ubuntu Skopeo package version `1.13.3+ds1-2ubuntu0.24.04.3`, whose
+error text it parses; changing that input requires another review and real
+preparation run. PR verification installs the available archive package
+without an exact apt pin and records its version in the step summary.
+
+Keeping the manifest type avoids rewriting configuration bytes. The
+prepared configuration digest must equal the hash of the archive's raw
+configuration, binding the manifest and root filesystem to the accepted
+image. This binding uses archive bytes rather than assuming Docker's image
+ID is a configuration digest. The classic store has real runner evidence;
+the containerd store branch has fixture coverage and still needs a real run.
+Skopeo [copies with preserved digests](https://github.com/containers/skopeo/blob/main/docs/skopeo-copy.1.md)
+to `repository@sha256:...`.
+
+The same manifest also gets the exact release retention tag `X.Y.Z`, with
+no leading `v`, `latest`, major or minor aliases. Before any registry write,
+a different digest at that tag is refused; a same-digest retry is idempotent.
+Only an explicit manifest-not-found result permits creation. Authentication,
+transport and other lookup errors fail closed. After copying the digest,
+the job copies the same manifest to the absent version tag and verifies its
+resolved digest. The release workflow serializes its own writes; this
+preflight is not a registry compare-and-swap against independent writers.
+Deployments, chart values, deploy/team and release receipts continue to use
+the digest reference. The version tag is for retention and human inspection.
+
+After the version tag is written, a failed final verification or receipt edit
+requires manual recovery of that published digest: verify the existing tag
+against the original run's retained build inputs and acceptance evidence, then
+restore its owned receipt block. Use the original digest output/summary when
+available; a failed final inspect may precede that output. A workflow rerun
+rebuilds and can yield a different digest that correctly refuses. Never retag
+to make the rerun pass.
+
+The digest is a job output and appears in the run summary. An owned block
+in the existing GitHub Release notes records the immutable image reference,
+source tag and commit, installed kernel, generated lock hash and npm kernel
+integrity. A retry replaces only that image's block, preserving other prose.
+The receipt's PASS list covers image build, non-root user, read-only root,
+sshd startup and image/configuration digest binding. Supervisor startup,
+admitted-seat spawn, wake delivery, package sync, inference, mail/chat,
+viewer, governance, platform containment and network/egress-bypass checks
+remain **NOT RUN**. Version and lock checks do not prove supervisor startup
+or agent readiness; those claims need direct acceptance coverage.
+
+Only that job has `packages: write`; `contents: write` lets it replace its
+owned receipt block. Among run-step environments, only the publish step
+receives `GITHUB_TOKEN`. The SHA-pinned first-party checkout and setup-node
+actions use their default action token inputs; checkout does not persist
+credentials. The publish step stores
 registry authentication in a private temporary file and removes it on exit.
 It receives no npm publish credential. To roll back a deployed image, select
 the previous reviewed digest in the deployment configuration.

@@ -51,3 +51,13 @@ docker network create --internal --ipv6=false \
   --subnet 172.30.88.0/24 "$AGENTS_NETWORK"
 "${compose[@]}" up -d --wait --wait-timeout 120
 container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64
+
+# This assertion runs in the accepted container, before cleanup or any registry
+# credential. Version metadata alone is not runtime evidence.
+accepted=$(docker inspect --format '{{.Image}}' "oats-agent-$TEAM")
+if [ -n "${EXPECTED_OATS_VERSION:-}" ]; then
+  installed=$(docker exec "oats-agent-$TEAM" oats version --json |
+    node .github/scripts/check-team-image-release.mjs --installed "$EXPECTED_OATS_VERSION")
+  printf 'kernel-version=%s\n' "$installed" >> "${GITHUB_OUTPUT:?}"
+fi
+printf 'image-id=%s\n' "$accepted" >> "${GITHUB_OUTPUT:?}"
