@@ -117,7 +117,7 @@ Name an instance `<descriptive>-<role>`, with `--name`:
 
 A task you write for a spawn says the new instance's role in its first lines
 ("You lead …", "You are the developer for …"). A suggested name
-(`oats spawn --suggest-name`, the Desktop's empty Name field) is a model's
+(`oats spawn --suggest-name`, the Desktop's empty Name field) is, from OATS 0.69.18, a model's
 `<descriptive>-<role>` read from the task text, and it finds the role there.
 
 `--name` is used exactly as given: it must be a slug, at most 64 characters,
