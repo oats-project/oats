@@ -23,7 +23,7 @@ import { createWorkspaceSwitcher } from "../renderer/workspace-switcher.mjs";
 import { mountShellIcons } from "../renderer/shell-icons.mjs";
 import { viewContext } from "./helpers/view-context.mjs";
 
-const PATH = "/Users/op/Agents/oats", REMOTE = "remote:altair:tsm-1", LOOSE = "remote:vega:v1";
+const PATH = "/Users/op/Agents/oats", REMOTE = "remote:devbox:web-1", LOOSE = "remote:laptop:v1";
 const VIEW = "ws:0123456789abcdef0123", OTHER = "ws:fedcba9876543210fedc";
 const served = (...views) => views;
 const view = (id, deployments, extra = {}) => ({ id, name: id.startsWith("ws:") ? "oats" : id, team: null, deployments, ...extra });
@@ -48,7 +48,7 @@ test("rehomeMap: a view id no longer served follows its deployments when ONE vie
 
 test("rehomeKey: terminal and view/file keys move with their workspace; other keys stay", () => {
   assert.equal(rehomeKey(terminalKey(PATH, "/h/dev"), PATH, VIEW), terminalKey(VIEW, "/h/dev"));
-  assert.equal(rehomeKey(`term:${REMOTE}:server:altair\u0000/h/x`, REMOTE, VIEW), `term:${VIEW}:server:altair\u0000/h/x`);
+  assert.equal(rehomeKey(`term:${REMOTE}:server:devbox\u0000/h/x`, REMOTE, VIEW), `term:${VIEW}:server:devbox\u0000/h/x`);
   assert.equal(rehomeKey(JSON.stringify([PATH, "view:brain"]), PATH, VIEW), JSON.stringify([VIEW, "view:brain"]));
   assert.equal(rehomeKey(JSON.stringify([OTHER, "file:/a"]), PATH, VIEW), JSON.stringify([OTHER, "file:/a"]), "another workspace's key stays");
   assert.equal(rehomeKey("picked-file:3", PATH, VIEW), "picked-file:3");
@@ -166,7 +166,7 @@ for (const [label, saved] of [["a local path", PATH], ["a remote group id", REMO
   const reading = u.s.refreshContextRoster();
   assert.equal(u.requests[0].path, `/api/panel?ws=${encodeURIComponent(saved)}`, "asked for the saved deployment id");
   const deployments = [{ id: PATH, machine: "This Mac", path: PATH, label: "~/Agents/oats", local: true, reachable: true, identityFrom: "reported", primary: true },
-    { id: REMOTE, machine: "altair", path: "/home/op/tsm", label: "~/tsm", local: false, reachable: true, identityFrom: "reported", primary: false }];
+    { id: REMOTE, machine: "devbox", path: "/home/op/web", label: "~/web", local: false, reachable: true, identityFrom: "reported", primary: false }];
   u.requests[0].resolve({ workspace: { id: VIEW, name: "oats" }, workspaces: [view(VIEW, [PATH, REMOTE])], deployments, instances: [] });
   await reading;
   assert.equal(common.currentWorkspace(), VIEW, "the view id is adopted (stale-selection adoption)");
@@ -190,7 +190,7 @@ test("shell: a remote that reports another workspace takes its terminal to that 
   const u = shell(t, { tabs, memory: new Map([[VIEW, terminalKey(VIEW, "/h/far")]]), selection: VIEW });
   Object.assign(u.c, { split: { groups: [{ id: 1, tabs: [1, 2], activeTab: 1 }], focusedGroup: 1, orientation: "row" }, activeTab: 1, tabLayerVisible: true });
   const reading = u.s.refreshContextRoster();
-  u.requests[0].resolve({ workspace: { id: VIEW, name: "oats" }, workspaces: [view(VIEW, [PATH]), view(OTHER, [REMOTE], { name: "tsm" })], instances: [] });
+  u.requests[0].resolve({ workspace: { id: VIEW, name: "oats" }, workspaces: [view(VIEW, [PATH]), view(OTHER, [REMOTE], { name: "web" })], instances: [] });
   await reading;
   assert.deepEqual([...tabs.values()].map((tab) => tab.workspace), [OTHER, VIEW]);
   assert.equal(tabs.get(1).key, terminalKey(OTHER, "/h/far"));
@@ -204,7 +204,7 @@ test("shell: a group that never reports keeps its own view; nothing moves", asyn
   const tabs = new Map([[1, { kind: "terminal", workspace: LOOSE, key: terminalKey(LOOSE, "/h/l"), instanceRef: { instance: "l", deployment: { id: LOOSE } } }]]);
   const u = shell(t, { tabs, memory: new Map([[LOOSE, terminalKey(LOOSE, "/h/l")]]), selection: LOOSE });
   const reading = u.s.refreshContextRoster();
-  u.requests[0].resolve({ workspace: { id: LOOSE, name: "vega", remote: true, server: "vega" }, workspaces: [view(VIEW, [PATH]), view(LOOSE, [LOOSE], { unattached: true })], instances: [] });
+  u.requests[0].resolve({ workspace: { id: LOOSE, name: "laptop", remote: true, server: "laptop" }, workspaces: [view(VIEW, [PATH]), view(LOOSE, [LOOSE], { unattached: true })], instances: [] });
   await reading;
   assert.equal(common.currentWorkspace(), LOOSE);
   assert.deepEqual([...tabs.values()].map((tab) => [tab.workspace, tab.key]), [[LOOSE, terminalKey(LOOSE, "/h/l")]]);
@@ -216,7 +216,7 @@ test("shell: an unattached deployment that matches later moves its view's state 
   const tabs = new Map([[1, { kind: "terminal", workspace: REMOTE, key: terminalKey(REMOTE, "/h/r"), instanceRef: { instance: "r", deployment: { id: REMOTE } } }]]);
   const u = shell(t, { tabs, selection: REMOTE });
   const first = u.s.refreshContextRoster();
-  u.requests[0].resolve({ workspace: { id: REMOTE, name: "altair" }, workspaces: [view(VIEW, [PATH]), view(REMOTE, [REMOTE], { unattached: true })], instances: [] });
+  u.requests[0].resolve({ workspace: { id: REMOTE, name: "devbox" }, workspaces: [view(VIEW, [PATH]), view(REMOTE, [REMOTE], { unattached: true })], instances: [] });
   await first;
   assert.equal(tabs.get(1).workspace, REMOTE, "unattached: its own view");
   const second = u.s.refreshContextRoster();
@@ -229,7 +229,7 @@ test("shell: an unattached deployment that matches later moves its view's state 
 test("shell: a selected view that is no longer served follows its deployments to the view that holds them", async (t) => {
   const tabs = new Map([[1, { kind: "terminal", workspace: OTHER, key: terminalKey(OTHER, "/h/far"), instanceRef: { instance: "far", deployment: { id: REMOTE } } }]]);
   const u = shell(t, { tabs, selection: OTHER });
-  u.c.viewMembership.note([view(OTHER, [REMOTE], { name: "tsm" })]);
+  u.c.viewMembership.note([view(OTHER, [REMOTE], { name: "web" })]);
   const reading = u.s.refreshContextRoster();
   u.requests[0].reject(Object.assign(new Error("not served"), { code: NOT_SERVED_CODE }));
   await new Promise((resolve) => setImmediate(resolve));
@@ -246,7 +246,7 @@ test("shell: a view that moved to a workspace another window has leaves this win
   const tabs = new Map([[1, { kind: "terminal", workspace: OTHER, key: terminalKey(OTHER, "/h/far"), instanceRef: { instance: "far", deployment: { id: REMOTE } } }]]);
   const choices = [view(VIEW, [PATH, REMOTE])];
   const u = shell(t, { tabs, selection: OTHER, claim: { ok: false, code: "open-elsewhere", workspaces: choices } });
-  u.c.viewMembership.note([view(OTHER, [REMOTE], { name: "tsm" })]);
+  u.c.viewMembership.note([view(OTHER, [REMOTE], { name: "web" })]);
   const reading = u.s.refreshContextRoster();
   u.requests[0].reject(Object.assign(new Error("not served"), { code: NOT_SERVED_CODE }));
   await new Promise((resolve) => setImmediate(resolve));
@@ -271,7 +271,7 @@ for (const [label, claim] of [["the destination is free", { ok: true, workspace:
     const tabs = new Map([[1, { kind: "terminal", workspace: OTHER, key: terminalKey(OTHER, "/h/far"), instanceRef: { instance: "far", deployment: { id: REMOTE } } }]]);
     const u = shell(t, { tabs, selection: OTHER, claim });
     u.c.api = async (path) => { const r = await main.call(path); if (!r.ok) throw httpError(r, path); return r.body; };
-    u.c.viewMembership.note([view(OTHER, [REMOTE], { name: "tsm" })]);
+    u.c.viewMembership.note([view(OTHER, [REMOTE], { name: "web" })]);
     await u.s.refreshContextRoster();
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(main.fetched, [], "main refused the read: nothing about another workspace was fetched");

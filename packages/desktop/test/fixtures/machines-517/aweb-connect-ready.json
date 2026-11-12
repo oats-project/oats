@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "ok": true,
  "result": {
-  "server": "altair-aweb",
+  "server": "devbox-aweb",
   "team": {
    "label": "joined",
    "team": "joined:example.invalid"
@@ -21,7 +21,7 @@
    {
     "step": "join",
     "status": "done",
-    "detail": "root /private/var/folders/n3/7j3g9hm10sbd4j8hccsvr4wh0000gn/T/oats-aweb-120-UY33xo/.aweb-roots/joined"
+    "detail": "root /private/var/folders/x4/2k8d0q5m7tbw1c9fgh3pzr6y0000gn/T/oats-aweb-120-UY33xo/.aweb-roots/joined"
    },
    {
     "step": "readiness",

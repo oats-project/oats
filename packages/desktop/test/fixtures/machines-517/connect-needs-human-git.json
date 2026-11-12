@@ -2,7 +2,7 @@
  "schemaVersion": 1,
  "ok": true,
  "result": {
-  "id": "altair-deployment",
+  "id": "devbox-deployment",
   "ready": false,
   "registration": null,
   "steps": [
@@ -19,8 +19,8 @@
     "step": "git",
     "status": "needs-human",
     "code": "E_REMOTE_UNREADABLE",
-    "detail": "cannot read remote /private/var/folders/n3/7j3g9hm10sbd4j8hccsvr4wh0000gn/T/oats-v2-Pm3wHQ/remotes/ws.git (not-found)",
-    "remedy": "on altair: make file:///private/var/folders/n3/7j3g9hm10sbd4j8hccsvr4wh0000gn/T/oats-v2-Pm3wHQ/remotes/ws.git readable by git there (check the reference; give git there credentials or an SSH key for it)"
+    "detail": "cannot read remote /private/var/folders/x4/2k8d0q5m7tbw1c9fgh3pzr6y0000gn/T/oats-qa-Pm3wHQ/remotes/ws.git (not-found)",
+    "remedy": "on devbox: make file:///private/var/folders/x4/2k8d0q5m7tbw1c9fgh3pzr6y0000gn/T/oats-qa-Pm3wHQ/remotes/ws.git readable by git there (check the reference; give git there credentials or an SSH key for it)"
    },
    {
     "step": "deployment",
@@ -39,7 +39,7 @@
    }
   ],
   "human": [
-   "on altair: make file:///private/var/folders/n3/7j3g9hm10sbd4j8hccsvr4wh0000gn/T/oats-v2-Pm3wHQ/remotes/ws.git readable by git there (check the reference; give git there credentials or an SSH key for it)"
+   "on devbox: make file:///private/var/folders/x4/2k8d0q5m7tbw1c9fgh3pzr6y0000gn/T/oats-qa-Pm3wHQ/remotes/ws.git readable by git there (check the reference; give git there credentials or an SSH key for it)"
   ]
  }
 }

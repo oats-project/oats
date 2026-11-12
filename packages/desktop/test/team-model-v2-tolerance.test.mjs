@@ -23,7 +23,7 @@ test('teams document: 0.29 unchanged; v2 drops primary/unmapped, adds left[] and
   const r29 = run('teams-initial');
   assert.deepEqual(teamsDocument(r29, 'messaging:teams'), r29.result, '0.29 as captured');
   const v2 = structuredClone(r29); delete v2.result.primary; delete v2.result.unmapped;
-  v2.result.defaultTeam = { label: 'antares-oats', team: v2.result.defaultTeam.team, from: 'deployment' }; // the kernel's DefaultTeam (K1 @8dd82158)
+  v2.result.defaultTeam = { label: 'builder-oats', team: v2.result.defaultTeam.team, from: 'deployment' }; // the kernel's DefaultTeam (K1 @8dd82158)
   v2.result.left = [{ label: 'reviewers', team: 'northwind:reviewers', at: '2026-09-27T10:00:00Z', reason: 'no-longer-eligible' }];
   const d = teamsDocument(v2, 'messaging:teams');
   assert.ok(d, 'the v2 document is read, not blanked');
@@ -32,8 +32,8 @@ test('teams document: 0.29 unchanged; v2 drops primary/unmapped, adds left[] and
   const soul = structuredClone(v2); soul.result.defaultTeam.from = 'soul'; assert.ok(teamsDocument(soul, 'messaging:teams'));
   const unmapped = structuredClone(v2); unmapped.result.defaultTeam.team = null;
   // K1 addendum 4 (final): an UNMAPPED default is {label, team: null, from}, never null; null only when none is configured.
-  assert.deepEqual(teamsDocument(unmapped, 'messaging:teams').defaultTeam, { label: 'antares-oats', team: null, from: 'deployment' });
-  assert.match(defaultTeamText(teamsDocument(unmapped, 'messaging:teams').defaultTeam), /^antares-oats \(no provider id yet\)/, 'an unmapped default names its label');
+  assert.deepEqual(teamsDocument(unmapped, 'messaging:teams').defaultTeam, { label: 'builder-oats', team: null, from: 'deployment' });
+  assert.match(defaultTeamText(teamsDocument(unmapped, 'messaging:teams').defaultTeam), /^builder-oats \(no provider id yet\)/, 'an unmapped default names its label');
   const none = structuredClone(v2); none.result.defaultTeam = null; assert.equal(teamsDocument(none, 'messaging:teams').defaultTeam, null, 'none configured');
   assert.match(defaultTeamText(teamsDocument(r29, 'messaging:teams').defaultTeam), / · /, '0.29 words unchanged');
   // Still strict: bounded, well-formed, and an unknown key or source is refused.
@@ -53,7 +53,7 @@ test('soul team rows: 0.29 {label, team, mapped} and v2 {label, team, default, f
     { label: '-x', team: 't', mapped: true }, { label: 'x', team: null, mapped: true }]) assert.equal(teamRow(bad), null, JSON.stringify(bad));
   const inspect = read('teams/inspect-soul').result.teams;
   assert.deepEqual(soulTeams(inspect), inspect.map(t => ({ label: t.label, team: t.team, mapped: t.mapped })), '0.29 inspect rows as before');
-  assert.deepEqual(soulTeams([{ label: 'antares-oats', team: 'a:juan.aweb.ai', default: true, from: 'local' }])[0].default, true);
+  assert.deepEqual(soulTeams([{ label: 'builder-oats', team: 'a:alex.aweb.ai', default: true, from: 'local' }])[0].default, true);
 });
 
 test('spawn preview teams: the v2 rows keep the spawn Teams choice (not "unreadable")', () => {
@@ -62,10 +62,10 @@ test('spawn preview teams: the v2 rows keep the spawn Teams choice (not "unreada
   assert.ok(before && Array.isArray(before.teams));
   const v2 = structuredClone(v29);
   delete v2.team; // v2 removes the primary label (K1: "removes team")
-  v2.teams = [{ label: 'antares-oats', team: 'a:juan.aweb.ai', default: true, from: 'local' }, { label: 'oats', team: 'oats:oats.aweb.ai', default: false, from: 'shared' }];
+  v2.teams = [{ label: 'builder-oats', team: 'a:alex.aweb.ai', default: true, from: 'local' }, { label: 'oats', team: 'oats:oats.aweb.ai', default: false, from: 'shared' }];
   const after = previewData(v2, target);
   assert.ok(after, 'the preview is read, with team removed'); assert.equal(after.team, null);
-  assert.deepEqual(after.teams.map(t => [t.label, t.default, t.mapped]), [['antares-oats', true, true], ['oats', false, true]]);
+  assert.deepEqual(after.teams.map(t => [t.label, t.default, t.mapped]), [['builder-oats', true, true], ['oats', false, true]]);
 });
 
 test('workspace status: defaults.byTeam optional; workspace.teams as strings (0.29) or v2 shared-team rows', () => {

@@ -6,15 +6,15 @@
  * - The control is the form's own family, never a native select: with two or three deployments the
  *   segmented control (Relationship's; one tab stop, arrows choose), with more the Harness-style
  *   dropdown (choice-popup.mjs). Each option is the deployment's machine label (machineLabels: "This
- *   Mac", "altair", "This Mac · oats-v2"; never an id) and, for a deployment that is not live, its state
+ *   Mac", "devbox", "This Mac · oats-qa"; never an id) and, for a deployment that is not live, its state
  *   in words ("not reached", "remembered": deploymentState) as a tag. The full deploymentLabel
- *   ("altair · ~/acme") is the dialog's "Runs on" row (`runsOn()`).
+ *   ("devbox · ~/acme") is the dialog's "Runs on" row (`runsOn()`).
  * - Availability is the CHOSEN deployment's own spawn catalog (`/api/agents?ws=<deployment id>`;
  *   a remote deployment's catalog is its roster group's, answered by the server). A deployment
  *   without the soul, or not reached, stays selectable; choosing it blocks Spawn, and the dialog says
- *   why in its footer only (`blockText()`): "altair isn't reachable right now" when it is not reached
+ *   why in its footer only (`blockText()`): "devbox isn't reachable right now" when it is not reached
  *   ("This Mac's deployment hasn't been read yet. Try again in a moment." for a local one not yet
- *   read), else "<soul> isn't available on altair". The field itself shows no message.
+ *   read), else "<soul> isn't available on devbox". The field itself shows no message.
  * - The default: the deployment last used in this view, if it has the soul; else the first that has
  *   it, local before remote; else the last used (blocked, saying why); with nothing used yet, the
  *   first local deployment, else the first. Until the catalogs answer the field shows that
@@ -186,7 +186,7 @@ export function createSpawnDeploymentField(doc, { ctx, soul, viewId, deployments
     /** The chosen deployment's id: every spawn request of the dialog addresses it. */
     value: () => deployment().id,
     deployment,
-    /** The "Runs on" row's words: the chosen deployment's full label ("altair · ~/acme"). */
+    /** The "Runs on" row's words: the chosen deployment's full label ("devbox · ~/acme"). */
     runsOn: () => deploymentLabel(deployment(), DESKTOP_TERMS),
     /** The chosen deployment's server ('' for a local one): a remote deployment spawns through it. */
     server: () => serverOf(deployment(), catalogs.get(deployment().id)?.row),

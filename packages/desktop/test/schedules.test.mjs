@@ -11,7 +11,7 @@ import { tick, cli, workspace, home, spec, job, setup, posts } from "./helpers/s
 
 test("schedule adapter passes private JSON and routes on the saved server without a shell", async () => {
   let file, call;
-  const result = await cliSchedule(cli.bin, { operation: "add", id: "review", spec, workspaceDir: "/local", server: "hetzner" }, { exec(bin, argv, opts, cb) {
+  const result = await cliSchedule(cli.bin, { operation: "add", id: "review", spec, workspaceDir: "/local", server: "builder" }, { exec(bin, argv, opts, cb) {
     file = argv[argv.indexOf("--file") + 1]; call = { bin, argv, opts };
     assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), { ...spec, id: "review" });
     assert.equal(statSync(file).mode & 0o777, 0o600);
@@ -21,7 +21,7 @@ test("schedule adapter passes private JSON and routes on the saved server withou
   assert.equal(call.opts.shell, false); assert.equal(call.opts.cwd, "/local");
   assert.deepEqual(call.argv.slice(0, 3), ["schedule", "add", "review"]);
   assert.equal(call.argv.includes("--dir"), false);
-  assert.deepEqual(call.argv.slice(-3), ["--server", "hetzner", "--json"]);
+  assert.deepEqual(call.argv.slice(-3), ["--server", "builder", "--json"]);
   for (const bad of [{ operation: "tick" }, { operation: "remove", id: "--force" }, { operation: "list", server: "--force" }]) {
     assert.equal((await cliSchedule(cli.bin, { workspaceDir: "/local", ...bad }, { exec: () => assert.fail("invalid operation executed") })).ok, false);
   }
@@ -55,8 +55,8 @@ test("schedule boundary resolves homes in the selected workspace and refuses uns
   assert.equal(calls.at(-1).spec.operation, "knowledge:digest");
   assert.equal(calls.at(-1).spec.home, home);
   assert.equal(calls.at(-1).spec.kind, "operation");
-  await scheduleRequest({ operation: "remove", id: "review" }, { ...context, workspace: { ...workspace, server: "hetzner", registrationPresent: true } });
-  assert.equal(calls.at(-1).server, "hetzner"); assert.equal(calls.at(-1).workspaceDir, "/local");
+  await scheduleRequest({ operation: "remove", id: "review" }, { ...context, workspace: { ...workspace, server: "builder", registrationPresent: true } });
+  assert.equal(calls.at(-1).server, "builder"); assert.equal(calls.at(-1).workspaceDir, "/local");
 });
 
 test("scheduled spawn keeps same-named souls in different repositories distinct", async () => {

@@ -33,7 +33,7 @@ function desktop({ saved, served, validate, ready = true, failWrite = false }) {
   return { add: path => execute({ id: path, path }, () => true), sets: () => sets, writes, servers };
 }
 
-test('Juan-style: saved [A, B] with B missing, add C: persisted [A, B, C], served [A, C]', async () => {
+test('a saved list with a missing entry: saved [A, B] with B missing, add C: persisted [A, B, C], served [A, C]', async () => {
   const d = disk(A, C); // B's volume is not mounted
   const raw = JSON.stringify([A, B]);
   // Startup: B is not served, and stays saved (nothing is written: the launch opened nothing new).

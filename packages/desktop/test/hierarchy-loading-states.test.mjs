@@ -520,7 +520,7 @@ test('the shipped poll across a connection change with a read unresolved: a read
 });
 
 test('an empty deployment\'s observed answer, as the server sends it, is the empty overview (never "Reading the deployment…"); refresh still works', async t => {
-  const empty = panel([], currentWorkspace(), { deployment: { status: 'observed', root: '/team/agents', workspace: { name: 'tsm', key: 'k' }, reachable: { reachable: true }, withheld: [],
+  const empty = panel([], currentWorkspace(), { deployment: { status: 'observed', root: '/team/agents', workspace: { name: 'web', key: 'k' }, reachable: { reachable: true }, withheld: [],
     catalog: { souls: [], ambiguous: [], reason: null, observedAt: null, refreshing: false } }, observedAt: '2026-10-02T00:00:00.000Z', refreshing: false, running: 0 });
   const u = await setup(t, { api: () => empty }); await tick();
   assert.ok(u.one('.empty'), 'the empty copy'); assert.equal(u.notice(), '');

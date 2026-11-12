@@ -32,7 +32,7 @@
       },
       {
         "label": "mine",
-        "team": "mine:juan.aweb.ai",
+        "team": "mine:alex.aweb.ai",
         "description": "My own team",
         "from": "local",
         "default": true,

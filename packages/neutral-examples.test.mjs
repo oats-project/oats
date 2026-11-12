@@ -34,8 +34,6 @@ const INVENTED_HOMES = new Set([
 // byte is skipped too).
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', '.git']);
 const BINARY = new Set(['.png', '.jpg', '.jpeg', '.gif', '.ico', '.icns', '.webp', '.woff', '.woff2', '.ttf', '.otf', '.gz', '.tgz', '.zip', '.pdf']);
-// Not cleaned yet; the Desktop's cleanup removes this entry.
-const PENDING = ['desktop/'];
 
 function* textFiles(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -44,7 +42,6 @@ function* textFiles(dir) {
     // This file's own cases name an owner on purpose.
     if (!entry.isFile() || path === SELF || BINARY.has(extname(entry.name).toLowerCase())) continue;
     const rel = relative(PACKAGES, path).split('\\').join('/');
-    if (PENDING.some(prefix => rel.startsWith(prefix))) continue;
     const text = readFileSync(path, 'utf8');
     if (!text.includes('\0')) yield { rel, text };
   }

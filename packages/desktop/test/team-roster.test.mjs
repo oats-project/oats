@@ -5,16 +5,16 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createComputerTeams, computerTeamsCSS, memberGroups, memberSummary, memberState, openBlocked, stateKind } from '../renderer/computer-teams.mjs';
 
-const TEAM = 'aweb:juan.aweb.ai';
+const TEAM = 'aweb:alex.aweb.ai';
 const tick = async () => { for (let i = 0; i < 6; i++) await new Promise(resolve => setImmediate(resolve)); };
-const doc = { schemaVersion: 1, defaultTeam: 'juan', teams: [{ label: 'juan', team: TEAM, from: 'local', default: true }], souls: { teams: {}, default: {} }, problems: [] };
+const doc = { schemaVersion: 1, defaultTeam: 'alex', teams: [{ label: 'alex', team: TEAM, from: 'local', default: true }], souls: { teams: {}, default: {} }, problems: [] };
 const m = (instance, extra = {}) => ({ workspace: '/w', server: null, serverLabel: null, instance, agent: 'dev', agentsRoot: '/w/agents',
   home: `/w/agents/dev/instances/${instance}`, team: TEAM, running: true, addressable: true, missingRemotely: false, reason: null, createdAt: null, ...extra });
 const far = (instance, server, extra = {}) => m(instance, { workspace: `remote:${server}:1`, server, serverLabel: `${server[0].toUpperCase()}${server.slice(1)} box`,
   agentsRoot: '/srv/agents', home: `/srv/agents/dev/instances/${instance}`, ...extra });
 const server = (name, extra = {}) => ({ server: name, label: `${name[0].toUpperCase()}${name.slice(1)} box`, group: `${name}:1`, reached: true, error: null, registered: true, souls: ['dev'], ...extra });
 
-/** The board, and juan's page open in its own host (as views/spawn.mjs shows it): `q`/`all` read the board, `p`/`pall` the page. */
+/** The board, and alex's page open in its own host (as views/spawn.mjs shows it): `q`/`all` read the board, `p`/`pall` the page. */
 async function mount(t, answer, { onMember = () => {} } = {}) {
   const dom = new JSDOM('<!doctype html><body><main class="oats-view"><div class="board"></div><section class="workspace-page"></section></main></body>', { pretendToBeVisual: true }), d = dom.window.document;
   const style = d.createElement('style'); style.textContent = computerTeamsCSS; d.head.append(style);
@@ -24,7 +24,7 @@ async function mount(t, answer, { onMember = () => {} } = {}) {
   t.after(() => { card.dispose(); dom.window.close(); });
   await tick();
   const host = d.querySelector('.workspace-page');
-  assert.equal(card.showTeam(host, 'juan', { onBack: () => {} }), true);
+  assert.equal(card.showTeam(host, 'alex', { onBack: () => {} }), true);
   return { dom, doc: d, card, host, set: next => { current = next; }, q: s => card.element.querySelector(s), all: s => [...card.element.querySelectorAll(s)],
     p: s => host.querySelector(s), pall: s => [...host.querySelectorAll(s)] };
 }
@@ -88,7 +88,7 @@ test('the team page lists its members by machine: one card per machine, a table 
     far('far-d', 'build', { addressable: false, reason: 'Build box did not report this instance as reachable.', reasonLabel: 'not reachable on Build box' })],
     servers: [server('build'), server('down', { reached: false, error: 'ssh failed: timeout' })], notReached: [] }, { onMember: (action, x) => calls.push([action, x.instance, x.server]) });
   assert.equal(u.q('.ct-irow, .ct-member-name'), null, 'the board lists nobody');
-  assert.equal(u.q('[data-team="juan"] .ct-sum').textContent, '4 of your instances, 3 on other machines, Down box not reached');
+  assert.equal(u.q('[data-team="alex"] .ct-sum').textContent, '4 of your instances, 3 on other machines, Down box not reached');
   const cards = u.pall('.ct-mcard');
   assert.deepEqual(cards.map(c => [c.getAttribute('role'), c.getAttribute('aria-label'), c.querySelector('.ct-mcard-head').textContent]),
     [['group', 'This computer', 'This computer1 instance, 1 running'], ['group', 'Build box', 'Build box2 instances, 0 running'], ['group', 'Down box', 'Down boxnot reached']]);
@@ -96,7 +96,7 @@ test('the team page lists its members by machine: one card per machine, a table 
   assert.equal(cards[0].querySelector('.ct-mcard-head').title, '');
   for (const c of cards) {
     const table = c.querySelector('.ct-ilist');
-    assert.equal(table.getAttribute('role'), 'table'); assert.equal(table.getAttribute('aria-label'), `Your instances on juan on ${c.getAttribute('aria-label')}`);
+    assert.equal(table.getAttribute('role'), 'table'); assert.equal(table.getAttribute('aria-label'), `Your instances on alex on ${c.getAttribute('aria-label')}`);
     assert.deepEqual([...table.querySelectorAll('.ct-ihead [role=columnheader]')].map(h => h.textContent), ['Instance', 'Soul', 'State', 'Created', 'Terminal']);
     assert.ok(table.querySelector('.ct-ihead .ct-vh'), 'the Terminal header is for assistive tech only');
   }
@@ -136,7 +136,7 @@ test('the team page\'s counts: instances, running, stopped, those needing attent
   const sum = u.p('.ct-yours-sum');
   assert.deepEqual([...sum.children].map(c => c.textContent), ['3instances', '1running', '1stopped', '1needs attention', 'on 2 machines']);
   assert.ok(sum.querySelector('.warn b'), 'attention in the warn colour'); assert.equal(sum.lastElementChild.className, 'ct-yours-machines');
-  assert.equal(u.p('.ct-default-note').textContent, 'Every instance joins its default team, so all of your instances are here.', 'juan is the default');
+  assert.equal(u.p('.ct-default-note').textContent, 'Every instance joins its default team, so all of your instances are here.', 'alex is the default');
   u.set({ members: [m('dev-a')], servers: [], notReached: [] }); u.card.syncRoster(); await tick();
   assert.deepEqual([...u.p('.ct-yours-sum').children].map(c => c.textContent), ['1instance', '1running', 'on 1 machine'], 'no stopped, no attention: not said');
 });
@@ -156,13 +156,13 @@ test('not reached: a status line under the head names every server we hold no ro
 
 test('the board\'s repaint barrier holds with focus inside it: a changed roster waits until focus leaves; the team page follows at once', async t => {
   const u = await mount(t, { members: [m('dev-a')], servers: [], notReached: [] });
-  const button = u.q('[data-team="juan"] .ct-open'), card = u.q('[data-team="juan"]'); button.focus();
+  const button = u.q('[data-team="alex"] .ct-open'), card = u.q('[data-team="alex"]'); button.focus();
   u.set({ members: [m('dev-a', { running: false }), m('dev-b')], servers: [], notReached: [] }); u.card.syncRoster(); await tick();
-  assert.equal(u.q('[data-team="juan"]'), card, 'not rebuilt under the keyboard'); assert.equal(u.doc.activeElement, button);
-  assert.equal(u.q('[data-team="juan"] .ct-sum').textContent, '1 of your instances');
+  assert.equal(u.q('[data-team="alex"]'), card, 'not rebuilt under the keyboard'); assert.equal(u.doc.activeElement, button);
+  assert.equal(u.q('[data-team="alex"] .ct-sum').textContent, '1 of your instances');
   assert.equal(u.pall('.ct-irow:not(.ct-ihead)').length, 2, 'the page has its own rule');
   button.blur(); u.card.syncRoster(); await tick();
-  assert.equal(u.q('[data-team="juan"] .ct-sum').textContent, '2 of your instances', 'redrawn once focus left');
+  assert.equal(u.q('[data-team="alex"] .ct-sum').textContent, '2 of your instances', 'redrawn once focus left');
 });
 
 test('hostile instance, home and server label strings are text, never markup', async t => {
@@ -178,7 +178,7 @@ test('hostile instance, home and server label strings are text, never markup', a
 
 test('a route answer that does not validate leaves the board and the page saying nothing about members', async t => {
   const u = await mount(t, { members: 'nope' });
-  assert.equal(u.q('[data-team="juan"] .ct-sum').textContent, ''); assert.equal(u.q('.ct-reach').textContent, '');
+  assert.equal(u.q('[data-team="alex"] .ct-sum').textContent, ''); assert.equal(u.q('.ct-reach').textContent, '');
   assert.deepEqual(u.pall('[data-section=yours] > *').map(e => e.className), ['ct-section-head'], 'unknown is not none: no list and no empty sentence');
 });
 
@@ -187,12 +187,12 @@ test('the team page: its card first (the label as the page\'s h2, no foot, not a
   const page = u.p('.computer-teams.ct-team-page');
   assert.deepEqual([...page.children].map(c => c.className), ['ct-card local ct-page-card', 'ct-section']);
   const card = page.querySelector('.ct-page-card');
-  assert.equal(card.querySelector('h2.ct-page-label').textContent, 'juan');
+  assert.equal(card.querySelector('h2.ct-page-label').textContent, 'alex');
   assert.equal(card.querySelector('.ct-open, .ct-foot, .ct-go'), null);
   assert.ok(card.querySelector('[data-fact=address]')); assert.ok(card.querySelector('.ct-why'), 'why Remove is off: on the page too');
   const yours = page.querySelector('[data-section=yours]');
   assert.equal(yours.querySelector('h3.ct-section-title').textContent, 'Your instances on this team');
-  assert.equal(yours.querySelector('.ct-section-lead').textContent, 'On this computer and the machines you added to this workspace. Instances other people run on juan are not listed here.');
-  assert.deepEqual([...u.host.querySelectorAll('.page-bar .page-crumbs span')].map(s => s.textContent), ['Workspace', '/', 'Teams', '/', 'juan']);
+  assert.equal(yours.querySelector('.ct-section-lead').textContent, 'On this computer and the machines you added to this workspace. Instances other people run on alex are not listed here.');
+  assert.deepEqual([...u.host.querySelectorAll('.page-bar .page-crumbs span')].map(s => s.textContent), ['Workspace', '/', 'Teams', '/', 'alex']);
   assert.equal(u.p('.page-back').getAttribute('aria-label'), 'Back to Teams'); assert.equal(u.p('.page-back').title, 'Back to Teams (Esc)');
 });

@@ -49,7 +49,7 @@ test('where to change it: one line, the kernel\'s words, naming the soul\'s key;
 
 test('a local team where local teams are allowed says so', async (t) => {
   const u = await mount(t, () => soulTeams('soul-teams-show-local'));
-  assert.deepEqual(u.rows().at(-1), ['mine', 'mine:juan.aweb.ai · local', 'a local team']);
+  assert.deepEqual(u.rows().at(-1), ['mine', 'mine:alex.aweb.ai · local', 'a local team']);
 });
 
 test('a default from the workspace or this deployment says so; an unmapped default blocks with the kernel\'s fix', async (t) => {
@@ -62,7 +62,7 @@ test('a default from the workspace or this deployment says so; an unmapped defau
   assert.match(block.textContent, /The default team global has no provider id yet, so agents\/release-manager can't be spawned here\./);
   assert.ok(block.textContent.includes(UNMAPPED_FIX), 'the kernel\'s fix');
   assert.doesNotMatch(block.textContent, /make another team/, 'nothing here can change it');
-  const deployment = soulTeams('soul-teams-show-local'); deployment.defaultTeam = { label: 'mine', team: 'mine:juan.aweb.ai', from: 'deployment' };
+  const deployment = soulTeams('soul-teams-show-local'); deployment.defaultTeam = { label: 'mine', team: 'mine:alex.aweb.ai', from: 'deployment' };
   const v = await mount(t, () => deployment);
   assert.equal(v.q('.sth-default').textContent, "Default: mine (this deployment's default)");
   const none = soulTeams('soul-teams-show'); none.defaultTeam = null; none.teams = [];

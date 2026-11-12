@@ -868,7 +868,7 @@ deployments (`/api/panel` `deployments`). With two or more, the form shows a
 **Deployment** field first, before Name, in place of *Where to run*: the form's
 segmented control with two or three deployments, the Harness-style dropdown with
 more (never a native select). Options are named by `machineLabels` ("This Mac",
-"altair", "This Mac · oats-v2") with a state tag when not live; the preview
+"devbox", "This Mac · oats-qa") with a state tag when not live; the preview
 column's **Runs on** row gives the chosen one's `deploymentLabel`. With one
 there is no field and the form is unchanged. Rules:
 
@@ -1580,7 +1580,7 @@ workspace is observed through its server and never synced from here.
   from `/api/team-members?ws=<view>` (#482, decision Q5): the view's
   deployments only. A card groups them by deployment (`memberGroups`), each
   heading labelled by `deploymentLabel` ("This Mac · ~/acme · 3",
-  "altair · ~/northwind · not reached"), this Mac's first. A member's
+  "devbox · ~/northwind · not reached"), this Mac's first. A member's
   `workspace` is its deployment id. Its Show and Terminal actions stay in the
   view on screen (`teamMemberAction` never switches workspace). They wait for
   the row of that deployment, and the open is owned by the view

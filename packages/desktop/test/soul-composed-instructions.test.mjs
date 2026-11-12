@@ -70,7 +70,7 @@ test('server: one optional boolean, a soul inspect only; the cache key includes 
   for (const bad of [{ ...soul, instructions: 'yes' }, { ...soul, instructions: 1 }, { action: 'inspect', selector: { home: '/h' }, instructions: true }, { action: 'run', selector: { home: '/h' }, operation: 'knowledge:x', instructions: false }])
     await assert.rejects(capabilityRequest(bad, { workspace: local, cli, agents, instances, localCwd: context, invoke }), { code: 'E_BAD_ARGS', message: 'Invalid instructions flag' }, JSON.stringify(bad));
   calls.length = 0;
-  const remote = { id: 'remote:hetzner', scope: '/remote/member', remote: true, server: 'hetzner', registrationPresent: true };
+  const remote = { id: 'remote:builder', scope: '/remote/member', remote: true, server: 'builder', registrationPresent: true };
   await capabilityRequest({ action: 'inspect', selector: { soul: 'dev', agentsRoot: '/remote/member/agents' }, instructions: true },
     { workspace: remote, cli, agents: [{ name: 'dev', agentsRoot: '/remote/member/agents' }], instances: [], localCwd: '/l', invoke });
   assert.equal(Object.hasOwn(calls[0], 'instructions'), false, 'a CLI without server-probe-features: the host’s features are not held, never routed');
@@ -286,13 +286,13 @@ test('the soul page asks for the composed AGENTS.md only with the feature; the s
   const flagged = await page(t);
   assert.deepEqual(flagged.bodies, [{ action: 'inspect', selector: { soul: 'release-manager', agentsRoot }, instructions: true }]);
   // A routed soul: the page asks when this CLI relays the hosts' features; whether the host composes is the server's call.
-  for (const agent of [{ remote: true, server: 'hetzner' }, { server: 'hetzner' }]) {
+  for (const agent of [{ remote: true, server: 'builder' }, { server: 'builder' }]) {
     const routed = await page(t, { agent, features: [FEATURE, 'server-probe-features'] });
     assert.deepEqual(routed.bodies, [{ action: 'inspect', selector: { soul: 'release-manager', agentsRoot }, instructions: true }], JSON.stringify(agent));
   }
-  for (const [label, options] of [['no feature', { features: [] }], ['sidebar', { layout: 'sidebar' }], ['remote soul', { agent: { remote: true, server: 'hetzner' } }],
-    ['remote soul, relays but does not compose', { agent: { remote: true, server: 'hetzner' }, features: ['server-probe-features'] }],
-    ['remote soul in the sidebar', { layout: 'sidebar', agent: { remote: true, server: 'hetzner' }, features: [FEATURE, 'server-probe-features'] }]]) {
+  for (const [label, options] of [['no feature', { features: [] }], ['sidebar', { layout: 'sidebar' }], ['remote soul', { agent: { remote: true, server: 'builder' } }],
+    ['remote soul, relays but does not compose', { agent: { remote: true, server: 'builder' }, features: ['server-probe-features'] }],
+    ['remote soul in the sidebar', { layout: 'sidebar', agent: { remote: true, server: 'builder' }, features: [FEATURE, 'server-probe-features'] }]]) {
     const u = await page(t, options);
     assert.equal(u.bodies.some(b => Object.hasOwn(b, 'instructions')), false, label);
   }

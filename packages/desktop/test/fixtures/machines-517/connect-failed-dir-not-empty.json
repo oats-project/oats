@@ -3,7 +3,7 @@
  "ok": false,
  "error": {
   "code": "E_DIR_NOT_EMPTY",
-  "message": "/tmp/oats-smp-Hmipbh/full on altair is not empty and holds no oats-local.yaml; nothing was written there (choose another --dir)",
+  "message": "/tmp/oats-smp-Hmipbh/full on devbox is not empty and holds no oats-local.yaml; nothing was written there (choose another --dir)",
   "details": {
    "dir": "/tmp/oats-smp-Hmipbh/full",
    "state": "not-empty",
@@ -20,13 +20,13 @@
     {
      "step": "git",
      "status": "ok",
-     "detail": "local//private/var/folders/n3/7j3g9hm10sbd4j8hccsvr4wh0000gn/T/oats-v2-Pm3wHQ/remotes/ws.git readable at 34ce0054fd12"
+     "detail": "local//private/var/folders/x4/2k8d0q5m7tbw1c9fgh3pzr6y0000gn/T/oats-qa-Pm3wHQ/remotes/ws.git readable at 34ce0054fd12"
     },
     {
      "step": "deployment",
      "status": "failed",
      "code": "E_DIR_NOT_EMPTY",
-     "detail": "/tmp/oats-smp-Hmipbh/full on altair is not empty and holds no oats-local.yaml; nothing was written there (choose another --dir)",
+     "detail": "/tmp/oats-smp-Hmipbh/full on devbox is not empty and holds no oats-local.yaml; nothing was written there (choose another --dir)",
      "details": {
       "dir": "/tmp/oats-smp-Hmipbh/full",
       "state": "not-empty"

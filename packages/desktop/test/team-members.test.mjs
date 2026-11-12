@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { teamMembers } from '../../client/team-members.mjs';
 import { remotePanel } from '../../client/remote-roster.mjs';
 import { apiUrl } from '../api-url.mjs';
-import { loadServer, juanState, A, B, R, V, V_OATS, V_LAB, tag } from './helpers/workspace-views-fixture.mjs';
+import { loadServer, alexState, A, B, R, V, V_OATS, V_LAB, tag } from './helpers/workspace-views-fixture.mjs';
 /** The time a remote panel is made at: remotePanel reads no clock, its caller gives the time. */
 const AT = '2026-10-11T12:00:00.000Z';
 
-const TEAM = 'aweb:juan.aweb.ai';
+const TEAM = 'aweb:alex.aweb.ai';
 const LOCAL = { id: '/w', machine: 'This Mac', path: '/w' };
 const localRow = (name, extra = {}) => ({ instance: name, agent: 'dev', agentsRoot: '/w/agents', home: `/w/agents/dev/instances/${name}`,
   running: true, createdAt: '2026-09-30T00:00:00.000Z', identity: { alias: name, team: TEAM }, ...extra });
@@ -112,20 +112,20 @@ test('/api/team-members is workspace-scoped at the proxy: an unadvertised ws is 
 });
 
 test('GET /api/team-members over the shipped handler: Host guard, one ws, the VIEW\'s members (any view), served from the held snapshot', async () => {
-  const { state } = juanState();
+  const { state } = alexState();
   const { request } = await loadServer(state, { adapter: new Proxy({}, { get: () => assert.fail }), cliState: { ok: true, bin: '/oats', features: ['workspace-identity'], remote: ['roster'] } });
   const ask = (url, headers = { host: '127.0.0.1:4820' }) => request({ url, headers });
   const ok = await ask(`/api/team-members?ws=${encodeURIComponent(V_OATS)}`);
   assert.equal(ok.status, 200);
   assert.deepEqual(ok.body.members.map(m => [m.server, m.instance, m.workspace, m.deployment]), [
     [null, 'dev-a', A, tag(A, 'This Mac', A)], [null, 'idle', A, tag(A, 'This Mac', A)], [null, 'dev-b', B, tag(B, 'This Mac', B)],
-    ['altair', 'far-a', R, tag(R, 'altair', '/home/juan/oats')]], 'the view\'s deployments only: vega\'s lab-a is another workspace');
-  assert.deepEqual(ok.body.servers.map(s => [s.server, s.deployment]), [['altair', R]]);
+    ['devbox', 'far-a', R, tag(R, 'devbox', '/home/alex/oats')]], 'the view\'s deployments only: laptop\'s lab-a is another workspace');
+  assert.deepEqual(ok.body.servers.map(s => [s.server, s.deployment]), [['devbox', R]]);
   assert.deepEqual(ok.body.notReached, []);
   assert.deepEqual((await ask(`/api/team-members?ws=${encodeURIComponent(A)}`)).body, ok.body, 'a deployment id reads its view');
   const lab = await ask(`/api/team-members?ws=${encodeURIComponent(V_LAB)}`);
   assert.equal(lab.status, 200, 'a remote-only view has a team roster');
-  assert.deepEqual(lab.body.members.map(m => [m.server, m.instance, m.workspace]), [['vega', 'lab-a', V]]);
+  assert.deepEqual(lab.body.members.map(m => [m.server, m.instance, m.workspace]), [['laptop', 'lab-a', V]]);
   for (const url of ['/api/team-members', `/api/team-members?ws=${encodeURIComponent(A)}&ws=${encodeURIComponent(A)}`, `/api/team-members?ws=${encodeURIComponent(A)}&x=1`]) assert.equal((await ask(url)).status, 400, url);
   assert.equal((await ask('/api/team-members?ws=%2Fnope')).body.code, 'E_WORKSPACE_UNKNOWN');
   assert.equal((await ask('/api/team-members?ws=%2Fnope')).status, 400);

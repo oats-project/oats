@@ -147,7 +147,7 @@ test('real: inspect --soul and --home (the record, launchCurrent, and a drift); 
   assert.deepEqual([item.required, item.recorded.harness, item.current.harness, item.from, item.at], [false, 'claude', 'codex', 'local', 'oats-local.yaml#/souls/launch/dev']);
 });
 
-// #292's review (Antares): readiness `recorded`/`current` mean what the item's CODE says. The REAL kernel
+// #292's review: readiness `recorded`/`current` mean what the item's CODE says. The REAL kernel
 // (capture-launch.mjs, main 69d76a91 = main's lib/) emits three shapes; each reads, and a mutant per rule refuses.
 const readinessOf = name => {
   const r = real(name).result, s = r.subject;

@@ -20,7 +20,7 @@ const markup = `<div id="app"><aside id="sidebar">
   </ul></div></section>
   <nav id="nav"><button class="nav-item active"><span class="icon">${icon}</span><span class="label">Workspace overview</span></button><button class="nav-item"><span class="icon">${icon}</span><span class="label">Automations</span></button></nav>
   <section id="instance-roster"><div class="ctx-head roster-head"><span>Instances</span><span class="ctx-count">● 1 running</span></div>
-    <div class="ctx-list"><div class="ctx-deployment" role="heading" aria-level="3"><span class="ctx-deployment-label">altair</span><span class="deployment-mark" role="img" aria-label="remembered">${icon}</span></div><div class="ctx-tree-row"><button class="ctx-inst active"><span class="ctx-dot on"></span>
+    <div class="ctx-list"><div class="ctx-deployment" role="heading" aria-level="3"><span class="ctx-deployment-label">devbox</span><span class="deployment-mark" role="img" aria-label="remembered">${icon}</span></div><div class="ctx-tree-row"><button class="ctx-inst active"><span class="ctx-dot on"></span>
       <span class="ctx-copy"><span class="ctx-name">Fixture instance</span><span class="ctx-repo-label">fixture</span></span>
       <span class="runtime-badge ctx-runtime" data-runtime="claude">C</span>
     </button></div></div></section>

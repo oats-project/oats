@@ -53,7 +53,7 @@ test('a CLI with neither team model is refused, as before', async () => {
 
 test('the kernel\'s local-teams-closed refusal keeps its reason, path and keys', async () => {
   const b = boundary({ teams: capture('teams-add-closed') });
-  const r = await b.teams({ action: 'add', label: 'mine', team: 'mine:juan.aweb.ai' }, context(['team-model-3']));
+  const r = await b.teams({ action: 'add', label: 'mine', team: 'mine:alex.aweb.ai' }, context(['team-model-3']));
   assert.equal(r.reason.code, 'E_WORKSPACE_SCHEMA');
   assert.match(r.reason.message, /either \(a\) add `localTeams: true`/);
   assert.deepEqual(r.reason.details, { reason: 'local-teams-closed', path: 'oats-local.yaml', keys: ['teams'] });

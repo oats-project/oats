@@ -11,12 +11,12 @@ import * as views from '../../client/panel-views.mjs';
 import { clientTerms } from '../../client/client-terms.mjs';
 import { deploymentState } from '../../client/roster-sections.mjs';
 import { createRemoteIdentityStore } from '../server/remote-identity.mjs';
-import { CLI, group, identity, observed, row, remoteRow, OATS, LAB, TSM, A, R, V, V_OATS, V_LAB } from './helpers/workspace-views-fixture.mjs';
+import { CLI, group, identity, observed, row, remoteRow, OATS, LAB, WEB, A, R, V, V_OATS, V_LAB } from './helpers/workspace-views-fixture.mjs';
 
 const AT = '2026-10-11T12:00:00.000Z', LATER = '2026-10-11T12:00:10.000Z';
 const TUI = clientTerms({ name: 'oats tui', self: 'oats tui', selfInitial: 'oats tui', update: 'OATS', thisMachine: 'This machine' });
-const altair = (ws = identity(), extra = {}) => group('altair:a1', 'altair', '/home/juan/oats', ws, [remoteRow('far-a', '/home/juan/oats')], extra);
-const vega = (ws = identity(LAB, 'aweb:lab'), extra = {}) => group('vega:v1', 'vega', '/srv/lab', ws, [], extra);
+const devbox = (ws = identity(), extra = {}) => group('devbox:a1', 'devbox', '/home/alex/oats', ws, [remoteRow('far-a', '/home/alex/oats')], extra);
+const laptop = (ws = identity(LAB, 'aweb:lab'), extra = {}) => group('laptop:v1', 'laptop', '/srv/lab', ws, [], extra);
 const entry = (g, over = {}) => ({ server: g.server, label: g.label, targetKey: g.id.slice(g.server.length + 1), path: g.target.workspace,
   workspace: (({ reachable: _reachable, ...ws }) => ws)(g.workspace), reportedAt: AT, ...over });
 const down = (g, error = { code: 'E_SSH', message: 'Connection timed out' }) => ({ ...g, probe: { ok: false, error }, workspace: null });
@@ -32,89 +32,89 @@ const run = (answers, held = EMPTY()) => answers.reduce((h, groups) => observeId
 
 test('a fresh report is remembered under its group id, with the time the caller gave; new Maps are answered', () => {
   const held = EMPTY();
-  const next = observeIdentities(held, [altair(), vega()], AT);
+  const next = observeIdentities(held, [devbox(), laptop()], AT);
   assert.equal(next.changed, true);
-  assert.deepEqual([...next.memory], [['altair:a1', entry(altair())], ['vega:v1', entry(vega())]]);
+  assert.deepEqual([...next.memory], [['devbox:a1', entry(devbox())], ['laptop:v1', entry(laptop())]]);
   assert.deepEqual([...next.notes], []);
   assert.ok(next.memory !== held.memory && next.notes !== held.notes, 'not the Maps that were given');
   assert.deepEqual([held.memory.size, held.notes.size], [0, 0]);
   // The same report again changes nothing, and still answers Maps of its own.
-  const again = observeIdentities(next, [altair(), vega()], LATER);
+  const again = observeIdentities(next, [devbox(), laptop()], LATER);
   assert.equal(again.changed, false);
   assert.deepEqual([...again.memory], [...next.memory], 'the time of the first report is kept');
   assert.ok(again.memory !== next.memory && again.notes !== next.notes);
 });
 
 test('an answer that lists no groups drops all memory, and each dropped group\'s note with it', () => {
-  const moved = run([[altair(), vega()], [altair(identity(TSM, 'gs:tsm')), vega()]]);
-  assert.deepEqual([moved.memory.size, [...moved.notes.keys()]], [2, ['altair:a1']]);
+  const moved = run([[devbox(), laptop()], [devbox(identity(WEB, 'nw:web')), laptop()]]);
+  assert.deepEqual([moved.memory.size, [...moved.notes.keys()]], [2, ['devbox:a1']]);
   const none = observeIdentities(moved, [], AT);
   assert.deepEqual([none.changed, [...none.memory], [...none.notes]], [true, [], []]);
   assert.equal(observeIdentities(none, [], AT).changed, false, 'nothing held, nothing listed: nothing changed');
   // One group no longer listed: only it is dropped.
-  const one = observeIdentities(moved, [vega()], AT);
-  assert.deepEqual([one.changed, [...one.memory.keys()], [...one.notes]], [true, ['vega:v1'], []]);
+  const one = observeIdentities(moved, [laptop()], AT);
+  assert.deepEqual([one.changed, [...one.memory.keys()], [...one.notes]], [true, ['laptop:v1'], []]);
 });
 
 test('a group reached without an identity is not a report; what is remembered of it is kept', () => {
   for (const workspace of [{ reachable: true }, { reachable: false, code: 'E_X', message: 'm' }, null, undefined, { reachable: true, ...identity(), keyFrom: 'bogus' }]) {
-    const fresh = observeIdentities(EMPTY(), [{ ...altair(), workspace }], AT);
+    const fresh = observeIdentities(EMPTY(), [{ ...devbox(), workspace }], AT);
     assert.deepEqual([fresh.changed, fresh.memory.size], [false, 0], JSON.stringify(workspace));
-    const kept = observeIdentities(run([[altair()]]), [{ ...altair(), workspace }], LATER);
-    assert.deepEqual([kept.changed, [...kept.memory]], [false, [['altair:a1', entry(altair())]]], JSON.stringify(workspace));
+    const kept = observeIdentities(run([[devbox()]]), [{ ...devbox(), workspace }], LATER);
+    assert.deepEqual([kept.changed, [...kept.memory]], [false, [['devbox:a1', entry(devbox())]]], JSON.stringify(workspace));
   }
   // Nor is a group whose id or server has not the kernel's form, or whose path is not absolute.
-  for (const g of [{ ...altair(), id: '/Users/juan/Agents/oats' }, { ...altair(), id: 'remote:altair:a1' }, { ...altair(), id: 'altair' }, { ...altair(), id: undefined },
-    { ...altair(), server: '/Users/juan' }, { ...altair(), server: undefined }, { ...altair(), target: { workspace: 'Agents/oats' } }, { ...altair(), target: undefined }]) {
+  for (const g of [{ ...devbox(), id: '/Users/alex/Agents/oats' }, { ...devbox(), id: 'remote:devbox:a1' }, { ...devbox(), id: 'devbox' }, { ...devbox(), id: undefined },
+    { ...devbox(), server: '/Users/alex' }, { ...devbox(), server: undefined }, { ...devbox(), target: { workspace: 'Agents/oats' } }, { ...devbox(), target: undefined }]) {
     assert.deepEqual([...observeIdentities(EMPTY(), [g], AT).memory], [], JSON.stringify([g.id, g.server, g.target]));
   }
 });
 
 test('a failed probe changes nothing for its group, and the group is not dropped while it is listed', () => {
-  const held = run([[altair(), vega()]]);
+  const held = run([[devbox(), laptop()]]);
   for (const probe of [{ ok: false, error: { code: 'E_SSH', message: 'ssh failed' } }, { ok: false }, {}, undefined, { ok: 'true' }, { ok: 1 }]) {
-    for (const workspace of [null, { reachable: true, ...identity(TSM, 'gs:tsm') }]) {
-      const next = observeIdentities(held, [{ ...altair(), probe, workspace }, vega()], LATER);
+    for (const workspace of [null, { reachable: true, ...identity(WEB, 'nw:web') }]) {
+      const next = observeIdentities(held, [{ ...devbox(), probe, workspace }, laptop()], LATER);
       assert.deepEqual([next.changed, [...next.memory], [...next.notes]], [false, [...held.memory], []], JSON.stringify([probe, workspace]));
     }
   }
   // Every group marked not reached by a failed roster read (remote-roster.mjs): the whole memory stays.
-  const marked = remoteRosterState({ remoteGroups: [altair(), vega()], rosterAnswered: true, rosterFailure: null }, { envelope: { schemaVersion: 1, ok: true, result: {} } }, AT).reported;
+  const marked = remoteRosterState({ remoteGroups: [devbox(), laptop()], rosterAnswered: true, rosterFailure: null }, { envelope: { schemaVersion: 1, ok: true, result: {} } }, AT).reported;
   assert.deepEqual([...observeIdentities(held, marked, LATER).memory], [...held.memory]);
 });
 
 test('a label change only, or a path change only, is stored and leaves no note', () => {
-  const held = run([[altair()]]);
-  const renamed = observeIdentities(held, [altair(identity(), { label: 'Altair box' })], LATER);
-  assert.deepEqual([renamed.changed, renamed.memory.get('altair:a1'), [...renamed.notes]], [true, entry(altair(), { label: 'Altair box', reportedAt: LATER }), []]);
-  const moved = observeIdentities(held, [{ ...altair(), target: { sshHost: 'altair.lan', workspace: '/home/juan/oats2' } }], LATER);
-  assert.deepEqual([moved.changed, moved.memory.get('altair:a1').path, [...moved.notes]], [true, '/home/juan/oats2', []]);
+  const held = run([[devbox()]]);
+  const renamed = observeIdentities(held, [devbox(identity(), { label: 'Devbox box' })], LATER);
+  assert.deepEqual([renamed.changed, renamed.memory.get('devbox:a1'), [...renamed.notes]], [true, entry(devbox(), { label: 'Devbox box', reportedAt: LATER }), []]);
+  const moved = observeIdentities(held, [{ ...devbox(), target: { sshHost: 'devbox.lan', workspace: '/home/alex/oats2' } }], LATER);
+  assert.deepEqual([moved.changed, moved.memory.get('devbox:a1').path, [...moved.notes]], [true, '/home/alex/oats2', []]);
   // A group with no label is remembered, and compared, by its server.
-  const bare = observeIdentities(EMPTY(), [altair(identity(), { label: '' })], AT);
-  assert.equal(bare.memory.get('altair:a1').label, 'altair');
-  assert.equal(observeIdentities(bare, [altair(identity(), { label: undefined })], LATER).changed, false);
+  const bare = observeIdentities(EMPTY(), [devbox(identity(), { label: '' })], AT);
+  assert.equal(bare.memory.get('devbox:a1').label, 'devbox');
+  assert.equal(observeIdentities(bare, [devbox(identity(), { label: undefined })], LATER).changed, false);
 });
 
 test('a move between two views leaves the sentence; a change inside one view is stored without one', () => {
-  const held = run([[altair()]]);
+  const held = run([[devbox()]]);
   // Another workspace: another view.
-  const tsm = observeIdentities(held, [altair(identity(TSM, 'gs:tsm'))], LATER);
-  assert.deepEqual([tsm.changed, [...tsm.notes]], [true, [['altair:a1', 'altair now reports workspace tsm.']]]);
-  assert.equal(tsm.memory.get('altair:a1').workspace.key, TSM);
+  const web = observeIdentities(held, [devbox(identity(WEB, 'nw:web'))], LATER);
+  assert.deepEqual([web.changed, [...web.notes]], [true, [['devbox:a1', 'devbox now reports workspace web.']]]);
+  assert.equal(web.memory.get('devbox:a1').workspace.key, WEB);
   // Another team of the same key is another view; the sentence names the machine by its label.
-  const ops = observeIdentities(held, [altair(identity(OATS, 'aweb:ops'), { label: 'Altair box' })], LATER);
-  assert.deepEqual([...ops.notes], [['altair:a1', 'Altair box now reports workspace oats.']]);
+  const ops = observeIdentities(held, [devbox(identity(OATS, 'aweb:ops'), { label: 'Devbox box' })], LATER);
+  assert.deepEqual([...ops.notes], [['devbox:a1', 'Devbox box now reports workspace oats.']]);
   // The same view under another ref (a ref is never compared): stored, no sentence.
-  const ref = observeIdentities(held, [altair({ ...identity(), ref: 'git@github.com:awebai/oats.git' })], LATER);
-  assert.deepEqual([ref.changed, ref.memory.get('altair:a1').workspace.ref, [...ref.notes]], [true, 'git@github.com:awebai/oats.git', []]);
+  const ref = observeIdentities(held, [devbox({ ...identity(), ref: 'git@github.com:awebai/oats.git' })], LATER);
+  assert.deepEqual([ref.changed, ref.memory.get('devbox:a1').workspace.ref, [...ref.notes]], [true, 'git@github.com:awebai/oats.git', []]);
   // To an identity with no workspace key (a member's): the other sentence.
-  const member = observeIdentities(held, [altair({ ...identity(), key: null, ref: null, keyFrom: null })], LATER);
-  assert.deepEqual([...member.notes], [['altair:a1', 'altair now reports another workspace.']]);
+  const member = observeIdentities(held, [devbox({ ...identity(), key: null, ref: null, keyFrom: null })], LATER);
+  assert.deepEqual([...member.notes], [['devbox:a1', 'devbox now reports another workspace.']]);
   // A note stays while its group is listed, through answers that change nothing and through a failed probe.
-  const quiet = run([[altair(identity(TSM, 'gs:tsm'))], [down(altair())]], tsm);
-  assert.deepEqual([...quiet.notes], [['altair:a1', 'altair now reports workspace tsm.']]);
+  const quiet = run([[devbox(identity(WEB, 'nw:web'))], [down(devbox())]], web);
+  assert.deepEqual([...quiet.notes], [['devbox:a1', 'devbox now reports workspace web.']]);
   // A later move replaces it.
-  assert.deepEqual([...observeIdentities(quiet, [altair(identity(LAB, 'aweb:lab'))], LATER).notes], [['altair:a1', 'altair now reports workspace lab.']]);
+  assert.deepEqual([...observeIdentities(quiet, [devbox(identity(LAB, 'aweb:lab'))], LATER).notes], [['devbox:a1', 'devbox now reports workspace lab.']]);
 });
 
 test('nothing caps the memory: 257 reports are 257 entries; the 256 is the Desktop file\'s', () => {
@@ -132,34 +132,34 @@ test('nothing caps the memory: 257 reports are 257 entries; the 256 is the Deskt
 });
 
 test('identityMemory: the three readers of `held.remembered`, which read and change nothing', () => {
-  const held = run([[altair(), vega()], [altair(identity(TSM, 'gs:tsm')), vega()]]);
+  const held = run([[devbox(), laptop()], [devbox(identity(WEB, 'nw:web')), laptop()]]);
   const memory = sealed(held.memory), notes = sealed(held.notes);
   const reading = identityMemory(frozen({ memory, notes }));
   assert.deepEqual(Object.keys(reading).sort(), ['all', 'get', 'note'], 'no writing method');
-  assert.deepEqual(reading.get('vega:v1'), entry(vega()));
-  assert.equal(reading.get('vega:v1'), memory.get('vega:v1'), 'the entry itself');
-  assert.equal(reading.get('rigel:r1'), null);
-  assert.equal(reading.note('altair:a1'), 'altair now reports workspace tsm.');
-  assert.equal(reading.note('vega:v1'), null);
-  assert.equal(reading.note('altair:a1'), 'altair now reports workspace tsm.', 'reading a note does not consume it');
-  assert.deepEqual(reading.all(), [{ id: 'altair:a1', ...memory.get('altair:a1') }, { id: 'vega:v1', ...entry(vega()) }]);
+  assert.deepEqual(reading.get('laptop:v1'), entry(laptop()));
+  assert.equal(reading.get('laptop:v1'), memory.get('laptop:v1'), 'the entry itself');
+  assert.equal(reading.get('build:r1'), null);
+  assert.equal(reading.note('devbox:a1'), 'devbox now reports workspace web.');
+  assert.equal(reading.note('laptop:v1'), null);
+  assert.equal(reading.note('devbox:a1'), 'devbox now reports workspace web.', 'reading a note does not consume it');
+  assert.deepEqual(reading.all(), [{ id: 'devbox:a1', ...memory.get('devbox:a1') }, { id: 'laptop:v1', ...entry(laptop()) }]);
   assert.deepEqual(identityMemory(EMPTY()).all(), []);
   // It reads the Maps it was given, so the Maps of a later answer need a reading of their own.
-  const later = observeIdentities({ memory, notes }, [vega()], LATER);
+  const later = observeIdentities({ memory, notes }, [laptop()], LATER);
   assert.deepEqual([reading.all().length, identityMemory(later).all().length], [2, 1]);
 });
 
 test('the time is required: without one nothing is remembered and nothing is answered', () => {
   for (const at of [undefined, null, '', 0, new Date(0)]) {
-    assert.throws(() => observeIdentities(EMPTY(), [altair()], at), (e) => e instanceof TypeError && e.message === 'observeIdentities: at must be the time of the call, a non-empty string');
+    assert.throws(() => observeIdentities(EMPTY(), [devbox()], at), (e) => e instanceof TypeError && e.message === 'observeIdentities: at must be the time of the call, a non-empty string');
   }
 });
 
 test('nothing given is changed: sealed Maps, frozen entries, frozen groups, and the same call answers the same', () => {
-  const start = run([[altair(), vega()]]);
-  const answers = [[], [altair(), vega()], [altair(identity(TSM, 'gs:tsm'), { label: 'Altair box' })], [down(altair()), vega()], [vega(), altair(), group('rigel:r1', 'rigel', '/home/juan/tsm', identity(TSM, 'gs:tsm'))]];
+  const start = run([[devbox(), laptop()]]);
+  const answers = [[], [devbox(), laptop()], [devbox(identity(WEB, 'nw:web'), { label: 'Devbox box' })], [down(devbox()), laptop()], [laptop(), devbox(), group('build:r1', 'build', '/home/alex/web', identity(WEB, 'nw:web'))]];
   for (const groups of answers) {
-    const held = frozen({ memory: sealed([...start.memory].map(([id, e]) => [id, frozen(structuredClone(e))])), notes: sealed([['vega:v1', 'vega now reports workspace lab.']]) });
+    const held = frozen({ memory: sealed([...start.memory].map(([id, e]) => [id, frozen(structuredClone(e))])), notes: sealed([['laptop:v1', 'laptop now reports workspace lab.']]) });
     const before = JSON.stringify([[...held.memory], [...held.notes]]), given = frozen(structuredClone(groups)), text = JSON.stringify(given);
     const next = observeIdentities(held, given, LATER);
     assert.equal(JSON.stringify([[...held.memory], [...held.notes]]), before);
@@ -172,16 +172,16 @@ test('nothing given is changed: sealed Maps, frozen entries, frozen groups, and 
 });
 
 test('entryOf: an entry read from outside is kept only when it is what observeIdentities would have stored', () => {
-  const good = entry(altair());
-  assert.deepEqual(entryOf('altair:a1', good), good);
-  assert.deepEqual(entryOf('altair:a1', { ...good, extra: 'dropped', workspace: { ...good.workspace, reachable: true } }), good, 'only the entry\'s own fields');
-  for (const [id, raw] of [['altair:a1', null], ['altair:a1', 'text'], ['vega:a1', good], ['/Users/juan/oats', good], ['Altair:a1', { ...good, server: 'Altair' }],
-    ['altair:a1', { ...good, label: '' }], ['altair:a1', { ...good, path: 'relative/path' }], ['altair:a1', { ...good, reportedAt: 'yesterday' }],
-    ['altair:a1', { ...good, reportedAt: undefined }], ['altair:a1', { ...good, workspace: { reachable: true } }], ['altair:a1', { ...good, targetKey: 'other' }]]) {
+  const good = entry(devbox());
+  assert.deepEqual(entryOf('devbox:a1', good), good);
+  assert.deepEqual(entryOf('devbox:a1', { ...good, extra: 'dropped', workspace: { ...good.workspace, reachable: true } }), good, 'only the entry\'s own fields');
+  for (const [id, raw] of [['devbox:a1', null], ['devbox:a1', 'text'], ['laptop:a1', good], ['/Users/alex/oats', good], ['Devbox:a1', { ...good, server: 'Devbox' }],
+    ['devbox:a1', { ...good, label: '' }], ['devbox:a1', { ...good, path: 'relative/path' }], ['devbox:a1', { ...good, reportedAt: 'yesterday' }],
+    ['devbox:a1', { ...good, reportedAt: undefined }], ['devbox:a1', { ...good, workspace: { reachable: true } }], ['devbox:a1', { ...good, targetKey: 'other' }]]) {
     assert.equal(entryOf(id, raw), null, JSON.stringify([id, raw]));
   }
   // What observeIdentities stores reads back through it.
-  for (const [id, e] of run([[altair(), vega()]]).memory) assert.deepEqual(entryOf(id, JSON.parse(JSON.stringify(e))), e);
+  for (const [id, e] of run([[devbox(), laptop()]]).memory) assert.deepEqual(entryOf(id, JSON.parse(JSON.stringify(e))), e);
 });
 
 /* ── The roster answer and the memory together, and the view a client shows from them ── */
@@ -201,7 +201,7 @@ function client() {
     /** `held` for panel-views.mjs, built per call from what it holds. */
     held(at = AT) {
       return { ctxs: [A], snapshot: { byWs: new Map([local, ...remotePanelEntries(rosterHeld.remoteGroups, at)]) }, ...rosterHeld, remembered: identityMemory(remembered),
-        cli: CLI, observing: new Set(), remoteCollecting: false, home: '/Users/juan', at };
+        cli: CLI, observing: new Set(), remoteCollecting: false, home: '/Users/alex', at };
     },
     /** Where a machine is shown, and how: [the view that holds it, its state's key, where its identity is from, its note]. */
     shown(id) {
@@ -219,13 +219,13 @@ test('answered, then unreachable, then back: the machine stays in its workspace,
   const tui = client();
   // Before any answer: no machine, and nothing remembered to show one by.
   assert.deepEqual([tui.shown(R), tui.memory(), views.viewModel(tui.held(), TUI).views.map(v => v.id)], [null, [], [V_OATS]]);
-  // Answered: altair is in the oats view beside this machine's deployment, live, by its own report.
-  assert.deepEqual(tui.take(answer([altair(), vega()])).map(g => g.id), ['altair:a1', 'vega:v1']);
+  // Answered: devbox is in the oats view beside this machine's deployment, live, by its own report.
+  assert.deepEqual(tui.take(answer([devbox(), laptop()])).map(g => g.id), ['devbox:a1', 'laptop:v1']);
   assert.deepEqual(tui.shown(R), [V_OATS, 'live', 'reported', null]);
   assert.deepEqual(tui.shown(V), [V_LAB, 'live', 'reported', null]);
   assert.deepEqual(views.viewModel(tui.held(), TUI).views.map(v => [v.id, v.deployments]), [[V_OATS, [A, R]], [V_LAB, [V]]]);
   // Unreachable, as the kernel reports one machine that did not answer: still in the oats view, from memory.
-  tui.take(answer([down(altair()), vega()]));
+  tui.take(answer([down(devbox()), laptop()]));
   assert.deepEqual(tui.shown(R), [V_OATS, 'remembered', 'remembered', null]);
   assert.deepEqual(tui.shown(V), [V_LAB, 'live', 'reported', null]);
   assert.deepEqual(views.viewModel(tui.held(), TUI).views.map(v => [v.id, v.deployments]), [[V_OATS, [A, R]], [V_LAB, [V]]], 'the views are the same');
@@ -233,7 +233,7 @@ test('answered, then unreachable, then back: the machine stays in its workspace,
   // Unreachable, as a roster read that failed altogether: every machine keeps its place, and nothing is forgotten.
   assert.equal(tui.take({ thrown: 'spawn oats ETIMEDOUT' }), null);
   assert.deepEqual([tui.shown(R), tui.shown(V)], [[V_OATS, 'remembered', 'remembered', null], [V_LAB, 'remembered', 'remembered', null]]);
-  assert.deepEqual(tui.memory(), ['altair:a1', 'vega:v1']);
+  assert.deepEqual(tui.memory(), ['devbox:a1', 'laptop:v1']);
   assert.equal(tui.held().rosterFailure, null, 'an answer has arrived: no failure sentence');
   const rows = views.panelData(tui.held(), V_OATS, TUI).instances.filter(i => i.deployment.id === R);
   assert.deepEqual(rows.map(i => [i.instance, i.running, i.serverUnreached]), [['far-a', null, true]], 'its last rows, their state unknown');
@@ -241,32 +241,32 @@ test('answered, then unreachable, then back: the machine stays in its workspace,
   tui.take({ envelope: { schemaVersion: 1, ok: false, error: { code: 'E_SERVERS_UNREADABLE', message: 'the server registry is not valid JSON' } } });
   assert.deepEqual(tui.shown(R), [V_OATS, 'remembered', 'remembered', null]);
   // Back: live again, by its own report.
-  tui.take(answer([altair(), vega()]), LATER);
+  tui.take(answer([devbox(), laptop()]), LATER);
   assert.deepEqual([tui.shown(R), tui.shown(V)], [[V_OATS, 'live', 'reported', null], [V_LAB, 'live', 'reported', null]]);
 });
 
 test('a machine that never answered in this run is shown under its own name, not matched; one that moved says so', () => {
   const tui = client();
-  // The first answer of the run lists altair as not reached: nothing is remembered, so nothing places it.
-  tui.take(answer([down(altair()), vega()]));
+  // The first answer of the run lists devbox as not reached: nothing is remembered, so nothing places it.
+  tui.take(answer([down(devbox()), laptop()]));
   assert.deepEqual(tui.shown(R), [R, 'unreached', null, null]);
-  assert.deepEqual(views.viewModel(tui.held(), TUI).views.map(v => [v.id, v.name, v.unattached === true]), [[V_OATS, 'oats', false], [V_LAB, 'lab', false], [R, 'altair', true]]);
-  assert.deepEqual(tui.memory(), ['vega:v1']);
+  assert.deepEqual(views.viewModel(tui.held(), TUI).views.map(v => [v.id, v.name, v.unattached === true]), [[V_OATS, 'oats', false], [V_LAB, 'lab', false], [R, 'devbox', true]]);
+  assert.deepEqual(tui.memory(), ['laptop:v1']);
   // It answers: it joins its workspace, and is remembered from then on.
-  tui.take(answer([altair(), vega()]));
-  assert.deepEqual([tui.shown(R), tui.memory()], [[V_OATS, 'live', 'reported', null], ['vega:v1', 'altair:a1']]);
+  tui.take(answer([devbox(), laptop()]));
+  assert.deepEqual([tui.shown(R), tui.memory()], [[V_OATS, 'live', 'reported', null], ['laptop:v1', 'devbox:a1']]);
   // It reports another workspace: it moves to that view, with the sentence.
-  tui.take(answer([altair(identity(LAB, 'aweb:lab')), vega()]));
-  assert.deepEqual(tui.shown(R), [V_LAB, 'live', 'reported', 'altair now reports workspace lab.']);
+  tui.take(answer([devbox(identity(LAB, 'aweb:lab')), laptop()]));
+  assert.deepEqual(tui.shown(R), [V_LAB, 'live', 'reported', 'devbox now reports workspace lab.']);
   // Unreachable after the move: remembered in the view it moved to, the sentence kept.
-  tui.take(answer([down(altair()), vega()]));
-  assert.deepEqual(tui.shown(R), [V_LAB, 'remembered', 'remembered', 'altair now reports workspace lab.']);
+  tui.take(answer([down(devbox()), laptop()]));
+  assert.deepEqual(tui.shown(R), [V_LAB, 'remembered', 'remembered', 'devbox now reports workspace lab.']);
   // The answer no longer lists it: gone from the roster, and from the memory.
-  tui.take(answer([vega()]));
-  assert.deepEqual([tui.shown(R), tui.memory()], [null, ['vega:v1']]);
+  tui.take(answer([laptop()]));
+  assert.deepEqual([tui.shown(R), tui.memory()], [null, ['laptop:v1']]);
   // A gated read (the accepted CLI reads no other machine) empties the roster and reports nothing: the memory is as it was.
   tui.take({ gated: true });
-  assert.deepEqual([tui.shown(V), tui.memory(), tui.held().rosterAnswered], [[V_LAB, 'remembered', 'remembered', null], ['vega:v1'], false]);
+  assert.deepEqual([tui.shown(V), tui.memory(), tui.held().rosterAnswered], [[V_LAB, 'remembered', 'remembered', null], ['laptop:v1'], false]);
 });
 
 test('the Desktop\'s store holds none of the rule: it keeps the Maps and the file, and calls the shared functions', () => {

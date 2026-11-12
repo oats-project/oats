@@ -88,7 +88,7 @@ await workspaceFile((doc) => {
     [key]: { default: "engineering", teams: ["marketing"] }, [`${member}/no-such-soul`]: { teams: ["global"] } };
 }, "team model 3: teams, defaultTeam, souls");
 run("teams-closed", ["teams", ...d]);
-run("teams-add-closed", ["teams", "add", "mine", "--team=mine:juan.aweb.ai", "--description=My own team", ...d], { expect: null });
+run("teams-add-closed", ["teams", "add", "mine", "--team=mine:alex.aweb.ai", "--description=My own team", ...d], { expect: null });
 run("teams-default-closed", ["teams", "default", "global", ...d], { expect: null });
 run("soul-teams-show", ["soul", "teams", key, ...d]);
 run("soul-teams-star-show", ["soul", "teams", "*", ...d]);
@@ -99,7 +99,7 @@ run("souls", ["souls", ...d]);
 run("readiness-soul", ["readiness", "--dir", dep, "--soul", key, "--agents-root", root, "--policy", "--json"], { expect: "any" });
 run("preview", ["spawn", key, "--dir", dep, "--agents-root", root, "--purpose", "teams", "--preview", "--json"], { expect: "any" });
 // Local teams declared while closed: the local-teams-closed failure; remove still runs there.
-localFile((doc) => { doc.teams = { mine: { team: "mine:juan.aweb.ai" }, spare: { team: "spare:juan.aweb.ai" } }; });
+localFile((doc) => { doc.teams = { mine: { team: "mine:alex.aweb.ai" }, spare: { team: "spare:alex.aweb.ai" } }; });
 run("teams-closed-local", ["teams", ...d]);
 run("teams-remove-closed", ["teams", "remove", "spare", ...d]);
 run("soul-teams-show-closed-local", ["soul", "teams", key, ...d], { expect: "any" });
@@ -108,8 +108,8 @@ localFile((doc) => { delete doc.teams; });
 // Phase 2: local teams allowed.
 await workspaceFile((doc) => { doc.localTeams = true; }, "team model 3: localTeams true");
 run("teams-open", ["teams", ...d]);
-run("teams-add", ["teams", "add", "mine", "--team=mine:juan.aweb.ai", "--description=My own team", ...d]);
-run("teams-add-exists", ["teams", "add", "mine", "--team=mine:juan.aweb.ai", ...d], { expect: null });
+run("teams-add", ["teams", "add", "mine", "--team=mine:alex.aweb.ai", "--description=My own team", ...d]);
+run("teams-add-exists", ["teams", "add", "mine", "--team=mine:alex.aweb.ai", ...d], { expect: null });
 run("teams-add-shared", ["teams", "add", "engineering", "--team=eng:northwind.aweb.ai", ...d], { expect: null });
 run("teams-default", ["teams", "default", "mine", ...d]);
 run("teams-remove-in-use", ["teams", "remove", "mine", ...d], { expect: null });

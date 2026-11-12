@@ -115,7 +115,7 @@ test("with a query: the order is the unfiltered one, ancestors are context", () 
 
 test("several deployments: sections by their newest focus, then the panel's order; groups stay in their deployment", () => {
   const D1 = { id: "/a", machine: "This Mac", path: "/a", label: "~/a", local: true, reachable: true, primary: true };
-  const D2 = { id: "remote:altair:b", machine: "altair", path: "/b", label: "~/b", local: false, reachable: true, primary: false };
+  const D2 = { id: "remote:devbox:b", machine: "devbox", path: "/b", label: "~/b", local: false, reachable: true, primary: false };
   const lead = { ...at("lead"), deployment: { id: D1.id } }, zeta = { ...at("zeta"), deployment: { id: D1.id } };
   const kid = { ...at("kid", { home: "/b/kid", agentsRoot: "/b", parentInstance: "boss" }), deployment: { id: D2.id } };
   const boss = { ...at("boss", { home: "/b/boss", agentsRoot: "/b" }), deployment: { id: D2.id } };
