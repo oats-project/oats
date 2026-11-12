@@ -3,11 +3,10 @@ import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { parseAllDocuments } from "yaml";
-import { checkAccount, checkPod, checkRendered, checkWorkload } from "./accept-kube.mjs";
+import { agentObjects, checkAccount, checkPod, checkRendered, checkWorkload } from "./accept-kube.mjs";
 
-const usage = "accept-kube.sh --values FILE --namespace NS --release NAME [--context CONTEXT --pod POD --ssh-key FILE] [--delete-pod]";
+const usage = "accept-kube.sh --values FILE --namespace NS --release NAME [--chart PATH] [--context CONTEXT --pod POD --ssh-key FILE] [--delete-pod]";
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 const report = (phase, message) => console.log(`[${phase}] ${message}`);
 function command(bin, args, { probe = false } = {}) {
@@ -31,7 +30,7 @@ function options(argv) {
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     if (k === "--delete-pod") { assert.ok(!out.delete, "duplicate --delete-pod"); out.delete = true; continue; }
-    assert.ok(["--values", "--namespace", "--release", "--context", "--pod", "--ssh-key"].includes(k), usage);
+    assert.ok(["--values", "--namespace", "--release", "--chart", "--context", "--pod", "--ssh-key"].includes(k), usage);
     assert.ok(!out[k] && argv[i + 1] && !argv[i + 1].startsWith("--"), usage);
     out[k] = argv[++i];
   }
@@ -172,11 +171,13 @@ async function replacementPod(kube, name, previousUID, docs) {
 }
 
 async function main() {
-  const o = options(process.argv.slice(2)), chart = fileURLToPath(new URL("./chart", import.meta.url));
+  const o = options(process.argv.slice(2));
+  assert.ok(o["--chart"], "agent chart is a library; supply --chart PATH to the installable deployment root");
+  const chart = o["--chart"];
   const args = ["--values", o["--values"], "--namespace", o["--namespace"]];
   command(process.env.HELM || "helm", ["lint", "--strict", chart, ...args]);
-  const docs = parseAllDocuments(command(process.env.HELM || "helm", ["template", o["--release"], chart, ...args])).map((d) => { assert.equal(d.errors.length, 0, "invalid rendered YAML"); return d.toJSON(); });
-  const set = checkRendered(docs);
+  const rendered = parseAllDocuments(command(process.env.HELM || "helm", ["template", o["--release"], chart, ...args])).map((d) => { assert.equal(d.errors.length, 0, "invalid rendered YAML"); return d.toJSON(); });
+  const docs = agentObjects(rendered), set = checkRendered(docs);
   report("render", "PASS Helm lint/template; one RWO StatefulSet, dedicated SA/no RBAC, fixed security, mounts, probes, budgets and 45s grace");
   report("render", "NOT ASSUMED: NetworkPolicy enforcement; no hostname allowlist proof without operator-verified enforcement and bypass tests");
   if (!o["--pod"]) { report("render", "NOT RUN: live pod, SSH, filesystem and deletion checks (supply --context --pod --ssh-key)"); return; }

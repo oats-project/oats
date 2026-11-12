@@ -46,15 +46,31 @@ function isolation(p) {
   assert.match(c.image, /^[^\s@]+@sha256:[a-f0-9]{64}$/, "image must be pinned by digest");
   same(c.volumeMounts, [{ name: "state", mountPath: "/state" }, { name: "tmp", mountPath: "/tmp" }, { name: "login", mountPath: "/etc/agent-login", readOnly: true }, { name: "authorized-keys", mountPath: "/etc/agent-ssh/authorized_keys", subPath: "authorized_keys", readOnly: true }], "approved mounts");
   same(c.ports, [{ name: "ssh", containerPort: 2222, protocol: "TCP" }], "container ports");
-  for (const key of ["livenessProbe", "readinessProbe"]) {
-    same(c[key]?.tcpSocket, { port: 2222 }, key);
-    assert.ok(!c[key].exec && !c[key].httpGet && !c[key].grpc, `${key} must use TCP only`);
-  }
+  same(c.livenessProbe?.exec, { command: ["node", "/usr/local/lib/agent-liveness.mjs"] }, "liveness must check the host supervisor");
+  assert.ok(!c.livenessProbe.tcpSocket && !c.livenessProbe.httpGet && !c.livenessProbe.grpc, "liveness must use the supervisor helper only");
+  same(c.readinessProbe?.tcpSocket, { port: 2222 }, "readinessProbe");
+  assert.ok(!c.readinessProbe.exec && !c.readinessProbe.httpGet && !c.readinessProbe.grpc, "readiness must use TCP only");
+  assert.ok(!c.startupProbe, "no SSH startup probe may restart the team");
   resources(c.resources);
+}
+
+/** Select the agent component inside an installable deployment root. Proxy and
+ * service components have their own admission/boundary gates. Names and workload
+ * identity also select objects, so removing a label cannot hide agent drift. */
+export function agentObjects(docs) {
+  const sets = docs.filter(d => d.kind === "StatefulSet" && (
+    d.metadata?.name?.endsWith("-oats-team-agent") ||
+    d.spec?.selector?.matchLabels?.["app.kubernetes.io/name"] === "oats-team-agent" ||
+    d.spec?.template?.spec?.containers?.some(c => c.name === "agent")));
+  assert.equal(sets.length, 1, "expected one agent StatefulSet");
+  const set = sets[0], release = set.spec?.selector?.matchLabels?.["app.kubernetes.io/instance"];
+  const names = [set.metadata.name, `${release}-oats-team-agent`, set.spec?.template?.spec?.serviceAccountName];
+  return docs.filter(d => d === set || names.includes(d.metadata?.name) || d.metadata?.labels?.["app.kubernetes.io/name"] === "oats-team-agent");
 }
 
 /** Validate rendered objects independently before trusting them as the live baseline. */
 export function checkRendered(docs) {
+  docs = agentObjects(docs);
   const allowed = ["StatefulSet", "ServiceAccount", "PodDisruptionBudget", "Service", "NetworkPolicy"];
   for (const d of docs) {
     assert.ok(allowed.includes(d.kind), "unapproved rendered object kind");
@@ -67,6 +83,9 @@ export function checkRendered(docs) {
   assert.ok(dnsLabel.test(set.metadata.name), "StatefulSet name must be a DNS-1035 label");
   assert.ok(typeof release === "string" && dnsLabel.test(release), "release name must be a DNS-1035 label");
   assert.ok(release.length <= 36, "release name must be at most 36 characters");
+  const labels = { "app.kubernetes.io/name": "oats-team-agent", "app.kubernetes.io/instance": release };
+  same(set.spec.selector.matchLabels, labels, "agent selector");
+  same(set.spec.template.metadata.labels, labels, "agent template labels");
   assert.equal(set.spec.replicas, 1, "replicas must stay at one");
   const p = set.spec.template.spec;
   isolation(p);
@@ -92,41 +111,41 @@ export function checkRendered(docs) {
   assert.ok(source?.secretName || source?.name, "authorized keys reference");
   same(keys(key), [key.secret ? "secret" : "configMap", "name"].sort(), "authorized keys source");
   same(source, { [key.secret ? "secretName" : "name"]: source.secretName ?? source.name, defaultMode: 292, items: [{ key: "authorized_keys", path: "authorized_keys" }] }, "authorized keys volume");
-  const policy = docs.find((d) => d.kind === "NetworkPolicy");
-  if (p.dnsPolicy === "None") {
-    assert.equal(p.dnsConfig?.nameservers?.length, 1, "one forwarder resolver");
-    assert.equal(isIP(p.dnsConfig.nameservers[0]), 4, "forwarder resolver IPv4");
-  } else assert.ok(!p.dnsConfig && !policy, "forwarder policy requires explicit DNS");
-  if (policy) {
-    same(policy.spec.policyTypes, ["Egress"], "policy type");
-    same(policy.spec.podSelector.matchLabels, set.spec.selector.matchLabels, "policy selector");
-    assert.equal(policy.spec.egress.length, 1, "one forwarder egress rule");
-    const rule = policy.spec.egress[0];
-    assert.equal(rule.to.length, 1, "one forwarder peer");
-    const peer = rule.to[0];
-    same(keys(peer), ["namespaceSelector", "podSelector"], "forwarder peer fields");
-    for (const k of ["namespaceSelector", "podSelector"]) { same(keys(peer[k]), ["matchLabels"], "peer labels only"); assert.ok(keys(peer[k].matchLabels).length, "nonempty peer labels"); }
-    same(rule.ports, [{ protocol: "TCP", port: 443 }, { protocol: "UDP", port: 53 }, { protocol: "TCP", port: 53 }], "forwarder ports");
-  }
+  assert.equal(p.dnsPolicy, "None", "agent DNS must use only the egress resolver");
+  same(keys(p.dnsConfig), ["nameservers"], "DNS configuration fields");
+  assert.equal(p.dnsConfig.nameservers?.length, 1, "one egress resolver");
+  assert.equal(isIP(p.dnsConfig.nameservers[0]), 4, "egress resolver IPv4");
+  const policy = one(docs, "NetworkPolicy");
+  same(policy.spec, {
+    podSelector: { matchLabels: set.spec.selector.matchLabels },
+    policyTypes: ["Egress"],
+    egress: [{ to: [{ podSelector: { matchLabels: { "app.kubernetes.io/name": "oats-team-egress", "app.kubernetes.io/instance": release } } }], ports: [{ protocol: "TCP", port: 443 }, { protocol: "UDP", port: 53 }, { protocol: "TCP", port: 53 }] }],
+  }, "agent egress policy");
   const service = docs.find((d) => d.kind === "Service");
   if (service) { assert.equal(service.spec.type, "ClusterIP", "service must be ClusterIP"); assert.ok(!service.spec.externalIPs?.length && !service.spec.ports.some((p) => p.nodePort), "no external service exposure"); }
   return set;
 }
 
-/** An admitted pod may acquire API defaults, but no extra authority or mounts. */
-export function checkPod(docs, pod) {
-  const set = checkRendered(docs), expected = set.spec.template.spec, p = pod.spec;
-  isolation(p);
-  assert.equal(pod.metadata.namespace, set.metadata.namespace, "pod namespace");
-  assert.equal(pod.metadata.name, `${set.metadata.name}-0`, "pod ordinal");
-  assert.ok(pod.metadata.ownerReferences?.some((o) => o.kind === "StatefulSet" && o.name === set.metadata.name && o.controller), "pod owner");
+function baseline(p, expected) {
   for (const key of ["securityContext", "serviceAccountName", "imagePullSecrets"]) same(p[key] ?? [], expected[key] ?? [], key);
   same(p.dnsPolicy ?? "ClusterFirst", expected.dnsPolicy ?? "ClusterFirst", "DNS policy");
   same(p.dnsConfig, expected.dnsConfig, "DNS config");
   const c = p.containers[0], wanted = expected.containers[0];
   for (const key of ["image", "imagePullPolicy"]) same(c[key], wanted[key], key);
   same(resources(c.resources), resources(wanted.resources), "resource quantities");
-  for (const key of ["livenessProbe", "readinessProbe"]) for (const field of ["tcpSocket", "initialDelaySeconds", "periodSeconds"]) same(c[key][field] ?? (field === "initialDelaySeconds" ? 0 : 10), wanted[key][field] ?? (field === "initialDelaySeconds" ? 0 : 10), `${key}.${field}`);
+  const probe = value => ({ initialDelaySeconds: 0, periodSeconds: 10, timeoutSeconds: 1, successThreshold: 1, failureThreshold: 3, ...value });
+  for (const key of ["livenessProbe", "readinessProbe"]) same(probe(c[key]), probe(wanted[key]), key);
+}
+
+/** An admitted pod may acquire API defaults, but no extra authority or mounts. */
+export function checkPod(docs, pod) {
+  const set = checkRendered(docs), expected = set.spec.template.spec, p = pod.spec;
+  isolation(p);
+  for (const [key, value] of Object.entries(set.spec.template.metadata.labels)) same(pod.metadata.labels?.[key], value, "agent pod labels");
+  assert.equal(pod.metadata.namespace, set.metadata.namespace, "pod namespace");
+  assert.equal(pod.metadata.name, `${set.metadata.name}-0`, "pod ordinal");
+  assert.ok(pod.metadata.ownerReferences?.some((o) => o.kind === "StatefulSet" && o.name === set.metadata.name && o.controller), "pod owner");
+  baseline(p, expected);
   const approved = [...expected.volumes, { name: "state", persistentVolumeClaim: { claimName: `state-${set.metadata.name}-0` } }];
   // The API canonicalizes quantities (1024Mi becomes 1Gi); other volume fields stay exact.
   const volumes = (list) => list.map((v) => v.name === "tmp" && v.emptyDir ? { ...v, emptyDir: { ...v.emptyDir, sizeLimit: quantity(v.emptyDir.sizeLimit) } } : v).sort((a, b) => a.name.localeCompare(b.name));
@@ -136,8 +155,10 @@ export function checkPod(docs, pod) {
 
 /** Check persistence and controller fields which are not present on an admitted pod. */
 export function checkWorkload(docs, admitted) {
+  docs = agentObjects(docs);
   const expected = one(docs, "StatefulSet");
   checkRendered(docs.map((d) => d.kind === "StatefulSet" ? admitted : d));
+  baseline(admitted.spec.template.spec, expected.spec.template.spec);
   for (const key of ["replicas", "selector", "serviceName"]) same(admitted.spec[key], expected.spec[key], `StatefulSet ${key}`);
   const actual = admitted.spec.volumeClaimTemplates[0].spec, wanted = expected.spec.volumeClaimTemplates[0].spec;
   same(quantity(actual.resources.requests.storage), quantity(wanted.resources.requests.storage), "PVC size");

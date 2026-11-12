@@ -1,4 +1,6 @@
 {{- define "oats.agent.statefulset" -}}
+{{- $a := .Values.agents -}}
+{{- $k := $a.kubernetes -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -22,25 +24,25 @@ spec:
       terminationGracePeriodSeconds: 45
       securityContext:
         runAsNonRoot: true
-        runAsUser: {{ .Values.uid }}
-        runAsGroup: {{ .Values.gid }}
-        fsGroup: {{ .Values.fsGroup }}
+        runAsUser: {{ $a.uid }}
+        runAsGroup: {{ $a.gid }}
+        fsGroup: {{ $k.fsGroup }}
         # Avoid recursively widening the persisted sshd host-key mode on every remount.
         fsGroupChangePolicy: OnRootMismatch
         seccompProfile: { type: RuntimeDefault }
-      {{- with .Values.imagePullSecrets }}
+      {{- with $k.imagePullSecrets }}
       imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
+        {{- range . }}
+        - name: {{ . | quote }}
+        {{- end }}
       {{- end }}
-      {{- if .Values.forwarder.enabled }}
       dnsPolicy: None
       dnsConfig:
-        nameservers: [{{ required "forwarder.resolverIP is required" .Values.forwarder.resolverIP | quote }}]
-      {{- end }}
+        nameservers: [{{ $a.resolverIp | quote }}]
       containers:
         - name: agent
-          image: {{ printf "%s@%s" (required "image.repository is required" .Values.image.repository) (required "image.digest is required" .Values.image.digest) | quote }}
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: {{ $a.image | quote }}
+          imagePullPolicy: {{ $k.imagePullPolicy }}
           stdin: false
           tty: false
           securityContext:
@@ -51,14 +53,21 @@ spec:
           ports:
             - { name: ssh, containerPort: 2222, protocol: TCP }
           livenessProbe:
-            tcpSocket: { port: 2222 }
+            exec: { command: [node, /usr/local/lib/agent-liveness.mjs] }
             initialDelaySeconds: 10
             periodSeconds: 30
           readinessProbe:
             tcpSocket: { port: 2222 }
             periodSeconds: 5
           resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+            requests:
+              cpu: {{ $k.requests.cpu | quote }}
+              memory: {{ include "oats.agent.bytes" $k.requests.memory | quote }}
+              ephemeral-storage: {{ include "oats.agent.bytes" $k.ephemeralStorage.request | quote }}
+            limits:
+              cpu: {{ $a.cpus | quote }}
+              memory: {{ include "oats.agent.bytes" $a.memory | quote }}
+              ephemeral-storage: {{ include "oats.agent.bytes" $k.ephemeralStorage.limit | quote }}
           volumeMounts:
             - { name: state, mountPath: /state }
             - { name: tmp, mountPath: /tmp }
@@ -66,18 +75,18 @@ spec:
             - { name: authorized-keys, mountPath: /etc/agent-ssh/authorized_keys, subPath: authorized_keys, readOnly: true }
       volumes:
         - name: tmp
-          emptyDir: { medium: Memory, sizeLimit: {{ .Values.tmpSize | quote }} }
+          emptyDir: { medium: Memory, sizeLimit: {{ include "oats.agent.bytes" $a.tmpSize | quote }} }
         - name: login
           secret:
-            secretName: {{ required "loginSecret is required" .Values.loginSecret }}
+            secretName: {{ required "agents.secrets is required" $a.secrets }}
             defaultMode: 288 # 0440 in both YAML 1.1 and YAML 1.2 readers.
         - name: authorized-keys
-          {{- if eq .Values.authorizedKeys.kind "Secret" }}
+          {{- if eq $k.authorizedKeys.kind "Secret" }}
           secret:
-            secretName: {{ required "authorizedKeys.name is required" .Values.authorizedKeys.name }}
+            secretName: {{ required "agents.kubernetes.authorizedKeys.name is required" $k.authorizedKeys.name }}
           {{- else }}
           configMap:
-            name: {{ required "authorizedKeys.name is required" .Values.authorizedKeys.name }}
+            name: {{ required "agents.kubernetes.authorizedKeys.name is required" $k.authorizedKeys.name }}
           {{- end }}
             defaultMode: 292 # 0444
             items:
@@ -87,11 +96,11 @@ spec:
         name: state
       spec:
         accessModes: [ReadWriteOnce]
-        {{- with .Values.storage.className }}
+        {{- with $k.storageClass }}
         storageClassName: {{ . | quote }}
         {{- end }}
         resources:
           requests:
-            storage: {{ .Values.storage.size | quote }}
+            storage: {{ include "oats.agent.bytes" $k.stateSize | quote }}
 
 {{- end -}}

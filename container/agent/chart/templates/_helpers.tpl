@@ -12,3 +12,13 @@
 app.kubernetes.io/name: oats-team-agent
 app.kubernetes.io/instance: {{ .Release.Name | quote }}
 {{- end -}}
+
+{{/* Kubernetes byte quantities use decimal strings, avoiding scientific notation. */}}
+{{- define "oats.agent.bytes" -}}
+{{- printf "%.0f" (float64 .) -}}
+{{- end -}}
+
+{{- define "oats.egress.labels" -}}
+app.kubernetes.io/name: oats-team-egress
+app.kubernetes.io/instance: {{ .Release.Name | quote }}
+{{- end -}}

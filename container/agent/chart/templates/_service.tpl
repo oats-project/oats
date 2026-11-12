@@ -1,5 +1,5 @@
 {{- define "oats.agent.service" -}}
-{{- if .Values.service.enabled }}
+{{- if .Values.agents.kubernetes.service.enabled }}
 apiVersion: v1
 kind: Service
 metadata:

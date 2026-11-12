@@ -1,11 +1,4 @@
 {{- define "oats.agent.networkpolicy" -}}
-{{- if .Values.forwarder.networkPolicy }}
-{{- if not .Values.forwarder.enabled }}
-{{- fail "forwarder.networkPolicy requires forwarder.enabled" }}
-{{- end }}
-{{- if or (empty .Values.forwarder.namespaceLabels) (empty .Values.forwarder.podLabels) }}
-{{- fail "forwarder.namespaceLabels and forwarder.podLabels must be nonempty" }}
-{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -18,16 +11,11 @@ spec:
   policyTypes: [Egress]
   egress:
     - to:
-        - namespaceSelector:
+        - podSelector:
             matchLabels:
-              {{- required "forwarder.namespaceLabels must select the forwarder namespace" .Values.forwarder.namespaceLabels | toYaml | nindent 14 }}
-          podSelector:
-            matchLabels:
-              {{- required "forwarder.podLabels must select the forwarder pods" .Values.forwarder.podLabels | toYaml | nindent 14 }}
+              {{- include "oats.egress.labels" . | nindent 14 }}
       ports:
         - { protocol: TCP, port: 443 }
         - { protocol: UDP, port: 53 }
         - { protocol: TCP, port: 53 }
-{{- end }}
-
 {{- end -}}
