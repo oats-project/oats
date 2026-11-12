@@ -370,6 +370,9 @@ local check limits; full suites run in CI.
 from the pull request's exact head commit, on an Ubuntu 24.04 amd64 runner.
 It also supports a manual verification run at the selected ref. Actions are
 pinned by commit, and the verification token has only `contents: read`.
+After acceptance, verification also runs the real Docker export, Skopeo
+compression and configuration-digest checks used before publication, without
+a registry credential or any registry/release write.
 
 The shared fixture, `.github/scripts/team-image-accept.sh`, starts the
 committed Compose service on a disposable internal bridge with IPv6 off and
@@ -397,8 +400,10 @@ final releases; a release candidate cannot pass this guard.
 
 The release job builds and accepts its own tagged checkout. It exports the
 accepted local image by immutable ID with `docker save`, then copies that
-archive to a private OCI layout. Docker's CLI negotiates the Engine API;
-Skopeo reads archive bytes without its own daemon connection. The OCI
+archive to a private directory with compressed layers, preserving its Docker
+v2s2 manifest type. Docker's CLI negotiates the Engine API; Skopeo reads
+archive bytes without its own daemon connection. Keeping the manifest type
+avoids a format conversion that rewrites configuration bytes. The prepared
 configuration digest must equal the hash of the archive's raw configuration,
 binding the published configuration and root filesystem to the tested image
 on both classic and containerd image stores. Skopeo

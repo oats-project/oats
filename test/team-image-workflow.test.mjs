@@ -24,6 +24,9 @@ test("team image verification builds the exact PR head and runs real acceptance 
   const build = job.steps.findIndex((s) => s.run?.includes("docker build "));
   const accept = job.steps.findIndex((s) => s.run === "bash .github/scripts/team-image-accept.sh");
   assert.ok(build > 0 && accept > build, "the runner builds before invoking acceptance");
+  const prepare = job.steps.findIndex((s) => s.run === "bash .github/scripts/team-image-publish.sh --verify");
+  assert.ok(prepare > accept, "the PR exercises real export, compression and digest binding after acceptance");
+  assert.ok(job.steps.some((s, i) => i < prepare && s.run?.includes("apt-get install -y --no-install-recommends skopeo")));
   assert.match(job.steps[build].run, /--platform linux\/amd64/);
   assert.match(job.steps[build].run, /container\/agent/);
   assert.equal(job.env.AGENT_IMAGE, "oats-team-agent:${{ github.event.pull_request.head.sha || github.sha }}");
@@ -112,7 +115,8 @@ test("publishing preserves the accepted image and records an immutable digest re
   const script = read(".github/scripts/team-image-publish.sh");
   assert.match(script, /docker save "\$tested" --output/);
   assert.match(script, /docker-archive:/);
-  assert.doesNotMatch(script, /docker-daemon:/);
+  assert.doesNotMatch(script, /docker-daemon:|oci:/);
+  assert.match(script, /skopeo copy --dest-compress/);
   assert.match(script, /config\.digest/);
   assert.match(script, /docker image inspect/);
   assert.match(script, /skopeo copy --preserve-digests/);
@@ -154,13 +158,21 @@ if (tool === "docker" && args[0] === "image") {
 } else if (tool === "skopeo" && args[0] === "inspect") {
   if (!args.includes("--raw") || !args.includes("--config")) process.exit(2);
   process.stdout.write(readFileSync(args.at(-1).slice("docker-archive:".length)));
-} else if (tool === "skopeo" && args[1]?.startsWith("docker-archive:")) {
-  if (readFileSync(args[1].slice("docker-archive:".length), "utf8") !== ${JSON.stringify(configBlob)}) process.exit(2);
-  const layout = args[2].slice(4, -9);
+} else if (tool === "skopeo" && args[0] === "manifest-digest") {
+  if (!readFileSync(args[1], "utf8").includes("config")) process.exit(2);
+  console.log(${JSON.stringify(digest)});
+} else if (tool === "skopeo" && args.some((a) => a.startsWith("docker-archive:"))) {
+  const source = args.find((a) => a.startsWith("docker-archive:"));
+  if (readFileSync(source.slice("docker-archive:".length), "utf8") !== ${JSON.stringify(configBlob)}) process.exit(2);
+  if (args.at(-1).startsWith("oci:")) {
+    console.error("OCI conversion rewrites Docker configuration bytes");
+    process.exit(1);
+  }
+  if (!args.includes("--dest-compress") || !args.at(-1).startsWith("dir:")) process.exit(2);
+  const layout = args.at(-1).slice(4);
   const manifest = process.env.SUBSTITUTE === "yes" ? '{"config":{"digest":"sha256:wrong"}}' : ${JSON.stringify(manifest)};
-  mkdirSync(join(layout, "blobs", "sha256"), { recursive: true });
-  writeFileSync(join(layout, "index.json"), JSON.stringify({ manifests: [{ digest: ${JSON.stringify(digest)} }] }));
-  writeFileSync(join(layout, "blobs", "sha256", ${JSON.stringify(digest.slice(7))}), manifest);
+  mkdirSync(layout, { recursive: true });
+  writeFileSync(join(layout, "manifest.json"), manifest);
 } else if (tool === "skopeo" && args[0] === "copy") {
   writeFileSync(join(dir, "copy.json"), JSON.stringify(args));
 } else if (tool === "gh" && args[1] === "view") {
@@ -181,6 +193,13 @@ if (tool === "docker" && args[0] === "image") {
     };
     const script = new URL("../.github/scripts/team-image-publish.sh", import.meta.url);
     const run = (extra = {}) => spawnSync("bash", [script.pathname], { env: { ...env, ...extra }, encoding: "utf8" });
+    const verifyEnv = { ...env };
+    for (const key of ["GITHUB_TOKEN", "GITHUB_ACTOR", "GITHUB_REF_NAME", "IMAGE_REPOSITORY"]) delete verifyEnv[key];
+    const verified = spawnSync("bash", [script.pathname, "--verify"], { env: verifyEnv, encoding: "utf8" });
+    assert.equal(verified.status, 0, verified.stderr);
+    for (const file of ["copy.json", "login", "notes.md"]) assert.equal(existsSync(join(dir, file)), false);
+    assert.equal(readFileSync(env.GITHUB_OUTPUT, "utf8"), `digest=${digest}\n`);
+    rmSync(env.GITHUB_OUTPUT);
     const result = run();
     assert.equal(result.status, 0, result.stderr);
     const copied = JSON.parse(readFileSync(join(dir, "copy.json"), "utf8"));

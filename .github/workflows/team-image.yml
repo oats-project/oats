@@ -35,3 +35,11 @@ jobs:
 
       - name: Accept the real container
         run: bash .github/scripts/team-image-accept.sh
+
+      - name: Install the registry copy tool
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends skopeo
+
+      - name: Verify export and registry manifest preparation without publishing
+        run: bash .github/scripts/team-image-publish.sh --verify
