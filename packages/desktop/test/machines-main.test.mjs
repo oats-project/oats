@@ -5,7 +5,6 @@ import assert from 'node:assert/strict';
 import { shippedMainApi } from './helpers/shipped-main-api.mjs';
 import { classifyApiRoute } from '../api-url.mjs';
 
-const BASE = 'http://127.0.0.1:4999';
 function deadlines(path, opts) {
   const api = shippedMainApi({ window: '/d/first', advertised: new Set(['/d/first']), served: [{ id: '/d/first' }] });
   const seen = []; api.context.AbortSignal = { timeout: ms => { seen.push(ms); return null; } };
@@ -13,9 +12,9 @@ function deadlines(path, opts) {
 }
 
 test('the machine routes are classified (aliases normalize like every other route)', () => {
-  assert.equal(classifyApiRoute('/api/server-connect?ws=x', BASE), 'machine-connect');
-  assert.equal(classifyApiRoute('/api/./server-connect', BASE), 'machine-connect');
-  for (const p of ['/api/server-check', '/api/server-remove', '/api/servers?ws=x']) assert.equal(classifyApiRoute(p, BASE), 'machines', p);
+  assert.equal(classifyApiRoute('/api/server-connect?ws=x'), 'machine-connect');
+  assert.equal(classifyApiRoute('/api/./server-connect'), 'machine-connect');
+  for (const p of ['/api/server-check', '/api/server-remove', '/api/servers?ws=x']) assert.equal(classifyApiRoute(p), 'machines', p);
 });
 
 test('connect waits past the CLI\'s 15 minutes (plus its list read); check, remove and the list past a check and a list read', async () => {

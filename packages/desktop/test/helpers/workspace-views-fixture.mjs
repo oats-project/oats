@@ -9,6 +9,7 @@ import * as shared from '../../../client/panel-views.mjs';
 import { createRemoteIdentityStore } from '../../server/remote-identity.mjs';
 import { DESKTOP_TERMS } from '../../renderer/desktop-terms.mjs';
 import { aboveTestedRefusal, postOperation, postRouteClassified } from '../../../client/above-tested.mjs';
+import { handlerAuth, authorized } from './handler-auth.mjs';
 /** The time a remote panel is made at: remotePanel reads no clock, its caller gives the time. */
 const AT = '2026-10-11T12:00:00.000Z';
 
@@ -103,12 +104,12 @@ export async function loadServer(state = {}, extra = {}) {
   const { EventEmitter } = await import('node:events');
   // The handler names the shared functions as the server imports them; `held` is the server's own, over these values.
   // The gate every POST asks before it runs anything (#1879): the shipped one, over the fixture's cliState.
-  const deps = { ...viewDeps(state), ...shared, aboveTestedRefusal, postOperation, postRouteClassified, createServer: fn => fn, ...extra };
+  const deps = { ...viewDeps(state), ...shared, aboveTestedRefusal, postOperation, postRouteClassified, createServer: fn => fn, ...handlerAuth, ...extra };
   const { server, held } = new Function(...Object.keys(deps),
     `${HELD}\n${FINDINST_BLOCK}\n${SPAWNERR_BLOCK}\n${HANDLER}\nreturn { server, held };`)(...Object.values(deps));
   const views = bound(held);
   async function request({ url, method = 'GET', body, headers = { host: '127.0.0.1:4820', origin: 'http://localhost:4820' } }) {
-    const req = new EventEmitter(); Object.assign(req, { url, method, headers }); let result;
+    const req = new EventEmitter(); Object.assign(req, { url, method, headers: authorized(headers) }); let result;
     const res = { writeHead(status, h) { result = { status, headers: h }; }, end(text) { result.body = JSON.parse(text); } };
     const done = server(req, res);
     if (body !== undefined) req.emit('data', Buffer.from(typeof body === 'string' ? body : JSON.stringify(body)));

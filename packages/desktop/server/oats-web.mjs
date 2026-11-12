@@ -2,10 +2,12 @@
 /**
  * OATS desktop backend server — the app's local control-panel API.
  *
- *   node oats-web.mjs start [--port <n>] [--dir <agents-root-context>]
+ *   node oats-web.mjs start --socket <path> (--token-fd <n> | --token-file <path>)
+ *       [--dir <deployment>]... [--cli-choice <file>] [--oats-bin <path>]
  *
- * A zero-dependency localhost HTTP server (spawned by the Electron main
- * process; the desktop renderer is its only client):
+ * A zero-dependency HTTP server on a private Unix domain socket (spawned by
+ * the Electron main process, which is its only client; the renderer reaches
+ * it only through main's IPC proxy):
  *   GET  /api/panel                 roster JSON (instances, task, tmux state; local Git unobserved)
  *   GET  /api/agents                available agents (souls) per workspace root
  *                                   (both: an explicit ?ws= not served → 404 E_WORKSPACE_NOT_SERVED)
@@ -19,7 +21,8 @@
  *                                   (server/capability-show.mjs; local only; errors 409/400 { error, code })
  *   POST /api/models                { harness: pi|claude|codex } → advisory model catalog for the spawn modal
  *   GET  /api/cli                   CLI discovery status (bin, version, required range, tried, probePath/pathSource/pathError, reader)
- *   POST /api/cli/reprobe           re-run discovery; body { bin? } prioritizes a user-chosen binary
+ *   POST /api/cli/reprobe           re-run discovery; body {} or empty (anything else 400 E_BAD_ARGS). The chosen
+ *                                   binary is the --cli-choice file's, written by main after its own file dialog
  *   POST /api/window-state          { focused } → the refresh cadence backs off while the window is blurred/hidden
  *   POST /api/windows               { views: [viewId|null, …] } → the views the open windows show: the remote roster
  *                                   reads their workspaces' machines (#1124)
@@ -28,7 +31,18 @@
  *                                   knowledge tree) + per-instance artifacts (abs paths)
  *   GET  /api/file?path=<abs>       text file content, guarded to workspace roots + agent homes
  *
- * SECURITY: binds 127.0.0.1 ONLY. This process can type into your terminals.
+ *   GET  /api/version               { capability, version } of this bundled server
+ *
+ * SECURITY: this process can type into your terminals. It listens only on
+ * --socket, whose directory must be a real directory owned by this user with
+ * no group/other permissions (no TCP listener; --port is refused). Every
+ * request, any method and any path, must carry `Authorization: Bearer
+ * <secret>`, else 401 E_UNAUTHORIZED before the target is parsed or the body
+ * read. The secret is 32 random bytes (base64url, 43 characters), fresh for
+ * each server main starts, read once at startup from --token-fd (main's
+ * private pipe) or --token-file (an operator's own 0600 file) and never
+ * printed. The Host guard (a loopback Host) and the Origin guard on POST stay.
+ * After listening, stdout carries the line `oats-desktop-server ready`.
  * Deployment model: every roster/header fact is the installed kernel's
  * `oats status --json` / `oats workspace status --json` (workspace model v2).
  * The server reads no deployment file and has no fallback reader.
@@ -45,7 +59,8 @@
 import { launchEnvironment } from "../../client/own-environment.mjs";
 import { createServer } from "node:http";
 import { execFile, spawn } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, statSync, realpathSync, accessSync, constants as fsConstants } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync, lstatSync, unlinkSync, chmodSync, realpathSync, accessSync, constants as fsConstants } from "node:fs";
+import { StartupRefusal, readSecretFd, readSecretFile, checkSocketParent, bearerBytes, bearerMatches, sameFile, carriesSecret, CREDENTIAL_IN_REPLY, UNAUTHORIZED } from "./request-checks.mjs";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { homedir } from "node:os";
@@ -97,10 +112,9 @@ import { rosterRows, kernelLiveness, livenessInput, livenessAnswers, panelInstan
 import { deployments, viewFor, deploymentFor, surfaceDeployment, viewForgeContext, deploymentRows, isServed, teamMembersFor, machineScope, panelData, cliReadsRemotes, rosterWorkspaceKeys } from "../../client/panel-views.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-// Identity for compatibility probes (GET /api/version): the desktop app must
-// not reuse an OLDER server that answers /api/panel but lacks the
-// desktop endpoints (/api/brain, /api/file...). The bundled
-// server's identity is the desktop package's name and version.
+// Identity (GET /api/version): main checks that the server it started is this
+// package's (server-compat.mjs `serverCompatible`). The bundled server's
+// identity is the desktop package's name and version.
 // The same version is this Desktop's TESTED BOUND (packages/client/cli-locator.mjs testedBound): the
 // newest CLI minor it accepts without holding anything back. It is the Desktop's own manifest, the
 // version of the app installed, which the version-bump PR moves with the kernel's; the release checks
@@ -121,9 +135,39 @@ const flagAll = (name) => args.flatMap((a, i) => (a === `--${name}` && args[i + 
 // "collect" is retired: the kernel owns roster collection and the CLI read is
 // asynchronous. Terminal liveness is the kernel's rows under feature status-liveness,
 // else it runs in packages/client/liveness-main.mjs children.
+const USAGE = "usage: oats-web.mjs start --socket <path> (--token-fd <n> | --token-file <path>) [--dir <deployment>]...  (repeat --dir for multiple deployments)";
 if (sub !== "start") {
-  console.error("usage: oats-web.mjs start [--port <n>] [--dir <deployment>]...  (repeat --dir for multiple deployments)");
+  console.error(USAGE);
   process.exit(1);
+}
+
+/* ── Startup checks: before anything listens and before any child process starts ──
+   The server listens only on a Unix domain socket whose directory is private to this user, and
+   answers only requests carrying the credential it reads here (server/request-checks.mjs). A
+   refusal is one stderr line naming the flag, never a value, and exit 1. */
+const startupRefusal = (message) => { console.error(`oats-desktop server: ${message}`); process.exit(1); };
+let SOCKET_PATH, BEARER;
+let CREDENTIAL; // the secret itself: no reply that holds it is sent (send)
+let TOKEN_FILE = null; // the --token-file's { dev, ino }: never served, whatever path names it
+try {
+  if (args.includes("--port")) throw new StartupRefusal("--port is not accepted: the server listens only on --socket <path>");
+  const tokenFd = flag("token-fd"), tokenFile = flag("token-file"), socket = flag("socket");
+  if (typeof socket !== "string") throw new StartupRefusal(`--socket <path> is required\n${USAGE}`);
+  if ((tokenFd === undefined) === (tokenFile === undefined)) throw new StartupRefusal("exactly one of --token-fd <n> or --token-file <path> is required");
+  let secret;
+  if (tokenFd !== undefined) {
+    if (typeof tokenFd !== "string" || !/^[1-9][0-9]{0,3}$/.test(tokenFd) || Number(tokenFd) < 3) throw new StartupRefusal("--token-fd must name a descriptor of 3 or more");
+    secret = readSecretFd(Number(tokenFd));
+  } else {
+    if (typeof tokenFile !== "string") throw new StartupRefusal("--token-file needs a path");
+    ({ secret, identity: TOKEN_FILE } = readSecretFile(tokenFile));
+  }
+  checkSocketParent(socket);
+  SOCKET_PATH = socket;
+  BEARER = bearerBytes(secret);
+  CREDENTIAL = secret;
+} catch (e) {
+  startupRefusal(e instanceof StartupRefusal ? e.message : "startup checks failed");
 }
 
 // The packaged app never imports the framework checkout's kernel module and
@@ -141,7 +185,6 @@ let remoteRead = null; // the remote roster read in flight (refreshRemoteSnapsho
  * canonical directory, exactly as given to `oats --dir`; the kernel decides
  * whether it is one. */
 const ctxs = [...new Set(flagAll("dir").map((d) => resolve(String(d))))];
-const port = Number(flag("port") || 4820);
 const DEBUG = flag("debug") === true || process.env.OATSWEB_DEBUG === "1";
 /* Internal (#698): stdin is the owner lifeline from Desktop's main (server-host.mjs); exit at its EOF. */
 const EXIT_ON_STDIN_CLOSE = args.includes("--exit-on-stdin-close");
@@ -406,9 +449,11 @@ async function spawnAgent({ agent, agentsRoot, task, purpose, name: instanceName
 
 /* ── CLI discovery (Desktop CLI API v1) ──
    The server is the privileged process that runs mutations, so it owns the
-   probe. The persisted user-chosen binary arrives from the Electron main
-   process as --oats-bin (main owns persistence in userData); re-probe runs at
-   startup, on explicit /api/cli/reprobe (app focus, Retry, choose). */
+   probe. The user-chosen binary is only ever the one main's own file dialog
+   wrote to the choice file (userData/oats-cli-choice.json), whose path main
+   passes as --cli-choice; it is read at the start of every probe. No request
+   names a binary. Re-probe runs at startup and on explicit /api/cli/reprobe
+   (app focus, Retry, after Choose). */
 let cliState = { ok: false, probedAt: 0, tried: [] };
 // The revision every deployment read is admitted under: pending reads are revoked (E_DEPLOYMENT_STALE)
 // when it moves, so it moves ONLY when the accepted CLI actually changed in a gate-relevant field
@@ -417,10 +462,20 @@ let cliState = { ok: false, probedAt: 0, tried: [] };
 // wipes the held catalogs, and cliState keeps its identity (the remote roster compares by it).
 let cliProbeGeneration = 0;
 let probeSequence = 0; // orders concurrent probes; a superseded probe's result is dropped
-// User-chosen binary: seeded from --oats-bin (main passes the persisted pick
-// at server start) and updated by /api/cli/reprobe {bin} — top candidate on
-// every subsequent probe until replaced.
-let chosenBin = typeof flag("oats-bin") === "string" ? flag("oats-bin") : null;
+// The user-chosen binary, the top candidate of a probe: the choice file's `bin` (--cli-choice), read
+// when each probe starts; without --cli-choice, an operator's own --oats-bin for a server started by hand.
+const CLI_CHOICE_FILE = typeof flag("cli-choice") === "string" ? flag("cli-choice") : null;
+const OPERATOR_BIN = typeof flag("oats-bin") === "string" ? flag("oats-bin") : null;
+function readCliChoice() {
+  if (!CLI_CHOICE_FILE) return OPERATOR_BIN;
+  try {
+    const raw = readFileSync(CLI_CHOICE_FILE, "utf8");
+    if (raw.length > 65536) return null;
+    const bin = JSON.parse(raw)?.bin;
+    return typeof bin === "string" && bin.startsWith("/") ? bin : null;
+  } catch { return null; }
+}
+let chosenBin = null;
 // Where this server's PATH came from (the Electron main process resolves the
 // login shell's PATH before starting it: login-path.mjs). The probe and every
 // oats call inherit process.env.PATH; a standalone server reports "inherited".
@@ -454,9 +509,9 @@ const probeBin = (path) => new Promise((ok, bad) => {
   execFile(path, ["version", "--json"], { encoding: "utf8", timeout: 8000, shell: false, killSignal: "SIGKILL" },
     (err, stdout) => (err ? bad(err) : ok({ stdout })));
 });
-async function reprobeCli(chosen) {
+async function reprobeCli() {
   const sequence = ++probeSequence;
-  if (chosen) chosenBin = chosen;
+  chosenBin = readCliChoice();
   const r = await locator.discover(cliIo, probeBin);
   if (sequence !== probeSequence) return cliState;
   const first = !cliState.probedAt;
@@ -964,7 +1019,7 @@ function skillEntry(skillDir, contained) {
   // dir itself is contained — reject per file.
   if (contained && !contained(p)) return null;
   let meta = {};
-  try { meta = skillFrontmatter(readFileSync(p, "utf8")); } catch { /* unreadable skill */ }
+  try { if (!sameFile(statSync(p), TOKEN_FILE)) meta = skillFrontmatter(readFileSync(p, "utf8")); } catch { /* unreadable skill */ }
   return { name: meta.name || basename(skillDir), path: p, description: String(meta.description || "").trim() };
 }
 function mdTree(dir) {
@@ -1112,6 +1167,7 @@ function fileData(requested) {
   const g = resolveGuardedFile(requested, fileRoots());
   if (g.error) return g;
   const st = statSync(g.real);
+  if (sameFile(st, TOKEN_FILE)) return { error: "forbidden", code: 403 };
   if (!st.isFile()) return { error: "not a regular file", code: 400 };
   if (st.size > FILE_MAX_BYTES) return { error: `file too large (${st.size} bytes)`, code: 413 };
   const buf = readFileSync(g.real);
@@ -1127,7 +1183,10 @@ function fileData(requested) {
 
 // ---- HTTP ----
 const send = (res, code, body, type = "application/json") => {
-  const data = type === "application/json" ? JSON.stringify(body) : body;
+  let data = type === "application/json" ? JSON.stringify(body) : body;
+  // No reply carries the credential, whatever route built it: a file, a skill or a Git diff that
+  // holds the --token-file's content (a copy or a hard link included) is refused with no content.
+  if (carriesSecret(data, CREDENTIAL)) { code = 403; type = "application/json"; data = JSON.stringify(CREDENTIAL_IN_REPLY); }
   res.writeHead(code, { "content-type": `${type}; charset=utf-8`, "cache-control": "no-store" });
   res.end(data);
 };
@@ -1172,24 +1231,27 @@ const refuseHeld = (res, refusal) => send(res, 409, { status: "refused", code: r
   reason: { code: refusal.code, message: refusal.message }, ...(refusal.release ? { release: refusal.release } : {}) });
 
 const server = createServer(async (req, res) => {
-  const url = new URL(req.url, "http://localhost");
-  const path = url.pathname;
-  // DNS-rebinding guard: EVERY request must carry a loopback Host — a hostile
-  // page rebinding its hostname to 127.0.0.1 must neither type into terminals
-  // (POST) nor read workspace files via the GET API (/api/file).
+  // Host guard: EVERY request must carry a loopback Host.
   const host = String(req.headers.host || "").replace(/:\d+$/, "");
   const okHost = (h) => h === "127.0.0.1" || h === "localhost" || h === "[::1]" || h === "::1";
   if (!okHost(host)) return send(res, 403, { error: "forbidden origin" });
-  // CSRF guard: mutating requests must also come from a loopback origin.
-  if (req.method === "POST") {
-    let originOk = true;
-    if (req.headers.origin !== undefined) {
-      // "Origin: null" (sandboxed pages) and malformed origins must 403, not throw.
-      try { originOk = okHost(new URL(String(req.headers.origin)).hostname); } catch { originOk = false; }
-    }
-    if (!originOk) return send(res, 403, { error: "forbidden origin" });
-  }
+  // The credential: every request, any method and any path, carries exactly `Bearer <secret>`
+  // (server/request-checks.mjs), checked before the target is parsed and before the body is read.
+  // No route is exempt.
+  if (!bearerMatches(req.headers.authorization, BEARER)) return send(res, 401, UNAUTHORIZED);
   try {
+    let url;
+    try { url = new URL(req.url, "http://localhost"); } catch { return send(res, 400, { error: "malformed request target", code: "E_BAD_ARGS" }); }
+    const path = url.pathname;
+    // Origin guard: mutating requests must also come from a loopback origin.
+    if (req.method === "POST") {
+      let originOk = true;
+      if (req.headers.origin !== undefined) {
+        // "Origin: null" (sandboxed pages) and malformed origins must 403, not throw.
+        try { originOk = okHost(new URL(String(req.headers.origin)).hostname); } catch { originOk = false; }
+      }
+      if (!originOk) return send(res, 403, { error: "forbidden origin" });
+    }
     if (req.method === "POST") { const refused = unclassifiedRoute(path); if (refused) return refuseHeld(res, refused); }
     if (req.method === "GET" && path === "/api/version") {
       return send(res, 200, { capability: MANIFEST.capability, version: MANIFEST.version });
@@ -1616,13 +1678,16 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "POST" && path === "/api/cli/reprobe") {
       // Re-probe triggers (contract): launch, app focus, explicit Retry, and
-      // after choosing a binary — main/renderer call this; body may carry a
-      // user-chosen absolute path which becomes the top-priority candidate.
-      const body = await readBody(req);
+      // after choosing a binary. The body names nothing: `{}` or empty. The
+      // chosen binary is the choice file's (--cli-choice), read by the probe.
+      // The gate is asked once the body is read, as at every POST, and before the body is judged:
+      // either refusal runs nothing.
+      let body = null;
+      try { body = await readStrictBody(req, 1024); } catch { /* refused below */ }
       const refused = heldBack(path);
       if (refused) return refuseHeld(res, refused);
-      const chosen = typeof body.bin === "string" && body.bin.startsWith("/") ? body.bin : undefined;
-      await reprobeCli(chosen);
+      if (!body || Object.keys(body).length) return send(res, 400, { error: "the body must be {} or empty", code: "E_BAD_ARGS" });
+      await reprobeCli();
       return send(res, 200, servedCliStatus());
     }
     if (req.method === "POST" && path === "/api/spawn") {
@@ -1722,17 +1787,30 @@ const server = createServer(async (req, res) => {
 });
 
 server.on("error", (e) => {
-  if (e.code === "EADDRINUSE") {
-    console.error(`oats-desktop server: port ${port} is already in use — a desktop backend is likely already running.`);
-    console.error(`Use --port <n> for a second server, or stop the old one: pkill -f "packages/desktop/server/oats-web.mjs start"`);
-    process.exit(1);
-  }
-  throw e;
+  console.error(`oats-desktop server: cannot listen on --socket: ${e.code || e.message}`);
+  process.exit(1);
 });
-server.listen(port, "127.0.0.1", () => {
-  const addr = `http://127.0.0.1:${port}`;
-  console.log(`oats-desktop server — API at ${addr}  (workspaces: ${deployments(held()).map((w) => w.name).join(", ") || "none"})`);
-  console.log("Bound to 127.0.0.1 only. This process can type into your agent terminals — do not expose it.");
+// The socket: a stale one at the path (a socket, by lstat, inside the directory checked above) is
+// removed; anything else there is refused. Once listening, one ready line on stdout, which main's
+// lease waits for. The socket file is removed on every exit this process controls.
+let listenedIno = null;
+function unlinkOwnSocket() {
+  try { const st = lstatSync(SOCKET_PATH); if (st.isSocket() && st.ino === listenedIno) unlinkSync(SOCKET_PATH); } catch { /* gone */ }
+}
+try {
+  const st = lstatSync(SOCKET_PATH);
+  if (!st.isSocket()) startupRefusal("--socket: something other than a socket is at that path");
+  unlinkSync(SOCKET_PATH);
+} catch (e) { if (e?.code !== "ENOENT") startupRefusal("--socket: cannot remove the stale socket at that path"); }
+process.on("exit", unlinkOwnSocket);
+for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"]) {
+  process.once(signal, () => { unlinkOwnSocket(); process.kill(process.pid, signal); });
+}
+server.listen(SOCKET_PATH, () => {
+  try { chmodSync(SOCKET_PATH, 0o600); listenedIno = lstatSync(SOCKET_PATH).ino; } catch { /* the directory is private either way */ }
+  console.log(`oats-desktop server — API on a private socket  (workspaces: ${deployments(held()).map((w) => w.name).join(", ") || "none"})`);
+  console.log("This process can type into your agent terminals: every request must carry its credential.");
+  console.log("oats-desktop-server ready");
 });
 // The owner lifeline (#698): Desktop's main holds the only write end of this
 // process's stdin and never writes to it, so EOF, close or an error there means

@@ -8,7 +8,7 @@ import { shippedMainApi } from './helpers/shipped-main-api.mjs';
 import { classifyApiRoute } from '../api-url.mjs';
 import { cliRemoteRoster } from '../../client/cli-adapter.mjs';
 
-const BASE = 'http://127.0.0.1:4999', REFRESH = '/api/remote-roster/refresh';
+const REFRESH = '/api/remote-roster/refresh';
 
 /** The limit the roster's CLI call really runs under: what `cliRemoteRoster` hands its exec, called as the
  * server calls it (no deadline of its own). Read from the call, never copied here. */
@@ -25,7 +25,8 @@ function slowBackend(reply, afterMs) {
   const api = shippedMainApi({ window: '/d/first', advertised: new Set(['/d/first']), served: [{ id: '/d/first' }] });
   const seen = [];
   api.context.AbortSignal = { timeout: ms => { seen.push(ms); return { ms }; } };
-  api.context.fetch = async (_url, init) => {
+  api.context.backendFetch = async (path, init) => {
+    assert.ok(typeof path === 'string' && path.startsWith('/api/'), `backendFetch takes a path: ${path}`);
     if (init.signal.ms <= afterMs) throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
     return { ok: reply.status < 400, status: reply.status, text: async () => JSON.stringify(reply.body) };
   };
@@ -33,8 +34,8 @@ function slowBackend(reply, afterMs) {
 }
 
 test('the refresh is classified, by its exact path (aliases normalize like every other route)', () => {
-  for (const p of [REFRESH, `${REFRESH}?ws=x`, '/api/./remote-roster/refresh', '/api/x/../remote-roster/refresh']) assert.equal(classifyApiRoute(p, BASE), 'remote-roster', p);
-  for (const p of ['/api/remote-roster', '/api/remote-roster/refresh/', '/api/remote-roster/refreshx', '/api/remote-roster/refresh/x']) assert.notEqual(classifyApiRoute(p, BASE), 'remote-roster', p);
+  for (const p of [REFRESH, `${REFRESH}?ws=x`, '/api/./remote-roster/refresh', '/api/x/../remote-roster/refresh']) assert.equal(classifyApiRoute(p), 'remote-roster', p);
+  for (const p of ['/api/remote-roster', '/api/remote-roster/refresh/', '/api/remote-roster/refreshx', '/api/remote-roster/refresh/x']) assert.notEqual(classifyApiRoute(p), 'remote-roster', p);
 });
 
 test('the proxy waits longer than the limit of the roster\'s CLI call, read from that call; an ordinary read keeps the ordinary deadline', async () => {

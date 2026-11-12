@@ -241,7 +241,7 @@ test('through the real cliWorkspace: fixed argv, no shell, and the failure envel
 test('HTTP: POST /api/capabilities show|file against the shipped server, the held catalog and a fake kernel', async () => {
   const s = await startLoadPathServer({ probe: v => ({ ...v, features: [...v.features, 'capability-show'], capabilityShowApi: 1 }) });
   try {
-    const post = async body => { const r = await fetch(`${s.base}/api/capabilities${s.ws}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); return { status: r.status, body: await r.json() }; };
+    const post = async body => { const r = await s.request(`/api/capabilities${s.ws}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); return { status: r.status, body: await r.json() }; };
     const cliState = await s.post('/api/cli/reprobe', {});
     assert.equal(cliState.capabilityShowApi, 1, 'the probe integer reaches /api/cli');
     await s.until(async () => (await s.panel()).deployment?.status === 'observed');

@@ -10,6 +10,7 @@ import { cliTeams, cliSoulTeams } from '../../client/cli-adapter.mjs';
 import { apiUrl, classifyApiRoute } from '../api-url.mjs';
 import { createTeamsBoundary, teamsFailure } from '../server/teams.mjs';
 import { deploymentDoubles } from './helpers/deployment-doubles.mjs';
+import { handlerAuth, authorized } from './helpers/handler-auth.mjs';
 
 const read = path => JSON.parse(readFileSync(new URL(`./fixtures/${path}.json`, import.meta.url), 'utf8'));
 const DEPLOYMENT = '/fixture/base/northwind-workspace';
@@ -30,10 +31,10 @@ function http({ reply } = {}) {
   const invalidated = [], previewsInvalidated = [];
   const deps = { createServer: fn => fn, teamsRequest: boundary.teams, soulTeamsRequest: boundary.soulTeams, teamsFailure, cliState, ...deploymentDoubles(() => [workspace]),
     inspectCache: { invalidate: ws => invalidated.push(ws) }, spawnPreview: { cache: { invalidate: ws => previewsInvalidated.push(ws) } },
-    panelData: assert.fail, collectNow: assert.fail };
+    panelData: assert.fail, collectNow: assert.fail, ...handlerAuth };
   const handler = new Function(...Object.keys(deps), `${source.slice(start, end)}\nreturn server;`)(...Object.values(deps));
   return { calls, workspace, cliState, invalidated, previewsInvalidated, async request({ url = '/api/workspace-teams?ws=team', method = 'POST', body = { action: 'list' }, headers = HEADERS } = {}) {
-    const req = new EventEmitter(); Object.assign(req, { url, method, headers }); let result;
+    const req = new EventEmitter(); Object.assign(req, { url, method, headers: authorized(headers) }); let result;
     const res = { writeHead(status, h) { result = { status, headers: h }; }, end(text) { result.body = JSON.parse(text); } };
     const done = handler(req, res); req.emit('data', Buffer.from(typeof body === 'string' ? body : JSON.stringify(body))); req.emit('end'); await done; return result;
   } };
@@ -149,9 +150,9 @@ test('gates: team-model-2, local workspaces, known ws; a malformed document is E
 
 test('renderer proxy: both routes take the guarded generic path with ws pinned to the connected server\'s workspaces', () => {
   for (const path of ['/api/workspace-teams', '/api/workspace-soul-teams']) {
-    assert.equal(classifyApiRoute(path, 'http://localhost:4820'), null, 'the generic path: frame guard + pinned ws + 20s deadline');
-    assert.equal(apiUrl(path, 'http://localhost:4820', 'team', new Set(['team'])).searchParams.get('ws'), 'team');
-    assert.equal(apiUrl(`${path}?ws=other`, 'http://localhost:4820', 'team', new Set(['team'])).searchParams.get('ws'), 'team', 'a ws the server does not advertise is re-pinned');
-    assert.throws(() => apiUrl(`//evil${path}`, 'http://localhost:4820', 'team'));
+    assert.equal(classifyApiRoute(path), null, 'the generic path: frame guard + pinned ws + 20s deadline');
+    assert.equal(apiUrl(path, 'team', new Set(['team'])).searchParams.get('ws'), 'team');
+    assert.equal(apiUrl(`${path}?ws=other`, 'team', new Set(['team'])).searchParams.get('ws'), 'team', 'a ws the server does not advertise is re-pinned');
+    assert.throws(() => apiUrl(`//evil${path}`, 'team'));
   }
 });

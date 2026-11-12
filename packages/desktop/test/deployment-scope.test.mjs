@@ -195,23 +195,22 @@ test('served selectors are view ids and deployment ids; a deployment id survives
   const panel = h.views.panelData();
   const served = servedSelectors(panel.workspaces);
   assert.deepEqual([...served].sort(), [V_OATS, V_LAB, L, A, B, R, V].sort());
-  const base = 'http://127.0.0.1:4820';
   for (const id of [A, B, R, V]) {
     for (const path of ['/api/brain/dev', '/api/instance-lifecycle', '/api/workspace-readiness', '/api/instance-git', '/api/instance-events']) {
-      assert.equal(apiUrl(`${path}?ws=${enc(id)}`, base, V_OATS, served).searchParams.get('ws'), id, `${path} ${id}`);
+      assert.equal(apiUrl(`${path}?ws=${enc(id)}`, V_OATS, served).searchParams.get('ws'), id, `${path} ${id}`);
     }
   }
-  assert.equal(apiUrl(`/api/instance-lifecycle?ws=${enc('/elsewhere')}`, base, V_OATS, served).searchParams.get('ws'), V_OATS, 'an unlisted id is rewritten');
+  assert.equal(apiUrl(`/api/instance-lifecycle?ws=${enc('/elsewhere')}`, V_OATS, served).searchParams.get('ws'), V_OATS, 'an unlisted id is rewritten');
   // The view id is in the set, so the proxy keeps it — and the server still refuses it on every instance route.
-  const kept = apiUrl(`/api/instance-lifecycle?ws=${enc(V_OATS)}`, base, B, served);
+  const kept = apiUrl(`/api/instance-lifecycle?ws=${enc(V_OATS)}`, B, served);
   assert.equal(kept.searchParams.get('ws'), V_OATS);
   h.reset();
   await h.request({ url: `${kept.pathname}${kept.search}`, method: 'POST', body: bodies[0][1] });
   assert.deepEqual(h.contexts.map(c => c.workspace), [null]);
   // Through the proxy, a view id addressed by path to the agent's brain is kept as it is on the body-addressed families.
-  assert.equal(apiUrl(`/api/brain/dev?ws=${enc(V_OATS)}`, base, B, served).searchParams.get('ws'), V_OATS);
+  assert.equal(apiUrl(`/api/brain/dev?ws=${enc(V_OATS)}`, B, served).searchParams.get('ws'), V_OATS);
   // A path-addressed instance route: the server refuses the view id at instance resolution and runs nothing.
-  const start = apiUrl(`/api/start/dev-b?ws=${enc(V_OATS)}&home=${enc(HOME.B)}`, base, B, served);
+  const start = apiUrl(`/api/start/dev-b?ws=${enc(V_OATS)}&home=${enc(HOME.B)}`, B, served);
   assert.equal(start.searchParams.get('ws'), V_OATS);
   const refused = await h.request({ url: `${start.pathname}${start.search}`, method: 'POST', body: {} });
   assert.equal(refused.status, 404);

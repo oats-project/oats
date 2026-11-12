@@ -191,7 +191,7 @@ The teams configuration is one deployment's: a view id is read as the view's pri
 two or more deployments the configuration says which under its heading ("On This Mac ·
 ~/acme"). A remote primary is `unsupported-remote-operation`: teams are edited on the
 computer that runs the deployment.
-They sit behind the server-wide Host and Origin guards (loopback only; a foreign, `null` or
+They sit behind the server-wide credential check and Host and Origin guards (loopback only; a foreign, `null` or
 malformed `Origin` is 403 before any process), so a cross-origin page cannot rewrite the file.
 The renderer reaches them through the generic guarded proxy (sender-frame guard, `ws` pinned to
 the connected server's view and deployment ids, 20 s deadline; the verbs run with a 15 s timeout).
@@ -250,7 +250,7 @@ The shape is the lead's (0.30 D2 review):
   never another workspace's groups. Any view is answered, a view with no local deployment
   included.
 - **Held observations only.** It runs no command and adds no ssh: remote groups are read as the
-  remote roster loop's one `oats server roster` read left them. The server-wide Host guard applies,
+  remote roster loop's one `oats server roster` read left them. The server-wide credential check and Host guard apply,
   and the proxy pins `ws` to an advertised view or deployment id.
 - A missing or repeated `ws` is `E_BAD_ARGS`; one that names no view is `E_WORKSPACE_UNKNOWN`.
 

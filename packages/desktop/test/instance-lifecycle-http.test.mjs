@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { withWindowGlobals } from './helpers/main-window-globals.mjs';
-import { apiUrl, apiInit, classifyApiRoute } from '../api-url.mjs';
+import { apiUrl, apiInit, classifyApiRoute, requestPath } from '../api-url.mjs';
 import { forgeProxyOptions, trustedForgeFrame, FORGE_EPOCH_HEADER } from '../forge-proxy.mjs';
 import { forgeFailure } from '../renderer/forge-contract.mjs';
 import { lifecycleFailure } from '../../client/lifecycle-contract.mjs';
@@ -14,6 +14,7 @@ import { DESKTOP_TERMS } from '../renderer/desktop-terms.mjs';
 import { createLifecycleBoundary } from '../../client/instance-lifecycle.mjs';
 import { context, request, stopPlan, retirePlan, stopReceipt, retireReceipt, envelope } from './helpers/lifecycle-fixture.mjs';
 import { deploymentDoubles } from './helpers/deployment-doubles.mjs';
+import { handlerAuth, authorized } from './helpers/handler-auth.mjs';
 function http({ remote = false, missing = false, routed = false, entries = ['lifecycle-plans'], apply = null } = {}) {
   const source = readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8');
   const start = source.indexOf('const send = (res, code, body, type'), end = source.indexOf('\nserver.on("error",');
@@ -31,11 +32,11 @@ function http({ remote = false, missing = false, routed = false, entries = ['lif
   const deps = { createServer: fn => fn, lifecycleRequest: service, cliState: ctx.cli, ...deploymentDoubles(() => [ctx.workspace]), ctxs: ['/Users/me/work'],
     snapshot: { byWs: new Map([['team', { instances: ctx.instances }]]) }, observeMutation() { refreshed.local++; },
     remoteLoop: { request() { refreshed.remote++; } },
-    resolveInstanceOr: assert.fail, panelData: assert.fail, snapshotPanel: assert.fail, collectNow: assert.fail };
+    resolveInstanceOr: assert.fail, panelData: assert.fail, snapshotPanel: assert.fail, collectNow: assert.fail, ...handlerAuth };
   const handler = new Function(...Object.keys(deps), `${source.slice(start, end)}\nreturn server;`)(...Object.values(deps));
   return { calls, refreshed, async request({ url = '/api/instance-lifecycle?ws=team', method = 'POST', body = JSON.stringify(request()),
     headers = { host: '127.0.0.1:4820', origin: 'http://localhost:4820' } } = {}) {
-    const req = new EventEmitter(); Object.assign(req, { url, method, headers }); let result;
+    const req = new EventEmitter(); Object.assign(req, { url, method, headers: authorized(headers) }); let result;
     const res = { writeHead(status, headers) { result = { status, headers }; }, end(text) { result.body = JSON.parse(text); } };
     const done = handler(req, res); req.emit('data', Buffer.from(body)); req.emit('end'); await done; return result;
   } };
@@ -46,11 +47,11 @@ test('shipped IPC bounds plan/apply separately and classifies lost mutation tran
   for (const phase of ['plan', 'apply']) for (const fail of [false, true]) {
     let handler, seen;
     const renderer = 'file:///fixture/index.html', frame = { url: renderer }, owner = { mainFrame: frame, isDestroyed: () => false };
-    const c = { ipcMain: { handle: (_name, fn) => { handler = fn; } }, apiUrl, apiInit, classifyApiRoute, forgeProxyOptions,
+    const c = { ipcMain: { handle: (_name, fn) => { handler = fn; } }, apiUrl, apiInit, classifyApiRoute, requestPath, forgeProxyOptions,
       trustedForgeFrame, FORGE_EPOCH_HEADER, forgeFailure, lifecycleFailure, lifecycleFrameRefusal, DESKTOP_TERMS, RENDERER_URL: renderer, serverEpoch: 0,
-      currentForgeEpoch: () => 'main:0', unservedRefusal: () => null, serverHost: { inTransition: () => false }, base: () => 'http://127.0.0.1:4820',
+      currentForgeEpoch: () => 'main:0', unservedRefusal: () => null, serverHost: { inTransition: () => false, held: () => () => true },
       wsId: 'team', allowedWs: new Set(['team']), guard: () => {}, AbortSignal: { timeout: ms => ({ ms }) },
-      fetch: async (url, opts) => { seen = { url, opts }; if (fail) throw new Error('PRIVATE transport'); return { ok: true, status: 200, text: async () => '{"lifecycleApi":1}' }; } };
+      backendFetch: async (url, opts) => { seen = { url, opts }; if (fail) throw new Error('PRIVATE transport'); return { ok: true, status: 200, text: async () => '{"lifecycleApi":1}' }; } };
     runInNewContext(source.slice(start, end), withWindowGlobals(c));
     const response = await handler({ sender: owner, senderFrame: frame }, '/api/instance-lifecycle?ws=team', { method: 'POST', body: JSON.stringify({ action: phase }) });
     assert.equal(seen.opts.signal.ms, phase === 'apply' ? 610000 : 50000);
@@ -134,11 +135,11 @@ test('remote lifecycle over HTTP: a row of another group of the same server is n
   const deps = { createServer: fn => fn, lifecycleRequest: createLifecycleBoundary({ terms: DESKTOP_TERMS, invoke: async (...args) => { calls.push(args); return envelope(stopPlan()); } }),
     cliState: { ...ctx.cli, remote: ['lifecycle-plans'] }, ...deploymentDoubles(() => [groupA, groupB]), ctxs: ['/Users/me/work'],
     snapshot: { byWs: new Map([[groupA.id, { instances: [] }], [groupB.id, { instances: [row] }]]) }, observeMutation: assert.fail, remoteLoop: { request: assert.fail },
-    resolveInstanceOr: assert.fail, panelData: assert.fail, snapshotPanel: assert.fail, collectNow: assert.fail };
+    resolveInstanceOr: assert.fail, panelData: assert.fail, snapshotPanel: assert.fail, collectNow: assert.fail, ...handlerAuth };
   const handler = new Function(...Object.keys(deps), `${source.slice(start, end)}\nreturn server;`)(...Object.values(deps));
   const ask = async ws => {
     const req = new EventEmitter(); let result;
-    Object.assign(req, { url: `/api/instance-lifecycle?ws=${encodeURIComponent(ws)}`, method: 'POST', headers: { host: '127.0.0.1:4820', origin: 'http://localhost:4820' } });
+    Object.assign(req, { url: `/api/instance-lifecycle?ws=${encodeURIComponent(ws)}`, method: 'POST', headers: authorized({ host: '127.0.0.1:4820', origin: 'http://localhost:4820' }) });
     const res = { writeHead(status) { result = { status }; }, end(text) { result.body = JSON.parse(text); } };
     const done = handler(req, res); req.emit('data', Buffer.from(JSON.stringify({ ...request(), selector: { ...request().selector, server: 'build' } }))); req.emit('end'); await done; return result;
   };

@@ -7,7 +7,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { apiUrl, workspaceScoped, windowRefusal } from '../api-url.mjs';
 
-const BASE = 'http://127.0.0.1:4999';
 const VERIFIED = '/d/first';
 const WINDOW = 'ws:0123456789abcdef0123';
 const ADVERTISED = new Set([VERIFIED, WINDOW, '/d/second', 'remote:altair:/srv/agents']);
@@ -25,54 +24,54 @@ test('workspaceScoped names exactly the routes main pins a workspace onto', () =
 
 test('bound window: an implicit ?ws= is the window\'s workspace, never the verified one', () => {
   for (const path of SCOPED) {
-    assert.equal(windowRefusal(path, BASE, WINDOW, ADVERTISED), null, path);
-    assert.equal(apiUrl(path, BASE, WINDOW, ADVERTISED, { bound: true }).searchParams.get('ws'), WINDOW, path);
+    assert.equal(windowRefusal(path, WINDOW, ADVERTISED), null, path);
+    assert.equal(apiUrl(path, WINDOW, ADVERTISED, { bound: true }).searchParams.get('ws'), WINDOW, path);
   }
 });
 
 test('bound window: an advertised explicit ?ws= (a deployment its rows address) passes unchanged', () => {
   for (const path of SCOPED) {
     const asked = `${path}?ws=${encodeURIComponent('/d/second')}`;
-    assert.equal(windowRefusal(asked, BASE, WINDOW, ADVERTISED), null, path);
-    assert.equal(apiUrl(asked, BASE, WINDOW, ADVERTISED, { bound: true }).searchParams.get('ws'), '/d/second', path);
+    assert.equal(windowRefusal(asked, WINDOW, ADVERTISED), null, path);
+    assert.equal(apiUrl(asked, WINDOW, ADVERTISED, { bound: true }).searchParams.get('ws'), '/d/second', path);
   }
 });
 
 test('bound window: an unadvertised workspace is refused on every workspace-scoped route', () => {
   for (const path of SCOPED) {
     // The window's own workspace, implicit, when the server stopped serving it.
-    assert.equal(windowRefusal(path, BASE, '/d/gone', ADVERTISED), '/d/gone', path);
+    assert.equal(windowRefusal(path, '/d/gone', ADVERTISED), '/d/gone', path);
     // An explicit selector the server does not advertise: a path, a view id, a remote, any id.
     for (const id of ['/d/gone', 'ws:ffffffffffffffffffff', 'remote:rigel:/x', 'anything']) {
-      assert.equal(windowRefusal(`${path}?ws=${encodeURIComponent(id)}`, BASE, WINDOW, ADVERTISED), id, `${path} ${id}`);
+      assert.equal(windowRefusal(`${path}?ws=${encodeURIComponent(id)}`, WINDOW, ADVERTISED), id, `${path} ${id}`);
     }
     // A duplicate selector naming one unadvertised id is refused too.
-    assert.equal(windowRefusal(`${path}?ws=${encodeURIComponent(VERIFIED)}&ws=%2Fd%2Fgone`, BASE, WINDOW, ADVERTISED), '/d/gone', path);
+    assert.equal(windowRefusal(`${path}?ws=${encodeURIComponent(VERIFIED)}&ws=%2Fd%2Fgone`, WINDOW, ADVERTISED), '/d/gone', path);
   }
 });
 
 test('bound window: routes outside the workspace scope are never refused by workspace', () => {
-  for (const path of UNSCOPED) assert.equal(windowRefusal(`${path}?ws=%2Fd%2Fgone`, BASE, '/d/gone', ADVERTISED), null, path);
+  for (const path of UNSCOPED) assert.equal(windowRefusal(`${path}?ws=%2Fd%2Fgone`, '/d/gone', ADVERTISED), null, path);
 });
 
 test('bound window: with no advertised set known, the request passes unrewritten', () => {
   for (const advertised of [new Set(), undefined, null]) {
-    assert.equal(windowRefusal('/api/panel?ws=%2Fd%2Fgone', BASE, WINDOW, advertised), null);
-    assert.equal(apiUrl('/api/panel?ws=%2Fd%2Fgone', BASE, WINDOW, advertised, { bound: true }).searchParams.get('ws'), '/d/gone');
-    assert.equal(apiUrl('/api/panel', BASE, WINDOW, advertised, { bound: true }).searchParams.get('ws'), WINDOW);
+    assert.equal(windowRefusal('/api/panel?ws=%2Fd%2Fgone', WINDOW, advertised), null);
+    assert.equal(apiUrl('/api/panel?ws=%2Fd%2Fgone', WINDOW, advertised, { bound: true }).searchParams.get('ws'), '/d/gone');
+    assert.equal(apiUrl('/api/panel', WINDOW, advertised, { bound: true }).searchParams.get('ws'), WINDOW);
   }
 });
 
 test('unbound window: today\'s rewrite to the verified workspace is kept', () => {
-  assert.equal(windowRefusal('/api/panel?ws=%2Fd%2Fgone', BASE, null, ADVERTISED), null, 'an unbound window is not refused here');
-  assert.equal(apiUrl('/api/panel?ws=%2Fd%2Fgone', BASE, VERIFIED, ADVERTISED).searchParams.get('ws'), VERIFIED);
-  assert.equal(apiUrl('/api/panel', BASE, VERIFIED, ADVERTISED).searchParams.get('ws'), VERIFIED);
+  assert.equal(windowRefusal('/api/panel?ws=%2Fd%2Fgone', null, ADVERTISED), null, 'an unbound window is not refused here');
+  assert.equal(apiUrl('/api/panel?ws=%2Fd%2Fgone', VERIFIED, ADVERTISED).searchParams.get('ws'), VERIFIED);
+  assert.equal(apiUrl('/api/panel', VERIFIED, ADVERTISED).searchParams.get('ws'), VERIFIED);
 });
 
 test('bound window: off-origin and malformed paths are still refused by apiUrl', () => {
-  assert.throws(() => apiUrl('//attacker/x', BASE, WINDOW, ADVERTISED, { bound: true }), /off-origin/);
-  assert.throws(() => apiUrl('api/panel', BASE, WINDOW, ADVERTISED, { bound: true }), /must start with/);
-  assert.equal(windowRefusal('//attacker/api/panel', BASE, '/d/gone', ADVERTISED), null, 'left to apiUrl, which throws');
+  assert.throws(() => apiUrl('//attacker/x', WINDOW, ADVERTISED, { bound: true }), /off-origin/);
+  assert.throws(() => apiUrl('api/panel', WINDOW, ADVERTISED, { bound: true }), /must start with/);
+  assert.equal(windowRefusal('//attacker/api/panel', '/d/gone', ADVERTISED), null, 'left to apiUrl, which throws');
 });
 
 test('every specialized proxy pins a bound window\'s workspace and never rewrites its explicit selector', async () => {
@@ -98,8 +97,8 @@ test('every specialized proxy pins a bound window\'s workspace and never rewrite
       [`?ws=${encodeURIComponent('/d/later')}`, '/d/later', new Set()]]) {
       const fetched = [];
       await proxy(event, `${path}${asked}`, opts, { rendererURL: renderer,
-        connection: () => ({ base: BASE, wsId: WINDOW, allowedWs, bound: true, epoch: 1, transition: false }),
-        fetch: async (url) => { fetched.push(new URL(url).searchParams.getAll('ws')); return { ok: false, status: 500, text: async () => '{}' }; } });
+        connection: () => ({ wsId: WINDOW, allowedWs, bound: true, epoch: 1, transition: false }),
+        fetch: async (path) => { assert.ok(typeof path === 'string' && path.startsWith('/api/'), `a proxy fetches a path: ${path}`); fetched.push(new URL(path, 'http://oats-backend.invalid').searchParams.getAll('ws')); return { ok: false, status: 500, text: async () => '{}' }; } });
       assert.deepEqual(fetched, [[expected]], `${path}${asked}`);
     }
   }
@@ -111,7 +110,7 @@ import { classifyApiRoute } from '../api-url.mjs';
 import { NOT_SERVED_CODE } from '../renderer/deployment-header.mjs';
 
 const shippedApi = ({ window, advertised = ADVERTISED, reread = null, served = [], chooser = false, holds }) =>
-  shippedMainApi({ window, chooser, base: BASE, wsId: VERIFIED, advertised, reread, served, ...(holds ? { holds } : {}) });
+  shippedMainApi({ window, chooser, wsId: VERIFIED, advertised, reread, served, ...(holds ? { holds } : {}) });
 
 test('shipped api: a bound window\'s read for an unserved workspace is 404 E_WORKSPACE_NOT_SERVED on every route, never fetched', async () => {
   for (const path of SCOPED) {
@@ -127,7 +126,7 @@ test('shipped api: a bound window\'s read for an unserved workspace is 404 E_WOR
 test('shipped api: a bound window\'s implicit read is its own workspace; an unbound window\'s is the verified one', async () => {
   // The four specialized proxies pin through their connection (tested above); here, every other route.
   const proxied = ['readiness', 'spawn-preview', 'instance-events', 'spawn-apply'];
-  for (const path of SCOPED.filter((p) => !proxied.includes(classifyApiRoute(p, BASE)))) {
+  for (const path of SCOPED.filter((p) => !proxied.includes(classifyApiRoute(p)))) {
     const bound = shippedApi({ window: WINDOW });
     await bound.call(path);
     assert.deepEqual(bound.fetched.map((u) => u.searchParams.get('ws')), [WINDOW], path);

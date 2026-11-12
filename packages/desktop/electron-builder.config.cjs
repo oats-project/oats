@@ -37,6 +37,8 @@ module.exports = {
     "spawn-apply-proxy.mjs",
     "server-compat.mjs",
     "server-host.mjs",
+    "backend-client.mjs",
+    "backend-socket.mjs",
     "tmux-target.mjs",
     "local-tmux-io.mjs",
     "remote-target.mjs",

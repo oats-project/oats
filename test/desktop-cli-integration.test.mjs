@@ -10,9 +10,9 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { closeGroup, startGroup } from "./helpers/process-group.mjs";
+import { privateSocketDir, startBackend } from "../packages/desktop/test/helpers/backend-server.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SRV = join(ROOT, "packages", "desktop", "server", "oats-web.mjs");
 
 /** A fake `oats` that speaks Desktop CLI API v1 exactly. It logs its argv/cwd
  * so assertions can verify the adapter's invocation shape. */
@@ -103,30 +103,17 @@ exec ${JSON.stringify(process.execPath)} ${JSON.stringify(js)} "$@"
   return { bin, real: realpathSync(bin), calls: () => readFileSync(log, "utf8").trim().split("\n").map((l) => JSON.parse(l)) };
 }
 
-/** A port the OS just handed us (bind :0, read, release). Under a concurrent
- *  test run a random port can already belong to ANOTHER test's server; with the
- *  child's stdio ignored its EADDRINUSE exit was silent and the poll below
- *  happily talked to a stranger — the "incompatible CLI" case then read the
- *  wrong server's healthy answer. */
-async function freePort() {
-  const { createServer } = await import("node:net");
-  return new Promise((resolve, reject) => {
-    const s = createServer(); s.unref();
-    s.on("error", reject);
-    s.listen(0, "127.0.0.1", () => { const { port } = s.address(); s.close(() => resolve(port)); });
-  });
-}
 /** Wait until the kernel observation of the deployment has landed. */
-async function observed(port) {
+async function observed(srv) {
   for (let i = 0; i < 100; i++) {
-    const pd = await (await fetch(`http://127.0.0.1:${port}/api/panel`)).json();
+    const pd = await (await srv.request("/api/panel")).json();
     if (pd.deployment?.status === "observed") return pd;
     await new Promise((r) => setTimeout(r, 100));
   }
   assert.fail("the deployment was never observed");
 }
-/** The servers the test that runs has started. */
-const servers = [];
+/** The servers the test that runs has started, and their socket directories. */
+const servers = [], sockets = [];
 /** A new temporary directory of the test, removed when the test has ended. Its servers are closed
  *  first, and the removal waits until everything they started has ended (closeGroup): a server
  *  that is killed leaves the fake CLI it had just started to finish by itself, and that one writes
@@ -135,34 +122,27 @@ function tempDir(t, prefix) {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   t.after(async () => {
     for (const proc of servers.splice(0)) await closeGroup(proc);
+    for (const socket of sockets.splice(0)) socket.remove();
     rmSync(dir, { recursive: true, force: true });
   });
   return dir;
 }
-async function startServer(env) {
-  const port = await freePort();
-  const proc = startGroup(process.execPath, [SRV, "start", "--port", String(port), "--dir", ROOT],
-    { stdio: ["ignore", "ignore", "pipe"], env: { ...process.env, ...env } });
-  servers.push(proc);
-  let stderr = ""; proc.stderr.on("data", (d) => { stderr += d; });
-  let exited = null; proc.on("exit", (code, sig) => { exited = { code, sig }; });
-  const deadline = Date.now() + 15000; // come-up under a loaded concurrent run, not a fixed 4 s
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 100));
-    if (exited) throw new Error(`server exited before coming up (${exited.code ?? exited.sig}): ${stderr.trim().slice(0, 300)}`);
-    try { await fetch(`http://127.0.0.1:${port}/api/panel`); return { proc, port }; } catch { /* retry */ }
-  }
-  proc.kill();
-  throw new Error(`server did not come up on ${port}: ${stderr.trim().slice(0, 300)}`);
+/** Start the real backend (a private socket, a fresh credential on fd 3: helpers/backend-server.mjs) serving
+ *  `dirs`, as the leader of a process group of its own; `srv.request(path, init)` is an authorized request. */
+async function startServer(env, dirs = [ROOT]) {
+  const socket = privateSocketDir(); sockets.push(socket);
+  const srv = await startBackend({ dirs, socket, env: { ...process.env, ...env }, timeout: 15000,
+    spawn: (command, argv, options) => { const proc = startGroup(command, argv, options); servers.push(proc); return proc; } });
+  return { proc: srv.child, srv };
 }
 
 test("desktop server: /api/cli reports discovery status; compatible fake CLI accepted via OATS_DESKTOP_OATS_BIN", async (t) => {
   const dir = tempDir(t, "oats-clifake-");
   const { bin, real } = fakeCli(dir);
-  const { proc, port } = await startServer({ OATS_DESKTOP_OATS_BIN: bin, PATH: "/nonexistent", SHELL: "/bin/false" });
+  const { proc, srv } = await startServer({ OATS_DESKTOP_OATS_BIN: bin, PATH: "/nonexistent", SHELL: "/bin/false" });
   try {
     // startup probe may still be running — reprobe deterministically
-    const s = await (await fetch(`http://127.0.0.1:${port}/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json();
+    const s = await (await srv.request(`/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json();
     assert.equal(s.ok, true, JSON.stringify(s));
     assert.equal(s.version, "0.26.0");
     assert.equal(s.source, "env");
@@ -178,7 +158,7 @@ test("desktop server: /api/cli reports discovery status; compatible fake CLI acc
     const { acceptProbe } = await import("../packages/client/cli-locator.mjs");
     assert.deepEqual(acceptProbe({ schemaVersion: 1, name: "@awebai/oats", version: desktopVersion, desktopApi: 1 }, desktopVersion), { ok: true },
       `the served install command pins ${desktopVersion}, which this Desktop would reject`);
-    const g = await (await fetch(`http://127.0.0.1:${port}/api/cli`)).json();
+    const g = await (await srv.request(`/api/cli`)).json();
     assert.equal(g.ok, true);
     assert.equal(g.bin, real);
   } finally { proc.kill(); }
@@ -187,9 +167,9 @@ test("desktop server: /api/cli reports discovery status; compatible fake CLI acc
 test("desktop server: incompatible CLI → status carries per-candidate diagnostics; no roster and no spawn target", async (t) => {
   const dir = tempDir(t, "oats-cliold-");
   const { bin, real, calls } = fakeCli(dir, { version: "0.21.6" });
-  const { proc, port } = await startServer({ OATS_DESKTOP_OATS_BIN: bin, PATH: "/nonexistent", SHELL: "/bin/false" });
+  const { proc, srv } = await startServer({ OATS_DESKTOP_OATS_BIN: bin, PATH: "/nonexistent", SHELL: "/bin/false" });
   try {
-    const s = await (await fetch(`http://127.0.0.1:${port}/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json();
+    const s = await (await srv.request(`/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json();
     assert.equal(s.ok, false);
     const envTried = s.tried.find((t) => t.path === real);
     assert.ok(envTried, "the rejected candidate is in diagnostics");
@@ -198,12 +178,12 @@ test("desktop server: incompatible CLI → status carries per-candidate diagnost
     // Workspace model v2: the deployment IS the kernel's JSON, so without a
     // compatible CLI there is no roster — never a filesystem fallback reader.
     let pd;
-    for (let i = 0; i < 50; i++) { pd = await (await fetch(`http://127.0.0.1:${port}/api/panel`)).json(); if (pd.deployment.status !== "pending") break; await new Promise((r) => setTimeout(r, 100)); }
+    for (let i = 0; i < 50; i++) { pd = await (await srv.request(`/api/panel`)).json(); if (pd.deployment.status !== "pending") break; await new Promise((r) => setTimeout(r, 100)); }
     assert.equal(pd.deployment.status, "unavailable"); assert.equal(pd.deployment.reason.code, "E_CLI_UNAVAILABLE");
     assert.deepEqual(pd.instances, []);
-    const ad = await (await fetch(`http://127.0.0.1:${port}/api/agents`)).json();
+    const ad = await (await srv.request(`/api/agents`)).json();
     assert.deepEqual(ad.agents, [], "no souls without the kernel's observation");
-    const r = await fetch(`http://127.0.0.1:${port}/api/spawn`, { method: "POST",
+    const r = await srv.request(`/api/spawn`, { method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ agent: "release-manager", agentsRoot: join(ROOT, "agents") }) });
     assert.equal(r.status, 409, "an unobserved root is never a spawn target");
@@ -226,7 +206,7 @@ test("desktop server: 0.26.0 through the Desktop's own minor are ACCEPTED as bef
     const compatible = fakeCli(okDir, { version });
     const a = await startServer({ OATS_DESKTOP_OATS_BIN: compatible.bin, PATH: "/nonexistent", SHELL: "/bin/false" });
     try {
-      const s = await (await fetch(`http://127.0.0.1:${a.port}/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json();
+      const s = await (await a.srv.request(`/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json();
       assert.equal(s.ok, true, `${version} rejected by discovery: ${JSON.stringify(s.tried)}`);
       assert.equal(s.version, version);
       assert.equal(s.bin, compatible.real);
@@ -240,7 +220,7 @@ test("desktop server: 0.26.0 through the Desktop's own minor are ACCEPTED as bef
   const outside = fakeCli(badDir, { version: "0.25.9" });
   const b = await startServer({ OATS_DESKTOP_OATS_BIN: outside.bin, PATH: "/nonexistent", SHELL: "/bin/false" });
   try {
-    const s = await (await fetch(`http://127.0.0.1:${b.port}/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json();
+    const s = await (await b.srv.request(`/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json();
     assert.equal(s.ok, false, "0.25.9 is below the floor and must not become the mutation binary");
     const tried = s.tried.find((t) => t.path === outside.real);
     assert.ok(tried, "the rejected candidate is in diagnostics");
@@ -254,9 +234,9 @@ test("desktop server: a CLI that prints a valid probe but exits nonzero (or hang
   // exercises the PRODUCTION probeBin callback: err && stdout must reject.
   const dir1 = tempDir(t, "oats-cliliar-");
   const liar = fakeCli(dir1, { probeExit: 1 });     // valid probe on stdout, exit 1
-  const { proc, port } = await startServer({ OATS_DESKTOP_OATS_BIN: liar.bin, PATH: "/nonexistent", SHELL: "/bin/false" });
+  const { proc, srv } = await startServer({ OATS_DESKTOP_OATS_BIN: liar.bin, PATH: "/nonexistent", SHELL: "/bin/false" });
   try {
-    const s = await (await fetch(`http://127.0.0.1:${port}/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json();
+    const s = await (await srv.request(`/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json();
     assert.equal(s.ok, false, `nonzero-exit liar accepted: ${JSON.stringify(s)}`);
     const tried = s.tried.find((t) => t.path === liar.real);
     assert.ok(tried, "liar recorded in diagnostics");
@@ -283,7 +263,7 @@ test("desktop server: a CLI that prints a valid probe but exits nonzero (or hang
   const r2 = await startServer({ OATS_DESKTOP_OATS_BIN: hanger.bin, PATH: "/nonexistent", SHELL: "/bin/false" });
   try {
     const t0 = Date.now();
-    const s2 = await (await fetch(`http://127.0.0.1:${r2.port}/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json();
+    const s2 = await (await r2.srv.request(`/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json();
     const elapsed = Date.now() - t0;
     assert.equal(s2.ok, false, `hanging liar accepted: ${JSON.stringify(s2)}`);
     const tried2 = s2.tried.find((t) => t.path === hanger.real);
@@ -296,16 +276,16 @@ test("desktop server: a CLI that prints a valid probe but exits nonzero (or hang
 test("desktop server: an unguarded local spawn is refused before the CLI; a provider's harvest addresses the exact instance home", async (t) => {
   const dir = tempDir(t, "oats-climut-");
   const { bin, calls } = fakeCli(dir, { features: ["operations"], operationsApi: 2 });
-  const { proc, port } = await startServer({ OATS_DESKTOP_OATS_BIN: bin, PATH: "/nonexistent", SHELL: "/bin/false" });
+  const { proc, srv } = await startServer({ OATS_DESKTOP_OATS_BIN: bin, PATH: "/nonexistent", SHELL: "/bin/false" });
   try {
-    await fetch(`http://127.0.0.1:${port}/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-    await observed(port);
+    await srv.request(`/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    await observed(srv);
     // ---- spawn: every local spawn is the confirmed prepare → apply transaction
     // (/api/spawn?ws=…); the ordinary body is execution-server only. The old
     // unguarded local route this test drove (argv --dir/--task-file) was
     // deleted with the v2 spawn dialog (§3b: deleted, not ported — the
     // confirmed apply's argv is covered by packages/desktop/test/spawn-apply-cli).
-    const r = await fetch(`http://127.0.0.1:${port}/api/spawn`, { method: "POST",
+    const r = await srv.request(`/api/spawn`, { method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ agent: "dev", agentsRoot: "/any/agents", task: "secret task text", purpose: "t1" }) });
     assert.equal(r.status, 409);
@@ -314,10 +294,10 @@ test("desktop server: an unguarded local spawn is refused before the CLI; a prov
     // ---- harvest is a provider operation run through the generic capabilities route (#818): pick a
     // real instance from the panel; the bridge names its home explicitly and lets the CLI derive its
     // recorded context
-    const pd = await (await fetch(`http://127.0.0.1:${port}/api/panel`)).json();
+    const pd = await (await srv.request(`/api/panel`)).json();
     const inst = pd.instances.find((i) => i.home);
     assert.ok(inst, "the fixture roster has an instance with a home");
-    const run = (home) => fetch(`http://127.0.0.1:${port}/api/capabilities?ws=${encodeURIComponent(pd.workspace.id)}`, { method: "POST",
+    const run = (home) => srv.request(`/api/capabilities?ws=${encodeURIComponent(pd.workspace.id)}`, { method: "POST",
       headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "run", selector: { home }, operation: "knowledge:harvest" }) });
     const hr = await run(inst.home);
     assert.equal(hr.status, 200, JSON.stringify(await hr.clone().json()));
@@ -347,24 +327,21 @@ test("desktop server: a kernel-reported home outside the soul's instances direct
   hostile.agents[0].instances[0].home = steerTarget;
   const cliDir = tempDir(t, "oats-clihostile-");
   const { bin, calls } = fakeCli(cliDir, { features: ["operations"], operationsApi: 2, status: hostile });
-  const port = await freePort();
-  const proc = startGroup(process.execPath, [SRV, "start", "--port", String(port), "--dir", scope],
-    { stdio: "ignore", env: { ...process.env, OATS_DESKTOP_OATS_BIN: bin, PATH: "/nonexistent", SHELL: "/bin/false" } });
-  servers.push(proc);
+  const { proc, srv } = await startServer({ OATS_DESKTOP_OATS_BIN: bin, PATH: "/nonexistent", SHELL: "/bin/false" }, [scope]);
   try {
     let pd;
     for (let i = 0; i < 100; i++) {
       await new Promise((r) => setTimeout(r, 100));
-      try { pd = await (await fetch(`http://127.0.0.1:${port}/api/panel`)).json(); } catch { continue; }
+      try { pd = await (await srv.request(`/api/panel`)).json(); } catch { continue; }
       if (pd.deployment?.status === "observed") break;
     }
     assert.equal(pd?.deployment?.status, "observed", JSON.stringify(pd?.deployment));
     const name = fixture.agents[0].instances[0].instance;
     assert.equal(pd.instances.some((i) => i.home === steerTarget), false, "the steered home is never published");
     assert.deepEqual(pd.deployment.withheld, [{ agent: fixture.agents[0].name, instance: name, reason: "home-outside-soul" }]);
-    const hr = await fetch(`http://127.0.0.1:${port}/api/start/${name}?ws=${encodeURIComponent(pd.workspace.id)}`, { method: "POST" });
+    const hr = await srv.request(`/api/start/${name}?ws=${encodeURIComponent(pd.workspace.id)}`, { method: "POST" });
     assert.equal(hr.status, 404, "a withheld row is not addressable");
-    const run = await fetch(`http://127.0.0.1:${port}/api/capabilities?ws=${encodeURIComponent(pd.workspace.id)}`, { method: "POST",
+    const run = await srv.request(`/api/capabilities?ws=${encodeURIComponent(pd.workspace.id)}`, { method: "POST",
       headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "run", selector: { home: steerTarget }, operation: "knowledge:harvest" }) });
     assert.equal(run.status, 409, "nor is its steered home");
     assert.equal((await run.json()).code, "E_BAD_ARGS");
@@ -379,13 +356,13 @@ test("desktop server HTTP boundary: long E_RELATIVE_AMBIGUOUS envelope reaches t
   // exercised through an execution-server spawn.
   const dir = tempDir(t, "oats-cliambig-");
   const { bin } = fakeCli(dir, { remote: ["spawn"] });
-  const { proc, port } = await startServer({ OATS_DESKTOP_OATS_BIN: bin, PATH: "/nonexistent", SHELL: "/bin/false" });
+  const { proc, srv } = await startServer({ OATS_DESKTOP_OATS_BIN: bin, PATH: "/nonexistent", SHELL: "/bin/false" });
   try {
-    await fetch(`http://127.0.0.1:${port}/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-    await observed(port);
-    const pd = await (await fetch(`http://127.0.0.1:${port}/api/panel`)).json();
+    await srv.request(`/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    await observed(srv);
+    const pd = await (await srv.request(`/api/panel`)).json();
     const agentsRoot = pd.instances[0].agentsRoot;
-    const post = (purpose) => fetch(`http://127.0.0.1:${port}/api/spawn`, { method: "POST",
+    const post = (purpose) => srv.request(`/api/spawn`, { method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ agent: "dev", agentsRoot, purpose, serverId: "host" }) });
     // case-(d) ambiguity: the fake CLI's envelope carries two deeply nested
@@ -413,10 +390,10 @@ test("desktop server: remote capability survives discovery and HTTP projection i
   const { prepareRemoteTerm } = await import("../packages/client/session-attach.mjs");
   const dir = tempDir(t, "oats-cliremote-");
   const fake = fakeCli(dir, { remote: ["spawn", "retire", "status", "session"] });
-  const { proc, port } = await startServer({ OATS_DESKTOP_OATS_BIN: fake.bin, PATH: "/nonexistent", SHELL: "/bin/false" });
+  const { proc, srv } = await startServer({ OATS_DESKTOP_OATS_BIN: fake.bin, PATH: "/nonexistent", SHELL: "/bin/false" });
   try {
-    await fetch(`http://127.0.0.1:${port}/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-    const cli = await (await fetch(`http://127.0.0.1:${port}/api/cli`)).json();
+    await srv.request(`/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const cli = await (await srv.request(`/api/cli`)).json();
     // A remote terminal is addressed by server and home, never a bare name.
     const home = "/srv/agents/dev/instances/dev-task";
     const prepared = await prepareRemoteTerm(cli, { serverId: "test", instance: "dev-task", home });
@@ -438,34 +415,33 @@ test("desktop server: remote roster, souls and a provider's harvest stay on the 
     ],
   }];
   const fake = fakeCli(dir, { remote: ["spawn", "retire", "session", "roster", "operations"], features: ["retire-home", "operations"], operationsApi: 2, groups });
-  const { proc, port } = await startServer({ OATS_DESKTOP_OATS_BIN: fake.bin, PATH: "/nonexistent", SHELL: "/bin/false" });
-  const base = `http://127.0.0.1:${port}`;
+  const { proc, srv } = await startServer({ OATS_DESKTOP_OATS_BIN: fake.bin, PATH: "/nonexistent", SHELL: "/bin/false" });
   try {
-    await fetch(`${base}/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    await srv.request(`/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     let panel;
     for (let n = 0; n < 30; n++) {
-      panel = await (await fetch(`${base}/api/panel?ws=remote%3Ahost-abc`)).json();
+      panel = await (await srv.request(`/api/panel?ws=remote%3Ahost-abc`)).json();
       if (panel.workspace?.remote) break;
       await new Promise((r) => setTimeout(r, 50));
     }
     assert.equal(panel.workspace.id, "remote:host-abc");
     assert.equal(panel.instances[0].server, "host");
     assert.ok(panel.workspaces.some((w) => w.remote && w.server === "host"));
-    const agents = await (await fetch(`${base}/api/agents?ws=remote%3Ahost-abc`)).json();
+    const agents = await (await srv.request(`/api/agents?ws=remote%3Ahost-abc`)).json();
     assert.equal(agents.agents[0].agentsRoot, "/remote/project/agents");
     assert.equal(agents.agents[0].server, "host");
     const qualifier = `?ws=remote%3Ahost-abc&home=${encodeURIComponent(home)}&server=host`;
-    const harvested = await fetch(`${base}/api/capabilities?ws=remote%3Ahost-abc`, { method: "POST", headers: { "content-type": "application/json" },
+    const harvested = await srv.request(`/api/capabilities?ws=remote%3Ahost-abc`, { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "run", selector: { home }, operation: "knowledge:harvest" }) });
     assert.equal(harvested.status, 200, JSON.stringify(await harvested.clone().json()));
     const call = fake.calls().find((c) => c.argv[0] === "operation");
     assert.deepEqual(call.argv, ["operation", "run", "knowledge:harvest", "--server", "host", "--home", home, "--json"], "saved --server route and the exact remote --home");
     assert.notEqual(call.cwd, home, "remote home must never become a local process cwd");
-    const retired = await fetch(`${base}/api/retire/dev-one${qualifier}`, { method: "POST" });
+    const retired = await srv.request(`/api/retire/dev-one${qualifier}`, { method: "POST" });
     assert.equal(retired.status, 409);
     assert.equal((await retired.json()).code, 'E_PLAN_REQUIRED');
     assert.equal(fake.calls().some(c => c.argv[0] === 'retire'), false, 'legacy remote retirement cannot bypass plan confirmation');
-    const spawned = await fetch(`${base}/api/spawn`, { method: "POST", headers: { "content-type": "application/json" },
+    const spawned = await srv.request(`/api/spawn`, { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ agent: "dev", agentsRoot: "/remote/project/agents", serverId: "host", harness: "codex" }) });
     assert.equal(spawned.status, 200);
     assert.equal((await spawned.json()).workspaceId, "remote:host-abc");
@@ -473,18 +449,18 @@ test("desktop server: remote roster, souls and a provider's harvest stay on the 
     assert.equal(spawnCall.argv.includes("--dir"), false, "remote scope remains the registry's authority");
     assert.equal(spawnCall.argv[spawnCall.argv.indexOf("codex") - 1], "--runtime", "the local kernel's flag (no feature harness): its --server route translates");
     assert.notEqual(spawnCall.cwd, "/remote/project", "spawn's local process does not enter the remote workspace");
-    const collision = await fetch(`${base}/api/spawn`, { method: "POST", headers: { "content-type": "application/json" },
+    const collision = await srv.request(`/api/spawn`, { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ agent: "dev", agentsRoot: "/remote/project/agents", serverId: "host", purpose: "route-conflict" }) });
     assert.equal(collision.status, 200, "the remote launch succeeded even though its route could not be saved");
     assert.deepEqual((await collision.json()).routeConflict, { instance: "dev-t1", existingHome: "/remote/existing" }, "the real HTTP boundary retains the CLI conflict for renderer feedback");
-    const remoteFiles = await fetch(`${base}/api/brain/dev?ws=remote%3Ahost-abc`);
+    const remoteFiles = await srv.request(`/api/brain/dev?ws=remote%3Ahost-abc`);
     assert.equal(remoteFiles.status, 409, "a remote agent's files are never read from a local lookalike path");
     assert.equal((await remoteFiles.json()).code, "E_REMOTE_FILES");
-    assert.equal((await fetch(`${base}/api/start/dev-one?ws=remote%3Ahost-abc&home=${encodeURIComponent(home)}`, { method: "POST" })).status, 404, "missing server cannot select a remote instance");
+    assert.equal((await srv.request(`/api/start/dev-one?ws=remote%3Ahost-abc&home=${encodeURIComponent(home)}`, { method: "POST" })).status, 404, "missing server cannot select a remote instance");
     const retireCalls = fake.calls().filter((c) => c.argv[0] === "retire").length;
     fakeCli(dir, { remote: ["roster", "retire"], groups }); // downgrade: no exact-home feature
-    await fetch(`${base}/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-    const refused = await fetch(`${base}/api/retire/dev-one${qualifier}`, { method: "POST" });
+    await srv.request(`/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    const refused = await srv.request(`/api/retire/dev-one${qualifier}`, { method: "POST" });
     assert.equal(refused.status, 409);
     assert.equal((await refused.json()).code, 'E_PLAN_REQUIRED');
     assert.equal(fake.calls().filter((c) => c.argv[0] === "retire").length, retireCalls, "old CLI cannot silently ignore --home and retire a twin");
@@ -504,21 +480,20 @@ test("remote homes cannot grant local file access, and unguarded retirement refu
     ],
   }];
   const fake = fakeCli(dir, { remote: ["roster", "retire"], features: ["retire-home"], groups });
-  const { proc, port } = await startServer({ OATS_DESKTOP_OATS_BIN: fake.bin, PATH: "/nonexistent", SHELL: "/bin/false" });
-  const base = `http://127.0.0.1:${port}`;
+  const { proc, srv } = await startServer({ OATS_DESKTOP_OATS_BIN: fake.bin, PATH: "/nonexistent", SHELL: "/bin/false" });
   try {
-    await fetch(`${base}/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    await srv.request(`/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     let panel;
     for (let n = 0; n < 30; n++) {
-      panel = await (await fetch(`${base}/api/panel?ws=remote%3Aguard`)).json();
+      panel = await (await srv.request(`/api/panel?ws=remote%3Aguard`)).json();
       if (panel.workspace?.remote) break;
       await new Promise((r) => setTimeout(r, 50));
     }
     assert.equal(panel.instances.length, 3, "the remote rows were actually admitted to the roster");
-    await observed(port); // the local deployment's kernel-observed roots
-    assert.equal((await fetch(`${base}/api/file?path=${encodeURIComponent(secret)}`)).status, 403);
-    assert.equal((await fetch(`${base}/api/file?path=${encodeURIComponent(join(ROOT, 'souls/oats-engineering-expert/AGENTS.md'))}`)).status, 200, "a local deployment file remains readable");
-    const retired = await fetch(`${base}/api/retire/missing-home?ws=remote%3Aguard&server=host`, { method: "POST" });
+    await observed(srv); // the local deployment's kernel-observed roots
+    assert.equal((await srv.request(`/api/file?path=${encodeURIComponent(secret)}`)).status, 403);
+    assert.equal((await srv.request(`/api/file?path=${encodeURIComponent(join(ROOT, 'souls/oats-engineering-expert/AGENTS.md'))}`)).status, 200, "a local deployment file remains readable");
+    const retired = await srv.request(`/api/retire/missing-home?ws=remote%3Aguard&server=host`, { method: "POST" });
     assert.equal(retired.status, 409);
     assert.equal((await retired.json()).code, 'E_PLAN_REQUIRED');
     assert.equal(fake.calls().filter((c) => c.argv[0] === "retire").length, 0);

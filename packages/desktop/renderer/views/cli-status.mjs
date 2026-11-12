@@ -183,12 +183,13 @@ const triedChanged = (before, after) => !after?.ok && JSON.stringify(before?.tri
 /** Refresh from GET /api/cli (cheap — server-side cached probe state). */
 export function refreshCli(ctx) { return updateCli(ctx, "/api/cli"); }
 
-/** POST /api/cli/reprobe — Retry and Choose-binary trigger. */
-export function reprobeCli(ctx, bin) {
+/** POST /api/cli/reprobe — Retry and Choose-binary trigger. The body names nothing: a chosen
+ * binary reaches the server only through main's own file dialog (the choice file it writes). */
+export function reprobeCli(ctx) {
   return updateCli(ctx, "/api/cli/reprobe", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(bin ? { bin } : {}),
+    body: "{}",
   });
 }
 
@@ -203,16 +204,14 @@ function probeAction(el, ctx, isAlive, still) {
     let request = requestGeneration;
     const owns = () => isAlive() && action === actionGeneration && request === requestGeneration;
     const status = (text) => { const st = el.querySelector(".cli-status"); if (st) st.textContent = text; };
-    let bin;
     if (choose) {
       let picked;
       try { picked = await ctx.chooseCliBinary(); }
       catch { if (owns()) status("Could not choose an oats binary. Try again."); return; }
       if (!owns() || !picked?.path) return;
-      bin = picked.path;
     }
     status(choose ? "Probing chosen binary…" : "Probing…");
-    const pending = reprobeCli(ctx, bin);
+    const pending = reprobeCli(ctx);
     request = requestGeneration;
     await pending;
     // A refresh, another action, reset or dispose revokes this callback's UI

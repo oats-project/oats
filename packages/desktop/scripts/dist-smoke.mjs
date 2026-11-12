@@ -48,7 +48,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createLaunchFixtureSource } from "../test/helpers/launch-fixture.mjs";
 import { createReaper } from "./proc-reaper.mjs";
-import { runAbiProbe, runBackendProbe, runMainImportsProbe, sharedHomeInventory } from "./smoke-probes.mjs";
+import { runAbiProbe, runBackendProbe, runMainImportsProbe, sharedHomeInventory, listeningTcpPorts, childPidMatching, unexpectedTcpListeners } from "./smoke-probes.mjs";
 import { verifyAppSignature } from "./codesign-verify.mjs";
 import { checkLinuxFloor } from "./linux-floor.mjs";
 import { WATCHDOG_MS, PHASE_BUDGET_MS, boundedTail, readDevToolsPort, awaitClose } from "./launch-probe.mjs";
@@ -246,8 +246,7 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
   // DevToolsActivePort file Chromium writes into --user-data-dir — the port
   // is definitionally OUR child's, so no stale/foreign listener can be
   // mistaken for the app (no check-then-use free-port race). The backend
-  // port is app-selected: main.mjs's ensureServer runs its own freePort
-  // from OATS_DESKTOP_PORT, so a random start value cannot collide fatally.
+  // listens on a private socket main makes for it, never on a port.
   // stdio is captured (bounded rolling tail) and drained on 'close' before
   // any crash tail is reported; each startup has one bounded readiness wait.
   // The picker and AppImage use separate profiles; the repeated AppImage launch
@@ -262,7 +261,7 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
     }
     Object.assign(env, { HOME: join(root, "home"), OATS_HOME_DIR: join(root, "oats"),
       TMUX_TMPDIR: join(root, "tmux"), TMPDIR: join(root, "tmp"), XDG_CONFIG_HOME: join(root, "config"), XDG_CACHE_HOME: join(root, "cache"),
-      PATH: `${dirname(process.execPath)}:${process.env.PATH}`, OATS_DESKTOP_PORT: String(10000 + Math.floor(Math.random() * 1500)) });
+      PATH: `${dirname(process.execPath)}:${process.env.PATH}` });
     for (const dir of [userData, env.HOME, env.OATS_HOME_DIR, env.TMUX_TMPDIR, env.TMPDIR]) mkdirSync(dir, { recursive: true });
     const deployment = join(root, "deployment");
     let tmuxServer = null, fixtureRow = null, inputReceipt = null, sourceBefore = null, launchError = null;
@@ -455,6 +454,18 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
         });
         ws.close();
         if (!String(result).startsWith("SHELL_OK")) throw new Error(`renderer did not reach the shell: ${result}`);
+        // No TCP listener but the smoke's own remote-debugging port, in main or in its backend (Linux /proc).
+        if (process.platform === "linux" && !instance) {
+          const backendPid = childPidMatching(child.pid, /server\/oats-web\.mjs start/);
+          if (!backendPid) throw new Error(`the packaged app's backend server process was not found among its children; output tail:\n${await drainTail()}`);
+          const held = { main: listeningTcpPorts(child.pid), backend: listeningTcpPorts(backendPid) };
+          if (held.main === null || held.backend === null) throw new Error("the listening sockets of the app or its backend could not be read from /proc");
+          const extra = unexpectedTcpListeners(held, port);
+          if (extra.main.length || extra.backend.length) {
+            throw new Error(`the packaged app or its backend listens on TCP besides the remote-debugging port ${port}: main ${extra.main.join(", ") || "none"}, backend ${extra.backend.join(", ") || "none"}`);
+          }
+          ok(`the app (pid ${child.pid}) listens on no TCP port but the smoke's remote-debugging port ${port}, and its backend (pid ${backendPid}) on none of its own (${held.backend.length ? "it holds only that inherited listener" : "it holds none"}): it is reached over its private socket`);
+        }
         if (instance) {
           const expected = `oats-desktop: launch --instance smoke-probe: selecting it in ${deployment}`;
           // did-finish-load sends the request; allow its stdout pipe to drain after the shell appears.

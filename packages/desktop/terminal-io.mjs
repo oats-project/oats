@@ -12,13 +12,12 @@ import { cliEnvironment } from '../client/cli-environment.mjs';
 
 const changed = code => Object.assign(new Error('Terminal context changed'), { code });
 const cliKey = cli => JSON.stringify([cli.bin, cli.version, [...(cli.remote || [])].sort(), [...(cli.features || [])].sort()]);
-export async function readTerminalCli(base, { fetch: fetcher = fetch, signal, current }) {
+/** The server's accepted CLI, read through main's backend client (`fetch`: backendFetch, which takes a
+ * path and reaches only main's own server), bounded to 1 MiB. */
+export async function readTerminalCli({ fetch: fetcher, signal, current }) {
   if (!current() || signal?.aborted) throw changed('E_TERM_CONTEXT_CHANGED');
-  const origin = new URL(base);
-  if (origin.protocol !== 'http:' || !['127.0.0.1', '[::1]'].includes(origin.hostname)
-    || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash) throw changed('E_TERM_CONTEXT_CHANGED');
   const timeout = AbortSignal.timeout(5000);
-  const response = await fetcher(`${origin.origin}/api/cli`, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout, redirect: 'error' });
+  const response = await fetcher('/api/cli', { signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
   if (!current() || signal?.aborted || !response.ok || !response.body?.getReader) throw changed('E_TERM_CONTEXT_CHANGED');
   const reader = response.body.getReader(), chunks = []; let bytes = 0;
   try {
@@ -38,10 +37,10 @@ export async function readTerminalCli(base, { fetch: fetcher = fetch, signal, cu
   return cli;
 }
 
-export function createTerminalIo({ base, context, attachmentDirectory, spawnPty, execFileSync, sweep = () => {},
-  fetch: fetcher = fetch, run: runCommand = runTerminalCommand, env = process.env, fs,
+export function createTerminalIo({ context, attachmentDirectory, spawnPty, execFileSync, sweep = () => {},
+  fetch: fetcher, run: runCommand = runTerminalCommand, env = process.env, fs,
 }) {
-  const readCli = control => readTerminalCli(base(), { fetch: fetcher, ...control });
+  const readCli = control => readTerminalCli({ fetch: fetcher, ...control });
   // Every program started here (tmux, `oats session …`) gets the user's environment, computed
   // from `env` when it starts (cli-environment.mjs). Last in the options: it is the one used.
   const run = (binary, args, options) => runCommand(binary, args, { ...options, env: cliEnvironment(env) });

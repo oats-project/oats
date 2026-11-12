@@ -307,7 +307,7 @@ test('postedViews: sorted, and more windows than a post may name read as the swi
 test('main posts the set on every change of the window set and at each served-list update, to /api/windows', () => {
   const main = readFileSync(new URL('../main.mjs', import.meta.url), 'utf8');
   assert.match(main, /createWindowSet\(\{ create: \(key, record\) => createWindow\(key, record\), onChange: \(\) => noteWindowViews\(\) \}\)/);
-  assert.match(main, /fetch\(`\$\{base\(\)\}\/api\/windows`/);
+  assert.match(main, /backendFetch\("\/api\/windows"/);
   const served = main.slice(main.indexOf('function noteServed(list) {'), main.indexOf('\n}', main.indexOf('function noteServed(list) {')));
   assert.match(served, /noteWindowViews\(\);/, 'every served-list update re-posts a set the backend has not taken (a new server, a failed post)');
   assert.match(main, /windowViewsNotifier\.update\(windows\.entries\(\)\.map\(\(\[, key\]\) => key\), serverEpoch\)/);

@@ -51,17 +51,20 @@ test("apiJson accepts both a Fetch Response and shell-parsed JSON", async () => 
 });
 
 test("harness proxy: 403s hostile Host/Origin without reaching upstream; forwards the real Origin on loopback requests", async () => {
-  const { createHarnessServer } = await import(new URL("../packages/desktop/renderer/harness-server.mjs", import.meta.url).href);
-  // fake upstream: records what actually reaches it
+  const { createHarnessServer, HARNESS_TOKEN_HEADER } = await import(new URL("../packages/desktop/renderer/harness-server.mjs", import.meta.url).href);
+  const { backendSecret, privateSocketDir } = await import(new URL("../packages/desktop/test/helpers/backend-server.mjs", import.meta.url).href);
+  // fake upstream on the backend's private socket: records what actually reaches it
   const seen = [];
   const upstream = createServer((req, res) => {
     seen.push({ path: req.url, origin: req.headers.origin ?? null, host: req.headers.host });
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ ok: true }));
   });
-  await new Promise((ok) => upstream.listen(0, "127.0.0.1", ok));
-  const upPort = upstream.address().port;
-  const harness = createHarnessServer(new URL(`http://127.0.0.1:${upPort}`));
+  const socket = privateSocketDir();
+  await new Promise((ok) => upstream.listen(socket.socketPath, ok));
+  const harnessToken = backendSecret();
+  const harness = createHarnessServer({ apiSocket: socket.socketPath, secret: backendSecret(), harnessToken });
+  const token = { [HARNESS_TOKEN_HEADER]: harnessToken };
   await new Promise((ok) => harness.listen(0, "127.0.0.1", ok));
   const base = `http://127.0.0.1:${harness.address().port}`;
   // fetch() strips forbidden headers like Host, so drive raw HTTP for forgeries
@@ -72,32 +75,33 @@ test("harness proxy: 403s hostile Host/Origin without reaching upstream; forward
     q.on("error", err); q.end();
   });
   try {
-    // hostile Host: 403, upstream never sees it
-    let r = await raw("/api/panel", { headers: { host: "evil.example" } });
+    // hostile Host: 403, upstream never sees it, the harness token notwithstanding
+    let r = await raw("/api/panel", { headers: { ...token, host: "evil.example" } });
     assert.equal(r.status, 403);
     // hostile Origin on a mutating request: 403, upstream never sees it
-    r = await raw("/api/spawn", { method: "POST", headers: { host: "127.0.0.1", origin: "http://evil.example" } });
+    r = await raw("/api/spawn", { method: "POST", headers: { ...token, host: "127.0.0.1", origin: "http://evil.example" } });
     assert.equal(r.status, 403);
     // malformed Origin: 403
-    r = await raw("/api/panel", { headers: { host: "127.0.0.1", origin: "null" } });
+    r = await raw("/api/panel", { headers: { ...token, host: "127.0.0.1", origin: "null" } });
     assert.equal(r.status, 403);
     assert.equal(seen.length, 0, "hostile requests must never reach upstream");
     // loopback request: proxied, with the browser's ORIGINAL Origin unchanged
     const myOrigin = base; // a loopback origin, but NOT the upstream's authority
-    const r2 = await fetch(`${base}/api/panel?x=1`, { headers: { origin: myOrigin } });
+    const r2 = await fetch(`${base}/api/panel?x=1`, { headers: { ...token, origin: myOrigin } });
     assert.equal(r2.status, 200);
     assert.deepEqual(await r2.json(), { ok: true });
     assert.equal(seen.length, 1);
     assert.equal(seen[0].path, "/api/panel?x=1");
     assert.equal(seen[0].origin, myOrigin, "the real Origin must be forwarded, never rewritten");
-    assert.equal(seen[0].host, `127.0.0.1:${upPort}`, "Host is rewritten for routing only");
+    assert.equal(seen[0].host, "localhost", "Host is rewritten for routing only: the backend is on its socket");
     // loopback request WITHOUT an Origin header stays origin-less upstream
-    const r3 = await fetch(`${base}/api/agents`);
+    const r3 = await fetch(`${base}/api/agents`, { headers: token });
     assert.equal(r3.status, 200);
     assert.equal(seen[1].origin, null, "no Origin must not be invented");
   } finally {
     harness.close();
     upstream.close();
+    socket.remove();
   }
 });
 

@@ -3,10 +3,10 @@
  *  'suggest-name'`, feature instance-suggest-name, #1490 §2: a name for a spawn on another machine, `{ workspace, data:
  *  { name?, naming } }` with no preview): their bodies may take the apply's 64 KiB, a preview's stays at 16 KiB, and the
  *  server checks both again (server/oats-web.mjs). */
-import { apiUrl, apiInit } from './api-url.mjs';
+import { apiUrl, apiInit, requestPath } from './api-url.mjs';
 import { trustedForgeFrame } from './forge-proxy.mjs';
 import { previewFailure, previewTarget, previewData, instanceSuggestion } from '../client/spawn-preview-contract.mjs';
-export async function proxySpawnPreview(event, path, opts, { rendererURL, connection, fetch: fetcher = globalThis.fetch } = {}) {
+export async function proxySpawnPreview(event, path, opts, { rendererURL, connection, fetch: fetcher } = {}) {
   const reply = (code, status = 503) => ({ ok: false, status, body: previewFailure(code) });
   let frame; try { frame = event?.senderFrame; } catch { return reply('E_FORBIDDEN_FRAME', 403); }
   const owns = () => { try { return trustedForgeFrame(event, rendererURL) && event.sender.mainFrame === frame; } catch { return false; } };
@@ -16,7 +16,7 @@ export async function proxySpawnPreview(event, path, opts, { rendererURL, connec
   try {
     if (opts?.method !== 'POST') return reply('E_BAD_ARGS', 400);
     start = { ...connection() }; if (start.transition) return reply('E_TARGET_CHANGED');
-    const url = apiUrl(path, start.base, start.wsId, start.allowedWs, { bound: start.bound === true });
+    const url = apiUrl(path, start.wsId, start.allowedWs, { bound: start.bound === true });
     if (url.pathname !== '/api/workspace-spawn-preview') return reply('E_BAD_ARGS', 400);
     const init = apiInit({ method: 'POST', body: opts.body });
     // The largest body any read may have (a suggest read's 64 KiB) is refused before it is parsed; a parsed one that is
@@ -27,7 +27,7 @@ export async function proxySpawnPreview(event, path, opts, { rendererURL, connec
     let action; try { action = JSON.parse(init.body)?.action; } catch { return reply('E_BAD_ARGS', 400); }
     const suggestName = action === 'suggest-name'; // feature instance-suggest-name (awebai/oats#1490 §2): a name, and no preview
     if (action !== 'suggest' && !suggestName && bytes > 16384) return reply('E_BAD_ARGS', 400);
-    const response = await fetcher(url, { ...init, signal: AbortSignal.timeout(35000) }), raw = await response.text();
+    const response = await fetcher(requestPath(url), { ...init, signal: AbortSignal.timeout(35000) }), raw = await response.text();
     if (!owns()) return reply('E_FORBIDDEN_FRAME', 403);
     if (!current()) return reply('E_TARGET_CHANGED');
     if (typeof raw !== 'string' || Buffer.byteLength(raw) > 4 * 1024 * 1024) return reply('E_CLI_OUTPUT_LIMIT');

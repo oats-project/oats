@@ -65,11 +65,11 @@ async function domainParity(shape, method, mod = cs) {
   const c = card(mod, ctx);
   const off = mod.onCliChange(s => seen.push(s));
   try {
-    await mod[method](ctx, method === "reprobeCli" ? "/chosen/oats" : undefined);
+    await mod[method](ctx);
     assertFacts(mod, c.el, expected);
     assert.deepEqual(seen, [expected]);
     assert.deepEqual(calls, method === "refreshCli" ? [["/api/cli", undefined]] : [["/api/cli/reprobe", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ bin: "/chosen/oats" }),
+      method: "POST", headers: { "content-type": "application/json" }, body: "{}",
     }]], "rendering never installs or dispatches extra requests");
   } finally { off(); c.close(); mod.resetCliStateForTests(); }
 }
@@ -127,7 +127,7 @@ for (const shape of ["parsed", "response"]) {
       c.el.querySelector(".cli-retry").click(); await tick();
       assertFacts(cs, c.el, expected);
       assert.deepEqual(calls.map(([path, opts]) => [path, JSON.parse(opts.body)]), [
-        ["/api/cli/reprobe", { bin: "/not-yet-verified/oats" }], ["/api/cli/reprobe", {}],
+        ["/api/cli/reprobe", {}], ["/api/cli/reprobe", {}],
       ]);
     } finally { c.close(); cs.resetCliStateForTests(); }
   });
