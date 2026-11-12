@@ -1842,7 +1842,7 @@ test("a new start ends the run before it, whose answers are dropped; stop() does
 
 test("an identity read through the real shared reader and the reader's own exec: `oats status --dir <path> --max-age 60 --json` in the deployment, the projected workspace object handed on", async () => {
   const dir = "/srv/listed", argvs = [];
-  const document = { root: `${dir}/agents`, agents: [], workspace: { reachable: true, key: "github.com/acme/lfx", ref: "main", keyFrom: "workspace", standalone: false, defaultTeam: { label: "eng", team: "t" }, teams: { eng: "t" }, teamsFrom: "observed" } };
+  const document = { root: `${dir}/agents`, agents: [], workspace: { reachable: true, key: "github.com/acme/lab", ref: "main", keyFrom: "workspace", standalone: false, defaultTeam: { label: "eng", team: "t" }, teams: { eng: "t" }, teamsFrom: "observed" } };
   const exec = (bin, argv, options, callback) => { argvs.push([bin, argv, options.cwd, typeof options.timeout]); setImmediate(() => callback(null, JSON.stringify(document), "")); };
   const heard = [];
   const cli = { ...IDENTIFIES, features: [...IDENTIFIES.features, "observe-max-age", "instance-modules", "served-identity", "packages-no-approval"] };
@@ -1851,5 +1851,5 @@ test("an identity read through the real shared reader and the reader's own exec:
   for (let i = 0; i < 5 && !heard.length; i++) await turn();
   assert.deepEqual(argvs, [[cli.bin, ["status", "--dir", dir, "--max-age", "60", "--json"], dir, "number"]]);
   assert.equal(heard.length, 1);
-  assert.deepEqual([heard[0].path, heard[0].read.ok, heard[0].read.workspace.key, heard[0].read.workspace.reachable], [dir, true, "github.com/acme/lfx", true]);
+  assert.deepEqual([heard[0].path, heard[0].read.ok, heard[0].read.workspace.key, heard[0].read.workspace.reachable], [dir, true, "github.com/acme/lab", true]);
 });

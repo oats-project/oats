@@ -122,9 +122,9 @@ test("a value flag with no value is a usage error, not a swallowed next flag", (
 
 test("known flags still work: --status on an empty record reports and exits 0", (t) => {
   const root = setup(t);
-  const r = run(root, ["--status", "--owner", "altair"]);
+  const r = run(root, ["--status", "--owner", "builder"]);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /owner: altair/);
+  assert.match(r.stdout, /owner: builder/);
 });
 
 test("a hostname-derived owner that is a stranger to the record warns, but still captures", (t) => {
@@ -162,7 +162,7 @@ test("an explicit owner is never second-guessed, even when it is new to the reco
   t.after(() => rmSync(home, { recursive: true, force: true }));
   seedSession(home);
 
-  const first = run(root, ["--owner", "altair", "--sessions-only", "--no-index"], { home });
+  const first = run(root, ["--owner", "builder", "--sessions-only", "--no-index"], { home });
   assert.equal(first.status, 0, first.stderr);
 
   // Deliberately adding a second owner is a legitimate act (multi-machine
