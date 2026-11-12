@@ -139,7 +139,9 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
         for(const sni of ["unlisted.egress-probe.invalid",""])await send(protocol,route,targetAddress,sni,humanHost,"forbidden");
       }
     }
-    // A final live human-backend control is a delivery barrier for its audit.
+    // Each backend needs a later matched record to flush preceding deliveries.
+    for(const route of routes)for(const targetAddress of route.addresses)
+      await send(protocol,route,targetAddress,route.host,route.host,"matched");
     await send(protocol,routes.find(route=>route.role==="signer"),address,humanHost,humanHost,"human");
   }
   const deadline=Date.now()+2000;
@@ -165,6 +167,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       assert.ok(key && !Object.hasOwn(options, key) && value && !value.startsWith("--"), "ingress probe arguments are invalid");
       options[key] = value;
     }
+    assert.ok(options.policyFile && options.routeLogsFile,"ingress admission requires the derived policy and per-route audit inputs");
     const readJson=(file,max)=>{const stat=statSync(file);assert.ok(stat.isFile()&&stat.size<=max,"probe input file is invalid");return JSON.parse(readFileSync(file,"utf8"));};
     if(options.policyFile)options.policy=readJson(options.policyFile,65536);
     if(options.routeLogsFile)options.routeLogs=readJson(options.routeLogsFile,128*1024);

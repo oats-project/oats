@@ -51,7 +51,10 @@ export async function probeComposeBoundary(plan) {
   assert.equal(proxy.NetworkSettings.Networks[plan.agentsNetwork].IPAddress,plan.policy.frontAddress,"proxy address differs from runtime policy");
   assert.ok(proxy.Mounts.length===1 && proxy.Mounts[0].Type==="bind" && proxy.Mounts[0].Destination==="/etc/egress/policy.json" && proxy.Mounts[0].RW===false,
     "proxy must mount only its read-only public policy");
-  assertPublicMountSource(realpathSync(proxy.Mounts[0].Source),plan.protectedSources,"proxy");
+  let policySource;
+  try {policySource=realpathSync(proxy.Mounts[0].Source);}
+  catch {throw new Error("proxy policy source must resolve on the Docker engine host");}
+  assertPublicMountSource(policySource,plan.protectedSources,"proxy");
   const livePolicy=json(["exec",plan.proxyContainer,"node","-e","process.stdout.write(require('node:fs').readFileSync('/etc/egress/policy.json','utf8'))"]);
   assert.deepEqual(livePolicy,plan.policy,"live proxy policy differs from derived policy");
   assert.ok(Array.isArray(plan.deniedBackends) && plan.deniedBackends.length===2

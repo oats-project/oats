@@ -297,7 +297,8 @@ test("the shared ingress probe proves both protocol refusals before backend deli
     ...Object.fromEntries(["aweb","secrets","logs","registry"].map(role=>[role+".example.invalid",{path:role==="registry"?"/health":"/ready",log:join(dir,role+".log")}]))
   };
   for(const route of Object.values(serviceRoutes))writeFileSync(route.log,"");
-  let strict=true, strictTls=false, weakSni=null;
+  let strict=true, strictTls=false, weakSni=null, delayRegistryPort=false;
+  const pendingRegistry=[];
   const {createSecureContext}=await import("node:tls");
   const context=createSecureContext({key:readFileSync(join(dir,"key.pem")),cert:readFileSync(join(dir,"cert.pem"))});
   const server=createSecureServer({key:readFileSync(join(dir,"key.pem")),cert:readFileSync(join(dir,"cert.pem")),allowHTTP1:true,
@@ -310,12 +311,16 @@ test("the shared ingress probe proves both protocol refusals before backend deli
     const authority=req.headers[":authority"]||req.headers.host;
     const sni=req.socket.servername;
     const matched=authority===sni || authority===sni+":443";
-    if(strict&&!matched&&sni!==weakSni){res.writeHead(421);res.end();return}
+    const delayed=delayRegistryPort&&req.httpVersionMajor===2&&sni==="registry.example.invalid"&&authority==="registry.example.invalid:444";
+    if(strict&&!matched&&sni!==weakSni&&!delayed){res.writeHead(421);res.end();return}
     const host=authority?.split(":")[0];
     if(!Object.hasOwn(serviceRoutes,host)){res.writeHead(421);res.end();return}
     const wanted=serviceRoutes[host].path;
     if(new URL(req.url,"https://fixture.invalid").pathname!==wanted){res.writeHead(404);res.end();return}
-    appendFileSync(serviceRoutes[host].log,req.url+"\n");
+    if(host==="registry.example.invalid"&&matched&&pendingRegistry.length)
+      appendFileSync(serviceRoutes[host].log,pendingRegistry.splice(0).join("\n")+"\n");
+    if(delayed)pendingRegistry.push(req.url);
+    else appendFileSync(serviceRoutes[host].log,req.url+"\n");
     // A misrouted backend may itself return 421: status alone proves nothing.
     res.writeHead(matched?200:421);res.end();
   });
@@ -330,7 +335,11 @@ test("the shared ingress probe proves both protocol refusals before backend deli
   const full={...options,address:policy.targets.signer.addresses[0],policy,routeLogs,exchange:args=>statusOf({...args,address:"127.0.0.1",port:options.port})};
   const before=Object.fromEntries(Object.entries(routeLogs).map(([role,route])=>[role,readFileSync(route.log,"utf8").length]));
   assert.equal(await probeIngress(full),true);
-  for(const [role,route] of Object.entries(routeLogs))assert.equal((readFileSync(route.log,"utf8").slice(before[role]).match(/oats_egress_probe=/g)||[]).length,2,role+" needs H1 and H2 backend controls");
+  for(const [role,route] of Object.entries(routeLogs))assert.equal((readFileSync(route.log,"utf8").slice(before[role]).match(/oats_egress_probe=/g)||[]).length,4,role+" needs H1/H2 initial and final backend controls");
+  delayRegistryPort=true;
+  await assert.rejects(()=>probeIngress(full),/forbidden probe reached a backend/,
+    "a route's buffered forbidden delivery must be flushed by a later matched control");
+  delayRegistryPort=false;
   await assert.rejects(()=>probeIngress({...full,address:"10.20.0.99"}),/ingress address.*signer/);
   for(const bad of [Object.fromEntries(Object.entries(routeLogs).filter(([role])=>role!=="registry")),{...routeLogs,extra:routeLogs.aweb}])
     await assert.rejects(()=>probeIngress({...full,routeLogs:bad}),/exactly the policy roles/);
@@ -471,4 +480,45 @@ test("public CA and source mirrors cannot overlap writable state or be mounted w
     const nested=structuredClone(valid);nested.agent.Mounts.at(-1).Source="/fixture/state/public-input";nested.approvedAgentMounts.at(-1).Source="/fixture/state/public-input";
     assert.throws(()=>assertComposeBoundary(nested),/public input.*protected/);
   }
+});
+
+
+test("an unavailable proxy policy source has a fixed path-free diagnostic", async t => {
+  const {mkdtempSync,writeFileSync,rmSync}=await import("node:fs");
+  const {tmpdir}=await import("node:os");
+  const {join}=await import("node:path");
+  const {fileURLToPath}=await import("node:url");
+  const dir=mkdtempSync(join(tmpdir(),"oats-egress-policy-source-"));
+  t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  const state=composeBoundary(), policy=proxyPolicy();
+  const probeImage="sha256:"+"a".repeat(64),proxyImage="sha256:"+"b".repeat(64);
+  const mounts=state.approvedAgentMounts.map((mount,index)=>{
+    const source=join(dir,"mount-"+index);writeFileSync(source,"");return {...mount,Source:source};
+  });
+  const probe={...state.agent,Id:"probe-id",Image:probeImage,Mounts:mounts,State:{Running:true},
+    Config:{Image:probeImage,User:"20001:20001",Entrypoint:["sleep"],Cmd:["infinity"],Env:[]}};
+  const proxy={...state.egress,Id:"proxy-id",Image:proxyImage,State:{Running:true,Health:{Status:"healthy"}},
+    Config:{Image:proxyImage,User:"10001:10001",Entrypoint:["node"],Env:[]},
+    Mounts:[{Type:"bind",Source:join(dir,"withheld-private-path-marker"),Destination:"/etc/egress/policy.json",RW:false}]};
+  proxy.HostConfig={...proxy.HostConfig,Sysctls:{"net.ipv4.ip_forward":"0"}};
+  proxy.NetworkSettings=structuredClone(proxy.NetworkSettings);
+  proxy.NetworkSettings.Networks.proof_agents.IPAddress=policy.frontAddress;
+  const responses={
+    "inspect probe":[probe],"inspect proxy":[proxy],
+    "network inspect proof_agents":[{...state.agentsNetwork,Containers:{"probe-id":{},"proxy-id":{}}}],
+    "network inspect proof_services":[state.servicesNetwork],
+    ["image inspect "+probeImage]:[{Id:probeImage,Config:{Env:[]}}],
+    ["image inspect "+proxyImage]:[{Id:proxyImage,Config:{Env:[],Entrypoint:["node"]}}],
+  };
+  writeFileSync(join(dir,"docker"),"#!/usr/bin/env node\nconst r="+JSON.stringify(responses)+";const k=process.argv.slice(2).join(' ');if(!Object.hasOwn(r,k))process.exit(2);process.stdout.write(JSON.stringify(r[k]));\n",{mode:0o755});
+  const plan=join(dir,"plan.json");
+  writeFileSync(plan,JSON.stringify({policy,probeContainer:"probe",proxyContainer:"proxy",agentsNetwork:"proof_agents",servicesNetwork:"proof_services",
+    probeImage,proxyImage,uid:20001,gid:20001,approvedProbeMounts:mounts,protectedSources:state.protectedSources}));
+  const child=spawn(process.execPath,[fileURLToPath(new URL("../container/agent/egress/probe-compose-boundary.mjs",import.meta.url)),"--plan",plan],{
+    env:{...process.env,PATH:dir+":"+process.env.PATH},stdio:["ignore","pipe","pipe"],timeout:5000});
+  let stdout="",stderr="";child.stdout.on("data",data=>stdout+=data);child.stderr.on("data",data=>stderr+=data);
+  const code=await new Promise((resolve,reject)=>{child.once("error",reject);child.once("close",resolve)});
+  assert.equal(code,1);assert.equal(stdout,"");
+  assert.equal(stderr,"egress boundary: proxy policy source must resolve on the Docker engine host\n");
+  assert.doesNotMatch(stderr,/withheld-private-path-marker/);
 });

@@ -92,20 +92,18 @@ node /opt/egress/probe-ingress.mjs \
   --address <ingress-ipv4> \
   --request-origin https://prepare.example.invalid \
   --human-origin https://approve.example.invalid \
-  --request-log <request-backend-log> \
   --human-log <human-backend-log> \
   --ca-file <public-ca.pem> \
-  --request-path /readyz \
-  --human-path /handoff-assets/handoff.css
+  --human-path /handoff-assets/handoff.css \
+  --policy <derived-policy.json> \
+  --route-logs <runtime-audit.json>
 ```
 
 The files are operator-side probe inputs; never mount backend logs into an agent.
-Both log paths may name one file when the surfaces share a backend process.
-Choose an existing, harmless endpoint returning 200 on each matched surface,
-using `--request-path` and `--human-path` when their routes differ. Forbidden
-human-authority cases use the human path. The compatible `--path` option sets
-both defaults (otherwise `/ready`). Certificate chain and service-name checks
-stay on.
+Log entries may name one file when surfaces share a backend process. Choose
+an existing, harmless endpoint returning 200 for each route in `--route-logs`;
+`--human-path` names the human surface. Forbidden human-authority cases use that
+human path. Certificate chain and service-name checks stay on.
 Without `--ca-file`, Node's normal trust configuration applies.
 
 The probe sends matched controls and forbidden authorities over HTTP/1.1 and
@@ -118,13 +116,15 @@ certificate-validation error fails. A peer
 response, and only for the enumerated unknown/absent-SNI cases. The same alert
 fails for known SNI or a matched control. Unique
 query tags must appear for matched controls in the appropriate backend log, and
-all forbidden tags must be absent from both logs. Final human controls establish
-that logging still works after the negative cases. Responses and log contents
+all forbidden tags must be absent from every supplied log. Final matched controls
+on each route and address, plus the human surface, provide later log records
+after the negative cases. Responses and log contents
 are never printed. Success prints exactly `OATS_EGRESS_INGRESS_PASS`; require
 that token and exit 0 before enabling the signer route and admitting agents.
 
-The deployment qualification must add `--policy <derived-policy.json>` and
-`--route-logs <runtime-audit.json>`. The latter has exactly the policy's five role
+The CLI requires `--policy <derived-policy.json>` and
+`--route-logs <runtime-audit.json>` together; a partial signer-only call fails
+without an admission token. The latter file has exactly the policy's five role
 keys, each holding `{ "path": "/ready", "log": "/logs/aweb.log" }` for that
 role's harmless 200 endpoint and actual backend log. Use signer `/readyz` and
 registry `/health` where those are the supported routes; `--human-path` and
@@ -137,9 +137,9 @@ the final human control. If supplied, the compatible `--request-log` and
 Full mode tests each routed SNI at each pinned address, over both protocols,
 with matched controls and human-authority, wrong-port and suffix refusals.
 Unknown/absent SNI is tested per distinct address. Matched tags must reach their
-own backend log; no forbidden tag may reach any supplied backend. The old
-signer-only call is a compatibility check, not the five-route deployment proof.
-The wrappers must call full mode before admission. `--ca-file` adds its public
+own backend log, including a final matched control after the negatives; no
+forbidden tag may reach any supplied backend. The wrappers require this complete
+proof before admission. `--ca-file` adds its public
 certificates to Node's normal public roots.
 
 ## Build and prove
@@ -161,6 +161,14 @@ each probe on a separate internal bridge, at the same port. It creates disposabl
 networks and a temporary public
 policy file. This catches packaged binaries that cannot execute under the runtime
 capability restrictions.
+
+`python3 test/agent-egress-ingress-image.py IMAGE` exercises the packaged ingress
+CLI against disposable real HTTP/1.1 and HTTP/2 TLS routes with separate backend
+logs. It requires a signer-only call to fail, a complete five-route call to pass,
+and a forwarded human authority returning backend 421 to fail. It creates only
+its own containers, internal network and temporary public trust fixture, and
+removes its private test key at cleanup. Python 3, OpenSSL and Docker are required;
+this is a transport regression, not an identity or mail-wake fixture.
 
 `test/agent-egress.test.mjs` checks policy compilation and admitted Compose
 metadata. `assertComposeBoundary()` takes Docker container/network inspections,
