@@ -328,25 +328,23 @@ oats spawn release-manager --provider oats.aweb identity.source=/abs/path/to/ret
 ```
 
 An instance is named exactly `--name <slug>`, or `<soul>-<purpose>` with
-`--purpose`; with neither, the kernel numbers it. A typed `--name` is used
-exactly as given. How a person or an agent chooses one is the oats.core
-skill oats-souls, "Name the instance"
-([its rule](../oats-package/capabilities/oats-core/skills/oats-souls/SKILL.md#name-the-instance)).
-`--purpose` derives the name from the soul, for
+`--purpose`; with neither, the kernel numbers it. The convention for a name a
+person or an agent chooses is `<descriptive>-<role>` through `--name`: a few
+words for the instance's work, then the soul's role, the last word of the
+soul's name after any package qualifier (`--name desktop-improvements-expert`
+for an `oats-desktop-expert`). `--purpose` derives the name from the soul, for
 automations and scripts that know only the soul and a purpose.
 Names are unique per deployment (a workspace-model deployment has one agents
 root): a derived name in use gets `-2`, `-3`…; an explicit `--name` in use is
 refused (`E_INSTANCE_NAME_TAKEN`). The Desktop's spawn dialog adds the role to
 a typed name.
 `oats spawn <soul> --preview --suggest-name --task-file <f>` asks the soul's
-own harness for the whole name, `<work>-<role>` with the role as the task
-gives it, from the task, in one call that starts
+own harness for the descriptive words, from the task, in one call that starts
 none of the user's MCP servers, hooks, plugins or extensions. Claude Code's
 built-in plugins, the host's managed-policy hooks and pi's credential commands
 are the stated exceptions; a claude login through `apiKeyHelper` is not read,
 so that user's name stays numbered (`harness-failed`). The preview then answers for
-`--name <that name>`, de-duplicated the same way; nothing appends the soul's
-role. On claude and pi
+`--name <descriptive>-<role>`, de-duplicated the same way. On claude and pi
 only; any other harness, and any failure of the call, leaves the name numbered
 and says why
 ([The suggested name](desktop-cli-api.md#the-suggested-name-feature-spawn-suggest-name)).
@@ -357,16 +355,16 @@ at spawn (`.oats-background.json`), so a later soul edit moves no existing
 instance; `oats instance background <instance> on|off` does. Both flags
 together are `E_BAD_ARGS`.
 An apply takes `--suggest-name` too (without `--name` or `--purpose`): the
-machine that spawns makes the same call, names the instance with the reply's
-name, de-duplicated the same way, and numbers it on any
+machine that spawns makes the same call, names the instance
+`<descriptive>-<role>`, de-duplicated the same way, and numbers it on any
 failure; the result's `naming` says which, and the apply may take up to 20 s
 longer ([On an apply](desktop-cli-api.md#on-an-apply-feature-spawn-apply-suggest-name)).
 Without the flag an apply is numbered, as before.
-`oats instance suggest-name --task-file <f>` asks for the same name on this
-machine for a spawn that will land on another (the Desktop's dialog, spawning
-through `--server`): nothing is written or reserved, and the name is not made
-unique, which the landing host does. `--soul <soul>` is optional: when given it
-is checked as a soul name's shape and does not change the name
+`oats instance suggest-name --soul <soul> --task-file <f>` asks for the same
+words on this machine for a spawn that will land on another (the Desktop's
+dialog, spawning through `--server`): the soul only gives the role and needn't
+exist here, nothing is written or reserved, and the name is not made unique,
+which the landing host does
 ([A name for a spawn elsewhere](desktop-cli-api.md#a-name-for-a-spawn-elsewhere-oats-instance-suggest-name)).
 
 From a deployment (where `oats-local.yaml` is), a spawn: reads the local file →

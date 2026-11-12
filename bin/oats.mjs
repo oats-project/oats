@@ -1423,12 +1423,11 @@ async function instanceUpgradeCmd(name, bail) {
   } catch (e) { return lifecycleFail(e, "E_UPGRADE_FAILED", { ...e.details, ...(e.plan ? { plan: e.plan } : {}), ...(e.candidates ? { candidates: e.candidates } : {}) }); }
 }
 
-/** `oats instance suggest-name` (feature instance-suggest-name, awebai/oats#1490 §2): the name a
- *  --suggest-name spawn would get, chosen here for a spawn that may land on another machine
- *  (lib/core.mjs suggestSpawnName). --soul is optional, shape-checked when given and unused for the
- *  name. Never routed: --server is refused before the route dispatch. */
+/** `oats instance suggest-name` (feature instance-suggest-name, awebai/oats#1490 §2): the name a spawn
+ *  of a soul would get by --suggest-name, chosen here for a spawn that may land on another machine
+ *  (lib/core.mjs suggestSpawnName). Never routed: --server is refused before the route dispatch. */
 async function instanceSuggestNameCmd(bail) {
-  const usage = "usage: oats instance suggest-name [--soul <soul>] (--task <t> | --task-file <f>) [--harness claude|pi] [--model <m>] [--launch-config <n>] [--dir <d>] [--json]";
+  const usage = "usage: oats instance suggest-name --soul <soul> (--task <t> | --task-file <f>) [--harness claude|pi] [--model <m>] [--launch-config <n>] [--dir <d>] [--json]";
   // A flag's value as given, the empty text included (`--task ""` is an empty task, not a missing one).
   const value = (name) => {
     const i = args.indexOf(`--${name}`);
@@ -1438,6 +1437,7 @@ async function instanceSuggestNameCmd(bail) {
     return v;
   };
   const soul = value("soul"), task = value("task"), taskFile = value("task-file");
+  if (soul === undefined) return bail("E_BAD_ARGS", `--soul is required; ${usage}`);
   if ((task === undefined) === (taskFile === undefined)) return bail("E_BAD_ARGS", `give the task with one of --task or --task-file; ${usage}`);
   let text = task;
   if (taskFile !== undefined) { try { text = readFileSync(taskFile, "utf8"); } catch (e) { return bail("E_BAD_ARGS", `--task-file ${taskFile} cannot be read (${e.code || "error"})`); } }
@@ -5086,8 +5086,8 @@ Usage:
                                             includes the decision revision for confirmation
       [--suggest-name]                      no --name, --purpose or --expect-decision: the
                                             soul's harness, on the machine that spawns, names
-                                            the instance for its task (the model's whole
-                                            <work>-<role>, made unique); else it is numbered, and
+                                            the instance for its task (<descriptive>-<role>,
+                                            made unique); else it is numbered, and
                                             naming.reason says why (claude and pi); on a
                                             preview or an apply
       [--expect-decision <rev>]              bind apply to the previewed decision; drift refuses
@@ -5249,14 +5249,13 @@ Usage:
                                              record that this instance does the same work as
                                              its parent (on needs a recorded parent); clients
                                              draw the parent line for it; off removes it
-  oats instance suggest-name [--soul <soul>] (--task <t> | --task-file <f>) [--harness claude|pi]
+  oats instance suggest-name --soul <soul> (--task <t> | --task-file <f>) [--harness claude|pi]
       [--model <m>] [--launch-config <n>] [--dir <d>] [--json]
-                                             a name for a spawn by this machine's harness, as a
-                                             preview's --suggest-name chooses it (the model's whole
-                                             <work>-<role>), not made unique (where it lands decides
-                                             that); else numbered, and naming.reason says why.
-                                             --soul is optional, checked as a soul name's shape and
-                                             not used for the name. Reads only this machine's launch
+                                             a name for a spawn of <soul> (only a name: it gives
+                                             the role) by this machine's harness, as a preview's
+                                             --suggest-name chooses it, not made unique (where it
+                                             lands decides that); else numbered, and naming.reason
+                                             says why. Reads only this machine's launch
                                              configurations; writes and reserves nothing; no --server
   oats worktree add --purpose <p> --branch <b> --base <remote-branch>  from an instance home: make the
       [--repo <member key|clone path>]      extra tree <home>/.work-<p> on a new branch at origin's
