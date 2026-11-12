@@ -662,3 +662,17 @@ credentials. The publish step stores
 registry authentication in a private temporary file and removes it on exit.
 It receives no npm publish credential. To roll back a deployed image, select
 the previous reviewed digest in the deployment configuration.
+
+## Egress component
+
+The generic [egress image and service](../container/agent/egress/README.md) live
+with the agent image. The deployment wrapper owns its allowlist and derives the
+non-secret runtime policy from the shared deployment configuration and signer
+profile. The proxy permits only the named API and registry routes and serves
+only the declared public namespace authority records. Service custody keys,
+PostgreSQL, Redis and the Docker socket stay outside the agent container.
+
+Network membership, CNI enforcement and ingress Host/SNI agreement require runtime
+proof before launching agents. An internal bridge, a NetworkPolicy object or a
+healthy proxy alone does not prove the boundary. The [service descriptor](../container/agent/egress/descriptor.md)
+supplies the wrapper mapping without a separate operator schema.

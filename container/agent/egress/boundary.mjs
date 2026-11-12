@@ -1,0 +1,34 @@
+/** Preflight checks over admitted runtime metadata. Passing these does not
+ * prove firewall/CNI enforcement; the shared journey also probes the boundary. */
+import assert from "node:assert/strict";
+import { posix } from "node:path";
+
+export function assertComposeBoundary({ agent, egress, agentsNetwork, servicesNetwork, approvedAgentMounts, protectedSources }) {
+  assert.ok(typeof agentsNetwork.Id === "string" && agentsNetwork.Id.length > 0
+    && typeof servicesNetwork.Id === "string" && servicesNetwork.Id.length > 0
+    && agentsNetwork.Id !== servicesNetwork.Id, "expected distinct identified runtime networks");
+  assert.ok(agentsNetwork.Internal === true && agentsNetwork.EnableIPv6 === false, "expected an isolated IPv4 agents network");
+  const endpoints = Object.values(agent.NetworkSettings?.Networks ?? {});
+  assert.equal(endpoints.length, 1, "agent must have exactly one isolated network");
+  assert.equal(endpoints[0].NetworkID, agentsNetwork.Id, "agent network must be the approved isolated network");
+  const proxyNetworks = Object.values(egress.NetworkSettings?.Networks ?? {}).map(endpoint => endpoint.NetworkID);
+  assert.ok(proxyNetworks.length === 2 && new Set(proxyNetworks).size === 2
+    && proxyNetworks.includes(agentsNetwork.Id) && proxyNetworks.includes(servicesNetwork.Id),
+  "proxy must join exactly the agents and services networks");
+  assert.ok(Array.isArray(agent.Mounts) && Array.isArray(approvedAgentMounts)
+    && Array.isArray(protectedSources), "agent mount inventory must be complete");
+  const mountKey = mount => JSON.stringify([mount.Type, mount.Source, mount.Destination, mount.RW]);
+  const actual = agent.Mounts.map(mountKey).sort(), expected = approvedAgentMounts.map(mountKey).sort();
+  assert.ok(actual.length === expected.length && actual.every((key,index) => key === expected[index]), "agent mounts differ from the approved inputs");
+  for (const mount of agent.Mounts) {
+    assert.ok(typeof mount.Destination === "string" && mount.Destination.startsWith("/")
+      && !posix.normalize(mount.Destination).startsWith("/run/secrets"), "agent must not mount service secrets");
+    assert.ok(typeof mount.Source === "string" && mount.Source.startsWith("/"), "agent mount source must be an absolute runtime path");
+    const source = posix.normalize(mount.Source);
+    for (const protectedSource of [...protectedSources, "/run/docker.sock", "/var/run/docker.sock"]) {
+      assert.ok(typeof protectedSource === "string" && protectedSource.startsWith("/"), "agent protected-source inventory is invalid");
+      const secret = posix.normalize(protectedSource);
+      assert.ok(source !== secret && !source.startsWith(secret + "/") && !secret.startsWith(source.endsWith("/") ? source : source + "/"), "agent mount overlaps a protected service source");
+    }
+  }
+}
