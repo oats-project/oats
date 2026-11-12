@@ -515,3 +515,8 @@ test("container image and Compose declare broker session delivery", () => {
   assert.deepEqual(agent.environment,{AWEB_DELIVERY:"session"});
   assert.match(read("Dockerfile"),/^ENV AWEB_DELIVERY=session$/m);
 });
+
+test("the runtime account keeps a bash login shell at any UID", () => {
+  assert.match(read("Dockerfile"),/--shell \/bin\/bash agent/);
+  assert.ok(read("entrypoint.sh").includes("/state/home:/bin/bash\\n"));
+});

@@ -5,7 +5,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends tmux git openssh-server ca-certificates tini libnss-wrapper \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt /etc/ssh/ssh_host_* \
     && mkdir -p /run/sshd /state /opt/agent \
-    && useradd --create-home --home-dir /state/home --shell /bin/sh agent \
+    && useradd --create-home --home-dir /state/home --shell /bin/bash agent \
     && ln -s /usr/lib/*/libnss_wrapper.so /usr/local/lib/libnss_wrapper.so
 
 WORKDIR /opt/agent

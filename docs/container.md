@@ -164,6 +164,10 @@ the override: the base has no `/work` mount. With multiple Compose files,
 paths resolve relative to the first file; use absolute host paths. Container
 down/upgrade preserves `/state`; the operator owns provisioning and rollback.
 
+The image account and the runtime NSS entry use `/bin/bash` as the login shell.
+This lets OATS capture a fresh login environment rather than inheriting the tmux
+creator's environment after a failed shell capture.
+
 ## Broker delivery before launch
 
 Container deployments use the in-container broker with session delivery. Before
