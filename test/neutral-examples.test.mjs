@@ -62,7 +62,7 @@ function* textFiles(dir) {
 }
 
 // `/Users/<name>` or `/home/<name>` at a path's start: at the start of a line, or after whitespace,
-// a quote, a bracket, `=`, `:`, `~` or a file URL's `file://`. After another path segment
+// a quote, a bracket, `=`, one of the list separators `:` `;` `,`, `~` or a file URL's `file://`. After another path segment
 // (`/state/home/x`) it is a folder of that path, not a home, and is not checked.
 // The owner is the whole segment, any characters, up to the next path or
 // quoting separator, so a name that only starts like an invented one is checked whole.
@@ -75,7 +75,7 @@ function* textFiles(dir) {
 // the characters they write first; any other backslash ends the segment (it starts an escape, not
 // a name's letter). Interpolation is the code's, not an example, and is skipped: `${…}` (its
 // segment is the `$` before the `{`) and a shell variable (`$USER`).
-const HOME = /(?<=^|[\s'"`(){}\[\]<>=:~]|file:\/\/)\/(?:Users|home)\/([^/\\\s'"`(){}\[\]<>,;:]+)|-Users-([^-/\\\s'"`(){}\[\]<>,;:]+)-/gu;
+const HOME = /(?<=^|[\s'"`(){}\[\]<>=:;,~]|file:\/\/)\/(?:Users|home)\/([^/\\\s'"`(){}\[\]<>,;:]+)|-Users-([^-/\\\s'"`(){}\[\]<>,;:]+)-/gu;
 const ESCAPE = /\\u\{([0-9a-fA-F]{1,6})\}|\\u([0-9a-fA-F]{4})/g;
 const unescaped = line => line.replace(ESCAPE, (_, braced, four) => String.fromCodePoint(parseInt(braced ?? four, 16)));
 
@@ -127,6 +127,9 @@ test('an owner home directory fails unless its owner is an invented one', () => 
   assert.deepEqual(ownerHomes('cwd=/home/robin PATH=/bin:/home/robin/bin ~/Users/robin ["/Users/robin"] (/home/robin) `/home/robin`'),
     Array(6).fill(':1: /…/robin'));
   assert.deepEqual(ownerHomes('file:///Users/robin/x'), [':1: /…/robin'], 'a file URL\'s path starts after its `//`');
+  // A list's separators start a path too, as `:` does: a comma-separated list, a shell's `;`.
+  assert.deepEqual(ownerHomes('roots=/a,/home/robin cd /tmp;/Users/robin/x'), [':1: /…/robin', ':1: /…/robin']);
+  assert.deepEqual(ownerHomes('/a,/state/home/x;/b/home/y'), [], 'still a folder after another segment');
 });
 
 test('the guard reads packages/, test/ and docs/, but not the released notes', () => {
