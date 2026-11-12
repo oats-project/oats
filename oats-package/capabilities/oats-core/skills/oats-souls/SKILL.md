@@ -99,23 +99,37 @@ only when no agent can say.
 
 Name an instance `<descriptive>-<role>`, with `--name`:
 
-- **Descriptive:** a few lowercase kebab-case words for what this incarnation
+- **Descriptive:** a few lowercase kebab-case words for what this instance
   does (`desktop-improvements`, `release-0-26`), not an opaque number.
-- **Role:** the last word of the soul's name, after any package qualifier:
-  `oats-engineering-expert` → `expert`, `oats-desktop-developer` → `developer`,
-  `code-reviewer` → `reviewer`. A one-word soul's role is its name.
-- So `oats spawn oats-engineering-expert --name desktop-improvements-expert`, not
+- **Role:** the new instance's role in your coordination, the word your
+  coordination uses for it: your landing rules and your coordination skills
+  name the roles, and a coordination template's spawn command gives one
+  (`lead`, `developer`, `reviewer`, `maintainer`). With no coordination, one
+  word for what the instance does in its task (`helper`, `auditor`).
+- **At most five words** in all.
+- **Nothing is appended:** not the soul's name, not its last word. The soul is
+  shown beside the instance's name.
+- So a lead's developer for the Desktop improvements is
+  `oats spawn oats-desktop-developer --name desktop-improvements-developer`, and
+  the lead of that effort `--name desktop-improvements-lead`, not
   `--purpose desktop-improvements` (which gives
   `oats-engineering-expert-desktop-improvements`).
 
+A task you write for a spawn says the new instance's role in its first lines
+("You lead …", "You are the developer for …"). A suggested name
+(`oats spawn --suggest-name`, the Desktop's empty Name field) is a model's
+`<descriptive>-<role>` read from the task text, and it finds the role there.
+
 `--name` is used exactly as given: it must be a slug, at most 64 characters,
 and not a soul name. A name built this way can be a soul's name
-(`integrations-expert`): add a word. An explicit `--name` in use is refused,
+(`code-reviewer`): add a word. An explicit `--name` in use is refused,
 never suffixed.
 
 Spawn's `--purpose <slug>` names the instance `<soul>-<slug>` instead,
 derived from the soul, so a script or automation that knows only the soul
-and a purpose can use it. It is not exact: a derived name in use gets `-2`.
+and a purpose can use it: schedules and triggers name their runs this way.
+Don't use it to name an instance you spawn. It is not exact: a derived name
+in use gets `-2`.
 `--name` and `--purpose` do not combine. Without either, the kernel numbers
 the instance.
 
