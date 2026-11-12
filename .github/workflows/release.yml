@@ -444,7 +444,7 @@ jobs:
   # exist. This job never inherits the npm publish token.
   publish-team-image:
     needs: publish
-    # Publication is disabled until Juan confirms the registry/repository.
+    # Publication is disabled pending the registry decision.
     # This is the single publication switch; verification is always enabled.
     if: ${{ false }}
     runs-on: ubuntu-24.04

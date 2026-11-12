@@ -387,8 +387,8 @@ remain outside this check.
 The `publish-team-image` job in
 [Release](../.github/workflows/release.yml) waits for the existing `publish`
 job, so npm publication and the GitHub Release precede the image. Its
-single job-level `if: ${{ false }}` keeps publication disabled pending Juan's
-confirmation of the proposed `ghcr.io/oats-project/team-agent` target.
+single job-level `if: ${{ false }}` keeps publication disabled pending the
+registry decision for the proposed `ghcr.io/oats-project/team-agent` target.
 Verification remains enabled. Enabling publication requires that decision
 and a reviewed change to the switch.
 
