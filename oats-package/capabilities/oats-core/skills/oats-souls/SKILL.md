@@ -110,10 +110,10 @@ Name an instance `<descriptive>-<role>`, with `--name`:
 - **Nothing is appended:** not the soul's name, not its last word. The soul is
   shown beside the instance's name.
 - So a lead's developer for the Desktop improvements is
-  `oats spawn oats-desktop-developer --name desktop-improvements-developer`, and
-  the lead of that effort `--name desktop-improvements-lead`, not
-  `--purpose desktop-improvements` (which gives
-  `oats-engineering-expert-desktop-improvements`).
+  `oats spawn oats-desktop-developer --name desktop-improvements-developer`,
+  not `--purpose desktop-improvements` (which gives
+  `oats-desktop-developer-desktop-improvements`), and the lead of that effort
+  is `oats spawn oats-engineering-expert --name desktop-improvements-lead`.
 
 A task you write for a spawn says the new instance's role in its first lines
 ("You lead …", "You are the developer for …"). A suggested name

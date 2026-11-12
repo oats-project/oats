@@ -14,4 +14,4 @@
   at that rule. `--purpose` (`<soul>-<purpose>`) and the numbered fallback are
   unchanged: schedules and triggers still name their runs that way. An
   instance spawned with an older oats.core keeps the old rule until it is
-  respawned.
+  respawned or its package modules are upgraded (`oats instance upgrade`).
