@@ -401,3 +401,16 @@ test("the in-container boundary body rejects a live denied endpoint or a key mou
   await assert.rejects(()=>probeRuntime(plan,{...io,fs:{...io.fs,readdirSync:()=>["credential"]}}),/credential-free state or login directory is not empty/);
   await assert.rejects(()=>probeRuntime(plan,{...io,getStatus:async()=>503}),/allowed service did not answer 200/);
 });
+
+test("public CA and source mirrors cannot overlap writable state or be mounted writable", () => {
+  for(const destination of ["/etc/agent-trust/ca.pem","/mirrors"]){
+    const valid=composeBoundary();
+    const mount={Type:"bind",Source:"/operator/public-input",Destination:destination,RW:false};
+    valid.agent.Mounts.push({...mount});valid.approvedAgentMounts.push({...mount});
+    assert.doesNotThrow(()=>assertComposeBoundary(valid));
+    const writable=structuredClone(valid);writable.agent.Mounts.at(-1).RW=true;writable.approvedAgentMounts.at(-1).RW=true;
+    assert.throws(()=>assertComposeBoundary(writable),/public input.*read-only/);
+    const nested=structuredClone(valid);nested.agent.Mounts.at(-1).Source="/fixture/state/public-input";nested.approvedAgentMounts.at(-1).Source="/fixture/state/public-input";
+    assert.throws(()=>assertComposeBoundary(nested),/public input.*protected/);
+  }
+});

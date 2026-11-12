@@ -230,6 +230,32 @@ test("acceptance refuses drift in the admitted container settings", async () => 
   const wrongTmpSize = structuredClone(inspected);
   wrongTmpSize.HostConfig.Tmpfs["/tmp"] = "rw,nosuid,nodev,size=268435456,mode=1777";
   assert.throws(() => inspectAgent(wrongTmpSize,env,image), /tmpfs/);
+  const trusted = structuredClone(inspected);
+  const trustEnv = {...env,AGENT_CA_FILE:"/operator/public-ca.pem"};
+  trusted.Config.Env.push("SSL_CERT_FILE=/etc/agent-trust/ca.pem","NODE_EXTRA_CA_CERTS=/etc/agent-trust/ca.pem");
+  trusted.Mounts.push({Source:trustEnv.AGENT_CA_FILE,Destination:"/etc/agent-trust/ca.pem",RW:false,Type:"bind"});
+  trusted.HostConfig.Mounts.push({Type:"bind",Source:trustEnv.AGENT_CA_FILE,Target:"/etc/agent-trust/ca.pem",ReadOnly:true,BindOptions:{}});
+  assert.doesNotThrow(()=>inspectAgent(trusted,trustEnv,image),"the approved optional CA is the only trust/environment exception");
+  for(const mutate of [
+    v=>{v.Config.Env[2]="SSL_CERT_FILE=/state/unreviewed.pem"},
+    v=>{v.Config.Env.pop()},
+    v=>{v.Config.Env.push("NODE_TLS_REJECT_UNAUTHORIZED=0")},
+    v=>{v.Mounts.at(-1).RW=true},
+  ]) {const changed=structuredClone(trusted);mutate(changed);assert.throws(()=>inspectAgent(changed,trustEnv,image));}
+  assert.throws(()=>inspectAgent(trusted,env,image),"unconfigured trust must not become an environment exception");
+  const writableCA=structuredClone(trusted),writableCAPath=env.TEAM_STATE_DIR+"/ca.pem";
+  writableCA.Mounts.at(-1).Source=writableCAPath;writableCA.HostConfig.Mounts.at(-1).Source=writableCAPath;
+  assert.throws(()=>inspectAgent(writableCA,{...trustEnv,AGENT_CA_FILE:writableCAPath},image),/outside agent-writable sources/);
+
+  const mirrored = structuredClone(inspected), mirrorEnv={...env,AGENT_MIRRORS_DIR:"/operator/mirrors"};
+  mirrored.Mounts.push({Source:mirrorEnv.AGENT_MIRRORS_DIR,Destination:"/mirrors",RW:false,Type:"bind"});
+  mirrored.HostConfig.Mounts.push({Type:"bind",Source:mirrorEnv.AGENT_MIRRORS_DIR,Target:"/mirrors",ReadOnly:true,BindOptions:{}});
+  assert.doesNotThrow(()=>inspectAgent(mirrored,mirrorEnv,image));
+  const writableMirrors=structuredClone(mirrored);writableMirrors.Mounts.at(-1).RW=true;
+  assert.throws(()=>inspectAgent(writableMirrors,mirrorEnv,image));
+  const nestedMirrors=structuredClone(mirrored),nestedSource=env.TEAM_STATE_DIR+"/mirrors";
+  nestedMirrors.Mounts.at(-1).Source=nestedSource;nestedMirrors.HostConfig.Mounts.at(-1).Source=nestedSource;
+  assert.throws(()=>inspectAgent(nestedMirrors,{...mirrorEnv,AGENT_MIRRORS_DIR:nestedSource},image),/outside agent-writable sources/);
   const withoutCmd = structuredClone(image);
   delete withoutCmd.Config.Cmd;
   assert.ok(inspectAgent(inspected, env, withoutCmd).length >= 8, "Docker image metadata omits Cmd while container metadata uses null");
@@ -550,4 +576,53 @@ test("supervisor liveness stays healthy when SSH is gone", async t => {
   assert.equal(supervisorAlive({procRoot}),false,"a probe's own argument text is not the supervisor");
   writeFileSync(join(procRoot,"8","cmdline"),"");
   assert.equal(supervisorAlive({procRoot}),false,"an exited/zombie supervisor is not live");
+});
+
+
+test("optional public CA fragment has one fixed mount and two named trust settings", () => {
+  const path=new URL("../container/agent/compose.agent.trust.yaml",import.meta.url);
+  assert.ok(existsSync(path),"the supported optional trust fragment is required");
+  assert.deepEqual(parse(readFileSync(path,"utf8")),{services:{agent:{
+    environment:{SSL_CERT_FILE:"/etc/agent-trust/ca.pem",NODE_EXTRA_CA_CERTS:"/etc/agent-trust/ca.pem"},
+    volumes:[{type:"bind",source:"${AGENT_CA_FILE:?Set AGENT_CA_FILE}",target:"/etc/agent-trust/ca.pem",read_only:true,bind:{create_host_path:false}}],
+  }}});
+});
+
+test("public CA acceptance rejects private keys, malformed files and writable trust", async () => {
+  const {publicCACheck}=await import("../container/agent/accept.mjs");
+  assert.equal(typeof publicCACheck,"function","a real mounted-CA check is required");
+  const crypto=await import("node:crypto"),tls=await import("node:tls");
+  const pem=tls.rootCertificates[0];
+  const fs={constants:{W_OK:2},statSync:()=>({isFile:()=>true,size:pem.length}),readFileSync:()=>pem,
+    accessSync:()=>{throw Object.assign(new Error("read-only fixture"),{code:"EROFS"})}};
+  const run=system=>runInNewContext(`(${publicCACheck.toString()})()`,{require:name=>name==="node:fs"?system:name==="node:crypto"?crypto:assert});
+  assert.equal(run(fs),"public CA: valid read-only CA certificates; contents withheld");
+  for(const contents of ["",pem+"\n-----BEGIN PRIVATE KEY-----\nPRIVATE_VALUE_MUST_BE_WITHHELD\n-----END PRIVATE KEY-----\n","-----BEGIN CERTIFICATE-----\nbroken\n-----END CERTIFICATE-----"]){
+    assert.throws(()=>run({...fs,readFileSync:()=>contents}),error=>/public CA/.test(error.message)&&!error.message.includes("PRIVATE_VALUE_MUST_BE_WITHHELD"));
+  }
+  assert.throws(()=>run({...fs,accessSync:()=>{}}),/public CA/);
+  assert.throws(()=>run({...fs,statSync:()=>({isFile:()=>true,size:65537})}),/public CA/);
+});
+
+
+test("optional mirrors fragment has only the operator-controlled read-only mount", () => {
+  const path=new URL("../container/agent/compose.agent.mirrors.yaml",import.meta.url);
+  assert.ok(existsSync(path),"the supported optional mirrors fragment is required");
+  assert.deepEqual(parse(readFileSync(path,"utf8")),{services:{agent:{volumes:[{
+    type:"bind",source:"${AGENT_MIRRORS_DIR:?Set AGENT_MIRRORS_DIR}",target:"/mirrors",read_only:true,bind:{create_host_path:false},
+  }]}}});
+});
+
+test("mirror acceptance requires readable directories and refuses writable mirrors", async () => {
+  const {mirrorsCheck}=await import("../container/agent/accept.mjs");
+  assert.equal(typeof mirrorsCheck,"function","a read-only mirror check is required");
+  const fs={statSync:()=>({isDirectory:()=>true}),readdirSync:()=>["github.com"],
+    writeFileSync:()=>{throw Object.assign(new Error("read-only fixture"),{code:"EROFS"})},unlinkSync:()=>assert.fail("no file was written")};
+  const run=system=>runInNewContext(`(${mirrorsCheck.toString()})()`,{process:{pid:100},require:()=>system});
+  assert.equal(run(fs),"mirrors: readable read-only directory; source freshness is operator-qualified");
+  let removed=false;
+  assert.throws(()=>run({...fs,writeFileSync:()=>{},unlinkSync:()=>{removed=true}}),/mirrors/);
+  assert.equal(removed,true,"an unexpected write is removed before reporting failure");
+  assert.throws(()=>run({...fs,statSync:()=>({isDirectory:()=>false})}),/mirrors/);
+  assert.throws(()=>run({...fs,readdirSync:()=>{throw new Error("unreadable")}}),/mirrors/);
 });

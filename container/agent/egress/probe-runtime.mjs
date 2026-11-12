@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { tcpReachable } from "./canary.mjs";
 import { compilePolicy } from "./policy.mjs";
+import { publicCACheck, mirrorsCheck } from "../accept.mjs";
 
 export async function probeRuntime(plan, io = {}) {
   const fs = io.fs || await import("node:fs");
@@ -31,6 +32,14 @@ export async function probeRuntime(plan, io = {}) {
     expect(fs.statSync(caFile).isFile() && fs.statSync(caFile).size <= 65536,"public CA material is invalid");
     ca = fs.readFileSync(caFile);
     expect(ca.length <= 65536 && ca.toString().includes("BEGIN CERTIFICATE") && !ca.toString().includes("PRIVATE KEY"), "public CA material is invalid");
+    if (caFile === "/etc/agent-trust/ca.pem") {
+      const env = io.environment || process.env;
+      expect(env.SSL_CERT_FILE === caFile && env.NODE_EXTRA_CA_CERTS === caFile,"public CA trust settings differ");
+      try { publicCACheck(fs, await import("node:crypto")); } catch { expect(false,"public CA material or read-only mount is invalid"); }
+    }
+  }
+  if (plan.mirrors) {
+    try { mirrorsCheck(fs); } catch { expect(false,"mirrors are not readable and read-only"); }
   }
   const dns = await import("node:dns/promises");
   const resolver = io.resolver || new dns.Resolver({ timeout:1000, tries:1 });
@@ -109,7 +118,7 @@ export async function probeRuntime(plan, io = {}) {
 
 export function runtimeProgram(plan) {
   compilePolicy(plan.policy);
-  return `const tcpReachable=(${tcpReachable.toString()});const probeRuntime=(${probeRuntime.toString()});try{await probeRuntime(JSON.parse(${JSON.stringify(JSON.stringify(plan))}));process.stdout.write("OATS_EGRESS_BOUNDARY_PASS\\n");}catch(error){const label=error?.name==="BoundaryFailure"?error.message:"input or runtime operation failed";process.stderr.write("egress boundary: "+label+"\\n");process.exitCode=1;}`;
+  return `const tcpReachable=(${tcpReachable.toString()});const publicCACheck=(${publicCACheck.toString()});const mirrorsCheck=(${mirrorsCheck.toString()});const probeRuntime=(${probeRuntime.toString()});try{await probeRuntime(JSON.parse(${JSON.stringify(JSON.stringify(plan))}));process.stdout.write("OATS_EGRESS_BOUNDARY_PASS\\n");}catch(error){const label=error?.name==="BoundaryFailure"?error.message:"input or runtime operation failed";process.stderr.write("egress boundary: "+label+"\\n");process.exitCode=1;}`;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

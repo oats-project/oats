@@ -11,6 +11,15 @@ function required(env, name) {
 
 const ids = (env) => ({ uid: env.AGENT_UID || "20001", gid: env.AGENT_GID || "20001" });
 
+// The optional public-CA mount is the only deployment environment exception.
+// Both settings reach the broker before it starts, including its Node child.
+export function agentEnvironment(imageEnv, publicCA = false) {
+  if (!publicCA) return imageEnv;
+  const trust = ["SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS"];
+  return [...imageEnv.filter(entry => !trust.includes(entry.split("=", 1)[0])),
+    ...trust.map(name => `${name}=/etc/agent-trust/ca.pem`)];
+}
+
 // Compare only reviewed settings, never dump Config.Env or credential contents.
 export function inspectAgent(info, env, image, defaultRuntime = "runc") {
   const evidence = [];
@@ -59,7 +68,7 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc") {
   equal("agent IP", info.NetworkSettings.Networks[network].IPAddress, required(env, "AGENT_IP"));
   const names = (entries) => entries.map((entry) => entry.split("=", 1)[0]);
   assert.ok(Array.isArray(image?.Config?.Env), "image environment baseline is required");
-  const actualEnv = info.Config.Env || [], expectedEnv = image.Config.Env;
+  const actualEnv = info.Config.Env || [], expectedEnv = agentEnvironment(image.Config.Env, !!env.AGENT_CA_FILE);
   const allNames = new Set([...names(actualEnv), ...names(expectedEnv)]);
   const entriesFor = (entries, name) => entries.filter((entry) => entry.split("=", 1)[0] === name).sort();
   const changedNames = [...allNames].filter((name) => !isDeepStrictEqual(entriesFor(actualEnv, name), entriesFor(expectedEnv, name)));
@@ -90,6 +99,8 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc") {
     ["TEAM_LOGIN_DIR", "/etc/agent-login", false],
     ["AUTHORIZED_KEYS_FILE", "/etc/agent-ssh/authorized_keys", false],
     ["RESOLV_CONF_FILE", "/etc/resolv.conf", false],
+    ...(env.AGENT_CA_FILE ? [["AGENT_CA_FILE", "/etc/agent-trust/ca.pem", false]] : []),
+    ...(env.AGENT_MIRRORS_DIR ? [["AGENT_MIRRORS_DIR", "/mirrors", false]] : []),
     ...(env.TEAM_WORK_DIR ? [["TEAM_WORK_DIR", "/work", true]] : []),
   ].map(([name, target, rw]) => {
     const source = required(env, name);
@@ -97,6 +108,13 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc") {
     assert.ok(!source.includes("docker.sock"), "no Docker socket source");
     return { source: resolve(source), target, rw, type: "bind" };
   });
+  for (const input of mounts.filter(m => m.target === "/etc/agent-trust/ca.pem" || m.target === "/mirrors")) {
+    for (const writable of mounts.filter(m => m.rw)) {
+      const overlaps = input.source === writable.source || input.source.startsWith(writable.source + "/")
+        || writable.source.startsWith(input.source.endsWith("/") ? input.source : input.source + "/");
+      assert.ok(!overlaps,"public CA and mirrors must stay outside agent-writable sources");
+    }
+  }
   const sort = (v) => v.sort((a, b) => a.target.localeCompare(b.target));
   equal("exact approved mounts (no extra home, socket or service-account mount)", sort(info.Mounts.map((m) => ({ source: m.Source, target: m.Destination, rw: m.RW, type: m.Type }))), sort(mounts));
   equal("legacy auto-creating binds", h.Binds || [], []);
@@ -132,6 +150,39 @@ function runtimeCheck(uid, gid) {
   socket.setTimeout(5000, () => { console.error("SSH banner timed out"); process.exit(1); });
   socket.once("data", (chunk) => { assert.match(chunk.toString(), /^SSH-2\.0-OpenSSH_/); console.log(`SSH banner: ${chunk.toString().trim()}`); socket.destroy(); });
   socket.once("error", (err) => { console.error(err.message); process.exit(1); });
+}
+
+// Serialized inside the agent: CA bytes are public, but private-key mistakes
+// and parser diagnostics must never be copied into acceptance output.
+export function publicCACheck(fs = require("node:fs"), { X509Certificate } = require("node:crypto")) {
+  const path = "/etc/agent-trust/ca.pem";
+  try {
+    const stat = fs.statSync(path);
+    if (!stat.isFile() || stat.size > 65536) throw new Error("invalid file");
+    const pem = fs.readFileSync(path,"utf8");
+    const certificates = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g) || [];
+    if (!certificates.length || pem.replace(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g,"").trim()
+      || certificates.some(certificate => !new X509Certificate(certificate).ca)) throw new Error("invalid certificates");
+    let writable = true;
+    try { fs.accessSync(path,fs.constants.W_OK); }
+    catch (error) { if (error.code === "EROFS" || error.code === "EACCES") writable = false; else throw error; }
+    if (writable) throw new Error("writable trust");
+    return "public CA: valid read-only CA certificates; contents withheld";
+  } catch { throw new Error("public CA must contain only valid read-only CA certificates (contents withheld)"); }
+}
+
+export function mirrorsCheck(fs = require("node:fs")) {
+  const root = "/mirrors";
+  const probe = `${root}/.oats-read-only-probe-${process.pid}`;
+  try {
+    if (!fs.statSync(root).isDirectory()) throw new Error("not a directory");
+    fs.readdirSync(root);
+    let wrote = false;
+    try { fs.writeFileSync(probe,"probe",{flag:"wx",mode:0o600}); wrote = true; }
+    catch (error) { if (error.code !== "EROFS" && error.code !== "EACCES") throw error; }
+    if (wrote) { fs.unlinkSync(probe); throw new Error("writable mirrors"); }
+    return "mirrors: readable read-only directory; source freshness is operator-qualified";
+  } catch { throw new Error("mirrors must be a readable read-only directory (contents withheld)"); }
 }
 
 // Validate the mount even before a token is provisioned; never create a placeholder.
@@ -207,6 +258,8 @@ function main(args, env) {
   report(`PASS ${program(runtimeCheck, [uid, gid]).replaceAll("\n", `\n[${label}] PASS `)}`);
   const token = JSON.parse(program(tokenCheck, [gid, label !== "local"]));
   for (const line of token.evidence) report(line);
+  if (env.AGENT_CA_FILE) report(`PASS ${JSON.parse(program(publicCACheck, []))}`);
+  if (env.AGENT_MIRRORS_DIR) report(`PASS ${JSON.parse(program(mirrorsCheck, []))}`);
   report(`PASS ${program(credentialScan, [["/"], ["/proc", "/sys", "/dev", "/state", "/tmp", "/run", "/work"]], true)}`);
   const writableRoots = ["/state", "/tmp", "/run", "/work", "/dev/shm", "/dev/mqueue"];
   report(`PASS ${program(credentialScan, [writableRoots])}`);

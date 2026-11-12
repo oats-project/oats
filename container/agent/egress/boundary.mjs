@@ -38,6 +38,10 @@ export function assertComposeBoundary({ agent, egress, agentsNetwork, servicesNe
     assert.ok(typeof mount.Destination === "string" && mount.Destination.startsWith("/")
       && !posix.normalize(mount.Destination).startsWith("/run/secrets"), "agent must not mount service secrets");
     assertPublicMountSource(mount.Source, protectedSources);
+    if (["/etc/agent-trust/ca.pem", "/mirrors"].includes(mount.Destination)) {
+      assert.equal(mount.RW,false,"public input mounts must be read-only");
+      for (const writable of agent.Mounts.filter(item => item.RW)) assertPublicMountSource(mount.Source,[writable.Source],"public input");
+    }
   }
 }
 

@@ -1,0 +1,12 @@
+# Include only when the shared configuration supplies agents.caFile.
+services:
+  agent:
+    environment:
+      SSL_CERT_FILE: /etc/agent-trust/ca.pem
+      NODE_EXTRA_CA_CERTS: /etc/agent-trust/ca.pem
+    volumes:
+      - type: bind
+        source: ${AGENT_CA_FILE:?Set AGENT_CA_FILE}
+        target: /etc/agent-trust/ca.pem
+        read_only: true
+        bind: { create_host_path: false }

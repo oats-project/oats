@@ -166,17 +166,24 @@ The runtime JSON is derived by the deployment wrapper. Its fields are:
 | `agentsNetwork`, `servicesNetwork` | Existing bundle network names. No replacement agents network is created. |
 | `probeImage`, `proxyImage` | Reviewed repository digest references; a local content ID is also accepted for a disposable image test. |
 | `uid`, `gid` | Configured numeric non-root agent IDs. |
-| `approvedProbeMounts` | Expected `{Type,Source,Destination,RW}` entries from reviewed configuration, including the staged public mounts; not copied from inspect. Bind sources must resolve on this engine host. |
+| `approvedProbeMounts` | Expected `{Type,Source,Destination,RW}` entries from reviewed configuration, including the staged public CA and optional `/mirrors` mounts; not copied from inspect. Bind sources must resolve on this engine host. |
 | `protectedSources` | Canonical private service/database directories or key paths, plus the engine socket. |
 | `policy` | The same derived policy object mounted in the live proxy. |
 | `allowedPaths` | Exactly the five roles, with an existing harmless HTTP 200 control path per API; for example `/ready`, signer `/readyz`, registry `/health`. |
 | `deniedBackends` | Two `{role,address,port,controlNetwork?}` records, roles `postgres` and `redis`; each address is in `policy.deniedAddresses`. `controlNetwork` selects an existing backend network for its live control, otherwise `servicesNetwork`. |
-| `caFile` | Optional public CA path inside the probe. No private key in the file. |
+| `caFile` | Optional public CA path inside the probe. The supported agent trust fragment uses `/etc/agent-trust/ca.pem` and exactly its two fixed trust settings. An explicit CA at another public probe path remains probe-only evidence. No private key in the file. |
 | `protectedPaths` | Optional additional service-private paths that must not exist inside the probe. Standard secret/socket/custody paths are always checked. |
 
 The operator-side adapter checks actual image IDs, inert entrypoint, non-root
 identity, dropped capabilities, read-only root, no new privileges, exact mount
 sources, the sole isolated agents network and the proxy's two networks. It
+permits the agent's two fixed CA environment settings only with the configured
+trust path. Public CA and mirrors are read-only and cannot overlap writable
+state/work sources. Their runtime checks reuse the agent acceptance functions.
+For `probe-runtime.mjs --emit-program`, set runtime `mirrors: true` only when the
+platform adapter has admitted that exact read-only mount; the Compose adapter
+derives it from the approved inventory.
+The adapter
 requires the live proxy policy to equal the derived policy and establishes live
 TCP controls from the existing services/backend networks. Its own temporary host
 canary binds only the services bridge's gateway address.

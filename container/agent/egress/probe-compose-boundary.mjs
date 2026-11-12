@@ -9,6 +9,7 @@ import { compilePolicy } from "./policy.mjs";
 import { assertComposeBoundary, assertPublicMountSource } from "./boundary.mjs";
 import { docker, tcpFromNetwork, withGatewayCanary } from "./canary.mjs";
 import { runtimeProgram } from "./probe-runtime.mjs";
+import { agentEnvironment } from "../accept.mjs";
 
 function json(args) {
   const text=docker(args);
@@ -39,7 +40,8 @@ export async function probeComposeBoundary(plan) {
     const image=json(["image","inspect",reference])[0];
     assert.equal(info.Config.Image,reference,"container image reference differs from reviewed source");
     assert.equal(info.Image,image.Id,"container image content differs from reviewed source");
-    assert.deepEqual([...(info.Config.Env||[])].sort(),[...(image.Config.Env||[])].sort(),"probe or proxy environment differs from reviewed image (values withheld)");
+    const expectedEnv = agentEnvironment(image.Config.Env||[], info === probe && plan.caFile === "/etc/agent-trust/ca.pem");
+    assert.deepEqual([...(info.Config.Env||[])].sort(),[...expectedEnv].sort(),"probe or proxy environment differs from reviewed image (values withheld)");
     assert.ok((info.HostConfig.Devices||[]).length===0 && (info.HostConfig.DeviceRequests||[]).length===0,"probe or proxy has an unexpected device");
   }
   assert.deepEqual(proxy.Config.Entrypoint,json(["image","inspect",plan.proxyImage])[0].Config.Entrypoint,"proxy must run its reviewed entrypoint");
@@ -74,7 +76,8 @@ export async function probeComposeBoundary(plan) {
   assert.ok(gateway,"services network needs an identified gateway for the owned host canary");
   await withGatewayCanary({image:plan.proxyImage,controlNetwork:plan.servicesNetwork,gatewayAddress:gateway},async endpoint=>{
     const program=runtimeProgram({policy:plan.policy,allowedPaths:plan.allowedPaths,deniedBackends:plan.deniedBackends,
-      uid:plan.uid,gid:plan.gid,caFile:plan.caFile,protectedPaths:plan.protectedPaths||[],gateway:endpoint});
+      uid:plan.uid,gid:plan.gid,caFile:plan.caFile,mirrors:approvedMounts.some(mount=>mount.Destination === "/mirrors"),
+      protectedPaths:plan.protectedPaths||[],gateway:endpoint});
     const result=spawnSync("docker",["exec","-i",plan.probeContainer,"node","--input-type=module","-"],{input:program,encoding:"utf8",timeout:45000,maxBuffer:1024*1024});
     if(result.status!==0) {
       const first=(result.stderr||"").split("\n")[0];

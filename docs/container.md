@@ -111,6 +111,8 @@ the UID-only form proves startup and SSH support, not token access.
 | `/etc/agent-ssh/authorized_keys` | root-owned regular file, 0644 | Read-only |
 | `/etc/resolv.conf` | Operator-provided resolver file | Read-only |
 | `/tmp` | tmpfs, rw,nosuid,nodev,size=AGENT_TMP_SIZE,mode=1777 | Ephemeral; bounded by the configured byte limit |
+| `/etc/agent-trust/ca.pem` | Optional public CA file, read-only | Operator-provisioned extra trust; no private keys |
+| `/mirrors` | Optional bare Git mirror directory, read-only | Operator-refreshed source snapshots, outside writable state |
 
 All binds use `create_host_path: false`: a missing path fails startup.
 `/state/home`, `/state/ssh` and `/state/deploy` are created 0700 by the agent.
@@ -142,6 +144,8 @@ Supply these plain variables to the bundle's env file:
 | `RESOLV_CONF_FILE` | Absolute host resolver file; always required. |
 | `AGENT_PIDS`, `AGENT_MEMORY`, `AGENT_CPUS` | Positive limits; memory uses bytes, k, m or g. |
 | `AGENT_TMP_SIZE` | Positive integer bytes from the shared configuration's `agents.tmpSize`; bounds the `/tmp` tmpfs. |
+| `AGENT_CA_FILE` | Optional absolute public PEM path from `agents.caFile`; selects `compose.agent.trust.yaml`. |
+| `AGENT_MIRRORS_DIR` | Optional absolute mirror directory from `agents.mirrorsDir`; selects `compose.agent.mirrors.yaml`. |
 | `AGENTS_NETWORK`, `AGENT_IP` | Installer-created external network and container address. |
 
 The bundle owns the network, resolver, forwarder, firewall and their bypass
@@ -151,6 +155,38 @@ policy is `unless-stopped`, its stop grace period is 45 seconds and its
 healthcheck reads sshd's port
 ([The kernel's periodic work](#the-kernels-periodic-work)); security flags
 are fixed in the service file.
+
+Include `compose.agent.trust.yaml` only when `agents.caFile` is configured. It
+adds one read-only mount at `/etc/agent-trust/ca.pem` and exactly two fixed
+environment settings: `SSL_CERT_FILE` and `NODE_EXTRA_CA_CERTS`, both pointing
+there before the supervisor starts. The file must contain only valid public CA
+certificates, at most 64 KiB, with no private key. Go keeps its normal certificate
+directories and Node extends its normal roots. The acceptance check validates
+the file and the exact mount/environment pair; it permits no general environment
+override. The broker and its Node verification child receive the same trust
+settings. A successful probe using an explicit CA does not establish that the
+real broker trusts it; prove that through the deployment's HTTPS registry.
+
+Include `compose.agent.mirrors.yaml` only when `agents.mirrorsDir` is configured.
+The operator provisions and refreshes the bare mirrors outside the container,
+with no repository credentials, and the fragment mounts them read-only at
+`/mirrors`. Keep both optional input sources outside every agent-writable bind
+source. The wrapper renders the existing Git rewrite in
+`/state/home/.gitconfig`:
+
+```gitconfig
+[url "file:///mirrors/github.com/"]
+    insteadOf = https://github.com/
+```
+
+Retain the operator's exact source/ref/commit manifest and refresh time beside
+the mirrors. A snapshot observes the last operator refresh; its presence does
+not prove current membership or withdrawal freshness. The first deployment check
+is `oats workspace status` with all members confirmed, followed by the actual
+spawn preview. Do not enable all Git file transports or add a general Git-host
+egress route to make that check pass. Kubernetes uses an explicit existing
+`agents.kubernetes.mirrorsClaim` for the same read-only mount, separate from
+state; it never turns the Compose directory into a hostPath.
 
 ```sh
 docker compose -p "oats-team-${TEAM}" --env-file <plain-env-file> \
