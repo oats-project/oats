@@ -35,4 +35,4 @@ Hosts that ran workspace automations before 0.30 must add their `trust` lines. T
 notes say so. No host of ours runs one today, so there's nothing to migrate.
 
 ## Unblocks
-The okf review trigger on Juan's host: it runs once his host trusts it.
+The okf review trigger on an operator's host: it runs once that host trusts it.

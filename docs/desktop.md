@@ -686,10 +686,10 @@ feature (OATS 0.36.0); without it each deployment has its own entry.
   One sentence above them says what a machine is: "Each machine runs this
   workspace in a folder of its own. The instances under a machine run on
   that machine." **All** stacks one section per deployment, each headed by
-  its machine and folder ("This Mac · ~/acme", "altair · ~/northwind"),
-  with "Instances on this machine" or "Instances on altair" under it. Then
-  each deployment has a tab of its own, named by its machine ("altair";
-  "This Mac · oats-v2" when this Mac holds two). A workspace with one
+  its machine and folder ("This Mac · ~/acme", "devbox · ~/northwind"),
+  with "Instances on this machine" or "Instances on devbox" under it. Then
+  each deployment has a tab of its own, named by its machine ("devbox";
+  "This Mac · acme-2" when this Mac holds two). A workspace with one
   deployment shows just that deployment's tab, its tree under the same
 heading. The tab you chose is
   remembered per workspace. With two or more deployments, the sidebar's
@@ -712,7 +712,7 @@ heading. The tab you chose is
   can't read other machines. A server that can't be reached stays under the
   workspace it last reported, marked "remembered".
 - **The list of workspaces.** Each workspace names its machines on one line ("This Mac ·
-  altair"), with a mark when one of them isn't live.
+  devbox"), with a mark when one of them isn't live.
 - **Not matched to a workspace.** A deployment that can't be matched is
   listed on its own under that heading in the list, with its machine and
   a short reason; choosing it opens its tab on the Machines tab. When this

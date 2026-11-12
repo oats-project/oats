@@ -974,7 +974,7 @@ selected.
 ```
   acme-platform                       │   dev
   acme-billing ●                      │   soul     dev
-  lfx                                 │   state    running
+  lab                                 │   state    running
   garnet                              │   harness  claude, claude-opus-5-5 (so…
   +2                                  │   work     worktree, agents/dev
                                       │   team     eng
@@ -983,7 +983,7 @@ selected.
 
 The sidebar's first rows list the workspaces this run can show, one row a
 workspace, whatever machines it is on, in [the switcher](#the-switcher)'s
-order: `lfx` is one row however many machines hold it, and a machine the
+order: `lab` is one row however many machines hold it, and a machine the
 rules shared with the Desktop matched to no workspace is a row by its own
 name, in the same flat list. A row is one line: the name. With one
 workspace the list is its row.
@@ -1028,7 +1028,7 @@ workspace the list is its row.
   that list fills the sidebar, which then has no such row, does the line
   take a row, the list giving up its last. With the list's focus (`w`) the
   focus stays there, the cursor where it was. A workspace with a deployment of this
-  machine not opened yet (lfx, with `~/Work/lfx` on this computer's list)
+  machine not opened yet (lab, with `~/Work/lab` on this computer's list)
   opens it first, as the switcher's `Enter` does. What the workspace left
   had open is kept for it, as for a switch from the
   switcher ([Tabs](#tabs)), and from a terminal's focus the focus is kept
@@ -1068,9 +1068,9 @@ switcher covers the whole screen.
  workspaces                                     │ > * acme-platform
                                                 │       This machine
  Instances                                    1 │       garnet
- Souls                                        2 │     lfx
+ Souls                                        2 │     lab
  Capabilities                                 3 │       This machine · not opened
-────────────────────────────────────────────────│       athenea (lfx)
+────────────────────────────────────────────────│       builder (lab)
  Ctrl+X   commands                              │   Not matched to a workspace
  Ctrl+K   palette                               │     basalt                ssh needs a prompt
  Enter    open                                  │   On this machine, not opened

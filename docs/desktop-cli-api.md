@@ -2166,7 +2166,7 @@ The messaging provider's `teams` operation (`messaging:teams`) is produced by
 the provider (oats.aweb 1.17 or later), not the kernel:
 
 ```json
-{"defaultTeam":{"label":"antares","team":"antares:ana.aweb.ai","from":"deployment"},
+{"defaultTeam":{"label":"builder","team":"builder:ana.aweb.ai","from":"deployment"},
  "eligible":[{"label":"oats","team":"oats:oats.aweb.ai","joined":true}],
  "joined":[{"label":"oats","team":"oats:oats.aweb.ai","identityHome":"/w/agents/oe/instances/oe-1/.aw-teams/oats","receive":"live","since":"2026-09-28T09:00:00.000Z"}],
  "left":[{"label":"reviewers","team":"reviewers:acme.aweb.ai","at":"2026-09-28T09:30:00.000Z","reason":"no-longer-eligible"}],
@@ -4177,9 +4177,9 @@ whose key is not known; an unparsable ref is `E_REPO_REF`.
 
 ```json
 {"file":"/Users/me/.oats/servers.json",
- "servers":[{"id":"altair-aweb","sshHost":"altair","operatorSshHost":"altair-operator","workspace":"/Users/me/acme","path":"/opt/homebrew/bin","label":"altair",
-             "workspaceKey":"github.com/awebai/ac",
-             "target":{"sshHost":"altair","workspace":"/Users/me/acme","oatsPath":"oats","path":"/opt/homebrew/bin"},"snapshots":0}],
+ "servers":[{"id":"devbox-aweb","sshHost":"devbox","operatorSshHost":"devbox-operator","workspace":"/Users/me/acme","path":"/opt/homebrew/bin","label":"devbox",
+             "workspaceKey":"github.com/example/app",
+             "target":{"sshHost":"devbox","workspace":"/Users/me/acme","oatsPath":"oats","path":"/opt/homebrew/bin"},"snapshots":0}],
  "unknownWorkspace":["build"]}
 ```
 
@@ -4205,18 +4205,18 @@ An envelope, `ok: true` whenever no step failed, human steps included
 ([servers.md](servers.md#connect-a-machine) has what each step does):
 
 ```json
-{"id":"altair-aweb","ready":false,
+{"id":"devbox-aweb","ready":false,
  "registration":null,
  "steps":[{"step":"ssh","status":"ok"},
           {"step":"oats","status":"done","detail":"installed @awebai/oats 0.39.0 (was missing)"},
           {"step":"git","status":"needs-human","code":"E_REMOTE_UNREADABLE",
-           "detail":"cannot read remote https://github.com/awebai/ac (auth): on macOS a session without a terminal …",
-           "remedy":"on altair: on macOS a session without a terminal … (`gh auth login --insecure-storage`, then `gh auth setup-git`), or use an SSH key the session can reach: …",
+           "detail":"cannot read remote https://github.com/example/app (auth): on macOS a session without a terminal …",
+           "remedy":"on devbox: on macOS a session without a terminal … (`gh auth login --insecure-storage`, then `gh auth setup-git`), or use an SSH key the session can reach: …",
            "hint":"keychain-non-interactive"},
           {"step":"deployment","status":"skipped","detail":"waits for git"},
           {"step":"register","status":"skipped","detail":"waits for git"},
           {"step":"readiness","status":"skipped","detail":"waits for git"}],
- "human":["on altair: on macOS a session without a terminal … or the desktop login's ssh-agent (point SSH_AUTH_SOCK at it in the shell's startup file)"]}
+ "human":["on devbox: on macOS a session without a terminal … or the desktop login's ssh-agent (point SSH_AUTH_SOCK at it in the shell's startup file)"]}
 ```
 
 - `steps` is always the six steps `ssh`, `oats`, `git`, `deployment`,
