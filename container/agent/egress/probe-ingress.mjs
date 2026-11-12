@@ -10,7 +10,7 @@ import { checkServerIdentity, connect as connectTls } from "node:tls";
 import { pathToFileURL } from "node:url";
 import { originHost } from "./policy.mjs";
 
-function statusOf({ protocol, address, port, sni, authority, expectedHost, path, ca }) {
+export function statusOf({ protocol, address, port, sni, authority, expectedHost, path, ca }) {
   return new Promise((resolve, reject) => {
     let finished = false, request, session, socket;
     const done = (error, status) => {
@@ -58,7 +58,7 @@ function backendLog(path) {
   } catch { throw new Error("backend audit log is unavailable or too large"); }
 }
 
-export async function probeIngress({ address, port = 443, requestOrigin, humanOrigin, requestLog, humanLog, ca, path = "/ready", requestPath = path, humanPath = path }) {
+export async function probeIngress({ address, port = 443, requestOrigin, humanOrigin, requestLog, humanLog, ca, path = "/ready", requestPath = path, humanPath = path, exchange = statusOf }) {
   const requestHost = originHost(requestOrigin), humanHost = originHost(humanOrigin);
   assert.ok(requestHost !== humanHost && isIP(address) === 4, "ingress probe needs distinct origins and an IPv4 address");
   assert.ok(Number.isInteger(port) && port > 0 && port <= 65535, "ingress probe port is invalid");
@@ -76,7 +76,7 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
     const controlPath = authority === humanHost || authority === humanHost + ":443" ? humanPath : requestPath;
     const url = new URL(controlPath, requestOrigin); url.searchParams.set("oats_egress_probe", id);
     try {
-      const status = await statusOf({ protocol, address, port, sni, authority,
+      const status = await exchange({ protocol, address, port, sni, authority,
         expectedHost:sni === humanHost ? humanHost : requestHost, path:url.pathname + url.search, ca });
       assert.equal(status, kind === "forbidden" ? 421 : 200,
         kind === "forbidden" ? "ingress did not refuse a forbidden authority" : "matched ingress control did not succeed");
