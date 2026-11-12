@@ -7,6 +7,7 @@ import { mkdtempSync, realpathSync, writeFileSync, readFileSync, rmSync, existsS
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
+import { spawnSync } from 'node:child_process';
 import { backendRequest, startBackendThroughSpec, READY_LINE } from './helpers/backend-server.mjs';
 import { serverSpawnSpec } from '../server-host.mjs';
 import { NO_CLI_ENV } from '../scripts/smoke-probes.mjs';
@@ -16,16 +17,19 @@ const HERMETIC = { ...process.env, ...NO_CLI_ENV };
 
 /** A fake `oats` (a shell script: it holds no descriptor of its own at 3) that answers `version --json`
  * as a compatible CLI and records each run: its argv, its environment and whether its fd 3 is open. */
-function fakeCli(dir, name = 'oats', { gate = false, lateStart = false } = {}) {
+function fakeCli(dir, name = 'oats', { gate = false, lateStart = false, heldStart = false } = {}) {
   const log = join(dir, `${name}.log`), startedLog = join(dir, `${name}.started`);
   const bin = join(dir, name);
-  const gateFile = join(dir, `${name}.gate`);
+  const gateFile = join(dir, `${name}.gate`), launchedLog = join(dir, `${name}.launched`);
+  const waitGate = `i=0; while [ ! -e '${gateFile}' ] && [ $i -lt 400 ]; do /bin/sleep 0.05; i=$((i+1)); done`;
   // With a gate, a `server roster` run writes its first lines and then waits (bounded) for the gate file before
   // it writes its environment: a run held mid-record.
-  const hold = gate ? `case "$1 $2" in "server roster") i=0; while [ ! -e '${gateFile}' ] && [ $i -lt 400 ]; do /bin/sleep 0.05; i=$((i+1)); done;; esac; ` : '';
+  const hold = gate ? `case "$1 $2" in "server roster") ${waitGate};; esac; ` : '';
   // With lateStart, a `server roster` run waits half a second before it notes its start: a run already launched
-  // that has not yet said so.
-  const late = lateStart ? `case "$1 $2" in "server roster") /bin/sleep 0.5;; esac\n` : '';
+  // that has not yet said so. With heldStart, it marks its launch in a file only a test body reads, then waits
+  // (bounded) for the gate file before it notes its start.
+  const late = lateStart ? `case "$1 $2" in "server roster") /bin/sleep 0.5;; esac\n`
+    : heldStart ? `case "$1 $2" in "server roster") echo "run $*" >> '${launchedLog}'; ${waitGate};; esac\n` : '';
   writeFileSync(join(dir, `${name}.version.json`), VERSION);
   // Each run notes its start, writes its record to a file of its own and only then appends it to the log, in one
   // write: the log holds whole records only, never one half-written or two interleaved.
@@ -57,7 +61,9 @@ record='${log}.'$$
     }
     throw new Error(`no \`${args}\` run started`);
   };
-  return { bin, log, gate: gateFile, runs, started, settled, startedRun, probes: () => started().filter((l) => l === 'run version --json').length };
+  /** The `server roster` runs a heldStart fake has launched, noted or not. */
+  const launched = () => (existsSync(launchedLog) ? readFileSync(launchedLog, 'utf8').split('\n').filter((l) => l.startsWith('run ')) : []);
+  return { bin, log, gate: gateFile, runs, started, settled, startedRun, launched, probes: () => started().filter((l) => l === 'run version --json').length };
 }
 
 /** Every run a server started at start-up makes of the fake CLI, each once it has finished. Its first acceptance of
@@ -68,24 +74,38 @@ async function serverRuns(fake) {
   return fake.settled();
 }
 
+/** Waits (bounded) until no process names a path in `dir` on its command line: every CLI run a server started
+ * from it has ended. Called once that server has exited: it starts no run after that, and each run it started was
+ * already executing (a spawn returns once its exec has), so the process table holds every one until it ends,
+ * whether or not it has noted its start in the fake's records. A fake's run is `/bin/sh <dir>/<name> …`, and each
+ * child it waits on runs under it. */
+async function runsEnded(dir) {
+  const inDir = () => {
+    const ps = spawnSync('ps', ['-A', '-ww', '-o', 'args='], { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', LC_ALL: 'C' } });
+    if (ps.status !== 0) throw new Error(`ps failed: ${ps.error?.message ?? ps.stderr}`);
+    return ps.stdout.split('\n').filter((args) => args.includes(`${dir}/`));
+  };
+  for (let n = 0; n < 400; n++) {
+    if (!inDir().length) return;
+    await new Promise((ok) => setTimeout(ok, 25));
+  }
+  throw new Error(`a CLI run never ended: ${inDir().join('; ')}`);
+}
+
 async function started(t, { cli, gate = false, lateStart = false } = {}) {
   // Canonical, as the CLI locator reports a candidate (macOS's temporary directory is under a /var link).
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'oats-t-cli-')));
   const fake = cli ? fakeCli(dir, 'oats', { gate, lateStart }) : null;
-  const others = []; // every other fake CLI a test makes in this directory
   const choice = join(dir, 'oats-cli-choice.json');
   if (fake) writeFileSync(choice, JSON.stringify({ bin: fake.bin }));
   const s = await startBackendThroughSpec({ env: HERMETIC, cliChoiceFile: choice, home: dir, remoteIdentityFile: join(dir, 'remote-identity.json') });
-  /** Stop the server, wait for every CLI run it started to finish, then remove the directory. The server exits
-   * without signalling its CLI children (server/oats-web.mjs, its signal handlers), so a run it started can still
-   * be writing its record here once it has gone; once it has gone, no run starts. Its start-up roster read was
-   * launched before start-up returned (the probe's verdict starts it), so it is waited for by name, though it may
-   * not have noted its start yet. A test that makes another CLI the server's waits for the runs that starts. */
+  /** Stop the server, wait for every CLI run it started to end, then remove the directory. The server exits
+   * without signalling its CLI children (server/oats-web.mjs, its signal handlers), so a run it started can go on
+   * writing its record here after it has gone. */
   let closed;
   const close = () => (closed ||= (async () => {
     await s.stop();
-    if (fake) await serverRuns(fake);
-    for (const other of others) await other.settled();
+    await runsEnded(dir);
     rmSync(dir, { recursive: true, force: true });
   })());
   t.after(close);
@@ -94,9 +114,7 @@ async function started(t, { cli, gate = false, lateStart = false } = {}) {
     if (n > 400) throw new Error('the start-up probe never landed');
     await new Promise((ok) => setTimeout(ok, 25));
   }
-  /** Another fake CLI in this directory, waited for by the teardown as the first one is. */
-  const anotherCli = (name) => { const other = fakeCli(dir, name); others.push(other); return other; };
-  return { s, dir, fake, choice, close, anotherCli };
+  return { s, dir, fake, choice, close };
 }
 
 const WRONG_SAME_LENGTH = (secret) => `${secret[0] === 'A' ? 'B' : 'A'}${secret.slice(1)}`;
@@ -202,7 +220,7 @@ test('A5: the server prints its ready line and never the secret', async (t) => {
 });
 
 test('A6: reprobe takes no binary; the chosen binary is the choice file main writes', async (t) => {
-  const { s, fake, choice, anotherCli } = await started(t, { cli: true });
+  const { s, dir, fake, choice } = await started(t, { cli: true });
   const probes = () => fake.probes();
   for (const body of ['{"bin":"/x"}', '{"a":1}', '[]', '{']) {
     const before = probes();
@@ -213,13 +231,10 @@ test('A6: reprobe takes no binary; the chosen binary is the choice file main wri
   }
   for (const body of ['{}', undefined]) assert.equal((await s.request('/api/cli/reprobe', { method: 'POST', body })).status, 200, String(body));
   assert.equal((await (await s.request('/api/cli')).json()).bin, fake.bin, 'the choice file\'s binary after start');
-  const other = anotherCli('oats-other');
+  const other = fakeCli(dir, 'oats-other');
   writeFileSync(`${choice}.tmp`, JSON.stringify({ bin: other.bin })); chmodSync(`${choice}.tmp`, 0o600); renameSync(`${choice}.tmp`, choice);
   assert.equal((await s.request('/api/cli/reprobe', { method: 'POST', body: '{}' })).status, 200);
   assert.equal((await (await s.request('/api/cli')).json()).bin, other.bin, 'the rewritten choice after a reprobe');
-  // Accepting it starts a roster read of its own, after any read in flight: waited for while the server runs, so
-  // the teardown never stops the server as that run is launched.
-  assert.ok((await serverRuns(other)).some((r) => r.startsWith('run server roster ')), 'the rewritten choice reads the roster');
 });
 
 test('teardown: a CLI run still in flight when the server stops is waited for before its directory is removed', async (t) => {
@@ -232,6 +247,28 @@ test('teardown: a CLI run still in flight when the server stops is waited for be
   await new Promise((ok) => setTimeout(ok, 50)); // a teardown that does not wait has removed the directory by now
   assert.ok(existsSync(dir), 'the directory outlives the server while a run it started is in flight');
   writeFileSync(fake.gate, '');
+  await closing;
+  assert.equal(existsSync(dir), false, 'removed once that run has finished');
+});
+
+test('teardown: a later CLI run, launched but not yet noted when the server stops, is waited for', async (t) => {
+  // A run the server launches after start-up (here the roster read a new CLI's acceptance starts; unprompted, its
+  // periodic roster read) can be in flight before it has noted its start: no record the teardown reads names it.
+  const { s, dir, fake, choice, close } = await started(t, { cli: true });
+  await serverRuns(fake);
+  const other = fakeCli(dir, 'oats-other', { heldStart: true });
+  writeFileSync(`${choice}.tmp`, JSON.stringify({ bin: other.bin })); chmodSync(`${choice}.tmp`, 0o600); renameSync(`${choice}.tmp`, choice);
+  assert.equal((await s.request('/api/cli/reprobe', { method: 'POST', body: '{}' })).status, 200);
+  for (let n = 0; !other.launched().length; n++) {
+    if (n > 400) throw new Error('the new CLI\'s roster read never launched');
+    await new Promise((ok) => setTimeout(ok, 25));
+  }
+  assert.equal(other.started().some((l) => l.startsWith('run server roster ')), false, 'launched, not yet noted');
+  const closing = close();
+  if (s.child.exitCode === null && s.child.signalCode === null) await once(s.child, 'exit');
+  await new Promise((ok) => setTimeout(ok, 50)); // a teardown that does not wait has removed the directory by now
+  assert.ok(existsSync(dir), 'the directory outlives the server while a run it launched has not yet noted its start');
+  writeFileSync(other.gate, '');
   await closing;
   assert.equal(existsSync(dir), false, 'removed once that run has finished');
 });
