@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
@@ -21,7 +22,8 @@ export function agentEnvironment(imageEnv, publicCA = false) {
 }
 
 // Compare only reviewed settings, never dump Config.Env or credential contents.
-export function inspectAgent(info, env, image, defaultRuntime = "runc") {
+// Run on the Docker engine host: containment needs that host's real paths.
+export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath = realpathSync) {
   const evidence = [];
   const equal = (name, actual, expected) => {
     assert.deepEqual(actual, expected, name);
@@ -110,8 +112,11 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc") {
   });
   for (const input of mounts.filter(m => m.target === "/etc/agent-trust/ca.pem" || m.target === "/mirrors")) {
     for (const writable of mounts.filter(m => m.rw)) {
-      const overlaps = input.source === writable.source || input.source.startsWith(writable.source + "/")
-        || writable.source.startsWith(input.source.endsWith("/") ? input.source : input.source + "/");
+      let source, protectedSource;
+      try { source = hostPath(input.source); protectedSource = hostPath(writable.source); }
+      catch { assert.fail("public CA and mirrors require resolvable Docker-host sources (paths withheld)"); }
+      const overlaps = source === protectedSource || source.startsWith(protectedSource.endsWith("/") ? protectedSource : protectedSource + "/")
+        || protectedSource.startsWith(source.endsWith("/") ? source : source + "/");
       assert.ok(!overlaps,"public CA and mirrors must stay outside agent-writable sources");
     }
   }
@@ -158,7 +163,7 @@ export function publicCACheck(fs = require("node:fs"), { X509Certificate } = req
   const path = "/etc/agent-trust/ca.pem";
   try {
     const stat = fs.statSync(path);
-    if (!stat.isFile() || stat.size > 65536) throw new Error("invalid file");
+    if (!stat.isFile() || stat.size > 65536 || stat.nlink > 1) throw new Error("invalid file");
     const pem = fs.readFileSync(path,"utf8");
     const certificates = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g) || [];
     if (!certificates.length || pem.replace(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g,"").trim()

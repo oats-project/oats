@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -203,8 +203,10 @@ test("Claude auth acceptance excludes the instance project settings", () => {
   assert.doesNotMatch(source, /"exec", "--workdir", home/);
 });
 
-test("acceptance refuses drift in the admitted container settings", async () => {
-  const { inspectAgent } = await import("../container/agent/accept.mjs");
+test("acceptance refuses drift in the admitted container settings", async t => {
+  const { inspectAgent: inspectOnHost } = await import("../container/agent/accept.mjs");
+  // This metadata fixture has no host files. Real filesystem aliases are checked below.
+  const inspectAgent = (info, env, image, runtime) => inspectOnHost(info, env, image, runtime, source => source);
   const env = { AGENT_IMAGE: "oats-agent:reviewed", AGENT_UID: "20001", AGENT_GID: "20001", TEAM_STATE_DIR: "/srv/team/state", TEAM_LOGIN_DIR: "/srv/team/login", AUTHORIZED_KEYS_FILE: "/srv/team/authorized_keys", RESOLV_CONF_FILE: "/srv/team/resolv.conf", AGENT_PIDS: "512", AGENT_TMP_SIZE: "134217728", AGENT_MEMORY: "3g", AGENT_CPUS: "2", AGENTS_NETWORK: "team-agents", AGENT_IP: "172.30.0.2" };
   const image = { Id: "sha256:" + "1".repeat(64), Config: { Env: ["PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/state/home"], Entrypoint: ["/usr/bin/tini", "--", "/usr/local/bin/agent-entrypoint"], Cmd: null } };
   const inspected = {
@@ -321,6 +323,40 @@ test("acceptance refuses drift in the admitted container settings", async () => 
     changed.Config[field] = field === "Env" ? ["PATH=VALUE_MUST_BE_WITHHELD"] : ["VALUE_MUST_BE_WITHHELD"];
     assert.throws(() => inspectAgent(changed, env, image), (error) => !error.message.includes("VALUE_MUST_BE_WITHHELD"), field + " differences must withhold values");
   }
+  await t.test("public input symlinks into state or work are refused on the Docker host", t => {
+    const root = mkdtempSync(join(tmpdir(), "oats-agent-public-sources-"));
+    t.after(() => rmSync(root, {recursive:true, force:true}));
+    for (const name of ["state", "work", "operator"]) mkdirSync(join(root,name));
+    const realEnv = {...env, TEAM_STATE_DIR:join(root,"state"), TEAM_WORK_DIR:join(root,"work")};
+    for (const [name, target] of [["AGENT_CA_FILE","/etc/agent-trust/ca.pem"], ["AGENT_MIRRORS_DIR","/mirrors"]]) {
+      for (const location of ["state", "work", "operator"]) {
+        const source = join(root,location,name);
+        if (name === "AGENT_CA_FILE") writeFileSync(source, "public CA fixture");
+        else mkdirSync(source);
+        const alias = join(root, `${location}-${name}`);
+        symlinkSync(source, alias);
+        const settings = {...realEnv,[name]:alias};
+        const info = structuredClone(name === "AGENT_CA_FILE" ? trusted : mirrored);
+        info.Mounts = info.Mounts.filter(mount => mount.Destination !== target);
+        info.Mounts.find(mount => mount.Destination === "/state").Source = settings.TEAM_STATE_DIR;
+        info.Mounts.push({Source:settings.TEAM_WORK_DIR, Destination:"/work", RW:true, Type:"bind"},
+          {Source:alias, Destination:target, RW:false, Type:"bind"});
+        info.HostConfig.Mounts = info.Mounts.map(mount => ({Source:mount.Source, Target:mount.Destination, ReadOnly:!mount.RW, Type:"bind", BindOptions:{}}));
+        if (location === "operator") {
+          assert.doesNotThrow(() => inspectOnHost(info,settings,image), "external operator sources may be symlinks");
+          assert.throws(() => inspectOnHost(info,settings,image,undefined,() => { throw new Error("VALUE_MUST_BE_WITHHELD"); }),
+            error => /resolvable Docker-host sources/.test(error.message) && !error.message.includes("VALUE_MUST_BE_WITHHELD"));
+          // Resolve writable roots too, even when Docker preserves their aliases.
+          const writableAlias = join(root, `writable-${name}`);
+          symlinkSync(join(root,"operator"), writableAlias);
+          settings.TEAM_WORK_DIR = writableAlias;
+          info.Mounts.find(mount => mount.Destination === "/work").Source = writableAlias;
+          info.HostConfig.Mounts.find(mount => mount.Target === "/work").Source = writableAlias;
+        }
+        assert.throws(() => inspectOnHost(info,settings,image), /outside agent-writable sources/);
+      }
+    }
+  });
 });
 
 
@@ -602,6 +638,23 @@ test("public CA acceptance rejects private keys, malformed files and writable tr
   }
   assert.throws(()=>run({...fs,accessSync:()=>{}}),/public CA/);
   assert.throws(()=>run({...fs,statSync:()=>({isFile:()=>true,size:65537})}),/public CA/);
+});
+
+test("public CA acceptance rejects a real hardlink despite a read-only mount", async t => {
+  const {publicCACheck} = await import("../container/agent/accept.mjs");
+  const crypto = await import("node:crypto");
+  const {rootCertificates} = await import("node:tls");
+  const root = mkdtempSync(join(tmpdir(), "oats-agent-ca-links-"));
+  t.after(() => rmSync(root,{recursive:true,force:true}));
+  const source = join(root,"public-ca.pem");
+  writeFileSync(source,rootCertificates[0]);
+  const system = {
+    constants:{W_OK:2}, statSync:() => statSync(source), readFileSync:() => readFileSync(source,"utf8"),
+    accessSync:() => { throw Object.assign(new Error("read-only bind fixture"),{code:"EROFS"}); },
+  };
+  assert.equal(publicCACheck(system,crypto), "public CA: valid read-only CA certificates; contents withheld");
+  linkSync(source,join(root,"writable-alias.pem"));
+  assert.throws(() => publicCACheck(system,crypto), /public CA.*contents withheld/);
 });
 
 

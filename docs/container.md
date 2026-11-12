@@ -171,7 +171,10 @@ Include `compose.agent.mirrors.yaml` only when `agents.mirrorsDir` is configured
 The operator provisions and refreshes the bare mirrors outside the container,
 with no repository credentials, and the fragment mounts them read-only at
 `/mirrors`. Keep both optional input sources outside every agent-writable bind
-source. The wrapper renders the existing Git rewrite in
+source, including symlink aliases: run acceptance on the Docker engine host so
+it can resolve the actual sources. A CA file with multiple hardlinks is refused,
+since a read-only bind cannot protect another writable link to the same file.
+The wrapper renders the existing Git rewrite in
 `/state/home/.gitconfig`:
 
 ```gitconfig
