@@ -23,7 +23,7 @@ const DA = local(A, '…/base/northwind-workspace', { primary: true }), DB = loc
 const DR = { id: R, machine: 'devbox', path: '/Users/alex/Agents/web', label: '~/Agents/web', local: false, reachable: true, identityFrom: 'reported', primary: false };
 // Not reached: one the server remembers (its last report), one it never reached.
 const DV = { id: 'remote:laptop:k2', machine: 'laptop', path: '/home/ops/agents', label: '~/agents', local: false, reachable: false, identityFrom: 'remembered', primary: false, reason: 'ssh timed out' };
-const DW = { id: 'remote:wezen:k3', machine: 'wezen', path: '/srv/oats', label: '/srv/oats', local: false, reachable: false, identityFrom: null, primary: false };
+const DW = { id: 'remote:build:k3', machine: 'build', path: '/srv/oats', label: '/srv/oats', local: false, reachable: false, identityFrom: null, primary: false };
 const remoteSoul = { name: 'release-manager', description: '', kind: 'persistent', work: 'worktree', agentsRoot: '/srv/agents', server: 'devbox', remote: true, repoName: 'devbox' };
 const memory = () => { const m = new Map(); return { getItem: k => m.has(k) ? m.get(k) : null, setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k), m }; };
 const wsOf = path => decodeURIComponent(/[?&]ws=([^&]*)/.exec(path)?.[1] ?? '');
@@ -173,7 +173,7 @@ test('four or more deployments: the Harness-style dropdown (a listbox popup), by
   const listbox = doc.getElementById(trigger.getAttribute('aria-controls'));
   assert.equal(listbox.getAttribute('role'), 'listbox'); assert.equal(listbox.getAttribute('aria-label'), 'Deployment choices');
   const items = [...listbox.querySelectorAll('[role=option]')];
-  assert.deepEqual(items.map(b => b.firstChild.textContent), ['This Mac', 'devbox', 'laptop', 'wezen'], 'by machine');
+  assert.deepEqual(items.map(b => b.firstChild.textContent), ['This Mac', 'devbox', 'laptop', 'build'], 'by machine');
   assert.deepEqual(items.map(b => b.querySelector('small')?.textContent ?? null), [null, null, 'remembered', 'not reached'], 'a non-live state in words, part of the option');
   assert.deepEqual(items.map(b => b.getAttribute('aria-selected')), ['true', 'false', 'false', 'false']);
   assert.equal(doc.activeElement, items[0]);
@@ -254,17 +254,17 @@ test('the chosen deployment lacks the soul: one message, in the footer only; Spa
 test('the chosen deployment is not reachable: "<machine> isn\'t reachable right now." in the footer only; selectable, marked, Spawn blocked', async t => {
   const u = await mountSpawn(t, { deployments: [DA, DW], catalogs: { [A]: catalogAgents(), [DW.id]: [] } });
   await u.open(); await settle();
-  assert.deepEqual(options(u), ['This Mac', 'wezen, not reached']);
+  assert.deepEqual(options(u), ['This Mac', 'build, not reached']);
   const mark = [...u.q('.fdeployment').querySelectorAll('input')].find(i => i.value === DW.id).nextElementSibling.querySelector('.spawn-trigger-tag');
   assert.equal(mark.textContent, 'not reached', 'the state in words, not colour');
   assert.equal(chosen(u), A, 'the default is one that has the soul');
   await choose(u, DW.id);
   assert.equal(chosen(u), DW.id, 'selectable');
   assert.equal(u.q('.fspawn').disabled, true);
-  assert.equal(u.text('.fstatus'), "wezen isn't reachable right now."); assert.ok(u.q('.fstatus').classList.contains('err'));
+  assert.equal(u.text('.fstatus'), "build isn't reachable right now."); assert.ok(u.q('.fstatus').classList.contains('err'));
   assert.doesNotMatch(elsewhere(u), /reachable right now|isn't available/, 'nothing under the field or in the summary');
   assert.equal(u.dialog().textContent.split('reachable right now').length - 1, 1, 'said exactly once');
-  assert.deepEqual(facts(u), { 'Runs on': 'wezen · /srv/oats' });
+  assert.deepEqual(facts(u), { 'Runs on': 'build · /srv/oats' });
   assert.doesNotMatch(u.dialog().textContent, /remote:/, 'never an id');
 });
 
