@@ -58,18 +58,23 @@ function backendLog(path) {
   } catch { throw new Error("backend audit log is unavailable or too large"); }
 }
 
-export async function probeIngress({ address, port = 443, requestOrigin, humanOrigin, requestLog, humanLog, ca, path = "/ready" }) {
+export async function probeIngress({ address, port = 443, requestOrigin, humanOrigin, requestLog, humanLog, ca, path = "/ready", requestPath = path, humanPath = path }) {
   const requestHost = originHost(requestOrigin), humanHost = originHost(humanOrigin);
   assert.ok(requestHost !== humanHost && isIP(address) === 4, "ingress probe needs distinct origins and an IPv4 address");
   assert.ok(Number.isInteger(port) && port > 0 && port <= 65535, "ingress probe port is invalid");
-  assert.ok(typeof path === "string" && path.startsWith("/") && !path.startsWith("//") && !/[\r\n#]/.test(path), "ingress probe path is invalid");
+  for (const controlPath of [requestPath, humanPath]) {
+    assert.ok(typeof controlPath === "string" && controlPath.startsWith("/") && !controlPath.startsWith("//")
+      && !/[\\\u0000-\u0020\u007f#]/.test(controlPath), "ingress probe path is invalid");
+    assert.equal(new URL(controlPath, requestOrigin).origin, new URL(requestOrigin).origin, "ingress probe path is invalid");
+  }
   // Establish readable audit inputs before making any requests.
   backendLog(requestLog); backendLog(humanLog);
   const goodRequest = [], goodHuman = [], forbidden = [];
   const send = async (protocol, sni, authority, kind) => {
     const id = "oats-egress-" + randomUUID();
     (kind === "request" ? goodRequest : kind === "human" ? goodHuman : forbidden).push(id);
-    const url = new URL(path, requestOrigin); url.searchParams.set("oats_egress_probe", id);
+    const controlPath = authority === humanHost || authority === humanHost + ":443" ? humanPath : requestPath;
+    const url = new URL(controlPath, requestOrigin); url.searchParams.set("oats_egress_probe", id);
     try {
       const status = await statusOf({ protocol, address, port, sni, authority,
         expectedHost:sni === humanHost ? humanHost : requestHost, path:url.pathname + url.search, ca });
@@ -105,7 +110,8 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     const flags = { "--address":"address", "--request-origin":"requestOrigin", "--human-origin":"humanOrigin",
-      "--request-log":"requestLog", "--human-log":"humanLog", "--ca-file":"caFile", "--path":"path" };
+      "--request-log":"requestLog", "--human-log":"humanLog", "--ca-file":"caFile", "--path":"path",
+      "--request-path":"requestPath", "--human-path":"humanPath" };
     const options = {};
     for (let index = 2; index < process.argv.length; index += 2) {
       const key = flags[process.argv[index]], value = process.argv[index + 1];

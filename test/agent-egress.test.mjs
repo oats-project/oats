@@ -298,16 +298,28 @@ test("the shared ingress probe proves both protocol refusals before backend deli
     if(strict&&!matched){res.writeHead(421);res.end();return}
     const host=authority?.split(":")[0];
     if(host!=="prepare.example.invalid"&&host!=="approve.example.invalid"){res.writeHead(421);res.end();return}
+    const wanted=host==="prepare.example.invalid"?"/readyz":"/handoff-assets/handoff.css";
+    if(new URL(req.url,"https://fixture.invalid").pathname!==wanted){res.writeHead(404);res.end();return}
     appendFileSync(host==="prepare.example.invalid"?requestLog:humanLog,req.url+"\n");
     // A misrouted backend may itself return 421: status alone proves nothing.
     res.writeHead(matched?200:421);res.end();
   });
   await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
   t.after(()=>new Promise(resolve=>{for(const s of sessions)s.destroy();server.closeAllConnections?.();server.close(resolve)}));
-  const options={address:"127.0.0.1",port:server.address().port,requestOrigin:"https://prepare.example.invalid",humanOrigin:"https://approve.example.invalid",ca:readFileSync(join(dir,"cert.pem")),requestLog,humanLog};
+  const options={address:"127.0.0.1",port:server.address().port,requestOrigin:"https://prepare.example.invalid",humanOrigin:"https://approve.example.invalid",ca:readFileSync(join(dir,"cert.pem")),requestLog,humanLog,requestPath:"/readyz",humanPath:"/handoff-assets/handoff.css"};
   assert.equal(await probeIngress(options),true);
   strictTls=true;
   assert.equal(await probeIngress(options),true);
   strictTls=false; strict=false;
   await assert.rejects(()=>probeIngress(options),/forbidden probe reached a backend/);
+});
+
+test("ingress control paths cannot select another origin or inject a fragment", async () => {
+  const {probeIngress}=await import("../container/agent/egress/probe-ingress.mjs");
+  for (const path of ["/\\other.invalid/ready","//other.invalid/ready","https://other.invalid/ready","/ready#fragment","/ready\r\nInjected"]) {
+    for (const field of ["requestPath","humanPath"]) await assert.rejects(()=>probeIngress({
+      address:"127.0.0.1",requestOrigin:"https://prepare.example.invalid",humanOrigin:"https://approve.example.invalid",
+      [field]:path,requestLog:"/missing-audit",humanLog:"/missing-audit",
+    }),/ingress probe path is invalid/);
+  }
 });

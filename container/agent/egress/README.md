@@ -95,13 +95,17 @@ node /opt/egress/probe-ingress.mjs \
   --request-log <request-backend-log> \
   --human-log <human-backend-log> \
   --ca-file <public-ca.pem> \
-  --path /ready
+  --request-path /readyz \
+  --human-path /handoff-assets/handoff.css
 ```
 
 The files are operator-side probe inputs; never mount backend logs into an agent.
 Both log paths may name one file when the surfaces share a backend process.
-The default path is `/ready`; choose an existing, harmless endpoint that returns
-200 on each matched surface. Certificate chain and service-name checks stay on.
+Choose an existing, harmless endpoint returning 200 on each matched surface,
+using `--request-path` and `--human-path` when their routes differ. Forbidden
+human-authority cases use the human path. The compatible `--path` option sets
+both defaults (otherwise `/ready`). Certificate chain and service-name checks
+stay on.
 Without `--ca-file`, Node's normal trust configuration applies.
 
 The probe sends matched controls and forbidden authorities over HTTP/1.1 and
