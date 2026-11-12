@@ -19,7 +19,6 @@ import { workspaceHash, trustedRendererUrl } from '../renderer/window-binding.mj
 import { fakeWindowClass } from './helpers/fake-window.mjs';
 import { serverSpawnSpec, launchServerChild, LIFELINE_FLAG } from '../server-host.mjs';
 import { launchInstance, createLaunchReporter } from '../single-instance.mjs';
-import { retiredSettingNotices } from '../retired-settings.mjs';
 
 const RENDERER = 'file:///app/renderer/index.html';
 const HERE = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
@@ -51,17 +50,17 @@ function machine() {
 }
 
 /** Run main's startup for a launch from `launch` (Finder: `/`) and return what it did. */
-async function launch(m, { launch: WORKSPACE = '/', argv = ['/app/OATS Desktop'], env = {}, openSet, windowsFile, listed = { ok: false, reason: { code: 'E_DEPLOYMENTS_FEATURE', message: 'no list' } } } = {}) {
+async function launch(m, { launch: WORKSPACE = '/', argv = ['/app/OATS Desktop'], openSet, windowsFile, listed = { ok: false, reason: { code: 'E_DEPLOYMENTS_FEATURE', message: 'no list' } } } = {}) {
   if (openSet !== undefined) writeFileSync(join(m.userData, 'workspace-open.json'), JSON.stringify(openSet));
   if (windowsFile !== undefined) writeFileSync(join(m.userData, 'windows.json'), JSON.stringify(windowsFile));
   FakeWindow.reset();
-  const spawned = [], handlers = new Map(), appEvents = new Map(), logs = [], stderr = [], listedAtStartup = [], kernel = [], resumeLaunches = [], selects = [];
+  const spawned = [], handlers = new Map(), appEvents = new Map(), logs = [], listedAtStartup = [], kernel = [], resumeLaunches = [], selects = [];
   const context = {
     // Electron, at its boundary.
     app: { getPath: () => m.userData, on: (event, fn) => appEvents.set(event, fn) },
     BrowserWindow: Object.assign(FakeWindow, { fromWebContents: (wc) => FakeWindow.all.find((w) => w.webContents === wc), getAllWindows: () => FakeWindow.all }),
     ipcMain: { handle: (name, fn) => handlers.set(name, fn) }, screen: { getAllDisplays: () => [{ workArea: { x: 0, y: 25, width: 1440, height: 875 } }] },
-    Menu: {}, shell: {}, console: { log: (m) => logs.push(m), error: (m) => { logs.push(m); stderr.push(m); } },
+    Menu: {}, shell: {}, console: { log: (m) => logs.push(m), error: (m) => logs.push(m) },
     // The backend process, at its boundary: what main spawns it with is recorded, with what is written to its
     // fd 3 (the credential). The spec and the launch (its private socket directory, under this machine's root) are the real ones.
     serverSpawnSpec, launchServerChild, socketBase: () => m.root,
@@ -74,12 +73,10 @@ async function launch(m, { launch: WORKSPACE = '/', argv = ['/app/OATS Desktop']
       return { stdin: stream(), stdout: stream(), stderr: stream(), on() {},
         stdio: [null, null, null, { on() {}, end: (secret) => record.token.push(secret) }] };
     },
-    process: { execPath: '/app/OATS Desktop', env, argv }, homedir: () => m.home, CLI_CHOICE_FILE: () => join(m.userData, 'oats-cli-choice.json'),
+    process: { execPath: '/app/OATS Desktop', env: {}, argv }, homedir: () => m.home, CLI_CHOICE_FILE: () => join(m.userData, 'oats-cli-choice.json'),
     loginPath: { source: 'login-shell', error: null },
     REMOTE_IDENTITY_FILE: () => join(m.userData, 'remote-identity.json'), HERE,
     // The real code main runs at startup.
-    // The notices for retired launch settings (retired-settings.mjs, tested there): the real ones.
-    retiredSettingNotices,
     WORKSPACE, workspaceDirs: [], openDirs: [], join, existsSync, readFileSync, realpathSync, lstatSync, validateWorkspace,
     restoreWorkspaceDirs, savedWorkspacePaths, persistableDirs, startupOpenSet, saveWorkspaceDirs, createWindowRecords, parseWindowRecords,
     createWindowSet, restorePlan, resolveView, clampBounds, windowTitle, trustedForgeFrame, validWorkspaceId, workspaceHash, trustedRendererUrl, omarchyArguments: [],
@@ -126,7 +123,7 @@ async function panelWorkspaces() {
   const read = (name) => { try { return JSON.parse(readFileSync(join(m.userData, name), 'utf8')); } catch { return undefined; } };
   const claim = async (win, id) => JSON.parse(JSON.stringify(await handlers.get('window:claim-workspace')(
     { sender: Object.assign(win.webContents, { isDestroyed: () => false }), senderFrame: win.webContents.mainFrame }, id, { focus: false, initial: true })));
-  return { spawned, windows: FakeWindow.all, main, claim, logs, stderr, noted, listedAtStartup, kernel, resumeLaunches, selects, openFile: read('workspace-open.json'), windowsFile: read('windows.json') };
+  return { spawned, windows: FakeWindow.all, main, claim, logs, noted, listedAtStartup, kernel, resumeLaunches, selects, openFile: read('workspace-open.json'), windowsFile: read('windows.json') };
 }
 
 test('every served-list update tells main to post the window set (#1124): a new server, or a post that failed, gets it again', async () => {
@@ -281,24 +278,5 @@ test('a launch on a deployment lists that one deployment after startup; a Finder
     assert.deepEqual([...restored.listedAtStartup], [null], 'the restored set is never listed: a CLI remove would come back at every launch');
     assert.deepEqual([...restored.resumeLaunches], [1], 'and on every launch, whatever it opened');
     assert.deepEqual([...restored.kernel], [], 'startup itself asks the kernel nothing here: startupDeploymentList does, in the background');
-  } finally { rmSync(m.root, { recursive: true, force: true }); }
-});
-
-test('a launch that still sets OATS_DESKTOP_PORT is told on stderr, once, that it is ignored; a launch without it is told nothing', async () => {
-  const notice = retiredSettingNotices({ OATS_DESKTOP_PORT: '' })[0];
-  assert.match(notice, /^oats-desktop: OATS_DESKTOP_PORT is no longer used and is ignored: /);
-  for (const value of ['4820', '']) {
-    const m = machine();
-    try {
-      const r = await launch(m, { launch: m.deployment, env: { OATS_DESKTOP_PORT: value } });
-      assert.deepEqual(r.stderr.filter((line) => line === notice), [notice], `OATS_DESKTOP_PORT=${JSON.stringify(value)}: one line on stderr`);
-      assert.equal(r.spawned.length, 1, 'the backend is started as before');
-      assert.equal(r.spawned[0].args.some((arg) => /4820|port/i.test(arg)), false, 'no port reaches the backend');
-    } finally { rmSync(m.root, { recursive: true, force: true }); }
-  }
-  const m = machine();
-  try {
-    const r = await launch(m, { launch: m.deployment });
-    assert.equal(r.stderr.some((line) => /OATS_DESKTOP_PORT/.test(line)), false, 'without the variable, nothing is printed');
   } finally { rmSync(m.root, { recursive: true, force: true }); }
 });
