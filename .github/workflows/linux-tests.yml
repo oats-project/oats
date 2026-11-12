@@ -1,108 +1,45 @@
-# Run named test files of a named ref on a Linux runner whose per-user systemd manager answers
-# (`systemctl --user`, with lingering). Started by hand, never by a push or a pull request.
-# docs/named-test-runs.md owns it: what a run is evidence of, how to start one, the bounds, what a
-# run does not show, and the workflow's name as the contract test files guard on.
-#
-# The terms are macos-tests.yml's, each pinned by test/linux-tests-workflow.test.mjs:
-#
-#   * `workflow_dispatch` is the only trigger.
-#   * The token reads contents and nothing else; no secret is named; no step uploads an artifact
-#     (the logs and the step summary are all the workflow leaves); no step saves or restores a
-#     cache (`actions/setup-node` without `cache:`). What the code it runs can still reach is in
-#     the page, under "What a run does not protect".
-#   * No input is ever written into a shell line. The ref and the file list reach
-#     scripts/linux-tests.mjs as environment variables, and it validates both before anything of
-#     the ref is checked out, installed or run. The bounds (files a run, time a file, the wait for
-#     the user manager) are constants of the scripts, not inputs.
-#   * Two trees: `runner/` is this workflow's own commit, and the script runs from it; `tested/` is
-#     the ref. So a ref older than the workflow can be tested, and an honest branch cannot change
-#     the runner by accident. The trees are no security boundary: from the first install step on,
-#     the ref's code runs as the runner's user. Only the validation step's output is printed
-#     before any of it has run.
-#
-# All of this is of a run whose workflow commit is the default branch's. Started from another
-# branch, this file and the script are that branch's, and so is every line the run prints: where
-# a run ran from is read in GitHub's record of it, never in its log.
-#
-# The name below is a contract: test files that drive the runner's user manager run only when
-# GITHUB_WORKFLOW is this name, GITHUB_EVENT_NAME is `workflow_dispatch` and the platform is Linux.
-name: Linux tests
+name: Team image
 
 on:
+  pull_request:
   workflow_dispatch:
-    inputs:
-      ref:
-        description: "A branch, a tag or a full commit id of this repository (not a pull request's number)"
-        required: true
-        type: string
-      files:
-        description: "Test files, separated by spaces or commas: test/**/*.test.mjs, packages/<name>/test/**/*.test.mjs (at most 10)"
-        required: true
-        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  # A group of its own, and one per run: a run's link is evidence, so no later run may cancel it.
-  # One fixed group would not do: GitHub keeps a single pending run per group and cancels it when
-  # another is queued.
-  group: linux-tests-${{ github.run_id }}
-  cancel-in-progress: false
+  group: team-image-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  run:
-    name: Named test files on Linux
+  verify:
+    name: Team image / amd64 acceptance
     runs-on: ubuntu-24.04
-    # scripts/linux-tests.mjs: 10 files at 20 minutes each, the installs before them and the
-    # waits for the user manager, under GitHub's 6 hours for a job.
-    timeout-minutes: 240
+    timeout-minutes: 30
+    env:
+      AGENT_IMAGE: oats-team-agent:${{ github.event.pull_request.head.sha || github.sha }}
     steps:
-      - name: Check out the workflow's own commit
-        uses: actions/checkout@v4
+      # The PR's image inputs and acceptance script must come from its head,
+      # rather than GitHub's synthetic merge commit or the default branch.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          path: runner
-          # Every branch and tag of origin: the ref under test is looked up among them, and
-          # nothing is ever fetched by the input's own text.
-          fetch-depth: 0
-          # The token stays out of the checkout's configuration: the ref's code runs beside it.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
-      # Node 22, as pull-request CI. No `cache:`: no step of this workflow saves or restores one.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
-      # Before the validation, so that its header can say whether the user manager answered. The
-      # runner user has no login session: lingering starts its manager without one. Nothing else
-      # is installed or changed system-wide.
-      - name: Enable lingering for the runner user
-        run: sudo loginctl enable-linger "$USER"
+      - name: Build the reviewed image
+        run: docker build --platform linux/amd64 --tag "$AGENT_IMAGE" container/agent
 
-      # For the steps after this one: `systemctl --user` finds the manager's bus under it.
-      - name: Point later steps at the user manager
-        run: echo "XDG_RUNTIME_DIR=/run/user/$(id -u)" >> "$GITHUB_ENV"
+      - name: Accept the real container
+        run: bash .github/scripts/team-image-accept.sh
 
-      - name: Validate the request and check out its commit
-        run: node runner/scripts/linux-tests.mjs prepare tested
-        env:
-          LINUX_TESTS_REF: ${{ inputs.ref }}
-          LINUX_TESTS_FILES: ${{ inputs.files }}
+      - name: Install the registry copy tool
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends skopeo
 
-      # From here on the ref's own code runs (its install scripts, then its tests), as
-      # pull-request CI runs every branch's. The installs are pull-request CI's shards'.
-      - name: Install supported-node dependencies
-        run: npm ci
-        working-directory: tested
-
-      - name: Install desktop package dependencies
-        run: npm ci
-        working-directory: tested/packages/desktop
-        env:
-          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
-
-      - name: Run each file alone
-        run: node runner/scripts/linux-tests.mjs run tested
-        env:
-          LINUX_TESTS_REF: ${{ inputs.ref }}
-          LINUX_TESTS_FILES: ${{ inputs.files }}
+      - name: Verify export and registry manifest preparation without publishing
+        run: bash .github/scripts/team-image-publish.sh --verify
