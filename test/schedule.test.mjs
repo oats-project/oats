@@ -586,7 +586,7 @@ test("remote host cap options require explicit support before forwarding, includ
     const mutations = [];
     return { mutations, server, execFileSync: (_bin, argv) => {
       const command = argv.at(-1);
-      if (command.includes("version --json")) return JSON.stringify({ schemaVersion: 1, desktopApi: 1, version: "0.39.4", features });
+      if (command.includes("version --json")) return JSON.stringify({ schemaVersion: 1, desktopApi: 1, version: "0.69.15", features });
       mutations.push(command);
       return JSON.stringify({ schemaVersion: 1, ok: true, result });
     } };
@@ -627,7 +627,7 @@ test("a routed host install --register-only is refused here unless the host adve
     return { sent, server, execFileSync: (_bin, argv) => {
       const command = argv.at(-1);
       sent.push(command);
-      if (command.includes("version --json")) return JSON.stringify({ schemaVersion: 1, desktopApi: 1, version: "0.69.14", features });
+      if (command.includes("version --json")) return JSON.stringify({ schemaVersion: 1, desktopApi: 1, version: "0.69.15", features });
       return JSON.stringify({ schemaVersion: 1, ok: true, result });
     } };
   };
