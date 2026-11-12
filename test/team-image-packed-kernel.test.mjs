@@ -219,3 +219,44 @@ test("PR context generation preserves HEAD and uses only its bound private tarba
     assert.match(prepared.lockDigest, /^sha256:[a-f0-9]{64}$/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+test("the container source probe receives only the accepted container and HEAD inventory", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { spawnSync } = await import("node:child_process");
+  const root = mkdtempSync(join(tmpdir(), "oats-source-exec-"));
+  try {
+    const bin = join(root, "bin"), pkg = join(root, "package"); mkdirSync(bin); mkdirSync(pkg);
+    writeFileSync(join(pkg, "package.json"), '{"name":"@awebai/oats","version":"0.69.18"}\n');
+    const inventory = join(root, "inventory.json"), output = join(root, "output");
+    writeFileSync(inventory, JSON.stringify({ sourceCommit: "a".repeat(40), name: "@awebai/oats", version: "0.69.18",
+      integrity: `sha512-${Buffer.alloc(64, 1).toString("base64")}`, files: [
+        { path: "package.json", size: 44, mode: 0o644, sha256: "8e70d404831d1b86d7cacca96f69c7ef4025bb5e0f8f2edd8fbabb2145209521" },
+      ] }));
+    writeFileSync(join(bin, "docker"), `#!/usr/bin/env node
+const assert = require("node:assert/strict"), fs = require("node:fs"), cp = require("node:child_process");
+const args = process.argv.slice(2);
+assert.deepEqual(args.slice(0, 5), ["exec", "-i", "oats-agent-fixture", "node", "-e"]);
+assert.equal(args.length, 7);
+assert.equal(args[6], "/opt/agent/node_modules/@awebai/oats");
+process.stdout.write(cp.execFileSync(process.execPath, ["-e", args[5], process.env.FIXTURE_PACKAGE], { input: fs.readFileSync(0) }));
+`, { mode: 0o755 });
+    const script = new URL("../.github/scripts/check-team-image-packed-kernel.mjs", import.meta.url);
+    const { createHash } = await import("node:crypto");
+    const env = { PATH: `${bin}:${process.env.PATH}`, FIXTURE_PACKAGE: pkg, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: join(root, "summary"),
+      TEAM_IMAGE_PACKED_INVENTORY_DIGEST: `sha256:${createHash("sha256").update(readFileSync(inventory)).digest("hex")}` };
+    const run = () => spawnSync(process.execPath, [script.pathname, "oats-agent-fixture", inventory], { env, encoding: "utf8" });
+    const valid = run(); assert.equal(valid.status, 0, valid.stderr);
+    assert.equal(readFileSync(output, "utf8"), "kernel-version=0.69.18\n");
+    rmSync(output);
+    const originalInventory = readFileSync(inventory);
+    writeFileSync(inventory, `${originalInventory} `);
+    assert.notEqual(run().status, 0, "the prepared inventory digest must still match");
+    writeFileSync(inventory, originalInventory);
+    writeFileSync(join(pkg, "unexpected"), "same version, altered installed tree");
+    assert.notEqual(run().status, 0);
+    const { existsSync } = await import("node:fs");
+    assert.equal(existsSync(output), false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

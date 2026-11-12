@@ -55,6 +55,9 @@ container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64
 # This assertion runs in the accepted container, before cleanup or any registry
 # credential. Version metadata alone is not runtime evidence.
 accepted=$(docker inspect --format '{{.Image}}' "oats-agent-$TEAM")
+if [ -n "${TEAM_IMAGE_PACKED_INVENTORY:-}" ]; then
+  node .github/scripts/check-team-image-packed-kernel.mjs "oats-agent-$TEAM" "$TEAM_IMAGE_PACKED_INVENTORY"
+fi
 if [ -n "${EXPECTED_OATS_VERSION:-}" ]; then
   installed=$(docker exec "oats-agent-$TEAM" oats version --json |
     node .github/scripts/check-team-image-release.mjs --installed "$EXPECTED_OATS_VERSION")
