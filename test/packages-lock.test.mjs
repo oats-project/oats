@@ -264,7 +264,7 @@ function renamedFixture({ named = "oats.engineering-coordination", catalogHasNam
   const eng200 = eng.commit("2.0.0", pkgFiles(named, "2.0.0", [{ dir: "coord", name: "oats.coordination" }], { path }));
   eng.tag("v2.0.0", eng200);
   // The named package lives elsewhere in the catalog: the catalog decides, so the fix is still `<named>: v2.0.0`.
-  const other = new FakeRepo("github.com/awebai/oats-coordination");
+  const other = new FakeRepo("github.com/example/coordination");
   const other200 = other.commit("2.0.0", pkgFiles(named, "2.0.0", [{ dir: "coord", name: "oats.coordination" }]));
   other.tag("v2.0.0", other200);
   const catalog = { ...f.catalog, packages: { ...f.catalog.packages, "oats.engineering": { url: url ?? eng.url, ref: "v1.18.0", path },

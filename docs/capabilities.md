@@ -1188,7 +1188,7 @@ own configuration.
    naming the release, not with a schema error.
 3. The blast radius is every soul that composes the capability, on every host
    below the release: one capability can stop every developer soul of a
-   workspace from spawning, as in lfx-oats-workspace#22, where one capability
+   workspace from spawning, as in lab-oats-workspace#22, where one capability
    took down every developer soul.
 4. To limit it, put the hook in a small capability composed only by the souls
    that need the setup.

@@ -61,9 +61,9 @@ function fakeRemote(repos) {
 /** A workspace hosted at the moved `oats`, with the moved `oats-okf` and `plain` as members. */
 function workspace({ listed = OLD_OKF, backlink = OLD, plainBacklink = OLD, plainOwn = true } = {}) {
   const repos = {
-    [NEW]: { commit: OID("a"), files: { "oats-workspace.yaml": { schemaVersion: 2, name: "oats", members: [`git:${listed}`, "git:github.com/awebai/plain"] } } },
+    [NEW]: { commit: OID("a"), files: { "oats-workspace.yaml": { schemaVersion: 2, name: "oats", members: [`git:${listed}`, "git:github.com/example/plain"] } } },
     [NEW_OKF]: { commit: OID("b"), files: { "oats-membership.yaml": { schemaVersion: 2, workspace: `git:${backlink}` }, "souls/keeper/soul.yaml": SOUL } },
-    "github.com/awebai/plain": { commit: OID("c"), files: plainOwn ? { "oats-membership.yaml": { schemaVersion: 2, workspace: `git:${plainBacklink}` } } : {} },
+    "github.com/example/plain": { commit: OID("c"), files: plainOwn ? { "oats-membership.yaml": { schemaVersion: 2, workspace: `git:${plainBacklink}` } } : {} },
   };
   return fakeRemote(repos);
 }
@@ -97,7 +97,7 @@ test("the clients compare a moved repository by either spelling, and keep a key 
 
 test("a host that changed its workspace string has not moved to another workspace; one that changed repository has", () => {
   const workspace = (key) => ({ key, ref: `git:${key}`, keyFrom: "workspace", standalone: false, defaultTeam: { label: "oats", team: "oats:aweb.ai" }, teams: { oats: "oats:aweb.ai" }, teamsFrom: "observed" });
-  const group = (key) => ({ id: "altair:abc", server: "altair", label: "altair", target: { workspace: "/srv/oats" }, probe: { ok: true }, workspace: workspace(key) });
+  const group = (key) => ({ id: "devbox:abc", server: "devbox", label: "devbox", target: { workspace: "/srv/oats" }, probe: { ok: true }, workspace: workspace(key) });
   const at = "2026-10-30T10:00:00.000Z";
   const held = observeIdentities({ memory: new Map(), notes: new Map() }, [group(OLD)], at);
   assert.equal(held.memory.size, 1);
@@ -234,7 +234,7 @@ test("E_SOUL_UNKNOWN names the unconfirmed members, their reasons and details an
   assert.equal(e.code, "E_SOUL_UNKNOWN");
   assert.deepEqual(Object.keys(e.details), ["name", "members", "packages", "unconfirmed"]);
   assert.deepEqual(e.details.members, []);
-  assert.deepEqual(e.details.unconfirmed.map((m) => [m.key, m.reason]), [[OLD_OKF, "backlink-elsewhere"], ["github.com/awebai/plain", "no-backlink"]]);
+  assert.deepEqual(e.details.unconfirmed.map((m) => [m.key, m.reason]), [[OLD_OKF, "backlink-elsewhere"], ["github.com/example/plain", "no-backlink"]]);
   assert.ok(e.details.unconfirmed.every((m) => m.detail));
   assert.match(e.message, /^no soul "ghost" among the confirmed members/);
   assert.match(e.message, /2 members are not confirmed/);

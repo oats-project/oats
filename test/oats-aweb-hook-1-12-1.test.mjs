@@ -81,7 +81,7 @@ function bindingRequest(settings = {}) {
         payloadContract: "oats.aweb.messaging",
         payloadVersion: 1,
         payload: {
-          responsibleHuman: { provider: "oats.aweb", id: "pepe" },
+          responsibleHuman: { provider: "oats.aweb", id: "alex" },
           context: { kind: "standalone", key: "fixture" },
           privateTeam: { provider: "oats.aweb", id: "private:example.test" },
           wider: [],

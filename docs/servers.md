@@ -246,7 +246,7 @@ symlinks. Neither the caller's command nor stdin chooses a destination path.
 ## Connect a machine
 
 ```bash
-oats server connect altair-aweb --ssh altair --dir '~/acme' --install-oats
+oats server connect devbox-aweb --ssh devbox --dir '~/acme' --install-oats
 ```
 
 Run from a deployment, `server connect` puts that deployment's workspace on
@@ -569,7 +569,7 @@ registration.
 **Capability commands.** Any capability command routes with `--server`:
 
 ```bash
-oats aweb setup --join aweb --invite-stdin --soul dev --server altair-aweb < invite.txt
+oats aweb setup --join aweb --invite-stdin --soul dev --server devbox-aweb < invite.txt
 ```
 
 The host runs the same argv, minus `--server <id>` (or `--server=<id>`;

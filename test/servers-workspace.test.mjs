@@ -32,7 +32,7 @@ function setup() {
 }
 
 test("validateServer: workspaceKey is an optional canonical key string", () => {
-  assert.ok(validateServer("w", { sshHost: "h", workspace: "/w", workspaceKey: "github.com/awebai/ac" }));
+  assert.ok(validateServer("w", { sshHost: "h", workspace: "/w", workspaceKey: "github.com/example/app" }));
   assert.ok(validateServer("w", { sshHost: "h", workspace: "/w", workspaceKey: "local//tmp/ws.git" }));
   for (const bad of [42, "", "github.com/a b", "x\ny", null]) {
     assert.throws(() => validateServer("w", { sshHost: "h", workspace: "/w", workspaceKey: bad }), /workspaceKey/, JSON.stringify(bad));

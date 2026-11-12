@@ -48,7 +48,7 @@ test("clientTerms refuses a missing, empty, non-string, multi-line or unknown te
       assert.throws(() => clientTerms({ ...TUI, [key]: bad }), { name: "TypeError", message: `clientTerms: ${key} must be a string of one display line, and not empty` }, `${key}: ${JSON.stringify(bad)}`);
     }
   }
-  assert.throws(() => clientTerms({ ...TUI, host: "altair" }), { name: "TypeError", message: /^clientTerms: host is not a term/ });
+  assert.throws(() => clientTerms({ ...TUI, host: "devbox" }), { name: "TypeError", message: /^clientTerms: host is not a term/ });
   assert.throws(() => clientTerms({ ...TUI, [Symbol("made")]: true }), { name: "TypeError", message: /^clientTerms: Symbol\(made\) is not a term/ });
   for (const none of [undefined, null, "Desktop", 7, [], () => TUI]) assert.throws(() => clientTerms(none), { name: "TypeError", message: /^clientTerms: pass an object/ });
   // A term that an ancestor supplies is not the client's own.
@@ -118,11 +118,11 @@ const WORKSPACE_PATHS = [
  * builds a sentence is reached with and without a machine of its own. */
 function reasonInputs() {
   const fields = {
-    local: [true, false], machine: [undefined, "altair"], sshHost: [undefined, "altair.lan"], unavailable: [undefined, "E_CLI_FAILED: boom"],
+    local: [true, false], machine: [undefined, "devbox"], sshHost: [undefined, "devbox.lan"], unavailable: [undefined, "E_CLI_FAILED: boom"],
     readError: [undefined, "the cache is locked", ""], readErrorOrigin: [undefined, "kernel"], identityStatus: [undefined, "identity", "feature", "old", "none", "invalid"],
     cliReadsRemotes: [undefined, false], rosterError: [undefined, "no route to host"],
     probe: [undefined, { ok: true }, { ok: false }, { ok: false, error: { code: "E_SSH", message: "Host key verification failed." } },
-      { ok: false, error: { code: "E_SSH", message: "Connection timed out" } }, { ok: false, error: { code: "E_SSH", message: "ssh to altair.lan timed out: no answer within 20 s" } }, { ok: false, error: { code: "E_OTHER", message: "x" } }],
+      { ok: false, error: { code: "E_SSH", message: "Connection timed out" } }, { ok: false, error: { code: "E_SSH", message: "ssh to devbox.lan timed out: no answer within 20 s" } }, { ok: false, error: { code: "E_OTHER", message: "x" } }],
     attach: [undefined, { key: "k", team: "t" }, { unattached: "no-report" }, { unattached: "member" }, { unattached: "invalid-ref" }, { unattached: "unknown-team" }, { unattached: "standalone" }],
     ref: [undefined, "git:x"],
   };
@@ -131,8 +131,8 @@ function reasonInputs() {
   return inputs;
 }
 const REASON_INPUTS = reasonInputs();
-const DEPLOYMENTS = [undefined, null, {}, { machine: "altair" }, { label: "~/Agents/oats" }, { machine: "altair", label: "~/Agents/tsm" }];
-const DEPLOYMENT_LISTS = [[{ id: "a", path: "/a/oats" }], [{ id: "a", path: "/a/oats" }, { id: "b", path: "/b/oats" }, { id: "c", machine: "altair", path: "/c/tsm" }]];
+const DEPLOYMENTS = [undefined, null, {}, { machine: "devbox" }, { label: "~/Agents/oats" }, { machine: "devbox", label: "~/Agents/app" }];
+const DEPLOYMENT_LISTS = [[{ id: "a", path: "/a/oats" }], [{ id: "a", path: "/a/oats" }, { id: "b", path: "/b/oats" }, { id: "c", machine: "devbox", path: "/c/app" }]];
 /** Every branch of deploymentUnavailableText, by what the deployment is. */
 const UNOBSERVED = { "nothing": undefined, "pending": { status: "pending" }, "observed": { status: "observed" },
   "feature": { status: "unavailable", reason: { code: "E_DEPLOYMENT_FEATURE", feature: "served-identity" } },
@@ -155,7 +155,7 @@ const HELD = () => ({
   cli: { ok: true, features: ["workspace-identity"], remote: ["roster"] }, observing: new Set(), remoteCollecting: false, home: "/a", at: "2026-10-11T12:00:00.000Z",
 });
 const ROWS = [{ instance: "dev-1", agent: "dev", home: "/a/oats/agents/dev/instances/dev-1", deployment: { id: "a" } },
-  { instance: "dev-2", agent: "dev", home: "/c/tsm/agents/dev/instances/dev-2", deployment: { id: "c" } }];
+  { instance: "dev-2", agent: "dev", home: "/c/app/agents/dev/instances/dev-2", deployment: { id: "c" } }];
 
 /** Every answer of every table that takes terms, as `Map<what was asked, the answer>`: each code a table
  * knows (the codes are the tables' own lists) and each branch that builds a sentence. */
@@ -305,8 +305,8 @@ const TABLES = {
   kernelLines: (terms) => kernelLines("a message", "a fix", terms),
   deploymentReasonParts: (terms) => deploymentReasonParts({ local: true }, terms),
   deploymentReason: (terms) => deploymentReason({ local: true }, terms),
-  deploymentLabelParts: (terms) => deploymentLabelParts({ machine: "altair" }, terms),
-  deploymentLabel: (terms) => deploymentLabel({ machine: "altair" }, terms),
+  deploymentLabelParts: (terms) => deploymentLabelParts({ machine: "devbox" }, terms),
+  deploymentLabel: (terms) => deploymentLabel({ machine: "devbox" }, terms),
   machineLabels: (terms) => machineLabels([], terms),
   machineLabelParts: (terms) => machineLabelParts([], terms),
   rosterSections: (terms) => rosterSections([], [], [], terms),

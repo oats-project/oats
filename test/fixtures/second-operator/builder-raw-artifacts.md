@@ -1,6 +1,6 @@
 # Raw artifacts for the second-operator regression fixtures
 
-All four, with their **inputs** as well as their outputs — a fixture needs the request that produced it. Captured on macOS, node 26.8.2, npm 11.19.1, `@awebai/oats@0.24.1` installed directory-locally. Absolute paths are Juan's acceptance directory and are inherent to the capture; substitute a fixture root when you adopt them.
+All four, with their **inputs** as well as their outputs — a fixture needs the request that produced it. Captured on macOS, node 26.8.2, npm 11.19.1, `@awebai/oats@0.24.1` installed directory-locally. Absolute paths are the operator's acceptance directory and are inherent to the capture; substitute a fixture root when you adopt them.
 
 Ordering note: the runs below are the post-approval state. Both capability approvals (`oats.okf` artifact set `sha256-32994916e1cdd8dd5f7d24ea3b91db872f74b5d6958c50c37dba82d606f507d4`, `oats.aweb` artifact set `sha256-5fbf5303cd21ce34a754090fbcaa2411b3b48181d80b13ab78e174e05a709da4`) had already succeeded, so `approvalRequired` is `[]` on all three selections and the only remaining problems are the two you are fixing.
 
@@ -14,14 +14,14 @@ Ordering note: the runs below are the post-approval state. Both capability appro
   "source": "oats-kernel-expert",
   "origin": {
     "kind": "operator",
-    "document": { "kind": "operator", "id": "juan-p15-acceptance" },
+    "document": { "kind": "operator", "id": "alex-p15-acceptance" },
     "pointer": "/source"
   },
   "workspace": {
     "source": "git:github.com/awebai/oats",
     "origin": {
       "kind": "operator",
-      "document": { "kind": "operator", "id": "juan-p15-acceptance" },
+      "document": { "kind": "operator", "id": "alex-p15-acceptance" },
       "pointer": "/workspace"
     }
   },
@@ -29,7 +29,7 @@ Ordering note: the runs below are the post-approval state. Both capability appro
     "source": "git:github.com/awebai/oats",
     "origin": {
       "kind": "operator",
-      "document": { "kind": "operator", "id": "juan-p15-acceptance" },
+      "document": { "kind": "operator", "id": "alex-p15-acceptance" },
       "pointer": "/member"
     }
   }
@@ -189,7 +189,7 @@ Ordering note: the runs below are the post-approval state. Both capability appro
           "kind": "operator",
           "document": {
             "kind": "operator",
-            "id": "juan-p15-acceptance"
+            "id": "alex-p15-acceptance"
           },
           "pointer": "/workspace"
         }
@@ -218,7 +218,7 @@ Ordering note: the runs below are the post-approval state. Both capability appro
             "kind": "operator",
             "document": {
               "kind": "operator",
-              "id": "juan-p15-acceptance"
+              "id": "alex-p15-acceptance"
             },
             "pointer": "/workspace"
           }
@@ -306,7 +306,7 @@ Ordering note: the runs below are the post-approval state. Both capability appro
           "kind": "operator",
           "document": {
             "kind": "operator",
-            "id": "juan-p15-acceptance"
+            "id": "alex-p15-acceptance"
           },
           "pointer": "/member"
         }
@@ -432,7 +432,7 @@ Ordering note: the runs below are the post-approval state. Both capability appro
     "kind": "operator",
     "document": {
       "kind": "operator",
-      "id": "juan-p15-acceptance"
+      "id": "alex-p15-acceptance"
     },
     "pointer": "/source"
   },
@@ -442,7 +442,7 @@ Ordering note: the runs below are the post-approval state. Both capability appro
       "kind": "operator",
       "document": {
         "kind": "operator",
-        "id": "juan-p15-acceptance"
+        "id": "alex-p15-acceptance"
       },
       "pointer": "/workspace"
     }
@@ -453,7 +453,7 @@ Ordering note: the runs below are the post-approval state. Both capability appro
       "kind": "operator",
       "document": {
         "kind": "operator",
-        "id": "juan-p15-acceptance"
+        "id": "alex-p15-acceptance"
       },
       "pointer": "/member"
     }
@@ -462,7 +462,7 @@ Ordering note: the runs below are the post-approval state. Both capability appro
     "policy": {},
     "document": {
       "kind": "operator",
-      "id": "juan-p15-acceptance"
+      "id": "alex-p15-acceptance"
     },
     "bindings": {
       "stores.oats": {
@@ -554,7 +554,7 @@ Ordering note: the runs below are the post-approval state. Both capability appro
     "kind": "operator",
     "document": {
       "kind": "operator",
-      "id": "juan-p15-acceptance"
+      "id": "alex-p15-acceptance"
     },
     "pointer": "/source"
   },
@@ -564,7 +564,7 @@ Ordering note: the runs below are the post-approval state. Both capability appro
       "kind": "operator",
       "document": {
         "kind": "operator",
-        "id": "juan-p15-acceptance"
+        "id": "alex-p15-acceptance"
       },
       "pointer": "/workspace"
     }
@@ -575,7 +575,7 @@ Ordering note: the runs below are the post-approval state. Both capability appro
       "kind": "operator",
       "document": {
         "kind": "operator",
-        "id": "juan-p15-acceptance"
+        "id": "alex-p15-acceptance"
       },
       "pointer": "/member"
     }
@@ -584,7 +584,7 @@ Ordering note: the runs below are the post-approval state. Both capability appro
     "policy": {},
     "document": {
       "kind": "operator",
-      "id": "juan-p15-acceptance"
+      "id": "alex-p15-acceptance"
     },
     "bindings": {
       "stores.oats": {

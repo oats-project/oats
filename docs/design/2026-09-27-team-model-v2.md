@@ -25,8 +25,8 @@ Local `oats-local.yaml` (the deployment's per-machine file, never committed):
 
 ```yaml
 teams:
-  antares-oats: { team: antares-oats:ana.aweb.ai }   # a local (personal) team: label → provider id
-defaultTeam: antares-oats
+  builder-oats: { team: builder-oats:ana.aweb.ai }   # a local (personal) team: label → provider id
+defaultTeam: builder-oats
 souls:
   disabled: [...]
   teams:                        # the extra teams each soul's instances MAY join here
