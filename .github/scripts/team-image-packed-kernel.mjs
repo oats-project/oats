@@ -84,7 +84,7 @@ export function packKernel({ sourceDir, sourceCommit, tempDir = tmpdir(), runNpm
     }
     assert.equal(offset, payload.length, "unexpected archive payload bytes");
     files.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
-    return { root, sourceCommit, name: pack.name, version: pack.version, tarball, integrity, files };
+    return { root, sourceCommit, name: pack.name, version: pack.version, manifest, tarball, integrity, files };
   } catch (error) {
     rmSync(root, { recursive: true, force: true });
     throw error;

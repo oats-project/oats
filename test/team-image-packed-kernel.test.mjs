@@ -168,3 +168,54 @@ test("the image uses only the owner's additive read-only npm-ci context mount", 
   assert.match(current, /RUN --network=none npm rebuild @awebai\/aw --ignore-scripts=false --offline/);
   assert.doesNotMatch(current, /^ARG |^COPY .*oats-pr-kernel/m);
 });
+
+test("PR context generation preserves HEAD and uses only its bound private tarball", async () => {
+  const { preparePrContext } = await import("../.github/scripts/team-image-pr-context.mjs");
+  const { execFileSync } = await import("node:child_process");
+  const { mkdtempSync, readFileSync, writeFileSync, readdirSync, rmSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const { fileURLToPath } = await import("node:url");
+  const { createHash } = await import("node:crypto");
+  const root = mkdtempSync(join(tmpdir(), "oats-pr-context-test-"));
+  try {
+    const source = join(root, "source"), original = fileURLToPath(new URL("../", import.meta.url));
+    const gitEnv = { PATH: process.env.PATH, HOME: root, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
+    const git = (args, cwd = source) => execFileSync("git", args, { cwd, env: gitEnv, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+    git(["clone", "--quiet", "--shared", original, source], root);
+    const f = localLockFixture();
+    writeFileSync(join(source, "container/agent/package.json"), JSON.stringify(f.sourceManifest));
+    writeFileSync(join(source, "container/agent/package-lock.json"), JSON.stringify(f.sourceLock));
+    git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", "commit", "-am", "fixture compatible image baseline"]);
+    const sourceCommit = git(["rev-parse", "HEAD"]);
+    const before = git(["status", "--porcelain"]);
+    const runNpm = (args, options) => {
+      assert.equal(options.env.GITHUB_TOKEN, undefined);
+      assert.ok(args.includes("--registry=https://registry.npmjs.org"));
+      if (args[0] === "pack") {
+        assert.ok(args.includes("--ignore-scripts"));
+        return execFileSync("npm", args, options);
+      }
+      if (args[0] === "view") return JSON.stringify(f.metadata[args[1].split("@")[0]]);
+      assert.equal(args[0], "install");
+      for (const flag of ["--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"]) assert.ok(args.includes(flag));
+      const lock = structuredClone(f.sourceLock), cwd = options.cwd;
+      lock.packages[""].dependencies["@awebai/oats"] = f.manifest.dependencies["@awebai/oats"];
+      Object.assign(lock.packages["node_modules/@awebai/oats"], { resolved: f.manifest.dependencies["@awebai/oats"],
+        integrity: `sha512-${createHash("sha512").update(readFileSync(join(cwd, "oats-pr-kernel.tgz"))).digest("base64")}` });
+      writeFileSync(join(cwd, "package-lock.json"), JSON.stringify(lock));
+      return "";
+    };
+    const prepared = preparePrContext({ sourceDir: source, sourceCommit, tempDir: root, runNpm });
+    assert.equal(git(["status", "--porcelain"]), before);
+    const effective = JSON.parse(readFileSync(join(prepared.contextDir, "package.json")));
+    assert.equal(effective.dependencies["@awebai/oats"], "file:../oats-build-inputs/oats-pr-kernel.tgz");
+    assert.deepEqual(readdirSync(prepared.contextDir).sort(), [".dockerignore", "Dockerfile", "entrypoint.sh", "oats-pr-kernel.tgz", "package-lock.json", "package.json", "sshd_config", "supervisor.mjs"]);
+    assert.ok(readFileSync(join(prepared.contextDir, ".dockerignore"), "utf8").endsWith("!oats-pr-kernel.tgz\n"));
+    assert.deepEqual(readFileSync(join(prepared.contextDir, "oats-pr-kernel.tgz")), readFileSync(join(prepared.root, "oats-build-inputs/oats-pr-kernel.tgz")));
+    const proof = JSON.parse(readFileSync(prepared.inventoryPath));
+    assert.equal(proof.sourceCommit, sourceCommit);
+    assert.ok(proof.files.some((entry) => entry.path === "lib/core.mjs" && entry.size > 0));
+    assert.match(prepared.lockDigest, /^sha256:[a-f0-9]{64}$/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
