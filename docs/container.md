@@ -64,7 +64,7 @@ must succeed during the build.
 
 `libnss-wrapper` is the extra OS package needed for arbitrary UID support.
 No credentials or SSH host keys are baked in. The build context allowlist
-excludes everything except the image's five inputs.
+excludes everything except the explicitly listed image inputs.
 
 A derived image may add reviewed OS tools with `USER root` and `RUN`, then
 restore `USER agent`. Those build steps use the system passwd/group database.

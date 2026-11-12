@@ -486,3 +486,26 @@ test("TERM kills a read-only status probe without failing the shortened stop gra
     assert.match(fx.text(), /broker TERM[\s\S]*broker ended/);
   }
 });
+
+
+test("every Dockerfile COPY source is admitted by the closed build context", () => {
+  const rules = read(".dockerignore").split("\n").map(line => line.trim()).filter(line => line && !line.startsWith("#"));
+  assert.equal(rules.shift(), "**", "image context starts closed");
+  const admitted = new Set(rules.map(rule => {
+    assert.match(rule, /^![A-Za-z0-9][A-Za-z0-9._-]*$/, "build context permits only named root files");
+    return rule.slice(1);
+  }));
+  const required = new Set(["Dockerfile"]);
+  for (const [, instruction] of read("Dockerfile").matchAll(/^COPY\s+(.+)$/gm)) {
+    const tokens = instruction.trim().split(/\s+/);
+    if (tokens.some(token => token.startsWith("--from="))) continue;
+    const files = tokens.filter(token => !token.startsWith("--")).slice(0,-1);
+    assert.ok(files.length, "COPY must name source inputs");
+    for (const file of files) {
+      assert.match(file, /^[A-Za-z0-9][A-Za-z0-9._-]*$/, "COPY context sources are explicit root files");
+      required.add(file);
+      assert.ok(admitted.has(file), `COPY source ${file} is excluded from the image context`);
+    }
+  }
+  assert.deepEqual([...admitted].sort(), [...required].sort(), "do not admit unrelated files into the image");
+});
