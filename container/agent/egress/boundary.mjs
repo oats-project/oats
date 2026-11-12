@@ -15,7 +15,10 @@ export function assertComposeBoundary({ agent, egress, agentsNetwork, servicesNe
       && JSON.stringify(host.SecurityOpt) === '["no-new-privileges:true"]'
       && !host.PidMode && host.IpcMode === "private"
       && typeof host.NetworkMode === "string" && host.NetworkMode !== "host"
-      && !host.NetworkMode.startsWith("container:"), "runtime isolation differs from the approved boundary");
+      && !host.NetworkMode.startsWith("container:")
+      && !(host.ExtraHosts||[]).length && !(host.Dns||[]).length
+      && !(host.Devices||[]).length && !(host.DeviceRequests||[]).length,
+    "runtime isolation differs from the approved boundary");
   }
   assert.equal(agentsNetwork.Options?.["com.docker.network.bridge.gateway_mode_ipv4"], "isolated",
     "agents network requires isolated gateway mode");

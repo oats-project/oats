@@ -255,6 +255,7 @@ test("runtime privileges cannot bypass the admitted egress boundary", () => {
     ["Privileged",true], ["CapAdd",["NET_ADMIN"]], ["CapDrop",[]],
     ["SecurityOpt",[]], ["ReadonlyRootfs",false], ["PidMode","host"],
     ["NetworkMode","host"], ["NetworkMode","container:other"],
+    ["ExtraHosts",["bypass:10.20.0.10"]], ["Dns",["1.1.1.1"]], ["Devices",[{PathOnHost:"/dev/mem"}]],
   ]) {
     const state=composeBoundary();state[role].HostConfig[key]=value;
     assert.throws(()=>assertComposeBoundary(state),/runtime isolation/);
@@ -378,3 +379,25 @@ test("the reusable gateway canary has one live TCP client body", async t => {
   assert.equal(out.match(/CANARY_HIT/g)?.length,2);
 });
 
+test("the in-container boundary body rejects a live denied endpoint or a key mount", async () => {
+  const url=new URL("../container/agent/egress/probe-runtime.mjs",import.meta.url);
+  assert.ok(existsSync(url),"the actual agents-network probe body is required");
+  const {probeRuntime}=await import(url);
+  const policy=proxyPolicy();
+  const plan={policy,uid:20001,gid:20001,allowedPaths:{aweb:"/ready",secrets:"/ready",logs:"/ready",signer:"/readyz",registry:"/health"},deniedBackends:[{role:"postgres",address:"10.20.0.11",port:5432},{role:"redis",address:"10.20.0.12",port:6379}],gateway:{address:"10.20.0.1",port:40000}};
+  const io={
+    identity:()=>({uid:20001,gid:20001}),
+    fs:{readdirSync:()=>[],readFileSync:path=>path==="/etc/resolv.conf"?"nameserver 172.30.0.2\n":"CapEff:\t0000000000000000\nNoNewPrivs:\t1\n",existsSync:()=>false},
+    resolver:{setServers:servers=>assert.deepEqual(servers,["172.30.0.2"]),resolve4:async host=>{
+      if(Object.values(policy.targets).some(t=>new URL(t.origin).hostname===host))return["172.30.0.2"];
+      throw Object.assign(new Error("NXDOMAIN"),{code:"ENOTFOUND"});
+    },resolveTxt:async name=>policy.authorityRecords.filter(r=>r.name===name).map(r=>[r.text])},
+    getStatus:async()=>200,tlsReachable:async()=>false,tcpReachable:async()=>false,
+  };
+  assert.equal(await probeRuntime(plan,io),true);
+  await assert.rejects(()=>probeRuntime(plan,{...io,tcpReachable:async()=>true}),/denied TCP endpoint is reachable/);
+  await assert.rejects(()=>probeRuntime(plan,{...io,fs:{...io.fs,existsSync:path=>path==="/run/secrets"}}),/protected path exists inside probe/);
+  await assert.rejects(()=>probeRuntime(plan,{...io,tlsReachable:async()=>true}),/human TLS origin is reachable/);
+  await assert.rejects(()=>probeRuntime(plan,{...io,fs:{...io.fs,readdirSync:()=>["credential"]}}),/credential-free state or login directory is not empty/);
+  await assert.rejects(()=>probeRuntime(plan,{...io,getStatus:async()=>503}),/allowed service did not answer 200/);
+});

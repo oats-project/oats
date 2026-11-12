@@ -148,3 +148,51 @@ metadata checks does not prove firewall, host-gateway, ingress or CNI isolation.
 The shared runtime journey must attempt allowed and denied connections and reads
 before launching agents, and fail on an alternate bridge, backend or key/socket
 access. A false or missing enforcement result must not become PASS.
+
+## Boundary probe on an existing Compose deployment
+
+Run `node container/agent/egress/probe-compose-boundary.mjs --plan <runtime.json>`
+on the Linux Docker engine host. The deployment wrapper stages a credential-free probe
+using the agent service's image, UID/GID, security settings and static address,
+with entrypoint `sleep infinity`. Its state and login mounts are empty; no seat,
+controller, team key or setup-token is present. It may have a read-only public CA
+mount. Remove it before starting the real service at that address.
+
+The runtime JSON is derived by the deployment wrapper. Its fields are:
+
+| Field | Runtime value |
+| --- | --- |
+| `probeContainer`, `proxyContainer` | Existing running container name or ID. The deployment wrapper owns the probe's creation/removal. |
+| `agentsNetwork`, `servicesNetwork` | Existing bundle network names. No replacement agents network is created. |
+| `probeImage`, `proxyImage` | Reviewed repository digest references; a local content ID is also accepted for a disposable image test. |
+| `uid`, `gid` | Configured numeric non-root agent IDs. |
+| `approvedProbeMounts` | Expected `{Type,Source,Destination,RW}` entries from reviewed configuration, including the staged public mounts; not copied from inspect. Bind sources must resolve on this engine host. |
+| `protectedSources` | Canonical private service/database directories or key paths, plus the engine socket. |
+| `policy` | The same derived policy object mounted in the live proxy. |
+| `allowedPaths` | Exactly the five roles, with an existing harmless HTTP 200 control path per API; for example `/ready`, signer `/readyz`, registry `/health`. |
+| `deniedBackends` | Two `{role,address,port,controlNetwork?}` records, roles `postgres` and `redis`; each address is in `policy.deniedAddresses`. `controlNetwork` selects an existing backend network for its live control, otherwise `servicesNetwork`. |
+| `caFile` | Optional public CA path inside the probe. No private key in the file. |
+| `protectedPaths` | Optional additional service-private paths that must not exist inside the probe. Standard secret/socket/custody paths are always checked. |
+
+The operator-side adapter checks actual image IDs, inert entrypoint, non-root
+identity, dropped capabilities, read-only root, no new privileges, exact mount
+sources, the sole isolated agents network and the proxy's two networks. It
+requires the live proxy policy to equal the derived policy and establishes live
+TCP controls from the existing services/backend networks. Its own temporary host
+canary binds only the services bridge's gateway address.
+
+The shared in-container body requires the configured resolver, all five allowed
+HTTPS controls through that resolver and proxy, the exact namespace TXT records,
+negative unknown/human DNS, refusal of human TLS SNI, and denied direct upstream,
+PostgreSQL, Redis and host-canary connections. Secret and engine-socket paths
+must be absent. It reads no service credential. Only after final live controls
+and zero forbidden canary hits does the adapter print exactly
+`OATS_EGRESS_BOUNDARY_PASS` and exit 0. Docker and response values are withheld
+on failure. It removes only its own canary/control containers.
+
+Kubernetes uses `probe-runtime.mjs --emit-program <runtime.json>` to emit the
+same in-container body for its adapter's operator connection. That adapter must
+supply and verify its admitted pod, mounts, enforcing CNI and live backend/node
+canary controls. Emitting the program is not a boundary PASS. The smoke test
+creates disposable networks for its regression; the deployment probe uses the
+bundle's actual network and does not infer enforcement from metadata.
