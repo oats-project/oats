@@ -145,7 +145,7 @@ test("v2 preparation aligns standalone OKF and Git-only theory catalog pins", ()
   assert.ok(onboarding.includes("kernel ≥ " + okfFloor), "onboarding carries the mirrored provider's kernel floor");
   assert.equal(catalog.packages["oats.knowledge-theory"], undefined, "the theory package identity was renamed to oats.framework");
   const framework = catalog.packages["oats.framework"];
-  assert.equal(framework.ref, "oats-framework/v1.24.1", "catalog uses the published distribution tag, not a pending kernel release tag");
+  assert.equal(framework.ref, "oats-framework/v1.25.0", "catalog uses the published distribution tag, not a pending kernel release tag");
   assert.equal(framework.path, "oats-package");
   for (const id of ["oats.knowledge-theory", "oats.core", "oats.setup", "oats.onboarding"]) assert.equal(catalog.capabilities[id], "oats.framework");
 });
