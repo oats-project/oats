@@ -35,14 +35,17 @@ It is spawned attached to your tree:
 ```bash
 oats spawn code-reviewer --work attached --work-dir <the consolidated worktree> \
   --parent "$OATS_INSTANCE" --same-work --repo <repository> \
-  --purpose <short-slug> --task-file <review-brief.md>
+  --name <change-slug>-r<round>-reviewer --task-file <review-brief.md>
 ```
 Always give both `--work-dir` and `--repo`. `<repository>` is the absolute path of the
 worktree's clone: `repo` in your `instance.json`, or the clone you made an extra worktree
 from. Each reviewer is your child, on your work: `--same-work` records that it does your
 work, and your person's sidebar draws its line to you. That flag shares no tree:
 `--work attached` is what gives the reviewer your tree, to read the code and run the tests,
-and it must not edit it. Each gets a purpose of its own, so no two share a name.
+and it must not edit it. Name each for the change it reviews and its round, with its role
+last (`gateway-limits-r2-reviewer`), so no two share a name. A reviewer that replaces one
+in the same round adds a letter to the round (`gateway-limits-r2b-reviewer`): a name is
+used once, even after its instance retires.
 
 ## Pick a different model
 A reviewer on your model shares your blind spots. Before spawning, compare:
@@ -64,6 +67,15 @@ harness, spawn it on a state-of-the-art model of another family, on another harn
 you can, through a launch configuration this host defines (`oats launch-config list`) or
 `--harness`/`--model`, choosing only a model this workspace allows. If none is available,
 use the effective one and say so in your handback.
+
+**The floor comes first.** Check the model the reviewer would launch on against the floor
+your landing rules set ("The models children run on"), before anything above: the
+effective one from the preview as much as one you pick, and a native reviewer's too. A
+smaller, faster or cheaper model is not a different one. An effective model below the
+floor is not used, even where it differs from yours: pass `--harness`/`--model` for one
+at or above the floor, and tell your person once that the configuration is below it.
+Where no other family has a model at or above the floor, or you can't establish its tier,
+spawn the reviewer on your own model and say in your handback that diversity was lost.
 
 If either model is unknown (`null`, absent, or a harness's native default), the comparison
 proves nothing: spawn the reviewer with `--harness`/`--model` (or a launch configuration) on
@@ -180,8 +192,9 @@ status --json` and `oats instance events <reviewer> --json` (`waitingClaims`), t
   question through your messaging layer, and set a second checkpoint, half as far out.
 
 **A second overdue checkpoint ends the wait.** Never set a third, and never read silence as
-approval. Spawn a new reviewer with the same brief, on another model if a provider refused
-this one, retire the stalled one (`oats retire <name>`) and say so in your handback.
+approval. Spawn a new reviewer with the same brief, a letter added to its round in the
+name, on another model if a provider refused this one, retire the stalled one
+(`oats retire <name>`) and say so in your handback.
 
 ## Close
 - Hand the branch to your expert only once the loop converges, never intermediate heads,

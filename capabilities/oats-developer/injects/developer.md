@@ -43,6 +43,9 @@ compaction, reload the skill of the step you are on.
   <!-- OATS: no skill or briefing names a harness or a model; a machine's souls.launch picks the model. -->
   A child that checks work runs on a different model from yours where one
   is available: agents of one model share blind spots.
+  NEVER run a child, an OATS child or a native subagent, on a model below the floor your
+  landing rules set ("The models children run on"): a different model is one of another
+  family at or above that floor, never a smaller, faster or cheaper one.
 - IMPORTANT: NEVER open a PR before a round of your review loop finds nothing to fix, your
   expert verifies the branch and the lane's green light is given (your expert's
   verification, unless the lane names another). Then YOU open it at the verified head and

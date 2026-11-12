@@ -248,9 +248,24 @@ reports your own: its status line, or its model command), with `--harness <h> --
 this host defines (`oats launch-config list`). If none is available, or you can't
 establish a difference, use the effective one and say so where you use its answer.
 
-Spawn it as your child, the brief as its task, with a name no instance has had:
+**The floor comes first.** Every helper, probe or not, OATS child or native subagent, runs
+at or above the floor your landing rules set ("The models children run on"). Check the
+model it would launch on against that floor before anything above: the effective one from
+the preview as much as one you pass with `--model`, and a native subagent's too. A smaller,
+faster or cheaper model is not a different one. An effective model below the floor is not
+used, even where it differs from the author's: pass `--harness`/`--model` for one at or
+above the floor, and tell your person once that the configuration is below it. Where no
+other family has a model at or
+above the floor, or you can't establish its tier, use your own model and say, where you
+use the answer, that diversity was lost.
+
+Spawn it as your child, the brief as its task. Name it for its task, with its role in your
+effort last: `<task-slug>-helper` (`retry-header-helper`), or `<area-slug>-specialist` for
+a standing specialist (`billing-api-specialist`). Never name it for its soul, which the
+sidebar already shows, and give it a name no instance has had: when the name is taken,
+make the task's part more specific.
 ```bash
-oats spawn <soul> --parent "$OATS_INSTANCE" --same-work --purpose <helper-slug> --task-file <brief.md>
+oats spawn <soul> --parent "$OATS_INSTANCE" --same-work --name <task-slug>-helper --task-file <brief.md>
 ```
 `--same-work` records that the helper does your work, and your person's sidebar draws its
 line to you. It shares no work tree: a helper of a worktree soul gets its own worktree and
