@@ -18,15 +18,15 @@ function composeBoundary() {
   return {
     approvedAgentMounts,
     protectedSources: ["/fixture/services/keys", "/fixture/services/postgres", "/var/run/docker.sock"],
-    agentsNetwork: { Id: "internal-agent-network", Internal: true, EnableIPv6: false },
+    agentsNetwork: { Id: "internal-agent-network", Internal: true, EnableIPv6: false, Options:{"com.docker.network.bridge.gateway_mode_ipv4":"isolated"} },
     servicesNetwork: { Id: "service-network", Internal: false, EnableIPv6: false },
     agent: {
       Mounts: structuredClone(approvedAgentMounts),
-      HostConfig: { NetworkMode: "proof_agents" },
+      HostConfig: { NetworkMode: "proof_agents", CapDrop:["ALL"], CapAdd:[], SecurityOpt:["no-new-privileges:true"], ReadonlyRootfs:true, Privileged:false, PidMode:"", IpcMode:"private" },
       NetworkSettings: { Networks: { proof_agents: { NetworkID: "internal-agent-network" } } },
     },
     egress: {
-      HostConfig: { NetworkMode: "proof_agents" },
+      HostConfig: { NetworkMode: "proof_agents", CapDrop:["ALL"], CapAdd:[], SecurityOpt:["no-new-privileges:true"], ReadonlyRootfs:true, Privileged:false, PidMode:"", IpcMode:"private" },
       NetworkSettings: { Networks: {
         proof_agents: { NetworkID: "internal-agent-network" },
         proof_services: { NetworkID: "service-network" },
@@ -247,4 +247,67 @@ test("only provisioned public namespace TXT records enter the authoritative zone
     {name:"_awid.team.example.invalid\nmalformed",text:policy.authorityRecords[0].text},
     {name:"_awid.team.example.invalid",text:"awid=v1;\nmalformed"},
   ]) assert.throws(()=>compilePolicy({...policy,authorityRecords:[record]}),/egress policy/);
+});
+
+
+test("runtime privileges cannot bypass the admitted egress boundary", () => {
+  for (const role of ["agent", "egress"]) for (const [key,value] of [
+    ["Privileged",true], ["CapAdd",["NET_ADMIN"]], ["CapDrop",[]],
+    ["SecurityOpt",[]], ["ReadonlyRootfs",false], ["PidMode","host"],
+    ["NetworkMode","host"], ["NetworkMode","container:other"],
+  ]) {
+    const state=composeBoundary();state[role].HostConfig[key]=value;
+    assert.throws(()=>assertComposeBoundary(state),/runtime isolation/);
+  }
+});
+
+test("an internal bridge with a reachable host gateway is not isolated", () => {
+  const state=composeBoundary();
+  state.agentsNetwork.Options={};
+  assert.throws(()=>assertComposeBoundary(state),/isolated gateway mode/);
+});
+
+test("the shared ingress probe proves both protocol refusals before backend delivery", async t => {
+  const moduleUrl=new URL("../container/agent/egress/probe-ingress.mjs",import.meta.url);
+  assert.ok(existsSync(moduleUrl),"the shared runtime ingress refusal probe is required");
+  const {probeIngress}=await import(moduleUrl);
+  const {mkdtempSync,writeFileSync,appendFileSync,rmSync}=await import("node:fs");
+  const {tmpdir}=await import("node:os");
+  const {join}=await import("node:path");
+  const {execFileSync}=await import("node:child_process");
+  const {createSecureServer}=await import("node:http2");
+  const dir=mkdtempSync(join(tmpdir(),"oats-egress-ingress-"));
+  t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  writeFileSync(join(dir,"openssl.cnf"),'[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n[dn]\nCN=prepare.example.invalid\n[ext]\nsubjectAltName=DNS:prepare.example.invalid,DNS:approve.example.invalid\nbasicConstraints=critical,CA:TRUE\n');
+  execFileSync("openssl",["req","-x509","-newkey","rsa:2048","-sha256","-nodes","-days","1","-keyout",join(dir,"key.pem"),"-out",join(dir,"cert.pem"),"-config",join(dir,"openssl.cnf")],{stdio:"ignore"});
+  const requestLog=join(dir,"request.log"),humanLog=join(dir,"human.log");
+  writeFileSync(requestLog,"");writeFileSync(humanLog,"");
+  let strict=true, strictTls=false;
+  const {createSecureContext}=await import("node:tls");
+  const context=createSecureContext({key:readFileSync(join(dir,"key.pem")),cert:readFileSync(join(dir,"cert.pem"))});
+  const server=createSecureServer({key:readFileSync(join(dir,"key.pem")),cert:readFileSync(join(dir,"cert.pem")),allowHTTP1:true,
+    SNICallback:(name,done)=>{
+      if(strictTls && name!=="prepare.example.invalid" && name!=="approve.example.invalid")done(new Error("unlisted SNI"));
+      else done(null,context);
+    }});
+  const sessions=new Set();server.on("session",s=>{sessions.add(s);s.on("close",()=>sessions.delete(s))});
+  server.on("request",(req,res)=>{
+    const authority=req.headers[":authority"]||req.headers.host;
+    const sni=req.socket.servername;
+    const matched=authority===sni || authority===sni+":443";
+    if(strict&&!matched){res.writeHead(421);res.end();return}
+    const host=authority?.split(":")[0];
+    if(host!=="prepare.example.invalid"&&host!=="approve.example.invalid"){res.writeHead(421);res.end();return}
+    appendFileSync(host==="prepare.example.invalid"?requestLog:humanLog,req.url+"\n");
+    // A misrouted backend may itself return 421: status alone proves nothing.
+    res.writeHead(matched?200:421);res.end();
+  });
+  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+  t.after(()=>new Promise(resolve=>{for(const s of sessions)s.destroy();server.closeAllConnections?.();server.close(resolve)}));
+  const options={address:"127.0.0.1",port:server.address().port,requestOrigin:"https://prepare.example.invalid",humanOrigin:"https://approve.example.invalid",ca:readFileSync(join(dir,"cert.pem")),requestLog,humanLog};
+  assert.equal(await probeIngress(options),true);
+  strictTls=true;
+  assert.equal(await probeIngress(options),true);
+  strictTls=false; strict=false;
+  await assert.rejects(()=>probeIngress(options),/forbidden probe reached a backend/);
 });

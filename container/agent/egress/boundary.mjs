@@ -8,6 +8,17 @@ export function assertComposeBoundary({ agent, egress, agentsNetwork, servicesNe
     && typeof servicesNetwork.Id === "string" && servicesNetwork.Id.length > 0
     && agentsNetwork.Id !== servicesNetwork.Id, "expected distinct identified runtime networks");
   assert.ok(agentsNetwork.Internal === true && agentsNetwork.EnableIPv6 === false, "expected an isolated IPv4 agents network");
+  for (const info of [agent, egress]) {
+    const host = info.HostConfig;
+    assert.ok(host && host.Privileged === false && host.ReadonlyRootfs === true
+      && JSON.stringify(host.CapDrop) === '["ALL"]' && (host.CapAdd ?? []).length === 0
+      && JSON.stringify(host.SecurityOpt) === '["no-new-privileges:true"]'
+      && !host.PidMode && host.IpcMode === "private"
+      && typeof host.NetworkMode === "string" && host.NetworkMode !== "host"
+      && !host.NetworkMode.startsWith("container:"), "runtime isolation differs from the approved boundary");
+  }
+  assert.equal(agentsNetwork.Options?.["com.docker.network.bridge.gateway_mode_ipv4"], "isolated",
+    "agents network requires isolated gateway mode");
   const endpoints = Object.values(agent.NetworkSettings?.Networks ?? {});
   assert.equal(endpoints.length, 1, "agent must have exactly one isolated network");
   assert.equal(endpoints[0].NetworkID, agentsNetwork.Id, "agent network must be the approved isolated network");

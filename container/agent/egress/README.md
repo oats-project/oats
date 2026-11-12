@@ -58,7 +58,11 @@ The top-level Compose service extends `compose.egress.yaml` and supplies:
 | `EGRESS_ADDRESS` | Static proxy address on the internal `agents` network. |
 
 The bundle defines the networks. Only agents and this proxy join `agents`, which
-is IPv4 and internal. Only the proxy joins both `agents` and `services`; IP
+is IPv4 and internal, with
+`driver_opts: {com.docker.network.bridge.gateway_mode_ipv4: isolated}` (Docker
+Engine 28 or later). An ordinary internal bridge still exposes its host gateway;
+the isolated mode removes that host bridge address. Only the proxy joins both
+`agents` and `services`; IP
 forwarding is disabled. The agent has no other bridge, host networking, elevated
 capability, engine socket, service-key or database mount. Its existing harness
 login stays the dedicated read-only `/etc/agent-login` mount.
@@ -76,6 +80,40 @@ matched traffic succeeds, and that unknown or absent SNI has no default route.
 If this cannot be proved, keep the signer route closed and use isolated ingress
 listeners or upstreams. Exact authority and port comparisons are required.
 
+## Ingress admission probe
+
+Both wrappers run the same probe from services-side connectivity before admitting
+agents. Capture the actual request and human backend access logs first; the logs
+must include request query strings. Do not use the TLS frontend access log as
+proof that a backend received nothing.
+
+```sh
+node /opt/egress/probe-ingress.mjs \
+  --address <ingress-ipv4> \
+  --request-origin https://prepare.example.invalid \
+  --human-origin https://approve.example.invalid \
+  --request-log <request-backend-log> \
+  --human-log <human-backend-log> \
+  --ca-file <public-ca.pem> \
+  --path /ready
+```
+
+The files are operator-side probe inputs; never mount backend logs into an agent.
+Both log paths may name one file when the surfaces share a backend process.
+The default path is `/ready`; choose an existing, harmless endpoint that returns
+200 on each matched surface. Certificate chain and service-name checks stay on.
+Without `--ca-file`, Node's normal trust configuration applies.
+
+The probe sends matched controls and forbidden authorities over HTTP/1.1 and
+HTTP/2. It includes the human host, explicit port 443, a wrong port, a hostname
+suffix, unknown SNI and absent SNI. Only 421 or specific connection/TLS refusals
+count as rejections; a timeout or certificate-validation error fails. Unique
+query tags must appear for matched controls in the appropriate backend log, and
+all forbidden tags must be absent from both logs. Final human controls establish
+that logging still works after the negative cases. Responses and log contents
+are never printed. Success prints exactly `OATS_EGRESS_INGRESS_PASS`; require
+that token and exit 0 before enabling the signer route and admitting agents.
+
 ## Build and prove
 
 Build from this directory with `docker build -t <local-name> .`. The image runs as
@@ -88,7 +126,10 @@ NXDOMAIN for an unknown name and a live TLS listener. It is a readiness check.
 
 `test/agent-egress-image.sh IMAGE` runs the built image with dropped capabilities,
 read-only root and the component sysctls, proves DNS/TLS readiness and EROFS, then
-requires a clean stop. It creates only a disposable container and temporary public
+requires a clean stop. It also establishes a host-gateway canary as a positive
+control on an ordinary internal bridge, then requires connection denial from an
+isolated bridge while that canary stays live. It creates disposable containers,
+networks and a temporary public
 policy file. This catches packaged binaries that cannot execute under the runtime
 capability restrictions.
 

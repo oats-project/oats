@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, statSync } from "node:fs";
 import { isIP } from "node:net";
 
-function originHost(value) {
+export function originHost(value) {
   assert.ok(typeof value === "string" && value.length <= 2048 && !/[\u0000-\u0020\u007f]/.test(value), "egress policy origin is invalid");
   let url;
   try { url = new URL(value); } catch { throw new Error("egress policy origin is invalid"); }

@@ -5,16 +5,27 @@ image=${1:?Usage: agent-egress-image.sh IMAGE}
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 scratch=$(mktemp -d)
 name="oats-egress-smoke-$$"
+plain="oats-egress-plain-$$"
+isolated="oats-egress-isolated-$$"
+canary="oats-egress-canary-$$"
 cleanup() {
   docker logs "$name" > "$scratch/container.log" 2>&1 || true
   if test -n "${EGRESS_SMOKE_EVIDENCE:-}"; then cp "$scratch/container.log" "$EGRESS_SMOKE_EVIDENCE"; fi
   docker rm -f "$name" >/dev/null 2>&1 || true
+  docker rm -f "$canary" >/dev/null 2>&1 || true
+  docker network rm "$plain" "$isolated" >/dev/null 2>&1 || true
   rm -rf "$scratch"
 }
 trap cleanup EXIT
 node -e 'const fs=require("node:fs");const s=fs.readFileSync(process.argv[1],"utf8");const m=s.match(/```json\n([\s\S]*?)\n```/);fs.writeFileSync(process.argv[2],JSON.stringify(JSON.parse(m[1])),{mode:0o644})' "$root/container/agent/egress/README.md" "$scratch/policy.json"
 chmod 755 "$scratch"
 docker run --detach --name "$name" --network none --user 10001:10001 --cap-drop ALL --security-opt no-new-privileges:true --read-only --tmpfs /tmp:rw,nosuid,nodev,size=16m,mode=1777 --pids-limit 64 --memory 256m --cpus 1 --sysctl net.ipv4.ip_forward=0 --sysctl net.ipv4.ip_unprivileged_port_start=0 --mount "type=bind,source=$scratch/policy.json,target=/etc/egress/policy.json,readonly" "$image" >/dev/null
+if docker run --rm --network none --user 10001:10001 --cap-drop ALL --security-opt no-new-privileges:true --read-only --entrypoint node "$image" /opt/egress/probe-ingress.mjs > "$scratch/probe-out" 2> "$scratch/probe-error"; then
+  printf '%s\n' 'FAIL ingress probe accepted missing arguments' >&2
+  exit 1
+fi
+test ! -s "$scratch/probe-out"
+grep -q '^egress: ingress authority or backend non-delivery proof failed (values withheld)$' "$scratch/probe-error"
 attempt=0
 until result=$(docker exec "$name" node /opt/egress/health.mjs 2>/dev/null); do
   attempt=$((attempt+1))
@@ -27,3 +38,23 @@ docker stop --time 5 "$name" >/dev/null
 test "$(docker inspect --format '{{.State.ExitCode}}' "$name")" = 0
 test "$(docker inspect --format '{{.State.OOMKilled}}' "$name")" = false
 printf '%s\n' 'PASS proxy image: UID 10001, dropped capabilities, read-only root, DNS and TLS readiness, clean stop'
+
+# A live host listener distinguishes a closed boundary from an absent service.
+docker network create --internal "$plain" >/dev/null
+docker network create --internal --opt com.docker.network.bridge.gateway_mode_ipv4=isolated "$isolated" >/dev/null
+gateway=$(docker network inspect --format '{{(index .IPAM.Config 0).Gateway}}' "$plain")
+docker run -d --name "$canary" --network host --user 10001:10001 --cap-drop ALL --security-opt no-new-privileges:true --read-only --entrypoint node "$image" -e 'require("node:net").createServer(s=>{console.log("CANARY_HIT");s.end("canary")}).listen(0,process.argv[1],function(){console.log("CANARY_PORT="+this.address().port)})' "$gateway" >/dev/null
+attempt=0
+while :; do
+  port=$(docker logs "$canary" | sed -n 's/^CANARY_PORT=//p')
+  if test -n "$port"; then break; fi
+  attempt=$((attempt+1));test "$attempt" -lt 10;sleep 1
+done
+client() {
+  docker run --rm --network "$1" --user 10001:10001 --cap-drop ALL --security-opt no-new-privileges:true --read-only --entrypoint node "$image" -e 'const c=require("node:net").connect({host:process.argv[1],port:Number(process.argv[2])});c.setTimeout(1500,()=>{c.destroy();console.log("DENIED")});c.on("data",data=>{console.log(data.toString()==="canary"?"CONNECTED":"UNEXPECTED");c.destroy()});c.on("error",()=>console.log("DENIED"))' "$gateway" "$port"
+}
+test "$(client "$plain")" = CONNECTED
+test "$(client "$isolated")" = DENIED
+test "$(client "$plain")" = CONNECTED
+test "$(docker logs "$canary" | grep -c '^CANARY_HIT$')" = 2
+printf '%s\n' 'PASS host gateway: live positive controls; isolated agent bridge denied'

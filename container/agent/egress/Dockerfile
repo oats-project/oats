@@ -11,7 +11,7 @@ COPY --from=dns --chmod=755 /coredns /usr/local/bin/coredns
 RUN cp --no-preserve=xattr /usr/local/bin/coredns /usr/local/bin/coredns.clean \
     && mv /usr/local/bin/coredns.clean /usr/local/bin/coredns
 WORKDIR /opt/egress
-COPY --chmod=644 policy.mjs supervisor.mjs health.mjs ./
+COPY --chmod=644 policy.mjs supervisor.mjs health.mjs probe-ingress.mjs ./
 ENV GOMAXPROCS=2
 USER 10001:10001
 EXPOSE 53/udp 53/tcp 443/tcp
