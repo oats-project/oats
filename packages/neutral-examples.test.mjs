@@ -3,8 +3,9 @@
 // when an example's `/Users/<name>` or `/home/<name>` (or Claude's encoded `-Users-<name>-`) names
 // someone not on the list of invented owners below.
 //
-// It covers home paths only. Other deployment specifics (a real machine's name, a private
-// repository) have no generic shape to check for; review catches them.
+// It covers home paths only, and among them the homes named like a login (below). Other
+// deployment specifics (a real machine's name, a private repository) have no generic shape to
+// check for; review catches them.
 //
 // It sits at the root of packages/ because it reads all of them. CI runs it on every pull request
 // through the root runner's `packages/**/*.test.mjs` glob (scripts/run-tests.mjs); it is not in
@@ -50,9 +51,11 @@ function* textFiles(dir) {
 }
 
 // `/Users/<name>` or `/home/<name>`: the whole segment, any characters, up to the next path or
-// quoting separator, so a name that only starts like an invented one is checked whole. The owner
-// is a login name, which holds no whitespace, quote or bracket (macOS short names; Linux's
-// default login rule), so those end it, as they end a path in prose and in code.
+// quoting separator, so a name that only starts like an invented one is checked whole.
+// Whitespace, quotes and brackets end the segment, as they end a path in prose and in code. So
+// the guard covers homes named like a login (the default, and what a pasted path shows); a home
+// directory whose own name holds a space or a quote is not checked, and review catches it, as it
+// does every other deployment specific.
 // `-Users-<name>-`: Claude's encoded form, up to the next dash. A line's `\u` escapes are read as
 // the characters they write first; any other backslash ends the segment (it starts an escape, not
 // a name's letter). An interpolated `${…}` is the code's, not an example: its segment stops at the
