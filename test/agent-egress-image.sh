@@ -4,16 +4,17 @@ set -eu
 image=${1:?Usage: agent-egress-image.sh IMAGE}
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 scratch=$(mktemp -d)
-name="oats-egress-smoke-$$"
-plain="oats-egress-plain-$$"
-isolated="oats-egress-isolated-$$"
-probe="oats-egress-network-probe-$$"
+name="gateway-correction-smoke-$$"
+control="gateway-correction-control-$$"
+plain="gateway-correction-plain-$$"
+isolated="gateway-correction-isolated-$$"
+probe="gateway-correction-probe-$$"
 cleanup() {
   docker logs "$name" > "$scratch/container.log" 2>&1 || true
   if test -n "${EGRESS_SMOKE_EVIDENCE:-}"; then cp "$scratch/container.log" "$EGRESS_SMOKE_EVIDENCE"; fi
   docker rm -f "$name" >/dev/null 2>&1 || true
   docker rm -f "$probe" >/dev/null 2>&1 || true
-  docker network rm "$plain" "$isolated" >/dev/null 2>&1 || true
+  docker network rm "$control" "$plain" "$isolated" >/dev/null 2>&1 || true
   rm -rf "$scratch"
 }
 trap cleanup EXIT
@@ -39,10 +40,23 @@ test "$(docker inspect --format '{{.State.ExitCode}}' "$name")" = 0
 test "$(docker inspect --format '{{.State.OOMKilled}}' "$name")" = false
 printf '%s\n' 'PASS proxy image: UID 10001, dropped capabilities, read-only root, DNS and TLS readiness, clean stop'
 
-# A live host listener distinguishes a closed boundary from an absent service.
+# Test each agents bridge's own on-link gateway, with a separate live control.
+docker network create --internal "$control" >/dev/null
 docker network create --internal "$plain" >/dev/null
-docker network create --internal --opt com.docker.network.bridge.gateway_mode_ipv4=isolated "$isolated" >/dev/null
-gateway=$(docker network inspect --format '{{(index .IPAM.Config 0).Gateway}}' "$plain")
+# Reserve a free Docker subnet, then retain an explicit IPAM gateway even
+# though isolated mode removes that address from the host bridge.
+docker network create --internal "$isolated" >/dev/null
+isolated_subnet=$(docker network inspect --format '{{(index .IPAM.Config 0).Subnet}}' "$isolated")
+isolated_gateway=$(docker network inspect --format '{{(index .IPAM.Config 0).Gateway}}' "$isolated")
+docker network rm "$isolated" >/dev/null
+docker network create --internal --subnet "$isolated_subnet" --gateway "$isolated_gateway" --opt com.docker.network.bridge.gateway_mode_ipv4=isolated "$isolated" >/dev/null
+control_gateway=$(docker network inspect --format '{{(index .IPAM.Config 0).Gateway}}' "$control")
+plain_gateway=$(docker network inspect --format '{{(index .IPAM.Config 0).Gateway}}' "$plain")
+test "$(docker network inspect --format '{{(index .IPAM.Config 0).Gateway}}' "$isolated")" = "$isolated_gateway"
+docker run -d --name "$probe" --network "$plain" --user 10001:10001 --cap-drop ALL --security-opt no-new-privileges:true --read-only --entrypoint sleep "$image" infinity >/dev/null
+node --input-type=module -e 'const {default:assert}=await import("node:assert/strict");const {checkDockerGateway}=await import(process.argv[1]);const options={image:process.argv[2],controlNetwork:process.argv[3],controlAddress:process.argv[4],gatewayAddress:process.argv[5],probeContainer:process.argv[6]};await checkDockerGateway({...options,expectedReachable:true});await assert.rejects(checkDockerGateway(options),{code:"ERR_ASSERTION",message:/^probe can reach the host gateway(?:\n|$)/,actual:"CONNECTED",expected:"DENIED"})' "$root/container/agent/egress/canary.mjs" "$image" "$control" "$control_gateway" "$plain_gateway" "$probe"
+docker rm -f "$probe" >/dev/null
+printf '%s\n' 'PASS plain host gateway: reachable on-link canary; boundary refused'
 docker run -d --name "$probe" --network "$isolated" --user 10001:10001 --cap-drop ALL --security-opt no-new-privileges:true --read-only --entrypoint sleep "$image" infinity >/dev/null
-node --input-type=module -e 'const {checkDockerGateway}=await import(process.argv[1]);await checkDockerGateway({image:process.argv[2],controlNetwork:process.argv[3],gatewayAddress:process.argv[4],probeContainer:process.argv[5]})' "$root/container/agent/egress/canary.mjs" "$image" "$plain" "$gateway" "$probe"
+node --input-type=module -e 'const {checkDockerGateway}=await import(process.argv[1]);await checkDockerGateway({image:process.argv[2],controlNetwork:process.argv[3],controlAddress:process.argv[4],gatewayAddress:process.argv[5],probeContainer:process.argv[6]})' "$root/container/agent/egress/canary.mjs" "$image" "$control" "$control_gateway" "$isolated_gateway" "$probe"
 printf '%s\n' 'PASS host gateway: live positive controls; isolated agent bridge denied'

@@ -19,12 +19,29 @@ export async function tcpReachable(address, port, { payload = false, timeoutMs =
   });
 }
 
-export async function serveCanary(address) {
+export async function serveCanary(address, probeAddress = address) {
   const { createServer } = await import("node:net");
-  createServer(socket => {
+  const onConnection = socket => {
     process.stdout.write("CANARY_HIT\n");
     socket.end("canary");
-  }).listen(0, address, function () { process.stdout.write("CANARY_PORT=" + this.address().port + "\n"); });
+  };
+  const listen = (server, port, host) => new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, host, resolve);
+  });
+  const control = createServer(onConnection);
+  await listen(control, 0, address);
+  const port = control.address().port;
+  if (probeAddress !== address) {
+    const probe = createServer(onConnection);
+    try { await listen(probe, port, probeAddress); }
+    catch (error) {
+      // Isolated Docker bridges deliberately have no host gateway address.
+      // Every other bind failure invalidates this proof, including a busy port.
+      if (error.code !== "EADDRNOTAVAIL") throw error;
+    }
+  }
+  process.stdout.write("CANARY_PORT=" + port + "\n");
 }
 
 export const tcpProgram = `const tcpReachable=(${tcpReachable.toString()});const ok=await tcpReachable(process.argv[1],Number(process.argv[2]),{payload:process.argv[3]==="canary"});process.stdout.write(ok?"CONNECTED\\n":"DENIED\\n");`;
@@ -41,11 +58,12 @@ export function tcpFromNetwork({ image, network, address, port, payload = false 
   return docker(["run","--rm","--network",network,"--user","10001:10001","--cap-drop","ALL","--security-opt","no-new-privileges:true","--read-only","--entrypoint","node",image,"--input-type=module","-e",tcpProgram,address,String(port),payload ? "canary" : "tcp"]).trim() === "CONNECTED";
 }
 
-export async function withGatewayCanary({ image, controlNetwork, gatewayAddress }, run) {
-  assert.ok(safeName(controlNetwork) && isIP(gatewayAddress) === 4, "gateway control inputs are invalid");
+export async function withGatewayCanary({ image, controlNetwork, gatewayAddress, controlAddress = gatewayAddress, expectedProbeHits = 0 }, run) {
+  assert.ok(safeName(controlNetwork) && isIP(controlAddress) === 4 && isIP(gatewayAddress) === 4, "gateway control inputs are invalid");
+  assert.ok(expectedProbeHits === 0 || expectedProbeHits === 1, "gateway expected hit count is invalid");
   const name = "oats-egress-canary-" + randomUUID();
   try {
-    docker(["run","-d","--name",name,"--network","host","--user","10001:10001","--cap-drop","ALL","--security-opt","no-new-privileges:true","--read-only","--entrypoint","node",image,"--input-type=module","-e",`(${serveCanary.toString()})(process.argv[1])`,gatewayAddress]);
+    docker(["run","-d","--name",name,"--network","host","--user","10001:10001","--cap-drop","ALL","--security-opt","no-new-privileges:true","--read-only","--entrypoint","node",image,"--input-type=module","-e",`(${serveCanary.toString()})(process.argv[1],process.argv[2])`,controlAddress,gatewayAddress]);
     let port;
     const deadline = Date.now() + 10000;
     while (!port) {
@@ -53,20 +71,23 @@ export async function withGatewayCanary({ image, controlNetwork, gatewayAddress 
       if (match) port = Number(match[1]);
       else { assert.ok(Date.now() < deadline, "host canary did not start"); await new Promise(resolve => setTimeout(resolve, 50)); }
     }
-    assert.ok(tcpFromNetwork({ image, network:controlNetwork, address:gatewayAddress, port, payload:true }), "host canary positive control failed");
-    await run({ address:gatewayAddress, port });
-    assert.ok(tcpFromNetwork({ image, network:controlNetwork, address:gatewayAddress, port, payload:true }), "host canary final positive control failed");
-    assert.equal(docker(["logs",name]).match(/^CANARY_HIT$/gm)?.length, 2, "forbidden probe reached the host canary");
+    assert.ok(tcpFromNetwork({ image, network:controlNetwork, address:controlAddress, port, payload:true }), "host canary positive control failed");
+    try { await run({ address:gatewayAddress, port }); }
+    finally {
+      assert.ok(tcpFromNetwork({ image, network:controlNetwork, address:controlAddress, port, payload:true }), "host canary final positive control failed");
+    }
+    assert.equal(docker(["logs",name]).match(/^CANARY_HIT$/gm)?.length, 2 + expectedProbeHits, "forbidden probe reached the host canary");
   } finally {
     // This name is ours; never prune or remove a caller's container/network.
     docker(["rm","-f",name]);
   }
 }
 
-export async function checkDockerGateway({ image, controlNetwork, gatewayAddress, probeContainer }) {
+export async function checkDockerGateway({ image, controlNetwork, controlAddress, gatewayAddress, probeContainer, expectedReachable = false }) {
   assert.ok(safeName(probeContainer), "probe container name is invalid");
-  await withGatewayCanary({ image, controlNetwork, gatewayAddress }, async ({address,port}) => {
+  assert.equal(typeof expectedReachable, "boolean", "gateway expected reachability is invalid");
+  await withGatewayCanary({ image, controlNetwork, controlAddress, gatewayAddress, expectedProbeHits:expectedReachable ? 1 : 0 }, async ({address,port}) => {
     const answer = docker(["exec",probeContainer,"node","--input-type=module","-e",tcpProgram,address,String(port),"canary"]).trim();
-    assert.equal(answer, "DENIED", "probe can reach the host gateway");
+    assert.equal(answer, expectedReachable ? "CONNECTED" : "DENIED", expectedReachable ? "plain probe cannot reach its on-link host gateway" : "probe can reach the host gateway");
   });
 }

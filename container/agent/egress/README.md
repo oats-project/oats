@@ -133,9 +133,10 @@ NXDOMAIN for an unknown name and a live TLS listener. It is a readiness check.
 
 `test/agent-egress-image.sh IMAGE` runs the built image with dropped capabilities,
 read-only root and the component sysctls, proves DNS/TLS readiness and EROFS, then
-requires a clean stop. It also establishes a host-gateway canary as a positive
-control on an ordinary internal bridge, then requires connection denial from an
-isolated bridge while that canary stays live. It creates disposable containers,
+requires a clean stop. It also proves that a plain internal agents bridge can
+reach its own on-link host gateway and is refused by the boundary check, while an
+isolated agents bridge passes. The canary has live controls before and after
+each probe on a separate internal bridge, at the same port. It creates disposable containers,
 networks and a temporary public
 policy file. This catches packaged binaries that cannot execute under the runtime
 capability restrictions.
@@ -186,7 +187,14 @@ derives it from the approved inventory.
 The adapter
 requires the live proxy policy to equal the derived policy and establishes live
 TCP controls from the existing services/backend networks. Its own temporary host
-canary binds only the services bridge's gateway address.
+canary binds an ephemeral port on the services bridge's gateway, then attempts
+the same port on the agents network's on-link IPAM gateway. Only an unavailable
+host address (`EADDRNOTAVAIL`, as expected in isolated mode) permits the second
+bind to fail. Readiness follows that bind result; the in-container probe targets
+the agents gateway while services controls remain live. Neither listener binds
+a wildcard address. Configure an explicit IPv4 `gateway` in the agents network's
+`ipam.config`: Docker can otherwise omit the gateway in isolated mode, and the
+adapter refuses to infer a probe address from a subnet.
 
 The shared in-container body requires the configured resolver, all five allowed
 HTTPS controls through that resolver and proxy, the exact namespace TXT records,

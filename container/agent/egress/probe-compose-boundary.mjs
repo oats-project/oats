@@ -72,9 +72,11 @@ export async function probeComposeBoundary(plan) {
     }
   };
   verifyControls();
-  const gateway=servicesNetwork.IPAM?.Config?.find(item=>isIP(item.Gateway)===4)?.Gateway;
-  assert.ok(gateway,"services network needs an identified gateway for the owned host canary");
-  await withGatewayCanary({image:plan.proxyImage,controlNetwork:plan.servicesNetwork,gatewayAddress:gateway},async endpoint=>{
+  const gateway=agentsNetwork.IPAM?.Config?.find(item=>isIP(item.Gateway)===4)?.Gateway;
+  const controlAddress=servicesNetwork.IPAM?.Config?.find(item=>isIP(item.Gateway)===4)?.Gateway;
+  assert.ok(gateway,"agents network needs an explicit IPv4 IPAM gateway; configure ipam.config gateway before probing");
+  assert.ok(controlAddress,"services network needs an identified IPv4 gateway for the owned host canary");
+  await withGatewayCanary({image:plan.proxyImage,controlNetwork:plan.servicesNetwork,controlAddress,gatewayAddress:gateway},async endpoint=>{
     const program=runtimeProgram({policy:plan.policy,allowedPaths:plan.allowedPaths,deniedBackends:plan.deniedBackends,
       uid:plan.uid,gid:plan.gid,caFile:plan.caFile,mirrors:approvedMounts.some(mount=>mount.Destination === "/mirrors"),
       protectedPaths:plan.protectedPaths||[],gateway:endpoint});
