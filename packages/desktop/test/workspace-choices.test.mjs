@@ -127,7 +127,7 @@ test('choiceMatches: the label and the place, lower-cased, against what was type
   assert.deepEqual(kept('too old'), [LOOSE.id], 'the short reason is searchable');
   assert.deepEqual(kept('this mac'), [OATS.id, LOOSE.id]);
   assert.deepEqual(kept('oats this'), [OATS.id], 'a query may span the name and the line: they are joined by one space');
-  assert.deepEqual(kept('mac · alt'), [OATS.id]);
+  assert.deepEqual(kept('mac · dev'), [OATS.id]);
   // What is not shown is not matched: the full reason, the tooltip's paths, an id, the not-live words.
   for (const hidden of ['run oats sync', '~/agents', 'ws:', '/srv', 'not live', 'github.com']) assert.deepEqual(kept(hidden), [], hidden);
   // Lower-cased as the menu lower-cases: by the locale's rule, on both sides.
