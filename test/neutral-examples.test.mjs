@@ -7,16 +7,17 @@
 // deployment specifics (a real machine's name, a private repository) have no generic shape to
 // check for; review catches them.
 //
-// It sits at the root of packages/ because it reads all of them. CI runs it on every pull request
-// through the root runner's `packages/**/*.test.mjs` glob (scripts/run-tests.mjs); it is not in
-// the npm package (package.json `files`).
+// It sits in test/, the kernel's test directory: the root runner's `test/**/*.test.mjs` glob
+// (scripts/run-tests.mjs) runs it in every CI shard, with or without the Desktop's dependencies,
+// where at the root of packages/ the runner's fallback without them (one glob per package
+// directory) skipped it. It is not in the npm package (package.json `files`).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, extname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const SELF = fileURLToPath(import.meta.url), PACKAGES = dirname(SELF);
+const SELF = fileURLToPath(import.meta.url), ROOT = dirname(dirname(SELF)), PACKAGES = join(ROOT, 'packages');
 
 // The invented owners an example's home directory may name. A new one must be obviously invented
 // (`alex`, `user`), never someone's login. The last few are folders a fixture puts right under a
