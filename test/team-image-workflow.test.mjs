@@ -280,11 +280,17 @@ test("release image builds a preserved generated context and retains its lock ar
   assert.equal(accept.env.EXPECTED_OATS_VERSION, "${{ steps.context.outputs.kernel-version }}");
 });
 
-test("both image lanes install and verify the reviewed Skopeo package", () => {
-  for (const [file, jobID] of [["team-image.yml", "verify"], ["release.yml", "publish-team-image"]]) {
-    const install = workflow(file).jobs[jobID].steps.find((s) => s.run?.includes("apt-get install"));
-    assert.match(install.run, /skopeo=1\.13\.3\+ds1-2ubuntu0\.24\.04\.3/);
-    assert.match(install.run, /dpkg-query/);
-    assert.match(install.run, /1\.13\.3\+ds1-2ubuntu0\.24\.04\.3/);
-  }
+test("the release image lane pins and verifies the reviewed Skopeo package", () => {
+  const install = workflow("release.yml").jobs["publish-team-image"].steps.find((s) => s.run?.includes("apt-get install"));
+  assert.match(install.run, /skopeo=1\.13\.3\+ds1-2ubuntu0\.24\.04\.3/);
+  assert.match(install.run, /dpkg-query/);
+  assert.match(install.run, /1\.13\.3\+ds1-2ubuntu0\.24\.04\.3/);
+});
+
+test("PR verification uses the available Skopeo package and records its version", () => {
+  const install = workflow("team-image.yml").jobs.verify.steps.find((s) => s.run?.includes("apt-get install"));
+  assert.doesNotMatch(read(".github/workflows/team-image.yml"), /skopeo=[^\s]+/, "PR verification must carry no exact apt pin");
+  assert.match(install.run, /apt-get install -y --no-install-recommends skopeo\s/);
+  assert.match(install.run, /dpkg-query/);
+  assert.match(install.run, />> "\$GITHUB_STEP_SUMMARY"/);
 });

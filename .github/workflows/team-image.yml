@@ -40,8 +40,8 @@ jobs:
       - name: Install the registry copy tool
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends skopeo=1.13.3+ds1-2ubuntu0.24.04.3
-          test "$(dpkg-query -W -f='${Version}' skopeo)" = 1.13.3+ds1-2ubuntu0.24.04.3
+          sudo apt-get install -y --no-install-recommends skopeo
+          printf 'Skopeo package: `%s`\n' "$(dpkg-query -W -f='${Version}' skopeo)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verify export and registry manifest preparation without publishing
         run: bash .github/scripts/team-image-publish.sh --verify

@@ -562,9 +562,11 @@ The fixture records the accepted container's image ID. Export must inspect
 that same ID, then use `docker save` on the immutable ID. Skopeo reads the
 archive and compresses layers into a private directory, preserving its
 Docker v2s2 manifest type. Docker's CLI negotiates the Engine API; Skopeo
-uses no daemon connection. Both lanes install and verify the reviewed
-Ubuntu Skopeo package version `1.13.3+ds1-2ubuntu0.24.04.3`; changing that
-input requires another review and real preparation run.
+uses no daemon connection. The release lane installs and verifies the
+reviewed Ubuntu Skopeo package version `1.13.3+ds1-2ubuntu0.24.04.3`, whose
+error text it parses; changing that input requires another review and real
+preparation run. PR verification installs the available archive package
+without an exact apt pin and records its version in the step summary.
 
 Keeping the manifest type avoids rewriting configuration bytes. The
 prepared configuration digest must equal the hash of the archive's raw
