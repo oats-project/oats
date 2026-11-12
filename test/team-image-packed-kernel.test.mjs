@@ -86,3 +86,34 @@ test("a packed kernel with HEAD's version but substituted bytes or modes is refu
     } finally { if (returned) rmSync(returned.root, { recursive: true, force: true }); }
   }
 });
+
+test("installed packed files match exact paths, sizes, hashes and modes", async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, chmodSync, renameSync, symlinkSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { spawnSync } = await import("node:child_process");
+  const script = new URL("../.github/scripts/team-image-installed-kernel.cjs", import.meta.url);
+  const expected = { name: "@awebai/oats", version: "0.69.18", files: [
+    { path: "package.json", size: 44, mode: 0o644, sha256: "8e70d404831d1b86d7cacca96f69c7ef4025bb5e0f8f2edd8fbabb2145209521" },
+    { path: "lib/core.mjs", size: 5, mode: 0o644, sha256: "34d6a94dacb895403529caac12a19aed745c6caca7a8d0f4ed631999044f76e8" },
+  ] };
+  for (const change of ["none", "same-version-bytes", "size", "mode", "extra", "missing", "renamed", "link"]) {
+    const root = mkdtempSync(join(tmpdir(), "oats-installed-kernel-"));
+    try {
+      mkdirSync(join(root, "lib"));
+      writeFileSync(join(root, "package.json"), '{"name":"@awebai/oats","version":"0.69.18"}\n', { mode: 0o644 });
+      const core = join(root, "lib/core.mjs");
+      writeFileSync(core, "HEAD\n", { mode: 0o644 });
+      if (change === "same-version-bytes") writeFileSync(core, "OLD!\n");
+      if (change === "size") writeFileSync(core, "HEAD\nextra");
+      if (change === "mode") chmodSync(core, 0o755);
+      if (change === "extra") writeFileSync(join(root, "lib/extra.mjs"), "HEAD\n");
+      if (change === "missing" || change === "link") rmSync(core);
+      if (change === "renamed") renameSync(core, join(root, "lib/other.mjs"));
+      if (change === "link") symlinkSync("../package.json", core);
+      const result = spawnSync(process.execPath, [script.pathname, root], { input: JSON.stringify(expected), encoding: "utf8" });
+      if (change === "none") assert.equal(result.status, 0, result.stderr);
+      else assert.notEqual(result.status, 0, change);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  }
+});
