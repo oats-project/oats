@@ -129,7 +129,7 @@ test('an owner home directory fails unless its owner is an invented one', () => 
   assert.deepEqual(ownerHomes('file:///Users/robin/x'), [':1: /…/robin'], 'a file URL\'s path starts after its `//`');
   // A list's separators start a path too, as `:` does: a comma-separated list, a shell's `;`.
   assert.deepEqual(ownerHomes('roots=/a,/home/robin cd /tmp;/Users/robin/x'), [':1: /…/robin', ':1: /…/robin']);
-  assert.deepEqual(ownerHomes('/a,/state/home/x;/b/home/y'), [], 'still a folder after another segment');
+  assert.deepEqual(ownerHomes('/a,/state/home/robin;/b/home/robin'), [], 'still a folder after another segment');
 });
 
 test('the guard reads packages/, test/ and docs/, but not the released notes', () => {
