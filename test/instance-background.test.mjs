@@ -341,7 +341,7 @@ test("routed spawn --background / --no-background need a host that advertises in
       assert.deepEqual(old.spawned(), [], `${flag}: nothing sent`);
       const current = remote(["instance-background"]);
       const routed = routeCommand("build", "spawn", ["dev", "--purpose", "x", flag], { server, execFileSync: current.exec, warn });
-      assert.match(current.spawned().at(-1), new RegExp(` spawn dev --purpose x ${flag} --expect-decision r1 --idempotency-key \S+ --dir /w --json$`));
+      assert.match(current.spawned().at(-1), new RegExp(` spawn dev --purpose x ${flag} --expect-decision r1 --idempotency-key \\S+ --dir /w --json$`));
       assert.equal(routed.envelope.result.background, true, "the host's answer is relayed");
       rmSync(REMOTE_SNAPSHOT_DIR(), { recursive: true, force: true });
     }

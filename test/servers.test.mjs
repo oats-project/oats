@@ -1928,7 +1928,7 @@ test("attachArgv with a detach key: validated before anything is asked of the ho
   // A host without the feature: refused on the probe, nothing else sent.
   const refused = (e) => {
     assert.equal(e.code, "E_REMOTE_INCOMPATIBLE");
-    assert.equal(e.message, detachRefusal("0.50.0", "h"));
+    assert.equal(e.message, detachRefusal("0.69.15", "h"));
     assert.deepEqual(e.details, { feature: DETACH_FEATURE });
     return true;
   };
