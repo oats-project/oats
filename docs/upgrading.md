@@ -20,7 +20,7 @@ prints the version you have.
 Then, on each host:
 
 ```sh
-                                     # 0. where the Desktop is installed: Desktop 0.69.18 first
+                                     # 0. where the Desktop is installed: Desktop 0.69.18, in either order
 npm install -g @awebai/oats@0.69.18  # 1. the CLI
 oats update                          # 2. in each deployment: the plan, then it asks before it runs
 oats doctor                          # 3. in the same deployment
