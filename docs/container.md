@@ -170,7 +170,9 @@ fixed CA file is readable. The image sources that same profile at the start of
 the system bashrc, before its noninteractive return, for bash's SSH startup
 path. sshd also fixes `BASH_ENV` to that profile for other noninteractive bash
 commands; user environment and SSH rc overrides remain disabled. Without the
-CA mount, the profile exports neither setting.
+CA mount, the profile exports neither setting. Recreate the container after
+changing a trust bundle so the broker, Node children and captured sessions all
+start with the same approved anchors.
 A successful probe using an explicit CA does not establish that the
 real broker trusts it; prove that through the deployment's HTTPS registry.
 

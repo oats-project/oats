@@ -36,6 +36,9 @@ export async function probeRuntime(plan, io = {}) {
       const env = io.environment || process.env;
       expect(env.SSL_CERT_FILE === caFile && env.NODE_EXTRA_CA_CERTS === caFile,"public CA trust settings differ");
       try { publicCACheck(fs, await import("node:crypto")); } catch { expect(false,"public CA material or read-only mount is invalid"); }
+      // The approved image input extends the process's normal trust store.
+      // Explicit `ca` would replace it and reject publicly certified targets.
+      ca = undefined;
     }
   }
   if (plan.mirrors) {

@@ -111,7 +111,9 @@ Without `--ca-file`, Node's normal trust configuration applies.
 The probe sends matched controls and forbidden authorities over HTTP/1.1 and
 HTTP/2. It includes the human host, explicit port 443, a wrong port, a hostname
 suffix, unknown SNI and absent SNI. Only 421 or specific connection/TLS refusals
-count as rejections; a timeout or certificate-validation error fails. A peer
+count as rejections; known-SNI transport refusals require completed TLS and no
+HTTP response. A pre-TLS reset cannot prove a Host/authority check. A timeout or
+certificate-validation error fails. A peer
 `internal_error` alert is accepted only before TLS completes and before any HTTP
 response, and only for the enumerated unknown/absent-SNI cases. The same alert
 fails for known SNI or a matched control. Unique
@@ -120,6 +122,25 @@ all forbidden tags must be absent from both logs. Final human controls establish
 that logging still works after the negative cases. Responses and log contents
 are never printed. Success prints exactly `OATS_EGRESS_INGRESS_PASS`; require
 that token and exit 0 before enabling the signer route and admitting agents.
+
+The deployment qualification must add `--policy <derived-policy.json>` and
+`--route-logs <runtime-audit.json>`. The latter has exactly the policy's five role
+keys, each holding `{ "path": "/ready", "log": "/logs/aweb.log" }` for that
+role's harmless 200 endpoint and actual backend log. Use signer `/readyz` and
+registry `/health` where those are the supported routes; `--human-path` and
+`--human-log` still name the human surface. Begin capturing every backend before
+the call. The policy supplies all origins and pinned addresses; it is not copied
+into a new operator schema. `--address` must be one pinned signer address for
+the final human control. If supplied, the compatible `--request-log` and
+`--request-path` must equal the signer's runtime-audit entry.
+
+Full mode tests each routed SNI at each pinned address, over both protocols,
+with matched controls and human-authority, wrong-port and suffix refusals.
+Unknown/absent SNI is tested per distinct address. Matched tags must reach their
+own backend log; no forbidden tag may reach any supplied backend. The old
+signer-only call is a compatibility check, not the five-route deployment proof.
+The wrappers must call full mode before admission. `--ca-file` adds its public
+certificates to Node's normal public roots.
 
 ## Build and prove
 

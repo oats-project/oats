@@ -11,9 +11,14 @@ acceptance check refuses a missing or different limit.
 
 Optional fragments add a public CA file with two fixed trust settings, or
 operator-maintained bare Git mirrors at read-only `/mirrors`. Acceptance checks
-their exact mounts and refuses writable-state aliases or arbitrary environment
-changes. No service credential or TLS verification bypass is added.
+their exact mounts and refuses writable-state aliases, multiply linked CA files
+and arbitrary environment changes. The fixed public trust reaches the supervisor,
+broker, direct SSH commands and login-captured tmux panes while retaining normal
+public roots. No service credential or TLS verification bypass is added.
 
-Runtime acceptance must prove the network boundary and ingress Host/SNI checks
-before agents launch. Readiness and rendered policy alone do not establish
+Runtime acceptance proves the agent's own on-link gateway denial with live
+controls and a plain-versus-isolated bridge regression. The ingress probe checks
+every policy route over HTTP/1.1 and HTTP/2, including backend non-delivery for
+forbidden human authorities; known-name refusals require completed TLS.
+Both checks must pass before agents launch. Readiness and rendered policy alone do not establish
 isolation. See the [component contract](../../container/agent/egress/README.md).

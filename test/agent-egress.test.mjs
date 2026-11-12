@@ -26,6 +26,7 @@ function composeBoundary() {
       NetworkSettings: { Networks: { proof_agents: { NetworkID: "internal-agent-network" } } },
     },
     egress: {
+      Config: {User:"10001:10001"},
       HostConfig: { NetworkMode: "proof_agents", CapDrop:["ALL"], CapAdd:[], SecurityOpt:["no-new-privileges:true"], ReadonlyRootfs:true, Privileged:false, PidMode:"", IpcMode:"private" },
       NetworkSettings: { Networks: {
         proof_agents: { NetworkID: "internal-agent-network" },
@@ -37,6 +38,13 @@ function composeBoundary() {
 
 test("preflight accepts the isolated agent and sole dual-network proxy", () => {
   assert.doesNotThrow(() => assertComposeBoundary(composeBoundary()));
+});
+
+test("the proxy must use the approved non-root UID and GID", () => {
+  for(const user of ["0:0","10001","10002:10002"]){
+    const state=composeBoundary();state.egress.Config.User=user;
+    assert.throws(()=>assertComposeBoundary(state),/proxy.*UID/);
+  }
 });
 
 test("an alternate open agent bridge fails the boundary before launch", () => {
@@ -279,16 +287,22 @@ test("the shared ingress probe proves both protocol refusals before backend deli
   const {createSecureServer}=await import("node:http2");
   const dir=mkdtempSync(join(tmpdir(),"oats-egress-ingress-"));
   t.after(()=>rmSync(dir,{recursive:true,force:true}));
-  writeFileSync(join(dir,"openssl.cnf"),'[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n[dn]\nCN=prepare.example.invalid\n[ext]\nsubjectAltName=DNS:prepare.example.invalid,DNS:approve.example.invalid\nbasicConstraints=critical,CA:TRUE\n');
+  writeFileSync(join(dir,"openssl.cnf"),'[req]\ndistinguished_name=dn\nx509_extensions=ext\nprompt=no\n[dn]\nCN=prepare.example.invalid\n[ext]\nsubjectAltName=DNS:prepare.example.invalid,DNS:approve.example.invalid,DNS:aweb.example.invalid,DNS:secrets.example.invalid,DNS:logs.example.invalid,DNS:registry.example.invalid\nbasicConstraints=critical,CA:TRUE\n');
   execFileSync("openssl",["req","-x509","-newkey","rsa:2048","-sha256","-nodes","-days","1","-keyout",join(dir,"key.pem"),"-out",join(dir,"cert.pem"),"-config",join(dir,"openssl.cnf")],{stdio:"ignore"});
   const requestLog=join(dir,"request.log"),humanLog=join(dir,"human.log");
   writeFileSync(requestLog,"");writeFileSync(humanLog,"");
-  let strict=true, strictTls=false;
+  const serviceRoutes={
+    "prepare.example.invalid":{path:"/readyz",log:requestLog},
+    "approve.example.invalid":{path:"/handoff-assets/handoff.css",log:humanLog},
+    ...Object.fromEntries(["aweb","secrets","logs","registry"].map(role=>[role+".example.invalid",{path:role==="registry"?"/health":"/ready",log:join(dir,role+".log")}]))
+  };
+  for(const route of Object.values(serviceRoutes))writeFileSync(route.log,"");
+  let strict=true, strictTls=false, weakSni=null;
   const {createSecureContext}=await import("node:tls");
   const context=createSecureContext({key:readFileSync(join(dir,"key.pem")),cert:readFileSync(join(dir,"cert.pem"))});
   const server=createSecureServer({key:readFileSync(join(dir,"key.pem")),cert:readFileSync(join(dir,"cert.pem")),allowHTTP1:true,
     SNICallback:(name,done)=>{
-      if(strictTls && name!=="prepare.example.invalid" && name!=="approve.example.invalid")done(new Error("unlisted SNI"));
+      if(strictTls && !Object.hasOwn(serviceRoutes,name))done(new Error("unlisted SNI"));
       else done(null,context);
     }});
   const sessions=new Set();server.on("session",s=>{sessions.add(s);s.on("close",()=>sessions.delete(s))});
@@ -296,12 +310,12 @@ test("the shared ingress probe proves both protocol refusals before backend deli
     const authority=req.headers[":authority"]||req.headers.host;
     const sni=req.socket.servername;
     const matched=authority===sni || authority===sni+":443";
-    if(strict&&!matched){res.writeHead(421);res.end();return}
+    if(strict&&!matched&&sni!==weakSni){res.writeHead(421);res.end();return}
     const host=authority?.split(":")[0];
-    if(host!=="prepare.example.invalid"&&host!=="approve.example.invalid"){res.writeHead(421);res.end();return}
-    const wanted=host==="prepare.example.invalid"?"/readyz":"/handoff-assets/handoff.css";
+    if(!Object.hasOwn(serviceRoutes,host)){res.writeHead(421);res.end();return}
+    const wanted=serviceRoutes[host].path;
     if(new URL(req.url,"https://fixture.invalid").pathname!==wanted){res.writeHead(404);res.end();return}
-    appendFileSync(host==="prepare.example.invalid"?requestLog:humanLog,req.url+"\n");
+    appendFileSync(serviceRoutes[host].log,req.url+"\n");
     // A misrouted backend may itself return 421: status alone proves nothing.
     res.writeHead(matched?200:421);res.end();
   });
@@ -309,16 +323,31 @@ test("the shared ingress probe proves both protocol refusals before backend deli
   t.after(()=>new Promise(resolve=>{for(const s of sessions)s.destroy();server.closeAllConnections?.();server.close(resolve)}));
   const options={address:"127.0.0.1",port:server.address().port,requestOrigin:"https://prepare.example.invalid",humanOrigin:"https://approve.example.invalid",ca:readFileSync(join(dir,"cert.pem")),requestLog,humanLog,requestPath:"/readyz",humanPath:"/handoff-assets/handoff.css"};
   assert.equal(await probeIngress(options),true);
+  const policy=proxyPolicy();
+  const routeLogs=Object.fromEntries(Object.entries(policy.targets).map(([role,target])=>{
+    const route=serviceRoutes[new URL(target.origin).hostname];return[role,{path:route.path,log:route.log}];
+  }));
+  const full={...options,address:policy.targets.signer.addresses[0],policy,routeLogs,exchange:args=>statusOf({...args,address:"127.0.0.1",port:options.port})};
+  const before=Object.fromEntries(Object.entries(routeLogs).map(([role,route])=>[role,readFileSync(route.log,"utf8").length]));
+  assert.equal(await probeIngress(full),true);
+  for(const [role,route] of Object.entries(routeLogs))assert.equal((readFileSync(route.log,"utf8").slice(before[role]).match(/oats_egress_probe=/g)||[]).length,2,role+" needs H1 and H2 backend controls");
+  await assert.rejects(()=>probeIngress({...full,address:"10.20.0.99"}),/ingress address.*signer/);
+  for(const bad of [Object.fromEntries(Object.entries(routeLogs).filter(([role])=>role!=="registry")),{...routeLogs,extra:routeLogs.aweb}])
+    await assert.rejects(()=>probeIngress({...full,routeLogs:bad}),/exactly the policy roles/);
+  await assert.rejects(()=>probeIngress({...full,routeLogs:{...routeLogs,aweb:{...routeLogs.aweb,path:"//elsewhere.invalid/ready"}}}),/ingress probe path/);
+  weakSni="aweb.example.invalid";
+  await assert.rejects(()=>probeIngress(full),/forbidden probe reached a backend/,"a non-signer SNI must not front the human origin");
+  weakSni=null;
   strictTls=true;
   assert.equal(await probeIngress(options),true);
   strictTls=false;
   const {createServer}=await import("node:net");
-  let hang=false;
+  let hang=false, alertDescription=80;
   const alertSockets=new Set();
   // TLS 1.2 fatal internal_error (RFC 5246 alert description 80), before HTTP.
   const alertServer=createServer(socket=>{
     alertSockets.add(socket);socket.on("close",()=>alertSockets.delete(socket));
-    socket.once("data",()=>{if(!hang)socket.end(Buffer.from([21,3,3,0,2,2,80]))});
+    socket.once("data",()=>{if(!hang)socket.end(Buffer.from([21,3,3,0,2,2,alertDescription]))});
   });
   await new Promise(resolve=>alertServer.listen(0,"127.0.0.1",resolve));
   t.after(()=>new Promise(resolve=>{for(const socket of alertSockets)socket.destroy();alertServer.close(resolve)}));
@@ -327,6 +356,12 @@ test("the shared ingress probe proves both protocol refusals before backend deli
   const unknownRefusal=args=>statusOf({...args,port:unlisted(args.sni)?alertPort:options.port});
   assert.equal(await probeIngress({...options,exchange:unknownRefusal}),true,
     "unknown/empty SNI fatal handshake refusals still require live matched controls and backend audit");
+  await assert.rejects(()=>probeIngress({...options,exchange:args=>{
+    if(args.sni==="prepare.example.invalid" && args.authority==="approve.example.invalid")return Promise.reject(Object.assign(new Error("reset before TLS"),{
+      code:"ECONNRESET",beforeHttpResponse:true,peerHandshakeRefusal:false,tlsEstablished:false,
+    }));
+    return statusOf({...args,port:options.port});
+  }}),error=>error.code==="ECONNRESET","known-SNI authority checks must actually establish TLS before any transport refusal counts");
   const knownRefusal=args=>statusOf({...args,port:args.sni==="prepare.example.invalid"&&args.authority==="approve.example.invalid"?alertPort:options.port});
   await assert.rejects(()=>probeIngress({...options,exchange:knownRefusal}),error=>error.code==="ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR");
   await assert.rejects(()=>probeIngress({...options,exchange:args=>statusOf({...args,port:alertPort})}),error=>error.code==="ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR",
@@ -338,6 +373,19 @@ test("the shared ingress probe proves both protocol refusals before backend deli
     }));
     return statusOf({...args,port:options.port});
   }}),error=>error.code==="ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR", "an alert after HTTP is not a handshake refusal");
+  // Node/OpenSSL versions spell the same peer handshake_failure differently.
+  // Exercise the shipped spelling too; it never admits a known SNI pre-TLS.
+  const shippedHandshake="ERR_SSL_SSL/TLS_ALERT_HANDSHAKE_FAILURE";
+  const shippedRefusal=args=>unlisted(args.sni)?Promise.reject(Object.assign(new Error("peer handshake_failure"),{
+    code:shippedHandshake,beforeHttpResponse:true,peerHandshakeRefusal:false,tlsEstablished:false,
+  })):statusOf({...args,port:options.port});
+  assert.equal(await probeIngress({...options,exchange:shippedRefusal}),true);
+  await assert.rejects(()=>probeIngress({...options,exchange:args=>args.sni==="prepare.example.invalid"&&args.authority==="approve.example.invalid"
+    ?Promise.reject(Object.assign(new Error("known SNI handshake_failure"),{code:shippedHandshake,beforeHttpResponse:true,tlsEstablished:false}))
+    :statusOf({...args,port:options.port})}),error=>error.code===shippedHandshake);
+  alertDescription=40;
+  assert.equal(await probeIngress({...options,exchange:unknownRefusal}),true,"actual peer handshake_failure before HTTP refuses unlisted/absent SNI");
+  alertDescription=80;
   hang=true;
   await assert.rejects(()=>probeIngress({...options,exchange:unknownRefusal}),error=>error.code==="EGRESS_PROBE_TIMEOUT");
   hang=false; strict=false;
@@ -395,6 +443,16 @@ test("the in-container boundary body rejects a live denied endpoint or a key mou
     getStatus:async()=>200,tlsReachable:async()=>false,tcpReachable:async()=>false,
   };
   assert.equal(await probeRuntime(plan,io),true);
+  const trustPath="/etc/agent-trust/ca.pem",pem=(await import("node:tls")).rootCertificates[0];
+  let rootControls=0;
+  const trustIO={...io,environment:{SSL_CERT_FILE:trustPath,NODE_EXTRA_CA_CERTS:trustPath},fs:{...io.fs,
+    statSync:()=>({isFile:()=>true,size:pem.length,nlink:1}),
+    readFileSync:(path,...args)=>path===trustPath?pem:io.fs.readFileSync(path,...args),
+    constants:{W_OK:2},accessSync:()=>{throw Object.assign(new Error("read-only fixture"),{code:"EROFS"})}},
+    getStatus:async({ca})=>{assert.equal(ca,undefined,"supported trust extends normal roots rather than replacing them");rootControls++;return 200;}};
+  assert.equal(await probeRuntime({...plan,caFile:trustPath},trustIO),true);
+  assert.equal(rootControls,5);
+
   await assert.rejects(()=>probeRuntime(plan,{...io,tcpReachable:async()=>true}),/denied TCP endpoint is reachable/);
   await assert.rejects(()=>probeRuntime(plan,{...io,fs:{...io.fs,existsSync:path=>path==="/run/secrets"}}),/protected path exists inside probe/);
   await assert.rejects(()=>probeRuntime(plan,{...io,tlsReachable:async()=>true}),/human TLS origin is reachable/);

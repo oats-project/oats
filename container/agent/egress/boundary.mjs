@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { posix } from "node:path";
 
 export function assertComposeBoundary({ agent, egress, agentsNetwork, servicesNetwork, approvedAgentMounts, protectedSources }) {
+  assert.equal(egress.Config?.User,"10001:10001","proxy must use the approved non-root UID/GID");
   assert.ok(typeof agentsNetwork.Id === "string" && agentsNetwork.Id.length > 0
     && typeof servicesNetwork.Id === "string" && servicesNetwork.Id.length > 0
     && agentsNetwork.Id !== servicesNetwork.Id, "expected distinct identified runtime networks");
