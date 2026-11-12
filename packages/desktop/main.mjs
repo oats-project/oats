@@ -63,6 +63,7 @@ import { createWindowSet } from "./window-set.mjs";
 import { parseWindowRecords, resolveView, restorePlan, clampBounds, windowTitle, createWindowRecords } from "./window-records.mjs";
 import { createResumeWiring } from "./session-resume-launch.mjs";
 import { createResumeTrigger, localDeploymentIds } from "../client/session-resume-trigger.mjs";
+import { retiredSettingNotices } from "./retired-settings.mjs";
 
 const require = createRequire(import.meta.url);
 const pty = require("node-pty");
@@ -1111,6 +1112,8 @@ const primaryInstance = startSingleInstance(app, (argv, workingDirectory) => {
   const dir = launchDirectory(argv, workingDirectory);
   return openLaunch(dir, launchInstance(argv), createLaunchReporter(argv, dir));
 }, async () => {
+  // A launch that still sets a setting the Desktop no longer reads is told so, once (retired-settings.mjs).
+  for (const line of retiredSettingNotices(process.env)) console.error(line);
   await applyLoginPath(); // first: everything below may spawn
   installAppMenu();
   let savedWindows = "[]";
