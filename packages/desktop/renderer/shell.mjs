@@ -105,7 +105,7 @@ import { retiredTabs, tabShowsRow, otherIncarnation, terminalOrigin } from "./re
 import { notePanel, panelDeployments, deploymentHeading } from "./view-deployments.mjs";
 import { deploymentState, rowStale, rosterSectionKey, sidebarSections } from "../../client/roster-sections.mjs";
 import { backgroundHeading } from "./background-heading.mjs";
-import { cliStatus, onCliChange } from "./views/cli-status.mjs";
+import { cliStatus, onCliChange, cliHeldBack } from "./views/cli-status.mjs";
 import { DESKTOP_TERMS } from "./desktop-terms.mjs";
 import { onDeploymentTabRequest } from "./deployment-tabs.mjs";
 import { ROSTER_POLL_FOCUSED_MS, rosterPollDue } from "./roster-cadence.mjs";
@@ -2670,6 +2670,10 @@ function lifecycleFallbackFocus() {
   row.tabIndex = 0; return row;
 }
 function openLifecycleDialog(operation, instance, workspace) {
+  // Above the tested bound (#1879) Stop and Remove are held back: every path that would open the dialog (the
+  // controls, the menu, a key) says the notice instead, and nothing is planned. The backend refuses it too.
+  const heldBack = cliHeldBack("POST /api/instance-lifecycle plan");
+  if (heldBack) { notifications.notify(heldBack); return; }
   connections.close(); shortcutsEditor.close();
   const order = [...(contextRosterEl?.querySelectorAll(".ctx-list .ctx-inst") || [])].map(r => r.dataset.treeInstance);
   lifecycleRowOrder = { order, at: order.indexOf(instanceId(instance)) };
@@ -2709,6 +2713,9 @@ function forgetNextFocus() {
 }
 function openForgetDialog(instance, workspace) {
   if (workspace !== currentWorkspace() || forgetDialog.busy()) return;
+  // Above the tested bound (#1879) Forget is held back: the notice instead of the dialog. The backend refuses it too.
+  const heldBack = cliHeldBack("POST /api/server-forget");
+  if (heldBack) { notifications.notify(heldBack); return; }
   connections.close(); shortcutsEditor.close(); lifecycleDialog.close();
   const order = [...(contextRosterEl?.querySelectorAll(".ctx-list .ctx-inst") || [])].map(r => r.dataset.treeInstance);
   forgetRowOrder = { order, at: order.indexOf(instanceId(instance)) };

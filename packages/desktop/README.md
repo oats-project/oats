@@ -108,7 +108,9 @@ The shell has three navigation contexts:
   detached and file-backed (`packages/client/session-resume-cli.mjs`), so
   quitting never cancels it; nothing in `shutdown()` touches it. The Desktop
   shows nothing of a sweep: a `failed` reading is one log line with its code,
-  and every other reading is dropped. No window hears of it
+  and every other reading is dropped. With the CLI above the tested bound the
+  sweep is held back, and skipped with one log line naming `cli-above-tested`
+  (below, "Above the tested bound"). No window hears of it
   ([When Desktop opens](../../docs/desktop-instance-start.md#when-desktop-opens)).
 - `renderer/shell.mjs` — contextual single sidebar, stage host, artifact-tab
   host, command palette, recursive instance roster, and integrated terminals.
@@ -146,6 +148,23 @@ alone, with no document to draw in: the roster as a tree
 which acts a row offers and why, and whether its terminal can be opened
 (`instance-acts.mjs`), and whether a directory is a deployment
 (`workspace-admission.mjs`).
+
+It also holds what stays on when the accepted CLI is above the Desktop's
+tested bound, the minor of its own version (`aboveTested`, `cli-locator.mjs`).
+`above-tested.mjs` names every operation by (route, action), or `main <what>`
+outside HTTP, as a read, allowed or held, and every module that runs the CLI;
+anything it does not name is held. Its `aboveTestedRefusal(cli, operation)` is
+the one gate: every POST handler of `server/oats-web.mjs` calls it (as
+`heldBack(route, action)`) once the body is read and before anything runs, as
+do main's deployments-list writes and onboard (`mainRefusal`) and the resume
+sweep (`session-resume-launch.mjs`). Before any handler, a POST to a route the
+table does not name is refused the same way (`postRouteClassified`), so a
+handler added without its classification is held back too. The renderer asks the same table
+(`cliHeldBack` in `renderer/views/cli-status.mjs`; `renderer/desktop-acts.mjs`
+for a row's acts) only to disable what the backend would refuse.
+`above-tested-notice.mjs` builds the one sentence every refusal and the notice
+carry. A new route, action or CLI-running module fails
+`test/above-tested-inventory.test.mjs` until it is classified.
 
 It holds how an agent's terminal is opened with the kernel's own viewer,
 `oats session attach` (`session-attach.mjs`): the viewer's arguments for this

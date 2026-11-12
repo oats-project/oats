@@ -1,4 +1,5 @@
 import { iconElement } from "./shell-icons.mjs";
+import { cliHeldBack, onCliChange } from "./views/cli-status.mjs";
 import { revealInScrollport } from "./reveal-in-scrollport.mjs";
 import { workspaceStep } from "../../client/workspace-step.mjs";
 import { requestDeploymentTab } from "./deployment-tabs.mjs";
@@ -82,6 +83,9 @@ export function rowNames(choices) {
 export function openInNewWindowHint(mac) {
   return `Press ${mac ? "⌘Enter" : "Ctrl+Enter"} to open this workspace in a new window.`;
 }
+
+/** The switcher's controls whose operation main holds back above the tested bound: selector → operation. */
+const HELD_WRITES = Object.freeze({ ".ws-remove-listed": "main deployments remove", ".ws-pick-setup": "main workspace onboard" });
 
 export function createWorkspaceSwitcher({
   document, selectWorkspace, discoverSuggestions, addWorkspace, pickWorkspace, onboardWorkspace = null, onboarded = null,
@@ -301,6 +305,16 @@ export function createWorkspaceSwitcher({
   // One tab stop among them all (the one last focused, else the first); Up/Down move between them.
   const matches = (query) => (candidate) => !query
     || `${candidateName(candidate)} ${candidateId(candidate)} ${candidate.team?.name || ""} ${candidate.reason || ""}`.toLocaleLowerCase().includes(query);
+  // Above the tested bound (#1879) the writes main would refuse are held back here too, with the notice as their
+  // title (packages/client/above-tested.mjs): removing a row of this computer's deployments list, and setting up a
+  // new deployment. Applied after every paint and busy change, and again when the CLI changes.
+  const applyHolds = () => {
+    for (const [selector, operation] of Object.entries(HELD_WRITES)) {
+      const held = cliHeldBack(operation);
+      for (const button of [suggestionsEl, pickEl].flatMap((el) => [...el.querySelectorAll(selector)])) { button.disabled = adding || !!held; button.title = held ?? button.dataset.title ?? ""; }
+    }
+  };
+  const offCli = onCliChange(applyHolds);
   const renderSuggestions = (focusId = "") => {
     const query = modalSearch.value.trim().toLocaleLowerCase();
     suggestionsEl.replaceChildren();
@@ -368,8 +382,9 @@ export function createWorkspaceSwitcher({
         remove.type = "button"; remove.className = "ws-remove-listed"; remove.tabIndex = -1;
         remove.dataset.workspacePath = id; remove.textContent = "Remove"; remove.disabled = adding;
         remove.setAttribute("aria-label", `Remove ${name} from this computer's list`);
-        remove.title = `Remove ${name} from this computer's list. Nothing on disk changes.`;
-        remove.addEventListener("click", () => { if (!adding) void runRemove(id, name); });
+        remove.dataset.title = `Remove ${name} from this computer's list. Nothing on disk changes.`;
+        remove.title = remove.dataset.title;
+        remove.addEventListener("click", () => { if (!adding && !cliHeldBack(HELD_WRITES[".ws-remove-listed"])) void runRemove(id, name); });
         row.append(remove);
       }
       staleGroup.append(row);
@@ -379,6 +394,7 @@ export function createWorkspaceSwitcher({
         .find((button) => button.dataset.workspaceId === focusId)?.focus();
     }
     if (!all.length && !status.textContent) setStatus("No matching OATS workspaces found.");
+    applyHolds();
   };
 
   const paintDiscoveryState = () => {
@@ -418,14 +434,15 @@ export function createWorkspaceSwitcher({
     if (notes.length) { const more = document.createElement("p"); more.className = "ws-pick-more"; more.textContent = `${notes.join(". ")}.`; pickEl.append(more); }
     if (pickOffer && typeof onboardWorkspace === "function") {
       const setup = document.createElement("button"); setup.type = "button"; setup.className = "ws-pick-setup secondary";
-      setup.textContent = "Set up a new deployment here…"; setup.disabled = adding;
+      setup.textContent = "Set up a new deployment here…"; setup.disabled = adding; setup.dataset.title = "";
       setup.addEventListener("click", () => {
-        if (adding || !pickOffer) return;
+        if (adding || !pickOffer || cliHeldBack(HELD_WRITES[".ws-pick-setup"])) return;
         const offer = pickOffer; clearPick(); setStatus(""); enterOnboarding(offer);
       });
       pickEl.append(setup);
     }
     pickEl.hidden = !pickEl.childElementCount;
+    applyHolds();
   };
   const setAdding = (value) => {
     adding = value;
@@ -437,6 +454,7 @@ export function createWorkspaceSwitcher({
     refInput.disabled = value;
     for (const button of suggestionsEl.querySelectorAll("button")) button.disabled = value;
     for (const button of pickEl.querySelectorAll("button")) button.disabled = value;
+    applyHolds();
     confirm.disabled = value || !refInput.value.trim();
     if (value) status.focus();
   };
@@ -812,6 +830,7 @@ export function createWorkspaceSwitcher({
     /** Open the Add dialog (the chooser's button, a window with nothing to show); `opener` gets focus back. */
     openModal,
     dispose() {
+      offCli();
       resized?.disconnect();
       closeRowMenu(false);
     },

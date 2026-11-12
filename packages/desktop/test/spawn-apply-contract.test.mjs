@@ -13,7 +13,7 @@ const strong = () => data(); // a v2 preview always carries its effective plan
 const prepare = (changes = {}) => ({ action: 'prepare', selector, choices: {}, task: '', ...changes });
 const ref = 'a'.repeat(64);
 for (const spawnApplyApi of [undefined, null, false, true, 0, '1', 2, 1]) test(`locator passes only exact apply API 1 (${JSON.stringify(spawnApplyApi)})`, async () => {
-  const found = await discover({ persisted: () => cli.bin, env: {}, isExecutableFile: () => true }, async () => ({ stdout: JSON.stringify({ schemaVersion: 1, name: '@awebai/oats', version: '0.26.0', desktopApi: 1, spawnApplyApi, spawnPreviewApi: 2, features: capable().features }) }));
+  const found = await discover({ testedVersion: '0.69.17', persisted: () => cli.bin, env: {}, isExecutableFile: () => true }, async () => ({ stdout: JSON.stringify({ schemaVersion: 1, name: '@awebai/oats', version: '0.26.0', desktopApi: 1, spawnApplyApi, spawnPreviewApi: 2, features: capable().features }) }));
   assert.equal(found.spawnApplyApi, spawnApplyApi === 1 ? 1 : undefined);
   assert.equal(spawnApplySupported(found), spawnApplyApi === 1);
 });

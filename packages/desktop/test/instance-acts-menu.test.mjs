@@ -155,7 +155,12 @@ test("source pin: the menu decides nothing itself", () => {
   // The four helpers the menu used to decide with. If it needs one again, the decision has not fully moved.
   const source = readFileSync(new URL("../renderer/instance-actions.mjs", import.meta.url), "utf8");
   for (const name of ["heldHome", "unsupportedSession", "canAddressRemote", "rowReason"]) assert.ok(!source.includes(name), `instance-actions.mjs names ${name}`);
-  assert.match(source, /import \{ instanceActs \} from "\.\.\/\.\.\/client\/instance-acts\.mjs";/);
+  // It draws them from the shared table through desktop-acts.mjs, which adds only the acts held back above the
+  // tested bound (#1879, packages/client/above-tested.mjs heldBackActs).
+  assert.match(source, /import \{ desktopActs \} from "\.\/desktop-acts\.mjs";/);
+  const acts = readFileSync(new URL("../renderer/desktop-acts.mjs", import.meta.url), "utf8");
+  assert.match(acts, /import \{ instanceActs \} from '\.\.\/\.\.\/client\/instance-acts\.mjs';/);
+  assert.match(acts, /heldBackActs\(instanceActs\(instance\), cli\)/);
   assert.ok(!/\.running\b/.test(source), "nor does it read the row's liveness");
 });
 

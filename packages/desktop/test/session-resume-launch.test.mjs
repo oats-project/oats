@@ -27,7 +27,10 @@ function wiring() {
     error: (line) => calls.push(["error", line]),
   });
   assert.equal(trigger, made, "the wiring returns what the maker made");
-  assert.equal(options.cli, cli, "the CLI is passed as given");
+  // The trigger's probe is gated (above the tested bound the sweep is held back: above-tested-gate.test.mjs);
+  // within the bound it is the probe as given, and nothing is logged.
+  assert.equal(options.cli(), CLI, "within the tested bound the CLI's probe is passed as given");
+  assert.deepEqual(calls, [], "and nothing is logged");
   assert.deepEqual(Object.keys(options).sort(), ["cli", "onReading"], "run and read are the trigger's defaults");
   return { calls, onReading: options.onReading };
 }

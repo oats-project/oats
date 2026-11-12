@@ -8,7 +8,7 @@ import { wakeScheduleFields } from "../wake-schedule-fields.mjs";
 import { scheduleDraft, descriptionValid, DESCRIPTION_MAX } from "../schedule-read-data.mjs";
 import { localScheduleDefinition, runState } from "../automation-rows.mjs";
 import { mountAutomationsPage, automationDescriptionsSupported } from "./automations.mjs";
-import { cliStatus, onCliChange } from "./cli-status.mjs";
+import { cliStatus, onCliChange, cliHeldBack } from "./cli-status.mjs";
 
 // Mounted as the Automations stage's Schedules subtab (views/automations.mjs).
 let preselection;
@@ -86,7 +86,9 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   // nothing changes what the page could not show.
   // The Summary field needs an OATS that writes summaries (feature automation-descriptions, 0.43).
   const summaries = () => automationDescriptionsSupported(cli());
-  const canMutate = () => { const c = cli(); return alive && readOk && c?.ok === true && [1, 2].includes(c.scheduleApi) && !!c.features?.includes("schedule"); };
+  // Above the tested bound (#1879) every schedule write is held back (packages/client/above-tested.mjs).
+  const canMutate = () => { const c = cli(); return alive && readOk && c?.ok === true && [1, 2].includes(c.scheduleApi) && !!c.features?.includes("schedule")
+    && cliHeldBack("POST /api/schedules", c) === null; };
   const owns = (token, gen) => alive && token === formOperation && gen === workspaceGeneration();
   const preserve = (name, key = name) => original && original.kind === field("kind").value && Object.hasOwn(original, key) && field(name).value === baseline[name] ? original[key] : field(name).value;
   const view = () => page?.view;
@@ -208,6 +210,7 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   }
   function render() {
     newButton.disabled = busy || !canMutate();
+    newButton.title = cliHeldBack("POST /api/schedules", cli()) ?? "";
     q(".schedule-save").disabled = busy || !canMutate() || !formReady;
     for (const control of form.querySelectorAll("input, select, textarea")) control.disabled = busy || (control.name === "id" && !!editing)
       || (!formReady && ["agent", "home", "providerOperation"].includes(control.name));

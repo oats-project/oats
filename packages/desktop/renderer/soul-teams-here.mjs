@@ -22,6 +22,11 @@
 import { pageCard } from './capability-page.mjs';
 import { SOULS_WHERE } from './computer-teams.mjs';
 import { createDataState, skeletonBlock, statusLine, captureFocusState, observedText } from './loading.mjs';
+import { holdControl, syncHeldControls } from './views/cli-status.mjs';
+
+/** Above the tested bound (#1879) a soul's team writes are held back (packages/client/above-tested.mjs): each write
+ * control is marked with this operation (holdControl), disabled with the notice, and follows a reprobe. */
+const SOUL_TEAM_WRITE = 'POST /api/workspace-soul-teams add';
 
 export const soulTeamsHereCSS = `
 .soul-teams-here .sth-default { margin:0; color:var(--fg); font-size:12px; line-height:1.45; overflow-wrap:anywhere; }
@@ -95,6 +100,8 @@ export function createSoulTeamsHere(doc, { soul, request, listTeams = null, cloc
     focusFallback: head, // a focused Retry whose failed block goes on success lands on the card title, not <body>
     now: clock.now, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout });
   let current = null, pending = false, serial = 0, disposed = false, rowError = null, cardError = null, choices = null, focusAdd = false;
+  // The team writes follow the CLI: a reprobe into or out of the tested bound holds them back or gives them back.
+  const offHeld = syncHeldControls(() => [card]);
 
   async function run(action, { label = null, user = false } = {}) {
     const ticket = ++serial; pending = true; rowError = null; cardError = null;
@@ -189,9 +196,9 @@ export function createSoulTeamsHere(doc, { soul, request, listTeams = null, cloc
       main.append(el(doc, 'span', model3 ? viaText3(team.via, current.match) : viaText(team.via, home?.from), 'sth-meta'));
       if (model3) { row.append(main); body.append(row); continue; } // read only: no action in team model 3
       const actions = el(doc, 'div', null, 'sth-actions');
-      if (!team.default && team.team) actions.append(button('Make default', '', () => run({ action: 'default', label: team.label }, { label: team.label }), { aria: `Make ${team.label} the default team of ${soul}`, key: `default:${team.label}` }));
-      if (team.default && home?.from === 'soul') actions.append(button('Use workspace default', '', () => run({ action: 'clear-default' }, { label: team.label }), { aria: `Use the workspace's default team for ${soul}`, key: 'clear-default' }));
-      if (list(team.via).includes('soul')) actions.append(button('Remove', '', () => run({ action: 'remove', labels: [team.label] }, { label: team.label }), { aria: `Remove ${team.label} from ${soul}`, key: `remove:${team.label}` }));
+      if (!team.default && team.team) actions.append(holdControl(button('Make default', '', () => run({ action: 'default', label: team.label }, { label: team.label }), { aria: `Make ${team.label} the default team of ${soul}`, key: `default:${team.label}` }), SOUL_TEAM_WRITE));
+      if (team.default && home?.from === 'soul') actions.append(holdControl(button('Use workspace default', '', () => run({ action: 'clear-default' }, { label: team.label }), { aria: `Use the workspace's default team for ${soul}`, key: 'clear-default' }), SOUL_TEAM_WRITE));
+      if (list(team.via).includes('soul')) actions.append(holdControl(button('Remove', '', () => run({ action: 'remove', labels: [team.label] }, { label: team.label }), { aria: `Remove ${team.label} from ${soul}`, key: `remove:${team.label}` }), SOUL_TEAM_WRITE));
       row.append(main, actions);
       if (rowError?.label === team.label) row.append(problemBox(rowError));
       body.append(row);
@@ -206,12 +213,12 @@ export function createSoulTeamsHere(doc, { soul, request, listTeams = null, cloc
     const have = new Set(list(current.teams).map(t => t.label));
     const offer = (choices || []).filter(t => !have.has(t.label));
     const add = el(doc, 'div', null, 'sth-add');
-    if (choices === null) add.append(button('Add a team', '', () => { void loadChoices(); }, { key: 'add-team' }));
+    if (choices === null) add.append(holdControl(button('Add a team', '', () => { void loadChoices(); }, { key: 'add-team' }), SOUL_TEAM_WRITE));
     else if (!offer.length) add.append(el(doc, 'span', `${soul} is in every team on this computer.`, 'sth-meta'));
     else {
       const select = el(doc, 'select', null, 'field'); select.setAttribute('aria-label', `Team to add to ${soul}`); select.dataset.focusKey = 'add-select';
       for (const t of offer) { const o = el(doc, 'option', t.team ? t.label : `${t.label} (no provider id yet)`); o.value = t.label; select.append(o); }
-      add.append(select, button('Add', 'primary', () => run({ action: 'add', labels: [select.value] }), { key: 'add' }));
+      add.append(select, holdControl(button('Add', 'primary', () => run({ action: 'add', labels: [select.value] }), { key: 'add' }), SOUL_TEAM_WRITE));
       if (focusAdd) { focusAdd = false; queueMicrotask(() => { if (select.isConnected) select.focus(); }); }
     }
     if (cardError) add.append(problemBox(cardError));
@@ -219,5 +226,5 @@ export function createSoulTeamsHere(doc, { soul, request, listTeams = null, cloc
   }
 
   void run({ action: 'show' });
-  return { element: card, refresh: ({ user = false } = {}) => run({ action: 'show' }, { user }), dispose() { disposed = true; serial++; loading.dispose(); } };
+  return { element: card, refresh: ({ user = false } = {}) => run({ action: 'show' }, { user }), dispose() { disposed = true; serial++; offHeld(); loading.dispose(); } };
 }

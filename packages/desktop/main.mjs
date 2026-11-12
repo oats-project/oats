@@ -36,7 +36,8 @@ import { createServerHost, createServerAdapter, serverSpawnSpec } from "./server
 import { cliWorkspace, validWorkspaceRef } from "../client/workspace-cli.mjs";
 import { onboardData } from "../client/deployment-data.mjs";
 import { validateWorkspace } from "../client/workspace-admission.mjs";
-import { cliDeploymentList } from "../client/deployment-list-cli.mjs";
+import { cliDeploymentList as runDeploymentList } from "../client/deployment-list-cli.mjs";
+import { aboveTestedRefusal } from "../client/above-tested.mjs";
 import { workspaceSuggestions, listState, createRemoveListed, unsavedOpenSet, importDesktopLists, createSerialQueue, settledCli, listDeployment, decideAdd, createGenerations, createAddExecutor, restoreWorkspaceDirs, saveWorkspaceDirs, commitOpenSet, startupOpenSet, matchWorkspaceDirs, createOnboardOffers, createOnboardExecutor,
   savedWorkspacePaths, persistableDirs, stageDirs, pickedFolderChoices, createPerformAdd, createSuggestionCalls } from "./workspace-registry.mjs";
 import { workspaceNotServed } from "./renderer/deployment-header.mjs";
@@ -346,6 +347,18 @@ const wsValidate = (p) => validateWorkspace(p, {
 // This computer's deployments list (#1390): every call a kernel verb, through the server's accepted CLI
 // (the binary every other kernel verb uses). Gated on its deployments-list feature; nothing falls back.
 const readServedCli = async () => (await fetch(`${base()}/api/cli`, { signal: AbortSignal.timeout(10_000) })).json();
+/** Main's own runs of the CLI for an effect, refused above the tested bound before anything runs
+ * (packages/client/above-tested.mjs, oats-project/oats#1879): its `main <what>` operation, or null. Each
+ * refusal is in the shape its caller already reads, a reason with a code and a message. */
+const mainRefusal = (cli, operation) => {
+  const refused = aboveTestedRefusal(cli, operation);
+  return refused ? { ok: false, reason: { code: refused.code, message: refused.message } } : null;
+};
+/** This computer's deployments list: its list is a read; add, import and remove are held back. */
+function cliDeploymentList(cli, options, io) {
+  const refused = mainRefusal(cli, `main deployments ${typeof options?.action === "string" ? options.action : "?"}`);
+  return refused ? Promise.resolve(refused) : runDeploymentList(cli, options, io);
+}
 async function deploymentList(options) {
   let cli;
   try { cli = await readServedCli(); } catch { cli = null; }
@@ -514,7 +527,8 @@ const onboardExecutor = createOnboardExecutor({
   isDeployment: (p) => !!wsValidate(p),
   // The server's accepted probe: the same binary every other kernel verb uses.
   readCli: readServedCli,
-  run: (cli, options) => cliWorkspace(cli, options, DESKTOP_TERMS),
+  // Onboarding creates a deployment: held back above the tested bound, before the CLI runs.
+  run: (cli, options) => { const refused = mainRefusal(cli, "main workspace onboard"); return refused ? Promise.resolve(refused) : cliWorkspace(cli, options, DESKTOP_TERMS); },
   project: onboardData,
   add: (dir, scope) => performAdd(dir, true, scope),
   validRef: validWorkspaceRef,

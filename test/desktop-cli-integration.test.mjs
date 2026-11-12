@@ -166,14 +166,17 @@ test("desktop server: /api/cli reports discovery status; compatible fake CLI acc
     assert.equal(s.ok, true, JSON.stringify(s));
     assert.equal(s.version, "0.26.0");
     assert.equal(s.source, "env");
-    assert.deepEqual(s.required, { desktopApi: 1, range: ">=0.26.0 <0.70.0" });
     // The recovery command is DERIVED from this app's own version, so it names
-    // the lockstep-published kernel and always lands inside the band above —
+    // the lockstep-published kernel and always lands inside the tested bound —
     // never a hand-pinned version that rots below a feature floor.
     const desktopVersion = JSON.parse(readFileSync(new URL("../packages/desktop/package.json", import.meta.url), "utf8")).version;
+    const [major, minor] = desktopVersion.split(".");
+    assert.deepEqual(s.required, { desktopApi: 1, range: `>=0.26.0, tested through ${major}.${minor}` });
+    assert.equal(s.aboveTested, false, "a 0.26 CLI is inside the tested bound");
+    assert.equal(s.testedThrough, `${major}.${minor}`, "the tested bound is this Desktop's own minor (#1879)");
     assert.equal(s.install, `npm install -g @awebai/oats@${desktopVersion}`);
     const { acceptProbe } = await import("../packages/client/cli-locator.mjs");
-    assert.equal(acceptProbe({ schemaVersion: 1, name: "@awebai/oats", version: desktopVersion, desktopApi: 1 }).ok, true,
+    assert.deepEqual(acceptProbe({ schemaVersion: 1, name: "@awebai/oats", version: desktopVersion, desktopApi: 1 }, desktopVersion), { ok: true },
       `the served install command pins ${desktopVersion}, which this Desktop would reject`);
     const g = await (await fetch(`http://127.0.0.1:${port}/api/cli`)).json();
     assert.equal(g.ok, true);
@@ -208,13 +211,17 @@ test("desktop server: incompatible CLI → status carries per-candidate diagnost
   } finally { proc.kill(); }
 });
 
-// Band edges through the REAL discovery path, not just acceptProbe: the
-// v0.19.0 readiness blocker was an app whose band excluded the kernel its own
+// The edges through the REAL discovery path, not just acceptProbe: the
+// v0.19.0 readiness blocker was an app that refused the kernel its own
 // release published, so it degraded to observation-only in the field while
-// every unit test passed. Accept the band from its floor to its last minor,
-// and reject a 0.25 kernel at the floor and the next minor at the exclusive ceiling.
-test("desktop server: 0.26.0 through 0.69.x CLIs are ACCEPTED; 0.25.9 is REJECTED at the floor and 0.70.0 at the ceiling", async (t) => {
-  for (const version of ["0.26.0", "0.26.4", "0.27.0", "0.28.0", "0.29.0", "0.30.0", "0.31.0", "0.32.0", "0.33.0", "0.34.0", "0.35.0", "0.36.0", "0.37.0", "0.38.0", "0.39.0", "0.40.0", "0.41.0", "0.42.0", "0.43.0", "0.44.0", "0.45.0", "0.46.0", "0.47.0", "0.48.0", "0.49.0", "0.50.0", "0.51.0", "0.52.0", "0.53.0", "0.54.0", "0.55.0", "0.56.0", "0.57.0", "0.58.0", "0.59.0", "0.60.0", "0.61.0", "0.62.0", "0.63.0", "0.64.0", "0.65.0", "0.66.0", "0.67.0", "0.68.0", "0.69.0"]) {
+// every unit test passed. Accept from the floor to the Desktop's own minor with
+// no notice; accept the next minor and the next major flagged above the tested
+// bound (#1879); refuse a 0.25 kernel at the floor.
+test("desktop server: 0.26.0 through the Desktop's own minor are ACCEPTED as before; a later minor or major is ACCEPTED above the tested bound; 0.25.9 is REJECTED at the floor", async (t) => {
+  const desktopVersion = JSON.parse(readFileSync(new URL("../packages/desktop/package.json", import.meta.url), "utf8")).version;
+  const [major, minor] = desktopVersion.split(".").map(Number);
+  const inside = ["0.26.0", "0.26.4", "0.40.0", "0.49.0", "0.52.0", "0.53.0", `${major}.${minor}.0`, `${major}.${minor}.99`];
+  for (const [version, above] of [...inside.map((v) => [v, false]), [`${major}.${minor + 1}.0`, true], [`${major + 1}.0.0`, true]]) {
     const okDir = tempDir(t, "oats-cli-compatible-");
     const compatible = fakeCli(okDir, { version });
     const a = await startServer({ OATS_DESKTOP_OATS_BIN: compatible.bin, PATH: "/nonexistent", SHELL: "/bin/false" });
@@ -224,23 +231,23 @@ test("desktop server: 0.26.0 through 0.69.x CLIs are ACCEPTED; 0.25.9 is REJECTE
       assert.equal(s.version, version);
       assert.equal(s.bin, compatible.real);
       assert.equal(s.relations, true, `${version} is above the spawn-relations floor`);
+      assert.equal(s.aboveTested, above, `${version}: above the ${major}.${minor} tested bound?`);
+      assert.equal(s.testedThrough, `${major}.${minor}`);
     } finally { a.proc.kill(); }
   }
 
-  for (const [version, why] of [["0.25.9", "0.25.9 is below the floor"], ["0.70.0", "0.70.0 is past the exclusive ceiling"]]) {
-    const badDir = tempDir(t, "oats-cli-outside-");
-    const outside = fakeCli(badDir, { version });
-    const b = await startServer({ OATS_DESKTOP_OATS_BIN: outside.bin, PATH: "/nonexistent", SHELL: "/bin/false" });
-    try {
-      const s = await (await fetch(`http://127.0.0.1:${b.port}/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json();
-      assert.equal(s.ok, false, `${why} and must not become the mutation binary`);
-      const tried = s.tried.find((t) => t.path === outside.real);
-      assert.ok(tried, "the rejected candidate is in diagnostics");
-      assert.match(tried.reason, /outside >=0\.26\.0 <0\.70\.0/);
-      assert.equal(tried.version, version);
-      assert.equal(tried.above, version === "0.70.0" ? true : undefined, "refused only for being above the band: the card says the Desktop is the older");
-    } finally { b.proc.kill(); }
-  }
+  const badDir = tempDir(t, "oats-cli-outside-");
+  const outside = fakeCli(badDir, { version: "0.25.9" });
+  const b = await startServer({ OATS_DESKTOP_OATS_BIN: outside.bin, PATH: "/nonexistent", SHELL: "/bin/false" });
+  try {
+    const s = await (await fetch(`http://127.0.0.1:${b.port}/api/cli/reprobe`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).json();
+    assert.equal(s.ok, false, "0.25.9 is below the floor and must not become the mutation binary");
+    const tried = s.tried.find((t) => t.path === outside.real);
+    assert.ok(tried, "the rejected candidate is in diagnostics");
+    assert.match(tried.reason, /outside >=0\.26\.0, tested through /);
+    assert.equal(tried.version, "0.25.9");
+    assert.equal(Object.hasOwn(tried, "newerApi"), false, "below the floor is not a newer API");
+  } finally { b.proc.kill(); }
 });
 
 test("desktop server: a CLI that prints a valid probe but exits nonzero (or hangs) is REJECTED (review 0b83988)", async (t) => {

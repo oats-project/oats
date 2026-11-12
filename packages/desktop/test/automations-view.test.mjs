@@ -262,6 +262,41 @@ test('the mounted page: gates on the CLI, then reads and acts through POST /api/
   assert.match(el.querySelector('.page-card[data-card="Test result"]').textContent, /gh is missing/, 'an unavailable reply shows its reason');
 });
 
+test('#1879: an accepted newer CLI with no automations API of a known shape, or with no workspace, gets its gate and the notice beside it; nothing is read', async t => {
+  const { mountAutomationsPage } = await import('../renderer/views/automations.mjs');
+  const { setWorkspace } = await import('../renderer/views/common.mjs');
+  const cs = await import('../renderer/views/cli-status.mjs');
+  const cli = (extra = {}) => ({ ok: true, bin: '/oats', version: '0.70.1', source: 'path', required: { desktopApi: 1, range: '>=0.26.0, tested through 0.69' }, tried: [],
+    aboveTested: true, testedThrough: '0.69', features: ['schedule', 'automations'], ...extra });
+  let probe = cli({ automationsApi: null });
+  const bodies = [], ctx = { api: async (path, opts) => { if (path === '/api/cli') return probe; bodies.push([path, opts?.body]); return { status: 'ok', result: { triggers: [] } }; } };
+  await cs.refreshCli(ctx);
+  t.after(() => { cs.resetCliStateForTests(); setWorkspace('/team'); });
+  setWorkspace('/team');
+  const dom = new JSDOM('<!doctype html><body><main></main></body>', { pretendToBeVisual: true }), el = dom.window.document.querySelector('main');
+  const page = mountAutomationsPage(el, ctx, 'trigger');
+  t.after(() => { page.dispose(); dom.window.close(); });
+  const notice = () => el.querySelector('.cli-above-tested:not([hidden]) .cli-notice')?.textContent.trim() ?? null;
+  const sentence = /^This Desktop was tested with oats CLIs up to 0\.69; the installed CLI is 0\.70\.1\. /;
+  assert.match(el.querySelector('.auto-gate').textContent, /Triggers need OATS 0\.29 or later/, 'an unknown API: the gate');
+  assert.match(notice(), sentence, 'and the notice');
+  assert.equal(el.querySelector('.cli-above-tested .cli-release').textContent, 'https://github.com/oats-project/oats/releases/tag/v0.70.1', 'with its release');
+
+  probe = cli({ automationsApi: undefined }); delete probe.automationsApi; await cs.refreshCli(ctx); await tick();
+  assert.match(el.querySelector('.auto-gate').textContent, /Triggers need OATS 0\.29 or later/, 'a missing API: the gate');
+  assert.match(notice(), sentence, 'and the notice');
+
+  probe = cli({ automationsApi: 1 }); setWorkspace(''); await cs.refreshCli(ctx); await tick();
+  assert.match(el.querySelector('.auto-gate').textContent, /Choose a workspace/, 'no workspace: the gate');
+  assert.match(notice(), sentence, 'and the notice');
+  assert.equal(el.querySelectorAll('.cli-above-tested').length, 1, 'one notice, never one per build');
+  assert.deepEqual(bodies, [], 'nothing is read behind a gate');
+
+  probe = cli({ automationsApi: null, version: '0.69.25', aboveTested: undefined, testedThrough: undefined }); await cs.refreshCli(ctx); await tick();
+  assert.match(el.querySelector('.auto-gate').textContent, /Triggers need OATS 0\.29 or later/);
+  assert.equal(notice(), null, 'within the bound the gate stands alone');
+});
+
 // Spec F audit: the row menu closes with Escape (focus back on its summary), a chosen item
 // returns focus to the summary (never <body>), and tabbing out closes it.
 test('keyboard: the row menu closes on Escape and after an item, focus back on its summary', async t => {

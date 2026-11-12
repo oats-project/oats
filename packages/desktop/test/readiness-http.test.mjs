@@ -1,4 +1,5 @@
 import test from 'node:test';
+import * as LOCATOR from '../../client/cli-locator.mjs'; // cliStatus reads the locator's range text and tested bound
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
@@ -90,7 +91,7 @@ test('public CLI status forwards exact readiness API, including explicit unavail
   const source = readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8');
   const body = source.slice(source.indexOf('function cliStatus() {'), source.indexOf('\n}', source.indexOf('function cliStatus() {')) + 2);
   for (const readinessApi of [1, 2, '2', 3, undefined]) {
-    const status = new Function('cliState', 'locator', 'MANIFEST', `${body}; return cliStatus();`)({ readinessApi }, { supportsRelations: () => false, RELATIONS_MIN: [0, 0, 0] }, { version: 'fixture' });
+    const status = new Function('cliState', 'locator', 'MANIFEST', `${body}; return cliStatus();`)({ readinessApi }, { ...LOCATOR, supportsRelations: () => false, RELATIONS_MIN: [0, 0, 0] }, { version: '0.69.17' });
     assert.equal(status.readinessApi, readinessApi === 2 ? 2 : null);
   }
 });
@@ -98,7 +99,7 @@ test('public CLI status forwards the exact inspection gate (operationsApi 2) tha
   const source = readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8');
   const body = source.slice(source.indexOf('function cliStatus() {'), source.indexOf('\n}', source.indexOf('function cliStatus() {')) + 2);
   for (const operationsApi of [1, 2, '2', 3, undefined]) {
-    const status = new Function('cliState', 'locator', 'MANIFEST', `${body}; return cliStatus();`)({ operationsApi }, { supportsRelations: () => false, RELATIONS_MIN: [0, 0, 0] }, { version: 'fixture' });
+    const status = new Function('cliState', 'locator', 'MANIFEST', `${body}; return cliStatus();`)({ operationsApi }, { ...LOCATOR, supportsRelations: () => false, RELATIONS_MIN: [0, 0, 0] }, { version: '0.69.17' });
     assert.equal(status.operationsApi, operationsApi === 2 ? 2 : null, String(operationsApi));
   }
 });

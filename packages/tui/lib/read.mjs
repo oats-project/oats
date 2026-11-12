@@ -106,7 +106,8 @@ export function admitDeployment(path, io = {}) {
 
 /** Run the kernel once with `version --json` and make its record:
  *  -> Promise<{ ok: true, cli } | { ok: false, reason }>, never rejected.
- *  The answer is read with the shared parseProbeStdout and judged by the shared acceptProbe; an
+ *  The answer is read with the shared parseProbeStdout and judged by the shared acceptProbe, against
+ *  `testedVersion` (KERNEL_VERSION: the kernel it ships with); an
  *  accepted one becomes `cliRecord(payload, { bin, source: "tui" })`, the record every shared gate
  *  reads. `reason` is acceptProbe's own when it refused, and one of the TUI's four when there was
  *  no answer to judge. A nonzero exit or a timeout is a refusal even when stdout looks valid: a
@@ -115,7 +116,7 @@ export function admitDeployment(path, io = {}) {
  *  the caller shows it as it shows any kernel text.
  *  NOT detached, unlike every later child: it runs before the terminal is taken, and a Ctrl+C then
  *  must end it with the TUI. `timeoutMs` is for tests. */
-export function probeKernel({ bin = KERNEL_BIN, env = process.env, execFile = nodeExecFile, timeoutMs = PROBE_TIMEOUT_MS } = {}) {
+export function probeKernel({ bin = KERNEL_BIN, env = process.env, execFile = nodeExecFile, timeoutMs = PROBE_TIMEOUT_MS, testedVersion = KERNEL_VERSION } = {}) {
   return new Promise((done) => {
     const refuse = (reason) => done({ ok: false, reason });
     try {
@@ -123,7 +124,10 @@ export function probeKernel({ bin = KERNEL_BIN, env = process.env, execFile = no
         if (error) return refuse(typeof error.syscall === "string" && error.syscall.startsWith("spawn") ? "it did not start" : error.killed === true ? `it did not answer within ${timeoutMs / 1000} seconds` : "it failed");
         const payload = parseProbeStdout(stdout);
         if (!payload) return refuse("it answered something that is not a version record");
-        const verdict = acceptProbe(payload);
+        const verdict = acceptProbe(payload, testedVersion);
+        // A kernel newer than the TUI's own is not the kernel it shipped with: the TUI holds nothing back
+        // (it has no allowlist), so it refuses it, as before the Desktop's soft ceiling (#1879).
+        if (verdict.ok && verdict.aboveTested) return refuse(`version ${payload.version} is newer than this TUI's kernel ${testedVersion}`);
         return verdict.ok ? done({ ok: true, cli: cliRecord(payload, { bin, source: "tui" }) }) : refuse(verdict.reason);
       });
     } catch { refuse("it did not start"); }
@@ -160,6 +164,18 @@ export const CHANGE_FILES = Object.freeze({
     } finally { quietly(() => closeSync(fd)); }
   },
 });
+
+/** The version of the kernel's own package (its package.json, beside bin/, as KERNEL_BIN): the TUI's tested
+ *  version, which the shared acceptProbe requires (cli-locator.mjs). The kernel the TUI runs is this one, so it is
+ *  never above it. Read once, by the bounded read a change's output is read with (no other read of node:fs); null
+ *  when the manifest cannot be read or is over 1 MiB: the probe then refuses, as acceptProbe does without one. */
+export const KERNEL_VERSION = (() => {
+  try {
+    const { text, over } = CHANGE_FILES.read(fileURLToPath(new URL("../../../package.json", import.meta.url)), 1024 * 1024);
+    const version = over ? null : JSON.parse(text).version;
+    return typeof version === "string" ? version : null;
+  } catch { return null; }
+})();
 
 /** A child that did not end well, as execFile reports one: the facts on an Error, and no text of the child's. */
 const failure = (facts) => Object.assign(new Error("the child did not end with an answer"), facts);

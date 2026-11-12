@@ -142,3 +142,33 @@ test('a failed or malformed read says so', async t => {
   assert.equal(malformed.q('.loading-failed-message').textContent, 'The teams of release-manager on this computer could not be read.');
   assert.equal(malformed.q('.loading-failed-details').hidden, true, 'no code to disclose');
 });
+
+test('#1879: a reprobe above the tested bound holds every team write of the soul back with the notice; a reprobe into the bound gives each its own state back', async t => {
+  const cs = await import('../renderer/views/cli-status.mjs');
+  const cli = (extra = {}) => ({ ok: true, bin: '/oats', version: '0.70.1', source: 'path', required: { desktopApi: 1, range: '>=0.26.0, tested through 0.69' }, tried: [], features: [], ...extra });
+  let probe = cli({ version: '0.69.25' });
+  const cliCtx = { api: async () => probe };
+  await cs.refreshCli(cliCtx);
+  t.after(() => cs.resetCliStateForTests());
+  const u = await mount(t);
+  const controls = () => [u.act('mine', 'Remove'), u.act('engineering', 'Remove'), u.q('.sth-add .sth-act')].map(b => [b.textContent, b.disabled, b.title]);
+  const within = controls();
+  assert.deepEqual(within, [['Remove', false, ''], ['Remove', false, ''], ['Add a team', false, '']], 'within the bound: the writes are on');
+
+  probe = cli({ aboveTested: true, testedThrough: '0.69' });
+  await cs.refreshCli(cliCtx); await tick();
+  const notice = cs.cliHeldBack('POST /api/workspace-soul-teams add');
+  assert.match(notice, /^This Desktop was tested with oats CLIs up to 0\.69; the installed CLI is 0\.70\.1\. /);
+  assert.deepEqual(controls(), [['Remove', true, notice], ['Remove', true, notice], ['Add a team', true, notice]], 'held back, with no repaint');
+  const calls = u.calls.length;
+  await u.click(u.act('engineering', 'Remove'));
+  assert.equal(u.calls.length, calls, 'a held-back write runs nothing');
+
+  probe = cli({ version: '0.69.25' });
+  await cs.refreshCli(cliCtx); await tick();
+  assert.deepEqual(controls(), within, 'each control has its own state back');
+  u.card.dispose();
+  probe = cli({ aboveTested: true, testedThrough: '0.69' });
+  await cs.refreshCli(cliCtx); await tick();
+  assert.deepEqual(controls(), within, 'unsubscribed on disposal');
+});

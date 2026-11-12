@@ -309,7 +309,10 @@ test("#1011 planCliUpdate: the CLI moves forward only, and the bridges' target i
 });
 
 test("#1107 desktopFirstLine: the line when the CLI's install moves it to another minor or major version, null otherwise", () => {
-  const line = (version) => `OATS Desktop refuses a CLI newer than its own minor version: if you use it, install OATS Desktop ${version} first.`;
+  // #1879: a Desktop above its tested bound holds back what it was not tested with; the last hard-ceiling Desktop refuses.
+  const line = (version) => `An OATS Desktop older than ${version.split(".").slice(0, 2).join(".").replace(/-.*$/, "")} holds actions back with this CLI. `
+    + `Stop, Remove, schedules, triggers and every other change except Spawn, Start, Restart, colour and background are off until you install OATS Desktop ${version}. `
+    + "(An OATS Desktop of 0.69.17 or older refuses this CLI until then.)";
   const said = (installed, registry) => desktopFirstLine(planCliUpdate(installed, registry));
   // Another minor, or another major: the line, with the version the plan installs.
   assert.equal(said("0.55.1", "0.56.0"), line("0.56.0"));

@@ -34,7 +34,7 @@ test('positive feature/API gate precedes EVERY plan command, never version-only 
 });
 test('locator preserves only the exact lifecycleApi integer', async () => {
   for (const value of [1, true, '1', 2, undefined]) {
-    const found = await discover({ env: { PATH: '/bin' }, isExecutableFile: () => true }, async () => ({ stdout: JSON.stringify({ schemaVersion: 1, name: '@awebai/oats', desktopApi: 1, version: '0.26.0', features: ['lifecycle-plans'], lifecycleApi: value }) }));
+    const found = await discover({ testedVersion: '0.69.17', env: { PATH: '/bin' }, isExecutableFile: () => true }, async () => ({ stdout: JSON.stringify({ schemaVersion: 1, name: '@awebai/oats', desktopApi: 1, version: '0.26.0', features: ['lifecycle-plans'], lifecycleApi: value }) }));
     assert.equal(found.lifecycleApi, value === 1 ? 1 : undefined);
   }
 });

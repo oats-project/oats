@@ -253,3 +253,81 @@ test("the routes' answer (#269 df06befe, docs/desktop-teams.md): ok → the deco
   assert.deepEqual(refused({ code: 'E_BUSY', message: 'Another change is in progress. Try again.' }), ['E_BUSY', 'Another change is in progress. Try again.'], "the Desktop's own words");
   assert.deepEqual(refused({ code: 'E_CLI_PROTOCOL' }), ['E_CLI_PROTOCOL', 'The teams on this computer could not be read.'], 'no message: the fallback, with the code');
 });
+
+test('#1879: a reprobe above the tested bound holds every team write back with the notice, an open form kept; a reprobe into the bound gives each its own state back', async t => {
+  const cs = await import('../renderer/views/cli-status.mjs');
+  const cli = (extra = {}) => ({ ok: true, bin: '/oats', version: '0.70.1', source: 'path', required: { desktopApi: 1, range: '>=0.26.0, tested through 0.69' }, tried: [], features: [], ...extra });
+  let probe = cli({ version: '0.69.25' });
+  const cliCtx = { api: async () => probe };
+  await cs.refreshCli(cliCtx);
+  t.after(() => cs.resetCliStateForTests());
+  const u = await mount(t);
+  await u.click(u.q('.ct-add'));
+  const form = u.q('.ct-form'), label = form.querySelector('input[name=label]');
+  label.value = 'half'; label.dispatchEvent(new u.dom.window.Event('input', { bubbles: true }));
+  const controls = () => [u.q('.ct-add'), u.act('mine', 'Remove'), u.q('.ct-form button[type=submit]')].map(b => [b.disabled, b.title]);
+  const within = controls();
+  assert.deepEqual([within[0], within[2]], [[false, ''], [false, '']], 'within the bound: Add and its submit are on');
+  assert.equal(within[1][0], true, "mine's Remove is off for its own reason"); assert.match(within[1][1], /\S/, 'which its title says');
+  const calls = u.calls.length;
+
+  probe = cli({ aboveTested: true, testedThrough: '0.69' });
+  await cs.refreshCli(cliCtx); await tick();
+  const notice = cs.cliHeldBack('POST /api/workspace-teams add');
+  assert.match(notice, /^This Desktop was tested with oats CLIs up to 0\.69; the installed CLI is 0\.70\.1\. /);
+  assert.deepEqual(controls(), [[true, notice], [true, notice], [true, notice]], 'held back, with no repaint');
+  assert.equal(u.q('.ct-form'), form, 'the open form is kept'); assert.equal(label.value, 'half', 'with what was typed');
+  form.dispatchEvent(new u.dom.window.Event('submit', { cancelable: true })); await tick();
+  assert.equal(u.calls.length, calls, 'a held-back submit runs nothing');
+
+  probe = cli({ version: '0.69.25' });
+  await cs.refreshCli(cliCtx); await tick();
+  assert.deepEqual(controls(), within, 'each control has its own state back');
+  assert.equal(u.q('.ct-form'), form);
+});
+
+test('#1879: an open Make default confirmation follows a reprobe: held back above the tested bound, its click sends nothing, Cancel stays usable; given back within it', async t => {
+  const cs = await import('../renderer/views/cli-status.mjs');
+  const cli = (extra = {}) => ({ ok: true, bin: '/oats', version: '0.70.1', source: 'path', required: { desktopApi: 1, range: '>=0.26.0, tested through 0.69' }, tried: [], features: [], ...extra });
+  let probe = cli({ version: '0.69.25' });
+  const cliCtx = { api: async () => probe };
+  await cs.refreshCli(cliCtx);
+  t.after(() => cs.resetCliStateForTests());
+  const u = await mount(t, () => mapped());
+  await u.click(u.act('engineering', 'Make default'));
+  const confirm = u.row('engineering').querySelector('.ct-confirm');
+  const primary = () => confirm.querySelector('.primary'), cancel = () => [...confirm.querySelectorAll('.ct-act')].find(b => b.textContent === 'Cancel');
+  assert.deepEqual([primary().disabled, primary().title], [false, ''], 'within the bound: the confirmation is on');
+
+  probe = cli({ aboveTested: true, testedThrough: '0.69' });
+  await cs.refreshCli(cliCtx); await tick();
+  const notice = cs.cliHeldBack('POST /api/workspace-teams add');
+  assert.match(notice, /^This Desktop was tested with oats CLIs up to 0\.69; the installed CLI is 0\.70\.1\. /);
+  assert.equal(u.row('engineering').querySelector('.ct-confirm'), confirm, 'the open confirmation is kept');
+  assert.deepEqual([primary().disabled, primary().title], [true, notice], 'held back, with no repaint');
+  const calls = u.calls.length;
+  await u.click(primary());
+  assert.equal(u.calls.length, calls, 'a held-back confirmation sends nothing');
+  assert.equal(cancel().disabled, false, 'Cancel stays usable');
+
+  probe = cli({ version: '0.69.25' });
+  await cs.refreshCli(cliCtx); await tick();
+  assert.deepEqual([primary().disabled, primary().title], [false, ''], 'given back within the bound');
+  await u.click(cancel());
+  assert.equal(u.row('engineering').querySelector('.ct-confirm'), null, 'and Cancel closes it');
+});
+
+test('#1879: after disposal a CLI change touches the team page no more', async t => {
+  const cs = await import('../renderer/views/cli-status.mjs');
+  const cli = (extra = {}) => ({ ok: true, bin: '/oats', version: '0.70.1', source: 'path', required: { desktopApi: 1, range: '>=0.26.0, tested through 0.69' }, tried: [], features: [], ...extra });
+  let probe = cli({ version: '0.69.25' });
+  const cliCtx = { api: async () => probe };
+  await cs.refreshCli(cliCtx);
+  t.after(() => cs.resetCliStateForTests());
+  const u = await mount(t);
+  const add = u.q('.ct-add');
+  u.card.dispose();
+  probe = cli({ aboveTested: true, testedThrough: '0.69' });
+  await cs.refreshCli(cliCtx); await tick();
+  assert.deepEqual([add.disabled, add.title], [false, ''], 'unsubscribed on disposal');
+});

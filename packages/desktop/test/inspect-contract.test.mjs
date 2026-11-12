@@ -19,7 +19,7 @@ test('the probe gate is the exact integer 2: the locator forwards only operation
   assert.equal(probe.operationsApi, 2, 'the captured kernel advertises operationsApi 2');
   for (const operationsApi of [undefined, 1, '2', 3, true, 2]) {
     // The capture's kernel printed 0.25.9, below the band's floor; served as 0.26.0 so the locator accepts it.
-    const found = await discover({ persisted: () => '/fixture/bin/oats', env: {}, isExecutableFile: () => true },
+    const found = await discover({ testedVersion: '0.69.17', persisted: () => '/fixture/bin/oats', env: {}, isExecutableFile: () => true },
       async () => ({ stdout: JSON.stringify({ ...probe, version: '0.26.0', operationsApi }) }));
     assert.equal(found.ok, true); assert.equal(found.operationsApi, operationsApi === 2 ? 2 : undefined, String(operationsApi));
     assert.equal(inspectSupported(found), operationsApi === 2);

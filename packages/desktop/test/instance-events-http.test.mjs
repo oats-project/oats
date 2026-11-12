@@ -1,4 +1,5 @@
 import test from 'node:test';
+import * as LOCATOR from '../../client/cli-locator.mjs'; // cliStatus reads the locator's range text and tested bound
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { EventEmitter } from 'node:events';
@@ -125,9 +126,9 @@ test('proxy reprojection rejects foreign identities/protocol and never forwards 
 test('locator and public status expose exactly integer API2', async () => {
   const source = readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8').match(/function cliStatus\(\) \{[^]*?\n\}/)[0];
   for (const eventsApi of [undefined, 1, '2', true, 3, 2]) {
-    const found = await discover({ persisted: () => cli.bin, env: {}, isExecutableFile: () => true }, async () => ({ stdout: JSON.stringify({ schemaVersion: 1, name: '@awebai/oats', version: '0.26.0', desktopApi: 1, features: ['instance-events-2'], eventsApi }) }));
+    const found = await discover({ testedVersion: '0.69.17', persisted: () => cli.bin, env: {}, isExecutableFile: () => true }, async () => ({ stdout: JSON.stringify({ schemaVersion: 1, name: '@awebai/oats', version: '0.26.0', desktopApi: 1, features: ['instance-events-2'], eventsApi }) }));
     assert.equal(found.eventsApi, eventsApi === 2 ? 2 : undefined);
-    const status = new Function('cliState', 'locator', 'MANIFEST', `return (${source})();`)({ eventsApi }, { supportsRelations: () => false, RELATIONS_MIN: [] }, { version: 'fixture' });
+    const status = new Function('cliState', 'locator', 'MANIFEST', `return (${source})();`)({ eventsApi }, { ...LOCATOR, supportsRelations: () => false, RELATIONS_MIN: [] }, { version: '0.69.17' });
     assert.equal(status.eventsApi, eventsApi === 2 ? 2 : null);
   }
 });

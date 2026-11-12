@@ -295,6 +295,12 @@ select.field:disabled { background-color: var(--surface-2); color: var(--faint);
 .cli-card .cli-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .cli-card .cli-docs { color: var(--accent); font-size: 12.5px; }
 .cli-card .cli-status { color: var(--muted); font-size: 12.5px; }
+/* The notice above the tested bound (#1879): one line, its release below it. */
+.cli-card.cli-above-tested { gap: 6px; }
+.cli-card[hidden] { display: none; }
+.cli-card .cli-notice { margin: 0; line-height: 1.5; }
+.cli-card .cli-notice .glyph { color: var(--warn); }
+.cli-card .cli-release { color: var(--accent); font-size: 12.5px; word-break: break-all; }
 
 /* ── cards (summary, spawn) ── */
 .oats-view .cards { padding: 14px 18px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
