@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, realpathSync, writeFileSync, readFileSync, rmSync, existsSync, renameSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { once } from 'node:events';
 import { backendRequest, startBackendThroughSpec, READY_LINE } from './helpers/backend-server.mjs';
 import { serverSpawnSpec } from '../server-host.mjs';
 import { NO_CLI_ENV } from '../scripts/smoke-probes.mjs';
@@ -71,16 +72,31 @@ async function started(t, { cli, gate = false, lateStart = false } = {}) {
   // Canonical, as the CLI locator reports a candidate (macOS's temporary directory is under a /var link).
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'oats-t-cli-')));
   const fake = cli ? fakeCli(dir, 'oats', { gate, lateStart }) : null;
+  const others = []; // every other fake CLI a test makes in this directory
   const choice = join(dir, 'oats-cli-choice.json');
   if (fake) writeFileSync(choice, JSON.stringify({ bin: fake.bin }));
   const s = await startBackendThroughSpec({ env: HERMETIC, cliChoiceFile: choice, home: dir, remoteIdentityFile: join(dir, 'remote-identity.json') });
-  t.after(async () => { await s.stop(); rmSync(dir, { recursive: true, force: true }); });
+  /** Stop the server, wait for every CLI run it started to finish, then remove the directory. The server exits
+   * without signalling its CLI children (server/oats-web.mjs, its signal handlers), so a run it started can still
+   * be writing its record here once it has gone; once it has gone, no run starts. Its start-up roster read was
+   * launched before start-up returned (the probe's verdict starts it), so it is waited for by name, though it may
+   * not have noted its start yet. A test that makes another CLI the server's waits for the runs that starts. */
+  let closed;
+  const close = () => (closed ||= (async () => {
+    await s.stop();
+    if (fake) await serverRuns(fake);
+    for (const other of others) await other.settled();
+    rmSync(dir, { recursive: true, force: true });
+  })());
+  t.after(close);
   // The start-up probe has landed (its verdict is published) before any test counts probes.
   for (let n = 0; !(await (await s.request('/api/cli')).json()).probedAt; n++) {
     if (n > 400) throw new Error('the start-up probe never landed');
     await new Promise((ok) => setTimeout(ok, 25));
   }
-  return { s, dir, fake, choice };
+  /** Another fake CLI in this directory, waited for by the teardown as the first one is. */
+  const anotherCli = (name) => { const other = fakeCli(dir, name); others.push(other); return other; };
+  return { s, dir, fake, choice, close, anotherCli };
 }
 
 const WRONG_SAME_LENGTH = (secret) => `${secret[0] === 'A' ? 'B' : 'A'}${secret.slice(1)}`;
@@ -186,7 +202,7 @@ test('A5: the server prints its ready line and never the secret', async (t) => {
 });
 
 test('A6: reprobe takes no binary; the chosen binary is the choice file main writes', async (t) => {
-  const { s, dir, fake, choice } = await started(t, { cli: true });
+  const { s, fake, choice, anotherCli } = await started(t, { cli: true });
   const probes = () => fake.probes();
   for (const body of ['{"bin":"/x"}', '{"a":1}', '[]', '{']) {
     const before = probes();
@@ -197,8 +213,25 @@ test('A6: reprobe takes no binary; the chosen binary is the choice file main wri
   }
   for (const body of ['{}', undefined]) assert.equal((await s.request('/api/cli/reprobe', { method: 'POST', body })).status, 200, String(body));
   assert.equal((await (await s.request('/api/cli')).json()).bin, fake.bin, 'the choice file\'s binary after start');
-  const other = fakeCli(dir, 'oats-other');
+  const other = anotherCli('oats-other');
   writeFileSync(`${choice}.tmp`, JSON.stringify({ bin: other.bin })); chmodSync(`${choice}.tmp`, 0o600); renameSync(`${choice}.tmp`, choice);
   assert.equal((await s.request('/api/cli/reprobe', { method: 'POST', body: '{}' })).status, 200);
   assert.equal((await (await s.request('/api/cli')).json()).bin, other.bin, 'the rewritten choice after a reprobe');
+  // Accepting it starts a roster read of its own, after any read in flight: waited for while the server runs, so
+  // the teardown never stops the server as that run is launched.
+  assert.ok((await serverRuns(other)).some((r) => r.startsWith('run server roster ')), 'the rewritten choice reads the roster');
+});
+
+test('teardown: a CLI run still in flight when the server stops is waited for before its directory is removed', async (t) => {
+  // The server leaves its CLI children running when it exits: its start-up roster read is held mid-record here,
+  // the teardown stops the server, and the run goes on writing its record into the directory.
+  const { s, dir, fake, close } = await started(t, { cli: true, gate: true });
+  await fake.startedRun('server roster ');
+  const closing = close();
+  if (s.child.exitCode === null && s.child.signalCode === null) await once(s.child, 'exit');
+  await new Promise((ok) => setTimeout(ok, 50)); // a teardown that does not wait has removed the directory by now
+  assert.ok(existsSync(dir), 'the directory outlives the server while a run it started is in flight');
+  writeFileSync(fake.gate, '');
+  await closing;
+  assert.equal(existsSync(dir), false, 'removed once that run has finished');
 });
