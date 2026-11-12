@@ -508,7 +508,9 @@ carries it as `--name`; the answer keeps the preview's `naming`. This needs
 the server's `spawn-suggest-name` and `spawn-name` too.
 
 - **A link that fails under the second call** (a lost connection, a
-  timeout) is `E_SSH`, and the server may have started the spawn. The
+  timeout) is `E_SSH`, and a server `oats` that ends without an answer (it
+  was killed) is `E_REMOTE_ENVELOPE`. Either way the server may have started
+  the spawn. The
   message ends with the fix, and `--json` carries it:
   `error.details: {decision, idempotencyKey, fix}`. Run the same spawn again
   with `--expect-decision <decision.revision> --idempotency-key
