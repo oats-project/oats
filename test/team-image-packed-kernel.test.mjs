@@ -210,7 +210,7 @@ test("PR context generation preserves HEAD and uses only its bound private tarba
     assert.equal(git(["status", "--porcelain"]), before);
     const effective = JSON.parse(readFileSync(join(prepared.contextDir, "package.json")));
     assert.equal(effective.dependencies["@awebai/oats"], "file:../oats-build-inputs/oats-pr-kernel.tgz");
-    assert.deepEqual(readdirSync(prepared.contextDir).sort(), [".dockerignore", "Dockerfile", "entrypoint.sh", "oats-pr-kernel.tgz", "package-lock.json", "package.json", "sshd_config", "supervisor.mjs"]);
+    assert.deepEqual(readdirSync(prepared.contextDir).sort(), [".dockerignore", "Dockerfile", "agent-trust.sh", "entrypoint.sh", "liveness.mjs", "oats-pr-kernel.tgz", "package-lock.json", "package.json", "sshd_config", "supervisor.mjs"]);
     assert.ok(readFileSync(join(prepared.contextDir, ".dockerignore"), "utf8").endsWith("!oats-pr-kernel.tgz\n"));
     assert.deepEqual(readFileSync(join(prepared.contextDir, "oats-pr-kernel.tgz")), readFileSync(join(prepared.root, "oats-build-inputs/oats-pr-kernel.tgz")));
     const proof = JSON.parse(readFileSync(prepared.inventoryPath));
