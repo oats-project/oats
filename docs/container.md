@@ -83,7 +83,7 @@ version and regenerate this directory's lock with
 `npm install --package-lock-only --ignore-scripts`; review both files. Do not
 use `--install-oats` or `--install-aw` against a running container.
 
-The committed OATS 0.69.15 pin has `oats host run`, which the entrypoint
+The committed OATS 0.69.18 pin has `oats host run`, which the entrypoint
 runs, and `oats schedule host install --register-only`. It supports
 `env: { fromFile: ... }` and the operator's `oats harness token set` route.
 Provision the token through the
