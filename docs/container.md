@@ -208,29 +208,54 @@ without `--preview`. Keep the team and controller keys outside the container.
 
 `identity.source` is the legacy route of `oats.aweb`: the spawn copies an
 existing aweb identity into the new home and connects it. It is the route
-that works in a container today, for a team on any aweb server, and it stays
-labelled legacy until the package has a route that admits a seat itself.
+that works in a container today, and it stays labelled legacy until the
+package has a route that admits a seat itself.
 
-A seat is the `.aw` directory of one admitted team member. Whoever holds the
-team's controller key makes the invite, outside the container; the seat is
-accepted and bound inside it, over the SSH route, so its signing key is
-created on `/state` and never leaves it:
+A seat is the `.aw` directory of one admitted team member. On both routes
+below the seat's signing key is created in the container, over the SSH
+route, so it is on `/state` and never leaves it; the team's controller key
+stays outside. Which route applies depends on who holds that controller key.
+
+**A team whose controller key the operator holds** (a self-hosted server, or
+a team the operator brought). The seat asks, the controller admits it, the
+seat fetches its certificate:
 
 ```sh
-# Outside the container, where the team's controller key is:
-aw id team invite --team <team> --namespace <domain>
+# 1. In the container, once per seat. Prints the add-member command.
+mkdir -p /state/seats/<alias> && cd /state/seats/<alias>
+aw id team request --create-local-key --team <team>:<domain> --name <alias>
 
+# 2. Outside the container, where the team's controller key is: run the
+#    printed `aw id team add-member` command. It answers a certificate id.
+
+# 3. In the container, in the same directory:
+aw id team fetch-cert --team <team> --namespace <domain> --cert-id <certificate-id>
+aw workspace connect --service <the team's aweb server>
+```
+
+An invite cannot be used here: a token made with the operator's own
+controller key is redeemed only on the machine that holds that key
+(`aw id team accept-invite --help`).
+
+**A team hosted by the aweb service.** The service holds the controller key
+and issues an invite token (`aw_inv_…`); the seat redeems it:
+
+```sh
 # In the container, once per seat:
 mkdir -p /state/seats/<alias> && cd /state/seats/<alias>
 aw id team accept-invite <token> --name <alias>
-aw init --aweb-url <the team's aweb server>
+aw workspace connect --service <the team's aweb server>
 ```
+
+The commands are as `aw` 1.36.57 documents them in its own `--help`. The
+sequences have not yet been run in a container.
 
 The spawn refuses a seat it cannot use, before copying anything. The
 directory must hold:
 
 - `signing.key`, the member's key;
-- `workspace.yaml` with the server in `aweb_url` (`aw init` writes it);
+- `workspace.yaml` with the server in `aweb_url` (`aw workspace connect`
+  writes it);
 - `teams.yaml` with the active team, and the certificate under `team-certs/`.
 
 One seat serves one instance at a time. The spawn writes
