@@ -32,10 +32,11 @@ lane. Call that one; it brings in the second reader and the release lane.
      start it yourself, without asking: spawn your workspace's maintainer soul for them,
      independent of you and never as your child, so your retirement can't stop it:
      ```bash
-     oats spawn <maintainer soul> --relation unrelated --purpose <person>-<lane>-<n> --task-file <brief.md>
+     oats spawn <maintainer soul> --relation unrelated --name <person>-<lane>-maintainer --task-file <brief.md>
      ```
-     `<n>` is one more than the number of earlier maintainers for that person and lane (the
-     map's `left` entries), so no instance takes a retired one's name. Brief: "maintainer
+     No instance takes a retired one's name: where that person and lane had a maintainer
+     before (the map's `left` entries), put its count before the role
+     (`<person>-<lane>-2-maintainer`). Brief: "maintainer
      for <person> in <lane>; first call: <your instance> asks for <a read | the merge> of
      <PR> at <head>" (or "<the release> of <what goes in> at <head>"), and where the lane
      map is. Right after, tell your person, in two or three plain sentences, what you

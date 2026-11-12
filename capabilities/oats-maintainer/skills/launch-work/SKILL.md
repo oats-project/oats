@@ -55,8 +55,11 @@ what reaches you.
 
 ## 3. Spawn a fresh lead
 Spawn a new instance of that expert soul as your child, with the brief below:
-`oats spawn <expert> --parent "$OATS_INSTANCE" --purpose <slug> --task-file <brief.md>`,
-without `--same-work`: the effort is its own, not your work.
+`oats spawn <expert> --parent "$OATS_INSTANCE" --name <effort-slug>-lead --task-file <brief.md>`,
+without `--same-work`: the effort is its own, not your work. Name it for the effort, with
+its role last (`rate-limit-lead`), never for its soul, which the sidebar already shows, and
+with a name no instance has had: when the name is taken, make the effort's part more
+specific.
 
 - **One lead per effort,** never one per domain: it brings in what else it needs by a
   helper or a hand-off.
@@ -253,9 +256,11 @@ you, never your child. If your human already has one in that lane, say so instea
 one means splitting the lane (`/cross-review-peer`), your own overflow seat aside.
 
 ```sh
-oats spawn <maintainer soul> --relation unrelated --purpose <slug> --task-file <brief.md>
+oats spawn <maintainer soul> --relation unrelated --name <person>-<lane>-maintainer --task-file <brief.md>
 ```
 
+No instance takes a retired one's name: where that human and lane had a maintainer before
+(the map's `left` entries), put its count before the role (`<person>-<lane>-2-maintainer`).
 Its brief names the lane, where the map is, its human, the starting request (section 4, "The request"),
 and any efforts in flight it takes over. It adds its map entry
 (`/cross-review-peer`, "Joining as a new maintainer") and launches the work itself. Tell
@@ -270,10 +275,11 @@ yet (a running or stopped one counts until it is retired), spawn one (`/cross-re
 overflow seat, never spawn one. Spawn it as your child:
 
 ```sh
-oats spawn <your maintainer soul> --parent "$OATS_INSTANCE" --purpose <slug> --task-file <brief.md>
+oats spawn <your maintainer soul> --parent "$OATS_INSTANCE" --name <person>-<lane>-overflow-maintainer --task-file <brief.md>
 ```
 
-Give it a name no instance has had. Its brief says it is your overflow seat in the lane,
+Give it a name no instance has had: after a retired overflow seat, put its count before
+the role. Its brief says it is your overflow seat in the lane,
 holding no seat and adding no entry; names the map and your entry; gives it its first
 efforts, each request as section 4 says ("The request"); and says it answers its leads' calls for reads, and
 refers a merge reserved for the lane and contract or direction questions to you. Add

@@ -44,9 +44,11 @@ that effort's lead, and tell your person who leads it and where its thread is (s
   your own.
 - **Start it** independent of you, so it retires itself when the effort is done:
   ```bash
-  oats spawn <expert soul> --relation unrelated --purpose <effort-slug> --task-file <request.md>
+  oats spawn <expert soul> --relation unrelated --name <effort-slug>-lead --task-file <request.md>
   ```
-  Give it a name no instance has had; never reuse a retired one's.
+  Name it for the effort, with its role last (`rate-limit-lead`), never for its soul, which
+  the sidebar already shows. Give it a name no instance has had, never a retired one's:
+  when the name is taken, make the effort's part more specific.
 
 ## 3. Introduce once
 One message in your person's thread: who leads the effort (its instance name), what that

@@ -425,7 +425,7 @@ member soul that is the expert in that capability (`oats-okf-expert`,
 **OATS's coordination is a member copy of the engineering template.** The
 `oats` repository keeps its own copy of
 [oats-project/oats-engineering-coordination](https://github.com/oats-project/oats-engineering-coordination)
-at template-v3.1.1, adapted to OATS: `oats.engineering-expert`,
+at template-v3.1.3, adapted to OATS: `oats.engineering-expert`,
 `oats.developer`, `oats.build`, `oats.code-review`, `oats.maintainer`,
 `oats.landing-rules` and `oats.dispatcher`, in `capabilities/oats-<name>/`.
 `capabilities/TEMPLATE-RELEASE` records the release, its commit and what was copied, and
