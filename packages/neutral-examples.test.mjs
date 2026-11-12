@@ -52,14 +52,15 @@ function* textFiles(dir) {
 
 // `/Users/<name>` or `/home/<name>`: the whole segment, any characters, up to the next path or
 // quoting separator, so a name that only starts like an invented one is checked whole.
-// Whitespace, quotes and brackets end the segment, as they end a path in prose and in code. So
-// the guard covers homes named like a login (the default, and what a pasted path shows); a home
-// directory whose own name holds a space or a quote is not checked, and review catches it, as it
-// does every other deployment specific.
+// Whitespace, quotes, brackets and the list separators `,` `;` `:` (a PATH value, a list in
+// prose) end the segment, as they end a path in prose and in code. So the guard covers homes named
+// like a login (the default, and what a pasted path shows); a home directory whose own name holds
+// one of those characters is not checked, and review catches it, as it does every other
+// deployment specific. A dot is the owner's when a `/` follows it, a sentence's full stop when not.
 // `-Users-<name>-`: Claude's encoded form, up to the next dash. A line's `\u` escapes are read as
 // the characters they write first; any other backslash ends the segment (it starts an escape, not
-// a name's letter). An interpolated `${…}` is the code's, not an example: its segment stops at the
-// `{`, and a segment starting with `$` is skipped.
+// a name's letter). Interpolation is the code's, not an example, and is skipped: `${…}` (its
+// segment is the `$` before the `{`) and a shell variable (`$USER`).
 const HOME = /\/(?:Users|home)\/([^/\\\s'"`(){}\[\],;:<>|*]+)|-Users-([^-/\\\s'"`(){}\[\],;:<>|*]+)-/gu;
 const ESCAPE = /\\u\{([0-9a-fA-F]{1,6})\}|\\u([0-9a-fA-F]{4})/g;
 const unescaped = line => line.replace(ESCAPE, (_, braced, four) => String.fromCodePoint(parseInt(braced ?? four, 16)));
@@ -68,9 +69,12 @@ const unescaped = line => line.replace(ESCAPE, (_, braced, four) => String.fromC
 function ownerHomes(text, where = '') {
   const out = [];
   text.split('\n').forEach((line, i) => {
-    for (const [, slashed, encoded] of unescaped(line).matchAll(HOME)) {
-      if ((slashed ?? encoded).startsWith('$')) continue;
-      const name = (slashed ?? encoded).replace(/\.+$/, '').normalize('NFC'); // a sentence's full stop is not the name's
+    const read = unescaped(line);
+    for (const match of read.matchAll(HOME)) {
+      const segment = match[1] ?? match[2], after = read[match.index + match[0].length];
+      if ((segment === '$' && after === '{') || /^\$[A-Za-z_][A-Za-z0-9_]*$/.test(segment)) continue;
+      const owned = match[2] !== undefined || after === '/'; // a `/` (or the encoded form's dash) follows: its dots are the name's
+      const name = (owned ? segment : segment.replace(/\.+$/, '')).normalize('NFC');
       if (!INVENTED_HOMES.has(name.toLowerCase())) out.push(`${where}:${i + 1}: /…/${name}`);
     }
   });
@@ -92,6 +96,12 @@ test('an owner home directory fails unless its owner is an invented one', () => 
   // Written as escapes in source, read as the characters; composed and decomposed are one name.
   assert.deepEqual(ownerHomes(String.raw`"/home/robin\u00e9/x", "/home/zo\u00eb/x", "/home/zoe\u0308/x", "/home/\u{20000}/x"`), [':1: /…/robin\u00e9']);
   assert.deepEqual(ownerHomes(String.raw`"/home/a\0b"`), [], 'an escape ends the segment');
+  // A dot before a `/` is the owner's; a full stop after the path is the sentence's.
+  assert.deepEqual(ownerHomes('/home/alex./work /home/user../work'), [':1: /…/alex.', ':1: /…/user..']);
+  assert.deepEqual(ownerHomes('see /home/alex. Then /Users/user...'), []);
+  // Interpolation is skipped; anything else that starts with `$` is a name like any other.
+  assert.deepEqual(ownerHomes('`/home/${who}/x`, "/home/$USER/x", /home/$who_2'), []);
+  assert.deepEqual(ownerHomes('/home/$robin.x/work /home/$/work'), [':1: /…/$robin.x', ':1: /…/$']);
 });
 
 test('no example or fixture under packages/ names a real owner\'s home directory', () => {
