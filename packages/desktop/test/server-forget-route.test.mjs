@@ -231,7 +231,7 @@ test('with the server\'s refresh loop owning a read in flight, the same: one mor
 test('the route keeps the proxy\'s ordinary deadline, which outlasts the forget call', async () => {
   let limit;
   await cliServerForget('/oats', { server: 'build', instance: 'dev-a' }, { exec: (_bin, _argv, opts, done) => { limit = opts.timeout; done(null, JSON.stringify(OK)); } });
-  assert.equal(classifyApiRoute(ROUTE, 'http://127.0.0.1:4999'), null, 'no class of its own');
+  assert.equal(classifyApiRoute(ROUTE), null, 'no class of its own');
   const api = shippedMainApi({ window: '/d/first', advertised: new Set(['/d/first']), served: [{ id: '/d/first' }] });
   const seen = [];
   api.context.AbortSignal = { timeout: ms => { seen.push(ms); return { ms }; } };
