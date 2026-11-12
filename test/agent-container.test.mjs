@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 import { parse } from "yaml";
@@ -123,7 +127,7 @@ test("agent image pins its base and CLI dependency closure", () => {
   assert.equal([...dockerfile.matchAll(/^WORKDIR (.+)$/gm)].at(-1)[1], "/state", "Docker must not create a root-owned child in the state mount before entrypoint");
   assert.match(dockerfile, /^ENV HOME=\/state\/home/m);
   assert.doesNotMatch(dockerfile, /^ENV[\s\S]*LD_PRELOAD/m, "derived-image build steps must retain the system user database");
-  assert.match(dockerfile, /^ENTRYPOINT \["\/usr\/bin\/tini", "-g", "--", "\/usr\/local\/bin\/agent-entrypoint"\]$/m);
+  assert.match(dockerfile, /^ENTRYPOINT \["\/usr\/bin\/tini", "--", "\/usr\/local\/bin\/agent-entrypoint"\]$/m);
   const manifest = JSON.parse(read("package.json"));
   const lock = JSON.parse(read("package-lock.json"));
   assert.deepEqual(Object.keys(manifest.dependencies).sort(), ["@anthropic-ai/claude-code", "@awebai/aw", "@awebai/oats"]);
@@ -173,10 +177,14 @@ test("agent Compose service retains the isolation contract", () => {
   assert.deepEqual(work.services.agent.volumes, [{ type: "bind", source: "${TEAM_WORK_DIR:?Set TEAM_WORK_DIR}", target: "/work", bind: { create_host_path: false } }]);
 });
 
-test("the entrypoint starts sshd in the background and ends as oats host run, tini's direct child", () => {
-  const lines = read("entrypoint.sh").trimEnd().split("\n");
-  assert.deepEqual(lines.slice(-2), ["/usr/sbin/sshd -D -e -f /etc/agent-sshd_config &", "exec oats host run"]);
-  assert.equal(lines.filter((line) => /^\s*exec\b/.test(line)).length, 1, "one exec, the last line: whatever it runs is what tini signals and waits for");
+test("the entrypoint gives PID-only tini the image supervisor after NSS and key setup", () => {
+  const source = read("entrypoint.sh"), lines = source.trimEnd().split("\n");
+  assert.equal(lines.at(-1), "exec node /usr/local/lib/agent-supervisor.mjs");
+  assert.equal(lines.filter((line) => /^\s*exec\b/.test(line)).length, 1);
+  assert.doesNotMatch(source, /sshd -D|exec oats/);
+  assert.match(source, /export NSS_WRAPPER_PASSWD=/);
+  assert.match(source, /ssh-keygen/);
+  assert.match(read("Dockerfile"), /COPY --chmod=644 supervisor\.mjs \/usr\/local\/lib\/agent-supervisor\.mjs/);
 });
 
 test("SSH accepts only agent public keys with forwarding disabled", () => {
@@ -198,7 +206,7 @@ test("Claude auth acceptance excludes the instance project settings", () => {
 test("acceptance refuses drift in the admitted container settings", async () => {
   const { inspectAgent } = await import("../container/agent/accept.mjs");
   const env = { AGENT_IMAGE: "oats-agent:reviewed", AGENT_UID: "20001", AGENT_GID: "20001", TEAM_STATE_DIR: "/srv/team/state", TEAM_LOGIN_DIR: "/srv/team/login", AUTHORIZED_KEYS_FILE: "/srv/team/authorized_keys", RESOLV_CONF_FILE: "/srv/team/resolv.conf", AGENT_PIDS: "512", AGENT_MEMORY: "3g", AGENT_CPUS: "2", AGENTS_NETWORK: "team-agents", AGENT_IP: "172.30.0.2" };
-  const image = { Id: "sha256:" + "1".repeat(64), Config: { Env: ["PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/state/home"], Entrypoint: ["/usr/bin/tini", "-g", "--", "/usr/local/bin/agent-entrypoint"], Cmd: null } };
+  const image = { Id: "sha256:" + "1".repeat(64), Config: { Env: ["PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/state/home"], Entrypoint: ["/usr/bin/tini", "--", "/usr/local/bin/agent-entrypoint"], Cmd: null } };
   const inspected = {
     Image: image.Id,
     State: { Running: true },
@@ -280,4 +288,224 @@ test("acceptance refuses drift in the admitted container settings", async () => 
     changed.Config[field] = field === "Env" ? ["PATH=VALUE_MUST_BE_WITHHELD"] : ["VALUE_MUST_BE_WITHHELD"];
     assert.throws(() => inspectAgent(changed, env, image), (error) => !error.message.includes("VALUE_MUST_BE_WITHHELD"), field + " differences must withhold values");
   }
+});
+
+
+async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false, statusSpawnThrowsOnce = false, statusIgnoresTerm = false, stubbornFinish = false, brokerStatusPid = "owned" } = {}) {
+  const supervisor = new URL("../container/agent/supervisor.mjs", import.meta.url);
+  assert.ok(existsSync(supervisor), "the image must own broker readiness and ordered child shutdown");
+  const { supervise } = await import(supervisor);
+  const dir = mkdtempSync(join(tmpdir(), "oats-image-supervisor-"));
+  const events = join(dir, "events"), childFile = join(dir, "child.cjs"), brokerPid = join(dir, "broker-pid");
+  writeFileSync(events, "");
+  writeFileSync(childFile, `
+    const fs = require("node:fs");
+    const [role, events, mode, pidFile, pidMode] = process.argv.slice(2);
+    const log = text => fs.appendFileSync(events, text + "\\n");
+    if (role === "broker") fs.writeFileSync(pidFile, String(process.pid));
+    log(role + " started");
+    if (role === "status" && mode === "probe-stubborn") {
+      process.on("SIGTERM", () => log("status TERM"));
+      log("status listening");
+      setInterval(() => {}, 1000);
+    } else if (role === "status") {
+      const running = ((mode === "ready" || mode === "stubborn") && fs.readFileSync(events, "utf8").includes("broker started")) || (mode === "after-exit" && fs.readFileSync(events, "utf8").includes("broker exited"));
+      if (running) log("broker ready");
+      const pid = fs.existsSync(pidFile) ? Number(fs.readFileSync(pidFile,"utf8")) : 0;
+      const identity = pidMode === "missing" ? {} : {daemon_pid: pidMode === "other" ? process.ppid : pid};
+      process.stdout.write(JSON.stringify({daemon_running: running, ...identity}));
+      process.exit(0);
+    }
+    if (role !== "status") {
+      if (role === "broker" && mode === "after-exit") { log("broker exited"); process.exit(0); }
+      process.on("SIGTERM", () => {
+        log(role + " TERM");
+        if (mode === "stubborn" && (role === "ssh" || role === "broker")) return;
+        setTimeout(() => { log(role + " ended"); process.exit(0); }, role === "host" ? 80 : 0);
+      });
+      log(role + " listening");
+      setInterval(() => {}, 1000);
+    }
+  `);
+  const children = new Map(), said = [];
+  let signal, statusFailed = false;
+  const running = supervise({
+    spawnChild(file, args, options) {
+      const role = file === "aw" ? (args[1] === "run" ? "broker" : "status") : file === "oats" ? "host" : "ssh";
+      const mode = role === "status" && statusIgnoresTerm ? "probe-stubborn" : statusTrueAfterBrokerExit ? "after-exit" : stubbornFinish ? "stubborn" : ready ? "ready" : "not-ready";
+      appendFileSync(events, role + " spawned\n");
+      if (role === "status" && statusSpawnThrowsOnce && !statusFailed) {
+        statusFailed = true;
+        throw Object.assign(new Error("fixture status spawn failed"), {code: "ENOMEM"});
+      }
+      const failProbe = role === "status" && statusSpawnFailsOnce && !statusFailed;
+      if (failProbe) statusFailed = true;
+      const child = spawn(failProbe ? join(dir, "missing-probe") : process.execPath, failProbe ? [] : [childFile, role, events, mode, brokerPid, brokerStatusPid], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
+      children.set(role, child);
+      return child;
+    },
+    onSignal(handler) { signal = handler; return () => { signal = null; }; },
+    say(line) { said.push(line); appendFileSync(events, "supervisor " + line + "\n"); }, pollMs: 10, startupMs: 1000, childStopMs: 500,
+  });
+  t.after(async () => {
+    for (const child of children.values()) child.kill("SIGKILL");
+    await running.catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
+  });
+  const text = () => readFileSync(events, "utf8");
+  async function until(check) {
+    for (let tries = 0; tries < 200; tries += 1) { if (check()) return; await delay(10); }
+    assert.fail("supervisor fixture did not reach its checkpoint: " + text() + said.join(";"));
+  }
+  return { running, children, said, text, until, term: () => signal("SIGTERM") };
+}
+
+test("image supervisor admits SSH and host run only after its broker is ready", async (t) => {
+  const fx = await supervisorFixture(t);
+  await fx.until(() => fx.text().includes("host started"));
+  const events = fx.text().split("\n");
+  assert.ok(events.indexOf("broker started") < events.indexOf("broker ready"));
+  assert.ok(events.indexOf("broker ready") < events.indexOf("ssh spawned"));
+  assert.ok(events.indexOf("ssh spawned") < events.indexOf("host spawned"));
+  fx.term();
+  assert.equal(await fx.running, 0);
+  const stopped = fx.text().split("\n");
+  assert.ok(stopped.indexOf("host ended") < stopped.indexOf("broker TERM"), fx.text());
+});
+
+test("TERM during broker readiness starts neither SSH nor host run", async (t) => {
+  const fx = await supervisorFixture(t, { ready: false });
+  await fx.until(() => fx.text().includes("status started"));
+  fx.term();
+  assert.equal(await fx.running, 0);
+  assert.doesNotMatch(fx.text(), /(?:ssh|host) started/);
+  assert.match(fx.text(), /broker ended/);
+});
+
+test("a dead broker cannot be made ready by a stale daemon status", async (t) => {
+  const fx = await supervisorFixture(t, { statusTrueAfterBrokerExit: true });
+  assert.equal(await fx.running, 1);
+  assert.doesNotMatch(fx.text(), /(?:ssh|host) started/);
+  assert.match(fx.said.join("\n"), /broker.*exited/);
+});
+
+test("unexpected broker death drains host run and fails the container", async (t) => {
+  const fx = await supervisorFixture(t);
+  await fx.until(() => fx.text().includes("host started"));
+  fx.children.get("broker").kill("SIGKILL");
+  assert.equal(await fx.running, 1);
+  assert.match(fx.text(), /host TERM[\s\S]*host ended/);
+  assert.match(fx.said.join("\n"), /broker.*exited/);
+});
+
+
+test("sshd death is reported while healthy agents keep running", async (t) => {
+  const fx = await supervisorFixture(t);
+  await fx.until(() => fx.text().includes("host started"));
+  fx.children.get("ssh").kill("SIGKILL");
+  await fx.until(() => fx.said.some(line => line.startsWith("sshd exited")));
+  assert.doesNotMatch(fx.text(), /host TERM|broker TERM/);
+  fx.term();
+  assert.equal(await fx.running, 0);
+});
+
+test("unexpected host run exit stops the broker and fails the container", async (t) => {
+  const fx = await supervisorFixture(t);
+  await fx.until(() => fx.text().includes("host started"));
+  fx.children.get("host").kill("SIGKILL");
+  assert.equal(await fx.running, 1);
+  assert.match(fx.text(), /broker TERM[\s\S]*broker ended/);
+});
+
+
+test("a status-probe spawn error is retried before broker readiness expires", async (t) => {
+  const fx = await supervisorFixture(t, {statusSpawnFailsOnce:true});
+  await fx.until(() => fx.text().includes("host started"));
+  assert.ok(fx.said.includes("status could not start"), "the real failed spawn was observed");
+  assert.ok(fx.said.includes("broker ready (daemon_running: true)"));
+  assert.equal(fx.text().split("status spawned").length-1 >= 2,true,"readiness was retried");
+  fx.term();
+  assert.equal(await fx.running,0,"transient status failure does not fail the container");
+});
+
+
+test("broker death while host run drains is a failed container stop", async (t) => {
+  const fx = await supervisorFixture(t);
+  await fx.until(() => fx.text().includes("host started"));
+  fx.term();
+  await fx.until(() => fx.text().includes("host TERM"));
+  assert.doesNotMatch(fx.text(), /host ended/, "the host must still be draining when delivery dies");
+  fx.children.get("broker").kill("SIGKILL");
+  assert.equal(await fx.running, 1, "delivery lost before host drain completes cannot be a clean stop");
+  assert.match(fx.text(), /host ended/);
+});
+
+
+test("SSH and broker final cleanup share one grace span after host run ends", async (t) => {
+  const fx = await supervisorFixture(t, {stubbornFinish:true});
+  await fx.until(() => fx.text().includes("ssh listening") && fx.text().includes("host listening"));
+  fx.term();
+  assert.equal(await fx.running,1,"forced cleanup is reported as a failed stop");
+  const events=fx.text().split("\n");
+  assert.ok(events.indexOf("host ended") < events.indexOf("broker TERM"),fx.text());
+  assert.ok(events.indexOf("broker TERM") < events.indexOf("supervisor sshd exited (SIGKILL)"),"broker must be asked to stop before SSH consumes its entire grace: "+fx.text());
+  assert.ok(events.includes("supervisor broker exited (SIGKILL)"));
+});
+
+
+test("a status without our live broker PID cannot admit agents", async (t) => {
+  for (const brokerStatusPid of ["other", "missing"]) {
+    const fx = await supervisorFixture(t, {brokerStatusPid});
+    await fx.until(() => fx.text().split("status spawned").length-1 >= 3);
+    assert.doesNotMatch(fx.text(), /(?:ssh|host) spawned/, brokerStatusPid);
+    fx.term();
+    assert.equal(await fx.running,0);
+  }
+});
+
+
+test("a synchronous ENOMEM status-probe spawn is retried before readiness expires", async (t) => {
+  const fx = await supervisorFixture(t, {statusSpawnThrowsOnce:true});
+  await fx.until(() => fx.text().includes("host started"));
+  assert.ok(fx.said.includes("status could not start"), "the synchronous spawn failure was observed");
+  assert.ok(fx.text().split("status spawned").length-1 >= 2, "readiness was retried");
+  fx.term();
+  assert.equal(await fx.running,0,"a transient synchronous status failure does not fail the container");
+});
+
+
+test("TERM kills a read-only status probe without failing the shortened stop grace", async (t) => {
+  for (const statusSpawnThrowsOnce of [false, true]) {
+    const fx = await supervisorFixture(t, {statusIgnoresTerm:true, statusSpawnThrowsOnce});
+    await fx.until(() => fx.text().includes("status listening") && fx.text().includes("broker listening"));
+    const probe = fx.children.get("status");
+    fx.term();
+    assert.equal(await fx.running,0,"forced read-only probe cleanup is a clean startup stop");
+    assert.equal(probe.signalCode,"SIGKILL","the probe is killed and awaited");
+    assert.doesNotMatch(fx.text(), /(?:ssh|host) spawned/);
+    assert.match(fx.text(), /broker TERM[\s\S]*broker ended/);
+  }
+});
+
+
+test("every Dockerfile COPY source is admitted by the closed build context", () => {
+  const rules = read(".dockerignore").split("\n").map(line => line.trim()).filter(line => line && !line.startsWith("#"));
+  assert.equal(rules.shift(), "**", "image context starts closed");
+  const admitted = new Set(rules.map(rule => {
+    assert.match(rule, /^![A-Za-z0-9][A-Za-z0-9._-]*$/, "build context permits only named root files");
+    return rule.slice(1);
+  }));
+  const required = new Set(["Dockerfile"]);
+  for (const [, instruction] of read("Dockerfile").matchAll(/^COPY\s+(.+)$/gm)) {
+    const tokens = instruction.trim().split(/\s+/);
+    if (tokens.some(token => token.startsWith("--from="))) continue;
+    const files = tokens.filter(token => !token.startsWith("--")).slice(0,-1);
+    assert.ok(files.length, "COPY must name source inputs");
+    for (const file of files) {
+      assert.match(file, /^[A-Za-z0-9][A-Za-z0-9._-]*$/, "COPY context sources are explicit root files");
+      required.add(file);
+      assert.ok(admitted.has(file), `COPY source ${file} is excluded from the image context`);
+    }
+  }
+  assert.deepEqual([...admitted].sort(), [...required].sort(), "do not admit unrelated files into the image");
 });

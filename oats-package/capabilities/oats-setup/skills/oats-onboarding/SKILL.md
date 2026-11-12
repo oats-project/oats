@@ -331,7 +331,7 @@ receipt repair.
 
 Set this up only after cards 1–8 succeed, and only when the intake authorizes proposed
 knowledge reviewed and merged by an agent. It needs kernel ≥ 0.69.2 (the first that
-reads the `background:` key oats.okf's package souls declare) and `oats.okf` 6.0.2. The contract is
+reads the `background:` key oats.okf's package souls declare) and `oats.okf` 6.0.3. The contract is
 `docs/knowledge.md` ("Knowledge operations") and `docs/schedules.md`
 ("Triggers", "Workspace triggers and schedules") in the installed kernel, and
 okf's own README at the pinned tag; read them, and okf's own
@@ -339,7 +339,7 @@ okf's own README at the pinned tag; read them, and okf's own
 
 ### 1. Pin the package
 
-`packages: { oats.okf: v6.0.2 }` in the workspace file, then `oats sync`
+`packages: { oats.okf: v6.0.3 }` in the workspace file, then `oats sync`
 (`/oats-package-pins`). One pin brings, versioned and locked together:
 
 - the capabilities: `oats.okf` (every working soul's knowledge slot) and

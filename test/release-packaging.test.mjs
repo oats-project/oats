@@ -117,10 +117,10 @@ test("the kernel declares its Node floor, the lock carries it, and no package de
 
 test("v2 preparation aligns standalone OKF and Git-only theory catalog pins", () => {
   for (const cap of MIRROR_PATHS) {
-    assert.equal(json(`${cap}/oats.json`).version, "6.0.2");
+    assert.equal(json(`${cap}/oats.json`).version, "6.0.3");
     assert.equal(json(`${cap}/oats.json`).compatibility.oats, ">=0.69.2", `${cap}: OKF 5.6.0+ package souls say background:, which a kernel before 0.69.2 refuses; provider CI separately qualifies the real kernel`);
   }
-  assert.equal(json("package-catalog.json").packages["oats.okf"].ref, "v6.0.2");
+  assert.equal(json("package-catalog.json").packages["oats.okf"].ref, "v6.0.3");
   // The getting-started skill writes a workspace file pinning oats.framework only (#1314): that version is the catalog's.
   const gettingStarted = readFileSync(join(ROOT, "skills/oats-getting-started/SKILL.md"), "utf8");
   assert.match(gettingStarted, /^  oats\.framework: v1\.24\.1\b/m, "the getting-started skill shows the catalog's oats.framework version");

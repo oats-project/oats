@@ -7,7 +7,7 @@ import { hostname, tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fs, join, dirname, resolve, safePath, readJSON, save, digest, tree, withLock, fail, syncDir, identifier, relPath, within, displayRepo, hash, exec } from './io.mjs';
 import { noGit, gitTimeoutMs, consultMaxAgeMs, splitRef, resolveNodes, resolveSubjects } from './config.mjs';
-import { git, gitEnv, validateBase, readerWarnings, baseLock, journalPath, preflightLocalRepository, requireNotShallow, verifyRemote, unavailable } from './stores.mjs';
+import { git, gitEnv, validateBase, readerWarnings, invalidWarning, baseLock, journalPath, preflightLocalRepository, requireNotShallow, verifyRemote, unavailable } from './stores.mjs';
 import { layoutOf, parseFrontmatter, parseView, plainText, parseSubjectsIndex, counts as viewCounts, subjectFile, viewFile, subjectOfPath, SUBJECT_REF, KINDS } from './okf-reindex.mjs';
 import { verdictLanes } from './verdicts.mjs';
 
@@ -141,7 +141,10 @@ function resolveGit(bindings, alias, base, { fresh = false, preferCached = false
       return gitContext(bindings, alias, base, cache, state);
     }, { waitMs: state ? Math.min(gitTimeoutMs(), 60000) : gitTimeoutMs() }); // a cached commit can be served sooner
   } catch (e) {
-    if (e.code === 'E_LOCKED' && state) return gitContext(bindings, alias, base, cache, { ...state, error: `host cache lock is busy (${lock}); serving the last fetched accepted commit` });
+    if (e.code === 'E_LOCKED' && state) return gitContext(bindings, alias, base, cache, { ...state, error: e.otherHost
+      // #142: a lock another host left never clears by itself; say how it is released.
+      ? `serving the last fetched accepted commit: ${e.message}`
+      : `host cache lock is busy (${lock}); serving the last fetched accepted commit` });
     throw e;
   }
 }
@@ -330,12 +333,16 @@ export function verdict(ctx, { fetchMissing = true, saveResult = true } = {}) {
     // again rather than read without them (a 6.0 pre-release refused staleness).
     // okf 6.0.2: version 4 adds `unstamped` (claims/ concepts without id, which
     // a reader tolerates): a 6.0.0/6.0.1 verdict cached such a commit invalid.
+    // okf 6.0.3 (#140): an invalid verdict also carries its first finding and
+    // their count, for W_BASE_INVALID. The version stays: a valid verdict is
+    // unchanged, and an E_VALIDATION verdict cached without them (6.0.0-6.0.2)
+    // is judged again once, below. Another code has one message, no findings.
     try { const v = run(); return { version: 4, ok: true, digest: v.digest, nodes: v.meta.nodes, subjects: v.subjects, stale: v.stale ?? 0, unstamped: v.unstamped ?? 0 }; }
-    catch (e) { if (!VALIDATION_CODES.has(e.code)) throw e; return { version: 4, ok: false, error: { code: e.code, message: e.message } }; }
+    catch (e) { if (!VALIDATION_CODES.has(e.code)) throw e; return { version: 4, ok: false, error: { code: e.code, message: e.message }, ...(Array.isArray(e.findings) && e.findings.length ? { first: e.findings[0], count: e.findings.length } : {}) }; }
   };
   if (ctx.kind === 'directory') return judge(() => validateBase(ctx.base.path, ctx.base, { reader: true }));
   const file = validationFile(ctx);
-  if (fs.existsSync(file)) { const cached = readJSON(file); if (cached?.version === 4 && cached.commit === ctx.commit && cached.root === ctx.base.root) return cached; }
+  if (fs.existsSync(file)) { const cached = readJSON(file); if (cached?.version === 4 && cached.commit === ctx.commit && cached.root === ctx.base.root && (cached.ok || cached.error?.code !== 'E_VALIDATION' || cached.first !== undefined)) return cached; }
   const scratch = fs.mkdtempSync(join(saveResult ? dirname(ctx.cache) : fs.realpathSync(tmpdir()), saveResult ? '.validate-' : 'okf-validate-'));
   const root = join(scratch, 'tree');
   // Also used by offline inspection: never lazy-fetch while checking objects.
@@ -670,17 +677,17 @@ export function withLayout(source, flags, fn) {
 // and caches nothing, so the next read tries again; the read itself goes on.
 // okf 6.0.2 (#138): a claims/ concept merged without its id is read the same
 // way, with W_ID_MISSING; `bases` reports the same lines (readerWarnings).
+// okf 6.0.3 (#140): a base that fails validation for any other reason is
+// still answered from its committed indexes (as cat, ls and search serve it),
+// with W_BASE_INVALID naming the first finding; before, the verbs said nothing.
+// The spawn and every writer refuse such a base; `bases` reads INVALID.
 const warned = [];
 export const takeWarnings = () => warned.splice(0);
 const note = list => { for (const w of list) if (!warned.includes(w)) warned.push(w); };
 function noteWarnings(ctx) {
   let v;
-  if (ctx.kind === 'directory') { try { v = validateBase(ctx.base.path, ctx.base, { reader: true }); } catch { return; } }
-  else {
-    try { v = verdict(ctx, { fetchMissing: !ctx.offline }); } catch { return; }
-    if (!v.ok) return;
-  }
-  note(readerWarnings(v, short(ctx.receipt)));
+  try { v = verdict(ctx, { fetchMissing: !ctx.offline }); } catch { return; }
+  note(v.ok ? readerWarnings(v, short(ctx.receipt)) : [invalidWarning(v, short(ctx.receipt))]);
 }
 /** Where each subject ref lives: the one bound base with the subject layout
  *  holding its file (--base narrows the search to one). → Map ref → alias.

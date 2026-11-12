@@ -85,6 +85,7 @@ export function withLock(path, fn, { waitMs = 0, reclaimDead = false } = {}) {
         const owner = lockOwner(join(path, 'owner.json'));
         if(owner?.host === hostname() && !pidAlive(owner.pid)) fail('E_LOCKED', `abandoned lock: ${path} is held by process ${owner.pid}, which is gone; once no oats okf process is running, release it with: oats okf unlock --lock ${quote(path)} --token ${quote(owner.token)} --soul <soul>`);
         if(owner?.host === hostname()) fail('E_LOCKED', `busy lock: ${path} is held by running process ${owner.pid}; try again once it finishes`);
+        if(owner) throw Object.assign(new Error(otherHost(path, owner)), { code: 'E_LOCKED', otherHost: true });
         fail('E_LOCKED', `busy or abandoned lock: ${path}; inspect owner.json, never reclaim by age`);
       }
       pause(Math.max(1, Math.min(delay, deadline - Date.now())));
@@ -131,10 +132,32 @@ function reclaim(path) {
     fs.rmSync(path, { recursive: true }); syncDir(dirname(path)); return true;
   } finally { if (lockOwner(guard)?.token === me.token) fs.rmSync(guard, { force: true }); }
 }
-export function unlock(path, token) {
-  safePath(path); const o = readJSON(join(path, 'owner.json'));
-  if (!token || o.token !== token || o.host !== hostname()) fail('E_LOCKED', 'explicit matching local lock token required');
-  try { process.kill(o.pid, 0); fail('E_LOCKED', 'lock owner is still alive'); } catch (e) { if(e.code !== 'ESRCH') throw e; }
+/** The refusal for a lock whose owner is on another host: its process cannot
+ *  be probed from here, so only the operator can say that host is gone. */
+const otherHost = (path, owner) => `lock ${path} is held by process ${owner.pid} on host ${JSON.stringify(owner.host)}, not this host (${JSON.stringify(hostname())}), and a process on another host cannot be checked from here; it is never released automatically or by age. If that host still runs, wait for it. If it is gone for good (a recreated container, a retired machine) and no oats okf process uses this lock, release it with: oats okf unlock --lock ${quote(path)} --token ${quote(owner.token)} --host-gone ${quote(owner.host)} --soul <soul>`;
+/** Release an abandoned lock, by its token. A lock of this host is released
+ *  once its process is gone. A lock of another host (#142: a recreated
+ *  container has a new hostname) is released only with `hostGone` equal to the
+ *  owner's host: the operator's statement that the host is gone. Its pid is
+ *  another host's, so it is not probed. */
+export function unlock(path, token, hostGone) {
+  safePath(path); const o = lockOwner(join(path, 'owner.json'));
+  if (!o) {
+    // Never advise removing a path that is not plainly a lock (#142 review):
+    // a mistyped --lock may name the base itself.
+    let stat = null; try { stat = fs.lstatSync(path); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+    if (!stat) fail('E_NOT_FOUND', `no lock at ${path}; nothing to release`);
+    if (!stat.isDirectory() || !/\.(okf-)?lock$/.test(path)) fail('E_USAGE', `${path} is not an oats okf lock (a directory named *.okf-lock or *.lock that holds owner.json); nothing was released`);
+    fail('E_LOCKED', `lock ${path} has no readable owner.json (token, pid and host), so no token can release it; nothing was released. Once no oats okf process that shares it is running, on this or any other host, remove that lock directory by hand`);
+  }
+  if (!token || o.token !== token) fail('E_LOCKED', 'explicit matching lock token required: --token is the token in the lock\'s owner.json');
+  const local = o.host === hostname();
+  if (hostGone !== undefined) {
+    if (typeof hostGone !== 'string' || !hostGone) fail('E_USAGE', '--host-gone needs the host named in the lock\'s owner.json');
+    if (local) fail('E_LOCKED', `--host-gone is for a lock held on another host; this lock's owner is this host (${JSON.stringify(o.host)}): drop --host-gone`);
+    if (hostGone !== o.host) fail('E_LOCKED', `--host-gone ${JSON.stringify(hostGone)} is not the lock's owner host (${JSON.stringify(o.host)}); nothing was released`);
+  } else if (!local) fail('E_LOCKED', otherHost(path, o));
+  if (local && pidAlive(o.pid)) fail('E_LOCKED', 'lock owner is still alive');
   fs.rmSync(path, { recursive: true }); syncDir(dirname(path)); return { unlocked: path };
 }
 export const identityKeys = ['OATS_INSTANCE','OATS_INSTANCE_HOME','OATS_HOME','PI_AGENT_HOME','PI_AGENT_NAME','PI_AGENT_INSTANCE','PI_AGENTS_ROOT','OATS_ROOT','OATS_SOUL','OATS_SOUL_ID','OATS_AGENT','OATS_KIND','OATS_EVENT','OATS_CONTEXT','OATS_REPO','OATS_WORK','OATS_BRANCH','OATS_META','OATS_SETTINGS','OATS_SETTINGS_ORIGINS','OATS_BINDING_FILE','OATS_SOURCE_RECEIPT_FILE','OATS_INVOCATION_CONTEXT_FILE','OATS_DEPLOYMENT','OATS_RESOLUTION'];

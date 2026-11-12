@@ -7282,7 +7282,11 @@ this machine's: it takes no `--server`. It runs until SIGTERM or SIGINT.
   child process. A minute whose tick still runs is skipped; a minute missed
   is never replayed. With no scope registered it ticks nothing and says so.
 - **On SIGTERM or SIGINT.** No further minute starts; a tick or a sweep that
-  runs is waited for; it lists once; then it stops every running home, side
+  runs gets 10 seconds to finish naturally, then a private admission fence
+  stops further launches and owned child groups get a further 5-second
+  cancellation phase. Interrupted attempts keep their unknown/reconcile
+  accounting. It performs a final listing with a 3-second read budget; then
+  it stops every running home, side
   by side, each with the stop `oats session restart` uses: SIGTERM to the
   harness, a wait of `--stop-grace` seconds (default 20), never escalated.
   Each home's stop record is written before its harness is signalled and

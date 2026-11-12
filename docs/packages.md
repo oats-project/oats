@@ -48,7 +48,7 @@ whole organisation:
 
 ```yaml
 packages:
-  oats.okf: v6.0.2                                    # bare version → the official catalog
+  oats.okf: v6.0.3                                    # bare version → the official catalog
   acme.tools: git:github.com/acme/tools@v0.4.0        # direct ref: git:<repo>@<tag or full OID>
 ```
 
@@ -79,8 +79,8 @@ members:
   - git:github.com/acme/platform
 packages:
   oats.framework: v1.24.1
-  oats.okf: v6.0.2
-  oats.aweb: v1.40.0
+  oats.okf: v6.0.3
+  oats.aweb: v1.41.0
 teams:
   platform: { team: "platform:acme.aweb.ai", description: Platform engineering }
 defaults:
@@ -109,7 +109,7 @@ decision recorded in the lock.
 $ oats sync
 workspace  acme  (github.com/acme/agents @ 3f2a9c1e)
 members    agents ✓↔ (@ 3f2a9c1e)   platform ✓↔ (@ 77c0a1b2)   billing ✗ (no-backlink)
-packages   acme.tools 0.4.0 ✓ (@ 47f4b816)   oats.okf 6.0.2 ✓ (@ 5c3f684c)
+packages   acme.tools 0.4.0 ✓ (@ 47f4b816)   oats.okf 6.0.3 ✓ (@ fa13ca0b)
 changed    acme.tools  — → 0.4.0 (@ 47f4b816)
 souls      9 discovered (6 members, 1 external, 2 package, 0 disabled here) · 0 private capabilities
 teams      platform (shared) · this deployment's: oats teams
@@ -155,7 +155,7 @@ Declaring a package in the workspace's `packages:` is the trust decision
 ## `oats package add | remove`
 
 ```bash
-oats package add oats.aweb v1.40.0                         # a catalog version
+oats package add oats.aweb v1.41.0                         # a catalog version
 oats package add acme.tools git:github.com/acme/tools@v0.4.0
 oats package remove acme.tools
 ```
@@ -181,8 +181,8 @@ same workspace commit hold identical locks.
       "source": "catalog:oats.okf",
       "url": "https://github.com/awebai/oats-okf.git",
       "path": "oats-package",
-      "version": "6.0.2",
-      "commit": "5c3f684c35b2ea9eeec5cdca915b6d845273fb4d",
+      "version": "6.0.3",
+      "commit": "fa13ca0b026995fe5a278f7fb922ecd4eb09d6a9",
       "integrity": "sha256-…",
       "capabilities": ["oats.okf", "oats.okf-harvest", "oats.okf-maintenance"]
     },
@@ -431,7 +431,7 @@ A soul that names one of the package's capabilities with
 {
   "policy": "docs/official-catalog.md",
   "packages": {
-    "oats.okf":       { "url": "https://github.com/awebai/oats-okf.git", "ref": "v6.0.2", "path": "oats-package" },
+    "oats.okf":       { "url": "https://github.com/awebai/oats-okf.git", "ref": "v6.0.3", "path": "oats-package" },
     "oats.framework": { "url": "https://github.com/awebai/oats.git", "ref": "oats-framework/v1.24.1", "path": "oats-package" }
   }
 }

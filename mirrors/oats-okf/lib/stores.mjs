@@ -54,9 +54,12 @@ export const journalPath = b => `${b.path}.okf-publication.json`;
 // (W_ID_MISSING). Every writer (propose, migration, publication) keeps the
 // default, strict: what it writes is refused until regenerated or stamped;
 // propose alone lets through, by its `allow`, the missing ids of its own claims
-// and (6.0.2) of accepted claims/ concepts it leaves untouched, as a warning.
+// and (6.0.2) of accepted claims/ concepts it leaves untouched, as a warning;
+// from 6.0.3 (#140) also of accepted old-node concepts it leaves untouched.
 const INDEX_WARNING=/: generated index is (stale|missing|orphan); run okf-reindex\.mjs$/;
-const ID_WARNING=/: missing 'id' \(stamped by the maintainer at acceptance\)$/;
+/** The validator's finding for any concept without `id`: an error under
+ *  claims/, a strict warning in an old node. */
+export const ID_WARNING=/: missing 'id' \(stamped by the maintainer at acceptance\)$/;
 /** The validator's error for a claims/ concept without `id` (one claim each). */
 export const UNSTAMPED_ERROR=/^claims\/.+\.md: missing 'id' \(stamped by the maintainer at acceptance\)$/;
 /** `allow(findings)` (okf 6.0, propose only) returns the findings that still
@@ -70,13 +73,24 @@ export function validateBase(root, base, { allow = findings => findings, reader 
   const tolerated=subjectLayout ? result.warnings.filter(w=>INDEX_WARNING.test(w) || ID_WARNING.test(w)) : [];
   const unstamped=subjectLayout ? result.errors.filter(e=>UNSTAMPED_ERROR.test(e)) : [];
   const findings=allow([...result.errors.filter(e=>!unstamped.includes(e)),...result.warnings.filter(w=>!tolerated.includes(w))]);
-  if(findings.length) fail('E_VALIDATION', findings.join('; '));
+  if(findings.length) throw Object.assign(new Error(findings.join('; ')),{code:'E_VALIDATION',findings});
   return {files,meta,digest:digest(files),subjects:subjectsOf(files,meta),stale:tolerated.filter(w=>INDEX_WARNING.test(w)).length,unstamped:unstamped.length};
 }
 /** The reader's warning for a base whose generated indexes are stale. */
 export const staleWarning=(n,at)=>`W_INDEX_STALE: ${n} generated file${n===1?'':'s'} stale at ${at}; the maintainer regenerates (okf-reindex.mjs)`;
 /** The reader's warning for a base holding claims/ concepts merged without id. */
 export const unstampedWarning=(n,at)=>`W_ID_MISSING: ${n} claim${n===1?' lacks':'s lack'} an id at ${at}; the maintainer stamps ${n===1?'it':'them'} (knowledge-review)`;
+/** okf 6.0.3 (#140): the subject verbs' warning for a base that fails
+ *  validation for a reason no reader tolerates. They still answer from the
+ *  committed indexes; the spawn and `bases` refuse it. `v` is an invalid
+ *  verdict ({error: {message}, first?, count?}; a code other than
+ *  E_VALIDATION has only the message). The finding is committed, untrusted
+ *  text (paths, frontmatter values): control characters go, and it is cut. */
+export const invalidWarning=(v,at)=>{
+  const cut=t=>{ const line=String(t ?? '').replace(/[\u0000-\u001f\u007f-\u009f]+/g,' ').replace(/\s+/g,' ').trim(); return line.length>200?`${line.slice(0,200)}…`:line; };
+  const more=(v?.count ?? 1)-1;
+  return `W_BASE_INVALID: ${at} fails validation: ${cut(v?.first ?? v?.error?.message)}${more>0?` (and ${more} more)`:''}; answers come from the committed indexes as they are; the maintainer repairs the base (\`oats okf bases\`)`;
+};
 /** Every reader warning for a validated base, in a fixed order. */
 export const readerWarnings=({stale=0,unstamped=0},at)=>[...(stale>0?[staleWarning(stale,at)]:[]),...(unstamped>0?[unstampedWarning(unstamped,at)]:[])];
 /** okf 6.0: the subject refs of a base with the subject layout (its subject

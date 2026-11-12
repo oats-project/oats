@@ -383,10 +383,12 @@ export function wakeDaemonAssessment(status, {minimumVersion}) {
   return {problems: [], warnings};
 }
 
-// aw v1.36.37 wake/stream.go's complete StreamPhase vocabulary. Unknown phases
-// must not be treated as reconnects. Phase determines grant-stream readiness:
+// aw v1.36.37 wake/stream.go's complete StreamPhase vocabulary, and `refused`,
+// which replaces `quarantined` from aw 1.36.58 (cli/go/wake/stream.go:40 at
+// aw-v1.36.58); the floor still reports `quarantined`. Unknown phases must
+// not be treated as reconnects. Phase determines grant-stream readiness:
 // stream.go:269-279,326 gives retrying its recoverable error text.
-const STREAM_PHASES = ['starting', 'streaming', 'retrying', 'quarantined', 'stopped'];
+const STREAM_PHASES = ['starting', 'streaming', 'retrying', 'quarantined', 'refused', 'stopped'];
 const TRANSIENT_STREAM_PHASES = ['starting', 'retrying'];
 const GRANT_BROKER_REMEDY = 'restart the seat to re-register the broker with the current grant home';
 
@@ -402,6 +404,22 @@ function grantStreamSummary(hit) {
   const network = /\b(?:dial tcp: )?(?:network is unreachable|connection refused|connection reset by peer|context deadline exceeded|i\/o timeout|no such host|TLS handshake timeout|unexpected EOF|EOF)\b/.exec(hit.stream_error || '')?.[0];
   const remedy = TRANSIENT_STREAM_PHASES.includes(hit.stream_phase) && hit.stream_admitted === true ? 'the broker reconnects automatically' : GRANT_BROKER_REMEDY;
   return `broker receive stream is ${phase}${match ? ` (HTTP ${match[1]}${safeDetail})` : network ? ` (${network})` : hit.stream_error ? ' (stream error reported)' : ''}${hit.stream_admitted !== true ? '; stream admission is not confirmed' : ''}; ${remedy}`;
+}
+
+/** Why a target that aw 1.36.58 or later reports as not admitted is so, when
+ *  a stream of it was refused by the server: the phase, the cause aw names (an
+ *  HTTP status, a terminal event's name or "silence"), the next attempt and
+ *  the remedy. Only values in aw's own shape are named; the error text never
+ *  is. Undefined when no stream of the row is refused. */
+function refusedStreamMessage(row) {
+  const refused = Array.isArray(row.receive_identities) ? row.receive_identities.filter(r => object(r) && r.stream_phase === 'refused') : [];
+  if (!refused.length) return undefined;
+  const [stream] = refused;
+  const who = typeof stream.team_id === 'string' && /^[A-Za-z0-9._-]{1,64}:[A-Za-z0-9.-]{1,253}$/.test(stream.team_id) ? `team ${stream.team_id}` : pathValue(stream.identity_home) ? basename(stream.identity_home) : 'an identity';
+  const cause = typeof stream.stream_cause === 'string' && /^(?:[1-5]\d\d|[a-z][a-z0-9_]{0,63})$/.test(stream.stream_cause) ? ` (cause ${stream.stream_cause})` : '';
+  const next = Number.isFinite(parseTimestamp(stream.stream_next_attempt_at)) ? `, next at ${stream.stream_next_attempt_at}` : '';
+  const more = refused.length > 1 ? ` (and ${refused.length - 1} more refused stream${refused.length > 2 ? 's' : ''})` : '';
+  return `broker receive stream for ${who} is refused by the server${cause}${more}; the broker retries it on its own${next}; fix what the server refused, then restart the home to register it again, which retries at once`;
 }
 
 function receiveStreamAssessment(hit, grantHome, fallback) {
@@ -432,7 +450,7 @@ export function targetReceiveAssessment(status, {home, runtimeDelivery, runtime,
   const row = rows[0];
   if (row.paused !== false) return fail('wake-target-paused', 'broker target is paused or its pause state is unknown');
   if (row.phase !== 'active') return fail('wake-target-inactive', 'broker target is not confirmed active');
-  if (row.stream_admitted !== undefined && row.stream_admitted !== true) return fail('wake-stream-unavailable', 'broker target reports streams not admitted or malformed admission evidence');
+  if (row.stream_admitted !== undefined && row.stream_admitted !== true) return fail('wake-stream-unavailable', refusedStreamMessage(row) ?? 'broker target reports streams not admitted or malformed admission evidence');
   if (row.primary_identity_home !== undefined && (!pathValue(row.primary_identity_home) || (primary && !samePath(row.primary_identity_home, primary)))) return fail('wake-target-binding', 'supplied primary locator is malformed or contradicts the retained locator');
   const actualRuntime = row.runtime_delivery;
   if (!['external-session', 'native-channel', 'native-pi'].includes(actualRuntime) ||
