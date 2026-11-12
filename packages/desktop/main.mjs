@@ -63,6 +63,11 @@ import { createWindowSet } from "./window-set.mjs";
 import { parseWindowRecords, resolveView, restorePlan, clampBounds, windowTitle, createWindowRecords } from "./window-records.mjs";
 import { createResumeWiring } from "./session-resume-launch.mjs";
 import { createResumeTrigger, localDeploymentIds } from "../client/session-resume-trigger.mjs";
+import { retiredSettingNotices } from "./retired-settings.mjs";
+
+// A launch that still sets a setting the Desktop no longer reads is told so, once (retired-settings.mjs):
+// every launch, before the single-instance handoff below, so one made while the Desktop runs is told too.
+for (const line of retiredSettingNotices(process.env)) console.error(line);
 
 const require = createRequire(import.meta.url);
 const pty = require("node-pty");

@@ -39,6 +39,7 @@ module.exports = {
     "server-host.mjs",
     "backend-client.mjs",
     "backend-socket.mjs",
+    "retired-settings.mjs",
     "tmux-target.mjs",
     "local-tmux-io.mjs",
     "remote-target.mjs",

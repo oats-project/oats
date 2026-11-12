@@ -26,4 +26,5 @@
 ## Removed
 
 - **`OATS_DESKTOP_PORT`.** The Desktop's backend has no port to choose: it
-  listens on the private socket the app makes for it.
+  listens on the private socket the app makes for it. A launch that still sets
+  the variable, to any value, gets one line on stderr saying that it is ignored.

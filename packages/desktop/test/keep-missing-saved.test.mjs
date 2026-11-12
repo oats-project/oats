@@ -112,7 +112,7 @@ test('a kept saved entry that is not a deployment stays inert: never served, nev
   // The proxy's not-served refusal (and so Re-add) needs a deployment that validates: a read of the kept
   // entry is proxied like any unknown id, never answered as "not served".
   const known = new Set([A, parent, C]);
-  const refusal = createUnservedRefusal({ base: () => 'http://127.0.0.1:4820', body: workspaceNotServed,
+  const refusal = createUnservedRefusal({ body: workspaceNotServed,
     state: () => ({ allowedWs: new Set([A, C]), known: path => known.has(path) && !!d.validate(path) }) });
   assert.equal(refusal(`/api/panel?ws=${encodeURIComponent(parent)}`), null);
   d.unmount(C); assert.equal(refusal(`/api/panel?ws=${encodeURIComponent(C)}`), null, 'a missing one is inert the same way');
