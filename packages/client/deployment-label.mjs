@@ -32,21 +32,21 @@ export function deploymentLabelParts(deployment, terms) {
   return { machine, path };
 }
 
-/** `This Mac · ~/acme`, `altair · ~/northwind`. */
+/** `This Mac · ~/acme`, `builder · ~/northwind`. */
 export function deploymentLabel(deployment, terms) {
   requireTerms(terms, 'deploymentLabel');
   const { machine, path } = deploymentLabelParts(deployment, terms);
   return path ? `${machine} · ${path}` : machine;
 }
 
-/** The last segment of a path ("/Users/juan/awebai/oats-v2" → "oats-v2"), or the last `n`. */
+/** The last segment of a path ("/Users/alex/work/acme" → "acme"), or the last `n`. */
 export function pathTail(path, n = 1) {
   if (typeof path !== 'string' || !path) return '';
   return path.split('/').filter(Boolean).slice(-n).join('/');
 }
 
-/** Each deployment's short name on screen (UI spec, #482): its machine ("This Mac", "altair"); when one
- * machine holds two or more of the deployments, the machine and its path tail ("This Mac · oats-v2"),
+/** Each deployment's short name on screen (UI spec, #482): its machine ("This Mac", "builder"); when one
+ * machine holds two or more of the deployments, the machine and its path tail ("This Mac · acme"),
  * the last two segments when the tails collide. Never an id. Returns Map<deployment id, label>. */
 export function machineLabels(deployments, terms) {
   requireTerms(terms, 'machineLabels');

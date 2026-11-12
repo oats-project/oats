@@ -203,7 +203,7 @@ enter the record.
 7fe2a1b4-9c3d-4e21-b0aa-1f2e3d4c5b6a
 
 # never capture anything from this project's transcripts
-**/-Users-juanre-private-project/**
+**/-Users-alex-private-project/**
 
 # never capture one aw account's comm log
 acme-secret
