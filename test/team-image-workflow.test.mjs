@@ -15,7 +15,8 @@ test("team image verification builds the exact PR head and runs real acceptance 
   const w = workflow("team-image.yml");
   assert.deepEqual(Object.keys(w.on).sort(), ["pull_request", "workflow_dispatch"]);
   assert.deepEqual(w.permissions, { contents: "read" });
-  assert.deepEqual(Object.keys(w.jobs), ["verify"]);
+  assert.deepEqual(Object.keys(w.jobs), ["verify", "packed"]);
+  assert.equal(w.jobs.packed.if, "${{ github.event_name == 'workflow_dispatch' && inputs.packed_kernel }}");
   const job = w.jobs.verify;
   assert.equal(job["runs-on"], "ubuntu-24.04");
   const checkout = job.steps.find((s) => s.uses?.startsWith("actions/checkout@"));

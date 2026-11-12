@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { isDeepStrictEqual } from "node:util";
+import { checkImageLockDiff } from "./team-image-lock-diff.mjs";
 import { checkRelease } from "./check-team-image-release.mjs";
 import { appendFileSync, copyFileSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -11,9 +11,9 @@ import { pathToFileURL } from "node:url";
 const KERNEL = "@awebai/oats";
 const KERNEL_PATH = `node_modules/${KERNEL}`;
 const EXACT = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const packageName = (name) => assert.match(name, /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/, "invalid npm package name");
+export const packageName = (name) => assert.match(name, /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/, "invalid npm package name");
 
-function checkMetadata(name, version, value) {
+export function checkMetadata(name, version, value) {
   packageName(name);
   assert.equal(value?.name, name, `registry metadata name: ${name}`);
   assert.equal(value.version, version, `registry metadata version: ${name}`);
@@ -24,14 +24,14 @@ function checkMetadata(name, version, value) {
   return value;
 }
 
-function resolvedPath(lock, name) {
+export function resolvedPath(lock, name) {
   for (const path of [`${KERNEL_PATH}/node_modules/${name}`, `node_modules/${name}`]) {
     if (lock.packages?.[path]) return path;
   }
   return undefined;
 }
 
-function checkResolved(path, lock, metadata) {
+export function checkResolved(path, lock, metadata) {
   const entry = lock.packages?.[path];
   assert.equal(entry?.version, metadata.version, `resolved version: ${path}`);
   assert.equal(entry.resolved, metadata.dist.tarball, `resolved registry tarball: ${path}`);
@@ -47,18 +47,10 @@ export function checkGeneratedLock({ refType, refName, sourceManifest, sourceLoc
   const version = refName?.slice(1);
   assert.ok(refType === "tag" && refName?.startsWith("v") && EXACT.test(version), "stable release tag required");
   const kernel = checkMetadata(KERNEL, version, metadata[KERNEL]);
-  const expectedManifest = structuredClone(sourceManifest);
-  expectedManifest.dependencies[KERNEL] = version;
-  assert.deepEqual(manifest, expectedManifest, "only the manifest's exact OATS pin may change");
   assert.equal(sourceLock.packages?.[""]?.dependencies?.[KERNEL], sourceManifest.dependencies[KERNEL], "committed image lock root must match its OATS pin");
   assert.equal(sourceLock.packages?.[KERNEL_PATH]?.version, sourceManifest.dependencies[KERNEL], "committed image lock must resolve its OATS pin");
   checkRelease(refType, refName, manifest, lock);
   checkResolved(KERNEL_PATH, lock, kernel);
-  for (const name of Object.keys(sourceManifest.dependencies)) {
-    if (name === KERNEL) continue;
-    const path = `node_modules/${name}`;
-    assert.ok(isDeepStrictEqual(lock.packages[path], sourceLock.packages[path]), `unrelated protected CLI lock entry changed: ${name}`);
-  }
   const allowed = new Set([KERNEL_PATH]);
   for (const [name, pin] of Object.entries(kernel.dependencies ?? {})) {
     assert.match(pin, EXACT, `kernel dependency must be an exact stable version: ${name}`);
@@ -72,23 +64,16 @@ export function checkGeneratedLock({ refType, refName, sourceManifest, sourceLoc
     // That surviving entry is unrelated to the kernel's new resolution.
     if (sourcePath && !lock.packages[sourcePath]) allowed.add(sourcePath);
   }
-  const expectedRoot = structuredClone(sourceLock.packages[""]);
-  expectedRoot.dependencies[KERNEL] = version;
-  assert.deepEqual(lock.packages[""], expectedRoot, "unrelated lock root change");
-  assert.deepEqual({ ...lock, packages: undefined }, { ...sourceLock, packages: undefined }, "unrelated lock metadata change");
-  for (const path of new Set([...Object.keys(sourceLock.packages), ...Object.keys(lock.packages)])) {
-    if (path === "" || allowed.has(path)) continue;
-    assert.ok(isDeepStrictEqual(sourceLock.packages[path], lock.packages[path]), `unrelated lock entry changed: ${path}; migrate the committed image baseline instead of widening this allowance`);
-  }
+  checkImageLockDiff({ sourceManifest, sourceLock, manifest, lock }, allowed);
 }
 
 const json = (file) => JSON.parse(readFileSync(file, "utf8"));
-const runNpmCommand = (args, options) => execFileSync("npm", args, {
+export const runNpmCommand = (args, options) => execFileSync("npm", args, {
   ...options, encoding: "utf8", timeout: 120_000, maxBuffer: 8 * 1024 * 1024,
   stdio: ["ignore", "pipe", "pipe"],
 });
 
-function imageInputs(source) {
+export function imageInputs(source) {
   const regular = (name) => assert.ok(lstatSync(join(source, name)).isFile(), `image input must be a regular file: ${name}`);
   regular(".dockerignore");
   const rules = readFileSync(join(source, ".dockerignore"), "utf8").split(/\r?\n/).map((s) => s.trim()).filter((s) => s && !s.startsWith("#"));

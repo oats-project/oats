@@ -503,6 +503,53 @@ After acceptance, verification also runs the real Docker export, Skopeo
 compression and configuration-digest checks used before publication, without
 a registry credential or any registry/release write.
 
+Manual verification offers two additional proofs:
+
+- `default_payload_proof` builds the registry context a second time without
+  the additive BuildKit mount and compares the full installed `/opt/agent`
+  payload: file paths, sizes, content hashes, modes, directories and link
+  targets. Image history and IDs may differ; payload differences fail.
+- `packed_kernel` prepares a private context from the selected commit and
+  runs the image with that commit's own `npm pack` kernel. This job is
+  manual-only until the image owner's compatible final baseline lands.
+  Ordinary PR verification keeps the committed context in the meantime.
+  An incompatible baseline fails explicitly, with no registry-kernel fallback
+  and no wider lock allowance. The committed baseline needs final OATS
+  0.69.18+ and aw 1.36.59+ with the compatible exact runtime closure.
+  With the committed baseline, the packed job refuses; its positive real
+  packed-image acceptance is **NOT RUN** until that compatible baseline lands.
+
+Packing disables lifecycle scripts and uses a private npm home/cache, empty
+user/global configs and an explicit public registry. Every packed file must
+be in the kernel's literal `package.json.files` list, including the explicitly
+declared manifest and license. The tarball is checked against its SHA512
+integrity and the exact checkout's regular Git files, sizes, bytes and modes;
+links, unsafe paths and untracked/generated payloads refuse. The source
+checkout stays unchanged.
+
+Only the private image manifest changes to the fixed
+`file:../oats-build-inputs/oats-pr-kernel.tgz` dependency. The same tarball is
+provided in the closed context and a private host-side sibling directory,
+so npm lock generation and the build resolve the same bytes. The existing
+`npm ci --ignore-scripts` RUN gets a read-only context mount at
+`/opt/oats-build-inputs`; no tarball COPY, build argument, new lifecycle
+execution or runtime mount is added. The registry release context and its
+strict metadata checks keep their own path. Both adapters protect every
+unrelated CLI and lock entry, addition, removal and root/metadata field.
+
+After the unmodified acceptance, the packed job checks the installed kernel's
+exact own-file set, sizes, modes and hashes against the HEAD inventory in
+the same accepted container. Version equality alone is insufficient: two
+commits may share a version. Separately resolved nested dependencies remain
+governed by the image lock. A changed inventory artifact or installed file
+fails before digest preparation. The closed context, tarball, generated
+manifest/lock, source inventory and build metadata are retained as artifacts;
+npm config/cache are outside the uploaded context. Source SHA and
+integrity/inventory/lock hashes are retained in those artifacts. Acceptance
+reports the image ID in its log and passes it between workflow steps to bind
+the export to the accepted image. These checks do not broaden the receipt's
+supervisor, agent or containment claims.
+
 The shared fixture, `.github/scripts/team-image-accept.sh`, starts the
 committed Compose service on a disposable internal bridge with IPv6 off and
 an isolated gateway (Docker Engine 28+). It provisions private state, a

@@ -37,6 +37,8 @@
     "skills/",
     "injects/",
     "docs/",
+    "package.json",
+    "LICENSE",
     "README.md",
     "package-catalog.json",
     "packages/record/bin/",
