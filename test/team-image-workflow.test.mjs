@@ -82,14 +82,14 @@ test("publication rejects old kernels, branch refs, prereleases and inconsistent
   const manifest = (v) => ({ dependencies: { "@awebai/oats": v, "@awebai/aw": "1.36.59" } });
   const lock = (v) => ({ packages: { "": manifest(v), "node_modules/@awebai/oats": { version: v }, "node_modules/@awebai/aw": { version: "1.36.59" } } });
   assert.equal(checkRelease("tag", "v0.69.18", manifest("0.69.18"), lock("0.69.18")), "0.69.18");
-  assert.equal(checkRelease("tag", "v1.0.0", manifest("0.70.0"), lock("0.70.0")), "0.70.0");
+  assert.throws(() => checkRelease("tag", "v1.0.0", manifest("0.70.0"), lock("0.70.0")), /equal the release tag/);
   for (const version of ["0.69.15", "0.69.17", "0.69.18-rc.1", "^0.69.18", "latest"]) {
     assert.throws(() => checkRelease("tag", "v0.69.18", manifest(version), lock(version)), /0\.69\.18|exact stable/);
   }
   for (const [type, tag] of [["branch", "v0.69.18"], ["tag", "main"], ["tag", "v0.69.18-rc.1"], ["tag", "v0.69.17"]]) {
-    assert.throws(() => checkRelease(type, tag, manifest("0.69.18"), lock("0.69.18")), /release tag|newer than/);
+    assert.throws(() => checkRelease(type, tag, manifest("0.69.18"), lock("0.69.18")), /release tag/);
   }
-  assert.throws(() => checkRelease("tag", "v0.69.18", manifest("0.69.19"), lock("0.69.19")), /newer than/);
+  assert.throws(() => checkRelease("tag", "v0.69.18", manifest("0.69.19"), lock("0.69.19")), /equal the release tag/);
   const inconsistent = lock("0.69.18");
   inconsistent.packages["node_modules/@awebai/oats"].version = "0.69.15";
   assert.throws(() => checkRelease("tag", "v0.69.18", manifest("0.69.18"), inconsistent), /lock/);
@@ -139,8 +139,9 @@ test("the publisher copies by digest, retains release notes and rejects a substi
     const manifest = JSON.stringify({ config: { digest: config } });
     const digest = `sha256:${createHash("sha256").update(manifest).digest("hex")}`;
     const boundary = `#!/usr/bin/env node
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { basename, join } from "node:path";
+import { createHash } from "node:crypto";
 const args = process.argv.slice(2), dir = process.env.FIXTURE_DIR;
 const tool = basename(process.argv[1]);
 const imageID = process.env.IMAGE_STORE === "containerd" ? "sha256:" + "2".repeat(64) : ${JSON.stringify(config)};
@@ -155,12 +156,17 @@ if (tool === "docker" && args[0] === "image") {
 } else if (tool === "skopeo" && args[1]?.startsWith("docker-daemon:")) {
   console.error("client version 1.22 is too old");
   process.exit(1);
+} else if (tool === "skopeo" && args[0] === "inspect" && args.at(-1).startsWith("docker://")) {
+  if (process.env.TAG_STATE === "auth-failure") { console.error("unauthorized"); process.exit(1); }
+  if (process.env.TAG_STATE === "conflict") { process.stdout.write('{"config":{"digest":"sha256:other"}}'); }
+  else if (process.env.TAG_STATE === "same" || existsSync(join(dir, "tag-copy.json"))) process.stdout.write(${JSON.stringify(manifest)});
+  else { console.error("manifest unknown"); process.exit(1); }
 } else if (tool === "skopeo" && args[0] === "inspect") {
   if (!args.includes("--raw") || !args.includes("--config")) process.exit(2);
   process.stdout.write(readFileSync(args.at(-1).slice("docker-archive:".length)));
 } else if (tool === "skopeo" && args[0] === "manifest-digest") {
   if (!readFileSync(args[1], "utf8").includes("config")) process.exit(2);
-  console.log(${JSON.stringify(digest)});
+  console.log("sha256:" + createHash("sha256").update(readFileSync(args[1])).digest("hex"));
 } else if (tool === "skopeo" && args.some((a) => a.startsWith("docker-archive:"))) {
   const source = args.find((a) => a.startsWith("docker-archive:"));
   if (readFileSync(source.slice("docker-archive:".length), "utf8") !== ${JSON.stringify(configBlob)}) process.exit(2);
@@ -174,9 +180,11 @@ if (tool === "docker" && args[0] === "image") {
   mkdirSync(layout, { recursive: true });
   writeFileSync(join(layout, "manifest.json"), manifest);
 } else if (tool === "skopeo" && args[0] === "copy") {
-  writeFileSync(join(dir, "copy.json"), JSON.stringify(args));
+  const destination = args.at(-1);
+  if (!destination.endsWith("@" + ${JSON.stringify(digest)}) && !destination.endsWith(":0.69.18")) process.exit(2);
+  writeFileSync(join(dir, destination.includes("@sha256:") ? "copy.json" : "tag-copy.json"), JSON.stringify(args));
 } else if (tool === "gh" && args[1] === "view") {
-  console.log("Existing release notes.");
+  console.log(JSON.stringify({ body: existsSync(join(dir, "notes.md")) ? readFileSync(join(dir, "notes.md"), "utf8") : "Existing release notes." }));
 } else if (tool === "gh" && args[1] === "edit") {
   writeFileSync(join(dir, "notes.md"), readFileSync(args.at(-1)));
 } else {
@@ -188,9 +196,13 @@ if (tool === "docker" && args[0] === "image") {
     const env = {
       PATH: `${bin}:${process.env.PATH}`, FIXTURE_DIR: dir, RUNNER_TEMP: dir,
       AGENT_IMAGE: "oats-team-agent:reviewed", IMAGE_REPOSITORY: "ghcr.io/oats-project/team-agent",
+      ACCEPTED_IMAGE_ID: config, INSTALLED_OATS_VERSION: "0.69.18", GITHUB_SHA: "a".repeat(40),
+      BUILD_INPUTS: join(dir, "build-inputs.json"),
       GITHUB_TOKEN: "fixture-token", GITHUB_REF_NAME: "v0.69.18", GITHUB_ACTOR: "fixture",
       GITHUB_OUTPUT: join(dir, "output"), GITHUB_STEP_SUMMARY: join(dir, "summary"),
     };
+    writeFileSync(env.BUILD_INPUTS, JSON.stringify({ sourceTag: "v0.69.18", sourceCommit: "a".repeat(40),
+      kernelVersion: "0.69.18", lockDigest: "sha256:" + "3".repeat(64), kernelIntegrity: "sha512-" + Buffer.alloc(64, 1).toString("base64") }));
     const script = new URL("../.github/scripts/team-image-publish.sh", import.meta.url);
     const run = (extra = {}) => spawnSync("bash", [script.pathname], { env: { ...env, ...extra }, encoding: "utf8" });
     const verifyEnv = { ...env };
@@ -209,15 +221,62 @@ if (tool === "docker" && args[0] === "image") {
     assert.match(readFileSync(join(dir, "notes.md"), "utf8"), /^Existing release notes\./);
     assert.ok(readFileSync(join(dir, "notes.md"), "utf8").includes(`ghcr.io/oats-project/team-agent@${digest}`));
     assert.equal(readFileSync(join(dir, "saved-id"), "utf8"), config);
-    const containerd = run({ IMAGE_STORE: "containerd" });
+    const tagged = JSON.parse(readFileSync(join(dir, "tag-copy.json"), "utf8"));
+    assert.ok(tagged.includes("--preserve-digests"));
+    assert.equal(tagged.at(-1), "docker://ghcr.io/oats-project/team-agent:0.69.18");
+    assert.equal(tagged.at(-2), copied.at(-2), "both copies use the same prepared manifest");
+    const firstNotes = readFileSync(join(dir, "notes.md"), "utf8");
+    assert.match(firstNotes, /NOT RUN: supervisor startup/);
+    assert.match(firstNotes, /Installed kernel:.*0\.69\.18/);
+    rmSync(join(dir, "tag-copy.json"));
+    assert.equal(run({ TAG_STATE: "same" }).status, 0);
+    assert.equal(existsSync(join(dir, "tag-copy.json")), false, "same digest does not rewrite the version tag");
+    assert.equal(readFileSync(join(dir, "notes.md"), "utf8"), firstNotes);
+    const containerd = run({ IMAGE_STORE: "containerd", ACCEPTED_IMAGE_ID: `sha256:${"2".repeat(64)}` });
     assert.equal(containerd.status, 0, containerd.stderr);
     assert.equal(readFileSync(join(dir, "saved-id"), "utf8"), `sha256:${"2".repeat(64)}`);
     for (const file of ["copy.json", "login", "notes.md"]) rmSync(join(dir, file));
+    rmSync(join(dir, "tag-copy.json"));
+    for (const state of ["conflict", "auth-failure"]) {
+      const refused = run({ TAG_STATE: state });
+      assert.notEqual(refused.status, 0, state);
+      assert.equal(existsSync(join(dir, "copy.json")), false, state);
+      assert.equal(existsSync(join(dir, "tag-copy.json")), false, state);
+      assert.equal(existsSync(join(dir, "notes.md")), false, state);
+    }
+    const changedImage = run({ ACCEPTED_IMAGE_ID: "sha256:" + "f".repeat(64) });
+    assert.notEqual(changedImage.status, 0);
+    assert.match(changedImage.stderr, /accepted image ID/);
+    rmSync(join(dir, "login"));
     const substituted = run({ SUBSTITUTE: "yes" });
     assert.notEqual(substituted.status, 0);
     assert.match(substituted.stderr, /differs from the accepted Docker image/);
     for (const file of ["copy.json", "login", "notes.md"]) assert.equal(existsSync(join(dir, file)), false);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("release image builds a preserved generated context and retains its lock artifact", () => {
+  const job = workflow("release.yml").jobs["publish-team-image"];
+  const prepare = job.steps.findIndex((s) => s.run === "node .github/scripts/team-image-release-context.mjs");
+  assert.ok(prepare >= 0, "release context is prepared");
+  assert.equal(job.steps[prepare].id, "context");
+  const build = job.steps.find((s) => s.run?.startsWith("docker build "));
+  assert.equal(build.env.TEAM_IMAGE_BUILD_CONTEXT, "${{ steps.context.outputs.context }}");
+  assert.match(build.run, /"\$TEAM_IMAGE_BUILD_CONTEXT"$/);
+  const artifact = job.steps.find((s) => s.uses?.startsWith("actions/upload-artifact@"));
+  assert.match(artifact.with.path, /steps\.context\.outputs\.context.*package-lock\.json/);
+  assert.match(artifact.with.path, /steps\.context\.outputs\.metadata/);
+  const accept = job.steps.find((s) => s.run === "bash .github/scripts/team-image-accept.sh");
+  assert.equal(accept.env.EXPECTED_OATS_VERSION, "${{ steps.context.outputs.kernel-version }}");
+});
+
+test("both image lanes install and verify the reviewed Skopeo package", () => {
+  for (const [file, jobID] of [["team-image.yml", "verify"], ["release.yml", "publish-team-image"]]) {
+    const install = workflow(file).jobs[jobID].steps.find((s) => s.run?.includes("apt-get install"));
+    assert.match(install.run, /skopeo=1\.13\.3\+ds1-2ubuntu0\.24\.04\.3/);
+    assert.match(install.run, /dpkg-query/);
+    assert.match(install.run, /1\.13\.3\+ds1-2ubuntu0\.24\.04\.3/);
   }
 });
