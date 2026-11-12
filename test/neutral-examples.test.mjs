@@ -11,10 +11,11 @@
 // they are history and never edited (the entries for the next release, under
 // docs/release-notes/next/, are read).
 //
-// It sits in test/, the kernel's test directory: the root runner's `test/**/*.test.mjs` glob
-// (scripts/run-tests.mjs) runs it in every CI shard, with or without the Desktop's dependencies,
-// where at the root of packages/ the runner's fallback without them (one glob per package
-// directory) skipped it. It is not in the npm package (package.json `files`).
+// It sits in test/, the kernel's test directory: the root runner's kernel glob
+// `test/**/*.test.mjs` (scripts/run-tests.mjs) includes it with or without the Desktop's
+// dependencies, so sharded CI runs it as part of the suite, where at the root of packages/ the
+// runner's fallback without them (one glob per package directory) skipped it. It is not in the npm
+// package (package.json `files`).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';

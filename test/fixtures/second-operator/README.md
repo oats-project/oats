@@ -2,7 +2,9 @@
 
 These are supplied captures from OATS 0.24.1 (macOS, Node 26.8.2), **not expected
 post-fix outputs**. Only the original absolute host prefix was replaced with
-`/fixture/second-operator`. Tests replace that prefix with an owned temporary
+`/fixture/second-operator`, and the operator's names (its document id, and the
+narrative file's name) with invented ones of the same length; the captures are
+otherwise as supplied. Tests replace that prefix with an owned temporary
 fixture root and explicitly map source/workspace/member to their inert Git
 transport. No test here contacts the captured public repositories.
 
