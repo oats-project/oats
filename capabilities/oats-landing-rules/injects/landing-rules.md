@@ -101,13 +101,15 @@ fix, it is no longer a one-line fix: it gets the loop. Why: the one who built a 
 holds the context to answer its reviews, and a fresh reader catches what its author can't.
 
 **The models children run on.**
-<!-- OATS: the workspace's direction (recorded 2026-11-12) sets the floor by tier and names the two tiers here, the one place these texts name a model tier; no text names a model version or a harness. -->
+<!-- OATS: the workspace's direction (recorded 2026-11-12) sets the floor by tier and names the two tiers here and in the code reviewer's briefing, which loads no landing rules: the only places these texts name a model tier. No text names a model version or a harness. The floor is absolute here, so a parent's own model is the fallback only where it meets the floor. -->
 No agent runs a child, an OATS child or a native subagent, on a model below the floor: a
 Claude model of the Opus tier or above, an OpenAI model of the Sol tier or above, and in
 any other family its strongest tier. Never a smaller, faster or cheaper model, to save
 cost or time. The floor comes before model diversity: a child that checks work runs on
 another family's model only where one at or above the floor is available; otherwise on
-the parent's own model, and the parent says that diversity was lost. A model whose tier
+the parent's own model where that meets the floor, or on a model of the parent's family
+that does, and the parent says that diversity was lost. Where no model at or above the
+floor is available at all, the parent spawns no child and tells its person. A model whose tier
 the parent can't establish is below the floor. The floor binds the model a child would
 actually launch on, wherever it comes from: a soul's default or a machine's override that
 is below it is not used. The parent spawns that child on a model at or above the floor

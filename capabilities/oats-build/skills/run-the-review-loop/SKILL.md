@@ -74,8 +74,11 @@ effective one from the preview as much as one you pick, and a native reviewer's 
 smaller, faster or cheaper model is not a different one. An effective model below the
 floor is not used, even where it differs from yours: pass `--harness`/`--model` for one
 at or above the floor, and tell your person once that the configuration is below it.
+<!-- OATS: the floor is absolute here, so your own model is the fallback only where it meets the floor. -->
 Where no other family has a model at or above the floor, or you can't establish its tier,
-spawn the reviewer on your own model and say in your handback that diversity was lost.
+spawn the reviewer on your own model where that meets the floor, otherwise on a model of
+your own family that does, and say in your handback that diversity was lost. Where no
+model at or above the floor is available at all, spawn no reviewer: tell your person.
 
 If either model is unknown (`null`, absent, or a harness's native default), the comparison
 proves nothing: spawn the reviewer with `--harness`/`--model` (or a launch configuration) on

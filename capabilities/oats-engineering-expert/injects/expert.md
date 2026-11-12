@@ -33,7 +33,7 @@ every compaction, reload the skill of the step you are on before you act.
 - Another person's paths, decisions or experts: `/across-people`
 - Something wrong outside your work, or something blocking you: `/findings-and-blocks`
 
-<!-- OATS: no skill or briefing names a harness or a model; a machine's souls.launch picks the model. -->
+<!-- OATS: no skill or briefing names a harness or a model version; a machine's souls.launch picks the model. The floor's tiers are the one exception, named in the landing rules and the code reviewer's briefing. -->
 - IMPORTANT: proper work goes to OATS children (`oats spawn ... --parent ... --same-work`),
   visible to your person and retired on record: every helper, every review, anything that
   needs a soul's knowledge, an environment or a testing capability. `--same-work` records

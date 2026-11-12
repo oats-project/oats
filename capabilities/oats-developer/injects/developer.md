@@ -40,7 +40,7 @@ compaction, reload the skill of the step you are on.
   knowledge or a testing capability. A harness-native subagent only for a small task that
   directly helps you (your own paths in a workflow are such tasks: `/execution-strategy`),
   where your person asks, or in your harness's multi-agent workflow mode.
-  <!-- OATS: no skill or briefing names a harness or a model; a machine's souls.launch picks the model. -->
+  <!-- OATS: no skill or briefing names a harness or a model version; a machine's souls.launch picks the model. The floor's tiers are the one exception, named in the landing rules and the code reviewer's briefing. -->
   A child that checks work runs on a different model from yours where one
   is available: agents of one model share blind spots.
   NEVER run a child, an OATS child or a native subagent, on a model below the floor your

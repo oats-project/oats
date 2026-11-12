@@ -228,7 +228,7 @@ knowledge and no testing capability (where something is defined, what a file say
 to a native subagent. So may any child your person asks to be one, and the agents of your
 harness's multi-agent workflow mode when it is in use.
 
-<!-- OATS: the workspace's direction (recorded 2026-10-31, for every team) rules certain models out and names none in any text, and a machine's souls.launch picks a soul's model; so diversity compares model families, never names a model, and picks only a model this workspace allows. -->
+<!-- OATS: the workspace's direction (recorded 2026-10-31, for every team) rules certain models out and names no model version in any text (the floor's tiers, named in the landing rules and the code reviewer's briefing, are the exception), and a machine's souls.launch picks a soul's model; so diversity compares model families, never names a model, and picks only a model this workspace allows. -->
 **A probe runs on a different model from the author's,** where the organisation has one:
 every kind of probe checks work or validates an idea, and agents of one model share blind
 spots, so their agreement is not independent. The author is whoever made the work or the
@@ -254,10 +254,12 @@ model it would launch on against that floor before anything above: the effective
 the preview as much as one you pass with `--model`, and a native subagent's too. A smaller,
 faster or cheaper model is not a different one. An effective model below the floor is not
 used, even where it differs from the author's: pass `--harness`/`--model` for one at or
-above the floor, and tell your person once that the configuration is below it. Where no
-other family has a model at or
-above the floor, or you can't establish its tier, use your own model and say, where you
-use the answer, that diversity was lost.
+above the floor, and tell your person once that the configuration is below it.
+<!-- OATS: the floor is absolute here, so your own model is the fallback only where it meets the floor. -->
+Where no other family has a model at or above the floor, or you can't establish its tier,
+use your own model where that meets the floor, otherwise a model of your own family that
+does, and say, where you use the answer, that diversity was lost. Where no model at or
+above the floor is available at all, send no helper: tell your person.
 
 Spawn it as your child, the brief as its task. Name it for its task, with its role in your
 effort last: `<task-slug>-helper` (`retry-header-helper`), or `<area-slug>-specialist` for
