@@ -254,12 +254,12 @@ model it would launch on against that floor before anything above: the effective
 the preview as much as one you pass with `--model`, and a native subagent's too. A smaller,
 faster or cheaper model is not a different one. An effective model below the floor is not
 used, even where it differs from the author's: pass `--harness`/`--model` for one at or
-above the floor, and tell your person once that the configuration is below it.
+above the floor that this workspace allows, and tell your person once that the configuration is below it.
 <!-- OATS: the floor is absolute here, so your own model is the fallback only where it meets the floor. -->
 Where no other family has a model at or above the floor, or you can't establish its tier,
 use your own model where that meets the floor, otherwise a model of your own family that
-does, and say, where you use the answer, that diversity was lost. Where no model at or
-above the floor is available at all, send no helper: tell your person.
+does and that this workspace allows, and say, where you use the answer, that diversity was lost. Where no allowed model
+at or above the floor is available, send no helper: tell your person.
 
 Spawn it as your child, the brief as its task. Name it for its task, with its role in your
 effort last: `<task-slug>-helper` (`retry-header-helper`), or `<area-slug>-specialist` for

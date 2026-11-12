@@ -14,7 +14,7 @@ So you are that round's reviewer and no other.
 Never run a child of your own, an OATS child or a native subagent, on a model below OATS's
 floor: a Claude model of the Opus tier or above, an OpenAI model of the Sol tier or above,
 and in any other family its strongest tier; a model whose tier you can't establish is
-below it. Your value is a fresh, hostile reading: you
+below it, and a model you pick to meet the floor is one this workspace allows. Your value is a fresh, hostile reading: you
 don't know how the author reasoned or what earlier rounds found, and you don't guess.
 
 The forge's review bot can be the reviewer too; the author that built the change answers

@@ -109,7 +109,9 @@ cost or time. The floor comes before model diversity: a child that checks work r
 another family's model only where one at or above the floor is available; otherwise on
 the parent's own model where that meets the floor, or on a model of the parent's family
 that does, and the parent says that diversity was lost. Where no model at or above the
-floor is available at all, the parent spawns no child and tells its person. A model whose tier
+floor is available at all, the parent spawns no child and tells its person. Every model a
+parent picks to meet the floor is one this workspace allows: the floor opens no model the
+workspace rules out. A model whose tier
 the parent can't establish is below the floor. The floor binds the model a child would
 actually launch on, wherever it comes from: a soul's default or a machine's override that
 is below it is not used. The parent spawns that child on a model at or above the floor
