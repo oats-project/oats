@@ -1,3 +1,4 @@
+{{- define "oats.agent.statefulset" -}}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -92,3 +93,5 @@ spec:
         resources:
           requests:
             storage: {{ .Values.storage.size | quote }}
+
+{{- end -}}

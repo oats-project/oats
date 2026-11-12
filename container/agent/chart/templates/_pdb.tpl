@@ -1,3 +1,4 @@
+{{- define "oats.agent.pdb" -}}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -8,3 +9,5 @@ spec:
   selector:
     matchLabels:
       {{- include "agent.labels" . | nindent 6 }}
+
+{{- end -}}

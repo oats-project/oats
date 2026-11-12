@@ -1,3 +1,4 @@
+{{- define "oats.agent.networkpolicy" -}}
 {{- if .Values.forwarder.networkPolicy }}
 {{- if not .Values.forwarder.enabled }}
 {{- fail "forwarder.networkPolicy requires forwarder.enabled" }}
@@ -28,3 +29,5 @@ spec:
         - { protocol: UDP, port: 53 }
         - { protocol: TCP, port: 53 }
 {{- end }}
+
+{{- end -}}

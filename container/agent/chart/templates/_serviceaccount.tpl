@@ -1,6 +1,9 @@
+{{- define "oats.agent.serviceaccount" -}}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{ include "agent.name" . }}
   namespace: {{ .Release.Namespace }}
 automountServiceAccountToken: false
+
+{{- end -}}

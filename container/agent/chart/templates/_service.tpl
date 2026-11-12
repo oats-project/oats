@@ -1,3 +1,4 @@
+{{- define "oats.agent.service" -}}
 {{- if .Values.service.enabled }}
 apiVersion: v1
 kind: Service
@@ -11,3 +12,5 @@ spec:
   ports:
     - { name: ssh, port: 2222, targetPort: 2222, protocol: TCP }
 {{- end }}
+
+{{- end -}}
