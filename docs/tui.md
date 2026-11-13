@@ -176,12 +176,12 @@ while a terminal is open); under 80 columns it has the whole width.
   kernel reported that were withheld (a home outside its soul's directory,
   or one reported twice), `2 withheld`, when there are any.
 - **The list** is the roster the Desktop draws: the same groups in the same
-  order, from the same code. It is in name order, by each group's top
-  instance, so starting or stopping an instance moves nothing. An instance
+  order, from the same code. It is in spawn order, newest first, by each
+  group's top instance, so starting or stopping an instance moves nothing. An instance
   that others were spawned from has them indented under it, and keeps its
   place when it gains or loses one. Under one parent, the instances that do
   its work (the kernel's `sameWork`, from an OATS with `instance-same-work`)
-  come first, then the others, each part in name order, as the Desktop lists
+  come first, then the others, each part newest first, as the Desktop lists
   them. An empty row stands between each run
   of instances related to no other and the group before or after it. The
   indent alone says which instance is under which: no mark is drawn for
