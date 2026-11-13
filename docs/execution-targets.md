@@ -1350,7 +1350,9 @@ The sweep resumes a lost home only when OATS can vouch for the loss, from
 what its own reads of that home saw (`oats status`, OATS Desktop and `oats
 tui` reading it, and the sweep's own read). All four must hold:
 
-1. OATS saw the home running for its current start.
+1. OATS saw the home running for its current start. A start the sweep itself
+   made counts as seen, so a home that is lost again before any read saw it
+   running is still started again, within the hour's count below.
 2. No earlier sweep answered this loss. A sweep answers each lost home once,
    whatever it did with it (resumed, started fresh, blocked, refused or
    skipped), except a home it skipped because OATS was stopping, upgrading
@@ -1518,7 +1520,7 @@ refused. A home removed between the read and its start is reported
     restarts on the same kernel, including when read from older qualified
     records. A kernel reboot gives a fresh budget. Loss judgements remain
     per start, and a running look of a newly resumed start resets its prior
-    seen/lost judgement. Every new `oats host run` invokes the sweep;
+    seen/lost judgement. Every `oats host run` invokes the sweep at its start and each minute;
     successful restores after a host stop remain eligible as described above.
 - The lock, the per-boot note and the record of what status saw live in
   `session-resume/` under `~/.oats` (`$OATS_HOME_DIR` when set). All three

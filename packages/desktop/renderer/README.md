@@ -644,8 +644,9 @@ split into sections) is `packages/client/roster-sections.mjs`.
   the Machines tab (below). With one deployment the roster renders exactly as before; the Machines tab heads
   its one deployment too (`tabContent`), so every machine's tree is under its name.
 - **Agent groups and their order** (`rosterGroups`, `packages/client/instance-tree.mjs`, shared with the
-  palette and the TUI): one sequence by each cluster's first root, in name order (`rosterOrder`: by name,
-  ties by `instanceId`; the product owner's decision on #1262, which replaces #1083's running-first order here). A
+  palette and the TUI): one sequence by each cluster's first root, in spawn order, newest first (`rosterOrder`:
+  by `createdAt`, a row without a readable one last, then by name, ties by `instanceId`; the product owner's
+  2026-11-13 request, which replaces #1262's name order and keeps #1083's running-first order out). A
   multi-member cluster is a group under its name; each run of consecutive single instances is one
   "independent" group, in place. So a bundle keeps its place when its instance gains or loses children, and
   a start or a stop moves no row. Keys: `cluster:<n>:<name>`, `independent:<first member's instanceId>`,
