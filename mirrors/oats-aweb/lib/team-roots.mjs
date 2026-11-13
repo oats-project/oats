@@ -4,6 +4,7 @@
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, join, resolve } from 'node:path';
 import { querySelectedKernel } from './session-readiness.mjs';
+import { teamKeyIn } from './aweb-team-id.mjs';
 
 const object = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const canonical = path => {
@@ -75,8 +76,9 @@ export function currentJoinRootChoice(team, home, { env = process.env, query = q
   if (rows.length !== 1 || rows[0].layer !== 'messaging' || current.layers?.messaging?.id !== 'oats.aweb' || rows[0].compatibility?.ok !== true || !object(rows[0].settings)) unreadable('oats.aweb settings or compatibility unavailable for this soul');
   const settings = rows[0].settings;
   if (Object.hasOwn(settings, 'roots') && !object(settings.roots)) noRoot('the live settings.oats.aweb.roots is not a map');
-  const source = object(settings.roots) && Object.hasOwn(settings.roots, team) ? 'roots[team]' : 'root';
-  const root = source === 'roots[team]' ? settings.roots[team] : settings.root;
+  const rootsKey = teamKeyIn(settings.roots, team);
+  const source = rootsKey !== undefined ? 'roots[team]' : 'root';
+  const root = rootsKey !== undefined ? settings.roots[rootsKey] : settings.root;
   if (root === undefined) noRoot("no root for this team in the deployment's live settings (neither roots[team] nor root is set)");
   let selectedRoot;
   try {

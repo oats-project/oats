@@ -65,7 +65,11 @@ function logLines(base) {
   return text ? text.split(/\n/).map((l) => JSON.parse(l)) : [];
 }
 
-function bindingRequest(settings = {}) {
+// The check the kernel sends (lib/instance-inspect.mjs runProviderCheck): a soul-scope
+// readiness check of `deployment`, with no instance or home. oats.aweb 1.42.0 (#242,
+// #249) answers a `binding` or `invocation` input with provider-not-qualified: the
+// captured-execution path is removed.
+function bindingRequest(deployment, settings = {}) {
   return {
     schemaVersion: 1,
     phase: "check",
@@ -73,48 +77,39 @@ function bindingRequest(settings = {}) {
     capability: "oats.aweb",
     settings,
     input: {
-      context: { kind: "standalone", key: "fixture" },
-      action: { kind: "inspect" },
-      binding: {
-        schemaVersion: 1,
-        capability: "oats.aweb",
-        payloadContract: "oats.aweb.messaging",
-        payloadVersion: 1,
-        payload: {
-          responsibleHuman: { provider: "oats.aweb", id: "alex" },
-          context: { kind: "standalone", key: "fixture" },
-          privateTeam: { provider: "oats.aweb", id: "private:example.test" },
-          wider: [],
-        },
-        credentialRefs: {},
-        provenance: [],
-      },
+      context: { kind: "workspace", workspace: "fixture-workspace", deployment, soul: "dev", instance: null, home: null },
+      action: { kind: "readiness" },
     },
   };
 }
 
-/** Readiness checks the provider's aw floor too. The binding check gets
- *  an aw that answers only `version` (and logs every call), so the check never reads the host's
- *  own aw and otherwise runs exactly as before the floor. */
-function versionOnlyAw() {
+/** Readiness checks the provider's aw floor and, for a soul whose primary
+ *  receives through the host wake broker (delivery: session), that broker. The
+ *  binding check gets an aw that answers only those two reads (and logs every
+ *  call), so the check never reads the host's own aw or daemon. `wake status
+ *  --json` answers as aw 1.36.58 does for a running daemon that reported its
+ *  version (cli/go/wake/status.go at aw-v1.36.58), the fixture's aw version. */
+function readOnlyAw() {
   const bin = mkdtempSync(join(tmpdir(), "oats-aweb-1121-aw-"));
   write(join(bin, "aw"), `#!/usr/bin/env node
 const s = process.argv.slice(2).join(" ");
 require("node:fs").appendFileSync(${JSON.stringify(join(bin, "calls.log"))}, s + "\\n");
 if (s === "version") { process.stdout.write(${JSON.stringify(AW_VERSION_OUTPUT)}); process.exit(0); }
-console.error("version-only aw: unexpected " + s); process.exit(2);
+if (s === "wake status --json") { console.log(JSON.stringify({ updated_at: "2026-11-13T00:00:00Z", state_dir: "/fixture/wake", daemon_running: true, daemon_pid: 4242, daemon_version: "1.36.33", daemon_version_state: "reported", max_streams: 8, streams: [], instances: [] })); process.exit(0); }
+console.error("read-only aw: unexpected " + s); process.exit(2);
 `);
   chmodSync(join(bin, "aw"), 0o755);
   return bin;
 }
+const CHECK_READS = new Set(["version", "wake status --json"]);
 function runBinding(input, env = {}) {
-  const bin = versionOnlyAw();
+  const bin = readOnlyAw();
   const r = spawnSync(process.execPath, [BINDING, "check"], { input: JSON.stringify(input), encoding: "utf8", env: { ...process.env, ...env, PATH: `${bin}:${process.env.PATH}` } });
   const calls = existsSync(join(bin, "calls.log")) ? readFileSync(join(bin, "calls.log"), "utf8").split("\n").filter(Boolean) : [];
   rmSync(bin, { recursive: true, force: true });
-  assert.deepEqual(calls.filter((c) => c !== "version"), [], "the binding check calls aw only for its version");
+  assert.deepEqual(calls.filter((c) => !CHECK_READS.has(c)), [], "the binding check calls aw only to read its version and the wake broker's status");
   let doc; try { doc = JSON.parse(r.stdout); } catch { doc = undefined; }
-  return { ...r, doc };
+  return { ...r, doc, calls };
 }
 
 test("spawn uses roots[team] before root/workspace and local mode exports AWEB_IDENTITY_HOME", () => {
@@ -230,7 +225,7 @@ test("binding-check reports one v2 problem per missing root/team and ready once 
   const base = mkdtempSync(join(tmpdir(), "oats-aweb-1121-"));
   try {
     const workspace = join(base, "workspace"); mkdirSync(workspace, { recursive: true });
-    let r = runBinding(bindingRequest({ delivery: "session" }), { OATS_WORKSPACE: workspace });
+    let r = runBinding(bindingRequest(workspace, { delivery: "session" }), { OATS_WORKSPACE: workspace });
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.equal(r.doc.ok, true);
     assert.equal(r.doc.result.status, "needs-configuration");
@@ -238,10 +233,14 @@ test("binding-check reports one v2 problem per missing root/team and ready once 
       "no teams configured: run `oats aweb setup`",
       `no messaging root at ${workspace}: run oats aweb setup there or set settings.oats.aweb.root`,
     ]);
+    assert.deepEqual(r.calls, ["version"], "with a configuration problem the broker is not read");
     awRoot(workspace);
-    r = runBinding(bindingRequest({ delivery: "session" }), { OATS_WORKSPACE: workspace, ...defaultTeamEnv() });
+    r = runBinding(bindingRequest(workspace, { delivery: "session" }), { OATS_WORKSPACE: workspace, ...defaultTeamEnv() });
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    assert.deepEqual(r.doc.result, { status: "ready", problems: [] });
+    assert.deepEqual(r.doc.result, { status: "ready", problems: [], warnings: [] });
+    // oats.aweb 1.42.0: a soul whose primary receives through the host wake broker is
+    // ready only once the broker is confirmed running at a reported version.
+    assert.deepEqual(r.calls, ["version", "wake status --json"], "session delivery reads the wake broker once");
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
 
@@ -264,9 +263,9 @@ test("an unmapped default team is refused by binding-check and spawn, never repl
     const env = { OATS_WORKSPACE: workspace, OATS_WORKSPACE_KEY: "fixture-workspace", OATS_WORKSPACE_NAME: "Fixture Workspace", OATS_DEFAULT_TEAM: "engineering", OATS_DEFAULT_TEAM_FROM: "deployment", OATS_TEAMS: "[]", OATS_TEAMS_SOURCE: "live" };
     // oats.aweb 1.19.0 (team model 3) also names the workspace's defaultTeam, for workspaces that don't allow local teams.
     const unmapped = "the default team engineering has no provider id yet: its owner runs oats aweb setup, then commits the id, or choose another default: `oats teams default <label>`, or `defaultTeam:` in oats-workspace.yaml when the workspace doesn't allow local teams";
-    const check = runBinding(bindingRequest({ delivery: "session" }), env);
+    const check = runBinding(bindingRequest(workspace, { delivery: "session" }), env);
     assert.equal(check.status, 0, check.stdout + check.stderr);
-    assert.deepEqual(check.doc.result, { status: "needs-configuration", problems: [{ code: "needs-configuration", message: unmapped }] });
+    assert.deepEqual(check.doc.result, { status: "needs-configuration", problems: [{ code: "needs-configuration", message: unmapped }], warnings: [] });
     const spawn = runHook(bin, "spawn", { ...env, OATS_INSTANCE: "probe", OATS_HOME: home, OATS_CONTEXT: workspace, OATS_SETTINGS: JSON.stringify({}) });
     assert.notEqual(spawn.status, 0, spawn.stdout + spawn.stderr);
     assert.equal(spawn.doc.warning, `oats-aweb: ${unmapped}`);
@@ -286,7 +285,7 @@ test("a stale settings.oats.aweb.team is refused by spawn (before any aw call) a
     assert.notEqual(spawn.status, 0, spawn.stdout + spawn.stderr);
     assert.equal(spawn.doc.warning, `oats-aweb: ${refusal}`);
     assert.equal(existsSync(join(base, "aw.log")), false, "refused before any aw call, so nothing was minted");
-    const check = runBinding(bindingRequest({ delivery: "session", team: "t:example.test" }), { OATS_WORKSPACE: workspace, ...defaultTeamEnv() });
+    const check = runBinding(bindingRequest(workspace, { delivery: "session", team: "t:example.test" }), { OATS_WORKSPACE: workspace, ...defaultTeamEnv() });
     assert.equal(check.doc.ok, false, check.stdout + check.stderr);
     assert.equal(check.doc.error.code, "needs-configuration");
     assert.equal(check.doc.error.message, refusal);

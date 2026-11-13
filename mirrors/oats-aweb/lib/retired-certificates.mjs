@@ -3,8 +3,14 @@
 // key is held by people (alias_released_reason team_not_hosted): only that controller
 // can, with the command retire prints. Retire records each such certificate here, at
 // <deployment>/.oats-aweb/retired-certificates.json, so `oats aweb roster` on this host
-// can mark the leftover member and print that command. The record holds certificate ids
-// and commands only, never a secret, and lives only on the host where the retire ran.
+// can mark the leftover member and print that command. The record holds certificate ids,
+// registry origins and commands only, never a secret, and lives only on the host where the
+// retire ran.
+//
+// Any agent running as the deployment's user can write the record, so no text from it
+// reaches a person as a command: retire and roster both build the controller's command
+// with controllerCleanupCommand, from a validated team, certificate id and registry. The
+// stored `command` is written (rebuilt) for older providers that require it, and never read.
 //
 // Writers (retire) serialise on an exclusive lock file beside the record: each re-reads
 // the record under the lock, merges its entries, writes a temp file in the same directory
@@ -17,6 +23,8 @@
 // retire waits LOCK_WAIT_MS, records nothing and warns, naming the file to remove.
 import { chmodSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { validAwebTeamId } from "./aweb-team-id.mjs";
+import { registryOriginUrl } from "./plain-service.mjs";
 
 export const RETIRED_RECORD_MAX = 500;
 const LOCK_WAIT_MS = 5000;
@@ -34,6 +42,28 @@ const validEntry = (e) => !!e && typeof e === "object" && !Array.isArray(e)
   && typeof e.retiredAt === "string" && !Number.isNaN(Date.parse(e.retiredAt))
   && nullableString(e.alias) && nullableString(e.instance);
 const keyOf = (e) => `${e.team}\u0000${e.certificateId}`;
+
+// A certificate id as aw issues them (a UUID): letters, digits, `_` and `-`, starting with
+// a letter or digit so it can never read as a flag.
+const CERTIFICATE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+
+/** Why no controller cleanup command can be built from `{team, certificateId, registry}`, or
+ *  undefined when one can. `registry` is optional: undefined or null builds a command without
+ *  --registry. The reason is fixed text and never echoes the value. */
+export function controllerCleanupProblem({ team, certificateId, registry } = {}) {
+  if (typeof team !== "string" || !validAwebTeamId(team)) return "its team is not a valid aweb team id";
+  if (typeof certificateId !== "string" || !CERTIFICATE_ID_RE.test(certificateId)) return "its certificate id is not valid";
+  if (registry != null && !registryOriginUrl(registry)) return "its registry is not a plain registry origin";
+  return undefined;
+}
+
+/** The command the team's controller runs to remove a member certificate, built only from
+ *  validated values; undefined when any of them is invalid (controllerCleanupProblem). */
+export function controllerCleanupCommand({ team, certificateId, registry } = {}) {
+  if (controllerCleanupProblem({ team, certificateId, registry })) return undefined;
+  const [name, namespace] = team.split(":");
+  return `aw id team remove-member --namespace ${namespace} --team ${name} --cert-id ${certificateId}${registry ? ` --registry ${registry}` : ""} --json`;
+}
 
 /** The record's entries, or null when the text is not a version-1 record whose every
  *  entry is valid: a record with one bad entry is malformed as a whole. */
@@ -75,15 +105,16 @@ function takeLock(lock, { waitMs = LOCK_WAIT_MS } = {}) {
   }
 }
 
-/** Records `entries` ({team, certificateId, alias, instance, retiredAt, command}) at the
- *  deployment, replacing any entry with the same team and certificate id and keeping the
- *  newest RETIRED_RECORD_MAX. Entries without a certificate id are skipped: nothing can
- *  match them. Never throws: returns `cause`, the fixed cause of what went wrong, if
+/** Records `entries` ({team, certificateId, registry, alias, instance, retiredAt}) at the
+ *  deployment, each with the command controllerCleanupCommand builds from it, replacing any
+ *  entry with the same team and certificate id and keeping the newest RETIRED_RECORD_MAX.
+ *  Entries no command can be built for (no or an invalid certificate id, team or registry)
+ *  are skipped: nothing could be shown for them. Never throws: returns `cause`, the fixed cause of what went wrong, if
  *  anything did (an unreadable or malformed record is replaced, and said so). */
 export function recordRetiredCertificates(deployment, entries, { lockWaitMs } = {}) {
   try {
     const fresh = entries
-      .map((e) => ({ team: e?.team, certificateId: e?.certificateId, alias: e?.alias ?? null, instance: e?.instance ?? null, retiredAt: e?.retiredAt, command: e?.command }))
+      .map((e) => ({ team: e?.team, certificateId: e?.certificateId, alias: e?.alias ?? null, instance: e?.instance ?? null, retiredAt: e?.retiredAt, registry: e?.registry ?? null, command: controllerCleanupCommand({ team: e?.team, certificateId: e?.certificateId, registry: e?.registry }) }))
       .filter(validEntry);
     if (!fresh.length) return {};
     return writeRecord(deployment, fresh, { lockWaitMs });
