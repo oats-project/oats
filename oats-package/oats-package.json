@@ -1,6 +1,6 @@
 {
   "package": "oats.framework",
-  "version": "1.25.0",
+  "version": "1.25.1",
   "description": "Explicit OATS operation and setup guidance, onboarding a new workspace to its use case, the support desk role, the coordination setup practices for the setup expert, optional reference knowledge theory, and the knowledge-theory-expert and oats-setup-expert package souls.",
   "compatibility": { "oats": ">=0.24.0" },
   "capabilities": ["capabilities/oats-knowledge-theory", "capabilities/oats-core", "capabilities/oats-setup", "capabilities/oats-support", "capabilities/oats-onboarding", "capabilities/oats-coordination-setup"],
