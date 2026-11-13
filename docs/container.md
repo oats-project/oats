@@ -398,12 +398,32 @@ launch-configs:
       CLAUDE_CONFIG_DIR: /state/home/.claude
       CLAUDE_CODE_OAUTH_TOKEN:
         fromFile: /etc/agent-login/claude-token
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+      DISABLE_UPDATES: "1"
+      DISABLE_FEEDBACK_COMMAND: "1"
+      ENABLE_CLAUDEAI_MCP_SERVERS: "false"
+      CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL: "1"
 ```
 
 Select it with `--launch-config team-claude`. The operator provisions only a
 `claude setup-token` result through the supported token route. It is readable
 by every agent in the same trust group; read-only mounting does not hide it
 or narrow its authority. Never share the mount across trust groups.
+
+For the optional external model role, the wrapper also writes
+`{"skipWebFetchPreflight": true}` into `/state/home/.claude/settings.json`,
+merging with any other supported settings. The literals above disable ancillary
+Claude traffic; they do not prove that the pinned harness needs only
+`api.anthropic.com`. Qualify a real authorized start and turn, retaining every
+refused DNS/SNI name. Report an additional necessary host rather than adding it
+automatically. Do not put `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` alongside
+this login: those credentials take precedence over the setup-token input.
+
+The [egress component](../container/agent/egress/README.md#optional-external-source-and-model-roles)
+defines the two optional source/model routes and their operator-selected DNS
+resolvers. Their boundary is exact SNI and a validated public destination;
+it does not filter repository paths, HTTP authorities or data sent to a provider.
+The existing five-service ingress audit remains a separate admission gate.
 
 ### After changing a credential
 

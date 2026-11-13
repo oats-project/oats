@@ -47,7 +47,7 @@ export async function probeRuntime(plan, io = {}) {
   const dns = await import("node:dns/promises");
   const resolver = io.resolver || new dns.Resolver({ timeout:1000, tries:1 });
   resolver.setServers([policy.frontAddress]);
-  const getStatus = io.getStatus || (async ({host,path}) => {
+  const getStatus = io.getStatus || (async ({host,path,timeoutMs}) => {
     const https = await import("node:https");
     return new Promise((resolve,reject) => {
       const request = https.request({hostname:host,servername:host,port:443,path,method:"GET",ca,agent:false,family:4,
@@ -57,7 +57,9 @@ export async function probeRuntime(plan, io = {}) {
         response.on("data",data=>{bytes+=data.length;if(bytes>65536)request.destroy(new Error("response too large"))});
         response.once("error",reject);response.once("end",()=>resolve(response.statusCode));response.resume();
       });
-      request.setTimeout(2000,()=>request.destroy(new Error("allowed service timeout")));
+      const deadline=timeoutMs?setTimeout(()=>request.destroy(new Error("external origin timeout")),timeoutMs):undefined;
+      request.once("close",()=>clearTimeout(deadline));
+      request.setTimeout(timeoutMs??2000,()=>request.destroy(new Error("allowed service timeout")));
       request.once("error",reject);request.end();
     });
   });
@@ -72,6 +74,16 @@ export async function probeRuntime(plan, io = {}) {
     let code;
     try { code=await getStatus({host:origin.hostname,path,ca}); } catch { expect(false,"allowed service request failed"); }
     expect(code === 200,"allowed service did not answer 200");
+  }
+  // Public services supply no operator backend log. These checks establish
+  // observed proxy DNS and end-to-end TLS/HTTP, not public non-delivery proof.
+  for (const target of Object.values(policy.externalTargets||{})) {
+    const host=new URL(target.origin).hostname;
+    let answers,code;
+    try {answers=await resolver.resolve4(host);} catch {expect(false,"external DNS lookup failed");}
+    expect(answers.length===1 && answers[0]===policy.frontAddress,"external DNS answer bypasses proxy");
+    try {code=await getStatus({host,path:"/",timeoutMs:7000});} catch {expect(false,"external origin request failed");}
+    expect(code>=200 && code<500,"external origin did not answer with a verified TLS control");
   }
   for (const record of policy.authorityRecords) {
     let answers;

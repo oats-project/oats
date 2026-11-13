@@ -112,6 +112,114 @@ test("one policy produces authoritative DNS and exact TLS routes for the five se
   assert.doesNotMatch(result.corefile, /forward|proxy/, "the agent resolver never recurses upstream");
 });
 
+function externalPolicy() {
+  return {...proxyPolicy(), externalTargets: {
+    source: {origin:"https://github.com"}, model: {origin:"https://api.anthropic.com"},
+  }, externalResolverAddresses:["1.1.1.1","8.8.8.8"]};
+}
+
+test("external source and model roles keep DNS at the proxy and use separate owned connectors", () => {
+  const result=compilePolicy(externalPolicy());
+  for (const host of ["github.com","api.anthropic.com"]) {
+    assert.ok(result.zone.includes(`${host}. 30 IN A 172.30.0.2`));
+    assert.ok(result.nginx.includes(`"${host}" external_`));
+  }
+  assert.match(result.nginx,/server 127\.0\.0\.1:10443;/);
+  assert.match(result.nginx,/server 127\.0\.0\.1:10444;/);
+  assert.doesNotMatch(result.nginx,/resolver |proxy_ssl|ssl_certificate/);
+  assert.doesNotMatch(result.corefile,/forward|proxy/);
+  assert.match(result.corefile,/class denial/);
+  assert.match(result.nginx,/sni_refused/);
+  assert.match(result.nginx,/access_log \/dev\/stderr refused if=\$log_refused;/);
+  assert.match(result.nginx,/server 10\.20\.0\.10:443;/,"internal targets remain pinned");
+});
+
+test("external policy refuses unscoped roles, missing resolvers and unsafe resolver addresses", () => {
+  for (const change of [
+    p=>{p.externalTargets.knowledge={origin:"https://api.github.com"};},
+    p=>{p.externalTargets.source.origin="https://example.com";},
+    p=>{p.externalTargets.source.origin="https://github.com:444";},
+    p=>{p.externalTargets.model.addresses=["1.1.1.1"];},
+    p=>{delete p.externalResolverAddresses;},
+    p=>{delete p.externalTargets;},
+    p=>{p.externalTargets={};},
+    p=>{p.externalResolverAddresses=[];},
+    p=>{p.externalResolverAddresses=["1.1.1.1","1.1.1.1"];},
+    p=>{p.externalResolverAddresses=Array(5).fill("1.1.1.1");},
+    ...["0.0.0.0","10.0.0.1","127.0.0.1","169.254.169.254","172.30.0.2",
+      "192.168.0.1","100.64.0.1","192.0.2.1","224.0.0.1","240.0.0.1","::1"].map(ip=>p=>{p.externalResolverAddresses=[ip];}),
+    p=>{p.targets.aweb.addresses=["9.9.9.9"];p.externalResolverAddresses=["9.9.9.9"];},
+    p=>{p.deniedAddresses.push("1.1.1.1");},
+    p=>{p.privateIngressAddresses.push("1.1.1.1");},
+    p=>{p.targets.aweb.origin="https://github.com";},
+    p=>{p.humanOrigin="https://api.anthropic.com";},
+  ]) {
+    const policy=externalPolicy();change(policy);
+    assert.throws(()=>compilePolicy(policy),/egress policy/);
+  }
+  const source=externalPolicy();delete source.externalTargets.model;
+  assert.doesNotThrow(()=>compilePolicy(source),"either role can be independently enabled");
+});
+
+test("external resolution refuses mixed or deployment answers before opening any socket", async () => {
+  const {connectExternal}=await import("../container/agent/egress/external.mjs");
+  const policy=externalPolicy();let calls=0;
+  for (const answers of [["140.82.112.3","127.0.0.1"],["10.20.0.10"],["172.30.0.2"],[],["::1"]]) {
+    await assert.rejects(connectExternal(policy,"github.com",{
+      resolve4:async host=>{assert.equal(host,"github.com");return answers;},
+      connect:()=>{calls++;throw new Error("must not connect");},
+    }),/external destination refused/);
+  }
+  assert.equal(calls,0);
+  await assert.rejects(connectExternal(policy,"not-listed.invalid",{
+    resolve4:async()=>{throw new Error("undeclared host must not resolve");},
+  }),/external hostname refused/);
+});
+
+test("external connector passes only the validated IPv4 literal to the socket boundary", async () => {
+  const {connectExternal}=await import("../container/agent/egress/external.mjs");
+  const {PassThrough}=await import("node:stream");const stream=new PassThrough();
+  const policy=externalPolicy();let lookups=0,options;
+  const socket=await connectExternal(policy,"github.com",{
+    resolve4:async()=>{lookups++;return ["140.82.112.3"];},
+    connect:value=>{options=value;queueMicrotask(()=>stream.emit("connect"));return stream;},
+  });
+  assert.equal(socket,stream);assert.equal(lookups,1);
+  assert.deepEqual(options,{host:"140.82.112.3",port:443,family:4});
+  stream.destroy();
+});
+
+test("external DNS timeout and cancelled clients cannot later open an upstream socket", async () => {
+  const {connectExternal}=await import("../container/agent/egress/external.mjs");
+  for (const mode of ["timeout","abort"]) {
+    let answer,calls=0;
+    const controller=new AbortController();
+    const pending=connectExternal(externalPolicy(),"github.com",{
+      resolve4:()=>new Promise(resolve=>{answer=resolve;}),
+      connect:()=>{calls++;throw new Error("late socket");},
+      signal:controller.signal,timeoutMs:20,
+    });
+    if(mode==="abort") controller.abort();
+    await assert.rejects(pending,/external destination refused/);
+    answer?.(["140.82.112.3"]);
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(calls,0);
+  }
+});
+
+test("the proxy owns external connectors and does not launch children if a connector cannot bind", async () => {
+  const {createServer}=await import("node:net");
+  const blocker=createServer();await new Promise((resolve,reject)=>{
+    blocker.once("error",reject);blocker.listen(10443,"127.0.0.1",resolve);
+  });
+  let launches=0;
+  try {
+    const code=await superviseProxy({policy:externalPolicy(),spawnChild:()=>{launches++;throw new Error("must not launch");},
+      onSignal:()=>()=>{},say:()=>{}});
+    assert.equal(code,1);assert.equal(launches,0);
+  } finally {await new Promise(resolve=>blocker.close(resolve));}
+});
+
 test("proxy policy rejects wildcard, credential, human-login and unbound destinations", () => {
   const cases = [
     policy => { policy.targets.aweb.origin = "http://aweb.example.invalid"; },
@@ -494,6 +602,20 @@ test("the in-container boundary body rejects a live denied endpoint or a key mou
     getStatus:async({ca})=>{assert.equal(ca,undefined,"supported trust extends normal roots rather than replacing them");rootControls++;return 200;}};
   assert.equal(await probeRuntime({...plan,caFile:trustPath},trustIO),true);
   assert.equal(rootControls,5);
+
+  const externalSeen=[];
+  const externalIO={...io,resolver:{...io.resolver,resolve4:async host=>
+    ["github.com","api.anthropic.com"].includes(host)?[policy.frontAddress]:io.resolver.resolve4(host)},
+    getStatus:async({host,path})=>{
+      if(["github.com","api.anthropic.com"].includes(host)) {assert.equal(path,"/");externalSeen.push(host);}
+      return host==="api.anthropic.com"?404:200;
+    }};
+  const extended={...plan,policy:externalPolicy()};
+  assert.equal(await probeRuntime(extended,externalIO),true);
+  assert.deepEqual(externalSeen.sort(),["api.anthropic.com","github.com"]);
+  await assert.rejects(()=>probeRuntime(extended,{...externalIO,getStatus:async({host})=>host==="api.anthropic.com"?503:200}),/external origin did not answer/);
+  await assert.rejects(()=>probeRuntime(extended,{...externalIO,resolver:{...externalIO.resolver,
+    resolve4:async host=>host==="github.com"?["140.82.112.3"]:externalIO.resolver.resolve4(host)}}),/external DNS answer bypasses proxy/);
 
   await assert.rejects(()=>probeRuntime(plan,{...io,tcpReachable:async()=>true}),/denied TCP endpoint is reachable/);
   await assert.rejects(()=>probeRuntime(plan,{...io,fs:{...io.fs,existsSync:path=>path==="/run/secrets"}}),/protected path exists inside probe/);

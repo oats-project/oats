@@ -9,7 +9,7 @@ second operator schema.
 ## Derived policy
 
 The wrapper mounts a non-secret JSON file read-only at `/etc/egress/policy.json`.
-Its complete field set is:
+With external roles disabled, its field set is:
 
 ```json
 {
@@ -35,7 +35,78 @@ on port 443. Addresses are pinned IPv4 literals resolved and checked before the
 proxy starts. Private ingress addresses need explicit exceptions; loopback,
 metadata and reserved addresses remain denied. `deniedAddresses` lists protected
 backend addresses, including PostgreSQL and Redis, and overrides exceptions.
-There is no live upstream DNS or general recursive resolver.
+These five upstreams never use live DNS. The agent-facing DNS is authoritative,
+not a general recursive resolver.
+
+### Optional external source and model roles
+
+The wrapper's `egress.external.source` and `.model` booleans enable exactly
+`https://github.com` and `https://api.anthropic.com`, respectively. Both default
+false. The operator does not supply arbitrary origins. When either is enabled,
+the wrapper adds these derived fields, omitting disabled roles:
+
+```json
+{
+  "externalTargets": {
+    "model": {"origin": "https://api.anthropic.com"},
+    "source": {"origin": "https://github.com"}
+  },
+  "externalResolverAddresses": ["1.1.1.1"]
+}
+```
+
+`egress.external.resolvers` supplies 1–4 distinct public IPv4 DNS resolver
+addresses, in operator order, with no default. DNS uses UDP/TCP port 53.
+Both derived fields are absent with neither role enabled. The component checks
+the exact roles, origins and resolver addresses again. No knowledge-publication
+role, npm, codeload, raw-file or release-asset host is included.
+
+Agents resolve configured external names to the proxy address. Only the
+proxy resolves their upstream addresses, for each new connection. An
+image-owned loopback connector validates every returned IPv4 address, rejects
+mixed safe/unsafe answers, and connects to the selected IP literal without a
+second lookup. Private, loopback, link-local, reserved and denied addresses,
+the proxy, private-ingress exceptions and every pinned deployment target are
+excluded. External routes never inherit internal private-ingress exceptions.
+DNS and connect work has a five-second bound; there is no default upstream,
+recursive agent DNS, CONNECT endpoint or automatic host expansion.
+
+The external guarantee is exact declared SNI plus a validated public
+destination. TLS stays end to end. It does not filter encrypted HTTP
+Host/`:authority`, paths, methods or repositories. Source access can read any
+public repository on the allowed host; request paths and queries can disclose
+data. Absence of a provisioned Git credential is not a network prohibition on
+introducing one. Any authorized push credential must be scoped to one repository.
+Provider requests can contain prompts, decrypted messages, files and tool output.
+
+With external roles configured, CoreDNS logs denied questions and nginx logs
+refused SNI names. The connector reports refusal by role without request bodies,
+credentials or resolved values. A real harness start and turn must retain all
+refused names; another required host is a finding, not permission to add it.
+
+The runtime body checks each enabled external name resolves only to the proxy
+and receives an ordinary 2xx–4xx HTTP response over verified TLS, without following
+redirects. These are connectivity controls, not readiness or public-backend
+non-delivery evidence. Owned DNS/TLS mutants and shipped-client checks qualify
+external enforcement separately from the five-service common-audit proof below.
+Generic read-only mirror support remains available; it is not needed by the
+direct source role.
+
+After building the proxy, explicit public-host QA runs as:
+
+```sh
+sh test/agent-external-egress-image.sh <proxy-image-id> <existing-agent-image-id>
+```
+
+This fixture creates its own internal isolated agents network and services
+bridge, uses the agent image's shipped Node and Git without starting its broker,
+and checks public HTTPS, Git `ls-remote`, undeclared DNS/SNI refusal and refusal
+logs. It selects `1.1.1.1` and `8.8.8.8` only for that disposable fixture. It
+contains no login, seat or model request and removes its own resources. Set
+`EGRESS_EXTERNAL_EVIDENCE` to retain the proxy log. Run the original
+`test/agent-egress-image.sh` separately for the five-service baseline and the
+plain-versus-isolated gateway regression. Neither fixture proves a model turn,
+verified wake, the actual deployment boundary or Kubernetes enforcement.
 
 The wrapper derives `authorityRecords` only from the signer's validated
 `namespace_authorities` and `registry_origin`, using the existing AWID TXT
@@ -71,6 +142,9 @@ Kubernetes uses the same image and derived policy. An enforcing CNI must restric
 agent egress to proxy TCP/UDP 53 and TCP 443, and proxy egress to the pinned TLS
 ingress addresses on TCP 443. An installed NetworkPolicy object alone does not
 prove enforcement. The agent must have no service credentials or backend access.
+External roles also need proxy-only access to the selected DNS resolvers and
+validated public TLS destinations; their Kubernetes adapter/CNI qualification
+is separate from the Compose component proof.
 
 **An SNI map does not enforce HTTP origins.** Before enabling the signer route,
 the TLS ingress must reject mismatched SNI and HTTP Host, including HTTP/2
