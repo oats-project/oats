@@ -424,6 +424,16 @@ A self-contained package has an `oats.json`:
   A listed variable is the capability's to decide: a launch it is part of
   never inherits one its hooks leave out
   ([a declared name is the provider's](#a-declared-name-is-the-providers)).
+- `readsEnvironment` lists what the capability's module commands may read
+  from the environment of whoever runs them outside a launch (a readiness
+  check, `oats operation run`): exact variable names, and prefixes ending in
+  an underscore, such as `["AW_", "CLAUDE_CONFIG_DIR"]`. It grants no right
+  to set anything; that is `environment` and `environmentNamespaces`. The
+  kernel's own `OATS_`, `OAS_` and `PI_` names are reserved, a prefix has at
+  least two characters before its underscore, and `[]` says the commands read
+  none. This kernel accepts the field and does not yet act on it. A package
+  that declares it raises its `compatibility.oats` floor to this release: an
+  earlier kernel's schema refuses a field it does not know.
 - `triggerSources` (optional) declares the capability's
   [trigger sources](#trigger-sources-triggersources). It is checked only
   where a source is used, never when the capability loads.
