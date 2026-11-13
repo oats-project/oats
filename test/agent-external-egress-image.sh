@@ -19,6 +19,9 @@ cleanup() {
 }
 trap cleanup EXIT
 chmod 755 "$scratch"
+openssl req -x509 -newkey rsa:2048 -nodes -days 1 -keyout "$scratch/probe-ca.key" -out "$scratch/probe-ca.pem" -subj /CN=unrelated-public-probe-ca -addext basicConstraints=critical,CA:TRUE >/dev/null 2>&1
+chmod 644 "$scratch/probe-ca.pem"
+chmod 600 "$scratch/probe-ca.key"
 docker network create "$services" >/dev/null
 control_gateway=$(docker network inspect --format '{{(index .IPAM.Config 0).Gateway}}' "$services")
 # Retain an explicit gateway while isolated mode removes its host address.
@@ -33,6 +36,7 @@ node --input-type=module - "$root" "$scratch" "$proxy_ip" <<'JS'
 import fs from "node:fs";
 const [root,dir,frontAddress]=process.argv.slice(2);
 const {compilePolicy}=await import(root+"/container/agent/egress/policy.mjs");
+const {httpsStatus}=await import(root+"/container/agent/egress/probe-runtime.mjs");
 const text=fs.readFileSync(root+"/container/agent/egress/README.md","utf8");
 const policy={...JSON.parse(text.match(/```json\n([\s\S]*?)\n```/)[1]),frontAddress,
   externalTargets:{model:{origin:"https://api.anthropic.com"},source:{origin:"https://github.com"}},
@@ -40,6 +44,8 @@ const policy={...JSON.parse(text.match(/```json\n([\s\S]*?)\n```/)[1]),frontAddr
 compilePolicy(policy);
 fs.writeFileSync(dir+"/policy.json",JSON.stringify(policy),{mode:0o644});
 fs.writeFileSync(dir+"/resolv.conf","nameserver "+frontAddress+"\n",{mode:0o644});
+// The public-host checks use the same transport as the emitted runtime body.
+fs.writeFileSync(dir+"/client.mjs","const httpsStatus=("+httpsStatus.toString()+");\n",{mode:0o644});
 JS
 docker run -d --name "$proxy" --network "$agents" --ip "$proxy_ip" --user 10001:10001 --cap-drop ALL --security-opt no-new-privileges:true --read-only --tmpfs /tmp:rw,nosuid,nodev,size=16m,mode=1777 --pids-limit 64 --memory 256m --cpus 1 --sysctl net.ipv4.ip_forward=0 --sysctl net.ipv4.ip_unprivileged_port_start=0 --mount "type=bind,source=$scratch/policy.json,target=/etc/egress/policy.json,readonly" "$image" >/dev/null
 docker network connect "$services" "$proxy"
@@ -48,16 +54,15 @@ until docker exec "$proxy" node /opt/egress/health.mjs >/dev/null 2>&1; do
   attempt=$((attempt+1));test "$attempt" -lt 15 || exit 1
   sleep 1
 done
-docker run -d --name "$client" --network "$agents" --ip "$client_ip" --user 20001:20001 --cap-drop ALL --security-opt no-new-privileges:true --read-only --tmpfs /tmp:rw,nosuid,nodev,size=32m,mode=1777 --pids-limit 128 --memory 256m --cpus 1 --mount "type=bind,source=$scratch/resolv.conf,target=/etc/resolv.conf,readonly" --entrypoint sleep "$agent_image" infinity >/dev/null
+docker run -d --name "$client" --network "$agents" --ip "$client_ip" --user 20001:20001 --cap-drop ALL --security-opt no-new-privileges:true --read-only --tmpfs /tmp:rw,nosuid,nodev,size=32m,mode=1777 --pids-limit 128 --memory 256m --cpus 1 --mount "type=bind,source=$scratch/resolv.conf,target=/etc/resolv.conf,readonly" --mount "type=bind,source=$scratch/probe-ca.pem,target=/public/probe-ca.pem,readonly" --entrypoint sleep "$agent_image" infinity >/dev/null
 test "$(docker inspect --format '{{len .NetworkSettings.Networks}}' "$client")" = 1
 test "$(docker inspect --format '{{len .NetworkSettings.Networks}}' "$proxy")" = 2
 test "$(docker network inspect --format '{{.Internal}} {{.EnableIPv6}} {{index .Options "com.docker.network.bridge.gateway_mode_ipv4"}}' "$agents")" = 'true false isolated'
 node --input-type=module -e 'const {checkDockerGateway}=await import(process.argv[1]);await checkDockerGateway({image:process.argv[2],controlNetwork:process.argv[3],controlAddress:process.argv[4],gatewayAddress:process.argv[5],probeContainer:process.argv[6]})' "$root/container/agent/egress/canary.mjs" "$image" "$services" "$control_gateway" "$gateway" "$client"
 printf '%s\n' 'PASS actual public-host fixture: one isolated agent network and live on-link gateway denial'
-docker exec -i "$client" node --input-type=module - "$proxy_ip" <<'JS'
+cat >> "$scratch/client.mjs" <<'JS'
 import assert from "node:assert/strict";
 import dns from "node:dns/promises";
-import https from "node:https";
 import tls from "node:tls";
 import net from "node:net";
 import fs from "node:fs";
@@ -71,13 +76,8 @@ for(const port of [10443,10444]) await new Promise((resolve,reject)=>{
 });
 for(const host of ["github.com","api.anthropic.com"]) {
   assert.deepEqual(await dns.resolve4(host),[front]);
-  const code=await new Promise((resolve,reject)=>{
-    const req=https.get("https://"+host+"/",{family:4,agent:false},res=>{
-      const code=res.statusCode;res.destroy();resolve(code);
-    });
-    const timer=setTimeout(()=>req.destroy(new Error("public TLS control timeout")),10000);
-    req.once("close",()=>clearTimeout(timer));req.once("error",reject);
-  });
+  const code=await httpsStatus({host,path:"/",frontAddress:front,timeoutMs:10000,
+    headersOnly:true,ca:fs.readFileSync("/public/probe-ca.pem")});
   assert.ok(code>=200&&code<500);
   console.log(JSON.stringify({host,verifiedTLS:true,status:code}));
 }
@@ -104,6 +104,7 @@ assert.equal(git.status,0,"shipped git public HTTPS failed (output withheld)");
 assert.match(git.stdout,/^[0-9a-f]{40}\s+HEAD\s*$/);
 console.log("PASS shipped Git HTTPS and source/model verified TLS; undeclared DNS/SNI refused");
 JS
+docker exec -i "$client" node --input-type=module - "$proxy_ip" < "$scratch/client.mjs"
 docker stop --time 5 "$proxy" >/dev/null
 test "$(docker inspect --format '{{.State.ExitCode}}' "$proxy")" = 0
 test "$(docker inspect --format '{{.State.OOMKilled}}' "$proxy")" = false

@@ -41,11 +41,14 @@ export async function connectExternal(policy, host, {resolve4,connect=createConn
 
 export async function startExternalConnectors(policy, {resolve4,connect,say=line=>process.stderr.write(line+"\n")}={}) {
   const routes=compilePolicy(policy).external;
-  const servers=[], sockets=new Set();
+  const servers=[], sockets=new Set(), pending=new Set();
   let closing=false,fail;
   const failed=new Promise(resolve=>{fail=resolve;});
   const close=async()=>{
     closing=true;
+    // Abort before destroy: a server's close callback can precede the socket's
+    // close event, while a queued DNS answer is already ready to continue.
+    for(const controller of pending) controller.abort();
     for (const socket of sockets) socket.destroy();
     await Promise.all(servers.map(server=>new Promise(resolve=>server.close(()=>resolve()))));
   };
@@ -53,11 +56,13 @@ export async function startExternalConnectors(policy, {resolve4,connect,say=line
     for (const route of routes) {
       const server=createServer({pauseOnConnect:true},client=>{
         const controller=new AbortController();let upstream;
+        pending.add(controller);
         sockets.add(client);
-        client.once("close",()=>{sockets.delete(client);controller.abort();upstream?.destroy();});
-        client.on("error",()=>client.destroy());
+        client.once("close",()=>{sockets.delete(client);pending.delete(controller);controller.abort();upstream?.destroy();});
+        client.on("error",()=>{controller.abort();client.destroy();});
         client.setTimeout(300000,()=>client.destroy());
         connectExternal(policy,route.host,{resolve4,connect,signal:controller.signal}).then(socket=>{
+          pending.delete(controller);
           upstream=socket;
           if (client.destroyed) {socket.destroy();return;}
           sockets.add(socket);
@@ -66,7 +71,9 @@ export async function startExternalConnectors(policy, {resolve4,connect,say=line
           socket.setTimeout(300000,()=>socket.destroy());
           client.pipe(socket);socket.pipe(client);client.resume();
         }).catch(()=>{
-          say(`egress: external connection refused (${route.role})`);
+          pending.delete(controller);
+          if(!controller.signal.aborted && !client.destroyed)
+            say(`egress: external connection refused (${route.role})`);
           client.destroy();
         });
       });

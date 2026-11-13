@@ -264,6 +264,57 @@ test("external DNS timeout and cancelled clients cannot later open an upstream s
   }
 });
 
+test("external connectivity observes verified TLS headers without consuming a large response", async t => {
+  const {httpsStatus}=await import("../container/agent/egress/probe-runtime.mjs");
+  const {mkdtempSync,rmSync}=await import("node:fs");const {tmpdir}=await import("node:os");
+  const {join}=await import("node:path");const {execFileSync}=await import("node:child_process");
+  const https=await import("node:https");
+  const dir=mkdtempSync(join(tmpdir(),"external-large-control-"));
+  t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  execFileSync("openssl",["req","-x509","-newkey","rsa:2048","-nodes","-days","1","-keyout",join(dir,"key.pem"),
+    "-out",join(dir,"cert.pem"),"-subj","/CN=github.com","-addext","subjectAltName=DNS:github.com"],{stdio:"ignore",timeout:10000});
+  const cert=readFileSync(join(dir,"cert.pem"));
+  const server=https.createServer({key:readFileSync(join(dir,"key.pem")),cert},(_req,res)=>{
+    res.writeHead(200);res.end(Buffer.alloc(256*1024,"x"));
+  });
+  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+  t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
+  const options={host:"github.com",frontAddress:"127.0.0.1",port:server.address().port,path:"/",ca:cert,timeoutMs:2000};
+  assert.equal(await httpsStatus({...options,headersOnly:true}),200);
+  await assert.rejects(httpsStatus(options),/response too large/,"the internal response-size guard is retained");
+  execFileSync("openssl",["req","-x509","-newkey","rsa:2048","-nodes","-days","1","-keyout",join(dir,"extra-key.pem"),
+    "-out",join(dir,"extra-cert.pem"),"-subj","/CN=unrelated-probe-ca"],{stdio:"ignore",timeout:10000});
+  // A separate process starts with the backend CA in its default trust store.
+  // Supplying another probe CA must extend rather than replace that store.
+  const program=`const {readFileSync}=await import("node:fs");const {httpsStatus}=await import(process.argv[1]);
+    const status=await httpsStatus({host:"github.com",frontAddress:"127.0.0.1",port:Number(process.argv[3]),
+      path:"/",headersOnly:true,timeoutMs:2000,ca:readFileSync(process.argv[2])});console.log(status);`;
+  const child=spawn(process.execPath,["--input-type=module","-e",program,
+    new URL("../container/agent/egress/probe-runtime.mjs",import.meta.url).href,join(dir,"extra-cert.pem"),String(server.address().port)],
+    {env:{...process.env,NODE_EXTRA_CA_CERTS:join(dir,"cert.pem")},stdio:["ignore","pipe","pipe"],timeout:4000});
+  let output="";child.stdout.on("data",data=>output+=data);child.stderr.resume();
+  const code=await new Promise((resolve,reject)=>{child.once("error",reject);child.once("close",resolve);});
+  assert.equal(code,0,"the default process roots must survive an additional probe CA");assert.equal(output.trim(),"200");
+});
+
+test("a client reset during external DNS is not logged as a destination refusal", async () => {
+  const {startExternalConnectors}=await import("../container/agent/egress/external.mjs");
+  const {createConnection}=await import("node:net");
+  let ready,answer;const started=new Promise(resolve=>{ready=resolve;});
+  const logs=[];let connects=0;
+  const connectors=await startExternalConnectors(externalPolicy(),{
+    resolve4:()=>{ready();return new Promise(resolve=>{answer=resolve;});},
+    connect:()=>{connects++;throw new Error("cancelled client must not connect");},say:line=>logs.push(line),
+  });
+  const client=createConnection({host:"127.0.0.1",port:10443});client.on("error",()=>client.destroy());
+  try {
+    await started;client.resetAndDestroy();
+    await connectors.close();answer(["140.82.112.3"]);
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.deepEqual(logs,[]);assert.equal(connects,0);
+  } finally {client.destroy();await connectors.close();}
+});
+
 test("the proxy owns external connectors and does not launch children if a connector cannot bind", async () => {
   const {createServer}=await import("node:net");
   const blocker=createServer();await new Promise((resolve,reject)=>{
@@ -663,8 +714,8 @@ test("the in-container boundary body rejects a live denied endpoint or a key mou
   const externalSeen=[];
   const externalIO={...io,resolver:{...io.resolver,resolve4:async host=>
     ["github.com","api.anthropic.com"].includes(host)?[policy.frontAddress]:io.resolver.resolve4(host)},
-    getStatus:async({host,path})=>{
-      if(["github.com","api.anthropic.com"].includes(host)) {assert.equal(path,"/");externalSeen.push(host);}
+    getStatus:async({host,path,headersOnly})=>{
+      if(["github.com","api.anthropic.com"].includes(host)) {assert.equal(path,"/");assert.equal(headersOnly,true);externalSeen.push(host);}
       return host==="api.anthropic.com"?404:200;
     }};
   const extended={...plan,policy:externalPolicy()};

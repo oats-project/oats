@@ -70,6 +70,8 @@ the proxy, private-ingress exceptions and every pinned deployment target are
 excluded. External routes never inherit internal private-ingress exceptions.
 DNS and connect work has a five-second bound; there is no default upstream,
 recursive agent DNS, CONNECT endpoint or automatic host expansion.
+Client cancellation aborts pending work without being logged as a destination
+refusal; actual resolution and connection refusals remain role-labelled.
 
 The external guarantee is exact declared SNI plus a validated public
 destination. TLS stays end to end. It does not filter encrypted HTTP
@@ -86,7 +88,12 @@ refused names; another required host is a finding, not permission to add it.
 
 The runtime body checks each enabled external name resolves only to the proxy
 and receives an ordinary 2xx–4xx HTTP response over verified TLS, without following
-redirects. These are connectivity controls, not readiness or public-backend
+redirects. External controls stop at response headers, so a large homepage body
+does not fail connectivity. Internal readiness controls retain their response
+size bound. An explicit probe CA extends the process's default roots, including
+its environment-added certificates, using the shipped Node's
+[default CA store](https://nodejs.org/docs/latest-v22.x/api/tls.html#tlsgetcacertificatestype).
+These are connectivity controls, not readiness or public-backend
 non-delivery evidence. Owned DNS/TLS mutants and shipped-client checks qualify
 external enforcement separately from the five-service common-audit proof below.
 Generic read-only mirror support remains available; it is not needed by the
@@ -100,7 +107,9 @@ sh test/agent-external-egress-image.sh <proxy-image-id> <existing-agent-image-id
 
 This fixture creates its own internal isolated agents network and services
 bridge, uses the agent image's shipped Node and Git without starting its broker,
-and checks public HTTPS, Git `ls-remote`, undeclared DNS/SNI refusal and refusal
+and checks public HTTPS through the runtime body's shared serialized transport,
+with an unrelated fixture CA added to the default trust store. It also checks
+Git `ls-remote`, undeclared DNS/SNI refusal and refusal
 logs. It selects `1.1.1.1` and `8.8.8.8` only for that disposable fixture. It
 contains no login, seat or model request and removes its own resources. Set
 `EGRESS_EXTERNAL_EVIDENCE` to retain the proxy log. Run the original

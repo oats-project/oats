@@ -6,21 +6,29 @@ import { tcpReachable } from "./canary.mjs";
 import { compilePolicy } from "./policy.mjs";
 import { publicCACheck, mirrorsCheck } from "../accept.mjs";
 
-export async function httpsStatus({host,path,timeoutMs,frontAddress,ca,port=443}) {
-    const https = await import("node:https");
-    return new Promise((resolve,reject) => {
-      const request = https.request({hostname:host,servername:host,port,path,method:"GET",ca,agent:false,family:4,
-        lookup:(_name,options,done)=>options.all?done(null,[{address:frontAddress,family:4}]):done(null,frontAddress,4),
-      }, response => {
-        let bytes=0;
-        response.on("data",data=>{bytes+=data.length;if(bytes>65536)request.destroy(new Error("response too large"))});
-        response.once("error",reject);response.once("end",()=>resolve(response.statusCode));response.resume();
-      });
-      const deadline=timeoutMs?setTimeout(()=>request.destroy(new Error("external origin timeout")),timeoutMs):undefined;
-      request.once("close",()=>clearTimeout(deadline));
-      request.setTimeout(timeoutMs??2000,()=>request.destroy(new Error("allowed service timeout")));
-      request.once("error",reject);request.end();
+export async function httpsStatus({host,path,timeoutMs,frontAddress,ca,port=443,headersOnly=false}) {
+  const https = await import("node:https");
+  if(ca) {
+    const {getCACertificates}=await import("node:tls");
+    // The shipped Node's default store includes public and environment-added
+    // roots. An explicit probe CA extends that store rather than replacing it.
+    ca=[...getCACertificates("default"),ca];
+  }
+  return new Promise((resolve,reject) => {
+    const request = https.request({hostname:host,servername:host,port,path,method:"GET",ca,agent:false,family:4,
+      lookup:(_name,options,done)=>options.all?done(null,[{address:frontAddress,family:4}]):done(null,frontAddress,4),
+    }, response => {
+      response.once("error",reject);
+      if(headersOnly) {resolve(response.statusCode);response.destroy();return;}
+      let bytes=0;
+      response.on("data",data=>{bytes+=data.length;if(bytes>65536)request.destroy(new Error("response too large"))});
+      response.once("end",()=>resolve(response.statusCode));response.resume();
     });
+    const deadline=timeoutMs?setTimeout(()=>request.destroy(new Error("external origin timeout")),timeoutMs):undefined;
+    request.once("close",()=>clearTimeout(deadline));
+    request.setTimeout(timeoutMs??2000,()=>request.destroy(new Error("allowed service timeout")));
+    request.once("error",reject);request.end();
+  });
 }
 
 export async function probeRuntime(plan, io = {}) {
@@ -84,7 +92,7 @@ export async function probeRuntime(plan, io = {}) {
     let answers,code;
     try {answers=await resolver.resolve4(host);} catch {expect(false,"external DNS lookup failed");}
     expect(answers.length===1 && answers[0]===policy.frontAddress,"external DNS answer bypasses proxy");
-    try {code=await getStatus({host,path:"/",timeoutMs:7000});} catch {expect(false,"external origin request failed");}
+    try {code=await getStatus({host,path:"/",timeoutMs:7000,headersOnly:true});} catch {expect(false,"external origin request failed");}
     expect(code>=200 && code<500,"external origin did not answer with a verified TLS control");
   }
   for (const record of policy.authorityRecords) {
