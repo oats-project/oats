@@ -7,6 +7,7 @@ import { setupFailure } from './setup-team-default.mjs';
 import { versionAtLeast } from './aw-floor.mjs';
 import { leadingJsonObject, withheldFailureCause } from './aw-failure-cause.mjs';
 import { plainServiceUrl } from './plain-service.mjs';
+import { sameAwebTeamId } from './aweb-team-id.mjs';
 
 /** The first aw whose `team invite inspect` sends the whole hosted token to the
  *  invite preview and accepts the Cloud's `/api` service URL. (`id team
@@ -86,7 +87,7 @@ export function inspectInvite(token, cwd, { run, validTeam, resumeCommand, timeo
  *  mismatch; a label derived from the invite is a collision to resolve with
  *  `--join <label>`, never a suffix. */
 export function checkInviteLabel({ label, mappedTeam, inviteTeam, explicit }) {
-  if (!mappedTeam || mappedTeam === inviteTeam) return;
+  if (!mappedTeam || sameAwebTeamId(mappedTeam, inviteTeam)) return;
   if (explicit) throw setupFailure('E_SETUP_JOIN_MISMATCH', `--join ${label} is team ${mappedTeam} here, but the invite is for ${inviteTeam}; nothing was redeemed; pass the --join label of ${inviteTeam}, or ask for an invite to ${mappedTeam}`);
   throw setupFailure('E_SETUP_LABEL_COLLISION', `label ${label}, derived from the invite's team ${inviteTeam}, is already team ${mappedTeam} here; nothing was redeemed; pass --join <label> with a label for ${inviteTeam}`);
 }
