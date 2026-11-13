@@ -11,6 +11,9 @@
 | `signer.profileFile` | wrapper reads public `namespace_authorities` and `registry_origin` | validated existing ProtectedServiceProfile; agents require signer | none | Derive only its provisioned `_awid` TXT records using the existing AWID encoder/parser; no second namespace/controller input. |
 | `egress.privateIngressAddresses` | derived policy `privateIngressAddresses` | explicit approved IPv4 ingress addresses; no CIDR or wildcard | empty | Permit private TLS ingress only where declared. Reserved/metadata/loopback and protected-backend denials still take precedence. |
 | derived upstream inventory | policy `targets.<role>.addresses` | 1–8 pinned IPv4 addresses per role, resolved/checked before launch | none | No runtime DNS rebinding or general outbound proxy. |
+| `egress.external.source` | derived `externalTargets.source.origin` | boolean selects only `https://github.com` | false | Direct Git HTTPS source reads; no repository/path/method restriction. |
+| `egress.external.model` | derived `externalTargets.model.origin` | boolean selects only `https://api.anthropic.com` | false | End-to-end model TLS; no knowledge/publication role. |
+| `egress.external.resolvers` | derived `externalResolverAddresses` | 1–4 distinct public IPv4 literals, operator order, DNS port 53; required only with an enabled external role | none | Egress-only resolution; every answer is checked before connecting by IP. Agent DNS remains authoritative. |
 | derived protected inventory | policy `deniedAddresses` | exact protected backend IPv4 addresses, including PostgreSQL and Redis | none | Protected destinations override private ingress exceptions. |
 | derived policy artifact | `EGRESS_POLICY_FILE`; `/etc/egress/policy.json`, read-only | complete non-secret artifact specified in README; at most 64 KiB | none | Same generated policy interface for both wrappers, not another operator file/schema. |
 
