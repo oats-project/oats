@@ -360,7 +360,7 @@ test("acceptance refuses drift in the admitted container settings", async t => {
 });
 
 
-async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false, statusSpawnThrowsOnce = false, statusIgnoresTerm = false, stubbornFinish = false, brokerStatusPid = "owned" } = {}) {
+async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false, statusSpawnThrowsOnce = false, statusIgnoresTerm = false, stubbornFinish = false, brokerStatusPid = "owned", pauseAfterStarted = "" } = {}) {
   const supervisor = new URL("../container/agent/supervisor.mjs", import.meta.url);
   assert.ok(existsSync(supervisor), "the image must own broker readiness and ordered child shutdown");
   const { supervise } = await import(supervisor);
@@ -369,10 +369,14 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
   writeFileSync(events, "");
   writeFileSync(childFile, `
     const fs = require("node:fs");
-    const [role, events, mode, pidFile, pidMode] = process.argv.slice(2);
+    const [role, events, mode, pidFile, pidMode, pausedRole] = process.argv.slice(2);
     const log = text => fs.appendFileSync(events, text + "\\n");
+    const started = () => {
+      log(role + " started");
+      if (role === pausedRole) process.kill(process.pid, "SIGSTOP");
+    };
     if (role === "broker") fs.writeFileSync(pidFile, String(process.pid));
-    log(role + " started");
+    started();
     if (role === "status" && mode === "probe-stubborn") {
       process.on("SIGTERM", () => log("status TERM"));
       log("status listening");
@@ -409,7 +413,15 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
       }
       const failProbe = role === "status" && statusSpawnFailsOnce && !statusFailed;
       if (failProbe) statusFailed = true;
-      const child = spawn(failProbe ? join(dir, "missing-probe") : process.execPath, failProbe ? [] : [childFile, role, events, mode, brokerPid, brokerStatusPid], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
+      const child = spawn(failProbe ? join(dir, "missing-probe") : process.execPath, failProbe ? [] : [childFile, role, events, mode, brokerPid, brokerStatusPid, pauseAfterStarted], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
+      if (pauseAfterStarted) {
+        const kill = child.kill.bind(child);
+        child.kill = signal => {
+          const sent = kill(signal);
+          if (sent) appendFileSync(events, role + " signal " + signal + "\n");
+          return sent;
+        };
+      }
       children.set(role, child);
       return child;
     },
