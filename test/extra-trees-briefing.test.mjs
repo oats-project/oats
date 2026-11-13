@@ -27,8 +27,8 @@ const sectionOf = (text) => {
 const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 
 /** The briefing's commands, read from the inject text rather than retyped here. */
-function briefingCommands() {
-  const section = sectionOf(injectText("worktree"));
+function briefingCommands(mode = "worktree") {
+  const section = sectionOf(injectText(mode));
   const create = section.split("\n").filter((line) => line.startsWith("    oats ")).map((line) => line.slice(4));
   const remove = section.match(/`(oats worktree remove [^`]+)`/)?.[1];
   const push = section.match(/`(git push origin HEAD:<remote-branch>)`/)?.[1];
@@ -46,11 +46,12 @@ test.afterEach(() => {
 
 /** A scratch world: a deployment whose member clone (`clone`) has a bare `upstream` as origin, a seed
  *  repo that pushes to it behind the clone's back, and an instance home (checkout mode, no capability). */
-async function world(t) {
-  const fx = v2Deployment({ souls: { dev: { soul: { work: "checkout" } } } });
+async function world(t, { work = "checkout" } = {}) {
+  const fx = v2Deployment({ souls: { dev: { soul: { work } } } });
   cleanups.push(fx.cleanup);
   const hostPath = process.env.PATH; process.env.PATH = fx.env.PATH; t.after(() => { process.env.PATH = hostPath; });
-  const { home } = await fx.spawn("dev", { instance: "inst", work: "checkout" });
+  // A workspace home records the deployment as its repository, as `oats spawn` does (lib/core.mjs).
+  const { home } = await fx.spawn("dev", { instance: "inst", work, ...(work === "workspace" ? { repo: fx.dep } : {}) });
   const base = realpathSync(mkdtempSync(join(tmpdir(), "oats-extra-trees-")));
   cleanups.push(() => rmSync(base, { recursive: true, force: true }));
   const env = { ...fx.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0",
@@ -101,6 +102,64 @@ test("every composed worktree and checkout golden carries the shared section wit
       assert.ok(agents.includes(literal), `${name}/AGENTS.md keeps ${literal}`);
     }
   }
+});
+
+/** The section's bullets, from its first naming rule to its end: the part every mode shares. */
+const sharedBullets = (section) => section.slice(section.indexOf("- Name `<branch>`"));
+
+test("the workspace inject teaches extra trees: the shared bullets, and a create command that always names --repo", () => {
+  const shared = sectionOf(injectText("worktree"));
+  const workspace = sectionOf(injectText("workspace"));
+  assert.ok(workspace, "work-workspace.md has the Extra trees section");
+  assert.equal(sharedBullets(workspace), sharedBullets(shared), "the naming, timeout, push and remove rules are the shared ones");
+  assert.equal(briefingCommands("workspace").create, `${briefingCommands().create} --repo <repo>`, "the create command is the shared one plus --repo <repo>");
+  assert.equal(briefingCommands("workspace").remove, briefingCommands().remove);
+  assert.equal(briefingCommands("workspace").push, briefingCommands().push);
+  const cases = readdirSync(join(ROOT, "test", "golden")).filter((name) => /-workspace-/.test(name));
+  assert.ok(cases.length > 0);
+  for (const name of cases) {
+    const agents = readFileSync(join(ROOT, "test", "golden", name, "AGENTS.md"), "utf8");
+    assert.ok(agents.includes(workspace.trim()), `${name}/AGENTS.md contains the workspace Extra trees section verbatim`);
+  }
+});
+
+test("the workspace inject keeps member clones read-only and no longer forbids extra trees", () => {
+  const text = injectText("workspace");
+  const before = text.slice(0, text.indexOf(HEADING));
+  assert.match(before, /never edit or\s+commit there, and NEVER change a member clone's Git state/, "the clones stay read-only");
+  assert.doesNotMatch(before, /stashes or worktrees/, "worktrees are no longer among the forbidden Git operations");
+  assert.match(before, /`git worktree` run by hand/, "only hand-run `git worktree` is, beside the other state changes");
+});
+
+test("from a workspace home, the briefing's create command with --repo starts from the remote's tip and moves no clone ref", async (t) => {
+  const { create, remove } = briefingCommands("workspace");
+  const w = await world(t, { work: "workspace" });
+  const tip = w.seedCommit("main");
+  assert.notEqual(w.git("-C", w.clone, "rev-parse", "origin/main").trim(), tip, "the clone is stale");
+  const refsBefore = w.refs(w.clone, "refs/heads", "refs/remotes");
+  const headBefore = w.git("-C", w.clone, "symbolic-ref", "HEAD").trim();
+  const values = { purpose: "x", base: "main", branch: "agents/inst-x", repo: w.clone };
+  w.ok(w.run(create, values));
+
+  const tree = w.tree("x");
+  assert.equal(w.git("-C", tree, "rev-parse", "HEAD").trim(), tip, "the tree is at the upstream tip");
+  const after = lines(w.refs(w.clone, "refs/heads", "refs/remotes"));
+  const added = after.filter((line) => !lines(refsBefore).includes(line));
+  assert.deepEqual(added, [`${tip} commit\trefs/heads/agents/inst-x`], "exactly one new ref: the tree's branch");
+  assert.equal(after.filter((line) => !added.includes(line)).join("\n") + "\n", refsBefore, "every other clone ref is byte-identical");
+  assert.equal(w.git("-C", w.clone, "symbolic-ref", "HEAD").trim(), headBefore, "the clone's checked-out branch did not switch");
+  assert.equal(w.git("-C", w.clone, "status", "--porcelain"), "", "the clone's work tree is untouched");
+
+  w.ok(w.run(remove, values));
+  assert.equal(existsSync(tree), false);
+});
+
+test("from a workspace home, add without --repo is refused and makes nothing: the home's repository is the deployment", async (t) => {
+  const w = await world(t, { work: "workspace" });
+  const refused = w.run("oats worktree add --purpose x --branch agents/inst-x --base main", {});
+  assert.notEqual(refused.status, 0);
+  assert.equal(refused.json().error.code, "E_CLONE_MISSING");
+  assert.equal(existsSync(w.tree("x")), false, "nothing was made");
 });
 
 test("a fresh extra tree starts from the remote's tip, not the clone's stale origin/main, and moves no clone ref", async (t) => {
