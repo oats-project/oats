@@ -1,6 +1,6 @@
 {
   "name": "@awebai/oats",
-  "version": "0.69.18",
+  "version": "0.69.19",
   "description": "OATS (Open Agent Team Specification) — durable souls, disposable instances, targetable capability packages, and the runtime-neutral oats CLI/kernel.",
   "keywords": [
     "agents",
