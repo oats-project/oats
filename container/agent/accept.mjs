@@ -82,7 +82,7 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
   assert.ok(Number.isSafeInteger(Number(tmpSize)), "AGENT_TMP_SIZE must be safe integer bytes");
   equal("tmpfs", h.Tmpfs, { "/tmp": `rw,nosuid,nodev,size=${tmpSize},mode=1777` });
   equal("restart policy", h.RestartPolicy.Name, "unless-stopped");
-  equal("stop grace period (seconds)", info.Config.StopTimeout, 45);
+  equal("stop grace period (seconds)", info.Config.StopTimeout, 50);
   equal("healthcheck (sshd on 2222)", info.Config.Healthcheck, { Test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2222"], Interval: 30e9, Timeout: 5e9, StartPeriod: 10e9, Retries: 3 });
   const pids = Number(required(env, "AGENT_PIDS"));
   assert.ok(Number.isSafeInteger(pids) && pids > 0, "positive AGENT_PIDS");
