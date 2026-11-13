@@ -1022,7 +1022,7 @@ function renderContextRoster(instances) {
   // from SPACING/STRUCTURE (human re-test: no visible glyph): each group
   // gets an invisible separator that still exposes the group boundary to
   // AT (role=separator + aria-label).
-  // Agent groups (Redesign v3): one sequence in name order (#1262), each
+  // Agent groups (Redesign v3): one sequence in spawn order, newest first (rosterOrder), each
   // multi-member relation cluster under its deterministic name and each run
   // of unrelated instances under "independent", in place (rosterGroups,
   // shared with the command palette). A cluster's group is
