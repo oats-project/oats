@@ -201,7 +201,9 @@ test("PR context generation preserves HEAD and uses only its bound private tarba
       for (const flag of ["--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"]) assert.ok(args.includes(flag));
       const lock = structuredClone(f.sourceLock), cwd = options.cwd;
       lock.packages[""].dependencies["@awebai/oats"] = f.manifest.dependencies["@awebai/oats"];
+      // As npm records it: the packed tarball's own version, HEAD's (not the fixture baseline's).
       Object.assign(lock.packages["node_modules/@awebai/oats"], { resolved: f.manifest.dependencies["@awebai/oats"],
+        version: JSON.parse(readFileSync(join(source, "package.json"), "utf8")).version,
         integrity: `sha512-${createHash("sha512").update(readFileSync(join(cwd, "oats-pr-kernel.tgz"))).digest("base64")}` });
       writeFileSync(join(cwd, "package-lock.json"), JSON.stringify(lock));
       return "";

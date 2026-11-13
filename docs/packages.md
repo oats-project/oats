@@ -55,7 +55,7 @@ packages:
 - **Bare version** (`v5.8.0`, `5.8.0`, `1.0.0-rc.1`): the id is looked up in
   the official catalog — `package-catalog.json` in the `oats` repo, or the file
   named by `OATS_PACKAGE_CATALOG` — which supplies the repo url, the tag
-  convention (`v5.8.0` or `oats-framework/v1.25.0`) and the payload path. An id
+  convention (`v5.8.0` or `oats-framework/v1.25.2`) and the payload path. An id
   the catalog does not know is `E_PACKAGE_MISSING` ("use `git:<repo>@<ref>` for
   a package outside the catalog"). The catalog is the reviewed official list
   ([official-catalog.md](official-catalog.md)) and the only way a
@@ -78,7 +78,7 @@ members:
   - git:github.com/acme/agents
   - git:github.com/acme/platform
 packages:
-  oats.framework: v1.25.0
+  oats.framework: v1.25.2
   oats.okf: v6.0.3
   oats.aweb: v1.42.1
 teams:
@@ -432,11 +432,11 @@ A soul that names one of the package's capabilities with
   "policy": "docs/official-catalog.md",
   "packages": {
     "oats.okf":       { "url": "https://github.com/awebai/oats-okf.git", "ref": "v6.0.3", "path": "oats-package" },
-    "oats.framework": { "url": "https://github.com/awebai/oats.git", "ref": "oats-framework/v1.25.0", "path": "oats-package" }
+    "oats.framework": { "url": "https://github.com/awebai/oats.git", "ref": "oats-framework/v1.25.2", "path": "oats-package" }
   }
 }
 ```
 
-`ref` carries the tag convention: a workspace's `oats.framework: v1.25.0`
-resolves to tag `oats-framework/v1.25.0`. Resolving through the catalog never
+`ref` carries the tag convention: a workspace's `oats.framework: v1.25.2`
+resolves to tag `oats-framework/v1.25.2`. Resolving through the catalog never
 advances a lock by itself: `oats sync` does, and says so.
