@@ -151,7 +151,7 @@ Supply these plain variables to the bundle's env file:
 The bundle owns the network, resolver, forwarder, firewall and their bypass
 checks. The agent service publishes no ports and sets no DNS or extra-hosts
 override. It joins only the named external `agents` network. Its restart
-policy is `unless-stopped`, its stop grace period is 45 seconds and its
+policy is `unless-stopped`, its stop grace period is 50 seconds and its
 healthcheck reads sshd's port
 ([The kernel's periodic work](#the-kernels-periodic-work)); security flags
 are fixed in the service file.
@@ -474,14 +474,16 @@ What the image's files fix for that:
 
 - **PID-only tini signals the Node supervisor.** It forwards TERM to host
   run alone and keeps the wake broker alive until host run finishes stopping
-  the agents. Then it stops sshd and the broker in parallel. A broker or
+  the agents. Then it stops sshd and the broker in parallel, allowing sshd three seconds
+  and the broker six seconds before escalation. The broker budget preserves
+  its channel children's five-second delivery drain. A broker or
   host-run exit is reported and drains the other children before a nonzero
   container exit, so
   the restart policy can restart it. The broker runs as the agent uid; its
   default state directory is `/state/home/.config/aw/wake`, so registrations
   survive container replacement and it starts again even with no spawn.
-- **`stop_grace_period: 45s`** in the Compose service. Docker's default is
-  10 seconds, shorter than the 20 seconds each harness is given; a container
+- **`stop_grace_period: 50s`** in the Compose service. Docker's default is
+  10 seconds, shorter than the 20 seconds each harness is given, before broker cleanup; a container
   killed at the timeout leaves agents that were not stopped in order. A
   platform that does not read the Compose file needs the same stop timeout
   in its container spec.
@@ -554,7 +556,7 @@ variables. It resolves `AGENT_IMAGE` independently and requires that image's
 ID, reference and start command, and its complete environment (printing only
 names of differing variables). Other comparisons include supplementary
 groups, namespace overrides, sysctls, published ports, resolver overrides
-and the single network/address. The stop timeout must be 45 seconds and the
+and the single network/address. The stop timeout must be 50 seconds and the
 healthcheck the service file's, so a container made before either was set
 is refused until it is recreated. The OCI runtime must match the daemon's
 independently read default; shared memory stays at Docker's 64 MiB default,
@@ -773,5 +775,6 @@ supplies the wrapper mapping without a separate operator schema.
 For Kubernetes, liveness runs `node /usr/local/lib/agent-liveness.mjs` to check
 the supervisor process. SSH on port 2222 is readiness: losing SSH must not
 restart the whole team while its agents and broker are still running. The
-container's 45-second termination window includes the kernel and supervisor
-shutdown phases; the nominal phase sum leaves little overhead margin.
+container's 50-second termination window includes the kernel and supervisor
+shutdown phases, with overhead margin after the kernel drain and the broker's
+six-second cleanup.

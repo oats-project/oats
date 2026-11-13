@@ -158,7 +158,7 @@ test("agent Compose service retains the isolation contract", () => {
   assert.equal(agent.mem_limit, "${AGENT_MEMORY:?Set AGENT_MEMORY}");
   assert.equal(agent.cpus, "${AGENT_CPUS:?Set AGENT_CPUS}");
   assert.equal(agent.restart, "unless-stopped");
-  assert.equal(agent.stop_grace_period, "45s", "oats host run stops the agents within the stop grace");
+  assert.equal(agent.stop_grace_period, "50s", "host and broker drains fit within the stop grace");
   assert.deepEqual(agent.healthcheck, { test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2222"], interval: "30s", timeout: "5s", retries: 3, start_period: "10s" }, "sshd on 2222 is what the healthcheck reads");
   assert.equal(agent.dns, undefined);
   assert.equal(agent.ports, undefined);
@@ -212,7 +212,7 @@ test("acceptance refuses drift in the admitted container settings", async t => {
   const inspected = {
     Image: image.Id,
     State: { Running: true },
-    Config: { Image: env.AGENT_IMAGE, Hostname:"oats-agent", User: "20001:20001", Env: [...image.Config.Env], Entrypoint: [...image.Config.Entrypoint], Cmd: null, StopTimeout: 45,
+    Config: { Image: env.AGENT_IMAGE, Hostname:"oats-agent", User: "20001:20001", Env: [...image.Config.Env], Entrypoint: [...image.Config.Entrypoint], Cmd: null, StopTimeout: 50,
       Healthcheck: { Test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2222"], Interval: 30000000000, Timeout: 5000000000, StartPeriod: 10000000000, Retries: 3 } },
     HostConfig: { CapDrop: ["ALL"], CapAdd: null, SecurityOpt: ["no-new-privileges:true"], ReadonlyRootfs: true, Privileged: false, PidMode: "", IpcMode: "private", GroupAdd: null, UsernsMode: "", UTSMode: "", CgroupnsMode: "private", Sysctls: null, PortBindings: {}, ExtraHosts: [], Dns: null, NetworkMode: "team-agents", PidsLimit: 512, Memory: 3221225472, NanoCpus: 2000000000, Tmpfs: { "/tmp": "rw,nosuid,nodev,size=134217728,mode=1777" }, Binds: [], Mounts: [], Devices: [], DeviceRequests: null, RestartPolicy: { Name: "unless-stopped" } },
     NetworkSettings: { Networks: { "team-agents": { IPAddress: "172.30.0.2" } } },
@@ -309,6 +309,7 @@ test("acceptance refuses drift in the admitted container settings", async t => {
     (v) => { v.HostConfig.ShmSize = 8589934592; },
     (v) => { delete v.Config.StopTimeout; },
     (v) => { v.Config.StopTimeout = 10; },
+    (v) => { v.Config.StopTimeout = 45; },
     (v) => { delete v.Config.Healthcheck; },
     (v) => { v.Config.Healthcheck.Test = ["NONE"]; },
     (v) => { v.Config.Healthcheck.Test = ["CMD", "true"]; },
@@ -360,7 +361,7 @@ test("acceptance refuses drift in the admitted container settings", async t => {
 });
 
 
-async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false, statusSpawnThrowsOnce = false, statusIgnoresTerm = false, stubbornFinish = false, brokerStatusPid = "owned" } = {}) {
+async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false, statusSpawnThrowsOnce = false, statusIgnoresTerm = false, stubbornFinish = false, brokerStatusPid = "owned", brokerDrainMs = 0, productionStopBudgets = false } = {}) {
   const supervisor = new URL("../container/agent/supervisor.mjs", import.meta.url);
   assert.ok(existsSync(supervisor), "the image must own broker readiness and ordered child shutdown");
   const { supervise } = await import(supervisor);
@@ -369,7 +370,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
   writeFileSync(events, "");
   writeFileSync(childFile, `
     const fs = require("node:fs");
-    const [role, events, mode, pidFile, pidMode] = process.argv.slice(2);
+    const [role, events, mode, pidFile, pidMode, brokerDrainMs] = process.argv.slice(2);
     const log = text => fs.appendFileSync(events, text + "\\n");
     if (role === "broker") fs.writeFileSync(pidFile, String(process.pid));
     log(role + " started");
@@ -390,7 +391,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
       process.on("SIGTERM", () => {
         log(role + " TERM");
         if (mode === "stubborn" && (role === "ssh" || role === "broker")) return;
-        setTimeout(() => { log(role + " ended"); process.exit(0); }, role === "host" ? 80 : 0);
+        setTimeout(() => { log(role + " ended"); process.exit(0); }, role === "host" ? 80 : role === "broker" ? Number(brokerDrainMs) : 0);
       });
       log(role + " listening");
       setInterval(() => {}, 1000);
@@ -409,12 +410,13 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
       }
       const failProbe = role === "status" && statusSpawnFailsOnce && !statusFailed;
       if (failProbe) statusFailed = true;
-      const child = spawn(failProbe ? join(dir, "missing-probe") : process.execPath, failProbe ? [] : [childFile, role, events, mode, brokerPid, brokerStatusPid], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
+      const child = spawn(failProbe ? join(dir, "missing-probe") : process.execPath, failProbe ? [] : [childFile, role, events, mode, brokerPid, brokerStatusPid, String(brokerDrainMs)], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
       children.set(role, child);
       return child;
     },
     onSignal(handler) { signal = handler; return () => { signal = null; }; },
-    say(line) { said.push(line); appendFileSync(events, "supervisor " + line + "\n"); }, pollMs: 10, startupMs: 1000, childStopMs: 500,
+    say(line) { said.push(line); appendFileSync(events, "supervisor " + line + "\n"); }, pollMs: 10, startupMs: 1000,
+    ...(productionStopBudgets ? {} : {childStopMs: 500, brokerStopMs: 500}),
   });
   t.after(async () => {
     for (const child of children.values()) child.kill("SIGKILL");
@@ -440,6 +442,18 @@ test("image supervisor admits SSH and host run only after its broker is ready", 
   assert.equal(await fx.running, 0);
   const stopped = fx.text().split("\n");
   assert.ok(stopped.indexOf("host ended") < stopped.indexOf("broker TERM"), fx.text());
+});
+
+test("the production broker grace permits a five-second delivery drain after host run ends", async (t) => {
+  const fx = await supervisorFixture(t, {brokerDrainMs: 5000, productionStopBudgets: true});
+  await fx.until(() => ["broker", "ssh", "host"].every(role => fx.text().includes(role + " listening")));
+  fx.term();
+  assert.equal(await fx.running, 0, "a completed broker drain is a clean stop");
+  assert.equal(fx.children.get("broker").signalCode, null, "the supervisor must not kill a draining broker");
+  assert.equal(fx.children.get("broker").exitCode, 0);
+  const events = fx.text().split("\n");
+  assert.ok(events.indexOf("host ended") < events.indexOf("broker TERM"), fx.text());
+  assert.ok(events.includes("broker ended"), "the five-second drain must finish");
 });
 
 test("TERM during broker readiness starts neither SSH nor host run", async (t) => {

@@ -18,8 +18,8 @@ services:
     mem_limit: ${AGENT_MEMORY:?Set AGENT_MEMORY}
     cpus: ${AGENT_CPUS:?Set AGENT_CPUS}
     restart: unless-stopped
-    # oats host run gives each agent's harness 20 s to end after SIGTERM.
-    stop_grace_period: 45s
+    # Kernel launch/agent drains precede the broker's six-second cleanup.
+    stop_grace_period: 50s
     # Unhealthy means sshd no longer listens; Docker does not restart on that alone.
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2222"]
