@@ -14,6 +14,7 @@ import {lstatSync, readFileSync, realpathSync, statSync} from 'node:fs';
 import {basename, dirname, isAbsolute, join, resolve} from 'node:path';
 import {approvedChannelPolicyWarning} from './claude-managed-policy.mjs';
 import { parseVersion, versionAtLeast } from './aw-floor.mjs';
+import { sameAwebTeamId } from "./aweb-team-id.mjs";
 
 const JOINED_EVENT_CLASSES = ['mail', 'chat'];
 // Observation age is advisory; readiness does not certify recent observation.
@@ -290,7 +291,9 @@ export function expectedReceive(home, {delivery = 'channel', policy} = {}) {
   try { state = JSON.parse(readFileSync(join(home, '.oats-aweb', 'teams.json'), 'utf8')); }
   catch (error) {
     if (!absentFile(join(home, '.oats-aweb', 'teams.json'), error)) return fail('retained joined-team state is unreadable or malformed');
-    if (meta.identity?.mode === 'global' && (grant || meta.retained === true) &&
+    // A grant seat, and a retained seat (local since awebai/oats-aweb#226, global
+    // before it), record no joined-team file until they join a team.
+    if ((meta.retained === true || (meta.identity?.mode === 'global' && grant)) &&
         (meta.joinedTeams === undefined || (Array.isArray(meta.joinedTeams) && meta.joinedTeams.length === 0))) state = {joinedTeams: []};
     else if (incomplete) {
       state = {joinedTeams: meta.joinedTeams === undefined ? [] : meta.joinedTeams};
@@ -503,7 +506,7 @@ export function targetReceiveAssessment(status, {home, runtimeDelivery, runtime,
           (actualRuntime !== 'external-session' && (hit.controls === true || samePath(hit.identity_home, row.primary_identity_home))) ||
           (hit.controls === true && primary && !samePath(hit.identity_home, primary))) return fail('wake-target-binding', 'partial broker receive policy contradicts retained or supplied facts');
       if (primary && samePath(hit.identity_home, primary)) {
-        if (hit.team_id !== undefined && primaryTeam !== undefined && hit.team_id !== primaryTeam) return fail('wake-target-binding', 'broker primary team contradicts the retained identity');
+        if (hit.team_id !== undefined && primaryTeam !== undefined && !sameAwebTeamId(hit.team_id, primaryTeam)) return fail('wake-target-binding', 'broker primary team contradicts the retained identity');
         if (capturedDelivery === 'session' && (hit.controls !== true || classes.length)) return fail('wake-target-binding', 'broker primary policy contradicts the retained session route');
       }
       const stream = receiveStreamAssessment(hit, grantSession ? grantHome : undefined, 'supplied receive stream is missing, refused or not connected');
@@ -517,7 +520,7 @@ export function targetReceiveAssessment(status, {home, runtimeDelivery, runtime,
     const hit = hits[0];
     // controls/event_classes/label are omitempty in the released Go wire.
     const classes = hit.event_classes === undefined ? [] : hit.event_classes;
-    if ((hit.label !== undefined && typeof hit.label !== 'string') || (hit.label || undefined) !== expected.label || (hit.team_id !== undefined && hit.team_id !== expected.team) || hit.delivery_owner !== 'session-hints' ||
+    if ((hit.label !== undefined && typeof hit.label !== 'string') || (hit.label || undefined) !== expected.label || (hit.team_id !== undefined && !sameAwebTeamId(hit.team_id, expected.team)) || hit.delivery_owner !== 'session-hints' ||
         (hit.controls !== undefined && typeof hit.controls !== 'boolean') || (hit.controls === true) !== expected.controls ||
         !Array.isArray(classes) || classes.length !== expected.event_classes.length || classes.some(c => typeof c !== 'string') || JSON.stringify([...classes].sort()) !== JSON.stringify([...expected.event_classes].sort())) return fail('wake-target-binding', 'broker receive ownership, label or event policy differs from the captured home');
     const stream = receiveStreamAssessment(hit, grantSession ? grantHome : undefined, 'required receive stream is missing, refused or not connected');

@@ -50,7 +50,18 @@ if (a.startsWith("init --join-from") || (a.startsWith("init ") && args.some((x) 
   // mints an invite from the root, accepts it into the cwd and connects it, in one process.
   const aw = p.join(process.cwd(), ".aw");
   for (const f of ["signing.key", "identity.yaml", "team-certs", "workspace.yaml"]) if (fs.existsSync(p.join(aw, f))) { console.error("Error: refusing to overwrite existing " + p.join(aw, f)); process.exit(2); }
-  if (${JSON.stringify(joinMode)} === "conflict") { console.error("aweb: http 422: alias already holds an active certificate for this team (invite TOK-secret)"); process.exit(1); }
+  if (${JSON.stringify(joinMode)} === "conflict") {
+    // aw 1.36.58 (aw-v1.36.58): the registry refuses the certificate with 409
+    // {"detail":{"code":"alias_active","message":"Alias already active in team"}}
+    // (awid routes/teams.py). aw prints the refusal on stderr and, under --json, its
+    // error envelope on stdout (cmd/aw/root.go reportCLIError), where
+    // awid.DescribeError names an alias_active refusal alias_conflict. The hook trusts
+    // only that code (oats-aweb #248). TOK-secret is a canary: it must reach no log.
+    const message = "accept hosted team invite: Alias already active in team (invite TOK-secret)";
+    console.error(message);
+    console.log(JSON.stringify({ error: { code: "alias_conflict", message, http_status: 409, detail: "Alias already active in team", reason: "alias_active" } }));
+    process.exit(1);
+  }
   const bind = () => { fs.mkdirSync(p.join(aw, "team-certs"), { recursive: true }); fs.writeFileSync(p.join(aw, "signing.key"), "k"); fs.writeFileSync(p.join(aw, "workspace.yaml"), "memberships:\\n    - team_id: t:example.test\\n      alias: " + (val("--name") || "probe") + "\\n      workspace_id: 00000000-0000-4000-8000-000000000001\\n"); };
   if (process.env.FAKE_JOIN_LATE) {
     // The mint completes server-side (and binds the home) but the CLI hangs past the hook's timeout.
@@ -334,6 +345,10 @@ test("spawn: a join refused because the alias still holds a certificate is fatal
     const r = runHook(base, bin, "spawn", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_RUNTIME: "pi", OATS_SETTINGS: "{}" });
     assert.notEqual(r.status, 0);
     assert.match(r.stdout, /alias \\"probe\\" already holds a certificate on this team, so no identity could be minted: another machine's instance has that name, or a retired one still holds it; spawn with a different --name\. Team: t:example\.test/);
+    // oats.aweb 1.42.0 (#248): a refusal aw confirms by its code registered nothing,
+    // so the write-ahead mint record goes and no pending mint is left for retire.
+    assert.equal(r.doc.meta?.pendingMint, undefined, "a confirmed refusal leaves no pending mint");
+    assert.equal(existsSync(join(home, ".oats-aweb", "pending-mint.json")), false, "the write-ahead mint record is dropped");
     assert.equal(r.stdout.includes("TOK-secret"), false, "the invite token never reaches the log");
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
@@ -379,7 +394,7 @@ test("retained identity: authority files copied exactly, coordination reconnecte
     const r = runHook(base, bin, "spawn", env);
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.equal(r.doc.meta.retained, true); assert.equal(r.doc.meta.alias, "merlin"); assert.equal(r.doc.meta.team, "t:example.test");
-    assert.deepEqual(r.doc.meta.identity, { mode: "global", alias: "merlin", team: "t:example.test", address: "cjr.aweb.ai/merlin", resident: null });
+    assert.deepEqual(r.doc.meta.identity, { mode: "local", alias: "merlin", team: "t:example.test", address: "cjr.aweb.ai/merlin", resident: null });
     assert.match(r.doc.brief, /retained seat of the existing aweb identity "merlin" on team t:example.test/);
     const dest = join(home, ".aw");
     for (const f of ["signing.key", "identity.yaml", "teams.yaml", "team-certs/t-example.test.pem", "encryption.yaml", "encryption-keys/x25519.key"]) assert.equal(existsSync(join(dest, f)), true, `${f} copied`);
@@ -457,7 +472,7 @@ test("retained identity retire releases the lock before global identity dispatch
     const bin = fakeAw(base); const { root, home } = deployment(base); const { src } = legacySeat(base);
     const spawn = runHook(base, bin, "spawn", { OATS_INSTANCE: "merlin-seat", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_RUNTIME: "pi", OATS_TEAM_ID: "t:example.test", OATS_SETTINGS: JSON.stringify({ identity: { source: src } }) });
     assert.equal(spawn.status, 0, spawn.stdout + spawn.stderr);
-    assert.equal(spawn.doc.meta.identity.mode, "global");
+    assert.equal(spawn.doc.meta.identity.mode, "local");
     assert.equal(spawn.doc.meta.identity.grant, undefined);
     const ret = runHook(base, bin, "retire", { OATS_INSTANCE: "merlin-seat", OATS_HOME: home, OATS_META: JSON.stringify(spawn.doc.meta) });
     assert.equal(ret.status, 0, ret.stdout + ret.stderr);

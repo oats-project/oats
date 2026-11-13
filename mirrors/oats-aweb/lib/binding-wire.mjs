@@ -2,7 +2,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { basename, delimiter, isAbsolute, join, resolve } from 'node:path';
 import { TextDecoder } from 'node:util';
-import { assessCapturedSessionReadiness, querySelectedKernel } from './session-readiness.mjs';
+import { querySelectedKernel } from './session-readiness.mjs';
 import { custodyPreflight } from './grant-custody.mjs';
 import { selectClaudeChannel, recordedStart, expectedReceive, targetReceiveAssessment, wakeDaemonAssessment, claudeChannelModeUnset, CLAUDE_CHANNEL_MODE_DEFAULT } from './wake-receive.mjs';
 import { channelConnection, channelReadiness } from './claude-channel.mjs';
@@ -10,37 +10,32 @@ import { piExtensionSkillsWarning, piSkillsPackageWarning, recordedPiAgentDir } 
 import { grantExpiryAssessment } from './grant-expiry.mjs';
 import { renewalGrantTTL, resolveGrantTTL } from './grant-duration.mjs';
 import { seatGrantLabel, strayGrants, teamGrants, unrevokedGrant } from './seat-grants.mjs';
-import {healthSettings} from './health-settings.mjs';
+import {healthPublish, healthSettings} from './health-settings.mjs';
+import { identityBooleans } from './boolean-setting.mjs';
+import { retainedSeatCheck } from './retained-seat-service.mjs';
 import { childOutcome } from './child-outcome.mjs';
 import { residentRegistryEnv } from './resident-registry.mjs';
-import {
-  MESSAGING_CONTRACT,
-  MESSAGING_CONTRACT_VERSION,
-  bindMessagingDomain,
-  normalizeMessagingDeclarations,
-  validateAwebBinding,
-  validateAwebInvocationContext,
-} from './portable-binding.mjs';
+import { teamKeyIn } from './aweb-team-id.mjs';
 
 export const BINDING_WIRE_LIMITS=Object.freeze({bytes:1024*1024,depth:32,entries:16384});
+/** The one fixed reason for the captured-execution path, removed in this release
+ *  (awebai/oats-aweb#242): a check with a `binding` or `invocation` input, normalize and
+ *  bind answer it, and the hook names each variable that selected it. The version is the
+ *  release that removed it; release prep sets it here. */
+export const CAPTURED_UNSUPPORTED='captured bindings are not supported since oats.aweb 1.42.0; readiness takes a workspace context (oats readiness)';
 const CAPABILITY='oats.aweb',SLOT='messaging';
 const phases=new Set(['normalize','bind','check']);
-const declarationKinds=new Set(['soul','workspace','adoption','operator']);
-const errorCodes=new Set(['needs-configuration','requirement-conflict','invalid-binding','authorization-required','host-requirement-missing','provider-unavailable','provider-not-qualified']);
+const errorCodes=new Set(['needs-configuration','invalid-binding','provider-not-qualified']);
 const TEAM_SETTING_MESSAGE='teams are not a setting since oats.aweb 1.17 / OATS 0.30: use oats teams / oats soul teams';
 const AWEB_TEAM_ID_MESSAGE='aweb team ids must have shape <name>:<namespace> (name matches ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$; namespace is a hostname)';
 const obj=value=>value!==null && typeof value==='object' && !Array.isArray(value);
 const wireError=(code,message=code)=>{throw Object.assign(new Error(message),{wireCode:code});};
-const canonical=value=>value===null || typeof value!=='object'?JSON.stringify(value):Array.isArray(value)?`[${value.map(canonical).join(',')}]`:`{${Object.keys(value).sort().map(key=>`${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
-const same=(a,b)=>canonical(a)===canonical(b);
 function keys(value,allowed,required) {
   if(!obj(value)) wireError('invalid-binding');
   for(const key of Object.keys(value)) if(!allowed.includes(key)) wireError('invalid-binding');
   for(const key of required) if(!Object.hasOwn(value,key)) wireError('invalid-binding');
   return value;
 }
-function pointer(value) {return typeof value==='string' && /^(?:\/(?:[^~]|~[01])*)+$/.test(value);}
-function bindingKey(value) {return pointer(value) && value.startsWith('/bindings/messaging/') && value.length>'/bindings/messaging/'.length;}
 
 class StrictJsonParser {
   constructor(text,{depth,entries}) {this.text=text;this.maxDepth=depth;this.maxEntries=entries;this.at=0;this.entries=0;}
@@ -91,13 +86,14 @@ export function parseBindingJson(bytes,limits=BINDING_WIRE_LIMITS) {
   let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch{wireError('invalid-binding');}
   return new StrictJsonParser(text,limits).parse();
 }
-function settings(value,{phase}={}) {
+// The settings a check carries (check is the one phase that reads input).
+function settings(value) {
   if(!obj(value)) wireError('invalid-binding');
   if(Object.hasOwn(value,'team')) wireError('needs-configuration',TEAM_SETTING_MESSAGE);
-  if(phase!=='check' && Object.hasOwn(value,'identity')) wireError('provider-not-qualified');
-  keys(value,phase==='check'?['delivery','claudeChannelMode','root','roots','identity','residents','join','health']:['delivery','claudeChannelMode','root','roots','join'],[]);
-  if(phase==='check') {try {healthSettings(value);} catch {wireError('needs-configuration');}}
-  if(phase!=='check') {try {selectClaudeChannel(value.claudeChannelMode);} catch {wireError('needs-configuration');}}
+  keys(value,['delivery','claudeChannelMode','root','roots','identity','residents','join','health'],[]);
+  // health.publish's refusal is carried into the readiness result (readinessDetails), so the
+  // wire checks every other health setting here.
+  try {healthSettings(obj(value.health)?{...value,health:{...value.health,publish:undefined}}:value);} catch {wireError('needs-configuration');}
   if(value.delivery!==undefined && !['channel','session'].includes(value.delivery)) wireError('needs-configuration');
   if(value.root!==undefined && (typeof value.root!=='string' || !value.root.trim())) wireError('needs-configuration');
   if(value.join!==undefined && typeof value.join!=='string') wireError('needs-configuration');
@@ -111,62 +107,8 @@ function settings(value,{phase}={}) {
 function request(value,phase) {
   keys(value,['schemaVersion','phase','slot','capability','settings','input'],['schemaVersion','phase','slot','capability','settings','input']);
   if(value.schemaVersion!==1 || value.phase!==phase || value.slot!==SLOT || value.capability!==CAPABILITY) wireError('invalid-binding');
-  settings(value.settings,{phase});return value;
+  settings(value.settings);return value;
 }
-function declaration(value) {
-  keys(value,['kind','value','origin','origins'],['kind','value','origin','origins']);
-  if(!declarationKinds.has(value.kind) || !obj(value.value) || !obj(value.origin) || !obj(value.origins)) wireError('invalid-binding');
-  return value;
-}
-function context(value,{request=false}={}) {
-  if(value?.kind==='workspace') {
-    keys(value,request?['kind','identity','observation']:['kind','identity'],request?['kind','identity','observation']:['kind','identity']);
-    if(!obj(value.identity) || (request && !obj(value.observation))) wireError('invalid-binding');
-    return {kind:'workspace',identity:value.identity};
-  }
-  if(value?.kind==='standalone') {
-    keys(value,['kind','key'],['kind','key']);
-    if(value.key!==null && (typeof value.key!=='string' || !value.key.trim())) wireError('invalid-binding');
-    return {kind:'standalone',key:value.key};
-  }
-  wireError('invalid-binding');
-}
-function normalizePhase(req) {
-  keys(req.input,['declarations','context'],['declarations','context']);
-  if(!Array.isArray(req.input.declarations)) wireError('invalid-binding');
-  const declarations=req.input.declarations.map(declaration);context(req.input.context,{request:true});
-  return normalizeMessagingDeclarations({declarations,context:req.input.context});
-}
-function choiceMap(value,model) {
-  if(!obj(value)) wireError('invalid-binding');
-  const allowed=new Set(['/bindings/messaging/responsibleHuman','/bindings/messaging/privateTeam','/bindings/messaging/wider',...Object.values(model.teams)]);
-  for(const [key,choice] of Object.entries(value)) {
-    if(!bindingKey(key) || !allowed.has(key)) wireError('invalid-binding');
-    keys(choice,['value','selectedBy','constraints','considered'],['value','selectedBy','constraints','considered']);
-    if(!Array.isArray(choice.constraints) || !Array.isArray(choice.considered) || (choice.selectedBy!==null && !obj(choice.selectedBy))) wireError('invalid-binding');
-  }
-  return value;
-}
-function model(value) {
-  keys(value,['contract','version','context','contextOrigin','requested','requestedOrigins','aliases','aliasOrigins','teams','privatePolicy','privatePolicyOrigin'],['contract','version','context','contextOrigin','requested','requestedOrigins','aliases','aliasOrigins','teams','privatePolicy','privatePolicyOrigin']);
-  if(value.contract!==MESSAGING_CONTRACT || value.version!==MESSAGING_CONTRACT_VERSION || !Array.isArray(value.requested) || !obj(value.requestedOrigins) || !obj(value.aliases) || !obj(value.aliasOrigins) || !obj(value.teams) || typeof value.privatePolicy!=='boolean') wireError('invalid-binding');
-  context(value.context);if(value.contextOrigin!==null && !obj(value.contextOrigin)) wireError('invalid-binding');if(value.privatePolicyOrigin!==null && !obj(value.privatePolicyOrigin)) wireError('invalid-binding');
-  for(const key of Object.values(value.teams)) if(!bindingKey(key)) wireError('invalid-binding');
-  return value;
-}
-function bindPhase(req) {
-  keys(req.input,['model','choices','context'],['model','choices','context']);
-  const normalized=model(req.input.model),selectedContext=context(req.input.context,{request:true});
-  if(!same(selectedContext,normalized.context) || (selectedContext.kind==='workspace' && !same(req.input.context.observation,normalized.contextOrigin))) wireError('invalid-binding');
-  return bindMessagingDomain({model:normalized,choices:choiceMap(req.input.choices,normalized)});
-}
-function binding(value) {
-  keys(value,['schemaVersion','capability','payloadContract','payloadVersion','payload','credentialRefs','provenance'],['schemaVersion','capability','payloadContract','payloadVersion','payload','credentialRefs','provenance']);
-  if(value.schemaVersion!==1 || value.capability!==CAPABILITY || value.payloadContract!==MESSAGING_CONTRACT || value.payloadVersion!==MESSAGING_CONTRACT_VERSION || !obj(value.payload) || !obj(value.credentialRefs) || Object.keys(value.credentialRefs).length || !Array.isArray(value.provenance)) wireError('invalid-binding');
-  for(const origin of value.provenance) if(!obj(origin)) wireError('invalid-binding');
-  return value;
-}
-function checkResult(message) {return {status:'needs-configuration',problems:[{code:'needs-configuration',message}]};}
 function checkProblems(problems) {return problems.length?{status:'needs-configuration',problems}:null;}
 function workspaceReadinessContext(value) {
   keys(value,['kind','workspace','deployment','soul','team','instance','home'],['kind','workspace','deployment','soul']);
@@ -200,6 +142,7 @@ const versionToken=(re,text) => {const m=re.exec(text);return m && (parseVersion
 export function readAwVersion({timeout=10000,env=process.env}={}) {
   return new Promise((settle) => {
     const childEnv={...env,AW_NO_UPDATE_CHECK:'1'};delete childEnv.AWEB_IDENTITY_HOME;
+    if(!(timeout>0)){settle(undefined);return;} // no time left to ask: unreadable, nothing started
     let child,text='',answer,decided=false,exited=false,timer;
     // 'exit' can precede the last stdout chunk, so only 'close' judges the
     // output of a child that ended on its own; a decided read waits for 'exit'.
@@ -240,7 +183,8 @@ function teamFromSettings(settings,candidate,{env=process.env}={}) {
 }
 function rootCandidate(settings,team,{deployment,env=process.env}={}) {
   const roots=obj(settings.roots)?settings.roots:{};
-  if(team && typeof roots[team]==='string' && roots[team].trim()) return {root:roots[team].trim(),key:`settings.oats.aweb.roots[${JSON.stringify(team)}]`,declared:true};
+  const key=team?teamKeyIn(roots,team):undefined;
+  if(key!==undefined && typeof roots[key]==='string' && roots[key].trim()) return {root:roots[key].trim(),key:`settings.oats.aweb.roots[${JSON.stringify(key)}]`,declared:true};
   if(typeof settings.root==='string' && settings.root.trim()) return {root:settings.root.trim(),key:'settings.oats.aweb.root',declared:true};
   const candidates=[env.OATS_WORKSPACE || deployment || process.cwd()];
   for(const root of candidates) if(isAbsolute(root) && existsSync(join(resolve(root),'.aw'))) return {root,key:'settings.oats.aweb.root',declared:false};
@@ -287,8 +231,15 @@ function needsMintingRoot(settings) {
   const identity=obj(settings.identity)?settings.identity:{};
   return !(identity.mode==='global' && typeof identity.resident==='string' && identity.resident.trim());
 }
-async function readinessDetails(settings,{deployment,env=process.env}={}) {
+/** retainedSeat: a soul-scope retained seat (identity.source), whose spawn mints nothing and
+ *  takes its team from the seat's own predicate (retainedSeatCheck), so neither the messaging
+ *  root nor the generic no-team problem applies; the caller reports the seat's own refusal. */
+async function readinessDetails(settings,{deployment,env=process.env,retainedSeat=false}={}) {
   try { selectClaudeChannel(settings.claudeChannelMode); }
+  catch (error) { return {team:undefined,candidate:null,warnings:[],result:{status:'needs-configuration',problems:[{code:'needs-configuration',message:error.message}]}}; }
+  // The refusal spawn and start, or the health commands, give for a boolean setting that is
+  // neither a boolean nor its string.
+  try { identityBooleans(obj(settings.identity)?settings.identity:{}); healthPublish(settings); }
   catch (error) { return {team:undefined,candidate:null,warnings:[],result:{status:'needs-configuration',problems:[{code:'needs-configuration',message:error.message}]}}; }
   if(classicEnv(env)) return {team:undefined,candidate:null,warnings:[],result:{status:'needs-configuration',problems:[{code:'needs-configuration',message:CLASSIC_REFUSAL}]}};
   const invalidTeam=invalidAwebTeamId(env);if(invalidTeam)return {team:undefined,candidate:null,warnings:[],result:{status:'needs-configuration',problems:[{code:'needs-configuration',message:AWEB_TEAM_ID_MESSAGE}]}};
@@ -296,14 +247,13 @@ async function readinessDetails(settings,{deployment,env=process.env}={}) {
   const aw=await awFloorObservation();if(aw.message) problems.push({code:'needs-configuration',message:aw.message});
   const tested=aw.message?undefined:awTestedWarning(settings,aw.version,{deployment,env});
   if(tested) warnings.push({code:'aw-newer-than-tested',message:tested});
-  if(!team) {
+  if(!team && !retainedSeat) {
     const label=typeof env.OATS_DEFAULT_TEAM==='string'&&env.OATS_DEFAULT_TEAM.trim()?env.OATS_DEFAULT_TEAM.trim():'';
     problems.push({code:'needs-configuration',message:label?unmappedDefaultMessage(label):NO_TEAMS_MESSAGE});
   }
-  if(needsMintingRoot(settings) && (!candidate.root || !isAbsolute(candidate.root) || !existsSync(join(resolve(candidate.root),'.aw')))) problems.push({code:'needs-configuration',message:`no messaging root at ${candidate.root?resolve(candidate.root):process.cwd()}: run oats aweb setup there or set ${candidate.key}`});
+  if(!retainedSeat && needsMintingRoot(settings) && (!candidate.root || !isAbsolute(candidate.root) || !existsSync(join(resolve(candidate.root),'.aw')))) problems.push({code:'needs-configuration',message:`no messaging root at ${candidate.root?resolve(candidate.root):process.cwd()}: run oats aweb setup there or set ${candidate.key}`});
   return {team,candidate,awVersion:aw.version,warnings,result:checkProblems(problems) || {status:'ready',problems:[]}};
 }
-async function readinessFromSettings(settings,options) {return (await readinessDetails(settings,options)).result;}
 function runAw(argv,cwd,{unsetEnv=[],timeout=60000}={}) {
   // An inherited AWEB_IDENTITY_HOME is the caller's identity, never this check's.
   const env={...process.env,AW_NO_UPDATE_CHECK:'1'};delete env.AWEB_IDENTITY_HOME;for(const name of unsetEnv) delete env[name];
@@ -315,9 +265,9 @@ export function onPath(cmd,env=process.env){for(const dir of String(env.PATH||''
 const AW_INSTALL_COMMAND=`\`npm i -g @awebai/aw@latest\` (or \`npm i -g @awebai/aw@${AW_MIN}\`)`;
 /** The aw on PATH against AW_MIN: `{version, message}`, where message says why
  *  it falls short and is undefined when it doesn't. */
-export async function awFloorObservation({env=process.env}={}) {
+export async function awFloorObservation({env=process.env,timeout}={}) {
   if(!onPath('aw',env)) return {message:`aw CLI not on PATH; install aw >= ${AW_MIN} with ${AW_INSTALL_COMMAND}`};
-  const version=await readAwVersion({env});
+  const version=await readAwVersion({env,...(timeout===undefined?{}:{timeout})});
   if(!version) return {message:`aw version could not be read; install aw >= ${AW_MIN} with ${AW_INSTALL_COMMAND}`};
   return {version,message:!versionAtLeast(version,AW_MIN)?`aw ${version} is older than required ${AW_MIN}; upgrade with ${AW_INSTALL_COMMAND}`:undefined};
 }
@@ -350,12 +300,20 @@ async function workspaceReadinessPhase(req,{env=process.env}={}) {
   const localAw=(argv,cwd)=>runAw(argv,cwd,{timeout:Math.max(1,Math.min(5000,deadline-Date.now()))});
   const ctx=workspaceReadinessContext(req.input.context);
   if(!obj(req.input.action) || req.input.action.kind!=='readiness') wireError('invalid-binding');
-  const details=await readinessDetails(req.settings,{deployment:ctx.deployment}),problems=[...details.result.problems],warnings=[...details.warnings];
+  const identity=obj(req.settings.identity)?req.settings.identity:{},mode=identity.mode===undefined || identity.mode===null || identity.mode===''?'local':String(identity.mode);
+  // A retained seat's spawn (identity.source, a local identity) refuses before any effect on
+  // what the settings and the source decide; soul scope reports the same refusal from the same
+  // predicate. A seated home's start does not read the source again, so home scope does not.
+  const retainedSoul=!ctx.home && mode==='local' && !!identity.source;
+  const details=await readinessDetails(req.settings,{deployment:ctx.deployment,retainedSeat:retainedSoul}),problems=[...details.result.problems],warnings=[...details.warnings];
   // Soul scope has no captured harness: only explicit session delivery proves
   // that its primary will use the broker. Home scope uses expectedReceive's
   // captured runtime/delivery (including Codex on channel settings).
   let primaryBroker = !ctx.home && req.settings.delivery === 'session';
-  const identity=obj(req.settings.identity)?req.settings.identity:{},mode=identity.mode===undefined || identity.mode===null || identity.mode===''?'local':String(identity.mode);
+  if(retainedSoul) {
+    const seat=retainedSeatCheck(identity.source,env);
+    if(seat.refusal) problems.push({code:'needs-configuration',message:seat.refusal});
+  }
   if(mode==='global') {
     const grantProblem=grantAttachmentProblem(ctx.home);if(grantProblem) problems.push(grantProblem);
     const resident=typeof identity.resident==='string' && identity.resident.trim()?identity.resident.trim():undefined;
@@ -372,7 +330,7 @@ async function workspaceReadinessPhase(req,{env=process.env}={}) {
           // duration; a new seat's default is never), decides the custody's ops.
           const recorded=ctx.home?recordedStart(ctx.home).meta?.identity?.grant:undefined;
           const next=recorded?.id?renewalGrantTTL(identity.ttl,recorded.ttl):resolveGrantTTL(identity.ttl);
-          const preflight=custodyPreflight({custody,resident,team:details.team,e2eeRequired:identity.e2ee!==false,ttl:recorded?.expiresAt==='never'?'never':next,fatalOnError:false,runAw:localAw});
+          const preflight=custodyPreflight({custody,resident,team:details.team,e2eeRequired:identityBooleans(identity).e2ee,ttl:recorded?.expiresAt==='never'?'never':next,fatalOnError:false,runAw:localAw});
           for(const message of preflight.warnings) warnings.push({code:'e2ee-disabled',message});
           // This seat's active grants other than the current one, from the custody's
           // list: each stays valid until the next start or retire revokes it.
@@ -448,7 +406,7 @@ async function workspaceReadinessPhase(req,{env=process.env}={}) {
   const excludedGrantSeat = mode === 'global' && (!ctx.home || recordedStart(ctx.home).meta?.retained !== true);
   // A home's settings are its spawn's capture: it asks whether health
   // publishes now, so a later `health enable` or `disable` counts.
-  if (primaryBroker && !excludedGrantSeat && !problems.length && (ctx.home ? healthPublishesNow(ctx,env,deadline) : req.settings.health?.publish === true)) {
+  if (primaryBroker && !excludedGrantSeat && !problems.length && (ctx.home ? healthPublishesNow(ctx,env,deadline) : healthSettings(req.settings).publish)) {
     let countOnly = false;
     try { countOnly = localAw(['aw','mail','inbox','--help'],ctx.deployment).includes('--count-only'); } catch { /* unknown capability */ }
     if (!countOnly) warnings.push({code:'unread-count-unavailable',message:'aw mail inbox does not advertise --count-only; unread-delivery attention counts are unknown. Upgrade aw to a build with read-only count support; failed counts never clear existing claims.'});
@@ -458,28 +416,18 @@ async function workspaceReadinessPhase(req,{env=process.env}={}) {
 }
 async function checkPhase(req) {
   keys(req.input,['binding','context','action','invocation'],['context','action']);
+  if(Object.hasOwn(req.input,'binding') || Object.hasOwn(req.input,'invocation')) wireError('provider-not-qualified',CAPTURED_UNSUPPORTED);
   if(!obj(req.input.action) || typeof req.input.action.kind!=='string') wireError('invalid-binding');
-  if(!Object.hasOwn(req.input,'binding')) return workspaceReadinessPhase(req);
-  const current=validateAwebBinding(binding(req.input.binding)),selectedContext=context(req.input.context,{request:true});
-  if(!same(selectedContext,current.payload.context)) wireError('invalid-binding');
-  const invocation=Object.hasOwn(req.input,'invocation')?validateAwebInvocationContext(req.input.invocation,current,{context:req.input.context,action:req.input.action}):null;
-  if(['command','hook','operation'].includes(req.input.action.kind) && (!invocation || invocation.instance===null || invocation.intent===null)) return checkResult('an admitted captured instance intent is required for execution');
-  if(current.payload.privateTeam===null) return checkResult('an explicit private-team binding is required');
-  const hostReady=await readinessFromSettings(req.settings);
-  if(hostReady.status!=='ready') return hostReady;
-  if(!invocation) return hostReady;
-  // Read-only public kernel observations, not an account/grant attestation.
-  // Native setup is performed only by the separately admitted execution path.
-  return assessCapturedSessionReadiness({binding:current,invocation,settings:req.settings});
+  return workspaceReadinessPhase(req);
 }
 
 // check answers through a promise (its aw floor read is asynchronous).
+// normalize and bind are named because the kernel requires all three phases; they accept
+// no input since the captured path was removed.
 export function handleBindingRequest(phase,value) {
   if(!phases.has(phase)) wireError('invalid-binding');
-  const req=request(value,phase);
-  if(phase==='normalize') return normalizePhase(req);
-  if(phase==='bind') return bindPhase(req);
-  return checkPhase(req);
+  if(phase!=='check') wireError('provider-not-qualified',CAPTURED_UNSUPPORTED);
+  return checkPhase(request(value,phase));
 }
 function response(phase,body) {return {schemaVersion:1,phase,slot:SLOT,capability:CAPABILITY,...body};}
 function errorCode(error) {if(errorCodes.has(error?.wireCode)) return error.wireCode;if(errorCodes.has(error?.code)) return error.code;return 'invalid-binding';}
@@ -489,23 +437,12 @@ const safeReasons=new Map([
   ['needs-configuration',[
     TEAM_SETTING_MESSAGE,
     AWEB_TEAM_ID_MESSAGE,
-    'messaging-enabled standalone preparation needs an explicit context key',
-    'messaging binding needs one soul declaration',
-    'messaging workspace must declare private: per-human',
-    'an explicit responsible-human binding is required',
-    'an explicit wider-membership consent list is required',
-    'a selected wider-team binding is required',
-    'a selected wider alias needs an explicit workspace team mapping',
   ]],
-  ['requirement-conflict',['multiple soul messaging declarations','adoption team aliases have conflicting mappings']],
+  ['provider-not-qualified',[CAPTURED_UNSUPPORTED]],
 ]);
 const fallbackReasons=Object.freeze({
   'needs-configuration':'messaging settings and explicit binding selections are required',
-  'requirement-conflict':'messaging declarations contain incompatible requirements',
   'invalid-binding':'messaging input must match the supported binding contract',
-  'authorization-required':'explicit native messaging authorization is required',
-  'host-requirement-missing':'a required native messaging host resource is unavailable',
-  'provider-unavailable':'the selected messaging provider is unavailable',
   'provider-not-qualified':'the requested messaging configuration is not qualified',
 });
 function errorProblem(error) {
@@ -524,6 +461,9 @@ export async function runBindingWire(phase,input=process.stdin,output=process.st
   let answer;
   try {
     const chunks=[];let length=0;
+    // normalize and bind answer the fixed reason whatever they are sent; their input is read
+    // to its end and not parsed.
+    if(phase==='normalize' || phase==='bind') {for await(const chunk of input) void chunk;handleBindingRequest(phase);}
     for await(const chunk of input) {const bytes=Buffer.from(chunk);length+=bytes.length;if(length>BINDING_WIRE_LIMITS.bytes) wireError('invalid-binding');chunks.push(bytes);}
     const result=await handleBindingRequest(phase,parseBindingJson(Buffer.concat(chunks,length)));
     answer=response(phase,{ok:true,result});

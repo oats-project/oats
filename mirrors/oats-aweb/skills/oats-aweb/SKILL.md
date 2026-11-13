@@ -77,10 +77,16 @@ retire cannot remove the instance's member certificate. A line that ends
 `; retired by OATS on this host <date>; the team controller removes it with:
 <command>` is such a leftover: don't message it. Only the team's controller can
 remove it, by running that command; tell your human if you are not the
-controller. The record lives on the host where the retire ran, so a roster read
-on another host does not show those leftovers.
+controller. A line that instead says its record entry is malformed shows no
+command on purpose: the record is a file any agent on the host can write, and
+the roster builds the command only from values that pass its checks. Tell your
+human; don't compose the command yourself. The record lives on the host where
+the retire ran, so a roster read on another host does not show those leftovers.
+A line that says `recorded as retired, but its workspace is active: check
+before removing` is a member the record calls retired while its workspace is
+live: treat it as a live member, show no command, and tell your human.
 
-- A `deployment root` (for example `altair-aweb`) is a machine's minting
+- A `deployment root` (for example `builder-aweb`) is a machine's minting
   identity, not an agent: don't send work to it.
 - Instances are addressed by **instance name** (the alias), e.g. `dev-2`.
   Humans and global identities are addressed by their alias the same way.

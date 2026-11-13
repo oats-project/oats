@@ -64,6 +64,18 @@ export function awErrorCode(stdout) {
   } catch { return undefined; }
 }
 
+/** Whether aw's --json error envelope on stdout is a refusal of the alias because
+ *  another member holds it: code `alias_conflict` (aw's name for the registry's
+ *  `alias_active`), or AWID's `self_custody_reinit_unproven` as the reason of an
+ *  `http_error` (aw awid/error_detail.go DescribeError). Only those two fields are
+ *  read, never the message. */
+export function awAliasRefusal(stdout) {
+  try {
+    const error = leadingJsonObject(String(stdout ?? "").trim())?.error;
+    return error?.code === "alias_conflict" || (error?.code === "http_error" && error?.reason === "self_custody_reinit_unproven");
+  } catch { return false; }
+}
+
 /** The cause of a failure with no HTTP status: a missing local key, else
  *  aw's allowlisted error code, else a network or TLS failure in its output,
  *  else that the output held none of these. */

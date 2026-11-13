@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describeLaunchCommand, parseLaunchCommand, renderLaunchCommand, renderLaunchRecipe, RESUME_NOTICE, startInstanceSession } from "../lib/core.mjs";
 import { readStartExited, sessionEndOf } from "../lib/session-end.mjs";
-import { acquireResumeLock, bootId, noteSweep, readBootNote, RESUME_LIMIT, resumeSessions, resumeStateDir, rowFromStart } from "../lib/session-resume.mjs";
+import { acquireResumeLock, bootId, noteSweep, readBootNote, RESUME_LIMIT, RESUME_SPENT_HOURS, RESUME_WINDOW_MS, resumeSessions, resumeStateDir, RETRY_CEILING_MS, RETRY_FIRST_MS, retryDueAt, rowFromStart, spentHours } from "../lib/session-resume.mjs";
 import { homeKey, nextSeen, recordSeen, resumeEligible } from "../lib/session-seen.mjs";
 import { processStartToken } from "../lib/worktree-hooks.mjs";
 import { FRESH_REASON, NOT_SWEPT, OUTCOME, RESUME_WAITING, ROW_REASON, SESSION_END, SESSION_RESUME_FEATURE } from "../lib/session-resume-contract.mjs";
@@ -50,7 +50,7 @@ test("the session-resume contract's names", () => {
   assert.deepEqual(FRESH_REASON, { NO_CONVERSATION: "no-conversation", NO_RECEIPTS: "no-receipts", RESUME_UNPROVEN: "resume-unproven" });
   assert.deepEqual(RESUME_WAITING, { RESUME_CONFIRMATION: "resume-confirmation" });
   assert.deepEqual(OUTCOME, { RESUMED: "resumed", FRESH: "fresh", ALREADY_RUNNING: "already-running", SKIPPED: "skipped", BLOCKED: "blocked", REFUSED: "refused" });
-  assert.deepEqual(ROW_REASON, { UNKNOWN: "unknown", START_BUSY: "start-busy", NOT_LOST: "not-lost", NOT_SEEN_RECENTLY: "not-seen-recently", RESUME_CONFIRMATION: "resume-confirmation", LAUNCH_PROMPT: "launch-prompt", START_REFUSED: "start-refused", REFUSED_THIS_BOOT: "refused-this-boot", KEEPS_GETTING_LOST: "keeps-getting-lost", LIFECYCLE_BUSY: "lifecycle-busy" });
+  assert.deepEqual(ROW_REASON, { UNKNOWN: "unknown", START_BUSY: "start-busy", NOT_LOST: "not-lost", NOT_SEEN_RECENTLY: "not-seen-recently", RESUME_CONFIRMATION: "resume-confirmation", LAUNCH_PROMPT: "launch-prompt", START_REFUSED: "start-refused", START_REFUSED_RETRYING: "start-refused-retrying", KEEPS_GETTING_LOST: "keeps-getting-lost", LIFECYCLE_BUSY: "lifecycle-busy" });
   assert.deepEqual(NOT_SWEPT, { NOT_OK: "not-ok", UNREADABLE: "unreadable" });
 });
 
@@ -425,7 +425,7 @@ test("a running look during stop grace does not invalidate a current-start host 
   assert.deepEqual(resumeEligible(homes[H], row, { now, hostStoppedAt: stoppedAt }), { eligible: true });
 });
 
-test("a same-kernel startup after 30 hours restores clean stops and preserves blocked, refused and stale-receipt accounting", async (t) => {
+test("a same-kernel startup after 30 hours restores clean stops and preserves the blocked, refused and stale-receipt accounting of its last hour", async (t) => {
   const fx = v2Deployment({ t, souls: { dev: { soul: { work: "directory" } } } });
   // Even an unlaunched spawn resolves the harness; use the fixture's inert binaries.
   const hostPath = process.env.PATH;
@@ -440,7 +440,8 @@ test("a same-kernel startup after 30 hours restores clean stops and preserves bl
     homes[name] = { home, instance: name, startId, launched: true, running: true };
   }
   const stopped = Date.now() + 10 * 60_000, now = stopped + 30 * 60 * 60_000, boot = bootId();
-  const prior = { home: homeKey(homes.prior.home), startId: homes.prior.startId, code: "E_PRIOR", message: "prior fixture refusal", at: new Date(stopped).toISOString() };
+  // Refused half a minute before the sweep: not yet due again.
+  const prior = { home: homeKey(homes.prior.home), startId: homes.prior.startId, code: "E_PRIOR", message: "prior fixture refusal", at: new Date(now - 30_000).toISOString(), attempts: 1 };
   await fx.inEnv(() => {
     recordSeen(join(fx.dep, "agents"), Object.values(homes), { now: stopped - 10 * 60_000, boot });
     // A listing during the stop's grace can refresh the running observation after its receipt.
@@ -451,8 +452,9 @@ test("a same-kernel startup after 30 hours restores clean stops and preserves bl
     const short = homes["other-start-short"], path = join(short.home, "instance.json");
     short.startId = "fixture-new-short";
     writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, "utf8")), startId: short.startId }));
-    for (let n = 0; n < RESUME_LIMIT; n++) noteSweep({ launched: Object.values(homes).map((r) => homeKey(r.home)) }, boot);
-    noteSweep({ refusals: [prior] }, boot);
+    // The budget is spent by starts of the hour before the sweep.
+    for (let n = 0; n < RESUME_LIMIT; n++) noteSweep({ launched: Object.values(homes).map((r) => homeKey(r.home)) }, boot, now - 10 * 60_000);
+    noteSweep({ refusals: [prior] }, boot, now - 30_000);
   });
   for (const [name, row] of Object.entries(homes)) {
     write(row.home, ".oats-stop.json", { startId: name.startsWith("other-start") ? "old-start" : row.startId, at: new Date(name === "future" ? now + 1 : name === "status-after-stop-short" ? now - 10_000 : stopped + 1).toISOString(), resume: true, reason: "host-stop" });
@@ -476,14 +478,167 @@ test("a same-kernel startup after 30 hours restores clean stops and preserves bl
   assert.equal(rows["status-after-stop-short"].outcome, OUTCOME.RESUMED);
   assert.equal(rows.blocked.outcome, OUTCOME.BLOCKED);
   assert.equal(rows.refused.code, "E_FIXTURE");
-  assert.equal(rows.prior.reason, ROW_REASON.REFUSED_THIS_BOOT);
+  assert.deepEqual([rows.prior.reason, rows.prior.code, rows.prior.nextAttemptAt], [ROW_REASON.START_REFUSED_RETRYING, "E_PRIOR", new Date(now + 30_000).toISOString()]);
+  assert.deepEqual([rows.refused.reason, rows.refused.nextAttemptAt], [ROW_REASON.START_REFUSED, new Date(now + RETRY_FIRST_MS).toISOString()]);
   assert.equal(rows["other-start"].reason, ROW_REASON.NOT_SEEN_RECENTLY);
   assert.equal(rows.future.reason, ROW_REASON.NOT_SEEN_RECENTLY);
   assert.equal(rows["other-start-short"].reason, ROW_REASON.KEEPS_GETTING_LOST);
-  const note = await fx.inEnv(() => readBootNote(boot));
+  const note = await fx.inEnv(() => readBootNote(boot, now));
   for (const [name, row] of Object.entries(homes)) assert.equal(note.resumes[homeKey(row.home)], name === "blocked" ? RESUME_LIMIT + 1 : RESUME_LIMIT, name);
   assert.ok(note.refused.some((r) => r.home === homeKey(homes.refused.home) && r.startId === homes.refused.startId && r.code === "E_FIXTURE"));
   assert.ok(note.refused.some((r) => r.home === prior.home && r.code === "E_PRIOR"));
+});
+
+test("the count of a home's sweep starts is of the last hour: an older start is not counted, and is dropped at the next note", (t) => {
+  oatsHome(t);
+  const at = T("12:00:00.000");
+  noteSweep({ launched: [H] }, "boot-1", at - RESUME_WINDOW_MS - 1);
+  noteSweep({ launched: [H] }, "boot-1", at - RESUME_WINDOW_MS + 1);
+  noteSweep({ launched: [H] }, "boot-1", at - 60_000);
+  assert.equal(readBootNote("boot-1", at - 60_000).resumes[H], 3, "all three are within the hour before the third");
+  assert.equal(readBootNote("boot-1", at).resumes[H], 2, "the start of more than an hour ago is not counted");
+  assert.equal(readBootNote("boot-1", at + RESUME_WINDOW_MS).resumes[H], undefined, "an hour after the last start none is counted");
+  noteSweep({ launched: ["/d/agents/s/instances/b"] }, "boot-1", at);
+  const stored = JSON.parse(readFileSync(join(resumeStateDir(), "note.json"), "utf8"));
+  assert.deepEqual(stored.starts[H], [new Date(at - RESUME_WINDOW_MS + 1).toISOString(), new Date(at - 60_000).toISOString()], "the note keeps only the starts of the hour before its last write");
+});
+
+test("a refused start is due again a minute after its refusal, twice as long after each further one, never more than fifteen minutes", () => {
+  const at = T("12:00:00.000"), refused = (attempts) => retryDueAt({ at: new Date(at).toISOString(), attempts }) - at;
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 40].map(refused), [RETRY_FIRST_MS, 2 * RETRY_FIRST_MS, 4 * RETRY_FIRST_MS, 8 * RETRY_FIRST_MS, RETRY_CEILING_MS, RETRY_CEILING_MS, RETRY_CEILING_MS]);
+  assert.deepEqual([RETRY_FIRST_MS, RETRY_CEILING_MS, RESUME_WINDOW_MS], [60_000, 15 * 60_000, 60 * 60_000]);
+  assert.equal(refused(undefined), RETRY_FIRST_MS, "an entry without a count is a first refusal");
+  assert.equal(retryDueAt({ at: "no time" }), 0, "an entry whose time does not read is due at once");
+});
+
+/** A deployment with one launched home `name` that OATS saw running five minutes before `now`, and
+ *  `sweep(at, start)`: a sweep of it with the clock at `at` → `{ row, started }`. */
+async function lostHome(t, name, now) {
+  const fx = v2Deployment({ t, souls: { dev: { soul: { work: "directory" } } } });
+  const hostPath = process.env.PATH;
+  process.env.PATH = fx.env.PATH;
+  t.after(() => { if (hostPath === undefined) delete process.env.PATH; else process.env.PATH = hostPath; });
+  const { home } = await fx.spawn("dev", { name, harness: "claude" });
+  const path = join(home, "instance.json"), startId = `fixture-${name}`;
+  writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, "utf8")), launched: true, startId }));
+  const boot = bootId();
+  await fx.inEnv(() => recordSeen(join(fx.dep, "agents"), [{ home, instance: name, startId, launched: true, running: true }], { now: now - 5 * 60_000, boot }));
+  const sweep = async (at, start) => {
+    const realNow = Date.now;
+    let started = 0;
+    try {
+      Date.now = () => at;
+      const answer = await fx.inEnv(() => resumeSessions({ deployment: fx.dep, boot, start: async (row) => { started += 1; return start(row); } }));
+      return { row: answer.rows.find((r) => r.instance === name), started };
+    } finally { Date.now = realNow; }
+  };
+  return { fx, home, key: homeKey(home), boot, sweep };
+}
+const REFUSES = async () => ({ ok: false, error: { code: "E_FIXTURE", message: "fixture start refused" } });
+const RESUMES = async () => ({ ok: true, result: { resume: { resumed: true, sessionId: "fixture-conversation" } } });
+
+test("a refused start does not answer the loss: it is reported until its delay has run, tried again, and resumed once the start is no longer refused", { skip: bootId() ? false : "no boot id on this platform: nothing is noted" }, async (t) => {
+  const now = Date.now() + 60 * 60_000, iso = (ms) => new Date(ms).toISOString();
+  const f = await lostHome(t, "retried", now);
+
+  const first = await f.sweep(now, REFUSES);
+  assert.deepEqual([first.started, first.row.outcome, first.row.reason, first.row.code, first.row.nextAttemptAt], [1, OUTCOME.REFUSED, ROW_REASON.START_REFUSED, "E_FIXTURE", iso(now + RETRY_FIRST_MS)]);
+
+  const waiting = await f.sweep(now + 30_000, () => assert.fail("started before its delay had run"));
+  assert.deepEqual([waiting.started, waiting.row.outcome, waiting.row.reason, waiting.row.code, waiting.row.message, waiting.row.nextAttemptAt],
+    [0, OUTCOME.REFUSED, ROW_REASON.START_REFUSED_RETRYING, "E_FIXTURE", "fixture start refused", iso(now + RETRY_FIRST_MS)]);
+
+  const second = await f.sweep(now + RETRY_FIRST_MS, REFUSES);
+  assert.deepEqual([second.started, second.row.reason, second.row.nextAttemptAt], [1, ROW_REASON.START_REFUSED, iso(now + RETRY_FIRST_MS + 2 * RETRY_FIRST_MS)], "the second refusal waits twice as long");
+  assert.equal((await f.fx.inEnv(() => readBootNote(f.boot, now + RETRY_FIRST_MS))).resumes[f.key], undefined, "a refused start launched nothing and is not counted");
+
+  const third = await f.sweep(now + RETRY_FIRST_MS + 2 * RETRY_FIRST_MS, RESUMES);
+  assert.deepEqual([third.started, third.row.outcome], [1, OUTCOME.RESUMED]);
+});
+
+test("a home that used up its starts of the hour is reported keeps-getting-lost with the time a sweep starts it again, and is started then", { skip: bootId() ? false : "no boot id on this platform: nothing is counted" }, async (t) => {
+  const now = Date.now() + 60 * 60_000, iso = (ms) => new Date(ms).toISOString();
+  const f = await lostHome(t, "looping", now);
+  const oldest = now - 50 * 60_000;
+  await f.fx.inEnv(() => { for (const at of [oldest, oldest + 60_000, oldest + 120_000]) noteSweep({ launched: [f.key] }, f.boot, at); });
+
+  const spent = await f.sweep(now, () => assert.fail("started with its starts of the hour used up"));
+  assert.deepEqual([spent.started, spent.row.outcome, spent.row.reason, spent.row.nextAttemptAt], [0, OUTCOME.REFUSED, ROW_REASON.KEEPS_GETTING_LOST, iso(oldest + RESUME_WINDOW_MS)]);
+  assert.match(spent.row.message, /^looping was resumed 3 times in the last hour and was lost again each time; a sweep starts it again after .*, or start it by hand \(oats session start --resume --home /);
+
+  const again = await f.sweep(oldest + RESUME_WINDOW_MS, RESUMES);
+  assert.deepEqual([again.started, again.row.outcome], [1, OUTCOME.RESUMED], "the oldest start left the hour");
+});
+
+test("a home the sweep started that is lost again before any listing saw it running is started by the next sweeps, up to the hour's budget", { skip: bootId() ? false : "no boot id on this platform: nothing is counted" }, async (t) => {
+  const now = Date.now() + 60 * 60_000;
+  const f = await lostHome(t, "dies-at-once", now);
+  const path = join(f.home, "instance.json");
+  // A start gives the home a new start id; here its harness is gone before the sweep's answer.
+  let starts = 0;
+  const startsAndDies = async () => {
+    starts += 1;
+    writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, "utf8")), startId: `fixture-dies-at-once-${starts}` }));
+    return RESUMES();
+  };
+
+  for (let n = 0; n < RESUME_LIMIT; n += 1) {
+    const swept = await f.sweep(now + n * 60_000, startsAndDies);
+    assert.deepEqual([swept.started, swept.row.outcome], [1, OUTCOME.RESUMED], `sweep ${n + 1} starts it`);
+  }
+  const spent = await f.sweep(now + RESUME_LIMIT * 60_000, () => assert.fail("started with its starts of the hour used up"));
+  assert.deepEqual([spent.started, spent.row.outcome, spent.row.reason], [0, OUTCOME.REFUSED, ROW_REASON.KEEPS_GETTING_LOST]);
+});
+
+test("used-up hours are in a row when each begins less than an hour after the one before cleared; the same hour is counted once; only an hour without one begins again", () => {
+  const at = (min) => new Date(T("12:00:00.000") + min * 60_000).toISOString();
+  assert.deepEqual(spentHours(undefined, at(0)), { hours: 1, since: at(0) });
+  const first = { hours: 1, since: at(0) };
+  assert.deepEqual(spentHours(first, at(0)), first, "a later sweep in the same hour marks nothing new");
+  assert.deepEqual(spentHours(first, at(60)), { hours: 2, since: at(60) }, "it cleared at 60 and was used up again from 60");
+  assert.deepEqual(spentHours(first, at(119)), { hours: 2, since: at(119) }, "59 minutes after it cleared");
+  assert.deepEqual(spentHours(first, at(120)), { hours: 1, since: at(120) }, "an hour without one");
+  assert.deepEqual(spentHours({ hours: 3, since: at(120) }, at(125)), { hours: 4, since: at(125) }, "still in a row after it was given up");
+  assert.equal(RESUME_SPENT_HOURS, 3);
+});
+
+/** The home of `f` uses up an hour: three sweep starts from `since`, a minute apart, then a sweep
+ *  five minutes after the first → that sweep's `{ row, started }`. */
+async function useUpAnHour(f, since) {
+  await f.fx.inEnv(() => { for (const at of [since, since + 60_000, since + 120_000]) noteSweep({ launched: [f.key] }, f.boot, at); });
+  return f.sweep(since + 5 * 60_000, () => assert.fail("started with its starts of the hour used up"));
+}
+
+test("a home that uses up its starts three hours in a row is given up: no time of a next attempt, the loss judged, no sweep starts it again", { skip: bootId() ? false : "no boot id on this platform: nothing is counted" }, async (t) => {
+  const now = Date.now() + 60 * 60_000, f = await lostHome(t, "given-up", now - 5 * 60_000 + 5 * 60_000);
+  const hour = RESUME_WINDOW_MS;
+  const first = await useUpAnHour(f, now);
+  const second = await useUpAnHour(f, now + hour);
+  for (const [n, r] of [[1, first], [2, second]]) assert.deepEqual([r.started, r.row.reason, typeof r.row.nextAttemptAt], [0, ROW_REASON.KEEPS_GETTING_LOST, "string"], `hour ${n} is not the last`);
+  const third = await useUpAnHour(f, now + 2 * hour);
+  assert.deepEqual([third.started, third.row.outcome, third.row.reason, third.row.nextAttemptAt], [0, OUTCOME.REFUSED, ROW_REASON.KEEPS_GETTING_LOST, undefined]);
+  assert.match(third.row.message, /^given-up was resumed 3 times an hour for 3 hours in a row and was lost again each time; no sweep starts it again: start it by hand \(oats session start --resume --home /);
+  const later = await f.sweep(now + 4 * hour, () => assert.fail("a home that was given up was started"));
+  assert.deepEqual([later.started, later.row.outcome, later.row.reason], [0, OUTCOME.SKIPPED, ROW_REASON.NOT_SEEN_RECENTLY], "the loss was judged");
+});
+
+test("only an hour without a used-up budget begins the hours in a row again; a start by hand does not", { skip: bootId() ? false : "no boot id on this platform: nothing is counted" }, async (t) => {
+  const now = Date.now() + 60 * 60_000, hour = RESUME_WINDOW_MS;
+  const clean = await lostHome(t, "clean-hour", now);
+  await useUpAnHour(clean, now);
+  await useUpAnHour(clean, now + hour);
+  const afterAClean = await useUpAnHour(clean, now + 3 * hour + 60_000);
+  assert.equal(typeof afterAClean.row.nextAttemptAt, "string", "the third used-up hour is not in a row with the first two");
+
+  const byHand = await lostHome(t, "by-hand", now);
+  const record = join(byHand.home, "instance.json");
+  await useUpAnHour(byHand, now);
+  await useUpAnHour(byHand, now + hour);
+  // A person starts it: another start id, seen running, then lost again in the next hour.
+  writeFileSync(record, JSON.stringify({ ...JSON.parse(readFileSync(record, "utf8")), startId: "started-by-hand" }));
+  await byHand.fx.inEnv(() => recordSeen(join(byHand.fx.dep, "agents"), [{ home: byHand.home, instance: "by-hand", startId: "started-by-hand", launched: true, running: true }], { now: now + 2 * hour - 60_000, boot: byHand.boot }));
+  const afterAHand = await useUpAnHour(byHand, now + 2 * hour);
+  assert.deepEqual([afterAHand.row.reason, afterAHand.row.nextAttemptAt], [ROW_REASON.KEEPS_GETTING_LOST, undefined], "the third hour in a row gives it up, whoever started it in between");
 });
 
 test("legacy qualified failure notes and loss records keep the same-kernel guards", (t) => {

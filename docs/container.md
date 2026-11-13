@@ -343,47 +343,50 @@ aw workspace connect --service <the team's aweb server>
 The commands are as `aw` 1.36.57 documents them in its own `--help`. The
 sequences have not yet been run in a container.
 
-Before it copies anything, the spawn checks three things and refuses the
-seat when one is missing:
+Before it copies or locks anything, the spawn checks five things, and
+refuses the seat with its fix when one is missing:
 
 - `signing.key`, the member's key;
 - the server: `aweb_url` in `workspace.yaml` (`aw workspace connect` writes
-  it);
+  it). The seat's service comes only from there: `OATS_AWEB_URL` is not read;
 - the team: the deployment's default team, or else the active team in
-  `teams.yaml`.
+  `teams.yaml`;
+- `teams.yaml` itself;
+- a membership of that team in `teams.yaml`, matched as aw matches it. When
+  there is none, accept the team's invite (`aw id team accept-invite`) or
+  fetch its certificate (`aw id team fetch-cert`) in the seat's directory, or
+  make the seat's team the deployment's default.
 
-The member's certificate under `team-certs/` is not checked at that point,
-and the seat does not work without it: the spawn copies the seat, fails when
-it connects or reads the identity back, and removes the copy.
+The member's certificate file under `team-certs/` is not checked at that
+point, and the seat does not work without it: the spawn copies the seat,
+fails when it connects or reads the identity back, and removes the copy.
 
 One seat serves one instance at a time. The spawn writes
 `.aw-retained-seat.json` beside the seat's `.aw` and refuses a second spawn
 while the first instance's home exists; retiring that instance releases the
-seat. Two cases need the operator:
+seat. Every change of that lock is one guarded step, using two private files
+beside it, `.aw-retained-seat.json.guard` and `.aw-retained-seat.json.held`.
+A change that was killed can leave one of them behind. The next spawn or
+take-over then refuses, naming the file and its fix, and the next retire
+reports it. Nothing removes such a file automatically. Two cases need the
+operator:
 
 - **The holder's home exists and its runtime is known to be dead.** Spawn
   with `identity.takeOver=true`. If that runtime is in fact alive, there are
   then two seats with one key; stop the old one.
-- **The holder's home is gone without a retire** (a home removed by hand, a
-  volume restored). Every later spawn is still refused, as "taken by another
-  spawn a moment ago", and `identity.takeOver` does not apply. Remove
-  `.aw-retained-seat.json` by hand once the home is confirmed gone
-  ([awebai/oats-aweb#227](https://github.com/awebai/oats-aweb/issues/227)).
+- **The holder's home is not on this host** (a home removed by hand, a volume
+  restored, or a home on another host that shares the seat). The spawn
+  refuses, naming the holder as the lock records it (instance, host, since
+  and home) and the release. A lock is never released by age. Once that seat
+  is confirmed gone, spawn with `identity.takeOver=true`, which clears the lock
+  with a warning, or remove the lock file the refusal names.
 
 Retiring never revokes the member's certificate: on a server that is not the
 hosted service, whoever holds the controller key removes a member
-(`aw id team remove-member`).
-
-Known limits of this route, until their fixes are released:
-
-- **A restart can lose the seat's identity.** A seat made this way may not
-  get `AWEB_IDENTITY_HOME` at a restart
-  ([awebai/oats-aweb#226](https://github.com/awebai/oats-aweb/issues/226)).
-  Check `aw whoami` in the home after a restart; if it is not the seat, retire
-  the instance and spawn it again.
-- **Do not interrupt a seat's spawn.** A spawn killed after it connected can
-  delete the standing identity's workspace at the server
-  ([awebai/oats-aweb#228](https://github.com/awebai/oats-aweb/issues/228)).
+(`aw id team remove-member`). A seat's spawn that fails or is killed never
+deletes the standing identity's workspace at the server: its retire releases
+the lock and prints the `aw workspace connect` that binds the identity back to
+its seat.
 
 The pinned OATS release supports this file-backed launch configuration:
 

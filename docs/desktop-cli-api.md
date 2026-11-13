@@ -7175,7 +7175,7 @@ whatever the rows say:
   | `already-running` | none |
   | `skipped` | `not-seen-recently` (the sweep cannot vouch for this loss: OATS never saw the home running for its current start, an earlier sweep already answered the loss, the loss was first seen 24 hours ago or more, or, within one boot, it was first seen 24 hours or more after the last running look; with a `message` that says which, nothing started: [Which losses come back](execution-targets.md#which-losses-come-back)), `unknown` (running reads `null`, or the start could not establish it: `code` `E_SESSION_UNKNOWN`), `start-busy` (`E_SESSION_START_BUSY`: a concurrent start), `not-lost` (`E_RESUME_NOT_LOST` or `E_SESSION_RUNNING`, or any refusal of a home that is gone: it stopped, started or was removed between the read and the start), `lifecycle-busy` (OATS 0.69.2: OATS is stopping, upgrading or retiring the home, or its retire is owed; read from its row, with a `message`, or answered by its start, with the start's `code`, `E_INSTANCE_RETIRING` or `E_LIFECYCLE_BUSY`, and `message`; nothing started) |
   | `blocked` | `resume-confirmation` (Claude's resume-cost dialog: the session runs and waits for its human), `launch-prompt` (`code` `E_SPAWN_INCOMPLETE`, with `launchPrompts`: the session is kept) |
-  | `refused` | `start-refused` (`code` and `message`: the start's own refusal), `refused-this-boot` (an earlier sweep in this boot was refused for this home and start, and its answer to the loss was lost: reported again with that `code` and `message`, nothing started; a refused loss is never retried automatically, after a reboot either), `keeps-getting-lost` (sweeps started this home 3 times in this boot and it was lost again each time: nothing started, no `code`, a `message` that says so; no sweep starts this loss again, after a reboot either: a person starts it by hand) |
+  | `refused` | `start-refused` (`code` and `message`: the start's own refusal, and `nextAttemptAt`: a refused start launched nothing, so it does not answer the loss, and a sweep tries it again no sooner than that time), `start-refused-retrying` (an earlier sweep in this boot was refused for this home and start and its delay has not run: reported again with that `code`, `message` and `nextAttemptAt`, nothing started; the delay is 1 minute after the first refusal and doubles at each further one, up to 15 minutes, and the retries end when the loss is `not-seen-recently`), `keeps-getting-lost` (sweeps started this home 3 times in the last hour and it was lost again each time: nothing started, no `code`, a `message` that says so and `nextAttemptAt`, when the oldest of those starts is an hour old and a sweep starts the home again; a home that used up its starts 3 hours in a row is given up: the row has no `nextAttemptAt`, its `message` says a person starts it, and the loss is answered) |
 
   The kernel defines every `sessionEnd`, `resume` and row name in one
   module, `lib/session-resume-contract.mjs`; a change to one is a contract
@@ -7188,11 +7188,15 @@ whatever the rows say:
   runs in the OATS tmux server's cgroup, not a scope of its own, and why).
   Each start still records it in its own home's events. `--plan` has none.
 - A lost home is answered with the first that applies: `lifecycle-busy`,
-  `not-seen-recently`, `refused-this-boot`, `keeps-getting-lost`, then its
-  start. A sweep that is not a plan answers each lost home once: a later
-  sweep answers that loss `not-seen-recently`. A `lifecycle-busy` row does
-  not answer it: whatever OATS was doing to the home decides what it is
-  next, and a later sweep reads it again.
+  `not-seen-recently`, `start-refused-retrying`, `keeps-getting-lost`, then
+  its start. A sweep that is not a plan answers each lost home it started
+  once: a later sweep answers that loss `not-seen-recently`. Four rows do
+  not answer the loss, and a later sweep reads the home again:
+  `lifecycle-busy` (whatever OATS was doing to the home decides what it is
+  next), `start-refused` and `start-refused-retrying` (nothing was
+  launched), and `keeps-getting-lost` (until its hour has passed; one
+  without `nextAttemptAt` does answer it). The counts and the delays are
+  one boot's: a reboot starts them again.
 - A home whose self-retire is scheduled or owed reads no `sessionEnd`; a
   launched one that does not run is listed `skipped`, `lifecycle-busy`, as
   a lost one is.
@@ -7275,12 +7279,15 @@ this machine's: it takes no `--server`. It runs until SIGTERM or SIGINT.
   nothing of how far it got. A child that ended without an answer is
   reported under that code too, in `sweep.error` or on stderr, and does not
   end the run.
-- **What it runs, in order.** The resume sweep once (`oats session resume`).
+- **What it runs, in order.** The resume sweep (`oats session resume`).
   Then at second 0 of every minute: `oats schedule tick --host` when the
-  host schedule registry lists a scope, and a listing of every deployment's
-  instances, which records what runs for the next start's sweep. Each is a
-  child process. A minute whose tick still runs is skipped; a minute missed
-  is never replayed. With no scope registered it ticks nothing and says so.
+  host schedule registry lists a scope, and the resume sweep again, which
+  starts a home lost while the host runs, within the sweep's own bounds, and
+  records what runs for a later sweep. Each is a child process. A minute
+  whose tick still runs is skipped, and a sweep that still runs is not run
+  beside itself; a minute missed is never replayed. With no scope registered
+  it ticks nothing and says so. A sweep is said on stderr when its outcomes
+  differ from those of the sweep before.
 - **On SIGTERM or SIGINT.** No further minute starts; a tick or a sweep that
   runs gets 10 seconds to finish naturally, then a private admission fence
   stops further launches and owned child groups get a further 5-second
@@ -7296,7 +7303,7 @@ this machine's: it takes no `--server`. It runs until SIGTERM or SIGINT.
   modes. **The answer** is written once, when the run ends:
   `result` `{schemaVersion: 1, plan: false, signal, warnings, sweep, ticks, stopped}`.
   `signal` is `"SIGTERM"` or `"SIGINT"`; `warnings` an array of strings;
-  `sweep` the sweep's own `result`
+  `sweep` the first sweep's own `result`
   ([The machine sweep](#the-machine-sweep-oats-session-resume)), or
   `{error: {code, message}}` when it failed (the run goes on); `ticks`
   `{run, skipped, failed, noScope}`, minutes counted; `stopped` one row per

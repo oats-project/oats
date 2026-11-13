@@ -66,11 +66,23 @@ export function resolveLinkId(fromInstance, name, byName) {
   return sameRoot.length === 1 ? instanceId(sameRoot[0]) : null;
 }
 
-/** The roster's order, a comparator for `sort`: by instance name, ties broken by `instanceId`, so it is total and
- * deterministic. It ranks roots, siblings under one parent, and so clusters (by their first root). A start or a
- * stop moves no row; only adding or removing one does (Pepe's decision on #1262, comment 6196531154, which
- * replaces #1083's running-first order for the roster). The one place the roster's order is decided. */
+/** When a row was spawned, in ms: its `createdAt` (the kernel's ISO time from instance.json), or null when it has
+ * none or the reader can't parse it. */
+function spawnTime(instance) {
+  const time = typeof instance.createdAt === "string" ? Date.parse(instance.createdAt) : NaN;
+  return Number.isFinite(time) ? time : null;
+}
+
+/** The roster's order, a comparator for `sort`: by spawn time, newest first (Pepe, 2026-11-13: "by spawn time not
+ * alphabetically, i.e. new to old"); a row with no readable spawn time after every row with one; then by instance
+ * name, ties broken by `instanceId`, so it is total and deterministic. It ranks roots, siblings under one parent,
+ * and so clusters (by their first root: a bundle sits where its newest root sits, so a new child never moves it).
+ * A spawn time never changes, so a start or a stop moves no row; only adding or removing one does (#1262's
+ * recognition rule, whose name order this replaces; #1083's running-first order stays out of the roster). The one
+ * place the roster's order is decided. */
 function rosterOrder(a, b) {
+  const ta = spawnTime(a), tb = spawnTime(b);
+  if (ta !== tb) return ta === null ? 1 : tb === null ? -1 : tb - ta;
   const ia = instanceId(a), ib = instanceId(b);
   return String(a.instance).localeCompare(String(b.instance)) || (ia < ib ? -1 : ia > ib ? 1 : 0);
 }
@@ -117,8 +129,7 @@ export function instanceSiblings(instances) {
  * duplicate names across repos render as distinct nodes.
  * Under one parent, the children that draw their parent line come first (same-work.mjs `drawingFirst`: on a
  * host that declares instance-same-work, the flagged ones), each part in the roster's order (#1577). The product
- * owner's contract (awebai/oats#1577, comment 6441606665) refines the name order (the Desktop expert's decision
- * roster-name-order-preserves-recognition) inside one parent's children only: roots, clusters and groups keep it.
+ * owner's contract (awebai/oats#1577, comment 6441606665) refines the roster's order inside one parent's children only: roots, clusters and groups keep it.
  * Returns [{ key, instances: [{...instance, depth}] }] with clusters ranked by
  * their first ROOT in the roster's order (`rosterOrder`), never by another member (#1262): a bundle sits where
  * its root sits, and gaining or losing a child, or a start or a stop, moves nothing. A cluster without a root
@@ -185,7 +196,7 @@ export function clusterInstances(instances, { links = instanceLinks, roster = in
     // Deterministic cluster label: the lexically-smallest ROOT name —
     // independent of liveness, so the visible cluster name does not flip
     // when a different member starts/stops running (review f921f7d nit).
-    // `rank` (rosterOrder: by name) governs display ORDER within the cluster.
+    // `rank` (rosterOrder: by spawn time, newest first) governs display ORDER within the cluster.
     const rootNames = (roots.length ? roots : members).map((i) => i.instance).sort();
     clusters.push({ key: rootNames[0], instances: ordered, head: roots[0] ?? [...members].sort(rank)[0] });
   }
