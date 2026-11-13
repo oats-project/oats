@@ -56,7 +56,11 @@ the wrapper adds these derived fields, omitting disabled roles:
 ```
 
 `egress.external.resolvers` supplies 1–4 distinct public IPv4 DNS resolver
-addresses, in operator order, with no default. DNS uses UDP/TCP port 53.
+addresses, in operator order, with no default. The proxy must reach those public
+resolvers on UDP/TCP port 53; a cluster that requires its private DNS resolver
+is not supported by this input. Resolver validation and per-answer destination
+validation are separate checks; the public-resolver restriction is part of this
+configuration contract.
 Both derived fields are absent with neither role enabled. The component checks
 the exact roles, origins and resolver addresses again. No knowledge-publication
 role, npm, codeload, raw-file or release-asset host is included.
@@ -65,7 +69,9 @@ Agents resolve configured external names to the proxy address. Only the
 proxy resolves their upstream addresses, for each new connection. An
 image-owned loopback connector validates every returned IPv4 address, rejects
 mixed safe/unsafe answers, and connects to the selected IP literal without a
-second lookup. Private, loopback, link-local, reserved and denied addresses,
+second lookup. Only the first validated answer is tried; an unreachable first
+address fails that connection without trying the remaining answers.
+Private, loopback, link-local, reserved and denied addresses,
 the proxy, private-ingress exceptions and every pinned deployment target are
 excluded. External routes never inherit internal private-ingress exceptions.
 DNS and connect work has a five-second bound; there is no default upstream,
@@ -78,8 +84,12 @@ destination. TLS stays end to end. It does not filter encrypted HTTP
 Host/`:authority`, paths, methods or repositories. Source access can read any
 public repository on the allowed host; request paths and queries can disclose
 data. Absence of a provisioned Git credential is not a network prohibition on
-introducing one. Any authorized push credential must be scoped to one repository.
-Provider requests can contain prompts, decrypted messages, files and tool output.
+introducing one. The boundary limits reachable services, not accounts on those
+services. A credential introduced through any source, including an untrusted
+message, can authorize a Git push or send data to a model account its owner
+controls. Publishing is a separate operator decision; any authorized push
+credential must be scoped to one repository. Provider requests can contain
+prompts, decrypted messages, files and tool output.
 
 With external roles configured, CoreDNS logs denied questions and nginx logs
 refused SNI names. The connector reports refusal by role without request bodies,
@@ -106,8 +116,17 @@ its environment-added certificates, using the shipped Node's
 These are connectivity controls, not readiness or public-backend
 non-delivery evidence. Owned DNS/TLS mutants and shipped-client checks qualify
 external enforcement separately from the five-service common-audit proof below.
-Generic read-only mirror support remains available; it is not needed by the
-direct source role.
+Direct source access is off by default. Operator-refreshed read-only mirrors
+provide source reads without enabling the outbound source route. They avoid
+opening all public repositories on GitHub, disclosure through request paths in
+GitHub logs, and writes whose only restriction is the credential's scope.
+Mirrors observe the last operator refresh; direct source access observes the
+remote source through the configured route. Neither route is a general default
+preference.
+
+The nginx worker has a shared ceiling of 256 connections, counting client and
+upstream connections across internal and external routes. Long-lived model
+streams consume that pool; it is not a qualified agent-capacity figure.
 
 After building the proxy, explicit public-host QA runs as:
 
@@ -162,8 +181,11 @@ agent egress to proxy TCP/UDP 53 and TCP 443, and proxy egress to the pinned TLS
 ingress addresses on TCP 443. An installed NetworkPolicy object alone does not
 prove enforcement. The agent must have no service credentials or backend access.
 External roles also need proxy-only access to the selected DNS resolvers and
-validated public TLS destinations; their Kubernetes adapter/CNI qualification
-is separate from the Compose component proof.
+validated public TLS destinations. Those destination addresses are dynamic, so
+a Kubernetes egress policy cannot use the internal routes' pinned-address list
+for them: it must permit public TCP 443, with the external hostname and
+per-answer address restrictions enforced by the connector. Kubernetes
+adapter/CNI qualification remains separate from the Compose component proof.
 
 **An SNI map does not enforce HTTP origins.** Before enabling the signer route,
 the TLS ingress must reject mismatched SNI and HTTP Host, including HTTP/2

@@ -423,6 +423,20 @@ The [egress component](../container/agent/egress/README.md#optional-external-sou
 defines the two optional source/model routes and their operator-selected DNS
 resolvers. Their boundary is exact SNI and a validated public destination;
 it does not filter repository paths, HTTP authorities or data sent to a provider.
+It limits which services are reachable, not which accounts on them. A credential
+from any source, including an untrusted message, can allow an agent to push data
+to a GitHub repository or send data to a model account controlled by that
+credential's owner. Publishing needs a separate operator decision and a push
+credential scoped to one repository; the network boundary does not enforce
+that scope.
+
+Direct source access is off by default. Operator-refreshed read-only mirrors
+provide source reads without that outbound route. They avoid access to any
+public GitHub repository, request-path disclosure in GitHub logs, and writes
+limited only by credential scope. Mirrors reflect the last operator refresh;
+direct access uses the configured remote source. Both routes remain supported.
+The resolver input requires public IPv4 DNS and proxy UDP/TCP 53 access to it;
+a cluster that mandates a private DNS resolver is not supported by this input.
 The existing five-service ingress audit remains a separate admission gate.
 
 ### After changing a credential
