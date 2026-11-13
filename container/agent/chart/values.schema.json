@@ -1,0 +1,255 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "image",
+    "imagePullSecrets",
+    "uid",
+    "gid",
+    "fsGroup",
+    "storage",
+    "loginSecret",
+    "authorizedKeys",
+    "resources",
+    "tmpSize",
+    "service",
+    "forwarder"
+  ],
+  "properties": {
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "digest",
+        "pullPolicy"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "pullPolicy": {
+          "enum": [
+            "IfNotPresent",
+            "Always",
+            "Never"
+          ]
+        }
+      }
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$",
+            "maxLength": 253
+          }
+        }
+      }
+    },
+    "uid": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "gid": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "fsGroup": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "size",
+        "className"
+      ],
+      "properties": {
+        "size": {
+          "type": [
+            "string",
+            "number"
+          ],
+          "pattern": "^[0-9]+([.][0-9]+)?(m|Ki|Mi|Gi|Ti)?$"
+        },
+        "className": {
+          "type": "string"
+        }
+      }
+    },
+    "loginSecret": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$",
+      "maxLength": 253
+    },
+    "authorizedKeys": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "name"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "Secret",
+            "ConfigMap"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$",
+          "maxLength": 253
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requests",
+        "limits"
+      ],
+      "properties": {
+        "requests": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "cpu",
+            "memory",
+            "ephemeral-storage"
+          ],
+          "properties": {
+            "cpu": {
+              "type": [
+                "string",
+                "number"
+              ],
+              "pattern": "^[0-9]+([.][0-9]+)?(m|Ki|Mi|Gi|Ti)?$"
+            },
+            "memory": {
+              "type": [
+                "string",
+                "number"
+              ],
+              "pattern": "^[0-9]+([.][0-9]+)?(m|Ki|Mi|Gi|Ti)?$"
+            },
+            "ephemeral-storage": {
+              "type": [
+                "string",
+                "number"
+              ],
+              "pattern": "^[0-9]+([.][0-9]+)?(m|Ki|Mi|Gi|Ti)?$"
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "cpu",
+            "memory",
+            "ephemeral-storage"
+          ],
+          "properties": {
+            "cpu": {
+              "type": [
+                "string",
+                "number"
+              ],
+              "pattern": "^[0-9]+([.][0-9]+)?(m|Ki|Mi|Gi|Ti)?$"
+            },
+            "memory": {
+              "type": [
+                "string",
+                "number"
+              ],
+              "pattern": "^[0-9]+([.][0-9]+)?(m|Ki|Mi|Gi|Ti)?$"
+            },
+            "ephemeral-storage": {
+              "type": [
+                "string",
+                "number"
+              ],
+              "pattern": "^[0-9]+([.][0-9]+)?(m|Ki|Mi|Gi|Ti)?$"
+            }
+          }
+        }
+      }
+    },
+    "tmpSize": {
+      "type": [
+        "string",
+        "number"
+      ],
+      "pattern": "^[0-9]+([.][0-9]+)?(m|Ki|Mi|Gi|Ti)?$"
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "forwarder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "resolverIP",
+        "networkPolicy",
+        "namespaceLabels",
+        "podLabels"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "resolverIP": {
+          "type": "string",
+          "pattern": "^$|^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$"
+        },
+        "networkPolicy": {
+          "type": "boolean"
+        },
+        "namespaceLabels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "podLabels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

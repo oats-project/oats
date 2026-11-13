@@ -1,0 +1,13 @@
+{{- if .Values.service.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "agent.name" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "agent.labels" . | nindent 4 }}
+  ports:
+    - { name: ssh, port: 2222, targetPort: 2222, protocol: TCP }
+{{- end }}
