@@ -136,8 +136,8 @@ function failureClass(e) {
   const redacted = detail === undefined ? undefined : detail.replace(TOKEN_SHAPED_RE, "<redacted>").replace(/\s+/g, " ").trim().slice(0, 200);
   return `http ${http[1]}${redacted ? `, detail: ${JSON.stringify(redacted)}` : ""}`;
 }
-// The kernel kills a lifecycle hook (spawn, launch, retire) at 120 s (oats
-// lib/core.mjs runLifecycleHooks). Every aw call such a hook makes ends by one
+// The kernel kills a lifecycle hook (spawn, launch, retire) at 120 s (the
+// kernel's lifecycle-hook runner). Every aw call such a hook makes ends by one
 // deadline below that, HOOK_BUDGET_MS after the hook started, whatever its own
 // timeout, so the hook outlives its last call and reports what it confirmed (a
 // mint that completed late, a grant to revoke) instead of being killed with the

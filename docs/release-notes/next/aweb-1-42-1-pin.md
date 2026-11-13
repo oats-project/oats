@@ -1,6 +1,6 @@
 ## Changed
 
-- **The catalog pins oats.aweb 1.42.0** (from 1.41.0). It requires OATS
+- **The catalog pins oats.aweb 1.42.1** (from 1.41.0; 1.42.0 is never pinned: a comment in it named the kernel's private module, which the mirror check refuses). It requires OATS
   >=0.68.0, the aw floor stays 1.36.33, and the tested aw is 1.36.58. Most of
   the release is about retained seats: an atomic seat lock, a lock held on
   another host refuses with its release, a killed or failed spawn never
