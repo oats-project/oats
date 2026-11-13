@@ -155,7 +155,7 @@ Git-consumer evidence remains a separate deployment check.
 The agent retains one replica, one RWO PVC, `OnRootMismatch` fsGroup handling,
 RuntimeDefault seccomp, dropped capabilities, read-only root, no privilege
 escalation/token/service links, the approved login/public-key mounts, a size-limited
-memory-backed `/tmp`, 45-second stop grace and `maxUnavailable: 1` PDB. Release
+memory-backed `/tmp`, 50-second stop grace and `maxUnavailable: 1` PDB. Release
 names must be DNS-1035 labels no longer than 36 characters. Optional SSH Service
 exposure is ClusterIP only; the operator still uses pod port-forward and SSH.
 

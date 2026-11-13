@@ -25,7 +25,7 @@ spec:
       serviceAccountName: {{ include "agent.name" . }}
       automountServiceAccountToken: false
       enableServiceLinks: false
-      terminationGracePeriodSeconds: 45
+      terminationGracePeriodSeconds: 50
       securityContext:
         runAsNonRoot: true
         runAsUser: {{ $a.uid }}

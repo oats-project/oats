@@ -36,7 +36,7 @@ function publicCertificates(pem) {
 function isolation(p) {
   assert.equal(p.automountServiceAccountToken, false, "service-account token must be disabled");
   assert.equal(p.enableServiceLinks, false, "service links must be disabled");
-  assert.equal(p.terminationGracePeriodSeconds, 45, "termination grace must be 45 seconds");
+  assert.equal(p.terminationGracePeriodSeconds, 50, "termination grace must be 50 seconds");
   for (const key of ["hostNetwork", "hostPID", "hostIPC", "shareProcessNamespace"]) assert.ok(!p[key], `${key} must be off`);
   for (const key of ["initContainers", "ephemeralContainers"]) assert.equal(p[key]?.length ?? 0, 0, `${key} not approved`);
   const s = p.securityContext;

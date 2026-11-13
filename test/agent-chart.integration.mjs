@@ -112,7 +112,7 @@ test("Helm lint and default rendering enforce the agent isolation contract", () 
   assert.equal(c.stdin, false);
   assert.equal(c.tty, false);
   assert.match(c.image, /@sha256:a{64}$/);
-  assert.equal(p.terminationGracePeriodSeconds, 45);
+  assert.equal(p.terminationGracePeriodSeconds, 50);
   assert.deepEqual(c.livenessProbe.exec, { command: ["node", "/usr/local/lib/agent-liveness.mjs"] });
   assert.deepEqual(c.readinessProbe.tcpSocket, { port: 2222 });
   assert.equal(c.startupProbe, undefined);
@@ -219,6 +219,7 @@ test("acceptance rejects admitted pod security or mount drift", async () => {
     (p) => { p.spec.containers[0].volumeMounts[2].readOnly = false; },
     (p) => { p.spec.containers[0].livenessProbe = {}; },
     (p) => { p.spec.terminationGracePeriodSeconds = 1; },
+    (p) => { p.spec.terminationGracePeriodSeconds = 45; },
     (p) => { p.spec.containers[0].resources.limits.memory = "8Gi"; },
   ]) {
     const bad = structuredClone(pod); mutate(bad);

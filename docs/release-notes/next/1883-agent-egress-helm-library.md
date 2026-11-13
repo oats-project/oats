@@ -24,3 +24,7 @@
   its own writable state claim as a source, and writable alternate mounts.
   Source/ref/refresh evidence remains operator-owned; PVC presence proves no
   freshness.
+
+- The agent pod and its acceptance checks require a 50-second termination
+  grace, allowing the kernel shutdown phases and the wake broker's six-second
+  cleanup. The egress pod retains its separate five-second grace.

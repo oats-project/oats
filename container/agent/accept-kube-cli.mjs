@@ -134,12 +134,12 @@ async function shutdown(kube, pod, expectedUID) {
     assert.equal(current.metadata.uid, expectedUID, "pod was replaced before deletion");
     const start = Date.now();
     command("kubectl", [...kube, "delete", "pod", pod, "--wait=false"]);
-    const success = await Promise.race([closed, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("host run did not stop within 45 seconds")), 45_000); })]);
+    const success = await Promise.race([closed, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("host run did not stop within 50 seconds")), 50_000); })]);
     assert.ok(success, "shutdown log stream failed");
     assert.ok(signal && ended, "missing ordered SIGTERM and ended events");
     assert.ok(!stopFailed, "host run reported a shutdown failure");
-    assert.ok(Date.now() - start <= 45_000, "shutdown exceeded grace period");
-    report("stop", `PASS ordered host shutdown in ${Date.now() - start}ms (45s grace); StatefulSet may replace the deleted pod`);
+    assert.ok(Date.now() - start <= 50_000, "shutdown exceeded grace period");
+    report("stop", `PASS ordered host shutdown in ${Date.now() - start}ms (50s grace); StatefulSet may replace the deleted pod`);
   } finally { clearTimeout(timer); log.kill(); }
 }
 
@@ -178,7 +178,7 @@ async function main() {
   command(process.env.HELM || "helm", ["lint", "--strict", chart, ...args]);
   const rendered = parseAllDocuments(command(process.env.HELM || "helm", ["template", o["--release"], chart, ...args])).map((d) => { assert.equal(d.errors.length, 0, "invalid rendered YAML"); return d.toJSON(); });
   const docs = agentObjects(rendered), set = checkRendered(docs);
-  report("render", "PASS Helm lint/template; one RWO StatefulSet, dedicated SA/no RBAC, fixed security, mounts, probes, budgets and 45s grace");
+  report("render", "PASS Helm lint/template; one RWO StatefulSet, dedicated SA/no RBAC, fixed security, mounts, probes, budgets and 50s grace");
   report("render", "NOT ASSUMED: NetworkPolicy enforcement; no hostname allowlist proof without operator-verified enforcement and bypass tests");
   if (!o["--pod"]) { report("render", "NOT RUN: live pod, SSH, filesystem and deletion checks (supply --context --pod --ssh-key)"); return; }
   const kube = ["--context", o["--context"], "--namespace", o["--namespace"]];
