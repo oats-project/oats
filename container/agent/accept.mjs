@@ -4,6 +4,7 @@ import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
+import { registryOrigin } from "./agent-registry.mjs";
 
 function required(env, name) {
   assert.ok(env[name], `set ${name} to the reviewed Compose value`);
@@ -12,13 +13,16 @@ function required(env, name) {
 
 const ids = (env) => ({ uid: env.AGENT_UID || "20001", gid: env.AGENT_GID || "20001" });
 
-// The optional public-CA mount is the only deployment environment exception.
-// Both settings reach the broker before it starts, including its Node child.
-export function agentEnvironment(imageEnv, publicCA = false) {
-  if (!publicCA) return imageEnv;
+// Only the fixed public-CA pair and the explicit public registry selector may
+// differ from the image. No arbitrary container environment is admitted.
+export function agentEnvironment(imageEnv, publicCA = false, registryURL) {
+  registryOrigin(registryURL);
   const trust = ["SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS"];
-  return [...imageEnv.filter(entry => !trust.includes(entry.split("=", 1)[0])),
-    ...trust.map(name => `${name}=/etc/agent-trust/ca.pem`)];
+  let expected = publicCA ? [...imageEnv.filter(entry => !trust.includes(entry.split("=", 1)[0])),
+    ...trust.map(name => `${name}=/etc/agent-trust/ca.pem`)] : imageEnv;
+  if (registryURL !== undefined) expected = [...expected.filter(entry => !entry.startsWith("AWID_REGISTRY_URL=")),
+    `AWID_REGISTRY_URL=${registryURL}`];
+  return expected;
 }
 
 // Compare only reviewed settings, never dump Config.Env or credential contents.
@@ -70,7 +74,7 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
   equal("agent IP", info.NetworkSettings.Networks[network].IPAddress, required(env, "AGENT_IP"));
   const names = (entries) => entries.map((entry) => entry.split("=", 1)[0]);
   assert.ok(Array.isArray(image?.Config?.Env), "image environment baseline is required");
-  const actualEnv = info.Config.Env || [], expectedEnv = agentEnvironment(image.Config.Env, !!env.AGENT_CA_FILE);
+  const actualEnv = info.Config.Env || [], expectedEnv = agentEnvironment(image.Config.Env, !!env.AGENT_CA_FILE, env.AWID_REGISTRY_URL);
   const allNames = new Set([...names(actualEnv), ...names(expectedEnv)]);
   const entriesFor = (entries, name) => entries.filter((entry) => entry.split("=", 1)[0] === name).sort();
   const changedNames = [...allNames].filter((name) => !isDeepStrictEqual(entriesFor(actualEnv, name), entriesFor(expectedEnv, name)));
@@ -125,6 +129,15 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
   equal("legacy auto-creating binds", h.Binds || [], []);
   equal("binds fail on missing host paths", sort((h.Mounts || []).map((m) => ({ source: m.Source, target: m.Target, rw: !m.ReadOnly, type: m.Type, create_host_path: !!m.BindOptions?.CreateMountpoint }))), sort(mounts.map((m) => ({ ...m, create_host_path: false }))));
   return evidence;
+}
+
+export function registryCheck() {
+  const assert = require("node:assert/strict"), { spawnSync } = require("node:child_process");
+  const result = spawnSync(process.execPath, ["/usr/local/lib/agent-registry.mjs", "--profile"],
+    { encoding: "utf8", timeout: 5000, maxBuffer: 4096 });
+  assert.ok(result.status === 0, "AWID_REGISTRY_URL runtime data is invalid or unreadable at /tmp/agent-registry/registry-url");
+  assert.ok(result.stdout === (process.env.AWID_REGISTRY_URL ?? ""), "AWID_REGISTRY_URL runtime data differs from configured environment (values withheld)");
+  return "registry runtime selector matches configured environment (value withheld)";
 }
 
 function runtimeCheck(uid, gid) {
@@ -261,6 +274,7 @@ function main(args, env) {
   if (label !== "local") assert.equal(arch, "x64", "target evidence requires amd64");
   report(`PASS architecture=${arch}; image=${info.Image}`);
   report(`PASS ${program(runtimeCheck, [uid, gid]).replaceAll("\n", `\n[${label}] PASS `)}`);
+  report(`PASS ${JSON.parse(program(registryCheck, []))}`);
   const token = JSON.parse(program(tokenCheck, [gid, label !== "local"]));
   for (const line of token.evidence) report(line);
   if (env.AGENT_CA_FILE) report(`PASS ${JSON.parse(program(publicCACheck, []))}`);

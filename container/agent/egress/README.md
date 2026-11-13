@@ -341,7 +341,11 @@ The operator-side adapter checks actual image IDs, inert entrypoint, non-root
 identity, dropped capabilities, read-only root, no new privileges, exact mount
 sources, the sole isolated agents network and the proxy's two networks. It
 permits the agent's two fixed CA environment settings only with the configured
-trust path. Public CA and mirrors are read-only and cannot overlap writable
+trust path, plus exactly `AWID_REGISTRY_URL` equal to
+`plan.policy.targets.registry.origin`. The wrapper must render that same
+registry value into the inert probe, agent and explicit harness launch
+configuration from its single `team.registryUrl` input. No extra plan field or
+image-side policy read is used. Public CA and mirrors are read-only and cannot overlap writable
 state/work sources. Their runtime checks reuse the agent acceptance functions.
 For `probe-runtime.mjs --emit-program`, set runtime `mirrors: true` only when the
 platform adapter has admitted that exact read-only mount; the Compose adapter

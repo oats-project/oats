@@ -3,6 +3,7 @@
  * registry on /state without an override hidden from provider status reads. */
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import { prepareRegistryInput, REGISTRY_DIRECTORY } from "./agent-registry.mjs";
 
 const signals = ["SIGTERM", "SIGINT"];
 const onSignals = (handler) => {
@@ -16,7 +17,10 @@ export async function supervise({
   spawnChild = spawn, onSignal = onSignals,
   say = (line) => process.stderr.write(`agent-supervisor: ${line}\n`),
   pollMs = 200, startupMs = 30_000, childStopMs = 3_000,
+  registryDirectory = REGISTRY_DIRECTORY,
 } = {}) {
+  try { prepareRegistryInput(process.env.AWID_REGISTRY_URL, registryDirectory); }
+  catch (error) { say(error.message); return 1; }
   let stopping = false, failed = false, wakeStop, broker, ssh, host;
   const requested = new Promise((resolve) => { wakeStop = resolve; });
   const stop = () => { stopping = true; wakeStop(); };

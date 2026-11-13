@@ -226,6 +226,15 @@ test("acceptance refuses drift in the admitted container settings", async t => {
   inspected.HostConfig.Mounts = inspected.Mounts.map((m) => ({ Type: "bind", Source: m.Source, Target: m.Destination, ReadOnly: !m.RW, BindOptions: {} }));
   Object.assign(inspected.HostConfig, { Runtime: "runc", MemorySwap: 6442450944, OomKillDisable: false, DeviceCgroupRules: null, ShmSize: 67108864 });
   assert.ok(inspectAgent(inspected, env, image).length >= 8);
+  const registryEnv = { ...env, AWID_REGISTRY_URL: "https://registry.example.test" };
+  const registryConfigured = structuredClone(inspected);
+  registryConfigured.Config.Env.push("AWID_REGISTRY_URL=https://registry.example.test");
+  assert.doesNotThrow(() => inspectAgent(registryConfigured, registryEnv, image));
+  assert.throws(() => inspectAgent(registryConfigured, env, image), /environment names differing/);
+  assert.throws(() => inspectAgent(registryConfigured, { ...registryEnv, AWID_REGISTRY_URL: "https://other.example.test" }, image), /environment names differing/);
+  const extraRegistryEnv = structuredClone(registryConfigured);
+  extraRegistryEnv.Config.Env.push("ARBITRARY_ENV=refused");
+  assert.throws(() => inspectAgent(extraRegistryEnv, registryEnv, image), /environment names differing/);
   for (const tmp of [undefined, "0", "-1", "1g", "1,exec", "9007199254740992"]) {
     assert.throws(() => inspectAgent(inspected, {...env, AGENT_TMP_SIZE:tmp}, image), /AGENT_TMP_SIZE/);
   }
@@ -408,6 +417,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
   const children = new Map(), said = [];
   let signal, statusFailed = false;
   const running = supervise({
+    registryDirectory: join(dir, "registry"),
     spawnChild(file, args, options) {
       const role = file === "aw" ? (args[1] === "run" ? "broker" : "status") : file === "oats" ? "host" : "ssh";
       const mode = role === "status" && statusIgnoresTerm ? "probe-stubborn" : statusTrueAfterBrokerExit ? "after-exit" : stubbornFinish ? "stubborn" : ready ? "ready" : "not-ready";
@@ -668,6 +678,7 @@ test("login and SSH trust use one immutable conditional profile", () => {
   const profile = read("agent-trust.sh");
   assert.match(profile, /^if \[ -r \/etc\/agent-trust\/ca\.pem \]; then\n/m);
   assert.deepEqual([...profile.matchAll(/^\s*export (.+)$/gm)].map(match => match[1]).sort(), [
+    'AWID_REGISTRY_URL="$_agent_registry"', "AWID_REGISTRY_URL=invalid:",
     "NODE_EXTRA_CA_CERTS=/etc/agent-trust/ca.pem", "SSL_CERT_FILE=/etc/agent-trust/ca.pem",
   ]);
   assert.match(read("Dockerfile"), /^COPY --chmod=644 agent-trust\.sh \/etc\/profile\.d\/agent-trust\.sh$/m);

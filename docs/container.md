@@ -35,7 +35,7 @@ The same inputs apply to a Compose service or a platform's container spec:
 | Input | Purpose |
 | --- | --- |
 | Deployment repository and commit | Operator provisions `/state/deploy`; its `oats-lock.json` pins packages and souls. Record the source and lock commits in the receipt. |
-| aweb/AWID endpoints and team identifier | Deployment configuration; the platform's egress allowlist admits the endpoints. |
+| aweb/AWID endpoints and team identifier | Deployment configuration; `team.registryUrl` is the single registry source, defaulting to the public registry. The platform's egress allowlist admits the endpoints. |
 | Operator SSH public key | Read-only `authorized_keys` mount. |
 | Resource limits | Runtime pids, memory and CPU limits. |
 | Approved mounts | Explicit list, checked against the running container. |
@@ -146,6 +146,7 @@ Supply these plain variables to the bundle's env file:
 | `AGENT_TMP_SIZE` | Positive integer bytes from the shared configuration's `agents.tmpSize`; bounds the `/tmp` tmpfs. |
 | `AGENT_CA_FILE` | Optional absolute public PEM path from `agents.caFile`; selects `compose.agent.trust.yaml`. |
 | `AGENT_MIRRORS_DIR` | Optional absolute mirror directory from `agents.mirrorsDir`; selects `compose.agent.mirrors.yaml`. |
+| `AWID_REGISTRY_URL` | Bundle-rendered HTTPS registry origin from `team.registryUrl`; pass the same expected value to acceptance. |
 | `AGENTS_NETWORK`, `AGENT_IP` | Installer-created external network and container address. |
 
 The bundle owns the network, resolver, forwarder, firewall and their bypass
@@ -155,6 +156,45 @@ policy is `unless-stopped`, its stop grace period is 45 seconds and its
 healthcheck reads sshd's port
 ([The kernel's periodic work](#the-kernels-periodic-work)); security flags
 are fixed in the service file.
+
+### Registry selection in the container
+
+The bundle derives the policy's registry origin, the agent's
+`AWID_REGISTRY_URL`, and `team-claude.env.AWID_REGISTRY_URL` from the one
+`team.registryUrl` setting. It always renders the value, using the public
+registry as its default. The image does not read or cross-check the policy.
+No additional registry destination or verification bypass is enabled.
+
+Before starting any child, the supervisor validates a supplied selector as an
+HTTPS origin: no userinfo, query, fragment, whitespace, or path other than `/`.
+An empty or invalid value refuses startup, naming `AWID_REGISTRY_URL` and showing
+an accepted form without printing the supplied value. An unset variable removes
+stale runtime data before starting children and leaves aw's public default in
+place. Acceptance permits this one explicit variable alongside the fixed CA
+settings; all other environment changes remain refused.
+
+The supervisor writes only the validated literal to
+`/tmp/agent-registry/registry-url`, mode `0400` in a `0700` directory. The broker
+inherits the validated supervisor environment. The immutable
+`/etc/profile.d/agent-trust.sh` uses the image helper to read and revalidate that
+file as data for direct SSH and captured login shells. It never sources or
+evaluates the value. There is no `AcceptEnv` or login-seed forwarding.
+A missing file leaves the variable unset. An invalid or unreadable present file
+prints one refusal naming `AWID_REGISTRY_URL` and the fixed file, keeps the shell
+open, and sets an explicit invalid registry selector so aw errors instead of
+silently choosing its default. Acceptance also checks the runtime snapshot
+against the configured environment, with values withheld.
+
+All agents share one UID. A team member can replace this runtime data or set its
+own command environment, just as it can impersonate other agents in the
+container. The private modes and stale-file cleanup protect against accidents;
+they do not protect registry selection from a subverted team member.
+
+OATS still strips provider-owned ambient `AWID_REGISTRY_URL` from harness
+launches unless the provider or launch configuration explicitly supplies it.
+The bundle therefore renders the explicit `team-claude` value shown below;
+container environment and shell propagation alone do not configure a harness.
+Ordinary local-seat provider behavior and the kernel are unchanged.
 
 Include `compose.agent.trust.yaml` only when `agents.caFile` is configured. It
 adds one read-only mount at `/etc/agent-trust/ca.pem` and exactly two fixed
@@ -396,6 +436,7 @@ launch-configs:
     harness: claude
     env:
       CLAUDE_CONFIG_DIR: /state/home/.claude
+      AWID_REGISTRY_URL: "https://registry.example.test" # rendered from team.registryUrl
       CLAUDE_CODE_OAUTH_TOKEN:
         fromFile: /etc/agent-login/claude-token
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"

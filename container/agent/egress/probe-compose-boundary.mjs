@@ -40,7 +40,8 @@ export async function probeComposeBoundary(plan) {
     const image=json(["image","inspect",reference])[0];
     assert.equal(info.Config.Image,reference,"container image reference differs from reviewed source");
     assert.equal(info.Image,image.Id,"container image content differs from reviewed source");
-    const expectedEnv = agentEnvironment(image.Config.Env||[], info === probe && plan.caFile === "/etc/agent-trust/ca.pem");
+    const expectedEnv = agentEnvironment(image.Config.Env||[], info === probe && plan.caFile === "/etc/agent-trust/ca.pem",
+      info === probe ? plan.policy.targets.registry.origin : undefined);
     assert.deepEqual([...(info.Config.Env||[])].sort(),[...expectedEnv].sort(),"probe or proxy environment differs from reviewed image (values withheld)");
     assert.ok((info.HostConfig.Devices||[]).length===0 && (info.HostConfig.DeviceRequests||[]).length===0,"probe or proxy has an unexpected device");
   }

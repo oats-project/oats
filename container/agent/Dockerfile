@@ -22,6 +22,7 @@ RUN --network=none npm rebuild @awebai/aw --ignore-scripts=false --offline \
 
 COPY --chmod=755 entrypoint.sh /usr/local/bin/agent-entrypoint
 COPY --chmod=644 supervisor.mjs /usr/local/lib/agent-supervisor.mjs
+COPY --chmod=644 agent-registry.mjs /usr/local/lib/agent-registry.mjs
 COPY --chmod=644 liveness.mjs /usr/local/lib/agent-liveness.mjs
 COPY --chmod=644 sshd_config /etc/agent-sshd_config
 COPY --chmod=644 agent-trust.sh /etc/profile.d/agent-trust.sh
