@@ -1,0 +1,35 @@
+# Extend this service from the deployment's top-level Compose. It owns networks.
+services:
+  egress:
+    image: ${EGRESS_IMAGE:?Set EGRESS_IMAGE to a pinned image digest}
+    user: "10001:10001"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    privileged: false
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=16m,mode=1777
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 1
+    restart: unless-stopped
+    stop_grace_period: 5s
+    sysctls:
+      net.ipv4.ip_forward: "0"
+      net.ipv4.ip_unprivileged_port_start: "0"
+    volumes:
+      - type: bind
+        source: ${EGRESS_POLICY_FILE:?Set EGRESS_POLICY_FILE}
+        target: /etc/egress/policy.json
+        read_only: true
+        bind: { create_host_path: false }
+    networks:
+      agents:
+        ipv4_address: ${EGRESS_ADDRESS:?Set EGRESS_ADDRESS}
+      services: {}
+    healthcheck:
+      test: ["CMD", "node", "/opt/egress/health.mjs"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

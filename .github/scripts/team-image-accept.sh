@@ -7,6 +7,7 @@ fixture=$(mktemp -d)
 export TEAM="ci-$(basename "$fixture" | tr '[:upper:].' '[:lower:]-')"
 export AGENT_UID=20001 AGENT_GID=20001
 export AGENT_PIDS=256 AGENT_MEMORY=1g AGENT_CPUS=1
+export AGENT_TMP_SIZE=134217728
 export TEAM_STATE_DIR="$fixture/state" TEAM_LOGIN_DIR="$fixture/login"
 export AUTHORIZED_KEYS_FILE="$fixture/authorized_keys" RESOLV_CONF_FILE="$fixture/resolv.conf"
 export AGENTS_NETWORK="oats-$TEAM" AGENT_IP=172.30.88.2

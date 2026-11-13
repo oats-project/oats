@@ -110,7 +110,9 @@ the UID-only form proves startup and SSH support, not token access.
 | `/etc/agent-login` | root:runtime-GID, 0750; `claude-token` root:runtime-GID, 0440 | Read-only |
 | `/etc/agent-ssh/authorized_keys` | root-owned regular file, 0644 | Read-only |
 | `/etc/resolv.conf` | Operator-provided resolver file | Read-only |
-| `/tmp` | tmpfs, rw,nosuid,nodev,mode=1777 | Ephemeral |
+| `/tmp` | tmpfs, rw,nosuid,nodev,size=AGENT_TMP_SIZE,mode=1777 | Ephemeral; bounded by the configured byte limit |
+| `/etc/agent-trust/ca.pem` | Optional public CA file, read-only | Operator-provisioned extra trust; no private keys |
+| `/mirrors` | Optional bare Git mirror directory, read-only | Operator-refreshed source snapshots, outside writable state |
 
 All binds use `create_host_path: false`: a missing path fails startup.
 `/state/home`, `/state/ssh` and `/state/deploy` are created 0700 by the agent.
@@ -141,6 +143,9 @@ Supply these plain variables to the bundle's env file:
 | `AUTHORIZED_KEYS_FILE` | Absolute host public-key file. |
 | `RESOLV_CONF_FILE` | Absolute host resolver file; always required. |
 | `AGENT_PIDS`, `AGENT_MEMORY`, `AGENT_CPUS` | Positive limits; memory uses bytes, k, m or g. |
+| `AGENT_TMP_SIZE` | Positive integer bytes from the shared configuration's `agents.tmpSize`; bounds the `/tmp` tmpfs. |
+| `AGENT_CA_FILE` | Optional absolute public PEM path from `agents.caFile`; selects `compose.agent.trust.yaml`. |
+| `AGENT_MIRRORS_DIR` | Optional absolute mirror directory from `agents.mirrorsDir`; selects `compose.agent.mirrors.yaml`. |
 | `AGENTS_NETWORK`, `AGENT_IP` | Installer-created external network and container address. |
 
 The bundle owns the network, resolver, forwarder, firewall and their bypass
@@ -150,6 +155,50 @@ policy is `unless-stopped`, its stop grace period is 45 seconds and its
 healthcheck reads sshd's port
 ([The kernel's periodic work](#the-kernels-periodic-work)); security flags
 are fixed in the service file.
+
+Include `compose.agent.trust.yaml` only when `agents.caFile` is configured. It
+adds one read-only mount at `/etc/agent-trust/ca.pem` and exactly two fixed
+environment settings: `SSL_CERT_FILE` and `NODE_EXTRA_CA_CERTS`, both pointing
+there before the supervisor starts. The file must contain only valid public CA
+certificates, at most 64 KiB, with no private key. Go keeps its normal certificate
+directories and Node extends its normal roots. The acceptance check validates
+the file and the exact mount/environment pair; it permits no general environment
+override. The broker and its Node verification child receive the same trust
+settings. The immutable `/etc/profile.d/agent-trust.sh` also supplies the two
+settings to the agent's captured login environment and tmux children when the
+fixed CA file is readable. The image sources that same profile at the start of
+the system bashrc, before its noninteractive return, for bash's SSH startup
+path. sshd also fixes `BASH_ENV` to that profile for other noninteractive bash
+commands; user environment and SSH rc overrides remain disabled. Without the
+CA mount, the profile exports neither setting. Recreate the container after
+changing a trust bundle so the broker, Node children and captured sessions all
+start with the same approved anchors.
+A successful probe using an explicit CA does not establish that the
+real broker trusts it; prove that through the deployment's HTTPS registry.
+
+Include `compose.agent.mirrors.yaml` only when `agents.mirrorsDir` is configured.
+The operator provisions and refreshes the bare mirrors outside the container,
+with no repository credentials, and the fragment mounts them read-only at
+`/mirrors`. Keep both optional input sources outside every agent-writable bind
+source, including symlink aliases: run acceptance on the Docker engine host so
+it can resolve the actual sources. A CA file with multiple hardlinks is refused,
+since a read-only bind cannot protect another writable link to the same file.
+The wrapper renders the existing Git rewrite in
+`/state/home/.gitconfig`:
+
+```gitconfig
+[url "file:///mirrors/github.com/"]
+    insteadOf = https://github.com/
+```
+
+Retain the operator's exact source/ref/commit manifest and refresh time beside
+the mirrors. A snapshot observes the last operator refresh; its presence does
+not prove current membership or withdrawal freshness. The first deployment check
+is `oats workspace status` with all members confirmed, followed by the actual
+spawn preview. Do not enable all Git file transports or add a general Git-host
+egress route to make that check pass. Kubernetes uses an explicit existing
+`agents.kubernetes.mirrorsClaim` for the same read-only mount, separate from
+state; it never turns the Compose directory into a hostPath.
 
 ```sh
 docker compose -p "oats-team-${TEAM}" --env-file <plain-env-file> \
@@ -164,14 +213,56 @@ the override: the base has no `/work` mount. With multiple Compose files,
 paths resolve relative to the first file; use absolute host paths. Container
 down/upgrade preserves `/state`; the operator owns provisioning and rollback.
 
+The image account and the runtime NSS entry use `/bin/bash` as the login shell.
+This lets OATS capture a fresh login environment rather than inheriting the tmux
+creator's environment after a failed shell capture.
+
+Compose fixes the container hostname to `oats-agent`, so replacement keeps the
+hostname used by cache locks. Container names and network addresses still belong
+to the deployment wrapper. A lock written under a former ephemeral hostname may
+need one manual cleanup after checking that its holder is no longer running.
+
+## Broker delivery before launch
+
+Container deployments use the in-container broker with session delivery. Before
+any spawn or resume, the bootstrap wrapper writes the existing setting in the
+deployment's `oats-local.yaml`:
+
+```yaml
+settings:
+  oats.aweb:
+    delivery: session
+```
+
+A contradictory existing value must stop bootstrap with a fix naming
+`settings.oats.aweb.delivery`; correct the deployment setting before restarting
+it. Verify the effective value with `oats inspect` or the spawn preview's
+`settings.oats.aweb`. The image and Compose also declare `AWEB_DELIVERY=session`
+to silence ambient channel extensions; that variable alone does not select the
+provider setting. The image has no Claude channel plugin.
+
 ## OATS over SSH
 
-The operator's SSH alias selects the key, host-key verification, port 2222
-and jump route. The equivalent connection is:
+The operator's SSH alias selects the key and verifies the provisioned SSH host
+key. The isolated agents bridge has no host gateway, so use the operator's
+existing Docker context as a stdio relay to port 2222 inside the container:
 
-```sh
-ssh -J <provisioner>@<host> -p 2222 agent@<container-ip>
+```sshconfig
+Host team-agent
+  HostName oats-agent
+  User agent
+  Port 2222
+  IdentityFile <operator-key-path>
+  IdentitiesOnly yes
+  UserKnownHostsFile <provisioned-known-hosts-file>
+  StrictHostKeyChecking yes
+  ProxyCommand docker --context <operator-context> exec -i <container> node -e 'const s=require("node:net").connect(2222,"127.0.0.1");process.stdin.pipe(s);s.pipe(process.stdout);s.on("error",()=>process.exit(1));'
 ```
+
+Provision the public host key in that known-hosts file before connecting. The
+Docker context belongs only to the operator; the agent receives no engine socket,
+additional network or published port. `ssh team-agent` then uses the same SSH
+authentication and host-key checks as an ordinary SSH transport.
 
 Register an already provisioned deployment, or connect it from the operator's
 deployment using its source reference:
@@ -192,9 +283,11 @@ deployment for the schedule tick `oats host run` runs in the container
 oats schedule host install --register-only --server team-agent
 ```
 
-The operator places
-two independently admitted ordinary-member identities at
-`/state/seats/<alias>/.aw`; each spawn selects one:
+The legacy VM migration route copies an already admitted ordinary-member
+identity's private state into `/state/seats/<alias>/.aw`; each spawn selects one
+through the existing `identity.source` input. Treat that copy as credential
+provisioning, keep it private, and do not use a team or namespace controller
+identity:
 
 ```sh
 oats spawn <soul> --server team-agent --harness claude --preview --provider oats.aweb identity.source=/state/seats/<alias>/.aw
@@ -665,3 +758,23 @@ credentials. The publish step stores
 registry authentication in a private temporary file and removes it on exit.
 It receives no npm publish credential. To roll back a deployed image, select
 the previous reviewed digest in the deployment configuration.
+
+## Egress component
+
+The generic [egress image and service](../container/agent/egress/README.md) live
+with the agent image. The deployment wrapper owns its allowlist and derives the
+non-secret runtime policy from the shared deployment configuration and signer
+profile. The proxy permits only the named API and registry routes and serves
+only the declared public namespace authority records. Service custody keys,
+PostgreSQL, Redis and the Docker socket stay outside the agent container.
+
+Network membership, CNI enforcement and ingress Host/SNI agreement require runtime
+proof before launching agents. An internal bridge, a NetworkPolicy object or a
+healthy proxy alone does not prove the boundary. The [service descriptor](../container/agent/egress/descriptor.md)
+supplies the wrapper mapping without a separate operator schema.
+
+For Kubernetes, liveness runs `node /usr/local/lib/agent-liveness.mjs` to check
+the supervisor process. SSH on port 2222 is readiness: losing SSH must not
+restart the whole team while its agents and broker are still running. The
+container's 45-second termination window includes the kernel and supervisor
+shutdown phases; the nominal phase sum leaves little overhead margin.

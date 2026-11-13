@@ -5,7 +5,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends tmux git openssh-server ca-certificates tini libnss-wrapper \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt /etc/ssh/ssh_host_* \
     && mkdir -p /run/sshd /state /opt/agent \
-    && useradd --create-home --home-dir /state/home --shell /bin/sh agent \
+    && useradd --create-home --home-dir /state/home --shell /bin/bash agent \
     && ln -s /usr/lib/*/libnss_wrapper.so /usr/local/lib/libnss_wrapper.so
 
 WORKDIR /opt/agent
@@ -22,8 +22,13 @@ RUN --network=none npm rebuild @awebai/aw --ignore-scripts=false --offline \
 
 COPY --chmod=755 entrypoint.sh /usr/local/bin/agent-entrypoint
 COPY --chmod=644 supervisor.mjs /usr/local/lib/agent-supervisor.mjs
+COPY --chmod=644 liveness.mjs /usr/local/lib/agent-liveness.mjs
 COPY --chmod=644 sshd_config /etc/agent-sshd_config
+COPY --chmod=644 agent-trust.sh /etc/profile.d/agent-trust.sh
+# Bash's SSH startup path reads the system bashrc instead of BASH_ENV.
+RUN sed -i '1i . /etc/profile.d/agent-trust.sh' /etc/bash.bashrc
 ENV HOME=/state/home
+ENV AWEB_DELIVERY=session
 # A child WORKDIR would be created by Docker as root inside a fresh mount.
 WORKDIR /state
 USER agent

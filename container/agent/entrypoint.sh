@@ -14,7 +14,7 @@ chmod 700 /state/home /state/ssh /state/deploy
 # Keep system users (sshd's privilege-separation lookup included), and give
 # agent the actual uid/gid. Generate afresh so a remapped volume can restart.
 awk -F: -v uid="$runtime_uid" '$1 != "agent" && $3 != uid' /etc/passwd > /state/ssh/passwd
-printf 'agent:x:%s:%s:OATS agent:/state/home:/bin/sh\n' "$runtime_uid" "$runtime_gid" >> /state/ssh/passwd
+printf 'agent:x:%s:%s:OATS agent:/state/home:/bin/bash\n' "$runtime_uid" "$runtime_gid" >> /state/ssh/passwd
 awk -F: -v gid="$runtime_gid" '$1 != "agent" && $3 != gid' /etc/group > /state/ssh/group
 printf 'agent:x:%s:\n' "$runtime_gid" >> /state/ssh/group
 

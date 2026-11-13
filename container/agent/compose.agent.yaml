@@ -3,13 +3,17 @@ services:
   agent:
     image: ${AGENT_IMAGE:?Set AGENT_IMAGE}
     container_name: oats-agent-${TEAM:?Set TEAM}
+    hostname: oats-agent
     user: "${AGENT_UID:-20001}:${AGENT_GID:-20001}"
+    # Bootstrap also selects settings.oats.aweb.delivery: session before launch.
+    environment:
+      AWEB_DELIVERY: session
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     privileged: false
     read_only: true
     tmpfs:
-      - /tmp:rw,nosuid,nodev,mode=1777
+      - /tmp:rw,nosuid,nodev,size=${AGENT_TMP_SIZE:?Set AGENT_TMP_SIZE},mode=1777
     pids_limit: ${AGENT_PIDS:?Set AGENT_PIDS}
     mem_limit: ${AGENT_MEMORY:?Set AGENT_MEMORY}
     cpus: ${AGENT_CPUS:?Set AGENT_CPUS}
