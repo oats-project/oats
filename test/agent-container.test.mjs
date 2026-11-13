@@ -371,6 +371,8 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
     const fs = require("node:fs");
     const [role, events, mode, pidFile, pidMode, pausedRole] = process.argv.slice(2);
     const log = text => fs.appendFileSync(events, text + "\\n");
+    // Keep TERM pending until SIGCONT, so it uses the disposition at "started".
+    // Tests await the real supervisor signal before resuming this child.
     const started = () => {
       log(role + " started");
       if (role === pausedRole) process.kill(process.pid, "SIGSTOP");
