@@ -202,6 +202,57 @@ test("external connector passes only the validated IPv4 literal to the socket bo
   stream.destroy();
 });
 
+test("a live external TLS backend witnesses controls but never mixed-answer or rebound delivery", async t => {
+  const {connectExternal}=await import("../container/agent/egress/external.mjs");
+  const {mkdtempSync,rmSync}=await import("node:fs");
+  const {tmpdir}=await import("node:os");const {join}=await import("node:path");
+  const {execFileSync}=await import("node:child_process");
+  const https=await import("node:https"),net=await import("node:net");
+  const dir=mkdtempSync(join(tmpdir(),"external-tls-witness-"));
+  t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  execFileSync("openssl",["req","-x509","-newkey","rsa:2048","-nodes","-days","1","-keyout",join(dir,"key.pem"),
+    "-out",join(dir,"cert.pem"),"-subj","/CN=github.com","-addext","subjectAltName=DNS:github.com"],{stdio:"ignore",timeout:10000});
+  const cert=readFileSync(join(dir,"cert.pem"));let hits=0,answers=["140.82.112.3"],lookups=0;
+  const backend=https.createServer({key:readFileSync(join(dir,"key.pem")),cert},(_req,res)=>{hits++;res.end("backend-witness");});
+  await new Promise(resolve=>backend.listen(0,"127.0.0.1",resolve));
+  const sockets=new Set();
+  const front=net.createServer({pauseOnConnect:true},client=>{
+    sockets.add(client);client.on("error",()=>client.destroy());client.once("close",()=>sockets.delete(client));
+    connectExternal(externalPolicy(),"github.com",{
+      resolve4:async()=>{lookups++;return answers;},
+      connect:options=>{
+        // Substitute only the TCP boundary; the production resolver/filter
+        // must have selected this public literal before reaching the witness.
+        assert.deepEqual(options,{host:"140.82.112.3",port:443,family:4});
+        return net.createConnection({host:"127.0.0.1",port:backend.address().port});
+      },
+    }).then(upstream=>{
+      sockets.add(upstream);upstream.once("close",()=>{sockets.delete(upstream);client.destroy();});
+      upstream.on("error",()=>client.destroy());client.once("close",()=>upstream.destroy());
+      client.pipe(upstream);upstream.pipe(client);client.resume();
+    }).catch(()=>client.destroy());
+  });
+  await new Promise(resolve=>front.listen(0,"127.0.0.1",resolve));
+  t.after(async()=>{for(const socket of sockets)socket.destroy();backend.closeAllConnections();
+    await Promise.all([new Promise(resolve=>front.close(resolve)),new Promise(resolve=>backend.close(resolve))]);});
+  const request=()=>new Promise((resolve,reject)=>{
+    const req=https.get({hostname:"github.com",servername:"github.com",port:front.address().port,ca:cert,agent:false,
+      lookup:(_name,_options,done)=>done(null,[{address:"127.0.0.1",family:4}])},res=>{
+      let body="";res.on("data",data=>body+=data);res.once("end",()=>resolve({code:res.statusCode,body}));
+    });
+    const timer=setTimeout(()=>req.destroy(new Error("witness timeout")),2000);
+    req.once("close",()=>clearTimeout(timer));req.once("error",reject);
+  });
+  assert.deepEqual(await request(),{code:200,body:"backend-witness"});assert.equal(hits,1);
+  answers=["140.82.112.3","127.0.0.1"];
+  await assert.rejects(request());assert.equal(hits,1);
+  answers=["10.20.0.10"];
+  await assert.rejects(request());assert.equal(hits,1);
+  answers=["140.82.112.3"];
+  assert.deepEqual(await request(),{code:200,body:"backend-witness"});assert.equal(hits,2);
+  assert.equal(lookups,4,"each connection resolves anew rather than trusting a prior public answer");
+});
+
 test("external DNS timeout and cancelled clients cannot later open an upstream socket", async () => {
   const {connectExternal}=await import("../container/agent/egress/external.mjs");
   for (const mode of ["timeout","abort"]) {

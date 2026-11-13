@@ -20,6 +20,7 @@ cleanup() {
 trap cleanup EXIT
 chmod 755 "$scratch"
 docker network create "$services" >/dev/null
+control_gateway=$(docker network inspect --format '{{(index .IPAM.Config 0).Gateway}}' "$services")
 # Retain an explicit gateway while isolated mode removes its host address.
 docker network create --internal "$agents" >/dev/null
 subnet=$(docker network inspect --format '{{(index .IPAM.Config 0).Subnet}}' "$agents")
@@ -48,14 +49,25 @@ until docker exec "$proxy" node /opt/egress/health.mjs >/dev/null 2>&1; do
   sleep 1
 done
 docker run -d --name "$client" --network "$agents" --ip "$client_ip" --user 20001:20001 --cap-drop ALL --security-opt no-new-privileges:true --read-only --tmpfs /tmp:rw,nosuid,nodev,size=32m,mode=1777 --pids-limit 128 --memory 256m --cpus 1 --mount "type=bind,source=$scratch/resolv.conf,target=/etc/resolv.conf,readonly" --entrypoint sleep "$agent_image" infinity >/dev/null
+test "$(docker inspect --format '{{len .NetworkSettings.Networks}}' "$client")" = 1
+test "$(docker inspect --format '{{len .NetworkSettings.Networks}}' "$proxy")" = 2
+test "$(docker network inspect --format '{{.Internal}} {{.EnableIPv6}} {{index .Options "com.docker.network.bridge.gateway_mode_ipv4"}}' "$agents")" = 'true false isolated'
+node --input-type=module -e 'const {checkDockerGateway}=await import(process.argv[1]);await checkDockerGateway({image:process.argv[2],controlNetwork:process.argv[3],controlAddress:process.argv[4],gatewayAddress:process.argv[5],probeContainer:process.argv[6]})' "$root/container/agent/egress/canary.mjs" "$image" "$services" "$control_gateway" "$gateway" "$client"
 docker exec -i "$client" node --input-type=module - "$proxy_ip" <<'JS'
 import assert from "node:assert/strict";
 import dns from "node:dns/promises";
 import https from "node:https";
 import tls from "node:tls";
+import net from "node:net";
 import fs from "node:fs";
 import {spawnSync} from "node:child_process";
 const front=process.argv[2];
+for(const port of [10443,10444]) await new Promise((resolve,reject)=>{
+  const socket=net.connect({host:front,port});
+  const timer=setTimeout(()=>{socket.destroy();reject(new Error("connector-port refusal timeout"));},1000);
+  socket.once("connect",()=>{clearTimeout(timer);socket.destroy();reject(new Error("loopback connector exposed to agents"));});
+  socket.once("error",error=>{clearTimeout(timer);if(error.code==="ECONNREFUSED")resolve();else reject(error);});
+});
 for(const host of ["github.com","api.anthropic.com"]) {
   assert.deepEqual(await dns.resolve4(host),[front]);
   const code=await new Promise((resolve,reject)=>{
