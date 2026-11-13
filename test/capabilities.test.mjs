@@ -3133,7 +3133,7 @@ test("the boundary does not contradict a read-only workspace instance (reviewer-
   const fx = v2(t);
   const text = await composedFor(fx, "workspace");
   // Workspace `work` is the deployment scope, not a repo, and it is read-only.
-  assert.ok(text.includes("never edit or commit inside them"), "the mode's read-only rule survives");
+  assert.ok(text.includes(flat("never edit or commit there, and NEVER change a member clone's Git state")), "the mode's read-only rule survives");
   assert.ok(text.includes(flat("`<instance-home>/work` is your repository or workspace view")),
     "and the boundary calls it a repository OR WORKSPACE view, not simply the repository");
   assert.doesNotMatch(text, /work` is the repository\b/, "no unqualified 'work is the repository' claim");
