@@ -61,5 +61,5 @@ defaults:
 # Each binding's "id" is the base's own: it must equal the id in that base's
 # knowledge/okf-base.json (above), or every read of the base fails with E_BASE.
 stores:
-  oats: git:github.com/awebai/oats-knowledge
+  oats: git:github.com/oats-project/oats-knowledge
   aweb: git:github.com/awebai/aweb
