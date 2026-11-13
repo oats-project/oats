@@ -6,6 +6,23 @@ import { tcpReachable } from "./canary.mjs";
 import { compilePolicy } from "./policy.mjs";
 import { publicCACheck, mirrorsCheck } from "../accept.mjs";
 
+export async function httpsStatus({host,path,timeoutMs,frontAddress,ca,port=443}) {
+    const https = await import("node:https");
+    return new Promise((resolve,reject) => {
+      const request = https.request({hostname:host,servername:host,port,path,method:"GET",ca,agent:false,family:4,
+        lookup:(_name,options,done)=>options.all?done(null,[{address:frontAddress,family:4}]):done(null,frontAddress,4),
+      }, response => {
+        let bytes=0;
+        response.on("data",data=>{bytes+=data.length;if(bytes>65536)request.destroy(new Error("response too large"))});
+        response.once("error",reject);response.once("end",()=>resolve(response.statusCode));response.resume();
+      });
+      const deadline=timeoutMs?setTimeout(()=>request.destroy(new Error("external origin timeout")),timeoutMs):undefined;
+      request.once("close",()=>clearTimeout(deadline));
+      request.setTimeout(timeoutMs??2000,()=>request.destroy(new Error("allowed service timeout")));
+      request.once("error",reject);request.end();
+    });
+}
+
 export async function probeRuntime(plan, io = {}) {
   const fs = io.fs || await import("node:fs");
   const net = await import("node:net");
@@ -47,22 +64,7 @@ export async function probeRuntime(plan, io = {}) {
   const dns = await import("node:dns/promises");
   const resolver = io.resolver || new dns.Resolver({ timeout:1000, tries:1 });
   resolver.setServers([policy.frontAddress]);
-  const getStatus = io.getStatus || (async ({host,path,timeoutMs}) => {
-    const https = await import("node:https");
-    return new Promise((resolve,reject) => {
-      const request = https.request({hostname:host,servername:host,port:443,path,method:"GET",ca,agent:false,family:4,
-        lookup:(_name,options,done)=>options.all?done(null,[{address:policy.frontAddress,family:4}]):done(null,policy.frontAddress,4),
-      }, response => {
-        let bytes=0;
-        response.on("data",data=>{bytes+=data.length;if(bytes>65536)request.destroy(new Error("response too large"))});
-        response.once("error",reject);response.once("end",()=>resolve(response.statusCode));response.resume();
-      });
-      const deadline=timeoutMs?setTimeout(()=>request.destroy(new Error("external origin timeout")),timeoutMs):undefined;
-      request.once("close",()=>clearTimeout(deadline));
-      request.setTimeout(timeoutMs??2000,()=>request.destroy(new Error("allowed service timeout")));
-      request.once("error",reject);request.end();
-    });
-  });
+  const getStatus = io.getStatus || (options=>httpsStatus({...options,frontAddress:policy.frontAddress,ca}));
   for (const role of roles) {
     const target=policy.targets[role], origin=new URL(target.origin), path=allowedPaths?.[role];
     expect(origin.protocol === "https:" && !origin.port && !origin.username && !origin.password, "allowed origin is invalid");
@@ -133,7 +135,7 @@ export async function probeRuntime(plan, io = {}) {
 
 export function runtimeProgram(plan) {
   compilePolicy(plan.policy);
-  return `const tcpReachable=(${tcpReachable.toString()});const publicCACheck=(${publicCACheck.toString()});const mirrorsCheck=(${mirrorsCheck.toString()});const probeRuntime=(${probeRuntime.toString()});try{await probeRuntime(JSON.parse(${JSON.stringify(JSON.stringify(plan))}));process.stdout.write("OATS_EGRESS_BOUNDARY_PASS\\n");}catch(error){const label=error?.name==="BoundaryFailure"?error.message:"input or runtime operation failed";process.stderr.write("egress boundary: "+label+"\\n");process.exitCode=1;}`;
+  return `const httpsStatus=(${httpsStatus.toString()});const tcpReachable=(${tcpReachable.toString()});const publicCACheck=(${publicCACheck.toString()});const mirrorsCheck=(${mirrorsCheck.toString()});const probeRuntime=(${probeRuntime.toString()});try{await probeRuntime(JSON.parse(${JSON.stringify(JSON.stringify(plan))}));process.stdout.write("OATS_EGRESS_BOUNDARY_PASS\\n");}catch(error){const label=error?.name==="BoundaryFailure"?error.message:"input or runtime operation failed";process.stderr.write("egress boundary: "+label+"\\n");process.exitCode=1;}`;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
