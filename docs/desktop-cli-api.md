@@ -7279,12 +7279,15 @@ this machine's: it takes no `--server`. It runs until SIGTERM or SIGINT.
   nothing of how far it got. A child that ended without an answer is
   reported under that code too, in `sweep.error` or on stderr, and does not
   end the run.
-- **What it runs, in order.** The resume sweep once (`oats session resume`).
+- **What it runs, in order.** The resume sweep (`oats session resume`).
   Then at second 0 of every minute: `oats schedule tick --host` when the
-  host schedule registry lists a scope, and a listing of every deployment's
-  instances, which records what runs for the next start's sweep. Each is a
-  child process. A minute whose tick still runs is skipped; a minute missed
-  is never replayed. With no scope registered it ticks nothing and says so.
+  host schedule registry lists a scope, and the resume sweep again, which
+  starts a home lost while the host runs, within the sweep's own bounds, and
+  records what runs for a later sweep. Each is a child process. A minute
+  whose tick still runs is skipped, and a sweep that still runs is not run
+  beside itself; a minute missed is never replayed. With no scope registered
+  it ticks nothing and says so. A sweep is said on stderr when its outcomes
+  differ from those of the sweep before.
 - **On SIGTERM or SIGINT.** No further minute starts; a tick or a sweep that
   runs gets 10 seconds to finish naturally, then a private admission fence
   stops further launches and owned child groups get a further 5-second
@@ -7300,7 +7303,7 @@ this machine's: it takes no `--server`. It runs until SIGTERM or SIGINT.
   modes. **The answer** is written once, when the run ends:
   `result` `{schemaVersion: 1, plan: false, signal, warnings, sweep, ticks, stopped}`.
   `signal` is `"SIGTERM"` or `"SIGINT"`; `warnings` an array of strings;
-  `sweep` the sweep's own `result`
+  `sweep` the first sweep's own `result`
   ([The machine sweep](#the-machine-sweep-oats-session-resume)), or
   `{error: {code, message}}` when it failed (the run goes on); `ticks`
   `{run, skipped, failed, noScope}`, minutes counted; `stopped` one row per

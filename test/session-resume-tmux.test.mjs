@@ -203,6 +203,7 @@ test("after the tmux server dies, the sweep resumes the lost homes in their own 
   const judgements = (fx) => Object.fromEntries(Object.entries(readSeen(join(fx.dep, "agents")).homes).map(([home, r]) => [home.split("/").pop(), r.judgedBy?.outcome ?? null]));
   assert.deepEqual(Object.values(judgements(A)).filter(Boolean), [], "a plan judges no loss");
   assert.deepEqual(Object.fromEntries(Object.keys(homes).map((n) => [n, before(n)])), counts, "a plan starts nothing");
+  const refusedSeen = readSeen(join(C.dep, "agents")).homes[homes.c2];
 
   // The sweep. The envelope is the standard one; exit 0 whatever the rows say.
   const swept = cli(A, ["session", "resume", "--json"]);
@@ -256,8 +257,22 @@ test("after the tmux server dies, the sweep resumes the lost homes in their own 
     assert.equal(JSON.stringify(meta.launch).includes(ids[name]), false, `${name}: the recipe`);
   }
 
-  // Each lost home the sweep started is judged. c2's start was refused: its loss is not answered.
-  assert.deepEqual(judgements(C), { c1: OUTCOME.FRESH, c2: null });
+  // Each home the sweep started is seen running for its new start, with no loss and no judgement.
+  // c2's start was refused: its loss record is kept, unjudged.
+  for (const [fx, names] of [[A, ["a1", "a4", "a5", "a6", "a7"]], [C, ["c1"]]]) {
+    const seen = readSeen(join(fx.dep, "agents")).homes;
+    for (const name of names) {
+      const current = readJson(join(homes[name], "instance.json")).startId, record = seen[homes[name]];
+      assert.notEqual(current, runningNow[name].startId, `${name} has a new start`);
+      assert.equal(record.startId, current, `${name} is seen for its current start`);
+      assert.ok(Number.isFinite(Date.parse(record.lastSeenRunningAt)), `${name} was seen running`);
+      assert.equal(record.firstNotRunningAt, null, `${name}'s new start has no loss`);
+      assert.equal(record.firstNotRunningBoot, null);
+      assert.equal(record.judgedBy, null, `${name}'s new start is not judged`);
+    }
+  }
+  assert.deepEqual(readSeen(join(C.dep, "agents")).homes[homes.c2], refusedSeen, "c2's refused start keeps its loss record");
+  assert.equal(refusedSeen.judgedBy, null, "c2's loss is not judged");
 
   // A second sweep: the resumed homes run; nothing is started again. c2's refusal is not due again
   // within its first minute: it is reported with its code, not started (on a host that has a boot
