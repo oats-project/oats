@@ -482,11 +482,13 @@ What the image's files fix for that:
   the restart policy can restart it. The broker runs as the agent uid; its
   default state directory is `/state/home/.config/aw/wake`, so registrations
   survive container replacement and it starts again even with no spawn.
-- **`stop_grace_period: 50s`** in the Compose service. Docker's default is
-  10 seconds, shorter than the 20 seconds each harness is given, before broker cleanup; a container
-  killed at the timeout leaves agents that were not stopped in order. A
-  platform that does not read the Compose file needs the same stop timeout
-  in its container spec.
+- **`stop_grace_period: 50s`** in the Compose service. Docker's default
+  10 seconds is shorter than the kernel and broker drains; each harness
+  alone gets 20 seconds. A container killed at the timeout leaves agents
+  that were not stopped in order. A platform that does not read the Compose
+  file needs the same stop timeout in its container spec. The 50-second
+  limit is the runtime's final failure boundary for stuck OS work; wake
+  delivery and model activity require separate evidence.
 - **A healthcheck on sshd.** The supervisor reports an sshd exit; if
   sshd ends, the agents and the tick go on and the operator's route is gone.
   The service's healthcheck opens `127.0.0.1:2222` every 30 seconds (5
@@ -775,6 +777,5 @@ supplies the wrapper mapping without a separate operator schema.
 For Kubernetes, liveness runs `node /usr/local/lib/agent-liveness.mjs` to check
 the supervisor process. SSH on port 2222 is readiness: losing SSH must not
 restart the whole team while its agents and broker are still running. The
-container's 50-second termination window includes the kernel and supervisor
-shutdown phases, with overhead margin after the kernel drain and the broker's
-six-second cleanup.
+container's 50-second termination window covers the kernel and supervisor
+phases under the same [shutdown failure boundary](#the-kernels-periodic-work).
