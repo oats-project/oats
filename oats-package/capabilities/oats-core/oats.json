@@ -1,6 +1,6 @@
 {
   "capability": "oats.core",
-  "version": "2.13.0",
+  "version": "2.13.1",
   "description": "Day-to-day OATS operation from inside an instance: home and work, modules, status and drift, spawn preview and apply (harness, relations, teams to join), soul discovery, being spawned by a trigger, retiring instances you spawned, asking for a human's attention, and saving tokens when instances message each other (who a message is for, whether to send it, how long it is); for Claude Code instances, reports when the session waits on a permission prompt or a question, or a turn ended in an API error. No layer. Workspace setup and config is oats.setup.",
   "compatibility": {
     "oats": ">=0.49.0"
