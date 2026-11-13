@@ -379,7 +379,7 @@ test("retained identity: authority files copied exactly, coordination reconnecte
     const r = runHook(base, bin, "spawn", env);
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.equal(r.doc.meta.retained, true); assert.equal(r.doc.meta.alias, "merlin"); assert.equal(r.doc.meta.team, "t:example.test");
-    assert.deepEqual(r.doc.meta.identity, { mode: "global", alias: "merlin", team: "t:example.test", address: "cjr.aweb.ai/merlin", resident: null });
+    assert.deepEqual(r.doc.meta.identity, { mode: "local", alias: "merlin", team: "t:example.test", address: "cjr.aweb.ai/merlin", resident: null });
     assert.match(r.doc.brief, /retained seat of the existing aweb identity "merlin" on team t:example.test/);
     const dest = join(home, ".aw");
     for (const f of ["signing.key", "identity.yaml", "teams.yaml", "team-certs/t-example.test.pem", "encryption.yaml", "encryption-keys/x25519.key"]) assert.equal(existsSync(join(dest, f)), true, `${f} copied`);
@@ -457,7 +457,7 @@ test("retained identity retire releases the lock before global identity dispatch
     const bin = fakeAw(base); const { root, home } = deployment(base); const { src } = legacySeat(base);
     const spawn = runHook(base, bin, "spawn", { OATS_INSTANCE: "merlin-seat", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_RUNTIME: "pi", OATS_TEAM_ID: "t:example.test", OATS_SETTINGS: JSON.stringify({ identity: { source: src } }) });
     assert.equal(spawn.status, 0, spawn.stdout + spawn.stderr);
-    assert.equal(spawn.doc.meta.identity.mode, "global");
+    assert.equal(spawn.doc.meta.identity.mode, "local");
     assert.equal(spawn.doc.meta.identity.grant, undefined);
     const ret = runHook(base, bin, "retire", { OATS_INSTANCE: "merlin-seat", OATS_HOME: home, OATS_META: JSON.stringify(spawn.doc.meta) });
     assert.equal(ret.status, 0, ret.stdout + ret.stderr);

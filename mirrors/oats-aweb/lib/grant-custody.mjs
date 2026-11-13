@@ -1,4 +1,5 @@
 import { AW_MIN } from './aw-floor.mjs';
+import { sameAwebTeamId } from "./aweb-team-id.mjs";
 
 export function parseAwJson(text, what) {
   const trimmed = String(text ?? '').trim();
@@ -32,7 +33,7 @@ export function custodyPreflight({ custody, resident, team, e2eeRequired = true,
   const code = firstErrorCode ? ` error=${firstErrorCode}` : '';
   const fail = (why, remedy = `start aw custody serve for ${resident}`) => failNow(`custody preflight failed for ${resident}: status=${state}${code}; ${why}; ${remedy}`);
   if (state !== 'running') fail('custody service is not running');
-  const teamRow = (Array.isArray(status.teams) ? status.teams : []).find((t) => t && (t.team_id || t.id) === team);
+  const teamRow = (Array.isArray(status.teams) ? status.teams : []).find((t) => t && sameAwebTeamId(t.team_id || t.id, team));
   if (!teamRow) fail(`team ${team} is not present in custody status`);
   if (teamRow.ready !== true) fail(`team ${team} is not ready in custody status`);
   if (teamRow.certificate_present === false) fail(`team ${team} certificate is not present in custody status`);

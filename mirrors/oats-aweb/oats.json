@@ -1,7 +1,7 @@
 {
   "capability": "oats.aweb",
   "command": "aweb",
-  "version": "1.41.0",
+  "version": "1.42.0",
   "compatibility": {
     "oats": ">=0.68.0"
   },
@@ -91,38 +91,13 @@
       "wider"
     ],
     "reasons": [
-      "aw mail inbox does not advertise --count-only; unread-delivery attention counts are unknown. Upgrade aw to a build with read-only count support; failed counts never clear existing claims.",
-      "messaging-enabled standalone preparation needs an explicit context key",
-      "messaging binding needs one soul declaration",
-      "messaging workspace must declare private: per-human",
-      "an explicit responsible-human binding is required",
-      "an explicit wider-membership consent list is required",
-      "a selected wider-team binding is required",
-      "a selected wider alias needs an explicit workspace team mapping",
-      "multiple soul messaging declarations",
-      "adoption team aliases have conflicting mappings",
-      "messaging settings and explicit binding selections are required",
-      "messaging declarations contain incompatible requirements",
-      "messaging input must match the supported binding contract",
-      "explicit native messaging authorization is required",
-      "a required native messaging host resource is unavailable",
-      "the selected messaging provider is unavailable",
-      "the requested messaging configuration is not qualified",
-      "messaging response exceeds the supported wire limits",
-      "an admitted captured instance intent is required for execution",
-      "an explicit private-team binding is required",
-      "selected binding and inline captured invocation are required",
-      "an explicit captured instance home is required",
-      "captured messaging requires explicit delivery: session",
-      "selected wider memberships need their explicitly qualified native setup; they were not omitted",
-      "caller-owned OATS_CLI_BIN and readable kernel version are required",
-      "oats >=0.24.2 is required for captured HOME custody and retained runtime inspection",
-      "the exact retained runtime profile must be readable",
-      "the kernel must report the exact retained resolution",
-      "a retained launchSelection runtime/model observation is required",
-      "Pi strict print does not support session input; retain messaging and configure an input-capable profile",
-      "a supported input-capable ordinary Claude/Codex profile is required"
-    ]
+        "aw mail inbox does not advertise --count-only; unread-delivery attention counts are unknown. Upgrade aw to a build with read-only count support; failed counts never clear existing claims.",
+        "messaging settings and explicit binding selections are required",
+        "messaging input must match the supported binding contract",
+        "the requested messaging configuration is not qualified",
+        "messaging response exceeds the supported wire limits",
+        "captured bindings are not supported since oats.aweb 1.42.0; readiness takes a workspace context (oats readiness)"
+      ]
   },
   "hooks": {
     "spawn": {
