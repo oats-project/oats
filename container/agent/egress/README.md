@@ -86,6 +86,16 @@ refused SNI names. The connector reports refusal by role without request bodies,
 credentials or resolved values. A real harness start and turn must retain all
 refused names; another required host is a finding, not permission to add it.
 
+Healthchecks also appear in these logs: each check deliberately asks DNS for
+`denied-<uuid>.invalid` and opens the TLS port without sending a ClientHello,
+producing an empty-SNI refusal. Keep the raw qualification capture, but classify
+these recognisable health entries separately when reporting the harness's host
+requirements. A matching name or empty SNI alone does not identify its producer;
+correlate healthcheck activity before excluding an entry from that report.
+With the five-second Compose interval they recur continuously;
+the operator must bound log retention in its logging driver or collector.
+An empty SNI entry does not identify another host the harness needs.
+
 The runtime body checks each enabled external name resolves only to the proxy
 and receives an ordinary 2xx–4xx HTTP response over verified TLS, without following
 redirects. External controls stop at response headers, so a large homepage body

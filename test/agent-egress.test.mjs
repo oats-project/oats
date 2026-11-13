@@ -328,6 +328,44 @@ test("the proxy owns external connectors and does not launch children if a conne
   } finally {await new Promise(resolve=>blocker.close(resolve));}
 });
 
+test("a listening connector failure stops both owned children and fails the proxy", async () => {
+  const net=await import("node:net");
+  const {syncBuiltinESMExports}=await import("node:module");
+  const {EventEmitter}=await import("node:events");
+  const original=net.default.createServer, servers=[], children=[], logs=[];
+  let ready,stop,timer;
+  const started=new Promise(resolve=>{ready=resolve;});
+  // Instrument only the OS server factory. Actual connector listeners and the
+  // production failure promise run unchanged; child processes are OS doubles.
+  net.default.createServer=(...args)=>{const server=original(...args);servers.push(server);return server;};
+  syncBuiltinESMExports();
+  const running=superviseProxy({policy:externalPolicy(),graceMs:100,say:line=>logs.push(line),
+    onSignal:handler=>{stop=handler;return()=>{};},
+    spawnChild:()=>{
+      const child=new EventEmitter();child.signals=[];
+      child.kill=signal=>{child.signals.push(signal);queueMicrotask(()=>child.emit("close",null,signal));return true;};
+      children.push(child);if(children.length===2)ready();return child;
+    },
+  });
+  try {
+    await Promise.race([started,running.then(()=>{throw new Error("proxy ended before child startup");}),
+      new Promise((_resolve,reject)=>{timer=setTimeout(()=>reject(new Error("connector startup timeout")),1000);})]);
+    clearTimeout(timer);
+    assert.equal(servers.length,2);assert.ok(servers.every(server=>server.listening));
+    servers[0].emit("error",Object.assign(new Error("owned accept failure"),{code:"EMFILE"}));
+    const code=await Promise.race([running,new Promise((_resolve,reject)=>{
+      timer=setTimeout(()=>reject(new Error("connector failure did not stop the proxy")),500);
+    })]);
+    assert.equal(code,1);
+    assert.deepEqual(children.map(child=>child.signals),[["SIGTERM"],["SIGTERM"]]);
+    assert.ok(logs.includes("external connector failed"));
+    assert.ok(servers.every(server=>!server.listening));
+  } finally {
+    clearTimeout(timer);stop();await running;
+    net.default.createServer=original;syncBuiltinESMExports();
+  }
+});
+
 test("proxy policy rejects wildcard, credential, human-login and unbound destinations", () => {
   const cases = [
     policy => { policy.targets.aweb.origin = "http://aweb.example.invalid"; },
