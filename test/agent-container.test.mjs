@@ -360,7 +360,7 @@ test("acceptance refuses drift in the admitted container settings", async t => {
 });
 
 
-async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false, statusSpawnThrowsOnce = false, statusIgnoresTerm = false, stubbornFinish = false, brokerStatusPid = "owned" } = {}) {
+async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false, statusSpawnThrowsOnce = false, statusIgnoresTerm = false, stubbornFinish = false, brokerStatusPid = "owned", pauseAfterStarted = "" } = {}) {
   const supervisor = new URL("../container/agent/supervisor.mjs", import.meta.url);
   assert.ok(existsSync(supervisor), "the image must own broker readiness and ordered child shutdown");
   const { supervise } = await import(supervisor);
@@ -369,15 +369,22 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
   writeFileSync(events, "");
   writeFileSync(childFile, `
     const fs = require("node:fs");
-    const [role, events, mode, pidFile, pidMode] = process.argv.slice(2);
+    const [role, events, mode, pidFile, pidMode, pausedRole] = process.argv.slice(2);
     const log = text => fs.appendFileSync(events, text + "\\n");
+    // Keep TERM pending until SIGCONT, so it uses the disposition at "started".
+    // Tests await the real supervisor signal before resuming this child.
+    const started = () => {
+      log(role + " started");
+      if (role === pausedRole) process.kill(process.pid, "SIGSTOP");
+    };
     if (role === "broker") fs.writeFileSync(pidFile, String(process.pid));
-    log(role + " started");
     if (role === "status" && mode === "probe-stubborn") {
       process.on("SIGTERM", () => log("status TERM"));
+      started();
       log("status listening");
       setInterval(() => {}, 1000);
     } else if (role === "status") {
+      started();
       const running = ((mode === "ready" || mode === "stubborn") && fs.readFileSync(events, "utf8").includes("broker started")) || (mode === "after-exit" && fs.readFileSync(events, "utf8").includes("broker exited"));
       if (running) log("broker ready");
       const pid = fs.existsSync(pidFile) ? Number(fs.readFileSync(pidFile,"utf8")) : 0;
@@ -386,12 +393,14 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
       process.exit(0);
     }
     if (role !== "status") {
-      if (role === "broker" && mode === "after-exit") { log("broker exited"); process.exit(0); }
       process.on("SIGTERM", () => {
         log(role + " TERM");
         if (mode === "stubborn" && (role === "ssh" || role === "broker")) return;
         setTimeout(() => { log(role + " ended"); process.exit(0); }, role === "host" ? 80 : 0);
       });
+      // Publish the long-lived child's stop handshake only after TERM can drain it.
+      started();
+      if (role === "broker" && mode === "after-exit") { log("broker exited"); process.exit(0); }
       log(role + " listening");
       setInterval(() => {}, 1000);
     }
@@ -409,7 +418,15 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
       }
       const failProbe = role === "status" && statusSpawnFailsOnce && !statusFailed;
       if (failProbe) statusFailed = true;
-      const child = spawn(failProbe ? join(dir, "missing-probe") : process.execPath, failProbe ? [] : [childFile, role, events, mode, brokerPid, brokerStatusPid], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
+      const child = spawn(failProbe ? join(dir, "missing-probe") : process.execPath, failProbe ? [] : [childFile, role, events, mode, brokerPid, brokerStatusPid, pauseAfterStarted], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
+      if (pauseAfterStarted) {
+        const kill = child.kill.bind(child);
+        child.kill = signal => {
+          const sent = kill(signal);
+          if (sent) appendFileSync(events, role + " signal " + signal + "\n");
+          return sent;
+        };
+      }
       children.set(role, child);
       return child;
     },
@@ -429,6 +446,28 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
   return { running, children, said, text, until, term: () => signal("SIGTERM") };
 }
 
+test("broker TERM at its started checkpoint drains the real fixture child", async t => {
+  const fx = await supervisorFixture(t, { ready: false, pauseAfterStarted: "broker" });
+  await fx.until(() => fx.text().includes("broker started") && fx.text().includes("status started"));
+  fx.term();
+  await fx.until(() => fx.text().includes("broker signal SIGTERM"));
+  fx.children.get("broker").kill("SIGCONT");
+  assert.equal(await fx.running, 0);
+  assert.match(fx.text(), /broker TERM[\s\S]*broker ended/);
+  assert.doesNotMatch(fx.text(), /(?:ssh|host) started/);
+});
+
+test("host TERM after a retried probe drains the real fixture child", async t => {
+  const fx = await supervisorFixture(t, { statusSpawnFailsOnce: true, pauseAfterStarted: "host" });
+  await fx.until(() => fx.text().includes("host started"));
+  assert.ok(fx.said.includes("status could not start"));
+  fx.term();
+  await fx.until(() => fx.text().includes("host signal SIGTERM"));
+  fx.children.get("host").kill("SIGCONT");
+  assert.equal(await fx.running, 0, fx.text());
+  assert.match(fx.text(), /host TERM[\s\S]*host ended/);
+});
+
 test("image supervisor admits SSH and host run only after its broker is ready", async (t) => {
   const fx = await supervisorFixture(t);
   await fx.until(() => fx.text().includes("host started"));
@@ -444,7 +483,8 @@ test("image supervisor admits SSH and host run only after its broker is ready", 
 
 test("TERM during broker readiness starts neither SSH nor host run", async (t) => {
   const fx = await supervisorFixture(t, { ready: false });
-  await fx.until(() => fx.text().includes("status started"));
+  // A status child can start before the independently scheduled broker.
+  await fx.until(() => fx.text().includes("status started") && fx.text().includes("broker started"));
   fx.term();
   assert.equal(await fx.running, 0);
   assert.doesNotMatch(fx.text(), /(?:ssh|host) started/);
