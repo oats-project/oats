@@ -118,6 +118,19 @@ function externalPolicy() {
   }, externalResolverAddresses:["1.1.1.1","8.8.8.8"]};
 }
 
+test("the closed proxy build context admits each Dockerfile COPY source", () => {
+  const root=new URL("../container/agent/egress/",import.meta.url);
+  const dockerfile=readFileSync(new URL("Dockerfile",root),"utf8");
+  const admitted=readFileSync(new URL(".dockerignore",root),"utf8").trim().split("\n");
+  assert.equal(admitted[0],"**");
+  for(const line of dockerfile.split("\n").filter(line=>line.startsWith("COPY --chmod="))) {
+    for(const source of line.trim().split(/\s+/).slice(2,-1)) {
+      assert.ok(admitted.includes("!"+source),"Dockerfile source excluded from the closed context: "+source);
+      assert.ok(existsSync(new URL(source,root)));
+    }
+  }
+});
+
 test("external source and model roles keep DNS at the proxy and use separate owned connectors", () => {
   const result=compilePolicy(externalPolicy());
   for (const host of ["github.com","api.anthropic.com"]) {
