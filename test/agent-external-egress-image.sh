@@ -53,6 +53,7 @@ test "$(docker inspect --format '{{len .NetworkSettings.Networks}}' "$client")" 
 test "$(docker inspect --format '{{len .NetworkSettings.Networks}}' "$proxy")" = 2
 test "$(docker network inspect --format '{{.Internal}} {{.EnableIPv6}} {{index .Options "com.docker.network.bridge.gateway_mode_ipv4"}}' "$agents")" = 'true false isolated'
 node --input-type=module -e 'const {checkDockerGateway}=await import(process.argv[1]);await checkDockerGateway({image:process.argv[2],controlNetwork:process.argv[3],controlAddress:process.argv[4],gatewayAddress:process.argv[5],probeContainer:process.argv[6]})' "$root/container/agent/egress/canary.mjs" "$image" "$services" "$control_gateway" "$gateway" "$client"
+printf '%s\n' 'PASS actual public-host fixture: one isolated agent network and live on-link gateway denial'
 docker exec -i "$client" node --input-type=module - "$proxy_ip" <<'JS'
 import assert from "node:assert/strict";
 import dns from "node:dns/promises";

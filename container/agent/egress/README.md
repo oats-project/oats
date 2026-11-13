@@ -223,7 +223,7 @@ into a new operator schema. `--address` must be one pinned signer address for
 the final human control. If supplied, the compatible `--request-log` and
 `--request-path` must equal the signer's runtime-audit entry.
 
-Full mode tests each routed SNI at each pinned address, over both protocols,
+Full mode tests each internal target SNI at each pinned address, over both protocols,
 with matched controls and human-authority, wrong-port and suffix refusals.
 Unknown/absent SNI is tested per distinct address. Matched tags must reach their
 own backend log, including a final matched control after the negatives; no
