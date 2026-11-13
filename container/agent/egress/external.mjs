@@ -39,7 +39,7 @@ export async function connectExternal(policy, host, {resolve4,connect=createConn
   });
 }
 
-export async function startExternalConnectors(policy) {
+export async function startExternalConnectors(policy, {resolve4,connect,say=line=>process.stderr.write(line+"\n")}={}) {
   const routes=compilePolicy(policy).external;
   const servers=[], sockets=new Set();
   let closing=false,fail;
@@ -57,7 +57,7 @@ export async function startExternalConnectors(policy) {
         client.once("close",()=>{sockets.delete(client);controller.abort();upstream?.destroy();});
         client.on("error",()=>client.destroy());
         client.setTimeout(300000,()=>client.destroy());
-        connectExternal(policy,route.host,{signal:controller.signal}).then(socket=>{
+        connectExternal(policy,route.host,{resolve4,connect,signal:controller.signal}).then(socket=>{
           upstream=socket;
           if (client.destroyed) {socket.destroy();return;}
           sockets.add(socket);
@@ -66,7 +66,7 @@ export async function startExternalConnectors(policy) {
           socket.setTimeout(300000,()=>socket.destroy());
           client.pipe(socket);socket.pipe(client);client.resume();
         }).catch(()=>{
-          process.stderr.write(`egress: external connection refused (${route.role})\n`);
+          say(`egress: external connection refused (${route.role})`);
           client.destroy();
         });
       });
