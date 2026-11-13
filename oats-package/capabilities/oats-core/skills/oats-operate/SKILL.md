@@ -42,8 +42,9 @@ is not shown here, read `oats help`; never invent one.
   notes, whatever your knowledge capability keeps. OATS operational commands
   run here.
 - **`work/` is where repository work happens**: reading, editing, building,
-  testing, Git. In `worktree` and `checkout` mode, so do the extra trees
-  (`.work-<purpose>` in the home) that `oats worktree add` makes (below).
+  testing, Git. In `worktree`, `checkout` and `workspace` mode, so do the
+  extra trees (`.work-<purpose>` in the home) that `oats worktree add` makes
+  (below).
   Never run Git from the home root or from the operator's own checkout.
 - **A change to a soul is repository work**: an ordinary, reviewed change to
   the member repository that defines it, made in a work tree.
@@ -51,7 +52,8 @@ is not shown here, read `oats help`; never invent one.
 Work modes (from the soul's `work:`): `worktree` — your own branch in a Git
 worktree of the soul's repository; `checkout` — a shared checkout;
 `directory` — an owned directory, no repository; `workspace` — `work/` is the
-deployment directory itself, read-only across members, for coordination.
+deployment directory itself, read-only across members; work that needs a
+member's branch goes in an extra tree, named with `--repo`.
 `attached` is chosen only at spawn (`--work attached --work-dir <owner work>`):
 the new instance shares its owner's work tree and is always its child.
 

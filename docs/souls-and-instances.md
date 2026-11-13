@@ -1841,8 +1841,9 @@ after the capability injects (`injects/instance-boundary.md`):
   target another one deliberately).
 - `<instance-home>/work` — the repository or workspace view — is where
   repository reading, editing, building, testing, git and commits happen, to the
-  extent the mode below permits. In `worktree` and `checkout` mode, the
-  instance's [extra trees](#extra-trees) in the home serve the same purpose.
+  extent the mode below permits. In `worktree`, `checkout` and `workspace`
+  mode, the instance's [extra trees](#extra-trees) in the home serve the same
+  purpose.
 - The home has no soul link: the composed `AGENTS.md` already carries the
   soul's instructions, and `instance.json` `soulDir` records the (read-only,
   per-commit) soul directory every hook and dispatched command receives as
@@ -2048,21 +2049,32 @@ where it works are decoupled.
 
 Rules:
 
-- Read freely across member repos; **never edit or commit inside them** —
-  route changes to the owning repo's agents or the human.
-- No git state operations in any member repo.
+- Read freely across member repos through `work/`; **never edit or commit
+  inside the member clones** — others use them.
+- No Git state operations in any member clone (no branch switches, resets,
+  pulls, stashes, or `git worktree` run by hand).
+- Work that needs a branch of a member — a change the instance's role and
+  task call for, or a member at the remote's current state — goes in an
+  [extra tree](#extra-trees) of the instance's own, which `oats worktree add`
+  makes without moving any of the clone's refs. Otherwise route the change to
+  the owning repo's agents or the human. The mode says where work happens;
+  what work the instance takes on is its role's and its task's call.
 - Knowledge promotion follows the knowledge capability's own protocol, never
   direct edits through the workspace view.
 
-The instance records no branch: the workspace is not a Git tree.
+The instance records no branch: the workspace is not a Git tree. For the same
+reason an extra tree always names its repository (`--repo`): the instance's
+recorded repository is the deployment directory.
 
 ### Extra trees
 
-An instance in `worktree` or `checkout` mode can create extra trees: linked
-Git worktrees in its home, beside `work/`. It does so when the work needs
-another branch, or another repository of the deployment (one task that
-touches several repositories). The `worktree` and `checkout` briefings teach
-it; the `workspace`, `directory` and `attached` briefings do not.
+An instance in `worktree`, `checkout` or `workspace` mode can create extra
+trees: linked Git worktrees in its home, beside `work/`. It does so when the
+work needs another branch, or another repository of the deployment (one task
+that touches several repositories); in `workspace` mode, whenever work needs a
+branch of a member, since `work/` is read-only. The `worktree`, `checkout` and
+`workspace` briefings teach it (the `workspace` one with `--repo` always); the
+`directory` and `attached` briefings do not.
 
 ```text
 oats worktree add --purpose <p> --branch <b> --base <remote-branch>
