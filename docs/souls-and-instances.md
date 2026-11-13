@@ -1841,9 +1841,9 @@ after the capability injects (`injects/instance-boundary.md`):
   target another one deliberately).
 - `<instance-home>/work` — the repository or workspace view — is where
   repository reading, editing, building, testing, git and commits happen, to the
-  extent the mode below permits. In `worktree`, `checkout` and `workspace`
-  mode, the instance's [extra trees](#extra-trees) in the home serve the same
-  purpose.
+  extent the mode below permits. In `worktree`, `checkout`, `workspace` and
+  `directory` mode, the instance's [extra trees](#extra-trees) in the home
+  serve the same purpose.
 - The home has no soul link: the composed `AGENTS.md` already carries the
   soul's instructions, and `instance.json` `soulDir` records the (read-only,
   per-commit) soul directory every hook and dispatched command receives as
@@ -2015,6 +2015,14 @@ without Git. `repo` (or `--repo`) supplies context only and may be an ordinary
 directory; without it, the deployment directory (where `oats-local.yaml` is) is
 used. No implicit fallback changes the other modes.
 
+Repository work that needs a branch — a change the instance's role and task
+call for, or a repository at the remote's current state — goes in an
+[extra tree](#extra-trees) of the instance's own, never in `work/` (which
+never becomes a repository) and never in the `repo` directory. An extra tree
+always names its repository (`--repo`): the recorded `repo` is context only,
+the deployment directory by default, so `oats worktree add` without `--repo`
+is refused when it is not a clone (`E_CLONE_MISSING`).
+
 `--work-dir` and `--branch` are rejected. Canonical instructions, skill
 composition, provider trust and harness preflight still apply. Retirement preserves nonempty work in verified recovery storage beside the
 home (`workRecovery.path/work`) before deleting it, including files created by
@@ -2068,13 +2076,15 @@ recorded repository is the deployment directory.
 
 ### Extra trees
 
-An instance in `worktree`, `checkout` or `workspace` mode can create extra
-trees: linked Git worktrees in its home, beside `work/`. It does so when the
-work needs another branch, or another repository of the deployment (one task
-that touches several repositories); in `workspace` mode, whenever work needs a
-branch of a member, since `work/` is read-only. The `worktree`, `checkout` and
-`workspace` briefings teach it (the `workspace` one with `--repo` always); the
-`directory` and `attached` briefings do not.
+An instance in `worktree`, `checkout`, `workspace` or `directory` mode can
+create extra trees: linked Git worktrees in its home, beside `work/`. It does
+so when the work needs another branch, or another repository of the deployment
+(one task that touches several repositories); in `workspace` mode, whenever
+work needs a branch of a member, since `work/` is read-only; in `directory`
+mode, whenever work needs a branch at all, since `work/` is not a Git tree.
+The `worktree`, `checkout`, `workspace` and `directory` briefings teach it
+(the `workspace` and `directory` ones with `--repo` always, in one shared
+section); the `attached` briefing does not.
 
 ```text
 oats worktree add --purpose <p> --branch <b> --base <remote-branch>
