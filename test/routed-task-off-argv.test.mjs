@@ -2,7 +2,7 @@
 // argv of the local ssh process, and not in the remote command line that ssh carries. It goes to
 // the host on the ssh session's standard input, to its preview and to its apply alike, and the
 // host reads it there (`--task-file -`, feature spawn-task-stdin). A host that does not advertise
-// the feature cannot read it there: it is sent the task as an argument, and the answer says so.
+// the feature is refused before any spawn is sent.
 // The end-to-end test runs the real kernel behind a fake `ssh` that records how it was called.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -38,6 +38,8 @@ test("a routed spawn with a task: neither the ssh argv nor the remote command ho
   const cases = [
     { purpose: "from-file", token: "ZEBRA-FILE-7f3a9", flags: (task) => { const file = join(base, "task.md"); writeFileSync(file, task); return ["--task-file", file]; } },
     { purpose: "inline", token: "ZEBRA-INLINE-51c2e", flags: (task) => ["--task", task] },
+    { purpose: "equals", token: "ZEBRA-EQUALS-329a2", flags: (task) => [`--task=${task}`] },
+    { purpose: "file-equals", token: "ZEBRA-FILE-EQUALS-3d4a8", flags: (task) => { const file = join(base, "task.md"); writeFileSync(file, task); return [`--task-file=${file}`]; } },
   ];
   for (const { purpose, token, flags } of cases) {
     const task = `Review \`this\` and $(touch NEVER_RUN) 'quotes'\nthe ${token} line\n`;
@@ -60,9 +62,9 @@ test("a routed spawn with a task: neither the ssh argv nor the remote command ho
 
 /** A host that answers the probe with `features`, a roster, and a spawn's preview and apply.
  *  `calls` is every ssh call it saw: its argv, and the bytes given to its standard input. */
-function fakeHost(features, { keyed = true } = {}) {
+function fakeHost(features, { keyed = true, version = "0.69.15" } = {}) {
   const KEYED = keyed ? ["spawn-preview-2", "spawn-apply-2", "spawn-idempotency-2"] : [];
-  const probe = { schemaVersion: 1, name: "@awebai/oats", version: "0.24.9", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features: [...KEYED, ...features] };
+  const probe = { schemaVersion: 1, name: "@awebai/oats", version, desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status"], features: [...KEYED, ...features] };
   const status = { schemaVersion: 1, ok: true, result: { root: "/w/agents", agents: [{ name: "dev", harness: "pi", instances: [] }] } };
   const decision = { instance: "dev-1", revision: "0123456789abcdef01234567" };
   const preview = { schemaVersion: 1, ok: true, result: { spawnPreviewApi: 2, preview: true, agent: "dev", instance: "dev-1", home: "/w/agents/dev/instances/dev-1", decision } };
@@ -84,9 +86,42 @@ function routed(t, args, host) {
   const prior = process.env.OATS_HOME_DIR;
   process.env.OATS_HOME_DIR = join(base, "oats-home"); mkdirSync(process.env.OATS_HOME_DIR);
   t.after(() => rmSync(base, { recursive: true, force: true }));
-  try { return routeCommand("build", "spawn", args, { server: { id: "build", sshHost: "h", workspace: "/w", oatsPath: "oats" }, execFileSync: host.exec }); }
+  try { return routeCommand("build", "spawn", args, { server: { id: "build", sshHost: host.sshHost || "h", workspace: "/w", oatsPath: "oats" }, execFileSync: host.exec }); }
   finally { if (prior === undefined) delete process.env.OATS_HOME_DIR; else process.env.OATS_HOME_DIR = prior; }
 }
+
+test("both routing refusals keep the upgrade command within Desktop's first 300 characters", (t) => {
+  for (const host of [fakeHost([], { keyed: false, version: "0.69.14" }), fakeHost([], { keyed: false })]) {
+    host.sshHost = "user@a-long-host-name.example.internal";
+    assert.throws(() => routed(t, ["dev", "--task", "ZEBRA-MUST-NOT-LEAK"], host), (e) => {
+      assert.equal(e.code, "E_REMOTE_INCOMPATIBLE");
+      assert.ok(e.message.slice(0, 300).includes("npm install -g @awebai/oats@latest"), e.message);
+      assert.ok(e.message.includes(`at ${host.sshHost}`));
+      if (e.message.includes(FEATURE)) {
+        assert.ok(e.message.indexOf("npm install -g @awebai/oats@latest") < e.message.indexOf(FEATURE), "the upgrade command precedes the missing-feature detail");
+      }
+      return true;
+    });
+    assert.equal(host.calls.length, 1);
+  }
+});
+
+test("a high-version host missing a required spawn feature is refused before any spawn", (t) => {
+  const required = [FEATURE, "spawn-preview-2", "spawn-apply-2", "spawn-idempotency-2"];
+  for (const missing of required) {
+    for (const extra of [[], ["--preview"], ["--expect-decision", "r1", "--idempotency-key", "k1"]]) {
+      const host = fakeHost(required.filter((f) => f !== missing), { keyed: false, version: "99.0.0" });
+      assert.throws(() => routed(t, ["dev", "--task", "ZEBRA-MUST-NOT-LEAK", ...extra], host), (e) => {
+        assert.equal(e.code, "E_REMOTE_INCOMPATIBLE");
+        assert.ok(e.message.includes(missing), e.message);
+        assert.ok(e.message.includes("npm install -g @awebai/oats@latest"), e.message);
+        return true;
+      });
+      assert.equal(host.calls.some((call) => call.command.includes(" spawn ")), false);
+      assert.equal(host.calls.some((call) => call.argv.join(" ").includes("ZEBRA")), false);
+    }
+  }
+});
 
 test("a routed spawn gives the host's preview and its apply the same task on standard input, and no other call any input", (t) => {
   const host = fakeHost([FEATURE]);
@@ -101,49 +136,57 @@ test("a routed spawn gives the host's preview and its apply the same task on sta
   assert.deepEqual(host.calls.filter((call) => !call.command.includes(" spawn ")).map((call) => call.input), [undefined, undefined], "the probe and the roster read are given nothing");
 });
 
-const taskWarning = "remote oats 0.24.9 at h does not advertise spawn-task-stdin, so the task was passed as an argument, visible in this machine's process list (the ssh command) and the host's while the spawn runs; upgrade the host";
+test("direct routing strips both task spellings and keeps the first task on preview and apply", (t) => {
+  const first = "ZEBRA-FIRST task\n", later = "ZEBRA-LATER task";
+  for (const extra of [[], ["--preview"]]) {
+    for (const flags of [[`--task=${first}`], [`--task=${first}`, "--task", later], ["--task", first, `--task=${later}`], [`--task=${first}`, `--task=${later}`]]) {
+      const host = fakeHost([FEATURE]);
+      assert.equal(routed(t, ["dev", ...flags, ...extra], host).envelope.ok, true);
+      assert.equal(host.calls.some((call) => call.argv.join("\n").includes("ZEBRA")), false);
+      const spawns = host.calls.filter((call) => call.command.includes(" spawn "));
+      assert.equal(spawns.length, extra.length ? 1 : 2);
+      for (const call of spawns) {
+        assert.equal(call.input, first);
+        assert.ok(call.command.includes("--task-file -"));
+      }
+    }
+  }
+});
 
-test("a routed spawn with a task to a host that does not advertise spawn-task-stdin sends the task as an argument, to the preview and to the apply, and its answer says so once", (t) => {
-  const host = fakeHost([]);
-  const { envelope } = routed(t, ["dev", "--task", "the ZEBRA-OLD-HOST-2be77 task", "--no-launch"], host);
-  assert.equal(envelope.ok, true, JSON.stringify(envelope));
+test("direct routing leaves a caller's remote task-file path unchanged", (t) => {
+  const host = fakeHost([FEATURE]);
+  assert.equal(routed(t, ["dev", "--task-file", "/remote/task.md"], host).envelope.ok, true);
   const spawns = host.calls.filter((call) => call.command.includes(" spawn "));
-  assert.equal(spawns[0].command, "oats spawn dev --task 'the ZEBRA-OLD-HOST-2be77 task' --no-launch --preview --dir /w --json");
-  assert.match(spawns[1].command, /^oats spawn dev --task 'the ZEBRA-OLD-HOST-2be77 task' --no-launch --expect-decision 0123456789abcdef01234567 --idempotency-key \S+ --dir \/w --json$/);
   assert.equal(spawns.length, 2);
-  assert.equal(host.calls.some((call) => call.input !== undefined), false, "nothing was given to any call's standard input");
-  assert.deepEqual(envelope.result.warnings, [taskWarning], "one warning for the two calls");
-
-  // A preview of its own is one call, and says the same.
-  const previewing = fakeHost([]);
-  const previewed = routed(t, ["dev", "--task", "the ZEBRA-OLD-HOST-2be77 task", "--no-launch", "--preview"], previewing).envelope;
-  assert.deepEqual(previewing.calls.filter((call) => call.command.includes(" spawn ")).map((call) => call.command), ["oats spawn dev --task 'the ZEBRA-OLD-HOST-2be77 task' --no-launch --preview --dir /w --json"]);
-  assert.deepEqual(previewed.result.warnings, [taskWarning]);
-
-  // A spawn with no task has no such warning, and a host with the feature none either.
-  assert.deepEqual(routed(t, ["dev", "--no-launch"], fakeHost([])).envelope.result.warnings, []);
-  assert.deepEqual(routed(t, ["dev", "--task", "a task", "--no-launch"], fakeHost([FEATURE])).envelope.result.warnings, []);
+  for (const call of spawns) {
+    assert.ok(call.command.includes("--task-file /remote/task.md"));
+    assert.equal(call.input, undefined);
+  }
 });
 
-test("a host with neither the keyed spawn nor spawn-task-stdin gets one spawn with the task as an argument, and each of the two warnings once", (t) => {
-  const host = fakeHost([], { keyed: false });
-  const { envelope } = routed(t, ["dev", "--task", "the ZEBRA-OLDEST-HOST-0c41d task", "--no-launch"], host);
-  assert.equal(envelope.ok, true, JSON.stringify(envelope));
-  assert.deepEqual(host.calls.filter((call) => call.command.includes(" spawn ")).map((call) => call.command), ["oats spawn dev --task 'the ZEBRA-OLDEST-HOST-0c41d task' --no-launch --dir /w --json"]);
-  assert.equal(envelope.result.warnings.length, 2, JSON.stringify(envelope.result.warnings));
-  assert.match(envelope.result.warnings[0], /^remote oats 0\.24\.9 at h does not advertise spawn-preview-2, spawn-apply-2, spawn-idempotency-2: /);
-  assert.equal(envelope.result.warnings[1], taskWarning);
-
-  // The keyed spawn missing, spawn-task-stdin there: one spawn, the task on its standard input.
-  const reads = fakeHost([FEATURE], { keyed: false });
-  const answered = routed(t, ["dev", "--task", "the ZEBRA-STDIN-ONLY-77aa1 task", "--no-launch"], reads).envelope;
-  const spawns = reads.calls.filter((call) => call.command.includes(" spawn "));
-  assert.deepEqual(spawns.map((call) => [call.command, call.input]), [["oats spawn dev --task-file - --no-launch --dir /w --json", "the ZEBRA-STDIN-ONLY-77aa1 task"]]);
-  assert.equal(answered.result.warnings.length, 1, JSON.stringify(answered.result.warnings));
-  assert.match(answered.result.warnings[0], /does not advertise spawn-preview-2, spawn-apply-2, spawn-idempotency-2: /);
+test("a host below the routing floor is refused with the upgrade command before any spawn", (t) => {
+  for (const version of ["0.22.1", "0.69.14"]) {
+    const host = fakeHost([FEATURE], { version });
+    assert.throws(() => routed(t, ["dev", "--task", "ZEBRA-OLD-HOST", "--no-launch"], host), (e) => {
+      assert.equal(e.code, "E_REMOTE_INCOMPATIBLE");
+      assert.ok(e.message.includes(`remote oats ${version} at h`));
+      assert.ok(e.message.includes("minimum 0.69.15"));
+      assert.ok(e.message.includes("npm install -g @awebai/oats@latest"));
+      return true;
+    });
+    assert.equal(host.calls.length, 1, "only the version probe is sent");
+    assert.equal(host.calls.some((call) => call.argv.join(" ").includes("ZEBRA")), false);
+  }
 });
 
-test("a routed spawn with a task through a host whose oats does not advertise spawn-task-stdin succeeds: the instance there has the task, the remote command carried it, and the answer warns once", (t) => {
+test("a host missing stdin or keyed spawn is refused even when no task is given", (t) => {
+  for (const host of [fakeHost([]), fakeHost([FEATURE], { keyed: false })]) {
+    assert.throws(() => routed(t, ["dev", "--no-launch"], host), { code: "E_REMOTE_INCOMPATIBLE" });
+    assert.equal(host.calls.length, 1);
+  }
+});
+
+test("a routed spawn through a host without spawn-task-stdin refuses without sending the task or creating an instance", (t) => {
   const base = mkdtempSync("/tmp/oats-rto-");
   t.after(() => rmSync(base, { recursive: true, force: true }));
   const fx = v2Deployment({ souls: { dev: { soul: { work: "checkout" }, agents: "You are dev.\n" } } });
@@ -161,13 +204,13 @@ test("a routed spawn with a task through a host whose oats does not advertise sp
   const from = readFileSync(log, "utf8").length;
   const task = "the ZEBRA-OLDER-E2E-6d0f3 task\n";
   r = oats(["spawn", "dev", "--server", "build", "--purpose", "older", "--task", task, "--no-launch", "--json"]);
-  assert.equal(r.status, 0, r.stderr + r.stdout);
-  const result = JSON.parse(r.stdout).result;
-  assert.equal(readFileSync(join(result.home, "TASK.md"), "utf8").includes(task.trim()), true, "the instance on the host has the task");
-  const spawns = readFileSync(log, "utf8").slice(from).split("\n--\n").map((call) => call.split("\n").slice(call.split("\n").findIndex((line) => line.includes(" spawn "))).join("\n")).filter((command) => command.includes(" spawn "));
-  assert.equal(spawns.length, 2, spawns.join("\n"));
-  for (const command of spawns) assert.ok(command.includes("ZEBRA-OLDER-E2E-6d0f3") && !command.includes("--task-file"), `the task is in the remote command, which is the last argument of the local ssh: ${command}`);
-  const warned = result.warnings.filter((warning) => warning.includes("spawn-task-stdin"));
-  assert.equal(warned.length, 1, JSON.stringify(result.warnings));
-  assert.match(warned[0], /^remote oats \S+ at build-host does not advertise spawn-task-stdin, so the task was passed as an argument, visible in this machine's process list \(the ssh command\) and the host's while the spawn runs; upgrade the host$/);
+  assert.notEqual(r.status, 0, r.stderr + r.stdout);
+  const error = JSON.parse(r.stdout).error;
+  assert.equal(error.code, "E_REMOTE_INCOMPATIBLE");
+  assert.ok(error.message.includes(FEATURE));
+  assert.ok(error.message.includes("npm install -g @awebai/oats@latest"));
+  const recorded = readFileSync(log, "utf8").slice(from);
+  assert.equal(recorded.includes(" spawn "), false, "no spawn was sent to the host");
+  assert.equal(recorded.includes("ZEBRA"), false, "the task is in no ssh argument");
+  assert.equal(existsSync(join(fx.dep, "agents", "dev", "instances", "dev-older")), false);
 });

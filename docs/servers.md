@@ -443,26 +443,17 @@ Arguments are quoted for the remote shell. Local files (`--task-file`,
 sent as text or on stdin, never as paths.
 
 <a id="a-routed-spawns-task"></a>
-**A routed spawn's task is on no command line, for a server that advertises
-`spawn-task-stdin`.** The text of `--task` or of `--task-file` goes to such a
-server on the standard input of the ssh session, to the server's preview and
-to its spawn alike, and the remote command carries `--task-file -` in its
-place: the text is in the arguments of neither the local `ssh` process nor
-the server's `oats`, where every user of either machine could read it in the
-process list. A server that does not advertise `spawn-task-stdin` cannot read
-it there, and gets it as an argument of the remote command: the spawn
-succeeds, the task is readable in both process lists while it runs (this
-machine's, in the `ssh` command, and the server's), and the answer carries
-one warning that says so: `remote oats <version> at <host> does not
-advertise spawn-task-stdin, so the task was passed as an argument, visible
-in this machine's process list (the ssh command) and the host's while the
-spawn runs; upgrade the host`. Upgrade OATS on the server to keep tasks off
-both command lines. A `--wake-message` and a
-schedule's spec still travel as arguments.
+**A routed spawn's task is on no command line.** The text of `--task` or
+of `--task-file` goes to the server on the standard input of the ssh session,
+to its preview and to its spawn alike. The remote command carries
+`--task-file -` in its place: the text is in the arguments of neither the
+local `ssh` process nor the server's `oats`. A server missing
+`spawn-task-stdin` is refused before any spawn is sent. A `--wake-message`
+and a schedule's spec still travel as arguments.
 
 | Command | Where it runs | The server must advertise |
 |---|---|---|
-| `spawn` | registered workspace | the requested harness, backend and yolo option; `launch-config` for `--launch-config`; `schedule` for a wake schedule; `spawn-name` for `--name`; `spawn-task-stdin` for a `--task` or `--task-file` kept off the command line (without it: the task as an argument, and a warning; [a routed spawn's task](#a-routed-spawns-task)); `spawn-preview-2` for `--preview`; `spawn-preview-2`, `spawn-apply-2` and `spawn-idempotency-2` for a spawn bound to its preview and a key (without them: one call and a warning); `spawn-suggest-name` for `--suggest-name` on a preview, `spawn-apply-suggest-name` on an apply; `instance-background` for `--background` or `--no-background`; `instance-same-work` for `--same-work` |
+| `spawn` | registered workspace | the requested harness, backend and yolo option; `launch-config` for `--launch-config`; `schedule` for a wake schedule; `spawn-name` for `--name`; `spawn-task-stdin`, `spawn-preview-2`, `spawn-apply-2` and `spawn-idempotency-2` for every spawn and preview; missing features refuse before any spawn ([a routed spawn's task](#a-routed-spawns-task)); `spawn-suggest-name` for `--suggest-name` on a preview, `spawn-apply-suggest-name` on an apply; `instance-background` for `--background` or `--no-background`; `instance-same-work` for `--same-work` |
 | `status` | registered workspace | |
 | `retire` | the instance's home | `retire-home` to retire by exact home |
 | `session inspect`, `session attach` | the instance's home | `session`; `session-attach-detach-key` for `attach --detach-key`; `session-attach-no-status-line` for `attach --no-status-line`, which a host without it ignores |
@@ -486,7 +477,7 @@ for a spawn that may land on another; the host it lands on makes the name
 unique, or names an unnamed spawn itself with `--suggest-name`.
 
 Before every routed command except `status`, the kernel reads the server's
-`oats version --json`. A remote OATS older than 0.22.1 is refused, and so is a
+`oats version --json`. A remote OATS older than 0.69.15 is refused, and so is a
 missing feature (`E_REMOTE_INCOMPATIBLE`), before anything is sent. A spawn is
 checked against the harness it would use (the flag, or the soul's default as
 the remote roster reports it). A host that advertises no harness list is
@@ -525,12 +516,12 @@ the server's `spawn-suggest-name` and `spawn-name` too.
 - **A spawn that brings `--expect-decision` or `--idempotency-key`** travels
   as given, in one call: the caller previewed (`--server <id> --preview`) and
   holds the key.
-- **A server that does not advertise `spawn-preview-2`, `spawn-apply-2` and
-  `spawn-idempotency-2`** gets the spawn in one call, as given, and the
-  answer carries a warning: if the link drops while it spawns, the spawn
-  cannot be retried safely, since the instance may exist there and a second
-  run would create another. Check `oats status --server <id>` before running
-  it again, or upgrade OATS there.
+- **A server missing `spawn-task-stdin`, `spawn-preview-2`, `spawn-apply-2`
+  or `spawn-idempotency-2`** is refused before any spawn is sent, even if its
+  version meets the floor. Upgrade the server with
+  `npm install -g @awebai/oats@latest`. For an automatically named apply,
+  `spawn-suggest-name` and `spawn-name` are required too: the router binds
+  the name its preview chose.
 
 **A routed preview.** `oats spawn <soul> --server <id> --preview` runs the
 spawn's checks here (`E_ROUTE_CHANGED`, `E_ROUTE_EXISTS`, the harness and

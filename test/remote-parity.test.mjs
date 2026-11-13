@@ -25,7 +25,7 @@ test.after(() => {
   rmSync(base, { recursive: true, force: true });
 });
 
-const PROBE = { schemaVersion: 1, name: "@awebai/oats", version: "0.31.0", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["session"], features: ["harness"] };
+const PROBE = { schemaVersion: 1, name: "@awebai/oats", version: "0.69.15", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["session"], features: ["harness"] };
 const target = { sshHost: "h", workspace: "/w", oatsPath: "oats" };
 
 /** A transport that answers the version probe and counts it. */
@@ -310,7 +310,7 @@ test("session attach --server: ssh failing before the viewer (the probe, the nam
   assert.equal(r.status, 1, r.stderr);
   assert.match(r.stderr, /^oats: ssh to build-host failed: .*ENOENT/m);
   // A host that answers, but without `oats session`: a refusal, exit 1.
-  const old = fakeHost(join(dir, "old"), { probe: { ...PROBE, version: "0.22.1", remote: ["spawn", "retire", "status"] }, answers: { [`status --json --dir ${WS}`]: { stdout: JSON.stringify(ROSTER) } } });
+  const old = fakeHost(join(dir, "old"), { probe: { ...PROBE, remote: ["spawn", "retire", "status"] }, answers: { [`status --json --dir ${WS}`]: { stdout: JSON.stringify(ROSTER) } } });
   const oldEnv = cliEnv(join(dir, "old"), old); register(oldEnv, old.oatsPath);
   r = cli(oldEnv, ["session", "attach", "--server", "build", "--home", home]);
   assert.equal(r.status, 1, r.stderr);
@@ -455,45 +455,6 @@ test("server roster: every row the host reports is addressable; savedRoute is in
   for (const row of rows) { assert.equal(row.addressable, true); assert.equal(row.savedRoute, false); }
 });
 
-test("a remote without the session commands: the fallback hint names the instance's recorded tmux session, else the remote's default; a recorded socket is named, and the hint survives a paste", () => {
-  const old = { ...FULL_PROBE, version: "0.22.1", remote: ["spawn", "retire", "status"], features: [] };
-  const dir = mkdtempSync(join(base, "hint-"));
-  const oddSocket = "/tmp/it's a dir/oats";
-  const oddSession = "team x; echo $HOME `id` 'q'";
-  const roster = { root: `${WS}/agents`, agents: [{ name: "dev", instances: [
-    { instance: "dev-a", home: homeOf("dev", "dev-a"), tmux: { session: "team-x", window: "dev-a" } },
-    { instance: "dev-b", home: homeOf("dev", "dev-b") },
-    { instance: "dev-c", home: homeOf("dev", "dev-c"), tmux: { session: "oats-agents", window: "dev-c", socket: "/tmp/tmux-1000/oats" } },
-    { instance: "dev-d", home: homeOf("dev", "dev-d"), tmux: { session: "oats-agents", window: "dev-d", socket: oddSocket } },
-    { instance: "dev-e", home: homeOf("dev", "dev-e"), tmux: { session: oddSession, window: "dev-e" } },
-  ] }] };
-  const host = fakeHost(dir, { probe: old, answers: { [`status --json --dir ${WS}`]: { stdout: JSON.stringify(roster) } } });
-  const env = cliEnv(dir, host);
-  mkdirSync(env.OATS_HOME_DIR, { recursive: true });
-  writeFileSync(join(env.OATS_HOME_DIR, "servers.json"), JSON.stringify({ servers: { build: { sshHost: "build-host", workspace: WS, oatsPath: host.oatsPath } } }));
-  let r = cli(env, ["session", "inspect", "--server", "build", "--home", homeOf("dev", "dev-a"), "--json"]);
-  assert.equal(r.json().error.code, "E_REMOTE_INCOMPATIBLE");
-  assert.match(r.json().error.message, /attach with ssh -t build-host 'tmux attach -t team-x:dev-a'$/, "the remote command is one word, with or without a socket");
-  r = cli(env, ["session", "inspect", "--server", "build", "--home", homeOf("dev", "dev-b"), "--json"]);
-  assert.match(r.json().error.message, /attach with ssh -t build-host 'tmux attach -t pi-agents'$/, "a kernel before 0.22.2 opened its windows in pi-agents");
-  // A row that records its server's socket: the hint names it, and the remote command is one word.
-  r = cli(env, ["session", "inspect", "--server", "build", "--home", homeOf("dev", "dev-c"), "--json"]);
-  assert.match(r.json().error.message, /attach with ssh -t build-host 'tmux -S \/tmp\/tmux-1000\/oats attach -t oats-agents:dev-c'$/);
-  // A socket with a space and a quote, pasted: the local shell hands ssh one word (the remote command),
-  // and the remote shell reads that word back as tmux's own arguments.
-  const words = (line) => execFileSync("/bin/sh", ["-c", `for word in ${line}; do printf '%s\\n' "$word"; done`], { encoding: "utf8" }).split("\n").slice(0, -1);
-  const throughTwoShells = (instance) => {
-    const hint = cli(env, ["session", "inspect", "--server", "build", "--home", homeOf("dev", instance), "--json"]).json().error.message.match(/attach with (ssh -t build-host .*)$/)[1];
-    const local = words(hint);
-    assert.deepEqual(local.slice(0, 3), ["ssh", "-t", "build-host"]);
-    assert.equal(local.length, 4, `the remote command is one word: ${hint}`);
-    return words(local[3]);
-  };
-  assert.deepEqual(throughTwoShells("dev-d"), ["tmux", "-S", oddSocket, "attach", "-t", "oats-agents:dev-d"]);
-  // The same without a recorded socket: a session name with a space and shell characters stays one argument.
-  assert.deepEqual(throughTwoShells("dev-e"), ["tmux", "attach", "-t", `${oddSession}:dev-e`]);
-});
-
 // ---- item 4: the Desktop's reads and lifecycle plans, routed ----
 
 const SURFACE_PROBE = { ...FULL_PROBE, remote: [...FULL_PROBE.remote, "readiness", "instance-events", "instance-git", "lifecycle-plans"],
@@ -571,12 +532,12 @@ test("routed readiness, instance events, git, diff, stop and retire plans: run o
 
 test("routed Desktop reads and plans: a host without the feature is refused before anything is sent; a bad home is refused here or relayed from the host", () => {
   for (const [feature, argv] of SURFACE_CALLS) {
-    const probe = { ...SURFACE_PROBE, version: "0.30.3", features: SURFACE_PROBE.features.filter((f) => f !== feature) };
+    const probe = { ...SURFACE_PROBE, features: SURFACE_PROBE.features.filter((f) => f !== feature) };
     const { env, host } = surfaceSetup(`old-${feature}`, probe);
     const r = cli(env, argv);
     assert.equal(r.status, 1, argv.join(" "));
     assert.equal(r.json().error.code, "E_REMOTE_INCOMPATIBLE");
-    assert.match(r.json().error.message, new RegExp(`remote oats 0\\.30\\.3 at build-host does not advertise ${feature}`));
+    assert.match(r.json().error.message, new RegExp(`remote oats 0\\.69\\.15 at build-host does not advertise ${feature}`));
     const verb = argv[0] === "instance" ? `instance ${argv[1]}` : argv[0];
     assert.equal(host.calls().filter((c) => c.includes(` ${verb} `) && !c.includes("status --json")).length, 0, `nothing sent: ${host.calls().join("\n")}`);
   }
