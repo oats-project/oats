@@ -89,7 +89,7 @@ test("unreadable or substituted registry data is refused", async t => {
 });
 
 
-function shellProfile(t, directory) {
+function shellProfile(t, directory, sources = 1) {
   // Relocate only the image's two fixed filesystem bindings into this fixture.
   const helper = join(directory, "..", "agent-registry.mjs");
   const source = readFileSync(new URL("../container/agent/agent-registry.mjs", import.meta.url), "utf8")
@@ -98,7 +98,7 @@ function shellProfile(t, directory) {
   const profile = readFileSync(new URL("../container/agent/agent-trust.sh", import.meta.url), "utf8")
     .replace("/usr/local/bin/node", JSON.stringify(process.execPath))
     .replace("/usr/local/lib/agent-registry.mjs", JSON.stringify(helper));
-  return spawnSync("/bin/bash", ["--noprofile", "--norc", "-c", profile + '\nprintf "shell-open:%s" "${AWID_REGISTRY_URL-unset}"'],
+  return spawnSync("/bin/bash", ["--noprofile", "--norc", "-c", profile.repeat(sources) + '\nprintf "shell-open:%s" "${AWID_REGISTRY_URL-unset}"'],
     { env: { PATH: "/usr/bin:/bin", HOME: directory, AWID_REGISTRY_URL: "https://ambient.example.test" }, encoding: "utf8", timeout: 3000 });
 }
 
@@ -169,4 +169,15 @@ test("runtime acceptance refuses a missing, invalid or differing registry snapsh
   for (const result of [{ status: 1, stdout: "" }, { status: 0, stdout: "" }, { status: 0, stdout: "https://different.example.test" }]) {
     assert.throws(() => check("https://registry.example.test", result), /AWID_REGISTRY_URL/);
   }
+});
+
+
+test("a login shell sourcing the fixed profile twice reports bad registry data once", t => {
+  const { directory, file } = registryFixture(t, undefined);
+  mkdirSync(directory, { mode: 0o700 });
+  writeFileSync(file, "not an origin", { mode: 0o400 });
+  const result = shellProfile(t, directory, 2);
+  assert.equal(result.status, 0);
+  assert.equal(result.stdout, "shell-open:invalid:");
+  assert.equal(result.stderr.trim().split("\n").length, 1);
 });
