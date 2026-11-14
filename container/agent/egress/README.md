@@ -244,9 +244,10 @@ certificate-validation error fails. A peer
 `internal_error` alert is accepted only before TLS completes and before any HTTP
 response, and only for the enumerated unknown/absent-SNI cases. The same alert
 fails for known SNI or a matched control. Unique
-query tags must appear for matched controls in the appropriate backend log, and
-all forbidden tags must be absent from every supplied log. Final matched controls
-and common-path coverage on each route/address and the human surface provide
+query tags for matched controls on owned routes must appear in the appropriate
+backend log, and all forbidden tags must be absent from every supplied log.
+Final matched controls and common-path coverage on each local route/address
+and the human surface provide
 later log records after the negative cases. Responses and log contents
 are never printed. Success prints exactly `OATS_EGRESS_INGRESS_PASS`; require
 that token and exit 0 before enabling the signer route and admitting agents.

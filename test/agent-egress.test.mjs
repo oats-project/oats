@@ -625,6 +625,12 @@ test("the shared ingress probe proves both protocol refusals before backend deli
   ownedRegistryPolicy.targets.registry.addresses=[policy.targets.aweb.addresses[0]];
   await assert.rejects(()=>probeIngress({...externalFull,policy:ownedRegistryPolicy}),/external registry/,
     "an owned ingress cannot lose its backend audit by being declared external");
+  const publicFront=structuredClone(externalPolicy);
+  publicFront.frontAddress="8.8.8.8";
+  publicFront.targets.registry.addresses=[publicFront.frontAddress];
+  assert.ok(!publicFront.privateIngressAddresses.includes(publicFront.frontAddress));
+  await assert.rejects(()=>probeIngress({...externalFull,policy:publicFront}),/external registry/,
+    "a public front address is owned even without a private-ingress exception");
   for(const role of ["aweb","secrets","logs","signer"])
     await assert.rejects(()=>probeIngress({...externalFull,routeLogs:{...externalRouteLogs,[role]:{path:routeLogs[role].path,external:true}}}),/per-route audit input/);
   for(const registry of [
