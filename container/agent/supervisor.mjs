@@ -15,7 +15,7 @@ const onSignals = (handler) => {
 export async function supervise({
   spawnChild = spawn, onSignal = onSignals,
   say = (line) => process.stderr.write(`agent-supervisor: ${line}\n`),
-  pollMs = 200, startupMs = 30_000, childStopMs = 3_000,
+  pollMs = 200, startupMs = 30_000, childStopMs = 3_000, brokerStopMs = 6_000,
 } = {}) {
   let stopping = false, failed = false, wakeStop, broker, ssh, host;
   const requested = new Promise((resolve) => { wakeStop = resolve; });
@@ -39,12 +39,12 @@ export async function supervise({
     });
     return state;
   };
-  const finish = async (state) => {
+  const finish = async (state, stopMs = childStopMs) => {
     if (!state) return;
     state.stopRequested = true;
     if (state.ended) return;
     state.child.kill("SIGTERM");
-    const escalation = setTimeout(() => { failed = true; state.child.kill("SIGKILL"); }, childStopMs);
+    const escalation = setTimeout(() => { failed = true; state.child.kill("SIGKILL"); }, stopMs);
     try { await state.done; } finally { clearTimeout(escalation); }
   };
   const status = async () => {
@@ -90,7 +90,7 @@ export async function supervise({
     if (host && !host.ended) {
       host.child.kill("SIGTERM");
       // The kernel owns the 10+5+20 s drain. Never stop delivery or claim a
-      // clean stop while it is still stopping agents. The runtime's 45 s limit
+      // clean stop while it is still stopping agents. The runtime's 50 s limit
       // remains the final failure boundary for an unresponsive kernel.
       await host.done;
     }
@@ -101,7 +101,9 @@ export async function supervise({
     if (host && !host.ended) { host.child.kill("SIGTERM"); await host.done; }
   } finally {
     stopping = true;
-    await Promise.all([finish(ssh), finish(broker)]);
+    // aw gives channel children five seconds to drain; let that finish before
+    // escalating the broker, while retaining sshd's shorter cleanup budget.
+    await Promise.all([finish(ssh), finish(broker, brokerStopMs)]);
     unlisten();
   }
   return failed ? 1 : 0;
