@@ -223,10 +223,10 @@ return 200 at their existing paths, including the human CSS route.
 Certificate chain and service-name checks stay on.
 Without `--ca-file`, Node's normal trust configuration applies.
 
-`--audit-path` declares one common path whose request tags every backend can
+`--audit-path` declares one common path whose request tags every owned backend can
 witness, such as `/ready` with health-only service logging. Before and after the
 negatives, separate matched-SNI/Host coverage controls call this path on every
-role/address and the human surface over HTTP/1.1 and HTTP/2. Coverage controls
+local role/address and the human surface over HTTP/1.1 and HTTP/2. Coverage controls
 require verified TLS, an ordinary 2xx–4xx response and their tags in the
 appropriate backend logs. A 404 on this extra control can demonstrate logging;
 it never replaces a valid 200 service or human control. Redirects are observed
@@ -255,16 +255,49 @@ The CLI requires `--policy <derived-policy.json>` and
 `--route-logs <runtime-audit.json>` and `--audit-path <common-path>` together;
 a partial signer-only call or missing audit path fails
 without an admission token. The latter file has exactly the policy's five role
-keys, each holding `{ "path": "/ready", "log": "/logs/aweb.log" }` for that
+keys. Local entries hold `{ "path": "/ready", "log": "/logs/aweb.log" }` for that
 role's harmless 200 endpoint and actual backend log. Use signer `/readyz` and
 registry `/health` where those are the supported routes; `--human-path` and
-`--human-log` still name the human surface. Begin capturing every backend before
+`--human-log` still name the human surface. Begin capturing every owned backend before
 the call. The policy supplies all origins and pinned addresses; it is not copied
 into a new operator schema. `--address` must be one pinned signer address for
 the final human control. If supplied, the compatible `--request-log` and
 `--request-path` must equal the signer's runtime-audit entry.
 
-Full mode tests each internal target SNI at each pinned address, over both protocols,
+Only the registry may instead use exactly
+`{ "path": "/health", "external": true }`, without a `log` key. The wrapper
+must declare ownership; the probe never infers an external route from a missing
+log. The four other roles always keep their local log witnesses. Every external
+registry address must be disjoint from `--address`, `frontAddress`, private
+ingress and denied addresses, and all local-role addresses. The five pinned
+policy targets and optional external source/model roles are unchanged.
+
+An external registry receives exactly one matched 200 control per pinned address
+and protocol, with certificate and service-name verification. Redirects fail and
+are never followed. It receives no common-path coverage, forbidden authorities,
+or unknown/absent-SNI probes, and supplies no backend log. This proves only its
+positive connectivity, not remote authority refusal or backend non-delivery.
+After all obligations pass, the CLI records
+`egress: registry external: positive control only; refusal not claimed` on stderr
+and the usual admission token on stdout. Retain both streams and the route-mode
+input with the result. An external declaration does not relax signer-SNI/human-
+Host refusal, the human 200 control, or any owned backend's log barriers.
+
+The deployment bundle owns `team.registryRoute: external | local`, with
+`external` as its default. Existing deployments with a registry Compose service
+must set `team.registryRoute: local`; external mode refuses that service or a
+deployment-owned registry destination. Local mode must refuse a registry URL
+that its registry service does not serve. These ownership checks belong in the
+wrapper before this probe runs; the image does not read Compose service
+ownership or add another operator schema. For example, a bundle serving its own
+registry explicitly declares:
+
+```yaml
+team:
+  registryRoute: local
+```
+
+Full mode tests each local target SNI at each pinned address, over both protocols,
 with matched controls and human-authority, wrong-port and suffix refusals.
 Unknown/absent SNI is tested per distinct address. Matched tags must reach their
 own backend log, including a final matched control after the negatives; no

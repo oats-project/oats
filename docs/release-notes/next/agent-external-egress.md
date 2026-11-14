@@ -7,7 +7,7 @@
   and connects to a validated IP without resolving it again.
 - External enforcement is exact SNI plus a public destination; it does not filter
   HTTP authorities, paths, methods or repositories, or prove non-delivery at a
-  public backend. The five pinned internal routes and their backend audit remain
+  public backend. The five pinned service routes and owned-backend audit remain
   separate. Runtime checks add verified-TLS external controls and refused-name
   logging. Claude launch settings suppress ancillary traffic, whose actual host
   requirements still need a real authorized start and turn.

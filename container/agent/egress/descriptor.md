@@ -8,6 +8,7 @@
 | `signer.requestOrigin` | derived policy `targets.signer.origin` | exact HTTPS DNS origin on 443; equals validated profile `request_origin` | none | Signed prepare and receipt access, conditional on runtime Host/SNI refusal proof. |
 | `signer.humanOrigin` | derived policy `humanOrigin` | exact HTTPS DNS origin; excluded from agent routes | none | Prevent the browser approval surface becoming an agent destination. |
 | `team.registryUrl` | derived policy `targets.registry.origin` | exact HTTPS DNS origin on 443; equals validated profile `registry_origin` | none | Sender verification in the broker's Node channel-core child and Go aw. |
+| `team.registryRoute` | runtime audit `registry` entry: `{path,log}` or `{path,external:true}` | wrapper-owned `local` or `external`; only registry may be external | external in the deployment bundle | Local ownership requires its backend witness; external uses matched verified-TLS 200 only, with no remote refusal/non-delivery claim. Existing local-registry bundles must select `local`. |
 | `signer.profileFile` | wrapper reads public `namespace_authorities` and `registry_origin` | validated existing ProtectedServiceProfile; agents require signer | none | Derive only its provisioned `_awid` TXT records using the existing AWID encoder/parser; no second namespace/controller input. |
 | `egress.privateIngressAddresses` | derived policy `privateIngressAddresses` | explicit approved IPv4 ingress addresses; no CIDR or wildcard | empty | Permit private TLS ingress only where declared. Reserved/metadata/loopback and protected-backend denials still take precedence. |
 | derived upstream inventory | policy `targets.<role>.addresses` | 1–8 pinned IPv4 addresses per role, resolved/checked before launch | none | No runtime DNS rebinding or general outbound proxy. |
@@ -30,4 +31,4 @@
 Image: `container/agent/egress/Dockerfile`, one built digest; fixed uid/gid 10001:10001, no credential or operator allowlist baked in.
 Port: UDP/TCP 53 and TCP 443, component DNS/service name `egress`.
 Health: `node /opt/egress/health.mjs`; exact approved DNS answer, unknown-name NXDOMAIN and live TLS listener; readiness only, not boundary proof.
-Depends on: validated shared deployment config and signer profile; pinned ingress inventory; an enforcing network boundary and TLS ingress rejecting SNI/Host/:authority disagreement before routing; no PostgreSQL, Redis or custody mount.
+Depends on: validated shared deployment config and signer profile; pinned ingress inventory; an enforcing network boundary and owned TLS ingress rejecting SNI/Host/:authority disagreement before routing; no PostgreSQL, Redis or custody mount.
