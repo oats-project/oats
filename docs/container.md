@@ -811,6 +811,15 @@ proof before launching agents. An internal bridge, a NetworkPolicy object or a
 healthy proxy alone does not prove the boundary. The [service descriptor](../container/agent/egress/descriptor.md)
 supplies the wrapper mapping without a separate operator schema.
 
+The ingress probe keeps backend non-delivery witnesses for owned routes. A
+wrapper may explicitly mark only the registry as external for verified-TLS 200
+controls, without third-party refusal or backend-log claims. The signer and
+human-surface controls remain required. Deployment bundles default
+`team.registryRoute` to `external`; existing bundles serving a local registry
+must select `local` and refuse a URL their service does not serve. See the
+[route-mode contract](../container/agent/egress/README.md#ingress-admission-probe)
+for the exact probe inputs and ownership checks.
+
 For Kubernetes, liveness runs `node /usr/local/lib/agent-liveness.mjs` to check
 the supervisor process. SSH on port 2222 is readiness: losing SSH must not
 restart the whole team while its agents and broker are still running. The

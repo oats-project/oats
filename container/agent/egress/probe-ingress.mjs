@@ -1,5 +1,5 @@
-/** One runtime ingress proof for both deployment wrappers. Backend access-log
- * controls prevent a backend-generated rejection from certifying non-delivery. */
+/** One runtime ingress proof for both deployment wrappers. Owned access-log
+ * controls prove non-delivery; an external registry gets positive controls only. */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
@@ -90,10 +90,16 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
     assert.deepEqual(Object.keys(routeLogs).sort(),Object.keys(policy.targets).sort(),"per-route audit inputs must name exactly the policy roles");
     routes=Object.entries(policy.targets).map(([role,target])=>{
       const audit=routeLogs[role];
-      assert.ok(audit && typeof audit === "object" && !Array.isArray(audit)
-        && Object.keys(audit).sort().join(",")==="log,path" && typeof audit.log === "string" && audit.log.length>0,"per-route audit input is invalid");
-      return {role,origin:target.origin,host:originHost(target.origin),addresses:target.addresses,path:audit.path,log:audit.log};
+      assert.ok(audit && typeof audit === "object" && !Array.isArray(audit),"per-route audit input is invalid");
+      const keys=Object.keys(audit).sort().join(",");
+      const external=role==="registry" && keys==="external,path" && audit.external===true;
+      assert.ok(external || (keys==="log,path" && typeof audit.log==="string" && audit.log.length>0),"per-route audit input is invalid");
+      return {role,origin:target.origin,host:originHost(target.origin),addresses:target.addresses,path:audit.path,log:audit.log,external};
     });
+    const ownedAddresses=new Set([address,policy.frontAddress,...policy.privateIngressAddresses,...policy.deniedAddresses,
+      ...routes.filter(route=>!route.external).flatMap(route=>route.addresses)]);
+    for(const route of routes.filter(route=>route.external))
+      assert.ok(route.addresses.every(value=>!ownedAddresses.has(value)),"external registry overlaps deployment addresses");
     const signer=routes.find(route=>route.role==="signer");
     if(requestLog !== undefined)assert.equal(requestLog,signer.log,"signer backend log differs from per-route audit input");
     if(requestPath !== undefined)assert.equal(requestPath,signer.path,"signer control path differs from per-route audit input");
@@ -103,12 +109,13 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
       && !/[\\\u0000-\u0020\u007f#]/.test(controlPath), "ingress probe path is invalid");
     assert.equal(new URL(controlPath,requestOrigin).origin,new URL(requestOrigin).origin,"ingress probe path is invalid");
   }
-  const logs=[...new Set([humanLog,...routes.map(route=>route.log)])];
+  const localRoutes=routes.filter(route=>!route.external);
+  const logs=[...new Set([humanLog,...localRoutes.map(route=>route.log)])];
   for(const log of logs)backendLog(log);
   const matched=[],forbidden=[];
   const send=async(protocol,route,targetAddress,sni,authority,kind)=>{
     const id="oats-egress-"+randomUUID();
-    if(kind==="forbidden")forbidden.push(id);else matched.push({id,log:kind==="human"||kind==="human-coverage"?humanLog:route.log});
+    if(kind==="forbidden")forbidden.push(id);else if(!route.external)matched.push({id,log:kind==="human"||kind==="human-coverage"?humanLog:route.log});
     const coverage=kind==="coverage"||kind==="human-coverage";
     const controlPath=kind==="forbidden"||coverage?auditPath:kind==="human"?humanPath:route.path;
     const url=new URL(controlPath,route.origin);url.searchParams.set("oats_egress_probe",id);
@@ -133,12 +140,13 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
   for(const protocol of ["h1","h2"]) {
     // Coverage controls establish logging at every backend for the same path
     // used by negatives. Their 4xx responses never replace readiness controls.
-    for(const route of routes)for(const targetAddress of route.addresses)
+    for(const route of localRoutes)for(const targetAddress of route.addresses)
       await send(protocol,route,targetAddress,route.host,route.host,"coverage");
     await send(protocol,routes.find(route=>route.role==="signer"),address,humanHost,humanHost,"human-coverage");
     const unknownChecked=new Set();
     for(const route of routes)for(const targetAddress of route.addresses) {
       await send(protocol,route,targetAddress,route.host,route.host,"matched");
+      if(route.external)continue;
       for(const authority of [humanHost,humanHost+":443",route.host+":444",route.host+".unlisted.invalid"])
         await send(protocol,route,targetAddress,route.host,authority,"forbidden");
       if(!unknownChecked.has(targetAddress)) {
@@ -147,9 +155,9 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
       }
     }
     // Each backend needs a later matched record to flush preceding deliveries.
-    for(const route of routes)for(const targetAddress of route.addresses)
+    for(const route of localRoutes)for(const targetAddress of route.addresses)
       await send(protocol,route,targetAddress,route.host,route.host,"matched");
-    for(const route of routes)for(const targetAddress of route.addresses)
+    for(const route of localRoutes)for(const targetAddress of route.addresses)
       await send(protocol,route,targetAddress,route.host,route.host,"coverage");
     await send(protocol,routes.find(route=>route.role==="signer"),address,humanHost,humanHost,"human-coverage");
     await send(protocol,routes.find(route=>route.role==="signer"),address,humanHost,humanHost,"human");
@@ -183,6 +191,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if(options.routeLogsFile)options.routeLogs=readJson(options.routeLogsFile,128*1024);
     if (options.caFile) {assert.ok(statSync(options.caFile).size<=65536,"public CA input is too large");options.ca = [...rootCertificates,readFileSync(options.caFile)];}
     await probeIngress(options);
+    if(options.routeLogs.registry.external===true)process.stderr.write("egress: registry external: positive control only; refusal not claimed\n");
     process.stdout.write("OATS_EGRESS_INGRESS_PASS\n");
   } catch {
     process.stderr.write("egress: ingress authority or backend non-delivery proof failed (values withheld)\n");

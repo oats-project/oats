@@ -18,9 +18,9 @@
 
 - Runtime acceptance proves the agent's own on-link gateway denial with live
   controls and a plain-versus-isolated bridge regression. The ingress probe checks
-  every policy route over HTTP/1.1 and HTTP/2, with required full-policy inputs,
-  valid 200 service controls, separate common-path log coverage before/after
-  negatives, and non-delivery for forbidden human authorities;
+  every policy route over HTTP/1.1 and HTTP/2, with required full-policy inputs
+  and valid 200 service controls. Owned routes require separate common-path log
+  coverage before/after negatives and non-delivery for forbidden human authorities;
   known-name refusals require completed TLS. Partial signer-only CLI calls cannot
   emit the admission token.
   Both checks must pass before agents launch. Readiness and rendered policy alone do not establish

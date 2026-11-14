@@ -604,6 +604,101 @@ test("the shared ingress probe proves both protocol refusals before backend deli
   assert.equal(humanLines.filter(line=>line.startsWith("/handoff-assets/handoff.css?")).length,2,"valid human200 controls keep their CSS path");
   assert.equal(humanLines.filter(line=>line.startsWith("/ready?")).length,4,"separate human log-coverage controls use the common audit path");
   for(const [role,route] of Object.entries(routeLogs))assert.equal((readFileSync(route.log,"utf8").slice(before[role]).match(/oats_egress_probe=/g)||[]).length,8,role+" needs H1/H2 service controls and initial/final audit coverage");
+  const externalPolicy=structuredClone(policy);
+  externalPolicy.targets.registry.addresses=["8.8.8.8","9.9.9.9"];
+  const externalRouteLogs={...routeLogs,registry:{path:"/health",external:true}};
+  const externalCalls=[];
+  const externalFull={...full,policy:externalPolicy,routeLogs:externalRouteLogs,exchange:args=>{
+    if(externalPolicy.targets.registry.addresses.includes(args.address))externalCalls.push(args);
+    return full.exchange(args);
+  }};
+  const externalLogBefore=readFileSync(serviceRoutes["registry.example.invalid"].log,"utf8").length;
+  assert.equal(await probeIngress(externalFull),true);
+  assert.equal(externalCalls.length,4,"each external pin needs exactly one matched control over H1/H2");
+  for(const args of externalCalls){
+    assert.equal(args.sni,"registry.example.invalid");
+    assert.equal(args.authority,args.sni,"external registries receive no forbidden authorities");
+    assert.ok(args.path.startsWith("/health?"),"external registries receive no audit-path probes");
+  }
+  assert.equal((readFileSync(serviceRoutes["registry.example.invalid"].log,"utf8").slice(externalLogBefore).match(/oats_egress_probe=/g)||[]).length,4);
+  const ownedRegistryPolicy=structuredClone(externalPolicy);
+  ownedRegistryPolicy.targets.registry.addresses=[policy.targets.aweb.addresses[0]];
+  await assert.rejects(()=>probeIngress({...externalFull,policy:ownedRegistryPolicy}),/external registry/,
+    "an owned ingress cannot lose its backend audit by being declared external");
+  const publicFront=structuredClone(externalPolicy);
+  publicFront.frontAddress="8.8.8.8";
+  publicFront.targets.registry.addresses=[publicFront.frontAddress];
+  assert.ok(!publicFront.privateIngressAddresses.includes(publicFront.frontAddress));
+  await assert.rejects(()=>probeIngress({...externalFull,policy:publicFront}),/external registry/,
+    "a public front address is owned even without a private-ingress exception");
+  for(const role of ["aweb","secrets","logs","signer"])
+    await assert.rejects(()=>probeIngress({...externalFull,routeLogs:{...externalRouteLogs,[role]:{path:routeLogs[role].path,external:true}}}),/per-route audit input/);
+  for(const registry of [
+    {path:"/health",external:false},{path:"/health",external:"true"},
+    {path:"/health",external:true,log:routeLogs.registry.log},{path:"/health",external:true,extra:true},
+  ])await assert.rejects(()=>probeIngress({...externalFull,routeLogs:{...externalRouteLogs,registry}}),/per-route audit input/);
+  for(const owned of [policy.frontAddress,"10.20.0.30"]){
+    const mixed=structuredClone(externalPolicy);
+    mixed.privateIngressAddresses.push(owned);
+    mixed.targets.registry.addresses.push(owned);
+    await assert.rejects(()=>probeIngress({...externalFull,policy:mixed}),/external registry/);
+  }
+  await assert.rejects(()=>probeIngress({...externalFull,exchange:args=>externalPolicy.targets.registry.addresses.includes(args.address)
+    ?statusOf({...args,address:"127.0.0.1",port:options.port,ca:[]}):full.exchange(args)}),
+    error=>error.code==="DEPTH_ZERO_SELF_SIGNED_CERT","external positives still verify TLS");
+  for(const status of [302,421,503])await assert.rejects(()=>probeIngress({...externalFull,exchange:args=>externalPolicy.targets.registry.addresses.includes(args.address)
+    ?Promise.resolve(status):full.exchange(args)}),/matched ingress control did not succeed/);
+  await assert.rejects(()=>probeIngress({...externalFull,exchange:args=>externalPolicy.targets.registry.addresses.includes(args.address)
+    ?Promise.reject(Object.assign(new Error("remote TLS refused"),{code:"ECONNRESET",tlsEstablished:true,beforeHttpResponse:true})):full.exchange(args)}),
+    error=>error.code==="ECONNRESET","an external positive cannot become a refusal PASS");
+  misrouteSecrets=true;
+  await assert.rejects(()=>probeIngress(externalFull),/forbidden probe reached a backend/,"external registry mode keeps owned Secrets non-delivery proof");
+  assert.equal(secretsMisdeliveries,4);
+  secretsMisdeliveries=0;misrouteSecrets=false;
+  // Redirect only the OS TLS destination in the child; the packaged CLI still
+  // validates its own JSON, protocols, certificates, authorities and backend logs.
+  const preload=join(dir,"cli-tls-route.mjs"),traceFile=join(dir,"cli-tls-trace.jsonl");
+  writeFileSync(traceFile,"");
+  writeFileSync(preload,`import tls from "node:tls"; import {syncBuiltinESMExports} from "node:module"; import {appendFileSync} from "node:fs";
+    const connect=tls.connect; tls.connect=options=>{
+      appendFileSync(${JSON.stringify(traceFile)},JSON.stringify({host:options.host,sni:options.servername,alpn:options.ALPNProtocols})+"\\n");
+      return connect({...options,host:"127.0.0.1",port:${options.port}});
+    }; syncBuiltinESMExports();`);
+  const policyFile=join(dir,"cli-policy.json"),routeFile=join(dir,"cli-routes.json");
+  writeFileSync(policyFile,JSON.stringify(externalPolicy));
+  writeFileSync(routeFile,JSON.stringify(externalRouteLogs));
+  const {fileURLToPath}=await import("node:url");
+  const cli=()=>new Promise((resolve,reject)=>{
+    const child=spawn(process.execPath,["--import",preload,fileURLToPath(moduleUrl),
+      "--address",full.address,"--request-origin",options.requestOrigin,"--human-origin",options.humanOrigin,
+      "--human-log",humanLog,"--human-path",options.humanPath,"--audit-path",options.auditPath,
+      "--policy",policyFile,"--route-logs",routeFile,"--ca-file",join(dir,"cert.pem")],{stdio:["ignore","pipe","pipe"]});
+    let stdout="",stderr="";
+    const timer=setTimeout(()=>{child.kill("SIGKILL");reject(new Error("packaged ingress CLI timed out"));},10000);
+    child.stdout.on("data",data=>{stdout+=data});child.stderr.on("data",data=>{stderr+=data});
+    child.once("error",error=>{clearTimeout(timer);reject(error)});
+    child.once("close",code=>{clearTimeout(timer);resolve({code,stdout,stderr})});
+  });
+  const qualified=await cli();
+  assert.equal(qualified.code,0,qualified.stderr);
+  assert.equal(qualified.stdout,"OATS_EGRESS_INGRESS_PASS\n");
+  assert.match(qualified.stderr,/registry external: positive control only; refusal not claimed/);
+  const remoteTrace=readFileSync(traceFile,"utf8").trim().split("\n").map(line=>JSON.parse(line))
+    .filter(call=>externalPolicy.targets.registry.addresses.includes(call.host));
+  assert.equal(remoteTrace.length,4,"packaged CLI sends only one external positive per pin/protocol");
+  for(const call of remoteTrace)assert.equal(call.sni,"registry.example.invalid");
+  assert.deepEqual(remoteTrace.map(call=>[call.host,call.alpn[0]]).sort(),[
+    ["8.8.8.8","h2"],["8.8.8.8","http/1.1"],["9.9.9.9","h2"],["9.9.9.9","http/1.1"],
+  ]);
+  writeFileSync(policyFile,JSON.stringify(ownedRegistryPolicy));
+  const misdeclared=await cli();
+  assert.equal(misdeclared.code,1);assert.doesNotMatch(misdeclared.stdout,/OATS_EGRESS_INGRESS_PASS/);
+  writeFileSync(policyFile,JSON.stringify(externalPolicy));
+  misrouteSecrets=true;
+  const weakOwned=await cli();
+  assert.equal(weakOwned.code,1);assert.doesNotMatch(weakOwned.stdout,/OATS_EGRESS_INGRESS_PASS/);
+  assert.equal(secretsMisdeliveries,4);
+  secretsMisdeliveries=0;misrouteSecrets=false;
   misrouteSecrets=true;
   await assert.rejects(()=>probeIngress(full),/forbidden probe reached a backend/,
     "health-only Secrets logging must expose a delivered human-authority request even when its backend returns421");
