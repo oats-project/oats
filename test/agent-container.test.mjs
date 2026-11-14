@@ -495,6 +495,25 @@ test("the production broker grace permits a five-second delivery drain after hos
   assert.ok(events.includes("broker ended"), "the five-second drain must finish");
 });
 
+test("production cleanup escalates stubborn children within their separate budgets", {timeout: 10000}, async t => {
+  const fx = await supervisorFixture(t, {stubbornFinish: true, productionStopBudgets: true});
+  await fx.until(() => ["broker", "ssh", "host"].every(role => fx.text().includes(role + " listening")));
+  // Observe real child exits, with slack for host drain and scheduler overhead.
+  // Deadlines also bound a mutant production default that would otherwise hang.
+  const exited = (role, limit) => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(role + " exceeded its production cleanup budget")), limit);
+    fx.children.get(role).once("exit", (_code, signal) => {
+      clearTimeout(timer);
+      try { assert.equal(signal, "SIGKILL", role + " must escalate"); resolve(); }
+      catch (error) { reject(error); }
+    });
+  });
+  const ssh = exited("ssh", 4500), broker = exited("broker", 7500);
+  fx.term();
+  await Promise.all([ssh, broker]);
+  assert.equal(await fx.running, 1, "escalating stubborn children fails the stop");
+});
+
 test("TERM during broker readiness starts neither SSH nor host run", async (t) => {
   const fx = await supervisorFixture(t, { ready: false });
   // A status child can start before the independently scheduled broker.
