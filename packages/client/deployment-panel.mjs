@@ -133,6 +133,8 @@ export function panelInstance(i) {
     // Needs input (PR K): the validated claim (or null, unknown) as status reported it; absent stays absent.
     // The client's liveness is merged before projection, so running/runtimeState beside it are the probe's.
     ...(i.waitingOnYou !== undefined ? { waitingOnYou: i.waitingOnYou } : {}),
+    // The owning human (feature spawn-attribution): the label deployment-data.mjs validated, or null; absent stays absent.
+    ...(i.attributedHuman !== undefined ? { attributedHuman: i.attributedHuman } : {}),
     // Feature instance-color: the row's colour as instanceColor reads it, present only when it is one.
     ...(instanceColor(i) !== null ? { color: instanceColor(i) } : {}),
     // Feature instance-background (#1579): exactly true, else absent (instance-tree.mjs backgroundPlacement).
