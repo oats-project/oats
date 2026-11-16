@@ -104,6 +104,13 @@ test('panel: no attributed human (null or absent) shows no field, no empty secti
   assert.equal(u.row('parentInstance').hidden, false);
 });
 
+test('panel: a label that reads like the panel\'s own placeholder is still a human', t => {
+  const u = panel(t); u.select(instance({ attributedHuman: 'Not reported' }));
+  assert.equal(u.row('attributedHuman').hidden, false);
+  assert.equal(u.row('attributedHuman').querySelector('dd').textContent, 'Not reported');
+  assert.equal(u.row('attributedHuman').closest('.context-panel-section').hidden, false);
+});
+
 test('panel: moving from an attributed instance to one without clears the field', t => {
   const u = panel(t);
   u.select(instance({ attributedHuman: 'Ada Example' }));

@@ -660,8 +660,11 @@ export function createContextPanel({
       if (id === 'createdAt') el.title = value === 'Not reported' ? '' : value;
       else if (id === 'startedAt') el.title = value === 'Not reported' ? '' : [value, reported(instance.createdAt) !== 'Not reported' ? `created ${instance.createdAt}` : null].filter(Boolean).join(' · ');
       else if (el.closest('.context-panel-path')) el.closest('.context-panel-path').title = value === 'Not reported' ? '' : value;
-      el.toggleAttribute('data-unreported', value === 'Not reported');
-      const row = rows.get(id); if (row) row.hidden = value === 'Not reported';
+      // The owning human is a label (attributed-human.mjs validated it), so its presence is the value's, never its
+      // text: a label that reads "Not reported" is still a human.
+      const unreported = id === 'attributedHuman' ? !(typeof instance.attributedHuman === 'string' && instance.attributedHuman) : value === 'Not reported';
+      el.toggleAttribute('data-unreported', unreported);
+      const row = rows.get(id); if (row) row.hidden = unreported;
       else if (['model', 'modelFrom'].includes(id)) el.hidden = value === 'Not reported';
       if (id === 'identity' || id === 'instance') el.title = value === 'Not reported' ? '' : value;
       if (id === 'model' || id === 'modelFrom') modelLine.title = [fields.get('model')?.textContent, fields.get('modelFrom')?.textContent].filter(t => t && t !== 'Not reported').join(' · ');
