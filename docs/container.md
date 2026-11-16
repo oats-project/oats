@@ -439,6 +439,18 @@ The resolver input requires public IPv4 DNS and proxy UDP/TCP 53 access to it;
 a cluster that mandates a private DNS resolver is not supported by this input.
 The existing five-service ingress audit remains a separate admission gate.
 
+### A knowledge credential
+
+Agents that propose knowledge with `oats.okf` need a GitHub credential of
+their own, never the maintainer's: whatever it may do, every agent in the
+container may do. Give them an identity with the write role only on the
+knowledge repository, its token in a file named by
+`settings.oats.okf.github-token-file`, and keep the identity that merges to
+the accepted branch outside the container. oats.okf's
+[Bringing up a deployment's knowledge store](https://github.com/oats-project/oats-okf/blob/v6.2.0/README.md#bringing-up-a-deployments-knowledge-store)
+(oats.okf 6.2 and later) has each step; run its
+`oats okf setup --check` in the container to check them.
+
 ### After changing a credential
 
 A resume starts an agent under the values its last start recorded. When the
