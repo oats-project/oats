@@ -46,10 +46,13 @@ node, not a soul.
    machine's setup expert when it isn't yours); the brief names it as who to
    talk to first.
 6. **Maintainers.** A maintainer soul exists where a lane's landing rules
-   need a maintainer's read or reserve its merges; no maintainer instance is
-   started at setup. A lead starts one for the person who owns that lane when
-   first needed, without asking, and tells them what it is
-   (`/set-landing-rules`).
+   ask for its maintainer's green light or reserve its merges, or releases
+   need one; no maintainer instance is started at setup. There is no lane map:
+   the landing rules list the lanes and their owners, and a lane's maintainer
+   is found by its instance name, `<person>-<lane>-maintainer`, so give each
+   lane and each person a short name that fits in one. A lead starts one for
+   the person who owns that lane when first needed, without asking, and tells
+   them what it is (`/set-landing-rules`).
 7. **Reviewers.** A reviewer soul, fresh each round and launched by the
    change's author (a developer, or a lead for its own spec), whose `launch:`
    names a model this organisation can launch, from a family different from

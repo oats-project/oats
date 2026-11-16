@@ -102,8 +102,9 @@ your recommendation.
      and when a lead starts a maintainer.
    - **Give the landing rules and the ownership record one home:** one small
      capability of the workspace's own that every coordinating soul composes.
-     Write each rule's reason beside it. A lane map, where the workspace keeps
-     one, names who is active in each lane and points to that capability.
+     Write each rule's reason beside it. They list the lanes and their owners;
+     there is no lane map, and a lane's maintainer is found by its instance
+     name, `<person>-<lane>-maintainer`.
    - **Run-and-test:** where a repository's owners agreed to carry the
      instructions, propose them as a PR to that repository, by its rules;
      otherwise add a run-and-test skill to the workspace's developer
