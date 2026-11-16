@@ -28,7 +28,7 @@ leaves preview. The readers it shares with the Desktop (`packages/client/`) belo
 
 **Your own worktrees.** Your work-mode briefing's extra worktrees, named for the surface
 (`.work-kernel`, `.work-desktop`, `.work-docs`), are for reading, for verifying a
-developer's branch (`/verify-developer-work`), for a probe's scratch work, and for a spec
+developer's branch (`/coordinate-developers`), for a probe's scratch work, and for a spec
 you build yourself (`/plan-and-spec`, "Who builds it"), from the remote's default branch.
 Who builds each spec is yours to decide: a large feature, more than one surface or
 sustained building and testing, always goes to developers (`/coordinate-developers`).

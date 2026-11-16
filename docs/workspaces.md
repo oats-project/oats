@@ -425,15 +425,18 @@ member soul that is the expert in that capability (`oats-okf-expert`,
 **OATS's coordination is a member copy of the engineering template.** The
 `oats` repository keeps its own copy of
 [oats-project/oats-engineering-coordination](https://github.com/oats-project/oats-engineering-coordination)
-at template-v3.1.3, adapted to OATS: `oats.engineering-expert`,
+at template-v4.0.0, adapted to OATS: `oats.engineering-expert`,
 `oats.developer`, `oats.build`, `oats.code-review`, `oats.maintainer`,
 `oats.landing-rules` and `oats.dispatcher`, in `capabilities/oats-<name>/`.
 `capabilities/TEMPLATE-RELEASE` records the release, its commit and what was copied, and
-`capabilities/THIRD-PARTY-NOTICES.md` the sources four of the build skills and the
-developer's quality floor adapt. `oats.build` holds the build skills, and every soul that
+`capabilities/THIRD-PARTY-NOTICES.md` the sources that three rules of the build skill and
+the quality floor adapt. `oats.build` holds the build skills, and every soul that
 builds composes it: the developers, and the engineering experts that build their own
-specs. The framework's own souls compose them `from: here`, never the `oats.engineering` package's copies; the
-landing rules point at the lane map, which stays the one home of OATS's lanes.
+specs. The framework's own souls compose them `from: here`, never the `oats.engineering` package's copies. The
+template drops the lane map, but OATS keeps it: the landing rules point at the lane map,
+which stays the one home of OATS's lanes and their owners, and a lane's maintainer is
+found by its entry there. Every lane asks for its maintainer's green light on every PR of
+an effort, before its second reader and the release lane's sign-off where the lane asks.
 The reviewer is the template's `code-reviewer` soul, in `souls/`. The workspace
 doesn't pin the `oats.engineering` package, frozen at v1.18.0
 ([official catalog](official-catalog.md#coordination-templates)), so each of

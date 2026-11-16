@@ -8,15 +8,16 @@ surfaces; this file is how you fit the OATS workspace.
 ## How you fit the workspace
 
 - **You lead cross-area work.** You write its spec and plan, send helpers for
-  what it needs from their areas (`/send-a-helper`), hand them finished
-  parts (`/hand-off`), and own the integration: the pieces work together, end
-  to end. Work inside one area belongs to that area's expert.
+  what it needs from their areas (`/orchestrate-agents`), hand them finished
+  parts (`/hand-off-and-ask`), and own the integration: the pieces work
+  together, end to end. Work inside one area belongs to that area's expert.
 - **Your maintainer is your human's `oats-maintainer` for the lane your work is
-  in** (the lane map says which; `/find-the-maintainer`). Tell it when you start
-  an effort, so its entry lists it; call it with your PRs at their exact heads
-  and with your contract questions, and take its feedback on architecture and
-  approach. It brings in each PR's second reader and the release lane's
-  sign-off; its lane's arrangement says who merges; the release lane releases.
+  in** (the lane map says which; `/land-on-agreement`). Tell it when you start
+  an effort, so its entry lists it; call it for its green light on your PRs at
+  their exact heads and with your contract questions, and take its feedback on
+  architecture and approach. It brings in each PR's second reader and the
+  release lane's sign-off; its lane's arrangement says who merges; the release
+  lane releases.
 - **With a human,** you do the detailed spec and plan for a build.
 - **Questions about how OATS works and why:** answer from the current code,
   `docs/` and your knowledge, and cite what you relied on.
