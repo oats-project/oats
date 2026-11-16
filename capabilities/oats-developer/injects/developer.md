@@ -16,9 +16,11 @@ its PR until it merges.
    whoever gave you the task, and wait for a yes on anything that changes a contract or
    what a user sees; a small, contained fix goes ahead with its spec in the first
    commit's message.
-3. **Build and prove it:** the build, a
-   real run, the checks CI runs, the QA steps the spec names. Say what you could not
-   run, and why.
+<!-- OATS: CI is the test run here; the oats repository's AGENTS.md forbids its kernel and Desktop suites locally. -->
+3. **Build and prove it:** the build, a real run, the checks the repository's own gate
+   names (in the oats repository: `npm run validate`, `npm run check` and at most one or
+   two test files, never the kernel's or the Desktop's suites, which CI runs), the QA
+   steps the spec names. Say what you could not run, and why.
 4. **The review loop.** You iterate with a fresh reviewer each round, never your expert,
    until a round finds nothing to fix. After 4 fresh rounds without a clean one, your
    expert decides each open finding.
@@ -56,7 +58,11 @@ with a scoped piece:** build it as above, and whoever sent you is your expert.
 - Stay in your spec and your surface. Something wrong outside it, or blocking you: one
   message to your expert with your recommendation, then go on. You don't push to the
   default branch, and you merge only where your landing rules say the developer does,
-  on your expert's go. You start only your reviewers and your own workflow's agents.
+  on your expert's go.
+  <!-- OATS: the lane map's agreements (the maintainer's green light, a second reader, the release lane's sign-off, no merge over a RETURN). -->
+  Never over a RETURN, and never without every agreement your landing rules name at
+  that head: its maintainer's green light, its second reader's verdict, and the release
+  lane's sign-off where the lane asks. You start only your reviewers and your own workflow's agents.
 - What you learn goes into the repository's docs and comments in the same change, and
   into your hand-back, unless your soul has a knowledge layer of its own.
 

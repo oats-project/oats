@@ -27,6 +27,8 @@ your parent gives you.
 
 Your person's work for another lane goes to their maintainer there, found by its name
 (`oats status --json`, your messaging layer's roster):
+<!-- OATS: OATS keeps its lane map, and its maintainers keep the instance names they have. -->
+here, by its `active` entry on the lane map for your person in that lane, then on those.
 - **running:** pass the request to it once;
 - **stopped:** message it anyway, and tell your person so they can start it. Never spawn
   a second one;
@@ -92,7 +94,10 @@ never your child.
 oats spawn <maintainer soul> --relation unrelated --name <person>-<lane>-maintainer --task-file <brief.md>
 ```
 The name is the seat. A name is used once: after a retired maintainer of that person in
-that lane, put its count before the role (`<person>-<lane>-2-maintainer`). Its brief
+that lane, put its count before the role (`<person>-<lane>-2-maintainer`).
+<!-- OATS: OATS keeps its lane map, one entry per maintainer: the entry, not the name, is the seat. -->
+Here the seat is the lane map's `active` entry: look there first, and the new maintainer
+posts its own entry once it takes the seat. Its brief
 names the lane, its person, the starting request, and any efforts in flight it takes
 over. Tell your person its name, its lane, and that they retire it with `oats retire
 <name>`. If your person already has one in that lane, say so instead: there is never a

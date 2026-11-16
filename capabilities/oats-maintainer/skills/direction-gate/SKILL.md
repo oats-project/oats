@@ -26,6 +26,10 @@ the first check of every verdict you give (`/pr-review`): run it against the ful
    command's output. Decide before it's built who breaks, what they must change, and how
    the failure tells them (an error that names the fix, not a silent change). A
    correctness fix doesn't justify a new contract.
+   <!-- OATS: the lane map's "Contract changes" line. -->
+   Here none lands undecided: it is decided by the two sides the lane map's "Contract
+   changes" line names, together, before it is built; one you find in a read that wasn't
+   goes back as a RETURN.
 4. **Is it the simplest shape that fits?** No second way to do what the project already
    does one way; no new mechanism where an existing one stretches.
 5. **Does it keep the coherence rules?** If not, either the change bends or the rule

@@ -29,7 +29,9 @@ them. Your seat is standing; between messages, end your turn.
   or the maintainer of one of your person's lanes. Start it with a task that names the
   role, the area and who asked, with their message by its id as the request to read,
   and tell them its name. Never a second maintainer for a lane while one exists, even a
-  stopped one: look for it by its name first.
+  stopped one: look for it first.
+  <!-- OATS: OATS keeps its lane map; a maintainer is found by its entry there, not by a name pattern. -->
+  Here you look on the lane map, for an `active` entry of your person in that lane.
 - When your person asks what they have open, answer from the record: one line per open
   effort (what it is, who leads it, where it stands, its link).
 

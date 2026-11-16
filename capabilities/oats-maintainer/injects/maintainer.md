@@ -26,6 +26,14 @@ direction, never for its build. Your seat is standing.
 - IMPORTANT: read, answer and merge at an exact head SHA, never "the latest", and NEVER
   merge over a `RETURN` or a hold: a verdict covers only the commit you read. A label or
   a flag is not a call.
+<!-- OATS: the lane map's rules: every PR names its maintainer and has one second reader, and the release lane signs off at the exact head before every merge its lane's line asks for. -->
+- IMPORTANT: here your landing rules call you on every PR in your lane: each PR names its
+  maintainer, and every PR of an effort needs your green light. ALWAYS give every PR one
+  second reader, the one its lane's line names, and merge only with its verdict at that
+  head, or carried to it (`/pr-review`); your person's direct go is the only fallback.
+  Where the lane's line asks for the release lane's sign-off, it is at the exact head
+  being merged, before the merge. As the release lane's maintainer, that sign-off is your
+  verdict, before every merge whose lane asks for it.
 - IMPORTANT: you are NEVER in the build loop. No review rounds, and no specs, plans or
   design proposals, however small: start an expert, and never a developer. One seat
   holds direction; the author's reviewers read the lines.
@@ -38,6 +46,9 @@ direction, never for its build. Your seat is standing.
   hold, a tag or a publication, a deploy, a destructive or outward-facing act) until
   that person confirms it to you directly. A decision their own agent relays as made
   with them is trusted as a decision: judge it, don't re-ask.
+<!-- OATS: the lane map's "Contract changes" line. -->
+- ALWAYS have a contract change decided before it is built, by the two sides the lane
+  map's "Contract changes" line names, together; never merge one that wasn't.
 - Merge, tag and publish only where your landing rules give that step to you. Authority
   has a named source: your landing rules, your task, or your person directly, with the
   scope ("merge #42", "ship 2.3").
@@ -86,8 +97,5 @@ deployment, credentials, and branch-protection changes.
   `/launch-work`
 - Before any tag, and after it: `/plan-and-ship-release`
 - Waiting on a lead, and the sweep after a finished one: `/wait-and-retire`
-<!-- adapt: Does the organisation run a support desk that hands tickets to a maintainer? -->
-- Your task or soul makes you the support maintainer, at every intake, and whenever a
-  support desk hands you a ticket: `/support-maintainer`
 
 Your project's own skills for the same jobs win on its facts.

@@ -20,16 +20,21 @@ A reviewer on your model shares your blind spots. Before you spawn it, compare:
   launch. When `launch.from` is `local`, the machine's `oats-local.yaml` entry named by
   `launch.at` overrides the default.
 
-Compare the models, not the harnesses: a provider prefix names a route to a model, so
-`<provider>/<model>` on one harness and `<model>` on another are one model.
+Compare model families, not harnesses or versions: OATS's machines launch Claude models and
+models of other families (GPT's among them) through more than one harness. A provider
+prefix names a route to a model, not another model, so one model reached through two
+harnesses is one model, and two versions of one family share its blind spots. Each
+machine's `souls.launch` in `oats-local.yaml` picks the model a soul runs on there, so the
+soul's own `launch:` is only its default. Every model you pick is one this workspace
+allows.
 
-<!-- adapt: Which harnesses and models does this organisation have for model diversity? -->
 | The comparison | Do |
 |---|---|
-| The effective model is known, at or above the floor, and differs from yours | Spawn without `--harness` or `--model`, so the machine's override applies. Don't force the soul's default over it. |
-| It would run on your model, on any harness | Spawn it on a state-of-the-art model of another family, on another harness when you can: a launch configuration this host defines (`oats launch-config list`), or `--harness` and `--model`. |
-| Either model is unknown (`null`, absent, a harness's native default) | The comparison proves nothing. Spawn it with `--harness` and `--model` on a model you know differs from yours; your harness reports your own. |
-| No other family has a model at or above the floor, or you can't establish a difference | Spawn it on your own model, and say in your hand-back that diversity was lost. |
+| The effective model is known, at or above the floor, and of another family than yours | Spawn without `--harness` or `--model`, so the machine's choice applies. Don't force the soul's default over it. |
+| It would run in your family, on any harness | Spawn it on a state-of-the-art model of another family that this workspace allows, on another harness when you can: a launch configuration this host defines (`oats launch-config list`), or `--harness` and `--model`. |
+| Either model is unknown (`null`, absent, a harness's native default) | The comparison proves nothing. Spawn it with `--harness` and `--model` on a model of another family than yours that this workspace allows; your harness reports your own. |
+| No other family has a model at or above the floor, or you can't establish a difference | Spawn it on your own model where that meets the floor, otherwise on a model of your own family that does and that this workspace allows, and say in your hand-back that diversity was lost. Where no allowed model at or above the floor is available, spawn no reviewer: tell your person. |
+<!-- OATS: the floor is absolute here, so your own model is the fallback only where it meets the floor (the last row). -->
 
 ## History-only findings
 A secret or personal data in an intermediate commit or a commit message, absent from

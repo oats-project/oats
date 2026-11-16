@@ -10,13 +10,15 @@
   rounds for it.
 - After 4 fresh rounds without a clean one, the builder's parent decides each open
   finding, and the person where it can't.
-<!-- adapt: May a change land with no fresh review (a typo, a broken link)? -->
 - **A one-line docs fix** (a typo, a broken link) skips the local loop, not the review:
   it merges on CI green and one fresh review at its head, the review bot's where one
   runs, otherwise one reviewer round. Its PR opens once the fix is proven the way the
   repository checks its docs, before that review; a developer's gets its expert's
   `VERIFIED` after the review, before the merge. If that review finds anything to fix, it is no
   longer a one-line fix: it gets the loop.
+  <!-- OATS: the lane map's agreements bind every PR, a docs fix included. -->
+  Like every PR here, it also needs its maintainer's green light, its second reader and
+  the sign-off its lane's line asks for.
 - **A maintainer's release prep** (the version bump and the assembled notes, nothing
   more) is the one change that needs no review round.
 
@@ -30,8 +32,10 @@ to that maintainer before the change is built, so its green light holds no surpr
 ## A PR with no lead
 An outside contributor's, a person's own, or a maintainer's release prep. The lane
 owner's maintainer merges it at its head once CI is green and the review bot's review
-holds where one runs; it reads any but its own release prep first, by its four gates. A
-fix goes to a lead, which decides who builds it. A running maintainer finds such a PR in
+holds where one runs; it reads any but its own release prep first, by its four gates.
+<!-- OATS: the second reader and the sign-off bind every PR on the lane map, release prep included. -->
+Its second reader and, where its lane's line asks, the release lane's sign-off still
+apply, as to every PR. A fix goes to a lead, which decides who builds it. A running maintainer finds such a PR in
 its intake; until one runs, the person brings it to their dispatcher, which starts one.
 Why: someone here has to own the merge, and the lane's maintainer holds it.
 

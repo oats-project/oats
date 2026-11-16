@@ -14,9 +14,15 @@ A developer builds a spec only where `/plan-and-spec` ("Who builds it") gives it
 - **One developer per surface;** two independent surfaces, two developers in parallel.
   Never one developer for two unrelated surfaces, and never one coupled change split
   across agents.
-<!-- adapt: Which developer souls exist, and which environment does each provide? -->
-- **The soul** brings the environment its repositories need. The default `developer`
-  builds in any repository of the organisation.
+- **The soul** brings the environment its repositories need. OATS's developer souls (the
+  surfaces table in your `oats.workspace-experts` briefing is the authority):
+  - `oats-developer`, the default one: the kernel and the CLI (`lib/`, `bin/`, the
+    schemas), the Terminal UI (`packages/tui/`) while it is a preview, the docs, and the
+    provider and package repositories (`oats-okf`, `oats-aweb`, `oats-jira`,
+    `oats-linear`, `oats-authoring`) with their mirrors and pins here. Package work is
+    usually in another repository: name it with `--repo` and `--base`;
+  - `oats-desktop-developer`: the Desktop (`packages/desktop/`), with `oats.desktop-ui`'s
+    live Electron checks on a display.
 - **Spawn it** as your child, the spec as its task:
   ```bash
   oats spawn <developer-soul> --parent "$OATS_INSTANCE" --same-work \

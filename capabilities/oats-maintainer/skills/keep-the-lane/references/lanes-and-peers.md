@@ -14,11 +14,16 @@
 - When the lanes themselves change
 
 ## The lanes, and who holds each
-There is no lane map. The lanes are in your landing rules, each with what it covers, its
-owner and its arrangement: the agreements that merge its changes, who merges, and
-whether it asks for a maintainer's green light. The rest is read live:
+<!-- OATS: OATS keeps its lane map, the pinned issue its landing rules point at, as the list of its lanes, their arrangements and second readers, and one entry per maintainer. -->
+Here the lanes are on the lane map your landing rules point at, each with what it covers,
+its owner and its arrangement: the agreements that merge its changes, who merges, its
+second reader and where the release lane signs off. Where the map's lines say more than
+this file (overlap, the package repositories, contracts), the map's win. The rest is
+read live:
 - **Which lane a PR is in:** the lane of the effort that produced it; its description
   names it. Every effort and PR is in exactly one lane.
+  <!-- OATS: the lane map shows a PR's lane by its `lane:` label, and holds by the `hold` label. -->
+  Here its `lane:<name>` label shows it too, as the lane map says.
 - **Overlap.** Two area lanes never overlap, nor two lanes for one kind of work: to take
   part of one, split it. A lane for a kind of work, or for one person's requests, may
   overlap area lanes: its PRs stay in that lane and name the area lane they touch,
@@ -27,11 +32,23 @@ whether it asks for a maintainer's green light. The rest is read live:
   owner's maintainer there. Where several people own the lane, the maintainer of the
   person whose effort produced the PR, when they are among the owners; otherwise the
   first owner's. Never whoever owns the forge account.
-- **Who holds a seat:** the instance named `<person>-<lane>-maintainer`, or, after
-  retired ones, the one with the highest count before the role
-  (`<person>-<lane>-2-maintainer`), running or stopped, until it is retired. An
-  overflow seat (`-overflow-maintainer`) holds none. Find it by those names: `oats
-  status --json` on this machine, and your messaging layer's roster across machines.
+  <!-- OATS: a project lane has one maintainer per person; a PR's is the one of the effort's person (the lane map). -->
+  Here a project lane has one maintainer per person, and a PR's is the one of the
+  effort's person in that lane.
+<!-- OATS: OATS's maintainers keep the instance names they have, which follow no one pattern, so a seat is its entry on the lane map. -->
+- **Who holds a seat:** the instance the lane map's `active` entry names for that person
+  in that lane, running or stopped, until it is retired. A maintainer you start is named
+  `<person>-<lane>-maintainer` (after retired ones, with a count before the role,
+  `<person>-<lane>-2-maintainer`). An overflow seat (`-overflow-maintainer`) holds none,
+  and has no entry of its own: its parent's entry lists it. Find a seat on the map, then
+  with `oats status --json` on this machine and your messaging layer's roster across
+  machines.
+- **Your entry:** one comment on the lane map, which only you edit, in the shape the
+  map's body gives. Post it when you take your seat, and update it at every intake, when
+  an effort starts or ends, and at every hand-over.
+- **A retired maintainer** can't mark its entry: the map's keeper, the release lane's
+  maintainer, marks it `left` on its person's word. A relayed word is not enough: the
+  keeper confirms it with that person directly first.
 - **Stopped is not gone:** message it, tell its person so they can start it, and never
   spawn a second one.
 - **Named on the roster with nothing running anywhere you can see:** it may be retired,
@@ -89,6 +106,9 @@ person asks you to take that lane on.
   people who decide, by message.
 - A contract change, in any lane, is decided by everyone who decides direction
   (`/direction-gate`).
+  <!-- OATS: the lane map's "Contract changes" line. -->
+  Here: by the two sides the lane map's "Contract changes" line names, together, before
+  it is built.
 
 ## What you message a peer for
 Each once, to the one peer it is for:
@@ -178,6 +198,11 @@ owner and its arrangement, on its owner's yes. You propose a new lane, a split o
 change to a lane's arrangement; you never authorise one. Every lane names a merge path a
 lead can reach. Until a lane is listed, work no lane covers lands on the default
 agreements, and a single effort there is launched by the release lane's maintainer.
+<!-- OATS: the lane map lists OATS's lanes, so a lane is listed there; its default arrangement is one second reader per PR and the release lane's sign-off before every merge. -->
+Here a lane is listed on the lane map: a new lane adds its row and creates its label, as
+the map says. Until its owner's yes sets its arrangement, it runs on the map's default:
+its maintainer's green light, one second reader per PR, the release lane's sign-off at
+the exact head before every merge, and its maintainer merges.
 When a lane splits, efforts move whole, with their lead and all their PRs, by hand-over
 to the person's maintainer in the other lane; a moved PR keeps its verdicts, since a
 lane change is not a new head. A moved effort's lead stays the OATS child of the

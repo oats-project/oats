@@ -65,7 +65,6 @@ place in three cases:
 - **Specialisation:** the surface needs an environment, tools or knowledge you lack, or
   instructions that would conflict with your own.
 
-<!-- adapt: What counts as a large feature here, past which a lead always sends developers? -->
 A large feature always goes to developers, one per surface: more than one surface, or
 sustained building and testing. If none of the three cases holds, build it yourself:
 usually a small change, or

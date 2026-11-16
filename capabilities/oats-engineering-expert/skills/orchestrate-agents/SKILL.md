@@ -68,8 +68,10 @@ before you apply, as `/coordinate-developers` says for a developer. Where
 ## 4. A specialist
 Start one per area when the effort is large or crosses several areas: a fresh instance of
 the expert soul that knows the area.
-<!-- adapt: Which expert souls can lead an area as a specialist, and what does each bring (knowledge, tools, an environment)? -->
-The generalist `engineering-expert` takes any area, one fresh instance per area.
+Here: `oats-engineering-expert` (the kernel, the Desktop, the provider packages, the
+operator, the docs; it reads each area's subject per task), `oats-product-expert`
+(direction, users, research and trials), a package's own expert for its package, and
+`oats-setup-admin` for the workspace's configuration, one fresh instance per area.
 
 An area has its own repositories, toolchain or knowledge, and an interface to the rest
 that can be written down. Parts that share code or need constant back-and-forth are one

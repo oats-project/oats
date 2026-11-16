@@ -1,7 +1,8 @@
 ---
 name: plan-and-ship-release
-description: Plans and ships a release in the release lane - which PRs are in and why the others are out, the version, the notes, the merge order, the release-prep PR, the owners' yes, a freeze and a patch release under it; then the exact source pinned, the project's live release contract read and run, the publication verified item by item, and a partial, failed or bad release handled without hiding it (re-run only the failed step from the same tag, never retag, fix forward). Use before any tag, when deciding whether a PR waits for the next release, after a tag, and when a release half-ran.
+description: Plans and ships a release in the release lane - which PRs are in and why the others are out, the version, the notes, the merge order, the release-prep PR, the lanes' agreement on the plan, a freeze and a patch release under it; then the exact source pinned, the project's live release contract read and run, the publication verified item by item, and a partial, failed or bad release handled without hiding it (re-run only the failed step from the same tag, never retag, fix forward). Use before any tag, when deciding whether a PR waits for the next release, after a tag, and when a release half-ran.
 ---
+<!-- OATS: the description names the lanes' agreement on the plan, not the owners' yes: the lane map's release-lane line (section 1). -->
 
 # Plan and ship a release
 
@@ -36,11 +37,12 @@ must do. Your state file names where it is.
 it, keep it green, and land it as your landing rules say for a PR with no lead. A fix
 the release needs is not release prep: it goes to a lead (`/launch-work`).
 
-**The owners' yes.** Each person whose lane has changes in the release approves its
-contents: one card each, with what goes in from their lane, the head to tag and your
-recommendation. Tag only on every such yes, from that person directly or relayed by
-their own agent as a decision made with them. Every lane agrees what goes in on the
-plan; only the release lane tags.
+<!-- OATS: the lane map's release-lane line: lane:release has the final say on what is released, the lanes agree what goes in on its plan through their maintainers, and the tag and the publication rest on the release lane's person's authority. -->
+**The lanes' agreement.** Here a release's contents are agreed on the plan: each lane
+with PRs in it, or left out of it, agrees there what goes in and when, through its
+maintainer, who is told once where the plan is and answers there. Send no card to each
+lane's person. The tag and the publication rest on your person's authority, as the
+release lane's maintainer, with that scope. Only the release lane tags.
 
 **A freeze** before the tag is a hold on the default branch, not a message. When the
 person picks a patch release with named changes while a freeze is on, the freeze stays:
@@ -57,8 +59,10 @@ project's decision: record it in your knowledge.
 ## 2. Ship it
 Start read-only. Confirm the version and its plan, the exact source SHA (on the planned
 release branch: the default branch, or the supported line for a backport; reviewed, CI
-green), where it will be published, and your authority: the yes of
-every owner, with that scope. This skill grants no push, merge, credential or
+green), where it will be published, and your authority:
+<!-- OATS: the lane map's release-lane line: the tag and the publication rest on the release lane's person's authority, on a plan the lanes agreed. -->
+your person's, as the release lane's maintainer, on the plan the lanes agreed, with that
+scope. This skill grants no push, merge, credential or
 protected-ref authority.
 1. **Read the live release contract:** the workflow, its scripts and the project's
    release docs. The executable is the authority; where the docs disagree, record it. A

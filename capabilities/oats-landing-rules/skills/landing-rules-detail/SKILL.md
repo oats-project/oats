@@ -11,21 +11,26 @@ them. Where the two differ, a change you recorded since your spawn wins, then th
 briefing.
 
 ## CI green
-<!-- adapt: Which checks does the forge require on the default branch? -->
 At least one check ran at the head, every check the forge requires is among them, and
 every check that ran succeeded: none failing, none pending. A skipped check didn't run. A
 head where no check ran isn't green. Where no hosted check runs the tests, the author
-runs the repository's own test gate at that head and says so in the PR.
+runs the repository's own test gate at that head and says so in the PR. OATS's
+repositories require no check on their default branches (no branch protection, no
+rulesets), so this definition holds as written: it needs a check to have run, and every
+one that ran to have succeeded.
 
 A review thread is **answered** by a fix, or by a decline with a concrete reason.
 
 ## Opening a PR
-<!-- adapt: What must hold before a PR opens, beyond the verification of whoever specified the work? -->
 - **A developer's work, or a helper's scoped piece,** opens on `VERIFIED at <head>` from
   whoever specified it (the effort's lead, or the specialist of its area). Its builder
   opens the PR at that head and works its reviews.
 - **A change a lead or a specialist built itself** opens on the round of its review loop
   that found nothing to fix, with that round's Checked section.
+<!-- OATS: the lane map: every PR carries its lane's label and names its maintainer, who runs it from there. -->
+- **Either way** the PR carries its lane's `lane:` label and names its maintainer in its
+  description, and whoever lands it hands it at that head to that maintainer
+  (`/land-on-agreement`); from there the lane's arrangement on the map runs it.
 - **`VERIFIED` asserts** what was checked against each acceptance criterion: the spec's
   pinned acceptance tests and the suite that bears on the change ran at that head, the
   cases that must fail included.
@@ -54,7 +59,7 @@ The reviewer's severity decides which, not the author's wish: a fix ranked minor
 turns out to change behaviour gets a fresh reviewer.
 
 ## A maintainer's green light
-Only in a lane whose landing rules ask for it. "Green light" means only a lane
+Only in a lane whose landing rules ask for it: here every lane does. "Green light" means only a lane
 maintainer's verdict on a PR, at an exact head.
 - **The call:** by message at that head, from the lead or the specialist landing the PR,
   once CI is green and every review thread is answered there.
@@ -65,6 +70,10 @@ maintainer's verdict on a PR, at an exact head.
   its task, and the evidence against the task's acceptance criteria. Never the lines
   again: the author's reviewers read those.
 - **Two lanes:** each maintainer's green light.
+<!-- OATS: the lane map: the PR's maintainer, after its green light, brings in the second reader and the release lane's sign-off. -->
+- **After it, here:** the maintainer that gave it asks the PR's second reader and, where
+  the lane's line asks, the release lane's sign-off, at that head; the lead or the
+  specialist doesn't. A RETURN from any of them goes to the change's author.
 
 Why, where an organisation asks for it: one seat holds a lane's direction across parallel
 efforts.
@@ -74,11 +83,16 @@ The floor in your briefing binds every child, an OATS child or a native subagent
 is checked before model diversity.
 - It binds the model a child would actually launch on, wherever that comes from: a soul's
   default or a machine's override that is below the floor is not used. Spawn that child
-  on a model at or above the floor instead, your own by default, and tell your person
-  once that the configuration is below the floor, naming the soul and the machine.
+  on a model at or above the floor instead, your own where that meets the floor, and
+  tell your person once that the configuration is below the floor, naming the soul and
+  the machine.
 - A model whose tier you can't establish is below the floor.
+<!-- OATS: the floor is absolute here (by tier, not the parent's own), so a parent's own model is the fallback only where it meets the floor, and every model picked is one this workspace allows. -->
 - A child that checks work runs on another family's model only where one at or above the
-  floor is available; otherwise on your own model, and you say that diversity was lost.
+  floor is available; otherwise on your own model where that meets the floor, or on a
+  model of your own family that does, and you say that diversity was lost. Where no model
+  at or above the floor is available at all, spawn no child and tell your person. Every
+  model you pick to meet the floor is one this workspace allows.
 
 ## The rest
 [references/more-rules.md](references/more-rules.md) holds who builds a change and the

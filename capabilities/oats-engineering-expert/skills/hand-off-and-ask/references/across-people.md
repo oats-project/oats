@@ -17,6 +17,9 @@ can't spawn, retire or direct another person's agents: you ask.
   maintainer for a lane while one exists. Don't address their developers.
 - **Merges:** each lane's landing rules apply. Where a lane asks for a maintainer's green
   light, it is the maintainer of the person who owns that lane.
+  <!-- OATS: a project lane has one maintainer per person; a PR's is the one of the effort's person (the lane map). -->
+  Here a project lane has one maintainer per person: a PR's is the one of the effort's
+  person in that lane.
 - **Disputes.** Text (two PRs edit the same lines): the first merge wins. Meaning,
   between agents: post your evidence once on the effort's record and send it to the
   generalist expert, which settles it; where you are the generalist and a party, start a

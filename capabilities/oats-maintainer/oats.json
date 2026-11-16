@@ -4,7 +4,7 @@
   "compatibility": {
     "oats": ">=0.69.7"
   },
-  "description": "The maintainer's role: it holds one lane for its person - the lane's direction across parallel efforts, the calls the lane's landing rules give it (its green light on a PR at an exact head, as GREEN LIGHT, RETURN or ESCALATE, on direction, contracts, coherence, scope and evidence, never a second code review; a merge kept for it), PRs with no lead, releases where it holds the release lane, and the lane's stewardship (holds, cleanliness, the roadmap). It is called, never a station, launches one lead expert per effort its person asks of it, and is never in the build loop. A maintainer is found by its instance name, with no lane map. Skills: keep-the-lane (intake, the roadmap, cleanliness, seats, peers and holds), pr-review, direction-gate, launch-work, plan-and-ship-release, and support-maintainer for an organisation with a support desk. Copied from the engineering template, template-v4.0.0.",
+  "description": "The maintainer's role: it holds one lane for its person - the lane's direction across parallel efforts, the calls the lane's landing rules give it (its green light on a PR at an exact head, as GREEN LIGHT, RETURN or ESCALATE, on direction, contracts, coherence, scope and evidence, never a second code review; a merge kept for it), PRs with no lead, releases where it holds the release lane, and the lane's stewardship (holds, cleanliness, the roadmap). It is called, never a station, launches one lead expert per effort its person asks of it, and is never in the build loop. In OATS a maintainer is found by its entry on the lane map. Skills: keep-the-lane (intake, the roadmap, cleanliness, seats, peers and holds), pr-review, direction-gate, launch-work and plan-and-ship-release. Copied from the engineering template, template-v4.0.0.",
   "requires": [],
   "inject": "injects/maintainer.md",
   "skills": [
@@ -12,7 +12,6 @@
     "skills/pr-review",
     "skills/direction-gate",
     "skills/launch-work",
-    "skills/plan-and-ship-release",
-    "skills/support-maintainer"
+    "skills/plan-and-ship-release"
   ]
 }

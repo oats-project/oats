@@ -1,7 +1,8 @@
 ---
 name: build-in-the-repository
-description: Builds a change the way its repository wants it - finds and follows the repository's own rules before the first edit (they outrank habits and the spec), works in extra worktrees made from the remote, keeps one author for a change and its tests, follows the commit rules from the first commit, proves the change with the repository's own gate and the checks CI runs, and names the evidence for every claim. Use before the first edit in any repository and in each new directory, when the work needs another checkout, and before handing a branch back or pushing a fix.
+description: Builds a change the way its repository wants it - finds and follows the repository's own rules before the first edit (they outrank habits and the spec), works in extra worktrees made from the remote, keeps one author for a change and its tests, follows the commit rules from the first commit, proves the change with the repository's own gate, and names the evidence for every claim. Use before the first edit in any repository and in each new directory, when the work needs another checkout, and before handing a branch back or pushing a fix.
 ---
+<!-- OATS: the description names the repository's own gate, not "the checks CI runs": CI is the test run in the oats repository (section 4, step 2). -->
 
 # Build in the repository
 
@@ -54,7 +55,6 @@ oats worktree add --purpose <slug> --branch <branch> --base <the default branch>
 ## 3. While you build
 - **A change and its tests have one author.** One context is the default. Fan out only
   across components with a settled interface between them, or independent questions.
-<!-- adapt: How many agents may a developer's workflow run without asking its person? -->
 - **A workflow of your harness's own agents** runs your own paths without asking while
   it stays under 10 agents, counted across all stages and back-to-back workflows. Ten
   or more need your person's permission: say how many, why, and what the smaller shape
@@ -78,7 +78,6 @@ oats worktree add --purpose <slug> --branch <branch> --base <the default branch>
   boundaries (the network, the clock, a paid service), never for your own collaborators.
   A double of an external tool or API is checked against the real one at least once,
   with the command in your hand-back.
-<!-- adapt: Does the organisation enforce the quality floor with its runtime's hooks, and with which checks? -->
 - **The quality floor** in your briefing is yours to keep: nothing enforces it but you
   and your reviewers.
 
@@ -88,9 +87,13 @@ for the hosts.
 1. Build and run it locally, with the services it needs, and exercise the changed
    behaviour as a caller would. The environment your soul provides is how, where it has
    one.
-2. Run the repository's gate and the checks CI runs for what you changed, as bare
-   commands on the consolidated tree: no filter piped after a test command (it replaces
-   the exit status), and no gate inside a chain. Where the linter or type checker
+<!-- OATS: CI is the test run; the oats repository allows at most one or two test files locally and never its kernel's or Desktop's suites. -->
+2. Run the checks your repository's gate names for what you changed, the way it says to
+   run them, as bare commands on the consolidated tree. Where CI is the test run (the
+   oats repository: `npm run validate`, `npm run check`, at most one or two test files,
+   never the kernel's or the Desktop's suites), push and read CI for the rest, and name
+   it as not run locally. No filter piped after a test command (it replaces the exit
+   status), and no gate inside a chain. Where the linter or type checker
    already fails on the default branch, compare against its count and say so.
 3. Run the spec's acceptance tests and QA steps, and keep the evidence: commands,
    outputs, screenshots for a UI change.

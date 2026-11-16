@@ -57,7 +57,6 @@ choice matters, don't pick on reasoning alone:
    the approaches still in the lead. Drop a dead end as soon as it is one.
 4. **Record every approach tried,** and why each was dropped, on the effort's record.
 
-<!-- adapt: How many probes may a lead run in parallel for one decision? -->
 At most 4 probes run in parallel for one decision. Beyond that, ask your person first.
 
 ## A probe never checks its own claim
@@ -73,6 +72,7 @@ model floor"). Check the model the child would launch on against it before anyth
 below: the effective one from the preview as much as one you pass. A smaller, faster or
 cheaper model is not a different one.
 
+<!-- OATS: the workspace's direction (recorded 2026-10-31, for every team) rules certain models out and names no model version in any text, and a machine's souls.launch picks a soul's model; so diversity compares model families, never names a model, and picks only a model this workspace allows. -->
 Then diversity. Agents of one model share blind spots, so their agreement is not
 independent: a child that checks work or validates an idea runs on a different model
 from the author's, where the organisation has one at or above the floor. The author is
@@ -82,14 +82,20 @@ claim.
 2. The child's is `launch.effective.model` in `oats spawn <soul> --preview --json`: what
    this machine will launch (a `launch.from` of `local` is this machine's override of the
    soul's preference).
-3. Compare models, not harnesses: a provider prefix names a route, so `<provider>/<model>`
-   and `<model>` are one model.
+3. Compare model families, not harnesses or versions: a provider prefix names a route,
+   so one model reached through two harnesses is one, and two versions of one family
+   count as a match.
 4. Both known and different: spawn without `--harness` or `--model`.
 5. The same, or either unknown (`null`, absent, a harness's native default): spawn with
    `--harness <h> --model <m>`, or a launch configuration this host defines (`oats
-   launch-config list`), on a model you know differs. Your harness reports your own.
+   launch-config list`), on a model of another family than the author's that this
+   workspace allows. Your harness reports your own.
+<!-- OATS: the floor is absolute here, so your own model is the fallback only where it meets the floor. -->
 6. No other family has a model at or above the floor, or you can't establish its tier:
-   use your own model, and say where you use the answer that diversity was lost.
+   use your own model where that meets the floor, otherwise a model of your own family
+   that does and that this workspace allows, and say where you use the answer that
+   diversity was lost. Where no allowed model at or above the floor is available, send no
+   child: tell your person.
 
 ## What it is worth
 The fan-out fits what the decision is worth. Most decisions need one probe, and a choice

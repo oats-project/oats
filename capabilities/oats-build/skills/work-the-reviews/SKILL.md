@@ -19,7 +19,6 @@ it, in the repository's PR template where it has one. Name your expert as the PR
 and head in one line.
 
 ## 2. Watch it
-<!-- adapt: What wakes a developer here on a new review, comment or CI result on its PR? -->
 Use what your harness or your forge offers: a notification, a subscription, a watch that
 wakes you once per event. Arm a watch for one event at a time and re-arm it after each: a
 background watch left running across a compaction can crash a harness. Between events,
@@ -85,6 +84,10 @@ You merge only where your landing rules say the developer merges, and only on yo
 expert's go at that head, never on seeing its note alone. First check that no hold is
 open on the PR or the default branch, then merge guarded by that head, and tell your
 expert in one line.
+<!-- OATS: the lane map's agreements bind every merge, whoever presses the button. -->
+Never merge over a RETURN, nor before the PR's maintainer's green light, its second
+reader's verdict and, where its lane asks, the release lane's sign-off are given at that
+head.
 
 ## 8. Until it merges
 Keep watching: a new finding, a return or a moved default branch is another round and

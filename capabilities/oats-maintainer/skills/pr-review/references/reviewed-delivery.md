@@ -39,7 +39,9 @@ at the head to merge, and for a PR with no lead they give you.
 - **The default branch moved since CI ran on this head?** Two changes that share no file
   can still break each other (one changes a text, the other's test reads it). On a trial
   merge onto the default branch, run the test files changed or added by this PR and by
-  what merged since its base. If those are more than a couple, need what your host
+  what merged since its base.
+  <!-- OATS: the oats repository's Gates rule (AGENTS.md): at most one or two test files locally, never the kernel's or the Desktop's suites. -->
+  If those are more than one or two (the oats repository's limit), need what your host
   lacks, or are code you haven't read and trusted (an outside contributor's), bring the
   branch up to date and let CI be the run. A merge queue does this for
   the head you enqueue.

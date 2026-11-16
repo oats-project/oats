@@ -44,8 +44,12 @@ report.
 - If a tool, a test run or a sub-review refuses or fails so that you can't finish the
   round, report that to the author at once, the way you report a verdict: a silent
   reviewer looks like a working one.
-- Never run a child of your own, an OATS child or a native subagent, on a weaker model
-  tier than yours.
+<!-- OATS: the reviewer loads no landing rules, so OATS's floor is stated here: absolute, by tier (the workspace's direction, recorded 2026-11-12). -->
+- Never run a child of your own, an OATS child or a native subagent, on a model below
+  OATS's floor: a Claude model of the Opus tier or above, an OpenAI model of the Sol tier
+  or above, and in any other family its strongest tier; a model whose tier you can't
+  establish is below it, and a model you pick to meet the floor is one this workspace
+  allows.
 - The forge's review bot can be the reviewer too; the author answers it as it answers
   you.
 

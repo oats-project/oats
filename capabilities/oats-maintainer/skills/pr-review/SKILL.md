@@ -11,6 +11,9 @@ description: Gives or returns the green light on a PR, where the lane's landing 
   head. You are not in its build loop: its author's reviewers and the review bot read
   the lines before you are called. A PR nobody has to call you for lands on its lane's
   other agreements.
+  <!-- OATS: on the lane map every lane asks for its maintainer's green light, so no PR of an effort lands without it. -->
+  Here every lane asks for your green light: one your sweep finds that nobody called you
+  for, ask its lead for the call.
 - **The call names** the exact head, CI green on it, every review thread answered there,
   the task the PR delivers with its acceptance criteria, and the `VERIFIED` note at that
   head (for a change a lead or a specialist built itself, the clean round of its review
@@ -80,6 +83,10 @@ RETURN at <sha>: <repo>#<PR>
   root lead puts both positions to its person in one card.
 - Your green light is one of the agreements the landing rules name. The author gathers
   the others, another lane's green light included: you forward nothing.
+  <!-- OATS: the lane map: the PR's maintainer asks its second reader and the release lane's sign-off. -->
+  Here you do ask two: once you give your green light at a head, ask the PR's second
+  reader (the one its lane's line names) and, where the line asks, the release lane's
+  sign-off, at that head with CI green. Never merge, or let it merge, over a RETURN.
 
 ## A moved head, a hold, a merge
 Read [references/reviewed-delivery.md](references/reviewed-delivery.md) when the head

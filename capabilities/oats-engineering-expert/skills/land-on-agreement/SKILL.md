@@ -1,7 +1,8 @@
 ---
 name: land-on-agreement
-description: Takes a PR from a verified branch to merge - the VERIFIED note for a developer's work or the clean round for a change the lead built, a lane maintainer's GREEN LIGHT at the exact head where the landing rules ask for one (finding that maintainer by its instance name, or starting one where none exists), the merge at that head by whoever the landing rules name, a conflict with the default branch, a release, and saying shipped only once checked. Use whenever work becomes a PR, while a PR is open, before every call to a maintainer (a green light, a direction answer before a build, a release), and when a PR merges.
+description: Takes a PR from a verified branch to merge - the VERIFIED note for a developer's work or the clean round for a change the lead built, a lane maintainer's GREEN LIGHT at the exact head where the landing rules ask for one (finding that maintainer by its entry on the lane map, or starting one where none exists), the merge at that head by whoever the landing rules name, a conflict with the default branch, a release, and saying shipped only once checked. Use whenever work becomes a PR, while a PR is open, before every call to a maintainer (a green light, a direction answer before a build, a release), and when a PR merges.
 ---
+<!-- OATS: the description finds the maintainer by its entry on the lane map, which OATS keeps (section 2). -->
 
 # Land on agreement
 
@@ -30,9 +31,13 @@ where it touches the design or a contract.
 ## 2. The maintainer's green light
 Only where your landing rules ask for it in the PR's lane; a lane they don't name needs
 none. As a specialist, this step is yours for your area's PRs.
+<!-- OATS: on the lane map every lane asks for its maintainer's green light, and a project lane has one maintainer per person: a PR's is the one of the effort's person. -->
+Here every lane asks for it: the PR's maintainer is the one of your person in the PR's
+lane, named in the PR's description.
 
-**Find the maintainer** by its instance name: the person who owns the lane, the lane,
-then `maintainer`. [references/find-the-maintainer.md](references/find-the-maintainer.md)
+<!-- OATS: OATS keeps its lane map, and its maintainers keep the names they have. -->
+**Find the maintainer** by its `active` entry on the lane map, for your person in that
+lane. [references/find-the-maintainer.md](references/find-the-maintainer.md)
 says how, what to do when it is stopped, and how to start one where none exists. Never
 start a second maintainer for a lane while one exists, even a stopped one.
 
@@ -42,6 +47,10 @@ criteria, your `VERIFIED` note or your clean round's Checked section, what was r
 the findings declined, with why.
 - **`GREEN LIGHT at <head>`:** go on to the merge. As a specialist, send your parent the
   PR at its head with the green light: a hand-off to a person is the root lead's.
+  <!-- OATS: the lane map: the PR's maintainer asks its second reader and the release lane's sign-off. -->
+  Here the maintainer that gave it then asks the PR's second reader and, where the lane's
+  line asks, the release lane's sign-off, at that head; you don't. A RETURN from any of
+  them goes to the change's author like the maintainer's own.
 - **`RETURN at <head>`:** its findings go to the change's author, and the fixed head goes
   back to the maintainer. After 3 returns on one PR, stop: the root lead puts both
   positions, each with its evidence, to its person in one card.
@@ -57,6 +66,10 @@ no PR and no CI.
 ## 3. Merge
 When every agreement holds at the same head and no hold is open on the PR or the default
 branch, whoever your landing rules name merges:
+<!-- OATS: the lane map's agreements: the second reader's verdict, the release lane's sign-off where the lane asks, and no RETURN. -->
+(here the agreements include the maintainer's green light, the second reader's verdict
+and, where the lane asks, the release lane's sign-off, all at that head, with no RETURN
+outstanding)
 - **You:** merge at that head, guarded by it (the forge's merge-at-head option), and say
   so in one line in the effort's thread. As a specialist, tell your parent.
 - **The developer:** give it the go in one line, at that head, once you have checked
