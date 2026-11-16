@@ -34,10 +34,11 @@ read live:
   first owner's. Never whoever owns the forge account.
   <!-- OATS: a project lane has one maintainer per person; a PR's is the one of the effort's person (the lane map). -->
   Here a project lane has one maintainer per person, and a PR's is the one of the
-  effort's person in that lane.
+  effort's person in that lane; `lane:release` has one maintainer for the whole project.
 <!-- OATS: OATS's maintainers keep the instance names they have, which follow no one pattern, so a seat is its entry on the lane map. -->
 - **Who holds a seat:** the instance the lane map's `active` entry names for that person
-  in that lane, running or stopped, until it is retired. A maintainer you start is named
+  in that lane (in `lane:release`, the one entry for the whole project), running or
+  stopped, until it is retired. A maintainer you start is named
   `<person>-<lane>-maintainer` (after retired ones, with a count before the role,
   `<person>-<lane>-2-maintainer`). An overflow seat (`-overflow-maintainer`) holds none,
   and has no entry of its own: its parent's entry lists it. Find a seat on the map, then

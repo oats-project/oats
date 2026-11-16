@@ -20,9 +20,10 @@ the effort that produced it, shown by its `lane:` label; its description names i
 maintainer, the maintainer of the effort's person in that lane.
 
 <!-- OATS: OATS's maintainers keep the instance names they have, which follow no one pattern, so a lane's maintainer is found by its entry on the lane map. -->
-A lane's maintainer is the instance its `active` entry on the lane map names for that
-person in that lane, one per person in each project lane; `oats status` and the messaging
-layer's roster show whether it runs. A taken seat stops a second one.
+A lane's maintainer is the instance its `active` entry on the lane map names: in a project
+lane, the one of that person there, one per person; in `lane:release`, its one maintainer
+for the whole project, whoever's work it is. `oats status` and the messaging layer's
+roster show whether it runs. A taken seat stops a second one.
 
 **What merges a change** built inside an effort: all of these, at one head. A PR with no
 lead (an outside contributor's, a person's own, a maintainer's release prep) follows
@@ -54,8 +55,8 @@ can't; a RETURN or a hold is someone's recorded no.
 <!-- OATS: OATS is a large project, with several lanes, maintainers and people, so every lane asks for its maintainer's green light; the lane map's release-lane line gives the release lane the final say on what is released. -->
 Every lane asks for its maintainer's green light on every PR built inside an effort (a
 lead's, a specialist's, a developer's or a helper's): the green light of the maintainer of
-the effort's person in the PR's lane, named in the PR's description, at the head being
-merged. That maintainer then brings in the PR's second reader and the release lane's
+the effort's person in the PR's lane (in `lane:release`, its one maintainer), named in the
+PR's description, at the head being merged. That maintainer then brings in the PR's second reader and the release lane's
 sign-off where the lane's line asks, and merges where the line gives it the merge. Releases and tags are the release lane's: its
 maintainer plans, tags and publishes every release of OATS and the official packages, on
 the release plan it posts on the forge (`/plan-and-ship-release`). Each lane with PRs in

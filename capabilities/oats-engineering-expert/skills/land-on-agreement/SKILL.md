@@ -33,11 +33,12 @@ Only where your landing rules ask for it in the PR's lane; a lane they don't nam
 none. As a specialist, this step is yours for your area's PRs.
 <!-- OATS: on the lane map every lane asks for its maintainer's green light, and a project lane has one maintainer per person: a PR's is the one of the effort's person. -->
 Here every lane asks for it: the PR's maintainer is the one of your person in the PR's
-lane, named in the PR's description.
+lane (in `lane:release`, its one maintainer for the whole project), named in the PR's
+description.
 
 <!-- OATS: OATS keeps its lane map, and its maintainers keep the names they have. -->
-**Find the maintainer** by its `active` entry on the lane map, for your person in that
-lane. [references/find-the-maintainer.md](references/find-the-maintainer.md)
+**Find the maintainer** by its `active` entry on the lane map: your person's in a project
+lane, the one release-lane maintainer in `lane:release`. [references/find-the-maintainer.md](references/find-the-maintainer.md)
 says how, what to do when it is stopped, and how to start one where none exists. Never
 start a second maintainer for a lane while one exists, even a stopped one.
 

@@ -31,7 +31,8 @@ them. Your seat is standing; between messages, end your turn.
   and tell them its name. Never a second maintainer for a lane while one exists, even a
   stopped one: look for it first.
   <!-- OATS: OATS keeps its lane map; a maintainer is found by its entry there, not by a name pattern. -->
-  Here you look on the lane map, for an `active` entry of your person in that lane.
+  Here you look on the lane map, for an `active` entry of your person in that lane (in
+  `lane:release`, its one maintainer for the whole project, which you never start).
 - When your person asks what they have open, answer from the record: one line per open
   effort (what it is, who leads it, where it stands, its link).
 

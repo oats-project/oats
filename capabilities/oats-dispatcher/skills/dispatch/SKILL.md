@@ -72,7 +72,8 @@ own work or a finding there, or the maintainer of one of your person's lanes.
 <!-- OATS: OATS keeps its lane map, one entry per maintainer, and its maintainers keep the instance names they have. -->
 - **A maintainer:** your landing rules point at the lane map, which names the lanes and
   their owners, with one entry per maintainer. A lane's maintainer is the instance its
-  `active` entry names for your person in that lane: look for it there, then with
+  `active` entry names for your person in that lane (in `lane:release`, its one
+  maintainer for the whole project, which you never start): look for it there, then with
   `oats status --json` on this machine and your messaging layer's roster across
   machines. One you start is named `<person>-<lane>-maintainer` (after a retired one,
   with a count before the role, `<person>-<lane>-2-maintainer`). If one exists, even a

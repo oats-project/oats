@@ -28,7 +28,8 @@ your parent gives you.
 Your person's work for another lane goes to their maintainer there, found by its name
 (`oats status --json`, your messaging layer's roster):
 <!-- OATS: OATS keeps its lane map, and its maintainers keep the instance names they have. -->
-here, by its `active` entry on the lane map for your person in that lane, then on those.
+here, by its `active` entry on the lane map for your person in that lane (in `lane:release`,
+its one maintainer for the whole project), then on those.
 - **running:** pass the request to it once;
 - **stopped:** message it anyway, and tell your person so they can start it. Never spawn
   a second one;
