@@ -7,7 +7,7 @@ import { hostname, tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fs, join, dirname, resolve, safePath, readJSON, save, digest, tree, withLock, fail, syncDir, identifier, relPath, within, displayRepo, hash, exec } from './io.mjs';
 import { noGit, gitTimeoutMs, consultMaxAgeMs, splitRef, resolveNodes, resolveSubjects } from './config.mjs';
-import { git, gitEnv, validateBase, readerWarnings, invalidWarning, baseLock, journalPath, preflightLocalRepository, requireNotShallow, verifyRemote, unavailable } from './stores.mjs';
+import { git, gitEnv, ghChildEnv, validateBase, readerWarnings, invalidWarning, baseLock, journalPath, preflightLocalRepository, requireNotShallow, verifyRemote, unavailable } from './stores.mjs';
 import { layoutOf, parseFrontmatter, parseView, plainText, parseSubjectsIndex, counts as viewCounts, subjectFile, viewFile, subjectOfPath, SUBJECT_REF, KINDS } from './okf-reindex.mjs';
 import { verdictLanes } from './verdicts.mjs';
 
@@ -101,6 +101,15 @@ function gitContext(bindings, alias, base, cache, state, { offline = false } = {
   if (state.error) receipt.reason = state.error;
   return { alias, base, bindings, kind: 'git', cache, commit, receipt };
 }
+/** Why a failed fetch still serves the cached commit, or null when it must
+ *  not. An unusable github-token-file (6.2) is such a failure like any other
+ *  authentication failure: a secret that is not mounted yet, or a refresher
+ *  mid-write, must not fail every agent's read. The reason names its fix. */
+export function staleReason(e, now) {
+  if (e?.code === 'E_BASE_UNAVAILABLE') return `fetch of the accepted branch failed at ${now} (reason: ${e.reason || 'unknown'}); serving the last fetched accepted commit`;
+  if (e?.code === 'E_CREDENTIAL') return `fetch of the accepted branch failed at ${now} (reason: credential; ${e.message}); serving the last fetched accepted commit`;
+  return null;
+}
 function resolveGit(bindings, alias, base, { fresh = false, preferCached = false } = {}) {
   const cache = cacheDir(bindings, base), lock = cacheLock(bindings, base);
   fs.mkdirSync(dirname(cache), { recursive: true, mode: 0o700 });
@@ -133,9 +142,9 @@ function resolveGit(bindings, alias, base, { fresh = false, preferCached = false
       }
       try { fetchAccepted(base, alias, cache); state = { ...state, fetchedAt: now, attemptedAt: now, error: null }; }
       catch (e) {
-        if (e.code !== 'E_BASE_UNAVAILABLE') throw e;
         // Serve the last fetched accepted commit, loudly; retry after max-age or --fresh.
-        state = { ...state, attemptedAt: now, error: `fetch of the accepted branch failed at ${now} (reason: ${e.reason || 'unknown'}); serving the last fetched accepted commit` };
+        const error = staleReason(e, now); if (error === null) throw e;
+        state = { ...state, attemptedAt: now, error };
       }
       save(stateFile(cache), state);
       return gitContext(bindings, alias, base, cache, state);
@@ -447,7 +456,7 @@ function onePath(positionals, label) {
 /** What `protection` answers, printed with every Git base by `oats okf bases`. */
 export const PROTECTION_MEANING = 'protection answers "can anyone but a reviewer land a change on the accepted branch?": enforced = a readable ruleset or classic rule requires a pull request or restricts who may push; none = both reads succeeded and neither does (classic protection with status checks only included: it gates nothing); unknown = neither read shows such a rule and at least one read failed, or the base is not on GitHub. It does not check approval counts, bypass lists or who the maintainer is';
 const GITHUB_REMOTE = /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)/;
-export function protection(base, { run = (args, timeout) => exec('gh', args, { timeout }) } = {}) {
+export function protection(base, { run = (args, timeout) => exec('gh', args, { timeout, env: ghChildEnv() }) } = {}) {
   if (base.kind !== 'git' || !GITHUB_REMOTE.test(base.repository)) return 'unknown';
   const repo = `repos/${base.pr.repository}`, branch = base.acceptedBranch;
   let rules = null;

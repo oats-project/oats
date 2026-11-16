@@ -67,7 +67,8 @@ close or delete.
 The field set is the same in both helper copies:
 
 - `phase`: `push` means the Git push child failed, including a delete push;
-  `readback-absent` means a pushed ref was not found afterwards;
+  `readback-failed` means the push or delete ran and the remote could not be
+  read afterwards; `readback-absent` means a pushed ref was not found afterwards;
   `readback-other` means a pushed ref names an unexpected OID, or a deleted ref
   still exists. That OID is never included in the diagnostic.
 - `exitCode`: the push child's integer exit status, or `null` if unavailable.
@@ -162,10 +163,48 @@ case-insensitively in every screened text, file name and ref, reported as rule
 `host-term` with its location only. Terms only add refusals; an unreadable
 or malformed file is `E_CONTENT_INPUT`, never "no terms".
 
+## The credential the gate uses
+
+By default the helper's `git` and `gh` children use the caller's native
+credentials. With `--token-file <absolute path>` (oats.okf 6.2; `oats okf
+propose` passes the host's `github-token-file` setting) they are given the
+GitHub token in that file: ambient credential helpers are cleared,
+inherited token variables and `gh`'s stored login are not consulted, the
+host's askpass (`core.askPass`) is switched off, and SSH, `git://` and
+plain HTTP are refused (a local repository stays readable). A file that
+yields no token is an authentication failure, never another credential. The helper does not isolate Git
+from the host's own configuration: a netrc entry for github.com, an
+authorization header (`http.extraHeader`) or a URL rewrite (`insteadOf`,
+`pushInsteadOf`) in the system or user Git configuration answers before any
+credential helper is asked. With a token file, `preflight`, `create`,
+`rewrite`, `amend-legacy`, `merge`, `close` and `close-unsafe` therefore look
+at the host when they start and refuse `E_HOST_CREDENTIAL` (exit 2,
+`diagnostic: { phase: "host", routes, unread }`, fixed kinds and never a
+value) when one exists or the system or user Git configuration cannot be
+read; nothing was sent by that command. The helper also resets
+`http.extraHeader`, unscoped and for `https://github.com/`, for its own Git
+children. A host that uses a token file keeps none of
+them for github.com. The `preflight` check runs no Git: with a token file
+it judges that file's token (`gh` is handed it; the installation route
+reads it from the file and does not ask `gh auth token`). The token is read at each use, goes
+to `git` through the helper's own `git-credential` mode for
+`https://github.com` only and to `gh` in that child's environment, and never
+appears in an argument or a result. A missing or malformed file is
+`E_CREDENTIAL` with `diagnostic.reason` (`missing`, `unreadable`,
+`not-a-file`, `empty`, `malformed`, `path`; `helper-path` when the Node
+binary's or this script's own path contains a single quote), exit 2. The
+file is checked when a command starts, before anything is sent, and read
+again at each use: when it turns unusable later, `create` reports
+`published` after its push, and on `rewrite`, `merge` and `close` an
+`E_CREDENTIAL` can follow a push or a posted comment.
+The gate is still not a sandbox: it does not hide the file from the caller.
+
 ## Create
 
 `oats okf propose --apply` runs the exact create sequence. Its local-only `commit`
-step snapshots screened commit text, fixes author and committer explicitly
+step snapshots screened commit text (from 6.1 it ends in the proposer's
+trailers: `Proposed-by`, and where the home recorded them `Proposer-identity`
+and `Attributed-human`), fixes author and committer explicitly
 (overriding more-specific Git settings after clearing inherited selectors),
 checks the staged tree, and updates only the current new branch with a local
 old-head compare-and-swap. No raw commit summary is printed. `create` preserves its
@@ -173,6 +212,33 @@ fresh `okf-proposal/<date>-<UUID>` key (a 5.x `okf-harvest/` key with a
 version 2 block is still accepted through 6.x), empty expected-old lease and new-ref
 confirmation. It never updates an existing ref, even an identical one. The
 helper verifies the recorded accepted branch tip before and after screening.
+Before its push, `create` makes read-only `gh` calls (first `gh api --hostname github.com
+repos/<repo> --jq .permissions.push`; the `preflight --github OWNER/REPO`
+command runs the check alone). An explicit `true` passes at once. A missing `gh`, a
+failed call or unstated permission, or a credential that may not push
+refuses `E_GH_UNAVAILABLE` with a fixed `preflight` diagnostic (`gh-absent`,
+`gh-failed`, `no-write-permission`): nothing was pushed. One other route
+passes: a GitHub App installation token, for which GitHub reports those
+permissions all false or not at all. When the answer is not `true` and `gh
+api installation/repositories` succeeds (only an installation token may call
+it), the helper puts the write question to GitHub: with gh's token for
+github.com (`gh auth token`, read on a pipe) a child with an empty
+environment requests the repository's push advertisement
+(`info/refs?service=git-receive-pack`), where GitHub authorizes a push.
+Nothing is sent and Git takes no part, so no Git configuration, URL rewrite,
+netrc, SSH key or other login answers for the installation. The
+advertisement passes, a 401, 403 or 404 is `installation-cannot-push`, and a
+timeout, an unreachable github.com, a redirect, no token from gh or any
+other answer is `installation-check-failed`; the request uses no proxy. Not
+yet run with a real installation token. Every call of the check names
+github.com (`--hostname`), so `GH_HOST` cannot split it across two
+credentials. On both routes it is gh's credential that is judged (the
+token file's, when one is named), not the one Git uses for the base's remote. For an installation it proves contents
+write only, not the pull-requests and issues write the PR and its label
+need. It cannot tell
+whether a narrowly scoped token may open a PR. A failure after the confirmed
+push carries `published: { branch, head }`.
+
 A base that moved before the push is recovered inside `create`, at most three
 times: it fetches the accepted branch (writing no local ref but the CAS
 below), requires a fast-forward, reconciles the PR's delta onto the new tip

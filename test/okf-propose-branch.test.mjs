@@ -14,8 +14,9 @@ const UUID = '[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12
 function github(f) {
   const prs = join(f.base, 'prs.json'), calls = join(f.base, 'gh.jsonl');
   json(prs, []);
-  // The released 6.0 helper's exact gh surface: the okf-proposal label, the
-  // fixed title, the body on stdin and its readback; plan's duplicate listing.
+  // The released helper's exact gh surface: the publish check before the push
+  // (6.1.0), the okf-proposal label, the fixed title, the body on stdin and
+  // its readback; plan's duplicate listing.
   write(join(f.bin, 'gh'), `#!${process.execPath}
 import * as fs from 'node:fs';import {execFileSync} from 'node:child_process';import assert from 'node:assert/strict';
 const a=process.argv.slice(2),v=k=>a[a.indexOf(k)+1],p=${JSON.stringify(prs)};
@@ -25,7 +26,9 @@ const remoteHead=branch=>{
   assert.equal(rows.length,1);
   const [oid,ref]=rows[0].split('\\t');assert.match(oid,/^[0-9a-f]{40}$/);assert.equal(ref,'refs/heads/'+branch);return oid;
 };
-if(a[0]==='pr' && a[1]==='list') {
+if(a[0]==='api') {
+  assert.deepEqual(a,['api','--hostname','github.com','repos/fixture/knowledge','--jq','.permissions.push']);console.log('true');
+} else if(a[0]==='pr' && a[1]==='list') {
   assert.deepEqual(a,['pr','list','--repo','fixture/knowledge','--label',v('--label'),'--state','open','--limit','100','--json','number,title,url']);
   assert.ok(['okf-proposal','okf-harvest'].includes(v('--label')));console.log('[]');
 } else if(a[0]==='label') {

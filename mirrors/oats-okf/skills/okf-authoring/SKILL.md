@@ -160,7 +160,7 @@ v1 removals close/delete the branch and route remaining exposure privately.
 
 When the portable binding interface is active (planned OATS >=0.24.0; not yet a
 published provider baseline), treat the source declaration as policy and the
-captured ProviderBinding as execution authority:
+bound ProviderBinding as execution authority:
 
 - In `oats.okf.locations@1`, `fixed` is source-owned, `default` is rebindable,
   and `inherit` requires an external binding such as `write.default`.
@@ -180,13 +180,13 @@ captured ProviderBinding as execution authority:
   workers, and no harvest soul: the instance proposes its knowledge at checkpoints with
   `oats okf propose`, which opens a reviewed PR. No source gets a scheduler
   job.
-- Captured `setup`, `init`, `migrate`, and `unlock` are deliberate refusals.
-  Provisioning/migration remains a separate explicit operator path.
+- Provisioning and migration (`setup`, `init`, `migrate`, `unlock`) remain a
+  separate explicit operator path.
 
 The broker-owned `binding-normalize`, `binding-bind`, and `binding-check`
 manifest commands are not manual recipes. Do not invoke them from a working
-agent or copy a transient `OATS_BINDING_FILE` path. That private mode-0600
-file exists only for one synchronous invocation.
+agent. oats.okf reads no captured binding: a set `OATS_BINDING_FILE` is
+ignored, with a warning naming it.
 
 ## External bases and native tools
 

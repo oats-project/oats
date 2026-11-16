@@ -271,7 +271,12 @@ accepted tip and the head is the reviewed PR head. The remote is the recorded
 clone locator. A behind head is supported for v3 or v2 replacement via its unique fork
 with the base, never for direct merge. Do not change the accepted branch or
 refresh an OID merely to bypass a refusal.
-For an amendment, write a safe commit message and safe PR body first:
+For an amendment, write a safe commit message and safe PR body first. End
+the commit message with the old head's own trailer block (`Proposed-by`,
+`Proposer-identity`, `Attributed-human`, `Published-by`, as they are), after a
+blank line: the merge copies those rows from the reviewed head into the squash
+commit, so the accepted history still names the proposer. Leave out a row
+whose value is the reason for the amendment:
 
 ```sh
 node '<okf-authoring skill dir>/scripts/okf-publication.mjs' rewrite \
@@ -307,7 +312,8 @@ node '<okf-authoring skill dir>/scripts/okf-publication.mjs' merge \
 Use the same flags with `close` or `close-unsafe` and a `close` verdict for
 those outcomes. The helper screens before every supported write, uses the
 exact OID/old-head lease, sends immutable text bytes, and never uses an
-automatic merge summary of prior commits. It rechecks the screened head tree
+automatic merge summary of prior commits: the squash body is the reviewed
+head, the PR's URL and the proposer's trailers from that head's message. It rechecks the screened head tree
 and that the accepted pin is current before merge. A moved accepted tip refuses
 again with `E_REWRITE_REQUIRED`, even after a completed rewrite; do not retry by
 automatically recomposing. A moved head also refuses. Prior accepted-branch advancement requires the v3/v2 rewrite/fresh-review

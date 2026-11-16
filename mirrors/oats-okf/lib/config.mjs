@@ -1,5 +1,5 @@
 import { isAbsolute } from 'node:path';
-import { refuseLegacySettings, refuseKnowledgeKeys, withoutDefaults } from './legacy-settings.mjs';
+import { refuseLegacySettings, refuseKnowledgeKeys, withoutDefaults, parseOrigins } from './legacy-settings.mjs';
 import { SUBJECT_REF } from './okf-reindex.mjs';
 import { fs, join, resolve, dirname, fail, readJSON, safePath, relPath, identifier, overlaps, hash, embedsCredential } from './io.mjs';
 const obj = v => v && typeof v === 'object' && !Array.isArray(v);
@@ -13,12 +13,54 @@ export function settings() {
   // A 4.x manifest default (harvest off, harvest-runtime pi) is dropped, never a 5.0 setting;
   // `harvest` left here can only be the soul's own opt-out (off): refuseLegacySettings refused any other.
   const s = withoutDefaults(JSON.parse(process.env.OATS_SETTINGS || '{}'));
-  keys(s,['bindings-file','state-dir','git-timeout','consult-max-age','screen-terms-file','harvest','publish'],'OATS_SETTINGS');
+  keys(s,['bindings-file','state-dir','git-timeout','consult-max-age','screen-terms-file','github-token-file','harvest','publish'],'OATS_SETTINGS');
+  tokenFile();
   if(s['git-timeout']!==undefined && (!Number.isInteger(s['git-timeout']) || s['git-timeout']<1)) fail('E_CONFIG','git-timeout must be a positive integer number of seconds');
   if(s['consult-max-age']!==undefined && (!Number.isInteger(s['consult-max-age']) || s['consult-max-age']<0)) fail('E_CONFIG','consult-max-age must be a non-negative integer number of seconds');
   if(s['screen-terms-file']!==undefined && (typeof s['screen-terms-file']!=='string' || !isAbsolute(s['screen-terms-file']) || resolve(s['screen-terms-file'])!==s['screen-terms-file'])) fail('E_CONFIG','screen-terms-file must be a normalized absolute path');
   if(s['state-dir']!==undefined && (typeof s['state-dir']!=='string' || !isAbsolute(s['state-dir']) || resolve(s['state-dir'])!==s['state-dir'])) fail('E_CONFIG','state-dir must be a normalized absolute path');
   return s;
+}
+const TOKEN_FIXES = 'provision the deployment\'s proposer credential there (README: "The proposer credential"), or remove settings.oats.okf.github-token-file from oats-local.yaml to use this user\'s own git and gh login';
+const HELPER_PROBLEM = 'github-token-file cannot be used on this installation: the path of the Node binary or of oats.okf\'s publication helper contains a single quote, so Git cannot be given the credential helper';
+const HELPER_FIX = 'install them under a path without one, or remove settings.oats.okf.github-token-file from oats-local.yaml to use this user\'s own git and gh login';
+const TOKEN_REASONS = { path: 'is not a usable path', missing: 'does not exist', 'not-a-file': 'is not a file', unreadable: 'cannot be read', empty: 'is empty', malformed: 'does not hold one token (one line of printable characters)' };
+// A refusal whose message ends in its own whole fix also carries it as
+// `fix`, for a caller that lists problem and fix apart (setup --check).
+const failFix = (code, problem, fix, tail = '') => { throw Object.assign(new Error(`${problem}: ${fix}${tail}`), { code, fix }); };
+/** E_CREDENTIAL, the whole fix in the message, never the file's content.
+ *  `unsent`: only a caller that knows nothing left this host says so. */
+export function credentialRefusal(file, reason, { unsent = false } = {}) {
+  const tail = unsent ? '; nothing was sent' : '';
+  if (reason === 'helper-path') failFix('E_CREDENTIAL', HELPER_PROBLEM, HELPER_FIX, tail);
+  failFix('E_CREDENTIAL', `github-token-file ${file} ${TOKEN_REASONS[reason] ?? 'cannot be used'}`, TOKEN_FIXES, tail);
+}
+/** oats.okf 6.2: the host's proposer credential file, or undefined (today's
+ *  behaviour: the user's own git and gh login). Host-only: a path on one
+ *  machine, so only this deployment's oats-local.yaml may set it. The kernel
+ *  refuses a committed value itself (manifest `hostOnly`); this is the same
+ *  rule for a kernel or a caller that did not. Reads the raw payload, so the
+ *  credential path decides nothing about, and is not blocked by, other keys. */
+export function tokenFile(env = process.env) {
+  let s; try { s = JSON.parse(env.OATS_SETTINGS || '{}'); } catch { return undefined; }
+  const file = s?.['github-token-file'];
+  if (file === undefined) return undefined;
+  const layer = parseOrigins(env.OATS_SETTINGS_ORIGINS)['/github-token-file'], kind = typeof layer?.kind === 'string' ? layer.kind : null;
+  const move = 'set it in this deployment\'s oats-local.yaml under settings.oats.okf, and remove it';
+  if (kind === null && env.OATS_SETTINGS_ORIGINS !== undefined) failFix('E_CONFIG', 'github-token-file from an unknown origin is not valid: it is host-only (a path on one machine)', `${move} wherever else it is set (soul.yaml knowledge:, oats-workspace.yaml, or a --provider oats.okf flag)`);
+  if (kind !== null && kind !== 'host') failFix('E_CONFIG', `github-token-file from ${kind}${typeof layer.at === 'string' ? ` (${layer.at})` : ''} is not valid: it is host-only (a path on one machine)`, `${move} there`);
+  if (typeof file !== 'string' || !isAbsolute(file) || resolve(file) !== file || /[\0\r\n']/.test(file)) fail('E_CONFIG', 'github-token-file must be a normalized absolute path (no quote or line break)');
+  return file;
+}
+/** With github-token-file, the token serves https://github.com only: every
+ *  Git base must be bound there, so no SSH key or other login stands in. */
+export function requireTokenBases(bindings, env = process.env) {
+  const file = tokenFile(env);
+  if (file === undefined) return bindings;
+  for (const [alias, base] of Object.entries(bindings.bases)) {
+    if (base.kind === 'git' && !/^https:\/\/github\.com\//.test(base.repository)) failFix('E_CREDENTIAL', `git base "${alias}" is not bound by an https://github.com/ URL, and github-token-file serves only those`, 'bind it by its HTTPS URL in the bindings file, or remove settings.oats.okf.github-token-file from oats-local.yaml to use this user\'s own git and gh login', '; nothing was sent');
+  }
+  return bindings;
 }
 /** Time budget for Git operations that talk to a remote (clone, fetch, push,
  *  ls-remote). Local object reads keep the short exec default. */
@@ -80,10 +122,10 @@ export function validateBindings(doc, file, { sourceHome, sourceWork } = {}) {
 }
 export function loadBindings(file = settings()['bindings-file'], opts = {}) {
   if(typeof file !== 'string' || !isAbsolute(file)) fail('E_CONFIG','set one absolute bindings-file; explicit provisioning/migration is required');
-  safePath(file); return { file, ...validateBindings(readJSON(file),file,opts) };
+  safePath(file); return requireTokenBases({ file, ...validateBindings(readJSON(file),file,opts) });
 }
 export function declaration(soul) {
-  if(fs.existsSync(join(soul,'.okf-cutover.json'))) fail('E_MIGRATION','incomplete explicit migration cutover: rerun its recorded migrate --cutover command');
+  if(fs.existsSync(join(soul,'.okf-cutover.json'))) failFix('E_MIGRATION','incomplete explicit migration cutover','rerun its recorded migrate --cutover command');
   if(fs.existsSync(join(soul,'knowledge'))) fail('E_MIGRATION','legacy soul/knowledge exists: use oats okf migrate --soul <soul> to preserve and stage it, then explicit cutover; no automatic loss');
   if(!fs.existsSync(join(soul,'okf.json'))) fail('E_CONFIG',`soul has no okf.json: this soul reads/owns no knowledge yet. Provision it explicitly (oats okf init --soul <soul>, or oats okf migrate --soul <soul> for a legacy soul), or deactivate oats.okf for this soul; nothing was created`);
   return validateDeclaration(readJSON(join(soul,'okf.json')));

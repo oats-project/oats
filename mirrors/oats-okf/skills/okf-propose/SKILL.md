@@ -207,17 +207,31 @@ the craft):
 
 Use the digest the last `--check` printed. If anything changed since,
 `E_DIGEST`: check again and read the new diff. On success it commits with the
-package's fixed author text, pushes a new `okf-proposal/<date>-<uuid>` branch
+package's fixed author text and the commit text `--check` printed, whose
+trailers name you (`Proposed-by`, and where your home records them your
+messaging identity and the human it is attributed to; the maintainer's merge
+copies them into the accepted history; a `W_ATTRIBUTION` warning means one was
+left out because the content screen refuses its value, and needs nothing from
+you), pushes a new `okf-proposal/<date>-<uuid>` branch
 (create-only, never the accepted branch), labels it `okf-proposal`, opens one
 PR per changed base and prints each PR's URL, head, branch, the accepted
 commit it is parented on and `recovered` (how often an accepted branch that
 moved before the push was replayed onto; 0 normally).
 
+Before it pushes anything, `--apply` checks that `gh` on this host can open
+the PR. `E_GH_UNAVAILABLE` means it cannot (`gh` is missing, cannot read the
+repository, or its account lacks write permission): nothing was pushed and
+the proposal is unchanged. This one is not a publication error: report the
+message to whoever runs the host, and once it is fixed run the same `--apply
+--digest` again.
+
 **A publication error is reported, never retried.** `E_BASE_MOVED` (the
 recovery could not replay), `E_PUSH_UNCERTAIN`, `E_GH` and `E_PR_UNCERTAIN`
 retain the clone, the commit text, the PR body and the safe result in the
 proposal directory. A remote branch or PR may exist after an uncertain one:
-never assume it does not, never clean it up. A second `--apply` of the same
+never assume it does not, never clean it up. When the push went through, the
+message names the branch and the commands that finish or remove it: pass
+them on in your report, and do not run them. A second `--apply` of the same
 proposal refuses (`E_PROPOSAL_EXISTS`). Report the code and the PRs already
 opened in your hand-back.
 

@@ -5,11 +5,12 @@ import { service, ensureInstanceKnowledge, consultSource, checkSeat } from '../l
 import { CONSULT, subjectBriefLines, takeWarnings } from '../lib/consult.mjs';
 import { initBase, migrate, deliverMigration, cutoverMigration, forgetMigration } from '../lib/migration.mjs';
 import { inspect } from '../lib/inspection.mjs';
-import { loadInvocationKnowledgeBinding } from '../lib/binding-wire.mjs';
+import { ignoredCapturedVariables } from '../lib/binding-wire.mjs';
 import { refuseLegacySettings, refuseKnowledgeKeys, removeLegacySettings } from '../lib/legacy-settings.mjs';
 import { writeHarvestPolicy, harvestPolicy } from '../lib/harvest-policy.mjs';
 import { upgradePlan, upgradeApply } from '../lib/upgrade.mjs';
 import { propose } from '../lib/propose.mjs';
+import { setupCheck, renderSetupCheck } from '../lib/setup-check.mjs';
 const HELP=`oats okf status [--home PATH] [--json]
   (spawn-recorded duty to propose, as harvest and publish: on, off, or unknown; no base/network read)
 oats okf inspect [--home PATH] [--json]
@@ -37,6 +38,7 @@ oats okf init --base ALIAS --nodes FILE [--output PATH | --confirm] [--json]
 oats okf migrate --legacy PATH --base ALIAS --node NODE --output PATH [--json]
 oats okf migrate --deliver FILE | --cutover FILE --soul-dir PATH | --forget ID [--json]
 oats okf unlock --lock PATH --token TOKEN [--host-gone HOST] [--json]
+oats okf setup --check --soul SOUL [--json]
 oats okf setup --remove-legacy-settings [--plan] --soul SOUL [--json]
   (from the deployment: deletes only settings.oats.okf.harvest/harvest-runtime/harvest-model
   from its oats-local.yaml; --plan writes nothing)
@@ -57,25 +59,32 @@ use one absolute bindings-file.
 const NEW_WAY='run `oats okf propose` from the instance home: the working agent proposes its own knowledge by PR at its checkpoints (the compulsory okf-propose skill; `oats okf status` first); oats.okf keeps no source custody, runs or drains (README#upgrading-to-60)';
 const removed=(what)=>fail('E_REMOVED',`${what} was removed in oats.okf 5.0: ${NEW_WAY}`);
 const args=process.argv.slice(2);
+// awebai/oats-aweb#242 part 2: a captured-binding variable is ignored, first
+// thing, by every command and hook: one stderr line each, naming it (never its
+// value). A hook's answer also carries the lines in its `warning`, which the
+// kernel shows (an upgrade plan's {adopt} answer has none: stderr only).
+const ignored=ignoredCapturedVariables();
+for(const line of ignored) process.stderr.write(`${line}\n`);
+const withIgnored=answer=>ignored.length?{...answer,warning:[...ignored.map(line=>`oats-okf: ${line}`),...(answer.warning?[answer.warning]:[])].join('; ')}:answer;
 if(args.includes('--help') || args.includes('-h')) {process.stdout.write(HELP);}
 // okf #106: the upgrade hook reads only the home and its recorded meta, before
-// any settings, binding or invocation check: a 4.x home's recorded harvest
-// keys would refuse it there, and it must answer that home with its remedy.
+// any settings check: a 4.x home's recorded harvest keys would refuse it
+// there, and it must answer that home with its remedy.
 else if((process.env.OATS_EVENT || args[0])==='upgrade') {
   const phase=process.env.OATS_UPGRADE_PHASE,home=resolve(process.env.OATS_INSTANCE_HOME || process.env.OATS_HOME || process.cwd());
   let answer;
   try {
     if(phase==='plan') answer=upgradePlan(home);
-    else if(phase==='apply') answer=upgradeApply(home);
+    else if(phase==='apply') answer=withIgnored(upgradeApply(home));
     else fail('E_USAGE','OATS_UPGRADE_PHASE must be plan or apply');
-  } catch(e) {answer={warning:`oats-okf ${e.code || 'E_OKF'}: ${redactUrls(e.message)}`};process.exitCode=1;}
+  } catch(e) {answer=withIgnored({warning:`oats-okf ${e.code || 'E_OKF'}: ${redactUrls(e.message)}`});process.exitCode=1;}
   process.stdout.write(JSON.stringify(answer)+'\n');
 }
 else {
   const event=process.env.OATS_EVENT || args[0];
   const hook=['spawn','soul-scaffold'].includes(event);
   const consult=Object.hasOwn(CONSULT,event);
-  let exit=0,answer,text,textMode=(consult || event==='propose') && !args.includes('--json');
+  let exit=0,notReady=false,answer,text,textMode=(consult || event==='propose' || (event==='setup' && args.includes('--check'))) && !args.includes('--json');
   try {
     // Removed 4.x commands refuse whatever their (old) flags were.
     if(['harvest','run-source','complete','retry','harvest-status'].includes(event)) removed(`oats okf ${event}`);
@@ -92,19 +101,17 @@ else {
     // The one exemption is the cleanup that removes it (help is answered above).
     const cleanup=event==='setup' && flags['remove-legacy-settings']===true;
     if(!cleanup) {refuseLegacySettings();refuseKnowledgeKeys();}
-    for(const name of ['OATS_SOURCE_RECEIPT_FILE','OATS_INVOCATION_CONTEXT_FILE']) if(Object.hasOwn(process.env,name)) removed(`the captured source receipt/invocation context (${name})`);
     if(flags.source!==undefined) removed('--source (a 4.x source descriptor)');
     const accepted={
       spawn:[],'soul-scaffold':[],status:['home'],inspect:['home'],read:['home','base','path','fresh'],refresh:['home'],
       bases:['home','fresh'],index:['home','base','fresh'],cat:['home','base','from','fresh'],ls:['home','base','fresh'],
       links:['home','base','fresh'],search:['home','base','all','node','regex','case-sensitive','fresh'],
       subjects:['home','base','kind','fresh'],subject:['home','base','fresh'],claims:['home','base','about','type','kind','fresh'],verdicts:['home','base','check','fresh'],
-      setup:['remove-legacy-settings','plan','harvest','enable','disable','install-host','remove-schedules'],init:['base','nodes','output','confirm'],
+      setup:['remove-legacy-settings','plan','check','harvest','enable','disable','install-host','remove-schedules'],init:['base','nodes','output','confirm'],
       propose:['home','plan','check','apply','slug','digest'],
       migrate:['source-home','legacy','base','node','output','deliver','cutover','soul-dir','forget'],unlock:['lock','token','host-gone']
     };
     for(const k of Object.keys(flags)) if(!['json','soul',...(accepted[event] || [])].includes(k)) fail('E_USAGE',`unknown flag --${k} for ${event}`);
-    if(!cleanup && loadInvocationKnowledgeBinding().kind==='captured' && ['setup','init','migrate','unlock'].includes(event)) fail('E_MIGRATION',`captured ${event} is not supported; use an explicit operator administration path`);
     const home=resolve(flags.home || process.env.OATS_INSTANCE_HOME || process.env.OATS_HOME || process.cwd());
     let result;
     // oats.okf 6: `publish` is the same spawn-recorded value under its new name.
@@ -144,7 +151,13 @@ else {
     }
     else if(event==='setup' && flags.harvest!==undefined) removed('setup --harvest (the deployment harvest switch)');
     else if(event==='setup' && (flags.enable || flags.disable || flags['install-host'] || flags['remove-schedules'])) removed('setup --enable/--disable/--install-host/--remove-schedules');
-    else if(event==='setup') fail('E_USAGE','setup needs --remove-legacy-settings [--plan]');
+    else if(event==='setup' && flags.check) {
+      const other=Object.keys(flags).filter(k=>!['json','soul','check'].includes(k));
+      if(other.length) fail('E_USAGE',`--check takes no other flag (got --${other.join(', --')})`);
+      result=setupCheck({home});text=renderSetupCheck(result);
+      if(!result.ok) notReady=true;
+    }
+    else if(event==='setup') fail('E_USAGE','setup needs --check, or --remove-legacy-settings [--plan]');
     else if(event==='init') result=initBase(loadBindings(),flags.base,flags.nodes,flags.output,{confirm:!!flags.confirm});
     else if(event==='migrate') {
       if(flags['source-home']) removed('migrate --source-home (4.x source registration)');
@@ -154,13 +167,14 @@ else {
       else result=migrate(loadBindings(),{legacy:flags.legacy,alias:flags.base,node:flags.node,output:flags.output});
     } else if(event==='unlock') result=unlock(resolve(flags.lock),flags.token,flags['host-gone']);
     else fail('E_USAGE',`unknown command ${event}; see --help`);
-    answer=hook?result:{schemaVersion:1,ok:true,result};
-  } catch(e) {const code=e.code || 'E_OKF',message=redactUrls(e.message);exit=1;answer=hook?{warning:`oats-okf ${code}: ${message}`}:{schemaVersion:1,ok:false,error:{code,message,...(e.result?{result:e.result}:{})}};}
+    answer=hook?withIgnored(result):{schemaVersion:1,ok:true,result};
+  } catch(e) {const code=e.code || 'E_OKF',message=redactUrls(e.message);exit=1;answer=hook?withIgnored({warning:`oats-okf ${code}: ${message}`}):{schemaVersion:1,ok:false,error:{code,message,...(e.result?{result:e.result}:{})}};}
   // Consult commands print text unless --json; every other answer is JSON.
   // Let Node drain the pipe; no process.exit after a possibly large answer.
   // A propose refusal's safe details (finding locations, retained report) go with it.
   if(textMode && exit) process.stderr.write(`oats okf ${event}: ${answer.error.code}: ${answer.error.message}\n${answer.error.result?JSON.stringify(answer.error.result,null,2)+'\n':''}`);
   else if(textMode) process.stdout.write(text+'\n');
   else process.stdout.write(JSON.stringify(answer)+'\n');
-  process.exitCode=exit;
+  // setup --check answered (ok: true) and found problems: exit 1, so an unattended bring-up stops.
+  process.exitCode=exit || (notReady?1:0);
 }
