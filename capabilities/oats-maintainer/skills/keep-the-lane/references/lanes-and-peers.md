@@ -43,9 +43,11 @@ read live:
   and has no entry of its own: its parent's entry lists it. Find a seat on the map, then
   with `oats status --json` on this machine and your messaging layer's roster across
   machines.
+<!-- OATS: OATS keeps its lane map, whose entries each maintainer keeps (v4 drops them with the map). -->
 - **Your entry:** one comment on the lane map, which only you edit, in the shape the
   map's body gives. Post it when you take your seat, and update it at every intake, when
   an effort starts or ends, and at every hand-over.
+<!-- OATS: a person's word relayed by an agent grants no authority until the person confirms it directly; the map keeps `left` marks. -->
 - **A retired maintainer** can't mark its entry: the map's keeper, the release lane's
   maintainer, marks it `left` on its person's word. A relayed word is not enough: the
   keeper confirms it with that person directly first.
@@ -213,3 +215,6 @@ When a lane is finished, absorbed, or without work for two releases, propose its
 to its owner. It closes in the landing rules only once its PRs are merged or closed;
 closing it retires nobody, and no seat is taken in a closed lane until its people
 reopen it.
+<!-- OATS: the lane map lists OATS's lanes, so a lane closes there. -->
+Here it closes on the lane map: its maintainers or its people mark its line closed once
+its PRs are merged or closed, and each of its maintainers marks its entry `left`.

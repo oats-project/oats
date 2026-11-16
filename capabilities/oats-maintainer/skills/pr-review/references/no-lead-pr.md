@@ -34,5 +34,9 @@ stands.
 
 Then it lands as your landing rules say for a PR with no lead: where they give you the
 merge, merge that head ([reviewed-delivery.md](reviewed-delivery.md), "Merge"). A fix
-its author won't make goes to a lead, which decides who builds it. Your own release prep
-needs no read: nobody is recruited to review it.
+its author won't make goes to a lead, which decides who builds it.
+<!-- OATS: the lane map's second reader and the release lane's sign-off bind every PR, release prep included. -->
+Your own release prep needs no review round and you never approve it yourself, but here
+it still gets its second reader (the one the lane map names for the release lane's own
+PRs) and, where its lane's line asks, the release lane's sign-off, at its head, before it
+merges.
