@@ -1,13 +1,11 @@
 {
   "capability": "oats.developer",
-  "version": "3.1.3",
+  "version": "4.0.0",
   "compatibility": {
     "oats": ">=0.69.7"
   },
-  "description": "Developers build one spec end to end: evaluate it (or write one), execute it (in one context by default, fanning out only by context, never by kind of work), add its acceptance tests unchanged, write it test first, diagnosing a bug before fixing it and designing as it writes, above a quality floor it never lowers silently, prove it the way the repository runs it, and iterate with a fresh reviewer each round (a new code-reviewer instance, this template's soul, spawned as an OATS child on a different model where one is available; a harness-native subagent only for small tasks that directly help, where the person asks, or in a multi-agent workflow mode) until a round finds nothing to fix before handing back; their expert never runs review rounds. Once their expert has verified the branch and the lane's green light is given, they open the PR, work its reviews (bots, reviewers, CI) and raise to their expert only what needs product or architecture direction. Copied from the engineering template, template-v3.1.3.",
+  "description": "The developer's role, with no skills of its own: it builds one spec for the expert that gave it (the effort's lead, or the specialist of its area), proves it the way the repository runs it, iterates with a fresh reviewer each round until a round finds nothing to fix, hands the branch back, opens the PR on VERIFIED at the head and works its reviews until it merges, then sends its done line and retires itself. The briefing holds the flow, the rules that aren't obvious (the spec's acceptance tests go in unchanged, no PR before VERIFIED, the quality floor, stay in the spec) and which build skill to open at which step. Copied from the engineering template, template-v4.0.0.",
   "requires": [],
   "inject": "injects/developer.md",
-  "skills": [
-    "skills/understand-the-spec"
-  ]
+  "skills": []
 }

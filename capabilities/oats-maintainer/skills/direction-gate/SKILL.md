@@ -1,18 +1,13 @@
 ---
 name: direction-gate
-description: Judge, when an author calls you, whether a change belongs where it is and moves the project the way its roadmap and recorded decisions say - a contract or structural question before it is built, or the direction part of a read your landing rules need. It is a call, never a gate every change passes. Consult the recorded decisions first, and record each new architectural call with its reason and the alternatives rejected; superseding a decision a human accepted needs that human's own confirmation. Use when an author asks you a contract, structural or direction question, before you decide one yourself, and in every read you are called for.
+description: Judges whether a change belongs where it is and moves the project the way its roadmap and recorded decisions say - a contract or structural question an author brings before it is built, and the first check of every green light. Consults the recorded decisions first, and records each new architectural call with its reason and the alternatives rejected. Use when an author asks a contract, structural or direction question, before deciding one, and in every green-light review.
 ---
 
 # Direction gate
 
-An author calls it: an expert asks you, by message at an exact reference, before it builds
-a contract or structural change, or a read your lane's landing rules need includes it.
-Answer in that thread. It is never a gate every change passes: a change nobody brings you
-lands on its lane's other agreements. In a read, run it against the full diff.
-<!-- OATS: the lane map's "Contract changes" line. -->
-A contract change is the exception: none lands undecided. It is decided by the two sides
-the lane map's "Contract changes" line names, together, before it is built; one you find in
-a read that wasn't goes back as a RETURN.
+Before a build, an author calls it: an expert asks you, by message at an exact reference,
+before it builds a contract or structural change. Answer in that thread. At a PR, it is
+the first check of every verdict you give (`/pr-review`): run it against the full diff. A question answered before the build is not asked again at the PR.
 
 ## Read before you judge
 - **The recorded decisions:** your knowledge's accepted decisions, the living roadmap, and
@@ -39,15 +34,15 @@ a read that wasn't goes back as a RETURN.
 ## Outcomes
 | Finding | Do |
 |---|---|
-| Fits | Say so in one line; in a read, go on with the other review gates. |
+| Fits | Say so in one line; in a green-light review, go on with the other checks. |
 | Fits with changes | Say the change needed and why, with the decision or rule it rests on. |
-| Needs a decision | Stop. Put the question to whoever decides it (your soul or human says who), with the options and your recommendation. Nothing is built or merged on it meanwhile. |
+| Needs a decision | Stop. Put the question to whoever decides it (your soul or person says who; the person your landing rules name, for a one-way door they keep), with the options and your recommendation. Nothing is built or merged on it meanwhile. |
 | Doesn't belong | Say where it would belong, and whether part of it can land here. |
 
 ## Record
 - A new architectural or structural call: its reason and the alternatives rejected, in
   your knowledge. Supersede the decision it replaces; don't leave both standing.
-- Superseding a decision a human accepted needs that human's own confirmation, cited
+- Superseding a decision a person accepted needs that person's own confirmation, cited
   exactly (the comment that says it, not the thread), before the knowledge change merges.
 - A changed direction: update the living roadmap in place.
 - A coherence rule you just enforced for the first time: write it down.

@@ -75,11 +75,14 @@ The author runs a fresh reviewer for each round, so you are one round.
   that nobody will check your findings for you.
 - Hold the bar the spec sets, not a bar of your own: a fresh reviewer each round must not
   mean a moving target. Taste stays out (section 4).
-- Your severity decides what comes next. A fix to a blocker or a major gets a fresh
-  reviewer on the whole change. A fix to a minor, a nit taken, or a CI fix that changes no
-  behaviour comes back to you as a delta: read it against your own findings, then send an
-  updated verdict and Checked section at the new head. A delta that changes behaviour, a
-  contract or the design is not yours to approve as a delta: say so, and it gets a fresh
-  round.
-- If the author disputes a finding with you, re-read it against its reason. Withdraw it if
-  they're right; say why if they aren't.
+- Your severity decides what comes next, so rank with care. A fix to a blocker or a major
+  gets a fresh reviewer on the whole change. A fix to a minor, a nit taken, or a CI fix
+  that changes no behaviour gets a read of its delta alone, by another reviewer.
+- Your report is your last word: you retire once it is sent. So each finding carries
+  what the author needs to place and reproduce it without asking you (section 3).
+
+## 6. A delta
+Your brief gives a delta's range and the findings it answers, from a round you didn't
+read. Read the delta against them and the criteria, and report: each finding fixed or
+not, and whether the delta changes behaviour, a contract or the design. One that does is
+not yours to approve as a delta: say so, and it gets a fresh round on the whole change.

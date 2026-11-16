@@ -3,18 +3,23 @@
 In OATS's copy, the template's `capabilities/<name>/` is `capabilities/oats-<name>/`: its
 `capabilities/build/` is `capabilities/oats-build/` here.
 
-Four of the build skills (`oats.build`) and the developer's quality floor adapt rules from
-MIT-licensed skill collections. The rules were rewritten in this template's words; no file
-was copied. Each source's copyright notice and licence follow, as the MIT licence asks. Keep
-this file with any copy of those skills (ADAPTING.md, section 1).
+Three rules of the build skill for the repository (`oats.build`) and the quality floor in the
+developer's and the expert's briefings adapt rules from MIT-licensed skill collections. The
+rules were rewritten in this template's words; no file was copied. Each source's copyright
+notice and licence follow, as the MIT licence asks. Keep this file with any copy of those
+texts (ADAPTING.md, section 1).
 
-| Template skill | Adapted from |
+| Template text | Adapted from |
 |---|---|
-| `capabilities/build/skills/test-first` | mattpocock/skills (`tdd`); obra/superpowers (`test-driven-development`) |
-| `capabilities/build/skills/diagnose-before-fixing` | mattpocock/skills (`diagnosing-bugs`); obra/superpowers (`systematic-debugging`) |
-| `capabilities/build/skills/design-while-writing` | mattpocock/skills (`codebase-design`); addyosmani/agent-skills (`api-and-interface-design`, `incremental-implementation`) |
-| `capabilities/developer/injects/developer.md`, the quality floor | addyosmani/agent-skills (`constraint-driven-development`) |
-| `capabilities/build/skills/prove-it-works`, step 6 | obra/superpowers (`verification-before-completion`) |
+| `capabilities/build/skills/build-in-the-repository`, section 3: three failed fixes means stop | mattpocock/skills (`diagnosing-bugs`); obra/superpowers (`systematic-debugging`) |
+| `capabilities/build/skills/build-in-the-repository`, section 3: a rename, a move or an extraction in a commit of its own | mattpocock/skills (`codebase-design`); addyosmani/agent-skills (`api-and-interface-design`, `incremental-implementation`) |
+| `capabilities/build/skills/build-in-the-repository`, section 3: no test asserts on a double; doubles only at real boundaries | mattpocock/skills (`tdd`); obra/superpowers (`test-driven-development`) |
+| `capabilities/build/skills/build-in-the-repository`, section 4: every claim names its evidence | obra/superpowers (`verification-before-completion`) |
+| `capabilities/developer/injects/developer.md` and `capabilities/engineering-expert/injects/expert.md`, the quality floor | addyosmani/agent-skills (`constraint-driven-development`) |
+
+template-v3.1.3 and earlier carried four longer build skills adapted from the same sources
+(`test-first`, `diagnose-before-fixing`, `design-while-writing`, `prove-it-works`); a copy
+that keeps them keeps this file's earlier table with them.
 
 ## mattpocock/skills
 
