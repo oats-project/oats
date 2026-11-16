@@ -198,11 +198,12 @@ owner and its arrangement, on its owner's yes. You propose a new lane, a split o
 change to a lane's arrangement; you never authorise one. Every lane names a merge path a
 lead can reach. Until a lane is listed, work no lane covers lands on the default
 agreements, and a single effort there is launched by the release lane's maintainer.
-<!-- OATS: the lane map lists OATS's lanes, so a lane is listed there; its default arrangement is one second reader per PR and the release lane's sign-off before every merge. -->
-Here a lane is listed on the lane map: a new lane adds its row and creates its label, as
-the map says. Until its owner's yes sets its arrangement, it runs on the map's default:
-its maintainer's green light, one second reader per PR, the release lane's sign-off at
-the exact head before every merge, and its maintainer merges.
+<!-- OATS: the lane map lists OATS's lanes and keeps its rule that a maintainer may open a lane for its own person's work; a new lane's default arrangement is one second reader per PR and the release lane's sign-off before every merge. -->
+Here a lane is listed on the lane map, and the map's rule holds: a maintainer may open a
+lane for its own person's work there, adding its row and creating its label. Until its
+owner's yes sets its arrangement, it runs on the map's default: its maintainer's green
+light, one second reader per PR, the release lane's sign-off at the exact head before
+every merge, and its maintainer merges.
 When a lane splits, efforts move whole, with their lead and all their PRs, by hand-over
 to the person's maintainer in the other lane; a moved PR keeps its verdicts, since a
 lane change is not a new head. A moved effort's lead stays the OATS child of the

@@ -59,8 +59,9 @@ The reviewer's severity decides which, not the author's wish: a fix ranked minor
 turns out to change behaviour gets a fresh reviewer.
 
 ## A maintainer's green light
-Only in a lane whose landing rules ask for it: here every lane does. "Green light" means only a lane
-maintainer's verdict on a PR, at an exact head.
+<!-- OATS: OATS is a large project, so every lane asks for its maintainer's green light (the landing rules). -->
+Only in a lane whose landing rules ask for it: here every lane does. "Green light" means
+only a lane maintainer's verdict on a PR, at an exact head.
 - **The call:** by message at that head, from the lead or the specialist landing the PR,
   once CI is green and every review thread is answered there.
 - **The verdict:** by message to whoever called. `GREEN LIGHT at <head>` with what it
@@ -81,13 +82,13 @@ efforts.
 ## The model floor
 The floor in your briefing binds every child, an OATS child or a native subagent, and it
 is checked before model diversity.
+<!-- OATS: the floor is absolute here (by tier, not the parent's own), so a parent's own model is the fallback only where it meets the floor, and every model picked is one this workspace allows. -->
 - It binds the model a child would actually launch on, wherever that comes from: a soul's
   default or a machine's override that is below the floor is not used. Spawn that child
   on a model at or above the floor instead, your own where that meets the floor, and
   tell your person once that the configuration is below the floor, naming the soul and
   the machine.
 - A model whose tier you can't establish is below the floor.
-<!-- OATS: the floor is absolute here (by tier, not the parent's own), so a parent's own model is the fallback only where it meets the floor, and every model picked is one this workspace allows. -->
 - A child that checks work runs on another family's model only where one at or above the
   floor is available; otherwise on your own model where that meets the floor, or on a
   model of your own family that does, and you say that diversity was lost. Where no model

@@ -18,6 +18,7 @@ Then:
 - **Running:** call it.
 - **Stopped, or known but not active:** message it anyway (messages wait), and tell its
   person it is stopped, so they can start it.
+<!-- OATS: OATS keeps its lane map: a seat is its `active` entry there. -->
 - **An `active` entry with nothing running anywhere you can see:** it may be retired,
   or run where you can't look. Ask its person before you start one. After a retired
   one, the next takes its count before the role (`<person>-<lane>-2-maintainer`): a
