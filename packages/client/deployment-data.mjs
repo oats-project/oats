@@ -8,6 +8,7 @@ import { teamRow, teamRowsOf, defaultTeamOf, TEAM_ID } from './team-rows.mjs';
 import { launchOf, REPORT_FROM } from './launch-contract.mjs';
 import { readIdentity } from './workspace-views.mjs';
 import { waitingOnYouData } from './waiting-on-you.mjs';
+import { attributedHumanData } from './attributed-human.mjs';
 import { retireData } from './retire-state.mjs';
 import { instanceColor } from './instance-presentation.mjs';
 const text = value => typeof value === 'string' && value.length <= 8192 && !value.includes('\0');
@@ -244,6 +245,9 @@ export function deploymentStatusData(document, deployment) {
       // Needs input (PR K): validated, never check()ed — an invalid claim is null (unknown), never an E_* that
       // fails the roster. Absent stays absent.
       if (own(instance, 'waitingOnYou')) row.waitingOnYou = waitingOnYouData(instance.waitingOnYou);
+      // Feature spawn-attribution: the owning human's label, or null. Validated, never check()ed: a malformed
+      // value is null (no human), never an E_* that fails the roster. Absent stays absent.
+      if (own(instance, 'attributedHuman')) row.attributedHuman = attributedHumanData(instance.attributedHuman);
       return [row];
     });
     return out;

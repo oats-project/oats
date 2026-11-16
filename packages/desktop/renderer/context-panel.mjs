@@ -80,6 +80,8 @@ export const contextPanelCSS = `
 #context-panel .context-panel-paths[open] > summary { margin-bottom:8px; }
 /* Facts: a label column (64px, muted) and a value column; Paths and Lineage share it. */
 #context-panel .context-panel-facts { display:grid; grid-template-columns:64px minmax(0,1fr); gap:7px 10px; align-items:center; margin:0; min-width:0; font-size:12px; line-height:1.45; }
+/* Lineage's label column grows to fit "Owning human" on one line, and only while that row is shown. */
+#context-panel .context-panel-facts.is-lineage { grid-template-columns:minmax(64px, max-content) minmax(0,1fr); }
 #context-panel .context-panel-fact { display:contents; }
 #context-panel .context-panel-facts dt { color:var(--muted); }
 #context-panel .context-panel-facts dd { margin:0; min-width:0; color:var(--fg); overflow-wrap:anywhere; }
@@ -469,7 +471,9 @@ export function createContextPanel({
   const teamsSection = typeof createTeamsSection === 'function' ? createTeamsSection(teamsHost, { tools: teamsTools,
     onPresence(present) { if (!disposed) teamsHost.hidden = !present; } }) : null;
   const lineage = section('instance', 'Lineage');
-  facts(lineage, [['parentInstance', 'Parent'], ['siblingInstance', 'Sibling']]);
+  // Owning human (feature spawn-attribution): the kernel's attributedHuman, the label of the human the instance's
+  // messaging identity is attributed to. Shown only when set; null or absent hides the row, like any unreported fact.
+  facts(lineage, [['attributedHuman', 'Owning human'], ['parentInstance', 'Parent'], ['siblingInstance', 'Sibling']]).classList.add('is-lineage');
   const soulHead = identityHeader('soul');
   const soulSub = field('div', 'context-panel-identity-sub', 'description');
   soulHead.copy.append(field('div', 'context-panel-identity-name', 'agent'), soulSub);

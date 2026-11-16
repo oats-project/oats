@@ -1101,6 +1101,22 @@ computer, and for an instance on a server, on that server too; until then the
 buttons are disabled and the dialog says which is missing. An instance whose
 home is being spawned or retired can't be given a colour meanwhile.
 
+## An instance's owning human
+
+Where the messaging capability attributes an instance's messaging identity to
+a human, the instance panel's Lineage section shows that human first, as
+**Owning human**, above the instance's parent and sibling. It is the
+`attributedHuman` of the instance's row in `oats status --json`, and of a
+server's row for an instance on a server
+([Attributed human](desktop-cli-api.md#attributed-human)), shown as OATS
+reports it. The instance is still named by its own name everywhere: the
+sidebar, its terminal tab, the command palette and the panel's header.
+
+An instance with no human attributed shows no such field, and nothing says
+one is missing: that is the usual case, on a deployment whose messaging
+capability supplies no human identities and for an older OATS that doesn't
+report it. A label OATS would not show as one line of text reads the same way.
+
 ## Identity marks and harness badges
 
 Souls, capabilities and workspaces carry a coloured two-letter mark beside
