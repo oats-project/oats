@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { fs, join, dirname, safePath, readJSON, atomic, tree, materialize, digest, hash, withLock, exec, cleanEnv, fail, relPath, overlaps, resolve, within, redactUrls, displayRepo } from './io.mjs';
 import { metadata, noGit, gitTimeoutMs } from './config.mjs';
 import { isBridgedMeta, subjectOfPath } from './okf-reindex.mjs';
+import { gitCredentialEnv, ghEnv, refuseBadTokenFile, refuseHostRoutes } from './credential.mjs';
 const validator = fileURLToPath(new URL('./okf-validate.mjs', import.meta.url));
 // Never let local replace refs reinterpret frozen OIDs, including inside Git's
 // transport subprocesses. Override even an explicitly supplied command env.
@@ -12,7 +13,10 @@ const validator = fileURLToPath(new URL('./okf-validate.mjs', import.meta.url));
 // grafts (info/grafts) or commit-graph file could otherwise rewrite parents,
 // and so ancestry, without changing a single object. The graft file is a path
 // that cannot exist: an existing one, even empty, makes Git print a warning.
-export const gitEnv = (env = cleanEnv()) => ({...env,GIT_NO_REPLACE_OBJECTS:'1',GIT_GRAFT_FILE:'/dev/null/no-grafts'});
+// With github-token-file (6.2) the same environment carries the one credential source.
+export const gitEnv = (env = cleanEnv()) => gitCredentialEnv({...env,GIT_NO_REPLACE_OBJECTS:'1',GIT_GRAFT_FILE:'/dev/null/no-grafts'});
+/** Every gh child of the library: the deployment's credential, or the user's own login. */
+export const ghChildEnv = (env = cleanEnv()) => ghEnv(env);
 export const git = (cwd,args,opts={}) => exec('git',['--no-replace-objects','-c','core.hooksPath=/dev/null','-c','protocol.ext.allow=never','-c','core.commitGraph=false','-C',cwd,...args],{cwd,...opts,env:gitEnv(opts.env)});
 function baseError(code,message,base,alias,step,reason) {throw Object.assign(new Error(redactUrls(message)),{code,base:alias,repository:displayRepo(base.repository),step,reason});}
 function baseRemedy(alias) {return `fix the binding for base alias "${alias}" in the bindings file, or remove the base from the bindings`;}
@@ -26,7 +30,8 @@ function classifyGitFailure(error) {
 }
 export function unavailable(base,alias,step,error,{detail:withDetail=true}={}) {
   // withDetail false (oats okf propose): a fixed classification only, never the tool's own bytes.
-  const reason=classifyGitFailure(error),detail=reason==='unknown'&&withDetail?`; original Git failure: ${redactUrls(String(error?.message || 'unknown failure'))}`:'';
+  const reason=classifyGitFailure(error); if(reason==='auth') refuseBadTokenFile();
+  const detail=reason==='unknown'&&withDetail?`; original Git failure: ${redactUrls(String(error?.message || 'unknown failure'))}`:'';
   const message=`Git base "${alias}" repository "${displayRepo(base.repository)}" is required by the deployment's bindings, but ${step} failed (reason: ${reason}${detail}); ${baseRemedy(alias)}`;
   baseError('E_BASE_UNAVAILABLE',message,base,alias,step,reason);
 }
@@ -369,11 +374,11 @@ function prRows(base,branch,cwd,{identity,allBases=false}={}) {
   // head/base filter. A missing/inaccessible identity is an error, not absence.
   if(identity) {
     if(!Number.isInteger(identity.number) || identity.number<1 || !/^https:\/\//.test(identity.url)) fail('E_RECOVERY','invalid recorded PR identity');
-    const pr=JSON.parse(exec('gh',['pr','view',String(identity.number),'--repo',base.pr.repository,'--json',fields],{cwd,env:gitEnv()}));
+    const pr=JSON.parse(exec('gh',['pr','view',String(identity.number),'--repo',base.pr.repository,'--json',fields],{cwd,env:ghChildEnv()}));
     if(!pr || Array.isArray(pr) || typeof pr!=='object') fail('E_RECOVERY','known PR missing; reconcile custody before rejudging');
     return [pr];
   }
-  const raw=exec('gh',['pr','list','--repo',base.pr.repository,'--head',branch,...(allBases?[]:['--base',base.acceptedBranch]),'--state','all','--json',fields],{cwd,env:gitEnv()});
+  const raw=exec('gh',['pr','list','--repo',base.pr.repository,'--head',branch,...(allBases?[]:['--base',base.acceptedBranch]),'--state','all','--json',fields],{cwd,env:ghChildEnv()});
   const rows=JSON.parse(raw); if(!Array.isArray(rows)) fail('E_PR','invalid gh PR list'); return rows;
 }
 // Git terminates each record it prints; a URL's own whitespace is kept, since
@@ -482,7 +487,7 @@ const MERGE_VERDICTS=['merge','amend+merge'],REVIEWER_ASSOCIATIONS=['OWNER','MEM
  *  token's comments carry no member association): a merge verdict, or null
  *  when there is none or it is not a merge. */
 function mergeVerdict(base,pr,cwd) {
-  const {comments,mergedBy}=JSON.parse(exec('gh',['pr','view',String(pr.number),'--repo',base.pr.repository,'--json','comments,mergedBy'],{cwd,env:gitEnv()}));
+  const {comments,mergedBy}=JSON.parse(exec('gh',['pr','view',String(pr.number),'--repo',base.pr.repository,'--json','comments,mergedBy'],{cwd,env:ghChildEnv()}));
   // gh prints an App merger as app/<name> but its comments' author as <name>;
   // a login cannot contain '/', so stripping the prefix is safe for users.
   const merger=typeof mergedBy?.login==='string' && mergedBy.login?mergedBy.login.replace(/^app\//,''):null;
@@ -523,6 +528,9 @@ function carriesDelivered(cwd,branch,commit,head) {
   catch(e) {if(e.status===1) return false;throw e;}
 }
 export function gitPublish(base, stage, proposal, receipt, persist, {beforePublish=()=>{},prIdentity=receipt.pr,pr:presentation}={}) {
+  // 6.2: with github-token-file, nothing of a delivery starts (no fetch, no
+  // push intent, no push, no PR) while the host can answer GitHub in its place.
+  refuseHostRoutes();
   const cwd=stage.checkout, branch=`okf/${proposal.attempt || proposal.run}-${base.id}`;
   verifyRemote(base,cwd);
   const baseline=immutableCommit(cwd,stage.head);
@@ -611,8 +619,8 @@ export function gitPublish(base, stage, proposal, receipt, persist, {beforePubli
     const label=presentation?.label;
     // The label is what the review trigger watches: make sure the
     // repository has it (idempotent), then open the PR carrying it.
-    if(label) try {exec('gh',['label','create',label,'--repo',base.pr.repository,'--force','--color','0E8A16','--description','OKF harvest PR (oats.okf)'],{cwd,env:gitEnv()});} catch { /* may exist already or be unmanageable; pr create reports a real problem */ }
-    try { exec('gh',['pr','create','--repo',base.pr.repository,'--head',branch,'--base',base.acceptedBranch,'--title',title,'--body',body,...(label?['--label',label]:[])],{cwd,env:gitEnv()}); }
+    if(label) try {exec('gh',['label','create',label,'--repo',base.pr.repository,'--force','--color','0E8A16','--description','OKF harvest PR (oats.okf)'],{cwd,env:ghChildEnv()});} catch { /* may exist already or be unmanageable; pr create reports a real problem */ }
+    try { exec('gh',['pr','create','--repo',base.pr.repository,'--head',branch,'--base',base.acceptedBranch,'--title',title,'--body',body,...(label?['--label',label]:[])],{cwd,env:ghChildEnv()}); }
     catch(e) {receipt.status='pr-unknown';receipt.error=e.message;persist();throw e;}
     rows=prRows(base,branch,cwd);
   }

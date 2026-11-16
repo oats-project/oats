@@ -1,17 +1,15 @@
 import { TextDecoder } from 'node:util';
 import { spawn } from 'node:child_process';
 import { isAbsolute, resolve } from 'node:path';
-import { fs, safePath, displayRepo, redactUrls } from './io.mjs';
+import { displayRepo, redactUrls } from './io.mjs';
 import {
   KNOWLEDGE_CONTRACT,
   KNOWLEDGE_CONTRACT_VERSION,
-  KNOWLEDGE_PAYLOAD_VERSION,
   bindKnowledgeDomain,
   bindingChoiceKey,
   normalizeKnowledgeBindingCandidates,
   normalizeKnowledgeDeclaration,
   renderKnowledgeRuntime,
-  sameJson,
 } from './portable-binding.mjs';
 import { declaration as soulDeclaration, loadBindings, validateBindings, validateDeclaration, declarationFile, resolveNodes, resolveSubjects } from './config.mjs';
 import { gitEnv, validateBase } from './stores.mjs';
@@ -29,7 +27,17 @@ const wireError=code=>{throw Object.assign(new Error(code),{wireCode:code});};
 // Private diagnostic marker and closed literal vocabulary. Never serialize a
 // caught exception's message, supplied value, path, alias or unknown key.
 const settingDiagnostic=Symbol('runtime-setting-diagnostic');
-const V1_REMOVED='E_REMOVED: OKF binding payloadVersion 1 (harvest runtime/model) was removed in oats.okf 5.0; respawn to bind with oats.okf 5 (there is no harvest runtime or model)';
+// awebai/oats-aweb#242 part 2: the one fixed wording oats.okf and oats.aweb
+// share for the removed captured bindings. Release prep may change the version
+// here, its one place (oats.json binding.reasons carries the reason byte-exact).
+const CAPTURED_REMOVED_SINCE='oats.okf 6.1.0';
+const CAPTURED_REASON=`captured bindings are not supported since ${CAPTURED_REMOVED_SINCE}; readiness takes a workspace context (oats readiness)`;
+const CAPTURED_VARIABLES=Object.freeze(['OATS_BINDING_FILE','OATS_SOURCE_RECEIPT_FILE','OATS_INVOCATION_CONTEXT_FILE']);
+/** One warning per captured-binding variable present in `env`, naming it and
+ *  never its value: every oats.okf command and hook ignores them. */
+export function ignoredCapturedVariables(env=process.env) {
+  return CAPTURED_VARIABLES.filter(name=>Object.hasOwn(env,name)).map(name=>`${name} is ignored: ${CAPTURED_REASON}`);
+}
 const settingMessages=Object.freeze({
   'bindings-file:missing':'setting bindings-file is required (absolute host path)',
   'bindings-file:invalid':'setting bindings-file must be a normalized absolute host path',
@@ -197,61 +205,6 @@ function bindPhase(req) {
   const runtime=renderKnowledgeRuntime({domain:bound.payload,...req.input.model.runtime});
   return {payloadContract:bound.contract,payloadVersion:bound.version,payload:{...bound.payload,runtime},credentialRefs:bound.credentialRefs,provenance:bound.provenance};
 }
-function bindingPayload(binding,{diagnoseSettings=false}={}) {
-  keys(binding,['schemaVersion','capability','payloadContract','payloadVersion','payload','credentialRefs','provenance'],['schemaVersion','capability','payloadContract','payloadVersion','payload','credentialRefs','provenance'],'provider binding');
-  if(binding.schemaVersion===1 && binding.capability===CAPABILITY && binding.payloadContract===KNOWLEDGE_CONTRACT && binding.payloadVersion===1) throw Object.assign(new Error(V1_REMOVED),{code:'E_REMOVED',wireCode:'needs-configuration',v1:true});
-  if(binding.schemaVersion!==1 || binding.capability!==CAPABILITY || binding.payloadContract!==KNOWLEDGE_CONTRACT || binding.payloadVersion!==KNOWLEDGE_PAYLOAD_VERSION || !Array.isArray(binding.provenance)) wireError('invalid-binding');
-  if(!obj(binding.credentialRefs) || Object.keys(binding.credentialRefs).length) wireError('invalid-binding');
-  keys(binding.payload,['owner','stores','reads','owns','runtime'],['owner','stores','reads','owns','runtime'],'OKF binding payload');
-  const domain={owner:binding.payload.owner,stores:binding.payload.stores,reads:binding.payload.reads,owns:binding.payload.owns};
-  if(diagnoseSettings) {
-    const bound=binding.payload;
-    if(!obj(bound.runtime) || !obj(bound.runtime.bindings)) wireError('invalid-binding');
-    // Check the retained values, not mutable request settings. Existing full
-    // envelope/canonical-runtime guards still run below on success.
-    runtimeSettings({'bindings-file':bound.runtime.descriptorFile,'state-dir':bound.runtime.bindings.stateDir});
-  }
-  const runtime=renderKnowledgeRuntime({domain,stateDir:binding.payload.runtime?.bindings?.stateDir,descriptorFile:binding.payload.runtime?.descriptorFile});
-  if(!sameJson(runtime,binding.payload.runtime)) wireError('invalid-binding');
-  return {domain,runtime};
-}
-
-/** Pure projection of a bound payload: what an instance consults. */
-export function sourceRuntimeFromKnowledgeBinding(binding) {
-  const {domain,runtime}=bindingPayload(binding);
-  return {owner:domain.owner,bindings:{file:runtime.descriptorFile,...runtime.bindings},decl:runtime.declaration};
-}
-
-const invocationError=()=>{throw Object.assign(new Error('invalid captured provider binding snapshot'),{code:'E_BINDING'});};
-export function readPrivateInvocationJson(file) {
-  if(!absolute(file)) invocationError();
-  let fd;
-  try {
-    if(safePath(file)!==file) invocationError();
-    const before=fs.lstatSync(file),uid=typeof process.getuid==='function'?process.getuid():null;
-    if(!before.isFile() || before.nlink!==1 || before.size>BINDING_WIRE_LIMITS.bytes || (before.mode&0o077)!==0 || (uid!==null && before.uid!==uid)) invocationError();
-    fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);
-    const opened=fs.fstatSync(fd);
-    if(!opened.isFile() || opened.nlink!==1 || opened.dev!==before.dev || opened.ino!==before.ino || opened.size>BINDING_WIRE_LIMITS.bytes || (opened.mode&0o077)!==0 || (uid!==null && opened.uid!==uid)) invocationError();
-    const bytes=Buffer.alloc(Math.min(BINDING_WIRE_LIMITS.bytes+1,opened.size+1));let length=0;
-    while(length<bytes.length) {const count=fs.readSync(fd,bytes,length,bytes.length-length,null);if(!count) break;length+=count;}
-    const after=fs.fstatSync(fd);
-    if(length>BINDING_WIRE_LIMITS.bytes || after.size!==opened.size || after.mtimeMs!==opened.mtimeMs) invocationError();
-    return parseBindingJson(bytes.subarray(0,length));
-  } catch(error) {if(error?.code==='E_BINDING') throw error;invocationError();}
-  finally {if(fd!==undefined) fs.closeSync(fd);}
-}
-
-/** Load a private ProviderBinding1 snapshot (OATS_BINDING_FILE) when one is
- * named. The released kernel (0.44) names none: the usual path is the soul's
- * declaration and the bindings file. A present file fails closed on any
- * defect; a 4.x payloadVersion 1 snapshot is E_REMOVED. */
-export function loadInvocationKnowledgeBinding(env=process.env) {
-  if(!Object.hasOwn(env,'OATS_BINDING_FILE')) return {kind:'legacy'};
-  const file=env.OATS_BINDING_FILE,binding=readPrivateInvocationJson(file);
-  let runtime;try{runtime=sourceRuntimeFromKnowledgeBinding(binding);}catch(error){if(error?.v1) throw error;invocationError();}
-  return {kind:'captured',file,binding,runtime};
-}
 // Closed vocabulary of check-phase reasons: one fixed literal per cause, so the
 // operator learns WHICH qualification failed without any value, path, alias or
 // caught message reaching the wire. Every literal is also in oats.json
@@ -260,8 +213,7 @@ const checkReasons=Object.freeze({
   'action:not-admitted':'check action is not an admitted knowledge operation',
   'settings:missing':'OKF settings missing bindings-file: set settings.oats.okf bindings-file, or deactivate oats.okf',
   'soul:missing':'OKF soul declaration missing: create okf.json for this soul, or deactivate oats.okf',
-  'binding:v1-removed':V1_REMOVED,
-  'binding:not-configured':'OKF binding missing or invalid: provision soul OKF declaration and bindings file, or deactivate oats.okf',
+  'binding:captured':CAPTURED_REASON,
   'bindings:invalid':'OKF bindings file missing or invalid: repair configured bindings file, or deactivate oats.okf',
   'bases:too-many':'more than 64 git knowledge bases declared',
   'base:stage-failed':'declared knowledge base could not be staged from its git source',
@@ -301,7 +253,9 @@ function providerActionName(action) {
   return null;
 }
 function readinessRuntime(settings,env=process.env) {
-  if(settings.schemaVersion===undefined) {const removed=removedMessage(settings);if(removed) return {problem:{code:'needs-configuration',message:removed}};}
+  // A ProviderBinding1 as the settings is a captured binding: never checked.
+  if(settings.schemaVersion!==undefined) return {problem:problem('needs-configuration','binding:captured')};
+  const removed=removedMessage(settings);if(removed) return {problem:{code:'needs-configuration',message:removed}};
   if(Object.hasOwn(settings,'bindings-file')) {
     try {
       if(typeof settings['bindings-file']!=='string' || !absolute(settings['bindings-file'])) return {problem:problem('needs-configuration','settings:missing')};
@@ -313,14 +267,6 @@ function readinessRuntime(settings,env=process.env) {
       const message=String(error?.message || '');
       if(error?.code==='E_CONFIG' && /okf\.json|soul has no/.test(message)) return {problem:problem('needs-configuration','soul:missing')};
       return {problem:problem('needs-configuration','bindings:invalid')};
-    }
-  }
-  if(settings.schemaVersion!==undefined) {
-    try { return {runtime:bindingPayload(settings,{diagnoseSettings:true}).runtime}; }
-    catch(error) {
-      if(error?.v1) return {problem:problem('needs-configuration','binding:v1-removed')};
-      if(['invalid-binding','needs-configuration'].includes(error?.wireCode)) return {problem:problem('needs-configuration','binding:not-configured')};
-      throw error;
     }
   }
   return {problem:problem('needs-configuration','settings:missing')};
@@ -436,7 +382,7 @@ function errorCode(error) {if(errorCodes.has(error?.wireCode)) return error.wire
 function errorProblem(error) {
   // The private symbol is set only by settingError (closed literals) and
   // removedError (the `setting:removed` template, rendered), never by a caught message.
-  const code=errorCode(error),message=error?.v1?V1_REMOVED:error?.[settingDiagnostic];
+  const code=errorCode(error),message=error?.[settingDiagnostic];
   return {code,...(code==='needs-configuration' && typeof message==='string'?{message}:{})};
 }
 function enforceOutputLimits(value,depth=1,state={entries:0}) {

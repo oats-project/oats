@@ -12,9 +12,10 @@ import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { isAbsolute, relative, sep } from 'node:path';
-import { fs, join, resolve, dirname, safePath, atomic, hash, cleanEnv, exec, fail } from './io.mjs';
-import { settings, resolveNodes, gitTimeoutMs } from './config.mjs';
-import { git as rawGit, gitEnv, preflightLocalRepository, unavailable, validateBase, ID_WARNING, unstampedWarning } from './stores.mjs';
+import { fs, join, resolve, dirname, safePath, atomic, hash, cleanEnv, exec, fail, quote } from './io.mjs';
+import { settings, resolveNodes, gitTimeoutMs, tokenFile, credentialRefusal } from './config.mjs';
+import { hostRefusal } from './credential.mjs';
+import { git as rawGit, gitEnv, ghChildEnv, preflightLocalRepository, unavailable, validateBase, ID_WARNING, unstampedWarning } from './stores.mjs';
 import { consultSource } from './sources.mjs';
 import { harvestPolicy } from './harvest-policy.mjs';
 import { isBridgedMeta } from './okf-reindex.mjs';
@@ -38,6 +39,37 @@ const sha256 = bytes => hash(bytes);
 const present = p => { try { fs.lstatSync(p); return true; } catch (e) { if (e.code === 'ENOENT') return false; throw e; } };
 const failWith = (code, message, result) => { throw Object.assign(new Error(message), { code, ...(result ? { result } : {}) }); };
 const parseJson = (bytes, label) => { try { return JSON.parse(bytes); } catch { return fail('E_SOURCE', `${label} is not readable JSON`); } };
+
+// ------------------------------------------------------------ attribution
+// The kernel's refused set and one-line rule for text it did not write (a
+// waiting claim's message): what `attributedHuman` is held to on a status row.
+const REFUSED_TEXT = /[\p{Cc}\u2028\u2029\u202A-\u202E\u2066-\u2069\u200B\u2060\uFEFF\u{E0000}-\u{E007F}]/u;
+const oneLine = v => typeof v === 'string' && v.trim().length > 0 && [...v].length <= 200 && !REFUSED_TEXT.test(v);
+/** Who the home's record says proposes: the messaging identity it serves and
+ *  the human that identity is attributed to, read as the kernel reads
+ *  `attributedHuman` (feature spawn-attribution): by slot, never by name. Only
+ *  the identity a capability whose layer is "messaging" recorded counts; only
+ *  mode "human" names one; a malformed or absent attribution reads as absent.
+ *  One difference from the kernel, for a trailer's sake: the address, alias
+ *  and label are trimmed, and a blank one is absent.
+ *  A self-declared record, never proof: any caller can name a home. */
+export function attribution(record) {
+  const none = { identity: null, human: null };
+  const meta = record?.capabilityMeta, runtime = record?.capabilityRuntime;
+  if (!object(meta) || !Array.isArray(runtime)) return none;
+  for (const c of runtime.filter(c => c && c.layer === 'messaging')) {
+    const identity = meta[c.id]?.identity;
+    if (!object(identity)) continue;
+    const name = [identity.address, identity.alias].find(oneLine)?.trim() ?? null;
+    const a = identity.attribution;
+    if (!object(a) || !['human', 'none', 'unknown'].includes(a.mode)) return { identity: name, human: null };
+    const human = a.human ?? null, parent = a.parent ?? null, id = v => typeof v === 'string' && v.length > 0;
+    if (human !== null && !(object(human) && id(human.id) && typeof human.label === 'string')) return { identity: name, human: null };
+    if (parent !== null && !(object(parent) && id(parent.id))) return { identity: name, human: null };
+    return { identity: name, human: a.mode === 'human' && human && oneLine(human.label) ? human.label.trim() : null };
+  }
+  return none;
+}
 
 // ------------------------------------------------------------ safe reads
 // Every component below a trusted directory is checked; neither a symlinked
@@ -119,10 +151,11 @@ export function resolveSource(home, env = process.env) {
   const capabilities = [record.capabilities, record.capabilityRuntime].flatMap(l => Array.isArray(l) ? l : []);
   const tasksProvider = capabilities.find(c => c?.layer === 'tasks')?.id ?? null;
   const messaging = capabilities.some(c => c?.layer === 'messaging');
+  const attributed = attribution(record);
   const proposer = form === 'live'
     ? { form, instance: record.instance, alias: messaging ? record.instance : null }
     : { form, instance: typeof env.OATS_INSTANCE === 'string' && NAME.test(env.OATS_INSTANCE) ? env.OATS_INSTANCE : null, alias: null };
-  return { form, home, root, record, soul, decl, bindings, tasksProvider: typeof tasksProvider === 'string' ? tasksProvider : null, proposer, legacyKeysIgnored };
+  return { form, home, root, record, soul, decl, bindings, tasksProvider: typeof tasksProvider === 'string' ? tasksProvider : null, proposer, attributed, legacyKeysIgnored };
 }
 
 /** A retired seat with no spawn-recorded duty (spawned on 4.x or 5.0/5.1),
@@ -538,7 +571,21 @@ export function provenance(source, bases, ev) {
     proposer: source.proposer,
   };
 }
-const commitText = (source, proposal) => `okf-proposal: ${proposal.claim}\n\nSource: instance ${source.record.instance}, soul ${source.soul}\n`;
+/** The commit's trailer block: who proposed, as the home's record says. The
+ *  forge's own record shows only the deployment's credential, so the accepted
+ *  history carries these (the maintainer's merge copies them). `optional`
+ *  rows are the record's free text: one the content screen refuses is left
+ *  out (`screened` decides), never a refusal the proposer cannot fix. */
+function trailers(source, screened) {
+  const rows = [`Proposed-by: ${source.record.instance} (soul ${source.soul})`], withheld = [];
+  for (const [key, value] of [['Proposer-identity', source.attributed.identity], ['Attributed-human', source.attributed.human]]) {
+    if (value === null) continue;
+    if (screened(`${key}: ${value}`)) rows.push(`${key}: ${value}`); else withheld.push(key);
+  }
+  if (source.form === 'recovery') rows.push(`Published-by: ${source.proposer.instance ?? 'operator'}`);
+  return { rows, withheld };
+}
+const commitText = (source, proposal, rows) => `okf-proposal: ${proposal.claim}\n\nSource: instance ${source.record.instance}, soul ${source.soul}\n\n${rows.join('\n')}\n`;
 const prBody = (proposal, block, candidates = '') => `${proposal.body}${candidates ? `\n${candidates}` : ''}\n\`\`\`okf-proposal\n${JSON.stringify(block, null, 2)}\n\`\`\`\n`;
 function termsFile() {
   const file = settings()['screen-terms-file'];
@@ -547,13 +594,68 @@ function termsFile() {
   return file;
 }
 /** Run one helper command in process; its refusals keep their codes. */
-function runHelper(command, options) {
+export function runHelper(command, options) {
   try { return publication.execute(command, { ...options }); }
   catch (e) {
     const code = /^E_[A-Z_]+$/.test(e.code || '') ? e.code : 'E_PUBLICATION';
-    const result = { ...(e.findings ? { findings: e.findings } : {}), ...(e.diagnostic ? { diagnostic: e.diagnostic } : {}) };
-    failWith(code, code === 'E_CONTENT_REFUSED' ? 'the content screen refused the outgoing content (findings name locations only; nothing left this host)' : code === 'E_CONTENT_INPUT' ? 'the content screen could not read an input (an outgoing text or the host terms file)' : `the publication helper refused (${code})`, result);
+    // Before this call's push, an unusable token file is the whole-fix
+    // refusal. After it, it is a publication error like any other and keeps
+    // what was published. Neither says "nothing was sent": another base's PR
+    // may be open by now, and the caller says what was pushed for this one.
+    if (code === 'E_CREDENTIAL' && options['token-file'] && !e.published) credentialRefusal(options['token-file'], e.diagnostic?.reason);
+    // The helper looks at the host when the command starts, before its push.
+    if (code === 'E_HOST_CREDENTIAL') hostRefusal(e.diagnostic);
+    const result = { ...(e.findings ? { findings: e.findings } : {}), ...(e.diagnostic ? { diagnostic: e.diagnostic } : {}), ...(e.published ? { published: e.published } : {}) };
+    failWith(code, code === 'E_CONTENT_REFUSED' ? 'the content screen refused the outgoing content (findings name locations only; nothing left this host)' : code === 'E_CONTENT_INPUT' ? 'the content screen could not read an input (an outgoing text or the host terms file)' : code === 'E_CREDENTIAL' && e.published ? 'the token in github-token-file became unusable after the push (its file was missing, empty or malformed when gh needed it)' : `the publication helper refused (${code})`, result);
   }
+}
+
+/** The helper option that names the deployment's credential file, if any. */
+const tokenOption = () => { const file = tokenFile(); return file === undefined ? {} : { 'token-file': file }; };
+const GH_FIX = {
+  'gh-absent': 'gh is not installed on this host (or not on PATH): install it and sign it in',
+  'gh-failed': 'gh could not read the repository or its permission on it: sign gh in (gh auth login, or GH_TOKEN) with an account that can see it',
+  'no-write-permission': "gh's account has less than write permission on the repository (the label and the PR need it): use an account with write",
+  'installation-cannot-push': "gh is signed in as a GitHub App installation, and GitHub refused that installation a push to the repository or does not show it the repository (asked with gh's own token; nothing was sent): give the installation access to the repository with contents write, plus pull-requests and issues write for the PR and its label (which this check cannot see)",
+  'installation-check-failed': "gh is signed in as a GitHub App installation, and whether GitHub accepts a push from it could not be checked (the request timed out, could not reach github.com directly over HTTPS, gh gave no token for github.com, or GitHub gave some other answer; nothing was sent): check the network (the check uses no proxy) and `gh auth status`, then run it again",
+};
+// The same answers when the deployment's own credential was judged
+// (github-token-file): the fix is the token and its identity, never gh's login.
+const TOKEN_FIX = {
+  'gh-absent': 'gh is not installed on this host (or not on PATH): install it (github-token-file supplies its credential)',
+  'gh-failed': 'GitHub did not show the repository or a permission on it to the token in github-token-file: check that the token is valid and not expired, and that its identity can see the repository',
+  'no-write-permission': 'the identity of the token in github-token-file has less than write permission on the repository (the label and the PR need it): give that identity the write role there',
+  'installation-cannot-push': 'the token in github-token-file is a GitHub App installation\'s, and GitHub refused it a push to the repository or does not show it the repository (asked with that token; nothing was sent): give the installation access to the repository with contents write, plus pull-requests and issues write for the PR and its label (which this check cannot see)',
+  'installation-check-failed': 'the token in github-token-file is a GitHub App installation\'s, and whether GitHub accepts a push from it could not be checked (the request timed out, could not reach github.com directly over HTTPS, or GitHub gave some other answer; nothing was sent): check the network (the check uses no proxy), then run it again',
+};
+/** The one publish predicate: this deployment's credential can publish to
+ *  this base. With github-token-file it is that file's token that is judged,
+ *  otherwise gh's own login: gh is present, reads the repository and GitHub
+ *  says the credential may push; for a GitHub App installation, GitHub answers
+ *  the token with the repository's push advertisement. Read-only; refuses
+ *  E_GH_UNAVAILABLE with the fix, E_CREDENTIAL for an unusable file, or
+ *  E_HOST_CREDENTIAL when the host can answer GitHub in the file's place. */
+export function checkPublish(alias, base) {
+  const repository = base.pr.repository, file = tokenFile();
+  try { publication.execute('preflight', { github: repository, ...tokenOption() }); }
+  catch (e) {
+    if (e?.code === 'E_CREDENTIAL' && file !== undefined) credentialRefusal(file, e.diagnostic?.reason, { unsent: true });
+    if (e?.code === 'E_HOST_CREDENTIAL') hostRefusal(e.diagnostic);
+    if (e?.code !== 'E_GH_UNAVAILABLE') failWith(/^E_[A-Z_]+$/.test(e?.code || '') ? e.code : 'E_PUBLICATION', `the publication helper refused before anything was pushed (base ${alias})`);
+    const reason = e.diagnostic?.reason;
+    const fix = (file === undefined ? GH_FIX : TOKEN_FIX)[reason] ?? 'gh is not usable';
+    // `fix`: the same text apart, for a caller that lists problem and fix separately (setup --check).
+    throw Object.assign(new Error(`base ${alias} (${repository}): ${fix}`), { code: 'E_GH_UNAVAILABLE', fix, result: { reason, alias, repository, pushed: false, ...(file === undefined ? {} : { credential: 'file' }) } });
+  }
+}
+/** How a publication that stopped after a step it cannot undo is finished or
+ *  removed, for whoever the instance reports to (the instance never does it). */
+function aftermath(code, r, branch, bodyFile, pushed, late) {
+  const repository = r.owned.base.pr.repository, q = quote;
+  if (late) return `; gh stopped answering after the proposal was marked as attempted (${late}): nothing was pushed for base ${r.alias}`;
+  if (pushed) return `; branch ${pushed.branch} (${pushed.head.slice(0, 12)}) was pushed to ${repository} and no PR is confirmed, never assume there is none. For whoever you report to: \`gh pr list --repo ${q(repository)} --head ${q(pushed.branch)} --state all\` shows whether a PR exists; to finish, \`gh pr create --repo ${q(repository)} --base ${q(r.owned.base.acceptedBranch)} --head ${q(pushed.branch)} --label okf-proposal --title 'OKF knowledge proposal' --body-file ${q(bodyFile)}\`; to remove it, \`git -C ${q(r.clone)} push origin --delete ${q(pushed.branch)}\``;
+  if (code === 'E_PUSH_UNCERTAIN') return `; branch ${branch} may exist on ${repository}, never assume it does not: \`git -C ${q(r.clone)} ls-remote origin ${q(`refs/heads/${branch}`)}\` shows whether it does`;
+  return ['E_PR_UNCERTAIN', 'E_GH'].includes(code) ? '; a remote branch or PR may exist, never assume it does not' : '';
 }
 
 /** Everything --check verifies and --apply re-verifies. Writes only the
@@ -565,7 +667,20 @@ function prepare(source, dir, plan) {
   const terms = termsFile();
   const outgoing = join(dir, 'outgoing');
   fs.mkdirSync(outgoing, { recursive: true, mode: 0o700 });
-  const message = commitText(source, proposal);
+  // One trailer line at a time through the same screen the whole commit text
+  // meets below, so a withheld line is named and the rest still publishes.
+  const attributed = trailers(source, line => {
+    const scratch = fs.mkdtempSync(join(fs.realpathSync(tmpdir()), 'okf-propose-trailer-'));
+    try {
+      const file = join(scratch, 'trailer.txt');
+      fs.writeFileSync(file, `${line}\n`, { mode: 0o600 });
+      // Through runHelper: any other failure (an unreadable terms file) keeps its message and findings.
+      try { runHelper('screen-text', { 'text-file': [file], ...(terms ? { 'terms-file': terms } : {}) }); return true; }
+      catch (e) { if (e?.code === 'E_CONTENT_REFUSED') return false; throw e; }
+    } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
+  });
+  for (const key of attributed.withheld) warnings.push(`W_ATTRIBUTION: the ${key} trailer is left out of the commit: the content screen refuses its value (this home's recorded messaging identity); the proposal is otherwise unchanged`);
+  const message = commitText(source, proposal, attributed.rows);
   const results = [], checked = [], verdicts = [];
   for (const entry of plan.bases) {
     const owned = bases.find(b => b.alias === entry.alias);
@@ -649,7 +764,7 @@ function duplicates(base) {
   const out = [];
   for (const label of ['okf-proposal', 'okf-harvest']) {
     try {
-      const rows = JSON.parse(exec('gh', ['pr', 'list', '--repo', base.pr.repository, '--label', label, '--state', 'open', '--limit', '100', '--json', 'number,title,url'], { timeout: 30000 }));
+      const rows = JSON.parse(exec('gh', ['pr', 'list', '--repo', base.pr.repository, '--label', label, '--state', 'open', '--limit', '100', '--json', 'number,title,url'], { timeout: 30000, env: ghChildEnv() }));
       for (const r of Array.isArray(rows) ? rows : []) out.push({ label, number: r.number, title: String(r.title ?? '').slice(0, 200), url: String(r.url ?? '') });
     } catch { return { unavailable: 'gh pr list failed or gh is absent: open proposals could not be listed; check them by hand' }; }
   }
@@ -702,8 +817,22 @@ export function apply(source, slug, expected) {
   if (p.digest !== expected) fail('E_DIGEST', 'the clone, proposal.md, a named note or the generated commit text or PR body changed since --check (or the digest is not the one it printed): run --check again and read its diff before --apply');
   // The publish directory is the attempt marker: one attempt per proposal.
   const publish = join(dir, 'publish');
+  const attempted = () => fail('E_PROPOSAL_EXISTS', `this proposal was already applied or attempted (see ${publish}); never retry it: plan a new proposal if knowledge is still missing`);
+  // An attempted proposal refuses as such, before the gate below could call it untouched.
+  if (present(publish)) attempted();
+  // Every gh precondition, for every base, before the attempt marker.
+  for (const r of p.results.filter(x => x.changed.length)) {
+    try { checkPublish(r.alias, r.owned.base); }
+    catch (e) {
+      // Another --apply of this proposal may have begun while gh was asked:
+      // then it is attempted, and never reported as untouched.
+      if (present(publish)) attempted();
+      if (['E_GH_UNAVAILABLE', 'E_HOST_CREDENTIAL'].includes(e?.code)) e.message += '. Nothing was pushed and the proposal is unchanged: fix this host, then run the same --apply again';
+      throw e;
+    }
+  }
   try { fs.mkdirSync(publish, { mode: 0o700 }); }
-  catch (e) { if (e.code === 'EEXIST') fail('E_PROPOSAL_EXISTS', `this proposal was already applied or attempted (see ${publish}); never retry it: plan a new proposal if knowledge is still missing`); throw e; }
+  catch (e) { if (e.code === 'EEXIST') attempted(); throw e; }
   const published = [];
   const stamp = new Date().toISOString().slice(0, 10).replaceAll('-', '');
   for (const r of p.results.filter(x => x.changed.length)) {
@@ -712,8 +841,10 @@ export function apply(source, slug, expected) {
     // The digest bound these exact texts in memory: snapshot them into this
     // attempt's own directory (a concurrent --check rewrites outgoing/).
     const commitFile = join(publish, `${r.alias}-commit.txt`), bodyFile = join(publish, `${r.alias}-pr.md`);
-    atomic(commitFile, p.message); atomic(bodyFile, p.body);
     try {
+      // Inside the envelope: a failed snapshot after an earlier base's PR
+      // still reports that PR.
+      atomic(commitFile, p.message); atomic(bodyFile, p.body);
       git(r.clone, ['update-ref', `refs/heads/${branch}`, r.accepted, '']);
       git(r.clone, ['symbolic-ref', 'HEAD', `refs/heads/${branch}`]);
       // The checked tree is staged as is (the helper commits the index); the
@@ -727,20 +858,30 @@ export function apply(source, slug, expected) {
       // changed since the comparison above: the commit object is immutable, so
       // its tree must be the digest-bound one before anything leaves the host.
       if (!/^[0-9a-f]{40,64}$/.test(committed?.head ?? '') || git(r.clone, ['rev-parse', '--verify', `${committed.head}^{tree}`]) !== r.tree) fail('E_DIGEST', `base ${r.alias}: the committed tree is not the one --check showed (the clone's index changed during --apply); nothing was pushed`);
-      const created = runHelper('create', { repo: r.clone, remote: r.owned.base.repository, github: r.owned.base.pr.repository, base: r.accepted,
+      const created = runHelper('create', { ...tokenOption(), repo: r.clone, remote: r.owned.base.repository, github: r.owned.base.pr.repository, base: r.accepted,
         'base-branch': r.owned.base.acceptedBranch, head: committed.head, branch, 'body-file': bodyFile, 'guard-file': baseFile(r.owned.base, 'okf-base.json'), ...terms });
       const row = { alias: r.alias, url: created.url, head: created.head, branch: created.branch, base: created.base, recovered: created.recovered };
-      atomic(report, JSON.stringify({ ok: true, ...row }, null, 2) + '\n');
+      // The PR is confirmed: a receipt that cannot be written is a warning,
+      // never a reason to report the publication as failed or unknown.
       published.push(row);
+      try { atomic(report, JSON.stringify({ ok: true, ...row }, null, 2) + '\n'); }
+      catch { p.warnings.push(`W_RECEIPT: the PR for base ${r.alias} is open, but its receipt could not be written under ${publish}: record the URL from this output`); }
     } catch (e) {
-      const code = /^E_[A-Z_]+$/.test(e.code || '') ? e.code : 'E_PUBLICATION';
-      const safe = { ok: false, alias: r.alias, code, ...(e.result?.findings ? { findings: e.result.findings } : {}), ...(e.result?.diagnostic ? { diagnostic: e.result.diagnostic } : {}) };
+      // The helper's own check before its push repeats the gate above. A
+      // refusal there comes after the attempt marker (and perhaps after
+      // another base's PR), so it is a publication error, not the
+      // re-appliable E_GH_UNAVAILABLE.
+      const late = e.code === 'E_GH_UNAVAILABLE' ? (e.result?.diagnostic?.reason ?? 'gh-failed') : null;
+      const code = late ? 'E_GH' : /^E_[A-Z_]+$/.test(e.code || '') ? e.code : 'E_PUBLICATION';
+      const pushed = e.result?.published;
+      const safe = { ok: false, alias: r.alias, code, ...(e.result?.findings ? { findings: e.result.findings } : {}), ...(e.result?.diagnostic ? { diagnostic: e.result.diagnostic } : {}), ...(pushed ? { published: pushed } : {}) };
       try { atomic(report, JSON.stringify(safe, null, 2) + '\n'); } catch { /* the error below still reports */ }
-      failWith(code, `publication of base ${r.alias} stopped (${code}); ${published.length ? `already opened: ${published.map(x => x.url).join(', ')}; ` : ''}the clone, the commit text, the PR body and the safe result are retained in the proposal directory. Do not retry: report it${['E_PUSH_UNCERTAIN', 'E_PR_UNCERTAIN', 'E_GH'].includes(code) ? '; a remote branch or PR may exist, never assume it does not' : ''}`,
+      failWith(code, `publication of base ${r.alias} stopped (${code}); ${published.length ? `already opened: ${published.map(x => x.url).join(', ')}; ` : ''}the clone, the commit text, the PR body and the safe result are retained in the proposal directory. Do not retry: report it${['E_CREDENTIAL', 'E_HOST_CREDENTIAL'].includes(code) && !pushed ? `; nothing was pushed for base ${r.alias}: ${e.message}` : ''}${aftermath(code, r, branch, bodyFile, pushed, late)}`,
         { published, failed: safe, proposal: dir });
     }
   }
-  atomic(join(dir, 'published.json'), JSON.stringify({ version: 1, prs: published }, null, 2) + '\n');
+  try { atomic(join(dir, 'published.json'), JSON.stringify({ version: 1, prs: published }, null, 2) + '\n'); }
+  catch { p.warnings.push(`W_RECEIPT: every PR is open, but published.json could not be written under ${dir}: record the URLs from this output`); }
   return { proposal: dir, prs: published, warnings: p.warnings,
     next: 'record each PR URL in log.md and go back to work; the knowledge maintainer reviews it (the proposal-review trigger), you never shepherd it' };
 }
