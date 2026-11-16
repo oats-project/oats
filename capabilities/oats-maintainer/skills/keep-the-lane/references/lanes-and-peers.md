@@ -97,6 +97,9 @@ A successor takes its predecessor's seat only when its person or the predecessor
 hand-over says so, or once the predecessor is retired: a similar name is not a seat.
 Nobody takes another person's seat. Launch nothing in a lane you don't hold, unless your
 person asks you to take that lane on.
+<!-- OATS: the release lane changes hands only as its people say. -->
+No seat is taken in `lane:release` but as its people say: a retired predecessor there
+leaves the seat empty until they appoint its successor.
 
 ## A PR that touches another lane
 - A PR that changes code another lane holds, or something its code or text reads (a

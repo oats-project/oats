@@ -33,7 +33,7 @@ its one maintainer for the whole project), then on those.
 - **running:** pass the request to it once;
 - **stopped:** message it anyway, and tell your person so they can start it. Never spawn
   a second one;
-- **none:** launch one (section 6).
+- **none:** launch one (section 6), except in `lane:release` (below).
 
 Tell the requester who has the work now. Another person's work goes to that person's
 maintainer, or back to that person: spawning a maintainer for them is their call. When
@@ -100,7 +100,11 @@ that lane, put its count before the role (`<person>-<lane>-2-maintainer`).
 Here the seat is the lane map's `active` entry: look there first, and the new maintainer
 posts its own entry once it takes the seat. Its brief
 names the lane, its person, the starting request, and any efforts in flight it takes
-over. Tell your person its name, its lane, and that they retire it with `oats retire
+over.
+<!-- OATS: the release lane changes hands only as its people say. -->
+Never in `lane:release`: its one maintainer for the whole project is started, or
+replaced, only as its people say. With none active there, ask your person, and launch
+nothing. Tell your person its name, its lane, and that they retire it with `oats retire
 <name>`. If your person already has one in that lane, say so instead: there is never a
 second.
 

@@ -84,9 +84,12 @@ RETURN at <sha>: <repo>#<PR>
 - Your green light is one of the agreements the landing rules name. The author gathers
   the others, another lane's green light included: you forward nothing.
   <!-- OATS: the lane map: the PR's maintainer asks its second reader and the release lane's sign-off. -->
-  Here you do ask two: once you give your green light at a head, ask the PR's second
-  reader (the one its lane's line names) and, where the line asks, the release lane's
-  sign-off, at that head with CI green. Never merge, or let it merge, over a RETURN.
+  Here you do ask two, as the PR's own maintainer (the one its description names): once
+  you give your green light at a head, ask the PR's second reader (the one its lane's
+  line names) and, where the line asks, the release lane's sign-off, at that head with CI
+  green. Called only as its second reader, for the release lane's sign-off or for another
+  lane the PR touches, you answer your caller at that head and ask neither again. Never
+  merge, or let it merge, over a RETURN.
 
 ## A moved head, a hold, a merge
 Read [references/reviewed-delivery.md](references/reviewed-delivery.md) when the head
