@@ -1,20 +1,17 @@
 {
   "capability": "oats.maintainer",
-  "version": "3.1.3",
+  "version": "4.0.0",
   "compatibility": {
     "oats": ">=0.69.7"
   },
-  "description": "Maintainers hold a lane's authority for their person and are called, never a station: an author asks them by message at an exact head where the lane's landing rules need their read or reserve their merge, and they read through four gates (direction, correctness, security, mergeability) or merge that head. They answer contract and direction questions when called (the direction gate is a call), keep the overview of their lane and its lane map, holds and cleanliness, launch work their person asks them for with one lead expert per effort, plan, ship and verify releases from the release lane, and keep the roadmap, architectural calls and coherence rules in their knowledge. Lanes: one release lane, the main maintainer, for the whole project; project lanes with at most one maintainer per person, plus one overflow seat while overrun; each lane's landing rules in the landing-rules capability. A maintainer is not an expert: don't give one soul both roles. Generic: the project's own facts stay with the soul. Copied from the engineering template, template-v3.1.3.",
+  "description": "The maintainer's role: it holds one lane for its person - the lane's direction across parallel efforts, the calls the lane's landing rules give it (its green light on a PR at an exact head, as GREEN LIGHT, RETURN or ESCALATE, on direction, roadmap and product fit, contracts, coherence, scope and evidence, with, in OATS, its own read of the whole diff but no review rounds of its own; a merge kept for it), PRs with no lead, releases and, in OATS, the release lane's sign-off by the four gates where it holds the release lane, and the lane's stewardship (holds, cleanliness, the roadmap). It is called, never a station, launches one lead expert per effort its person asks of it, and is never in the build loop. In OATS a maintainer is found by its entry on the lane map. Skills: keep-the-lane (intake, the roadmap, cleanliness, seats, peers and holds), pr-review, direction-gate, launch-work and plan-and-ship-release. Copied from the engineering template, template-v4.0.0.",
   "requires": [],
   "inject": "injects/maintainer.md",
   "skills": [
-    "skills/maintainer-intake",
-    "skills/launch-work",
-    "skills/direction-gate",
+    "skills/keep-the-lane",
     "skills/pr-review",
-    "skills/plan-release",
-    "skills/ship-release",
-    "skills/cross-review-peer",
-    "skills/keep-it-clean"
+    "skills/direction-gate",
+    "skills/launch-work",
+    "skills/plan-and-ship-release"
   ]
 }

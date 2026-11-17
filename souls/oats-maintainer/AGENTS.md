@@ -35,8 +35,8 @@ is how you fit the OATS workspace.
 - **You review the PRs that belong to you for coherence** (`/pr-review`, with
   `/oats-pr-review`): each fits OATS's architecture and leaves no patchy code
   or design behind. The release lane gives the final review and sign-off and
-  cuts releases (`/ship-release`, with `/git-tag-release`); who merges is the
-  lane's arrangement on the map.
+  cuts releases (`/plan-and-ship-release`, with `/git-tag-release`); who merges
+  is the lane's arrangement on the map.
 
 ## OATS specifics
 

@@ -2,10 +2,10 @@
 name: set-landing-rules
 description: >-
   Write an organisation's landing rules from how it lands changes today: per
-  lane, the agreements that merge a change and who merges; who gives the green
-  light to open a PR; who builds (the lead or a developer), its author running
-  the review rounds and nothing landing without a fresh review; where a
-  maintainer's read is required and whose it is; the one-way doors kept for
+  lane, the agreements that merge a change and who merges; what opens a PR;
+  who builds (the lead or a developer), its author running the review rounds
+  and nothing landing without a fresh review; where a lane asks for its
+  maintainer's green light and whose it is; the one-way doors kept for
   people; and a merge path every lead can reach, with no deadlines and no
   defaults. Use at onboarding, and when the setup is reviewed. Part of
   oats.coordination-setup.
@@ -22,13 +22,16 @@ description: >-
 2. **Per lane, name the agreements that merge a change, and who merges.**
    Default: CI green and the review at the head, the author's last fresh
    reviewer finding nothing to fix (on a different model where the
-   organisation has one), plus, for a developer's work, the lead's
-   verification note at that head; the lead merges. A change the lead built
-   has no verification note: its clean round stands in. A review carries to a
-   new head with no re-read through an unchanged rebase or update, and through
-   the same reviewer's re-read of a delta that only fixes a minor, takes a nit
-   or fixes CI with no change in behaviour; otherwise not, and a blocker's or
-   a major's fix gets a fresh reviewer. The reviewer's severity decides. Where
+   organisation has one), plus, for a developer's work, `VERIFIED at <head>`
+   from whoever specified it; the lead merges. A change the lead built has no
+   `VERIFIED` note: its clean round stands in. A review carries to a new head
+   with no re-read through an unchanged rebase or update, and through a read of
+   the delta alone (the review bot's, or a fresh reviewer briefed with the
+   delta) where it only fixes a minor, takes a nit or fixes CI with no change
+   in behaviour; otherwise not, and a blocker's or a major's fix gets a fresh
+   reviewer. The reviewer's severity decides. A `VERIFIED` note and a green
+   light carry only through an unchanged rebase or update: at any other new
+   head, whoever gave it reads the delta and gives it again. Where
    the organisation keeps the merge for its people, say so: agents then hand
    them a PR at an exact head.
 3. **Every lane names a merge path a lead can reach.** A lead with no
@@ -49,15 +52,20 @@ description: >-
      no review round. Where every commit must pass a review round (commits
      signed under a shared account, a repository's own pre-PR review), the
      docs fix gets that round too.
-   - Who gives the green light to open a PR: for a developer's work, the
-     lead's verification at the verified head where that is enough,
-     otherwise whoever holds the lane; for a change the lead built, the round
-     that found nothing to fix. The author then opens it and works its
-     reviews. A helper building a scoped piece of its parent lead's effort
-     hands that head back and opens no PR until the parent has verified it.
-5. **A maintainer's read** only where the organisation already requires a
-   second read for a lane, or reserves its merges. It is the maintainer of the
-   person who owns the lane. Say whether the maintainer reads or merges. When
+   - What opens a PR: for a developer's work, `VERIFIED at <head>` from the
+     lead, and anything more whoever holds the lane asks for; for a change the
+     lead built, the round that found nothing to fix. The author then opens it
+     and works its reviews. A helper building a scoped piece of its parent
+     lead's effort hands that head back and opens no PR until the parent has
+     verified it.
+5. **A maintainer's green light** is an option per lane, off by default: the
+   maintainer's verdict on a PR at an exact head (`GREEN LIGHT`, `RETURN` or
+   `ESCALATE`), on direction, contracts, coherence, scope and evidence, never a
+   second code review. Recommend it for a large project (several lanes or
+   maintainers, several people); leave it out for a small personal project.
+   Where the organisation reserves a lane's merges for a maintainer, say so
+   too. It is the maintainer of the person who owns the lane, found by its
+   instance name, `<person>-<lane>-maintainer`. When
    first needed and none is active, the lead starts it for its own person,
    without asking, and tells them in two or three plain sentences what a
    maintainer is, what it is for, and its exact name; for another person's

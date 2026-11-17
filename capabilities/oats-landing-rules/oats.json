@@ -1,11 +1,14 @@
 {
   "capability": "oats.landing-rules",
-  "version": "3.1.3",
+  "version": "4.0.0",
   "compatibility": {
     "oats": ">=0.69.7"
   },
-  "description": "This organisation's landing rules and ownership record, in one place: per lane, the agreements that merge a change and who merges, who gives the green light to open a PR, who builds a change (the lead or a developer, as the lead decides; whoever builds it iterates with fresh reviewers, and nothing lands without a fresh review), where a maintainer's read is needed, the one-way doors kept for people, who owns which paths, and where the records, the lane map and holds are kept. Composed by every coordinating soul (dispatcher, experts, developers, maintainers). The template's rules are an example to adapt. Copied from the engineering template, template-v3.1.3.",
+  "description": "This organisation's landing rules and ownership record, in one place for every coordinating role (dispatcher, experts, developers, maintainers): the lanes and their owners, the agreements that merge a change at one head (CI green, a review, VERIFIED from whoever specified a developer's work) and who merges, where a lane asks for its maintainer's green light, the one-way doors kept for people, who owns which paths, where effort records and holds are kept, and the house rules (instance names, the model floor for children, the hosts). Two skills hold what the briefing leaves out: landing-rules-detail (the definitions: CI green, what opens a PR, what carries to a new head, the green light, the model floor, the review loop's cap, the docs fix, a PR with no lead, records) and wait-and-retire (the checkpoint that bounds a wait on an instance, and retiring a finished one). The template's rules are defaults: an organisation answers the adapt markers with its own. Copied from the engineering template, template-v4.0.0.",
   "requires": [],
   "inject": "injects/landing-rules.md",
-  "skills": []
+  "skills": [
+    "skills/landing-rules-detail",
+    "skills/wait-and-retire"
+  ]
 }

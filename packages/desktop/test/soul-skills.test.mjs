@@ -16,7 +16,7 @@ const REVIEW_MD = `---\nname: oats-pr-review\ndescription: "The OATS repository'
 const file = (path, text, over = {}) => ({ path, bytes: Buffer.byteLength(text ?? ''), text, binary: false, truncated: false, ...over });
 /** Two skills, as `inspect --soul oats-maintainer --skills` answers them (sorted by name). */
 const skillsAnswer = () => [
-  { name: 'git-tag-release', path: 'skills/git-tag-release', description: "OATS's release lane: the release workflow and scripts. Load it with /ship-release.",
+  { name: 'git-tag-release', path: 'skills/git-tag-release', description: "OATS's release lane: the release workflow and scripts. Load it with /plan-and-ship-release.",
     files: [file('skills/git-tag-release/SKILL.md', '---\nname: git-tag-release\n---\n# OATS\'s release lane\n')], filesTruncated: false },
   { name: 'oats-pr-review', path: 'skills/oats-pr-review', description: "The OATS repository's part of a review: which consumers to read. Load it with /pr-review.",
     files: [
