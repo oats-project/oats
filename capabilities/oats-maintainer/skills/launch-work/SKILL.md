@@ -33,6 +33,10 @@ its one maintainer for the whole project), then on those.
 - **running:** pass the request to it once;
 - **stopped:** message it anyway, and tell your person so they can start it. Never spawn
   a second one;
+<!-- OATS: OATS keeps its lane map: a seat is its `active` entry there, and a name only on the roster may be retired or run elsewhere. -->
+- **an `active` entry, or a maintainer of your person in that lane named only on the
+  roster, with nothing running anywhere you can see:** it may be retired, or run where
+  you can't look. Ask your person before you launch one;
 - **none:** launch one (section 6), except in `lane:release` (below).
 
 Tell the requester who has the work now. Another person's work goes to that person's
@@ -95,7 +99,11 @@ never your child.
 oats spawn <maintainer soul> --relation unrelated --name <person>-<lane>-maintainer --task-file <brief.md>
 ```
 The name is the seat. A name is used once: after a retired maintainer of that person in
-that lane, put its count before the role (`<person>-<lane>-2-maintainer`).
+that lane, put its count before the role (`<person>-<lane>-2-maintainer`). The kernel
+doesn't refuse a retired instance's name: `oats instance events <name>` shows whether
+one was used.
+<!-- OATS: the dispatcher's and the expert's lookups say the same: a name the roster still lists is used. -->
+Here a name the roster still lists is used too.
 <!-- OATS: OATS keeps its lane map, one entry per maintainer: the entry, not the name, is the seat. -->
 Here the seat is the lane map's `active` entry: look there first, and the new maintainer
 posts its own entry once it takes the seat. Its brief
@@ -106,7 +114,8 @@ Never in `lane:release`: its one maintainer for the whole project is started, or
 replaced, only as its people say. With none active there, ask your person, and launch
 nothing. Tell your person its name, its lane, and that they retire it with `oats retire
 <name>`. If your person already has one in that lane, say so instead: there is never a
-second.
+second. A spawn refused because the name is taken means a holder is running or stopped:
+find it, and start none under another name.
 
 ## 7. An overflow seat
 A maintainer is never overrun. With more than 5 efforts of your own in flight, spawn one

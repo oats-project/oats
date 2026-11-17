@@ -6,9 +6,10 @@ description: "The OATS repository's part of a review: which consumers to read, t
 # Reviewing an OATS pull request
 
 `/pr-review` (from `oats.maintainer`) is the method: exact heads, the green light's five
-checks on a PR from an effort (the four gates for a PR with no lead), the verdict on the
-PR, the guarded merge and the check that what landed is what you reviewed. This skill
-adds what is specific to the OATS repository.
+checks on a PR from an effort plus its read of the whole diff, the four gates for a PR
+with no lead and for the release lane's sign-off, the verdict on the PR, the guarded
+merge and the check that what landed is what you reviewed. This skill adds what is
+specific to the OATS repository.
 
 ## Correctness: OATS's usual consumers
 Besides what the search finds, check these every time: the pi adapter (`packages/pi`),

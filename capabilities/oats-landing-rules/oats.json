@@ -1,10 +1,10 @@
 {
   "capability": "oats.landing-rules",
-  "version": "4.0.0",
+  "version": "4.0.2",
   "compatibility": {
     "oats": ">=0.69.7"
   },
-  "description": "This organisation's landing rules and ownership record, in one place for every coordinating role (dispatcher, experts, developers, maintainers): the lanes and their owners, the agreements that merge a change at one head (CI green, a review, VERIFIED from whoever specified a developer's work) and who merges, where a lane asks for its maintainer's green light, the one-way doors kept for people, who owns which paths, where effort records and holds are kept, and the house rules (instance names, the model floor for children, the hosts). Two skills hold what the briefing leaves out: landing-rules-detail (the definitions: CI green, what opens a PR, what carries to a new head, the green light, the model floor, the review loop's cap, the docs fix, a PR with no lead, records) and wait-and-retire (the checkpoint that bounds a wait on an instance, and retiring a finished one). The template's rules are defaults: an organisation answers the adapt markers with its own. Copied from the engineering template, template-v4.0.0.",
+  "description": "This organisation's landing rules and ownership record, in one place for every coordinating role (dispatcher, experts, developers, maintainers): the lanes and their owners, the agreements that merge a change at one head (CI green, a review, VERIFIED from whoever specified a developer's work) and who merges, where a lane asks for its maintainer's green light, the one-way doors kept for people, who owns which paths, where effort records and holds are kept, and the house rules (instance names, the model floor for children, the hosts). Two skills hold what the briefing leaves out: landing-rules-detail (the definitions: CI green, what opens a PR, what carries to a new head, the green light, the model floor, the review loop's cap, the docs fix, a PR with no lead, records) and wait-and-retire (the checkpoint that bounds a wait on an instance, and retiring a finished one). The template's rules are defaults: an organisation answers the adapt markers with its own. Copied from the engineering template, template-v4.0.2.",
   "requires": [],
   "inject": "injects/landing-rules.md",
   "skills": [
