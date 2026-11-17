@@ -34,7 +34,7 @@ lead (an outside contributor's, a person's own, a maintainer's release prep) fol
 3. `VERIFIED at <head>` from whoever specified the work, for a developer's or a helper's
    change. A change a lead or a specialist built itself needs none: nobody verifies
    their own work.
-<!-- OATS: the lane map's agreements: every PR's maintainer gives its green light, one second reader per PR, the release lane's sign-off where a lane asks, and who merges is the lane's arrangement; Pepe, 17 Nov: the sign-off keeps the four gates. -->
+<!-- OATS: the lane map's agreements: every PR's maintainer gives its green light, one second reader per PR, the release lane's sign-off where a lane asks, and who merges is the lane's arrangement; decided 17 Nov 2026 (oats#1943): the sign-off keeps the four gates. -->
 4. The green light of the PR's maintainer, at that head (below).
 5. The verdict of the PR's one second reader, the one its lane's line names, at that head
    or carried to it (`/pr-review`); the direct go of the person whose maintainer holds the
@@ -70,7 +70,7 @@ lane the final say on what is released.
 Where a lane does ask for it, "green light" means only that maintainer's verdict at an
 exact head, by message: `GREEN LIGHT at <head>`, `RETURN at <head>` with its findings, or
 `ESCALATE`, a direction question gone to whoever decides it, which you wait on.
-<!-- OATS: Pepe, 17 Nov: "the maintainers both look at the PR code and also assess the PR against roadmap and direction and product fit"; the sign-off keeps the four gates. -->
+<!-- OATS: decided 17 Nov 2026 (oats#1943): both maintainer reads look at the code and judge direction, roadmap and product fit; the sign-off keeps the four gates. -->
 Here it judges direction, roadmap and product fit, contracts, coherence, scope and
 evidence, and reads the whole diff once, from the maintainer's own checkout: a defect it
 finds there blocks. It runs no review rounds of its own. The release lane's sign-off is

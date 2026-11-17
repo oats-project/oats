@@ -67,7 +67,7 @@ only a lane maintainer's verdict on a PR, at an exact head.
 - **The verdict:** by message to whoever called. `GREEN LIGHT at <head>` with what it
   checked; `RETURN at <head>` with findings; or `ESCALATE`, when a direction question
   must go to whoever decides it first.
-<!-- OATS: Pepe, 17 Nov: "the maintainers both look at the PR code and also assess the PR against roadmap and direction and product fit". -->
+<!-- OATS: decided 17 Nov 2026 (oats#1943): the green light also reads the code and judges direction, roadmap and product fit. -->
 - **What it checks:** the lane's direction, its roadmap and the product fit, contracts,
   coherence, the PR's scope against its task, and the evidence against the task's
   acceptance criteria. Here it also reads the whole diff once, from its own checkout: a
@@ -78,7 +78,7 @@ only a lane maintainer's verdict on a PR, at an exact head.
 - **After it, here:** the maintainer that gave it asks the PR's second reader and, where
   the lane's line asks, the release lane's sign-off, at that head; the lead or the
   specialist doesn't. A RETURN from any of them goes to the change's author.
-<!-- OATS: Pepe, 17 Nov: the release lane's sign-off keeps the four gates, as the final gate on main. -->
+<!-- OATS: decided 17 Nov 2026 (oats#1943): the release lane's sign-off keeps the four gates, as the final gate on main. -->
 - **The release lane's sign-off, here:** its verdict by the four gates of a PR with no
   lead (direction, roadmap and product fit; correctness over the whole diff; security;
   mergeability), at the exact head being merged: the final gate on main, not the green

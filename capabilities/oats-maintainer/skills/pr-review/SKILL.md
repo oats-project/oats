@@ -2,7 +2,7 @@
 name: pr-review
 description: Gives or returns the green light on a PR, where the lane's landing rules ask the maintainer for one, at the exact head its lead or specialist names, by the maintainer's own list (direction, roadmap and product fit, contracts and interfaces, coherence rules, scope against the task, evidence against the acceptance criteria) and, in OATS, its own read of the whole diff, with no review rounds of its own; the verdict GREEN LIGHT, RETURN or ESCALATE bound to that head; the four gates for a PR with no lead (an outside contributor's, a person's own) and, in OATS, for the release lane's sign-off; and, where the merge is kept for the maintainer, merging only that head. Use before every green light, every other verdict and every merge kept for the maintainer, when a head moved after a verdict, and when a hold applies.
 ---
-<!-- OATS: the description names product fit, the green light's read of the diff and the sign-off's four gates (Pepe, 17 Nov: "the maintainers both look at the PR code and also assess the PR against roadmap and direction and product fit"). -->
+<!-- OATS: the description names product fit, the green light's read of the diff and the sign-off's four gates, decided 17 Nov 2026 (oats#1943). -->
 
 # Review the exact change
 
@@ -27,7 +27,7 @@ description: Gives or returns the green light on a PR, where the lane's landing 
   reviews: it gets the four gates of
   [references/no-lead-pr.md](references/no-lead-pr.md), and you merge it where your
   landing rules say so.
-<!-- OATS: Pepe, 17 Nov: the release lane's sign-off keeps the four gates on every PR it signs off, as the final gate on main. -->
+<!-- OATS: decided 17 Nov 2026 (oats#1943): the release lane's sign-off keeps the four gates on every PR it signs off, as the final gate on main. -->
 - **The release lane's sign-off,** where you hold the release lane: on every PR whose
   lane's line asks for it, the four gates of
   [references/no-lead-pr.md](references/no-lead-pr.md) (direction, roadmap and product
@@ -43,7 +43,7 @@ The verdict is bound to the SHA. It goes by message to whoever called, and on th
 a comment at that SHA, so whoever merges reads it there.
 
 ## The green light: what you check
-<!-- OATS: Pepe, 17 Nov: the green light also reads the code, and its first check is direction, roadmap and product fit. -->
+<!-- OATS: decided 17 Nov 2026 (oats#1943): the green light also reads the code, and its first check is direction, roadmap and product fit. -->
 Pin the base and head SHAs before you read a line. Read the PR as a whole, from an
 exact-commit checkout of your own, never another agent's work tree: the description's
 claim against the diff, and the task, spec and dependent PRs it links. Here you also
@@ -73,7 +73,7 @@ the security gate of the reference. CI is the gate: don't ask for a full local r
 when you reproduce a finding locally, say what you ran.
 
 ## The verdict
-<!-- OATS: Pepe, 17 Nov: the verdict names direction, roadmap and product fit, and the read of the diff. -->
+<!-- OATS: decided 17 Nov 2026 (oats#1943): the verdict names direction, roadmap and product fit, and the read of the diff. -->
 ```text
 GREEN LIGHT at <sha>: <repo>#<PR>
 Checked: direction, roadmap and product fit: <...>; contracts: <...>; coherence: <...>;
@@ -86,7 +86,7 @@ Follow-ups: <non-blocking findings, each with where it is tracked>
 RETURN at <sha>: <repo>#<PR>
 1. <finding>: <file and line, or the contract>; why it blocks; what would settle it
 ```
-<!-- OATS: Pepe, 17 Nov: a defect found in the diff blocks. -->
+<!-- OATS: decided 17 Nov 2026 (oats#1943): a defect found in the diff blocks. -->
 - A green light names each of the five, and the read of the whole diff. One that lists
   nothing it checked isn't one.
 - Only a finding on one of the five, a defect in the diff, or a finding on the security
@@ -99,7 +99,7 @@ RETURN at <sha>: <repo>#<PR>
   root lead puts both positions to its person in one card.
 - Your green light is one of the agreements the landing rules name. The author gathers
   the others, another lane's green light included: you forward nothing.
-  <!-- OATS: the lane map: the PR's maintainer asks its second reader and the release lane's sign-off; Pepe, 17 Nov: the sign-off keeps the four gates. -->
+  <!-- OATS: the lane map: the PR's maintainer asks its second reader and the release lane's sign-off; decided 17 Nov 2026 (oats#1943): the sign-off keeps the four gates. -->
   Here you do ask two, as the PR's own maintainer (the one its description names): once
   you give your green light at a head, ask the PR's second reader (the one its lane's
   line names) and, where the line asks, the release lane's sign-off, at that head with CI
