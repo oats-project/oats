@@ -1,13 +1,12 @@
 // okf 5.0.0: what a working instance consults, and what its spawn checks.
 // There is no source custody: no descriptor, marker, capture or worker. An
 // instance consults through its soul's declaration (the kernel's OATS_SOUL)
-// and the deployment's bindings, or a captured provider binding snapshot.
+// and the deployment's bindings.
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { fs, join, safePath, readJSON, atomic, fail } from './io.mjs';
-import { loadBindings, declaration, settings, validateBindings, resolveNodes, resolveSubjects } from './config.mjs';
+import { loadBindings, declaration, settings, resolveNodes, resolveSubjects } from './config.mjs';
 import { short } from './consult.mjs';
-import { loadInvocationKnowledgeBinding } from './binding-wire.mjs';
 import { validateBase, readerWarnings } from './stores.mjs';
 
 const primeBasesScript=fileURLToPath(new URL('./prime-bases.mjs',import.meta.url));
@@ -68,18 +67,12 @@ function primeGitBases(bindings,decl,{refreshDue=false}={}) {
   return {primed,warnings:[...warnings,...skippedWarnings]};
 }
 /** What an instance (or, from the deployment, its soul) consults: the soul's
- *  declaration and the deployment's bindings as they are now, or a captured
- *  provider binding snapshot (OATS_BINDING_FILE). From a deployment there is
- *  no instance home to keep apart from the bases. */
+ *  declaration and the deployment's bindings as they are now. From a
+ *  deployment there is no instance home to keep apart from the bases. */
 export function consultSource(home) {
   home=safePath(home);
   const work=fs.existsSync(join(home,'work'))?fs.realpathSync(join(home,'work')):join(home,'work');
   const seat=fs.existsSync(join(home,'instance.json'))?{sourceHome:home,sourceWork:work}:{};
-  const invocation=loadInvocationKnowledgeBinding();
-  if(invocation.kind==='captured') {
-    const {file,...doc}=invocation.runtime.bindings;
-    return {home,work,decl:invocation.runtime.decl,bindings:{file,...validateBindings(doc,file,seat)}};
-  }
   if(!process.env.OATS_SOUL) fail('E_OATS_SOUL_MISSING','OATS_SOUL is not set; oats.okf commands run only under the OATS kernel');
   return {home,work,decl:declaration(fs.realpathSync(process.env.OATS_SOUL)),bindings:loadBindings(undefined,seat)};
 }

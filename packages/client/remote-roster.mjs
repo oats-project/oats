@@ -2,6 +2,7 @@ import { harnessOf } from "./harness-names.mjs";
 import { unsupportedSession, unsupportedSessionOrigin, hasRuntimeError } from "./instance-presentation.mjs";
 import { madeByKernel } from "./kernel-made.mjs";
 import { waitingOnYouData } from "./waiting-on-you.mjs";
+import { attributedHumanData } from "./attributed-human.mjs";
 import { retireData } from "./retire-state.mjs";
 import { readIdentity } from "./workspace-views.mjs";
 import { sameRepo } from "./repo-moves.mjs";
@@ -61,6 +62,9 @@ export function remotePanel(group, at) {
       tmux: i.tmux || null, git: i.git || null, task: i.task || "", next: i.next || "",
       // Needs input: only a remote kernel with the feature reports it — validated, never synthesized when absent.
       ...(Object.hasOwn(i, "waitingOnYou") ? { waitingOnYou: waitingOnYouData(i.waitingOnYou) } : {}),
+      // The owning human (feature spawn-attribution): the host's label validated again here (attributed-human.mjs),
+      // a malformed one null; a host that does not report it leaves it absent.
+      ...(Object.hasOwn(i, "attributedHuman") ? { attributedHuman: attributedHumanData(i.attributedHuman) } : {}),
       // #1247: the host's retire state, relayed unchanged when it is in the contract (retire-state.mjs), else absent.
       ...(retireData(sentRetire) ? { retire: retireData(sentRetire) } : {}),
       // #1577: the host's same-work flag, true only (anything else reads unflagged). `sameWorkKnown` is this

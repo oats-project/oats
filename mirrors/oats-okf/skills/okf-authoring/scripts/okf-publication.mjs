@@ -2,7 +2,7 @@
 // Publication gate, not a sandbox: callers still have their native credentials.
 // Never forward Git/gh stderr, matched values, or raw remote response text.
 import fs from 'node:fs';
-import { resolve, join } from 'node:path';
+import { resolve, join, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -22,9 +22,70 @@ function inspectBytes(bytes, location, options) {
 const oid = value => { if (!OID.test(value || '')) fail('E_OID'); return value; };
 // Native credentials stay available; inherited Git selectors, external diff,
 // replacement objects, hooks and interactive prompts cannot change the gate.
-function env() {
-  return { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/.test(k))),
-    GIT_NO_REPLACE_OBJECTS: '1', GIT_TERMINAL_PROMPT: '0' };
+function env({ gh = false } = {}) {
+  return tokenEnv({ ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^GIT_/.test(k))),
+    GIT_NO_REPLACE_OBJECTS: '1', GIT_TERMINAL_PROMPT: '0' }, tokenFile, { gh });
+}
+// oats.okf 6.2: the deployment's proposer credential, a GitHub token in a file
+// (setting github-token-file, or --token-file here). When one is named, every
+// remote git call and every gh call of this process tree is given that token:
+// ambient credential helpers are cleared, gh's stored login and inherited
+// token variables are not consulted, the host's askpass (core.askPass) is
+// switched off, so a file that yields no token is an authentication failure
+// and never another credential, and SSH, git:// and plain HTTP are refused,
+// so no SSH key stands in (a local repository stays readable). Git is NOT isolated from the host's own
+// configuration: a netrc, an http.extraHeader or a URL rewrite there answers
+// before any helper is asked. tokenEnv resets http.extraHeader, unscoped and
+// for https://github.com/, and hostGate refuses every publishing command
+// while one of the three exists; a read (a fetch) is not refused. The file is read at each
+// use, so a rotated token needs no restart. The token never reaches an
+// argument, an error or a log: git asks this script (`git-credential`, for
+// https://github.com only), and gh gets it in its own child environment.
+// Without one, nothing here changes: the caller's native credentials apply.
+let tokenFile;
+const SELF = fileURLToPath(import.meta.url);
+const credentialError = (reason) => Object.assign(new Error('E_CREDENTIAL'), { code: 'E_CREDENTIAL', diagnostic: { phase: 'credential', reason } });
+/** The token in `file`: one printable-ASCII word, at most 4 KiB with its
+ *  line end. A mounted secret is a symlink, so links are followed. */
+export function readToken(file) {
+  if (typeof file !== 'string' || !file.startsWith('/') || /[\0\r\n']/.test(file)) throw credentialError('path');
+  let bytes;
+  try {
+    const st = fs.statSync(file);
+    if (!st.isFile()) throw credentialError('not-a-file');
+    if (st.size > 4096) throw credentialError('malformed');
+    bytes = fs.readFileSync(file);
+  } catch (e) { throw e?.code === 'E_CREDENTIAL' ? e : credentialError(e?.code === 'ENOENT' ? 'missing' : 'unreadable'); }
+  const token = bytes.toString('latin1').replace(/\r?\n$/, '');
+  if (!token) throw credentialError('empty');
+  if (!/^[\x21-\x7e]{1,2048}$/.test(token)) throw credentialError('malformed');
+  return token;
+}
+const INHERITED = /^(?:GH_TOKEN|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN|GH_HOST|GIT_ASKPASS|SSH_ASKPASS|GIT_SSH|GIT_SSH_COMMAND|GIT_CONFIG_COUNT|GIT_CONFIG_KEY_\d+|GIT_CONFIG_VALUE_\d+|OKF_GITHUB_TOKEN_FILE)$/;
+/** `base` as a child's environment when `file` names the token: for git, the
+ *  configuration that makes this script the only credential source; with
+ *  `gh: true`, the token itself, for that one gh child (read here, so a bad
+ *  file refuses before gh starts; git reads it through the helper, and a bad
+ *  file there is an authentication failure). `file` absent: `base`. */
+export function tokenEnv(base, file, { gh = false } = {}) {
+  if (file === undefined || file === null) return base;
+  if (/'/.test(process.execPath) || /'/.test(SELF)) throw credentialError('helper-path');
+  const config = [['core.askPass', ''], ['http.extraHeader', ''], ['http.https://github.com/.extraHeader', ''], ['credential.helper', ''], ['credential.https://github.com.helper', `!'${process.execPath}' '${SELF}' git-credential`],
+    ['credential.https://github.com.useHttpPath', 'false'], ['protocol.ssh.allow', 'never'], ['protocol.git.allow', 'never'], ['protocol.http.allow', 'never']];
+  const out = Object.fromEntries(Object.entries(base).filter(([k]) => !INHERITED.test(k)));
+  out.GIT_CONFIG_COUNT = String(config.length);
+  config.forEach(([key, value], i) => { out[`GIT_CONFIG_KEY_${i}`] = key; out[`GIT_CONFIG_VALUE_${i}`] = value; });
+  out.OKF_GITHUB_TOKEN_FILE = file; out.GIT_TERMINAL_PROMPT = '0';
+  if (gh) out.GH_TOKEN = readToken(file);
+  return out;
+}
+/** git's credential helper protocol, `get` only, https://github.com only. */
+function gitCredential(action) {
+  if (action !== 'get') return;
+  const asked = Object.fromEntries(fs.readFileSync(0, 'utf8').split('\n').filter(Boolean).map(row => { const i = row.indexOf('='); return [row.slice(0, i), row.slice(i + 1)]; }));
+  if (asked.protocol !== 'https' || asked.host !== 'github.com') return;
+  let token; try { token = readToken(process.env.OKF_GITHUB_TOKEN_FILE); } catch { return; }
+  process.stdout.write(`username=x-access-token\npassword=${token}\n`);
 }
 // Nullable fields mean the OS supplied no usable exit/signal, not invented
 // process outcomes. Never serialize an Error, raw tool bytes, or a free string.
@@ -63,7 +124,7 @@ function uncertain(code, diagnostic) {
   throw Object.assign(new Error(code), { code, diagnostic: diagnostic ?? uncertaintyDiagnostic() });
 }
 function run(command, args, { cwd, input, optional = false, indexFile, publication = false } = {}) {
-  const childEnv = env();
+  const childEnv = env({ gh: command === 'gh' });
   // Only an internally-created private reconciliation index supplies this.
   // Inherited GIT_INDEX_FILE was already removed by env().
   if (indexFile) childEnv.GIT_INDEX_FILE = indexFile;
@@ -243,10 +304,14 @@ export function screenedPush(o, head, expected, branch) {
   try {
     output = git(o.repo, ['push', '--porcelain', '--no-signed', '--no-follow-tags', '--recurse-submodules=no',
       `--force-with-lease=${reference}:${expected}`, 'origin', `${head}:${reference}`], { publication: true });
-  } catch (error) { uncertain('E_PUSH_UNCERTAIN', error?.diagnostic); }
+  } catch (error) { if (error?.code === 'E_CREDENTIAL') throw error; uncertain('E_PUSH_UNCERTAIN', error?.diagnostic); }
   const status = text(output.stdout).split('\n').find(row => row.split('\t')[1] === `${head}:${reference}`)?.split('\t')[0];
   if (expected === '' && status !== '*') fail('E_CREATE_NOT_CONFIRMED');
-  const actual = tip(o, reference);
+  // The push ran: a readback that cannot be made leaves the remote unknown,
+  // never a bare Git error that names no publication.
+  let actual;
+  try { actual = tip(o, reference); }
+  catch { uncertain('E_PUSH_UNCERTAIN', { ...output.diagnostic, phase: 'readback-failed' }); }
   if (actual !== head) uncertain('E_PUSH_UNCERTAIN', { ...output.diagnostic, phase: actual === null ? 'readback-absent' : 'readback-other' });
   return head;
 }
@@ -255,6 +320,149 @@ function github(o) {
   if (o.pr !== undefined && !/^[1-9][0-9]*$/.test(o.pr)) fail('E_PR');
 }
 function gh(o, args, input) { github(o); return run('gh', args, { input }); }
+// The one gh precondition a publication can decide before its push: gh is on
+// this host, can read the repository, and GitHub states that its credential
+// may push there (the label and the PR need write). Read-only. An explicit
+// `true` passes; an absent or unknown answer establishes nothing, with one
+// further route for a GitHub App installation token (below), which GitHub
+// never answers `true`. It is gh's credential for github.com that is judged,
+// on both routes: every call names that host, so a GH_HOST or a gh signed in
+// elsewhere cannot answer one question for another credential. With a token
+// file (github-token-file, --token-file) it is that file's token that is
+// judged: gh gets it in its own environment, and the installation route's
+// request carries it straight from the file, so gh's stored login never
+// answers for it.
+// The REST field, not GraphQL's viewerPermission, which is null for a GitHub
+// App. A bounded check: it cannot tell whether a narrowly scoped token may
+// open a PR. The reason is a fixed constant; gh's output is never forwarded.
+export function publishPreflight(o) {
+  github(o);
+  const unavailable = reason => { throw Object.assign(new Error('E_GH_UNAVAILABLE'), { code: 'E_GH_UNAVAILABLE', diagnostic: { phase: 'preflight', reason } }); };
+  const ghEnv = env({ gh: true });
+  const r = spawnSync('gh', ['api', '--hostname', 'github.com', `repos/${o.github}`, '--jq', '.permissions.push'], { env: ghEnv, timeout: 60000, maxBuffer: MAX });
+  if (r.error?.code === 'ENOENT') unavailable('gh-absent');
+  if (r.error || r.signal || r.status !== 0) unavailable('gh-failed');
+  let push;
+  try { push = text(r.stdout).trim(); } catch { unavailable('gh-failed'); }
+  if (push === 'true') return;
+  // A GitHub App installation token is not a user: for it GitHub reports the
+  // repository's `permissions` all false, or leaves them out, whatever the
+  // installation was granted, so the answer above says nothing about it.
+  // Only an installation token may list the installation's repositories, and
+  // for one the write question is put to GitHub itself (below). Every other
+  // credential is judged as before, and an unknown answer still refuses.
+  const listed = spawnSync('gh', ['api', '--hostname', 'github.com', 'installation/repositories?per_page=1', '--jq', '.total_count'], { env: ghEnv, timeout: 60000, maxBuffer: MAX });
+  let installation = false;
+  try { installation = !listed.error && !listed.signal && listed.status === 0 && /^\d+$/.test(text(listed.stdout).trim()); } catch { /* not an installation's answer */ }
+  if (!installation) unavailable(push === 'false' ? 'no-write-permission' : 'gh-failed');
+  const answer = acceptsPush(o);
+  if (answer !== 'accepted') unavailable(answer === 'refused' ? 'installation-cannot-push' : 'installation-check-failed');
+}
+// Whether GitHub accepts a push to the repository from GH'S credential, the
+// one the installation answer was about. It asks GitHub for the push
+// advertisement, the authenticated request every HTTPS push starts with and
+// the one where GitHub authorizes it: 200 with the advertisement where the
+// credential may push, 401 or 403 where it may not, 404 where it does not
+// show the credential the repository at all. Nothing is sent. Git is
+// not involved, so nothing of the host's (Git configuration, a template, a
+// URL rewrite, a netrc, an askpass, an SSH key, a proxy variable) can answer
+// for the installation: gh prints its token for github.com on a pipe (with a
+// token file, the file is read instead and gh is not asked), and a
+// Node child with an empty environment reads it on stdin and makes the one
+// request, following no redirect. The token is never an argument and nothing
+// either child prints is forwarded. A host that reaches github.com only
+// through a proxy therefore reads as "could not check".
+// → 'accepted' | 'refused' (GitHub said no to the credential) | 'unknown'
+// (a timeout, a network error, no token from gh, any other answer: could not
+// check). Only 'accepted' passes.
+const ADVERTISEMENT = `
+let token = ''; for await (const chunk of process.stdin) token += chunk;
+let code = 4;
+try {
+  const r = await fetch(process.argv[1], { redirect: 'manual', signal: AbortSignal.timeout(45000),
+    headers: { 'user-agent': 'git/2.0 (oats-okf preflight)', authorization: 'Basic ' + Buffer.from('x-access-token:' + token).toString('base64') } });
+  if (r.status === 200 && r.headers.get('content-type') === 'application/x-git-receive-pack-advertisement') code = 0;
+  else if (r.status === 401 || r.status === 403 || r.status === 404) code = 3;
+} catch { /* could not check */ }
+process.exit(code);
+`;
+export function receivePack(url, token) {
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', ADVERTISEMENT, url], { input: token, env: {}, timeout: 60000, maxBuffer: MAX });
+  if (r.error || r.signal) return 'unknown';
+  return r.status === 0 ? 'accepted' : r.status === 3 ? 'refused' : 'unknown';
+}
+/** What on this host answers GitHub before Git asks the package's credential
+ *  helper, so that Git would act with another credential, or elsewhere, and
+ *  not with the token file's: a netrc entry for github.com, and in the system
+ *  or user Git configuration an authorization header or a rewrite of
+ *  https://github.com/ URLs. Included files are followed. A conditional
+ *  include (includeIf) depends on the repository Git runs in, so its
+ *  condition is taken as true and the file it names is read the same way.
+ *  → { routes, unread }: what was found, and what could not be read. Names
+ *  kinds and scopes only, never a value (a header or a rewritten URL can
+ *  hold a credential). */
+export function hostRoutes(childEnv = env()) {
+  const env = childEnv;
+  const routes = new Set(), unread = new Set(), hub = 'https://github.com/';
+  const touches = url => { const u = String(url).toLowerCase(); return hub.startsWith(u) || u.startsWith('https://github.com'); };
+  if (env.HOME) {
+    // curl matches the host without regard to case, and accepts it quoted.
+    try { if (/(?:^|\s)(?:machine\s+"?github\.com"?|default)(?:\s|$)/i.test(fs.readFileSync(join(env.HOME, '.netrc'), 'utf8'))) routes.add('a netrc entry that answers for github.com (.netrc in this user\'s home)'); }
+    catch { /* absent, or not readable by this user: then Git's curl cannot read it either, and it is no route */ }
+  }
+  const KEYS = '^(url\\..*\\.(insteadof|pushinsteadof)|http\\.(.*\\.)?extraheader|includeif\\..*\\.path)$';
+  const seen = new Set();
+  const scan = (source, scope, depth) => {
+    let out;
+    const r = spawnSync('git', ['config', ...source, '--includes', '--show-origin', '-z', '--get-regexp', KEYS], { env, encoding: 'utf8', timeout: 60000, maxBuffer: MAX });
+    if (!r.error && !r.signal && (r.status === 0 || r.status === 1)) out = r.stdout;
+    else { unread.add(depth ? `a file the ${scope} Git configuration conditionally includes` : `the ${scope} Git configuration`); return; }
+    const fields = out.split('\0');
+    for (let i = 0; i + 1 < fields.length; i += 2) {
+      const origin = fields[i], record = fields[i + 1], cut = record.indexOf('\n'), key = cut < 0 ? record : record.slice(0, cut), value = cut < 0 ? '' : record.slice(cut + 1);
+      if (/^includeif\./i.test(key)) {
+        // As Git resolves it: ~/ against the home, a relative path against the including file.
+        const from = origin.startsWith('file:') ? origin.slice(5) : null;
+        const path = value.startsWith('~/') && env.HOME ? join(env.HOME, value.slice(2)) : isAbsolute(value) ? value : from ? resolve(dirname(from), value) : null;
+        if (path === null || depth >= 8) { unread.add(`a file the ${scope} Git configuration conditionally includes`); continue; }
+        if (seen.has(path) || !fs.existsSync(path)) continue;   // Git ignores an include that is not there
+        seen.add(path); scan(['--file', path], scope, depth + 1); continue;
+      }
+      if (/^url\./i.test(key)) { if (touches(value)) routes.add(`a rewrite of https://github.com/ URLs (url.<base>.insteadOf or pushInsteadOf) in the ${scope} Git configuration`); continue; }
+      // Git lets * stand for a host label, so a wildcard host may be github.com.
+      const scoped = /^http\.(.*)\.extraheader$/i.exec(key);
+      if ((!scoped || touches(scoped[1]) || scoped[1].includes('*')) && /^\s*authorization\s*:/i.test(value)) routes.add(`an authorization header (http.extraHeader) in the ${scope} Git configuration`);
+    }
+  };
+  scan(['--system'], 'system', 0); scan(['--global'], 'user', 0);
+  return { routes: [...routes], unread: [...unread] };
+}
+
+// The installation route's one request and the host scan, replaceable in tests only.
+export const probes = { receivePack, hostRoutes };
+// With a token file, nothing that publishes starts while the host can answer
+// GitHub in the token's place: Git would push with that credential, or
+// elsewhere, after a check that judged the token. Fixed kinds only.
+function hostGate() {
+  const { routes, unread } = probes.hostRoutes(env());
+  if (routes.length || unread.length) throw Object.assign(new Error('E_HOST_CREDENTIAL'), { code: 'E_HOST_CREDENTIAL', diagnostic: { phase: 'host', routes, unread } });
+}
+const PUBLISHES = new Set(['preflight', 'create', 'rewrite', 'amend-legacy', 'merge', 'close', 'close-unsafe']);
+
+function acceptsPush(o) {
+  try {
+    let token;
+    if (tokenFile !== undefined) token = readToken(tokenFile);
+    else {
+      const r = spawnSync('gh', ['auth', 'token', '--hostname', 'github.com'], { env: env(), timeout: 60000, maxBuffer: MAX });
+      if (r.error || r.signal || r.status !== 0) return 'unknown';
+      token = text(r.stdout).trim();
+    }
+    if (!/^[\x21-\x7e]{1,4096}$/.test(token)) return 'unknown';
+    const answer = probes.receivePack(`https://github.com/${o.github}.git/info/refs?service=git-receive-pack`, token);
+    return answer === 'accepted' || answer === 'refused' ? answer : 'unknown';
+  } catch { return 'unknown'; }
+}
 function view(o, { states = ['OPEN'], publishing = true } = {}) {
   let p;
   try { p = JSON.parse(text(gh(o, ['pr', 'view', o.pr, '--repo', o.github, '--json', 'state,headRefOid,headRefName,baseRefName,isCrossRepository,title,body']))); }
@@ -439,10 +647,29 @@ function verdict(bytes, head, allowed) {
   } catch { fail('E_VERDICT'); }
   if (v.headSha !== head || !allowed.includes(v.verdict)) fail('E_VERDICT');
 }
+// oats.okf 6.1: the squash commit names the proposer. A proposal's commit
+// ends in a trailer block (Proposed-by, and where the proposer's home recorded
+// them Proposer-identity, Attributed-human, Published-by); the accepted
+// history would otherwise hold only the merging account. Copied from the
+// reviewed head's own message, one row per key, never from the PR body. They
+// are the proposer's own statement, not proof.
+const CARRIED = ['Proposed-by', 'Proposer-identity', 'Attributed-human', 'Published-by'];
+const UNPRINTABLE = /[\p{Cc}\u2028\u2029\u202A-\u202E\u2066-\u2069\u200B\u2060\uFEFF\u{E0000}-\u{E007F}]/u;
+function proposerTrailers(o) {
+  const raw = text(object(o.repo, o.head, 'commit')), split = raw.indexOf('\n\n');
+  const block = (split < 0 ? '' : raw.slice(split + 2)).trimEnd().split('\n\n').at(-1).split('\n');
+  return CARRIED.flatMap(key => {
+    const rows = block.filter(row => row.startsWith(`${key}: `));
+    return rows.length === 1 && [...rows[0]].length <= 300 && !UNPRINTABLE.test(rows[0]) ? rows : [];
+  });
+}
 function comment(o, bytes) {
   gh(o, ['pr', 'comment', o.pr, '--repo', o.github, '--body-file', '-'], bytes);
 }
 export function execute(command, o) {
+  tokenFile = o['token-file'];
+  if (tokenFile !== undefined) readToken(tokenFile);
+  if (tokenFile !== undefined && PUBLISHES.has(command)) hostGate();
   o.terms = loadTerms(o['terms-file']);
   if (command === 'screen-text') {
     if (!o['text-file']?.length) fail('E_USAGE');
@@ -467,6 +694,7 @@ export function execute(command, o) {
     git(o.repo, ['update-ref', reference, head, o.head]);
     return { head, status: 'committed' };
   }
+  if (command === 'preflight') { publishPreflight(o); return { github: o.github, status: 'gh-available' }; }
   if (command === 'create') {
     github(o);
     // A canonical repository-relative path, as a base root is bound (any
@@ -480,6 +708,8 @@ export function execute(command, o) {
     const label = prefix, kind = LABELS[prefix];
     const body = readText(o['body-file'], 'PR body', { terms: o.terms });
     const p = provenance(text(body)); if (p.version !== kind.version) fail('E_PROVENANCE');
+    // Before the push: a host that cannot open the PR publishes nothing.
+    publishPreflight(o);
     let head, recovered = 0;
     for (;;) {
       // Every E_BASE_MOVED from screenedPush is decided before its push.
@@ -488,16 +718,19 @@ export function execute(command, o) {
       if (recovered === RECOVERIES) unrecovered(recovered, 'retries-exhausted');
       recoverBase(o, ++recovered);
     }
-    gh(o, ['label', 'create', label, '--repo', o.github, '--force', '--color', '0E8A16', '--description', kind.description]);
+    // The push is confirmed: every failure from here names what it published.
     try {
-      verifyBase(o);
-      if (tip(o, ref(o.branch)) !== head) fail('E_HEAD_MOVED');
-    } catch { fail('E_PR_UNCERTAIN'); }
-    const url = text(gh(o, ['pr', 'create', '--repo', o.github, '--base', o['base-branch'], '--head', o.branch,
-      '--label', label, '--title', 'OKF knowledge proposal', '--body-file', '-'], body)).trim();
-    if (!url.startsWith(`https://github.com/${o.github}/pull/`) || !/\/pull\/[1-9][0-9]*$/.test(url)) fail('E_PR_UNCERTAIN');
-    confirmPr({ ...o, pr: url.split('/').at(-1) }, 'OPEN', o.branch);
-    return { head, base: o.base, recovered, branch: o.branch, url, status: 'created' };
+      gh(o, ['label', 'create', label, '--repo', o.github, '--force', '--color', '0E8A16', '--description', kind.description]);
+      try {
+        verifyBase(o);
+        if (tip(o, ref(o.branch)) !== head) fail('E_HEAD_MOVED');
+      } catch { fail('E_PR_UNCERTAIN'); }
+      const url = text(gh(o, ['pr', 'create', '--repo', o.github, '--base', o['base-branch'], '--head', o.branch,
+        '--label', label, '--title', 'OKF knowledge proposal', '--body-file', '-'], body)).trim();
+      if (!url.startsWith(`https://github.com/${o.github}/pull/`) || !/\/pull\/[1-9][0-9]*$/.test(url)) fail('E_PR_UNCERTAIN');
+      confirmPr({ ...o, pr: url.split('/').at(-1) }, 'OPEN', o.branch);
+      return { head, base: o.base, recovered, branch: o.branch, url, status: 'created' };
+    } catch (error) { throw Object.assign(error, { published: { branch: o.branch, head } }); }
   }
   remoteGuard(o);
   const closing = command === 'close' || command === 'close-unsafe';
@@ -546,12 +779,15 @@ export function execute(command, o) {
     if (forkPoint(o.repo, o.base, o.head) !== o.base) fail('E_REWRITE_REQUIRED');
     const screenedTree = oid(text(git(o.repo, ['rev-parse', `${o.head}^{tree}`])).trim());
     checked(screenRange(o.repo, o.base, o.head));
+    // Built and screened before the verdict comment: a refusal publishes nothing.
+    const mergeText = `Reviewed OKF head: ${o.head}\n\n${[`Proposal: https://github.com/${o.github}/pull/${o.pr}`, ...proposerTrailers(o)].join('\n')}\n`;
+    checked(screenText(mergeText, 'merge commit text', { commit: true }));
+    const mergeBody = Buffer.from(mergeText);
     const confirmScreenedTree = () => {
       verifyBase(o, 'E_REWRITE_REQUIRED');
       if (oid(text(git(o.repo, ['rev-parse', `${o.head}^{tree}`])).trim()) !== screenedTree) fail('E_HEAD_MOVED');
     };
     confirmScreenedTree(); view(o); comment(o, body); view(o); confirmScreenedTree();
-    const mergeBody = Buffer.from(`Reviewed OKF head: ${o.head}\n`);
     gh(o, ['pr', 'merge', o.pr, '--repo', o.github, '--squash', '--match-head-commit', o.head,
       '--subject', 'OKF knowledge proposal', '--body-file', '-'], mergeBody);
     return { head: o.head, status: 'merge-submitted' };
@@ -572,8 +808,11 @@ export function execute(command, o) {
       let output;
       try { output = git(o.repo, ['push', '--porcelain', '--no-signed', '--no-follow-tags', '--recurse-submodules=no',
         `--force-with-lease=${reference}:${o.head}`, 'origin', `:${reference}`], { publication: true }); }
-      catch (error) { uncertain('E_DELETE_UNCERTAIN', error?.diagnostic); }
-      if (tip(o, reference) !== null) uncertain('E_DELETE_UNCERTAIN', { ...output.diagnostic, phase: 'readback-other' });
+      catch (error) { if (error?.code === 'E_CREDENTIAL') throw error; uncertain('E_DELETE_UNCERTAIN', error?.diagnostic); }
+      let left;
+      try { left = tip(o, reference); }
+      catch { uncertain('E_DELETE_UNCERTAIN', { ...output.diagnostic, phase: 'readback-failed' }); }
+      if (left !== null) uncertain('E_DELETE_UNCERTAIN', { ...output.diagnostic, phase: 'readback-other' });
     }
     return { head: o.head, status: command === 'close-unsafe' ? 'closed-branch-deleted-pull-ref-remains' : 'closed' };
   }
@@ -584,12 +823,13 @@ const FLAGS = {
   'screen-tree': ['repo', 'head', 'root', 'terms-file'],
   screen: ['repo', 'base', 'head', 'text-file', 'terms-file'],
   commit: ['repo', 'base', 'head', 'branch', 'commit-file', 'terms-file'],
-  create: ['repo', 'remote', 'github', 'base', 'base-branch', 'head', 'branch', 'body-file', 'terms-file', 'guard-file'],
-  rewrite: ['repo', 'remote', 'github', 'base', 'base-branch', 'head', 'pr', 'body-file', 'commit-file'],
-  'amend-legacy': ['repo', 'remote', 'github', 'base', 'base-branch', 'head', 'pr', 'body-file', 'commit-file'],
-  merge: ['repo', 'remote', 'github', 'base', 'base-branch', 'head', 'pr', 'verdict-file'],
-  close: ['repo', 'remote', 'github', 'base', 'base-branch', 'head', 'pr', 'verdict-file'],
-  'close-unsafe': ['repo', 'remote', 'github', 'base', 'base-branch', 'head', 'pr', 'verdict-file'],
+  preflight: ['github', 'token-file'],
+  create: ['repo', 'remote', 'github', 'base', 'base-branch', 'head', 'branch', 'body-file', 'terms-file', 'guard-file', 'token-file'],
+  rewrite: ['repo', 'remote', 'github', 'base', 'base-branch', 'head', 'pr', 'body-file', 'commit-file', 'token-file'],
+  'amend-legacy': ['repo', 'remote', 'github', 'base', 'base-branch', 'head', 'pr', 'body-file', 'commit-file', 'token-file'],
+  merge: ['repo', 'remote', 'github', 'base', 'base-branch', 'head', 'pr', 'verdict-file', 'token-file'],
+  close: ['repo', 'remote', 'github', 'base', 'base-branch', 'head', 'pr', 'verdict-file', 'token-file'],
+  'close-unsafe': ['repo', 'remote', 'github', 'base', 'base-branch', 'head', 'pr', 'verdict-file', 'token-file'],
 };
 function parse(args) {
   const [command, ...argv] = args, allowed = FLAGS[command]; if (!allowed) fail('E_USAGE');
@@ -600,11 +840,12 @@ function parse(args) {
     if (key === 'text-file') (o[key] ??= []).push(value);
     else { if (Object.hasOwn(o, key)) fail('E_USAGE'); o[key] = value; }
   }
-  for (const key of allowed) if (!['root', 'text-file', 'terms-file', 'guard-file'].includes(key) && !o[key]) fail('E_USAGE');
+  for (const key of allowed) if (!['root', 'text-file', 'terms-file', 'guard-file', 'token-file'].includes(key) && !o[key]) fail('E_USAGE');
   if (o.repo) o.repo = resolve(o.repo); return { command, o };
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  if (process.argv.length === 2 || process.argv.includes('--help')) {
+  if (process.argv[2] === 'git-credential') gitCredential(process.argv[3]);
+  else if (process.argv.length === 2 || process.argv.includes('--help')) {
     for (const [command, flags] of Object.entries(FLAGS)) console.log(`okf-publication.mjs ${command} ${flags.map(f => `--${f} VALUE`).join(' ')}`);
   } else {
     try {
@@ -612,7 +853,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       console.log(JSON.stringify({ ok: true, ...execute(command, o) }));
     } catch (e) {
       const code = /^E_[A-Z_]+$/.test(e.code || '') ? e.code : 'E_PUBLICATION';
-      console.log(JSON.stringify({ ok: false, code, ...(e.findings ? { findings: e.findings } : {}), ...(e.diagnostic ? { diagnostic: e.diagnostic } : {}) }));
+      console.log(JSON.stringify({ ok: false, code, ...(e.findings ? { findings: e.findings } : {}), ...(e.diagnostic ? { diagnostic: e.diagnostic } : {}), ...(e.published ? { published: e.published } : {}) }));
       process.exitCode = code === 'E_CONTENT_REFUSED' ? 1 : 2;
     }
   }

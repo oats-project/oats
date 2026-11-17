@@ -46,7 +46,11 @@ added with: read it with `oats trigger show <id> --json` and repeat its
   that account.
 - **Proposers run anywhere**: working agents open their own proposal PRs
   (`oats okf propose`) from their own deployment; the review host need not
-  be one of them. Each proposing host needs a `gh`/Git account that can
+  be one of them. **It must not be one of them where agents share a
+  container:** every agent there can read every credential in it, so the
+  merging account's login stays outside the proposers' container, and the
+  proposers get a write-role-only credential through the host setting
+  `github-token-file` (the README's "The proposer credential"). Each proposing host needs a `gh`/Git account that can
   create branches on the KB repository, never one that can push the
   accepted branch. Forks are not supported: proposals are same-repository
   branches, and the publication helper refuses a fork PR (`E_PR_STATE`).
@@ -110,6 +114,12 @@ absent, or an account without admin read on the
 repository: GitHub answers 404 `Not Found` or 403) or the base is not on
 GitHub. It is read-only and never refuses anything. Run it with an account
 that may read the repository's settings, or read `unknown` as "check by hand".
+
+To check a whole deployment in one step (settings, bases, the credential's
+role, this protection and the label), run `oats okf setup --check --soul
+<soul>` (oats.okf 6.2): every problem names its fix, and with the host
+setting `github-token-file` an unprotected branch or an admin credential is
+a problem, not a warning.
 
 ## 3. Messaging
 
