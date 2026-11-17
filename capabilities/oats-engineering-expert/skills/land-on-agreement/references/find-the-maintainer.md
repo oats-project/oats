@@ -17,22 +17,27 @@ by a name pattern: OATS's maintainers keep the names they have. Then see whether
 
 Then:
 - **Running:** call it.
-- **Stopped, or known but not active:** message it anyway (messages wait), and tell its
-  person it is stopped, so they can start it.
+- **Stopped:** message it anyway (messages wait), and tell its person it is stopped, so
+  they can start it.
 <!-- OATS: OATS keeps its lane map: a seat is its `active` entry there. -->
-- **An `active` entry with nothing running anywhere you can see:** it may be retired,
-  or run where you can't look. Ask its person before you start one. After a retired
-  one, the next takes its count before the role (`<person>-<lane>-2-maintainer`): a
-  name is used once.
+- **An `active` entry, or a maintainer of your person in that lane named only on the
+  roster, with nothing running anywhere you can see:** it may be retired, or run where
+  you can't look. Ask its person before you start one.
 - **None** (no `active` entry for your person in that project lane, and none on the
   roster): start one for your own person, without asking, independent of you so your
   retirement can't stop it. Never in `lane:release`, which has one maintainer for the
   whole project: with none active there, ask your person, and start none:
   ```bash
-  oats spawn <maintainer soul> --relation unrelated --name <person>-<lane>-maintainer --task-file <brief.md>
+  oats spawn <maintainer soul> --relation unrelated --name <person>-<lane>[-<count>]-maintainer --task-file <brief.md>
   ```
-  A spawn refused because the name is taken means the lane has a maintainer, so find it,
-  and start none under another name. Brief: "maintainer for <person> in <lane>; first
+  A name is used once, so after a retired holder the next one carries a count before the
+  role: `<person>-<lane>-2-maintainer`, then `-3-`. The name is the first of that family
+  that no instance has had. The kernel doesn't refuse a retired instance's name, so check
+  each in order before you spawn: `oats instance events <name>` lists a used name's
+  events, a `retired` one among them, and says "no instance" for a name never used on
+  this machine; a name the roster still lists is used too. A spawn refused because the
+  name is taken means a holder is running or stopped: find it, and start none under
+  another name. Brief: "maintainer for <person> in <lane>; first
   call: <your instance> asks for <the green light | the merge | the release> on <PR> at
   <head>, or for an answer on <the question, at its revision>; the lane map is <its
   link>". Then tell your person, in two or three
