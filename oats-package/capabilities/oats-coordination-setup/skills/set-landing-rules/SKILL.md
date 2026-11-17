@@ -55,8 +55,9 @@ description: >-
    - What opens a PR: for a developer's work, `VERIFIED at <head>` from the
      lead, and anything more whoever holds the lane asks for; for a change the
      lead built, the round that found nothing to fix. The author then opens it
-     and works its reviews. A helper building a scoped piece of its parent lead's effort
-     hands that head back and opens no PR until the parent has verified it.
+     and works its reviews. A helper building a scoped piece of its parent
+     lead's effort hands that head back and opens no PR until the parent has
+     verified it.
 5. **A maintainer's green light** is an option per lane, off by default: the
    maintainer's verdict on a PR at an exact head (`GREEN LIGHT`, `RETURN` or
    `ESCALATE`), on direction, contracts, coherence, scope and evidence, never a

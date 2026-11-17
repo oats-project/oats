@@ -67,14 +67,22 @@ only a lane maintainer's verdict on a PR, at an exact head.
 - **The verdict:** by message to whoever called. `GREEN LIGHT at <head>` with what it
   checked; `RETURN at <head>` with findings; or `ESCALATE`, when a direction question
   must go to whoever decides it first.
-- **What it checks:** the lane's direction, contracts, coherence, the PR's scope against
-  its task, and the evidence against the task's acceptance criteria. Never the lines
-  again: the author's reviewers read those.
+<!-- OATS: Pepe, 17 Nov: "the maintainers both look at the PR code and also assess the PR against roadmap and direction and product fit". -->
+- **What it checks:** the lane's direction, its roadmap and the product fit, contracts,
+  coherence, the PR's scope against its task, and the evidence against the task's
+  acceptance criteria. Here it also reads the whole diff once, from its own checkout: a
+  defect it finds there blocks like a finding on the five. It repeats none of the
+  author's review rounds.
 - **Two lanes:** each maintainer's green light.
 <!-- OATS: the lane map: the PR's maintainer, after its green light, brings in the second reader and the release lane's sign-off. -->
 - **After it, here:** the maintainer that gave it asks the PR's second reader and, where
   the lane's line asks, the release lane's sign-off, at that head; the lead or the
   specialist doesn't. A RETURN from any of them goes to the change's author.
+<!-- OATS: Pepe, 17 Nov: the release lane's sign-off keeps the four gates, as the final gate on main. -->
+- **The release lane's sign-off, here:** its verdict by the four gates of a PR with no
+  lead (direction, roadmap and product fit; correctness over the whole diff; security;
+  mergeability), at the exact head being merged: the final gate on main, not the green
+  light's five checks.
 
 Why, where an organisation asks for it: one seat holds a lane's direction across parallel
 efforts.

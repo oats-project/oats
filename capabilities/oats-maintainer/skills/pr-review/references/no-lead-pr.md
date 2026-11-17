@@ -1,11 +1,19 @@
 # A PR with no lead: the four gates
 
+<!-- OATS: Pepe, 17 Nov: the release lane's sign-off reads every PR it signs off by these four gates. -->
+Here the release lane's sign-off reads every PR it signs off by these four gates too, at
+the exact head being merged, as the final gate on main (`SKILL.md`, "Which PRs, and
+when"), whatever reviews the PR has had.
+
 An outside contributor's PR, or a person's own, has had none of our reviews. It is ready
 when its author marks it ready (not a draft) or asks for a read at a named head, with CI
 green. For a fork, check the workflows and secrets (gate 3) first, so CI can run. Read
 the author's evidence at this head, then:
 
-1. **Direction** (`/direction-gate`), against the full diff.
+<!-- OATS: Pepe, 17 Nov: gate 1 judges direction, roadmap and product fit. -->
+1. **Direction, roadmap and product fit** (`/direction-gate`), against the full diff: it
+   belongs where it is, moves the lane the way its roadmap and recorded decisions say,
+   and fits the product (who it is for, what it is meant to be).
 2. **Correctness.** Read the whole diff, from an exact-commit checkout of your own, never
    another agent's work tree. Find the consumers of every changed export, signature,
    output or message shape, config key, flag, error code and file format, here and in

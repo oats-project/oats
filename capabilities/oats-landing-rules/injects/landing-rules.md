@@ -34,14 +34,14 @@ lead (an outside contributor's, a person's own, a maintainer's release prep) fol
 3. `VERIFIED at <head>` from whoever specified the work, for a developer's or a helper's
    change. A change a lead or a specialist built itself needs none: nobody verifies
    their own work.
-<!-- OATS: the lane map's agreements: every PR's maintainer gives its green light, one second reader per PR, the release lane's sign-off where a lane asks, and who merges is the lane's arrangement. -->
+<!-- OATS: the lane map's agreements: every PR's maintainer gives its green light, one second reader per PR, the release lane's sign-off where a lane asks, and who merges is the lane's arrangement; Pepe, 17 Nov: the sign-off keeps the four gates. -->
 4. The green light of the PR's maintainer, at that head (below).
 5. The verdict of the PR's one second reader, the one its lane's line names, at that head
    or carried to it (`/pr-review`); the direct go of the person whose maintainer holds the
    PR, for that PR, is the only fallback.
 6. The release lane's sign-off, where the lane's line asks for it: its verdict at the
-   exact head being merged. Where a lane's line doesn't say yet, the release lane signs
-   off every merge.
+   exact head being merged, by the four gates (below). Where a lane's line doesn't say
+   yet, the release lane signs off every merge.
 
 Never merge over a RETURN or a hold. A new commit needs them again unless a carry rule
 holds (`/landing-rules-detail`). Who merges is the lane's arrangement on the map: the
@@ -56,8 +56,9 @@ can't; a RETURN or a hold is someone's recorded no.
 Every lane asks for its maintainer's green light on every PR built inside an effort (a
 lead's, a specialist's, a developer's or a helper's): the green light of the maintainer of
 the effort's person in the PR's lane (in `lane:release`, its one maintainer), named in the
-PR's description, at the head being merged. That maintainer then brings in the PR's second reader and the release lane's
-sign-off where the lane's line asks, and merges where the line gives it the merge. Releases and tags are the release lane's: its
+PR's description, at the head being merged. That maintainer then brings in the PR's
+second reader and the release lane's sign-off where the lane's line asks, and merges
+where the line gives it the merge. Releases and tags are the release lane's: its
 maintainer plans, tags and publishes every release of OATS and the official packages, on
 the release plan it posts on the forge (`/plan-and-ship-release`). Each lane with PRs in
 the plan, or left out of it, agrees there what goes in and when, through its maintainer.
@@ -68,8 +69,14 @@ lane the final say on what is released.
 
 Where a lane does ask for it, "green light" means only that maintainer's verdict at an
 exact head, by message: `GREEN LIGHT at <head>`, `RETURN at <head>` with its findings, or
-`ESCALATE`, a direction question gone to whoever decides it, which you wait on. It
-judges direction, contracts, coherence, scope and evidence, never a second code review.
+`ESCALATE`, a direction question gone to whoever decides it, which you wait on.
+<!-- OATS: Pepe, 17 Nov: "the maintainers both look at the PR code and also assess the PR against roadmap and direction and product fit"; the sign-off keeps the four gates. -->
+Here it judges direction, roadmap and product fit, contracts, coherence, scope and
+evidence, and reads the whole diff once, from the maintainer's own checkout: a defect it
+finds there blocks. It runs no review rounds of its own. The release lane's sign-off is
+its verdict by the four gates of a PR with no lead (direction, roadmap and product fit;
+correctness over the whole diff; security; mergeability), at the exact head being
+merged: the final gate on main, not the green light's five checks.
 
 **One-way doors kept for people.**
 A release's tag and publication, on the release lane's person's authority (above);

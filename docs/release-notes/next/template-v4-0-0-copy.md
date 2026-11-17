@@ -34,6 +34,14 @@
     evidence. Each lane's agreements are as before: the PR's second reader,
     the release lane's sign-off where the lane asks, and the merge where the
     lane's arrangement puts it. A PR with no lead still gets the four gates.
+  - **Both maintainer reads look at the code and judge direction, roadmap
+    and product fit.** The lane maintainer's green light adds its own read
+    of the whole diff, from its own checkout, to the five checks: a defect
+    it finds there blocks, and it runs no review rounds of its own. The
+    release lane's sign-off keeps the four gates (direction, roadmap and
+    product fit; correctness over the whole diff; security; mergeability)
+    on every PR it signs off, at the exact head being merged, as the final
+    gate on main.
   - **What carries to a new head.** A review carries as before, except that a
     fix to a minor is read by the review bot where one runs, otherwise by a
     fresh reviewer briefed with the delta, not by the round's reviewer. A `VERIFIED` note and a green light carry only

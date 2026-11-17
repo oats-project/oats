@@ -437,6 +437,9 @@ template drops the lane map, but OATS keeps it: the landing rules point at the l
 which stays the one home of OATS's lanes and their owners, and a lane's maintainer is
 found by its entry there. Every lane asks for its maintainer's green light on every PR of
 an effort, before its second reader and the release lane's sign-off where the lane asks.
+Both maintainer reads look at the code and judge direction, roadmap and product fit: the
+lane maintainer by the five checks of its green light plus its own read of the whole
+diff, the release lane by the four gates, at the exact head being merged.
 The reviewer is the template's `code-reviewer` soul, in `souls/`. The workspace
 doesn't pin the `oats.engineering` package, frozen at v1.18.0
 ([official catalog](official-catalog.md#coordination-templates)), so each of
