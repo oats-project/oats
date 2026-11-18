@@ -107,7 +107,7 @@ net.createServer(socket=>socket.end()).listen(Number(process.argv[2]),'0.0.0.0',
     compose = ["docker", "compose", "-p", project, "-f", str(root / "container/agent/egress/compose.minimal.yaml"), "-f", overlay_file]
     run([*compose,"config","--quiet"])
     created = True
-    run([*compose,"up","-d"])
+    run([*compose,"up","-d","--wait","--wait-timeout","60"])
     for service, token in [("front","TLS_READY"),("postgres","BACKEND_READY"),("redis","BACKEND_READY")]:
         container = run([*compose,"ps","-q",service])
         for _ in range(50):
@@ -117,13 +117,6 @@ net.createServer(socket=>socket.end()).listen(Number(process.argv[2]),'0.0.0.0',
         else:
             raise RuntimeError("fixture control did not start: " + service)
     proxy = run([*compose,"ps","-q","egress"])
-    for _ in range(100):
-        info = json.loads(docker("inspect",proxy))[0]
-        if info["State"].get("Health",{}).get("Status") == "healthy":
-            break
-        time.sleep(0.1)
-    else:
-        raise RuntimeError("fixture proxy never became healthy")
     approved = [{"Type":"bind","Source":source,"Destination":target,"RW":writable} for source,target,writable in [
         (env["TEAM_STATE_DIR"],"/state",True),(env["TEAM_LOGIN_DIR"],"/etc/agent-login",False),
         (keys_file,"/etc/agent-ssh/authorized_keys",False),(resolver_file,"/etc/resolv.conf",False),
