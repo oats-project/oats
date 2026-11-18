@@ -1,3 +1,4 @@
+import { hookCleanupComplete } from "../lib/hook-outcome.mjs";
 // oats.aweb 1.12.0 hook behaviour, against a fake `aw` on PATH:
 // local/global identity meta, resident session grants, compensation, and revoke.
 
@@ -278,13 +279,13 @@ test("global retire treats a maybe-applied revoke timeout as success when grant 
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
 
-test("global retire reports nothing to revoke without a grant id and fails loudly when revoke fails", () => {
+test("global retire with undocumented no-grant outcome is incomplete under the kernel contract; revoke failure stays loud", () => {
   const base = mkdtempSync(join(tmpdir(), "oats-aweb-112-"));
   try {
     const bin = fakeAw(base); const { root, home } = deployment(base); const custody = resident(base);
     let r = runHook(bin, "retire", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_META: JSON.stringify({ identity: { mode: "global", resident: "merlin" } }), OATS_SETTINGS: JSON.stringify({ residents: { merlin: custody } }) });
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    assert.equal(r.doc.meta.reason, "nothing-to-revoke");
+    assert.equal(hookCleanupComplete(r.doc.meta), false, "the package no-grant answer is not the documented nothing-to-delete outcome");
     r = runHook(bin, "retire", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_META: JSON.stringify({ identity: { mode: "global", resident: "merlin", grant: { id: "grant-123", expiresAt: "2026-09-24T07:00:00Z", scopes: [] } } }), OATS_SETTINGS: JSON.stringify({ residents: { merlin: custody } }), FAKE_REVOKE_FAIL: "1" });
     assert.notEqual(r.status, 0);
     assert.match(r.doc.warning, /grant grant-123 was not revoked/);
