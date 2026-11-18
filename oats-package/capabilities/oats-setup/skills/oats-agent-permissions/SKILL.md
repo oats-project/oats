@@ -134,7 +134,7 @@ mode.
       "Bash(oats spawn *)",
       "Bash(oats retire * --plan)", "Bash(oats retire * --plan *)",
       "Bash(oats instance stop * --plan)", "Bash(oats instance stop * --plan *)",
-      "Bash(aw mail inbox *)", "Bash(aw mail show *)", "Bash(aw mail ack *)",
+      "Bash(aw mail inbox *)", "Bash(aw mail show *)",
       "Bash(aw chat pending *)", "Bash(aw chat history *)",
       "Bash(aw whoami *)", "Bash(aw workspace status *)",
       "Bash(gh pr view *)", "Bash(gh pr list *)", "Bash(gh pr checks *)", "Bash(gh pr diff *)",
@@ -142,6 +142,9 @@ mode.
     ],
     "ask": [
       "Bash(aw *--server-name*)",
+      "Bash(aw *--identity-home*)",
+      "Bash(aw *--human*)",
+      "Bash(aw *--team*)",
       "Bash(oats spawn *--yolo*)",
       "Bash(oats spawn *--server*)",
       "Bash(oats spawn *--wake-*)"
@@ -170,7 +173,18 @@ mode.
   attach any file and reach an address outside the team. The `autoMode`
   allow entry above tells the classifier that mailing other instances is
   normal. An `ask` rule keeps a person on `--server-name`, which points `aw`
-  at another server.
+  at another server. The other `aw` ask rules cover `--identity-home`
+  (another identity), `--human` including `--human-domain` (another human
+  principal), and `--team` (another team). Mail acknowledgement changes read
+  state, so `aw mail ack` also goes to the classifier.
+  Per [Claude's permission matcher](https://code.claude.com/docs/en/permissions#wildcard-patterns),
+  `*` matches text including spaces, anywhere in a rule, and ask precedes allow.
+  Thus `Bash(aw *--team*)` covers both `aw --team t mail inbox` and
+  `aw mail inbox --team=t`; the corresponding rules also cover
+  `aw --identity-home /home/seat mail inbox` and
+  `aw mail inbox --human-domain example.test`. They apply even when an
+  allowed read form matches. These examples describe the documented matcher;
+  they are not a runtime permission probe.
 - **No `git` rules.** Claude's built-in read-only set already runs
   `git status`, `diff`, `log` and `show` without a prompt, and it checks
   their flags. An allow rule would skip that check: `git diff --output=<file>`
