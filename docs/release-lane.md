@@ -467,8 +467,9 @@ tagged:
    ```
 
 3. Pin the same version in `package-catalog.json` and `oats-workspace.yaml`,
-   update the version literals the tests and smoke script carry, and review
-   the diff as one PR.
+   update current documentation/skill recommendations, then run
+   `node scripts/check-mirrors.mjs --verify` and `npm run validate`. The
+   catalog is the source for smoke/test versions. Review the diff as one PR.
 
 `--finalize` stamps `release.status: published` only when every check passes:
 the tag is exactly `v<package version>` and resolves to the given commit; the

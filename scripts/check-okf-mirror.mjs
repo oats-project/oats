@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+// The combined scripts/check-mirrors.mjs gate extends this payload walker to
+// every catalog-pinned mirror; OKF retains its stricter release provenance.
 // The standalone distribution is authoritative; this is a byte mirror, not a
 // second authoring surface. CI verifies the checked-in inventory without Git,
 // network access or a sibling clone. Source operations read Git; --finalize and

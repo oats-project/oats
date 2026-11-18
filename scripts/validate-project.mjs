@@ -5,7 +5,8 @@ import { basename, dirname, extname, join, relative, resolve, sep } from "node:p
 import { fileURLToPath } from "node:url";
 import { parse as parseYamlFull } from "yaml";
 import { entriesDir } from "./assemble-release-notes.mjs";
-import { checkOkfMirror } from "./check-okf-mirror.mjs";
+import { checkMirrors } from "./check-mirrors.mjs";
+import { checkCatalogReferences } from "./check-catalog-references.mjs";
 import { checkKnowledgeTheoryPackage } from "./check-knowledge-theory-package.mjs";
 import { checkNodeFloor, checkReleaseVersions } from "./check-package-dry-runs.mjs";
 import { checkWorkspaceFiles } from "./check-workspace-files.mjs";
@@ -48,7 +49,8 @@ const validatePackage = ajv.compile(json(packageSchemaPath));
 const theoryManifest = join(root, "oats-package/oats-package.json");
 if (!validatePackage(json(theoryManifest))) fail(`oats-package/oats-package.json: ${ajv.errorsText(validatePackage.errors)}`);
 try { checkKnowledgeTheoryPackage({ repoRoot: root }); } catch (error) { fail(`optional knowledge theory: ${error.message}`); }
-try { checkOkfMirror({ repoRoot: root }); } catch (error) { fail(`standalone OKF mirror: ${error.message}`); }
+try { checkMirrors({ repoRoot: root }); } catch (error) { fail(`package mirrors: ${error.message}`); }
+try { checkCatalogReferences(root); } catch (error) { fail(`catalog references: ${error.message}`); }
 try { checkReleaseVersions(root); } catch (error) { fail(`release manifests: ${error.message}`); }
 try { checkNodeFloor(root); } catch (error) { fail(`Node floor: ${error.message}`); }
 // The repository's own oats-workspace.yaml and package-catalog.json, read by the kernel's readers,
