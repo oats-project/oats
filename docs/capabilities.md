@@ -184,18 +184,27 @@ A self-contained package has an `oats.json`:
   the branch gone (a damaged ref, a failed read), the retry stays incomplete
   with `git branch <b>: could not verify whether it still exists (…)`. A retry that still cannot
   finish keeps the home again, names what is outstanding, and exits nonzero.
-- The **escape hatch is `oats retire <instance> --force`**, for a home OATS cannot
-  identify at all: no `instance.json` and no **usable** cleanup descriptor, or an
-  `instance.json` that does not say which retire hooks to run and no usable
-  descriptor beside it. Such a record names no repository (`repo`), which the
-  retire hooks are run for, and does not show (`capabilityRuntime`) that no
-  capability has a retire hook: the stub a spawn leaves when it is killed
-  before its record, where no marker was written before its hooks (a spawn by
-  a kernel before this rule, or a marker since removed). Retire refuses it
-  with `E_UNIDENTIFIED_INSTANCE_HOME` before anything is stopped, run or
-  removed: the spawn hooks may have registered an identity that only the
-  retire hooks would release. Clean up by hand what the capabilities
-  registered, then `--force` removes the home, running no hook. Usable
+- **A home whose retire hooks cannot run is refused before anything is stopped,
+  run or removed, children included.** The same admission rule applies to
+  `oats retire --plan`, the Desktop's Remove plan and every apply path.
+  `E_UNIDENTIFIED_INSTANCE_HOME` names the cause, the recorded capabilities
+  that may have left state, and the manual-cleanup remedy. No current
+  deployment configuration can prove what an old home registered.
+  A normal home needs its recorded `capabilityRuntime` and a context `repo`
+  to run its hooks; an explicit capability set with no retire hooks proves
+  that none is owed. A captured home from before 0.26 cannot run its hooks:
+  only an explicit empty captured `hookOrder`, with no contradictory
+  capability metadata, proves that no capability's spawn hook ran. Missing
+  information proves nothing.
+- The **escape hatch is `oats retire <instance> --force`**. This includes
+  homes spawned before `capabilityRuntime`, captured homes without proof of
+  no spawn hooks, a home without a usable record or cleanup descriptor, and
+  a home whose recorded retire hooks have no context repository. Inspect the
+  home and clean up external identities and memberships with the provider's
+  tooling first. Force can remove the home while leaving that state active;
+  its output keeps the warnings about hooks that did not run and state that
+  was not revoked. An unreadable `instance.json` still refuses even with
+  force. A usable cleanup descriptor can drive the normal retry. Usable
   means it satisfies the versioned cleanup contract the rollback writes, checked
   to the depth the retry consumes it: `version`, a context `repo`, a recognised
   `work` mode (plus a `branch` for `worktree` — an unknown mode would skip the

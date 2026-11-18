@@ -5670,7 +5670,7 @@ had begun.
 | `E_HOME_NOT_OWNED` | yes | yes |
 | `E_SESSION_UNKNOWN` | yes | yes |
 | `E_AMBIGUOUS_INSTANCE` | yes | yes |
-| `E_UNIDENTIFIED_INSTANCE_HOME` | yes | yes |
+| `E_UNIDENTIFIED_INSTANCE_HOME` | yes | yes; hook admission in both plan and apply |
 | `E_REMOTE_INCOMPATIBLE` | yes | yes |
 | `E_AMBIGUOUS` | yes | yes |
 | `E_SNAPSHOT_UNKNOWN` | yes | yes |
@@ -6580,8 +6580,14 @@ one),
 `E_SESSION_UNKNOWN`, `E_AMBIGUOUS_INSTANCE`,
 `E_UNIDENTIFIED_INSTANCE_HOME` (a home with no `instance.json` and no cleanup
 descriptor, or a rollback marker that cannot drive a retry, or an
-`instance.json` that names no repository and does not show that no capability
-has a retire hook, what a spawn killed before its record leaves
+`instance.json` without a usable `capabilityRuntime`, a record whose retire
+hooks have no context repository, or a captured home from before 0.26 that
+does not positively record that no spawn hook ran. An explicit capability set
+with no retire hooks permits retirement without hook execution. These
+refusals apply to both `--plan` (including Desktop Remove) and apply before
+anything is stopped, run or removed, children included; the message names
+known capabilities, external identities/memberships at risk and the manual
+cleanup followed by `oats retire <instance> --force` remedy
 ([capabilities.md](capabilities.md#manifest)), until `--force`;
 a home whose `instance.json` [cannot be read](#unreadable-record), `--plan`
 and `--force` included),
