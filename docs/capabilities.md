@@ -204,7 +204,8 @@ A self-contained package has an `oats.json`:
   tooling first. Force can remove the home while leaving that state active;
   its output keeps the warnings about hooks that did not run and state that
   was not revoked. An unreadable `instance.json` still refuses even with
-  force. A usable cleanup descriptor can drive the normal retry. Usable
+  force. A forced self-retirement carries the force choice into its deferred
+  completion. A usable cleanup descriptor can drive the normal retry. Usable
   means it satisfies the versioned cleanup contract the rollback writes, checked
   to the depth the retry consumes it: `version`, a context `repo`, a recognised
   `work` mode (plus a `branch` for `worktree` — an unknown mode would skip the

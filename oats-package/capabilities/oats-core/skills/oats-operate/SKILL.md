@@ -336,8 +336,9 @@ record positively proves no cleanup hook is owed (a captured home must prove
 no capability's spawn hook ran). Read the named capabilities, inspect the
 home and clean up external identities/memberships with the provider's own
 tooling. Then `oats retire <instance> --force` removes the home while warning
-that skipped hooks did not revoke that state. Missing information never
-proves there is nothing to undo.
+that skipped hooks did not revoke that state. For your own instance, retain
+`--self`: its deferred completion carries the force choice. Missing information
+never proves there is nothing to undo.
 
 From OATS 0.48.0, retiring an instance stops its recorded children first and keeps them; if one
 will not stop, retire refuses with `E_CHILDREN_RUNNING` and retires nothing

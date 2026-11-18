@@ -10,3 +10,4 @@
   that hooks did not run and state was not revoked; it can leave external state
   active after deleting the local credential. Captured homes need positive
   evidence that no capability's spawn hook ran to retire without force.
+  Forced self-retirement keeps the force choice in its deferred completion.

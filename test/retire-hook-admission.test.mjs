@@ -48,7 +48,7 @@ test('unrunnable retire hooks refuse plan and apply before children, hooks or re
         const view = unavailableView(shown.reason, { target: ctx.instances[0], operation: 'retire' }, DESKTOP_TERMS);
         assert.ok(view.blocks.some(block => block.type === 'details' && /--force/.test(block.reason.detail)), 'Desktop Remove renders the refusal and remedy in Details');
       }
-      if (error.details?.reached) assert.equal(error.details.reached.sessionStopAttempted, false);
+      if (!flags.length) assert.equal(error.details.reached.sessionStopAttempted, false);
     }
   }
 });
@@ -57,6 +57,7 @@ test('positive record proof permits hookless retirement; force preserves cleanup
   for (const [name, mutate, forced] of [
     ['no-retire-hooks', m => { m.capabilityRuntime = []; }, false],
     ['captured-no-spawn', m => { m.captured = { hookOrder: [] }; m.capabilityMeta = {}; }, false],
+    ['forced-missing-context', m => { delete m.repo; m.capabilityRuntime = [{ id: 'test.identity', hooks: { retire: 'hook.mjs' } }]; }, true],
     ['forced-malformed', m => { m.capabilityRuntime = [null]; }, true],
     ['forced-legacy', m => { delete m.capabilityRuntime; }, true],
     ['forced-captured', m => { m.captured = { hookOrder: ['test.identity'] }; m.capabilityMeta = { 'test.identity': {} }; }, true],
@@ -66,9 +67,35 @@ test('positive record proof permits hookless retirement; force preserves cleanup
     const r = fx.cli(['retire', name, '--json', ...(forced ? ['--force'] : [])]);
     assert.equal(r.status, 0, r.stdout + r.stderr); assert.equal(existsSync(home), false);
     if (forced) assert.match(JSON.parse(r.stdout).warnings.join('\n'), /no retire hook ran|retire hook did NOT run/);
-    if (name === 'forced-captured') assert.match(JSON.parse(r.stdout).warnings.join('\n'), /test.identity.*not revoked/);
+    if (name === 'forced-captured' || name === 'forced-missing-context') assert.match(JSON.parse(r.stdout).warnings.join('\n'), /test.identity.*not revoked/);
   }
 });
+
+test('forced self retirement carries admission authority through the detached completion', async t => {
+  const { retireInstance, retirePendingMarkerPath, deferredRetireResultPath } = await import('../lib/core.mjs');
+  const { waitUntil, killAndReap } = await import('./helpers/host-fixture.mjs');
+  const { processLiveness, processStartToken } = await import('../lib/worktree-hooks.mjs');
+  const fx = v2Deployment({ t });
+  for (const kind of ['legacy', 'captured']) {
+    const name = `self-${kind}`, { home } = await spawn(fx, name);
+    const file = join(home, 'instance.json'), meta = read(file); cases[kind](meta); writeFileSync(file, JSON.stringify(meta));
+    await fx.inEnv(async () => {
+      assert.throws(() => retireInstance(fx.root, name, { self: true, selfKillDelaySec: 0 }), e => e.code === 'E_UNIDENTIFIED_INSTANCE_HOME');
+      assert.equal(existsSync(retirePendingMarkerPath(home)), false, 'unforced self retirement schedules nothing');
+      const scheduled = retireInstance(fx.root, name, { self: true, force: true, selfKillDelaySec: 0 });
+      assert.equal(scheduled.deferred, true);
+      const completion = { pid: scheduled.completionPid, processStart: processStartToken(scheduled.completionPid) };
+      try {
+        await waitUntil(() => (existsSync(deferredRetireResultPath(home)) || !existsSync(home)) && processLiveness(completion).state === 'gone', 'the private deferred retirement to finish', 60000);
+        assert.equal(existsSync(deferredRetireResultPath(home)), false, existsSync(deferredRetireResultPath(home)) ? JSON.stringify(read(deferredRetireResultPath(home))) : 'successful completion leaves no failure record');
+        assert.equal(existsSync(home), false, 'the detached completion removed the forced home');
+      } finally {
+        if (processLiveness(completion).state === 'alive') await killAndReap(completion.pid);
+      }
+    });
+  }
+});
+
 
 test('an unusable directory-spawn marker still reports live or unknown spawn liveness first', async t => {
   const { processStartToken } = await import('../lib/worktree-hooks.mjs');
