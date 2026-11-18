@@ -1,0 +1,33 @@
+# Run preflight-network.mjs on the Linux engine host immediately before creating
+# these networks. Pin this file, the policy/proxy image and the probe to one
+# reviewed source commit. Public sources are staged before credentials.
+services:
+  agent:
+    extends:
+      file: ../compose.agent.yaml
+      service: agent
+  egress:
+    extends:
+      file: compose.egress.yaml
+      service: egress
+
+networks:
+  agents:
+    name: ${AGENTS_NETWORK:?Set AGENTS_NETWORK}
+    driver: bridge
+    internal: true
+    enable_ipv6: false
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: isolated
+    ipam:
+      config:
+        - subnet: ${AGENTS_SUBNET:?Run the refusing network preflight}
+          gateway: ${AGENTS_GATEWAY:?Run the refusing network preflight}
+  services:
+    name: ${SERVICES_NETWORK:?Set SERVICES_NETWORK}
+    driver: bridge
+    enable_ipv6: false
+    ipam:
+      config:
+        - subnet: ${SERVICES_SUBNET:?Run the refusing network preflight}
+          gateway: ${SERVICES_GATEWAY:?Run the refusing network preflight}

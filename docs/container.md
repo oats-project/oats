@@ -814,7 +814,11 @@ the previous reviewed digest in the deployment configuration.
 The generic [egress image and service](../container/agent/egress/README.md) live
 with the agent image. The deployment wrapper owns its allowlist and derives the
 non-secret runtime policy from the shared deployment configuration and signer
-profile. The proxy permits only the named API and registry routes and serves
+profile when signer is declared. An optional derived `roles` array selects a
+nonempty subset of aweb, logs, registry, secrets and signer, with exactly matching
+targets and probe paths. Omission retains the five-role policy and output.
+Signer `humanOrigin` and `authorityRecords` are required with signer and refused
+without it. The proxy permits only the named API and registry routes and serves
 only the declared public namespace authority records. Service custody keys,
 PostgreSQL, Redis and the Docker socket stay outside the agent container.
 
@@ -823,10 +827,20 @@ proof before launching agents. An internal bridge, a NetworkPolicy object or a
 healthy proxy alone does not prove the boundary. The [service descriptor](../container/agent/egress/descriptor.md)
 supplies the wrapper mapping without a separate operator schema.
 
+The [minimal Compose wrapper and refusing network preflight](../container/agent/egress/README.md#minimal-compose-wrapper-and-network-preflight)
+own explicit agents/services IPAM, gateways, `AGENT_IP` and `EGRESS_ADDRESS`.
+Preflight is read-only on the Linux engine host and refuses failed observations
+or CIDR overlaps across every Docker IPAM entry, route table and link address.
+Every role set keeps unlisted DNS/TLS refusal, alternate-network refusal, a live
+host-gateway canary, direct upstream/backend denial and an explicit IPv4 IPAM
+gateway. The report separates universal and declared controls. Stage public
+sources before credentials; there is no codeload exception. Pin wrapper,
+compiler/proxy image and probes to one reviewed commit and retain image digests.
+
 The ingress probe keeps backend non-delivery witnesses for owned routes. A
 wrapper may explicitly mark only the registry as external for verified-TLS 200
-controls, without third-party refusal or backend-log claims. The signer and
-human-surface controls remain required. Deployment bundles default
+controls, without third-party refusal or backend-log claims. When signer is
+declared, signer and human-surface ingress controls remain required. Deployment bundles default
 `team.registryRoute` to `external`; existing bundles serving a local registry
 must select `local` and refuse a URL their service does not serve. See the
 [route-mode contract](../container/agent/egress/README.md#ingress-admission-probe)

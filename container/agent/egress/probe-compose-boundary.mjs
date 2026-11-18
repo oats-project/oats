@@ -6,7 +6,7 @@ import { isIP } from "node:net";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { compilePolicy } from "./policy.mjs";
-import { assertComposeBoundary, assertPublicMountSource } from "./boundary.mjs";
+import { assertComposeBoundary, assertPublicMountSource, boundaryControls, ipv4Gateway } from "./boundary.mjs";
 import { docker, tcpFromNetwork, withGatewayCanary } from "./canary.mjs";
 import { runtimeProgram } from "./probe-runtime.mjs";
 import { agentEnvironment } from "../accept.mjs";
@@ -57,6 +57,7 @@ export async function probeComposeBoundary(plan) {
   assertPublicMountSource(policySource,plan.protectedSources,"proxy");
   const livePolicy=json(["exec",plan.proxyContainer,"node","-e","process.stdout.write(require('node:fs').readFileSync('/etc/egress/policy.json','utf8'))"]);
   assert.deepEqual(livePolicy,plan.policy,"live proxy policy differs from derived policy");
+  const report = boundaryControls(plan);
   assert.ok(Array.isArray(plan.deniedBackends) && plan.deniedBackends.length===2
     && plan.deniedBackends.map(item=>item.role).sort().join(",")==="postgres,redis","backend control inventory is incomplete");
   const controls=[];
@@ -67,6 +68,7 @@ export async function probeComposeBoundary(plan) {
   for(const target of Object.values(plan.policy.targets))for(const address of target.addresses)controls.push({address,port:443,network:plan.servicesNetwork});
   for(const control of controls)assert.ok(isIP(control.address)===4 && Number.isInteger(control.port) && control.port>0 && control.port<=65535 && safeName(control.network)
     && control.network!==plan.agentsNetwork,"positive control endpoint or network is invalid");
+  const gateway=ipv4Gateway(agentsNetwork,"agents"),controlAddress=ipv4Gateway(servicesNetwork,"services");
   const verifyControls=()=>{
     const checked=new Set();
     for(const control of controls) {
@@ -75,10 +77,6 @@ export async function probeComposeBoundary(plan) {
     }
   };
   verifyControls();
-  const gateway=agentsNetwork.IPAM?.Config?.find(item=>isIP(item.Gateway)===4)?.Gateway;
-  const controlAddress=servicesNetwork.IPAM?.Config?.find(item=>isIP(item.Gateway)===4)?.Gateway;
-  assert.ok(gateway,"agents network needs an explicit IPv4 IPAM gateway; configure ipam.config gateway before probing");
-  assert.ok(controlAddress,"services network needs an identified IPv4 gateway for the owned host canary");
   await withGatewayCanary({image:plan.proxyImage,controlNetwork:plan.servicesNetwork,controlAddress,gatewayAddress:gateway},async endpoint=>{
     const program=runtimeProgram({policy:plan.policy,allowedPaths:plan.allowedPaths,deniedBackends:plan.deniedBackends,
       uid:plan.uid,gid:plan.gid,caFile:plan.caFile,mirrors:approvedMounts.some(mount=>mount.Destination === "/mirrors"),
@@ -91,6 +89,8 @@ export async function probeComposeBoundary(plan) {
     assert.equal(result.stdout.trim(),"OATS_EGRESS_BOUNDARY_PASS","in-container boundary probe did not confirm all checks");
   });
   verifyControls();
+  for (const group of ["universal", "declared"]) for (const control of report[group])
+    process.stderr.write(`egress boundary ${group}: ${control}\n`);
   return true;
 }
 

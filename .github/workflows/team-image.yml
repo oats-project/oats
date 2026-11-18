@@ -27,6 +27,7 @@ jobs:
     timeout-minutes: 30
     env:
       AGENT_IMAGE: oats-team-agent:${{ github.event.pull_request.head.sha || github.sha }}
+      EGRESS_IMAGE: oats-team-egress:${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       # The PR's image inputs and acceptance script must come from its head,
       # rather than GitHub's synthetic merge commit or the default branch.
@@ -51,6 +52,22 @@ jobs:
       - name: Accept the real container
         id: accept
         run: bash .github/scripts/team-image-accept.sh
+
+      # Wrapper, policy/proxy and probes all come from the reviewed checkout.
+      # Local image content IDs bind the disposable proof to these exact builds.
+      - name: Build the reviewed egress image
+        run: docker build --platform linux/amd64 --tag "$EGRESS_IMAGE" container/agent/egress
+
+      - name: Prove legacy egress image and ingress controls
+        run: |
+          sh test/agent-egress-image.sh "$EGRESS_IMAGE"
+          python3 test/agent-egress-ingress-image.py "$EGRESS_IMAGE"
+
+      - name: Prove full and declared-role Compose boundaries
+        run: |
+          for roles in full aweb,registry aweb,registry,secrets; do
+            python3 test/agent-egress-boundary-image.py "$EGRESS_IMAGE" "$AGENT_IMAGE" "$roles"
+          done
 
       - name: Compare the default installed payload across the mount seam
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.default_payload_proof }}
