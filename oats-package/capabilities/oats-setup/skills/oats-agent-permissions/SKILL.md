@@ -175,8 +175,10 @@ mode.
   normal. An `ask` rule keeps a person on `--server-name`, which points `aw`
   at another server. The other `aw` ask rules cover `--identity-home`
   (another identity), `--human` including `--human-domain` (another human
-  principal), and `--team` (another team). Mail acknowledgement changes read
-  state, so `aw mail ack` also goes to the classifier.
+  principal), and `--team` (another team). `aw mail inbox` marks displayed messages as read; it stays allowed as the
+  agent receive path. A bare `aw mail ack` goes to the classifier. Explicit
+  identity selection also asks on joined-team reads and sends; under this
+  example unattended joined-team calls therefore need a person.
   Per [Claude's permission matcher](https://code.claude.com/docs/en/permissions#wildcard-patterns),
   `*` matches text including spaces, anywhere in a rule, and ask precedes allow.
   Thus `Bash(aw *--team*)` covers both `aw --team t mail inbox` and

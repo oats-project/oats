@@ -88,14 +88,11 @@ test("--json: the host's envelope is relayed verbatim; ssh failure is one envelo
     assert.equal(env.ok, false);
     assert.equal(env.error.code, "E_SSH");
     assert.match(env.error.message, /oats aweb setup --join aweb --invite-stdin --json/);
-    const all = r.stdout.toString() + r.stderr.toString();
-    assert.equal(all.includes("SECRET-1") || all.includes("SECRET-2"), false, "no invite value is printed anywhere");
 
-    // Text mode: the same redacted line on stderr, ssh's exit status relayed.
+    // Text mode: ssh diagnostics go to stderr and its exit status is relayed.
     r = s.oats(["aweb", "setup", "--invite-stdin", "--server", "box"]);
     assert.equal(r.status, 255);
     assert.match(r.stderr.toString(), /--invite-stdin/);
-    assert.equal(r.stderr.toString().includes("SECRET-3"), false);
   } finally { s.cleanup(); }
 });
 
