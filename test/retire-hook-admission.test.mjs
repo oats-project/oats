@@ -69,3 +69,22 @@ test('positive record proof permits hookless retirement; force preserves cleanup
     if (name === 'forced-captured') assert.match(JSON.parse(r.stdout).warnings.join('\n'), /test.identity.*not revoked/);
   }
 });
+
+test('an unusable directory-spawn marker still reports live or unknown spawn liveness first', async t => {
+  const { processStartToken } = await import('../lib/worktree-hooks.mjs');
+  const fx = v2Deployment({ t });
+  for (const known of [true, false]) {
+    const name = known ? 'spawning' : 'spawn-unknown', { home } = await spawn(fx, name);
+    const marker = join(home, '.oats-rollback-incomplete.json');
+    const inProgress = { pid: process.pid, processStart: known ? processStartToken(process.pid) : null, startedAt: new Date().toISOString() };
+    writeFileSync(marker, JSON.stringify({ inProgress, cleanup: { version: 1, repo: fx.dep, work: 'directory', capabilityRuntime: [], outstanding: { hooks: [], git: [] } } }));
+    for (const flags of [['--plan'], [], ...(known ? [['--force'], ['--plan', '--force']] : [])]) {
+      const r = fx.cli(['retire', name, '--json', ...flags]);
+      assert.equal(r.status, 1, r.stdout + r.stderr);
+      assert.equal(r.json().error.code, 'E_LIFECYCLE_BUSY', r.stdout);
+      assert.match(r.json().error.message, known ? /still being spawned/ : /whether its spawn.*still runs cannot be read/);
+      assert.equal(existsSync(home), true);
+      assert.deepEqual(read(marker).inProgress, inProgress);
+    }
+  }
+});
