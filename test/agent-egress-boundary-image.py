@@ -107,7 +107,10 @@ net.createServer(socket=>socket.end()).listen(Number(process.argv[2]),'0.0.0.0',
     compose = ["docker", "compose", "-p", project, "-f", str(root / "container/agent/egress/compose.minimal.yaml"), "-f", overlay_file]
     run([*compose,"config","--quiet"])
     created = True
-    run([*compose,"up","-d","--wait","--wait-timeout","60"])
+    # Scope --wait to the proxy: the inert agent deliberately disables the
+    # inherited SSH healthcheck, which Compose may otherwise still wait for.
+    run([*compose,"up","-d","--wait","--wait-timeout","60","egress"])
+    run([*compose,"up","-d","agent","front","postgres","redis"])
     for service, token in [("front","TLS_READY"),("postgres","BACKEND_READY"),("redis","BACKEND_READY")]:
         container = run([*compose,"ps","-q",service])
         for _ in range(50):
