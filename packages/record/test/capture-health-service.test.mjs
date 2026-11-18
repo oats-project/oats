@@ -314,3 +314,22 @@ test("doctor remedies change authored commands only, retaining literal paths/his
   const malformed = structuredClone(doctor); malformed.backlog.setAside[0].private = "must not pass";
   assert.equal(validCaptureHealthEnvelope(malformed, { now }), false);
 });
+
+test('mixed sealed and oversized set-asides keep both remedies and truncated sealed guidance', t => {
+  const f = fixture(t); f.save(status(60)); f.hook();
+  const state = new DerivedState(f.root);
+  state.set('set-aside', 'a-big', { source: 'aw', path: '/fixture/a-big', offset: 0, reason: 'record-too-large' });
+  state.set('set-aside', 'b-sealed', { source: 'aw', path: '/fixture/b-sealed', offset: 0, reason: 'sealed, not readable by this recorder' });
+  state.close();
+  const message = () => f.health().rows.find(row => row.code === 'capture-input-set-aside').message;
+  assert.match(message(), /1 listed as record-too-large: Edit the source so no record exceeds 8 MiB/);
+  assert.match(message(), /1 listed as sealed, not readable by this recorder: supply a readable source/);
+  assert.match(message(), /retry cannot decrypt ciphertext/);
+  const more = new DerivedState(f.root);
+  more.delete('set-aside', 'b-sealed');
+  for (let n = 0; n < 101; n++) more.set('set-aside', `c-${n}`, { source: 'aw', path: `/fixture/c-${String(n).padStart(3, '0')}`, offset: 0, reason: 'captured-prefix-changed' });
+  more.set('set-aside', 'z-sealed', { source: 'aw', path: '/fixture/z-sealed', offset: 0, reason: 'sealed, not readable by this recorder' });
+  more.close();
+  assert.match(message(), /Unlisted entries:.*sealed.*supply a readable source/);
+  assert.match(message(), /record-too-large.*Edit the source so no record exceeds 8 MiB/);
+});
