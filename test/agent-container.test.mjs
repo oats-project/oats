@@ -27,6 +27,28 @@ function sshSettings(source) {
 const read = (name) => readFileSync(new URL(`../container/agent/${name}`, import.meta.url), "utf8");
 const readBb = (name) => readFileSync(new URL(`../container/agent-bb/${name}`, import.meta.url), "utf8");
 
+function acceptanceFixture() {
+  const env = { AGENT_IMAGE: "oats-agent:reviewed", AGENT_UID: "20001", AGENT_GID: "20001", TEAM_STATE_DIR: "/srv/team/state", TEAM_LOGIN_DIR: "/srv/team/login", AUTHORIZED_KEYS_FILE: "/srv/team/authorized_keys", RESOLV_CONF_FILE: "/srv/team/resolv.conf", AGENT_PIDS: "512", AGENT_TMP_SIZE: "134217728", AGENT_MEMORY: "3g", AGENT_CPUS: "2", AGENTS_NETWORK: "team-agents", AGENT_IP: "172.30.0.2" };
+  const image = { Id: "sha256:" + "1".repeat(64), Config: { Env: ["PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/state/home"], Entrypoint: ["/usr/bin/tini", "--", "/usr/local/bin/agent-entrypoint"], Cmd: null } };
+  const inspected = {
+    Image: image.Id,
+    State: { Running: true },
+    Config: { Image: env.AGENT_IMAGE, Hostname:"oats-agent", User: "20001:20001", Env: [...image.Config.Env], Entrypoint: [...image.Config.Entrypoint], Cmd: null, StopTimeout: 50,
+      Healthcheck: { Test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2222"], Interval: 30000000000, Timeout: 5000000000, StartPeriod: 10000000000, Retries: 3 } },
+    HostConfig: { CapDrop: ["ALL"], CapAdd: null, SecurityOpt: ["no-new-privileges:true"], ReadonlyRootfs: true, Privileged: false, PidMode: "", IpcMode: "private", GroupAdd: null, UsernsMode: "", UTSMode: "", CgroupnsMode: "private", Sysctls: null, PortBindings: {}, ExtraHosts: [], Dns: null, NetworkMode: "team-agents", PidsLimit: 512, Memory: 3221225472, NanoCpus: 2000000000, Tmpfs: { "/tmp": "rw,nosuid,nodev,size=134217728,mode=1777" }, Binds: [], Mounts: [], Devices: [], DeviceRequests: null, RestartPolicy: { Name: "unless-stopped" } },
+    NetworkSettings: { Networks: { "team-agents": { IPAddress: "172.30.0.2" } } },
+    Mounts: [
+      { Source: "/srv/team/state", Destination: "/state", Type: "bind", RW: true },
+      { Source: "/srv/team/login", Destination: "/etc/agent-login", Type: "bind", RW: false },
+      { Source: "/srv/team/authorized_keys", Destination: "/etc/agent-ssh/authorized_keys", Type: "bind", RW: false },
+      { Source: "/srv/team/resolv.conf", Destination: "/etc/resolv.conf", Type: "bind", RW: false },
+    ],
+  };
+  inspected.HostConfig.Mounts = inspected.Mounts.map((m) => ({ Type: "bind", Source: m.Source, Target: m.Destination, ReadOnly: !m.RW, BindOptions: {} }));
+  Object.assign(inspected.HostConfig, { Runtime: "runc", MemorySwap: 6442450944, OomKillDisable: false, DeviceCgroupRules: null, ShmSize: 67108864 });
+  return { env, image, inspected };
+}
+
 function loginFixture() {
   const dir = { uid: 0, gid: 20001, mode: 0o750, isDirectory: () => true };
   const token = { uid: 0, gid: 20001, mode: 0o440, isFile: () => true };
@@ -206,34 +228,12 @@ test("Claude auth acceptance excludes the instance project settings", () => {
   assert.doesNotMatch(source, /"exec", "--workdir", home/);
 });
 
-// The admitted container as `docker inspect` reports it, with its acceptance inputs.
-function inspectFixture() {
-  const env = { AGENT_IMAGE: "oats-agent:reviewed", AGENT_UID: "20001", AGENT_GID: "20001", TEAM_STATE_DIR: "/srv/team/state", TEAM_LOGIN_DIR: "/srv/team/login", AUTHORIZED_KEYS_FILE: "/srv/team/authorized_keys", RESOLV_CONF_FILE: "/srv/team/resolv.conf", AGENT_PIDS: "512", AGENT_TMP_SIZE: "134217728", AGENT_MEMORY: "3g", AGENT_CPUS: "2", AGENTS_NETWORK: "team-agents", AGENT_IP: "172.30.0.2" };
-  const image = { Id: "sha256:" + "1".repeat(64), Config: { Env: ["PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/state/home"], Entrypoint: ["/usr/bin/tini", "--", "/usr/local/bin/agent-entrypoint"], Cmd: null } };
-  const inspected = {
-    Image: image.Id,
-    State: { Running: true },
-    Config: { Image: env.AGENT_IMAGE, Hostname:"oats-agent", User: "20001:20001", Env: [...image.Config.Env], Entrypoint: [...image.Config.Entrypoint], Cmd: null, StopTimeout: 50,
-      Healthcheck: { Test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2222"], Interval: 30000000000, Timeout: 5000000000, StartPeriod: 10000000000, Retries: 3 } },
-    HostConfig: { CapDrop: ["ALL"], CapAdd: null, SecurityOpt: ["no-new-privileges:true"], ReadonlyRootfs: true, Privileged: false, PidMode: "", IpcMode: "private", GroupAdd: null, UsernsMode: "", UTSMode: "", CgroupnsMode: "private", Sysctls: null, PortBindings: {}, ExtraHosts: [], Dns: null, NetworkMode: "team-agents", PidsLimit: 512, Memory: 3221225472, NanoCpus: 2000000000, Tmpfs: { "/tmp": "rw,nosuid,nodev,size=134217728,mode=1777" }, Binds: [], Mounts: [], Devices: [], DeviceRequests: null, RestartPolicy: { Name: "unless-stopped" } },
-    NetworkSettings: { Networks: { "team-agents": { IPAddress: "172.30.0.2" } } },
-    Mounts: [
-      { Source: "/srv/team/state", Destination: "/state", Type: "bind", RW: true },
-      { Source: "/srv/team/login", Destination: "/etc/agent-login", Type: "bind", RW: false },
-      { Source: "/srv/team/authorized_keys", Destination: "/etc/agent-ssh/authorized_keys", Type: "bind", RW: false },
-      { Source: "/srv/team/resolv.conf", Destination: "/etc/resolv.conf", Type: "bind", RW: false },
-    ],
-  };
-  inspected.HostConfig.Mounts = inspected.Mounts.map((m) => ({ Type: "bind", Source: m.Source, Target: m.Destination, ReadOnly: !m.RW, BindOptions: {} }));
-  Object.assign(inspected.HostConfig, { Runtime: "runc", MemorySwap: 6442450944, OomKillDisable: false, DeviceCgroupRules: null, ShmSize: 67108864 });
-  return { env, image, inspected };
-}
 
 test("acceptance refuses drift in the admitted container settings", async t => {
   const { inspectAgent: inspectOnHost } = await import("../container/agent/accept.mjs");
   // This metadata fixture has no host files. Real filesystem aliases are checked below.
   const inspectAgent = (info, env, image, runtime) => inspectOnHost(info, env, image, runtime, source => source);
-  const { env, image, inspected } = inspectFixture();
+  const { env, image, inspected } = acceptanceFixture();
   assert.ok(inspectAgent(inspected, env, image).length >= 8);
   for (const tmp of [undefined, "0", "-1", "1g", "1,exec", "9007199254740992"]) {
     assert.throws(() => inspectAgent(inspected, {...env, AGENT_TMP_SIZE:tmp}, image), /AGENT_TMP_SIZE/);
@@ -1399,7 +1399,7 @@ test("the derived image adds only pinned bb-app", () => {
 test("acceptance with the bb fragment refuses a non-loopback listener and a published port; and without the fragment refuses AGENT_BB", async () => {
   const { inspectAgent: inspectOnHost, listenerCheck, agentEnvironment } = await import("../container/agent/accept.mjs");
   const inspectAgent = (info, env, image) => inspectOnHost(info, env, image, undefined, source => source);
-  const { env, image, inspected } = inspectFixture();
+  const { env, image, inspected } = acceptanceFixture();
   const bbEnv = {...env, AGENT_BB: "1"}, withBb = structuredClone(inspected);
   withBb.Config.Env.push("AGENT_BB=1");
   assert.doesNotThrow(() => inspectAgent(withBb, bbEnv, image), "the fragment's entry is the one admitted difference");
@@ -1450,7 +1450,7 @@ test("acceptance with the bb fragment refuses a non-loopback listener and a publ
 test("acceptance admits the bb fragment together with the inputs, outbox and trust fragments", async () => {
   const { inspectAgent: inspectOnHost } = await import("../container/agent/accept.mjs");
   const inspectAgent = (info, env, image) => inspectOnHost(info, env, image, undefined, source => source);
-  const { env, image, inspected } = inspectFixture();
+  const { env, image, inspected } = acceptanceFixture();
   const all = structuredClone(inspected);
   const allEnv = {...env, AGENT_BB: "1", AGENT_CA_FILE: "/operator/public-ca.pem", TEAM_INPUT_DIR: "/operator/inputs", TEAM_OUTBOX_DIR: "/operator/outbox", TEAM_OUTBOX_GID: "20002"};
   all.Config.Env.push("SSL_CERT_FILE=/etc/agent-trust/ca.pem", "NODE_EXTRA_CA_CERTS=/etc/agent-trust/ca.pem", "AGENT_BB=1");
