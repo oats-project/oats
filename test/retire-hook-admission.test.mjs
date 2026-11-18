@@ -18,6 +18,10 @@ const cases = {
   legacy: meta => { delete meta.capabilityRuntime; },
   captured: meta => { meta.captured = { hookOrder: ['test.identity'] }; meta.capabilityMeta = { 'test.identity': {} }; },
   'captured-unknown': meta => { meta.captured = {}; },
+  'captured-intent': meta => { meta.captured = { hookOrder: [], hookIntents: { 'test.identity': { state: 'unconfirmed' } } }; meta.capabilityMeta = {}; },
+  'captured-failure': meta => { meta.captured = { hookOrder: [], hookFailures: [{ capability: 'test.identity', unconfirmed: true }] }; meta.capabilityMeta = {}; },
+  'captured-lifecycle': meta => { meta.captured = { hookOrder: [], lifecycle: 'spawn-failed-cleanup-required' }; meta.capabilityMeta = {}; },
+  'captured-contradicted': meta => { meta.captured = { hookOrder: [], lifecycle: 'spawn-failed-cleanup-required', hookFailures: [{ capability: 'test.identity', unconfirmed: true }], hookIntents: { 'test.identity': { state: 'unconfirmed' } } }; meta.capabilityMeta = {}; },
   'missing-context': meta => { delete meta.repo; meta.capabilityRuntime = [{ id: 'test.identity', hooks: { retire: 'hook.mjs' } }]; },
 };
 test('unrunnable retire hooks refuse plan and apply before children, hooks or removal', async t => {
@@ -36,7 +40,7 @@ test('unrunnable retire hooks refuse plan and apply before children, hooks or re
       assert.match(error.message, /identit|membership/);
       assert.match(error.message, /--force/);
       assert.match(error.message, /[Nn]othing was stopped, run or removed/);
-      if (name === 'captured' || name === 'missing-context') assert.match(error.message, /test.identity/);
+      if (['captured', 'captured-intent', 'captured-failure', 'captured-contradicted', 'missing-context'].includes(name)) assert.match(error.message, /test.identity/);
       assert.equal(existsSync(home), true); assert.equal(existsSync(child.home), true);
       assert.equal(readFileSync(childClaim, 'utf8'), 'unreadable claim');
       if (flags.length) {
@@ -57,8 +61,11 @@ test('positive record proof permits hookless retirement; force preserves cleanup
   for (const [name, mutate, forced] of [
     ['no-retire-hooks', m => { m.capabilityRuntime = []; }, false],
     ['captured-no-spawn', m => { m.captured = { hookOrder: [] }; m.capabilityMeta = {}; }, false],
+    ['captured-empty-evidence', m => { m.captured = { hookOrder: [], hookIntents: {}, hookFailures: [], lifecycle: 'spawned-launch-pending' }; m.capabilityMeta = {}; }, false],
+    ['forced-contradicted', cases['captured-contradicted'], true],
     ['forced-missing-context', m => { delete m.repo; m.capabilityRuntime = [{ id: 'test.identity', hooks: { retire: 'hook.mjs' } }]; }, true],
     ['forced-malformed', m => { m.capabilityRuntime = [null]; }, true],
+    ['forced-malformed-hook', m => { m.capabilityRuntime = [{ id: 'test.identity', hooks: { retire: null } }]; }, true],
     ['forced-legacy', m => { delete m.capabilityRuntime; }, true],
     ['forced-captured', m => { m.captured = { hookOrder: ['test.identity'] }; m.capabilityMeta = { 'test.identity': {} }; }, true],
   ]) {
@@ -66,8 +73,12 @@ test('positive record proof permits hookless retirement; force preserves cleanup
     mutate(meta); writeFileSync(file, JSON.stringify(meta));
     const r = fx.cli(['retire', name, '--json', ...(forced ? ['--force'] : [])]);
     assert.equal(r.status, 0, r.stdout + r.stderr); assert.equal(existsSync(home), false);
+    if (name.startsWith('forced-malformed')) {
+      assert.match(JSON.parse(r.stdout).warnings.join('\n'), /recorded capability hooks cannot be identified/);
+      assert.doesNotMatch(JSON.parse(r.stdout).warnings.join('\n'), /earlier kernel spawned it/);
+    }
     if (forced) assert.match(JSON.parse(r.stdout).warnings.join('\n'), /no retire hook ran|retire hook did NOT run/);
-    if (name === 'forced-captured' || name === 'forced-missing-context') assert.match(JSON.parse(r.stdout).warnings.join('\n'), /test.identity.*not revoked/);
+    if (['forced-captured', 'forced-missing-context', 'forced-contradicted'].includes(name)) assert.match(JSON.parse(r.stdout).warnings.join('\n'), /test.identity.*not revoked/);
   }
 });
 
@@ -115,6 +126,7 @@ test('an unusable directory-spawn marker still reports live or unknown spawn liv
     }
   }
 });
+
 
 test('core forwards the admission readers and constants by reference without extending its API', async () => {
   const core = await import('../lib/core.mjs'), leaf = await import('../lib/retire-admission.mjs');

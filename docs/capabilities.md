@@ -193,8 +193,9 @@ A self-contained package has an `oats.json`:
   A normal home needs its recorded `capabilityRuntime` and a context `repo`
   to run its hooks; an explicit capability set with no retire hooks proves
   that none is owed. A captured home from before 0.26 cannot run its hooks:
-  only an explicit empty captured `hookOrder`, with no contradictory
-  capability metadata, proves that no capability's spawn hook ran. Missing
+  only an explicit empty captured `hookOrder`, with no capability metadata,
+  hook intents, hook failures or lifecycle marked `*-cleanup-required`,
+  proves that no capability's spawn hook ran. Missing
   information proves nothing.
 - The **escape hatch is `oats retire <instance> --force`**. This includes
   homes spawned before `capabilityRuntime`, captured homes without proof of
@@ -256,7 +257,7 @@ A self-contained package has an `oats.json`:
   verifiably alive (its pid runs with the recorded start time):
   - `oats status` gives the home's row `spawnInProgress: true` and no
     `rollbackIncomplete`;
-  - `oats retire` refuses with `E_LIFECYCLE_BUSY`, `--force` included;
+  - `oats retire` refuses with `E_LIFECYCLE_BUSY`, `--plan` and `--force` included;
   - `oats session start` refuses it as any quarantined home
     (`E_INSTANCE_RETIRING`).
 

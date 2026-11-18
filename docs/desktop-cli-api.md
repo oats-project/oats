@@ -6578,19 +6578,10 @@ message names the entry or the state that could not be read, or the directory
 Git reads as the top level of a `work/` whose `core.worktree` names another
 one),
 `E_SESSION_UNKNOWN`, `E_AMBIGUOUS_INSTANCE`,
-`E_UNIDENTIFIED_INSTANCE_HOME` (a home with no `instance.json` and no cleanup
-descriptor, or a rollback marker that cannot drive a retry, or an
-`instance.json` without a usable `capabilityRuntime`, a record whose retire
-hooks have no context repository, or a captured home from before 0.26 that
-does not positively record that no spawn hook ran. An explicit capability set
-with no retire hooks permits retirement without hook execution. These
-refusals apply to both `--plan` (including Desktop Remove) and apply before
-anything is stopped, run or removed, children included; the message names
-known capabilities, external identities/memberships at risk and the manual
-cleanup followed by `oats retire <instance> --force` remedy
-([capabilities.md](capabilities.md#manifest)), until `--force`;
-a home whose `instance.json` [cannot be read](#unreadable-record), `--plan`
-and `--force` included),
+`E_UNIDENTIFIED_INSTANCE_HOME` (a missing or unusable cleanup record, or
+recorded hooks that cannot run without proof that no cleanup is owed, until
+`--force`; a home whose `instance.json` [cannot be read](#unreadable-record)
+refuses even with `--plan` or `--force`),
 `E_NO_ROOT`, `E_LIFECYCLE_FAILED`, `E_LIFECYCLE_BUSY` (another retire of the
 home is running or scheduled, or a stop of it is running, `--force`
 included: one retire or stop of a home at a time, above; or, feature
@@ -6598,8 +6589,20 @@ included: one retire or stop of a home at a time, above; or, feature
 hooks, a row with `spawnInProgress: true`, `--force` included; or one whose start time
 cannot be read, a `rollbackIncomplete` row, until `--force`; or a hook or git
 group whose leader's start cannot be read, until `--force`; every one is
-answered before any effect and carries [`details.holder`](#busy-holder)). The
-codes a retire answers only before any effect are
+answered before any effect and carries [`details.holder`](#busy-holder)).
+
+Hook admission refuses both `--plan` (including Desktop Remove) and apply
+before anything is stopped, run or removed, children included. Causes include
+homes spawned before `capabilityRuntime`, recorded retire hooks without a
+context repository, and captured homes from before 0.26 without positive
+proof that no spawn hook ran. An ordinary home's explicit capability set with
+no retire hooks proves no hook is owed. Captured proof also excludes any
+recorded hook intents, failures or lifecycle cleanup debt. The refusal names
+known capabilities, external identities/memberships at risk, and the remedy:
+clean up with the provider's tooling, then `oats retire <instance> --force`.
+See [the cleanup rule](capabilities.md#manifest).
+
+The codes a retire answers only before any effect are
 [one list](#before-effect-codes). A recovery whose Git status disagrees with
 the source's carries `details: {home, statusDisagreement: {repo, rows: [{path,
 source, recovery}], total}}` (the first 10 paths). A worktree recovery whose
