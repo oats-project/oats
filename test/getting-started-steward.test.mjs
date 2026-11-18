@@ -3,9 +3,8 @@
 // catalog's oats.machine, its setup soul is oats.machine/steward, and the steward
 // gets a global, contacts-only aweb address through `oats aweb resident create`'s
 // root route, or a local team identity when that route is not there. The skill's
-// literals are checked here against the catalog and against the oats.aweb
-// provider's own source (mirrors/oats-aweb), so they cannot drift from what the
-// provider prints.
+// guidance is checked against the catalog and documented operator contracts.
+// Provider behaviour belongs to the package's executable tests.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -14,6 +13,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { normalizeAwebTeamName } from "../mirrors/oats-aweb/lib/team-roots.mjs";
+import { AW_INVITE_INSPECT } from "../mirrors/oats-aweb/lib/setup-invite.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const read = (rel) => readFileSync(join(ROOT, rel), "utf8");
@@ -21,7 +21,6 @@ const skill = read("skills/oats-getting-started/SKILL.md");
 const catalog = JSON.parse(read("package-catalog.json"));
 const residentSource = read("mirrors/oats-aweb/lib/resident.mjs");
 const providerVersion = JSON.parse(read("mirrors/oats-aweb/oats.json")).version;
-const setupInviteSources = () => read("mirrors/oats-aweb/lib/setup-invite.mjs") + read("mirrors/oats-aweb/bin/oats-aweb.mjs");
 const atLeast = (v, min) => {
   const a = v.split(".").map(Number), b = min.split(".").map(Number);
   for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
@@ -135,9 +134,6 @@ test("the steward's harness is recorded before readiness and harness trust read 
 });
 
 test("a root that is not a member of the team stops step 9 before the spawn, with its fix", () => {
-  // The fields the stop reads are the ones `oats aweb setup --check-only` prints.
-  const provider = read("mirrors/oats-aweb/bin/oats-aweb.mjs");
-  assert.match(provider, /console\.log\(JSON\.stringify\(\{ aw, defaultTeam: label \|\| team \? \{ label, team \} : null, member, root: teamRoot \}\)\)/);
   const stop = skill.indexOf("**`\"member\": false` after step 5's sign-in:** stop, spawn nothing");
   assert.ok(stop > skill.indexOf("## 9. Messaging on this machine") && stop < skill.indexOf("## 10. Spawn the setup expert"), "in step 9, before the spawn");
   const fix = skill.slice(stop, skill.indexOf("\n2. ", stop));
@@ -150,10 +146,6 @@ test("a root that is not a member of the team stops step 9 before the spawn, wit
 });
 
 test("the default new workspace signs up without a sign-in, and the team id it writes is checked against setup's answer", () => {
-  const signup = read("mirrors/oats-aweb/lib/setup-team-default.mjs");
-  // The skeleton's team is the provider's own predicted team, and the answer carries team and membershipVerified.
-  assert.ok(signup.includes("predictedTeam = `default:${username}.aweb.ai`"));
-  assert.ok(signup.includes("return { plan: false, label, team, root, steps, observed, membershipVerified: true };"));
   assert.match(skill, /the messaging account's name `N`[^]*?default\s+`<workspace>-oats`/);
   assert.match(skill, /## 5\. Optional: the team on your own aweb account/);
   assert.match(skill, /- \*\*The team\*\* is `default:N\.aweb\.ai`, with `N` from step 1/);
@@ -219,32 +211,20 @@ test("getting-started: an existing workspace names its setup expert after this m
   // --service, which the invite-only form never passes, so the skill names none.
   assert.ok(flat.includes("Before redeeming anything, it refuses an invite it can't use here"));
   assert.ok(!/refuses an invite[^.]*another service/.test(flat), "no service refusal is promised for the invite-only form");
-  const providerSources = setupInviteSources();
-  for (const code of ["E_SETUP_INVITE_INSPECT", "E_SETUP_INVITE_SCOPE", "E_SETUP_LABEL_COLLISION", "E_SETUP_ALREADY_MEMBER"])
-    assert.ok(providerSources.includes(code), `the provider refuses with ${code}`);
   // A team the workspace doesn't name is refused before redeeming: E_SETUP_POLICY where local teams are closed, and
   // E_SETUP_DEFAULT_PRESERVE where the default comes from the workspace file. Only a machine whose own oats-local.yaml
   // sets the default redeems it and maps that team under a label of its own; item 5 tells the two apart read-only,
   // because a per-team root is made only by a redemption.
   assert.ok(flat.includes("one for a team this workspace doesn't name (unless the workspace allows local teams and this machine's own `oats-local.yaml` sets its default team)"));
-  const teamDefault = read("mirrors/oats-aweb/lib/setup-team-default.mjs");
-  assert.ok(teamDefault.includes("throw setupFailure('E_SETUP_POLICY', 'local-teams-closed"), "the provider refuses an unnamed team where local teams are closed");
-  assert.ok(teamDefault.includes("doc.defaultTeam.from !== 'deployment'") && teamDefault.includes("throw setupFailure('E_SETUP_DEFAULT_PRESERVE'"), "the provider refuses an unnamed team where the default is the workspace's");
   assert.ok(flat.includes("In that exception, an invite for a team the workspace doesn't name is redeemed instead"));
-  assert.ok(setupInviteSources().includes('join(resolve(base), ".aweb-roots", normalizeAwebTeamName(label))'), "a redemption makes the per-team root item 5 looks for");
   assert.ok(flat.includes("- **No new path:** the join made no root here. It refused before redeeming anything"), "a refusal is not read as a root left outside L");
   assert.ok(flat.includes("- **A new path under another name:** the invite was for that team, and this machine joined it instead"), "a redeemed invite for another team is not read as a refusal");
-  const setupInvite = read("mirrors/oats-aweb/lib/setup-invite.mjs");
-  const awFloor = setupInvite.match(/AW_INVITE_INSPECT = '([0-9.]+)'/);
-  assert.ok(awFloor && flat.includes(`aw ${awFloor[1]} or later (\`aw.version\` in item 1's check)`), "the skill's aw floor is the provider's");
+  assert.ok(flat.includes(`aw ${AW_INVITE_INSPECT} or later (\`aw.version\` in item 1's check)`), "the skill names the provider's exported invite floor");
   // Older providers keep the labelled form; awebUrl is new in oats.aweb 1.33.1 and may be null: that join works without --service.
   assert.ok(flat.includes("from oats.aweb 1.33.1 the answer's `result.awebUrl`, no secret"));
   assert.ok(flat.includes("When it is `null` or absent, leave `--service U` out of item 4's labelled form"));
   assert.ok(flat.includes("| oats aweb setup --soul S --join L --invite-stdin --name A --service U'"));
   assert.ok(!flat.includes("default service"), "the provider has no default service: the join fails without one");
-  const invite = read("mirrors/oats-aweb/lib/invite.mjs");
-  const [maj, min, pat] = providerVersion.split(".").map(Number);
-  if (maj > 1 || (maj === 1 && (min > 33 || (min === 33 && pat >= 1)))) assert.ok(invite.includes("awebUrl"), "the invite answer carries awebUrl from 1.33.1");
 });
 
 test("getting-started: item 5 reads a failed join from what ran, read-only (#1746)", () => {

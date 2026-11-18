@@ -590,6 +590,14 @@ scaling by call count.
 
 ## Tests and gates
 
+Native `aw` test titles start with `real aw` (or `real-aw`). The root runner's
+reporter counts any skipped test with that prefix, prints its file and title,
+and fails the run. An absent binary or fixture is missing evidence; platform
+skips outside that group keep their normal meaning. Provider-owned optional
+native tests are not retained in the kernel as normally skipped duplicates.
+The [test ownership record](design/2026-11-18-kernel-test-ownership.md) lists
+the removed opt-ins and source checks, with their reasons.
+
 | command | what it checks |
 |---|---|
 | `npm test` | every suite under `test/` (`node --test`), through `scripts/run-tests.mjs`, which also fails the run when an `oats: warning:` line is left in a test file's output, or a test file leaves something in its temporary directory |

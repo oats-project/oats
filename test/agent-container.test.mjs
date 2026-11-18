@@ -8,6 +8,8 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
+import { isDeepStrictEqual } from "node:util";
+import { parseLaunchCommand } from "../lib/instance-listing.mjs";
 import { parse } from "yaml";
 
 function sshSettings(source) {
@@ -202,14 +204,14 @@ test("agent Compose service retains the isolation contract", () => {
   assert.deepEqual(work.services.agent.volumes, [{ type: "bind", source: "${TEAM_WORK_DIR:?Set TEAM_WORK_DIR}", target: "/work", bind: { create_host_path: false } }]);
 });
 
-test("the entrypoint gives PID-only tini the image supervisor after NSS and key setup", () => {
-  const source = read("entrypoint.sh"), lines = source.trimEnd().split("\n");
-  assert.equal(lines.at(-1), "exec node /usr/local/lib/agent-supervisor.mjs");
-  assert.equal(lines.filter((line) => /^\s*exec\b/.test(line)).length, 1);
-  assert.doesNotMatch(source, /sshd -D|exec oats/);
-  assert.match(source, /export NSS_WRAPPER_PASSWD=/);
-  assert.match(source, /ssh-keygen/);
-  assert.match(read("Dockerfile"), /COPY --chmod=644 supervisor\.mjs \/usr\/local\/lib\/agent-supervisor\.mjs/);
+test("the entrypoint command structure hands PID-only tini the supervisor after NSS and key setup", () => {
+  const commands = read("entrypoint.sh").split("\n").map(line => line.trim()).filter(line => line && !line.startsWith("#")).map(line => line.split(/\s+/));
+  assert.deepEqual(commands.at(-1), ["exec", "node", "/usr/local/lib/agent-supervisor.mjs"]);
+  assert.equal(commands.filter(argv => argv[0] === "exec").length, 1);
+  assert.ok(commands.some(argv => isDeepStrictEqual(argv, ["export", "NSS_WRAPPER_PASSWD=/state/ssh/passwd"])));
+  assert.ok(commands.some(argv => isDeepStrictEqual(argv, ["ssh-keygen", "-q", "-t", "ed25519", "-N", "''", "-f", "/state/ssh/ssh_host_ed25519_key"])));
+  const copies = read("Dockerfile").split("\n").map(line => line.trim().split(/\s+/)).filter(words => words[0] === "COPY");
+  assert.deepEqual(copies.find(words => words.includes("supervisor.mjs")), ["COPY", "--chmod=644", "supervisor.mjs", "/usr/local/lib/agent-supervisor.mjs"]);
 });
 
 test("SSH accepts only agent public keys with forwarding disabled", () => {
@@ -221,11 +223,51 @@ test("SSH guard refuses repeated keywords or conditional configuration", () => {
   for (const prefix of ["PasswordAuthentication yes", "disableforwarding no", "  Match User agent", "  Include /tmp/unreviewed.conf", "disableforwarding=no", "PasswordAuthentication=yes", "DisableForwarding = no", "Include=/tmp/unreviewed.conf", '"PasswordAuthentication" yes']) assert.throws(() => sshSettings(prefix + "\n" + read("sshd_config")), prefix);
 });
 
-test("Claude auth acceptance excludes the instance project settings", () => {
-  const source = read("accept.mjs");
-  assert.match(source, /--setting-sources user/);
-  assert.match(source, /mktemp -d \/tmp\/oats-claude-probe\.XXXXXX/);
-  assert.doesNotMatch(source, /"exec", "--workdir", home/);
+test("Claude auth orchestration uses a scratch cwd and only user settings", async () => {
+  // Pins orchestration argv at the Docker subprocess boundary. Docker's
+  // acceptance of those arguments belongs to team-image CI.
+  const { main } = await import("../container/agent/accept.mjs");
+  assert.equal(typeof main, "function");
+  const { env, image, inspected } = acceptanceFixture();
+  const container = "fixture-agent", home = "/state/deploy/fixture/instance";
+  const program = ["exec", "-i", container, "node"];
+  const expected = [
+    [["inspect", container], JSON.stringify([inspected])],
+    [["image", "inspect", "--", env.AGENT_IMAGE], JSON.stringify([image])],
+    [["info", "--format", "{{.DefaultRuntime}}"], "runc"],
+    [["exec", container, "node", "-p", "process.arch"], "x64"],
+    [program, "runtime fixture"],
+    [program, JSON.stringify({ present: true, evidence: [] })],
+    [["exec", "-i", "--user", "0:0", container, "node"], "root scan fixture"],
+    [program, "writable scan fixture"],
+    [["exec", container, "sh", "-eu", "-c", null], "EACCES /usr/local"],
+    [["exec", container, "oats", "version", "--json"], JSON.stringify({ version: "fixture" })],
+    [["exec", container, "aw", "version"], "aw fixture"],
+    [["exec", container, "claude", "--version"], "claude fixture"],
+    [["exec", container, "sh", "-eu", "-c", null, "oats-claude-probe", home], "OATS_CONTAINER_AUTH_OK"],
+    [program, "final scan fixture"],
+  ];
+  const calls = [];
+  const run = (executable, argv) => {
+    const row = expected[calls.length];
+    calls.push(argv);
+    const matches = row && argv.length === row[0].length && row[0].every((value, at) => value === null ? typeof argv[at] === "string" : isDeepStrictEqual(argv[at], value));
+    if (executable !== "docker" || !matches) return { status: 2, stdout: "", stderr: `unexpected ${executable} ${JSON.stringify(argv)}` };
+    return { status: 0, stdout: row[1], stderr: "" };
+  };
+  main([container, "--evidence", "local", "--claude", home], env, { spawnSync: run });
+  assert.equal(calls.length, expected.length);
+  const auth = calls[12];
+  assert.deepEqual(auth.slice(0, 5), ["exec", container, "sh", "-eu", "-c"]);
+  assert.deepEqual(auth.slice(6), ["oats-claude-probe", home]);
+  assert.ok(calls.every(argv => !argv.includes("--workdir")), "the instance home is never a Docker workdir");
+  const commands = auth[5].trim().split("\n").map(line => line.trim());
+  assert.ok(commands.includes('probe=$(mktemp -d /tmp/oats-claude-probe.XXXXXX)'));
+  assert.ok(commands.includes('cd "$probe"'));
+  const command = commands.find(line => line.startsWith("claude "));
+  assert.ok(command, "the auth probe invokes Claude");
+  const { tokens } = parseLaunchCommand("'claude' " + command.slice("claude ".length));
+  assert.deepEqual(tokens.map(token => token.value), ["claude", "-p", "--setting-sources", "user", "--tools", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--no-session-persistence", "Reply with exactly OATS_CONTAINER_AUTH_OK"]);
 });
 
 
