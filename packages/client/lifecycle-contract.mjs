@@ -24,7 +24,12 @@ const messages = {
   E_HOME_MISMATCH: 'The instance home no longer matches this selection.',
   // The kernel's, for a home whose record or cleanup cannot be used. Answered only before any effect.
   // Details gives the cause and remedy; --force cannot bypass a record that is there and cannot be read.
-  E_UNIDENTIFIED_INSTANCE_HOME: "OATS can't tell what this home's capabilities created, or can't run their cleanup. Nothing was removed. If Details allows removal, clean up by hand, then run `oats retire <name> --force` in a terminal.",
+  E_UNIDENTIFIED_INSTANCE_HOME: (_terms, context) => {
+    if (context?.operation !== 'retire') return "OATS couldn't find or read what it needs in this instance's home folder, so nothing was done.";
+    // Only a CLI-safe instance name belongs in the suggested terminal command.
+    const name = typeof context.instance === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/.test(context.instance) ? context.instance : '<instance>';
+    return `OATS can't tell what this home's capabilities created, or can't run their cleanup, so nothing was removed. Details lists what may be left. Clean that up by hand, then remove it with \`oats retire ${name} --force\` in a terminal.`;
+  },
   'cli-unavailable': 'Choose a compatible installed OATS CLI.',
   E_LIFECYCLE_UNAVAILABLE: terms => `This OATS can't stop or retire instances from ${terms.name}. Update OATS.`,
   'unsupported-remote-operation': "This computer's OATS can't route this to the server. Update OATS here.",
@@ -53,11 +58,12 @@ export const LIFECYCLE_CODES = Object.freeze(Object.keys(messages));
 /** The code as the table knows it: itself, or `E_CLI_FAILED` for one it has no sentence for. Needs no terms. */
 export const lifecycleCode = code => (Object.hasOwn(messages, code) ? code : 'E_CLI_FAILED');
 /** The code and its sentence, in the client's terms (client-terms.mjs): a sentence that names the client is
- * built from them. */
-export function lifecycleReason(code, terms) {
+ * built from them. `context` supplies the explicit operation and instance for a Remove's cleanup refusal;
+ * without it the unidentified-home sentence stays neutral, as it is for Stop. */
+export function lifecycleReason(code, terms, context = {}) {
   requireTerms(terms, 'lifecycleReason');
   const known = lifecycleCode(code), message = messages[known];
-  return { code: known, message: typeof message === 'function' ? message(terms) : message };
+  return { code: known, message: typeof message === 'function' ? message(terms, context) : message };
 }
 /** A kernel's error answer whose code has no sentence here. It says "OATS answered", so it is chosen only
  * for a code read out of the kernel's own error envelope: by where the code came from, which only the caller

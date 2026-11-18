@@ -24,7 +24,8 @@ const UNDESCRIBED = 'OATS answered with an error that Desktop has no description
 const NOT_RUN = "OATS couldn't be run for this.";
 const QUIESCE = "OATS tried to end a session or a process and couldn't confirm that it ended.";
 const UNKNOWN = "OATS didn't confirm the result. Check again before assuming nothing happened.";
-const HOME_CLEANUP = "OATS can't tell what this home's capabilities created, or can't run their cleanup. Nothing was removed. If Details allows removal, clean up by hand, then run `oats retire <name> --force` in a terminal.";
+const UNREADABLE_HOME = "OATS couldn't find or read what it needs in this instance's home folder, so nothing was done.";
+const HOME_CLEANUP = "OATS can't tell what this home's capabilities created, or can't run their cleanup, so nothing was removed. Details lists what may be left. Clean that up by hand, then remove it with `oats retire dev-1 --force` in a terminal.";
 const SAID = 'a stand-in for the kernel message';
 /** The kernel's error envelope as the adapter passes it on (`origin: 'kernel'`), and one that does not say so. */
 const answered = (code, ...message) => ({ schemaVersion: 1, ok: false, origin: 'kernel', error: { code, message: message.length ? message[0] : SAID } });
@@ -282,9 +283,9 @@ test("E_UNIDENTIFIED_INSTANCE_HOME at each place the kernel raises it for a Stop
   const SITES = [
     { what: 'the record is there and cannot be read', operations: ['stop', 'retire'], phases: ['plan', 'apply'],
       said: `${home}/instance.json cannot be read (Unexpected end of JSON input); nothing was done. Restoring the file from a copy makes the home usable again; removing such a home through OATS is not possible yet.` },
-    { what: 'a rollback marker that cannot drive a retry', operations: ['retire'], phases: ['apply'],
+    { what: 'a rollback marker that cannot drive a retry', operations: ['retire'], phases: ['plan', 'apply'],
       said: `${home} carries a rollback marker that cannot drive a retry (unreadable, or missing the cleanup descriptor fields the retry consumes), so OATS cannot tell what external state still depends on this home. ${withForce}` },
-    { what: 'no instance.json and no cleanup descriptor', operations: ['retire'], phases: ['apply'],
+    { what: 'no instance.json and no cleanup descriptor', operations: ['retire'], phases: ['plan', 'apply'],
       said: `${home} has no instance.json and no cleanup descriptor, so OATS cannot tell whether external state (identities, worktrees) still depends on it. Retiring it would delete whatever it holds without running any cleanup. ${withForce}` },
     // K1 PR2's shared retire admission, before effects in a plan and an apply alike.
     ...[
@@ -307,7 +308,12 @@ test("E_UNIDENTIFIED_INSTANCE_HOME at each place the kernel raises it for a Stop
   const kernel = (operation, refuse, said, details) => (bin, args) => cliLifecycle(bin, args, { exec: (_b, argv, _o, done) => argv.includes('--plan') !== (refuse === 'plan')
     ? done(null, JSON.stringify(envelope(planOf(operation))), '') : done(Object.assign(new Error('exit 1'), { code: 1 }), printed(said, details), '') });
   assert.equal(BEFORE_EFFECT_CODES.includes('E_UNIDENTIFIED_INSTANCE_HOME'), true); assert.equal(lifecycleDetailCode('E_UNIDENTIFIED_INSTANCE_HOME'), true);
-  assert.deepEqual(lifecycleReason('E_UNIDENTIFIED_INSTANCE_HOME', DESKTOP_TERMS), { code: 'E_UNIDENTIFIED_INSTANCE_HOME', message: HOME_CLEANUP });
+  assert.deepEqual(lifecycleReason('E_UNIDENTIFIED_INSTANCE_HOME', DESKTOP_TERMS), { code: 'E_UNIDENTIFIED_INSTANCE_HOME', message: UNREADABLE_HOME });
+  assert.equal(lifecycleReason('E_UNIDENTIFIED_INSTANCE_HOME', DESKTOP_TERMS, { operation: 'stop', instance: instance.instance }).message, UNREADABLE_HOME);
+  assert.equal(lifecycleReason('E_UNIDENTIFIED_INSTANCE_HOME', DESKTOP_TERMS, { operation: 'retire', instance: instance.instance }).message, HOME_CLEANUP);
+  const placeholder = HOME_CLEANUP.replace('oats retire dev-1 --force', 'oats retire <instance> --force');
+  for (const name of [undefined, '', 'bad;name', 'line\nbreak', 'token=private'])
+    assert.equal(lifecycleReason('E_UNIDENTIFIED_INSTANCE_HOME', DESKTOP_TERMS, { operation: 'retire', instance: name }).message, placeholder);
   assert.equal(undescribedAnswer('E_UNIDENTIFIED_INSTANCE_HOME', DESKTOP_TERMS), null);
   /** The dialog over the real adapter and the boundary. */
   const dialogOver = (ctx, operation, invoke) => {
@@ -320,9 +326,9 @@ test("E_UNIDENTIFIED_INSTANCE_HOME at each place the kernel raises it for a Stop
     return doc;
   };
   for (const { what, operations, phases, said } of SITES) for (const operation of operations) for (const ctx of [context, routedContext]) {
-    const where = `${what}, ${operation}, ${ctx === context ? 'local' : 'routed'}`;
+    const where = `${what}, ${operation}, ${ctx === context ? 'local' : 'routed'}`, headline = operation === 'retire' ? HOME_CLEANUP : UNREADABLE_HOME;
     // The kernel's sentence passes the display filter whole, as one line.
-    const reason = { code: 'E_UNIDENTIFIED_INSTANCE_HOME', message: HOME_CLEANUP, detail: said, ...(ctx === routedContext ? { remote: true } : {}) };
+    const reason = { code: 'E_UNIDENTIFIED_INSTANCE_HOME', message: headline, detail: said, ...(ctx === routedContext ? { remote: true } : {}) };
     const ask = async (refuse, details) => {
       const service = createLifecycleBoundary({ terms: DESKTOP_TERMS, invoke: kernel(operation, refuse, said, details) }), c = ctx();
       const planned = await service({ action: 'plan', operation, selector: selectorOf(c), options: optionsOf(operation) }, () => c);
@@ -332,7 +338,7 @@ test("E_UNIDENTIFIED_INSTANCE_HOME at each place the kernel raises it for a Stop
       const { planned } = await ask('plan');
       assert.equal(planned.status, 'unavailable', where); assert.deepEqual(planned.reason, reason, where);
       const review = dialogOver(ctx, operation, kernel(operation, 'plan', said)); await tick(); await tick();
-      assert.equal(review.querySelector('.lifecycle-dialog [role=status]').textContent, HOME_CLEANUP, where);
+      assert.equal(review.querySelector('.lifecycle-dialog [role=status]').textContent, headline, where);
       assertIsolatedDetail(review.querySelector('.lifecycle-details p'), { before: 'E_UNIDENTIFIED_INSTANCE_HOME: ', detail: said });
       assert.equal(review.querySelector('.lifecycle-confirm').hidden, true, where);
       for (const other of [UNDESCRIBED, NOT_RUN, UNKNOWN]) assert.equal(review.body.textContent.includes(other), false, where);
@@ -346,7 +352,7 @@ test("E_UNIDENTIFIED_INSTANCE_HOME at each place the kernel raises it for a Stop
     const confirmed = dialogOver(ctx, operation, kernel(operation, 'apply', said, operation === 'retire' ? { reached } : undefined)); await tick(); await tick();
     confirmed.querySelector('.lifecycle-confirm').click(); await tick(); await tick();
     assert.equal(confirmed.querySelector('.lifecycle-dialog h2').textContent, `dev-1 wasn't ${operation === 'retire' ? 'retired' : 'stopped'}`, where);
-    assert.equal(confirmed.querySelector('.lifecycle-dialog [role=status]').textContent, HOME_CLEANUP, where);
+    assert.equal(confirmed.querySelector('.lifecycle-dialog [role=status]').textContent, headline, where);
     assertIsolatedDetail(confirmed.querySelector('.lifecycle-details p'), { before: 'E_UNIDENTIFIED_INSTANCE_HOME: ', detail: said });
     assert.equal(confirmed.body.textContent.split(said).length, 2, 'the kernel message is in Details only');
     for (const other of [UNDESCRIBED, NOT_RUN, UNKNOWN, 'Result not confirmed']) assert.equal(confirmed.body.textContent.includes(other), false, where);

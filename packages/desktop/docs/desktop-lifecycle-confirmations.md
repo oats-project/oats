@@ -369,11 +369,16 @@ from whether the plan observed `work/` (`facts.work.observed`):
   cleanup descriptor, its `capabilityRuntime` is missing or malformed, it
   names no repository for recorded retire hooks, or it is a captured home
   whose record does not prove that no capability's spawn hook ran) is a
-  **refusal** with its own fixed sentence: "OATS can't tell what this home's
-  capabilities created, or can't run their cleanup. Nothing was removed.
-  If Details allows removal, clean up by hand, then run
-  `oats retire <name> --force` in a terminal." The kernel answers it only
-  before any effect, so it is in
+  **refusal**. Remove's sentence, selected by its explicit `retire` operation,
+  is "OATS can't tell what this home's capabilities created, or can't run
+  their cleanup, so nothing was removed. Details lists what may be left.
+  Clean that up by hand, then remove it with `oats retire <instance> --force`
+  in a terminal." The admitted instance name replaces `<instance>` when it
+  is safe in a CLI argument; otherwise the placeholder stays. Stop keeps
+  "OATS couldn't find or read what it needs in this instance's home folder,
+  so nothing was done." The boundary and confirmation view both use the
+  operation they own; no new envelope field is read. The kernel answers the
+  code only before any effect, so it is in
   `BEFORE_EFFECT_CODES`: a plan read and an apply answered with it both read
   as refused, never as an unknown outcome. The kernel's message (it names the
   file or the folder, and the remedy where there is one) is in Details, for a
