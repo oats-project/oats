@@ -1,7 +1,7 @@
-import { hookCleanupComplete } from "../lib/hook-outcome.mjs";
 // oats.aweb 1.12.0 hook behaviour, against a fake `aw` on PATH:
 // local/global identity meta, resident session grants, compensation, and revoke.
 
+import { hookCleanupComplete } from "../lib/hook-outcome.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -285,6 +285,7 @@ test("global retire with undocumented no-grant outcome is incomplete under the k
     const bin = fakeAw(base); const { root, home } = deployment(base); const custody = resident(base);
     let r = runHook(bin, "retire", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_META: JSON.stringify({ identity: { mode: "global", resident: "merlin" } }), OATS_SETTINGS: JSON.stringify({ residents: { merlin: custody } }) });
     assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.equal(r.doc.meta.reason, "nothing-to-revoke", "mirror oats.aweb 1.42.1 emits this undocumented outcome; update the observation with the release pin");
     assert.equal(hookCleanupComplete(r.doc.meta), false, "the package no-grant answer is not the documented nothing-to-delete outcome");
     r = runHook(bin, "retire", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_META: JSON.stringify({ identity: { mode: "global", resident: "merlin", grant: { id: "grant-123", expiresAt: "2026-09-24T07:00:00Z", scopes: [] } } }), OATS_SETTINGS: JSON.stringify({ residents: { merlin: custody } }), FAKE_REVOKE_FAIL: "1" });
     assert.notEqual(r.status, 0);

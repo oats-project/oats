@@ -157,10 +157,7 @@ A self-contained package has an `oats.json`:
   reads what there is to undo from the home and from the service it
   registered with, and answers `meta: { retired: false, reason:
   "nothing-to-delete" }` when there is nothing: that is a complete cleanup.
-  The kernel applies one predicate (`hookCleanupComplete` in
-  `lib/hook-outcome.mjs`) to ordinary retirement, spawn rollback and quarantine
-  retries, including their outstanding-hook records. Every other explicit
-  `retired: false` outcome is incomplete, including `"nothing-to-revoke"`.
+  Every other explicit `retired: false` outcome is an incomplete cleanup.
 - A capability declaring a **required** spawn hook should declare a `retire` hook
   too. Without one, OATS has no way to undo what the spawn hook did and no way to
   know whether it did anything, so a failure quarantines the home rather than
