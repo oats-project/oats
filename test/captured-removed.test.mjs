@@ -80,7 +80,8 @@ test("a captured home: status names it, start/inspect/readiness/operation --home
   for (const args of [["inspect", "--home", home, "--json"], ["readiness", "--home", home, "--json"], ["operation", "run", "knowledge:x", "--home", home, "--json"]]) {
     const e = fail(fx.cli(args), args.slice(0, 2).join(" "));
     assert.equal(e.code, "E_UNSUPPORTED_MODE", args.join(" "));
-    assert.match(e.message, /is a captured home .*removed in 0\.26.*retire it/, args.join(" "));
+    assert.match(e.message, /is a captured home .*removed in 0\.26.*without proof that no spawn hook ran/, args.join(" "));
+    assert.ok(e.message.includes(`oats retire ${instance} --force`), e.message);
     assert.equal(e.details?.captured, true, args.join(" "));
   }
   const inHome = fail(fx.cli(["tool", "show", "--json"], { cwd: home, env: { OATS_INSTANCE_HOME: home } }), "in-home");
