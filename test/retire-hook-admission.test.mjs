@@ -115,3 +115,9 @@ test('an unusable directory-spawn marker still reports live or unknown spawn liv
     }
   }
 });
+
+test('core forwards the admission readers and constants by reference without extending its API', async () => {
+  const core = await import('../lib/core.mjs'), leaf = await import('../lib/retire-admission.mjs');
+  for (const key of ['identifiedHomeRecord', 'capturedHomeCapabilities', 'WORK_MODES', 'QUARANTINE_CLEANUP_VERSION', 'QUARANTINE_GIT_DEBT']) assert.equal(core[key], leaf[key], key);
+  assert.equal(Object.hasOwn(core, 'retireCleanupAdmission'), false);
+});
