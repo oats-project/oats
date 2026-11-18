@@ -25,9 +25,7 @@ const NOT_RUN = "OATS couldn't be run for this.";
 const QUIESCE = "OATS tried to end a session or a process and couldn't confirm that it ended.";
 const UNKNOWN = "OATS didn't confirm the result. Check again before assuming nothing happened.";
 const UNREADABLE_HOME = "OATS couldn't find or read what it needs in this instance's home folder, so nothing was done.";
-const HOME_CLEANUP = "OATS can't tell what this home's capabilities created, or can't run their cleanup, so nothing was removed. Details lists what may be left. Clean that up by hand, then remove it with `oats retire dev-1 --force` in a terminal.";
-const ROUTED_CLEANUP = HOME_CLEANUP.replace('oats retire dev-1 --force', 'oats retire dev-1 --server build --force');
-const UNKNOWN_ROUTED_CLEANUP = HOME_CLEANUP.replace('oats retire dev-1 --force', 'oats retire <instance> --server <server-id> --force');
+const HOME_CLEANUP = "OATS can't tell what this home's capabilities created, or can't run their cleanup, so nothing was removed. Details says what may be left and how to finish.";
 const SAID = 'a stand-in for the kernel message';
 /** The kernel's error envelope as the adapter passes it on (`origin: 'kernel'`), and one that does not say so. */
 const answered = (code, ...message) => ({ schemaVersion: 1, ok: false, origin: 'kernel', error: { code, message: message.length ? message[0] : SAID } });
@@ -313,12 +311,11 @@ test("E_UNIDENTIFIED_INSTANCE_HOME at each place the kernel raises it for a Stop
   assert.deepEqual(lifecycleReason('E_UNIDENTIFIED_INSTANCE_HOME', DESKTOP_TERMS), { code: 'E_UNIDENTIFIED_INSTANCE_HOME', message: UNREADABLE_HOME });
   assert.equal(lifecycleReason('E_UNIDENTIFIED_INSTANCE_HOME', DESKTOP_TERMS, { operation: 'stop', instance: instance.instance }).message, UNREADABLE_HOME);
   assert.equal(lifecycleReason('E_UNIDENTIFIED_INSTANCE_HOME', DESKTOP_TERMS, { operation: 'retire', instance: instance.instance }).message, HOME_CLEANUP);
-  const placeholder = HOME_CLEANUP.replace('oats retire dev-1 --force', 'oats retire <instance> --force');
   for (const name of [undefined, '', 'bad;name', 'line\nbreak', 'token=private'])
-    assert.equal(lifecycleReason('E_UNIDENTIFIED_INSTANCE_HOME', DESKTOP_TERMS, { operation: 'retire', instance: name }).message, placeholder);
-  assert.equal(lifecycleReason('E_UNIDENTIFIED_INSTANCE_HOME', DESKTOP_TERMS, { operation: 'retire', instance: instance.instance, routed: true, server: 'build' }).message, ROUTED_CLEANUP);
+    assert.equal(lifecycleReason('E_UNIDENTIFIED_INSTANCE_HOME', DESKTOP_TERMS, { operation: 'retire', instance: name }).message, HOME_CLEANUP);
+  assert.equal(lifecycleReason('E_UNIDENTIFIED_INSTANCE_HOME', DESKTOP_TERMS, { operation: 'retire', instance: instance.instance, routed: true, server: 'build' }).message, HOME_CLEANUP);
   for (const server of [undefined, null, '', '--force', 'bad;server', 'line\nbreak'])
-    assert.equal(lifecycleReason('E_UNIDENTIFIED_INSTANCE_HOME', DESKTOP_TERMS, { operation: 'retire', instance: instance.instance, routed: true, server }).message, UNKNOWN_ROUTED_CLEANUP);
+    assert.equal(lifecycleReason('E_UNIDENTIFIED_INSTANCE_HOME', DESKTOP_TERMS, { operation: 'retire', instance: instance.instance, routed: true, server }).message, HOME_CLEANUP);
   assert.equal(undescribedAnswer('E_UNIDENTIFIED_INSTANCE_HOME', DESKTOP_TERMS), null);
   /** The dialog over the real adapter and the boundary. */
   const dialogOver = (ctx, operation, invoke) => {
@@ -331,7 +328,7 @@ test("E_UNIDENTIFIED_INSTANCE_HOME at each place the kernel raises it for a Stop
     return doc;
   };
   for (const { what, operations, phases, said } of SITES) for (const operation of operations) for (const ctx of [context, routedContext]) {
-    const where = `${what}, ${operation}, ${ctx === context ? 'local' : 'routed'}`, headline = operation === 'retire' ? ctx === context ? HOME_CLEANUP : ROUTED_CLEANUP : UNREADABLE_HOME;
+    const where = `${what}, ${operation}, ${ctx === context ? 'local' : 'routed'}`, headline = operation === 'retire' ? HOME_CLEANUP : UNREADABLE_HOME;
     // The kernel's sentence passes the display filter whole, as one line.
     const reason = { code: 'E_UNIDENTIFIED_INSTANCE_HOME', message: headline, detail: said, ...(ctx === routedContext ? { remote: true } : {}) };
     const ask = async (refuse, details) => {
@@ -344,6 +341,7 @@ test("E_UNIDENTIFIED_INSTANCE_HOME at each place the kernel raises it for a Stop
       assert.equal(planned.status, 'unavailable', where); assert.deepEqual(planned.reason, reason, where);
       const review = dialogOver(ctx, operation, kernel(operation, 'plan', said)); await tick(); await tick();
       assert.equal(review.querySelector('.lifecycle-dialog [role=status]').textContent, headline, where);
+      assert.doesNotMatch(review.querySelector('.lifecycle-dialog [role=status]').textContent, /--force|oats retire/, where);
       assertIsolatedDetail(review.querySelector('.lifecycle-details p'), { before: 'E_UNIDENTIFIED_INSTANCE_HOME: ', detail: said });
       assert.equal(review.querySelector('.lifecycle-confirm').hidden, true, where);
       for (const other of [UNDESCRIBED, NOT_RUN, UNKNOWN]) assert.equal(review.body.textContent.includes(other), false, where);
@@ -358,11 +356,12 @@ test("E_UNIDENTIFIED_INSTANCE_HOME at each place the kernel raises it for a Stop
     confirmed.querySelector('.lifecycle-confirm').click(); await tick(); await tick();
     assert.equal(confirmed.querySelector('.lifecycle-dialog h2').textContent, `dev-1 wasn't ${operation === 'retire' ? 'retired' : 'stopped'}`, where);
     assert.equal(confirmed.querySelector('.lifecycle-dialog [role=status]').textContent, headline, where);
+    assert.doesNotMatch(confirmed.querySelector('.lifecycle-dialog [role=status]').textContent, /--force|oats retire/, where);
     assertIsolatedDetail(confirmed.querySelector('.lifecycle-details p'), { before: 'E_UNIDENTIFIED_INSTANCE_HOME: ', detail: said });
     assert.equal(confirmed.body.textContent.split(said).length, 2, 'the kernel message is in Details only');
     for (const other of [UNDESCRIBED, NOT_RUN, UNKNOWN, 'Result not confirmed']) assert.equal(confirmed.body.textContent.includes(other), false, where);
   }
-  // A relayed routed refusal whose view no longer has the server id must not suggest a local command.
+  // Outdated relayed force advice must not replace the current cause-neutral headline.
   // The adapter and boundary still answer from their admitted route; simulate missing metadata only
   // on the transport reply and the dialog's target, keeping the remote reason and its Details intact.
   for (const phase of ['plan', 'apply']) {
@@ -370,15 +369,16 @@ test("E_UNIDENTIFIED_INSTANCE_HOME at each place the kernel raises it for a Stop
     const service = createLifecycleBoundary({ terms: DESKTOP_TERMS, invoke: kernel('retire', phase, said, phase === 'apply' ? { reached } : undefined) });
     const planned = await service({ action: 'plan', operation: 'retire', selector: selectorOf(c), options: optionsOf('retire') }, () => c);
     const applied = phase === 'apply' ? await service({ action: 'apply', planRef: planned.planRef }, () => c) : null;
-    const withoutServer = result => ({ ...result, target: { ...result.target, server: null } });
+    const withoutServer = result => ({ ...result, target: { ...result.target, server: null },
+      reason: result.reason ? { ...result.reason, message: 'Old advice: oats retire dev-1 --server build --force' } : null });
     const dom = new JSDOM('<!doctype html>', { pretendToBeVisual: true }), doc = dom.window.document;
     const dialog = createLifecycleDialog({ doc, request: async (_ws, body) => withoutServer(body.action === 'plan' ? planned : applied) });
     t.after(() => { dialog.dispose(); dom.window.close(); });
     dialog.open({ operation: 'retire', instance, workspace: 'team' }); await tick();
     if (phase === 'apply') { doc.querySelector('.lifecycle-confirm').click(); await tick(); }
-    assert.equal(doc.querySelector('.lifecycle-dialog [role=status]').textContent, UNKNOWN_ROUTED_CLEANUP, phase);
+    assert.equal(doc.querySelector('.lifecycle-dialog [role=status]').textContent, HOME_CLEANUP, phase);
     assertIsolatedDetail(doc.querySelector('.lifecycle-details p'), { before: 'E_UNIDENTIFIED_INSTANCE_HOME: ', detail: said });
-    assert.equal(doc.querySelector('.lifecycle-dialog [role=status]').textContent.includes('oats retire dev-1 --force'), false, phase);
+    assert.doesNotMatch(doc.querySelector('.lifecycle-dialog [role=status]').textContent, /--force|oats retire/, phase);
   }
   // A message the display filter withholds, and no message: Details as for any other code with its own sentence.
   const withheld = await createLifecycleBoundary({ terms: DESKTOP_TERMS, invoke: kernel('retire', 'plan', `${home}/instance.json cannot be read (token=abc123)`) })({ action: 'plan', operation: 'retire', selector: selectorOf(context()), options: optionsOf('retire') }, context);

@@ -23,15 +23,11 @@ const messages = {
   E_SESSION_UNKNOWN: 'This instance is no longer in the current roster.', E_AMBIGUOUS_INSTANCE: 'Select an exact instance home.',
   E_HOME_MISMATCH: 'The instance home no longer matches this selection.',
   // The kernel's, for a home whose record or cleanup cannot be used. Answered only before any effect.
-  // Details gives the cause and remedy; --force cannot bypass a record that is there and cannot be read.
+  // The envelope has no structured cause discriminator. Details gives the remedy; never parse its words
+  // or promise force, which cannot bypass a record that is there and cannot be read.
   E_UNIDENTIFIED_INSTANCE_HOME: (_terms, context) => {
     if (context?.operation !== 'retire') return "OATS couldn't find or read what it needs in this instance's home folder, so nothing was done.";
-    // A routed home must never suggest a local command. Missing route identity keeps both placeholders.
-    const routed = context.routed === true || context.server != null;
-    const server = typeof context.server === 'string' && /^[a-z0-9][a-z0-9-]{0,63}$/.test(context.server) ? context.server : null;
-    const name = (!routed || server) && typeof context.instance === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/.test(context.instance) ? context.instance : '<instance>';
-    const route = routed ? ` --server ${server ?? '<server-id>'}` : '';
-    return `OATS can't tell what this home's capabilities created, or can't run their cleanup, so nothing was removed. Details lists what may be left. Clean that up by hand, then remove it with \`oats retire ${name}${route} --force\` in a terminal.`;
+    return "OATS can't tell what this home's capabilities created, or can't run their cleanup, so nothing was removed. Details says what may be left and how to finish.";
   },
   'cli-unavailable': 'Choose a compatible installed OATS CLI.',
   E_LIFECYCLE_UNAVAILABLE: terms => `This OATS can't stop or retire instances from ${terms.name}. Update OATS.`,
@@ -61,7 +57,7 @@ export const LIFECYCLE_CODES = Object.freeze(Object.keys(messages));
 /** The code as the table knows it: itself, or `E_CLI_FAILED` for one it has no sentence for. Needs no terms. */
 export const lifecycleCode = code => (Object.hasOwn(messages, code) ? code : 'E_CLI_FAILED');
 /** The code and its sentence, in the client's terms (client-terms.mjs): a sentence that names the client is
- * built from them. `context` supplies the explicit operation, instance and route for a Remove's cleanup refusal;
+ * built from them. `context` supplies the explicit operation for a Remove's cleanup refusal;
  * without it the unidentified-home sentence stays neutral, as it is for Stop. */
 export function lifecycleReason(code, terms, context = {}) {
   requireTerms(terms, 'lifecycleReason');

@@ -196,7 +196,7 @@ const localDetail = reason => reason && typeof reason === 'object' && !Object.ha
  * the kernel's message behind a disclosure when there is one to show. `plan`: the snapshot the refusal is about,
  * when there is one. Every status it answers carries the reason's `code` (and the kernel's busy `holder` when it
  * is read by it): a client switches on the code, never on the words, and words a code only it raises itself. */
-function refusal(reason, plan, { target, operation, leftover }, terms) {
+function refusal(reason, plan, { operation, leftover }, terms) {
   // The kernel's busy answer, read by who holds the claim: the headline, the target it is about when that
   // is another one of this plan, and the kernel's own sentence as the main text when it names what ends it.
   const busy = busyRefusal(reason, plan);
@@ -213,9 +213,9 @@ function refusal(reason, plan, { target, operation, leftover }, terms) {
     return { status: { headline: LEFTOVER_HELD, more: [], next: 'retire-with-force', code: reason.code }, blocks: [{ type: 'quote', text: shown.detail }] };
   // A reason with no code reads as the table's fallback, and says that fallback's code; a code only the client
   // raises (one the table does not know) keeps its own, so the client can word it.
-  const table = lifecycleReason(reason?.code, terms, { operation, instance: target.instance, routed: !!remote || target.server != null, server: target.server });
+  const table = lifecycleReason(reason?.code, terms, { operation });
   const own = typeof reason?.code === 'string' && reason.code ? reason.code : table.code;
-  // Rebuild this command from the view's route, including the missing-server fallback, never a relayed sentence.
+  // This code's headline must hold for every cause, even when a relayed sentence still offers force.
   const status = remote ? { headline: remote.code === 'E_UNIDENTIFIED_INSTANCE_HOME' ? table.message : remote.message, code: remote.code } : undescribed ? { headline: undescribed.message, code: reason.code }
     : { headline: table.message, code: own };
   return { status: { more: [], next: null, ...status }, blocks: shown ? [{ type: 'details', reason: shown, bare: !!undescribed }] : [] };
@@ -234,7 +234,7 @@ const validTarget = (result, target) => result?.lifecycleApi === 1 && !!result.t
  * target, read as a protocol failure). */
 export function unavailableView(reason, { target, operation }, terms) {
   requireTerms(terms, 'unavailableView');
-  const { status, blocks } = refusal(reason ?? { code: 'E_CLI_PROTOCOL' }, null, { target, operation, leftover: false }, terms);
+  const { status, blocks } = refusal(reason ?? { code: 'E_CLI_PROTOCOL' }, null, { operation, leftover: false }, terms);
   return { kind: 'unavailable', title: `Couldn't check what ${operation === 'retire' ? 'retiring' : 'stopping'} ${target.instance} will do`,
     status, blocks, uncertain: false };
 }
@@ -277,7 +277,7 @@ export function outcomeView(result, { target, operation, choices, plan, leftover
     // The rows are the server's, already decoded: validated here, never decoded again.
     const children = result.childrenStopped ? decodedStoppedTargets(result.childrenStopped, plan.facts?.children || []) : null;
     if (result.childrenStopped && !children) return invalid;
-    let { status, blocks } = refusal(result.reason?.code ? result.reason : { code: 'E_OUTCOME_UNKNOWN' }, plan, { target, operation, leftover }, terms);
+    let { status, blocks } = refusal(result.reason?.code ? result.reason : { code: 'E_OUTCOME_UNKNOWN' }, plan, { operation, leftover }, terms);
     // This client's own apply is running (its busy refusal, or the answer of an apply whose wait ended): which one
     // is said, in place of the general sentence of the busy refusal. Never for the kernel's busy answer.
     const running = runningOf(result), own = running && !Object.hasOwn(result.reason ?? {}, 'holder');

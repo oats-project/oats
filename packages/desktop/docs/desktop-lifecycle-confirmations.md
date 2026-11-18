@@ -371,14 +371,11 @@ from whether the plan observed `work/` (`facts.work.observed`):
   whose record does not prove that no capability's spawn hook ran) is a
   **refusal**. Remove's sentence, selected by its explicit `retire` operation,
   is "OATS can't tell what this home's capabilities created, or can't run
-  their cleanup, so nothing was removed. Details lists what may be left.
-  Clean that up by hand, then remove it with `oats retire <instance> --force`
-  in a terminal." The admitted instance name replaces `<instance>` when it
-  is safe in a CLI argument; otherwise the placeholder stays. For a routed
-  home the command is `oats retire <instance> --server <server-id> --force`,
-  using the admitted instance name and server id. When the view lacks a safe
-  server id, both placeholders stay; a routed home never shows a local
-  command. This uses the existing [retire routing](../../../docs/servers.md#what-this-machine-keeps).
+  their cleanup, so nothing was removed. Details says what may be left and
+  how to finish." The error code has no structured field that distinguishes
+  these causes, so the headline is the same for every Remove refusal under
+  this code, local or routed. The client never parses the kernel's message
+  to choose a remedy or adds a force command to the headline.
   Stop keeps "OATS couldn't find or read what it needs in this instance's home folder,
   so nothing was done." The boundary and confirmation view both use the
   operation they own; no new envelope field is read. The kernel answers the
