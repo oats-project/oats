@@ -208,6 +208,7 @@ test("the entrypoint command structure hands PID-only tini the supervisor after 
   const commands = read("entrypoint.sh").split("\n").map(line => line.trim()).filter(line => line && !line.startsWith("#")).map(line => line.split(/\s+/));
   assert.deepEqual(commands.at(-1), ["exec", "node", "/usr/local/lib/agent-supervisor.mjs"]);
   assert.equal(commands.filter(argv => argv[0] === "exec").length, 1);
+  assert.ok(commands.every(argv => !(argv[0] === "sshd" && argv.includes("-D"))), "the supervisor alone launches sshd");
   assert.ok(commands.some(argv => isDeepStrictEqual(argv, ["export", "NSS_WRAPPER_PASSWD=/state/ssh/passwd"])));
   assert.ok(commands.some(argv => isDeepStrictEqual(argv, ["ssh-keygen", "-q", "-t", "ed25519", "-N", "''", "-f", "/state/ssh/ssh_host_ed25519_key"])));
   const copies = read("Dockerfile").split("\n").map(line => line.trim().split(/\s+/)).filter(words => words[0] === "COPY");
