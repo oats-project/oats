@@ -365,15 +365,23 @@ from whether the plan observed `work/` (`facts.work.observed`):
 - `E_UNIDENTIFIED_INSTANCE_HOME` (a home the kernel cannot work from: its
   record is there and cannot be read
   ([desktop-cli-api.md](../../../docs/desktop-cli-api.md#unreadable-record)),
-  its rollback marker cannot drive a retry, or it has neither a record nor a
-  cleanup descriptor) is a **refusal** with its own fixed sentence: "OATS
-  couldn't find or read what it needs in this instance's home folder, so
-  nothing was done." The kernel answers it only before any effect, so it is in
+  its rollback marker cannot drive a retry, it has neither a record nor a
+  cleanup descriptor, its `capabilityRuntime` is missing or malformed, it
+  names no repository for recorded retire hooks, or it is a captured home
+  whose record does not prove that no capability's spawn hook ran) is a
+  **refusal** with its own fixed sentence: "OATS can't tell what this home's
+  capabilities created, or can't run their cleanup. Nothing was removed.
+  If Details allows removal, clean up by hand, then run
+  `oats retire <name> --force` in a terminal." The kernel answers it only
+  before any effect, so it is in
   `BEFORE_EFFECT_CODES`: a plan read and an apply answered with it both read
   as refused, never as an unknown outcome. The kernel's message (it names the
   file or the folder, and the remedy where there is one) is in Details, for a
-  local answer and a routed one. Where that message offers `--force`, it is
-  the kernel's own word: Desktop offers none and adds nothing about it.
+  local answer and a routed one. Details governs the remedy: an unreadable
+  record must be restored before OATS can remove the home, and `--force`
+  cannot bypass that refusal. Where the kernel offers `--force`, manual
+  cleanup comes first; force removes the home without revoking state whose
+  retire hooks cannot run. Desktop offers no force control.
 - `E_USAGE` (a stop or a retire missing its argument, which the kernel
   answers only before any effect, a routed one before it is sent) is a
   **refusal** with the sentence of `E_BAD_ARGS`, "Invalid lifecycle
