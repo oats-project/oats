@@ -576,8 +576,10 @@ The host runs the same argv, minus `--server <id>` (or `--server=<id>`;
 after a `--` the argv is the provider's and is never read), as `oats <namespace>
 <command> …` from the registered workspace directory: the kernel's
 capability dispatch finds the deployment from its working directory, so no
-`--dir` is added to the provider's argv. `--soul` and every other flag go
-through untouched. Stdin is forwarded as is and never read or logged here;
+`--dir` is added to the provider's argv. `--soul` and other flags go
+through untouched, except `--invite <token>` and `--invite=<token>`: routed
+commands refuse both with `E_BAD_ARGS` before ssh runs. Use `--invite-stdin`
+and pipe the token on stdin to avoid exposing it in process arguments. Stdin is forwarded as is and never read or logged here;
 when stdin is a terminal nothing is forwarded and the host's stdin is
 closed. The host's stdout, stderr and exit status are relayed; with
 `--json` its envelope is relayed verbatim, and when nothing comes back this
