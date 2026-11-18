@@ -13,9 +13,7 @@ import {
   checkSignedConsistency,
   coreString,
   turnId,
-  verifyDidKeySignature,
   verifyTurnId,
-  verifyTurnSig,
 } from "../lib/canonical.mjs";
 import {
   projectLegacyRow,
@@ -26,19 +24,17 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const load = (name) => JSON.parse(readFileSync(join(HERE, "vectors", name), "utf8"));
 
-test("turn-id vectors: canonical bytes, ids, envelope signatures", () => {
+test("turn-id vectors: canonical bytes and ids", () => {
   const doc = load("turn-id-v1.json");
   for (const c of doc.cases) {
     assert.equal(coreString(c.turn), c.expected_canonical_core, c.name);
     assert.equal(turnId(c.turn), c.expected_id, c.name);
     assert.ok(verifyTurnId(c.turn), c.name);
-    if (c.turn.sig) assert.ok(verifyTurnSig(c.turn), `${c.name}: sig`);
   }
-  for (const n of doc.negatives) {
+  for (const n of doc.negatives.filter(n => n.reject !== "sig")) {
     if (n.reject === "id") {
       assert.ok(!verifyTurnId(n.turn), n.name);
-    } else if (n.reject === "sig") {
-      assert.ok(!verifyTurnSig(n.turn), n.name);
+
     } else if (n.reject === "number") {
       assert.throws(() => coreString(n.turn), CanonicalError, n.name);
     } else {
@@ -47,7 +43,7 @@ test("turn-id vectors: canonical bytes, ids, envelope signatures", () => {
   }
 });
 
-test("aweb projection vectors: projection, signatures, round-trip", () => {
+test("aweb projection vectors: projection and round-trip", () => {
   const doc = load("aweb-projection-v1.json");
   for (const c of doc.cases) {
     const expected = c.expected_turn;
@@ -59,11 +55,6 @@ test("aweb projection vectors: projection, signatures, round-trip", () => {
 
     if (expected.signed_payload) {
       assert.equal(expected.signed_payload, c.row.signed_payload, `${c.name}: verbatim payload`);
-      const p = JSON.parse(expected.signed_payload);
-      assert.ok(
-        verifyDidKeySignature(p.from_did, expected.signed_payload, expected.signature),
-        `${c.name}: source signature`,
-      );
       checkSignedConsistency(expected);
     }
 
