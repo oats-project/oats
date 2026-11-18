@@ -19,3 +19,9 @@
   refusal now names missing `capabilityRuntime` and retains the `--force`
   remedy. Homes lacking workspace modules alone are not newly refused:
   the cleanup rule depends on their recorded hook bindings.
+
+- Retire hooks now run in the repository Git identifies for an instance's
+  own worktree when its record names no `repo`. Previously that home ran no
+  retire hook and warned that there was no context repository. Retirement
+  now performs the recorded cleanup in the Git-derived context without
+  rewriting the instance record.
