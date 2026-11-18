@@ -8,5 +8,6 @@
 
 - Removed the recorder's unused signature-verification helpers
   `base58Decode`, `publicKeyFromDidKey`, `base64DecodeLoose`,
-  `verifyDidKeySignature` and `verifyTurnSig` from its internal canonical module.
-  No production callers used them. Source signatures are still preserved.
+  `verifyDidKeySignature` and `verifyTurnSig` from the public `@awebai/turn-record/canonical` export.
+  External importers must remove those imports or use a signature-verification
+  library. No in-repository production callers used them. Source signatures are still preserved.

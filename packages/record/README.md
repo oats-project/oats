@@ -501,7 +501,7 @@ resource accounting and v0.53.0 downgrade/re-upgrade contract.
 
 ### Sealed aw logs
 
-A sealed client-log envelope (`v`, `key_id`, `tag`, `enc`, `ct`) contains
+A sealed client-log envelope (`v`, `key_id`, `enc`, `ct`, with optional `tag`) contains
 ciphertext this recorder cannot read. Capture stops before that line and
 reports a separate `sealed` count, without counting it as a projection failure
 or advancing its cursor. Later lines wait too. Command capture sets the input

@@ -29,6 +29,8 @@ import {
 import { loadIgnore } from "./ignore.mjs";
 import { bufferLines, fileChunks } from "./file-lines.mjs";
 
+export const SEALED_AW_LOG_REASON = "sealed, not readable by this recorder";
+
 export function defaultCommLogDir(home = homedir()) {
   return join(home, ".config", "aw", "logs");
 }
@@ -76,7 +78,7 @@ export function* awLogLines(chunks, { start = 0, maxBytes = Infinity, frontier =
       const entry = JSON.parse(text);
       // Sealed aw client-log envelopes are ciphertext, not projection errors.
       const sealed = entry !== null && typeof entry === "object" &&
-        ["v", "key_id", "tag", "enc", "ct"].every(key => Object.hasOwn(entry, key));
+        ["v", "key_id", "enc", "ct"].every(key => Object.hasOwn(entry, key));
       yield { ...record, entry, parsed: true, ...(sealed ? { sealed: true } : {}) };
     } catch {
       yield { ...record, skipped: !final };

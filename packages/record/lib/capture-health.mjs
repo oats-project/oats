@@ -1,3 +1,4 @@
+import { SEALED_AW_LOG_REASON } from "./capture-aw.mjs";
 // Package-owned offline diagnosis. No writable DB/store, lock acquisition,
 // manager, repair or capture; warnings never publish new run evidence.
 import { homedir, hostname, platform as hostPlatform } from "node:os";
@@ -78,7 +79,9 @@ function diagnose(root, { home = homedir(), platform = hostPlatform(), now = Dat
     // sample are unknown here, so a truncated list says so rather than guess.
     const oversized = backlog.setAside.filter(entry => entry.reason === "record-too-large").length;
     const others = backlog.setAsideCount - oversized, general = setAsideRemedy(command, root);
-    const message = !oversized ? general + (backlog.truncated ? ` Unlisted entries: see each entry's reason; record-too-large entries need: ${oversizedRemedy(command, root)}` : "") :
+    const sealed = backlog.setAside.filter(entry => entry.reason === SEALED_AW_LOG_REASON).length;
+    const message = sealed ? `${sealed} listed as ${SEALED_AW_LOG_REASON}: supply a readable source and run ${command} capture --retry-set-aside, or add the source to ${join(root, "ignore")}; retry cannot decrypt ciphertext.` +
+      (backlog.setAsideCount > sealed ? ` Other set-aside inputs: inspect each reason; record-too-large needs an edited or ignored source. For a conflicting captured prefix: ${general}` : "") : !oversized ? general + (backlog.truncated ? ` Unlisted entries: see each entry's reason; record-too-large entries need: ${oversizedRemedy(command, root)}` : "") :
       `${oversized} listed as record-too-large: ${oversizedRemedy(command, root)}` + (!others ? "" : backlog.truncated ?
         ` The other ${others}, including unlisted entries: see each entry's reason; record-too-large entries need the edit-or-ignore remedy above. Otherwise: ${general}` :
         ` The other ${others}: ${general}`);

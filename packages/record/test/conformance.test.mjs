@@ -34,7 +34,6 @@ test("turn-id vectors: canonical bytes and ids", () => {
   for (const n of doc.negatives.filter(n => n.reject !== "sig")) {
     if (n.reject === "id") {
       assert.ok(!verifyTurnId(n.turn), n.name);
-
     } else if (n.reject === "number") {
       assert.throws(() => coreString(n.turn), CanonicalError, n.name);
     } else {

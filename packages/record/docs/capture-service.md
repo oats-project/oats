@@ -81,6 +81,20 @@ For a conflicting native prefix, either:
    input from active set-aside entries. Removing the ignore rule later does not
    authorize the conflict.
 
+**Sealed aw logs.** Capture stops before a sealed client-log envelope (`v`,
+`key_id`, `enc`, `ct`, optional `tag`) and leaves its cursor at the line's
+start. It reports a distinct `sealed` count, and command capture sets the input
+aside with reason `sealed, not readable by this recorder`. Later lines wait.
+The owner can export readable JSONL with `aw log read <file>... --json`,
+using the keychain and passphrase where the sealing key was created. The
+recorder has no unattended decryption authority or passphrase transport. The
+native reader may emit a readable prefix before failing, so partial stdout
+does not prove the whole source was read.
+
+Supply a readable source and run `capture --retry-set-aside`, or ignore the
+source; retry and cursor reset cannot decrypt ciphertext. Readable projection
+errors retain their existing consume-and-count behaviour.
+
 **Oversized records.** The 8 MiB raw-record limit applies to capture beyond
 the captured prefix. The supervised worker never allocates, captures or
 modifies a new raw source record larger than 8 MiB. It appends and checkpoints

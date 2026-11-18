@@ -2,7 +2,7 @@
 // Explicit per-file public APIs keep their full-reprojection defaults.
 import { closeSync, constants, fstatSync, openSync } from "node:fs";
 import { basename } from "node:path";
-import { awBoundaryWitness, awLogLines, awStream } from "./capture-aw.mjs";
+import { awBoundaryWitness, awLogLines, awStream, SEALED_AW_LOG_REASON } from "./capture-aw.mjs";
 import { captureContext } from "./capture-context.mjs";
 import { CAPTURE_POLICY } from "./capture-budget.mjs";
 import { fileVersion, statVersion, sameVersion } from "./derived-state.mjs";
@@ -28,7 +28,7 @@ export function captureAwUnit(store, { owner, path, kind = "comm", selfName, wor
   }
   const blocked = state.get("set-aside", key);
   if (blocked && !blocked.retry) return { ...result, setAside: blocked,
-    ...(blocked.reason === "sealed, not readable by this recorder" ? { sealed: 1 } : {}) };
+    ...(blocked.reason === SEALED_AW_LOG_REASON ? { sealed: 1 } : {}) };
   const fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
   try {
     const observe = () => {
@@ -132,7 +132,7 @@ export function captureAwUnit(store, { owner, path, kind = "comm", selfName, wor
     if (scanned || atEnd) state.delete("aw-unit", key);
     else state.set("aw-unit", key, job);
     if (sealed !== null) {
-      const row = { owner, source: "aw", path, offset: sealed, reason: "sealed, not readable by this recorder", retry: false };
+      const row = { owner, source: "aw", path, offset: sealed, reason: SEALED_AW_LOG_REASON, retry: false };
       state.set("set-aside", key, row);
       return { ...result, setAside: row };
     }
