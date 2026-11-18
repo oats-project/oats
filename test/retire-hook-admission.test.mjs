@@ -14,6 +14,7 @@ async function spawn(fx, name, extra = {}) {
   finally { process.env.PATH = prior; }
 }
 const cases = {
+  'malformed-runtime': meta => { meta.capabilityRuntime = [null]; },
   legacy: meta => { delete meta.capabilityRuntime; },
   captured: meta => { meta.captured = { hookOrder: ['test.identity'] }; meta.capabilityMeta = { 'test.identity': {} }; },
   'captured-unknown': meta => { meta.captured = {}; },
@@ -56,6 +57,7 @@ test('positive record proof permits hookless retirement; force preserves cleanup
   for (const [name, mutate, forced] of [
     ['no-retire-hooks', m => { m.capabilityRuntime = []; }, false],
     ['captured-no-spawn', m => { m.captured = { hookOrder: [] }; m.capabilityMeta = {}; }, false],
+    ['forced-malformed', m => { m.capabilityRuntime = [null]; }, true],
     ['forced-legacy', m => { delete m.capabilityRuntime; }, true],
     ['forced-captured', m => { m.captured = { hookOrder: ['test.identity'] }; m.capabilityMeta = { 'test.identity': {} }; }, true],
   ]) {
