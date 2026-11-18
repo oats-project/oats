@@ -72,6 +72,8 @@ test("a captured home: status names it, start/inspect/readiness/operation --home
   const status = fx.cli(["status", "--json"]);
   assert.equal(status.status, 0, status.stderr);
   const problem = JSON.parse(status.stdout).problems?.find((p) => p.code === "legacy-captured-home");
+  assert.match(problem.message, /inspect.*clean up.*--force/);
+  assert.doesNotMatch(problem.message, /oats retire` still works/);
   assert.deepEqual([problem?.instances, problem?.homes?.map((h) => realpathSync(h))], [[instance], [realpathSync(home)]], status.stdout);
   assert.match(fx.cli(["status"]).stdout, /! legacy-captured-home: 1 captured home .* \(dev-old\)/);
 

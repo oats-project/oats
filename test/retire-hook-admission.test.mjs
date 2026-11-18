@@ -73,6 +73,7 @@ test('positive record proof permits hookless retirement; force preserves cleanup
     mutate(meta); writeFileSync(file, JSON.stringify(meta));
     const r = fx.cli(['retire', name, '--json', ...(forced ? ['--force'] : [])]);
     assert.equal(r.status, 0, r.stdout + r.stderr); assert.equal(existsSync(home), false);
+    if (name === 'captured-no-spawn' || name === 'captured-empty-evidence') assert.doesNotMatch((JSON.parse(r.stdout).warnings || []).join('\n'), /captured home: no retire hook ran|not revoked/);
     if (name.startsWith('forced-malformed')) {
       assert.match(JSON.parse(r.stdout).warnings.join('\n'), /recorded capability hooks cannot be identified/);
       assert.doesNotMatch(JSON.parse(r.stdout).warnings.join('\n'), /earlier kernel spawned it/);

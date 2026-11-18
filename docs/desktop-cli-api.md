@@ -463,8 +463,10 @@ with the soul's merged payload. `oats <namespace> --help --json` answers
 captured home (`details: {home, captured: true}`), the selectors
 `--deployment`, `--resolution` and `--artifact-set` (`details.selector`), and
 an inherited `OATS_DEPLOYMENT` or `OATS_RESOLUTION` (`details.inherited`).
-`oats version` and `oats retire` still work. `oats status --json` names such
-homes in `problems[]`: `legacy-captured-home {code, instances, homes,
+`oats version` still answers. For captured homes, inspect and clean up external
+state first; without positive proof that no spawn hook ran, retirement needs
+`oats retire <instance> --force`. `oats status --json` names such homes in
+`problems[]`: `legacy-captured-home {code, instances, homes,
 message}` and `legacy-local-agents {code, dirs, instances, message}`.
 
 <a id="observation-reuse-feature-observe-max-age-oats-0311"></a>
