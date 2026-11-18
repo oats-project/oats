@@ -19,8 +19,9 @@ the oats repo and run as `oats experimental <cmd>`. They are deliberately not
 part of this package.
 
 - **`lib/canonical.mjs`** — canonical JSON (integers only in the core),
-  `t1:` content ids, did:key Ed25519 verification. Byte-compatible with awid
-  message signing.
+  `t1:` content ids, and consistency checks for duplicated signed fields.
+  Byte-compatible with awid message signing; capture preserves source signatures
+  verbatim and does not verify them.
 - **`lib/store.mjs`** — the store: `streams/<owner>~<source>/journal.jsonl`
   (owner-only append, torn-tail tolerant), `objects/sha256/` (immutable
   blobs), `index/` (derived, never replicated). Merge is prefix extension
@@ -497,3 +498,15 @@ Anything that binds nothing is an error,
 See [capture algorithms and recovery](docs/capture-service.md) for the shared
 append-only input assumption, reset/retry commands, bounded status inventory,
 resource accounting and v0.53.0 downgrade/re-upgrade contract.
+
+### Sealed aw logs
+
+A sealed client-log envelope (`v`, `key_id`, `tag`, `enc`, `ct`) contains
+ciphertext this recorder cannot read. Capture stops before that line and
+reports a separate `sealed` count, without counting it as a projection failure
+or advancing its cursor. Later lines wait too. Command capture sets the input
+aside with reason “sealed, not readable by this recorder”; status reports it
+under the set-aside count. Supply a readable source and explicitly retry the
+set-aside input, or ignore that source. Resetting a cursor cannot decrypt it.
+Readable lines that fail projection retain their existing consume-and-count
+behaviour.

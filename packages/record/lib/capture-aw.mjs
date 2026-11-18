@@ -52,7 +52,7 @@ export function listCommLogs(dir = defaultCommLogDir()) {
 // interior bad line is skipped and counted (`onSkipped`), never fatal.
 function* logEntries(fd, start, end, onSkipped, onConsumed) {
   for (const record of awLogLines(fileChunks(fd, { start, end, size: 65536 }), { start })) {
-    if (!record.final) onConsumed(record.end);
+    if (!record.final && !record.sealed) onConsumed(record.end);
     if (record.skipped) onSkipped();
     if (record.parsed) yield record;
   }
@@ -74,7 +74,10 @@ export function* awLogLines(chunks, { start = 0, maxBytes = Infinity, frontier =
       const text = line.toString("utf8");
       if (text.trim() === "") { yield record; continue; }
       const entry = JSON.parse(text);
-      yield { ...record, entry, parsed: true };
+      // Sealed aw client-log envelopes are ciphertext, not projection errors.
+      const sealed = entry !== null && typeof entry === "object" &&
+        ["v", "key_id", "tag", "enc", "ct"].every(key => Object.hasOwn(entry, key));
+      yield { ...record, entry, parsed: true, ...(sealed ? { sealed: true } : {}) };
     } catch {
       yield { ...record, skipped: !final };
     }
@@ -117,7 +120,7 @@ function captureLogFile(store, { streamId, path, project, knownIds, incremental 
       if (old.dev === version.dev && old.ino === version.ino && (version.size > old.size || sameVersion(old, version)) &&
           previous.bytes <= end && boundaryWitness(fd, previous.bytes) === previous.witness) start = previous.bytes;
     }
-    let entries = 0, skipped = 0, failed = 0, appended = 0, batch = [], batchBytes = 0, consumed = start, complete = false;
+    let entries = 0, skipped = 0, failed = 0, appended = 0, batch = [], batchBytes = 0, consumed = start, complete = false, sealed = 0;
     const checkpoint = () => {
       if (!incremental) return;
       const bytes = consumed;
@@ -141,6 +144,7 @@ function captureLogFile(store, { streamId, path, project, knownIds, incremental 
         flush(); consumed = scanned;
       }
       entries++;
+      if (record.sealed) { consumed = record.start; sealed++; break; }
       let turn;
       // Projection refusal consumes this complete entry just like a skipped
       // malformed line. Resetting source cursors is the explicit retry path;
@@ -154,9 +158,9 @@ function captureLogFile(store, { streamId, path, project, knownIds, incremental 
     }
     // Complete refused/malformed/blank lines are consumed; an unfinished final
     // fragment keeps its starting boundary so later growth can finish it.
-    complete = true;
+    complete = sealed === 0;
     flush();
-    return { entries, appended, skipped, failed };
+    return { entries, appended, skipped, failed, ...(sealed ? { sealed } : {}) };
   } finally { try { if (!captureContext(store)) state?.close(); } finally { closeSync(fd); } }
 }
 
