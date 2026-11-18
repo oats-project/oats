@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { v2Deployment } from './helpers/v2-deployment.mjs';
 import { createLifecycleBoundary } from '../packages/client/instance-lifecycle.mjs';
@@ -133,4 +133,45 @@ test('core forwards the admission readers and constants by reference without ext
   const core = await import('../lib/core.mjs'), leaf = await import('../lib/retire-admission.mjs');
   for (const key of ['identifiedHomeRecord', 'capturedHomeCapabilities', 'WORK_MODES', 'QUARANTINE_CLEANUP_VERSION', 'QUARANTINE_GIT_DEBT']) assert.equal(core[key], leaf[key], key);
   assert.equal(Object.hasOwn(core, 'retireCleanupAdmission'), false);
+});
+
+
+test('a Git-derived own-tree repository admits cleanup and is the retire hook context without rewriting the record', async t => {
+  const cap = 'test.repo-context';
+  const fx = v2Deployment({ t,
+    souls: { dev: { soul: { work: 'worktree', capabilities: { [cap]: { from: 'here' } } } } },
+    capabilities: { [cap]: { manifest: { hooks: { retire: 'retire.mjs' } }, files: {
+      'retire.mjs': `import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+const home = process.env.OATS_INSTANCE_HOME;
+writeFileSync(join(process.env.OATS_ROOT, 'hook-context.json'), JSON.stringify({ context: process.env.OATS_CONTEXT, homeThere: existsSync(home), record: JSON.parse(readFileSync(join(home, 'instance.json'), 'utf8')) }));
+console.log(JSON.stringify({ meta: { retired: true } }));
+`,
+    } } },
+  });
+  const name = 'derived-repo', { home } = await spawn(fx, name);
+  const file = join(home, 'instance.json'), meta = read(file);
+  assert.equal(meta.work, 'worktree');
+  assert.equal(meta.capabilityRuntime[0].id, cap);
+  assert.equal(meta.capabilityRuntime[0].hooks.retire, `node '${join(home, '.oats', 'modules', cap, 'retire.mjs')}'`);
+  delete meta.repo;
+  const bytes = JSON.stringify(meta);
+  writeFileSync(file, bytes);
+  const witness = join(fx.root, 'hook-context.json');
+  const planned = fx.cli(['retire', name, '--plan', '--json']);
+  assert.equal(planned.status, 0, planned.stdout + planned.stderr);
+  const plan = planned.json().result, repo = realpathSync(fx.member);
+  assert.equal(plan.facts.repo, null, 'the plan keeps the recorded repository fact');
+  assert.equal(plan.facts.ownWorktree, true);
+  assert.ok(plan.notes.includes(`the record names no repository for the work tree: the retire uses the one Git names for it, ${repo}, and does not write it into the record`));
+  assert.equal(readFileSync(file, 'utf8'), bytes, 'planning does not rewrite the record');
+  assert.equal(existsSync(witness), false, 'planning runs no hook');
+  const applied = fx.cli(['retire', name, '--plan-revision', plan.planRevision, '--idempotency-key', 'derived-repo-retire', '--json']);
+  assert.equal(applied.status, 0, applied.stdout + applied.stderr);
+  const ran = read(witness);
+  assert.equal(ran.context, repo, 'apply runs cleanup in the same repository admission accepted');
+  assert.equal(ran.homeThere, true, 'the hook runs before removal');
+  assert.deepEqual(ran.record, meta, 'apply does not rewrite the record before cleanup');
+  assert.equal(JSON.parse(applied.stdout).retired, name);
+  assert.equal(existsSync(home), false);
 });

@@ -135,11 +135,12 @@ test("a home whose record does not say which retire hooks to run: retire refuses
   // The home as a kernel that wrote nothing before its spawn hooks leaves it: the record
   // lib/materialize.mjs writes, and nothing beside it that names the hooks.
   rmSync(join(home, ".oats-rollback-incomplete.json"), { force: true });
+  assert.equal(Object.hasOwn(JSON.parse(readFileSync(join(home, "instance.json"), "utf8")), "capabilityRuntime"), false, "fixture premise: no hook bindings survive in the stub");
   const r = d.fx.cli(["retire", "dev-stub", "--json"]);
   assert.equal(r.status, 1, r.stderr + r.stdout);
   const error = r.json().error;
   assert.equal(error.code, "E_UNIDENTIFIED_INSTANCE_HOME", JSON.stringify(error));
-  assert.match(error.message, /records neither a repository nor its capabilities' hooks/);
+  assert.match(error.message, /does not record capabilityRuntime, or its recorded capability hooks cannot be identified/);
   assert.match(error.message, /oats retire dev-stub --force/);
   assert.equal(error.details.reached.phase, "before-effects");
   assert.equal(d.retireRuns("dev-stub").length, 0, "no retire hook ran");

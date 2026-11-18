@@ -11,3 +11,11 @@
   active after deleting the local credential. Captured homes need positive
   evidence that no capability's spawn hook ran to retire without force.
   Forced self-retirement keeps the force choice in its deferred completion.
+
+- Retire plans for a home that cannot be entered (mode 000), or an
+  interrupted spawn's stub without recorded hook bindings, now refuse with
+  the same cleanup admission as apply. This is the before-effects plan/apply
+  rule; a refusal returns no plan claiming that work is absent. The stub's
+  refusal now names missing `capabilityRuntime` and retains the `--force`
+  remedy. Homes lacking workspace modules alone are not newly refused:
+  the cleanup rule depends on their recorded hook bindings.

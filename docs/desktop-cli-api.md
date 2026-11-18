@@ -5672,10 +5672,13 @@ had begun.
 | `E_HOME_NOT_OWNED` | yes | yes |
 | `E_SESSION_UNKNOWN` | yes | yes |
 | `E_AMBIGUOUS_INSTANCE` | yes | yes |
-| `E_UNIDENTIFIED_INSTANCE_HOME` | yes | yes; hook admission in both plan and apply |
+| `E_UNIDENTIFIED_INSTANCE_HOME` | yes | yes |
 | `E_REMOTE_INCOMPATIBLE` | yes | yes |
 | `E_AMBIGUOUS` | yes | yes |
 | `E_SNAPSHOT_UNKNOWN` | yes | yes |
+
+`E_UNIDENTIFIED_INSTANCE_HOME` includes cleanup-hook admission in both retire
+plan and apply; the refusal returns no work facts when the home cannot be identified.
 
 `E_HOME_NOT_OWNED` is the answer of every command that takes a home's
 lifecycle claim (a start, a resume, a stop, a retire, an upgrade) when the
@@ -6596,8 +6599,8 @@ answered before any effect and carries [`details.holder`](#busy-holder)).
 Hook admission refuses both `--plan` (including Desktop Remove) and apply
 before anything is stopped, run or removed, children included. Causes include
 homes spawned before `capabilityRuntime`, recorded retire hooks without a
-context repository, and captured homes from before 0.26 without positive
-proof that no spawn hook ran. An ordinary home's explicit capability set with
+context repository (recorded or identified by Git for its own worktree),
+and captured homes from before 0.26 without positive proof that no spawn hook ran. An ordinary home's explicit capability set with
 no retire hooks proves no hook is owed. Captured proof also excludes any
 recorded hook intents, failures or lifecycle cleanup debt. The refusal names
 known capabilities, external identities/memberships at risk, and the remedy:

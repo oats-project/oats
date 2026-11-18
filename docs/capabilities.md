@@ -190,9 +190,10 @@ A self-contained package has an `oats.json`:
   `E_UNIDENTIFIED_INSTANCE_HOME` names the cause, the recorded capabilities
   that may have left state, and the manual-cleanup remedy. No current
   deployment configuration can prove what an old home registered.
-  A normal home needs its recorded `capabilityRuntime` and a context `repo`
-  to run its hooks; an explicit capability set with no retire hooks proves
-  that none is owed. A captured home from before 0.26 cannot run its hooks:
+  A normal home needs its recorded `capabilityRuntime` and a context repository
+  to run its hooks. The context is its recorded `repo`, or the repository Git
+  identifies for its own worktree when the record names none. An explicit
+  capability set with no retire hooks proves that none is owed. A captured home from before 0.26 cannot run its hooks:
   only an explicit empty captured `hookOrder`, with no capability metadata,
   hook intents, hook failures or lifecycle marked `*-cleanup-required`,
   proves that no capability's spawn hook ran. Missing
