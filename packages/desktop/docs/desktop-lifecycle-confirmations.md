@@ -374,8 +374,12 @@ from whether the plan observed `work/` (`facts.work.observed`):
   their cleanup, so nothing was removed. Details lists what may be left.
   Clean that up by hand, then remove it with `oats retire <instance> --force`
   in a terminal." The admitted instance name replaces `<instance>` when it
-  is safe in a CLI argument; otherwise the placeholder stays. Stop keeps
-  "OATS couldn't find or read what it needs in this instance's home folder,
+  is safe in a CLI argument; otherwise the placeholder stays. For a routed
+  home the command is `oats retire <instance> --server <server-id> --force`,
+  using the admitted instance name and server id. When the view lacks a safe
+  server id, both placeholders stay; a routed home never shows a local
+  command. This uses the existing [retire routing](../../../docs/servers.md#what-this-machine-keeps).
+  Stop keeps "OATS couldn't find or read what it needs in this instance's home folder,
   so nothing was done." The boundary and confirmation view both use the
   operation they own; no new envelope field is read. The kernel answers the
   code only before any effect, so it is in

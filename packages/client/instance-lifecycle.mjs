@@ -55,7 +55,7 @@ const kernelAnswered = envelope => envelope?.origin === 'kernel' && envelope.sch
  * about when that is not the instance acted on (`about`). */
 function failureReason(envelope, remote, terms, { code = envelope?.error?.code, features = null, plan = null, operation, instance } = {}) {
   const kernel = kernelAnswered(envelope), undescribed = kernel ? undescribedAnswer(code, terms) : null;
-  const reason = undescribed || lifecycleReason(code, terms, { operation, instance }), details = envelope?.error?.details;
+  const reason = undescribed || lifecycleReason(code, terms, { operation, instance, routed: !!remote, server: remote?.server }), details = envelope?.error?.details;
   const holder = kernel ? busyHolder(code, details, features) : null, about = holder ? busyAbout(plan, details?.home) : null;
   const busy = holder ? { holder, ...(about ? { about } : {}) } : {};
   const message = holder ? busyHeadline(holder) : reason.message;
