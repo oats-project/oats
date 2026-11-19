@@ -28,14 +28,15 @@ const IDENTITY_KEYS = ['team', 'alias', 'identity', 'primary', 'error'];
 const MESSAGE_KEYS = ['id', 'conversationId', 'threadTitle', 'direction', 'team', 'from', 'to', 'subject', 'body', 'truncated',
   'createdAt', 'readByAgent', 'encrypted', 'verification', 'priority'];
 const PARTY_KEYS = ['alias', 'address', 'identity'];
-const CODE = /^E_[A-Z0-9_]{1,64}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 const record = v => !!v && typeof v === 'object' && !Array.isArray(v) && Object.getPrototypeOf(v) === Object.prototype;
 const exact = (v, keys) => record(v) && Object.keys(v).length === keys.length && keys.every(k => Object.hasOwn(v, k));
-const text = (v, max, empty = false) => typeof v === 'string' && v.length <= max && (empty || v.length > 0);
-/** An opaque provider value (an id, a label, an alias): one line, bounded, never empty. */
-const opaque = (v, max = 512) => text(v, max) && !NOT_NOTE_TEXT.test(v);
+/** Text: the contract bounds a body (16 KiB), a page (200 messages) and the whole result (256 KiB, which the transport
+ * bounds again), never a subject, a title, an alias or an id: those are any string, and only their display is cut. */
+const text = (v, empty = false) => typeof v === 'string' && (empty || v.length > 0);
+/** An opaque provider value (an id, a label, an alias): any non-empty string, never parsed. */
+const opaque = v => text(v);
 const iso = v => typeof v === 'string' && v.length <= 40 && ISO.test(v) && !Number.isNaN(Date.parse(v));
 const utf8Bytes = s => {
   let n = 0;
@@ -44,15 +45,17 @@ const utf8Bytes = s => {
 };
 
 function party(p) {
-  return exact(p, PARTY_KEYS) && opaque(p.alias, 256) && (p.address === null || opaque(p.address, 512)) && opaque(p.identity);
+  return exact(p, PARTY_KEYS) && opaque(p.alias) && (p.address === null || opaque(p.address)) && opaque(p.identity);
 }
 function identity(i) {
-  return exact(i, IDENTITY_KEYS) && opaque(i.team, 256) && opaque(i.alias, 256) && opaque(i.identity) && typeof i.primary === 'boolean'
-    && (i.error === null || (typeof i.error === 'string' && CODE.test(i.error)));
+  return exact(i, IDENTITY_KEYS) && opaque(i.team) && opaque(i.alias) && opaque(i.identity) && typeof i.primary === 'boolean'
+    // An identity's error: the provider's word for it (oats.aweb: identity-missing, identity-unreadable, no-mail-read,
+    // threads-unreadable, conversation-unreadable, too-many-threads), opaque: a client words the ones it knows.
+    && (i.error === null || opaque(i.error));
 }
 function message(m) {
-  return exact(m, MESSAGE_KEYS) && opaque(m.id) && (m.conversationId === null || opaque(m.conversationId)) && text(m.threadTitle, 1024, true)
-    && DIRECTIONS.includes(m.direction) && opaque(m.team, 256) && party(m.from) && party(m.to) && text(m.subject, 1024, true)
+  return exact(m, MESSAGE_KEYS) && opaque(m.id) && (m.conversationId === null || opaque(m.conversationId)) && text(m.threadTitle, true)
+    && DIRECTIONS.includes(m.direction) && opaque(m.team) && party(m.from) && party(m.to) && text(m.subject, true)
     && typeof m.body === 'string' && utf8Bytes(m.body) <= MAIL_BODY_BYTES && typeof m.truncated === 'boolean' && iso(m.createdAt)
     && typeof m.readByAgent === 'boolean' && typeof m.encrypted === 'boolean' && VERIFICATIONS.includes(m.verification)
     && PRIORITIES.includes(m.priority);
@@ -67,11 +70,10 @@ export function mailAnswer(run) {
   if (!exact(r, ['documents', 'mail']) || !Array.isArray(r.documents)) return null;
   const d = r.mail;
   if (!exact(d, MAIL_KEYS) || d.mailApi !== 1 || d.acknowledges !== false || !iso(d.observedAt)) return null;
-  if (!Array.isArray(d.identities) || d.identities.length > 64 || !d.identities.every(identity)) return null;
+  if (!Array.isArray(d.identities) || !d.identities.every(identity)) return null;
   if (!Array.isArray(d.messages) || d.messages.length > MAIL_MAX_LIMIT || !d.messages.every(message)) return null;
-  if (!Array.isArray(d.conversations) || d.conversations.length > MAIL_MAX_LIMIT * 4
-    || !d.conversations.every(c => exact(c, ['id', 'partial']) && opaque(c.id) && (c.partial === null || c.partial === PARTIAL_OLDEST_FIRST))) return null;
-  if (typeof d.hasMore !== 'boolean' || !(d.nextCursor === null || opaque(d.nextCursor, 4096))) return null;
+  if (!Array.isArray(d.conversations) || !d.conversations.every(c => exact(c, ['id', 'partial']) && opaque(c.id) && (c.partial === null || c.partial === PARTIAL_OLDEST_FIRST))) return null;
+  if (typeof d.hasMore !== 'boolean' || !(d.nextCursor === null || opaque(d.nextCursor))) return null;
   // More to read needs the cursor that reads it; a cursor with nothing more is the provider's slip, and dropped.
   if (d.hasMore && d.nextCursor === null) return null;
   const keys = d.messages.map(messageKey);
@@ -89,10 +91,14 @@ export function mailAnswer(run) {
 /** A message's identity across pages: its team and its id (ids are the provider's, per identity). */
 export const messageKey = m => JSON.stringify([m.team, m.id]);
 
+/** Whether a cursor can travel as an operation argument (cli-adapter.mjs operationArgs: one line of at most 1024
+ * characters). One that can't is no way to the next page from this client: the sheet offers none. */
+export const cursorUsable = c => typeof c === 'string' && c.length > 0 && c.length <= 1024 && !/[\x00-\x1f\x7f]/.test(c);
+
 /** The arguments of one read: the first page (no cursor) or the page after `cursor`. Only declared arguments. */
 export function mailArgs({ cursor = null, limit = MAIL_PAGE } = {}) {
   const n = Number.isInteger(limit) ? Math.min(Math.max(limit, 1), MAIL_MAX_LIMIT) : MAIL_PAGE;
-  return { limit: String(n), ...(typeof cursor === 'string' && cursor ? { cursor } : {}) };
+  return { limit: String(n), ...(cursorUsable(cursor) ? { cursor } : {}) };
 }
 
 /** A body as display lines: line breaks kept (CRLF and lone CR as one), tabs as spaces, every other character a note
@@ -106,7 +112,13 @@ export function mailBodyLines(body) {
   return lines;
 }
 
-/** One line of provider text (a subject, an alias, a title): line breaks as spaces, the rest as mailBodyLines does. */
+/** How much of one line of provider text is shown: the rest is cut, with an ellipsis. */
+export const MAIL_LINE_SHOWN = 512;
+/** One line of provider text (a subject, an alias, a title, an identity's error) as shown: line breaks as spaces, the
+ * rest as mailBodyLines does, cut past MAIL_LINE_SHOWN characters (never inside a surrogate pair). */
 export function mailLine(value) {
-  return mailBodyLines(typeof value === 'string' ? value.replace(/[\r\n]+/g, ' ') : '').join(' ').trim();
+  const line = mailBodyLines(typeof value === 'string' ? value.replace(/[\r\n]+/g, ' ') : '').join(' ').trim();
+  if (line.length <= MAIL_LINE_SHOWN) return line;
+  const cut = /[\uD800-\uDBFF]/.test(line[MAIL_LINE_SHOWN - 1]) ? MAIL_LINE_SHOWN - 1 : MAIL_LINE_SHOWN;
+  return `${line.slice(0, cut)}…`;
 }

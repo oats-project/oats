@@ -27,13 +27,24 @@ import { iconElement } from './shell-icons.mjs';
 import { ageText } from './age-text.mjs';
 import { DESKTOP_NOUNS } from './desktop-terms.mjs';
 import { shownInstance } from './forget-dialog.mjs';
-import { MAIL_OPERATION, mailAnswer, mailArgs, mailBodyLines, mailLine, messageKey } from '../../client/mail-contract.mjs';
+import { MAIL_OPERATION, mailAnswer, mailArgs, mailBodyLines, mailLine, messageKey, cursorUsable } from '../../client/mail-contract.mjs';
 import { remoteInspectBlock, relayedFailure, serverLabel, shownLabel, codeLineNodes } from '../../client/remote-address.mjs';
 import { displayLine, DETAIL_WITHHELD } from '../../client/display-text.mjs';
 
 const agent = DESKTOP_NOUNS.instance;
 
 /** The sheet's sentences. The "too old" one is the contract's (contract-mail-read v2, "Who builds what"). */
+/** What an identity's error means (oats.aweb's slugs); any other is shown as given. An identity with an error may
+ * still have messages: the sheet shows them. */
+export const IDENTITY_ERRORS = Object.freeze({ __proto__: null,
+  'identity-missing': 'its identity is missing from the agent\'s home',
+  'identity-unreadable': 'its identity could not be read',
+  'no-mail-read': 'it may not read mail (no mail.read grant, or the server refused)',
+  'threads-unreadable': 'its list of conversations could not be read',
+  'conversation-unreadable': 'one conversation could not be read, and its messages are missing',
+  'too-many-threads': 'it has too many conversations to order in one read',
+});
+
 export const MAIL_WORDS = Object.freeze({
   title: name => `${name} · mail`,
   lead: `The ${agent}'s own mail. You can read it; the app never marks it read.`,
@@ -50,7 +61,8 @@ export const MAIL_WORDS = Object.freeze({
   remoteTooOld: server => `The OATS on ${server} is too old to read this ${agent}'s mail.`,
   unreadable: `The messaging layer answered mail this Desktop can't read. Update OATS Desktop, or this ${agent}'s messaging.`,
   failed: `Couldn't read the ${agent}'s mail.`,
-  identityFailed: (team, code) => `Mail from ${team} can't be read: ${code}`,
+  identityFailed: (team, code) => `Mail from ${team} can't be read: ${IDENTITY_ERRORS[code] ?? mailLine(code)}`,
+  noIdentity: `None of this ${agent}'s mail identities could be read.`,
   received: 'From', sent: 'To',
   encrypted: 'Encrypted', unread: `Not read by the ${agent} yet`, high: 'High priority',
   unverified: 'Unverified sender', signatureFailed: 'Signature failed',
@@ -117,6 +129,7 @@ export function mailFailure(error, row) {
   const detail = own && own !== DETAIL_WITHHELD ? own : null;
   if (code === 'E_OPERATION_UNKNOWN') return { lines: [MAIL_WORDS.tooOld[0], { code: MAIL_WORDS.tooOld[1] }, MAIL_WORDS.tooOld[2]], code, detail: null };
   if (code === 'E_OPERATION_UNAVAILABLE') return { lines: [MAIL_WORDS.noMessaging], code, detail: null };
+  if (code === 'E_MAIL_UNREADABLE') return { lines: [MAIL_WORDS.noIdentity], code, detail };
   if (code === 'E_AW_TOO_OLD') return { lines: [MAIL_WORDS.awTooOld(detail)], code, detail: null };
   // A host's refusal, relayed (remote-address.mjs): its headline is already the sentence, but for a host too old
   // for operations, which says so for mail.
@@ -145,7 +158,8 @@ export function mailMarks(m) {
   if (m.encrypted) marks.push({ text: MAIL_WORDS.encrypted, warn: false });
   if (m.direction === 'received' && !m.readByAgent) marks.push({ text: MAIL_WORDS.unread, warn: false });
   if (m.priority === 'high') marks.push({ text: MAIL_WORDS.high, warn: true });
-  if (m.verification === 'unverified') marks.push({ text: MAIL_WORDS.unverified, warn: true });
+  // Anything but a verified signature says so: unknown is not verified either.
+  if (m.verification === 'unverified' || m.verification === 'unknown') marks.push({ text: MAIL_WORDS.unverified, warn: true });
   if (m.verification === 'failed') marks.push({ text: MAIL_WORDS.signatureFailed, warn: true });
   return marks;
 }
@@ -166,12 +180,13 @@ let sheets = 0;
  */
 export function createMailSheet({ doc, request, generation = () => 0, subscribeWorkspace = () => () => {}, cli = () => null,
   heldBack = () => null, onIntent = () => {}, applyFocus = fn => fn(), now = () => Date.now() } = {}) {
-  let alive = true, overlay = null, ui = null, restore = null, life = 0, serial = 0, release = null;
+  let alive = true, overlay = null, ui = null, restore = null, life = 0, serial = 0, release = null, outside = null;
   const node = (tag, cls, value) => { const el = doc.createElement(tag); if (cls) el.className = cls; if (value !== undefined && value !== null) el.textContent = value; return el; };
   const unsubscribe = subscribeWorkspace(() => close({ focus: 'none' }));
 
   function close({ focus = 'opener' } = {}) {
     release?.(); release = null;
+    if (outside) { doc.removeEventListener('keydown', outside, true); outside = null; }
     if (!overlay) return;
     life++; serial++; overlay.remove(); overlay = null; ui = null;
     const back = restore; restore = null;
@@ -188,7 +203,7 @@ export function createMailSheet({ doc, request, generation = () => 0, subscribeW
     return stop;
   }
 
-  function problem(failure) {
+  function problem(failure, key) {
     const box = node('div', 'mail-sheet-problem'); box.dataset.mailProblem = failure.code || 'failed';
     const p = node('p');
     for (const part of failure.lines) p.append(typeof part === 'string' ? doc.createTextNode(part) : node('code', null, part.code));
@@ -196,7 +211,8 @@ export function createMailSheet({ doc, request, generation = () => 0, subscribeW
     if (failure.code || failure.detail) {
       const more = node('details'), line = node('pre');
       line.append(...(failure.code ? codeLineNodes(doc, { code: failure.code, detail: failure.detail }) : [doc.createTextNode(failure.detail)]));
-      more.append(node('summary', null, 'Details'), line); box.append(more);
+      const summary = node('summary', null, 'Details'); summary.dataset.focusKey = key;
+      more.append(summary, line); box.append(more);
     }
     return box;
   }
@@ -239,20 +255,43 @@ export function createMailSheet({ doc, request, generation = () => 0, subscribeW
     if (open) ui.open.add(li.dataset.mailKey); else ui.open.delete(li.dataset.mailKey);
   }
 
-  /** Paints the messages held, keeping the focused message focused (by key) across a repaint. */
+  /** Where focus is in the sheet, as a key that survives a repaint: a message's, a problem's Details, or a control's
+   * own (refresh, close, older); null when it is not in the sheet. */
+  function focusKey() {
+    const el = doc.activeElement;
+    if (!ui || !el || !ui.dialog.contains(el)) return null;
+    const message = el.closest?.('.mail-item')?.dataset.mailKey;
+    if (message) return `message:${message}`;
+    if (el.dataset?.focusKey) return el.dataset.focusKey;
+    return el.dataset?.mailAction ? `action:${el.dataset.mailAction}` : 'sheet';
+  }
+  /** After a repaint, focus that was in the sheet stays in it: on the same control when it is still there and enabled,
+   * else on the list's stop, else on Older mail, else on Close, which is always there. Never on <body>. */
+  function keepFocus(key) {
+    if (!ui || key === null || ui.dialog.contains(doc.activeElement)) return;
+    const usable = el => el && el.isConnected && !el.disabled && !el.hidden;
+    const same = key.startsWith('message:') ? toggles().find(b => `message:${b.closest('.mail-item')?.dataset.mailKey}` === key)
+      : key.startsWith('action:') ? ui.dialog.querySelector(`[data-mail-action="${key.slice(7)}"]`)
+      : [...ui.dialog.querySelectorAll('[data-focus-key]')].find(el => el.dataset.focusKey === key);
+    const next = [same, toggles().find(b => b.tabIndex === 0), ui.problems.querySelector('summary'), ui.more, ui.closeButton].find(usable);
+    next?.focus();
+  }
+
+  /** Paints the messages held, keeping focus where it was (by key) across a repaint. */
   function paint() {
     if (!ui) return;
     const { state } = ui;
+    const kept = focusKey();
     const focusedKey = doc.activeElement?.closest?.('.mail-item')?.dataset.mailKey ?? null;
     const stopKey = toggles().find(b => b.tabIndex === 0)?.closest('.mail-item')?.dataset.mailKey ?? null;
     ui.list.replaceChildren(); ui.problems.replaceChildren();
     ui.dialog.setAttribute('aria-busy', String(!!state.reading));
     ui.refresh.disabled = !!state.reading;
     ui.status.textContent = state.reading === 'first' ? MAIL_WORDS.reading : state.reading === 'older' ? MAIL_WORDS.readingOlder : '';
-    if (state.failure) ui.problems.append(problem(state.failure));
+    if (state.failure) ui.problems.append(problem(state.failure, 'problem:read'));
     // Identities that could not be read: said once each, the rest of the mail shown.
     for (const i of state.identities.filter(x => x.error)) {
-      const box = problem({ lines: [MAIL_WORDS.identityFailed(mailLine(i.team), i.error)], code: '', detail: null });
+      const box = problem({ lines: [MAIL_WORDS.identityFailed(mailLine(i.team), i.error)], code: '', detail: null }, `problem:identity:${i.team}`);
       box.dataset.mailIdentity = i.team; ui.problems.append(box);
     }
     const showTeam = new Set(state.identities.map(i => i.team)).size > 1;
@@ -264,13 +303,15 @@ export function createMailSheet({ doc, request, generation = () => 0, subscribeW
     }
     ui.list.hidden = !state.messages.length;
     ui.empty.hidden = !(state.loaded && !state.messages.length && !state.failure);
-    ui.more.hidden = !(state.loaded && state.nextCursor);
+    // A cursor that can't travel as an argument is no way to the next page from here: no button.
+    ui.more.hidden = !(state.loaded && cursorUsable(state.nextCursor));
     ui.more.disabled = !!state.reading;
     ui.more.textContent = state.reading === 'older' ? MAIL_WORDS.readingOlder : MAIL_WORDS.older;
     const find = key => key && toggles().find(b => b.closest('.mail-item')?.dataset.mailKey === key);
     const stop = roving(find(stopKey) || null);
     const back = find(focusedKey);
     if (back) back.focus(); else if (focusedKey && stop) stop.focus();
+    keepFocus(kept);
   }
 
   /** One read: the first page (`older: false`, which replaces what is held) or the next one. */
@@ -278,7 +319,7 @@ export function createMailSheet({ doc, request, generation = () => 0, subscribeW
     if (!ui) return;
     const { state, row, workspace } = ui, mounted = life, ticket = ++serial, gen = generation();
     const owns = () => alive && !!ui && life === mounted && ticket === serial && generation() === gen;
-    if (older && !state.nextCursor) return;
+    if (older && !cursorUsable(state.nextCursor)) return;
     const held = heldBack();
     // Nothing is sent while the CLI is held back or the row can't be routed from here: the reason is said instead.
     if (held) { state.failure = ownFailure({ message: held }); state.reading = null; paint(); return; }
@@ -308,8 +349,8 @@ export function createMailSheet({ doc, request, generation = () => 0, subscribeW
   }
 
   /** The sheet's tab stops, in order. */
-  const stops = () => [ui.refresh, ui.closeButton, ...toggles().filter(b => b.tabIndex === 0),
-    ...ui.problems.querySelectorAll('summary'), ...(ui.more.hidden || ui.more.disabled ? [] : [ui.more])].filter(el => el.isConnected);
+  const stops = () => [ui.refresh, ui.closeButton, ...ui.problems.querySelectorAll('summary'), ...toggles().filter(b => b.tabIndex === 0),
+    ...(ui.more.hidden ? [] : [ui.more])].filter(el => el.isConnected && !el.disabled);
 
   /**
    * Opens the sheet for `row` (a roster row: { instance, home, server? }) in `workspace` (its deployment id), and
@@ -370,6 +411,14 @@ export function createMailSheet({ doc, request, generation = () => 0, subscribeW
       next.focus();
     });
     doc.body.append(overlay);
+    // The sheet is modal: a key pressed while focus is somewhere else (a control that left under it) is still the
+    // sheet's for Esc, which closes it, and Tab, which brings focus back into it. Every other key goes where it goes.
+    outside = event => {
+      if (!owns() || event.isComposing || overlay.contains(event.target)) return;
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
+      else if (event.key === 'Tab') { event.preventDefault(); event.stopPropagation(); keepFocus('sheet'); }
+    };
+    doc.addEventListener('keydown', outside, true);
     release = joinPickerFocusReturn(doc, { opener: restore, dismiss: () => close({ focus: 'none' }) });
     closeButton.focus();
     void read();

@@ -36,15 +36,23 @@ primary one and each joined team's). One item per message:
   and bidirectional overrides show as U+FFFD.
 - What the provider says about it: **Encrypted** (an end-to-end encrypted body,
   decrypted with the agent's keys), **Not read by the agent yet**, **High
-  priority**, **Unverified sender** or **Signature failed**.
+  priority**, **Unverified sender** (unverified, or verification unknown) or **Signature failed**.
 - **Shortened**, when the body passed the 16 KiB bound and the provider cut it.
 - "Older part of a long conversation shown; the newest messages can't be read
   yet.", once per conversation, where the provider could read only its oldest
   messages (aw's `mail show` reads oldest first).
 - **Older mail**, at the end, while the provider has more: it reads the next
-  page.
+  page. A cursor that can't travel as an operation argument (one line, at most
+  1024 characters) offers none.
 
-↑ and ↓ (Home, End) move between messages, and Tab stays inside the sheet. **r**
+The contract bounds a body, a page and the whole answer, never a subject, a
+title, an alias or an id: the sheet accepts any of them and shows the first
+512 characters of each line, with an ellipsis.
+
+↑ and ↓ (Home, End) move between messages, and Tab stays inside the sheet. When
+a read replaces the control that had focus (an error's Details, Refresh while it
+reads), focus moves to the next one in the sheet, never out of it; and Esc closes
+the sheet wherever focus is. **r**
 or the refresh button reads the mail again, keeping what was expanded.
 
 ## Reading never acknowledges
@@ -74,7 +82,8 @@ computer's OATS can route operations there.
 | The agent's copy of its messaging layer predates the operation (`E_OPERATION_UNKNOWN`) | This agent's messaging is too old to show mail; stop it and upgrade it (`oats instance upgrade`), or start a new agent of its soul. |
 | No messaging layer in the agent's home (`E_OPERATION_UNAVAILABLE`) | This agent has no messaging layer, so it has no mail. |
 | This computer's aw is older than the provider needs (`E_AW_TOO_OLD`) | This computer's aw is too old to read mail: and the provider's own message, which names the version it needs. |
-| One identity can't be read (`identities[].error`) | Mail from *team* can't be read: and its code; the rest of the mail shows. |
+| One identity can't be read (`identities[].error`) | Mail from *team* can't be read: and what its error means (oats.aweb's `identity-missing`, `identity-unreadable`, `no-mail-read`, `threads-unreadable`, `conversation-unreadable`, `too-many-threads`; any other as given); the rest of the mail shows. |
+| No identity can be read (`E_MAIL_UNREADABLE`) | None of this agent's mail identities could be read. |
 | A server's OATS can't run operations (`E_REMOTE_INCOMPATIBLE`) | The OATS on *server* is too old to read this agent's mail. |
 | An answer outside the contract | The messaging layer answered mail this Desktop can't read. |
 | The CLI is newer than this Desktop was tested with | The held-back notice; nothing is sent. |

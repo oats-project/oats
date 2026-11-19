@@ -47,7 +47,7 @@ test('the contract answer decodes; a closed shape refuses anything else, an ackn
     ['more past 200 messages', d => { d.messages = Array.from({ length: 201 }, (_, i) => ({ ...d.messages[0], id: `x-${i}` })); }],
     ['more without a cursor', d => { d.nextCursor = null; }],
     ['a message twice', d => { d.messages[1] = { ...d.messages[1], id: 'm-3', team: 'default' }; }],
-    ['an identity error not a code', d => { d.identities[1].error = 'no grant'; }],
+    ['an identity error not a string', d => { d.identities[1].error = 3; }], ['an empty message id', d => { d.messages[0].id = ''; }],
     ['a partial outside the set', d => { d.conversations[1].partial = 'newest-only'; }],
   ]) assert.equal(mailAnswer(fixture(edit)), null, why);
   assert.equal(mailAnswer(fixture((d, run) => { run.operation = 'messaging:teams'; })), null, 'another operation');
@@ -103,10 +103,13 @@ test('one identity: no team label; nothing at all: the empty line; one identity 
   none.sheet.open(row, 'ws-1'); await settle();
   assert.equal(none.one('.mail-sheet-empty').hidden, false); assert.equal(none.one('.mail-sheet-empty').textContent, MAIL_WORDS.empty);
   assert.equal(none.one('.mail-list').hidden, true);
-  const part = rig(t, { answer: () => fixture(d => { d.identities[1].error = 'E_GRANT_SCOPE'; d.messages = [d.messages[0]]; }) });
+  const part = rig(t, { answer: () => fixture(d => { d.identities[1].error = 'no-mail-read'; d.messages = [d.messages[0]]; }) });
   part.sheet.open(row, 'ws-1'); await settle();
   const problem = part.one('[data-mail-identity="product"]');
-  assert.equal(problem.textContent, "Mail from product can't be read: E_GRANT_SCOPE");
+  assert.equal(problem.textContent, "Mail from product can't be read: it may not read mail (no mail.read grant, or the server refused)");
+  const other = rig(t, { answer: () => fixture(d => { d.identities[1].error = 'some-new-slug'; }) });
+  other.sheet.open(row, 'ws-1'); await settle();
+  assert.equal(other.one('[data-mail-identity="product"]').textContent, "Mail from product can't be read: some-new-slug", 'an unknown error as given');
   assert.equal(part.all('.mail-item').length, 1);
 });
 
@@ -128,6 +131,9 @@ test('too old, no messaging, an old aw, an unreadable answer: each says so, and 
   aw.sheet.open(row, 'ws-1'); await settle();
   assert.equal(aw.one('.mail-sheet-problem > p').textContent, "This computer's aw is too old to read mail: aw 1.36.53 or later is needed; found 1.36.40");
   assert.equal(aw.one('.mail-sheet-problem pre').textContent, 'E_AW_TOO_OLD');
+  const none2 = rig(t, { answer: () => Promise.reject(refusal('E_MAIL_UNREADABLE', 'no identity could be read')) });
+  none2.sheet.open(row, 'ws-1'); await settle();
+  assert.equal(none2.one('.mail-sheet-problem > p').textContent, MAIL_WORDS.noIdentity);
   const odd = rig(t, { answer: () => fixture(d => { d.acknowledges = true; }) });
   odd.sheet.open(row, 'ws-1'); await settle();
   assert.equal(odd.one('.mail-sheet-problem > p').textContent, MAIL_WORDS.unreadable);
@@ -263,4 +269,71 @@ test("Details: Messaging & Teams carries Mail, which hands the panel's agent to 
   assert.equal(mail.closest('[data-context-section="teams"]').hidden, true, 'no messaging provider: no section, no Mail');
   const none = make(undefined);
   assert.equal(none.hosts[0].tools.querySelector('button.context-panel-mail'), null);
+});
+
+test("a captured provider answer (oats.aweb's branch, a real read; texts replaced) decodes as the kernel relays it", () => {
+  const provider = JSON.parse(readFileSync(new URL('./fixtures/mail-read/provider-real-redacted.json', import.meta.url), 'utf8'));
+  assert.equal(provider.ok, true);
+  const decoded = mailAnswer({ operationsApi: 2, operation: MAIL_OPERATION, capability: 'oats.aweb', result: provider.result });
+  assert.ok(decoded, 'the real shape is the contract');
+  assert.ok(decoded.messages.some(m => m.direction === 'sent') && decoded.messages.some(m => m.direction === 'received'));
+});
+
+test('a captured kernel run (oats 0.69.20 running the provider branch; texts replaced) decodes whole', () => {
+  const envelope = JSON.parse(readFileSync(new URL('./fixtures/mail-read/kernel-real-redacted.json', import.meta.url), 'utf8'));
+  assert.equal(envelope.ok, true);
+  const decoded = mailAnswer(envelope.result);
+  assert.ok(decoded); assert.equal(decoded.messages.length, 1); assert.equal(decoded.identities[0].error, null);
+});
+
+test('the contract bounds bodies and pages, not metadata: a long subject, alias, title, id or cursor is shown cut, never refused', async t => {
+  const long = 'x'.repeat(5000);
+  const edit = d => { Object.assign(d.messages[0], { subject: long, threadTitle: long, id: long, conversationId: long }); d.messages[0].from.alias = `a${long}`;
+    d.identities[1].team = 'product'; d.identities.push({ team: `t${long}`, alias: 'dev-1', identity: long, primary: false, error: `e${long}` }); d.nextCursor = `c${long}`; };
+  assert.ok(mailAnswer(fixture(edit)), 'decodes');
+  const u = rig(t, { answer: () => fixture(edit) });
+  u.sheet.open(row, 'ws-1'); await settle();
+  const subject = u.one('.mail-item-subject').textContent;
+  assert.equal(subject.length, 513); assert.ok(subject.endsWith('…'));
+  assert.equal(u.one('.mail-item-lead').textContent.length, 513 + ' wrote:'.length);
+  assert.equal(u.all('.mail-item').length, 3, 'every other message still shown');
+  assert.equal(u.one('.mail-sheet-more').hidden, true, "a cursor that can't travel as an argument offers no Older mail");
+  assert.ok(u.one(`[data-mail-identity^="t"]`).textContent.length < 1200, "an identity's unknown error is shown cut");
+});
+
+test('verification: only verified carries no mark; unverified and unknown say Unverified sender; failed says Signature failed', async () => {
+  const { mailMarks } = await import('../renderer/mail-sheet.mjs');
+  const base = { ...FIXTURE.result.mail.messages[1] };
+  assert.deepEqual(['verified', 'unverified', 'unknown', 'failed'].map(verification => mailMarks({ ...base, verification }).map(m => m.text)),
+    [[], [MAIL_WORDS.unverified], [MAIL_WORDS.unverified], [MAIL_WORDS.signatureFailed]]);
+});
+
+test("refreshing from an error's Details keeps focus in the sheet, pending, failed again and read; Esc closes it from there", async t => {
+  const pending = [];
+  const u = rig(t, { answer: () => new Promise((resolve, reject) => pending.push({ resolve, reject })) });
+  u.sheet.open(row, 'ws-1');
+  pending[0].reject(refusal('E_NETWORK', 'network down')); await settle();
+  const summary = u.one('.mail-sheet-problem summary'); summary.focus();
+  u.key('Tab', { shiftKey: true }); u.key('Tab');
+  assert.equal(u.doc.activeElement, summary, 'Details is a tab stop');
+  u.key('r');
+  assert.ok(u.one('.mail-sheet').contains(u.doc.activeElement), 'pending: in the sheet');
+  assert.equal(u.doc.activeElement.dataset.mailAction, 'close', 'Refresh is disabled while reading: Close holds focus');
+  pending[1].reject(refusal('E_NETWORK', 'network down')); await settle();
+  assert.ok(u.one('.mail-sheet').contains(u.doc.activeElement), 'failed again: in the sheet');
+  u.one('.mail-sheet-problem summary').focus(); u.key('r');
+  pending[2].resolve(fixture()); await settle();
+  assert.ok(u.one('.mail-sheet').contains(u.doc.activeElement), 'read: in the sheet');
+  u.key('Escape'); assert.equal(u.sheet.isOpen(), false);
+});
+
+test('focus that left the sheet anyway: Esc still closes it, Tab brings focus back, other keys pass', async t => {
+  const u = rig(t);
+  u.sheet.open(row, 'ws-1'); await settle();
+  u.doc.activeElement.blur(); assert.equal(u.doc.activeElement, u.doc.body);
+  assert.equal(u.key('x', {}, u.doc.body).defaultPrevented, false);
+  u.key('Tab', {}, u.doc.body); assert.ok(u.one('.mail-sheet').contains(u.doc.activeElement));
+  u.doc.activeElement.blur();
+  assert.equal(u.key('Escape', {}, u.doc.body).defaultPrevented, true); assert.equal(u.sheet.isOpen(), false);
+  assert.equal(u.key('Escape', {}, u.doc.body).defaultPrevented, false, 'closed: the listener is gone');
 });
