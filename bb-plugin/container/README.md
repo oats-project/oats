@@ -36,7 +36,7 @@ To work in a container for a while:
 ```sh
 KEEP=1 NAME=bb-plugin-dev container/ci.sh unit
 # after an edit: copy the tree in again, then run what you need
-tar -c --exclude node_modules --exclude dist --exclude ./container/out . | docker exec -i -u node bb-plugin-dev tar -x -C /home/node/plugin
+tar -c --exclude ./node_modules --exclude ./dist --exclude ./container/out . | docker exec -i -u node bb-plugin-dev tar -x -C /home/node/plugin
 docker exec -u node -w /home/node/plugin bb-plugin-dev npx vitest run test/kernel
 docker exec -u node -w /home/node/plugin bb-plugin-dev bash container/live.sh
 docker rm -f bb-plugin-dev

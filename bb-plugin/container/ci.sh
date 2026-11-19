@@ -29,7 +29,7 @@ cleanup() {
 trap cleanup EXIT
 
 run() { docker exec -u node -e BB_TELEMETRY=false -w /home/node/plugin "$NAME" "$@"; }
-(cd "$PLUGIN" && tar -c --exclude node_modules --exclude dist --exclude ./container/out .) | docker exec -i -u node "$NAME" tar -x -C /home/node/plugin
+(cd "$PLUGIN" && tar -c --exclude ./node_modules --exclude ./dist --exclude ./container/out .) | docker exec -i -u node "$NAME" tar -x -C /home/node/plugin
 run mkdir -p /home/node/out
 run sh container/setup.sh
 case "$STAGE" in
