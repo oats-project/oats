@@ -712,7 +712,21 @@ body {
 .agent-fact-updated, .agent-fact-sparknote { font-size: 11.5px; }
 .agent-fact-spark { width: 48px; height: 14px; color: var(--accent); flex: none; }
 .agent-fact-link { min-width: 0; max-width: 100%; padding: 1px 6px; border: 1px solid var(--border); border-radius: 5px; text-align: start;
-  background: var(--surface); color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; white-space: normal; overflow-wrap: anywhere; }
+  background: var(--surface); color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+/* The whole address of a link, shown on the person's press before it opens: wrapped, never cut. It lies over the top of
+   the terminal while it shows (Esc or the link again closes it), so it never takes rows from the terminal or the
+   questions, however long the address and however short the pane. */
+.agent-facts { position: relative; }
+.agent-fact-url { position: absolute; top: 100%; left: 8px; right: 8px; z-index: 7; display: flex; flex-wrap: wrap; align-items: baseline;
+  gap: 4px 8px; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-modal); }
+.agent-fact-url[hidden] { display: none; }
+.agent-fact-url-text { order: 1; margin: 0; flex: 1 1 100%; min-width: 0; color: var(--fg); font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.agent-fact-url > .agent-fact-says { flex: 1 1 auto; }
+.agent-fact-url-open { flex: none; min-height: 22px; padding: 0 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface);
+  color: var(--fg); font: inherit; font-size: 12px; cursor: pointer; }
+.agent-fact-url-open:hover, .agent-fact-url-open:focus-visible { background: var(--sel); outline: none; }
+/* The budget's last step (agent-board.mjs fit): a short pane drops the zone's key hint. */
+.tab-pane.agent-tight .agent-q-hint { display: none; }
 .agent-fact-host { color: var(--accent); font-weight: 700; }
 .agent-fact-link:hover, .agent-fact-link:focus-visible { background: var(--sel); outline: none; }
 .agent-fact-hide, .agent-facts-fold, .agent-facts-unhide { display: inline-flex; align-items: center; justify-content: center; min-height: 22px;

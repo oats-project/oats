@@ -90,6 +90,19 @@ function sparkline(doc, values) {
   return svg;
 }
 
+/** The least the terminal keeps of its pane: TERMINAL_MIN_PX, or TERMINAL_MIN_SHARE of the pane when that is more. */
+export const TERMINAL_MIN_PX = 120, TERMINAL_MIN_SHARE = 0.4;
+/** The pane's height for the board (its room) and the height the board takes now, from the DOM. */
+const defaultMeasure = {
+  room: pane => pane.clientHeight > 0 ? pane.clientHeight - Math.max(TERMINAL_MIN_PX, pane.clientHeight * TERMINAL_MIN_SHARE) : null,
+  used: parts => parts.reduce((n, el) => n + (el.isConnected ? el.offsetHeight : 0), 0),
+};
+const observePane = (pane, fn) => {
+  if (typeof ResizeObserver !== 'function') return () => {};
+  const observer = new ResizeObserver(fn); observer.observe(pane);
+  return () => observer.disconnect();
+};
+
 /**
  * The board on one terminal tab's pane.
  * @param {object} o
@@ -105,10 +118,13 @@ function sparkline(doc, values) {
  * @param {() => boolean} [o.shown]  this tab's terminal is the one in view (the shell's test)
  * @param {ReturnType<typeof createHiddenFacts>} [o.hidden]
  * @param {() => number} [o.now]
+ * @param {object} [o.measure]  the pane's room and what the board takes (layout; DOM by default)
+ * @param {(pane: HTMLElement, fn: () => void) => () => void} [o.observe]  the pane's size (a ResizeObserver by default)
  */
-export function createAgentBoard({ pane, home, name, type, focusTerminal, openLink, checkClaims = null, shown: inView = () => true, hidden = createHiddenFacts(), now = () => Date.now() }) {
+export function createAgentBoard({ pane, home, name, type, focusTerminal, openLink, checkClaims = null, shown: inView = () => true, hidden = createHiddenFacts(), now = () => Date.now(),
+  measure = defaultMeasure, observe = observePane }) {
   const doc = pane.ownerDocument;
-  let board = null, detail = null, dialog = false, unfolded = false, index = 0, shownId = null, pending = null, alive = true, chooseSeq = 0;
+  let board = null, detail = null, dialog = false, unfolded = false, index = 0, shownId = null, pending = null, alive = true, chooseSeq = 0, painting = false, compact = false, openUrl = null;
   // A question's occurrence: its id and when it was asked. An id the agent clears and asks again (a new `since`) is a
   // new question, even when no poll saw it cleared in between.
   const occurrence = q => `${q.id}@${q.since}`;
@@ -120,8 +136,10 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   const factList = node(doc, 'ul', 'agent-fact-list');
   const fold = node(doc, 'button', 'agent-facts-fold'); fold.type = 'button';
   const factsNote = node(doc, 'span', 'agent-facts-note');
+  const urlBox = node(doc, 'div', 'agent-fact-url'); urlBox.setAttribute('role', 'group');
+  urlBox.addEventListener('keydown', ev => { if (ev.key === 'Escape' && plain(ev)) { ev.preventDefault(); ev.stopPropagation(); const key = openUrl; openUrl = null; paint(); facts.querySelector(`li[data-key="${key}"] .agent-fact-link`)?.focus(); } });
   const shown = node(doc, 'button', 'agent-facts-unhide'); shown.type = 'button';
-  facts.append(factList, fold, shown, factsNote);
+  facts.append(factList, fold, shown, factsNote, urlBox);
   fold.addEventListener('click', () => { unfolded = !unfolded; paint(); fold.focus(); });
   shown.addEventListener('click', () => { hidden.showAll(home); paint(); focusFacts(); });
 
@@ -189,7 +207,8 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   // Reaching the zone (Alt+T, a click) reads the claims again, so a dialog that opened since shows before a press. The
   // read paints through its owner (update) only when it is the latest; nothing here uses its answer.
   zone.addEventListener('focusin', ev => {
-    if (!checkClaims || zone.contains(ev.relatedTarget)) return;
+    // A repaint that moves the focus to an option's replacement is not an entry into the zone.
+    if (!checkClaims || painting || zone.contains(ev.relatedTarget)) return;
     Promise.resolve().then(checkClaims).catch(() => null);
   });
   zone.addEventListener('keydown', ev => {
@@ -256,13 +275,13 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     body.setAttribute('aria-label', `${said.label}: ${said.value}${said.unit ? ` ${said.unit}` : ''}, ${updatedText(f.at, now())}`);
     li.append(body);
     if (f.link) {
+      // The link's button names its host; a press shows the whole address, attributed, with Open in browser beside it,
+      // so the person reads exactly what opens before it opens. Only that Open press opens it.
       const link = node(doc, 'button', 'agent-fact-link'); link.type = 'button';
-      link.append(node(doc, 'span', 'agent-fact-says', `${name} says:`), ' ');
-      // The full URL as text, its host emphasised: what the person sees is what opens.
-      const at = f.link.href.indexOf(f.link.host);
-      link.append(f.link.href.slice(0, at), node(doc, 'strong', 'agent-fact-host', f.link.host), f.link.href.slice(at + f.link.host.length));
-      link.setAttribute('aria-label', `Open ${f.link.href} in the browser (${name} says)`);
-      link.addEventListener('click', () => openLink(f.link.href));
+      link.append(node(doc, 'span', 'agent-fact-says', `${name} says:`), ' ', node(doc, 'strong', 'agent-fact-host', f.link.host), '…');
+      link.setAttribute('aria-expanded', String(openUrl === f.key));
+      link.setAttribute('aria-label', `The address ${name} gives, on ${f.link.host}: show it`);
+      link.addEventListener('click', () => { openUrl = openUrl === f.key ? null : f.key; paint(); facts.querySelector(openUrl ? '.agent-fact-url-open' : `li[data-key="${f.key}"] .agent-fact-link`)?.focus(); });
       li.append(link);
     }
     const close = node(doc, 'button', 'agent-fact-hide'); close.type = 'button';
@@ -274,7 +293,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   }
 
   function paintFacts() {
-    const view = factsView(board?.facts ?? [], hidden.get(home), { unfolded });
+    const view = factsView(board?.facts ?? [], hidden.get(home), { unfolded, limit: compact ? 1 : FACTS_SHOWN });
     const notes = [board?.malformed ? BOARD_MALFORMED : board?.dropped > 0 ? boardDropped(board.dropped) : null,
       board?.facts.length && detail && detail.state !== 'ok' ? (DETAIL_NOTES[detail.state] ?? DETAIL_NOTES.malformed).history : null].filter(Boolean);
     setText(factsNote, notes.join(' ')); factsNote.hidden = !notes.length;
@@ -282,11 +301,27 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     if (!any) { facts.remove(); return; }
     const focusedKey = facts.contains(doc.activeElement) ? doc.activeElement.closest?.('li')?.dataset.key : null;
     factList.replaceChildren(...view.shown.map(paintFact));
-    fold.hidden = view.shown.length + view.folded.length <= FACTS_SHOWN;
+    fold.hidden = !view.folded.length && !(unfolded && view.shown.length > FACTS_SHOWN);
     setText(fold, unfolded ? 'Fold' : `${view.folded.length} more`);
     fold.setAttribute('aria-expanded', String(unfolded));
     shown.hidden = !view.hidden.length;
     setText(shown, `${view.hidden.length} hidden · show`);
+    // The whole address of the link the person asked to see, under the facts.
+    const url = view.shown.find(f => f.key === openUrl && f.link)?.link ?? null;
+    if (!url) openUrl = null;
+    urlBox.hidden = !url;
+    if (url) {
+      const lower = url.href.toLowerCase(), at = lower.indexOf(`//${url.host}`) + 2;
+      const text = node(doc, 'p', 'agent-fact-url-text'); text.dir = 'ltr';
+      // The host in bold where it is spelled in the address (any case); an address whose host the URL parser
+      // rewrote (percent-encoded) is shown as written, unemphasised: the text is always exactly what opens.
+      if (at >= 2) text.append(url.href.slice(0, at), node(doc, 'strong', 'agent-fact-host', url.href.slice(at, at + url.host.length)), url.href.slice(at + url.host.length));
+      else text.append(url.href);
+      const open = node(doc, 'button', 'agent-fact-url-open', 'Open in browser'); open.type = 'button';
+      open.addEventListener('click', () => openLink(url.href));
+      urlBox.setAttribute('aria-label', `The address ${name} gives`);
+      urlBox.replaceChildren(node(doc, 'span', 'agent-fact-says', `${name} says:`), text, open);
+    } else urlBox.replaceChildren();
     if (facts.parentNode !== pane) pane.prepend(facts);
     if (focusedKey) factList.querySelector(`:scope > li[data-key="${focusedKey}"] > .agent-fact-focus`)?.focus();
   }
@@ -306,7 +341,8 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     const count = questionCount(index, list.length);
     setText(tag, count ?? 'needs you');
     nav.hidden = list.length < 2;
-    dots.replaceChildren(...list.map((each, j) => {
+    const dotsKey = JSON.stringify([list.map(occurrence), index]);
+    if (dots.dataset.key !== dotsKey) dots.dataset.key = dotsKey, dots.replaceChildren(...list.map((each, j) => {
       const d = node(doc, 'button', `agent-q-dot${j === index ? ' on' : ''}`); d.type = 'button';
       d.setAttribute('aria-label', `Question ${j + 1}`); if (j === index) d.setAttribute('aria-current', 'true');
       d.addEventListener('click', () => { index = j; shownId = each.id; paint(); zone.focus(); });
@@ -316,7 +352,11 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     age.title = q.since;
     setText(text, q.withheld ? displayLine(q.question) : q.question);
     const hadFocus = zone.contains(doc.activeElement), focusedOption = hadFocus && doc.activeElement.dataset?.option;
-    options.replaceChildren(...q.options.map((o, i) => {
+    // The same question's options are kept, nodes and focus, across repaints: only whether each is usable changes.
+    const optionsKey = JSON.stringify([occurrence(q), q.options, q.optionsWithheld]);
+    if (options.dataset.key === optionsKey) {
+      for (const b of options.querySelectorAll('.agent-q-option')) b.disabled = dialog || answerText(q, Number(b.dataset.option)) === null;
+    } else options.dataset.key = optionsKey, options.replaceChildren(...q.options.map((o, i) => {
       const li = node(doc, 'li');
       const b = node(doc, 'button', 'agent-q-option'); b.type = 'button'; b.dataset.option = String(i);
       b.append(node(doc, 'span', 'agent-q-num', String(i + 1)), ' ', node(doc, 'span', 'agent-q-label', q.optionsWithheld[i] ? displayLine(o) : o));
@@ -329,7 +369,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     }));
     if (focusedOption) options.querySelector(`[data-option="${focusedOption}"]:not([disabled])`)?.focus();
     // A focused option that is gone or disabled now (a dialog opened) leaves the focus on the zone, never on the page.
-    if (hadFocus && !zone.contains(doc.activeElement)) zone.focus();
+    if (hadFocus && (!zone.contains(doc.activeElement) || doc.activeElement.disabled)) zone.focus();
     note.hidden = !dialog; setText(note, dialog ? DIALOG_NOTE : '');
     zone.setAttribute('aria-label', `${count ? `${count[0].toUpperCase()}${count.slice(1)}` : 'A question'} from ${name}`);
     // The context: read with the detail (inspect --board) once the view is open; attributed, plain text, line breaks kept.
@@ -341,7 +381,8 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
       const body = ctx ? node(doc, 'p', 'agent-q-context-text', ctx) : node(doc, 'p', 'agent-q-context-none', words);
       // A long context scrolls inside its open fold (at most 12 lines tall), so its text takes the focus for the keys.
       if (ctx) { body.dir = 'auto'; body.tabIndex = 0; }
-      contextBody.replaceChildren(lead, body);
+      const contextKey = JSON.stringify([q.id, detail?.state ?? null, ctx]);
+      if (contextBody.dataset.key !== contextKey) { contextBody.dataset.key = contextKey; contextBody.replaceChildren(lead, body); }
     }
     if (context.dataset.question !== q.id) { context.open = false; context.dataset.question = q.id; }
     if (zone.parentNode !== pane) pane.append(zone);
@@ -357,9 +398,29 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   }
   function paint() {
     if (!alive) return;
-    paintFacts(); paintZone(); place();
-    pane.classList.toggle('agent-view', facts.parentNode === pane || zone.parentNode === pane);
+    painting = true;
+    try {
+      paintFacts(); paintZone(); place();
+      pane.classList.toggle('agent-view', facts.parentNode === pane || zone.parentNode === pane);
+      fit();
+    } finally { painting = false; }
   }
+  /** The budget: the terminal keeps at least TERMINAL_MIN_PX (or TERMINAL_MIN_SHARE) of the pane. Where the board would
+   * take more, it gives way in steps: the facts show one (the rest behind "N more", which the person may still open),
+   * then the zone drops its key hint. Nothing scrolls; nothing is cut out of reach. On a repaint and a resize only. */
+  function fit() {
+    const room = measure.room(pane);
+    const level = n => {
+      const wasCompact = compact;
+      compact = n >= 1 && !unfolded;
+      pane.classList.toggle('agent-tight', n >= 2);
+      if (compact !== wasCompact) paintFacts();
+    };
+    level(0);
+    if (room === null) return;
+    for (let n = 1; n <= 2 && measure.used([facts, zone]) > room; n++) level(n);
+  }
+  const unobserve = observe(pane, () => { if (alive && !painting) { painting = true; try { fit(); } finally { painting = false; } } });
 
   function focusFacts() {
     const first = factList.querySelector(':scope > li > .agent-fact-focus');
@@ -406,6 +467,6 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     get shown() { return facts.isConnected || zone.isConnected; },
     /** The question shown now (its id), for tests and the detail read's moment. */
     get question() { return open()[index]?.id ?? null; },
-    dispose() { alive = false; facts.remove(); zone.remove(); pane.classList.remove('agent-view'); },
+    dispose() { alive = false; unobserve(); facts.remove(); zone.remove(); pane.classList.remove('agent-view', 'agent-tight'); },
   };
 }

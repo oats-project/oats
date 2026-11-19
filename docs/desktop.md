@@ -1065,14 +1065,18 @@ agent writes it with `oats instance board set` and `oats instance board ask`,
    `label · value unit`, with "updated 4 min ago". At most three show; **N
    more** unfolds the rest. While the view is open the Desktop reads each
    fact's history once, and a number that changed draws a small sparkline.
-   A link shows as its full address, wrapped where it is long, attributed
-   (`dev-a says: https://…`, the host in bold), and opens in your browser only when you press it. **×**, or
+   A link shows as the agent's, with its host (`dev-a says: github.com…`). A
+   press shows its whole address over the top of the terminal, wrapped, the
+   host in bold, with **Open in browser** beside it: only that press opens it,
+   in your browser. Esc closes it. **×**, or
    **u** on a focused fact, hides it on this computer only: the agent's board
    is unchanged, and the fact shows again when its value changes. **N hidden ·
    show** brings them all back.
 2. **The agent's own terminal**, unchanged: the same viewer, the same cell
    geometry, the only part that scrolls (a long context scrolls inside its
-   own open fold, at most twelve lines tall). It gives up exactly the rows the
+   own open fold, at most twelve lines tall). It keeps at least 120 px, or
+   40% of the pane: in a short pane the facts give way to one (the rest stay
+   behind **N more**), then the questions drop their key hint. It gives up exactly the rows the
    facts and the questions take.
 3. **Questions**: one at a time, under the terminal, so they sit right by the
    agent's input line at the bottom of its screen. "question 2 of 3", ‹ › and

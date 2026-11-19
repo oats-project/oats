@@ -145,11 +145,11 @@ export function sparkValues(history) {
 /** The facts the strip shows, in the kernel's order: `shown` (at most FACTS_SHOWN, unless `unfolded`), `folded`
  * (the rest of the visible ones) and `hidden` (those the person hid on this computer). `hiddenKeys`: a Map from a
  * fact's key to the value it was hidden at; a fact whose value has changed since shows again (the agent said
- * something new). */
-export function factsView(facts, hiddenKeys = new Map(), { unfolded = false } = {}) {
+ * something new). `limit`: fewer shown where the pane is short (the agent view's budget). */
+export function factsView(facts, hiddenKeys = new Map(), { unfolded = false, limit = FACTS_SHOWN } = {}) {
   const visible = [], hidden = [];
   for (const f of facts) (hiddenKeys.has(f.key) && hiddenKeys.get(f.key) === f.value ? hidden : visible).push(f);
-  const cut = unfolded ? visible.length : FACTS_SHOWN;
+  const cut = unfolded ? visible.length : limit;
   return { shown: visible.slice(0, cut), folded: visible.slice(cut), hidden };
 }
 

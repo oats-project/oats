@@ -68,16 +68,36 @@ test('agent view facts: a fact updates in place, and the sparkline comes from in
   assert.match(score.textContent, /0\.4400/); assert.match(score.textContent, /updated just now/);
 });
 
-test('agent view facts: a link is attributed text that opens in the system browser only on a press', t => {
+test('agent view facts: a link is attributed text; a press shows the whole address, and only Open opens it in the browser', t => {
   const f = fixture(t);
   f.view.update(boardData(board()));
   const link = f.facts().querySelector('li[data-key="pr"] .agent-fact-link');
   assert.equal(link.tagName, 'BUTTON'); assert.equal(f.facts().querySelector('a'), null, 'no anchor, no auto-link');
-  assert.match(link.textContent, /^dev-a says: https:\/\/github\.com\/oats-project\/oats\/pull\/1990$/);
+  assert.equal(link.textContent, 'dev-a says: github.com…');
   assert.equal(link.querySelector('.agent-fact-host').textContent, 'github.com');
-  assert.deepEqual(f.opened, []);
   link.click();
+  assert.deepEqual(f.opened, [], 'showing the address opens nothing');
+  const box = f.facts().querySelector('.agent-fact-url');
+  assert.equal(box.hidden, false); assert.equal(link.isConnected ? link.getAttribute('aria-expanded') : f.facts().querySelector('li[data-key="pr"] .agent-fact-link').getAttribute('aria-expanded'), 'true');
+  assert.equal(box.querySelector('.agent-fact-url-text').textContent, 'https://github.com/oats-project/oats/pull/1990');
+  assert.equal(box.querySelector('.agent-fact-host').textContent, 'github.com');
+  assert.equal(f.doc.activeElement, box.querySelector('.agent-fact-url-open'), 'the keyboard lands on Open');
+  box.querySelector('.agent-fact-url-open').click();
   assert.deepEqual(f.opened, ['https://github.com/oats-project/oats/pull/1990']);
+  f.key(f.doc.activeElement, 'Escape');
+  assert.equal(f.facts().querySelector('.agent-fact-url').hidden, true, 'Esc closes it');
+  assert.equal(f.doc.activeElement, f.facts().querySelector('li[data-key="pr"] .agent-fact-link'));
+});
+
+test('r2: the address shown is exactly the one opened, whatever the host\'s case or spelling', t => {
+  for (const href of ['https://EXAMPLE.COM/pr/1', 'https://Example.com:8443/a?b=1', 'https://%65xample.com/x']) {
+    const f = fixture(t);
+    f.view.update(boardData({ facts: [fact('pr', { link: href })], questions: [] }));
+    f.facts().querySelector('.agent-fact-link').click();
+    assert.equal(f.facts().querySelector('.agent-fact-url-text').textContent, href, href);
+    f.facts().querySelector('.agent-fact-url-open').click();
+    assert.deepEqual(f.opened, [href]);
+  }
 });
 
 test('agent view facts: × or u hides a fact on this computer only; it shows again when its value changes', t => {
@@ -497,4 +517,62 @@ test('r1: a withheld fact text is withheld in its accessible names too', t => {
   const names = [...li.querySelectorAll('[aria-label]')].map(el => el.getAttribute('aria-label')).join(' | ');
   assert.doesNotMatch(names, /hidden-value|abcdefgh1234/);
   assert.doesNotMatch(li.textContent, /hidden-value|abcdefgh1234/);
+});
+
+// Round 2's findings, each pinned.
+test('r2: entering the zone reads the claims once; the repaints that answer it start no further read', async t => {
+  const f = tabsFixture(t);
+  f.boards.sync(f.tab, f.row(), null, 'w');
+  const answerAll = async () => {
+    for (let round = 0; round < 20; round++) {
+      const open = f.pending.splice(0);
+      if (!open.length) return;
+      for (const p of open) p.resolve(p.path.startsWith('/api/instance-events') ? { status: 'available', data: { waitingClaims: [] } } : detail());
+      await f.flush(); await f.flush();
+    }
+  };
+  await answerAll();
+  const before = f.calls.length;
+  const terminal = f.pane.ownerDocument.createElement('textarea'); f.pane.querySelector('.term-wrap').append(terminal); terminal.focus();
+  assert.equal(f.boards.cycleFocus(f.tab), true); // Alt+T: an option takes the focus
+  await answerAll();
+  assert.equal(f.calls.length - before, 1, 'one read for one entry, every answer resolved');
+  assert.ok(f.pane.querySelector('.agent-questions').contains(f.pane.ownerDocument.activeElement), 'the focus stays in the zone');
+  f.boards.sync(f.tab, f.row(), null, 'w'); await answerAll();
+  assert.equal(f.calls.length - before, 1, 'an unchanged poll adds none');
+});
+
+test('r2: the same question\'s options keep their nodes and focus across repaints', t => {
+  const f = fixture(t);
+  f.view.update(boardData(board()));
+  const first = f.zone().querySelector('.agent-q-option'); first.focus();
+  f.view.update(boardData(board()), { claims: [] }); f.view.detail({ state: 'ok', facts: new Map(), questions: new Map() });
+  assert.equal(f.zone().querySelector('.agent-q-option'), first, 'the same node');
+  assert.equal(f.doc.activeElement, first);
+});
+
+test('r2: the budget keeps the terminal its room: the facts give way to one, then the zone drops its hint', t => {
+  const dom = new JSDOM('<!doctype html><body><div class="tab-pane active"><div class="term-wrap"></div></div></body>');
+  t.after(() => dom.window.close());
+  const pane = dom.window.document.querySelector('.tab-pane');
+  let room = 1000, perFact = 20, zoneHeight = 100;
+  const measure = { room: () => room,
+    used: () => pane.querySelectorAll('.agent-fact').length * perFact + (pane.classList.contains('agent-tight') ? zoneHeight - 20 : zoneHeight) };
+  let resized = null;
+  const view = createAgentBoard({ pane, home: '/h', name: 'dev-a', now: () => NOW, type: () => true, focusTerminal: () => {}, openLink: () => {},
+    hidden: createHiddenFacts(memoryStorage()), measure, observe: (_, fn) => { resized = fn; return () => {}; } });
+  view.update(boardData({ facts: ['a', 'b', 'c', 'd'].map(k => fact(k)), questions: [question('q1')] }));
+  assert.equal(pane.querySelectorAll('.agent-fact').length, 3, 'room enough: three facts');
+  room = 130; resized();
+  assert.equal(pane.querySelectorAll('.agent-fact').length, 1, 'a short pane: one fact');
+  assert.equal(pane.querySelector('.agent-facts-fold').textContent, '3 more', 'the rest stay one press away');
+  assert.equal(pane.classList.contains('agent-tight'), false);
+  room = 95; resized();
+  assert.equal(pane.classList.contains('agent-tight'), true, 'shorter still: the zone drops its hint');
+  room = 1000; resized();
+  assert.equal(pane.querySelectorAll('.agent-fact').length, 3, 'room again: back to three');
+  assert.equal(pane.classList.contains('agent-tight'), false);
+  room = 130; resized();
+  pane.querySelector('.agent-facts-fold').click();
+  assert.equal(pane.querySelectorAll('.agent-fact').length, 4, 'the person may still unfold them all');
 });
