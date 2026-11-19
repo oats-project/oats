@@ -13,7 +13,7 @@ import { deploymentUnavailableText } from '../../client/deployment-facts.mjs';
 import { DESKTOP_TERMS } from './desktop-terms.mjs';
 import { setupCSS, renderSetup, teamsBox } from './workspace-setup.mjs';
 import { createWorkspaceMachines, machinesCSS } from './workspace-machines.mjs';
-import { machinesGated } from '../../client/machine-contract.mjs';
+import { machinesGated, machineDeployment } from '../../client/machine-contract.mjs';
 import { computerTeamsCSS, createComputerTeams, teamsAnswer } from './computer-teams.mjs';
 import { catalogCSS, renderCapabilityList, deploymentNotes } from './workspace-catalog.mjs';
 import { soulsComposition } from '../../client/capability-rows.mjs';
@@ -237,7 +237,10 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
       // computer's observed deployment, and of another machine's deployment as the panel reports it (#482).
       rosterState: () => rosterState(),
       localObservation: () => ({ status: deployment?.status ?? 'pending', text: deployment && deployment.status !== 'observed' && deployment.status !== 'pending' ? deploymentUnavailableText(deployment, DESKTOP_TERMS) : '' }),
-      observed: m => deployments.find(d => d && d.local !== true && (d.machine === m.id || (m.label && d.machine === m.label))) ?? null });
+      // A registration's deployment by its identity (the roster group's server), never by its display label; none or
+      // two: no observation is borrowed (packages/client/machine-contract.mjs machineDeployment).
+      observed: m => machineDeployment(deployments, m.id),
+      observedKnown: () => deployments.some(d => d && d.local !== true && typeof d.server === 'string') });
     return machines.element;
   }
   /** Whether `name`'s panel is the view's own right now (Souls; Machines while its Map is shown). */

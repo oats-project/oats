@@ -138,9 +138,10 @@ this computer and the machines registered here; team-instance-lists-state-their-
 and a count is shown only after a settled good roster read of that machine's deployment: the roster read itself
 (pending, failed or stale: "—" with the reason as its title), this computer's observed deployment (pending: "reading…";
 unreadable: "not read", "—", and the observation's own words under the list), and another machine's deployment as
-the panel's #482 `deployments` reports it (read now: a count; kept from an earlier read: the count "as last read";
-not reached: "—" with the reason). A successful machine check is not a roster read. With no panel entry for the machine
-(an older panel), a machine its check reached counts. The
+the panel's #482 `deployments` reports it, bound by the registration's id (each remote entry's `server`,
+`machine-contract.mjs` `machineDeployment`; a display label is not unique, and none or two matches make no claim; read
+now: a count; kept from an earlier read: the count "as last read"; not reached: "—" with the reason). A successful machine check is not a roster read. With no panel entry for the machine
+(an older panel that names no machine's deployment), a machine its check reached counts. The
 section says so in its one line.
 
 A registered machine's row is one button: Enter (or a click) opens it under its row, with its name,

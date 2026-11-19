@@ -117,3 +117,12 @@ export function followBackfill({ read, use, owns = () => true, delay = BACKFILL_
   next();
   return () => { stopped = true; if (timer !== null) timers.clearTimeout(timer); timer = null; };
 }
+
+/** The one deployment of `deployments` (a panel's #482 `deployments`) that registration `serverId` runs, by its `server`
+ * (the roster group's registration id, panel-views.mjs deploymentEntry); null when none, or when more than one claims it:
+ * a machine list never borrows another machine's observation, and a display label is not an identity. */
+export function machineDeployment(deployments, serverId) {
+  if (typeof serverId !== 'string' || !serverId) return null;
+  const found = (Array.isArray(deployments) ? deployments : []).filter(d => d && d.local !== true && d.server === serverId);
+  return found.length === 1 ? found[0] : null;
+}

@@ -414,6 +414,23 @@ test('Machines: an unread deployment here makes no agent claim and says why; a g
   assert.equal(u.doc.querySelector('.workspace-discovery section.machines .machines-reason'), null);
 });
 
+// Review round 4: two registrations sharing a display label; each count comes from its own deployment (by server id),
+// whatever the panel's order: the unreached one makes no claim, the reached one counts.
+for (const order of ['as listed', 'reversed']) test(`Machines: registrations with the same label each read their own deployment (${order})`, async t => {
+  const gated = { ...CLI, features: [...CLI.features, 'servers-per-workspace', 'server-connect'] };
+  const reg = (id, sshHost, reachable) => ({ id, label: 'build', sshHost, workspace: '/srv/team', workspaceKey: 'github.com/acme/team', check: { reachable, version: reachable ? '0.69.20' : null, error: reachable ? null : 'ssh timed out' } });
+  const remote = [{ id: 'remote:east-team:1', machine: 'build', server: 'east-team', path: '/srv/team', local: false, reachable: true },
+    { id: 'remote:west-team:1', machine: 'build', server: 'west-team', path: '/srv/team', local: false, reachable: false, reason: 'west ssh timed out' }];
+  const deployments = [{ id: '/team', machine: 'This Mac', path: '/team', local: true, reachable: true }, ...(order === 'reversed' ? [...remote].reverse() : remote)];
+  const u = await setup(t, { cli: gated, servers: () => ({ servers: [reg('east-team', 'east', true), reg('west-team', 'west', false)], filtered: true, key: 'github.com/acme/team', deployment: '/team', aweb: false }) });
+  u.setLoaders(null, () => ({ ...u.panel(), deployments }));
+  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
+  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
+  const agents = id => u.doc.querySelector(`[data-machine="${id}"] .agents`);
+  assert.equal(agents('east-team').textContent, '0 agents');
+  assert.equal(agents('west-team').textContent, '—'); assert.equal(agents('west-team').title, 'west ssh timed out');
+});
+
 test('Machines: without servers-per-workspace and server-connect the list is this computer alone, with no Add a machine', async t => {
   const u = await setup(t);
   u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
