@@ -692,7 +692,9 @@ split into sections) is `packages/client/roster-sections.mjs`.
   shell's `collapsedInstances` (closed by hand) and every root of its section with children that is not in
   `expandedInstances` (opened by hand). A row drawn as a pending row or a held home is never drawn collapsed
   (`staysOpen`: its lifecycle takes the row, which has no room for the roll-up) and wears no mark, so the keys have
-  nothing to collapse there; a choice made by hand stays in the sets and applies again afterwards. Both are in memory per workspace and re-homed together
+  nothing to collapse there; a choice made by hand stays in the sets and applies again afterwards. A root with a pinned
+  row under it in its section (feature `instance-pin`, `rowPinned`) is not collapsed by default (`startsOpen`, over
+  `anyBelow`), so the pin is seen; a root closed by hand stays closed. Both sets are in memory per workspace and re-homed together
   (`rehomeWorkspaceState`), and `setRowOpen` is the one place both change (the row keys, the mark, `showInRoster`
   and `revealPendingSpawn`). Tests of other behaviour draw every root open (test/helpers/view-context.mjs
   `expandedInstances`); `roster-disclosure-shell.test.mjs` runs the default.

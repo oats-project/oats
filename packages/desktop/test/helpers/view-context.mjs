@@ -40,7 +40,7 @@ import { keptFailure } from "../../../client/deployment-facts.mjs";
 import { retiredTabs, tabShowsRow, otherIncarnation, terminalOrigin } from "../../renderer/retired-tabs.mjs";
 import { dotColor, paintDotColor } from "../../renderer/instance-dot.mjs";
 import { syncWaitingRow } from "../../renderer/waiting-row.mjs";
-import { sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen } from "../../renderer/roster-disclosure.mjs";
+import { sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen, anyBelow } from "../../renderer/roster-disclosure.mjs";
 
 /** Every root opened by hand: the roster as it was drawn before roots started collapsed. */
 class AllOpen extends Set { has() { return true; } }
@@ -70,7 +70,7 @@ export const viewContext = () => ({
   focusPlaces: { take: () => null, note() {}, forget() {}, rehome() {} }, focusArrival() {}, applyRosterPlace() {},
   backgroundPlacement, rosterSectionKey, sidebarSections, backgroundHeading, backgroundShown: () => false, backgroundOpen: new Set(),
   setBackgroundOpen() {},
-  sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen, expandedInstances: new AllOpen(),
+  sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen, anyBelow, expandedInstances: new AllOpen(),
   // The row menu's Move to background / out of it (instance-background-menu.mjs) offers nothing here: its gate is the
   // route's check, which a suite about other behaviour never answers. instance-background.test.mjs drives the shipped one.
   backgroundMenu: { items: () => [], handles: () => false, run: async () => {} },

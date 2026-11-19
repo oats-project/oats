@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import { collapseKey, instanceId } from "../../client/instance-tree.mjs";
-import { sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen } from "../renderer/roster-disclosure.mjs";
+import { sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen, anyBelow } from "../renderer/roster-disclosure.mjs";
 
 const at = (instance, parentInstance, extra = {}) => ({ instance, parentInstance, agent: "dev", home: `/w/${instance}`, agentsRoot: "/w", ...extra });
 const ROWS = [at("lead"), at("mid", "lead"), at("tip", "mid"), at("side", "lead"), at("solo")];
@@ -48,6 +48,29 @@ test("collapsedRows: a row its lifecycle takes (staysOpen) is never drawn collap
   const collapsed = keys("lead", "mid");
   assert.deepEqual(collapsedRows("A", { collapsed, expanded: new Set(), children, staysOpen }), new Set());
   assert.deepEqual(collapsed, keys("lead", "mid"), "the choices made by hand are kept for later");
+});
+
+test("collapsedRows: a top-level root with a pinned row under it starts open (startsOpen), and a hand collapse of it is kept (pinned instances, spec B)", () => {
+  const children = sectionChildren(ROWS, one);
+  const pinnedBelow = (...names) => rowId => anyBelow(children, rowId, row => names.map(id).includes(row));
+  // tip, two levels under lead, is pinned: lead is not drawn collapsed by default, so tip is seen.
+  assert.deepEqual(collapsedRows("A", { collapsed: new Set(), expanded: new Set(), children, startsOpen: pinnedBelow("tip") }), new Set());
+  // Closed by hand, it stays closed, pin or not; and opening by hand is unchanged.
+  assert.deepEqual(collapsedRows("A", { collapsed: keys("lead"), expanded: new Set(), children, startsOpen: pinnedBelow("tip") }), keys("lead"));
+  assert.deepEqual(collapsedRows("A", { collapsed: new Set(), expanded: keys("lead"), children, startsOpen: pinnedBelow("tip") }), new Set());
+  // Only a pin under it opens it: a root pinned itself, with nothing pinned below, is seen anyway and starts collapsed.
+  assert.deepEqual(collapsedRows("A", { collapsed: new Set(), expanded: new Set(), children, startsOpen: pinnedBelow("lead") }), keys("lead"));
+  // A lifecycle row still wins: staysOpen keeps a hand collapse from drawing.
+  assert.deepEqual(collapsedRows("A", { collapsed: keys("lead"), expanded: new Set(), children, startsOpen: pinnedBelow("tip"), staysOpen: rowId => rowId === id("lead") }), new Set());
+});
+
+test("anyBelow: a row under it at any depth, never the row itself, and a cycle ends", () => {
+  const children = sectionChildren(ROWS, one);
+  assert.equal(anyBelow(children, id("lead"), row => row === id("tip")), true, "two levels down");
+  assert.equal(anyBelow(children, id("lead"), row => row === id("lead")), false, "not the row itself");
+  assert.equal(anyBelow(children, id("solo"), () => true), false, "a row with nothing under it");
+  const cycle = new Map([["a", ["b"]], ["b", ["a"]]]);
+  assert.equal(anyBelow(cycle, "a", row => row === "c"), false);
 });
 
 test("collapsedRows: a root of the Background section starts collapsed too", () => {
