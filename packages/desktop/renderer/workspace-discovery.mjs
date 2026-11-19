@@ -188,7 +188,7 @@ function catalogSkeleton(doc, rows = 6) {
 export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machinesPanel = null, onTab, onIntent, onOpenCapability = null, onCatalog = null, onTeamMember = () => {}, onOpenTeam = null, onMachinesView = null, rosterState = () => 'ready' }) {
   const doc = header.ownerDocument;
   const node = (tag, text, cls) => { const el = doc.createElement(tag); if (text !== undefined) el.textContent = text; if (cls) el.className = cls; return el; };
-  let alive = true, serial = 0, rosterGen = null, workspace = null, deployment = null, instances = [], tab = 'souls';
+  let alive = true, serial = 0, rosterGen = null, workspace = null, deployment = null, instances = [], deployments = [], tab = 'souls';
   let catalog = null, loading = false, failure = '', rendered = null;
   let warningsDrawn = { signature: null, element: null }; // Sources' warnings list, kept while it is unchanged
   // `setupMember`: the Setup member whose panel is open under its row.
@@ -227,7 +227,12 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
     machines?.dispose(); machinesFor = key;
     const gen = workspaceGeneration();
     machines = createWorkspaceMachines(doc, { ctx, ws: workspace.id, owns: () => alive && workspaceGeneration() === gen,
-      instances: () => instances, cli: () => cliStatus(), gated: machinesGated(cliStatus()) });
+      instances: () => instances, cli: () => cliStatus(), gated: machinesGated(cliStatus()),
+      // This computer runs the workspace only when the view has a deployment here: not a remote view, and (where the
+      // panel lists the view's deployments, #482) one of them local. A remote-only view lists its other machines'
+      // deployments from the same panel facts instead (their machine, whether reached, your agents there).
+      here: () => !(workspace?.remote || workspace?.server) && (!deployments.length || deployments.some(d => d?.local === true)),
+      elsewhere: () => deployments.filter(d => d && d.local !== true) });
     return machines.element;
   }
   /** Whether `name`'s panel is the view's own right now (Souls; Machines while its Map is shown). */
@@ -430,17 +435,25 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
     // The status's observation stamp moves on every poll and nothing here paints it: it is left out.
     const stableStatus = s && { ...s, workspace: s.workspace && { ...s.workspace, observedAt: undefined } };
     // The souls' composition (souls-capabilities) and marks feed "Used by".
-    const key = JSON.stringify([tab, machinesView, setupMember, souls.map(a => [a?.team ?? null, a?.name, a?.key, a?.color, a?.agentsRoot, a?.capabilities]), soulsComposition(cliStatus()), query, unavailable, catalog, stableStatus, rosterState(), deployment?.withheld, deployment?.reachable, instances.map(i => [i.agent, i.agentsRoot, i.modules, i.running])]);
+    const key = JSON.stringify([tab, machinesView, deployments, setupMember, souls.map(a => [a?.team ?? null, a?.name, a?.key, a?.color, a?.agentsRoot, a?.capabilities]), soulsComposition(cliStatus()), query, unavailable, catalog, stableStatus, rosterState(), deployment?.withheld, deployment?.reachable, instances.map(i => [i.agent, i.agentsRoot, i.modules, i.running])]);
     if (key === rendered) return;
     rendered = key;
     const restoreNotes = captureFocusState(notes, { scroller: null }); // a warning's Details or Open capability (by its focus key)
+    // Machines' list is one long-lived section that keeps its own focus across its repaints (sync): it stays mounted,
+    // never detached under a focused row or control.
+    if (tab === 'machines' && !owned(tab)) {
+      notes.replaceChildren();
+      for (const child of [...capLead.children]) if (child !== about.button) child.remove();
+      const card = machinesCard();
+      if (!card) body.replaceChildren(); else if (card.parentElement !== body || body.childElementCount !== 1) body.replaceChildren(card);
+      machines?.sync();
+      return;
+    }
     // A capability row (its data-focus-key) or a Setup member's control is found again after the list is rebuilt.
     const restoreBody = tab === 'capabilities' || tab === 'sources' ? captureFocusState(body, { scroller: null }) : null;
     notes.replaceChildren(); body.replaceChildren();
     for (const child of [...capLead.children]) if (child !== about.button) child.remove(); // the "i" stays, focus and all
-    if (owned(tab)) return; // the view paints its own panels
-    if (tab === 'machines') { const card = machinesCard(); if (card) body.append(card); return; }
-    if (unavailable) return;
+    if (owned(tab) || unavailable) return; // the view paints its own panels
     for (const note of deploymentNotes(deployment)) notes.append(node('p', note.text, `catalog-note${note.warn ? ' warn' : ''}`));
     if (tab === 'teams') {
       // Team model v2: this computer's teams (the kernel's `oats teams`), editable here. A workspace
@@ -499,6 +512,7 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
     // Another workspace generation is another subject: the table is forgotten. Within one, it is never set to null.
     if (rosterGen !== gen) { catalog = null; failure = ''; setupMember = null; serial++; loading = false; loadState.reset(); about.close({ focus: 'none' }); }
     rosterGen = gen; workspace = panelAnswer.workspace || null; deployment = panelAnswer.deployment || null; souls = list(agents);
+    deployments = list(panelAnswer.deployments); // #482: the view's deployments (this computer's and other machines')
     instances = list(panelAnswer.instances);
     updateCounts(agents.length); render();
     computerTeams?.syncRoster(); // the Teams page's members follow the roster poll
