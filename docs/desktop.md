@@ -1126,19 +1126,21 @@ agent writes it with `oats instance board set` and `oats instance board ask`,
    `label · value unit`, with "updated 4 min ago". At most three show; **N
    more** unfolds the rest. While the view is open the Desktop reads each
    fact's history once, and a number that changed draws a small sparkline.
-   A link shows as its full address, attributed (`dev-a says: https://…`, the
-   host in bold), and opens in your browser only when you press it. **×**, or
+   A link shows as its full address, wrapped where it is long, attributed
+   (`dev-a says: https://…`, the host in bold), and opens in your browser only when you press it. **×**, or
    **u** on a focused fact, hides it on this computer only: the agent's board
    is unchanged, and the fact shows again when its value changes. **N hidden ·
    show** brings them all back.
 2. **The agent's own terminal**, unchanged: the same viewer, the same cell
-   geometry, the only part that scrolls. It gives up exactly the rows the
+   geometry, the only part that scrolls (a long context scrolls inside its
+   own open fold, at most twelve lines tall). It gives up exactly the rows the
    facts and the questions take.
 3. **Questions**: one at a time, under the terminal, so they sit right by the
    agent's input line at the bottom of its screen. "question 2 of 3", ‹ › and
    the dots turn them, and so do Tab / Shift+Tab and ← / → while the questions
    have the focus. A question with context has a **Context** fold, attributed
-   to the agent, as plain text. With no open question there is no zone.
+   to the agent, as plain text: **c** opens or closes it and moves the focus
+   there, where Tab moves into its text. With no open question there is no zone.
 
 **What the view says when it can't show something.** History and context come
 from a second read while the view is open (`oats inspect --home <h> --board`,
@@ -1156,7 +1158,9 @@ facts, then back; Esc goes back to the terminal. A number, or a press on an
 option, puts `<id>: <option>` on the agent's input line, for example
 `q2: Yes, one clean commit`, and gives the terminal the focus. Nothing is sent:
 your Enter in the terminal sends it, as if you had typed it, so you see what
-goes. No bare digit is ever typed. The card hides once you press Enter; the
+goes. No bare digit is ever typed, and nothing is typed into a terminal that
+isn't on screen: a press whose terminal left the screen while the Desktop read
+the agent's claims types nothing. The card hides once you press Enter; the
 agent removes the question for real once it has read the answer.
 
 **While a dialog is open** (the agent has a live `permission` or `question`

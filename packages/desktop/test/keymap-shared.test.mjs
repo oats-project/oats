@@ -130,6 +130,7 @@ test("the chords: every one, per platform, and what it does", () => {
     ["filter", "cmd+f", "alt+f", "ctrl+alt+f"],
     ["edit-instance", "cmd+alt+r", "alt+r", "ctrl+alt+r"],
     ["mail", "cmd+alt+m", "alt+m", "ctrl+alt+m"],
+    ["agent-view", "cmd+alt+t", "alt+t", "ctrl+alt+t"],
   ]);
   assert.ok(Object.isFrozen(CHORDS) && CHORDS.every((entry) => Object.isFrozen(entry)));
   assert.equal(new Set(CHORDS.map((entry) => entry.does)).size, CHORDS.length, "one chord per action");
@@ -299,6 +300,7 @@ test("the Desktop's chords are the module's entries, each read by one action", (
     zoom: "terminal.focusMode", "close-terminal": "tabs.close", "split-right": "split.vertical", "split-down": "split.horizontal",
     "group-previous": "split.focusPrevGroup", "group-next": "split.focusNextGroup", filter: "sidebar.focusFilter", "edit-instance": "instance.edit",
     mail: "instance.mail",
+    "agent-view": "agent.viewFocus",
   });
   for (const { id, does } of CHORDS_READ) {
     assert.ok(Object.hasOwn(DEFAULT_KEYMAP, id), id);

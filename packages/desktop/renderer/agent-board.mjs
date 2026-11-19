@@ -38,7 +38,7 @@ export const DETAIL_NOTES = Object.freeze({
 });
 export const BOARD_MALFORMED = "This agent's board could not be read.";
 export const boardDropped = n => `${n} ${n === 1 ? 'entry' : 'entries'} of this agent's board could not be shown.`;
-export const ZONE_HINT = '1–4 put the answer on the input line · Enter there sends it · Esc back to the terminal';
+export const ZONE_HINT = '1–4 put the answer on the input line · Enter there sends it · c the context · Esc back to the terminal';
 const HIDDEN_STORE = 'oats.desktop.board.hidden';
 
 /** The person's hidden facts on this computer, by agent home: `{ [home]: { [key]: value } }` in `storage`
@@ -100,14 +100,19 @@ function sparkline(doc, values) {
  *                                  false when nothing was written (no live lease)
  * @param {() => void} o.focusTerminal
  * @param {(url: string) => void} o.openLink   the system browser (the Desktop's external-open path)
- * @param {() => Promise<object[] | null>} [o.checkClaims]  the agent's live claims, read now (null: unknown)
+ * @param {() => Promise<{ latest: boolean }>} [o.checkClaims]  reads the agent's live claims now; `latest`: no newer read
+ *                                  began meanwhile (its claims then reached `update`)
+ * @param {() => boolean} [o.shown]  this tab's terminal is the one in view (the shell's test)
  * @param {ReturnType<typeof createHiddenFacts>} [o.hidden]
  * @param {() => number} [o.now]
  */
-export function createAgentBoard({ pane, home, name, type, focusTerminal, openLink, checkClaims = null, hidden = createHiddenFacts(), now = () => Date.now() }) {
+export function createAgentBoard({ pane, home, name, type, focusTerminal, openLink, checkClaims = null, shown: inView = () => true, hidden = createHiddenFacts(), now = () => Date.now() }) {
   const doc = pane.ownerDocument;
   let board = null, detail = null, dialog = false, unfolded = false, index = 0, shownId = null, pending = null, alive = true, chooseSeq = 0;
-  const answered = new Set(); // ids whose answer the person sent from this tab (hidden until the agent clears them)
+  // A question's occurrence: its id and when it was asked. An id the agent clears and asks again (a new `since`) is a
+  // new question, even when no poll saw it cleared in between.
+  const occurrence = q => `${q.id}@${q.since}`;
+  const answered = new Set(); // occurrences whose answer the person sent from this tab (hidden until the agent clears them)
 
   // ── the facts strip ──
   const facts = node(doc, 'section', 'agent-facts');
@@ -144,7 +149,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   prev.addEventListener('click', () => turn(-1));
   next.addEventListener('click', () => turn(1));
 
-  const open = () => (board?.questions ?? []).filter(q => !answered.has(q.id));
+  const open = () => (board?.questions ?? []).filter(q => !answered.has(occurrence(q)));
 
   function turn(step) {
     const list = open();
@@ -152,48 +157,54 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     index = turnQuestion(index, step, list.length); shownId = list[index].id;
     paint();
   }
-  /** Option `i` of the shown question: types `<id>: <option>` and gives the terminal the focus. */
-  /** Option `i` of the shown question: types `<id>: <option>` and gives the terminal the focus. With `checkClaims`,
-   * the agent's claims are read again first: a harness dialog that opened since the view last read them adds a
-   * claim the row may not show (its newest claim with a message can be the board's own), so the numbers are checked
-   * at the moment they would type. A newer press, a closed view or another question shown meanwhile types nothing. */
+  /** Option `i` of the shown question: types `<id>: <option>` and gives the terminal the focus. Never with the view off
+   * screen (`shown`: the shell's own test that this tab's terminal is the one in view), checked before the read, after
+   * it and at the write. With `checkClaims`, the agent's claims are read again first: a harness dialog that opened
+   * since the view last read them adds a claim the row may not show (its newest claim with a message can be the
+   * board's own). That read's answer counts only if it is the latest claims read (`latest`); an older one cancels the
+   * press, and its claims are never used. A failed latest read is unknown, not a dialog: the person's Enter, with the
+   * terminal in view, stays the consent. A newer press, a closed view or another question shown meanwhile types
+   * nothing. */
   async function choose(i) {
     const q = open()[index];
-    if (!q || dialog || answerText(q, i) === null) return false;
+    if (!q || dialog || answerText(q, i) === null || !inView()) return false;
     const seq = ++chooseSeq;
     if (checkClaims) {
       zone.setAttribute('aria-busy', 'true');
-      let fresh = null;
-      try { fresh = await checkClaims(); } catch { fresh = null; }
+      let read = null;
+      try { read = await checkClaims(); } catch { read = null; }
       if (seq === chooseSeq) zone.removeAttribute('aria-busy');
-      if (!alive || seq !== chooseSeq) return false;
-      // Unknown (the read failed) is not a dialog: the person's Enter, with the terminal in view, stays the consent.
-      if (Array.isArray(fresh) && dialogOpen(fresh) !== dialog) { dialog = dialogOpen(fresh); paint(); }
-      if (dialog || open()[index]?.id !== q.id) return false;
+      if (!alive || seq !== chooseSeq || read?.latest !== true) return false;
+      // The latest read has already set the claims (update); a dialog it saw is `dialog` now.
+      const still = open()[index];
+      if (dialog || !still || occurrence(still) !== occurrence(q) || !inView()) return false;
     }
     const answer = answerText(open()[index], i);
-    if (!answer || !type(answer)) return false;
-    pending = q.id;
+    if (!answer || !inView() || !type(answer)) return false;
+    pending = occurrence(q);
     focusTerminal();
     return true;
   }
 
-  // Reaching the zone (Alt+T, a click) reads the claims again, so a dialog that opened since shows before a press.
-  let engageSeq = 0;
+  // Reaching the zone (Alt+T, a click) reads the claims again, so a dialog that opened since shows before a press. The
+  // read paints through its owner (update) only when it is the latest; nothing here uses its answer.
   zone.addEventListener('focusin', ev => {
     if (!checkClaims || zone.contains(ev.relatedTarget)) return;
-    const seq = ++engageSeq;
-    Promise.resolve().then(checkClaims).then(fresh => {
-      if (alive && seq === engageSeq && Array.isArray(fresh) && dialogOpen(fresh) !== dialog) { dialog = dialogOpen(fresh); paint(); }
-    }, () => { /* unknown: the numbers stay as the last read left them */ });
+    Promise.resolve().then(checkClaims).catch(() => null);
   });
   zone.addEventListener('keydown', ev => {
     if (!plain(ev)) return;
     const list = open();
-    if (DIGIT.test(ev.key) && !ev.shiftKey) {
+    const inContext = context.contains(ev.target);
+    if (ev.key === 'c' && !context.hidden) {
+      // The context: c opens or closes the fold and gives its summary the focus, where Tab and Shift+Tab move as they
+      // always do (into and out of the fold); the carousel keys are the zone's elsewhere.
       ev.preventDefault();
-      choose(Number(ev.key) - 1);
-    } else if ((ev.key === 'Tab' || ev.key === 'ArrowRight' || ev.key === 'ArrowLeft') && list.length > 1) {
+      context.open = !context.open; contextSummary.focus();
+    } else if (DIGIT.test(ev.key) && !ev.shiftKey) {
+      ev.preventDefault();
+      void choose(Number(ev.key) - 1);
+    } else if (!inContext && (ev.key === 'Tab' || ev.key === 'ArrowRight' || ev.key === 'ArrowLeft') && list.length > 1) {
       ev.preventDefault();
       turn(ev.key === 'ArrowLeft' || (ev.key === 'Tab' && ev.shiftKey) ? -1 : 1);
       zone.focus();
@@ -240,7 +251,9 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     if (values) body.append(' ', sparkline(doc, values), node(doc, 'span', 'agent-fact-sparknote', ` last ${values.length}`));
     const when = node(doc, 'span', 'agent-fact-updated', updatedText(f.at, now())); when.title = f.at;
     body.append(' ', when);
-    body.setAttribute('aria-label', `${f.label}: ${f.value}${f.unit ? ` ${f.unit}` : ''}, ${updatedText(f.at, now())}`);
+    // The accessible name is the shown text: a withheld label or value is withheld here too.
+    const said = { label: displayLine(f.label), value: displayLine(f.value), unit: f.unit ? displayLine(f.unit) : null };
+    body.setAttribute('aria-label', `${said.label}: ${said.value}${said.unit ? ` ${said.unit}` : ''}, ${updatedText(f.at, now())}`);
     li.append(body);
     if (f.link) {
       const link = node(doc, 'button', 'agent-fact-link'); link.type = 'button';
@@ -254,7 +267,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     }
     const close = node(doc, 'button', 'agent-fact-hide'); close.type = 'button';
     close.append(iconElement(doc, 'close', { size: 12 }));
-    close.setAttribute('aria-label', `Hide ${f.label} on this computer`); close.title = 'Hide on this computer (u)';
+    close.setAttribute('aria-label', `Hide ${displayLine(f.label)} on this computer`); close.title = 'Hide on this computer (u)';
     close.addEventListener('click', () => hideFact(f.key));
     li.append(close);
     return li;
@@ -326,7 +339,8 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
       const lead = node(doc, 'p', 'agent-q-says', `${name} says:`);
       const words = !detail ? 'Reading the context…' : detail.state === 'ok' ? 'The agent sent no context for this question.' : DETAIL_NOTES[detail.state]?.context ?? DETAIL_NOTES.malformed.context;
       const body = ctx ? node(doc, 'p', 'agent-q-context-text', ctx) : node(doc, 'p', 'agent-q-context-none', words);
-      if (ctx) body.dir = 'auto';
+      // A long context scrolls inside its open fold (at most 12 lines tall), so its text takes the focus for the keys.
+      if (ctx) { body.dir = 'auto'; body.tabIndex = 0; }
       contextBody.replaceChildren(lead, body);
     }
     if (context.dataset.question !== q.id) { context.open = false; context.dataset.question = q.id; }
@@ -361,9 +375,9 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
       board = next;
       dialog = dialogOpen(claims);
       // An answer the agent has cleared is forgotten; one it has not stays hidden on this tab.
-      const ids = new Set((board?.questions ?? []).map(q => q.id));
-      for (const id of answered) if (!ids.has(id)) answered.delete(id);
-      if (pending && !ids.has(pending)) pending = null;
+      const live = new Set((board?.questions ?? []).map(occurrence));
+      for (const key of answered) if (!live.has(key)) answered.delete(key);
+      if (pending && !live.has(pending)) pending = null;
       paint();
     },
     /** The inspect --board read (instance-board.mjs boardDetailData): history and context. */

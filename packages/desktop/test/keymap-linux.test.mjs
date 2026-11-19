@@ -186,6 +186,7 @@ const ctrlAltPresses = [
   [linux("z", { altKey: true }), "terminal.focusMode"], [linux("r", { altKey: true }), "instance.edit"], [linux("f", { altKey: true }), "sidebar.focusFilter"],
   [linux("n", { altKey: true }), "app.newAgent"],
   [linux("m", { altKey: true }), "instance.mail"],
+  [linux("t", { altKey: true }), "agent.viewFocus"],
   ...Array.from({ length: 9 }, (_, i) => [linux(`${i + 1}`, { altKey: true }), `tabs.goto${i + 1}`]),
   // The Alt+Shift arrows: the tab moves.
   [ev("ArrowLeft", { altKey: true, shiftKey: true }), "tabs.prevPage"], [ev("ArrowRight", { altKey: true, shiftKey: true }), "tabs.nextPage"],
@@ -199,6 +200,7 @@ const FAMILY_PRESSES = {
     [ev("z", { altKey: true }), "terminal.focusMode"], [ev("r", { altKey: true }), "instance.edit"], [ev("f", { altKey: true }), "sidebar.focusFilter"],
     [ev("n", { altKey: true }), "app.newAgent"],
     [ev("m", { altKey: true }), "instance.mail"],
+    [ev("t", { altKey: true }), "agent.viewFocus"],
     ...Array.from({ length: 9 }, (_, i) => [ev(`${i + 1}`, { altKey: true }), `tabs.goto${i + 1}`]),
     [ev("ArrowLeft", { altKey: true }), "tabs.prevPage"], [ev("ArrowRight", { altKey: true }), "tabs.nextPage"],
     // The leader's ↑ / ↓, the Alt family's alone.
@@ -260,13 +262,15 @@ test("Linux/Windows inside a terminal: Ctrl+W/K/\\/P/B, F6, Ctrl+PgUp/PgDn and e
     assert.equal(handleKeydown(event, inTerm), false); assert.equal(event.defaultPrevented, false, `${name} is the program's`);
   };
   // In every family: the plain Ctrl+letters, F6, Ctrl+PgUp/PgDn, and the Alt keys of readline and the
-  // agents that no table holds (M-b and M-d, the word moves and kill; M-. the last argument; M-t transpose).
+  // agents that no table holds (M-b and M-d, the word moves and kill; M-. the last argument). M-t (transpose-words) is
+  // the agent view's in the Alt family (the lead's call for S2-D, 2026-11-19; Esc, then t still sends it), the program's
+  // in the other two (below).
   const everyFamily = () => [
     ...["w", "k", "\\", "p", "b", "n", "e", "o", "f", "i"].map(key => [`Ctrl+${key}`, linux(key)]),
     ["F6 (mc, htop, nano)", ev("F6")], ["Shift+F6", ev("F6", { shiftKey: true })],
     ["Ctrl+PgDn (vim, weechat)", linux("PageDown")], ["Ctrl+PgUp", linux("PageUp")],
     ["Alt+B (readline backward-word)", ev("b", { altKey: true })], ["Alt+D (readline kill-word)", ev("d", { altKey: true })],
-    ["Alt+. (readline yank-last-arg)", ev(".", { altKey: true })], ["Alt+T (readline transpose-words)", ev("t", { altKey: true })],
+    ["Alt+. (readline yank-last-arg)", ev(".", { altKey: true })],
   ];
   for (const family of CHORD_FAMILIES) {
     setChordFamily(family);
@@ -284,6 +288,7 @@ test("Linux/Windows inside a terminal: Ctrl+W/K/\\/P/B, F6, Ctrl+PgUp/PgDn and e
       ["Alt+1 (readline numeric argument)", ev("1", { altKey: true })], ["Alt+9", ev("9", { altKey: true })],
       ["Alt+O (ESC o; the leader before 0.67)", ev("o", { altKey: true })], ["Alt+K", ev("k", { altKey: true })],
       ["Alt+P (an agent's model picker)", ev("p", { altKey: true })], ["Alt+←", ev("ArrowLeft", { altKey: true })], ["Alt+→", ev("ArrowRight", { altKey: true })],
+      ["Alt+T (readline transpose-words)", ev("t", { altKey: true })],
       // #1491 B1: these families leave Alt+↑/↓ to the program (xterm.js sends them as Ctrl+↑/↓'s CSI 1;5 A/B).
       ["Alt+↑", ev("ArrowUp", { altKey: true })], ["Alt+↓", ev("ArrowDown", { altKey: true })],
     ]) reachesProgram(`${name}, ${family}`, event);

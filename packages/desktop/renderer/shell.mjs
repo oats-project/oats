@@ -2699,7 +2699,11 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
   madeId = made.id;
   // The agent view's two hooks (agent-board.mjs), read when used: its answer goes through this tab's own PTY lease, and
   // the person's Enter sends it from the terminal, which takes the focus.
-  Object.assign(tabs.get(made.id), { typeText: (text) => tab.type(text), focusTerminal: () => term.focus() });
+  // `inView`: this terminal is on screen now, in this window's current workspace (a visible split's group counts).
+  const record = tabs.get(made.id);
+  Object.assign(record, { typeText: (text) => tab.type(text), focusTerminal: () => term.focus(),
+    inView: () => tabLayerVisible && document.visibilityState !== "hidden" && !record.paneEl.hidden && record.paneEl.classList.contains("active")
+      && record.workspace === currentWorkspace() && tabs.get(made.id) === record });
   made.paneEl.append(wrap);
   tabBoards.place(tabs.get(made.id));
   term.open(wrap);

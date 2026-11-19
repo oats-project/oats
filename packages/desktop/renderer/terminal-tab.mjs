@@ -397,7 +397,8 @@ export function createTerminalTab({ desk, term, tmux, remote, serverLabel, wrap,
     type(text) {
       if (typeof text !== 'string' || !text || /[\x00-\x1f\x7f]/.test(text)) return false;
       const h = life.ptyId();
-      if (!ready || closed || ended || !h) return false;
+      // Never into a terminal off screen (contract D30: the answer is typed only where the person sees it).
+      if (!ready || closed || ended || !h || !isActive()) return false;
       const result = desk.termWrite(h, text);
       if (result?.ok === false) { banner(terminalFailure(result.code).message); return false; }
       return true;
