@@ -30,9 +30,9 @@ successor, with a link to its full text.
   child the Desktop and the TUI start, answers `oats status` and `oats
   workspace status` with the kernel's own read code kept loaded: warm code,
   not warm data, the same answers as the CLI, and the CLI as the fallback.
-- [Sandboxes](2026-11-19-sandboxes.md) (proposed): boundaries declared in
-  the workspace's `sandboxes:`, started by `oats sync` on the machines that list
-  them; the contracts both sides decide before it is built.
+- [Sandboxes](2026-11-19-sandboxes.md) (contracts decided, not built):
+  boundaries declared in the workspace's `sandboxes:`, started by `oats sync` on
+  the machines that list them.
 
 The Desktop's design brief for designers is in
 [packages/desktop/docs](../../packages/desktop/docs/design-brief.md).

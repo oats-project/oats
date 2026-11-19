@@ -4,7 +4,11 @@
 and C3b as written at 0849ef12, with Juan's side's four changes, which Pepe's side
 accepted: the registry setting (C3, C6), a keyed `seat` (C4), the receipt of the host's
 `remove-member` (C6) and the credential-mount probe (C8). The connector half of C9
-stays designed only. Nothing is built yet. A later change to a contract goes back to
+stays designed only. Nothing is built yet. **Revised after review round 1** (marked
+"(r1)" below): existing host homes, lifecycle calls made inside a sandbox, C4's
+per-act wire shapes and provider selection, shared team aliases, mount overlap, the
+first use's GitHub API route, managed server registrations, and the missing refusal
+codes. Those additions go back to both sides for their answer on what changed. A later change to a contract goes back to
 both sides (the lane map's "Contract changes" line). When this record and a reference
 page disagree after it is built, the reference page wins.
 
@@ -49,8 +53,9 @@ nothing. All of this is shown by a live rehearsal and by the tests pinned in eac
   broker and `oats host run` as one user, with its own OATS deployment at
   `/state/deploy`, reached from the host as an OATS server over SSH
   ([container.md](../container.md)).
-- Its egress proxy admits fixed base routes (aweb, registry, Secrets, Logs; a declared
-  subset since #1955) plus two optional external roles, `source` (`https://github.com`)
+- Its egress component has five base roles (aweb, registry, secrets, logs, signer), of
+  which a policy may declare a subset (#1955); teamctl's profile declares four of them
+  (all but signer). It adds two optional external roles, `source` (`https://github.com`)
   and `model` (`https://api.anthropic.com`). It does not take arbitrary origins
   ([egress README](../../container/agent/egress/README.md)). The Compose boundary probe
   takes a `namePrefix` and reports `--json` receipts (#1958).
@@ -131,8 +136,53 @@ operator's account, and never enter the container.
    instead of printing it.
 
 A controller key held by the same OS user as host-side agents can be read by those
-agents. So a deployment that lists a sandbox runs no host-side agents. A host-placed
-spawn there is refused with `E_SANDBOX_HOST_AGENT` (C10).
+agents. So a deployment that lists a sandbox runs no host-side agents (C10), and this
+holds for homes that existed before the sandbox was listed (r1):
+
+- A host-placed spawn there is refused with `E_SANDBOX_HOST_AGENT`.
+- Starting, restarting or resuming a host-placed home there is refused the same way,
+  by `oats session start` (with or without `--resume`) and by the resume sweep, which
+  records the home as `skipped` with that code.
+- A sandbox's start (by `oats sandbox start` or sync) is refused with
+  `E_SANDBOX_HOST_AGENT` while any host-placed home of the deployment is running or its
+  session cannot be read. Its remedy names each home: stop or retire it, or move that
+  work to another deployment under another OS user. OATS never stops, retires or moves
+  existing work itself.
+
+### Lifecycle calls made inside a sandbox (r1)
+
+Minting and removing identities need the host's keys, so in v1 the host is the only
+place a sandboxed instance is spawned from, and the host finishes every retire:
+
+- **Spawn inside the sandbox.** The in-sandbox deployment has no root for the team.
+  Its kernel accepts a spawn only when it carries a host-delivered seat (the routed
+  spawn's `identity.seat`, C4 and C6). Any other spawn there, by an agent or by hand,
+  is refused with `E_SANDBOX_PLACEMENT`, reason `spawn-from-host`, whose remedy is to
+  spawn from the host. A sandboxed agent that needs a helper asks for one; it cannot
+  start one.
+- **Retire inside the sandbox** (`oats retire --self`, or a retire run there by hand)
+  works as today: the home goes, and oats.aweb prints the `remove-member` command it
+  cannot run. The host completes it: each provider `status` and `start` (and so each
+  sync) reconciles the provider's seat ledger with the sandbox's instances, read
+  through the server route. A seat whose instance the sandbox no longer lists, and
+  whose seat directory is gone, is retired, and the host runs `remove-member` for it
+  as in C6. A seat still `minting` or `delivered` (below) is never treated as retired
+  by reconcile.
+- **Retire from the host** (`oats retire <name> --server sandbox-<name>`, or the
+  kernel routing a retire of a sandboxed instance) runs the remote retire, then the
+  provider's `release` act (C4) for that seat at once.
+- **The ledger** lives in the provider's state on the host,
+  `~/.oats/sandboxes/<sandbox>/seats.json`, one entry per seat: instance, alias,
+  certificate ID, team, state (`minting`, `delivered`, `active`, `released`,
+  `removal-uncertain`), and the receipt of each step. It outlives the remote home, and
+  is the only evidence `remove-member` acts on.
+- **Compensation.** If the mint succeeds but delivery fails, or the routed spawn is
+  refused before it took the seat, the provider removes the member at once (the
+  `release` act, reason `spawn-failed`) and deletes the delivered copy. If the routed
+  spawn's outcome is uncertain, the seat stays `delivered`; the next reconcile marks it
+  `active` if the sandbox lists the instance, and releases it if the sandbox reports
+  the spawn failed or the seat directory unused. Nothing is retried automatically after
+  an uncertain removal (C6).
 
 ### Credentials (v1)
 
@@ -144,6 +194,28 @@ through its own file setting (for example `settings.oats.okf.github-token-file`)
 the provider writes into the in-sandbox local file from the host's settings for that
 sandbox.
 
+**No other mount may expose them (r1).** A credential source is a regular file, read
+through its real path; a symlink is resolved, and one that leads to anything but a
+regular file is refused (`E_SANDBOX_CREDENTIAL`, reason `not-a-file`). The bind source
+is the resolved path. The provider derives a protected inventory and gives it to the
+boundary probe as its `protectedSources`: the host's team roots (`roots`), the seat
+staging directory, the provider's own state (`~/.oats/sandboxes`), the host
+deployment directory, every credential source of every sandbox this host lists, and
+every other sandbox's state, work and mirror directories. Its start refuses
+(`E_SANDBOX_MOUNT`, reason `overlap`, naming both paths) when a mount the teamctl file
+gives (`stateDir`, a work or mirror directory) equals, contains or lies inside a
+protected path, or when two sandboxes share any such directory.
+
+**The first use needs one more egress role (r1).** `source` admits
+`https://github.com` only. A knowledge proposer also calls `https://api.github.com`
+(OKF's own setup check requires both), and the egress component has no role for it.
+So the knowledge ingestors can read sources and write locally, but cannot open
+knowledge proposals, until the egress component gains a closed role for the GitHub
+API. That role is a contract change to the egress component (lane:juan), decided by
+both sides, and it is not part of this record. The live rehearsal proves the
+boundary with sources and the model; opening a proposal from the sandbox waits on
+that role.
+
 ### What sync does
 
 After its current steps (the lock, package souls, the automation snapshot), `oats sync`
@@ -154,7 +226,10 @@ reconciles each sandbox the local file lists:
 - running with the same inputs: nothing.
 
 A sandbox declared in the workspace but not listed locally is never started. A sandbox
-listed earlier and now delisted is stopped, never destroyed. `oats sync --plan` shows
+listed earlier and now delisted is stopped, never destroyed. The provider keeps the
+last declaration it started each sandbox with in its own state, so a sandbox whose
+workspace entry was removed together with its local listing is still stopped, from
+that record (r1). `oats sync --plan` shows
 these actions and performs none. A failed sandbox does not undo the lock. It is reported
 in `problems`, and sync exits nonzero.
 
@@ -169,7 +244,7 @@ job is disabled pending the registry decision. Once the release lane publishes i
 digest moves into the lock with the release. That is a lock format change, proposed
 then, not here.
 
-## The contracts to decide
+## The contracts (decided)
 
 ### C1. Workspace `sandboxes:` (new root key)
 
@@ -192,6 +267,9 @@ sandboxes:
   egress component supports. Adding another destination is a change to the egress
   component, not a free-form list.
 - `credentials` names match `^[a-z0-9][a-z0-9-]{0,62}$`, and are distinct.
+- `team` is required. `egress` and `credentials` are optional and default to `[]`;
+  `egress` entries are distinct. A duplicate in either list is refused (reason
+  `duplicate-entry`) (r1).
 - It is closed (`additionalProperties: false`), like every workspace block. An older
   kernel refuses the file with `E_WORKSPACE_SCHEMA` and its existing "upgrade OATS"
   hint, which is the error that tells existing deployments what to do.
@@ -221,6 +299,11 @@ code:
    have no soul-to-team mapping today, and a local `defaultTeam` already loses to a
    soul's `souls:` default. A local team may not reuse a sandboxed team's label or
    provider id (reason `sandboxed-team-local`).
+4. **A shared alias (r1):** two shared labels may today name one provider id. A
+   sandboxed team's provider id must be named by exactly one shared label; another
+   shared label with that id is refused (reason `sandboxed-team-alias`). Every check
+   above, and placement, compare provider ids, never labels alone, so two sandboxes
+   cannot name one team through two labels either (reason `sandbox-team-taken`).
 
 ### C3. `oats-local.yaml`: `sandboxes` and `credentials` (new root keys)
 
@@ -241,14 +324,17 @@ settings:
   oats.aweb: { registry: https://registry.example.org }   # the host-side mint (C6)
 ```
 
-- `sandboxes` lists names that the workspace declares. An unknown name is refused, and so
-  is a listed sandbox with no `host.name`.
+- `sandboxes` lists distinct names that the workspace declares. An unknown name is
+  refused (`E_WORKSPACE_SCHEMA`, reason `sandbox-unknown`), a duplicate likewise
+  (`duplicate-entry`), and so is a listed sandbox with no `host.name` (reason
+  `sandbox-host-name-required`) (r1).
 - `credentials` uses the kernel's existing `fromFile` form. A listed sandbox whose
   declared credential has no source here refuses its start, naming the credential.
 - The teamctl file holds infrastructure only (images, network, ports, state directory,
   limits). The provider refuses a file that sets a boundary field the workspace owns
   (`team.id`, `egress.external`, `aweb.federationOutbound`): boundaries are declared
-  once.
+  once. The refusal is `E_SANDBOX_DEPLOYMENT`, reason `boundary-field`, naming the
+  field (r1).
 - **A private registry.** oats.aweb refuses an ambient `AWID_REGISTRY_URL`
   (awebai/oats-aweb#284), so where the sandbox team's registry is private the setting
   is written twice: `settings.oats.aweb.registry` on the host deployment, for the mint
@@ -272,41 +358,76 @@ its own because a kernel reads it:
 
 ### C4. The kernel–provider hook: `sandbox`
 
-A new capability hook event, `sandbox`. Exactly one active capability may declare it; with
-none, any sandbox action is refused with `E_SANDBOX_PROVIDER`. The kernel runs the hook with
-`OATS_SANDBOX_ACT` set to `plan`, `start`, `stop`, `status` or `seat`, and one JSON request
-on stdin:
+A new capability hook event, `sandbox`.
+
+**Which capability provides it (r1).** Sandbox acts run at deployment level, with no
+soul. The candidates are the capabilities the workspace's `defaults` compose (the
+same resolution a spawn uses, without a soul's layer) whose manifest declares the
+`sandbox` hook. Exactly one must exist: none refuses any sandbox act with
+`E_SANDBOX_PROVIDER`, reason `none`; two or more, reason `ambiguous`, naming them. Its
+settings are its manifest defaults, then the workspace defaults, then the host's
+`settings.<capability>` in `oats-local.yaml`, merged as for a spawn.
+
+**The call.** The kernel runs the hook with `OATS_SANDBOX_ACT` set to `plan`, `start`,
+`stop`, `status`, `seat` or `release`, one JSON request on stdin, and reads one JSON
+answer on stdout. The kernel holds a per-sandbox lock around every act but `status`,
+so two acts on one sandbox never run at once (a second gets `E_LIFECYCLE_BUSY`). A
+hook that exits nonzero, times out or prints anything but one valid answer is read as
+`state: "unknown"` with problem `E_SANDBOX_PROVIDER`, reason `hook-failed`.
+
+**Every request** carries:
 
 ```json
 {"sandboxApi":1,"act":"start","sandbox":"ingest","host":"cloud-1",
  "team":{"label":"ingest-team","id":"ingest:example.org"},
  "egress":["model","source"],
  "credentials":[{"name":"sources-read","path":"/srv/…"}],
- "workspace":{"url":"…","commit":"…","lock":"<sha256>"},
- "planRevision":"…","idempotencyKey":"…"}
+ "workspace":{"url":"…","commit":"…","lock":"<sha256>"}}
 ```
 
-The hook prints one JSON answer on stdout:
+and by act:
+
+| Act | Extra request fields | Answer fields beyond the envelope |
+| --- | --- | --- |
+| `plan` | `target`: `start`, `stop`, `seat` or `release`; for `seat` and `release`, the `instance` fields below | `planRevision`, `actions: [{step, detail}]` |
+| `start`, `stop` | `planRevision`, `idempotencyKey` | `server` |
+| `status` | none | `server`, `seats: [{instance, alias, certificateId, state}]` |
+| `seat` | `planRevision`, `idempotencyKey`, `instance: {name, soul, resolution}` (the name and resolution revision of the routed spawn's remote preview) | `seat: {path, alias, certificateId, team}`, `spawnProvider: {capability, options: {<key>: <value>}}` |
+| `release` | `planRevision`, `idempotencyKey`, `instance: {name}`, `reason`: `retired`, `spawn-failed` or `reconcile` | `seat: {alias, certificateId, state}` |
+
+**The envelope** of every answer:
 
 ```json
-{"state":"ready|stopped|absent|failed|unknown","server":"sandbox-ingest",
- "receipts":[{"step":"render|probe|start|register|deploy","ok":true,"detail":"…"}],
- "problem":{"code":"…","message":"…","remedy":"…"}}
+{"sandboxApi":1,"act":"…","state":"ready|stopped|absent|failed|unknown|stale",
+ "receipts":[{"step":"render|probe|start|register|deploy|mint|deliver|remove","ok":true,"detail":"…"}],
+ "problem":{"code":"…","reason":"…","message":"…","remedy":"…"}}
 ```
 
-`plan` is read-only. `start` and `stop` carry the plan's revision and an idempotency key,
-on the pattern of `oats instance stop`: a stale plan gets `E_PLAN_STALE` with the fresh
-plan, and the same key replays its receipt. `seat` mints and delivers one instance's seat
-(the Identities section) and answers `{seat:"/state/seats/<instance>/.aw"}`. It too
-carries `planRevision` and `idempotencyKey`: a replay of the same key returns the same
-seat, or `unknown`, and never mints a second identity. A start whose outcome is
-uncertain reports `unknown`, never `ready`.
+- `plan` is read-only. Its `planRevision` binds the request's inputs and the
+  provider's own state for that sandbox (and, for `seat` and `release`, that
+  instance's ledger entry).
+- **The provider owns revisions and receipts.** It checks `planRevision` on every
+  act that carries one, and answers `state: "stale"` with a fresh plan in `plan`; the
+  kernel reports that as `E_PLAN_STALE` with the fresh plan, on the pattern of `oats
+  instance stop`. It keeps each `idempotencyKey`'s receipt in its state on the host,
+  and the same key replays that receipt and changes nothing.
+- `seat` mints and delivers one instance's seat (the Identities section). A replay of
+  its key returns the same seat, or `unknown`, and never mints a second identity. The
+  kernel passes `spawnProvider` to the routed spawn as `--provider <capability>
+  <key>=<value>`, one per option, so the kernel names no messaging provider (oats.aweb
+  answers `{capability: "oats.aweb", options: {"seat": "<path>"}}`, which sets its
+  `identity.seat`, C6).
+- An act whose outcome is uncertain answers `unknown`, never `ready`.
 
 ### C5. CLI and JSON
 
 - `oats sandbox status [--json]`, `oats sandbox start|stop <name> (--plan | --plan-revision <r> --idempotency-key <k>)`.
 - `oats sandbox status --json` answers
   `{sandboxApi:1, host, sandboxes:[{name, team:{label,id}, listedHere, state, server, egress, credentials:[{name, source:"present"|"missing"}], problems}]}`.
+- `oats sandbox start|stop <name> --plan --json` answers
+  `{sandboxApi:1, sandbox, act, planRevision, actions}`; the apply answers
+  `{sandboxApi:1, sandbox, act, state, server, receipts, problems}`, and a stale
+  revision refuses `E_PLAN_STALE` with the fresh plan in its detail (r1).
 - `oats sync --json` gains `sandboxes` with the same entries plus `action`
   (`build|start|stop|none`). The field is additive, so `syncApi` stays 1.
 - `oats status --json` gains `placement: {sandbox}` on each instance placed in one.
@@ -327,7 +448,8 @@ uncertain reports `unknown`, never `ready`.
   deletes the delivered copy after connecting. It is refused together with
   `identity.source` and with global mode.
 - Retire, for an identity minted by the host for a sandbox: the host runs
-  `aw id team remove-member` with the controller key it holds, and reports it. It
+  `aw id team remove-member` with the controller key it holds, and reports it, from
+  the routed retire or from reconcile (the Lifecycle section). It
   removes by the certificate ID that the mint recorded, never by alias. It removes only
   an identity listed in the provider's ledger of seats this host minted for this
   sandbox. An identity it did not mint is never removed, and is reported instead. It
@@ -359,7 +481,13 @@ existing Docker-context SSH relay from container.md.
   refused (`E_SERVER_INVALID`, reason `reserved-prefix`). A `sandbox-*` server that is
   already registered is reported by `oats sandbox status`, not refused: refusing
   configuration that was accepted before would itself be a contract change. The provider
-  will not adopt or overwrite it, and that sandbox's start refuses, naming the server.
+  will not adopt or overwrite it, and that sandbox's start refuses, naming the server
+  (`E_SANDBOX_SERVER`, reason `server-taken`).
+- **Its own registration is not "already registered" (r1).** The provider records
+  each registration it made in its state, with the `servers.json` entry it wrote. A
+  `sandbox-<name>` server that matches its record is its own: a restart reuses it, and
+  stop and delisting keep it and the record, so the sandbox can start again. Only a
+  `sandbox-*` server with no matching record counts as taken.
 
 ### C8. teamctl and the container (Juan's side)
 
@@ -398,6 +526,12 @@ egress routes only.
   provider ships, and checked against that provider's interface before it is released.
   This keeps Pepe's decision to design both now, and Juan's side's point that a public
   contract must not take its shape from one unshipped product.
+- **What S4's spec settles before it is built (r1),** each a contract both sides
+  agree: the `credential list` JSON and its hook request; how the broker capability
+  is selected, and the no-provider refusal; how the caller and its grant are bound
+  to a request; the scope of a request ID, and what a resubmission with the same ID
+  but a different payload gets; and how `result` is kept free of secret values.
+  Agreement on this outline is not permission for a provider to choose those.
 - **A change the provider forces is a contract decision.** If checking against the
   first real provider shows the agreed shape must change, the change goes back to both
   sides as a contract decision before it is built. It is never a doc edit.
@@ -408,7 +542,8 @@ egress routes only.
 
 - `sandbox-listed-not-running`;
 - `sandbox-credential-missing`;
-- `sandbox-host-agents`: a deployment that lists a sandbox has host-placed instances;
+- `sandbox-host-agents`: a deployment that lists a sandbox has host-placed instances,
+  running or stopped;
 - `sandbox-provider-missing`;
 - `sandbox-ssh-include-missing`.
 
@@ -419,6 +554,14 @@ The refusals belong to the acts:
 | Listed sandbox, no provider | `oats sandbox start`, sync's start, a routed spawn | `E_SANDBOX_PROVIDER` |
 | A declared credential with no source, or a missing source file | `oats sandbox start`, sync's start | `E_SANDBOX_CREDENTIAL` |
 | A host-placed spawn in a deployment that lists a sandbox | `oats spawn`, a schedule's spawn | `E_SANDBOX_HOST_AGENT` |
+| Starting, restarting or resuming a host-placed home there (r1) | `oats session start`, the resume sweep | `E_SANDBOX_HOST_AGENT` |
+| A running or unreadable host-placed home when a sandbox starts (r1) | `oats sandbox start`, sync's start | `E_SANDBOX_HOST_AGENT` |
+| A spawn inside a sandbox without a host-delivered seat (r1) | the in-sandbox `oats spawn` | `E_SANDBOX_PLACEMENT`, `spawn-from-host` |
+| A teamctl file that sets a boundary field (r1) | `oats sandbox start`, sync's start | `E_SANDBOX_DEPLOYMENT`, `boundary-field` |
+| A mount that overlaps a protected path, or shared sandbox state (r1) | `oats sandbox start`, sync's start | `E_SANDBOX_MOUNT`, `overlap` |
+| A credential source that is not a regular file (r1) | `oats sandbox start`, sync's start | `E_SANDBOX_CREDENTIAL`, `not-a-file` |
+| `sandbox-<name>` registered by someone else (r1) | `oats sandbox start`, sync's start | `E_SANDBOX_SERVER`, `server-taken` |
+| No provider, or more than one (r1) | every sandbox act | `E_SANDBOX_PROVIDER`, `none` or `ambiguous` |
 | A sandboxed soul on a host that does not list or run its sandbox | `oats spawn`, a schedule's spawn | `E_SANDBOX_NOT_HERE` |
 | A soul not placed in this sandbox, inside it | the in-sandbox `oats spawn` | `E_SANDBOX_PLACEMENT` |
 
@@ -466,6 +609,19 @@ modes against users, which cannot be proved from inside one account.
 | S2 Provider: `oats.aweb-sandbox`, C4's hook, C6, C7, the registry setting (C3) | the oats-aweb package | lane:setup, Juan's side reads first | after S1's contract is merged |
 | S3 Credential mount: C8 | `container/agent`, and teamctl on Juan's side | lane:juan | in parallel with S1 |
 | S4 Broker contracts: C9 docs, then the client verbs | `docs/`, `lib/` | lane:product | after the first real provider |
+
+Each spec carries its own reference pages and a release-notes entry of its own under
+`docs/release-notes/next/` (r1):
+
+- S1: [workspaces.md](../workspaces.md) (`sandboxes:`, the rollout rule, C2's
+  refusals), [configuration.md](../configuration.md) (C3, C3b), [capabilities.md](../capabilities.md)
+  and the manifest schema (the `sandbox` hook, C4), the CLI and JSON pages (C5),
+  [servers.md](../servers.md) (the reserved prefix, C7), and readiness (C10).
+- S2: the oats-aweb package's own docs (`identity.seat`, the registry setting,
+  `oats.aweb-sandbox`'s settings, the ledger and reconcile).
+- S3: [container.md](../container.md) (the credential fragment and its probe) and
+  teamctl's docs on Juan's side.
+- S4: the broker contracts' reference page, when it is built.
 
 The live rehearsal runs on a disposable Linux Docker host, never on a person's machine.
 It covers every "done means" line, with the egress and boundary probes' receipts kept as
