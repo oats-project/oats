@@ -47,7 +47,7 @@ export function remotePanel(group, at) {
   const described = name => { const soul = (group.souls || []).find((a) => a?.name === name); return typeof soul?.description === "string" ? soul.description : null; };
   // A Herdr-recorded row is unsupported whatever the host's probe said: it cannot open or start.
   const instances = (group.instances || []).map(({ runtime: _released, runtimeErrorOrigin: _sent, retire: sentRetire, sameWork: sentSameWork,
-    sameWorkKnown: _gate, ...i }) => {
+    sameWorkKnown: _gate, pinned: sentPinned, ...i }) => {
     const unsupported = unsupportedSession(i);
     const origin = unsupported ? unsupportedSessionOrigin(i) : group.probe.ok || (group.probe.error?.message && madeByKernel(group.probe.error)) ? "kernel" : "roster-read";
     const row = {
@@ -70,6 +70,8 @@ export function remotePanel(group, at) {
       // #1577: the host's same-work flag, true only (anything else reads unflagged). `sameWorkKnown` is this
       // client's own field (same-work.mjs), never a host's: whatever a host sent under it is dropped.
       ...(sentSameWork === true ? { sameWork: true } : {}),
+      // Feature instance-pin: the host's pin, true only (anything else reads unpinned; instance-tree.mjs rowPinned).
+      ...(sentPinned === true ? { pinned: true } : {}),
       ...(unsupported ? { running: null, runtimeState: "unsupported", runtimeError: unsupported } : {}),
     };
     return hasRuntimeError(row) && origin ? { ...row, runtimeErrorOrigin: origin } : row;

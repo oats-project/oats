@@ -139,6 +139,8 @@ export function panelInstance(i) {
     ...(instanceColor(i) !== null ? { color: instanceColor(i) } : {}),
     // Feature instance-background (#1579): exactly true, else absent (instance-tree.mjs backgroundPlacement).
     ...(i.background === true ? { background: true } : {}),
+    // Feature instance-pin: exactly true, else absent (instance-tree.mjs rowPinned).
+    ...(i.pinned === true ? { pinned: true } : {}),
     team: i.team || null,
   };
 }
