@@ -972,11 +972,20 @@ readiness still reports a problem.
    - **Then tell the person,** in your words: this is the workspace's
      team, on an aweb account created for it; they attach themselves to it
      later in the setup, with the setup expert.
-   - **`E_SETUP_NATIVE`:** most likely `N` is taken (the preview does not
-     contact aweb, and aw's output is withheld); the run may also have left
-     a root part-way. Never remove `D/.aw`, and never rerun blindly.
+   - **`E_SETUP_USERNAME_UNAVAILABLE`:** aw refused `N` (its message says
+     why: taken, reserved or its format), and nothing was created. On a
+     machine found-list, ask nothing: tell the person what it says, and
+     stop. Otherwise ask the person for another `N`, change the team line in
+     `D/<repo>/oats-workspace.yaml` to `default:<new N>.aweb.ai`, commit and
+     push it, run `oats sync --dir D`, then run the preview and the signup
+     again with the new `N`.
+   - **`E_SETUP_NATIVE`:** aw failed, and its output is withheld (the
+     preview does not contact aweb). An oats.aweb older than the one that
+     answers `E_SETUP_USERNAME_UNAVAILABLE` (awebai/oats-aweb#286) also
+     fails this way when `N` is taken. The run may also have left a root
+     part-way. Never remove `D/.aw`, and never rerun blindly.
      On a machine found-list, ask nothing: tell the person that the run
-     failed, most likely because `N` is taken, and stop.
+     failed, and that `N` may be taken, and stop.
      Otherwise look first, read-only: `test -e "D/.aw" && echo RETAINED`.
      - **Nothing printed:** aw kept nothing, so `N` is free to change. Ask
        the person for another `N`, change the team line in
