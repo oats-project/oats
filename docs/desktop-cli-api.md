@@ -1001,6 +1001,15 @@ oats operation run <layer>:<name> (--home <abs> | --soul <name> [--dir <d>]) [--
   at the top level; `stderr` appears when the provider wrote any.
 - A `view` operation must answer `{documents: [{label, kind?, path?, text?}]}`
   (`kind` `markdown` or `text`), else `E_OPERATION_RESULT`.
+- **A view may carry one structured field** beside `documents`, named after
+  its operation and versioned by its own `<name>Api` inside it: `mail` with
+  `mailApi` for `messaging:mail` ([Mail](#mail-mailapi-1)). `documents` stays
+  the plain rendering every view reader can show. The kernel validates
+  `documents` only, and relays the provider's `result` unchanged, locally and
+  through `--server`, where the routing keys (`server`, `route`) sit beside
+  `result`, never inside it. A client reads the structured field only at a
+  `<name>Api` it knows, and falls back to `documents` otherwise. A view carries
+  at most one such field.
 - Errors: `E_OPERATION_UNKNOWN`, `E_OPERATION_UNAVAILABLE` (empty slot, or a
   home operation without `--home`), `E_CAPABILITY_REQUIRES`, `E_BAD_ARGS`
   (undeclared or missing `--arg`), `E_CAPABILITY_BROKEN`. A provider's `ok:
@@ -1018,6 +1027,87 @@ advertises `operations`.
 **Knowledge operations.** Discover a knowledge provider's operations from
 inspect; the provider's version owns their result shapes. For oats.okf, see
 [knowledge.md](knowledge.md#knowledge-operations).
+
+**Messaging operations.** The messaging provider's operations are listed by
+inspect too. One of them is a contract of the messaging layer, whatever the
+provider: `messaging:mail`, below. oats.aweb is its first provider, from its
+first release after 1.43.0 (its `docs/mail-read.md` says how it reads).
+
+<a id="mail-mailapi-1"></a>
+#### Mail, `mailApi: 1`
+
+`messaging:mail` is a read-only view of an instance's own mail, received and
+sent, newest first. It **never acknowledges** or marks anything read on the
+agent's behalf. Any messaging provider may answer it.
+
+```text
+oats operation run messaging:mail --home <abs> [--arg limit=50] [--arg cursor=<nextCursor>] [--arg conversation=<id>] [--server <id>] --json
+```
+
+The provider's manifest declares it as `{"kind": "view", "command": "mail",
+"context": "home", "args": [limit, cursor, conversation]}`. Its `result`:
+
+```json
+{"documents":[{"label":"Mail","kind":"markdown","text":"…plain rendering…"}],
+ "mail":{"mailApi":1,"acknowledges":false,"observedAt":"2026-11-19T12:00:00.000Z",
+  "identities":[{"team":"oats","alias":"dev-1","identity":"<opaque>","primary":true,"error":null}],
+  "messages":[{"id":"<opaque>","conversationId":"<opaque>","threadTitle":"Review","direction":"received","team":"oats",
+    "from":{"alias":"lead","address":"oats.aweb.ai/lead","identity":"<opaque>"},
+    "to":{"alias":"dev-1","address":"oats.aweb.ai/dev-1","identity":"<opaque>"},
+    "subject":"Review","body":"…","truncated":false,"createdAt":"2026-11-19T11:58:00Z",
+    "readByAgent":false,"encrypted":false,"verification":"verified","priority":"normal"}],
+  "conversations":[{"id":"<opaque>","partial":null}],
+  "hasMore":false,"nextCursor":null}}
+```
+
+- **Opaque values.** `identity` ids, message and conversation ids, `team`
+  labels and `nextCursor` are the provider's strings: a client compares them
+  and passes them back, and never parses them. `from`/`to` `address` may be
+  `null`; `conversationId` is `null` for mail with no conversation.
+- **Order.** Newest first by `createdAt`, across every identity of the
+  instance (its primary one and each joined team's), merged, each message
+  labelled by the `team` it was read in. `direction` is decided by the
+  sender's identity against the identity read. `identities` lists each
+  identity read, the primary one first.
+- **Read state.** `readByAgent` reports the server's read state of a received
+  message, and is `true` for a sent one. The read never changes it, and
+  `acknowledges` is always `false`.
+- **Closed sets.** `direction`: `received` or `sent`. `verification`:
+  `verified`, `unverified`, `failed` or `unknown`. `priority`: `normal`,
+  `high` or `unknown`. `partial`: `null` or `oldest-first-only`. A client
+  shows any other value as unknown.
+- **Bounds.** Each `body` is at most 16 KiB of UTF-8, cut at a character
+  boundary, with `truncated: true`. The whole `result` is at most 256 KiB;
+  past it the answer stops early, with `hasMore: true` and a `nextCursor`.
+  `limit` is 1 to 200, default 50 (`E_BAD_ARGS` otherwise).
+- **Paging.** `nextCursor`, passed back as `--arg cursor=…`, gives the next
+  messages in the same order, with no overlap. `--arg conversation=<id>`
+  reads one conversation, newest first; its cursor is valid only with the same
+  conversation.
+- **Partial conversations.** Where the provider can read only the oldest part
+  of a long conversation, the conversation is listed in `conversations` with
+  `partial: "oldest-first-only"`, and its newest messages are missing, never
+  shown as the latest. A client says "older part of a long conversation
+  shown; the newest messages can't be read yet".
+- **Untrusted text.** `subject`, `threadTitle` and `body` are the sender's
+  plain text: show them as text, attributed to their sender, never as markup.
+- **Encrypted mail.** End-to-end encrypted bodies are decrypted with the
+  agent's keys, and shown to whoever can run `oats operation run` on that
+  machine (routed reads included): the access that attaching to the agent's
+  terminal already gives, no wider. `encrypted: true` marks them.
+- **Errors.** Per identity, in `identities[].error` (a provider's code, such as
+  a grant without mail read): an identity with an error may still have
+  messages shown. The operation fails whole only when no identity can be
+  read.
+- **Cost.** Each read calls the messaging service several times. Read on
+  demand (opening a view, a manual refresh), never on a status poll.
+- **Older sides.** A home whose provider copy predates the operation answers
+  `E_OPERATION_UNKNOWN` (inspect doesn't list `mail`): the home gets it from
+  `oats instance upgrade` or a new spawn. A home with no messaging slot
+  answers `E_OPERATION_UNAVAILABLE`, and a remote host without `operations`
+  `E_REMOTE_INCOMPATIBLE`. A provider's own refusals are relayed with their
+  code, such as oats.aweb's `E_AW_TOO_OLD` for an aw too old to read mail
+  without acknowledging it.
 
 <a id="workspace-model-workspaceapi-2"></a>
 ## Workspace
