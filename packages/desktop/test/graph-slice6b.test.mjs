@@ -11,6 +11,7 @@ import { instanceGraph } from "../../client/instance-graph.mjs";
 import { DESKTOP_TERMS } from "../renderer/desktop-terms.mjs";
 import { registerAction } from "../renderer/keybindings.mjs";
 import { instanceId } from "../../client/instance-tree.mjs";
+import { requestDeploymentTab } from "../renderer/deployment-tabs.mjs";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const DEPLOYMENTS = [
@@ -43,6 +44,7 @@ function fixture(t, { rows = [], phase = "ready", deployments = DEPLOYMENTS, not
   const nodes = () => [...el.querySelectorAll("[data-graph-node]")];
   const nodeOf = (name) => nodes().find((n) => n.getAttribute("aria-label").startsWith(`${name},`));
   return {
+    switchWorkspace() { ws.gen++; for (const fn of ws.listeners) fn(); },
     retried: () => state.retried === true,
     dom, doc, el, graph, opened, details, souls, registered, nodes, nodeOf,
     set(next) { state = { ...state, ...next }; for (const fn of listeners) fn(); },
@@ -266,4 +268,36 @@ test("slice6b mount contract", () => {
   const dom = new JSDOM("<!doctype html><body><main></main></body>"), el = dom.window.document.querySelector("main");
   const dispose = mount(el, { homeRoster: () => ({ rows: [], deployments: [], phase: "loading", stale: () => false }) });
   assert.equal(typeof dispose, "function"); dispose(); dom.window.close();
+});
+
+test("slice6b a deployment request focuses its column; a workspace switch closes the menu and the events dialog", (t) => {
+  const u = fixture(t, { rows: [row("lead"), row("builder", { server: "polaris" })] });
+  requestDeploymentTab("ws", "polaris:/w", null);
+  assert.equal(u.focused(), "builder", "the switcher's Not matched entry lands on that machine's column");
+  u.nodeOf("lead").focus();
+  u.doc.activeElement.dispatchEvent(new u.dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  u.el.querySelector('[role="menu"] [data-action="events"]').click();
+  const dialog = u.el.querySelector('[role="dialog"]');
+  assert.ok(dialog, "Recent events opens by its node"); assert.match(dialog.getAttribute("aria-label"), /Recent events of lead/);
+  assert.ok(dialog.querySelector(".events-view"), "the events view, as the popup had it");
+  u.key(dialog, "Escape");
+  assert.equal(u.el.querySelector('[role="dialog"]'), null); assert.equal(u.focused(), "lead", "Esc closes it back on its node");
+  u.doc.activeElement.dispatchEvent(new u.dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  u.el.querySelector('[role="menu"] [data-action="events"]').click();
+  assert.ok(u.el.querySelector('[role="dialog"]'));
+  u.switchWorkspace();
+  assert.equal(u.el.querySelector('[role="dialog"]'), null, "the events dialog belonged to the workspace left");
+  u.nodeOf("lead").focus();
+  u.doc.activeElement.dispatchEvent(new u.dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  assert.ok(u.el.querySelector('[role="menu"]'));
+  u.switchWorkspace();
+  assert.equal(u.el.querySelector('[role="menu"]'), null, "and so did the menu");
+});
+
+test("slice6b hostile names stay text", (t) => {
+  const hostile = `x'"><img src=x onerror=bad()>`;
+  const u = fixture(t, { rows: [row(hostile, { agent: hostile }), row("kid", { parentInstance: hostile })] });
+  assert.equal(u.el.querySelector("img,script,iframe"), null);
+  assert.ok(u.nodes().every((n) => !n.id.includes("<")), "no identity becomes an id");
+  assert.match(u.nodeOf("kid").getAttribute("aria-label"), /started by x'"><img/);
 });

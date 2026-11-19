@@ -237,9 +237,10 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
   const applyTransform = () => { stage.style.transform = `translate(${tx}px, ${ty}px) scale(${z})`; };
   function fit() {
     if (!alive || !place) return;
-    fitted = true;
     const rect = canvas.getBoundingClientRect?.();
+    // Not measurable yet (hidden behind a terminal, not laid out): drawn at 1, and fitted once it has a size.
     if (!rect?.width || !rect?.height) { z = 1; tx = G.PAD; ty = G.PAD; applyTransform(); return; }
+    fitted = true;
     z = Math.min(1, Math.max(Z_MIN, Math.min((rect.width - G.PAD * 2) / place.width, (rect.height - G.PAD * 2 - 36) / place.height)));
     tx = G.PAD; ty = G.PAD; applyTransform();
   }
@@ -290,6 +291,9 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
   }, { passive: false });
   const onResize = () => { if (!fitted) fit(); };
   win.addEventListener("resize", onResize);
+  // The canvas getting its size (the stage shown again, the window laid out) fits a picture not fitted yet.
+  const sized = typeof win.ResizeObserver === "function" ? new win.ResizeObserver(() => { if (alive && !fitted) fit(); }) : null;
+  sized?.observe(canvas);
 
   /* The rebindable keys (the shortcuts editor lists them; they fire only from the Graph, view-keys.mjs). */
   const viewActions = [
@@ -383,15 +387,15 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     draw(data);
     // The focus stays on the node it was on, else the requested column's first, else the first node (roving tabindex).
     const stops = graphStops(graph).flat();
-    let target = focusId && nodeEls.has(focusId) ? focusId : null;
+    let target = focusId && nodeEls.has(focusId) ? focusId : null, focusAfter = false;
     if (requestedColumn && mode === "columns") {
       const first = graphStops(graph)[graph.columns.findIndex((c) => c.key === requestedColumn)]?.[0];
-      if (first) { target = first.id; requestedColumn = null; if (!hadFocus) win.queueMicrotask?.(() => focusNode(first.id)); }
+      if (first) { target = first.id; requestedColumn = null; focusAfter = true; }
     }
     focusId = target ?? stops[0]?.id ?? null;
     for (const [id, e] of nodeEls) e.tabIndex = id === focusId ? 0 : -1;
     if (!fitted) fit(); else applyTransform();
-    if ((hadFocus || keepFocus) && focusId) focusNode(focusId, { reveal: false });
+    if ((hadFocus || keepFocus || focusAfter) && focusId) focusNode(focusId, { reveal: focusAfter });
   }
 
   /** Each deployment with something to say (not live, not matched, or a note): its heading's words above the canvas. */
@@ -584,6 +588,12 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
   }
 
   const unsubscribe = typeof ctx.subscribeHomeRoster === "function" ? ctx.subscribeHomeRoster(() => paint()) : () => {};
+  // A deployment asked for while the Graph is shown: its column takes the focus now (the module's listener keeps it
+  // for a Graph mounted later).
+  const offRequest = onDeploymentTabRequest(({ tab }) => {
+    if (!alive || typeof tab !== "string" || !graph?.columns.some((c) => c.key === tab)) return;
+    requestedColumn = tab; paint({ keepFocus: true });
+  });
   const unsubscribeWorkspace = subscribeWorkspace(() => {
     if (!alive || generation() === gen) return;
     gen = generation(); focusId = null; fitted = false; signature = null; closeMenu(); closePop(); paint();
@@ -597,9 +607,9 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     focus: () => { if (focusId) focusNode(focusId); else title.focus(); },
     dispose() {
       if (!alive) return;
-      alive = false; intent++; closeMenu(); closePop(); unsubscribe(); unsubscribeWorkspace();
+      alive = false; intent++; closeMenu(); closePop(); unsubscribe(); unsubscribeWorkspace(); offRequest();
       for (const off of disposers) { try { off?.(); } catch (e) { console.error(e); } }
-      win.removeEventListener("mousemove", onMove); win.removeEventListener("mouseup", onUp); win.removeEventListener("resize", onResize);
+      win.removeEventListener("mousemove", onMove); win.removeEventListener("mouseup", onUp); win.removeEventListener("resize", onResize); sized?.disconnect();
     },
   };
 }
