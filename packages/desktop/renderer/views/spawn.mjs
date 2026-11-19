@@ -17,7 +17,7 @@ import { MARKDOWN_CSS } from "./markdown.mjs";
 import { runtimeState } from "../../../client/instance-presentation.mjs";
 import { deploymentUnavailableText } from "../../../client/deployment-facts.mjs";
 import { DESKTOP_TERMS } from "../desktop-terms.mjs";
-import { createSpawnDialog, spawnDialogCSS } from "../spawn-dialog.mjs";
+import { createSpawnDialog, createSoulStep, spawnDialogCSS } from "../spawn-dialog.mjs";
 import { SPAWN_DIALOG_KEYS, SPAWN_JUMPS, registerSpawnDialogKeys, ariaKeyShortcuts } from "../spawn-dialog-keys.mjs";
 import { pendingPlacement } from "../spawn-jobs.mjs";
 import { spawnProblem, catalogProblem, soulCatalogFailure } from "../../../client/spawn-messages.mjs";
@@ -231,20 +231,21 @@ export function preselectSoul(ref) {
   if (state?.alive) { applyWorkspaceTab(state); applyPreselect(state); }
 }
 
-/** Quick Open (spec F): open the spawn dialog scoped to this soul, exactly as its card's Spawn does.
- * A soul that can't be spawned here (attached only, refused, no verified CLI) opens its page
- * instead, which says why. The Workspace subtab is left alone when the dialog opens: it is a
- * modal over wherever Workspace was. `onDismiss` runs when the operator dismisses the dialog
- * (Cancel, Esc, ×, backdrop); it returns true when it took focus back to where they were, and
- * false to let the dialog restore focus itself. */
+/** Open the New agent form on this soul, exactly as its card's Spawn does (the palette's "New agent: <soul>", Quick
+ * Open's pick, the leader's N), or, with `soulFirst` and no name, on its Soul list (Quick Open's key, the sidebar's New
+ * agent). A soul that can't be spawned here (attached only, refused, no verified CLI) opens its page instead, which
+ * says why; a soul list that can't open (no verified CLI) calls `onMiss(0)`. The Workspace subtab is left alone when
+ * the form opens: it is a sheet over wherever Workspace was. `onDismiss` runs when the operator dismisses the form
+ * (Cancel, Esc, ×, backdrop); it returns true when it took focus back to where they were, and false to let the form
+ * restore focus itself. */
 export function preselectSpawn(ref) {
   const intent = nextSelectionIntent();
+  const hooks = { onMiss: typeof ref?.onMiss === 'function' ? ref.onMiss : null, onDismiss: typeof ref?.onDismiss === 'function' ? ref.onDismiss : null };
   pendingPreselect = ref && ref.name
-    ? { name: String(ref.name), agentsRoot: ref.agentsRoot, server: ref.server, spawn: true,
-      onMiss: typeof ref.onMiss === 'function' ? ref.onMiss : null, onDismiss: typeof ref.onDismiss === 'function' ? ref.onDismiss : null,
+    ? { name: String(ref.name), agentsRoot: ref.agentsRoot, server: ref.server, spawn: true, ...hooks,
       // Reopen spawn (Spec C): the draft a failed background spawn kept, restored into the dialog.
       draft: ref.draft && typeof ref.draft === 'object' ? ref.draft : null, ...intent }
-    : null;
+    : ref?.soulFirst === true ? { soulFirst: true, ...hooks, ...intent } : null;
   if (state?.alive) applyPreselect(state);
 }
 
@@ -258,6 +259,11 @@ function applyPreselect(s) {
   if (s.rosterGen !== workspaceGeneration()) return;
   const ref = pendingPreselect;
   pendingPreselect = null; // consumed-once, match or not
+  if (ref.soulFirst) {
+    openSpawnModal(s, null);
+    if (s.modalEl) s.spawnReturn = ref.onDismiss; else ref.onMiss?.(0);
+    return;
+  }
   const matches = s.souls.agents.filter((x) => x.name === ref.name
     && (!ref.agentsRoot || x.agentsRoot === ref.agentsRoot) && (!ref.server || x.server === ref.server)
     && (ref.key === undefined || x.key === ref.key) && (ref.repoKey === undefined || sameRepo(x.soulSource?.repoKey, ref.repoKey)));
@@ -1265,9 +1271,10 @@ function closeSpawnModal(s, { restoreFocus = false, repaint = true } = {}) {
   s.syncModalRelations = null; s.syncModalFacts = null;
   if (!hadModal || !repaint || s.alive === false) return;
   renderGrid(s); // clear the .open card highlight NOW
-  if (!restoreFocus || !agentRef) return;
-  // Opened from Quick Open: back to where the operator was before it, unless they have moved on.
+  if (!restoreFocus) return;
+  // Opened from Quick Open's key or the sidebar: back to where the operator was before it, unless they have moved on.
   if (dismissed) { let returned = false; try { returned = dismissed() === true; } catch { /* fall back */ } if (returned) return; }
+  if (!agentRef) return; // the soul step: no card or page to return to
   if (!fromCard && s.page?.focusLaunch(agentRef)) return;
   const card = gridCards(s).find(card => cardMatches(card, agentRef));
   if (!canFocusCard(s, card)) return;
@@ -1287,26 +1294,22 @@ export async function serverFacts(s) {
   const seen = new Set();
   return answers.flat().filter(f => f && typeof f.group === "string" && !seen.has(f.group) && seen.add(f.group));
 }
-/** A remote group's rows, for the relation picker of a chosen server: `/api/panel?ws=remote:<group>` answers
- * the VIEW holding that group (#482), so only the group's own deployment's rows (relations never cross machines). */
-export async function serverRows(s, group) {
-  const id = `remote:${group}`;
-  const d = await apiJson(s.ctx, `/api/panel?ws=${encodeURIComponent(id)}`);
-  return (Array.isArray(d?.instances) ? d.instances : []).filter(i => !i?.deployment || i.deployment.id === id);
-}
-
-/** The spawn dialog (renderer/spawn-dialog.mjs) hosted as a modal: role=dialog +
+/** The New agent form (renderer/spawn-dialog.mjs) hosted as a sheet: role=dialog +
  * aria-modal, Tab focus trap, Esc/backdrop/× close, focus restored to the
- * opener. Choosing another soul in the dialog reopens it for that soul and
- * keeps the typed name and instruction. */
+ * opener. With no soul (`a` null: Quick Open's key, the sidebar's New agent) it
+ * opens on its Soul list (createSoulStep); choosing a soul in it, or another soul
+ * in the form, reopens it for that soul and keeps the typed name and task. */
 function catalogNote(s) {
   return catalogProblem(s.souls?.catalog);
 }
 function openSpawnModal(s, a, draft = {}) {
-  if (!canLaunchSoul(s, a)) return;
+  if (a ? !canLaunchSoul(s, a) : !canChooseSoul(s)) return;
   nextSelectionIntent();
-  closeSpawnModal(s); // one modal at a time; a new open supersedes the old
-  s.sel = a.name; s.selAgent = a;
+  // One modal at a time; a new open supersedes the old. A soul step's own return target goes on with it.
+  const dismissed = s.spawnReturn;
+  closeSpawnModal(s);
+  s.sel = a?.name ?? null; s.selAgent = a ?? null;
+  if (!a) return openSoulStep(s, draft, dismissed);
   renderGrid(s); // highlight the selected card under the backdrop
   const doc = s.el.ownerDocument, modalGen = workspaceGeneration();
   const modal = doc.createElement("div");
@@ -1314,31 +1317,19 @@ function openSpawnModal(s, a, draft = {}) {
   const ownsModal = () => s.alive && modalGen === workspaceGeneration() && s.modalEl === modal;
   const close = () => closeSpawnModal(s, { restoreFocus: true });
   const ui = createSpawnDialog(modal, {
-    ctx: s.ctx, soul: a, agents: s.souls.agents, workspace: () => s.workspace, cli: cliStatus, instances: () => s.panelInstances,
+    ctx: s.ctx, soul: a, agents: s.souls.agents, workspace: () => s.workspace, cli: cliStatus,
     owns: () => ownsModal() && canLaunchSoul(s, a), canChoose: candidate => canLaunchSoul(s, candidate), draft, catalogNote: catalogNote(s), close,
-    // Board 6: opened for a soul (its card, its page) the dialog is scoped to it; a soul chosen in
-    // the picker (after Change soul) reopens in the picker, so the list stays where it was.
-    layout: draft.layout === "picker" ? "picker" : "scoped",
     ...(Number.isInteger(s.ctx.spawnTiming?.previewDelay) ? { delay: s.ctx.spawnTiming.previewDelay } : {}),
     ...(Number.isInteger(s.ctx.spawnTiming?.busyDelay) ? { busyDelay: s.ctx.spawnTiming.busyDelay } : {}),
     ...(Number.isInteger(s.ctx.spawnTiming?.backfillDelay) ? { backfillDelay: s.ctx.spawnTiming.backfillDelay } : {}),
     ...(Number.isInteger(s.ctx.spawnTiming?.pollDelay) ? { pollDelay: s.ctx.spawnTiming.pollDelay } : {}),
     ...(Number.isInteger(s.ctx.spawnTiming?.suggestDelay) ? { suggestDelay: s.ctx.spawnTiming.suggestDelay } : {}),
-    choose: (candidate, next) => {
-      if (!ownsModal() || !canLaunchSoul(s, candidate)) return;
-      const fresh = s.souls.agents.find(current => current.name === candidate.name && current.agentsRoot === candidate.agentsRoot && (current.server || "") === (candidate.server || ""));
-      // The same dialog flow: a Quick Open return target survives choosing another soul.
-      const dismissed = s.spawnReturn;
-      openSpawnModal(s, fresh, next); // a pick goes on to Name (Spec E)
-      if (s.modalEl && dismissed) s.spawnReturn = dismissed;
-    },
+    choose: (candidate, next) => chooseSoul(s, candidate, next, ownsModal),
     // #517: the window's own machines when the probe has the gates (the answer, with what Add a machine needs), else the registered list.
     servers: a.server ? [] : () => apiJson(s.ctx, `/api/servers${wsQuery()}`).then(d => d?.filtered === true && Array.isArray(d.servers) ? d : Array.isArray(d?.servers) ? d.servers : []),
-    // "Where to run": each server's disabled state and, once chosen, its rows for the relation picker; a remote soul's
-    // host features (held observations only).
+    // Where: each server's disabled state; a remote soul's host features (held observations only).
     serverFacts: () => serverFacts(s),
-    serverRows: group => serverRows(s, group),
-    // #482: the view's deployments; with two or more the Deployment field replaces "Where to run".
+    // #482: the view's deployments; with two or more the Deployment field replaces Where.
     deployments: () => s.spawnDeployments || [],
     remoteSpawn: fields => doSpawn(s, fields),
     // Spec C: a confirmed local press is handed to the shell's spawn-jobs store and the dialog closes at
@@ -1385,11 +1376,63 @@ function openSpawnModal(s, a, draft = {}) {
       closeSpawnModal(s); s.ctx.openTerminal(ref, { quiet: true });
     },
   });
+  const isMac = hostSheet(s, modal, ui, { close, ownsModal });
+  registerSpawnDialogKeys(); // once, for the app's lifetime (the shell registers them at start)
+  const updateHint = () => {
+    const label = formatChord(getBinding("spawn.submit", isMac), isMac) || "";
+    ui.spawn.dataset.chord = isMac ? label.replace(/Enter$/, "↵") : label;
+    ui.setShortcuts(Object.fromEntries(SPAWN_JUMPS.map(({ id, target }) => {
+      const chord = getBinding(id, isMac);
+      return [target, chord ? { label: formatChord(chord, isMac), aria: ariaKeyShortcuts(chord, isMac) } : null];
+    })));
+  };
+  const releaseHint = onKeymapChange(updateHint); updateHint();
+  const releaseJobs = s.ctx.spawnJobs && !a.server ? s.ctx.spawnJobs.subscribe(() => { if (ownsModal()) ui.syncInFlight(); }) : () => {};
+  s.modalCleanup = () => { ui.dispose(); releaseHint(); releaseJobs(); };
+  s.syncModalFacts = () => { if (ownsModal()) ui.sync(); };
+  s.syncModalRelations = s.syncModalFacts;
+  ui.start();
+  focusSheet(s, modal, ui, ownsModal);
+  return modal;
+}
+
+/** The soul step: the New agent form with its Soul list open, before a soul is chosen. A pick opens the form on it,
+ * keeping what was typed in Task; `dismissed` (where the operator was before it opened) goes on to that form. */
+function openSoulStep(s, draft, dismissed) {
+  const doc = s.el.ownerDocument, modalGen = workspaceGeneration();
+  const modal = doc.createElement("div");
+  modal.className = "spawn-modal";
+  const ownsModal = () => s.alive && modalGen === workspaceGeneration() && s.modalEl === modal;
+  const close = () => closeSpawnModal(s, { restoreFocus: true });
+  const ui = createSoulStep(modal, { agents: s.souls.agents, workspace: () => s.workspace, canChoose: candidate => canLaunchSoul(s, candidate),
+    close, draft, catalogNote: catalogNote(s), choose: (candidate, next) => chooseSoul(s, candidate, next, ownsModal) });
+  hostSheet(s, modal, ui, { close, ownsModal });
+  s.spawnReturn = dismissed ?? null;
+  s.modalCleanup = () => ui.dispose();
+  focusSheet(s, modal, ui, ownsModal);
+  return modal;
+}
+/** Whether the soul step can open: the view shows this workspace's catalog and a verified CLI can spawn. */
+const canChooseSoul = (s) => s.alive && s.rosterGen === workspaceGeneration() && cliAvailable();
+/** A soul picked in the form's Soul field: the form opens on it (its Task focused), with what was typed; the sheet's
+ * return target (Quick Open's, the sidebar's) goes on with it. */
+function chooseSoul(s, candidate, next, ownsModal) {
+  if (!ownsModal() || !canLaunchSoul(s, candidate)) return;
+  const fresh = s.souls.agents.find(current => current.name === candidate.name && current.agentsRoot === candidate.agentsRoot && (current.server || "") === (candidate.server || ""));
+  const dismissed = s.spawnReturn;
+  openSpawnModal(s, fresh, next);
+  if (s.modalEl && dismissed) s.spawnReturn = dismissed;
+}
+
+/** The sheet's host: Esc, the backdrop and × close it; the form's own chords (Mod+Enter, the section keys); the Tab
+ * focus trap; then it is mounted over the view. Returns whether the keys are macOS's. */
+function hostSheet(s, modal, ui, { close, ownsModal }) {
+  const doc = s.el.ownerDocument;
+  const isMac = /mac/i.test(doc.defaultView?.navigator?.platform || "");
   let composing = false;
   modal.addEventListener("mousedown", (e) => { if (e.target === modal && !ui.busy()) close(); }); // backdrop
   ui.dialog.addEventListener("compositionstart", () => { composing = true; });
   ui.dialog.addEventListener("compositionend", () => { composing = false; });
-  const isMac = /mac/i.test(doc.defaultView?.navigator?.platform || "");
   // The dialog's own chords (spawn-dialog-keys.mjs): Mod+Enter and the section keys. A plain chord never
   // takes a key from a text field, and plain Enter stays the focused control's.
   const dialogKey = (e) => {
@@ -1425,22 +1468,12 @@ function openSpawnModal(s, a, draft = {}) {
   });
   s.modalEl = modal;
   s.el.querySelector(".souls").append(modal);
-  registerSpawnDialogKeys(); // once, for the app's lifetime (the shell registers them at start)
-  const updateHint = () => {
-    const label = formatChord(getBinding("spawn.submit", isMac), isMac) || "";
-    ui.spawn.dataset.chord = isMac ? label.replace(/Enter$/, "↵") : label;
-    ui.setShortcuts(Object.fromEntries(SPAWN_JUMPS.map(({ id, target }) => {
-      const chord = getBinding(id, isMac);
-      return [target, chord ? { label: formatChord(chord, isMac), aria: ariaKeyShortcuts(chord, isMac) } : null];
-    })));
-  };
-  const releaseHint = onKeymapChange(updateHint); updateHint();
-  const releaseJobs = s.ctx.spawnJobs && !a.server ? s.ctx.spawnJobs.subscribe(() => { if (ownsModal()) ui.syncInFlight(); }) : () => {};
-  s.modalCleanup = () => { ui.dispose(); releaseHint(); releaseJobs(); };
-  s.syncModalFacts = () => { if (ownsModal()) ui.sync(); };
-  s.syncModalRelations = s.syncModalFacts;
-  ui.start();
-  // Spec E: opened for a soul, or after a pick, the dialog lands on its first field, the Opening instruction.
+  return isMac;
+}
+
+/** Spec E: the sheet lands on its first field: Task when it opened on a soul, else its Soul list. */
+function focusSheet(s, modal, ui, ownsModal) {
+  const doc = s.el.ownerDocument;
   // Quick Open's pick from a tab opens the dialog before its stage is on screen (the stage shows right after),
   // and focus on a control not rendered yet does not land: try again on the next frames, while this dialog
   // is still the open one and focus has gone nowhere new since (the operator's own focus is never taken).
@@ -1455,7 +1488,6 @@ function openSpawnModal(s, a, draft = {}) {
     if (!modal.contains(doc.activeElement) && tries > 0) nextFrame(() => focusInitial(tries - 1));
   };
   focusInitial(10);
-  return modal;
 }
 
 /* Exported for the in-flight-spawn regressions.
@@ -1553,7 +1585,7 @@ export function teamMemberAction(s, action, member) {
   } });
 }
 
-/** Execution-server spawn (Developer settings › Run on, or a remote soul). The
+/** Execution-server spawn (Where, or a remote soul). The
  * execution host decides every default and names the instance; nothing here
  * previews or binds a decision for it. Local spawns never come here.
  * Resolves { created: true } once the host created the instance (even if its
@@ -1567,8 +1599,6 @@ export async function doSpawn(s, fields) {
   const connection = s.ctx.connectionGeneration?.() ?? 0;
   const myOp = ++s.spawnOp;
   const owns = () => myOp === s.spawnOp && s.alive !== false && myGen === workspaceGeneration() && connection === (s.ctx.connectionGeneration?.() ?? 0);
-  const relation = fields.relation || "unrelated";
-  if (relation !== "unrelated" && !fields.relativeTo) { fields.status(`The "${relation}" relation needs a reference instance.`, true); return; }
   fields.status(`Spawning on ${fields.server}…`);
   try {
     const d = await postJson(s.ctx, "/api/spawn", {
@@ -1576,9 +1606,7 @@ export async function doSpawn(s, fields) {
       agent: a.name, agentsRoot: typeof fields.agentsRoot === "string" && fields.agentsRoot ? fields.agentsRoot : a.agentsRoot, serverId: fields.server, task: fields.task || "",
       purpose: fields.purpose || undefined, name: fields.name || undefined, // the dialog sends one: an exact name where the host takes one
       ...(fields.suggestName ? { suggestName: true } : {}), // or neither, and the host names it from its task (spawn-apply-suggest-name)
-      relation: relation !== "unrelated" ? relation : undefined,
-      relativeTo: relation !== "unrelated" ? fields.relativeTo : undefined,
-      relativeRoot: relation !== "unrelated" ? (fields.relativeRoot || undefined) : undefined,
+      // No relation: a human's spawn is top-level (D6).
       yolo: fields.yolo, background: fields.background, backend: fields.backend || undefined, harness: fields.harness || undefined,
       model: fields.model || undefined, launchConfig: fields.launchConfig || undefined, wake: fields.wake,
     });

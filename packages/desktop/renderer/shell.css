@@ -317,17 +317,19 @@ body {
 .ctx-dot.on[data-instance-color] { border-color: var(--instance-color); background: var(--instance-color); }
 .ctx-dot.off[data-instance-color] { border-color: var(--instance-color); }
 /* A waiting row's dot (the product owner, 2026-10-26): the needs-input mark (.attn-mark) at 10px, centred on the 8px
-   dot's slot (-1px each side, as the spawn spinner), so the name and the guides keep their place. It keeps the dot's
+   dot's slot (-1px each side), so the name and the guides keep their place. It keeps the dot's
    2px ring in the row's fill, and paints that fill under the disc so no guide shows through its edge. */
 .ctx-dot.waiting { width: 10px; height: 10px; margin: 0 -1px; border: 0; background-color: var(--row-solid, var(--surface)); }
 .ctx-dot.waiting > .attn-mark { width: 10px; height: 10px; }
-/* A pending spawn (Spec C): a dot-sized spinner beside "Spawning…" (the text carries the state; the
-   spinner only says it moves, and stands still under reduced motion). Its Check result stays visible. */
-.ctx-spawn-spinner { position: relative; z-index: 1; box-sizing: border-box; width: 10px; height: 10px; flex: none; margin: 0 -1px;
-                     border-radius: 50%; border: 1.5px solid var(--tree-line); border-top-color: var(--accent);
-                     background: var(--row-solid, var(--surface)); animation: oats-spin .9s linear infinite; }
+/* A pending spawn (Spec C; slice 5, guide step 24): the dot as an accent ring that pulses, beside "Spawning…" (the
+   text carries the state; the pulse only says it moves, the roster's one animation, and stands still under reduced
+   motion). The ring itself never fades below the dot's own contrast: the pulse is a halo around it. Its Check result
+   stays visible. */
+.ctx-dot.starting { border-color: var(--accent); background: var(--row-solid, var(--surface));
+                    animation: ctx-dot-starting 1.2s ease-in-out infinite; }
+@keyframes ctx-dot-starting { 0%, 100% { box-shadow: 0 0 0 0 var(--sel); } 50% { box-shadow: 0 0 0 3px var(--sel); } }
 .ctx-tree-row > .ctx-spawn-tools { visibility: visible; }
-@media (prefers-reduced-motion: reduce) { .ctx-spawn-spinner { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .ctx-dot.starting { animation: none; } }
 /* #802: the muted line under a held home's state ("since 14:03", "Retire it to clean up"): --muted text that
    meets AA on every row fill, never opacity. */
 .ctx-held-hint { color: var(--muted); font-size: 11.5px; line-height: normal; }

@@ -278,7 +278,11 @@ const spawnFollow = createSpawnFollow({
     const key = terminalKey(workspace, target);
     const tabOf = () => { for (const [id, t] of tabs) if (t.kind === "terminal" && t.key === key && !otherIncarnation(t.origin?.incarnation, target.incarnation)) return id; return null; };
     const before = tabOf();
-    await openTerminalTab(target, { quiet: true, expected: target, valid, followed: true });
+    // Its terminal opens without input focus (launch-instance-opens-view-without-input-focus): the new row is selected
+    // and holds keyboard focus, as a launch's --instance does; keys reach the agent only once the person goes there.
+    await showInRoster(row, { read: false });
+    if (!valid()) return false;
+    await openTerminalTab(target, { quiet: true, expected: target, valid, followed: true, focusContent: false });
     const after = tabOf();
     return after !== null && (after === activeTab || after !== before);
   },
@@ -1327,7 +1331,8 @@ function pendingSpawnRow(i, items, instances, startedAt = null) {
   else row.title = why;
   const mark = document.createElement("span");
   mark.setAttribute("aria-hidden", "true");
-  mark.className = unknown && !checking ? "ctx-dot unknown" : "ctx-spawn-spinner";
+  // Spawning: the dot pulsing (the roster's one animation, still under reduced motion); unknown: the unknown dot.
+  mark.className = unknown && !checking ? "ctx-dot unknown" : "ctx-dot starting";
   const copy = document.createElement("span");
   copy.className = "ctx-copy";
   const name = rosterName(document, i.instance);
@@ -2556,11 +2561,12 @@ const quickOpen = createQuickOpen({
   },
   onPick: (soul) => soulSpawn.open(soul),
 });
-/** Quick Open's pick path: the spawn dialog for `soul`, scoped as its card's Spawn opens it (a soul
- * that can't be spawned here opens its page, which says why); dismissing it returns to where the
- * operator was. The leader's N takes it for the target instance's soul (`onMiss`: no such soul). */
+/** The New agent form (slice 5): on `soul`, as its card's Spawn opens it (a soul that can't be spawned
+ * here opens its page, which says why), or with no soul on its Soul list (Quick Open's key, the sidebar's
+ * New agent); dismissing it returns to where the operator was. The leader's N takes it for the target
+ * instance's soul (`onMiss`: no such soul). */
 const soulSpawn = {
-  async open(soul, { onMiss } = {}) {
+  async open(soul = null, { onMiss } = {}) {
     // Capture before module loading: a new tab/stage/sidebar intent or an
     // A→B→A workspace visit must not turn this old callback into a new pick.
     const owns = tabOpenIntents.begin();
@@ -2574,7 +2580,8 @@ const soulSpawn = {
       return;
     }
     if (!owns()) return;
-    mod.preselectSpawn({ ...soul, ...(onMiss ? { onMiss } : {}), onDismiss: () => surfaceReturn.restore(origin) });
+    const miss = soul ? onMiss : () => ctx.notify("New agent needs a verified OATS CLI for this workspace.");
+    mod.preselectSpawn({ ...(soul ?? { soulFirst: true }), ...(miss ? { onMiss: miss } : {}), onDismiss: () => surfaceReturn.restore(origin) });
     showStage("spawn");
   },
 };
@@ -3082,7 +3089,9 @@ for (const [id, action, label] of [['instance.openSplit', 'open-split', 'Instanc
 /** The leader's target (leaderTargetId) where the palette was opened from: its instance entries act on it. */
 let paletteTargetId = null;
 registerAction({ id: "app.palette", label: "Open the command palette", context: "global", run: () => { tabOpenIntents.invalidate(); if (!palette.isOpen()) paletteTargetId = leaderTargetId(document.activeElement); palette.toggle(); } });
-registerAction({ id: "app.quickOpenSouls", label: "Quick open a soul to spawn", context: "global", run: () => { tabOpenIntents.invalidate(); quickOpen.toggle(); } });
+// Slice 5: the key opens the New agent form on its Soul list (Quick Open folds into the form and the palette). Under
+// another sheet or dialog it does nothing: the open form keeps what was typed in it.
+registerAction({ id: "app.quickOpenSouls", label: "New agent: choose a soul", context: "global", run: () => { if (modalOpen()) return; tabOpenIntents.invalidate(); void soulSpawn.open(); } });
 registerAction({ id: "app.chooseSoul", label: "Souls: choose a soul to spawn (Workspace › Souls)", context: "global", run: () => openWorkspaceSouls() });
 registerAction({ id: "app.shortcuts", label: "Edit keyboard shortcuts", context: "global", run: () => openShortcutsEditor() });
 registerAction({ id: "app.connections", label: "Settings: Connections…", context: "global", run: () => openConnections() });

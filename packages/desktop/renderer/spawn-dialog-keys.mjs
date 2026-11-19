@@ -1,24 +1,28 @@
-/* The spawn dialog's own keys (Spec E; docs/desktop-keyboard.md): Mod+Enter spawns, Mod+1–Mod+7 jump
-   to a section of the form, in the form's order. They are actions of the `spawn-dialog-local` context: the shortcuts editor
+/* The New agent form's own keys (Spec E; docs/desktop-keyboard.md): Mod+Enter starts the agent (as Enter in Task does),
+   Mod+1–Mod+7 jump to a section of the form. They are actions of the `spawn-dialog-local` context: the shortcuts editor
    lists them and they can be rebound, but the window never dispatches them (that context is never
    active). The open dialog resolves them itself (resolveViewKey) and stops them there, so while it is
    open these chords are the dialog's and nothing behind the modal sees them. Registered once, for the
    app's lifetime: the shell registers them at start so the editor lists them before any dialog opens;
-   the dialog's host registers them too (a no-op then), for hosts without the shell (the view harness). */
+   the dialog's host registers them too (a no-op then), for hosts without the shell (the view harness).
+   Slice 5 (D6) removed the Relationship section and its jump (Mod+4, spawn.jumpRelationship); the other chords and ids
+   stay as they were, so nothing a person learned or rebound moves. */
 import { registerAction, parseChord } from "./keybindings.mjs";
+import { DESKTOP_NOUNS } from "./desktop-terms.mjs";
+
+const NEW = `New ${DESKTOP_NOUNS.instance}`;
 
 export const SPAWN_DIALOG_CONTEXT = "spawn-dialog-local";
-export const SPAWN_SUBMIT = Object.freeze({ id: "spawn.submit", label: "Spawn selected soul", defaultChord: "Mod+Enter" });
+export const SPAWN_SUBMIT = Object.freeze({ id: "spawn.submit", label: `${NEW}: start it`, defaultChord: "Mod+Enter" });
 /** In chord order, which is the form's order: the keys follow the form. target: the section the dialog moves focus to
- * (createSpawnDialog's jump()). */
+ * (createSpawnDialog's jump()); Model, Name and Teams are in Advanced, which a jump opens. */
 export const SPAWN_JUMPS = Object.freeze([
-  { id: "spawn.jumpTask", target: "task", label: "Spawn dialog: go to Opening instruction", defaultChord: "Mod+1" },
-  { id: "spawn.jumpHarness", target: "harness", label: "Spawn dialog: go to Harness", defaultChord: "Mod+2" },
-  { id: "spawn.jumpModel", target: "model", label: "Spawn dialog: go to Model", defaultChord: "Mod+3" },
-  { id: "spawn.jumpRelationship", target: "relationship", label: "Spawn dialog: go to Relationship", defaultChord: "Mod+4" },
-  { id: "spawn.jumpTeams", target: "teams", label: "Spawn dialog: go to Teams", defaultChord: "Mod+5" },
-  { id: "spawn.jumpName", target: "name", label: "Spawn dialog: go to Name", defaultChord: "Mod+6" },
-  { id: "spawn.toggleAdvanced", target: "advanced", label: "Spawn dialog: open or close Developer settings", defaultChord: "Mod+7" },
+  { id: "spawn.jumpTask", target: "task", label: `${NEW}: go to Task`, defaultChord: "Mod+1" },
+  { id: "spawn.jumpHarness", target: "harness", label: `${NEW}: go to Harness`, defaultChord: "Mod+2" },
+  { id: "spawn.jumpModel", target: "model", label: `${NEW}: go to Model`, defaultChord: "Mod+3" },
+  { id: "spawn.jumpTeams", target: "teams", label: `${NEW}: go to Teams`, defaultChord: "Mod+5" },
+  { id: "spawn.jumpName", target: "name", label: `${NEW}: go to the kernel name`, defaultChord: "Mod+6" },
+  { id: "spawn.toggleAdvanced", target: "advanced", label: `${NEW}: open or close Advanced`, defaultChord: "Mod+7" },
 ].map(Object.freeze));
 export const SPAWN_DIALOG_KEYS = Object.freeze([SPAWN_SUBMIT, ...SPAWN_JUMPS]);
 

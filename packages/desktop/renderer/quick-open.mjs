@@ -15,8 +15,10 @@ import { subsequenceScore } from "../../client/subsequence-score.mjs";
 
 /** Pure row computation — exported for tests. Attached-mode souls are shown
  * (they exist) but marked: selection still routes to the Spawn view, whose
- * card explains why they are not spawnable standalone. */
-export function quickOpenRows(agents, query, { onPick } = {}) {
+ * card explains why they are not spawnable standalone. Each row carries its
+ * catalog row (`soul`). `limit`: how many rows (12, Quick Open's list; the New
+ * agent form's Soul field lists every match, `Infinity`). */
+export function quickOpenRows(agents, query, { onPick, limit = 12 } = {}) {
   const q = String(query || "").trim();
   const rows = [];
   for (const a of agents) {
@@ -30,11 +32,12 @@ export function quickOpenRows(agents, query, { onPick } = {}) {
       detail: [a.repoName, attached ? "attached only" : "", a.description]
         .filter(Boolean).join(" · "),
       dot: null,
+      soul: a,
       run: () => onPick({ name: a.name, agentsRoot: a.agentsRoot }),
     });
   }
   rows.sort((a, b) => a.sc - b.sc || String(a.label).localeCompare(String(b.label)));
-  return rows.slice(0, 12);
+  return rows.slice(0, limit);
 }
 
 /**

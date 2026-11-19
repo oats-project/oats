@@ -1,4 +1,11 @@
-/** Spawn dialog on workspace model v2.
+/** The New agent form (Desktop UI rework, slice 5; guide steps 22 to 24), on workspace model v2.
+ *
+ * One short sheet: Soul (a filterable list, spawn-soul-field.mjs), Task, Harness and, only with two or more machines,
+ * Where. No name field: the kernel names the agent from its task (suggest-name); an older kernel that can't gets
+ * today's optional Name field back, with one dim line saying why. No relation picker (D6: a human's spawn is
+ * top-level). Everything else the spawn can say (model, the kernel name, work base, teams, background, wake, launch
+ * configuration, permissions, identity, session backend, and the full preview) is in Advanced, hidden by default.
+ * Enter in Task starts the agent; Shift+Enter is a newline.
  *
  * What the operator sees is what the kernel decided: the dialog reads a spawn
  * preview in the background whenever a choice changes (latest intent wins)
@@ -20,7 +27,6 @@ import { retainedSpawnMessage, differedLines, flagIgnoredNotice } from '../../cl
 import { launchDiffered, launchDifferedCSS } from './launch-differed.mjs';
 import { harnessOf } from '../../client/harness-names.mjs';
 import { createSoulMark, createRuntimeBadge } from './identity-marks.mjs';
-import { distinguishingRootTags } from '../../client/instance-tree.mjs';
 import { createChoicePopup } from './choice-popup.mjs';
 import { postJson, workspaceGeneration, wsQuery } from './views/common.mjs';
 import { previewSupported, previewChoices, previewData, previewTarget, previewFailure, INSTANCE_NAME_MAX, suggestSupported,
@@ -32,7 +38,8 @@ import { createSpawnTransaction } from '../../client/spawn-transaction.mjs';
 import { spawnProblem, rolledBackProblem, cleanupOwedProblem } from '../../client/spawn-messages.mjs';
 import { spawnText, outcomeText } from './spawn-words.mjs';
 import { kernelLines } from '../../client/kernel-lines.mjs';
-import { DESKTOP_TERMS } from './desktop-terms.mjs';
+import { DESKTOP_TERMS, DESKTOP_NOUNS } from './desktop-terms.mjs';
+import { createSoulField, soulFieldCSS } from './spawn-soul-field.mjs';
 import { RECOVER_POLL_MS } from './spawn-jobs.mjs';
 import { wakeScheduleFields } from './wake-schedule-fields.mjs';
 import { iconElement } from './shell-icons.mjs';
@@ -53,29 +60,25 @@ const BUSY_RETRIES = 75;
 import { HARNESS_NAMES as RUNTIME_NAMES } from '../../client/harness-names.mjs';
 export { RUNTIME_NAMES };
 const PURPOSE = /^[a-z0-9][a-z0-9-]*$/i;
+/** The Harness field's order (the guide's: claude · codex · pi); only those the installed CLI launches are offered. */
+const HARNESS_ORDER = ['claude', 'codex', 'pi'];
 /** The kernel's name refusals: said next to the Name field, not only in the footer. */
 const NAME_REFUSALS = ['E_INSTANCE_NAME_INVALID', 'E_INSTANCE_NAME_TAKEN'];
 
 /** The one-column dialog: the stylesheet's media query and the preview's place (placePreview) read it. */
 export const SPAWN_NARROW = '(max-width:760px)';
 export const spawnDialogCSS = `
-/* The modal centres in a grid whose auto track grows to the dialog, so 100% would not cap it: the viewport does. */
-.spawn-modal .spawn-dialog { width:880px; max-width:calc(100vw - 48px); box-sizing:border-box; max-height:calc(100vh - 48px); padding:0; gap:0; overflow:hidden; background:var(--surface); box-shadow:var(--shadow-modal); }
-/* Two layouts, switched in place (design board 6): 'picker' = soul chooser + form; 'scoped' = the
-   preview of what the kernel will create + form, for one soul. Hidden columns stay in the DOM under
-   [hidden] so the host's focus trap skips them. */
-.spawn-modal .spawn-dialog[data-layout=scoped] { width:1000px; }
+/* D10: a centred sheet over a dim backdrop, easing in over 150 ms (still under reduced motion). One column; the
+   viewport caps it (the modal centres in a grid whose auto track grows to the dialog, so 100% would not). */
+.spawn-modal { animation:spawn-sheet-fade .15s ease; }
+.spawn-modal .spawn-dialog { width:640px; max-width:calc(100vw - 48px); box-sizing:border-box; max-height:calc(100vh - 48px); padding:0; gap:0; overflow:hidden; display:flex; flex-direction:column; background:var(--surface); box-shadow:var(--shadow-modal); animation:spawn-sheet-rise .15s ease; }
+@keyframes spawn-sheet-fade { from { background-color:transparent; } }
+@keyframes spawn-sheet-rise { from { transform:translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .spawn-modal, .spawn-modal .spawn-dialog { animation:none; } }
 .spawn-modal .spawn-dialog-head { min-height:52px; flex:none; align-items:center; gap:10px; padding:0 12px 0 20px; border-bottom:1px solid var(--border); }
 .spawn-modal .spawn-dialog-head h2 { flex:none; font-size:15px; font-weight:700; }
 .spawn-head-copy { flex:1; min-width:0; display:flex; align-items:center; gap:10px; }
 .spawn-context { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:12px; }
-.spawn-modal .spawn-dialog[data-layout=scoped] .spawn-dialog-head { min-height:0; padding:16px 12px 16px 20px; gap:12px; }
-.spawn-dialog-head .spawn-head-mark { width:34px; height:34px; border-radius:9px; font-size:14px; }
-.spawn-dialog[data-layout=scoped] .spawn-head-copy { flex-direction:column; align-items:stretch; gap:1px; }
-.spawn-modal .spawn-dialog[data-layout=scoped] .spawn-dialog-head h2 { font-size:16px; }
-/* A link, not a button: the soul is the dialog's subject, changing it is a side path. */
-.spawn-change-soul { flex:none; border:0; background:none; padding:0; font-weight:600; font-size:12px; line-height:normal; font-family:var(--ui-font,system-ui); color:var(--accent); cursor:pointer; }
-.spawn-change-soul:hover { text-decoration:underline; text-underline-offset:2px; }
 /* Add a machine under the Deployment field (two or more deployments): a side path, a link. */
 .spawn-add-machine { gap:4px; }
 .spawn-add-machine-button { align-self:flex-start; border:0; background:none; padding:0; font-weight:600; font-size:12px; line-height:normal; font-family:var(--ui-font,system-ui); color:var(--accent); cursor:pointer; }
@@ -83,13 +86,34 @@ export const spawnDialogCSS = `
 .spawn-add-machine-button:focus-visible { outline:none; background:var(--sel); border-radius:4px; }
 .spawn-add-machine-note:empty { display:none; }
 .spawn-dialog .close-act { flex:none; margin-left:auto; display:grid; place-items:center; }
-.spawn-columns { display:grid; grid-template-columns:300px minmax(0,1fr); height:calc(100vh - 100px); max-height:700px; min-height:0; overflow:hidden; }
-.spawn-dialog[data-layout=scoped] .spawn-columns { grid-template-columns:360px minmax(0,1fr); }
-/* The preview column: what the kernel will create, re-drawn from every observation. A named size
+/* The preview, in Advanced: what the kernel will create, re-drawn from every observation, as a card. A named size
    container: below ~300px of content width its facts stack label-above-value. */
-.spawn-preview { display:flex; flex-direction:column; gap:16px; min-width:0; min-height:0; overflow:auto; padding:18px 20px; box-sizing:border-box; background:var(--surface-2); border-right:1px solid var(--border); container:spawn-preview / inline-size; }
-/* Narrow (placePreview): in the form's scroll area after its last field, as a card, at its full height. */
-.spawn-form-body > .spawn-preview { flex:none; overflow:visible; padding:14px; border:1px solid var(--border); border-radius:10px; }
+.spawn-preview { display:flex; flex-direction:column; gap:16px; min-width:0; padding:14px; box-sizing:border-box; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; container:spawn-preview / inline-size; }
+/* The compact preview under the fields: one dim line, the kernel's answer for the inputs on screen. */
+.spawn-preview-line { margin:0; color:var(--muted); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+.spawn-preview-line:empty { display:none; }
+.spawn-preview-line strong { color:var(--fg); font-weight:600; font-family:var(--mono,monospace); font-size:11.5px; }
+.spawn-preview-line.err { color:var(--danger); }
+/* Task: several lines; its hint says how the agent is named and which key starts it. */
+.spawn-form .ftask { min-height:88px; resize:vertical; border-radius:8px; line-height:1.5; }
+.spawn-task-hint strong { font-weight:600; font-family:var(--mono,monospace); color:var(--fg); }
+/* Harness: the segmented control (.spawn-seg), the soul's default marked in words. */
+.spawn-harness .spawn-seg { align-self:flex-start; flex-wrap:wrap; max-width:100%; box-sizing:border-box; }
+.spawn-harness-default { margin-left:4px; font-weight:500; }
+/* An older kernel names nothing from the task: why, in one dim line above the Name field it brings back. */
+.spawn-naming-fallback { margin:0; color:var(--muted); font-size:11.5px; line-height:1.5; }
+.spawn-naming-fallback[hidden] { display:none; }
+/* Advanced: hidden by default, a dim link; open, its fields in one column. */
+.spawn-advanced { min-width:0; }
+.spawn-advanced > summary { display:inline-flex; align-items:baseline; gap:8px; flex-wrap:wrap; max-width:100%; padding:2px 0; cursor:pointer; list-style:none; font-size:12px; font-weight:600; color:var(--muted); border-radius:4px; }
+.spawn-advanced > summary::-webkit-details-marker { display:none; }
+.spawn-advanced > summary::before { content:''; flex:none; align-self:center; width:5px; height:5px; margin:0 2px; border-right:1.5px solid currentColor; border-bottom:1.5px solid currentColor; transform:rotate(-45deg); transition:transform .15s; }
+.spawn-advanced[open] > summary::before { transform:rotate(45deg); }
+.spawn-advanced > summary:hover { color:var(--fg); }
+.spawn-advanced > summary:focus-visible { outline:none; background:var(--sel); color:var(--fg); }
+.spawn-advanced > summary small { min-width:0; font-weight:400; font-size:11px; color:var(--muted); }
+.spawn-advanced-body { display:flex; flex-direction:column; gap:14px; padding:12px 0 0; }
+.spawn-advanced-body [hidden] { display:none; }
 .spawn-preview-section { display:flex; flex-direction:column; gap:6px; min-width:0; }
 .spawn-preview-body { display:flex; flex-direction:column; gap:12px; min-width:0; }
 .spawn-preview-title { margin:0; font-size:10.5px; font-weight:650; letter-spacing:.065em; text-transform:uppercase; color:var(--muted); }
@@ -144,24 +168,6 @@ export const spawnDialogCSS = `
 .spawn-cap-tags { display:flex; flex-wrap:wrap; justify-content:flex-start; gap:4px 6px; max-width:100%; min-width:0; }
 .spawn-cap-source, .spawn-cap-why { max-width:100%; padding:1px 6px; border-radius:4px; background:var(--tag-bg); color:var(--muted); font-size:10.5px; font-weight:600; overflow-wrap:anywhere; }
 .spawn-preview-note { margin:auto 0 0; font-size:11.5px; line-height:1.5; color:var(--muted); }
-.spawn-chooser { border-right:1px solid var(--border); min-width:0; min-height:0; overflow:auto; padding:16px 10px 12px; }
-.spawn-chooser-head { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin:0 6px 10px; }
-.spawn-chooser-title { margin:0; font-size:13px; font-weight:650; color:var(--fg); }
-.spawn-search-label { display:flex; align-items:center; gap:6px; margin:0 4px 10px; }
-.spawn-search-label input { min-width:0; flex:1; }
-.spawn-search-count { flex:none; color:var(--muted); font-weight:normal; font-size:10.5px; line-height:normal; font-family:var(--mono,monospace); }
-.spawn-chooser h3 { margin:14px 8px var(--title-gap); font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); overflow-wrap:anywhere; }
-.spawn-choice { width:100%; min-height:56px; display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid transparent; border-radius:8px; text-align:left; background:var(--surface); color:var(--fg); font:inherit; cursor:pointer; }
-.spawn-choice[aria-selected=true] { background:var(--sel); border-color:var(--accent); }
-.spawn-choice .spawn-choice-check { flex:none; color:var(--accent); visibility:hidden; }
-.spawn-choice[aria-selected=true] .spawn-choice-check { visibility:visible; }
-.spawn-choice:disabled { color:var(--muted); cursor:default; }
-.spawn-choice-copy { min-width:0; display:flex; flex:1; flex-direction:column; gap:1px; }
-.spawn-choice strong { font-size:12.5px; overflow-wrap:anywhere; }
-.spawn-choice small { font-size:11px; line-height:1.5; color:var(--muted); overflow-wrap:anywhere; }
-.spawn-choice .identity-mark { flex:none; width:30px; height:30px; border-radius:8px; }
-.spawn-chooser-note { margin:6px 8px; color:var(--muted); font-size:11.5px; line-height:1.5; overflow-wrap:anywhere; }
-.spawn-chooser-note:empty { display:none; }
 .spawn-form { min-width:0; min-height:0; overflow:hidden; display:flex; flex-direction:column; }
 .spawn-form-body { flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; gap:var(--section-gap); padding:20px 24px; box-sizing:border-box; }
 .spawn-field { display:flex; flex-direction:column; gap:var(--title-gap); min-width:0; margin:0; padding:0; border:0; }
@@ -178,7 +184,7 @@ export const spawnDialogCSS = `
 .spawn-form .field { min-width:0; width:100%; box-sizing:border-box; }
 /* Focus is the shell's (rule 2/3: fields turn their border accent); a joined wrapper is the one frame of its inputs. */
 .spawn-joined:focus-within { border-color:var(--accent); }
-/* Name: optional, the form's last field. One frame (the wrapper's border) that turns to the accent on focus; no ring. */
+/* Name: one frame (the wrapper's border) that turns to the accent on focus; no ring. */
 .spawn-name-input { display:flex; align-items:stretch; min-width:0; height:36px; border:1px solid var(--border); border-radius:8px; background:var(--surface); }
 .spawn-name-input:focus-within { border-color:var(--accent); box-shadow:none; outline:none; }
 .spawn-name-prefix { flex:none; display:flex; align-items:center; max-width:55%; padding:0 0 0 12px; color:var(--muted); font-weight:normal; font-size:13px; line-height:normal; font-family:var(--mono,monospace); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -193,16 +199,15 @@ export const spawnDialogCSS = `
 .spawn-hint:empty { display:none; }
 .spawn-hint code, .spawn-work-text code { font-weight:normal; font-size:11.5px; line-height:normal; font-family:var(--mono,monospace); color:var(--fg); }
 .spawn-hint.err { color:var(--danger); }
-/* Teams (teams contract): one line like Relationship — Default fixed on, mapped teams toggle, unmapped greyed. */
+/* Teams (teams contract): one line of chips — Default fixed on, mapped teams toggle, unmapped greyed. */
 .spawn-teams-row { flex-wrap:wrap; align-self:flex-start; max-width:100%; box-sizing:border-box; }
 .spawn-seg input:disabled { cursor:default; }
 /* A shared team with no provider id yet: shown, not choosable (muted text, still AA; no opacity). */
 .spawn-seg .spawn-team-off .spawn-team-name { color:var(--muted); cursor:default; }
 /* Default is fixed, not a choice: a quiet neutral chip (its own hairline, not the accent tint). */
 .spawn-seg .spawn-team-fixed input:checked + span { background:var(--surface); color:var(--fg); font-weight:500; box-shadow:inset 0 0 0 1px var(--border); cursor:default; }
-/* Runtime picker and model field */
-.spawn-run .spawn-choice-trigger, .spawn-deployment .spawn-choice-trigger { height:38px; min-height:38px; border-radius:8px; }
-.spawn-run .spawn-choice-trigger .runtime-badge, .spawn-choice-menu .runtime-badge { flex:none; width:20px; height:20px; border-radius:5px; display:grid; place-items:center; font-size:9.5px; font-weight:700; }
+.spawn-deployment .spawn-choice-trigger { height:38px; min-height:38px; border-radius:8px; }
+.spawn-choice-menu .runtime-badge { flex:none; width:20px; height:20px; border-radius:5px; display:grid; place-items:center; font-size:9.5px; font-weight:700; }
 .spawn-choice-menu button.has-mark { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .spawn-choice-menu button.has-mark small { flex-basis:100%; margin-left:30px; margin-top:-2px; }
 .spawn-trigger-tag, .spawn-input-tag { flex:none; padding:1px 7px; border-radius:999px; background:var(--chip-bg); color:var(--muted); font-weight:600; font-size:10.5px; line-height:normal; font-family:var(--ui-font,system-ui); }
@@ -214,7 +219,6 @@ export const spawnDialogCSS = `
 .spawn-model-field { position:relative; flex:1; min-width:0; display:flex; }
 .spawn-model-field input.field { height:38px; border-radius:8px; padding-right:80px; }
 .spawn-input-tag { position:absolute; right:10px; top:50%; transform:translateY(-50%); pointer-events:none; max-width:84px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.spawn-run .spawn-choice-trigger::after, .spawn-deployment .spawn-choice-trigger::after { margin-left:auto; }
 .spawn-model-controls .spawn-choice-popover { flex:none; }
 .spawn-model-controls .spawn-choice-trigger { width:38px; height:38px; min-height:38px; padding:0 10px; border-radius:8px; }
 .spawn-model-controls .spawn-choice-trigger::after { margin-left:0; }
@@ -233,44 +237,18 @@ export const spawnDialogCSS = `
 .spawn-switch input::before { content:''; position:absolute; top:3px; left:3px; width:12px; height:12px; border-radius:50%; background:var(--surface); transition:left .15s; }
 .spawn-switch input:checked { background:var(--primary-bg); }
 .spawn-switch input:checked::before { left:15px; }
-/* Relationship: a segmented control per the shared control rules — one outer frame, tinted
-   selection (never white-vs-grey), keyboard focus as tint + a 1px accent edge, no ring on click. */
-.spawn-relationship-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; min-width:0; }
+/* A segmented control (Harness, Deployment, Teams) per the shared control rules: one outer frame, tinted selection
+   (never white-vs-grey), keyboard focus as tint + a 1px accent edge, no ring on click. */
 .spawn-seg { display:inline-flex; flex:none; gap:2px; padding:2px; border:1px solid var(--border); border-radius:8px; background:var(--surface); }
 .spawn-seg label { position:relative; display:block; cursor:pointer; }
 .spawn-seg input { position:absolute; inset:0; appearance:none; -webkit-appearance:none; margin:0; border:0; background:transparent; cursor:pointer; }
 .spawn-seg span { display:flex; align-items:center; height:28px; padding:0 12px; border-radius:6px; font-size:12px; font-weight:500; color:var(--muted); white-space:nowrap; }
 .spawn-seg input:checked + span { background:var(--sel); color:var(--accent); font-weight:650; }
 .spawn-seg input:focus-visible + span { background:var(--sel); box-shadow:inset 0 0 0 1px var(--accent); }
-.spawn-relationship-row .frelto { flex:1 1 200px; width:auto; min-width:0; height:34px; }
-.spawn-relationship-row .frelto[hidden] { display:none; }
 /* Deployment (spawn-deployment-field.mjs): the segmented control at its own width (wrapping before it overflows); a deployment's state is the Harness trigger's tag. */
 .spawn-deployment .spawn-seg { align-self:flex-start; flex-wrap:wrap; max-width:100%; box-sizing:border-box; }
 .spawn-seg .spawn-trigger-tag { margin-left:8px; }
 .spawn-server-hint:empty { display:none; }
-.spawn-form .ftask { min-height:88px; resize:vertical; border-radius:8px; line-height:1.5; }
-/* Developer settings */
-.spawn-advanced { border:1px solid var(--border); border-radius:10px; background:var(--surface-2); }
-.spawn-advanced > summary { display:flex; align-items:center; gap:8px; padding:11px 14px; cursor:pointer; list-style:none; font-size:12px; font-weight:650; color:var(--fg); }
-.spawn-advanced > summary::-webkit-details-marker { display:none; }
-.spawn-advanced > summary::before { content:''; flex:none; width:6px; height:6px; margin:0 2px; border-right:1.5px solid var(--muted); border-bottom:1.5px solid var(--muted); transform:rotate(-45deg); transition:transform .15s; }
-.spawn-advanced[open] > summary::before { transform:rotate(45deg); }
-.spawn-advanced > summary { flex-wrap:wrap; row-gap:2px; }
-/* The topics hint: beside the title when it fits whole, else on its own line below it (never broken
-   mid-phrase beside it); with no room at all it is clipped, never pushing the summary wider. */
-.spawn-advanced > summary small { flex:0 1 auto; min-width:0; margin-left:auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:400; color:var(--muted); font-size:11px; }
-.spawn-advanced { container:spawn-advanced / inline-size; }
-@container spawn-advanced (max-width:479px) {
- /* No room beside the title: the hint drops to its own line, under the title's text (past the chevron). */
- .spawn-advanced > summary small { flex-basis:100%; margin-left:18px; }
-}
-.spawn-advanced-body { display:flex; flex-direction:column; gap:14px; padding:4px 14px 14px; }
-.spawn-advanced-body [hidden] { display:none; }
-.spawn-dialog fieldset.frelgroup { border:1px solid var(--border); border-radius:8px; margin:0; padding:8px 10px 10px; display:flex; flex-direction:column; gap:8px; background:var(--surface); }
-.spawn-dialog fieldset.frelgroup legend { font-size:11.5px; font-weight:650; color:var(--muted); padding:0 4px; }
-.spawn-dialog fieldset.frelgroup label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
-.spawn-dialog .freldesc { font-size:11.5px; color:var(--muted); }
-.spawn-dialog .freldesc:empty { display:none; }
 .spawn-footer { flex:none; display:flex; align-items:center; gap:8px; flex-wrap:wrap; border-top:1px solid var(--border); padding:12px 24px; background:var(--surface); }
 .spawn-status { flex:1 1 160px; min-width:0; display:flex; align-items:baseline; flex-wrap:wrap; gap:2px 10px; }
 /* Cancel and Spawn are one group, right-aligned on one line at every width: the status yields first
@@ -313,18 +291,14 @@ ${launchDifferedCSS}
 .spawn-dialog .spawn-seg input:focus-visible { outline:none; box-shadow:none; }
 .spawn-dialog [hidden] { display:none; }
 @media${SPAWN_NARROW} {
- .spawn-columns, .spawn-dialog[data-layout=scoped] .spawn-columns { grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); }
- .spawn-chooser { max-height:200px; border-right:0; border-bottom:1px solid var(--border); }
- /* What will be created has moved into the form (placePreview): the scoped form is the one row. */
- .spawn-dialog[data-layout=scoped] .spawn-columns { grid-template-rows:minmax(0,1fr); }
  .spawn-row { grid-template-columns:minmax(0,1fr); }
  .spawn-form-body { padding:14px; }
  .spawn-footer { padding:10px 14px; }
- .spawn-relationship-row .frelto { flex-basis:100%; }
 }
 /* Capability warnings (0.49.0): the shared list under its own title, at the facts' end. */
 .spawn-preview-warnings { display:flex; flex-direction:column; gap:6px; min-width:0; }
 ${capabilityWarningsCSS}
+${soulFieldCSS}
 `;
 
 const node = (doc, tag, text, cls) => { const el = doc.createElement(tag); if (text !== undefined) el.textContent = text; if (cls) el.className = cls; return el; };
@@ -451,113 +425,81 @@ export function roveSegment(group, { selects = false } = {}) {
   return sync;
 }
 
-/** The soul chooser (left column). */
-function composeChooser(doc, { soul, agents, canChoose, choose, query, note }) {
+/** The sheet's frame (D10): the dialog, its header (one h2, the sheet's name, and where it is) and its close button. */
+function composeSheet(doc) {
   const el = (tag, text, cls) => node(doc, tag, text, cls);
-  const chooser = el('section', undefined, 'spawn-chooser'); chooser.setAttribute('aria-label', 'Choose a soul');
-  const searchLabel = el('label', undefined, 'spawn-search-label'), search = el('input', undefined, 'field spawn-soul-search'), count = el('span', '', 'spawn-search-count');
-  search.type = 'search'; search.autocomplete = 'off'; search.placeholder = 'Search souls…'; search.setAttribute('aria-label', 'Search souls to spawn'); search.value = query;
-  searchLabel.append(search);
-  const head = el('div', undefined, 'spawn-chooser-head'), title = el('h2', 'Souls', 'spawn-chooser-title');
-  title.id = 'spawn-chooser-title'; chooser.setAttribute('aria-labelledby', title.id); head.append(title, count);
-  const list = el('div', undefined, 'spawn-soul-choices'); list.setAttribute('role', 'listbox'); list.setAttribute('aria-labelledby', title.id);
-  const empty = el('p', '', 'spawn-chooser-note spawn-chooser-empty'); empty.setAttribute('role', 'status');
-  const catalogNote = el('p', note || '', 'spawn-chooser-note spawn-catalog-note');
-  chooser.append(head, searchLabel, list, empty, catalogNote);
-  const rows = [], groups = new Map();
-  for (const candidate of agents) {
-    // Grouped by the repository that declares the soul (design frame 02).
-    const key = JSON.stringify([candidate.agentsRoot || '', candidate.server || '', candidate.repoName || '']);
-    if (!groups.has(key)) groups.set(key, []); groups.get(key).push(candidate);
-  }
-  const groupLabel = first => `${first.repoName || first.server || 'Souls'}${first.server ? ` · ${first.server}` : ''}`;
-  const labels = [...groups.values()].map(group => groupLabel(group[0]));
-  const rootTags = distinguishingRootTags([...groups.values()].map(group => group[0].agentsRoot).filter(Boolean));
-  // Repositories alphabetically; external souls last.
-  const ordered = [...groups.values()].sort((a, b) => (a[0].soulKind === 'external') - (b[0].soulKind === 'external') || groupLabel(a[0]).localeCompare(groupLabel(b[0])));
-  for (const group of ordered) {
-    const first = group[0], groupEl = el('div'), label = groupLabel(first);
-    const suffix = labels.filter(value => value === label).length > 1 ? ` · ${rootTags.get(first.agentsRoot) || first.agentsRoot || ''}` : '';
-    const heading = el('h3', label + suffix); heading.title = first.agentsRoot || ''; groupEl.append(heading);
-    // A listbox group, named by its heading (the listbox holds only groups and options).
-    heading.id = `spawn-choice-group-${list.childElementCount}`; groupEl.setAttribute('role', 'group'); groupEl.setAttribute('aria-labelledby', heading.id);
-    for (const candidate of group) {
-      const row = el('button', undefined, 'spawn-choice'); row.type = 'button';
-      row.dataset.agent = candidate.name; row.dataset.root = candidate.agentsRoot || ''; row.dataset.server = candidate.server || '';
-      // An option of the listbox: one tab stop (roving), Arrow/Home/End move, Enter or a click picks.
-      row.setAttribute('role', 'option'); row.disabled = !canChoose(candidate); row.tabIndex = -1;
-      row.setAttribute('aria-selected', String(identity(candidate) === identity(soul))); row.setAttribute('aria-disabled', String(row.disabled));
-      const copy = el('span', undefined, 'spawn-choice-copy');
-      copy.append(el('strong', candidate.name), el('small', candidate.work === 'attached' ? 'Attached only — cannot launch standalone' : candidate.description || candidate.repoName || ''));
-      const check = iconElement(doc, 'check', { size: 15, className: 'shell-icon spawn-choice-check' }); check.setAttribute('aria-hidden', 'true');
-      row.append(createSoulMark(doc, candidate), copy, check);
-      // A pick (a click, Space or Enter) goes on to the form's Name (Spec E).
-      row.addEventListener('click', () => { if (!row.disabled && row.isConnected) choose(candidate, search.value); });
-      row.addEventListener('keydown', event => {
-        if (event.key !== 'Enter' || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.repeat || event.isComposing) return;
-        event.preventDefault(); event.stopPropagation();
-        if (!row.disabled && row.isConnected) choose(candidate, search.value);
-      });
-      groupEl.append(row);
-      rows.push({ row, group: groupEl, text: [candidate.name, candidate.description, candidate.repoName, candidate.team, candidate.server].join('\n').toLowerCase() });
-    }
-    list.append(groupEl);
-  }
-  const filter = () => {
-    let shown = 0;
-    for (const entry of rows) { entry.row.hidden = !entry.text.includes(search.value.toLowerCase()); if (!entry.row.hidden) shown++; }
-    for (const group of list.children) group.hidden = !rows.some(entry => entry.group === group && !entry.row.hidden);
-    count.textContent = `${shown} of ${rows.length}`;
-    empty.textContent = shown ? '' : rows.length ? 'No souls match this filter.' : 'No souls to spawn in this workspace.';
-    const visible = rows.filter(entry => !entry.row.hidden && !entry.row.disabled);
-    const tabStop = visible.find(entry => entry.row === doc.activeElement) || visible.find(entry => entry.row.getAttribute('aria-selected') === 'true') || visible[0];
-    for (const entry of rows) entry.row.tabIndex = entry === tabStop ? 0 : -1;
+  const titleId = 'spawn-dialog-title';
+  const dialog = el('section', undefined, 'spawn-dialog');
+  dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('aria-labelledby', titleId);
+  const header = el('div', undefined, 'spawn-dialog-head');
+  const headCopy = el('div', undefined, 'spawn-head-copy');
+  const title = el('h2'); title.id = titleId;
+  const context = el('span', '', 'spawn-context');
+  headCopy.append(title, context);
+  const closeButton = el('button', undefined, 'close-act fcancel-x'); closeButton.type = 'button';
+  closeButton.setAttribute('aria-label', `Close New ${DESKTOP_NOUNS.instance}`);
+  closeButton.append(iconElement(doc, 'close', { size: 14 }));
+  header.append(headCopy, closeButton);
+  return { dialog, header, title, context, closeButton };
+}
+
+/** The New agent form before a soul is chosen (Quick Open's key, Alt+P, and the sidebar's New agent): the same sheet,
+ * its Soul list open and focused. Task can be typed ahead and goes with the pick; Harness waits for the soul (its
+ * default is the soul's). Choosing a soul is the host's: `choose(soul, draft)` opens the full form on it, Task focused.
+ * The host treats it as the dialog (the same methods), so its keys, focus trap and focus return are the form's.
+ * @param opts  agents, workspace(), canChoose(soul), choose(soul, draft), close(), draft ({ task, query }), catalogNote */
+export function createSoulStep(modal, { agents = [], workspace, canChoose = () => true, choose, close, draft = {}, catalogNote = '' }) {
+  const doc = modal.ownerDocument, el = (tag, text, cls) => node(doc, tag, text, cls);
+  const noun = DESKTOP_NOUNS.instance;
+  const { dialog, header, title, context, closeButton } = composeSheet(doc);
+  dialog.dataset.step = 'soul';
+  title.textContent = `New ${noun}`;
+  context.textContent = `in ${workspace?.()?.name || workspace?.()?.id || 'this workspace'}`; context.title = context.textContent;
+  const form = el('div', undefined, 'spawn-form'), body = el('div', undefined, 'spawn-form-body');
+  const task = el('textarea', undefined, 'field ftask'); task.rows = 4; task.value = draft.task || '';
+  const soulField = createSoulField(doc, { agents, canChoose, query: draft.query || '',
+    choose: (candidate, query) => choose(candidate, { query, task: task.value }) });
+  const taskLabel = el('label', undefined, 'spawn-field spawn-task'); taskLabel.append(el('span', 'Task', 'spawn-label'));
+  task.placeholder = `What should this ${noun} do? Empty starts it waiting for you.`;
+  const taskHint = el('p', 'Choose a soul first: Enter there goes on to this field.', 'spawn-hint spawn-task-hint');
+  taskHint.id = 'spawn-task-hint'; task.setAttribute('aria-describedby', taskHint.id);
+  taskLabel.append(task, taskHint);
+  // Enter in Task goes back to the soul list: there is nothing to start yet. Shift+Enter is a newline.
+  task.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey || event.isComposing || event.keyCode === 229) return;
+    event.preventDefault(); event.stopPropagation(); soulField.focus();
+  });
+  const harnessField = el('div', undefined, 'spawn-field spawn-harness');
+  harnessField.append(el('span', 'Harness', 'spawn-label'), el('p', 'The soul’s default, once a soul is chosen.', 'spawn-hint'));
+  const note = el('p', catalogNote || '', 'spawn-hint spawn-catalog-note');
+  body.append(soulField.element, taskLabel, harnessField, note);
+  const footer = el('div', undefined, 'spawn-footer'), statusRow = el('div', undefined, 'spawn-status');
+  const status = el('p', `Choose a soul to start an ${noun}.`, 'fstatus'); status.setAttribute('role', 'status');
+  statusRow.append(status);
+  const cancel = el('button', 'Cancel', 'act fcancel'); cancel.type = 'button';
+  const spawn = el('button', 'Start', 'act fspawn primary'); spawn.type = 'button'; spawn.disabled = true;
+  const actions = el('div', undefined, 'spawn-actions'); actions.append(cancel, spawn);
+  footer.append(statusRow, actions);
+  form.append(body, footer); dialog.append(header, form); modal.append(dialog);
+  cancel.addEventListener('click', () => close());
+  closeButton.addEventListener('click', () => close());
+  return {
+    dialog, task, spawn, status, soulField,
+    start() {}, focusFirst() { soulField.focus(); }, focusName() {},
+    /** Only Task is here to jump to; every other section waits for the soul. */
+    jump(target) { if (target !== 'task') return false; task.focus(); return true; },
+    setShortcuts() {}, submit() {}, busy: () => false, sync() {}, syncInFlight() {}, closePopups() {}, dispose() {},
   };
-  search.addEventListener('input', filter); filter();
-  /** The row to land on when the chooser opens: the selected soul if the filter shows it, else the search. */
-  const focusTarget = () => rows.find(entry => !entry.row.hidden && !entry.row.disabled && entry.row.getAttribute('aria-selected') === 'true')?.row || search;
-  const choosable = () => rows.filter(entry => !entry.row.hidden && !entry.row.disabled);
-  search.addEventListener('keydown', event => {
-    if (event.isComposing || event.keyCode === 229) return;
-    if (event.key === 'ArrowDown') {
-      const entry = rows.find(item => !item.row.hidden && !item.row.disabled && item.row.tabIndex === 0);
-      if (entry) { event.preventDefault(); event.stopPropagation(); entry.row.focus(); }
-    } else if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.repeat) {
-      // Type to filter, Enter to pick: the best match (the first shown), or with no query the
-      // selected soul; then on to Name.
-      const visible = choosable();
-      const entry = search.value.trim() ? visible[0] : visible.find(item => item.row.getAttribute('aria-selected') === 'true') || visible[0];
-      if (!entry) return;
-      event.preventDefault(); event.stopPropagation();
-      entry.row.dispatchEvent(new doc.defaultView.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-    }
-  });
-  list.addEventListener('keydown', event => {
-    // Typing on the list filters it: the character goes to the search field.
-    if (event.key.length === 1 && event.key !== ' ' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.isComposing) {
-      event.preventDefault(); event.stopPropagation();
-      search.value += event.key; search.dispatchEvent(new doc.defaultView.Event('input', { bubbles: true })); search.focus();
-      return;
-    }
-    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) || event.isComposing) return;
-    const visible = rows.filter(entry => !entry.row.hidden && !entry.row.disabled).map(entry => entry.row), at = visible.indexOf(doc.activeElement);
-    const next = event.key === 'Home' ? 0 : event.key === 'End' ? visible.length - 1 : (at + (event.key === 'ArrowDown' ? 1 : -1) + visible.length) % visible.length;
-    event.preventDefault(); event.stopPropagation();
-    for (const row of visible) row.tabIndex = row === visible[next] ? 0 : -1;
-    visible[next]?.focus();
-  });
-  return { chooser, search, focusTarget };
 }
 
 /**
  * @param modal  the .spawn-modal element (backdrop); the dialog is built inside it.
- * @param opts   ctx, soul, agents, workspace(), cli(), instances(), servers (Promise|array),
- *               canChoose(soul), choose(soul, draft), close(), owns(), draft,
- *               layout 'picker' (chooser + form; the default) | 'scoped' (preview + form, one soul),
+ * @param opts   ctx, soul, agents, workspace(), cli(), servers (Promise|array),
+ *               canChoose(soul), choose(soul, draft) (the Soul field's pick: the host reopens the form on it), close(),
+ *               owns(), draft,
  *               onCreated(view, isCurrent) — local creation handoff,
  *               remoteSpawn(fields) — execution-server spawn (unguarded route),
  *               serverFacts() — each remote group (/api/team-members `servers`): reached, registered, souls,
- *               serverRows(group) — a remote group's roster rows (the relation picker for a chosen server),
  *               handoff(spec) — Spec C: a confirmed local press hands its transaction to the background spawn
  *                 store and the host closes the dialog (returns true when taken). Without it the dialog runs
  *                 the transaction itself (the view harness, and tests of that flow).
@@ -572,30 +514,20 @@ function composeChooser(doc, { soul, agents, canChoose, choose, query, note }) {
  *                 Deployment field (spawn-deployment-field.mjs) chooses where to spawn; every spawn request
  *                 addresses a deployment, never the view.
  */
-export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, instances, canChoose, choose, close, owns,
-  draft = {}, catalogNote = '', onCreated = async () => {}, remoteSpawn = async () => {}, servers = [], serverFacts = () => [], serverRows = async () => [],
-  delay: debounce = PREVIEW_DEBOUNCE_MS, busyDelay = PREVIEW_BUSY_RETRY_MS, backfillDelay = BACKFILL_POLL_MS, pollDelay = RECOVER_POLL_MS, suggestDelay = SUGGEST_DEBOUNCE_MS, layout = 'picker', handoff = null, spawnInFlight = null, deployments = () => [] }) {
+export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, canChoose, choose, close, owns,
+  draft = {}, catalogNote = '', onCreated = async () => {}, remoteSpawn = async () => {}, servers = [], serverFacts = () => [],
+  delay: debounce = PREVIEW_DEBOUNCE_MS, busyDelay = PREVIEW_BUSY_RETRY_MS, backfillDelay = BACKFILL_POLL_MS, pollDelay = RECOVER_POLL_MS, suggestDelay = SUGGEST_DEBOUNCE_MS, handoff = null, spawnInFlight = null, deployments = () => [] }) {
   const doc = modal.ownerDocument, el = (tag, text, cls) => node(doc, tag, text, cls);
-  const titleId = 'spawn-dialog-title';
-  const dialog = el('section', undefined, 'spawn-dialog');
-  dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('aria-labelledby', titleId);
-  // ── header: one h2 (the dialog's name) whose words follow the layout
-  const header = el('div', undefined, 'spawn-dialog-head');
-  const mark = createSoulMark(doc, soul); mark.classList.add('spawn-head-mark');
-  const headCopy = el('div', undefined, 'spawn-head-copy');
-  const title = el('h2'); title.id = titleId;
-  const workspaceName = () => workspace()?.name || workspace()?.id || soul.repoName || 'this workspace';
-  const context = el('span', '', 'spawn-context');
-  headCopy.append(title, context);
-  const changeSoul = el('button', 'Change soul', 'spawn-change-soul'); changeSoul.type = 'button';
-  const closeButton = el('button', undefined, 'close-act fcancel-x'); closeButton.type = 'button'; closeButton.setAttribute('aria-label', 'Close spawn dialog');
-  closeButton.append(iconElement(doc, 'close', { size: 14 }));
-  header.append(mark, headCopy, changeSoul, closeButton);
-  // ── chooser (picker layout)
-  const { chooser, search, focusTarget } = composeChooser(doc, { soul, agents, canChoose, query: draft.query || '', note: catalogNote,
-    choose: (candidate, query) => { if (!busy()) choose(candidate, { query, purpose: purpose.value, task: task.value, layout: 'picker' }); } });
-  // ── preview (scoped layout): what the kernel will create, from the latest observation
-  const preview = el('aside', undefined, 'spawn-preview'); preview.setAttribute('aria-label', 'Spawn preview');
+  const { dialog, header, title, context, closeButton } = composeSheet(doc);
+  // Spec E: each section's jump chord (spawn-dialog-keys.mjs), a quiet hint beside its label, hidden from
+  // assistive tech (the control carries aria-keyshortcuts instead); filled by setShortcuts().
+  const keyHints = {};
+  const keyHint = target => { const k = el('kbd', '', 'shortcut-hint spawn-key-hint'); k.setAttribute('aria-hidden', 'true'); k.hidden = true; keyHints[target] = k; return k; };
+  // ── Soul: the chosen one, a button that opens the filterable list; a pick reopens the form on that soul.
+  const soulField = createSoulField(doc, { agents, soul, canChoose, keyHint: null,
+    choose: (candidate, query) => { if (!busy()) choose(candidate, { query, purpose: purpose.value, task: task.value }); } });
+  // ── the preview, at the end of Advanced: what the kernel will create, from the latest observation
+  const preview = el('aside', undefined, 'spawn-preview'); preview.setAttribute('aria-label', 'What will be created');
   const factsSection = el('section', undefined, 'spawn-preview-section spawn-preview-created');
   const factsBody = el('div', undefined, 'spawn-preview-body');
   const factsHead = el('div', undefined, 'spawn-preview-head'), updatingMark = el('span', 'Updating…', 'spawn-preview-updating');
@@ -608,10 +540,6 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
   preview.append(factsSection, coreSection, capsSection, previewNote);
   // ── form
   const form = el('div', undefined, 'spawn-form');
-  // Spec E: each section's jump chord (spawn-dialog-keys.mjs), a quiet hint beside its label, hidden from
-  // assistive tech (the control carries aria-keyshortcuts instead); filled by setShortcuts().
-  const keyHints = {};
-  const keyHint = target => { const k = el('kbd', '', 'shortcut-hint spawn-key-hint'); k.setAttribute('aria-hidden', 'true'); k.hidden = true; keyHints[target] = k; return k; };
   const selectionSummary = el('span', `Selected soul ${soul.name}${soul.server ? ` on ${soul.server}` : ''}`, 'workspace-sr-only');
   selectionSummary.id = 'spawn-selection-summary'; dialog.setAttribute('aria-describedby', selectionSummary.id);
   // Name (optional, the last field): what is typed goes as --name exactly as typed, lowercased, with nothing
@@ -619,8 +547,11 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
   // for a spawn on another machine, so does that host (roleNamed); elsewhere (an older kernel on either
   // side, or a host whose features are unknown) it is a purpose, named <soul>-<typed>, with that prefix
   // shown. Empty: the kernel numbers it, or, where the CLI advertises spawn-suggest-name and the field was never typed in, names it from its task (the suggestion below).
+  // Slice 5: in Advanced as the kernel name, an optional override, where the kernel names agents from their task; in the
+  // form itself, as today's Name, where it can't (namesFromTask), with one dim line saying why (placeName).
   const nameField = el('div', undefined, 'spawn-field spawn-name');
-  const nameLabel = el('label', 'Name '); nameLabel.htmlFor = 'spawn-purpose'; nameLabel.append(el('small', '· optional'), keyHint('name'));
+  const nameFallback = el('p', '', 'spawn-naming-fallback'); nameFallback.hidden = true;
+  const nameLabel = el('label'), nameLabelText = doc.createTextNode('Kernel name '); nameLabel.htmlFor = 'spawn-purpose'; nameLabel.append(nameLabelText, el('small', '· optional'), keyHint('name'));
   const nameInput = el('div', undefined, 'spawn-name-input');
   const prefix = el('span', `${soul.name}-`, 'spawn-name-prefix'); prefix.setAttribute('aria-hidden', 'true'); prefix.title = `${soul.name}-`;
   const purpose = el('input', undefined, 'field fpurpose'); purpose.id = 'spawn-purpose'; purpose.autocomplete = 'off'; purpose.spellcheck = false;
@@ -628,25 +559,27 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
   purpose.setAttribute('aria-describedby', 'spawn-name-result');
   nameInput.append(prefix, purpose);
   const nameResult = el('p', '', 'spawn-hint spawn-name-result'); nameResult.id = 'spawn-name-result'; nameResult.setAttribute('aria-live', 'polite');
-  nameField.append(nameLabel, nameInput, nameResult);
-  // Harness · Model — the harness is a picker with its badge; the select holds the value.
-  const runRow = el('div', undefined, 'spawn-row spawn-run');
-  const runtimeLabel = el('label'), runtimeText = el('span', 'Harness', 'spawn-label-text'); runtimeText.append(keyHint('harness')); runtimeLabel.append(runtimeText);
+  nameField.append(nameFallback, nameLabel, nameInput, nameResult);
+  // Harness: a segmented control of the harnesses this CLI launches (claude, codex, pi), the soul's default marked and
+  // chosen until another is; the hidden select holds the value ('' = the soul's default, nothing sent).
+  const harnessField = el('fieldset', undefined, 'spawn-field spawn-harness');
+  const harnessLegend = el('legend', 'Harness'); harnessLegend.append(keyHint('harness'));
+  const harnessSeg = el('div', undefined, 'spawn-seg fharness'); harnessSeg.setAttribute('role', 'radiogroup'); harnessSeg.setAttribute('aria-label', 'Harness');
   const runtime = el('select', undefined, 'field fruntime'); runtime.hidden = true; runtime.tabIndex = -1; runtime.setAttribute('aria-hidden', 'true');
-  runtimeLabel.append(runtime);
+  // Model (in Advanced): free text, with the harness's suggestions in a popup.
+  const modelField = el('div', undefined, 'spawn-field spawn-model');
   const modelLabel = el('label'), modelText_ = el('span', 'Model', 'spawn-label-text'); modelText_.append(keyHint('model')); modelLabel.append(modelText_);
-  const modelControls = el('div', undefined, 'spawn-model-controls'), modelField = el('span', undefined, 'spawn-model-field');
+  const modelControls = el('div', undefined, 'spawn-model-controls'), modelBox = el('span', undefined, 'spawn-model-field');
   const model = el('input', undefined, 'field fmodel'); model.autocomplete = 'off'; model.spellcheck = false; model.setAttribute('aria-label', 'Model — empty uses the default');
   const modelTag = el('span', '', 'spawn-input-tag'); modelTag.setAttribute('aria-hidden', 'true');
   // The default shows as a value (not placeholder grey) until the operator types a model.
   const modelDefault = el('span', '', 'spawn-model-default'); modelDefault.setAttribute('aria-hidden', 'true');
-  modelField.append(model, modelDefault, modelTag); modelControls.append(modelField); modelLabel.append(modelControls);
-  runRow.append(runtimeLabel, modelLabel);
+  modelBox.append(model, modelDefault, modelTag); modelControls.append(modelBox); modelLabel.append(modelControls); modelField.append(modelLabel);
   const runHint = el('p', '', 'spawn-hint spawn-run-hint'); runHint.setAttribute('aria-live', 'polite');
-  const runField = el('div', undefined, 'spawn-field'); runField.append(runRow, runHint);
-  // Where to run: a primary decision, at the top level just above Relationship (whose picker lists that machine's instances).
-  const placeRow = el('div', undefined, 'spawn-row'), serverLabel = el('label'); serverLabel.append(el('span', 'Where to run', 'spawn-label-text'));
-  const server = el('select', undefined, 'field fserver'); server.setAttribute('aria-label', 'Where to run'); serverLabel.append(server); placeRow.append(serverLabel);
+  harnessField.append(harnessLegend, harnessSeg, runtime, runHint);
+  // Where: shown only with two or more machines (this computer and a registered one, or a soul listed from one).
+  const placeRow = el('div', undefined, 'spawn-row'), serverLabel = el('label'); serverLabel.append(el('span', 'Where', 'spawn-label-text'));
+  const server = el('select', undefined, 'field fserver'); server.setAttribute('aria-label', 'Where'); serverLabel.append(server); placeRow.append(serverLabel);
   const serverHint = el('p', '', 'spawn-hint spawn-server-hint');
   const placeField = el('div', undefined, 'spawn-field spawn-place'); placeField.append(placeRow, serverHint);
   // Work — read from the soul; a worktree gets the joined "from base | branch" control.
@@ -681,28 +614,19 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
   backgroundSwitch.checked = backgroundDefault;
   // Touched on the press itself: the form's own `input` listener repaints the dialog before `change` fires, and must find it touched.
   for (const type of ['input', 'change']) backgroundSwitch.addEventListener(type, () => { backgroundTouched = true; });
-  // Relationship — shown by default.
-  const relation = el('fieldset', undefined, 'spawn-field spawn-relationship');
-  const relationLegend = el('legend', 'Relationship'); relationLegend.append(keyHint('relationship')); relation.append(relationLegend);
-  const relRow = el('div', undefined, 'spawn-relationship-row'), seg = el('div', undefined, 'spawn-seg frelation'); seg.setAttribute('role', 'radiogroup'); seg.setAttribute('aria-label', 'Relationship');
-  for (const [value, label] of [['unrelated', 'Independent'], ['child', 'Child of'], ['sibling', 'Sibling of'], ['parent', 'Parent of']]) {
-    const option = el('label'), input = el('input'); input.type = 'radio'; input.name = `spawn-relation-${Math.floor(workspaceGeneration())}`; input.value = value; input.checked = value === 'unrelated';
-    option.append(input, el('span', label)); seg.append(option);
-  }
-  const rel = { get value() { return seg.querySelector('input:checked')?.value || 'unrelated'; } };
-  roveSegment(seg, { selects: true });
-  const relTo = el('select', undefined, 'field frelto'); relTo.setAttribute('aria-label', 'Which instance');
-  relRow.append(seg, relTo);
-  const relDesc = el('p', '', 'spawn-hint freldesc'); relDesc.setAttribute('aria-live', 'polite');
-  relation.append(relRow, relDesc);
-  // Opening instruction
-  const taskLabel = el('label', undefined, 'spawn-field');
-  const taskTitle = el('span', 'Opening instruction ', 'spawn-label'); taskTitle.append(el('small', '· optional'), keyHint('task')); taskLabel.append(taskTitle);
-  const task = el('textarea', undefined, 'field ftask'); task.rows = 4; task.placeholder = 'What should this instance do? Empty starts it waiting for you.'; task.value = draft.task || '';
-  taskLabel.append(task);
-  // Developer settings (collapsed)
+  // Task: several lines. Enter starts the agent and Shift+Enter is a newline (onTaskKey); the hint under it says how the
+  // agent is named (renderTaskHint).
+  const noun = DESKTOP_NOUNS.instance;
+  const taskLabel = el('label', undefined, 'spawn-field spawn-task');
+  const taskTitle = el('span', 'Task', 'spawn-label'); taskTitle.append(keyHint('task')); taskLabel.append(taskTitle);
+  const task = el('textarea', undefined, 'field ftask'); task.rows = 4; task.placeholder = `What should this ${noun} do? Empty starts it waiting for you.`; task.value = draft.task || '';
+  const taskHint = el('p', '', 'spawn-hint spawn-task-hint'); taskHint.id = 'spawn-task-hint'; task.setAttribute('aria-describedby', taskHint.id);
+  taskLabel.append(task, taskHint);
+  // The compact preview: the kernel's answer for the inputs on screen, in one dim line (renderPreviewLine).
+  const previewLine = el('p', '', 'spawn-preview-line');
+  // Advanced: hidden by default behind a dim link; everything the form offers beyond the four fields.
   const advanced = el('details', undefined, 'spawn-advanced');
-  const advancedSummary = el('summary', 'Developer settings'), advancedTopics = el('small', 'Work area · permissions · launch · session · wake-up');
+  const advancedSummary = el('summary', 'Advanced'), advancedTopics = el('small', 'model · name · work · teams · wake');
   advancedSummary.append(keyHint('advanced'), advancedTopics);
   advanced.append(advancedSummary);
   const advancedBody = el('div', undefined, 'spawn-advanced-body'); advanced.append(advancedBody);
@@ -781,7 +705,9 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
   const backendLabel = el('label', 'Session backend'), backend = el('select', undefined, 'field fbackend'); backendLabel.append(backend);
   hostRow.append(backendLabel);
   const wake = wakeScheduleFields(doc);
-  advancedBody.append(workField, permRow, identityField, hostRow, wake.el);
+  // In the order the spec names them: model, the kernel name, work base, teams, background, then launch, identity,
+  // session, wake, and what will be created.
+  advancedBody.append(modelField, nameField, workField, teamsField, backgroundField, permRow, identityField, hostRow, wake.el, preview);
   // Footer
   const footer = el('div', undefined, 'spawn-footer');
   const statusRow = el('div', undefined, 'spawn-status');
@@ -801,32 +727,19 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
   inflight.append(inflightText, ' ', inflightShow);
   statusRow.append(inflight, status, detailsToggle);
   const cancel = el('button', 'Cancel', 'act fcancel'); cancel.type = 'button';
-  const spawn = el('button', 'Spawn', 'act fspawn primary'); spawn.type = 'button';
+  const spawn = el('button', 'Start', 'act fspawn primary'); spawn.type = 'button';
   const actions = el('div', undefined, 'spawn-actions'); actions.append(cancel, spawn);
   // What a blocked launch differed in (0.52.0): a group of its own under the status, above Details; in the
   // footer only while there is one to show (setStatus).
   const statusDiffered = el('div', undefined, 'spawn-status-differed');
   footer.append(statusRow, actions, details);
   const body = el('div', undefined, 'spawn-form-body');
-  // The Opening instruction first (the dialog lands there), Name last before Developer settings.
-  body.append(selectionSummary, taskLabel, runField, placeField, relation, backgroundField, teamsField, nameField, advanced);
+  // Soul, Task, Harness, Where (two or more machines), the compact preview, then the Advanced link.
+  body.append(selectionSummary, soulField.element, taskLabel, harnessField, placeField, previewLine, advanced);
   form.append(body, footer); // the footer stays in view while the body scrolls
-  const columns = el('div', undefined, 'spawn-columns'); columns.append(preview, chooser, form);
-  // Below SPAWN_NARROW (one column), What will be created follows the form's last field in the form's own
-  // scroll area, above the footer, which stays in view: the instruction is what shows on open, and the
-  // preview is reached by scrolling on with the fields. Moved in the document, not only drawn there, so the
-  // reading and tab order are the order on screen. Wide, it is the left column again.
-  const narrowQuery = (() => { try { return doc.defaultView?.matchMedia?.(SPAWN_NARROW) ?? null; } catch { return null; } })();
-  function placePreview() {
-    if (narrowQuery?.matches) { if (body.lastElementChild !== preview) body.append(preview); }
-    else if (columns.firstElementChild !== preview) columns.prepend(preview);
-  }
-  placePreview();
-  narrowQuery?.addEventListener?.('change', placePreview);
-  dialog.append(header, columns); modal.append(dialog);
+  dialog.append(header, form); modal.append(dialog);
   // ── #482 Deployment (renderer/spawn-deployment-field.mjs) ───────────────────────────────────────────
-  // With two or more deployments in the view the field replaces "Where to run" and comes first, before
-  // Harness: a remote deployment spawns through its server, a local one through the preview-bound
+  // With two or more deployments in the view the field replaces Where, after Harness: a remote deployment spawns through its server, a local one through the preview-bound
   // prepare/apply at ?ws=<its id>. Why Spawn is blocked there is said in the footer only; the preview
   // column's "Runs on" row names the chosen deployment.
   // The view's deployments as the dialog opened (a dialog belongs to one view; a newer list is the next dialog's).
@@ -839,35 +752,34 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
       const asked = deploymentField.selector(), rooted = asked.agentsRoot !== selector.agentsRoot;
       if (rooted) selector = asked;
       // Another deployment is another catalog, its own previews and its own instances: re-read from scratch.
-      if (moved || rooted) { shown = settled = null; void fillConfigs(); void fillRelatives(); if (programmatic) dropPress(); }
+      if (moved || rooted) { shown = settled = null; void fillConfigs(); if (programmatic) dropPress(); }
       schedule(0);
       if (moved) taskEdited(); // a name is asked for the machine it names a spawn on
     } });
-  if (deploymentField) { placeField.remove(); runField.before(deploymentField.element); }
+  if (deploymentField) placeField.replaceWith(deploymentField.element);
   /** The deployment every spawn request addresses (the preview and prepare/apply echo it): the chosen one,
    * else the view's only one, else its primary; a view id only while none is known. */
   const address = () => deploymentField?.value() ?? (deploymentsAtOpen.length === 1 ? deploymentsAtOpen[0].id : null) ?? workspace()?.primary ?? workspace()?.id;
-  /** Relation anchors: the chosen deployment's rows only (relations never cross deployments). */
-  const deploymentRows = rows => deploymentField ? rows.filter(i => i?.deployment?.id === deploymentField.value()) : rows;
   // ── end #482 Deployment ─────────────────────────────────────────────────────────────────────────────
-  let layoutNow = 'picker';
-  /** Switch layout in place: the other column goes under [hidden]; every typed value stays. */
-  function setLayout(name) {
-    layoutNow = name === 'scoped' ? 'scoped' : 'picker';
-    const scoped = layoutNow === 'scoped';
-    dialog.dataset.layout = layoutNow;
-    chooser.hidden = scoped; preview.hidden = !scoped; mark.hidden = !scoped; changeSoul.hidden = !scoped;
-    title.textContent = scoped ? `Spawn ${soul.name}` : 'Spawn instance';
-    context.textContent = scoped ? [soulOriginText(soul), `in ${workspaceName()}`].filter(Boolean).join(' · ') : `in ${workspaceName()}`;
-    context.title = context.textContent;
-    if (scoped) renderPreview();
-  }
+  title.textContent = `New ${noun}`;
+  context.textContent = `in ${workspace()?.name || workspace()?.id || soul.repoName || 'this workspace'}`;
+  context.title = context.textContent;
 
   // ── static options
   const c0 = cli();
   const runtimes = Array.isArray(c0?.harnesses) ? c0.harnesses.filter(v => Object.hasOwn(RUNTIME_NAMES, v)) : [];
   const fillSelect = (select, rows) => { select.replaceChildren(); for (const [value, label, disabled] of rows) { const o = el('option', label); o.value = value; o.disabled = !!disabled; select.append(o); } };
   fillSelect(runtime, [['', 'Default'], ...runtimes.map(v => [v, RUNTIME_NAMES[v]])]);
+  // The Harness choices, in the guide's order (claude · codex · pi); one tab stop, arrows choose (roveSegment).
+  const harnessName = `spawn-harness-${Math.floor(workspaceGeneration())}`;
+  for (const value of HARNESS_ORDER.filter(v => runtimes.includes(v))) {
+    const option = el('label'), input = el('input'), face = el('span', RUNTIME_NAMES[value]);
+    input.type = 'radio'; input.name = harnessName; input.value = value;
+    const tag = el('small', '· default', 'spawn-harness-default'); tag.hidden = true; face.append(tag);
+    option.append(input, face); harnessSeg.append(option);
+  }
+  const syncHarnessStop = roveSegment(harnessSeg, { selects: true });
+  harnessField.hidden = !harnessSeg.childElementCount;
   const yoloSupported = Array.isArray(c0?.launchOptions) && c0.launchOptions.includes('yolo');
   fillSelect(yolo, [['', 'Default'], ['false', "Ask — harness's policy", !yoloSupported], ['true', 'Skip prompts (YOLO)', !yoloSupported]]);
   // tmux is the only session backend; an older kernel may still list herdr, which is never offered.
@@ -876,22 +788,6 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
   fillSelect(config, [['', 'Default']]);
   fillSelect(server, [['', 'This computer']]);
   if (soul.server) { fillSelect(server, [[soul.server, soul.repoName || soul.server]]); server.value = soul.server; server.disabled = true; }
-  // The relation picker lists the rows of the machine the instance will run on: relations never cross machines.
-  // relativesPending: the chosen machine's rows are still being read; until they land no relation can be chosen.
-  let relativeRows = [], relativesReq = 0, relativesPending = false;
-  function paintRelatives(rows) {
-    relativeRows = rows; const picked = [relTo.value, relTo.selectedOptions[0]?.dataset.root];
-    const counts = new Map(); for (const i of rows) counts.set(i.instance, (counts.get(i.instance) || 0) + 1);
-    const tags = distinguishingRootTags(rows.filter(i => counts.get(i.instance) > 1).map(i => i.agentsRoot));
-    fillSelect(relTo, [['', '— which instance? —']]);
-    for (const i of rows) {
-      const o = el('option', `${i.instance}${counts.get(i.instance) > 1 && i.agentsRoot ? ` [${tags.get(String(i.agentsRoot)) || i.agentsRoot}]` : ''}${i.running === true ? '' : ' (stopped)'}`);
-      o.value = i.instance; o.dataset.root = i.agentsRoot || ''; relTo.append(o);
-    }
-    const keep = [...relTo.options].find(o => o.value && o.value === picked[0] && o.dataset.root === picked[1]);
-    if (keep) keep.selected = true;
-  }
-  paintRelatives(deploymentRows(instances() || []));
 
   // ── state
   // shown: the latest read's settled answer, data or failure ({ key, value, data|failure }); settled: the
@@ -926,18 +822,9 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
   const current = () => alive && owns() && mount === workspaceGeneration();
   const remoteTarget = () => deploymentField ? deploymentField.server() : soul.server || server.value || '';
   // Each server's registered group (where `spawn --server` goes), from the roster's facts, whichever way the
-  // dialog targets that server: Where to run, the Deployment field or a soul listed from it. Its label for the hint.
+  // dialog targets that server: Where, the Deployment field or a soul listed from it. Its label for the hint.
   const serverGroups = new Map(), serverNames = new Map();
   const registeredGroup = (facts, id) => facts.find(f => f.server === id && f.registered === true);
-  async function fillRelatives() {
-    const target = soul.server || deploymentField ? '' : server.value, ticket = ++relativesReq, group = serverGroups.get(target);
-    relativesPending = !!target; syncButton();
-    let rows = deploymentRows(instances() || []);
-    if (target) { try { rows = group ? await serverRows(group.group) : []; } catch { rows = []; } }
-    if (ticket !== relativesReq || !current()) return;
-    relativesPending = false;
-    paintRelatives(Array.isArray(rows) ? rows : []); render(); syncButton();
-  }
   function paintServerHint() {
     const target = remoteTarget();
     serverHint.textContent = target ? `Runs on ${serverNames.get(target) || soul.repoName || target}. Its teams and defaults come from that machine's workspace.`
@@ -965,17 +852,19 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
         if (!current()) return;
         if (!select) { addedNote.textContent = `${id} is added. It is listed here once this computer has read it.`; addedButton.focus(); return; }
         if (![...server.options].some(o => o.value === id)) addServerOption({ id, label: id });
+        placeField.hidden = false; // two machines now
         server.value = id; server.focus();
         server.dispatchEvent(new doc.defaultView.Event('change', { bubbles: true }));
       } });
   }
   let addedButton = null, addedNote = null, addMachineDialog = null, stopBackfill = null;
-  /** Two or more deployments: the Deployment field replaces Where to run, so Add a machine is a button under it. */
-  function addMachineRow() {
+  /** Add a machine as a button: under the Deployment field (two or more deployments, no Where), or in Advanced while Where
+   * is hidden (one machine), where `select` chooses the added machine in Where, which then shows. */
+  function addMachineRow({ select }) {
     const row = el('div', undefined, 'spawn-field spawn-add-machine');
     addedButton = el('button', 'Add a machine to this workspace…', 'spawn-add-machine-button'); addedButton.type = 'button';
     addedNote = el('p', '', 'spawn-hint spawn-add-machine-note'); addedNote.setAttribute('aria-live', 'polite');
-    addedButton.addEventListener('click', () => openAddMachine({ select: false }));
+    addedButton.addEventListener('click', () => openAddMachine({ select }));
     row.append(addedButton, addedNote);
     return row;
   }
@@ -1014,6 +903,11 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
    * computer's CLI chooses (instance-suggest-name, the suggest-name read: #1490 §2). */
   const suggesting = () => !nameTouched && roleNamed()
     && (local() ? previewable() && suggestSupported(cli()) : instanceSuggestSupported(cli()) && !!suggestDeployment());
+  /** Slice 5: the kernel names this spawn from its task, whatever the name field holds: here (spawn-suggest-name for a local
+   * spawn, instance-suggest-name for one on another machine) or on the host (spawn-apply-suggest-name). False on an
+   * older kernel: the form then brings today's Name field back (placeName). */
+  const namesFromTask = () => roleNamed() && (local() ? previewable() && suggestSupported(cli())
+    : instanceSuggestSupported(cli()) && !!suggestDeployment() || !!cli()?.features?.includes(APPLY_SUGGEST_FEATURE) && hostAdvertises(APPLY_SUGGEST_FEATURE));
   /** What an answer is kept by: the text, the soul and the machine it names a spawn on (namingKey). */
   const keyOf = text => namingKey(selector, text, remoteTarget() || null);
   /** The suggested name for exactly this task text, or null (a numbered answer is not a suggestion). */
@@ -1042,27 +936,16 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
   const bound = data => joinBound(data) && backgroundBound(data);
   // The chosen deployment's own catalog row (#482): the root differs per deployment.
   let selector = deploymentField?.selector() ?? { soul: soul.name, agentsRoot: soul.agentsRoot };
-  /** The facts a preview depends on from outside the form: the CLI (identity and features), the
-   * workspace and the relation anchor's roster rows. sync() re-reads only when one changed: the
-   * roster polls every few seconds, and a routine poll must never supersede a read in flight
-   * (a preview slower than the poll would otherwise never settle). */
+  /** The facts a preview depends on from outside the form: the CLI (identity and features) and the
+   * workspace. sync() re-reads only when one changed: the roster polls every few seconds, and a routine
+   * poll must never supersede a read in flight (a preview slower than the poll would otherwise never settle). */
   const factsKey = () => {
-    const c = cli(), w = workspace(), anchor = rel.value === 'unrelated' ? null : relTo.value;
+    const c = cli(), w = workspace();
     return JSON.stringify([c?.ok ?? null, c?.bin ?? null, c?.version ?? null, c?.spawnPreviewApi ?? null, c?.spawnApplyApi ?? null, c?.features ?? null,
-      w?.id ?? null, w?.remote ?? null, w?.server ?? null, address() ?? null,
-      anchor === null ? null : (instances() || []).filter(i => i.instance === anchor).map(i => [i.instance, i.agent, i.agentsRoot, i.home ?? null, i.remote ?? null, i.server ?? null])]);
+      w?.id ?? null, w?.remote ?? null, w?.server ?? null, address() ?? null]);
   };
   let factsSeen = factsKey();
 
-  function relationChoice() {
-    if (rel.value === 'unrelated') return { kind: 'unrelated' };
-    if (relativesPending) return null;
-    const name = relTo.value, root = relTo.selectedOptions[0]?.dataset.root, target = remoteTarget();
-    const matches = relativeRows.filter(i => i.instance === name && i.agentsRoot === root && (target ? true : !i.remote && !i.server));
-    if (matches.length !== 1) return null;
-    const a = matches[0];
-    return { kind: rel.value, anchor: { instance: a.instance, agent: a.agent, agentsRoot: a.agentsRoot, server: target || null } };
-  }
   /** The choices the fields express, or { error } for one the operator must fix. With `suggested` (the default), an
    * empty name field carries the suggestion for this text as the name: the preview, prepare and apply all bind it. */
   function choices({ suggested = true } = {}) {
@@ -1073,8 +956,6 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
     if (p && finalName(p, named).length > INSTANCE_NAME_MAX) {
       return { error: `Instance names are at most ${INSTANCE_NAME_MAX} characters. Shorten the name.`, field: 'name' };
     }
-    const relationValue = relationChoice();
-    if (!relationValue) return { error: `Pick the instance this one is a ${rel.value} of.`, field: 'relation' };
     const identityChoice = identityOffered() && identity.value ? identity.value === 'local' ? { provider: messagingProvider, mode: 'local' }
       : { provider: messagingProvider, mode: 'global', resident: resident.value.trim() } : null;
     if (identityChoice?.mode === 'global' && !identityChoice.resident) return { error: 'Type the resident this instance acts as.', field: 'identity' };
@@ -1085,8 +966,8 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
       ...(backend.value ? { backend: backend.value } : {}), ...(yolo.value ? { yolo: yolo.value === 'true' } : {}),
       ...(backgroundChoice() !== undefined ? { background: backgroundChoice() } : {}),
       model: nativeModel ? { kind: 'native-default' } : model.value.trim() ? { kind: 'custom', value: model.value.trim() } : { kind: 'inherit' },
-      // A remote spawn sends its relation to /api/spawn itself; the local preview contract never sees a remote anchor.
-      relation: relationValue.anchor?.server ? { kind: 'unrelated' } : relationValue, ...(identityChoice ? { identity: identityChoice } : {}),
+      // D6: a human's spawn is top-level, never related to another agent.
+      relation: { kind: 'unrelated' }, ...(identityChoice ? { identity: identityChoice } : {}),
       ...(joinLabels().length ? { join: { provider: messagingProvider, labels: joinLabels() } } : {}) };
     const valid = previewChoices(out);
     return valid ? { value: valid } : { error: 'A value here is not a valid spawn option (no spaces or leading dashes).', field: 'option' };
@@ -1135,17 +1016,17 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
     if (draftChoice.error && draftChoice.field === 'name') nameResult.textContent = draftChoice.error;
     else if (nameRefusal) nameResult.textContent = spawnText(spawnProblem(nameRefusal));
     else if (!local() && !named) nameResult.textContent = `Named by ${remoteTarget()} when it spawns.`;
-    else if (named && !typed && suggestion) { nameResult.replaceChildren('Instance name: '); nameResult.append(el('strong', nameNow().name), ' (from the task)'); }
+    else if (named && !typed && suggestion) { nameResult.replaceChildren('Name: '); nameResult.append(el('strong', nameNow().name), ' (from the task)'); }
     // Only what is true now: an empty name is named from its task where the kernel suggests names and the field was
     // never typed in, else numbered by the kernel (its number is the preview's "What will be created").
     // On another machine: named here, else named there from its task (hostNames), else numbered there.
-    else if (named && !typed) nameResult.textContent = suggesting() ? 'Left empty, the instance is named from its task.'
-      : local() ? 'Left empty, the kernel numbers it.' : hostNames() ? `Left empty, the instance is named from its task on ${remoteTarget()}.` : `Named by ${remoteTarget()} when it spawns.`;
+    else if (named && !typed) nameResult.textContent = suggesting() ? `Left empty, the ${noun} is named from its task.`
+      : local() ? 'Left empty, the kernel numbers it.' : hostNames() ? `Left empty, the ${noun} is named from its task on ${remoteTarget()}.` : `Named by ${remoteTarget()} when it spawns.`;
     else {
       nameResult.replaceChildren();
       const { name, kernel } = nameNow();
-      if (name) { nameResult.append('Instance name: '); nameResult.append(el('strong', name)); }
-      else nameResult.append('Instance name: numbered by the kernel');
+      if (name) { nameResult.append('Name: '); nameResult.append(el('strong', name)); }
+      else nameResult.append('Name: numbered by the kernel');
       // A purpose's taken name is numbered by the kernel; --name is refused instead (E_INSTANCE_NAME_TAKEN, beside the field).
       if (kernel && typed && !named && name !== `${soul.name}-${typed.toLowerCase()}`) nameResult.append(' — that name is taken, so the kernel numbered it');
     }
@@ -1160,7 +1041,7 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
     modelTag.textContent = model.value || !now ? '' : nativeModel || now.modelSource === 'explicit' ? 'chosen' : 'default';
     modelTag.title = now?.modelSource || '';
     model.setAttribute('aria-label', model.value ? 'Model' : `Model — empty uses ${defaultModel || 'the default'}`);
-    syncRuntime(now);
+    syncHarness(now);
     runHint.textContent = !local() ? `Harness and model defaults are decided on ${remoteTarget()}.` : launchHint(now, cli()) ?? (now ? `Launches ${runtimeName(now.harness)} with ${modelText(now)}.` : '');
     // Work.
     worktreeLabel.hidden = soul.work !== 'checkout';
@@ -1204,18 +1085,60 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
     }
     identityField.hidden = !identityOffered();
     residentLabel.hidden = identity.value !== 'global';
-    advancedTopics.textContent = `Work area · permissions${identityOffered() ? ' · identity' : ''} · launch · session · wake-up`;
+    advancedTopics.textContent = `model · name · work${teamsField.hidden ? '' : ' · teams'} · permissions${identityOffered() ? ' · identity' : ''} · launch · wake`;
     if (identityOffered()) {
       const origins = !!cli()?.features?.includes('settings-origins');
       identity.options[0].textContent = identityDefaultLabel(data, identity.value, origins);
       identityHint.classList.toggle('err', draftChoice.field === 'identity');
       identityHint.textContent = draftChoice.field === 'identity' ? draftChoice.error : !data || !data.messaging ? '' : identityHintText(data.messaging, origins);
     }
-    const related = rel.value !== 'unrelated';
-    relTo.hidden = !related; relTo.disabled = !related; relTo.setAttribute('aria-label', related ? `${rel.value[0].toUpperCase()}${rel.value.slice(1)} of which instance?` : 'Which instance');
-    relDesc.textContent = !related ? 'Independent — not linked to another instance.' : relTo.value ? `Spawns as a ${rel.value} of ${relTo.value}.` : `Pick the instance this one is a ${rel.value} of.`;
-    if (layoutNow === 'scoped') renderPreview();
+    placeName(); renderTaskHint(); renderPreview(); renderPreviewLine();
     syncButton();
+  }
+  /** Where the Name field is: Advanced (the kernel name, an optional override) where the kernel names agents from their
+   * task; the form itself (today's optional Name, and one dim line saying why) where it can't. Never moved while it
+   * holds focus: it moves when Where changes, so focus is on Where then. */
+  function placeName() {
+    const fallback = !namesFromTask();
+    if (nameField.contains(doc.activeElement)) return;
+    if (fallback && nameField.parentElement !== body) previewLine.before(nameField);
+    else if (!fallback && nameField.parentElement !== advancedBody) modelField.after(nameField);
+    nameLabelText.textContent = fallback ? 'Name ' : 'Kernel name ';
+    nameFallback.hidden = !fallback;
+    nameFallback.textContent = !fallback ? '' : local()
+      ? `This OATS CLI can't name an ${noun} from its task (it is older than spawn-suggest-name): name it here, or the kernel numbers it.`
+      : `This computer can't name an ${noun} on ${remoteTarget()} from its task: name it here, or ${remoteTarget()} names it.`;
+  }
+  /** Under Task: how the agent will be named (when the kernel names it from the task and no name is set), and the keys. */
+  function renderTaskHint() {
+    taskHint.replaceChildren();
+    const typed = purpose.value.trim();
+    if (namesFromTask() && !typed) {
+      const suggestion = suggestionNow();
+      if (suggestion) taskHint.append('Named ', el('strong', suggestion), ' from its task. ');
+      else if (!task.value.trim()) taskHint.append('Named from its task; with no task it gets a number. ');
+      else taskHint.append(`Named from its task${local() ? '' : ` on ${remoteTarget()}`}. `);
+    } else if (namesFromTask() && typed) taskHint.append('Named ', el('strong', finalName(typed, roleNamed())), ' (Advanced). ');
+    taskHint.append('Enter starts it · Shift+Enter for a new line');
+  }
+  /** The compact preview: one dim line of what the kernel will create for the inputs on screen (its full facts are
+   * Advanced's), from the same state as the full preview, so it is never truer or staler than it. A refusal is the
+   * footer's to say. */
+  function renderPreviewLine() {
+    const state = previewState();
+    previewLine.replaceChildren(); previewLine.classList.toggle('err', false);
+    if (defaultBlocked()) { previewLine.classList.add('err'); previewLine.textContent = teamsHint.textContent; return; }
+    if (state.kind === 'reading') { previewLine.textContent = 'Reading what will be created…'; return; }
+    if (state.kind === 'empty') { previewLine.textContent = state.text || ''; return; }
+    if (state.kind !== 'data') return;
+    const data = state.data, name = nameNow().name;
+    previewLine.append('Creates ');
+    if (name) previewLine.append(el('strong', name)); else previewLine.append(suggesting() && !purpose.value.trim() ? `an ${noun} named from its task` : `a numbered ${noun}`);
+    const modelName = data.model === null ? `${runtimeName(data.harness)}'s default model` : data.model;
+    const work = data.work === 'worktree' && data.branch ? `worktree on ${data.branch}` : data.work === 'checkout' ? 'in the checkout'
+      : data.work === 'directory' ? 'in its own folder' : data.work === 'workspace' ? 'in the workspace' : data.work || '';
+    previewLine.append([` · ${runtimeName(data.harness)}`, modelName, work].filter(Boolean).join(' · '));
+    if (state.updating) previewLine.append(' · Updating…');
   }
   /** What the preview column shows for the choices on screen: the kernel's data for exactly these
    * choices or its refusal; once anything settled, while a newer read is due or in the air, the last
@@ -1430,6 +1353,8 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
       return;
     }
     shown = next; if (next.data) settled = next;
+    // The soul's default harness here: what a preview with no harness and no launch configuration chosen launches.
+    if (next.data && value.harness === undefined && value.launchConfig === undefined) harnessDefaultSeen = next.data.harness;
     // A press kept as intent continues only on the preview for exactly the choices pressed. A press that is naming
     // (nameThenRun) is not a preview's to settle: it continues when its name lands.
     const press = pressed?.naming ? null : pressed;
@@ -1700,7 +1625,7 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
       const outcome = await remoteSpawn({ server: remoteTarget(), ...(deploymentField ? { agentsRoot: selector.agentsRoot, deployment: address() } : {}),
         ...naming, ...numbered, task: task.value, harness: runtime.value, model: model.value.trim(),
         backend: backend.value, launchConfig: config.value, yolo: yolo.value === '' ? undefined : yolo.value === 'true', background: backgroundChoice(), wake: wakeValue,
-        relation: rel.value, relativeTo: relTo.value, relativeRoot: relTo.selectedOptions[0]?.dataset.root || '', status, button: spawn });
+        status, button: spawn });
       if (outcome?.created) deploymentField?.remember(); // the host created it (the dialog may already be closed)
       if (outcome?.created && alive) phase = 'complete'; // created on the host: never a second spawn
     } finally { remoteBusy = false; if (alive) syncButton(); }
@@ -1720,20 +1645,29 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
   }, { searchable: true, scope: () => JSON.stringify([runtime.value || settled?.data?.harness || '', remoteTarget()]),
     nothingReported: 'No model suggestions reported. Any model ID can be typed.', noMatch: 'No suggestions match this filter.' });
   models.trigger.textContent = ''; models.trigger.setAttribute('aria-label', 'Choose model');
-  // ── harness picker: the harness's badge, like the design's provider field
-  const runtimePicker = createChoicePopup(doc, runtimeLabel, 'Harness choices', 'spawn-runtime-choices', () => [
-    { value: '', label: matched() ? `Default · ${runtimeName(matched().harness)}` : 'Default', detail: 'What this soul launches with unless you choose', selected: !runtime.value,
-      group: 'Default', search: false, ...(matched() ? { mark: () => createRuntimeBadge(doc, matched().harness) } : {}) },
-    ...runtimes.map(v => ({ value: v, label: RUNTIME_NAMES[v], selected: runtime.value === v, group: 'Harnesses', mark: () => createRuntimeBadge(doc, v) })),
-  ], item => { runtime.value = item.value; runtime.dispatchEvent(new doc.defaultView.Event('change', { bubbles: true })); });
-  function syncRuntime(data) {
-    const t = runtimePicker.trigger, value = runtime.value || data?.harness || '';
-    t.replaceChildren();
-    if (value) t.append(createRuntimeBadge(doc, value));
-    t.append(doc.createTextNode(value ? runtimeName(value) : 'Default'));
-    if (!runtime.value && data) t.append(el('span', 'default', 'spawn-trigger-tag'));
-    t.setAttribute('aria-label', `Harness: ${value ? runtimeName(value) : 'default'}${runtime.value ? '' : ' (default)'}`);
-    runtimePicker.refresh();
+  // ── Harness: the segmented control. The soul's default (where it runs: the preview's answer with no harness or launch
+  // configuration chosen, else its catalog row) is marked and chosen until another is; choosing it again sends nothing.
+  let harnessDefaultSeen = null;
+  const soulDefaultHarness = () => !local() ? remoteSoulHarness()
+    : harnessDefaultSeen ?? shownLaunch(soul.launch, cli())?.effective?.harness ?? null;
+  harnessSeg.addEventListener('change', event => {
+    const input = event.target;
+    if (input?.type !== 'radio' || !input.checked) return;
+    const next = input.value === soulDefaultHarness() && !config.value ? '' : input.value;
+    if (runtime.value === next) return;
+    runtime.value = next; runtime.dispatchEvent(new doc.defaultView.Event('change', { bubbles: true }));
+  });
+  /** The segments follow the value: the chosen harness, else the one the preview for these choices launches, else the
+   * soul's default; the default is marked in words. */
+  function syncHarness(data) {
+    const fallback = soulDefaultHarness(), value = runtime.value || data?.harness || fallback;
+    for (const input of harnessSeg.querySelectorAll('input')) {
+      input.checked = input.value === value;
+      const tag = input.nextElementSibling?.querySelector('.spawn-harness-default');
+      if (tag) tag.hidden = input.value !== fallback;
+      input.setAttribute('aria-label', `${RUNTIME_NAMES[input.value]}${input.value === fallback ? ' (the soul\'s default)' : ''}`);
+    }
+    syncHarnessStop();
   }
   async function fillModels() {
     const ticket = ++modelsReq, rt = runtime.value || settled?.data?.harness || '';
@@ -1764,7 +1698,7 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
       if (configWanted !== null) { configWanted = null; schedule(0); }
     } catch { /* the default stays */ }
   }
-  // ── execution servers (Advanced › Run on)
+  // ── execution servers (Where)
   // Disabled with why: the server's registered group failed its last roster read, or no group of it is the
   // registration's. Before the roster answers nothing is known: nothing is guessed. A group's souls are only
   // those spawned there before, not the ones its workspace offers, so they never disable a server: the kernel
@@ -1772,7 +1706,8 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
   // #517: with servers-per-workspace and server-connect the route answers this window's machines only
   // (`{ servers, filtered, key, deployment, aweb, reason? }`); without them it answers the registered list.
   // "Add a machine to this workspace…" is offered when the window has a key and a local deployment: the
-  // last entry here, or (two or more deployments, no Where to run) a button under the Deployment field.
+  // last entry of Where; with one machine (Where hidden), a button in Advanced, which shows Where with the machine
+  // added; with two or more deployments (no Where), a button under the Deployment field.
   Promise.all([Promise.resolve(typeof servers === 'function' ? servers() : servers),
     Promise.resolve().then(() => serverFacts()).catch(() => [])]).then(([answer, facts]) => {
     if (!current()) return;
@@ -1788,11 +1723,15 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
     // The server is still learning unknown keys: read again until it is done, adding the machines it found.
     if (machines?.backfilling === true && typeof servers === 'function') stopBackfill = followBackfill({ read: servers, owns: current, delay: backfillDelay,
       use: next => { for (const srv of Array.isArray(next?.servers) ? next.servers : []) if (!serverNames.has(srv.id)) addServerOption(srv, facts); } });
+    // Where: only with two or more machines (this computer and one of these).
+    placeField.hidden = !list.length;
     if (machines?.deployment) {
-      if (deploymentField) deploymentField.element.after(addMachineRow());
+      if (deploymentField) deploymentField.element.after(addMachineRow({ select: false }));
       else { const o = el('option', 'Add a machine to this workspace…'); o.value = ADD_MACHINE; server.append(o); }
+      if (!deploymentField && placeField.hidden) wake.el.after(addMachineRow({ select: true }));
     }
-    placeField.hidden = !list.length && !machines?.deployment && !machines?.reason;
+    // Why there are no machines to choose (the route's reason), where Where would be: under Advanced's button.
+    if (placeField.hidden && machines?.reason && addedNote) addedNote.textContent = machines.reason;
     paintServerHint();
   }).catch(() => {});
   placeField.hidden = !soul.server;
@@ -1805,19 +1744,25 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
     notice = hostNameRefusal = null; dropPress();
     if (phase === 'drifted') phase = 'idle';
     if (event.target === runtime || event.target === server) void fillModels();
-    if (event.target === server) { shown = settled = null; void fillConfigs(); void fillRelatives(); paintServerHint(); taskEdited(); }
+    if (event.target === server) { shown = settled = null; void fillConfigs(); paintServerHint(); taskEdited(); }
     // Typing in the name field replaces the suggestion, and stops suggestions for this dialog.
     if (event.target === purpose && event.type === 'input' && !nameTouched) { nameTouched = true; clearTimeout(suggestTimer); suggestTimer = null; suggestedNow = null; }
     if (event.target === task && event.type === 'input') { taskEdited(); syncButton(); return; }
-    if ([search].includes(event.target) || wake.el.contains(event.target) || event.target === task) { syncButton(); return; }
+    if (soulField.element.contains(event.target) || wake.el.contains(event.target) || event.target === task) { syncButton(); return; }
     schedule(event.type === 'change' && (event.target.tagName !== 'INPUT' || event.target.type === 'checkbox') ? 0 : debounce);
   };
   form.addEventListener('input', onEdit); form.addEventListener('change', onEdit);
   spawn.addEventListener('click', () => { void press(); });
   cancel.addEventListener('click', () => close());
   closeButton.addEventListener('click', () => close());
-  // Change soul: the picker, in place — never a reopen, so nothing typed is lost.
-  changeSoul.addEventListener('click', () => { dropPress(); setLayout('picker'); focusTarget().focus({ preventScroll: true }); });
+  // Task: Enter starts the agent, through the same press as the Start button and spawn.submit; Shift+Enter is a
+  // newline. Never while an input method composes, and never a held key's repeat.
+  task.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.isComposing || event.keyCode === 229) return;
+    event.preventDefault(); event.stopPropagation();
+    if (!event.repeat && !spawn.disabled) void press();
+  });
 
   // ── Spec E: focus and the section keys
   /** Name, with the caret at the end of what is there (a restored draft is never selected). */
@@ -1828,32 +1773,31 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
   }
   const visibleControl = c => !!c && !c.disabled && !c.hidden && !c.closest('[hidden]');
   const tabbable = root => [...root.querySelectorAll('button, input, select, textarea, summary, [tabindex]')].filter(c => visibleControl(c) && c.tabIndex >= 0);
-  /** Focus on open: the form's first field, the Opening instruction, without scrolling, with the caret at the
-   * end of what is there (a restored draft is never selected). */
+  /** Focus on open: Task (the soul is chosen), without scrolling, with the caret at the end of what is there (a
+   * restored draft is never selected). */
   function focusFirst({ preventScroll = true } = {}) {
     task.focus({ preventScroll });
     const end = task.value.length;
     try { task.setSelectionRange(end, end); } catch { /* not a text field here */ }
   }
-  /** The control each section key lands on (Relationship: its selected segment; Teams: its first box one can tick). */
+  /** The control each section key lands on (Harness: its chosen segment; Teams: its first box one can tick). */
   const jumpTargets = {
     name: () => purpose,
-    harness: () => runtimePicker.trigger,
+    harness: () => harnessSeg.querySelector('input:checked') || harnessSeg.querySelector('input'),
     model: () => model,
-    relationship: () => seg.querySelector('input:checked') || seg.querySelector('input'),
     teams: () => [...teamsList.querySelectorAll('input')].find(visibleControl) || null,
     task: () => task,
   };
-  /** The first control of Developer settings, in tab order. */
+  /** The first control of Advanced, in tab order. */
   const firstAdvanced = () => tabbable(advancedBody)[0] || null;
   /** A section key: focus moves to that section's control; a closed disclosure holding it opens first.
-   * 'advanced' toggles Developer settings: open, focus on its first control; closed, focus on its summary.
+   * 'advanced' toggles Advanced: open, focus on its first control; closed, focus on its summary.
    * False when the section is not there (Teams not offered, say): focus stays. */
   function jump(target) {
     if (!alive) return false;
     // An open Harness or Model picker closes first (its focus is not restored: focus moves on), so Escape
     // afterwards still closes a picker before the dialog only when one is shown.
-    models.close(); runtimePicker.close();
+    models.close();
     if (target === 'advanced') {
       advanced.open = !advanced.open;
       const to = advanced.open ? firstAdvanced() || advancedSummary : advancedSummary;
@@ -1867,11 +1811,11 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
     return true;
   }
   // The chords on screen, per section ({ label, aria } or null): the hint beside each label, and the
-  // control's aria-keyshortcuts (every segment of Relationship and every team box, the one focused varies).
+  // control's aria-keyshortcuts (every segment of Harness and every team box, the one focused varies).
   let keysNow = {};
   function applyKeys() {
     const targets = {
-      name: [purpose], harness: [runtimePicker.trigger], model: [model], relationship: [...seg.querySelectorAll('input')],
+      name: [purpose], harness: [...harnessSeg.querySelectorAll('input')], model: [model],
       teams: [...teamsList.querySelectorAll('input')].filter(c => !c.disabled), task: [task], advanced: [advancedSummary],
     };
     for (const [target, hint] of Object.entries(keyHints)) {
@@ -1903,12 +1847,7 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
       if (typeof c.background === 'boolean') { backgroundSwitch.checked = c.background; backgroundTouched = true; }
       if (c.model?.kind === 'native-default') nativeModel = true;
       else if (c.model?.kind === 'custom' && typeof c.model.value === 'string') model.value = c.model.value;
-      const kind = c.relation?.kind, anchor = c.relation?.anchor;
-      if (kind && kind !== 'unrelated' && anchor) {
-        const radio = [...seg.querySelectorAll('input')].find(i => i.value === kind);
-        const option = [...relTo.options].find(o => o.value === anchor.instance && o.dataset.root === anchor.agentsRoot);
-        if (radio && option) { radio.checked = true; option.selected = true; }
-      }
+      // A relation an older draft kept is not restored: a human's spawn is top-level (D6).
       if (c.identity?.mode === 'local' || c.identity?.mode === 'global') { identity.value = c.identity.mode; resident.value = c.identity.resident || ''; }
       for (const label of Array.isArray(c.join?.labels) ? c.join.labels : []) joinPicked.add(label);
     }
@@ -1921,15 +1860,13 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
     }
   }
   restoreDraft(draft.restore);
-  setLayout(layout); render();
+  render();
   return {
     /** Begin reading once the host owns the attached dialog. */
     start() { if (!current()) return; deploymentField?.start(); schedule(0); void fillModels(); void fillConfigs(); },
-    dialog, search, purpose, spawn, status, preview, changeSoul,
+    dialog, purpose, task, spawn, status, preview, soulField,
     /** Spec E: focus Name (caret at the end), the first field (focus on open), a section key's jump, and the chords the hints show. */
     focusName, focusFirst, jump, setShortcuts,
-    /** 'scoped' (preview + form) or 'picker' (chooser + form); switched in place. */
-    get layout() { return layoutNow; }, setLayout,
     submit: () => { if (!spawn.disabled) void press(); },
     busy,
     /** CLI/roster/workspace facts changed under the open dialog. */
@@ -1945,7 +1882,7 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, in
     },
     /** The background spawn store changed: re-read whether a spawn of this soul is in flight. */
     syncInFlight() { if (alive) syncButton(); },
-    closePopups() { models.close(); runtimePicker.close(); deploymentField?.closePopup(); },
-    dispose() { alive = false; narrowQuery?.removeEventListener?.('change', placePreview); addMachineDialog?.close({ restoreFocus: false }); stopBackfill?.(); clearTimeout(timer); clearTimeout(suggestTimer); serial++; pressed = null; modelsReq++; configsReq++; deploymentField?.dispose(); models.dispose(); runtimePicker.dispose(); form.removeEventListener('input', onEdit); form.removeEventListener('change', onEdit); },
+    closePopups() { models.close(); deploymentField?.closePopup(); },
+    dispose() { alive = false; addMachineDialog?.close({ restoreFocus: false }); stopBackfill?.(); clearTimeout(timer); clearTimeout(suggestTimer); serial++; pressed = null; modelsReq++; configsReq++; deploymentField?.dispose(); models.dispose(); form.removeEventListener('input', onEdit); form.removeEventListener('change', onEdit); },
   };
 }

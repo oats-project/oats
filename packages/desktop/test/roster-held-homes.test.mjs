@@ -132,7 +132,7 @@ test("a row the roster reports setting up its worktree (a spawn made anywhere): 
   u.render([...roster, instance("dev-new", "root", { running: false, spawnInProgress: true })]);
   const button = u.row("dev-new");
   assert.equal(button.querySelector(".ctx-spawn-state").textContent, "Setting up worktree…");
-  assert.equal(button.querySelector(".ctx-spawn-spinner").getAttribute("aria-hidden"), "true", "the text carries the state; the spinner is decoration");
+  assert.equal(button.querySelector(".ctx-dot.starting").getAttribute("aria-hidden"), "true", "the text carries the state; the pulse is decoration");
   assert.equal(button.classList.contains("pending"), true);
   assert.equal(button.getAttribute("aria-disabled"), "true"); assert.match(button.getAttribute("aria-description"), /is setting up its worktree/);
   assert.equal(button.dataset.treeInstance, "/synthetic/dev-new", "the instance's identity");
@@ -185,7 +185,7 @@ test("the pending row turns into “Setting up worktree…” in place, never fl
   u.row("dev-new").focus();
   step(roster, "Spawning…");
   const settingUp = step([...roster, instance("dev-new", "root", { running: false, spawnInProgress: true })], "Setting up worktree…");
-  assert.ok(settingUp.querySelector(".ctx-spawn-spinner"));
+  assert.ok(settingUp.querySelector(".ctx-dot.starting"));
   assert.equal(settingUp.querySelector(".ctx-spawn-since").textContent, `since ${waitingClock(STARTED)}`);
   assert.equal(u.status("dev-new"), "Spawning (setting up worktree)");
   // The roster reports it without the flag while the job is still spawning: still the pending row, never "stopped".
@@ -239,7 +239,7 @@ test("both spawnInProgress and rollbackIncomplete: rollbackIncomplete wins, even
     u.render([...roster, both]);
     assert.equal(u.list.querySelectorAll(".ctx-inst").length, 3, "never both");
     assert.equal(u.row("dev-new").querySelector(".ctx-spawn-state").textContent, "Spawn didn't finish");
-    assert.equal(u.row("dev-new").querySelector(".ctx-spawn-spinner"), null);
+    assert.equal(u.row("dev-new").querySelector(".ctx-dot.starting"), null);
     assert.equal(u.row("dev-new").querySelector(".ctx-spawn-since"), null);
     assert.deepEqual(u.menu("dev-new"), ["retire"]);
     assert.equal(u.status("dev-new"), "Spawn didn't finish");

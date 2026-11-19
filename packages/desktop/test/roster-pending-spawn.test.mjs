@@ -57,7 +57,7 @@ function fixture(t, rows, extra = {}) {
   return { doc, render, list, row, checked, live: () => doc.querySelector("#instance-roster > .ctx-spawn-live") };
 }
 
-test("a pending spawn shows under its parent: “Spawning…” text and a spinner, opens nothing, no actions; the count stays the kernel’s", async t => {
+test("a pending spawn shows under its parent: “Spawning…” text and a pulsing dot, opens nothing, no actions; the count stays the kernel’s", async t => {
   const u = fixture(t, () => [pending()]);
   u.render(roster);
   const button = u.row("dev-new");
@@ -66,7 +66,7 @@ test("a pending spawn shows under its parent: “Spawning…” text and a spinn
   assert.ok(names.indexOf("dev-new") > names.indexOf("root") && names.indexOf("dev-new") < names.indexOf("solo"), "in its parent's group");
   assert.equal(button.closest(".ctx-tree-row").style.getPropertyValue("--depth"), "1", "one level under root");
   assert.equal(button.querySelector(".ctx-spawn-state").textContent, "Spawning…");
-  assert.equal(button.querySelector(".ctx-spawn-spinner").getAttribute("aria-hidden"), "true", "the text carries the state; the spinner is decoration");
+  assert.equal(button.querySelector(".ctx-dot.starting").getAttribute("aria-hidden"), "true", "the text carries the state; the pulse is decoration");
   assert.equal(button.getAttribute("aria-disabled"), "true"); assert.match(button.getAttribute("aria-description"), /being spawned/);
   assert.equal(button.dataset.treeInstance, "/synthetic/dev-new", "the real row's identity");
   button.click(); // openTerminalTab / openInstanceStart would fail the test
@@ -147,7 +147,7 @@ test("an unknown outcome reads “Outcome unknown” with a visible Check result
   u.render(roster);
   const button = u.row("dev-new");
   assert.equal(button.querySelector(".ctx-spawn-state").textContent, "Outcome unknown");
-  assert.equal(button.querySelector(".ctx-spawn-spinner"), null, "no spinner: nothing is known to be moving");
+  assert.equal(button.querySelector(".ctx-dot.starting"), null, "no pulse: nothing is known to be moving");
   const check = button.closest(".ctx-tree-row").querySelector(".ctx-spawn-check");
   assert.equal(check.getAttribute("aria-label"), "Check result for dev-new"); assert.equal(check.textContent, "Check result");
   assert.ok(check.closest(".ctx-spawn-tools"), "its tools are always visible");
@@ -169,9 +169,9 @@ test("another workspace's pending rows are not painted", async t => {
   assert.equal(other.row("dev-new"), undefined);
 });
 
-test("CSS: the spinner turns only without reduced motion, and the Check result tools stay visible", () => {
-  assert.match(css, /\.ctx-spawn-spinner \{[^}]*animation: oats-spin/);
-  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ \.ctx-spawn-spinner \{ animation: none; \} \}/);
+test("CSS: the starting dot pulses only without reduced motion, and the Check result tools stay visible", () => {
+  assert.match(css, /\.ctx-dot\.starting \{[^}]*animation: ctx-dot-starting/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ \.ctx-dot\.starting \{ animation: none; \} \}/);
   assert.match(css, /\.ctx-tree-row > \.ctx-spawn-tools \{ visibility: visible; \}/);
 });
 
