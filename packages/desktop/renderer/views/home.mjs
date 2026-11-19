@@ -154,7 +154,7 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
     const s = node("section", "home-section"); s.dataset.homeSection = "overview";
     const h = node("h2", null, "Workspace overview"); h.id = "home-overview-title";
     const ul = node("ul", "home-list"); ul.setAttribute("aria-labelledby", h.id);
-    const all = { ...counts, agents: data.phase === "ready" ? data.rows.length : data.phase === "failed" ? "failed" : "loading", machines: machineCount(data.deployments) || (data.phase === "ready" ? 1 : data.phase === "failed" ? "failed" : "loading") };
+    const all = { ...counts, agents: data.phase === "ready" ? data.rows.length : data.phase === "loading" ? "loading" : "failed", machines: machineCount(data.deployments) || (data.phase === "ready" ? 1 : data.phase === "loading" ? "loading" : "failed") };
     // A workspace served with no deployment list is this machine's alone: one machine.
     for (const entry of OVERVIEW) {
       const b = node("button", "home-row"); b.type = "button"; b.dataset.homeOpen = entry.key;
@@ -180,10 +180,14 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
     const s = node("section", "home-section"); s.dataset.homeSection = "board";
     const h = node("h2", null, cap(nouns.instances)); s.append(h);
     if (data.phase === "loading") { s.append(statusLine(`Reading your ${nouns.instances}…`)); return s; }
-    if (data.phase === "failed") {
+    if (data.phase === "failed" || data.phase === "unavailable") {
+      // Unavailable: the kernel could not observe the deployment (its refusal, or a feature missing), said in the
+      // sidebar's own words: no first run, no empty board, no zero.
       const p = node("p", "home-failed", `Couldn't read your ${nouns.instances}.`);
       const retry = node("button", null, "Retry"); retry.type = "button"; retry.addEventListener("click", () => data.retry?.());
-      p.append(retry); s.append(p); return s;
+      p.append(retry); s.append(p);
+      if (data.phase === "unavailable" && data.note) s.append(node("p", "home-quiet", data.note));
+      return s;
     }
     const { needsYou, running } = homeBoard(data.rows, { stale: data.stale });
     const opts = { deployments: data.deployments, here: data.here };
@@ -215,7 +219,11 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
     back.addEventListener("click", () => backToBoard());
     s.append(back);
     if (data.phase === "loading") { s.append(statusLine(`Reading your ${nouns.instances}…`)); return s; }
-    if (data.phase === "failed") { s.append(node("p", "home-failed", `Couldn't read your ${nouns.instances}.`)); return s; }
+    if (data.phase === "failed" || data.phase === "unavailable") {
+      s.append(node("p", "home-failed", `Couldn't read your ${nouns.instances}.`));
+      if (data.phase === "unavailable" && data.note) s.append(node("p", "home-quiet", data.note));
+      return s;
+    }
     const rows = homeAgents(data.rows);
     if (!rows.length) { s.append(node("p", "home-quiet", `No ${nouns.instances} yet.`)); return s; }
     const opts = { deployments: data.deployments, here: data.here };
@@ -264,30 +272,31 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
   // a workspace since left is dropped. A read never rejects: a refused or malformed answer is that count's "failed".
   const own = (asked) => alive && asked === gen && generation() === asked;
   // A read may answer PENDING: the server has no settled observation yet (the souls catalog still reading). The count
-  // stays "Counting…" and is asked again on the roster's next paint (its refresh cadence: no timer of Home's own),
-  // at most PENDING_TRIES times; after that the answer is taken as it is.
-  const PENDING = Symbol("pending"), PENDING_TRIES = 10;
-  const inFlight = new Set(), retry = new Map(); // key -> { read, tries }
-  function readCount(key, read, tries = 0) {
+  // stays "Counting…" and is asked again on the roster's next paint (its refresh cadence: no timer of Home's own,
+  // one read in flight at a time), for as long as it is pending: a still-reading catalog never becomes a count.
+  const PENDING = Symbol("pending");
+  const inFlight = new Set(), retry = new Map(); // key -> its read, while pending
+  function readCount(key, read) {
     const asked = gen;
     counts[key] = "loading"; inFlight.add(key); retry.delete(key);
-    Promise.resolve().then(() => read(tries >= PENDING_TRIES)).catch(() => "failed").then((value) => {
+    Promise.resolve().then(() => read()).catch(() => "failed").then((value) => {
       if (!own(asked)) return;
       inFlight.delete(key);
-      if (value === PENDING) { retry.set(key, { read, tries: tries + 1 }); return; }
+      if (value === PENDING) { retry.set(key, read); return; }
       counts[key] = value; paint();
     });
   }
   function retryPending() {
-    for (const [key, { read, tries }] of [...retry]) if (!inFlight.has(key)) readCount(key, read, tries);
+    for (const [key, read] of [...retry]) if (!inFlight.has(key)) readCount(key, read);
   }
   /** The souls catalog's answer as a count (the Workspace page's rules, views/spawn.mjs settleGridState): a
    * `catalog.reason` is a failed read; an empty list while the catalog is still reading (`refreshing`), or with no
-   * catalog observed yet, is pending, not "0 souls"; else the number listed. */
-  function soulsCount(d, settle) {
+   * catalog observed yet, is pending, not "0 souls"; else the number listed. A remote view's answer (its workspace
+   * names a `server`) carries no catalog of its own: its list is the count. */
+  function soulsCount(d) {
     if (!d || !Array.isArray(d.agents)) return "failed";
     if (d.catalog?.reason) return "failed";
-    if (!d.agents.length && !settle && (d.refreshing === true || !d.catalog)) return PENDING;
+    if (!d.agents.length && (d.refreshing === true || (!d.catalog && !d.workspace?.server))) return PENDING;
     return d.agents.length;
   }
   let teamsReadIn = null; // the generation a Teams read was asked in: a CLI answer then asks no second one
@@ -302,7 +311,7 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
     });
   }
   function readCounts() {
-    readCount("souls", async (settle) => soulsCount(await apiJson(ctx, `/api/agents${wsQuery()}`), settle));
+    readCount("souls", async () => soulsCount(await apiJson(ctx, `/api/agents${wsQuery()}`)));
     readCount("capabilities", async () => {
       const r = await postJson(ctx, `/api/workspace-sync${wsQuery()}`, { action: "read" });
       return r?.status === "ok" && Array.isArray(r.capabilities?.capabilities) ? r.capabilities.capabilities.length : "failed";

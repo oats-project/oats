@@ -285,3 +285,29 @@ test("slice2 a repaint keeps focus and activation on the same agent when names r
   remote.focus(); u.set({ rows: [...rows] });
   assert.ok(u.doc.activeElement.dataset.homeAgent.startsWith("server:polaris"), "in Home › Agents too, across hosts");
 });
+
+// Review round 3 (slice 2): an unobserved deployment is no empty workspace, and a catalog still reading never becomes 0.
+test("slice2 an unavailable deployment is a failed read on Home, never the first run or 0 agents", (t) => {
+  const u = fixture(t, { rows: [], phase: "unavailable" });
+  u.set({ note: "OATS answered with an error (E_WORKSPACE_SCHEMA). It says: invalid workspace file" });
+  assert.equal(u.el.querySelector('[data-home-section="first-run"]'), null, "no first run");
+  assert.match(u.el.textContent, /Couldn't read your agents\./);
+  assert.match(u.el.textContent, /E_WORKSPACE_SCHEMA\). It says: invalid workspace file/, "the sidebar's own words for why");
+  assert.ok([...u.el.querySelectorAll("button")].some((b) => b.textContent === "Retry"));
+  assert.match(u.openButton("agents").textContent, /Couldn't count them/, "never 'You have 0 agents'");
+  assert.match(u.openButton("machines").textContent, /Couldn't count them/);
+  // The shell says unavailable whenever it holds a deployment note (the kernel could not observe it).
+  assert.match(shell, /const phase = contextDeploymentNote !== null \? "unavailable"/);
+});
+
+test("slice2 a catalog that keeps reading stays Counting…, however many paints ask again", async (t) => {
+  let reads = 0;
+  const u = fixture(t, { rows: [row("a")], api: async () => { reads++; return { agents: [], refreshing: true, catalog: { reason: null } }; } });
+  for (let i = 0; i < 12; i++) { u.set({ rows: [row("a")] }); await u.settle(); await u.settle(); }
+  assert.match(u.openButton("souls").textContent, /Counting…/, "still reading is never 0 souls");
+  assert.ok(reads > 10, "asked again on each paint while pending");
+  // A remote view's answer has no catalog of its own: its list is the count, zero included.
+  const v = fixture(t, { rows: [row("a")], api: async () => ({ workspace: { id: "remote:x", server: "polaris" }, agents: [], refreshing: false }) });
+  await v.settle(); await v.settle();
+  assert.match(v.openButton("souls").textContent, /You have 0 souls/);
+});

@@ -2426,14 +2426,16 @@ contract (its mount returns its disposer), so a later slice can put it in a tab.
 doesn't read already:
 
 - **The roster** through `ctx.homeRoster()` (the rows the sidebar shows, held retires included, its deployments, the
-  read's `phase`: loading, failed or ready, the held-stale rule, this machine's name and Retry) and
+  read's `phase`: loading, failed, unavailable (the kernel could not observe the deployment: the sidebar's note, never
+  an empty workspace, so no first run and no zero) or ready, the held-stale rule, this machine's name and Retry) and
   `ctx.subscribeHomeRoster(fn)`, run after each paint of the roster (and after a first read fails with nothing
   shown). The board's groups are the shared `packages/client/home-board.mjs` (`homeBoard`: Needs you by the one
   claim gate, newest claim first; Running, newest spawn first; `homeAgents`; `startedBy`), so the TUI can draw the
   same Home. Nothing reorders the roster.
 - **Counts**: Souls from `GET /api/agents` (read by the Workspace page's rules: a `catalog.reason` is a failure; an
   empty list while the catalog is still reading, or with no catalog observed yet, is pending, "Counting…", and is
-  asked again on the roster's next paint, at most ten times before its answer is taken as it is), Capabilities from `POST /api/workspace-sync {action:"read"}`, Teams from
+  asked again on each roster paint for as long as it stays pending, never taken as zero; a remote view's answer has
+  no catalog of its own, and its list is the count), Capabilities from `POST /api/workspace-sync {action:"read"}`, Teams from
   `POST /api/workspace-teams {action:"list"}` (only where the CLI has a team model: "Counting…" while its probe is
   pending, no line where it has none; `onCliChange` settles it), Machines from the roster's deployments (a workspace
   with no deployment list is this machine's: one). Each count is its own read, owned by the workspace generation it

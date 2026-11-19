@@ -576,11 +576,13 @@ function openRosterInstance(i) {
   return true;
 }
 /** Home's view of the roster: the rows the sidebar shows (held retires included), its deployments, the read's
- * phase ("loading" before a first answer, "failed" when that failed, else "ready"), the stale rule, and this
- * machine's name. */
+ * phase ("loading" before a first answer, "failed" when that failed, "unavailable" when the answer says the
+ * kernel could not observe the deployment, with the sidebar's own words for why in `note`: never an empty
+ * workspace; else "ready"), the stale rule, and this machine's name. */
 function homeRoster() {
-  const phase = rosterState?.hasData ? "ready" : rosterState?.state === "failed" ? "failed" : contextInstances.length ? "ready" : rosterState?.settled === "empty" ? "ready" : "loading";
-  return { rows: shownRows(contextInstances), deployments: contextDeployments, phase, stale: (row) => rosterStale || rowStale(row, contextDeployments), here: thisHostName,
+  const phase = contextDeploymentNote !== null ? "unavailable"
+    : rosterState?.hasData ? "ready" : rosterState?.state === "failed" ? "failed" : contextInstances.length ? "ready" : rosterState?.settled === "empty" ? "ready" : "loading";
+  return { rows: shownRows(contextInstances), deployments: contextDeployments, phase, note: contextDeploymentNote, stale: (row) => rosterStale || rowStale(row, contextDeployments), here: thisHostName,
     retry: () => { void refreshContextRoster({ user: true }); } };
 }
 let contextWorkspace = "";
