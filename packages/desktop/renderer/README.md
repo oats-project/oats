@@ -20,18 +20,24 @@ No frameworks, no dependencies; data comes from the bundled backend HTTP API.
   names its page, as the shortcuts editor's row does) and every
   `showStage("hierarchy")` / `ctx.openView("hierarchy")` to this page on the Machines tab.
   Souls come from `GET /api/agents` (the kernel's `oats souls` catalog),
-  grouped by **Repo** (the default: the member repository, the host first,
-  then packages with their pinned version, then external souls) or **Team**
-  (the default team). A card names its harness · model (only as the kernel
-  reports them), clamps the description to two lines, labels its chips
-  (*Team oats · default* for its default team, other teams plain; grouped by
-  team, *Repo …* instead of the group's team; no work-mode chip, that is the
-  soul page's and the spawn preview's) and says what runs in its foot (*N
-  instances running*, *N stopped*, *No instances*); a soul a spawn here would
-  refuse says why in `--warn`, with that count as a muted second line.
+  grouped by where they come from (the member repository, the host first,
+  then packages with their pinned version, then external souls) and, inside a
+  group, in kind order (`packages/client/soul-kind.mjs` `compareSouls`: maintainers,
+  experts, developers, operations, the rest; a name rule until the kernel reports a
+  role). They show as cards or as a table (`v`, `spawn.view`, or the toolbar's
+  Grid | Table; `rememberSoulsView` keeps the choice per view id in localStorage,
+  `oats.desktop.soulsView`). A card is one button: the name, the description
+  clamped to two lines, and a foot with its agents (*N agents running*, *No agents
+  running · N stopped*, through `DESKTOP_NOUNS`) and its kind; a soul a spawn here
+  would refuse says why in `--warn` instead of the count. The table's rows carry
+  the name (the row's one button), what it does, kind, agents running, harness ·
+  model and Ready (`soulReadiness`: *Ready*, the refusal, or *—* without
+  `desktop-facts`). Cards and rows' names share one roving tab stop (`.soul-item`).
+  No Spawn on a card, no team grouping or chips, no "About souls" (slice 3a): the
+  page's first line (`SOULS_LEDE`) says what a soul is.
   Selection opens the soul's page — read-only: a v2 soul is edited in its
   repository and the inspector never writes it in place; there are no layer bindings
-  (`oats use` was removed by workspace model v2). Its Spawn action opens the Spawn dialog
+  (`oats use` was removed by workspace model v2). Its New agent action opens the Spawn dialog
   (see below), which previews through the kernel and applies through the
   confirmed `/api/spawn?ws=` transaction. An empty opening instruction waits
   for instructions; attached-mode souls cannot launch standalone. The shell's
@@ -830,8 +836,8 @@ unless they acted since the press (input, a focus move, a navigation) or an over
 open; focus merely resting where the dialog returned it does not count. Otherwise its row says New. See
 `docs/desktop-spawn-preview.md`, "Background spawn". Souls come from the kernel's spawn catalog (`oats souls --json` via
 `GET /api/agents`), never from the roster. Two layouts, switched in place
-(design board 6): **scoped** — opened from a soul card's Spawn or the soul
-page's Spawn — heads the dialog *Spawn <soul>* with where the soul comes from
+(design board 6): **scoped** — opened from the soul page's New agent or Quick
+Open — heads the dialog *Spawn <soul>* with where the soul comes from
 and shows the preview column (*What will be created*: name, works in, harness
 and where it came from, default team; *Core capabilities* and *Capabilities*
 from the preview's projected `modules`, each with its source and, when the
@@ -1261,11 +1267,27 @@ is kept as the same element, so a roster repaint leaves an open Details open;
 keeps `capability` and `path` only when they are text). The contrast test holds
 the list on each host's real ground.
 
-**The soul page's Instructions (spec D).** `soul-instructions.mjs`, after
-Capabilities on the soul page only (not the 340px inspector, not an
-instance): the soul's own AGENTS.md from the inspection the page already
+**The soul page (slice 3a).** One column (`soul-inspector.mjs` `renderSoulPage`):
+the top block (`dl.soul-top`: Harness · model, Teams with "Teams on this computer"
+folded under it, Knowledge, Ready), the soul's warnings, its capabilities as one
+list of rows (`capability-row.mjs` `capabilityLine`, shared with the Capabilities
+page: core first with a dim *core* tag, *by <source>*, the catalog's one line;
+one roving stop, Up/Down/Home/End), then the instructions. Ready
+(`createReadyBlock`) is *Ready* or the first of: the roster row's spawn refusal,
+the inspection's first problem, the launch problem; behind a native **Details**
+the problems in full and the soul's readiness checks (`readiness-view.mjs`, a soul
+selector), created on the disclosure's first open. Its agents are not listed (the
+grid and table count them); an instance opens in the sidebar from the roster.
+
+**The soul page's Instructions (spec D; slice 3a's tabs).** `soul-instructions.mjs`,
+after Capabilities on the soul page only (not the 340px inspector, not an
+instance): two tabs, **Soul instructions** and **Composed instructions** (one
+roving stop, Left/Right/Home/End switch), each a reader at a readable measure
+with its section list on the left when the page is wide (a container query hides
+it under 760px), then **Skills** folded under a native disclosure. The soul's own
+AGENTS.md comes from the inspection the page already
 read (`souls[0].instructions` = `{ file, text, truncated }`, no request of
-its own), in the Contents card's grammar through `contents-reader.mjs`. The
+its own), rendered through `contents-reader.mjs`. The
 path shown is `<souls[0].path>/AGENTS.md` (`path` is the soul's directory in
 its repository), else just `AGENTS.md`; the absolute `file` is a host cache
 path and is never shown. `text: null` (or no `instructions`) is the reader
@@ -1274,8 +1296,8 @@ flag, worded for the inspection's 200,000-character cap. The inspector
 creates one controller per subject in `frame()` (disposed with the subject)
 and `render()` re-appends its element after taking `hold()` before
 `content.replaceChildren()`, so a repaint keeps focus and both scroll
-offsets; `update(soul)` repaints its tree or reader only when what they show
-changed. The tree's focus key is `instructions:own`.
+offsets; `update(soul)` repaints a reader or the Skills tree only when what
+it shows changed. The tabs' focus keys are `instructions:tab:own|composed`.
 
 **The composed AGENTS.md (spec D, B2; routed, spec R part RD).** The gate is
 `packages/client/composed-gate.mjs` (the shared home's, read by the page and the server). On the soul page of a
@@ -1405,10 +1427,10 @@ listed or counted under Capabilities (`compositionEntries`,
 (`layers.<slot>.from` behind `layers-from`, the emptied slot behind
 `desktop-facts`, "No default" only with both and a soul subject; never a
 guess), in the same words everywhere (`whyTag`, `coreNote`, `whyFact` for the
-capability page's "Why" row). On the soul page both tables go through one row
-builder (`renderSoulCore` / `renderSoulCapabilities`), so the grid, source chip
-and why tag cannot drift; a filled core row is a `button` with
-`data-focus-key="core:<slot>"`.
+capability page's "Why" row). On the soul page (slice 3a) both are one list of
+`capabilityLine` rows, core first, each a `button` with
+`data-focus-key="capability:<id>"`; why a capability is there is the row's title and
+its page's "Why" row, and what the soul turns off is one line under the list.
 
 The terminal-side context panel's Soul tab (`instance-soul.mjs`) and its
 Messaging & Teams section (`instance-teams.mjs`): the roster-derived header is the
@@ -1850,7 +1872,7 @@ section is the module map.
 - **quick-open.mjs** — Quick Open for souls (⌘P / Alt+P, also “Souls: quick
   open…” in the palette): fuzzy-find a soul from the Spawn view's data
   source and hand off through `views/spawn.mjs` `preselectSpawn()`: the
-  spawn dialog scoped to that soul, as its card's Spawn opens it, with focus
+  spawn dialog scoped to that soul, as its page's New agent opens it, with focus
   in Name. Opening never spawns; Spawn stays explicit. Attached-only, refused
   and CLI pending/unavailable souls open their soul page instead, which says
   why. Dismissing the dialog returns to where the operator was

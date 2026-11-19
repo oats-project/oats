@@ -501,43 +501,85 @@ way of working, and a knowledge default keeps what agents learn and the
 procedures the organisation writes down for later instances; a soul can turn
 one off and name its own in its place.
 **Close** or Esc closes it and returns the focus to the button; leaving the
-tab or the workspace closes it too. **Workspace › Souls** has the same button
-at the end of its toolbar, **About souls**, which explains what a soul is.
+tab or the workspace closes it too.
 
-A soul's page (open a soul from **Workspace › Souls**) ends with
-**Instructions**, what its instances are told, read like a capability's
-injected instructions (a navigation tree on the left, the file on the right).
-The tree has two sections, a rule between them:
+**Workspace › Souls** lists the souls the workspace offers. Its first line says
+what a soul is. The souls are grouped by where they come from: the workspace's
+own repository first, then its other member repositories, then each package,
+then the external souls. Inside a group they are in kind order: maintainers,
+experts, developers, operations, then the rest, each by name. The kind is read
+from the soul's name (`packages/client/soul-kind.mjs`): a name with a word
+`setup`, `operator`, `admin`, `ops` or `operations` is operations; else a name
+ending in `-maintainer`, `-expert` or `-developer` is that; else other. OATS
+reports no kind of its own, so the name is the rule.
 
-- **Defined in this soul**: its own `AGENTS.md`, at its path in the soul's
-  repository, and, with an OATS that reports a soul's skills, its **Skills**.
-  Open a skill to list its files; a file opens in the reader under its
-  repository path.
-- **Composed for an instance**: what an instance of this soul gets. Its
-  **AGENTS.md**, *after spawn, with injects*, and its **Skills**, each saying
-  where it comes from. With an OATS that lists every skill a spawn gives the
-  instance (0.67.0 and later), the Skills are that list: the soul's own, each
-  **From this soul**, and the ones its capabilities add, each **From** the
-  capability. A capability's skill file opens under its place in the instance
-  home (`.oats/modules/<capability>/…`), with **Open capability** above it. With
-  an older OATS the skills listed are the soul's own, and a note says that the
-  skills capabilities add are listed by a newer OATS. For a soul on another
-  machine, the server's OATS must list them too, as for the composed
-  AGENTS.md below.
+The souls show as a grid of cards or as a table: **v** (or **Grid** | **Table**
+in the toolbar) switches between them, and each window remembers its choice,
+also after a restart. A card shows the soul's name, what it does, how many of
+its agents run, and its kind; a soul a spawn here would refuse says why instead
+of its count. The table has the same souls as rows: name, what it does, kind,
+agents running, harness · model, and **Ready** (or why a spawn here would be
+refused; **—** when this OATS does not report it). A card or a row's name
+opens the soul's page. A new agent of a soul starts from **New agent** on its
+page, from Quick Open, or from the palette. Souls of a member repository that
+has not confirmed its membership are listed last, under **Not available**,
+with the reason; they open nothing.
 
-Both come from the same inspection as the rest of the page, so **Refresh**
-re-reads them and keeps what you had open, and your place in it. A file over
-200,000 characters is shown cut, and says so.
+A soul's page (open a soul from **Workspace › Souls**) is one column. Under its
+name and what it does, a block of facts: **Harness · model** (what a spawn here
+runs, and where that choice came from), **Teams** (the teams its agents may
+join, the default marked; with team model v2, **Teams on this computer** folds
+out the editable list), **Knowledge** (the nodes it owns and reads, when it
+declares any) and **Ready**: the word, or the one thing that stops a spawn here
+in one sentence, with **Details** folded under it (the problem in full and its
+code, and the soul's readiness checks, read when you open it). Its capability
+warnings follow. Its agents are not listed: the Souls grid and table count
+them, and the roster lists them.
 
-The composed **AGENTS.md** needs an OATS that composes a soul's instructions
-(0.46.0 and later). It is the file a spawn of this soul on this computer would
-write, with one entry per part (the soul's own text, then each block OATS and
-the soul's capabilities add, in order). Open it to read the whole document;
-choose a part to go to it. Each part's header says where it comes from
-(**From this soul** or **Injected by …**) and names its file; a capability's
-part has **Open capability**, and **Copy composed AGENTS.md** copies the exact
-file. When the soul can't be composed here, the section says so and the problem
-shows at the top of the page. For a soul on another machine (a server
+Then **Capabilities**, one list of rows: the core capabilities first (knowledge,
+messaging, tasks), each with a dim **core** tag, then the others in the order
+the workspace composes them. Each row has the capability's name, **by** where it
+comes from, and one line of what it does (its description in the workspace's
+catalog). Enter or a click opens the capability's page; ↑ and ↓ move between
+the rows. What the soul turns off, and a core slot left empty, are one line
+under the list.
+
+Then its two prompts, as two tabs: **Soul instructions** (the soul's own
+`AGENTS.md`, at its path in the soul's repository) and **Composed
+instructions** (what its agents are actually told). The tabs are one stop for
+Tab; ← and → (or Home and End) switch them. Each tab is a reader at a readable
+width, with its sections listed on its left when the page is wide enough: the
+own file's headings, the composed document's parts.
+
+Under the tabs, **Skills** folds out the soul's skills, with an OATS that
+reports them, in two sections:
+
+- **Defined in this soul**: its own skills. Open a skill to list its files; a
+  file opens in the reader beside the list, under its repository path.
+- **Every skill an agent gets**: each saying where it comes from. With an OATS
+  that lists every skill a spawn gives the agent (0.67.0 and later), that list:
+  the soul's own, each **From this soul**, and the ones its capabilities add,
+  each **From** the capability. A capability's skill file opens under its place
+  in the agent's home (`.oats/modules/<capability>/…`), with **Open
+  capability** above it. With an older OATS the skills listed are the soul's
+  own, and a note says that the skills capabilities add are listed by a newer
+  OATS. For a soul on another machine, the server's OATS must list them too, as
+  for the composed instructions below.
+
+A link in either document to a listed skill file opens it there. Everything on
+the page comes from the same inspection, so **Refresh** re-reads it and keeps
+what you had open, and your place in it. A file over 200,000 characters is
+shown cut, and says so.
+
+The composed instructions need an OATS that composes a soul's instructions
+(0.46.0 and later); without one, the tab says so. They are the `AGENTS.md` a
+spawn of this soul on this computer would write, one section per part (the
+soul's own text, then each block OATS and the soul's capabilities add, in
+order). Each part's header says where it comes from (**From this soul** or
+**Injected by …**) and names its file; a capability's part has **Open
+capability**, and **Copy composed AGENTS.md** copies the exact file. When the
+soul can't be composed here, the tab says so and the problem is the page's
+**Ready** line. For a soul on another machine (a server
 workspace), the page shows the composed file when that machine supports it:
 this computer's OATS must be 0.49.0 or later, to pass on what each server
 reports about itself, and the server's OATS must say it composes a soul's
