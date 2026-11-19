@@ -12,7 +12,7 @@ import { lifecycleCSS } from "../renderer/lifecycle-dialog.mjs";
 import { connectionsCSS } from "../renderer/connections.mjs";
 import { readinessCSS } from "../renderer/readiness-view.mjs";
 import { automationsCSS } from "../renderer/views/automations.mjs";
-import { hierarchyCSS } from "../renderer/views/hierarchy.mjs";
+import { graphCSS } from "../renderer/views/graph.mjs";
 import { setupCSS } from "../renderer/workspace-setup.mjs";
 import { inspectorCSS } from "../renderer/soul-inspector.mjs";
 import { soulTeamsHereCSS } from "../renderer/soul-teams-here.mjs";
@@ -27,7 +27,7 @@ const theme = read("theme.css"), shell = read("shell.css");
 // view keeps its sheet private, so its source is read). Sheets another spec owns are cut out.
 const owned = { "theme.css": theme, "shell.css": shell, "workspace-discovery.mjs (spec A lines)": discoveryLines(),
   "notifications.mjs": notificationCSS, "lifecycle-dialog.mjs": lifecycleCSS, "connections.mjs": connectionsCSS, "readiness-view.mjs": readinessCSS,
-  "views/automations.mjs": automationsCSS, "views/hierarchy.mjs": hierarchyCSS, "views/brain.mjs": brainStyles(), "workspace-setup.mjs": setupCSS,
+  "views/automations.mjs": automationsCSS, "views/graph.mjs": graphCSS, "views/brain.mjs": brainStyles(), "workspace-setup.mjs": setupCSS,
   "soul-inspector.mjs": inspectorCSS.replace(teamsCSS, "") /* teams-panel.mjs is spec B's */, "soul-teams-here.mjs": soulTeamsHereCSS, "instance-events-view.mjs": instanceEventsCSS };
 function discoveryLines() {
   return discoveryCSS.split("\n").filter(line => /\.ws-segmented|\.workspace-tabs button|\.ws-search/.test(line)).join("\n");
@@ -262,6 +262,7 @@ test("view search fields and tab strips follow rules 2 and 3 (Capabilities searc
   assert.match(find(automationsCSS, ".oats-view .auto-search input"), /border:0;.*outline:none;/);
   assert.match(find(discoveryCSS, ".workspace-tabs button:focus-visible"), /background:var\(--sel\)/);
   assert.match(find(automationsCSS, ".oats-view .auto-tabs button:focus-visible"), /background:var\(--sel\)/);
-  assert.match(find(hierarchyCSS, ".hier-canvas:focus-visible"), /outline: 1px solid var\(--accent\); outline-offset: -1px;/,
-    "the canvas clears its outline in its base rule, so it restates the edge for keyboard focus");
+  // The Graph's nodes (slice 6b) keep the global edge (no outline of their own) and tint as the house's controls do.
+  assert.match(find(graphCSS, ".graph-node:focus-visible"), /border-color:var\(--accent\); background:var\(--sel\);/);
+  assert.doesNotMatch(graphCSS, /\.graph-node \{[^}]*outline/, "a node clears no outline: the global 1px inset edge shows");
 });

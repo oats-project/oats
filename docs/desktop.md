@@ -301,8 +301,8 @@ have.
   terminal, a stopped one's Start.
 - **The overview.** Agents, Souls, Capabilities, Teams, Machines and Graph,
   each with what you have ("You have 4 souls"). Enter opens that part of the
-  Workspace page on its tab (the Machines canvas stands in for the Graph for
-  now), and Esc there comes back to Home. Agents opens **Home › Agents**: every
+  Workspace page on its tab, or the [Graph](#the-graph), a page of its own,
+  and Esc there comes back to Home. Agents opens **Home › Agents**: every
   agent, running or stopped, with its soul and machine, its state, and who
   started it (the person it's attributed to, or the agent that spawned it).
   An agent waiting on you wears the needs-input mark there too, and says
@@ -870,6 +870,36 @@ own detail. **This computer** lists what is not shared: this deployment's
 settings, lock, CLI and agents, and the member clones. The machines that run
 the workspace are the **Machines** tab's.
 
+## The Graph
+
+**Home › Graph**, or the palette's **Workspace: Graph**, answers "who started
+whom, and where does it run" in one picture. Every machine of the workspace is a
+column, this computer first and then the others by name; a machine that isn't
+reached says so in its column, and why (with **How to fix**) above the picture.
+Inside a column, the agents hang under the agent that started them: each node is
+the roster's dot (the needs-input mark included), the agent's name and its soul.
+A child that does its parent's work says **same work** on its node. **You** sits
+above the agents a person started that have no parent. A parent on another
+machine is drawn as a dotted line between the columns, and its node says
+"started by lead on falcon".
+
+Two things the design shows aren't drawn yet, because OATS doesn't report them:
+a clock for an agent a schedule started, and a same-work label (OATS reports
+only whether a child does its parent's work). OATS never records a parent on
+another machine either: the Graph draws that line only when exactly one agent of
+the workspace has the name the child records as its parent.
+
+Keys, on a node: ← → between machines, ↑ ↓ between the agents of a machine
+(Home and End to its first and last), **Enter** opens the agent as the roster
+does, **m** switches between machines as columns and one field (every agent in
+one tree, its machine on its node), **+** and **−** zoom and **0** fits. The menu
+key, Shift+F10 or a right-click opens a node's menu: **Open terminal**,
+**Details** (the agent's instance panel), **Open soul** and **Recent events…**.
+Esc goes back to Home. Drag pans, the wheel scrolls, and Ctrl or ⌘ with the
+wheel zooms. The Graph reads the roster the sidebar shows, so it is as current
+as the sidebar, and it reads nothing else but an agent's recent events, when
+you ask for them.
+
 ## A workspace's machines
 
 A window offers only the machines that run its workspace: those whose
@@ -880,7 +910,8 @@ Workspace › **Machines** tab lists the computers the workspace runs on: this
 computer first (where the view has a deployment here: "reading…" or "not read"
 until it is read), then each of those machines, with whether it can be reached
 and its OATS version. A remote-only view lists its machines' deployments
-instead. The Map and the roster show where agents run; the list counts none.
+instead. The [Graph](#the-graph) and the roster show where agents run; the list
+counts none.
 Enter on a machine opens it: its name, ssh host and folder,
 **Check** and **Remove**. Registrations whose key is not known yet are checked
 once in the background after the Desktop starts.

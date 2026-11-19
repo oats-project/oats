@@ -16,14 +16,15 @@ function fixture(t, { rows = [], phase = "ready", deployments = [], api = async 
   cli = () => ({ features: [] }) } = {}) {
   const dom = new JSDOM('<!doctype html><body><main></main></body>', { pretendToBeVisual: true });
   const doc = dom.window.document, el = doc.querySelector("main");
-  const listeners = new Set(), opened = [], tabs = [];
+  const listeners = new Set(), opened = [], tabs = [], stages = [];
   let state = { rows, phase, deployments, stale: () => false, here: "falcon", retry: () => { state.retried = true; } };
   const ctx = {
     api: async (path, opts) => (opts?.method === "POST" ? post(path, JSON.parse(opts.body)) : api(path)),
     homeRoster: () => state,
     subscribeHomeRoster: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     openAgent: (r) => { opened.push(r.instance); return true; },
-    openWorkspaceTab: (tab, options) => { tabs.push(options ? [tab, options.machinesView] : tab); },
+    openWorkspaceTab: (tab, options) => { tabs.push(options ? [tab, options] : tab); },
+    openStage: (name) => { stages.push(name); },
     chordText: (id) => ({ "app.quickOpenSouls": "Ctrl+N", "app.palette": "Ctrl+K" })[id] ?? "",
   };
   // The window's workspace and the CLI's probe, as Home reads them, driven by the test.
@@ -36,7 +37,7 @@ function fixture(t, { rows = [], phase = "ready", deployments = [], api = async 
   t.after(() => { home.dispose(); dom.window.close(); });
   const buttons = () => [...el.querySelectorAll("button")];
   return {
-    doc, el, home, opened, tabs, ctx,
+    doc, el, home, opened, tabs, stages, ctx,
     switchWorkspace() { ws.gen++; for (const fn of ws.listeners) fn(); },
     timers,
     tick() { const due = [...timers.values()]; timers.clear(); for (const fn of due) fn(); },
@@ -122,12 +123,13 @@ test("slice2 overview counts and enter opens section, esc returns", async (t) =>
   assert.match(u.openButton("graph").textContent, /2 agents on 2 machines/);
   assert.equal(overviewLine("souls", { souls: 1 }), "You have 1 soul");
   assert.equal(overviewLine("souls", { souls: "failed" }), "Couldn't count them");
-  // Enter on a section opens the Workspace page on its tab; Machines opens the Machines tab's List, the Graph its
-  // Map (today's canvas, until slice 6).
+  // Enter on a section opens the Workspace page on its tab (Machines: the list); the Graph is a page of its own
+  // (slice 6b).
   u.openButton("souls").click(); u.openButton("teams").click(); u.openButton("machines").click(); u.openButton("graph").click();
-  assert.deepEqual(u.tabs, ["souls", "teams", ["machines", "list"], ["machines", "map"]]);
-  // Esc on the Workspace page comes back to Home (shell.mjs): only an Esc nothing on the page took, from no field.
-  assert.match(shell, /if \(e\.key !== "Escape" \|\| e\.defaultPrevented \|\| e\.altKey \|\| e\.ctrlKey \|\| e\.metaKey \|\| e\.shiftKey \|\| stage\?\.name !== "spawn"\) return;/);
+  assert.deepEqual(u.tabs, ["souls", "teams", "machines"]); assert.deepEqual(u.stages, ["graph"]);
+  // Esc on the Workspace page and on the Graph comes back to Home (shell.mjs): only an Esc nothing on the page took,
+  // from no field.
+  assert.match(shell, /if \(e\.key !== "Escape" \|\| e\.defaultPrevented \|\| e\.altKey \|\| e\.ctrlKey \|\| e\.metaKey \|\| e\.shiftKey \|\| !\["spawn", "graph"\]\.includes\(stage\?\.name\)\) return;/);
   assert.match(shell, /e\.preventDefault\(\);\n  void showStageFocused\("home"\);/);
   // Agents opens Home › Agents here, and Esc returns to the board with focus on Agents.
   u.openButton("agents").click();

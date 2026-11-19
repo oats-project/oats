@@ -191,36 +191,32 @@ test('03: cards have one semantic Details entry with compact identity, descripti
 });
 
 // The Workspace page's tabs (the product owner, 2026-10-26): Souls | Capabilities | Teams | Machines | Setup, opening on
-// Souls. Machines opens on its list of computers (slice 3b); its Map holds the Deployments view (views/hierarchy.mjs),
-// mounted only while the Map is shown on the tab: chosen, or preselected (stage.hierarchy, ⌘1 / Ctrl+1: shell.mjs
-// openWorkspaceSouls → preselectWorkspaceTab) once the Map was chosen.
-test('Machines mounts the Deployments view while its Map is shown, and unmounts it on another tab; the page opens on Souls', async t => {
+// Souls. Machines is the list of computers (slice 3b), and only that: its canvas became the Graph, a page of its own
+// (slice 6b), so nothing is mounted behind it. stage.hierarchy (⌘1 / Ctrl+1: shell.mjs openWorkspaceSouls →
+// preselectWorkspaceTab) still lands on it.
+test('Machines is the list of computers, with no List | Map and no canvas behind it; the page opens on Souls', async t => {
   const u = await fixture(t);
   assert.deepEqual([...u.doc.querySelectorAll('.workspace-tabs [role=tab]')].map(b => [b.id, b.firstChild.textContent, b.getAttribute('aria-selected')]) /* the label, before its count */, [
     ['workspace-tab-souls', 'Souls', 'true'], ['workspace-tab-capabilities', 'Capabilities', 'false'], ['workspace-tab-teams', 'Teams', 'false'],
     ['workspace-tab-machines', 'Machines', 'false'], ['workspace-tab-sources', 'Setup', 'false']]);
   assert.equal(u.get('#workspace-tab-automations'), null, 'no Automations tab: it is a page of its own');
-  const panel = u.get('#workspace-machines');
-  assert.ok(panel.classList.contains('workspace-machines-panel')); assert.equal(panel.getAttribute('role'), 'tabpanel');
-  assert.equal(panel.getAttribute('aria-labelledby'), 'workspace-tab-machines');
-  assert.equal(panel.hidden, true); assert.equal(panel.childElementCount, 0, 'not mounted while Souls is shown: it reads nothing');
+  assert.equal(u.get('.workspace-machines-panel'), null, 'no panel for a canvas');
   assert.equal(u.get('.souls-grid').hidden, false); assert.equal(u.get('.souls-bar').hidden, false);
   u.get('#workspace-tab-machines').click(); await tick();
   assert.equal(u.get('#workspace-tab-machines').getAttribute('aria-selected'), 'true');
-  assert.equal(panel.hidden, true); assert.ok(u.get('.workspace-discovery section.machines'), 'the list of computers first');
-  u.get('.workspace-tools[data-tools=machines] [data-machines-view=map]').click(); await tick();
-  assert.equal(u.get('#workspace-tab-machines').getAttribute('aria-controls'), 'workspace-machines');
-  assert.equal(panel.hidden, false); assert.ok(panel.querySelector('.hier'), 'the Deployments view, mounted');
-  assert.ok(panel.querySelector('.hier-intro'), 'with its one sentence under the bar');
+  assert.ok(u.get('.workspace-discovery section.machines'), 'the list of computers');
+  assert.equal(u.get('.workspace-discovery').hidden, false);
+  assert.equal(u.get('#workspace-tab-machines').getAttribute('aria-controls'), u.get('.workspace-discovery').id);
+  assert.equal(u.get('.workspace-tools[data-tools=machines]'), null, 'no List | Map');
+  assert.equal(u.get('[data-machines-view]'), null);
+  assert.equal(u.get('.graph'), null); assert.equal(u.get('.hier'), null, 'no canvas mounted on the page');
   assert.equal(u.get('.souls-grid').hidden, true); assert.equal(u.get('.souls-bar').hidden, true); assert.equal(u.get('.souls-notice').hidden, true);
-  assert.equal(u.get('.workspace-discovery').hidden, true);
   u.get('#workspace-tab-souls').click(); await tick();
-  assert.equal(panel.hidden, true); assert.equal(panel.childElementCount, 0, 'unmounted on another tab: it reads nothing in the background');
   assert.equal(u.get('.souls-grid').hidden, false); assert.equal(u.get('.souls-bar').hidden, false);
   // The shell's stage.hierarchy on the page already shown: its preselection chooses Machines.
   assert.equal(spawn.preselectWorkspaceTab('machines'), true); await tick();
   assert.equal(u.get('#workspace-tab-machines').getAttribute('aria-selected'), 'true');
-  assert.equal(panel.hidden, false); assert.ok(panel.querySelector('.hier'), 'mounted again');
+  assert.ok(u.get('.workspace-discovery section.machines'));
 });
 
 // A soul's Schedule… (the product owner, 2026-10-26: Automations is a page of its own again, no tab of the Workspace

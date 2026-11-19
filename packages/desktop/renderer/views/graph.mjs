@@ -87,10 +87,11 @@ export const graphCSS = `
 /* A parent on another machine: dotted (its node says so in words too). */
 .graph-edges path.cross { stroke-dasharray:1.5 5; stroke-linecap:round; stroke-width:2; }
 .graph-node { position:absolute; display:flex; align-items:center; gap:10px; height:${G.NODE_H}px; padding:0 10px 0 12px; --row-solid:var(--surface);
-  border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--fg); cursor:pointer; user-select:none; outline:none; }
+  border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--fg); cursor:pointer; user-select:none; }
 .graph-node:hover { background:var(--surface-2); --row-solid:var(--surface-2); }
 .graph-node.stopped { border-style:dashed; }
-.graph-node:focus-visible { border-color:var(--accent); background:var(--sel); --row-solid:var(--sel); box-shadow:0 0 0 2px var(--accent); }
+/* Keyboard focus: the house's tint and its 1px inset accent edge (the global :focus-visible), the border in accent too. */
+.graph-node:focus-visible { border-color:var(--accent); background:var(--sel); --row-solid:var(--sel); }
 .graph-node-copy { display:flex; flex-direction:column; min-width:0; flex:1; }
 .graph-node-name { font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .graph-node-sub { color:var(--muted); font-size:11.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -482,13 +483,16 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     if (!alive || e.defaultPrevented || e.isComposing) return;
     const id = e.target?.dataset?.graphNode;
     if (!id || !nodeEls.has(id)) return;
-    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key) && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && !keymapTakes(e)) {
+    // The structural keys are the Graph's unless the keymap binds the chord (the shared Alt+Shift+↑/↓, a rebind):
+    // never a guess by modifier.
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "Enter"].includes(e.key)) {
+      if (keymapTakes(e)) return;
       e.preventDefault();
+      if (e.key === "Enter") { open(id); return; }
       const next = moveFrom(id, e.key);
       if (next) focusNode(next);
       return;
     }
-    if (e.key === "Enter" && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) { e.preventDefault(); open(id); return; }
     if (e.repeat) return;
     const hit = resolveViewKey(e, viewActions);
     if (hit) { e.preventDefault(); viewActions.find((a) => a.id === hit)?.run(); }

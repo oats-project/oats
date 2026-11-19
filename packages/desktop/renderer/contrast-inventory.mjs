@@ -66,7 +66,7 @@ export const GRAPHIC_PAIRS = Object.freeze([
   Object.freeze(["danger", "sel"]),
   // An instance's colour (issue 1421; instance-dot.mjs): its dot, filled or a ring, on every fill it is drawn on: the
   // roster's rows (plain, hovered, selected), the tab strip and its active and focused tab, the palette's rows, the
-  // hierarchy's cards, the colour dialog's swatches and mark. The colour never says the state alone (the shape does).
+  // Graph's nodes, the colour dialog's swatches and mark. The colour never says the state alone (the shape does).
   // --instance-<tone> is the soul's -fg in the built-in themes; "This computer" moves it until it holds (host-theme.mjs).
   ...SOUL_TONES.flatMap(tone => ["bg", "surface", "surface-2", "sel"].map(bg => Object.freeze([`instance-${tone}`, bg]))),
 ]);

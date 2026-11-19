@@ -339,7 +339,7 @@ test("inventory: the page reaches no module that imports a Node builtin", () => 
   const { problems, seen } = pageGraph();
   assert.deepEqual(problems, []);
   // Not vacuous: the page's entry, a view, and the shared home through them were read.
-  for (const path of ["renderer/index.html", "renderer/shell.mjs", "renderer/views/hierarchy.mjs", `${HOME}/deployment-facts.mjs`, `${HOME}/instance-tree.mjs`]) assert.ok(seen.has(path), `${path} was read`);
+  for (const path of ["renderer/index.html", "renderer/shell.mjs", "renderer/views/graph.mjs", `${HOME}/instance-graph.mjs`, `${HOME}/instance-tree.mjs`]) assert.ok(seen.has(path), `${path} was read`);
   // The switcher's words (3a) are the page's too: renderer/workspace-switcher.mjs draws its menu from them.
   assert.ok(seen.has(`${HOME}/workspace-choices.mjs`), "the page loads the switcher's words from the shared home");
   const reached = [...seen].filter((path) => path.startsWith(`${HOME}/`));

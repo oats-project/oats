@@ -6,7 +6,7 @@ The Desktop roster is the place to return to it:
 - A running row opens its terminal.
 - A stopped row offers **Start…**. Clicking the row opens the same dialog.
 - A running row's action menu offers **Restart with…** to change harness or launch configuration in the same home.
-- The hierarchy's action popover offers **Start…** for a stopped instance.
+- On the Graph, Enter or **Open terminal** on a stopped agent opens it as its roster row does: **Start…**.
 - An unknown status is shown as unknown, not as permission to launch another process.
 
 The Start/Restart dialog names the existing instance, harness and host. Choose

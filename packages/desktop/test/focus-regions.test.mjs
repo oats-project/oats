@@ -345,8 +345,8 @@ test("return: a terminal tab over Workspace › Machines comes back with Machine
   assert.deepEqual(w.calls, [["tab", 1, true]]);
 });
 
-// Workspace › Machines: the dialog opens on Souls, and leaving Machines disposes its panel (views/spawn.mjs
-// syncMachines unmounts the Deployments view, views/hierarchy.mjs).
+// A Workspace tab's panel that is disposed while a dialog over Souls is open (the shape Machines' canvas had until it
+// became the Graph, slice 6b; any tab whose panel is rebuilt behind a dialog meets the same rule).
 function onMachines(t) {
   const u = surfaces(t, { stage: "spawn", workspaceTab: "machines" });
   const tabs = u.doc.querySelector("#stagehost .workspace-tabs");

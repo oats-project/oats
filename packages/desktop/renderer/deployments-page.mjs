@@ -1,12 +1,6 @@
-/** The Deployments page's own pieces (UI spec, #482; the page is views/hierarchy.mjs): its tab bar and a
- * deployment's heading.
- *
- * Tabs: the Workspace page's tab component (workspace-discovery.mjs `.workspace-tabs`): a tablist of
- * plain-text tabs, the selected one in --fg at 650 over a 2px --live underline, roving tabindex, and
- * ArrowLeft / ArrowRight / Home / End selecting and focusing (automatic activation). Its rules come from
- * the same builder (workspace-discovery.mjs tabBarCSS), since that sheet is mounted only inside the Workspace view. `All`
- * first, then one tab per deployment in served order (deployment-tabs.mjs). A deployment that is not
- * live carries the shared status mark (view-deployments.mjs deploymentMark), its state in words.
+/** A deployment's heading (UI spec, #482), from the Deployments page of before (the Machines canvas, which became the
+ * Graph in slice 6b, views/graph.mjs: it shows a heading for each machine that has something to say, above its
+ * canvas). The page's deployment tabs went with it: the Graph's columns are the machines.
  *
  * Heading: the overview's group label (`.cnm` / `.cct`, the "INDEPENDENT 2" label) naming the
  * deployment and its counts; a deployment that is not live adds its state as a chip, the short reason,
@@ -14,16 +8,11 @@
  * at 650) holding the full sentence, the fix steps and the note. Never an id: the full path is the
  * label's tooltip only. */
 import { deploymentState } from '../../client/roster-sections.mjs';
-import { deploymentMark } from './view-deployments.mjs';
 import { deploymentLabel, deploymentLabelParts } from '../../client/deployment-label.mjs';
 import { DESKTOP_TERMS } from './desktop-terms.mjs';
 import { runtimeCounts } from '../../client/instance-presentation.mjs';
-import { tabBarCSS } from './workspace-discovery.mjs';
 
 export const deploymentsPageCSS = `
-${tabBarCSS('.hier-tabs')}
-.hier-tabs { align-self:stretch; flex:0 1 auto; margin-right:12px; padding:0 6px; margin-left:-6px; } /* room for the 6px focus tint at both ends; shrinks, then scrolls */
-.hier-tabs[hidden] { display:none; }
 .hier-dhead { position:absolute; left:0; display:flex; flex-direction:column; align-items:flex-start; gap:4px; width:max-content; }
 .hier-dline { display:flex; align-items:baseline; gap:8px; white-space:nowrap; }
 .hier-dname { display:inline-flex; align-items:baseline; gap:6px; min-width:0; flex:0 1 auto; overflow:hidden; }
@@ -38,7 +27,6 @@ ${tabBarCSS('.hier-tabs')}
 .hier-dfix-note { color:var(--muted); }
 .hier-dfix-code { font:inherit; font-family:var(--mono, ui-monospace, Menlo, monospace); color:var(--fg); }
 .hier-dreason .hier-dhead { position:static; }
-.hier-empty-wrap:has(> .hier-dreason) { flex-direction:column; gap:16px; } /* a live deployment's note above its empty state */
 `;
 
 /** Text whose `backticked` spans are commands, set as code (the server's reasons quote them so). */
@@ -60,82 +48,6 @@ export function deploymentCounts(rows) {
   if (!list.length) return 'no instances';
   const { running, stopped, unknown } = runtimeCounts(list);
   return [`${running} running`, stopped ? `${stopped} stopped` : '', unknown ? `${unknown} unknown` : ''].filter(Boolean).join(' · ');
-}
-
-/** The tab bar. `paint(tabs, selected, panelId)` keeps one button per tab across paints (a focused tab
- * stays focused through a refresh); `onSelect(id)` hears a click or an arrow key. */
-export function createDeploymentTabBar(doc, { idPrefix, onSelect }) {
-  const element = el(doc, 'div', undefined, 'hier-tabs');
-  element.setAttribute('role', 'tablist'); element.setAttribute('aria-label', 'Deployments'); element.hidden = true;
-  const buttons = new Map(); // tab id -> button
-  let order = [], shown = null;
-  const choose = (id, focus) => {
-    onSelect?.(id);
-    if (focus) buttons.get(id)?.focus(); // revealed by its focus listener
-  };
-  // When the tabs overflow, the strip scrolls horizontally (no scrollbar) and the selected or focused tab
-  // is revealed, as in the terminal tab strip; only the strip scrolls, never the page around it.
-  // True once the strip could be measured (a hidden stage has no width: nothing is revealed yet).
-  function reveal(control) {
-    if (!control || !element.clientWidth) return false;
-    const left = element.getBoundingClientRect().left + element.clientLeft, right = left + element.clientWidth;
-    const box = control.getBoundingClientRect();
-    if (box.left < left || box.width > element.clientWidth) element.scrollLeft += box.left - left;
-    else if (box.right > right) element.scrollLeft += box.right - right;
-    return true;
-  }
-  // A selection painted while the stage was hidden (a terminal in front of it) is revealed once the strip
-  // has a width again; a repaint of a revealed selection never fights the operator's own scrolling.
-  let selection = null;
-  const revealPending = () => { if (selection !== shown && reveal(buttons.get(selection))) shown = selection; };
-  const Observer = doc.defaultView?.ResizeObserver;
-  const resizes = Observer ? new Observer(revealPending) : null;
-  resizes?.observe(element);
-  function button(id) {
-    const b = el(doc, 'button'); b.type = 'button'; b.setAttribute('role', 'tab');
-    b.addEventListener('focus', () => reveal(b));
-    b.addEventListener('click', () => choose(id, false));
-    b.addEventListener('keydown', event => {
-      const at = order.indexOf(id), n = order.length;
-      const index = event.key === 'Home' ? 0 : event.key === 'End' ? n - 1 : event.key === 'ArrowRight' ? (at + 1) % n
-        : event.key === 'ArrowLeft' ? (at + n - 1) % n : -1;
-      if (index < 0 || at < 0) return;
-      event.preventDefault(); choose(order[index], true);
-    });
-    return b;
-  }
-  function fill(b, tab) {
-    const d = tab.deployment, quiet = !d || !deploymentNeedsWords(d);
-    const words = quiet ? '' : deploymentState(d).key === 'live' ? 'not matched' : deploymentState(d).text;
-    const key = JSON.stringify([tab.label, words, d?.path || '']);
-    if (b.dataset.key === key) return;
-    b.dataset.key = key;
-    const parts = [doc.createTextNode(tab.label)];
-    // Not live: the shared status mark (a shape, never colour alone), its words in the tab's name.
-    if (!quiet) parts.push(deploymentMark(doc, words));
-    b.replaceChildren(...parts);
-    const title = [d?.path || '', words].filter(Boolean).join(' — ');
-    if (title) b.title = title; else b.removeAttribute('title');
-  }
-  function paint(tabs, selected, panelId) {
-    const list = Array.isArray(tabs) ? tabs : [];
-    const keep = new Set(list.map(t => t.id));
-    for (const [id, b] of buttons) if (!keep.has(id)) { b.remove(); buttons.delete(id); }
-    order = list.map(t => t.id);
-    list.forEach((tab, i) => {
-      let b = buttons.get(tab.id);
-      if (!b) { b = button(tab.id); buttons.set(tab.id, b); }
-      b.id = `${idPrefix}-tab-${i}`;
-      fill(b, tab);
-      b.setAttribute('aria-selected', String(tab.id === selected)); b.tabIndex = tab.id === selected ? 0 : -1;
-      if (panelId) b.setAttribute('aria-controls', panelId);
-      if (element.children[i] !== b) element.insertBefore(b, element.children[i] || null);
-    });
-    element.hidden = !list.length;
-    // A newly selected tab (a remembered one, a request from the switcher) is brought into view once.
-    selection = selected; revealPending();
-  }
-  return { element, paint, reveal, selected: () => element.querySelector('[aria-selected="true"]'), dispose: () => resizes?.disconnect() };
 }
 
 /** Whether a deployment's heading must say something: it is not live, or it is live but carries a

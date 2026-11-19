@@ -160,15 +160,10 @@ test('the Workspace view is one fixed column that can never scroll; the document
   assert.equal(discovery.overscrollBehavior, 'contain'); assert.match(discovery.minHeight, /^0(px)?$/);
   assert.equal(u.get('.workspace-header').parentElement, u.get('.workspace-main'), 'the header is outside every scroller');
   for (const scroller of [u.get('.souls-grid'), u.get('.workspace-discovery')]) assert.equal(scroller.contains(u.get('.workspace-header')), false);
-  // The Machines tab's Map (the product owner, 2026-10-26; slice 3b put it behind List | Map): its panel fills the
-  // column under the header, which it never holds; the Deployments view in it scrolls inside itself.
+  // The Machines tab (slice 3b; its canvas became the Graph, slice 6b) is the discovery's list: the same scroller,
+  // under the header, which it never holds.
   u.get('#workspace-tab-machines').click(); await tick();
-  u.get('.workspace-tools[data-tools=machines] [data-machines-view=map]').click(); await tick();
-  const machines = u.get('#workspace-machines');
-  assert.equal(machines.hidden, false); assert.equal(machines.contains(u.get('.workspace-header')), false);
-  assert.equal(machines.parentElement, u.get('.workspace-main'));
-  const panel = u.css(machines);
-  assert.equal(panel.display, 'flex'); assert.equal(panel.flexDirection, 'column'); assert.match(panel.minHeight, /^0(px)?$/);
+  assert.equal(u.get('.workspace-discovery').hidden, false); assert.equal(u.get('.workspace-discovery').contains(u.get('.workspace-header')), false);
   // The app shell: html clips at the viewport; the body is positioned and clipped, so an absolute
   // element with no positioned ancestor is contained by it and cannot stretch the document.
   assert.equal(u.css(u.doc.documentElement).overflow, 'clip');

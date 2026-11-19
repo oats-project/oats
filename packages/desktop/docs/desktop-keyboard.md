@@ -169,9 +169,9 @@ Show instance panel and the closed sidebar and panel).
   shortcuts) carries a `--danger` dot and a description, and the
   editor names each clash at the top and on its row until you rebind or reset
   one side.
-- One chord per action. Where the table has two (Ctrl+Tab and Alt+Shift+→; F
-  and 0 on the overview canvas), the second is its own action (`tabs.nextPage`,
-  `hier.fitZero`), rebindable and unbindable on its own.
+- One chord per action. Where the table has two (Ctrl+Tab and Alt+Shift+→; =
+  and + on the Graph), the second is its own action (`tabs.nextPage`,
+  `graph.zoomInPlus`), rebindable and unbindable on its own.
 - **Terminal policy.** On Linux/Windows only the action ids in
   `TERMINAL_ALLOWLIST` fire while a terminal has focus; everything else reaches
   the program. The rule is by action id, so a user who rebinds an allowlisted
@@ -183,8 +183,8 @@ Show instance panel and the closed sidebar and panel).
 - Unmodified chords never fire from an editable field, nor, on Linux/Windows,
   the leader's Ctrl+X, which is the field's Cut (`leaderLeftToField`; see "The
   leader"); a view's own keys (the
-  overview canvas, the Souls grid) stay local to that view. Where a view moves
-  with the arrows (the roster tree, the overview canvas, the Souls grid, a
+  Graph, the Souls grid) stay local to that view. Where a view moves
+  with the arrows (the roster tree, the Graph, the Souls grid, a
   row's actions button), an arrow chord the keymap binds is the keymap's
   (`keymapTakes`): Alt+Shift+↑/↓ (⌥⌘↑/↓), or a rebind, works from there as
   from anywhere, and an arrow chord bound to nothing stays the view's.
@@ -1214,11 +1214,10 @@ the rig). "Fixed" marks a gap this change closed.
 | Split right / down (the only buttons after the tabs: closing the split and the instance panel are on their chords and the palette) | Tab (shown for a terminal) | Enter; their chords |
 | Split separator | Tab | Arrows resize, Home/End to the ends, **Enter resets to even (fixed: double-click only)** |
 | Empty split group | Tab; F6 (main) | Focus selects the group |
-| Workspace › Machines: Retry (no Spawn button: `S` on the canvas, the sidebar, ⌘N, Quick Open and the soul cards spawn) | First stops of the tab's panel; F6 (main) | Enter; `S` on the canvas |
-| Machines' deployment tabs (All, then one per deployment) | Tab (the selected tab) | ←/→ move and select; Home/End; the choice is remembered per workspace |
-| Overview canvas | Tab | Arrows walk the tree; **Up/Down move between rows when there is no parent/child, so every Independent node is reachable (fixed)**; `[` `]` hop groups; Enter and `T` go to the instance (Start… when stopped); `S` Workspace › Souls; `O` the node popup; Esc clears; **the selected node is panned into view (fixed)** |
-| Overview zoom − + fit | Tab after the canvas; **`-` `=` `0` on the canvas (fixed: `0`)**; `F` also fits | Enter |
-| Overview node popup | Tab after the zoom buttons; `O` | Native buttons; Esc back to the canvas |
+| Workspace › Machines: its rows, Retry, Add a machine | First stops of the tab's panel; F6 (main) | Enter |
+| The Graph (Home › Graph, the palette's **Workspace: Graph**): its nodes | One roving stop (Tab) | ←/→ between machines, ↑/↓ Home End between a machine's agents; Enter opens the agent as the roster does (Start… when stopped); `m` columns ⇄ one field; `+` (`=`) and `-` zoom, `0` fits; Esc back to Home; **the focused node is panned into view** |
+| The Graph's node menu (Open terminal, Details, Open soul, Recent events…) | The menu key, Shift+F10, a right-click | ↑/↓ Home End; Enter; Esc or Tab back to the node |
+| The Graph's mode and zoom buttons, a machine's How to fix | Tab | Enter |
 | Workspace tabs (Souls, Capabilities, Teams, Machines, Setup) | One roving stop; F6 (main) | Left/Right/Home/End, in that order; Souls is selected first |
 | Souls search, Group by | Tab; `/` from the grid | Typing; Enter |
 | Souls: **About souls** (the round "i" after Group by) and its dialog | Tab | As About capabilities below |

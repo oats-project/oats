@@ -1,18 +1,16 @@
-// #855: the context panel's lifecycle row, the roster row's context menu and the overview popover offer the same
-// acts, enabled the same way, because all three draw them from packages/client/instance-acts.mjs. The panel and
-// the menu are built here for one row at a time and read as plain data; the popover is read off a mounted canvas.
+// #855: the context panel's lifecycle row and the roster row's context menu offer the same acts, enabled the same
+// way, because both draw them from packages/client/instance-acts.mjs. The panel and the menu are built here for one
+// row at a time and read as plain data. (The overview popover, the third, went with the Machines canvas: the Graph's
+// Enter and Open terminal open a row through the roster's own activation, graph-slice6b.test.mjs.)
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createContextPanel, contextPanelCSS } from '../renderer/context-panel.mjs';
 import { instanceActions } from '../renderer/instance-actions.mjs';
 import { reasonLine } from '../renderer/speaker-line.mjs';
-import * as hierarchy from '../renderer/views/hierarchy.mjs';
-import { currentWorkspace, setWorkspace } from '../renderer/views/common.mjs';
 import { instanceActs, openAct } from '../../client/instance-acts.mjs';
 import { ROWS as MENU_ROWS, RETIRE_INTERRUPTED } from './helpers/instance-menu-probe.mjs';
 
-const tick = () => new Promise(resolve => setImmediate(resolve));
 const HERDR = 'E_HERDR_REMOVED: Herdr is no longer supported by OATS (removed in 0.31.0); tmux is the only session backend.';
 const local = (name, extra = {}) => ({ instance: name, agent: 'dev', agentsRoot: '/team/agents', home: `/team/agents/dev/instances/${name}`, harness: 'pi', ...extra });
 const remote = (name, extra = {}) => ({ instance: name, agent: 'dev', agentsRoot: '/remote/agents', home: `/remote/agents/dev/instances/${name}`,
@@ -193,71 +191,4 @@ test('#1247: a failed retire keeps its Retire in the panel; the kernel\'s messag
   for (const row of [failed(), local('interrupted', { running: true, retire: RETIRE_INTERRUPTED })]) {
     u.offer(row); assert.equal(line().hidden, true, JSON.stringify(row.retire)); assert.equal(line().textContent, '');
   }
-});
-
-/* ── the overview popover: Go to instance / Start… (Restart with… is the roster menu's and the instance panel's) ── */
-async function canvas(t, rows, extra = {}) {
-  const dom = new JSDOM('<body><main id="host"></main></body>', { url: 'http://localhost' });
-  const doc = dom.window.document, host = doc.querySelector('main');
-  const old = { window: globalThis.window, document: globalThis.document, setInterval: globalThis.setInterval, ws: currentWorkspace() };
-  globalThis.window = dom.window; globalThis.document = doc; globalThis.setInterval = () => 0;
-  doc.hasFocus = () => true;
-  setWorkspace('/team');
-  const opened = [], started = [], restarted = [];
-  const read = () => ({ instances: rows, workspace: { id: '/team' }, workspaces: [{ id: '/team', name: 'Team' }], generatedAt: 'observation-time' });
-  const dispose = hierarchy.mount(host, { hasWorkspaceSwitcher: true, api: read, openTerminal: ref => opened.push(ref.instance),
-    startInstance: ref => started.push(ref.instance), restartInstance: ref => restarted.push(ref.instance), openView() {}, ...extra });
-  t.after(() => { dispose(); setWorkspace(old.ws); globalThis.window = old.window; globalThis.document = old.document; globalThis.setInterval = old.setInterval; dom.window.close(); });
-  await tick();
-  host.querySelector('.hier-canvas').getBoundingClientRect = () => ({ left: 0, top: 0, width: 1200, height: 800 });
-  const mouse = (target, type) => target.dispatchEvent(new dom.window.MouseEvent(type, { bubbles: true, button: 0 }));
-  const node = name => [...host.querySelectorAll('.hnode')].find(n => n.dataset.name === name);
-  return { host, mouse, node, opened, started, restarted };
-}
-
-test('#855: the overview popover enables Go to instance / Start… exactly as the shared acts do, and offers no Restart with…', async t => {
-  const rows = Object.values(ROWS).map(([row]) => row), u = await canvas(t, rows);
-  for (const [name, [row]] of Object.entries(ROWS)) {
-    u.mouse(u.node(row.instance), 'click');
-    const terminal = u.host.querySelector('.pterm');
-    assert.ok(terminal, `${name}: the popover is open`);
-    assert.equal(u.host.querySelector('.prestart'), null, `${name}: Restart with… is the roster menu's, not the popover's`);
-    const menu = new Map(menuOffer(row).offer), stopped = row.running === false;
-    assert.equal(terminal.textContent, stopped ? 'Start…' : 'Go to instance', name);
-    const enabled = stopped ? menu.get('start') === true : openAct(row)?.enabled === true;
-    assert.equal(!terminal.disabled, enabled, `${name}: ${terminal.textContent} as the ${stopped ? 'menu\'s Start' : 'shared open act'}`);
-    // The double-click and Enter paths act exactly when the button would.
-    const before = [u.opened.length, u.started.length];
-    u.mouse(u.node(row.instance), 'dblclick');
-    assert.deepEqual([u.opened.length - before[0], u.started.length - before[1]], enabled ? stopped ? [0, 1] : [1, 0] : [0, 0], `${name}: a double-click`);
-  }
-  // The rows the spec names, read off the canvas: only the running row opens, only the stopped one starts, and nothing restarts here.
-  assert.deepEqual(u.opened, ['running']); assert.deepEqual(u.started, ['stopped']); assert.deepEqual(u.restarted, []);
-});
-
-test('#1247: the overview reads a held retire as the roster does; the shell\'s own retire in flight is drawn at once, and let go', async t => {
-  const holds = new Set(), listeners = new Set();
-  const told = () => { for (const fn of listeners) fn(); };
-  const rows = [local('busy', { running: true }), local('older', { running: true, retirePending: true }),
-    failed({ code: 'E_RETIRE_HOOK', message: 'the pre-retire hook exited 1' })];
-  const u = await canvas(t, rows, { retiringRows: list => list.map(row => holds.has(row.instance) ? { ...row, retireInFlight: true } : row),
-    subscribeRetires: fn => { listeners.add(fn); return () => listeners.delete(fn); } });
-  const label = name => u.node(name).getAttribute('aria-label'), state = () => u.host.querySelector('.pstate').textContent;
-  const inert = name => {
-    u.mouse(u.node(name), 'click');
-    assert.equal(u.host.querySelector('.pterm').disabled, true, `${name}: Go to instance`); assert.equal(u.host.querySelector('.prestart'), null, `${name}: no Restart with…`);
-    u.mouse(u.node(name), 'dblclick');
-  };
-  assert.match(label('older'), /^older, Retiring…/);
-  assert.match(u.node('older').querySelector('.hmeta').textContent, /Retiring…$/);
-  inert('older'); assert.equal(state(), 'Reported state: Retiring…');
-  inert('failed'); assert.equal(state(), 'Reported state: Retire failed · OATS says: the pre-retire hook exited 1 (E_RETIRE_HOOK)');
-  assert.match(label('busy'), /^busy, running/);
-  // The shell begins a retire of busy: drawn at once, without a read; then let go: as the observation says.
-  holds.add('busy'); told();
-  assert.match(label('busy'), /^busy, Retiring…/);
-  inert('busy'); assert.equal(state(), 'Reported state: Retiring…');
-  holds.delete('busy'); told();
-  assert.match(label('busy'), /^busy, running/);
-  assert.deepEqual([u.opened, u.started, u.restarted], [[], [], []], 'a held home opens, starts and restarts nothing');
 });

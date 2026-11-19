@@ -9,14 +9,12 @@ No frameworks, no dependencies; data comes from the bundled backend HTTP API.
 ## Views (`views/`)
 
 - **spawn.mjs** — **Workspace**, with Souls / Capabilities / Teams / Machines / Setup subtabs
-  (`workspace-discovery.mjs` `workspaceTabs`); the page opens on Souls. Souls and Machines are
-  panels the view owns: Machines (`.workspace-machines-panel`, id `workspace-machines`) mounts
-  `hierarchy.mjs`, the Deployments page of before, only while its tab is shown (chosen, or
-  preselected by `stage.hierarchy`) and unmounts it on
-  leaving (`syncMachines`), and that view's "Workspace" (`s`, Go to soul's page) is the Souls tab
-  here. `shell-nav.mjs` NAV is Home (`home`, the Desktop UI rework's slice 2), Workspace overview
+  (`workspace-discovery.mjs` `workspaceTabs`); the page opens on Souls.
+  The Souls grid is the panel the view owns; Machines is the discovery's list (its canvas of before is the Graph,
+  `graph.mjs`, a page of its own since slice 6b). `shell-nav.mjs` NAV is Home (`home`, the Desktop UI rework's slice 2), Workspace overview
   (`spawn`, since slice 2 without a pinned row of its own: `PINNED` is Home and Automations, and
-  `pinnedRowFor("spawn")` is Home's row, which opens it) and Automations (`automations`, a page of its
+  `pinnedRowFor("spawn")` is Home's row, which opens it), the Graph (`graph`, slice 6b, no pinned row either: Home's)
+  and Automations (`automations`, a page of its
   own again, as before 2026-10-23), and its NAV_TABS route
   `stage.hierarchy` (⌘1 / Ctrl+1), the palette's **View: Workspace › Machines** (the entry's label
   names its page, as the shortcuts editor's row does) and every
@@ -88,8 +86,8 @@ No frameworks, no dependencies; data comes from the bundled backend HTTP API.
   workspaces with main's choices, and reads nothing.
   A persisted selection the server no longer serves is **stale**
   (`staleWorkspaceSelection`: non-empty and absent from the reply's
-  `workspaces` plus `workspace`); both roster paths (hierarchy refresh and
-  the shell's context roster) treat it like an empty selection and silently
+  `workspaces` plus `workspace`); the roster path (the shell's context
+  roster; the Graph reads it) treats it like an empty selection and silently
   `adoptWorkspace` the served id, without a generation bump. Without a
   served list nothing is guessed. A selection that IS served and gets a reply
   for another workspace stays a refused mismatch. A deployment id saved before
@@ -143,7 +141,7 @@ also carries `.theme-picker-overlay` or `.font-picker-overlay`.
 - **Every UI font rule follows it** by reading `font-family: var(--ui-font,
   <its own stack>)`, a longhand beside its size, weight and line-height (never
   inside a `font` shorthand: jsdom drops a shorthand that holds `var()`, so a
-  test would read the parent's values): the body, `.oats-view`, the context panel, the Machines (hierarchy), brain
+  test would read the parent's values): the body, `.oats-view`, the context panel, the Graph, brain
   and markdown views, and the rules that once read `var(--sans,system-ui)`, a
   token nothing defined. The monospace rules do too: code in the markdown view,
   the context panel's ids, paths and facts, the soul tab's meta and sources, PR
@@ -716,17 +714,11 @@ split into sections) is `packages/client/roster-sections.mjs`.
   facts and malformed versions show nothing. This standing fact changes no row label or live-claim
     mark, and adds nothing to the terminal pane. The panel's live Needs input section from the agent's own
   `oats instance attention` claim can appear alongside it; neither suppresses the other.
-- **The Machines tab** (the Workspace page's, before Setup; the Deployments page until 2026-10-26, and the Active
-  overview before that; stage `hierarchy` opens it): tabs from
-  `deployment-tabs.mjs` (All, then one per deployment; one deployment has only its own tab;
-  the choice remembered per view); All stacks one section per deployment, a deployment's tab
-  shows its tree alone. A non-live deployment's heading has a state chip, its `short` reason
-  and **How to fix** (the `fix` steps, else the sentence, and any note); a live deployment's
-  note shows under **Details** with no chip (`deploymentHasWords`). Under each machine's heading,
-  `.hier-dsub` says what its tree is ("Instances on this machine", or "Instances on <machine>";
-  `deployments-page.mjs` `deploymentHead`), and under the bar `.hier-intro` says once what a
-  machine is ("Each machine runs this workspace in a folder of its own. The instances under a
-  machine run on that machine."): plain words, no About dialog.
+- **The Graph** (a page of its own since the Desktop UI rework's slice 6b; the Machines tab's canvas, the Deployments
+  page and the Active overview before): one column per deployment, and each not-live deployment's heading above it
+  (a state chip, its `short` reason and **How to fix**: the `fix` steps, else the sentence, and any note; a live
+  deployment's note under **Details** with no chip, `deploymentHasWords`; `deployments-page.mjs` `deploymentHead`).
+  See "The Graph" below.
 - **"On <deployment>"** (`deployment-scope-line.mjs`): deployment-level surfaces read the
   view's primary deployment, and some say which in a line under their heading, only with two
   or more deployments: the side panel's soul inspector for a soul, Brain and the Sync sheet.
@@ -735,8 +727,8 @@ split into sections) is `packages/client/roster-sections.mjs`.
   (`views/automations.mjs`), nor a capability's page (`capability-page.mjs`), a
   team's page (`computer-teams.mjs`) or a soul's page (`soul-inspector.mjs` in
   `layout: 'page'`). They read the primary all the same (#482: their reads carry the view id, which the
-  server answers from the primary), with no choice of deployment. The Machines tab names
-  each deployment on its own tab. Launch configurations and spawn are not wired here.
+  server answers from the primary), with no choice of deployment. The Graph names
+  each deployment in its own column. Launch configurations and spawn are not wired here.
 - **Re-homing** (`workspace-rehome.mjs`, shell `rehomeWorkspaceState`, on every roster
   read): state under a deployment id (a selection, tab layout and active-terminal memory,
   open tabs with their `term:`/view keys, collapsed rows, stored spawn jobs) moves to the view
@@ -746,81 +738,47 @@ split into sections) is `packages/client/roster-sections.mjs`.
   Spawn jobs keep `deployment` (where the transaction is addressed) apart from `workspace`
   (the owner that moves).
 
-## Machines tab (formerly the Deployments page and the Active overview) — slice 7a, reported roster only
+## The Graph (`views/graph.mjs`) — the Desktop UI rework, slice 6b
 
-The existing `hierarchy` stage consumes **GET `/api/panel` only**. Relation groups
-are connected components of the shared parent/sibling resolver across roots and
-repositories, never repository buckets. Groups remain anonymous/count-labeled;
-reported context is metadata, not a derived group name. Header counts distinguish
-multi-member groups from independent instances and keep unknown runtime state
-separate from stopped. Parent/child edges are OAS-style cubic S-curves from the
-parent's bottom-centre to the child's top-centre; sibling edges are shallow arcs
-dashed `5 4`, so the two kinds do not rely on color alone. `--graph-edge` holds
-3:1 against every surface it is drawn on (WCAG 1.4.11, pinned in
-`theme-contrast`); the lit lineage is `--accent`. The 220px cards show reported context/runtime/branch—not guessed
-PRs, worktree health or task activity. Same-named nodes carry visible root/home
-suffixes and host qualifiers; their popup exposes the full reported address.
-Those are per-instance identity cues, never invented group names.
+The Machines tab's canvas of before (the Deployments page, the Active overview) is the **Graph**, a stage of its
+own: NAV `graph` (`pinned: false`, its row Home's, `pinnedRowFor`), opened by Home's Graph row (`ctx.openStage`),
+the palette's **Workspace: Graph** (the entry's `command`, which the palette and the shortcuts editor use for its
+label) and a deployment request from the switcher's "Not matched" entries (`onDeploymentTabRequest`: the Graph
+focuses that deployment's column). It has no key of its own yet. Esc on it goes back to Home (shell.mjs's stage
+listener, as on the Workspace page).
 
-Activity and waiting-on-you are explicitly **unknown / available after K7**.
-`TASK`, `STATE`, transcript prose, unnegotiated activity/group labels and the old
-aggregate `instance.git` are not consumed by this projection. The popover offers
-exactly two acts, **Go to instance** and **Go to soul** (below); Git, Restart
-with… and the soul's own facts live in the roster row's menu and the instance
-panel, and no Tasks destination or Stop/Retire surface is introduced.
-
-`active-observation.mjs` validates the roster/address shape and rejects duplicate
-identities rather than silently losing nodes. Local request tickets and global
-workspace generations guard both outcomes. Workspace switches synchronously
-revoke old graph/actions/gestures; a foreign workspace reply is not silently
-adopted over an explicit selection that the server still serves (a stale
-selection, no longer among the served choices, is adopted like an empty one).
-Failures retain an explicitly stale last
-observation with actions disabled, not a false healthy empty graph. A manual
-retry can supersede a read; periodic polling skips its own pending request so
-slow responses are not starved. A manual retry of a window whose last reply
-named a deployment on another machine first awaits
-`POST /api/remote-roster/refresh` (the servers read again), then reads the
-panel; polls never ask for it.
-
-No-op polls ignore timestamps/unconsumed metadata and preserve actual popup
-controls, focus, camera, offsets and selection. Changed observations wait for
-an active gesture to finish; a newer failure revokes a queued success. Window
-blur/hidden ownership cancels gestures, and drag-click suppression expires after
-its own native click window rather than swallowing a future intentional click. Popup
-controls survive meaningful updates for the same identity and resolve the current
-record, not a captured stale object. Hidden/disposed/replaced controls cannot
-act or reclaim focus. Action text remains screen-sized outside the scaled stage,
-bounded to the viewport during zoom/pan/resize. Go to instance (the terminal tab,
-or **Start…** on a stopped row, which has no terminal) uses the current full
-home/root/server and requires known runtime state and an available route;
-double-click, Enter and `T` take exactly its act. Terminal key handling itself is
-unchanged.
-
-**Go to soul never guesses.** It opens the Workspace page's page of the
-instance's exact soul, handed over with `preselectSoul({ name, key, repoKey,
-agentsRoot, server })` and `ctx.openView('spawn')`. The facts are the row's
-`soulKey` (the roster agent row's `key`, carried by `rosterRows`/`panelInstance`
-and kept by `active-observation.mjs`) and `soul.repoKey`, matched against the
-row's own deployment's catalog (`/api/agents?ws=<rowDeployment(row)>`, read once
-per popover per roster observation, the last answer standing while a re-read
-runs): a local row is exact when exactly one catalog row has its key, source and
-agents root and the key is not in `catalog.ambiguous`; a remote row when exactly
-one of its host's agent dirs has its name, root and server. The Workspace page
-shows only the view's primary deployment's souls, so a row of another
-deployment is disabled before any read. The soul page inspects by bare name
-and root (`inspectSoul`'s selector `{ soul, agentsRoot }`, which
-`inspect-boundary.mjs` refuses when two souls of the root share the name), so
-an exact soul whose name another soul of its root shares is disabled too, and
-`preselectSoul` refuses a keyed handoff that meets one on arrival (`onMiss`
-with `sharedName`). A
-`catalog.reason` reply is a failed read and a deployment whose catalog is not
-read yet keeps it checking, as the Workspace page reads them. Every other case
-is disabled with a title that says why (nothing recorded, not in the catalog
-now, several, the read failed, still checking). A late answer is kept only while its read is
-still the popover's (`s.soulRead`, dropped by `closePop`), and a miss on arrival
-is said in the popover's status line, or as a notification once the page has
-gone.
+- **Facts.** The roster the sidebar shows (`ctx.homeRoster`, its paints through `ctx.subscribeHomeRoster`, as Home
+  reads it): its phase (loading, failed with Retry, unavailable with the sidebar's words, ready), its rows with the
+  shell's held retires, its deployments and its stale rule. The Graph makes no read of its own but an agent's
+  recent events, when asked; a poll that changes nothing it draws repaints nothing (its signature).
+- **Layout.** `packages/client/instance-graph.mjs` `instanceGraph(rows, deployments, terms, { mode, here })`, pure,
+  for the TUI to draw the same graph: one column per deployment (this computer's first, by its own name, then the
+  others by label; `machineLabelParts` adds the folder only when one machine holds two), each an outline tree in the
+  roster's order. A parent resolves in its own column (`resolveLinkId`); a name no row of the column has, which
+  exactly one row of another column has, is a cross-machine edge (a display rule: the kernel never resolves a parent
+  across hosts), drawn dotted between the columns, and its node says "started by <parent> on <machine>". **You** is
+  one root per column above the rows with an attributed human and no recorded parent. Same work is the kernel's flag,
+  read only where the host declares the feature (`sameWorkKnown`), said "same work" on the node. A `parentInstance`
+  cycle is cut at its first row. `m` gives one field: every agent in one tree, its machine on its node. The schedule
+  clock root and a same-work label have no fact to read (gap map, contradictions 13 and 3).
+- **Drawing.** `layoutGraph` places rows at fixed heights, indented by depth (capped), and `edgePath` draws an edge
+  in a column down its parent's guide and across to the child, so no two cross; a cross-machine edge is a curve
+  between the columns' sides (`.cross`, dotted). The edges use `--graph-edge` (3:1 on every surface it is drawn on).
+  A node is the roster's `.ctx-dot` (the needs-input mark, `paintDotColor`), the display name and its soul. Not-live
+  deployments' headings (`deployments-page.mjs` `deploymentReasonBlock`: the state, the short reason, **How to fix**)
+  sit above the canvas, readable at any zoom; their disclosures stay open across repaints.
+- **Keys and focus.** Every node is a `treeitem` (`aria-level`, its column a `group`) with a roving tabindex, the
+  house's focus tint and edge, and its whole story as its name: "<name>, <soul>, on <machine>, started by <parent or
+  you>, <state>" (", same work" before the state). ←→ move to the nearest agent of the next machine with any, ↑↓
+  Home End within a column, Enter opens the agent as the roster's Enter does (`ctx.openAgent`, which activates the
+  roster row, so its gates hold). A chord the keymap binds is the keymap's (`keymapTakes`). `m`, `=`/`+`, `-` and `0`
+  are rebindable actions of the never-activated context `view:graph`, resolved with `resolveViewKey`. Drag pans, the
+  wheel scrolls, Ctrl/⌘ + the wheel zooms; nothing animates.
+- **The node's menu** (a right-click, Shift+F10, the Menu key) replaces the old popover: **Open terminal**
+  (`ctx.openAgent`), **Details** (`ctx.openAgentDetails`: the row opened, then the instance panel shown and
+  focused), **Open soul** (`ctx.openSoulOf`: the instance panel's own hand-off, `openSoulPage`) and **Recent
+  events…** (`instance-events-view.mjs` in a small dialog by the node, owned by that dialog and the workspace it was
+  opened in). Esc or Tab close the menu back on its node.
 
 ## Spawn dialog — workspace model v2
 
@@ -1074,7 +1032,7 @@ and stops every animation — including the older `.spinner` — under
 `prefers-reduced-motion`. Text colours are the inventoried AA pairs (muted on
 bg/surface, warn on attn-bg); `test/loading-contrast.test.mjs` proves them on
 the effective colours. One live region per surface: where a surface has no
-visible status line (the sidebar roster, the hierarchy), `statusLine(doc,
+visible status line (the sidebar roster), `statusLine(doc,
 { visuallyHidden: true })` speaks and the visible notice is a `role=note`.
 
 Where each surface wires it: the sidebar roster in `instance-tree-view.mjs`
@@ -1084,8 +1042,8 @@ while stale, Start…, the row's context menu and a *stopped* row's own activati
 held — a stale `running:false` may be running by now — while a running row
 still opens its terminal; a row of a `stale` deployment, `rowStale` in
 `packages/client/roster-sections.mjs`, is held the same way, and so are its actions in the
-overview); the hierarchy in `views/hierarchy.mjs` (the summary
-pill, its own notice keeps the stale copy with the observation's age); the soul
+overview); the Graph in `views/graph.mjs` reads the sidebar's roster and its phase (loading, failed with
+Retry, unavailable, ready), with no loading controller of its own; the soul
 inspector in `soul-inspector.mjs` (while `loading.settled === 'stale'` — the settled state, so a Retry in flight over stale content keeps the hold — every
 `[data-mutate]` control and the teams panel's join/leave — `createTeamsPanel`'s
 `mutable` / `mutableReason` — wait with `INSPECTION_STALE_TITLE`; Launch,
@@ -1640,12 +1598,8 @@ workspace is observed through its server and never synced from here.
   each with reachable and its OATS version (no agent counts in this slice);
   Enter opens one with Check and Remove; Add a machine at its head. Mounted once
   per workspace and kept mounted across the page's repaints (focus stays on its
-  controls), `sync()` on each roster poll. Its header's **List | Map** (`machinesView`, `setMachinesView`;
-  `onMachinesView` tells `views/spawn.mjs`) swaps it for the Deployments view
-  (`views/hierarchy.mjs`, mounted in `.workspace-machines-panel` only while the
-  Map is shown), until slice 6 makes that the Graph. A handoff may name the view
-  (`preselectWorkspaceTab('machines', { machinesView: 'list' | 'map' })`); without it
-  the tab opens on the view last chosen.
+  controls), `sync()` on each roster poll. It is the tab's only view: its canvas
+  of before is the Graph, a page of its own (`views/graph.mjs`, slice 6b).
 - **Notes** keep the F1 guards visible: an unreachable workspace (module drift
   not current), withheld instance rows, unsynced/stale declarations and
   workspace problems, each in the kernel's own terms.
@@ -1667,7 +1621,7 @@ workspace is observed through its server and never synced from here.
 
 **Pinned tops and one scroller per tab (spec G, `sticky-top.mjs`).** The view
 is one fixed-height column that never scrolls: the tab row (`.workspace-header`,
-which also carries Setup's Sync and Machines' List | Map) and the Souls bar sit outside the
+which also carries Setup's Sync) and the Souls bar sit outside the
 content scrollers (`.souls-grid`, `.workspace-discovery`). Each scroller is
 positioned, `min-height:0` and `overscroll-behavior: contain`; the view root
 (`.souls`) is `position:relative; overflow:clip`. Inside the Capabilities

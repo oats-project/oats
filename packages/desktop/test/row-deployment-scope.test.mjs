@@ -94,7 +94,7 @@ test('source pin: each instance-addressed call site takes the row\'s deployment'
     ['instance-pr-action.mjs', /gitTarget\(\{ \.\.\.target, workspace: target\.deployment \}\)/],
     ['shell.mjs', /lifecycleDialog\.open\(\{ operation, instance, workspace: rowDeployment\(instance\) \}\)/],
     ['context-panel.mjs', /const deployment = instanceDeployment\(context\);/],
-    ['views/hierarchy.mjs', /const selection = row => \(\{ workspace: rowDeployment\(row\),/],
+    ['views/graph.mjs', /return \{ workspace: rowDeployment\(now\), selector: \{ instance: now\.instance,/],
     ['soul-inspector.mjs', /selection\?\.instance \? `\?ws=\$\{encodeURIComponent\(rowDeployment\(selection\.instance\)\)\}`/],
     ['soul-inspector.mjs', /id: ref \? rowDeployment\(ref\) : w\.primary \|\| w\.id/],
     ['start-instance.mjs', /deployment: rowDeployment\(instance\)/],

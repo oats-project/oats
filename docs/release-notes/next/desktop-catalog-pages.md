@@ -18,7 +18,7 @@
     count your agents.
   - **Machines** opens on the list of the computers the workspace runs on. Each row says whether
     the computer is reachable and its OATS version. Enter opens
-    a machine, with Check and Remove. Its **Map** is the earlier Machines view.
+    a machine, with Check and Remove. The earlier Machines view is the Graph, a page of its own.
   - **Setup** is its list only; its graph is gone. A member's **Details** (or **Why?**) opens its
     membership under its row.
   - **Connections** says what the GitHub connection is for.

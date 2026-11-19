@@ -172,8 +172,9 @@ other, and the shared reason and each of the Desktop's notices agree.
 absent otherwise; another machine's panel never carries it.
 
 The reason of a stale deployment is under "Reasons". The overview's notes
-of a kept failure have the same shape, composed in one place
-(`keptFailureNote`, `renderer/views/hierarchy.mjs`): "Roster unavailable.
+of a kept failure had the same shape, composed in one place
+(`keptFailureNote`, in the Machines canvas, which became the Graph in slice
+6b and now shows the sidebar roster's own state): "Roster unavailable.
 Showing a reported observation, not current state; actions disabled. OATS
 says: <message>" for the kernel's message, the Desktop's sentences alone
 when there is none to show, and "Roster unavailable: <message>. Showing…"
@@ -554,48 +555,32 @@ also chooses which registered servers the window offers: Where to run, the
 Setup tab's Registered machines box and Add a machine list only the registrations that
 report that key. See [desktop-machines.md](desktop-machines.md).
 
-### The Machines tab
+### The Graph
 
-The Workspace page's **Machines** tab, between Teams and Setup (2026-10-26;
-the Deployments page before that, and the Active overview before that: stage
-`hierarchy`, Mod+1, which now opens the Workspace page on this tab), shows
-the view's overview trees and nothing deployment-specific beyond them. The
-page opens on Souls; `views/spawn.mjs` mounts the view (`views/hierarchy.mjs`)
-only while the Machines tab is shown. One sentence under its bar says what a machine is:
-"Each machine runs this workspace in a folder of its own. The instances
-under a machine run on that machine." It has no About dialog. Its tabs
-(`renderer/deployment-tabs.mjs`) are **All**, then one per deployment in
-served order, named by `machineLabels`; a view of one deployment has only
-that deployment's tab, so the machine is always named. The selected tab is
-remembered per view in localStorage (`oats.desktop.deploymentTab`, ids only,
-at most 32 views). When the tabs overflow, the strip scrolls horizontally and
-the selected or focused tab is revealed, as in the terminal tab strip. The
-header's count line counts the selected tab and sits at the right of the
-header. The tab has no Spawn button (Spec E): `S` on the canvas (which goes
-to the Souls tab), the sidebar's New agent, Quick Open and the soul
-cards spawn.
+The Workspace page's **Machines** tab, between Teams and Setup (stage
+`hierarchy`, Mod+1), is the list of the computers the workspace runs on
+([desktop-machines.md](desktop-machines.md)). Its canvas of before (the
+Deployments page, and the Active overview before that) is the **Graph**, a
+page of its own since the Desktop UI rework's slice 6b (`views/graph.mjs`,
+[the Graph](../../../docs/desktop.md#the-graph)): one column per deployment
+of the view, this computer's first and then the others by `machineLabels`,
+each with its agents under "started by" edges. Relations are recorded within
+one deployment; a parent on another machine is drawn between the columns
+only when exactly one row of the view has the name the child records (a
+display rule, never a kernel fact). The deployment tabs went with the canvas:
+the columns name every machine, and a request from the switcher's "Not
+matched" entries (`requestDeploymentTab`) opens the Graph on that
+deployment's column.
 
-- **All** stacks one section per deployment, headed by `deploymentLabel`
-  (the full path in a tooltip) and its counts: the machine in the
-  group-label style (uppercase), the `· path` in normal case in the muted
-  secondary style, like the counts, and under it "Instances on this
-  machine" (this computer) or "Instances on <machine>"
-  (`deployments-page.mjs` `deploymentHead`); relations never cross
-  sections, and pan, zoom and fit work over the whole canvas.
-- **A deployment's tab** shows only that deployment's tree, under its heading,
-  even when it is the view's only deployment: every machine's tree is under
-  its name and "Instances on …" (the Machines tab, 2026-10-26).
-- A non-live deployment's heading carries a state chip ("not reached",
-  "remembered", "stale"; "not matched" for a reached one with a reason) and
-  its `short` reason, with **How to fix** under it: the `fix` steps when
-  there are any (they carry every fact the sentence has, a host or a
-  reference), else the full sentence (`reason`), and any `note`. On its own
-  tab, a non-live deployment with no rows shows that block as the empty
-  state.
+- A non-live deployment says so in its column ("not reached", "remembered",
+  "stale"; "not matched" for a reached one with a reason), and its heading
+  above the picture (`deployments-page.mjs` `deploymentReasonBlock`) carries
+  the state chip and its `short` reason, with **How to fix** under it: the
+  `fix` steps when there are any (they carry every fact the sentence has, a
+  host or a reference), else the full sentence (`reason`), and any `note`.
 - A live deployment's `note` (a remote that now reports another workspace, a
   standalone host's local teams) is said under **Details** on its heading,
-  with no chip and no mark. With no rows, the note heads the usual empty
-  message.
+  with no chip and no mark.
 
 ### Scope per row
 

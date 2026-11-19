@@ -35,8 +35,8 @@ export const workspaceTabs = ['souls', 'capabilities', 'teams', 'machines', 'sou
 // on Souls.
 const TAB_LABELS = { machines: 'Machines', teams: 'Teams', souls: 'Souls', capabilities: 'Capabilities', sources: 'Setup' };
 /** The Workspace page's tab bar rules for a selector: plain-text tabs, the selected one at 650 over a 2px
- * --live underline. Shared with the Deployments page's tabs (deployments-page.mjs), so the two never drift. */
-export const tabBarCSS = (sel) => `${sel} { display:flex; flex-wrap:nowrap; overflow-x:auto; gap:22px; min-width:0; scrollbar-width:none; }
+ * --live underline. */
+const tabBarCSS = (sel) => `${sel} { display:flex; flex-wrap:nowrap; overflow-x:auto; gap:22px; min-width:0; scrollbar-width:none; }
 /* Unselected tabs read like the sidebar's items (human, 2026-09-28): its ink and size, not muted grey. */
 ${sel} button { flex:none; display:inline-flex; align-items:center; gap:6px; padding:0; border:0; border-radius:0; background:none; color:var(--nav-fg); font-weight:500; font-size:13px; line-height:normal; font-family:var(--ui-font,system-ui); cursor:pointer; }
 ${sel} button:hover { color:var(--fg); }

@@ -252,6 +252,9 @@ covers backend replacement; its monotonic connection generation revokes reads
 and clears retained evidence without another command or new IPC surface. A newer read can supersede a pending read; the
 server coalesces identical commands.
 
+The view lives in the Graph's **Recent events…** dialog (the node's menu; the
+Machines canvas's popup until the Desktop UI rework's slice 6b), owned by that
+dialog and the workspace it was opened in.
 One observation, at most 4 MiB, is retained **only in the current popup** (below
 the 32-target upper bound). There is no cross-selection/server cache,
 persistence or reopening-by-name. A failed refresh keeps the actual older rows

@@ -136,7 +136,8 @@ message is the state's title), and the version that check reported.
 
 The guide also asks for the agents on each machine. They are cut from this slice (the effort's lead, after a third
 review major on binding a machine to its roster observation): a count must come from a settled good roster read of that
-machine's own deployment, and the panel did not bind one soundly. The Map and the roster show where agents run.
+machine's own deployment, and the panel did not bind one soundly. The Graph (`views/graph.mjs`, slice 6b) and the roster
+show where agents run.
 
 A registered machine's row is one button: Enter (or a click) opens it under its row, with its name,
 ssh host and folder, then **Check** and **Remove**; the row's title gives the same facts. A machine

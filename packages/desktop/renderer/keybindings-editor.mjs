@@ -48,7 +48,7 @@ const CONTEXT_LABELS = {
   "stage:spawn": "Soul roster",
   // view-local contexts: never activated for window dispatch — the actions
   // dispatch inside their view surface but stay editor-visible here.
-  "view:hierarchy": "Machines",
+  "view:graph": "Graph",
   "view:spawn": "Soul roster",
   // a modal dialog's own keys: dispatched only by the open dialog (spawn-dialog-keys.mjs)
   "spawn-dialog-local": "Spawn dialog",
@@ -65,7 +65,7 @@ const groupOf = (action) => (action.id === "app.leader" ? "leader" : action.cont
 /** Group registered actions by context, stable order, for rendering. The Leader group (when
  * app.leader is registered) comes first, then the Sidebar keys. */
 export function groupActions(actions = listActions()) {
-  const order = ["leader", "sidebar", "global", "tabs", "roster", "stage:hierarchy", "view:hierarchy", "stage:spawn", "view:spawn", "spawn-dialog-local"];
+  const order = ["leader", "sidebar", "global", "tabs", "roster", "stage:hierarchy", "view:graph", "stage:spawn", "view:spawn", "spawn-dialog-local"];
   const groups = new Map();
   for (const a of actions) {
     const g = groupOf(a);

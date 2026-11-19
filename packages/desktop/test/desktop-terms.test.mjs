@@ -180,7 +180,7 @@ test('every shipped Desktop module that calls a table that takes terms passes DE
   // Not vacuous: the reader found the call sites, in main, the backend and the page.
   assert.deepEqual([...callers.keys()].sort(), ['main.mjs', 'renderer/capability-contents.mjs', 'renderer/computer-teams.mjs', 'renderer/deployment-scope-line.mjs',
     'renderer/deployment-tabs.mjs', 'renderer/deployments-page.mjs', 'renderer/lifecycle-dialog.mjs', 'renderer/palette.mjs', 'renderer/shell.mjs',
-    'renderer/soul-inspector.mjs', 'renderer/spawn-deployment-field.mjs', 'renderer/start-instance.mjs', 'renderer/views/hierarchy.mjs', 'renderer/views/spawn.mjs', 'renderer/workspace-discovery.mjs',
+    'renderer/soul-inspector.mjs', 'renderer/spawn-deployment-field.mjs', 'renderer/start-instance.mjs', 'renderer/views/graph.mjs', 'renderer/views/spawn.mjs', 'renderer/workspace-discovery.mjs',
     'server/capability-show.mjs', 'server/oats-web.mjs', 'server/workspace-sync.mjs']);
   const calls = [...callers.values()].reduce((a, b) => a + b, 0);
   assert.ok(calls >= 48, `the call sites were read (${calls})`);

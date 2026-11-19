@@ -19,7 +19,6 @@ import { canAddressRemote, rowReason } from "../../client/remote-address.mjs";
 import * as vdShared from "../../client/roster-sections.mjs";
 import * as vdView from "../renderer/view-deployments.mjs";
 const vd = { ...vdShared, ...vdView };
-import * as hierarchy from "../renderer/views/hierarchy.mjs";
 import { createWorkspaceSwitcher } from "../renderer/workspace-switcher.mjs";
 import { workspaceChoiceLabels, workspaceChoicePlace } from "../../client/workspace-choices.mjs";
 import { onDeploymentTabRequest } from "../renderer/deployment-tabs.mjs";

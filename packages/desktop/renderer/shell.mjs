@@ -848,7 +848,7 @@ async function refreshContextRoster({ user = false } = {}) {
   const commitWorkspaceLabel = workspaceLabel.begin();
   const ws = currentWorkspace();
   // A stale dispatch selection (persisted, not among the served choices) is
-  // owned like an empty one: the hierarchy may have adopted the served
+  // owned like an empty one: another view may have adopted the served
   // workspace while this request was in flight, and this reply resolves the
   // same selection. A real switch still bumps contextRosterGen and loses.
   const owns = (responseWs = ws, staleDispatch = false) => rosterResponseOwns({

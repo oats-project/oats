@@ -112,7 +112,7 @@ test("slice6b keyboard moves and opens", (t) => {
   // One tab stop (a roving tabindex), each node a treeitem with a visible focus rule.
   assert.equal(u.nodes().filter((n) => n.tabIndex === 0).length, 1);
   assert.ok(u.nodes().every((n) => n.getAttribute("role") === "treeitem"));
-  assert.match(read("../renderer/views/graph.mjs"), /\.graph-node:focus-visible \{[^}]*box-shadow:0 0 0 2px var\(--accent\)/);
+  assert.match(read("../renderer/views/graph.mjs"), /\.graph-node:focus-visible \{ border-color:var\(--accent\); background:var\(--sel\);/);
   u.nodeOf("lead").focus();
   u.key(u.doc.activeElement, "ArrowDown"); assert.equal(u.focused(), "dev", "↓ the next agent of the column");
   u.key(u.doc.activeElement, "ArrowUp"); assert.equal(u.focused(), "lead", "↑ back");

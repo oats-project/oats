@@ -20,7 +20,7 @@ import { projectActivePanel, activeSignature } from '../renderer/active-observat
 const renderer = new URL('../renderer/', import.meta.url);
 const shellCss = readFileSync(new URL('shell.css', renderer), 'utf8');
 const themeCss = readFileSync(new URL('theme.css', renderer), 'utf8');
-const hierarchy = readFileSync(new URL('views/hierarchy.mjs', renderer), 'utf8');
+const graph = readFileSync(new URL('views/graph.mjs', renderer), 'utf8');
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 async function settle(n = 6) { for (let i = 0; i < n; i++) await tick(); }
 
@@ -46,8 +46,8 @@ test('the stylesheet: each colour is its --instance-<colour>; running fills, sto
   assert.match(shellCss, /\.ctx-dot\.off\[data-instance-color\] \{ border-color: var\(--instance-color\); \}/);
   assert.match(shellCss, /\.tab-dot\.on\[data-instance-color\] \{ background: var\(--instance-color\); \}/);
   assert.match(shellCss, /\.tab-dot\.off\[data-instance-color\] \{ border-color: var\(--instance-color\); \}/);
-  assert.match(hierarchy, /\.hdot\.on\[data-instance-color\] \{ background: var\(--instance-color\); box-shadow: 0 0 0 3px color-mix\(in srgb, var\(--instance-color\) 18%, transparent\); \}/, 'the halo takes the colour');
-  assert.match(hierarchy, /\.hdot\.off\[data-instance-color\] \{ border-color: var\(--instance-color\); \}/);
+  // The Graph's nodes (slice 6b) draw the roster's own dot (.ctx-dot), painted by the one rule.
+  assert.match(graph, /d\.className = `ctx-dot \$\{state === "running" \? "on" : state === "stopped" \? "off" : "unknown"\}`; paintDotColor\(d, row, state\);/);
   const rules = [...shellCss.matchAll(/[^}]*data-instance-color[^{]*\{[^}]*\}/g)].map(m => m[0]).join('\n') + instanceColorCSS;
   assert.doesNotMatch(rules.replace(/\/\*[\s\S]*?\*\//g, ''), /#[0-9a-f]{3,8}\b|rgb\(|opacity/i);
 });

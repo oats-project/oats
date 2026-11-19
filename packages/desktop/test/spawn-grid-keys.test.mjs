@@ -187,8 +187,8 @@ test("spawn MODAL controls are excluded from view-key dispatch: '/' and 'B' from
 
 // A card's arrows give way to the keymap only for a chord it binds (keybindings.mjs keymapTakes): the
 // shared Alt+Shift+↑/↓ open the previous / next instance's terminal from a card too, and a rebind
-// follows, as do the workspace steps (Alt+↑/↓); an arrow chord bound to nothing (Ctrl+↓) still moves between the cards. The overview canvas
-// (views/hierarchy.mjs) and the roster rows (roster-keys.mjs) give way the same way.
+// follows, as do the workspace steps (Alt+↑/↓); an arrow chord bound to nothing (Ctrl+↓) still moves between the cards. The Graph
+// (views/graph.mjs) and the roster rows (roster-keys.mjs) give way the same way.
 test("spawn grid: the keymap's arrow chords pass the cards; an unbound arrow chord still moves", async (t) => {
   pinPlatform(t); // the Linux and Windows keymap, Alt family: Alt+Shift+↑/↓ the instances, Alt+↑/↓ the workspaces
   const dom = new JSDOM('<!doctype html><html><body><div id=host></div></body></html>', { url: "http://localhost" });
