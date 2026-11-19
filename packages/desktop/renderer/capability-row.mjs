@@ -1,18 +1,15 @@
-/** One capability as a row (the Desktop UI rework): its name, then where it comes from ("by <source>", or the
- * verified mark once a rule establishes "official"), a dim "core" tag on a core capability and "default" on a
- * workspace default, and one line of what it does. The same row wherever a capability is listed: a soul's page
+/** One capability as a row (the Desktop UI rework): its name, then where it comes from ("by <source>"), a dim
+ * "core" tag on a core capability, and one line of what it does. A stand-in for the soul page until slice 3b's shared
+ * row (workspace-catalog.mjs capabilityRowElement) lands: that row brings the verified mark and the "default" tag,
+ * with the rule that decides them. The same row wherever a capability is listed: a soul's page
  * (slice 3a) and the Capabilities page (slice 3b). A row that opens something is a button; Enter and a click open
  * it. Up/Down, Home and End move between the rows of one list (`roveCapabilityLines`), one tab stop for the list.
  *
  * Every word on the row is the kernel's (the name, the source, the manifest's description), shown as text. */
-import { iconElement } from './shell-icons.mjs';
 
 export const CAPABILITY_LINE_COPY = Object.freeze({
   core: 'core',
-  isDefault: 'default',
   by: source => `by ${source}`,
-  verified: 'Verified: published by OATS',
-  open: 'open its page',
 });
 
 export const capabilityLineCSS = `
@@ -26,7 +23,6 @@ export const capabilityLineCSS = `
 .cap-line-name { color:var(--fg); font-size:13px; font-weight:600; overflow-wrap:anywhere; }
 .cap-line-by { color:var(--muted); font-size:12px; overflow-wrap:anywhere; }
 .cap-line-tag { color:var(--muted); font-size:11px; font-weight:600; letter-spacing:.02em; }
-.cap-line-verified { color:var(--accent); font-size:12px; }
 .cap-line-desc { color:var(--muted); font-size:12.5px; line-height:1.45; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 `;
 
@@ -37,28 +33,20 @@ export const capabilityLineCSS = `
  * @param {string|null} [o.by]      where it comes from (a repository or a package), shown as "by <source>"; null: nothing
  * @param {string|null} [o.description]  one line of what it does (the manifest's); null: no second line
  * @param {boolean} [o.core]        a core capability (knowledge, messaging, tasks): the dim "core" tag
- * @param {boolean} [o.isDefault]   a workspace default: the "default" tag
- * @param {boolean} [o.verified]    published by OATS (the official rule's): the mark instead of "by <source>"
  * @param {string|null} [o.title]   the row's tooltip (what the tags stand for)
  * @param {string|null} [o.focusKey]  a stable key, so a repaint finds the row again (loading.mjs captureFocusState)
  * @param {() => void} [o.onOpen]   opens the capability; absent, the row is plain text
  * @returns {HTMLElement} a <button> (opens) or a <div>, carrying data-capability = name
  */
-export function capabilityLine(doc, { name, by = null, description = null, core = false, isDefault = false, verified = false, title = null, focusKey = null, onOpen = null }) {
+export function capabilityLine(doc, { name, by = null, description = null, core = false, title = null, focusKey = null, onOpen = null }) {
   const node = (tag, text, cls) => { const el = doc.createElement(tag); if (text !== undefined && text !== null) el.textContent = text; if (cls) el.className = cls; return el; };
   const opens = typeof onOpen === 'function';
   const row = node(opens ? 'button' : 'div', undefined, 'cap-line');
   row.dataset.capability = name;
   const head = node('span', undefined, 'cap-line-head');
   head.append(node('span', name, 'cap-line-name'));
-  if (verified) {
-    const mark = node('span', undefined, 'cap-line-verified'); mark.title = CAPABILITY_LINE_COPY.verified;
-    mark.setAttribute('role', 'img'); mark.setAttribute('aria-label', CAPABILITY_LINE_COPY.verified);
-    mark.append(iconElement(doc, 'check', { size: 12 })); head.append(mark);
-  }
-  else if (typeof by === 'string' && by) head.append(node('span', CAPABILITY_LINE_COPY.by(by), 'cap-line-by'));
+  if (typeof by === 'string' && by) head.append(node('span', CAPABILITY_LINE_COPY.by(by), 'cap-line-by'));
   if (core) head.append(node('span', CAPABILITY_LINE_COPY.core, 'cap-line-tag'));
-  if (isDefault) head.append(node('span', CAPABILITY_LINE_COPY.isDefault, 'cap-line-tag'));
   row.append(head);
   if (typeof description === 'string' && description) { const line = node('span', description, 'cap-line-desc'); line.title = description; row.append(line); }
   if (title) row.title = title;

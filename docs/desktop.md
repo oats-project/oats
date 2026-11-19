@@ -511,7 +511,8 @@ experts, developers, operations, then the rest, each by name. The kind is read
 from the soul's name (`packages/client/soul-role.mjs`): a name with a word
 `setup`, `operator`, `admin`, `ops` or `operations` is operations; else a name
 ending in `-maintainer`, `-expert` or `-developer` is that; else other. OATS
-reports no kind of its own, so the name is the rule.
+reports no role for a soul yet, so the name is the rule until it does
+([#1980](https://github.com/oats-project/oats/issues/1980)).
 
 The souls show as a grid of cards or as a table: **v** (or **Grid** | **Table**
 in the toolbar) switches between them, and each window remembers its choice,
