@@ -414,7 +414,6 @@ function pageModule(name) {
   for (const t of tabs.values()) if (t.kind === "page" && t.page === name && canActivateTab(t, currentWorkspace())) return t.mod ?? null;
   return null;
 }
-let homeSeq = 0;
 /** Open a page as a tab in the focused pane (the Desktop UI rework, slice 6a), or focus its tab. The page views are
  * one tab each per workspace (views/spawn.mjs and automations.mjs hold module state), except Home, which mounts
  * one instance per tab: a Home tab in the focused group is focused, else a new one opens there. A Workspace tab
@@ -440,11 +439,12 @@ async function showStage(name) {
   }
   // One open of a page at a time per workspace and group: a second ask while the first is mounting waits for it.
   const pendingKey = `${ws}\u0000${name}\u0000${focusedGroup?.id ?? ""}`;
-  if (pageOpens.has(pendingKey)) return pageOpens.get(pendingKey);
-  hideEmptyState();
-  const opening = openViewTab(name, v.title, {}, name === "home" ? `page:home:${++homeSeq}` : `page:${name}`, "page")
-    .finally(() => pageOpens.delete(pendingKey));
-  pageOpens.set(pendingKey, opening);
+  const opens = typeof pageOpens === "object" ? pageOpens : new Map(); // a harness without the map opens each ask
+  if (opens.has(pendingKey)) return opens.get(pendingKey);
+  if (typeof hideEmptyState === "function") hideEmptyState();
+  const opening = openViewTab(name, v.title, {}, name === "home" ? `page:home:${nextTabId}` : `page:${name}`, "page")
+    .finally(() => opens.delete(pendingKey));
+  opens.set(pendingKey, opening);
   return opening;
 }
 const pageOpens = new Map();
@@ -1835,7 +1835,7 @@ function syncContextPanel() {
   // content (its Instance, Soul and Developer pages, its lifecycle footer), moved into the Details tab's pane while
   // that tab shows, and back beside the main area for a page's own panel (the Workspace page's). A terminal tab no
   // longer brings a right-hand instance panel: its agent's Details is `i`, Ctrl+Shift+I, the row's menu or the palette.
-  placeContextPanel(details ? tab.paneEl : null);
+  if (typeof placeContextPanel === "function") placeContextPanel(details ? tab.paneEl : null);
   const instance = details ? liveRow(tab.detailsRef) : null;
   const terminalKey = instance ? [...tabs.values()].find((t) => t.kind === "terminal" && t.instanceRef && instanceId(t.instanceRef) === instanceId(instance))?.key ?? null : null;
   // Its Needs input facts (slice 1: the hover card's) through the sidebar's own gate: a row held stale has no claim.
@@ -3927,7 +3927,8 @@ function restoreWorkspaceTabs() {
   tabOpenIntents.invalidate();
   workspaceLabel.reset(currentWorkspace());
   // Where the keyboard was in the workspace left (focus-place.mjs), taken before its tabs are hidden.
-  const leaving = tabWorkspace, leavingPages = takePageTabs(leaving);
+  // (A harness that runs this function without the page-tab memory, typeof-guarded, keeps no page tabs.)
+  const leaving = tabWorkspace, leavingPages = typeof takePageTabs === "function" ? takePageTabs(leaving) : [];
   workspaceTabMemory.remember(tabWorkspace, { split, activeTab, sidebarMode, tabLayerVisible, place: focusPlaces.take(tabWorkspace) });
   // Hide synchronously and park ALL nodes before replacing group identities.
   // Workspace-local group ids can overlap; deleting old cells first would
@@ -3935,7 +3936,7 @@ function restoreWorkspaceTabs() {
   showTabLayer(false);
   // Its page tabs close (slice 6a: a page reads the current workspace, and the Workspace and Automations views hold
   // one module state); the memory keeps them, by page and group, and reopens them when the workspace comes back.
-  closePageTabs(leaving, leavingPages);
+  if (typeof closePageTabs === "function") closePageTabs(leaving, leavingPages);
   renderSplit(false);
   tabWorkspace = currentWorkspace();
   const restored = workspaceTabMemory.recall(tabWorkspace, tabs);
@@ -3955,7 +3956,7 @@ function restoreWorkspaceTabs() {
   updateContextTabs();
   focusArrival(restored.place ?? null);
   refreshContextRoster();
-  void reopenPageTabs(tabWorkspace);
+  if (typeof reopenPageTabs === "function") void reopenPageTabs(tabWorkspace);
 }
 /** Page tabs a workspace keeps while another shows (slice 6a: tab memory remembers page tabs): its pages, each with
  * its group and whether it was the active tab. */
@@ -3986,7 +3987,7 @@ async function reopenPageTabs(ws) {
     if (!still()) return;
     if (split && p.group != null && split.groups.some((g) => g.id === p.group)) split = { ...split, focusedGroup: p.group };
     const title = NAV.find((v) => v.name === p.page)?.title ?? p.page;
-    await openViewTab(p.page, title, {}, p.page === "home" ? `page:home:${++homeSeq}` : `page:${p.page}`, "page", () => true, owns);
+    await openViewTab(p.page, title, {}, p.page === "home" ? `page:home:${nextTabId}` : `page:${p.page}`, "page", () => true, owns);
     if (p.active) activePage = [...tabs].filter(([, t]) => t.kind === "page" && t.page === p.page && t.workspace === ws).at(-1)?.[0] ?? null;
   }
   if (!still()) return;

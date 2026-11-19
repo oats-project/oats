@@ -29,7 +29,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 function pages({ split = null, open = [] } = {}) {
   const tabs = new Map(open.map((t, i) => [i + 1, { workspace: "A", ...t }]));
   const c = { tabs, split, NAV, navTab, canActivateTab, groupOfTab, removeSplitTab, opened: [], selected: [], souls: [],
-    windowState: () => "bound", showChooser() {}, hideEmptyState() {}, currentWorkspace: () => "A", homeSeq: 0,
+    windowState: () => "bound", showChooser() {}, hideEmptyState() {}, currentWorkspace: () => "A", nextTabId: 1,
     openWorkspaceSouls: (tab) => { c.souls.push(tab); },
     selectTab: (id) => { c.selected.push(id); return true; },
     openViewTab: async (name, title, extra, key, kind) => { c.opened.push({ name, title, key, kind }); const id = tabs.size + 1; tabs.set(id, { kind, page: name, workspace: "A" }); return id; } };
@@ -203,7 +203,7 @@ test("slice6a tab memory restores page tabs", async () => {
   // one active again.
   const tabs = new Map([[1, { kind: "terminal", workspace: "A" }], [2, { kind: "page", page: "home", workspace: "A" }], [3, { kind: "page", page: "spawn", workspace: "A" }]]);
   const split = { orientation: "row", nextId: 3, groups: [{ id: 1, tabs: [1, 2], activeTab: 2 }, { id: 2, tabs: [3], activeTab: 3 }], focusedGroup: 2 };
-  const c = { tabs, split, activeTab: 3, groupOfTab, NAV, canActivateTab, homeSeq: 0, ws: "A", closed: [], reopened: [], selected: [],
+  const c = { tabs, split, activeTab: 3, groupOfTab, NAV, canActivateTab, nextTabId: 1, ws: "A", closed: [], reopened: [], selected: [],
     currentWorkspace: () => c.ws, tabOpenIntents: { watch: () => () => true },
     closeTab: (id) => { c.closed.push(id); tabs.delete(id); },
     showStage: async () => {},

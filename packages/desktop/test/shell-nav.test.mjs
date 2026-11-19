@@ -101,11 +101,11 @@ test("showStage routes a NAV_TABS name to openWorkspaceSouls(tab); showStageFocu
   const showStage = src.match(/async function showStage\(name\) \{[^]*?\n\}/)[0];
   const route = showStage.indexOf("const asTab = navTab(name);\n  if (asTab) return openWorkspaceSouls(asTab.tab);");
   assert.ok(route > 0, "showStage asks navTab first");
-  assert.ok(route < showStage.indexOf("tabOpenIntents.invalidate()") && route > showStage.indexOf('windowState() === "choosing"'),
-    "after the no-workspace guard, before a page switch starts");
+  assert.ok(route < showStage.indexOf("const v = NAV.find") && route > showStage.indexOf('windowState() === "choosing"'),
+    "after the no-workspace guard, before a page tab opens (slice 6a: pages are tabs)");
   const focused = src.match(/async function showStageFocused\(name\) \{[^]*?\n\}/)[0];
   assert.match(focused, /page = navTab\(name\)\?\.page \?\? name;/);
-  assert.match(focused, /if \(stage\?\.name !== page \|\|/);
+  assert.match(focused, /if \(!owns\(\) \|\| currentPage\(\) !== page\) return;/, "it compares the shown page tab with the page");
   // openWorkspaceSouls names each tab it can open (its failure notice) and awaits the page.
   const open = src.match(/async function openWorkspaceSouls\(tab = "souls", options = undefined\) \{[^]*?\n\}/)[0];
   // Home's Machines and Graph rows name the Machines tab's view (slice 3b's option; an older page ignores it).
