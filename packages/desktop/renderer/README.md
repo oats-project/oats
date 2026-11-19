@@ -2431,13 +2431,17 @@ doesn't read already:
   shown). The board's groups are the shared `packages/client/home-board.mjs` (`homeBoard`: Needs you by the one
   claim gate, newest claim first; Running, newest spawn first; `homeAgents`; `startedBy`), so the TUI can draw the
   same Home. Nothing reorders the roster.
-- **Counts**: Souls from `GET /api/agents`, Capabilities from `POST /api/workspace-sync {action:"read"}`, Teams from
+- **Counts**: Souls from `GET /api/agents` (read by the Workspace page's rules: a `catalog.reason` is a failure; an
+  empty list while the catalog is still reading, or with no catalog observed yet, is pending, "Counting…", and is
+  asked again on the roster's next paint, at most ten times before its answer is taken as it is), Capabilities from `POST /api/workspace-sync {action:"read"}`, Teams from
   `POST /api/workspace-teams {action:"list"}` (only where the CLI has a team model: "Counting…" while its probe is
   pending, no line where it has none; `onCliChange` settles it), Machines from the roster's deployments (a workspace
   with no deployment list is this machine's: one). Each count is its own read, owned by the workspace generation it
   was asked in (a late answer or failure for a workspace since left is dropped), and never rejects: a refused or
   malformed answer is that count's "Couldn't count them", the others stand. The stage stays mounted across a
   workspace switch, so Home follows `onWorkspaceChange` itself: its board again, and the new workspace's counts.
+- **Identity**: an agent row is known by `instanceId` (its home, its host), never its bare name, so a repaint keeps
+  focus and activation on the same agent when names repeat across roots and hosts.
 - **Opening**: an agent row runs `ctx.openAgent(row)`, the shell's `openRosterInstance`, which activates the
   roster's own row (showing it first if a collapsed parent or the closed Background section hides it), so its gates
   are the row's (held, unknown or unaddressable, stopped on a stale roster: refused) and can't drift. An overview row runs

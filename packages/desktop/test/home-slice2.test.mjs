@@ -245,3 +245,43 @@ test("slice2 Enter on a section lands focus on its Workspace tab, so Esc goes st
   assert.deepEqual(went, ["home"], "the first Esc goes back to Home");
   dom.window.close();
 });
+
+// Review round 2 (slice 2): a souls catalog still reading is no count of zero, and a row is known by its identity.
+test("slice2 Souls waits for the catalog: pending is Counting…, a refusal is a failure, never 0 souls", async (t) => {
+  let answer = { agents: [], refreshing: true, catalog: { reason: null } }, reads = 0;
+  const u = fixture(t, { rows: [row("a")], api: async () => { reads++; return answer; } });
+  await u.settle(); await u.settle();
+  assert.match(u.openButton("souls").textContent, /Counting…/, "the catalog still reading: not 'You have 0 souls'");
+  answer = { agents: [{}, {}, {}], catalog: { reason: null } };
+  u.set({ rows: [row("a")] }); // the roster's next paint asks again
+  await u.settle(); await u.settle();
+  assert.match(u.openButton("souls").textContent, /You have 3 souls/);
+  assert.equal(reads, 2);
+  u.set({ rows: [row("a")] }); await u.settle();
+  assert.equal(reads, 2, "a settled count isn't read again on every paint");
+  const v = fixture(t, { rows: [row("a")], api: async () => ({ agents: [], catalog: { reason: { code: "E_UNREACHABLE", message: "Cannot read souls" } } }) });
+  await v.settle(); await v.settle();
+  assert.match(v.openButton("souls").textContent, /Couldn't count them/, "a refused catalog is a failure");
+  const w = fixture(t, { rows: [row("a")], api: async () => ({ agents: [], catalog: { reason: null } }) });
+  await w.settle(); await w.settle();
+  assert.match(w.openButton("souls").textContent, /You have 0 souls/, "a settled empty catalog is zero");
+});
+
+test("slice2 a repaint keeps focus and activation on the same agent when names repeat across roots and hosts", async (t) => {
+  const rows = [row("same", { home: "/one/a", createdAt: "2026-11-02T00:00:00.000Z" }), row("same", { home: "/two/a", createdAt: "2026-11-01T00:00:00.000Z" }),
+    row("same", { home: "/one/a", server: "polaris", createdAt: "2026-11-03T00:00:00.000Z" })];
+  const opened = [];
+  const u = fixture(t, { rows });
+  u.ctx.openAgent = (r) => { opened.push(`${r.server ?? ""}${r.home}`); return true; };
+  const buttons = () => [...u.el.querySelectorAll("[data-home-agent]")];
+  const second = buttons().find((b) => b.dataset.homeAgent === "/two/a");
+  second.focus();
+  u.set({ rows: [...rows].reverse() }); // a repaint, in another order
+  assert.equal(u.doc.activeElement.dataset.homeAgent, "/two/a", "the same agent keeps the focus");
+  u.doc.activeElement.click();
+  assert.deepEqual(opened, ["/two/a"]);
+  u.openButton("agents").click();
+  const remote = buttons().find((b) => b.dataset.homeAgent.startsWith("server:polaris"));
+  remote.focus(); u.set({ rows: [...rows] });
+  assert.ok(u.doc.activeElement.dataset.homeAgent.startsWith("server:polaris"), "in Home › Agents too, across hosts");
+});

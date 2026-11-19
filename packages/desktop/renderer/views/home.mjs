@@ -18,6 +18,7 @@ import { apiJson, postJson, wsQuery, workspaceGeneration, onWorkspaceChange } fr
 import { cliStatus, onCliChange } from "./cli-status.mjs";
 import { DESKTOP_NOUNS, DESKTOP_TERMS } from "../desktop-terms.mjs";
 import { homeBoard, homeAgents, startedBy } from "../../../client/home-board.mjs";
+import { instanceId } from "../../../client/instance-tree.mjs";
 import { rosterRowFacts } from "../../../client/roster-row-facts.mjs";
 import { waitingDetail, waitingLabel } from "../../../client/waiting-on-you.mjs";
 import { runtimeState } from "../../../client/instance-presentation.mjs";
@@ -126,7 +127,7 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
   /** One agent's row: its dot, name, soul · machine, and a side note (the claim, the state, who started it). */
   function agentRow(row, { claim = null, side = null, state = runtimeState(row), deployments, here }) {
     const facts = rosterRowFacts(row, DESKTOP_TERMS, { deployments, here });
-    const b = node("button", "home-row"); b.type = "button"; b.dataset.homeAgent = row.instance;
+    const b = node("button", "home-row"); b.type = "button"; b.dataset.homeAgent = instanceId(row); // identity, never the bare name: names repeat across roots and hosts
     // The needs-input mark is the roster's (.attn-mark): yellow means needs input only, never a dot's fill.
     const dot = claim ? iconElement(doc, "attention", { size: 10, className: "shell-icon attn-mark home-mark" })
       : node("span", `home-dot ${state === "running" ? "on" : ""}`.trim());
@@ -262,10 +263,32 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
   // Each count is its own read, owned by the workspace generation it was asked in: a late answer, or a failure, for
   // a workspace since left is dropped. A read never rejects: a refused or malformed answer is that count's "failed".
   const own = (asked) => alive && asked === gen && generation() === asked;
-  function readCount(key, read) {
+  // A read may answer PENDING: the server has no settled observation yet (the souls catalog still reading). The count
+  // stays "Counting…" and is asked again on the roster's next paint (its refresh cadence: no timer of Home's own),
+  // at most PENDING_TRIES times; after that the answer is taken as it is.
+  const PENDING = Symbol("pending"), PENDING_TRIES = 10;
+  const inFlight = new Set(), retry = new Map(); // key -> { read, tries }
+  function readCount(key, read, tries = 0) {
     const asked = gen;
-    counts[key] = "loading";
-    Promise.resolve().then(read).catch(() => "failed").then((value) => { if (!own(asked)) return; counts[key] = value; paint(); });
+    counts[key] = "loading"; inFlight.add(key); retry.delete(key);
+    Promise.resolve().then(() => read(tries >= PENDING_TRIES)).catch(() => "failed").then((value) => {
+      if (!own(asked)) return;
+      inFlight.delete(key);
+      if (value === PENDING) { retry.set(key, { read, tries: tries + 1 }); return; }
+      counts[key] = value; paint();
+    });
+  }
+  function retryPending() {
+    for (const [key, { read, tries }] of [...retry]) if (!inFlight.has(key)) readCount(key, read, tries);
+  }
+  /** The souls catalog's answer as a count (the Workspace page's rules, views/spawn.mjs settleGridState): a
+   * `catalog.reason` is a failed read; an empty list while the catalog is still reading (`refreshing`), or with no
+   * catalog observed yet, is pending, not "0 souls"; else the number listed. */
+  function soulsCount(d, settle) {
+    if (!d || !Array.isArray(d.agents)) return "failed";
+    if (d.catalog?.reason) return "failed";
+    if (!d.agents.length && !settle && (d.refreshing === true || !d.catalog)) return PENDING;
+    return d.agents.length;
   }
   let teamsReadIn = null; // the generation a Teams read was asked in: a CLI answer then asks no second one
   function readTeams() {
@@ -279,7 +302,7 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
     });
   }
   function readCounts() {
-    readCount("souls", async () => { const d = await apiJson(ctx, `/api/agents${wsQuery()}`); return Array.isArray(d?.agents) ? d.agents.length : "failed"; });
+    readCount("souls", async (settle) => soulsCount(await apiJson(ctx, `/api/agents${wsQuery()}`), settle));
     readCount("capabilities", async () => {
       const r = await postJson(ctx, `/api/workspace-sync${wsQuery()}`, { action: "read" });
       return r?.status === "ok" && Array.isArray(r.capabilities?.capabilities) ? r.capabilities.capabilities.length : "failed";
@@ -291,11 +314,11 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
    * switch, so Home follows it itself). */
   function workspaceChanged() {
     if (!alive || generation() === gen) return;
-    gen = generation(); view = "board"; returnTo = null;
+    gen = generation(); view = "board"; returnTo = null; retry.clear(); inFlight.clear();
     readCounts();
   }
 
-  const unsubscribe = typeof ctx.subscribeHomeRoster === "function" ? ctx.subscribeHomeRoster(() => paint()) : () => {};
+  const unsubscribe = typeof ctx.subscribeHomeRoster === "function" ? ctx.subscribeHomeRoster(() => { paint(); retryPending(); }) : () => {};
   const unsubscribeWorkspace = subscribeWorkspace(() => workspaceChanged());
   // The CLI's probe answering (or its features changing) settles whether Teams has a count.
   const unsubscribeCli = subscribeCli(() => { if (!alive) return; readTeams(); paint(); });
