@@ -536,20 +536,21 @@ let contextRosterGen = 0;
 let shownRoster = null;
 let contextRosterEl = null;
 let contextInstances = [];
-/** Home (slice 2) reads the roster the sidebar shows: its listeners run after each change the roster's paint makes
- * to the sidebar's list (rows, a loading or failed state, the count), batched by a MutationObserver watching it from
- * the first subscription, so no paint path has to remember to say so. */
+/** Home (slice 2, #1987 in slice 6a) reads the roster model, not the sidebar's DOM: its listeners run when the model
+ * changes (each paint of it, rows, a loading or failed state; `rosterModelChanged`), batched to one call per task, so
+ * Home follows the roster in any pane and with the sidebar collapsed or hidden. */
 const homeRosterListeners = new Set();
-let homeRosterObserver = null;
+let rosterModelPending = false;
+function rosterModelChanged() {
+  if (rosterModelPending) return;
+  rosterModelPending = true;
+  Promise.resolve().then(() => {
+    rosterModelPending = false;
+    for (const listener of homeRosterListeners) { try { listener(); } catch (e) { console.error(e); } }
+  });
+}
 function subscribeHomeRoster(fn) {
   homeRosterListeners.add(fn);
-  if (!homeRosterObserver) {
-    const rosterEl = document.getElementById("instance-roster");
-    homeRosterObserver = new MutationObserver(() => {
-      for (const listener of homeRosterListeners) { try { listener(); } catch (e) { console.error(e); } }
-    });
-    if (rosterEl) homeRosterObserver.observe(rosterEl, { childList: true, subtree: true, characterData: true });
-  }
   return () => homeRosterListeners.delete(fn);
 }
 /** Open a roster row from Home (slice 2) as the roster's own activation does, by activating its row: the row's
@@ -582,7 +583,7 @@ function openRosterInstance(i) {
 function homeRoster() {
   const phase = contextDeploymentNote !== null ? "unavailable"
     : rosterState?.hasData ? "ready" : rosterState?.state === "failed" ? "failed" : contextInstances.length ? "ready" : rosterState?.settled === "empty" ? "ready" : "loading";
-  return { rows: shownRows(contextInstances), deployments: contextDeployments, phase, note: contextDeploymentNote, stale: (row) => rosterStale || rowStale(row, contextDeployments), here: thisHostName,
+  return { rows: shownRows(contextInstances), deployments: contextDeployments, phase, note: contextDeploymentNote, pins: pinsShown(), stale: (row) => rosterStale || rowStale(row, contextDeployments), here: thisHostName,
     retry: () => { void refreshContextRoster({ user: true }); } };
 }
 let contextWorkspace = "";
@@ -870,7 +871,10 @@ async function refreshContextRoster({ user = false } = {}) {
       // The rows are rebuilt once, to disable their actions; a repeat failure keeps them. Without
       // data, the count's pill stops (nothing is loading): the reserved box, empty and still.
       if (rosterState?.hasData && !rosterStale) { rosterStale = true; renderContextRoster(contextInstances); }
-      else if (rosterState && !rosterState.hasData) { renderRosterCount(contextRosterEl.querySelector(".ctx-count"), [], { failed: true }); applyRosterPlace(); }
+      else if (rosterState && !rosterState.hasData) {
+        renderRosterCount(contextRosterEl.querySelector(".ctx-count"), [], { failed: true }); applyRosterPlace();
+        if (typeof rosterModelChanged === "function") rosterModelChanged(); // a first read failed: Home says so
+      }
       refreshPanelInstance([], ws);
     }
     return;
@@ -1045,6 +1049,8 @@ function emptyRosterLine() {
 
 function renderContextRoster(instances) {
   instances = shownRows(instances);
+  // The roster model changed (each paint is one): Home hears it (a harness without the seam paints alone).
+  if (typeof rosterModelChanged === "function") rosterModelChanged();
   const listEl = contextRosterEl.querySelector(".ctx-list");
   const restoreTreeState = captureTreeRenderState(listEl);
   // #1579: what had focus in the list, for the Background heading (no instance identity: it keeps its own focus)

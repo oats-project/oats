@@ -12,11 +12,12 @@
  *               (instance-activity-is-reported-not-inferred): a live row is "running". Stopped and unknown rows
  *               aren't on the board (D11). The "New" group (stopped or finished since you last looked) has no
  *               fact to read, so it isn't here.
- *   homeAgents(rows) -> rows: every agent, running or stopped, in the roster's order (newest spawn first).
+ *   homeAgents(rows, { pins }) -> rows: every agent, running or stopped, in the roster's order: pinned first where
+ *               the CLI reports pins (`pins`, instance-tree.mjs `rowPinned`, #1974), then newest spawn first.
  *   startedBy(row) -> string | null: who started it, the row's attributed human (attributed-human.mjs), else
  *               its parent's name (`parentInstance`), else null. */
 import { waitingClaim } from './waiting-on-you.mjs';
-import { rosterOrder } from './instance-tree.mjs';
+import { rosterOrder, rowPinned } from './instance-tree.mjs';
 import { attributedHumanData } from './attributed-human.mjs';
 import { instanceDisplayName } from './instance-display-name.mjs';
 
@@ -37,8 +38,9 @@ export function homeBoard(rows, { stale = () => false } = {}) {
   return { needsYou, running };
 }
 
-export function homeAgents(rows) {
-  return rowsOf(rows).sort(rosterOrder);
+export function homeAgents(rows, { pins = false } = {}) {
+  const pinned = (row) => (rowPinned(row, pins) ? 1 : 0);
+  return rowsOf(rows).sort((a, b) => pinned(b) - pinned(a) || rosterOrder(a, b));
 }
 
 export function startedBy(row) {

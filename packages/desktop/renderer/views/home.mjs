@@ -232,7 +232,7 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
       if (data.phase === "unavailable" && data.note) s.append(node("p", "home-quiet", data.note));
       return s;
     }
-    const rows = homeAgents(data.rows);
+    const rows = homeAgents(data.rows, { pins: data.pins === true }); // pinned first, as the roster (#1974)
     if (!rows.length) { s.append(node("p", "home-quiet", `No ${nouns.instances} yet.`)); return s; }
     const opts = { deployments: data.deployments, here: data.here };
     const ul = node("ul", "home-list"); ul.setAttribute("aria-label", `Every ${nouns.instance}`);
