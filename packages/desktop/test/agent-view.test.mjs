@@ -15,14 +15,14 @@ function memoryStorage() {
   const m = new Map();
   return { getItem: k => m.get(k) ?? null, setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k) };
 }
-function fixture(t, { typeOk = true } = {}) {
+function fixture(t, { typeOk = true, checkClaims = null } = {}) {
   const dom = new JSDOM('<!doctype html><body><div class="tab-pane active"><div class="term-wrap"><textarea class="xterm-helper"></textarea></div></div></body>', { pretendToBeVisual: true });
   t.after(() => dom.window.close());
   const doc = dom.window.document, pane = doc.querySelector('.tab-pane'), terminal = doc.querySelector('textarea');
   const typed = [], opened = [];
   const view = createAgentBoard({ pane, home: '/w/agents/dev/instances/dev-a', name: 'dev-a', now: () => NOW,
     type: text => { if (typeOk) typed.push(text); return typeOk; }, focusTerminal: () => terminal.focus(), openLink: url => opened.push(url),
-    hidden: createHiddenFacts(memoryStorage()) });
+    hidden: createHiddenFacts(memoryStorage()), checkClaims });
   const key = (el, k, extra = {}) => el.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...extra }));
   return { dom, doc, pane, terminal, typed, opened, view, key, zone: () => pane.querySelector('.agent-questions'), facts: () => pane.querySelector('.agent-facts') };
 }
@@ -175,6 +175,36 @@ test('agent view answering: the numbers are disabled while a permission or quest
   assert.equal(f.zone().querySelector('.agent-q-note').hidden, true);
 });
 
+test('agent view answering: the claims are read again at the press, so a dialog that opened since types nothing', async t => {
+  let answer = [{ producer: 'oats.board', reason: 'attention' }, { producer: 'pi.harness', waiting: true, reason: 'permission' }];
+  const f = fixture(t, { checkClaims: async () => answer });
+  f.view.update(boardData(board()), { claims: [{ producer: 'oats.board', reason: 'attention' }] });
+  assert.ok([...f.zone().querySelectorAll('.agent-q-option')].every(b => !b.disabled), 'the row alone shows no dialog');
+  f.zone().querySelector('.agent-q-option').click();
+  await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(f.typed, [], 'nothing typed');
+  assert.equal(f.zone().querySelector('.agent-q-note').textContent, DIALOG_NOTE);
+  answer = [{ producer: 'pi.harness', waiting: false, reason: 'permission' }];
+  f.view.update(boardData(board()), { claims: [] });
+  f.zone().querySelector('.agent-q-option').click();
+  await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(f.typed, ['q1: Yes, one clean commit'], 'the dialog is gone: the press types');
+});
+
+test('agent view answering: an unknown claims read still types; a newer press wins over an older one', async t => {
+  let release;
+  const gate = () => new Promise(r => { release = r; });
+  const f = fixture(t, { checkClaims: gate });
+  f.view.update(boardData(board()));
+  const [one, two] = f.zone().querySelectorAll('.agent-q-option');
+  one.click(); const first = release;
+  two.click(); const second = release;
+  first([]); await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(f.typed, [], 'the older press types nothing');
+  second(null); await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(f.typed, ['q1: No, keep them'], 'unknown (null) is not a dialog');
+});
+
 test('agent view answering: no lease, nothing typed, the card stays and the focus does not move', t => {
   const f = fixture(t, { typeOk: false });
   f.view.update(boardData(board()));
@@ -237,6 +267,9 @@ test('agent view reads: inspect --board and the claims when the view opens, thro
   const f = tabsFixture(t);
   f.boards.sync(f.tab, f.row(), null, 'w');
   assert.deepEqual(f.calls.map(c => c.path), ['/api/capabilities?ws=w', '/api/instance-events?ws=w']);
+  const other = tabsFixture(t);
+  other.boards.sync(other.tab, other.row({ deployment: { id: 'ws:d1' } }), null, 'view');
+  assert.deepEqual(other.calls.map(c => c.path), ['/api/capabilities?ws=ws%3Ad1', '/api/instance-events?ws=ws%3Ad1'], 'the row\'s own deployment, never the window\'s view');
   assert.deepEqual(f.calls[0].body, { action: 'inspect', selector: { home: '/w/agents/dev/instances/dev-a' }, board: true });
   assert.deepEqual(f.calls[1].body, { action: 'read', selector: { instance: 'dev-a', agent: 'dev', agentsRoot: '/w/agents', server: null }, limit: 50 });
   f.pending[1].resolve({ status: 'available', data: { waitingClaims: [{ producer: 'pi.harness', waiting: true, reason: 'permission', since: '2026-11-19T10:00:00.000Z' }] } });
@@ -281,4 +314,27 @@ test('agent view reads: without the events read the numbers stay enabled (unknow
   f.boards.sync(f.tab, f.row(), null, 'w');
   assert.deepEqual(f.calls.map(c => c.path), ['/api/capabilities?ws=w']);
   assert.ok([...f.pane.querySelectorAll('.agent-q-option')].every(b => !b.disabled));
+});
+
+test('agent view reads: a press reads the claims again through the events read before it types', async t => {
+  const f = tabsFixture(t);
+  const typed = []; f.tab.typeText = text => { typed.push(text); return true; };
+  f.boards.sync(f.tab, f.row(), null, 'w');
+  f.pending[1].resolve({ status: 'available', data: { waitingClaims: [] } }); f.pending[0].resolve(detail());
+  await f.flush();
+  f.pane.querySelector('.agent-q-option').click();
+  assert.equal(f.calls.at(-1).path, '/api/instance-events?ws=w', 'a fresh read at the press');
+  assert.deepEqual(typed, [], 'nothing typed before it answers');
+  f.pending.at(-1).resolve({ status: 'available', data: { waitingClaims: [{ producer: 'pi.harness', waiting: true, reason: 'permission', since: '2026-11-19T10:05:00.000Z' }] } });
+  await f.flush();
+  assert.deepEqual(typed, [], 'a dialog opened since: nothing typed');
+  assert.ok(f.pane.querySelector('.agent-q-option').disabled);
+});
+
+test('agent view focus: an option disabled under the focus (a dialog opened) leaves the focus on the zone', t => {
+  const f = fixture(t);
+  f.view.update(boardData(board()));
+  f.zone().querySelector('.agent-q-option').focus();
+  f.view.update(boardData(board()), { claims: [{ producer: 'pi.harness', waiting: true, reason: 'question' }] });
+  assert.equal(f.doc.activeElement, f.zone());
 });

@@ -23,13 +23,19 @@ import { eventsSelector } from '../../client/instance-events-contract.mjs';
  * @param {(url: string) => void} o.openLink
  * @param {ReturnType<typeof createHiddenFacts>} [o.hidden]
  */
+/** The deployment a row belongs to (#482): its `deployment.id`, else the tab's workspace. An instance-addressed read
+ * names the row's own deployment, never the window's view. */
+const rowDeployment = (row, workspace) => typeof row?.deployment?.id === 'string' && row.deployment.id ? row.deployment.id : workspace;
+
 export function createTabBoards({ features, eventsReadable = () => false, post, openLink, hidden = createHiddenFacts(), now }) {
   const states = new WeakMap(); // tab record -> { view, detailSeq, claimsSeq, detailSig, claimsSig, claims }
 
   function open(tab, row) {
     const state = { view: null, detailSeq: 0, claimsSeq: 0, detailSig: null, claimsSig: null, claims: [], alive: true, home: row.home };
     state.view = createAgentBoard({ pane: tab.paneEl, home: row.home, name: row.instance,
-      type: text => tab.typeText?.(text) === true, focusTerminal: () => tab.focusTerminal?.(), openLink, hidden, ...(now ? { now } : {}) });
+      type: text => tab.typeText?.(text) === true, focusTerminal: () => tab.focusTerminal?.(), openLink, hidden, ...(now ? { now } : {}),
+      // Before a number types: the claims again, read now (null when unknown).
+      checkClaims: async () => { const claims = await readClaims(state, state.workspace, state.row); return claims && [state.claim, ...claims]; } });
     states.set(tab, state);
     return state;
   }
@@ -40,7 +46,8 @@ export function createTabBoards({ features, eventsReadable = () => false, post, 
     state.view.dispose(); states.delete(tab);
   }
 
-  async function readDetail(state, workspace, row) {
+  async function readDetail(state, view, row) {
+    const workspace = rowDeployment(row, view);
     const seq = ++state.detailSeq;
     const owns = () => state.alive && state.detailSeq === seq;
     try {
@@ -51,20 +58,20 @@ export function createTabBoards({ features, eventsReadable = () => false, post, 
       if (owns()) state.view.detail({ facts: new Map(), questions: new Map() });
     }
   }
-  async function readClaims(state, workspace, row) {
+  async function readClaims(state, view, row) {
+    const workspace = rowDeployment(row, view);
     const seq = ++state.claimsSeq;
     const owns = () => state.alive && state.claimsSeq === seq;
     const selector = eventsSelector({ instance: row.instance, agent: row.agent, agentsRoot: row.agentsRoot, server: row.server ?? null });
-    if (!selector || !eventsReadable()) { state.claims = []; return; }
+    if (!selector || !eventsReadable()) { state.claims = []; return null; }
+    let claims = null;
     try {
       const answer = await post(`/api/instance-events?ws=${encodeURIComponent(workspace)}`, { action: 'read', selector, limit: 50 });
-      if (!owns()) return;
-      state.claims = answer?.status === 'available' && Array.isArray(answer.data?.waitingClaims) ? answer.data.waitingClaims : [];
-    } catch {
-      if (!owns()) return;
-      state.claims = [];
-    }
-    state.view.update(state.board, { claims: [state.claim, ...state.claims] });
+      claims = answer?.status === 'available' && Array.isArray(answer.data?.waitingClaims) ? answer.data.waitingClaims : null;
+    } catch { claims = null; }
+    // The answer is this read's own (a press waits on it); only the latest read paints.
+    if (owns()) { state.claims = claims ?? []; state.view.update(state.board, { claims: [state.claim, ...state.claims] }); }
+    return claims;
   }
 
   return {
@@ -76,7 +83,7 @@ export function createTabBoards({ features, eventsReadable = () => false, post, 
       if (!row || !rowHasBoard(row, features())) return false;
       const fresh = !state;
       state ??= open(tab, row);
-      state.board = row.board ?? null; state.claim = claim ?? null;
+      state.board = row.board ?? null; state.claim = claim ?? null; state.row = row; state.workspace = workspace;
       state.view.update(state.board, { claims: [state.claim, ...state.claims] });
       const sig = boardSignature(state.board);
       // History and context: when the view opens, and again when the board changes (a new value, a new question).
