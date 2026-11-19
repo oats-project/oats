@@ -21,8 +21,10 @@ agents, their homes, identities and mail are OATS's and aweb's.
   agent shows on its soul's page as "thread missing", with Start and Retire.
 - **Spawn** from a soul's page (Souls, pick a soul, name, task, Preview, Spawn in bb). The name is
   lower-case letters, digits and dashes. The new agent opens in its own thread.
-- **Answer an agent in bb**: in its thread, or on the OATS home's "Needs you" cards. The plugin
-  never types into an agent for you.
+- **Answer an agent in bb**: in its thread, or on the OATS home's "Needs you" cards. A card
+  answers in place where the question has plain choices (a permission: Allow once or Deny; a
+  question with options; pi's confirm and select); anything richer has Open. The plugin never types
+  into an agent for you.
 - A kernel refusal is shown with the kernel's code and message (`E_…`), unchanged: act on what it
   says.
 
