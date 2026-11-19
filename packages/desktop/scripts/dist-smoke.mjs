@@ -537,6 +537,8 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
                       terminals: document.querySelectorAll('.term-wrap').length,
                       dialogs: [...document.querySelectorAll('[role="dialog"]')].filter(el => el.getClientRects().length).length,
                       mainNavigation: document.querySelector('#nav .nav-item.active')?.textContent?.trim() ?? null,
+                      // The view itself, not only its nav row (Home's row also stands for the Workspace page it opens).
+                      homeShown: !!document.querySelector('#stagehost .home [data-home-section]'),
                       notices: [...document.querySelectorAll('.app-toast-text')].map(el => el.textContent),
                     };
                     const encoded = JSON.stringify(state);
@@ -558,15 +560,22 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
                       if (event.target?.closest?.('.term-wrap')) window.__oatsSmokeTerminalFocuses++;
                     }, true);
                     document.querySelector('#nav .nav-item[data-view="home"]')?.click(); // Home, the landing surface (slice 2)
-                    setTimeout(() => resolve({
-                      mainNavigation: document.querySelector('#nav .nav-item.active')?.textContent?.trim() ?? null,
-                      activeTerminal: !!document.querySelector('.tab-pane.active:not([hidden]) .term-wrap'),
-                      terminals: document.querySelectorAll('.term-wrap').length,
-                    }), 0);
+                    // Home's stage may still be mounting (its module loads on first show): wait for it, at most 5 s.
+                    const startedAt = Date.now();
+                    (function settle() {
+                      const homeShown = !!document.querySelector('#stagehost .home [data-home-section]');
+                      if (!homeShown && Date.now() - startedAt < 5000) { setTimeout(settle, 50); return; }
+                      resolve({
+                        mainNavigation: document.querySelector('#nav .nav-item.active')?.textContent?.trim() ?? null,
+                        homeShown,
+                        activeTerminal: !!document.querySelector('.tab-pane.active:not([hidden]) .term-wrap'),
+                        terminals: document.querySelectorAll('.term-wrap').length,
+                      });
+                    })();
                   })`, awaitPromise: true, returnByValue: true,
                 });
                 console.log(`dist:smoke before repeated running launch: ${JSON.stringify(between)}`);
-                if (between?.mainNavigation !== "Home" || between.activeTerminal || between.terminals !== 1)
+                if (between?.mainNavigation !== "Home" || !between.homeShown || between.activeTerminal || between.terminals !== 1)
                   throw new Error("could not leave the retained terminal before the repeated launch");
               }
               return observation;
@@ -598,7 +607,11 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
               if (observation.samples.some(sample => sample.activeInstance !== expectedRow || !sample.activeTerminal || sample.terminals !== 1
                 || sample.terminalTabs.length !== 1 || sample.terminalTabs[0] !== "smoke-probe" || sample.mainNavigation !== null))
                 throw new Error(`${label} running launch did not show the exact fixture terminal in the main area`);
-            } else if (observation.samples.some(sample => sample.mainNavigation !== "Home" || sample.terminals || sample.terminalTabs.length)) {
+            } else if (observation.samples.some(sample => sample.mainNavigation !== "Home" || sample.terminals || sample.terminalTabs.length)
+              // Home's view itself, not only its row (which also stands for the Workspace page): shown by the last
+              // sample, and never gone again once shown (it may still be mounting in the first samples).
+              || !observation.samples.at(-1)?.homeShown
+              || observation.samples.slice(observation.samples.findIndex(sample => sample.homeShown)).some(sample => !sample.homeShown)) {
               throw new Error(`${label} stopped launch left Home or opened a tab`);
             }
           }

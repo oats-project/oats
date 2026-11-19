@@ -1336,7 +1336,8 @@ roster row. Before the repeated running launch, the smoke switches to Home,
 then requires that launch to reactivate the retained tab with exactly
 one viewer and no terminal focus event. CDP sends a key to the window;
 independent tmux pane/output reads prove no input reached the inert harness. The stopped fixture stays selected
-only, with no tab or Start dialog, on Home. The smoke also
+only, with no tab or Start dialog, on Home (its row current and its view
+shown, since Home's row also stands for the Workspace page). The smoke also
 asserts that viewer cleanup restores its private tmux baseline. The fixture's
 workspace/member source, soul definition and inert harness executable are authored by the test-only
 [`launch-fixture.mjs`](../packages/desktop/test/helpers/launch-fixture.mjs).
