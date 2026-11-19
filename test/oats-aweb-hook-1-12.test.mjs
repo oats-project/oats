@@ -279,14 +279,14 @@ test("global retire treats a maybe-applied revoke timeout as success when grant 
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
 
-test("global retire with undocumented no-grant outcome is incomplete under the kernel contract; revoke failure stays loud", () => {
+test("global retire with no grant answers the documented nothing-to-delete outcome, complete under the kernel contract; revoke failure stays loud", () => {
   const base = mkdtempSync(join(tmpdir(), "oats-aweb-112-"));
   try {
     const bin = fakeAw(base); const { root, home } = deployment(base); const custody = resident(base);
     let r = runHook(bin, "retire", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_META: JSON.stringify({ identity: { mode: "global", resident: "merlin" } }), OATS_SETTINGS: JSON.stringify({ residents: { merlin: custody } }) });
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    assert.equal(r.doc.meta.reason, "nothing-to-revoke", "mirror oats.aweb 1.42.1 emits this undocumented outcome; update the observation with the release pin");
-    assert.equal(hookCleanupComplete(r.doc.meta), false, "the package no-grant answer is not the documented nothing-to-delete outcome");
+    assert.equal(r.doc.meta.reason, "nothing-to-delete", "mirror oats.aweb 1.43.0 answers the documented outcome (awebai/oats-aweb#273)");
+    assert.equal(hookCleanupComplete(r.doc.meta), true, "nothing-to-delete is a complete cleanup under the kernel contract");
     r = runHook(bin, "retire", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_META: JSON.stringify({ identity: { mode: "global", resident: "merlin", grant: { id: "grant-123", expiresAt: "2026-09-24T07:00:00Z", scopes: [] } } }), OATS_SETTINGS: JSON.stringify({ residents: { merlin: custody } }), FAKE_REVOKE_FAIL: "1" });
     assert.notEqual(r.status, 0);
     assert.match(r.doc.warning, /grant grant-123 was not revoked/);

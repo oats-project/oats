@@ -1,3 +1,4 @@
+import {registryOrigin, registryShellAssignment} from './registry-setting.mjs';
 // The per-user service that keeps a GLOBAL resident's custody running: a
 // launchd agent on macOS, a systemd --user unit on Linux. aw has no install
 // verb (`aw custody serve` takes no flags and serves the identity home of its
@@ -71,10 +72,11 @@ export const systemdValue = (s) => String(s).replace(/%/g, "%%");
 export const systemdQuoted = (s) => `"${systemdValue(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
 /** The unit file's text. `path` and `home` are the only environment it sets. */
-export function renderUnit({ platform, label, aw, root, path, home, address }) {
+export function renderUnit({ platform, label, aw, root, path, home, address, registry }) {
   for (const [what, value] of Object.entries({ label, aw, root, path, home, address })) {
     if (typeof value !== "string" || !value || /[\x00-\x1f\x7f]/.test(value)) fail("E_RESIDENT_UNIT", `the custody unit's ${what} is empty or contains a control character`);
   }
+  if(registry!==undefined) registry=registryOrigin({registry});
   const log = join(root, ".oats-resident", "custody.log");
   if (platform === "darwin") return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -95,7 +97,9 @@ export function renderUnit({ platform, label, aw, root, path, home, address }) {
     <key>PATH</key>
     <string>${xml(path)}</string>
     <key>HOME</key>
-    <string>${xml(home)}</string>
+    <string>${xml(home)}</string>${registry ? `
+    <key>AWID_REGISTRY_URL</key>
+    <string>${xml(registry)}</string>` : ""}
   </dict>
   <key>RunAtLoad</key>
   <true/>
@@ -114,7 +118,7 @@ Description=aweb custody for resident ${systemdValue(address)}
 [Service]
 Type=simple
 WorkingDirectory=${systemdValue(root)}
-Environment=${systemdQuoted(`PATH=${path}`)} ${systemdQuoted(`HOME=${home}`)}
+Environment=${systemdQuoted(`PATH=${path}`)} ${systemdQuoted(`HOME=${home}`)}${registry ? ` ${systemdQuoted(`AWID_REGISTRY_URL=${registry}`)}` : ""}
 ExecStart=${systemdQuoted(aw).split("$").join("$$")} custody serve
 Restart=on-failure
 RestartSec=5
@@ -211,7 +215,7 @@ export function lingerEnabled({ platform, user, env }) {
  *  A unit of this label that serves another directory is refused. `rerun`
  *  names the command to rerun in a failure's remedy; `unload` overrides
  *  reloadLaunchd's clock, sleep and bound. */
-export async function ensureCustodyUnit({ platform, label, aw, root, home, address, uid, env, xdgConfigHome, rerun = "the command", unload = {} }) {
+export async function ensureCustodyUnit({ platform, label, aw, root, home, address, registry, uid, env, xdgConfigHome, rerun = "the command", unload = {} }) {
   const manager = unitManager(platform);
   if (!manager) fail("E_RESIDENT_UNIT_UNSUPPORTED", `this host (${platform}) has no supported per-user service manager`);
   const path = unitPath({ platform, home, xdgConfigHome }, label);
@@ -222,7 +226,7 @@ export async function ensureCustodyUnit({ platform, label, aw, root, home, addre
     if (!served || !samePath(served, root)) fail("E_RESIDENT_UNIT_CONFLICT", conflictMessage({ path, root: served }, root));
   }
   // A unit serving the same directory under another spelling keeps its own.
-  const desired = renderUnit({ platform, label, aw, root: served, path: unitSearchPath(aw, env), home, address });
+  const desired = renderUnit({ platform, label, aw, root: served, path: unitSearchPath(aw, env), home, address, registry });
   const changed = existing !== desired;
   if (changed) {
     mkdirSync(unitDir({ platform, home, xdgConfigHome }), { recursive: true });
@@ -342,8 +346,8 @@ export async function ownUnitServes({ platform, label, root, home, xdgConfigHome
 }
 
 /** What an operator runs where OATS writes no unit. */
-export function handStep(root, name) {
-  return `start custody yourself: run \`aw custody serve\` in ${root} under a supervisor that keeps it running (working directory ${root}, environment PATH and HOME only), then rerun \`oats aweb resident create ${name}\` to verify`;
+export function handStep(root, name, registry) {
+  return `start custody yourself: run \`aw custody serve\` in ${root} under a supervisor that keeps it running (working directory ${root}, environment PATH and HOME${registry ? ` plus ${registryShellAssignment(registryOrigin({registry}))} from settings.oats.aweb.registry` : " only"}), then rerun \`oats aweb resident create ${name}\` to verify`;
 }
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));

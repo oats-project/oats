@@ -7,7 +7,7 @@ export function readJoinedLocalMembership(identityHome, expectedTeam, alias, { r
   let doc;
   try {
     doc = JSON.parse(run(['aw', '--identity-home', identityHome, 'id', 'team', 'list', '--json'],
-      identityHome, 45000, { secretSafe: true, unsetEnv: ['AWEB_API_KEY', 'AWEB_TEAM_ID', 'AWEB_WORKSPACE_ID'] }));
+      identityHome, 45000, { secretSafe: true, unsetEnv: ['AWEB_TEAM_ID', 'AWEB_WORKSPACE_ID'] }));
   } catch {
     throw setupFailure('E_SETUP_MEMBERSHIP', 'accepted root membership is unavailable; root retained, no repeated invite redemption');
   }

@@ -40,8 +40,9 @@ export function selectedDeployment(env = process.env, explicitDir) {
  *  the shared `root`, read from the deployment's LIVE settings (a root recorded
  *  after this home's spawn counts). Refuses before any invite is minted unless
  *  that root proves membership in the team, naming the cause and its fix: an
- *  unreadable live read is repaired at `oats inspect`, a missing or non-member
- *  root at setup (awebai/oats-aweb#52). */
+ *  unreadable live settings read is repaired at `oats inspect`, a missing or
+ *  non-member root at setup (awebai/oats-aweb#52). Unreadable membership throws
+ *  E_SETUP_MEMBERSHIP: repair `aw team list --json` in the named root and retry. */
 export function currentJoinRootChoice(team, home, { env = process.env, query = querySelectedKernel, membership, label } = {}) {
   let deployment, soul;
   const refuse = (cause, remedy) => { throw new Error(`cannot join team ${team}: ${cause}; nothing was minted; ${remedy}`); };
@@ -86,7 +87,11 @@ export function currentJoinRootChoice(team, home, { env = process.env, query = q
     if (!statSync(join(selectedRoot, '.aw')).isDirectory()) throw new Error();
   } catch { noRoot(`the live ${source} root is missing, not absolute or has no readable .aw`); }
   let member = false;
-  try { member = membership(selectedRoot, team) === true; } catch { /* no native output in the error */ }
+  try { member = membership(selectedRoot, team) === true; }
+  catch (e) {
+    if (e.code === 'E_SETUP_MEMBERSHIP') throw e; // the root reader already withheld native output
+    throw Object.assign(new Error(`could not check membership at ${selectedRoot}; aw team list is unavailable; retry the read before joining`), {code:'E_SETUP_MEMBERSHIP'});
+  }
   if (!member) noRoot(`current root ${selectedRoot} cannot prove membership in this exact team`);
   return { root: selectedRoot, source };
 }

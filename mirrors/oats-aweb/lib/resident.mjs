@@ -1,3 +1,9 @@
+import {registryEnv, registryOrigin, registryMigration} from './registry-setting.mjs';
+import { awChildEnv } from './aw-child-env.mjs';
+import { withheldFailureCause } from './aw-failure-cause.mjs';
+import { childOutcome } from './child-outcome.mjs';
+
+import { parseProviderSettings } from './provider-settings.mjs';
 // `oats aweb resident create <name>`: provisions a GLOBAL resident identity in
 // an existing hosted team from the dashboard's API key, serves it with a
 // per-user custody unit, and records it as settings.oats.aweb.residents.<name>.
@@ -19,6 +25,7 @@ import { assertAwebSettingRecordable, recordAwebSetting } from "./local-settings
 import { querySelectedKernel } from "./session-readiness.mjs";
 import { sameAwebTeamId } from "./aweb-team-id.mjs";
 import { selectedTeamKernel } from "./setup-team-default.mjs";
+import { promptHidden } from "./hidden-prompt.mjs";
 import { normalizeAwebTeamName, selectedDeployment } from "./team-roots.mjs";
 import { conflictMessage, custodyLabel, ensureCustodyUnit, foreignUnitMessage, handStep, lingerProblem, ownUnitServes, residentUnits, retireUnitStep, samePath, unitManager, unitPath, waitForCustody } from "./custody-unit.mjs";
 
@@ -103,40 +110,11 @@ const needsInit = (state) => state === "create" || state === "continue" || state
 /** The key, from AWEB_API_KEY or a prompt that does not echo. */
 async function readKey({ env, stdin, stderr, name }) {
   const fromEnv = typeof env.AWEB_API_KEY === "string" ? env.AWEB_API_KEY.trim() : "";
-  const key = fromEnv || (stdin.isTTY && stderr.isTTY ? await promptHidden(stdin, stderr) : undefined);
+  const key = fromEnv || (stdin.isTTY && stderr.isTTY ? await promptHidden(stdin, stderr, { prompt: "aweb API key (input hidden): ", cancelled: () => failure("E_RESIDENT_KEY", "key", "cancelled"), empty: () => failure("E_RESIDENT_KEY", "key", "no API key was entered") }) : undefined);
   if (key === undefined) throw failure("E_RESIDENT_KEY", "key", `no AWEB_API_KEY in the environment and no terminal to ask for it on: run AWEB_API_KEY=<key> AWEB_URL=<url> oats aweb resident create ${name}`);
   if (!key) throw failure("E_RESIDENT_KEY", "key", "no API key was entered");
   if (key.length > MAX_KEY_LENGTH || /[\x00-\x1f\x7f]/.test(key)) throw failure("E_RESIDENT_KEY", "key", `the API key must be one line of at most ${MAX_KEY_LENGTH} characters`);
   return key;
-}
-/** Reads one line from the terminal in raw mode, echoing nothing. */
-function promptHidden(stdin, stderr) {
-  return new Promise((done, reject) => {
-    let value = "";
-    const finish = (error) => {
-      stdin.removeListener("data", onData);
-      stdin.setRawMode(false);
-      stdin.pause();
-      stderr.write("\n");
-      // Terminals in bracketed-paste mode wrap a paste in these markers.
-      if (error) reject(error); else done(value.replace(/\x1b\[20[01]~/g, "").trim());
-    };
-    const onData = (chunk) => {
-      for (const ch of String(chunk)) {
-        if (ch === "\r" || ch === "\n") return finish();
-        if (ch === "\u0003") return finish(failure("E_RESIDENT_KEY", "key", "cancelled"));
-        if (ch === "\u0004") { if (!value) return finish(failure("E_RESIDENT_KEY", "key", "no API key was entered")); continue; }
-        if (ch === "\u007f" || ch === "\b") { value = value.slice(0, -1); continue; }
-        value += ch;
-      }
-    };
-    // Echo goes off before the prompt shows, so nothing typed after it is echoed.
-    stdin.setEncoding("utf8");
-    stdin.setRawMode(true);
-    stdin.on("data", onData);
-    stdin.resume();
-    stderr.write("aweb API key (input hidden): ");
-  });
 }
 
 const stamp = () => new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
@@ -314,28 +292,30 @@ export async function createResident(opts, { env, stdin, stderr, platform }) {
   let deployment;
   try { deployment = selectedDeployment(env, opts.dir); }
   catch (e) { throw failure("E_RESIDENT_DEPLOYMENT", "deployment", e.message); }
-  let settings;
-  try { settings = JSON.parse(env.OATS_SETTINGS || "{}"); } catch { settings = {}; }
+  const settings = parseProviderSettings(env);
   const residents = object(settings) && object(settings.residents) ? settings.residents : {};
   const root = opts.root ? resolve(opts.root) : join(deployment, ".aweb-residents", name);
   // Every failure from here on names the resident's directory, and the
   // captures of the init run when there was one.
   const captures = [];
   try {
+    const registry=registryOrigin(settings);
+    const migration=registryMigration(settings,env,{custody:root});
+    if(migration) throw failure("E_RESIDENT_REGISTRY","preflight",migration);
     const localYaml = join(deployment, "oats-local.yaml");
     const recorded = typeof residents[name] === "string" ? residents[name] : undefined;
     if (recorded !== undefined && !samePath(recorded, root)) throw failure("E_RESIDENT_ROOT", "preflight", `settings.oats.aweb.residents.${name} already records ${recorded}, not ${root}: pass --root ${recorded} to verify that resident, or choose another name`);
 
-    // Every aw child but init runs with PATH and HOME, and the init's registry
-    // when one is set: no key, no identity selector.
-    const readEnv = { PATH: env.PATH || "", HOME: env.HOME || "", AW_NO_UPDATE_CHECK: "1", ...(env.AWID_REGISTRY_URL ? { AWID_REGISTRY_URL: env.AWID_REGISTRY_URL } : {}) };
+    // Reads retain PATH/HOME only; registry-capable calls explicitly add the
+    // configured pin. Offline reads receive no key or registry selector.
+    const readEnv = awChildEnv({ PATH: env.PATH || "", HOME: env.HOME || "" });
     const floor = await awFloorMessage({ env: readEnv });
     if (floor) throw failure("E_RESIDENT_AW_FLOOR", "aw", floor);
     const aw = onPath("aw", env);
     if (!aw) throw failure("E_RESIDENT_AW_FLOOR", "aw", "aw is not on PATH");
     const read = (args) => {
-      const r = spawnSync(aw, args, { cwd: root, env: readEnv, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 60000 });
-      if (r.status !== 0) throw new Error(`aw ${args.slice(0, 2).join(" ")} ${r.error ? `failed: ${r.error.code}` : `exited ${r.status}`}${r.stderr ? `: ${String(r.stderr).trim().slice(0, 300)}` : ""}`);
+      const r = spawnSync(aw, args, { cwd: root, env: {...readEnv,...registryEnv(settings,args)}, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 60000 });
+      if (r.status !== 0) throw Object.assign(new Error(`aw ${args.slice(0, 2).join(" ")} ${r.error ? `failed: ${r.error.code}` : `exited ${r.status}`}${r.stderr ? `: ${String(r.stderr).trim().slice(0, 300)}` : ""}`), {stderr:r.stderr,stdout:r.stdout,outcome:childOutcome({...r,...r.error},60000)});
       return r.stdout;
     };
     const readJson = (args, what, stage = "verify") => {
@@ -384,7 +364,13 @@ export async function createResident(opts, { env, stdin, stderr, platform }) {
     if (known && manager) {
       const label = custodyLabel(known.address, name);
       let status;
-      try { status = parseAwJson(read(["custody", "status", "--json"]), "aw custody status"); } catch { /* unreadable is not running here */ }
+      try {
+        status = parseAwJson(read(["custody", "status", "--json"]), "aw custody status");
+        if (!['running','not_running'].includes(status?.status)) throw new Error('unusable status');
+      } catch (e) {
+        const cause = e.outcome ? `${e.outcome}; ${withheldFailureCause(e)}` : 'aw custody status returned no usable status result';
+        throw failure('E_RESIDENT_VERIFY','preflight',`could not check custody status (${cause}); run \`aw custody status --json\` in ${root} and retry before installing a custody unit`);
+      }
       if (status?.status === "running") {
         const problem = await notOurCustody(label, status);
         if (problem) throw failure("E_RESIDENT_CUSTODY_RUNNING", "preflight", problem);
@@ -404,11 +390,11 @@ export async function createResident(opts, { env, stdin, stderr, platform }) {
       return {
         outcome: "plan", name, root, state,
         ...(rejected ? { rejected } : {}),
-        init: needsInit(state) ? { argv: ["aw", ...INIT_ARGS(name)], cwd: root, awebUrl: awebUrl ?? "AWEB_URL from your dashboard line", env: ["PATH", "HOME", "AWEB_URL", "AWEB_API_KEY", "AW_NO_UPDATE_CHECK", ...(env.AWID_REGISTRY_URL ? ["AWID_REGISTRY_URL"] : [])] } : null,
-        verify: ["aw whoami --json", "aw doctor identity --offline --json", "aw doctor registry --online --json"].map((c) => `${c} (in ${root}, environment ${env.AWID_REGISTRY_URL ? "PATH, HOME and AWID_REGISTRY_URL" : "PATH and HOME"} only)`),
+        init: needsInit(state) ? { argv: ["aw", ...INIT_ARGS(name)], cwd: root, awebUrl: awebUrl ?? "AWEB_URL from your dashboard line", env: ["PATH", "HOME", "AWEB_URL", "AWEB_API_KEY", "AW_NO_UPDATE_CHECK", ...(registry ? ["AWID_REGISTRY_URL"] : [])] } : null,
+        verify: ["aw whoami --json", "aw doctor identity --offline --json", "aw doctor registry --online --json"].map((c) => `${c} (in ${root}, environment ${registry ? "PATH, HOME and AWID_REGISTRY_URL" : "PATH and HOME"} only)`),
         custody: manager
-          ? { manager, label, path: unitPath(where, known ? label : `ai.aweb.custody.<domain>.${name}`), runs: `${aw} custody serve`, workingDirectory: root, env: ["PATH", "HOME"] }
-          : { manager: null, handStep: handStep(root, name) },
+          ? { manager, label, path: unitPath(where, known ? label : `ai.aweb.custody.<domain>.${name}`), runs: `${aw} custody serve`, workingDirectory: root, env: ["PATH", "HOME", ...(registry ? ["AWID_REGISTRY_URL"] : [])] }
+          : { manager: null, handStep: handStep(root, name, registry) },
         record: `settings.oats.aweb.residents.${name}: ${root} in ${localYaml}`,
         teamLabel: opts.teamLabel
           ? `${opts.teamLabel} → the returned team, with oats teams add --no-default where the workspace allows local teams; it becomes the default team only where there is none`
@@ -421,7 +407,7 @@ export async function createResident(opts, { env, stdin, stderr, platform }) {
     if (needsInit(state)) {
       let key = await readKey({ env, stdin, stderr, name });
       let scrub = scrubber([key, env.AWEB_API_KEY]);
-      const childEnv = { PATH: env.PATH || "", HOME: env.HOME || "", AWEB_URL: env.AWEB_URL, AWEB_API_KEY: key, AW_NO_UPDATE_CHECK: "1", ...(env.AWID_REGISTRY_URL ? { AWID_REGISTRY_URL: env.AWID_REGISTRY_URL } : {}) };
+      const childEnv = awChildEnv({ PATH: env.PATH || "", HOME: env.HOME || "" }, { AWEB_URL: env.AWEB_URL, AWEB_API_KEY: key, ...registryEnv(settings) });
       mkdirSync(root, { recursive: true, mode: 0o700 });
       const r = spawnSync(aw, INIT_ARGS(name), { cwd: root, env: childEnv, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: INIT_TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024 });
       // The key is held for this child only: aw's streams are scrubbed of it
@@ -468,7 +454,7 @@ export async function createResident(opts, { env, stdin, stderr, platform }) {
       const foreign = residentUnits(where, name).find((u) => u.label !== label);
       if (foreign) throw failure("E_RESIDENT_UNIT_CONFLICT", "custody", foreignUnitMessage(foreign, root, where));
       try {
-        const unit = await ensureCustodyUnit({ platform, label, aw, root, home: env.HOME || "", address: identity.address, uid: process.getuid(), env, xdgConfigHome: env.XDG_CONFIG_HOME, rerun: `oats aweb resident create ${name}` });
+        const unit = await ensureCustodyUnit({ platform, label, aw, root, home: env.HOME || "", address: identity.address, registry, uid: process.getuid(), env, xdgConfigHome: env.XDG_CONFIG_HOME, rerun: `oats aweb resident create ${name}` });
         custody = { manager: unit.manager, label: unit.label, path: unit.path };
       } catch (e) {
         if (e.code !== "E_RESIDENT_UNIT_UNSUPPORTED") throw failure(e.code || "E_RESIDENT_UNIT", "custody", e.message);
@@ -478,7 +464,7 @@ export async function createResident(opts, { env, stdin, stderr, platform }) {
     // Ready means our unit's process is the server, not just that a custody answers.
     try { await waitForCustody({ status, resident: name, team, owner: custody ? (ready) => notOurCustody(label, ready) : undefined, timeoutMs: unsupported ? 0 : undefined }); }
     catch (e) {
-      if (unsupported) throw failure("E_RESIDENT_UNIT_UNSUPPORTED", "custody", `${unsupported}: ${handStep(root, name)}`);
+      if (unsupported) throw failure("E_RESIDENT_UNIT_UNSUPPORTED", "custody", `${unsupported}: ${handStep(root, name, registry)}`);
       throw failure(e.code === "E_RESIDENT_CUSTODY_RUNNING" ? e.code : "E_RESIDENT_CUSTODY", "custody", e.message);
     }
     custody = { status: "running", ...(custody || { manager: null, label: null, path: null }) };

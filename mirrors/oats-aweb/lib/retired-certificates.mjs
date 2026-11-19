@@ -4,13 +4,14 @@
 // can, with the command retire prints. Retire records each such certificate here, at
 // <deployment>/.oats-aweb/retired-certificates.json, so `oats aweb roster` on this host
 // can mark the leftover member and print that command. The record holds certificate ids,
-// registry origins and commands only, never a secret, and lives only on the host where the
+// registry origins and a rebuilt compatibility command, never a secret, and lives only on the host where the
 // retire ran.
 //
 // Any agent running as the deployment's user can write the record, so no text from it
 // reaches a person as a command: retire and roster both build the controller's command
 // with controllerCleanupCommand, from a validated team, certificate id and registry. The
-// stored `command` is written (rebuilt) for older providers that require it, and never read.
+// stored `command` field is optional and ignored by this reader. Writers rebuild it
+// for released homes whose shared-record readers still require a nonempty command.
 //
 // Writers (retire) serialise on an exclusive lock file beside the record: each re-reads
 // the record under the lock, merges its entries, writes a temp file in the same directory
@@ -38,10 +39,11 @@ const nonEmpty = (v) => typeof v === "string" && v.trim() !== "";
 const nullableString = (v) => v === null || typeof v === "string";
 /** An entry the record may hold: everything roster shows is present and typed. */
 const validEntry = (e) => !!e && typeof e === "object" && !Array.isArray(e)
-  && nonEmpty(e.team) && nonEmpty(e.certificateId) && nonEmpty(e.command)
+  && nonEmpty(e.team) && nonEmpty(e.certificateId)
   && typeof e.retiredAt === "string" && !Number.isNaN(Date.parse(e.retiredAt))
   && nullableString(e.alias) && nullableString(e.instance);
 const keyOf = (e) => `${e.team}\u0000${e.certificateId}`;
+const recordInputs = (e) => ({ team: e?.team, certificateId: e?.certificateId, alias: e?.alias ?? null, instance: e?.instance ?? null, retiredAt: e?.retiredAt, registry: e?.registry });
 
 // A certificate id as aw issues them (a UUID): letters, digits, `_` and `-`, starting with
 // a letter or digit so it can never read as a flag.
@@ -106,7 +108,7 @@ function takeLock(lock, { waitMs = LOCK_WAIT_MS } = {}) {
 }
 
 /** Records `entries` ({team, certificateId, registry, alias, instance, retiredAt}) at the
- *  deployment, each with the command controllerCleanupCommand builds from it, replacing any
+ *  deployment with a compatibility command rebuilt from authoritative inputs, replacing any
  *  entry with the same team and certificate id and keeping the newest RETIRED_RECORD_MAX.
  *  Entries no command can be built for (no or an invalid certificate id, team or registry)
  *  are skipped: nothing could be shown for them. Never throws: returns `cause`, the fixed cause of what went wrong, if
@@ -114,8 +116,8 @@ function takeLock(lock, { waitMs = LOCK_WAIT_MS } = {}) {
 export function recordRetiredCertificates(deployment, entries, { lockWaitMs } = {}) {
   try {
     const fresh = entries
-      .map((e) => ({ team: e?.team, certificateId: e?.certificateId, alias: e?.alias ?? null, instance: e?.instance ?? null, retiredAt: e?.retiredAt, registry: e?.registry ?? null, command: controllerCleanupCommand({ team: e?.team, certificateId: e?.certificateId, registry: e?.registry }) }))
-      .filter(validEntry);
+      .map(e => ({ ...recordInputs(e), registry: e?.registry ?? null }))
+      .filter(e => validEntry(e) && !controllerCleanupProblem(e));
     if (!fresh.length) return {};
     return writeRecord(deployment, fresh, { lockWaitMs });
   } catch {
@@ -144,8 +146,14 @@ function writeRecord(deployment, fresh, { lockWaitMs }) {
     } catch (e) { if (e?.code !== "ENOENT") cause = "the previous record was unreadable and was replaced"; }
     const replaced = new Set(fresh.map(keyOf));
     const merged = [...existing.filter((e) => !replaced.has(keyOf(e))), ...fresh].slice(-RETIRED_RECORD_MAX);
+    // Old readers require a nonempty display command, even for unusable inputs.
+    // Fixed shell comments preserve every entry without becoming executable or
+    // copying old command text. Keep an absent registry absent on later writes.
+    const compatible = merged.map(e => ({ ...recordInputs(e), command: !Object.hasOwn(e, "registry")
+      ? "# unavailable: registry was not recorded"
+      : controllerCleanupCommand(e) ?? "# unavailable: invalid cleanup inputs" }));
     try {
-      writeFileSync(tmp, `${JSON.stringify({ version: 1, entries: merged }, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+      writeFileSync(tmp, `${JSON.stringify({ version: 1, entries: compatible }, null, 2)}\n`, { mode: 0o600, flag: "wx" });
       chmodSync(tmp, 0o600);
     } catch { return { cause: "the record could not be written" }; }
     try { renameSync(tmp, file); } catch { return { cause: "the record could not be written" }; }
