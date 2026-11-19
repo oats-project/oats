@@ -81,6 +81,29 @@ test('slice3b machines section lists servers', async t => {
   assert.equal(remote.q('.machines-add'), null);
 });
 
+// Review round 3: agents are counted only from a settled good roster read of that machine's deployment; a machine check
+// is not one. Pending, failed or stale reads make no claim (or say "as last read"), and this computer's unread
+// deployment says why.
+test('agent counts need a settled roster read of each deployment: pending, failed, unread and stale say so', async t => {
+  const state = { roster: 'pending', local: { status: 'pending' }, deployment: { machine: 'devbox', reachable: true } };
+  const u = setup(t, { '/api/servers': () => answer([machine('devbox-aweb', { check: { reachable: true, version: '0.69.20', error: null } })]) },
+    { instances: () => [], rosterState: () => state.roster, localObservation: () => state.local, observed: () => state.deployment, cli: () => ({ version: '0.69.21' }) });
+  await settle();
+  assert.deepEqual(u.cells(THIS_COMPUTER), ['This computer', 'reading…', '—', 'oats 0.69.21'], 'pending: no zero');
+  assert.deepEqual(u.cells('devbox-aweb').slice(1, 3), ['reachable', '—'], 'a reachable check is not a roster read');
+  state.roster = 'failed'; state.local = { status: 'unavailable', text: 'E_CLI_FAILED: roster command failed' }; u.ui.sync();
+  assert.deepEqual(u.cells(THIS_COMPUTER).slice(1, 3), ['not read', '—']);
+  assert.equal(u.row(THIS_COMPUTER).querySelector('.agents').title, 'Unavailable: roster is not current');
+  assert.equal(u.q('.machines-notes .machines-reason').textContent, 'E_CLI_FAILED: roster command failed', 'why, in the observation\'s words');
+  state.roster = 'ready'; state.local = { status: 'observed' }; u.ui.sync();
+  assert.deepEqual(u.cells(THIS_COMPUTER).slice(1, 3), ['reachable', '0 agents']);
+  assert.deepEqual(u.cells('devbox-aweb').slice(1, 3), ['reachable', '0 agents'], 'its deployment read now');
+  state.deployment = { machine: 'devbox', reachable: true, stale: true }; u.ui.sync();
+  assert.equal(u.row('devbox-aweb').querySelector('.agents').title, 'as last read: the latest read did not reach it');
+  state.deployment = { machine: 'devbox', reachable: false, reason: 'devbox not reached' }; u.ui.sync();
+  assert.equal(u.cells('devbox-aweb')[2], '—'); assert.equal(u.row('devbox-aweb').querySelector('.agents').title, 'devbox not reached');
+});
+
 test('lists this workspace\'s machines and checks each unchecked one once in the background', async t => {
   let released;
   const gate = new Promise(r => { released = r; });

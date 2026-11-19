@@ -494,6 +494,29 @@ test('a skill whose files change on a re-read opens, and stays open, with the fi
   assert.equal(u.contents.skillView.querySelector('.cap-reader-path').textContent, 'skills/playbook/other.md');
 });
 
+// Review round 3: the open skill leaving the answer closes the view; focus goes to a row still there, else to Back.
+test('an open skill that a re-read removes closes, focus on the page\'s Back (never <body>)', async t => {
+  const answer = { current: showAnswer() };
+  const u = setup(t, { answer: body => body.action === 'show' ? answer.current : fileAnswer(body.path, {}, answer.current.commit) });
+  u.go(); await flush(); await flush();
+  const page = u.doc.createElement('div'); u.doc.body.append(page);
+  renderCapabilityPage(page, { row: packageRow, status: null, instances: [], root: '/ws', onBack() {}, contents: u.contents.element, skills: u.contents.skills, skillView: u.contents.skillView });
+  page.querySelector('button.cap-skill-row[data-skill="skills/oats-aweb"]').click(); await flush(); await flush();
+  assert.equal(u.doc.activeElement.className, 'skill-view-reader');
+  answer.current = showAnswer({ skills: [] });
+  u.contents.refresh(); await flush(); await flush();
+  assert.equal(u.contents.skillView.hidden, true);
+  assert.equal(u.doc.activeElement, page.querySelector('.page-back'));
+  // A skill whose files can no longer be listed closes the same way; focus goes to Back (its row opens nothing).
+  answer.current = showAnswer();
+  u.contents.refresh(); await flush(); await flush();
+  page.querySelector('button.cap-skill-row[data-skill="skills/aweb-identity"]').click(); await flush(); await flush();
+  answer.current = showAnswer({ skills: [showAnswer().skills[0], { ...showAnswer().skills[1], files: null }] });
+  u.contents.refresh(); await flush(); await flush();
+  assert.equal(u.contents.skillView.hidden, true);
+  assert.equal(u.doc.activeElement, page.querySelector('.page-back'));
+});
+
 test('code blocks keep a working copy button: the code to the clipboard, "copied", back to "copy"', async t => {
   const text = '# T\n\n```js\nconst a = 1;\n```\n';
   const u = setup(t, { answer: body => body.action === 'show' ? showAnswer({ inject: { path: 'inject.md', bytes: 9, text, binary: false, truncated: false } }) : fileAnswer(body.path) });

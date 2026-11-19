@@ -11,9 +11,10 @@ connect --json`); the Desktop keeps no registry.
 The probe (`oats version --json`) must declare `servers-per-workspace` and
 `server-connect`. The messaging step also needs `capability-route`. Without
 them nothing here changes: `/api/servers` answers the registered list as
-before, Where to run lists every registered server, there is no Add entry and
-no machines list (`machinesGated`, `awebConnectGated` in
-`packages/client/machine-contract.mjs`).
+before, Where to run lists every registered server, there is no Add entry, and
+the Machines list reads no registration: it shows this computer alone (or, in a
+remote-only view, the view's deployments from the panel), with no Add
+(`machinesGated`, `awebConnectGated` in `packages/client/machine-contract.mjs`).
 
 ## The window's key
 
@@ -127,14 +128,19 @@ and is not selected.
 
 The Workspace page's **Machines** section (the Desktop UI rework, slice 3b; until then the Setup tab's
 Registered machines box): the computers this workspace runs on, one row each. **This computer** first
-(reachable, the CLI probe's OATS version, nothing to check or remove), then each registered machine:
+(reachable once its deployment is read, the CLI probe's OATS version, nothing to check or remove), then each registered machine:
 its name, reachable or not from its last check this run (reachable: the check reached its deployment,
 and `workspaceReadable` is not `false`; the kernel's `workspaceReadError` or error message is the
 state's title), how many of **your agents** run on it, and its OATS version. The agents are the
 roster's rows: this computer's carry no `server`, another machine's carry its registration id as
 `server` (`packages/client/remote-roster.mjs`). They count what this Desktop reads (your agents, on
 this computer and the machines registered here; team-instance-lists-state-their-observation-scope),
-and a machine that was not reached, with no agent read from it, shows "—" (no claim), not 0. The
+and a count is shown only after a settled good roster read of that machine's deployment: the roster read itself
+(pending, failed or stale: "—" with the reason as its title), this computer's observed deployment (pending: "reading…";
+unreadable: "not read", "—", and the observation's own words under the list), and another machine's deployment as
+the panel's #482 `deployments` reports it (read now: a count; kept from an earlier read: the count "as last read";
+not reached: "—" with the reason). A successful machine check is not a roster read. With no panel entry for the machine
+(an older panel), a machine its check reached counts. The
 section says so in its one line.
 
 A registered machine's row is one button: Enter (or a click) opens it under its row, with its name,

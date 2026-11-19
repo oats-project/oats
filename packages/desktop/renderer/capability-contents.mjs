@@ -264,9 +264,10 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
     const moved = !!previous && previous.commit !== data.commit;
     if (!previous || moved || readerPath !== selected) open(selected, { force: moved });
     // The open skill follows the answer: still listed, its file is read again at a moved commit; gone, it closes.
+    let returnTo = null; // a skill closed under focus: its row (or Back), once the rows are repainted
     if (openSkillRef) {
       const still = (data.skills || []).find(skill => skill.path === openSkillRef.path && skill.files?.length);
-      if (!still) closeSkill({ focus: true });
+      if (!still) returnTo = closeSkill({ focus: false, defer: true });
       else {
         // The same skill at a moved commit, or with another file list: its file buttons follow the answer, and the open
         // file stays open only while it is still listed (else its SKILL.md).
@@ -278,6 +279,7 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
       }
     }
     paintSkills();
+    if (returnTo) focusSkillRow(returnTo);
     syncProvides();
   }
 
@@ -376,15 +378,23 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
       if (STALE_CODES.has(error?.code)) onCatalogStale?.();
     });
   }
-  /** Back to the capability: its body again, focus on the skill's row (`focus`). */
-  function closeSkill({ focus = true } = {}) {
+  /** Back to the capability: its body again, focus on the skill's row (`focus`, or when focus was in the skill view).
+   * `defer`: focus nothing now and answer the closed skill's path when focus was in the view (the caller repaints the
+   * rows first, then calls focusSkillRow), else null. */
+  function closeSkill({ focus = true, defer = false } = {}) {
     const was = openSkillRef; skillTicket++; openSkillRef = null; skillFile = null;
-    if (skillView.hidden) return;
+    if (skillView.hidden) return null;
     const hadFocus = skillView.contains(doc.activeElement);
     skillView.hidden = true; pageBody()?.removeAttribute('hidden'); skillReader.clear();
-    if (!was || !(focus || hadFocus)) return;
-    const row = [...skills.querySelectorAll('button.cap-skill-row')].find(b => b.dataset.skill === was.path);
-    (row || pageBody()?.closest('.capability-page')?.querySelector('.page-back'))?.focus({ preventScroll: false });
+    if (!was || !(focus || hadFocus)) return null;
+    if (defer) return was.path;
+    focusSkillRow(was.path);
+    return null;
+  }
+  /** Focus the skill's row when it is still an openable row, else the page's Back (never <body>). */
+  function focusSkillRow(path) {
+    const row = [...skills.querySelectorAll('button.cap-skill-row')].find(b => b.dataset.skill === path);
+    (row || pageBody()?.closest('.capability-page')?.querySelector('.page-back') || skills.querySelector('button'))?.focus({ preventScroll: false });
   }
   svBack.addEventListener('click', () => closeSkill({ focus: true }));
   skillView.addEventListener('keydown', event => {
