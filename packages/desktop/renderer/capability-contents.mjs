@@ -266,7 +266,16 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
     // The open skill follows the answer: still listed, its file is read again at a moved commit; gone, it closes.
     if (openSkillRef) {
       const still = (data.skills || []).find(skill => skill.path === openSkillRef.path && skill.files?.length);
-      if (!still) closeSkill({ focus: true }); else if (moved) { openSkillRef = still; showSkillFile(listedSkillFile(still, skillFile), { force: true }); }
+      if (!still) closeSkill({ focus: true });
+      else {
+        // The same skill at a moved commit, or with another file list: its file buttons follow the answer, and the open
+        // file stays open only while it is still listed (else its SKILL.md).
+        const relisted = JSON.stringify(still.files) !== JSON.stringify(openSkillRef.files);
+        openSkillRef = still;
+        if (relisted) paintSkillFiles(still);
+        const next = listedSkillFile(still, skillFile);
+        if (moved || next !== skillFile) showSkillFile(next, { force: true });
+      }
     }
     paintSkills();
     syncProvides();
@@ -277,7 +286,7 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
   function paintSkills() {
     const pending = !show && navState.state === 'pending' && !fallbackSkills?.length;
     const listed = show ? show.skills : null;
-    const signature = JSON.stringify([show ? 'show' : 'catalog', listed && listed.map(s => [s.name, s.path, s.description, !!s.files?.length]), show ? null : fallbackSkills === undefined ? 'unreported' : fallbackSkills, pending, capName]);
+    const signature = JSON.stringify([show ? 'show' : 'catalog', listed && listed.map(s => [s.name, s.path, s.description, s.files && s.files.map(f => f.path)]), show ? null : fallbackSkills === undefined ? 'unreported' : fallbackSkills, pending, capName]);
     if (signature === skillsDrawn) return;
     skillsDrawn = signature;
     const restore = captureFocusState(skillsBody, { scroller: null });
@@ -305,7 +314,8 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
       if (opens) {
         row.type = 'button'; row.dataset.skill = skill.path; row.dataset.focusKey = `skill-row:${skill.path}`;
         row.setAttribute('aria-label', CONTENTS_COPY.skillOpen(name));
-        row.addEventListener('click', () => openSkill(skill));
+        // The skill as the answer lists it when pressed (a re-read may have moved its files since the row was drawn).
+        row.addEventListener('click', () => openSkill((show?.skills || []).find(s => s.path === skill.path) || skill));
       }
       const item = node('li'); item.append(row); rows.append(item);
     }
@@ -320,17 +330,24 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
     openSkillRef = skill;
     svBack.replaceChildren(iconElement(doc, 'chevronLeft', { size: 15 }), node('span', null, CONTENTS_COPY.skillBack(capName)));
     svTitle.textContent = skill.name;
-    svFiles.replaceChildren(); svFiles.hidden = skill.files.length < 2;
-    if (skill.files.length > 1) {
-      svFiles.append(node('span', null, `${CONTENTS_COPY.skillFiles}:`));
-      for (const f of [...skill.files].sort((a, b) => isSkillMd(skill, b) - isSkillMd(skill, a))) {
-        const b = node('button', null, skillRelativePath(skill, f)); b.type = 'button'; b.dataset.path = f.path; b.addEventListener('click', () => showSkillFile(f.path));
-        svFiles.append(b);
-      }
-    }
+    paintSkillFiles(skill);
     skillView.hidden = false; pageBody()?.setAttribute('hidden', '');
     showSkillFile(listedSkillFile(skill), { force: true });
     svReader.focus({ preventScroll: true });
+  }
+  /** The open skill's file buttons (SKILL.md first), when it has more than one; the shown file is marked current. */
+  function paintSkillFiles(skill) {
+    const focused = svFiles.contains(doc.activeElement) ? doc.activeElement.dataset.path : null;
+    svFiles.replaceChildren(); svFiles.hidden = skill.files.length < 2;
+    if (skill.files.length < 2) { if (focused) svReader.focus({ preventScroll: true }); return; }
+    svFiles.append(node('span', null, `${CONTENTS_COPY.skillFiles}:`));
+    for (const f of [...skill.files].sort((a, b) => isSkillMd(skill, b) - isSkillMd(skill, a))) {
+      const b = node('button', null, skillRelativePath(skill, f)); b.type = 'button'; b.dataset.path = f.path; b.addEventListener('click', () => showSkillFile(f.path));
+      if (f.path === skillFile) b.setAttribute('aria-current', 'true');
+      svFiles.append(b);
+    }
+    // A repaint keeps focus on the same file's button, else on the reader (never on <body>).
+    if (focused) ([...svFiles.querySelectorAll('button')].find(b => b.dataset.path === focused) || svReader).focus({ preventScroll: true });
   }
   /** Read one of the open skill's files into the skill view (its own ticket: a read for a file or skill left since is dropped). */
   function showSkillFile(path, { force = false } = {}) {

@@ -461,6 +461,39 @@ test('a skill read that lands after the skill was left is dropped (latest intent
   assert.equal(u.contents.skillView.querySelector('.mdv h1').textContent, 'Identity');
 });
 
+// Review round 2: a re-read that changes a skill's files (same name, path and description) moves the whole-skill view
+// with it, whether the skill was closed or open when the answer landed.
+test('a skill whose files change on a re-read opens, and stays open, with the files the answer now lists', async t => {
+  const playbook = files => ({ name: 'playbook', path: 'skills/playbook', description: 'The playbook.', files: files.map(f => ({ path: `skills/playbook/${f}`, bytes: 10 })), filesTruncated: false });
+  const answer = { current: showAnswer({ skills: [playbook(['SKILL.md', 'old.md'])] }) };
+  const u = setup(t, { answer: body => body.action === 'show' ? answer.current : fileAnswer(body.path, {}, answer.current.commit) });
+  u.go(); await flush(); await flush();
+  const page = u.doc.createElement('div'); u.doc.body.append(page);
+  renderCapabilityPage(page, { row: packageRow, status: null, instances: [], root: '/ws', onBack() {}, contents: u.contents.element, skills: u.contents.skills, skillView: u.contents.skillView });
+  const shown = () => [...u.contents.skillView.querySelectorAll('.skill-view-files button')].map(b => b.textContent);
+  const row = () => page.querySelector('button.cap-skill-row[data-skill="skills/playbook"]');
+  // Closed during the re-read: the next open lists the new files.
+  answer.current = showAnswer({ skills: [playbook(['SKILL.md', 'new.md'])] });
+  u.contents.refresh(); await flush(); await flush();
+  row().click(); await flush(); await flush();
+  assert.deepEqual(shown(), ['SKILL.md', 'new.md']);
+  // Open during the re-read, on a file the new answer drops: the buttons follow, and the open file falls back to SKILL.md.
+  u.contents.skillView.querySelector('.skill-view-files button[data-path="skills/playbook/new.md"]').click(); await flush(); await flush();
+  assert.equal(u.contents.skillView.querySelector('.cap-reader-path').textContent, 'skills/playbook/new.md');
+  answer.current = showAnswer({ skills: [playbook(['SKILL.md', 'other.md'])] });
+  u.contents.refresh(); await flush(); await flush();
+  assert.equal(u.contents.openSkill, 'skills/playbook');
+  assert.deepEqual(shown(), ['SKILL.md', 'other.md']);
+  assert.equal(u.contents.skillView.querySelector('.cap-reader-path').textContent, 'skills/playbook/SKILL.md');
+  assert.equal(u.calls.filter(c => c.action === 'file').at(-1).path, 'skills/playbook/SKILL.md', 'the new SKILL.md is read');
+  // A re-read that keeps the open file listed keeps it open.
+  u.contents.skillView.querySelector('.skill-view-files button[data-path="skills/playbook/other.md"]').click(); await flush(); await flush();
+  answer.current = showAnswer({ skills: [playbook(['SKILL.md', 'other.md', 'more.md'])] });
+  u.contents.refresh(); await flush(); await flush();
+  assert.deepEqual(shown(), ['SKILL.md', 'other.md', 'more.md']);
+  assert.equal(u.contents.skillView.querySelector('.cap-reader-path').textContent, 'skills/playbook/other.md');
+});
+
 test('code blocks keep a working copy button: the code to the clipboard, "copied", back to "copy"', async t => {
   const text = '# T\n\n```js\nconst a = 1;\n```\n';
   const u = setup(t, { answer: body => body.action === 'show' ? showAnswer({ inject: { path: 'inject.md', bytes: 9, text, binary: false, truncated: false } }) : fileAnswer(body.path) });
