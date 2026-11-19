@@ -257,6 +257,8 @@ const ctx = {
   homeRoster: () => homeRoster(),
   subscribeHomeRoster: (fn) => subscribeHomeRoster(fn),
   openAgent: (row) => openRosterInstance(row),
+  // Details for an agent (slice 6a), for any view that shows agents (slice 6b's Graph node menu).
+  openDetails: (row) => openDetailsTab(row),
   openWorkspaceTab: (tab, options) => openWorkspaceTabFocused(tab, options),
   // A bound action's key as the keyboard reference writes it ("Ctrl+K"), or "" when it has none.
   chordText: (id) => { const b = getBinding(id, navigator.platform.includes("Mac")); return b ? formatChord(b, navigator.platform.includes("Mac")) : ""; },
