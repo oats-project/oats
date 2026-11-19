@@ -576,3 +576,53 @@ test('r2: the budget keeps the terminal its room: the facts give way to one, the
   pane.querySelector('.agent-facts-fold').click();
   assert.equal(pane.querySelectorAll('.agent-fact').length, 4, 'the person may still unfold them all');
 });
+
+// Round 3's findings, each pinned.
+test('r3: an open context gives up the rest of the room, so what the board takes ends within it', t => {
+  const dom = new JSDOM('<!doctype html><body><div class="tab-pane active"><div class="term-wrap"></div></div></body>');
+  t.after(() => dom.window.close());
+  const pane = dom.window.document.querySelector('.tab-pane');
+  const contextPx = () => { const el = pane.querySelector('.agent-q-context[open] .agent-q-context-text'); if (!el) return 0; const cap = Number.parseFloat(el.style.maxHeight); return Number.isFinite(cap) ? Math.min(cap, 400) : 400; };
+  const used = () => 60 + (pane.classList.contains('agent-tight') ? 120 : 140) + contextPx();
+  const room = 300;
+  const view = createAgentBoard({ pane, home: '/h', name: 'dev-a', now: () => NOW, type: () => true, focusTerminal: () => {}, openLink: () => {},
+    hidden: createHiddenFacts(memoryStorage()), measure: { room: () => room, used, height: () => contextPx() }, observe: () => () => {} });
+  view.update(boardData({ facts: [fact('a')], questions: [question('q1', { hasContext: true })] }));
+  view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'line\n'.repeat(300) }]]) });
+  const fold = pane.querySelector('.agent-q-context');
+  fold.open = true; fold.dispatchEvent(new dom.window.Event('toggle'));
+  assert.ok(used() <= room, `used ${used()} within ${room}`);
+  assert.equal(contextPx(), room - 60 - 120);
+});
+
+test('r3: a terminal the board squeezed off screen takes no answer', t => {
+  const dom = new JSDOM('<!doctype html><body><div class="tab-pane active"><div class="term-wrap"></div></div></body>');
+  t.after(() => dom.window.close());
+  const typed = []; let terminalPx = 0;
+  const view = createAgentBoard({ pane: dom.window.document.querySelector('.tab-pane'), home: '/h', name: 'dev-a', now: () => NOW,
+    type: text => { typed.push(text); return true; }, focusTerminal: () => {}, openLink: () => {}, hidden: createHiddenFacts(memoryStorage()),
+    measure: { room: () => null, terminal: () => terminalPx }, observe: () => () => {} });
+  view.update(boardData(board()));
+  dom.window.document.querySelector('.agent-q-option').click();
+  assert.deepEqual(typed, [], '0 px of terminal: nothing typed');
+  terminalPx = 200;
+  dom.window.document.querySelector('.agent-q-option').click();
+  assert.deepEqual(typed, ['q1: Yes, one clean commit']);
+});
+
+test('r3: an id cleared and asked again shows its own context, read afresh, never the earlier question\'s', async t => {
+  const f = tabsFixture(t, { events: false });
+  const asked = (text, since) => boardData({ facts: [], questions: [question('q1', { question: text, since, hasContext: true })] });
+  f.boards.sync(f.tab, f.row({ board: asked('Deploy version one?', '2026-11-19T10:00:00.000Z') }), null, 'w');
+  f.pending[0].resolve({ instance: { board: { facts: [], questions: [{ id: 'q1', context: 'Version one passed all tests.' }] } } });
+  await f.flush(); await f.flush();
+  const fold = () => f.pane.querySelector('.agent-q-context-body').textContent;
+  assert.match(fold(), /Version one passed/);
+  f.boards.sync(f.tab, f.row({ board: asked('Delete production data?', '2026-11-19T11:00:00.000Z') }), null, 'w');
+  assert.equal(f.calls.filter(c => c.path.startsWith('/api/capabilities')).length, 2, 'a new occurrence reads the detail again');
+  assert.doesNotMatch(fold(), /Version one passed/, 'the earlier context is not shown');
+  assert.match(fold(), /Reading the context/);
+  f.pending[1].resolve({ instance: { board: { facts: [], questions: [{ id: 'q1', context: 'This deletes everything.' }] } } });
+  await f.flush(); await f.flush();
+  assert.match(fold(), /This deletes everything/);
+});

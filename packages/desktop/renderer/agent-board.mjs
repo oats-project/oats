@@ -21,7 +21,7 @@
  * agent-supplied text: every text is set with textContent, never as markup (source-prose-is-an-attributed-quote). */
 import { iconElement } from './shell-icons.mjs';
 import { DESKTOP_BOARD_WORDS } from './desktop-terms.mjs';
-import { FACTS_SHOWN, factsView, answerText, questionCount, turnQuestion, updatedText, sparkValues, dialogOpen, boardContext } from '../../client/instance-board.mjs';
+import { FACTS_SHOWN, questionOccurrence, factsView, answerText, questionCount, turnQuestion, updatedText, sparkValues, dialogOpen, boardContext } from '../../client/instance-board.mjs';
 import { waitedText } from '../../client/waiting-on-you.mjs';
 import { displayLine } from '../../client/display-text.mjs';
 
@@ -92,10 +92,19 @@ function sparkline(doc, values) {
 
 /** The least the terminal keeps of its pane: TERMINAL_MIN_PX, or TERMINAL_MIN_SHARE of the pane when that is more. */
 export const TERMINAL_MIN_PX = 120, TERMINAL_MIN_SHARE = 0.4;
+/** The least an open context keeps when the budget's last step shortens it (three lines; it scrolls in its fold). */
+export const CONTEXT_MIN_PX = 54;
+/** The least of the terminal that must be on screen for a number to type: a terminal the board squeezed below it
+ * (a pane too short for the board) is not one the person can see their answer land in. */
+export const TERMINAL_TYPE_MIN_PX = 36;
 /** The pane's height for the board (its room) and the height the board takes now, from the DOM. */
 const defaultMeasure = {
   room: pane => pane.clientHeight > 0 ? pane.clientHeight - Math.max(TERMINAL_MIN_PX, pane.clientHeight * TERMINAL_MIN_SHARE) : null,
-  used: parts => parts.reduce((n, el) => n + (el.isConnected ? el.offsetHeight : 0), 0),
+  // Everything in the pane but the terminal: the facts, the zone and a waiting row beside them.
+  used: pane => [...pane.children].reduce((n, el) => n + (el.classList.contains('term-wrap') ? 0 : el.offsetHeight), 0),
+  height: el => el.offsetHeight,
+  // The terminal's height on screen; null where nothing is laid out (no measure: not a reason to refuse).
+  terminal: pane => { const wrap = pane.querySelector(':scope > .term-wrap'); return wrap && pane.clientHeight > 0 ? wrap.offsetHeight : null; },
 };
 const observePane = (pane, fn) => {
   if (typeof ResizeObserver !== 'function') return () => {};
@@ -122,12 +131,12 @@ const observePane = (pane, fn) => {
  * @param {(pane: HTMLElement, fn: () => void) => () => void} [o.observe]  the pane's size (a ResizeObserver by default)
  */
 export function createAgentBoard({ pane, home, name, type, focusTerminal, openLink, checkClaims = null, shown: inView = () => true, hidden = createHiddenFacts(), now = () => Date.now(),
-  measure = defaultMeasure, observe = observePane }) {
+  measure: measured = {}, observe = observePane }) {
+  const measure = { ...defaultMeasure, ...measured };
   const doc = pane.ownerDocument;
   let board = null, detail = null, dialog = false, unfolded = false, index = 0, shownId = null, pending = null, alive = true, chooseSeq = 0, painting = false, compact = false, openUrl = null;
-  // A question's occurrence: its id and when it was asked. An id the agent clears and asks again (a new `since`) is a
-  // new question, even when no poll saw it cleared in between.
-  const occurrence = q => `${q.id}@${q.since}`;
+  // A question's occurrence (instance-board.mjs questionOccurrence): its answer, its context and its options are its own.
+  const occurrence = questionOccurrence;
   const answered = new Set(); // occurrences whose answer the person sent from this tab (hidden until the agent clears them)
 
   // ── the facts strip ──
@@ -183,9 +192,10 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
    * press, and its claims are never used. A failed latest read is unknown, not a dialog: the person's Enter, with the
    * terminal in view, stays the consent. A newer press, a closed view or another question shown meanwhile types
    * nothing. */
+  const terminalSeen = () => { const h = measure.terminal(pane); return h === null || h >= TERMINAL_TYPE_MIN_PX; };
   async function choose(i) {
     const q = open()[index];
-    if (!q || dialog || answerText(q, i) === null || !inView()) return false;
+    if (!q || dialog || answerText(q, i) === null || !inView() || !terminalSeen()) return false;
     const seq = ++chooseSeq;
     if (checkClaims) {
       zone.setAttribute('aria-busy', 'true');
@@ -198,7 +208,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
       if (dialog || !still || occurrence(still) !== occurrence(q) || !inView()) return false;
     }
     const answer = answerText(open()[index], i);
-    if (!answer || !inView() || !type(answer)) return false;
+    if (!answer || !inView() || !terminalSeen() || !type(answer)) return false;
     pending = occurrence(q);
     focusTerminal();
     return true;
@@ -373,18 +383,20 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     note.hidden = !dialog; setText(note, dialog ? DIALOG_NOTE : '');
     zone.setAttribute('aria-label', `${count ? `${count[0].toUpperCase()}${count.slice(1)}` : 'A question'} from ${name}`);
     // The context: read with the detail (inspect --board) once the view is open; attributed, plain text, line breaks kept.
-    const ctx = detail?.state === 'ok' ? boardContext(detail.questions.get(q.id)?.context) : null;
+    // A detail read for an earlier occurrence of this id says nothing about this one: it reads as still reading.
+    const current = !!detail && (!detail.occurrences || detail.occurrences.has(occurrence(q)));
+    const ctx = current && detail.state === 'ok' ? boardContext(detail.questions.get(q.id)?.context) : null;
     context.hidden = !q.hasContext;
     if (q.hasContext) {
       const lead = node(doc, 'p', 'agent-q-says', `${name} says:`);
-      const words = !detail ? 'Reading the context…' : detail.state === 'ok' ? 'The agent sent no context for this question.' : DETAIL_NOTES[detail.state]?.context ?? DETAIL_NOTES.malformed.context;
+      const words = !current ? 'Reading the context…' : detail.state === 'ok' ? 'The agent sent no context for this question.' : DETAIL_NOTES[detail.state]?.context ?? DETAIL_NOTES.malformed.context;
       const body = ctx ? node(doc, 'p', 'agent-q-context-text', ctx) : node(doc, 'p', 'agent-q-context-none', words);
       // A long context scrolls inside its open fold (at most 12 lines tall), so its text takes the focus for the keys.
       if (ctx) { body.dir = 'auto'; body.tabIndex = 0; }
-      const contextKey = JSON.stringify([q.id, detail?.state ?? null, ctx]);
+      const contextKey = JSON.stringify([occurrence(q), current, detail?.state ?? null, ctx]);
       if (contextBody.dataset.key !== contextKey) { contextBody.dataset.key = contextKey; contextBody.replaceChildren(lead, body); }
     }
-    if (context.dataset.question !== q.id) { context.open = false; context.dataset.question = q.id; }
+    if (context.dataset.question !== occurrence(q)) { context.open = false; context.dataset.question = occurrence(q); }
     if (zone.parentNode !== pane) pane.append(zone);
   }
 
@@ -407,7 +419,9 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   }
   /** The budget: the terminal keeps at least TERMINAL_MIN_PX (or TERMINAL_MIN_SHARE) of the pane. Where the board would
    * take more, it gives way in steps: the facts show one (the rest behind "N more", which the person may still open),
-   * then the zone drops its key hint. Nothing scrolls; nothing is cut out of reach. On a repaint and a resize only. */
+   * then the zone drops its key hint, then an open context gives up the rest, down to three lines (it scrolls in its
+   * fold). On a repaint, a resize and the context's toggle. Where even that is too tall (a pane too short for the
+   * board), a number refuses to type until the terminal is on screen again (TERMINAL_TYPE_MIN_PX). */
   function fit() {
     const room = measure.room(pane);
     const level = n => {
@@ -418,8 +432,17 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     };
     level(0);
     if (room === null) return;
-    for (let n = 1; n <= 2 && measure.used([facts, zone]) > room; n++) level(n);
+    for (let n = 1; n <= 2 && measure.used(pane) > room; n++) level(n);
+    // The last step: an open context gives up the rest, down to CONTEXT_MIN_PX (it scrolls in its fold).
+    const text = context.open ? contextBody.querySelector('.agent-q-context-text') : null;
+    if (text) {
+      text.style.removeProperty('max-height');
+      const over = measure.used(pane) - room;
+      if (over > 0) text.style.maxHeight = `${Math.max(CONTEXT_MIN_PX, measure.height(text) - over)}px`;
+    }
   }
+  // Opening or closing the context changes what the board takes: the budget runs again.
+  context.addEventListener('toggle', () => { if (alive && !painting) { painting = true; try { fit(); } finally { painting = false; } } });
   const unobserve = observe(pane, () => { if (alive && !painting) { painting = true; try { fit(); } finally { painting = false; } } });
 
   function focusFacts() {

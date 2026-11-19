@@ -12,7 +12,7 @@
  *    opens with a question and when the row's claim or questions change.
  * Unknown (a read refused or failed) is never a dialog, and never history: the view shows what the row says. */
 import { createAgentBoard, createHiddenFacts } from './agent-board.mjs';
-import { rowHasBoard, boardClaim, detailSignature, boardDetailData } from '../../client/instance-board.mjs';
+import { rowHasBoard, boardClaim, detailSignature, boardDetailData, questionOccurrence } from '../../client/instance-board.mjs';
 import { eventsSelector } from '../../client/instance-events-contract.mjs';
 
 /**
@@ -53,12 +53,15 @@ export function createTabBoards({ features, eventsReadable = () => false, post, 
     const workspace = rowDeployment(row, view);
     const seq = ++state.detailSeq;
     const owns = () => state.alive && state.detailSeq === seq;
+    // The question occurrences this read answers for: the view shows its context only for them, so a cleared and
+    // re-asked id never shows the earlier question's context while its own read runs.
+    const occurrences = new Set((state.board?.questions ?? []).map(questionOccurrence));
     try {
       const answer = await post(`/api/capabilities?ws=${encodeURIComponent(workspace)}`, { action: 'inspect', selector: { home: row.home }, board: true });
-      if (owns()) state.view.detail(boardDetailData(answer));
+      if (owns()) state.view.detail({ ...boardDetailData(answer), occurrences });
     } catch {
       // Refused or failed: the view says so (agent-board.mjs DETAIL_NOTES), never "no history".
-      if (owns()) state.view.detail({ state: 'failed' });
+      if (owns()) state.view.detail({ state: 'failed', occurrences });
     }
   }
   async function readClaims(state, view, row) {
