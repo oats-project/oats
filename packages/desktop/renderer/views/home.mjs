@@ -103,7 +103,8 @@ export const homeCSS = `
 let returnTo = null; // the overview key Home last opened, focused again when Home mounts (per workspace generation)
 
 export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, subscribeCli = onCliChange, subscribeWorkspace = onWorkspaceChange,
-  generation = workspaceGeneration } = {}) {
+  generation = workspaceGeneration, setTimeout: schedule = (fn, ms) => globalThis.setTimeout(fn, ms),
+  clearTimeout: cancel = (id) => globalThis.clearTimeout(id) } = {}) {
   const nouns = DESKTOP_NOUNS;
   const style = doc.createElement("style"); style.dataset.home = ""; style.textContent = homeCSS;
   const root = doc.createElement("div"); root.className = "home";
@@ -272,23 +273,22 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
   // a workspace since left is dropped. A read never rejects: a refused or malformed answer is that count's "failed".
   const own = (asked) => alive && asked === gen && generation() === asked;
   // A read may answer PENDING: the server has no settled observation yet (the souls catalog still reading). The count
-  // stays "Counting…" and is asked again on the roster's next paint (its refresh cadence: no timer of Home's own,
-  // one read in flight at a time), for as long as it is pending: a still-reading catalog never becomes a count.
-  const PENDING = Symbol("pending");
-  const inFlight = new Set(), retry = new Map(); // key -> its read, while pending
+  // stays "Counting…" and is asked again PENDING_RETRY_MS later, on a timer this Home owns (cleared on a workspace
+  // switch and on disposal; one read in flight per count), for as long as it is pending: a still-reading catalog
+  // never becomes a count. (Not on the roster's paints: an unchanged roster read paints nothing.)
+  const PENDING = Symbol("pending"), PENDING_RETRY_MS = 3000;
+  const retries = new Map(); // key -> its retry timer, while pending
   function readCount(key, read) {
     const asked = gen;
-    counts[key] = "loading"; inFlight.add(key); retry.delete(key);
+    counts[key] = "loading";
+    if (retries.has(key)) { cancel(retries.get(key)); retries.delete(key); }
     Promise.resolve().then(() => read()).catch(() => "failed").then((value) => {
       if (!own(asked)) return;
-      inFlight.delete(key);
-      if (value === PENDING) { retry.set(key, read); return; }
+      if (value === PENDING) { retries.set(key, schedule(() => { retries.delete(key); if (own(asked)) readCount(key, read); }, PENDING_RETRY_MS)); return; }
       counts[key] = value; paint();
     });
   }
-  function retryPending() {
-    for (const [key, read] of [...retry]) if (!inFlight.has(key)) readCount(key, read);
-  }
+  function clearRetries() { for (const id of retries.values()) cancel(id); retries.clear(); }
   /** The souls catalog's answer as a count (the Workspace page's rules, views/spawn.mjs settleGridState): a
    * `catalog.reason` is a failed read; an empty list while the catalog is still reading (`refreshing`), or with no
    * catalog observed yet, is pending, not "0 souls"; else the number listed. A remote view's answer (its workspace
@@ -323,11 +323,11 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
    * switch, so Home follows it itself). */
   function workspaceChanged() {
     if (!alive || generation() === gen) return;
-    gen = generation(); view = "board"; returnTo = null; retry.clear(); inFlight.clear();
+    gen = generation(); view = "board"; returnTo = null; clearRetries();
     readCounts();
   }
 
-  const unsubscribe = typeof ctx.subscribeHomeRoster === "function" ? ctx.subscribeHomeRoster(() => { paint(); retryPending(); }) : () => {};
+  const unsubscribe = typeof ctx.subscribeHomeRoster === "function" ? ctx.subscribeHomeRoster(() => paint()) : () => {};
   const unsubscribeWorkspace = subscribeWorkspace(() => workspaceChanged());
   // The CLI's probe answering (or its features changing) settles whether Teams has a count.
   const unsubscribeCli = subscribeCli(() => { if (!alive) return; readTeams(); paint(); });
@@ -344,7 +344,7 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
   return {
     get view() { return view; },
     refresh: () => paint(),
-    dispose() { alive = false; unsubscribe(); unsubscribeWorkspace(); unsubscribeCli(); root.removeEventListener("keydown", onKey); },
+    dispose() { alive = false; clearRetries(); unsubscribe(); unsubscribeWorkspace(); unsubscribeCli(); root.removeEventListener("keydown", onKey); },
   };
 }
 

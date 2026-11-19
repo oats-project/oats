@@ -28,13 +28,18 @@ function fixture(t, { rows = [], phase = "ready", deployments = [], api = async 
   };
   // The window's workspace and the CLI's probe, as Home reads them, driven by the test.
   const ws = { gen: 1, listeners: new Set() }, cliListeners = new Set();
+  // Home's own retry timers, run by the test (`tick`), never by the clock.
+  const timers = new Map(); let nextTimer = 1;
   const home = createHome(el, ctx, { doc, cli: () => cli(), subscribeCli: (fn) => { cliListeners.add(fn); return () => cliListeners.delete(fn); },
-    subscribeWorkspace: (fn) => { ws.listeners.add(fn); return () => ws.listeners.delete(fn); }, generation: () => ws.gen });
+    subscribeWorkspace: (fn) => { ws.listeners.add(fn); return () => ws.listeners.delete(fn); }, generation: () => ws.gen,
+    setTimeout: (fn) => { const id = nextTimer++; timers.set(id, fn); return id; }, clearTimeout: (id) => timers.delete(id) });
   t.after(() => { home.dispose(); dom.window.close(); });
   const buttons = () => [...el.querySelectorAll("button")];
   return {
     doc, el, home, opened, tabs, ctx,
     switchWorkspace() { ws.gen++; for (const fn of ws.listeners) fn(); },
+    timers,
+    tick() { const due = [...timers.values()]; timers.clear(); for (const fn of due) fn(); },
     cliAnswered() { for (const fn of cliListeners) fn(); },
     set(next) { state = { ...state, ...next }; for (const fn of listeners) fn(); },
     groups: () => [...el.querySelectorAll(".home-group")].map((g) => [g.querySelector("h3").textContent, [...g.querySelectorAll("[data-home-agent]")].map((b) => b.dataset.homeAgent)]),
@@ -253,12 +258,14 @@ test("slice2 Souls waits for the catalog: pending is Counting…, a refusal is a
   await u.settle(); await u.settle();
   assert.match(u.openButton("souls").textContent, /Counting…/, "the catalog still reading: not 'You have 0 souls'");
   answer = { agents: [{}, {}, {}], catalog: { reason: null } };
-  u.set({ rows: [row("a")] }); // the roster's next paint asks again
+  u.set({ rows: [row("a")] }); await u.settle();
+  assert.equal(reads, 1, "a roster paint is no read clock (an unchanged roster read paints nothing)");
+  assert.equal(u.timers.size, 1, "Home's own retry is scheduled");
+  u.tick(); // its retry asks again
   await u.settle(); await u.settle();
   assert.match(u.openButton("souls").textContent, /You have 3 souls/);
   assert.equal(reads, 2);
-  u.set({ rows: [row("a")] }); await u.settle();
-  assert.equal(reads, 2, "a settled count isn't read again on every paint");
+  assert.equal(u.timers.size, 0, "a settled count schedules nothing more");
   const v = fixture(t, { rows: [row("a")], api: async () => ({ agents: [], catalog: { reason: { code: "E_UNREACHABLE", message: "Cannot read souls" } } }) });
   await v.settle(); await v.settle();
   assert.match(v.openButton("souls").textContent, /Couldn't count them/, "a refused catalog is a failure");
@@ -300,12 +307,18 @@ test("slice2 an unavailable deployment is a failed read on Home, never the first
   assert.match(shell, /const phase = contextDeploymentNote !== null \? "unavailable"/);
 });
 
-test("slice2 a catalog that keeps reading stays Counting…, however many paints ask again", async (t) => {
+test("slice2 a catalog that keeps reading stays Counting…, however many retries ask again", async (t) => {
   let reads = 0;
   const u = fixture(t, { rows: [row("a")], api: async () => { reads++; return { agents: [], refreshing: true, catalog: { reason: null } }; } });
-  for (let i = 0; i < 12; i++) { u.set({ rows: [row("a")] }); await u.settle(); await u.settle(); }
+  await u.settle(); await u.settle();
+  for (let i = 0; i < 12; i++) { u.tick(); await u.settle(); await u.settle(); }
   assert.match(u.openButton("souls").textContent, /Counting…/, "still reading is never 0 souls");
-  assert.ok(reads > 10, "asked again on each paint while pending");
+  assert.equal(reads, 13, "asked again on each retry while pending, one read at a time");
+  const before = [...u.timers.keys()];
+  u.switchWorkspace(); await u.settle(); await u.settle();
+  assert.ok(before.length && before.every((id) => !u.timers.has(id)), "a switch drops the old workspace's retry (the new one asks for itself)");
+  u.home.dispose();
+  assert.equal(u.timers.size, 0, "disposal clears every retry");
   // A remote view's answer has no catalog of its own: its list is the count, zero included.
   const v = fixture(t, { rows: [row("a")], api: async () => ({ workspace: { id: "remote:x", server: "polaris" }, agents: [], refreshing: false }) });
   await v.settle(); await v.settle();

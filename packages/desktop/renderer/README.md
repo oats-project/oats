@@ -2434,7 +2434,8 @@ doesn't read already:
   same Home. Nothing reorders the roster.
 - **Counts**: Souls from `GET /api/agents` (read by the Workspace page's rules: a `catalog.reason` is a failure; an
   empty list while the catalog is still reading, or with no catalog observed yet, is pending, "Counting…", and is
-  asked again on each roster paint for as long as it stays pending, never taken as zero; a remote view's answer has
+  asked again every 3 s on a timer Home owns (cleared on a switch and on disposal) for as long as it stays pending,
+  never taken as zero (not on the roster's paints: an unchanged roster read paints nothing); a remote view's answer has
   no catalog of its own, and its list is the count), Capabilities from `POST /api/workspace-sync {action:"read"}`, Teams from
   `POST /api/workspace-teams {action:"list"}` (only where the CLI has a team model: "Counting…" while its probe is
   pending, no line where it has none; `onCliChange` settles it), Machines from the roster's deployments (a workspace
