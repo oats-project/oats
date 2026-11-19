@@ -805,8 +805,9 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
         const refusal = spawnRefusal(agent);
         const said = soulFacts(agent, inspected, cli, DESKTOP_TERMS);
         // Any problem the inspection reports is one: a problem without words says the generic sentence (problem()'s).
-        const firstProblem = inspected.problems[0] ?? null;
-        const problemText = firstProblem ? (typeof firstProblem.message === 'string' && firstProblem.message ? firstProblem.message : 'The kernel reported a problem.') : null;
+        // An entry counts whatever its shape (null too, as problem() shows it), so existence is the list's length.
+        const firstProblem = inspected.problems.length ? inspected.problems[0] : undefined;
+        const problemText = inspected.problems.length ? (typeof firstProblem?.message === 'string' && firstProblem.message ? firstProblem.message : 'The kernel reported a problem.') : null;
         const sentence = refusal ?? problemText ?? said.problem?.lines?.[0] ?? said.problem?.lead ?? null;
         line.textContent = sentence ?? 'Ready';
         line.classList.toggle('problem', !!sentence);

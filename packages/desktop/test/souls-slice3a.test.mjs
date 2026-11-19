@@ -333,4 +333,8 @@ test('slice3a soul page: an empty refresh is not painted over by a catalog updat
   await u.inspector.show(selection('release-manager'), { user: true }); await settle();
   assert.equal(u.$('.soul-ready-line').textContent, 'The kernel reported a problem.');
   assert.match(u.$('.soul-ready-problems').textContent, /E_UNREADABLE/);
+  // A null first entry (the contract admits it) is a problem too, and it leads.
+  answer = inspection('release-manager'); answer.problems = [null, { code: 'E_X', message: 'broken' }];
+  await u.inspector.show(selection('release-manager'), { user: true }); await settle();
+  assert.equal(u.$('.soul-ready-line').textContent, 'The kernel reported a problem.');
 });
