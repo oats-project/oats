@@ -108,6 +108,7 @@ rpc refresh > /dev/null
 fake '{"status":{"sleepMs":600000,"grandchild":true}}'
 : > "$FAKE_LOG"
 (rpc refresh > "$OUT/a15-refresh.txt" 2>&1 || true) &
+refresh=$!
 wait_until 15 grep -q '"verb":"status"' "$FAKE_LOG" || fail "A15 the slow oats did not start"
 oats_processes > "$OUT/a15-before.txt"
 say "A15 running before the reload:"; sed 's/^/    /' "$OUT/a15-before.txt"
@@ -117,7 +118,7 @@ fake
 bb plugin reload oats > "$OUT/a15-reload.txt" 2>&1 || { fail "A15 bb plugin reload"; cat "$OUT/a15-reload.txt"; }
 none_left() { [ -z "$(oats_processes)" ]; }
 if wait_until 10 none_left; then pass "A15 no oats process is left after bb plugin reload oats"; else fail "A15 left running:"; oats_processes; fi
-wait || true
+wait "$refresh" || true
 bb plugin list | grep -q '^oats@.* running' && pass "A15 the plugin runs again after the reload" || fail "A15 plugin state after the reload"
 [ "$(field ok <<<"$(rpc snapshot)")" = true ] && pass "A15 the snapshot answers after the reload" || fail "A15 snapshot after the reload"
 
@@ -133,12 +134,13 @@ if [ -f "$OUT/bb.pid" ]; then
   fake '{"status":{"sleepMs":600000,"grandchild":true}}'
   : > "$FAKE_LOG"
   (rpc refresh > "$OUT/a15b-refresh.txt" 2>&1 || true) &
+refresh=$!
   wait_until 15 grep -q '"verb":"status"' "$FAKE_LOG" || fail "A15b the slow oats did not start"
   oats_processes > "$OUT/a15b-before.txt"
   [ "$(wc -l < "$OUT/a15b-before.txt")" -ge 2 ] || fail "A15b expected the slow oats and its child to be running"
   kill -TERM "$(cat "$OUT/bb.pid")"
   if wait_until 20 none_left; then pass "A15b no oats process is left after bb stops"; else fail "A15b left running:"; oats_processes; fi
-  wait || true
+  wait "$refresh" || true
   rm -f "$OUT/bb.pid"
 else
   say "note: A15b skipped: this run did not start bb itself, so it does not stop it"
