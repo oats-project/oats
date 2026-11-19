@@ -2320,8 +2320,13 @@ terminal's geometry is never set here. Its two reads, the detail through
 and on rejection, and run when the view opens and when the board or the claim
 changes, never on an unchanged poll. The answer goes through
 `createTerminalTab`'s `type(text)`, the tab's own PTY lease (no control
-character, no line end), and the person's Enter is seen through its
-`onInput` observer. Alt+T is `agent.viewFocus` (`keybindings.mjs`).
+character, no line end, never while the pane isn't active), and the person's Enter is seen through its
+`onInput` observer. Before a number types, the view reads the claims again
+(`checkClaims`): only the latest claims read paints and may let the press type,
+and the shell's `inView` (the tab's pane active, the tab layer shown, its
+workspace current) is checked before the read, after it and at the write.
+A question's optimistic state is keyed by its occurrence (`id@since`). Alt+T
+is `agent.viewFocus`, the shared CHORDS row `agent-view` (the TUI skips it).
 
 ### Workspace-local tab memory
 

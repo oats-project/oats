@@ -176,33 +176,44 @@ test('agent view answering: the numbers are disabled while a permission or quest
 });
 
 test('agent view answering: the claims are read again at the press, so a dialog that opened since types nothing', async t => {
-  let answer = [{ producer: 'oats.board', reason: 'attention' }, { producer: 'pi.harness', waiting: true, reason: 'permission' }];
-  const f = fixture(t, { checkClaims: async () => answer });
+  // The view's owner paints the latest read's claims through update, then answers { latest }.
+  let view = null, fresh = [];
+  const f = fixture(t, { checkClaims: async () => { view.update(boardData(board()), { claims: fresh }); return { latest: true }; } });
+  view = f.view;
   f.view.update(boardData(board()), { claims: [{ producer: 'oats.board', reason: 'attention' }] });
   assert.ok([...f.zone().querySelectorAll('.agent-q-option')].every(b => !b.disabled), 'the row alone shows no dialog');
+  fresh = [{ producer: 'oats.board', reason: 'attention' }, { producer: 'pi.harness', waiting: true, reason: 'permission' }];
   f.zone().querySelector('.agent-q-option').click();
   await new Promise(r => setTimeout(r, 0));
   assert.deepEqual(f.typed, [], 'nothing typed');
   assert.equal(f.zone().querySelector('.agent-q-note').textContent, DIALOG_NOTE);
-  answer = [{ producer: 'pi.harness', waiting: false, reason: 'permission' }];
+  fresh = [{ producer: 'pi.harness', waiting: false, reason: 'permission' }];
   f.view.update(boardData(board()), { claims: [] });
   f.zone().querySelector('.agent-q-option').click();
   await new Promise(r => setTimeout(r, 0));
   assert.deepEqual(f.typed, ['q1: Yes, one clean commit'], 'the dialog is gone: the press types');
 });
 
-test('agent view answering: an unknown claims read still types; a newer press wins over an older one', async t => {
+test('agent view answering: a failed latest read still types; a newer press wins over an older one', async t => {
   let release;
-  const gate = () => new Promise(r => { release = r; });
-  const f = fixture(t, { checkClaims: gate });
+  const f = fixture(t, { checkClaims: () => new Promise(r => { release = r; }) });
   f.view.update(boardData(board()));
   const [one, two] = f.zone().querySelectorAll('.agent-q-option');
   one.click(); const first = release;
   two.click(); const second = release;
-  first([]); await new Promise(r => setTimeout(r, 0));
+  first({ latest: true }); await new Promise(r => setTimeout(r, 0));
   assert.deepEqual(f.typed, [], 'the older press types nothing');
-  second(null); await new Promise(r => setTimeout(r, 0));
-  assert.deepEqual(f.typed, ['q1: No, keep them'], 'unknown (null) is not a dialog');
+  second({ latest: true }); await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(f.typed, ['q1: No, keep them'], 'a latest read that saw no dialog (or failed: unknown) types');
+});
+
+test('agent view answering: a superseded claims read cancels the press, even when it answers last', async t => {
+  let release;
+  const f = fixture(t, { checkClaims: () => new Promise(r => { release = r; }) });
+  f.view.update(boardData(board()));
+  f.zone().querySelector('.agent-q-option').click();
+  release({ latest: false }); await new Promise(r => setTimeout(r, 0));
+  assert.deepEqual(f.typed, [], 'an answer older than the latest read never types');
 });
 
 test('agent view answering: no lease, nothing typed, the card stays and the focus does not move', t => {
@@ -236,10 +247,11 @@ function tabsFixture(t, { features = [BOARD_FEATURE], events = true } = {}) {
   const calls = [], pending = [];
   const post = (path, body) => new Promise((resolve, reject) => { calls.push({ path, body }); pending.push({ path, resolve, reject }); });
   const boards = createTabBoards({ features: () => features, eventsReadable: () => events, post, openLink: () => {}, hidden: createHiddenFacts(memoryStorage()), now: () => NOW });
-  const tab = { paneEl: pane, typeText: () => true, focusTerminal: () => {} };
+  let inView = true;
+  const tab = { paneEl: pane, typeText: () => true, focusTerminal: () => {}, inView: () => inView };
   const row = (extra = {}) => ({ instance: 'dev-a', agent: 'dev', agentsRoot: '/w/agents', home: '/w/agents/dev/instances/dev-a', running: true, board: boardData(board()), ...extra });
   const flush = () => new Promise(r => setTimeout(r, 0));
-  return { pane, calls, pending, boards, tab, row, flush };
+  return { pane, calls, pending, boards, tab, row, flush, setInView: v => { inView = v; } };
 }
 
 test('agent view gate: without the feature (an older kernel) the tab is today\'s terminal and its waiting row', t => {
@@ -393,4 +405,96 @@ test('board read condition 4: read on open and on a changed fact `at`, never on 
   f.boards.sync(f.tab, f.row({ home: '/w/agents/dev/instances/dev-z', instance: 'dev-z' }), null, 'w');
   late.resolve(detail()); await f.flush();
   assert.equal(f.pane.querySelector('.agent-fact-spark'), null, 'the old home\'s history is not painted');
+});
+
+// Round 1's findings, each pinned.
+const permission = { producer: 'pi.harness', waiting: true, reason: 'permission', since: '2026-11-19T10:05:00.000Z' };
+const settle = async f => { await f.flush(); await f.flush(); };
+const eventsCalls = f => f.pending.filter(p => p.path.startsWith('/api/instance-events'));
+async function opened(t) {
+  const f = tabsFixture(t);
+  const typed = []; f.tab.typeText = text => { typed.push(text); return true; };
+  f.boards.sync(f.tab, f.row(), null, 'w');
+  eventsCalls(f)[0].resolve({ status: 'available', data: { waitingClaims: [] } });
+  f.pending[0].resolve(detail());
+  await settle(f);
+  return { f, typed };
+}
+
+test('r1: an older claims answer, out of order, never undoes a newer permission claim nor types', async t => {
+  const { f, typed } = await opened(t);
+  f.pane.querySelector('.agent-q-option').click(); // read A, for the press
+  const zone = f.pane.querySelector('.agent-questions');
+  zone.dispatchEvent(new f.pane.ownerDocument.defaultView.FocusEvent('focusin', { bubbles: true })); // read B, entering the zone
+  await f.flush();
+  const [, a, b] = eventsCalls(f);
+  b.resolve({ status: 'available', data: { waitingClaims: [permission] } }); await settle(f);
+  assert.ok(f.pane.querySelector('.agent-q-option').disabled, 'B, the newer read, painted the dialog');
+  a.resolve({ status: 'available', data: { waitingClaims: [] } }); await settle(f);
+  assert.ok(f.pane.querySelector('.agent-q-option').disabled, 'A, older, changes nothing');
+  assert.deepEqual(typed, [], 'and types nothing');
+});
+
+test('r1: never typed into a terminal off screen, on success and on rejection of the claims read', async t => {
+  for (const outcome of ['resolve', 'reject']) {
+    const { f, typed } = await opened(t);
+    f.pane.querySelector('.agent-q-option').click();
+    f.setInView(false); // another tab, stage or workspace shown while the read runs
+    const read = eventsCalls(f).at(-1);
+    if (outcome === 'resolve') read.resolve({ status: 'available', data: { waitingClaims: [] } }); else read.reject(new Error('refused'));
+    await settle(f);
+    assert.deepEqual(typed, [], `${outcome}: nothing typed off screen`);
+    f.setInView(true);
+    assert.deepEqual(typed, [], `${outcome}: nor later`);
+    f.pane.querySelector('.agent-q-option').click(); f.setInView(false);
+    assert.deepEqual(typed, []);
+  }
+});
+
+test('r1: a press while the view is off screen types nothing, even with no claims read', t => {
+  const dom = new JSDOM('<!doctype html><body><div class="tab-pane"><div class="term-wrap"></div></div></body>');
+  t.after(() => dom.window.close());
+  const typed = [];
+  const view = createAgentBoard({ pane: dom.window.document.querySelector('.tab-pane'), home: '/h', name: 'dev-a', now: () => NOW,
+    type: text => { typed.push(text); return true; }, focusTerminal: () => {}, openLink: () => {}, shown: () => false, hidden: createHiddenFacts(memoryStorage()) });
+  view.update(boardData(board()));
+  dom.window.document.querySelector('.agent-q-option').click();
+  assert.deepEqual(typed, []);
+});
+
+test('r1: with several questions, the keyboard reaches the Context fold (c), and Tab moves within it', t => {
+  const f = fixture(t);
+  f.view.update(boardData({ ...board(), questions: [question('q1', { hasContext: true }), question('q2')] }));
+  f.view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'Why: three commits.' }]]) });
+  f.terminal.focus();
+  f.view.cycleFocus(); // Alt+T: an option of the zone
+  assert.ok(f.zone().contains(f.doc.activeElement));
+  f.key(f.doc.activeElement, 'c');
+  const fold = f.zone().querySelector('.agent-q-context');
+  assert.equal(fold.open, true, 'c opens the fold');
+  assert.equal(f.doc.activeElement, fold.querySelector('summary'), 'and focuses its summary');
+  const tab = f.key(f.doc.activeElement, 'Tab');
+  assert.equal(tab, true, 'Tab inside the fold is not taken by the carousel');
+  assert.equal(f.view.question, 'q1');
+  assert.equal(fold.querySelector('.agent-q-context-text').textContent, 'Why: three commits.');
+  assert.equal(fold.querySelector('.agent-q-context-text').tabIndex, 0, 'its text takes the focus, to scroll a long one');
+  assert.match(f.zone().querySelector('.agent-q-hint').textContent, /c the context/);
+});
+
+test('r1: an id cleared and asked again between two polls is a new question', t => {
+  const f = fixture(t);
+  f.view.update(boardData(board()));
+  f.zone().focus(); f.key(f.zone(), '1'); f.view.input('\r');
+  assert.equal(f.view.question, 'q2', 'q1 answered and hidden');
+  f.view.update(boardData({ ...board(), questions: [question('q1', { question: 'A new decision?', since: '2026-11-19T10:03:00.000Z' }), question('q2')] }));
+  assert.equal(f.zone().querySelectorAll('.agent-q-dot').length, 2, 'the new q1 shows, without an empty board seen in between');
+});
+
+test('r1: a withheld fact text is withheld in its accessible names too', t => {
+  const f = fixture(t);
+  f.view.update(boardData({ facts: [fact('s', { label: 'token=abcdefgh1234', value: 'secret=hidden-value' })], questions: [] }));
+  const li = f.facts().querySelector('.agent-fact');
+  const names = [...li.querySelectorAll('[aria-label]')].map(el => el.getAttribute('aria-label')).join(' | ');
+  assert.doesNotMatch(names, /hidden-value|abcdefgh1234/);
+  assert.doesNotMatch(li.textContent, /hidden-value|abcdefgh1234/);
 });

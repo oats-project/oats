@@ -35,7 +35,10 @@ export function createTabBoards({ features, eventsReadable = () => false, post, 
     state.view = createAgentBoard({ pane: tab.paneEl, home: row.home, name: row.instance,
       type: text => tab.typeText?.(text) === true, focusTerminal: () => tab.focusTerminal?.(), openLink, hidden, ...(now ? { now } : {}),
       // Before a number types: the claims again, read now (null when unknown).
-      checkClaims: async () => { const claims = await readClaims(state, state.workspace, state.row); return claims && [state.claim, ...claims]; } });
+      // Before a number types: the claims again, read now. Only the latest read's claims reach the view (update).
+      checkClaims: () => readClaims(state, state.workspace, state.row),
+      // The shell's test that this tab's terminal is the one in view (never type into a tab off screen).
+      shown: () => tab.inView?.() === true });
     states.set(tab, state);
     return state;
   }
@@ -63,15 +66,19 @@ export function createTabBoards({ features, eventsReadable = () => false, post, 
     const seq = ++state.claimsSeq;
     const owns = () => state.alive && state.claimsSeq === seq;
     const selector = eventsSelector({ instance: row.instance, agent: row.agent, agentsRoot: row.agentsRoot, server: row.server ?? null });
-    if (!selector || !eventsReadable()) { state.claims = []; return null; }
+    // No events read here: unknown, which is not a dialog; nothing newer can supersede a read that never ran.
+    if (!selector || !eventsReadable()) { state.claims = []; return { latest: owns() }; }
     let claims = null;
     try {
       const answer = await post(`/api/instance-events?ws=${encodeURIComponent(workspace)}`, { action: 'read', selector, limit: 50 });
       claims = answer?.status === 'available' && Array.isArray(answer.data?.waitingClaims) ? answer.data.waitingClaims : null;
     } catch { claims = null; }
-    // The answer is this read's own (a press waits on it); only the latest read paints.
-    if (owns()) { state.claims = claims ?? []; state.view.update(state.board, { claims: [state.claim, ...state.claims] }); }
-    return claims;
+    // Only the latest read paints, and only it may let a press type (agent-board.mjs choose): an older answer, out of
+    // order, never undoes a newer one's dialog. A failed latest read is unknown (no claims of its own).
+    if (!owns()) return { latest: false };
+    state.claims = claims ?? [];
+    state.view.update(state.board, { claims: [state.claim, ...state.claims] });
+    return { latest: true };
   }
 
   return {

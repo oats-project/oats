@@ -62,3 +62,26 @@ test('the agent view paints tokens only: no raw colour in its rules', () => {
   assert.ok(block.length > 1000, 'the agent view\'s rules');
   assert.doesNotMatch(block, /#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(|opacity\s*:/i);
 });
+
+// Round 1's layout findings: the terminal is the one scrolling region (a long context scrolls only inside its open
+// fold), and a link's whole address is shown before the press, wrapped, never cut with an ellipsis.
+test('the agent view layout: no scrolling zone, the context fold\'s text the one exception; links shown whole', () => {
+  const dom = new JSDOM(`<!doctype html><html data-theme="dark"><body><div class="tab-pane active"><div class="term-wrap"></div></div></body></html>`);
+  const doc = dom.window.document, win = dom.window;
+  for (const source of [theme, shell]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
+  const view = createAgentBoard({ pane: doc.querySelector('.tab-pane'), home: '/h', name: 'dev-a', now: () => NOW, type: () => true, focusTerminal: () => {}, openLink: () => {},
+    hidden: createHiddenFacts({ getItem: () => null, setItem: () => {} }) });
+  const long = `https://example.com/${'a'.repeat(480)}`;
+  const b = board(); b.facts[1].link = long; b.questions[0].hasContext = true;
+  view.update(boardData(b));
+  view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'line\n'.repeat(400) }]]) });
+  for (const selector of ['.agent-questions', '.agent-facts', '.agent-q-context', '.agent-q-context-body']) {
+    const css = win.getComputedStyle(doc.querySelector(selector));
+    assert.ok(!['auto', 'scroll'].includes(css.overflowY) && !['auto', 'scroll'].includes(css.overflow), `${selector} does not scroll`);
+  }
+  assert.equal(win.getComputedStyle(doc.querySelector('.agent-q-context-text')).overflowY, 'auto', 'a long context scrolls in its open fold');
+  const link = doc.querySelector('.agent-fact-link'), css = win.getComputedStyle(link);
+  assert.ok(link.textContent.endsWith(long), 'the whole address is the text');
+  assert.notEqual(css.textOverflow, 'ellipsis'); assert.notEqual(css.whiteSpace, 'nowrap'); assert.notEqual(css.overflow, 'hidden');
+  dom.window.close();
+});
