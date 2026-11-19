@@ -25,17 +25,18 @@ const shellSource = () => readFileSync(join(PKG, "renderer", "shell.mjs"), "utf8
 // The sidebar's pages (the Desktop UI rework, slice 2; before it, the product owner, 2026-10-26): Home, the
 // Workspace page (Workspace overview, no row of its own: Home opens it) and Automations (Schedules | Triggers);
 // Deployments became the Workspace page's Machines tab. The pinned rows: Home, then Automations.
-test("NAV is exactly Home, Workspace overview and Automations, in that order; Home and Automations are pinned", () => {
-  assert.deepEqual(NAV.map((v) => v.name), ["home", "spawn", "automations"],
-    "page destinations are Home, Workspace and Automations; Machines (formerly Deployments, formerly Active overview) is a tab of Workspace");
-  assert.deepEqual(NAV.map((v) => v.label), ["Home", "Workspace overview", "Automations"],
+test("NAV is exactly Home, Workspace overview, the Graph and Automations, in that order; Home and Automations are pinned", () => {
+  assert.deepEqual(NAV.map((v) => v.name), ["home", "spawn", "graph", "automations"],
+    "page destinations are Home, Workspace, the Graph (slice 6b: Machines' canvas of before) and Automations; Machines is a tab of Workspace");
+  assert.deepEqual(NAV.map((v) => v.label), ["Home", "Workspace overview", "Graph", "Automations"],
     "Knowledge/Tasks remain deferred; Workspace keeps the internal spawn route");
   for (const v of NAV) {
     assert.ok(v.label && v.icon && v.title, `${v.name} entry carries full rail chrome`);
   }
-  assert.deepEqual(NAV.map((v) => v.title), ["Home", "Workspace overview", "Automations"]);
+  assert.deepEqual(NAV.map((v) => v.title), ["Home", "Workspace overview", "Graph", "Automations"]);
   assert.deepEqual(PINNED.map((v) => v.name), ["home", "automations"]);
-  assert.equal(pinnedRowFor("spawn"), "home");
+  assert.equal(pinnedRowFor("spawn"), "home"); assert.equal(pinnedRowFor("graph"), "home");
+  assert.deepEqual(NAV.filter((v) => v.command).map((v) => [v.name, v.command]), [["graph", "Workspace: Graph"]]);
 });
 
 // A destination that is a tab of a page keeps its name (stage.hierarchy, ⌘1 / Ctrl+1) and says which page and tab
@@ -82,14 +83,14 @@ test("shell.mjs consumes the manifest: rail built from shell-nav NAV, openView r
 
 test("palette view commands derive from NAV and NAV_TABS — no hard-coded destination list to drift", () => {
   const src = shellSource();
-  assert.match(src, /\.\.\.\[\.\.\.NAV, \.\.\.NAV_TABS\]\.map\(\(v\) => \(\{ label: `View: \$\{v\.label\}`,.*run: \(\) => showStageFocused\(v\.name\) \}\)\)/,
+  assert.match(src, /\.\.\.\[\.\.\.NAV, \.\.\.NAV_TABS\]\.map\(\(v\) => \(\{ label: v\.command \?\? `View: \$\{v\.label\}`,.*run: \(\) => showStageFocused\(v\.name\) \}\)\)/,
     "palette view commands (View: Workspace › Machines among them) are generated from the manifests");
   assert.ok(!/label:\s*"View: /.test(src), "no hard-coded View: palette entries remain");
 });
 
 // The stage actions too: stage.hierarchy (⌘1 / Ctrl+1) still exists, from NAV_TABS, and stage.automations (⌘3 / Ctrl+3) from NAV.
 test("shell.mjs registers stage.<name> for every NAV page and NAV_TABS entry, each running showStageFocused", () => {
-  assert.match(shellSource(), /\[\.\.\.NAV, \.\.\.NAV_TABS\]\.forEach\(\(v\) => registerAction\(\{\n  id: `stage\.\$\{v\.name\}`, label: `View: \$\{v\.label\}`, context: "global",\n  run: \(\) => showStageFocused\(v\.name\),\n\}\)\);/);
+  assert.match(shellSource(), /\[\.\.\.NAV, \.\.\.NAV_TABS\]\.forEach\(\(v\) => registerAction\(\{\n  id: `stage\.\$\{v\.name\}`, label: v\.command \?\? `View: \$\{v\.label\}`, context: "global",\n  run: \(\) => showStageFocused\(v\.name\),\n\}\)\);/);
 });
 
 // showStage is where every open of a name goes (the actions, the palette, ctx.openView): a NAV_TABS name

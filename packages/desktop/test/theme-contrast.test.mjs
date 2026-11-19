@@ -1285,7 +1285,8 @@ test("yellow means needs input only: no shipped rule paints a dot, disc or fill 
   const rule = selector => allStyles.match(new RegExp(`${selector.replace(/[.()[\]>]/g, "\\$&")}\\s*\\{([^}]*)\\}`))?.[1].replace(/\s+/g, " ");
   // The unknown bullseye: a --muted ring and centre, the fill between them.
   assert.match(rule(".ctx-dot.unknown"), /border-color: var\(--muted\); background: var\(--muted\); box-shadow: inset 0 0 0 1\.5px var\(--row-solid, var\(--surface\)\), 0 0 0 2px var\(--row-solid, var\(--surface\)\);/);
-  for (const selector of [".hdot.unknown", ".computer-teams .ct-member-state.warn .ct-state-dot"]) {
+  // (The Machines canvas's .hdot.unknown went with it: the Graph draws the roster's .ctx-dot, slice 6b.)
+  for (const selector of [".computer-teams .ct-member-state.warn .ct-state-dot"]) {
     assert.match(rule(selector), /border(?:-color)?:[^;]*var\(--muted\);/, selector);
     assert.match(rule(selector), /background:\s*radial-gradient\(circle, var\(--muted\) 1px, transparent 1px\);/, selector);
     assert.doesNotMatch(rule(selector), /dashed/, `${selector}: not a dashed ring (stopped's, in slice 2)`);

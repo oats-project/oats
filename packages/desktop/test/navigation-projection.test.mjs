@@ -252,8 +252,8 @@ async function machinesFrom(t, start, shellSource = source) {
   await done;
   return s;
 }
-test("the sidebar's views: Home, the Workspace page (no row of its own: Home's) and Automations, each a page; Machines is the Workspace page's tab", () => {
-  assert.deepEqual(NAV.map(v => [v.name, v.label]), [["home", "Home"], ["spawn", "Workspace overview"], ["automations", "Automations"]]);
+test("the sidebar's views: Home, the Workspace page and the Graph (no row of their own: Home's) and Automations, each a page; Machines is the Workspace page's tab", () => {
+  assert.deepEqual(NAV.map(v => [v.name, v.label]), [["home", "Home"], ["spawn", "Workspace overview"], ["graph", "Graph"], ["automations", "Automations"]]);
   assert.deepEqual(NAV.filter(v => v.pinned !== false).map(v => v.name), ["home", "automations"]);
   assert.deepEqual(NAV_TABS, [{ name: "hierarchy", label: "Workspace › Machines", page: "spawn", tab: "machines" }]);
   assert.deepEqual(navTab("hierarchy"), NAV_TABS[0]);

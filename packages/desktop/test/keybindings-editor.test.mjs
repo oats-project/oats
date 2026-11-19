@@ -679,11 +679,12 @@ const LEADER_EXTRA = [
 test("the stage rows' labels are the shell's, Machines' from NAV_TABS, Automations' from NAV", async () => {
   const { readFileSync } = await import("node:fs");
   const shell = readFileSync(new URL("../renderer/shell.mjs", import.meta.url), "utf8");
-  assert.match(shell, /\[\.\.\.NAV, \.\.\.NAV_TABS\]\.forEach\(\(v\) => registerAction\(\{\n  id: `stage\.\$\{v\.name\}`, label: `View: \$\{v\.label\}`/);
+  // An entry with a `command` (the Graph's "Workspace: Graph", slice 6b) is labelled by it.
+  assert.match(shell, /\[\.\.\.NAV, \.\.\.NAV_TABS\]\.forEach\(\(v\) => registerAction\(\{\n  id: `stage\.\$\{v\.name\}`, label: v\.command \?\? `View: \$\{v\.label\}`/);
   for (const [id, label] of LEADER_EXTRA.filter(([id]) => id.startsWith("stage."))) {
     const entry = [...NAV, ...NAV_TABS].find((v) => `stage.${v.name}` === id);
     assert.ok(entry, `${id} is a shell destination`);
-    assert.equal(label, `View: ${entry.label}`, id);
+    assert.equal(label, entry.command ?? `View: ${entry.label}`, id);
   }
   assert.deepEqual(NAV_TABS.map((v) => [v.name, v.page, v.tab]), [["hierarchy", "spawn", "machines"]]);
   assert.ok(NAV.some((v) => v.name === "automations"), "Automations is a page again");

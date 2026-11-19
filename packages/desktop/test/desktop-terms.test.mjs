@@ -87,7 +87,9 @@ const TABLES = ['lifecycleReason', 'lifecycleFailure', 'undescribedAnswer', 'und
   // 7a: the capability catalog moved to the shared home (packages/client/capability-catalog.mjs) and takes the terms the same way.
   'createCapabilityCatalog',
   // 6a: a soul's facts (packages/client/soul-facts.mjs): the kernel's lines of a launch problem are said with the terms.
-  'soulFacts'];
+  'soulFacts',
+  // The Desktop UI rework, slice 6b: the Graph's layout (packages/client/instance-graph.mjs) labels its columns by machine.
+  'instanceGraph'];
 const ROOT = new URL('../', import.meta.url);
 function shippedModules(dir = '') {
   const out = [];
