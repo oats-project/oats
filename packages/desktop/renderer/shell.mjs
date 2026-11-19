@@ -1934,6 +1934,13 @@ function stableFocusTarget() {
 function refreshPanelInstance(instances, workspace) {
   syncTabNeedsInput(instances, workspace); // also on a poll whose roster signature is unchanged (no repaint)
   const tab = tabs.get(activeTab);
+  // Details (slice 6a) follows the poll for its agent the same way: by identity, unknown when not unique.
+  if (tabLayerVisible && tab?.kind === "details" && tab.workspace === workspace && tab.detailsRef) {
+    const id = instanceId(tab.detailsRef), rows = shownRows(instances).filter((row) => instanceId(row) === id);
+    tab.detailsRef = rows.length === 1 ? rows[0] : { ...tab.detailsRef, running: null };
+    syncContextPanel();
+    return;
+  }
   if (!tabLayerVisible || tab?.kind !== "terminal" || tab.workspace !== workspace) return;
   // #1247: the panel's row reads as the roster's does (this window's retires in flight held as retiring).
   const matches = shownRows(instances).filter(instance => tabShowsRow(tab, workspace, instance));

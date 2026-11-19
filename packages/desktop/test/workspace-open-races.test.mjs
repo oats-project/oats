@@ -85,6 +85,7 @@ test("navigating to a stage cancels an older terminal open", async t => {
     // Automations, a page of its own (the product owner, 2026-10-26; hierarchy is now the Workspace page's Machines tab).
     ...f.context, NAV: [{ name: "automations", title: "Automations" }], navTab /* the shipped NAV_TABS lookup: showStage reads it first */,
     split: null, groupOfTab, removeSplitTab, canActivateTab: (tab, ws) => !!tab && tab.workspace === ws, stageSidebarMode: () => "overview", showTabLayer() {},
+    createPanelOwner: () => ({ dispose() {} }), contextPanel: {}, syncContextPanel() {}, setNavActive() {}, setSidebarMode() {}, retitleTab() {},
   }));
   assert.equal(navTab("automations"), null, "a page, not a tab of one");
   await navigate("automations");

@@ -107,7 +107,11 @@ function shell(t, shellSource = source) {
   const names = ["setSidebarMode", "updateContextTabs", "showTabLayer", "closeStage", "showStage", "renderSplit", "selectEmptyGroup", "splitPane", "closeSplit", "restoreTerminalGroups",
     "updateSplitControls", "onTabKeydown", "walkedTabs", "visibleTabEntries", "addTab", "selectTab", "activateTab", "revealActiveRosterRow", "closeTab", "tabStrips", "revealActiveTabs", "observeTabStrips", "showTerminalContext",
     "openTerminalTabFlow", "openTerminalTabInner", "restoreWorkspaceTabs", "focusActiveTerminal",
-    "syncContextPanel", "refreshPanelInstance", "syncTabNeedsInput", "focusGroup", "rosterEntry"];
+    "syncContextPanel", "refreshPanelInstance", "syncTabNeedsInput", "focusGroup", "rosterEntry",
+    // Details (slice 6a): the instance panel's content in a tab, for the agent asked for.
+    "liveRow", "placeContextPanel", "openDetailsTab"];
+  Object.assign(c, { shownRows: rows => rows, instanceDisplayName: name => name, retitleTab() {}, hideEmptyState() {},
+    createInstanceEventsView: () => ({ dispose() {} }), instanceEventsCSS: "", rowDeployment: () => "A", railServerLabel: () => null });
   const functions = names.map(name => {
     const match = shellSource.match(new RegExp(`(?:async )?function ${name}\\([^]*?\\n\\}`));
     assert.ok(match, `execute shipped ${name}`); return match[0];
@@ -118,7 +122,7 @@ function shell(t, shellSource = source) {
   // Execute the shipped panel construction as well as its projection functions:
   // pointer/focus intent must compete with opens exactly as in the real shell.
   const panelSetup = shellSource.slice(shellSource.indexOf("const contextPanel = createContextPanel"), shellSource.indexOf("/** Projection only:"));
-  const s = runInNewContext(`${functions.join("\n")}\n${panelSetup}\n${registry.join("\n")}\n({ ${names.join(", ")}, contextPanel });`, withShellWindowGlobals(c));
+  const s = runInNewContext(`const contextPanelHome = { parent: null, next: null };\n${functions.join("\n")}\n${panelSetup}\n${registry.join("\n")}\n({ ${names.join(", ")}, contextPanel });`, withShellWindowGlobals(c));
   t.after(() => s.contextPanel.dispose());
   const event = (el, type, options = {}) => el.dispatchEvent(type === "keydown"
     ? new dom.window.KeyboardEvent(type, { bubbles: true, cancelable: true, ...options })
@@ -129,6 +133,8 @@ function shell(t, shellSource = source) {
     empty: id => [...c.tabhost.querySelectorAll(".group-cell")].find(cell => cell.dataset.group === String(id))?.querySelector(".split-empty"),
     field: name => document.querySelector(`[data-context-field="${name}"]`).textContent,
     panelRoot: document.getElementById("context-panel"),
+    /** Details for an agent (slice 6a): its tab, the panel's content in it. */
+    details: ref => s.openDetailsTab(typeof ref === "string" ? instance(ref) : ref, { focus: false }),
     async open(ref, ready = true, roster = [typeof ref === "string" ? instance(ref) : ref]) {
       const count = attachments.length;
       const done = s.openTerminalTabFlow(ref, message => assert.fail(message));
@@ -476,19 +482,21 @@ test('repeated close coalesces cleanup but retains the latest explicit close foc
 });
 
 /** Slice 6a (Details for any agent, superseding closed-panels-return-main-area-space's right-hand instance panel): a
- * terminal tab, committed or retained, brings no instance panel; its agent's facts are its Details tab's (the panel's
- * content, moved into that tab: slice6a.test.mjs). `ref`, the terminal the old panel followed, names the case only. */
+ * terminal tab, committed or retained, brings no instance panel; the panel's content shows in a Details tab, for the
+ * agent it was opened for. `ref`: the agent Details shows (its tab active), or null (no panel). */
 function assertPanel(s, ref) {
-  assert.equal(s.panelRoot.hidden, true, `no instance panel beside a terminal${ref ? ` (${ref.instance})` : ''}: Details is a tab`);
-  assert.equal(s.field('instance'), 'Not reported', 'the panel holds no terminal\'s instance');
+  const details = s.c.tabs.get(s.c.activeTab)?.kind === "details";
+  assert.equal(s.panelRoot.hidden, ref == null, ref ? `Details shows ${ref.instance}` : "no instance panel beside a terminal: Details is a tab");
+  if (ref) { assert.equal(details, true); assert.equal(s.field('instance'), ref.instance); assert.equal(s.field('home'), ref.home); }
 }
 
-test('resolved instance context is committed before pending PTY readiness; panel entry revokes input focus only', async t => {
+test('resolved instance context is committed before pending PTY readiness; Details reads it, and its entry revokes input focus only', async t => {
   const s = shell(t), resolved = { ...instance('pending'), harness: 'pi', model: 'reported-model' };
   const pending = await s.open({ instance: 'pending' }, false, [resolved]);
-  assertPanel(s, resolved);
-  assert.equal(s.field('harness'), 'Pi', 'Workspace v4: the harness by its display name'); assert.equal(s.field('model'), 'reported-model');
+  assertPanel(s, null);
   assert.equal(s.c.tabs.get(pending.id).instanceRef, resolved, 'store the resolver result, not the caller reference');
+  s.details(resolved); assertPanel(s, resolved);
+  assert.equal(s.field('harness'), 'Pi', 'Workspace v4: the harness by its display name'); assert.equal(s.field('model'), 'reported-model');
   assert.equal(pending.term.focuses, 0); assert.equal(s.attachments.length, 1);
   const soul = s.document.querySelector('[data-context-tab="soul"]');
   soul.focus(); soul.click();
@@ -496,57 +504,50 @@ test('resolved instance context is committed before pending PTY readiness; panel
   pending.gate.resolve({ id: 301 }); await pending.done;
   assertPanel(s, resolved);
   assert.equal(pending.term.focuses, 0); assert.equal(s.document.activeElement, soul);
-  assert.equal(s.c.tabs.size, 1); assert.deepEqual(s.detached, []);
+  assert.equal(s.c.tabs.size, 2, "the terminal and its Details"); assert.deepEqual(s.detached, []);
 });
 
-test('two existing groups project only the focused instance; empty, file and brain clear it without attachments', async t => {
+test('terminals in two groups bring no panel whichever is focused; Details shows the agent asked for', async t => {
   const s = shell(t), left = await s.open('left-panel'); s.splitPane('row');
   assertPanel(s, null);
   const right = await s.open('right-panel');
   for (const tab of [left, right, left]) {
     s.event(s.c.tabs.get(tab.id).paneEl, 'pointerdown'); tab.term.input.focus();
     assert.equal(s.c.activeTab, tab.id);
-    assertPanel(s, s.c.tabs.get(tab.id).instanceRef);
-  }
-  const split = structuredClone(s.c.split);
-  for (const kind of ['file', 'brain']) {
-    s.addTab({ title: kind, kind }); assertPanel(s, null);
-    s.selectTab(left.id); assertPanel(s, instance('left-panel'));
-    assert.deepEqual(structuredClone(s.c.split), split);
+    assertPanel(s, null);
   }
   s.selectTab(right.id); await s.closeTab(right.id); assertPanel(s, null);
   // Reopening an existing terminal moves its original pane into the empty
   // destination, rather than creating a third attachment or copying context.
   const again = await s.open('left-panel');
-  assert.equal(again.id, left.id); assertPanel(s, instance('left-panel'));
+  assert.equal(again.id, left.id); assertPanel(s, null);
   assert.equal(layout.groupOfTab(s.c.split, left.id).id, 2);
+  s.details('left-panel'); assertPanel(s, instance('left-panel'));
   assert.equal(s.attachments.length, 2); assert.deepEqual(s.detached, [2]);
 });
 
-test('panel context and per-workspace tab preferences survive A→B→A, open or closed is one preference, without reacquiring retained terminals', async t => {
+test('Details and its per-workspace page preference survive A→B→A, without reacquiring retained terminals', async t => {
   const s = shell(t); await s.open('a-panel');
-  s.document.querySelector('[data-context-tab="soul"]').click(); s.contextPanel.setCollapsed(true);
-  assert.equal(s.panelRoot.hidden, true, 'closed: hidden, no rail');
-  assert.equal(s.c.localStorage.getItem('oats-desktop-instance-panel-open'), null, 'the closed state is stored');
+  s.details('a-panel'); assertPanel(s, instance('a-panel'));
+  s.document.querySelector('[data-context-tab="soul"]').click();
   s.document.getElementById('workspace').focus(); s.switchTo('B'); assertPanel(s, null);
   await s.open('b-panel');
-  assert.equal(s.panelRoot.hidden, true, 'opening a terminal in B never opens it');
-  assert.equal(s.field('instance'), 'b-panel', 'its details are current, ready for when it opens');
-  s.contextPanel.setCollapsed(false); assertPanel(s, instance('b-panel'));
-  assert.equal(s.c.localStorage.getItem('oats-desktop-instance-panel-open'), '1');
+  assertPanel(s, null);
+  s.details('b-panel'); assertPanel(s, instance('b-panel'));
   s.document.querySelector('[data-context-tab="git"]').click();
   s.document.getElementById('workspace').focus(); s.switchTo('A');
+  s.selectTab([...s.c.tabs].find(([, t]) => t.kind === 'details' && t.workspace === 'A')[0]);
   assertPanel(s, instance('a-panel'));
   assert.equal(s.document.querySelector('[aria-selected="true"][data-context-tab]').dataset.contextTab, 'soul', 'the selected page is per workspace');
-  assert.equal(s.document.activeElement.id, 'workspace');
   s.switchTo('B');
+  s.selectTab([...s.c.tabs].find(([, t]) => t.kind === 'details' && t.workspace === 'B')[0]);
   assertPanel(s, instance('b-panel'));
   assert.equal(s.document.querySelector('[aria-selected="true"][data-context-tab]').dataset.contextTab, 'git');
   assert.equal(s.attachments.length, 2); assert.deepEqual(s.detached, []);
 });
 
 async function panelChoiceRace(t, outcome, shellSource = source) {
-  const s = shell(t, shellSource); await s.open('older-panel'); await s.open('chosen-panel');
+  const s = shell(t, shellSource); await s.open('older-panel'); await s.open('chosen-panel'); s.details('chosen-panel');
   const pending = s.openTerminalTabFlow('older-panel', () => assert.fail('stale notification'));
   const gate = s.requests.at(-1), soul = s.document.querySelector('[data-context-tab="soul"]');
   s.event(soul, 'pointerdown'); soul.focus(); soul.click();
@@ -555,7 +556,7 @@ async function panelChoiceRace(t, outcome, shellSource = source) {
   await pending;
   assertPanel(s, instance('chosen-panel'));
   assert.equal(soul.getAttribute('aria-selected'), 'true'); assert.equal(s.document.activeElement, soul);
-  assert.equal(s.c.tabs.size, 2); assert.equal(s.attachments.length, 2); assert.deepEqual(s.detached, []);
+  assert.equal(s.c.tabs.size, 3, "two terminals and the Details tab"); assert.equal(s.attachments.length, 2); assert.deepEqual(s.detached, []);
 }
 for (const outcome of ['resolve', 'reject']) {
   test(`late terminal lookup ${outcome} cannot overwrite a newer real panel choice`, t => panelChoiceRace(t, outcome));
@@ -576,15 +577,15 @@ test('same-name roots/hosts stay distinct and exact-key metadata refresh is focu
   const remote = { ...local, server: 'saved-host', addressable: true, model: 'remote' };
   const roster = [local, otherRoot, remote], opened = [];
   for (const ref of roster) {
-    opened.push(await s.open(ref, true, roster)); assertPanel(s, ref); assert.equal(s.field('model'), ref.model);
+    opened.push(await s.open(ref, true, roster)); s.details(ref); assertPanel(s, ref); assert.equal(s.field('model'), ref.model);
   }
-  assert.equal(new Set([...s.c.tabs.values()].map(tab => tab.key)).size, 3);
+  assert.equal(new Set([...s.c.tabs.values()].filter(tab => tab.kind === "terminal").map(tab => tab.key)).size, 3);
   assert.deepEqual(structuredClone(s.attachments[2].spec.remote), { serverId: 'saved-host', instance: 'same', home: '/one/same' });
-  const selected = opened[0]; s.selectTab(selected.id);
+  const selected = opened[0]; s.selectTab(selected.id); s.details(local);
   const soul = s.document.querySelector('[data-context-tab="soul"]'); soul.focus(); soul.click();
   const ticket = s.c.tabOpenIntents.begin(), exact = { ...local, running: false, model: 'new observation' };
   s.refreshPanelInstance([remote, otherRoot, exact], 'A');
-  assert.equal(s.c.tabs.get(selected.id).instanceRef, exact);
+  assert.equal(s.c.tabs.get(s.c.activeTab).detailsRef, exact, "Details follows the poll for its agent, by identity");
   assert.equal(s.field('running'), 'Stopped'); assert.equal(s.field('model'), 'new observation');
   assert.equal(s.document.activeElement, soul); assert.equal(ticket(), true, 'polling is not user intent');
   s.refreshPanelInstance([{ ...local, model: 'foreign workspace' }], 'B');

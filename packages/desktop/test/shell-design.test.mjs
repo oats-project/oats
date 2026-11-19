@@ -714,7 +714,7 @@ test('the palette keeps focus mode reachable without the bar and names the insta
   assert.equal(resetWidth.detail(), '');
   assert.equal(listActions().find(action => action.id === 'sidebar.resetWidth')?.label, "Reset the sidebar's width");
   resetWidth.run(); assert.deepEqual(s.events.at(-1), ['sidebarWidth', 'reset']);
-  assert.equal(commands.indexOf(resetWidth), commands.findIndex(item => item.label === 'Sidebar: toggle (hide/show)') + 1, 'listed after the toggle');
+  assert.equal(commands.indexOf(resetWidth), commands.findIndex(item => item.label === 'Sidebar: hide') + 1, 'listed after the sidebar\'s own commands (slice 6a: collapse, then hide)');
 });
 
 for (const hidden of [false, true]) test(`focus mode overrides but restores raw sidebar preference hidden=${hidden}`, t => {
@@ -804,8 +804,9 @@ test('Spec B: a chord pressed elsewhere opens or closes the panel without taking
   s.contextPanel.setContext(terminalOf('/A/one')); terminal.focus();
   runAction('panel.toggle'); assert.equal(q('context-panel').hidden, false); assert.equal(s.document.activeElement, terminal);
   runAction('panel.toggle'); assert.equal(q('context-panel').hidden, true); assert.equal(s.document.activeElement, terminal);
-  runAction('sidebar.toggle'); assert.equal(q('app').classList.contains('sidebar-hidden'), true); assert.equal(s.document.activeElement, terminal);
-  runAction('sidebar.toggle'); assert.equal(s.document.activeElement, terminal);
+  // Slice 6a: sidebar.toggle collapses to the rail and back, never taking focus from the terminal either.
+  runAction('sidebar.toggle'); assert.equal(q('app').classList.contains('sidebar-rail'), true); assert.equal(s.document.activeElement, terminal);
+  runAction('sidebar.toggle'); assert.equal(q('app').classList.contains('sidebar-rail'), false); assert.equal(s.document.activeElement, terminal);
 });
 
 test('Spec B: Show instance panel carries the Developer change dot and says so in its name', t => {
