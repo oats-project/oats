@@ -103,7 +103,9 @@ test("on a machine found-list, step 1 is the machine's round, with a default for
 
 test("after step 1, a machine found-list asks nothing: a step that would ask tells and stops", () => {
   assert.match(skill, /Wherever a later step says to ask the\s+person, on a machine found-list you tell them what happened, as it is, and\s+stop instead/);
-  assert.match(skill, /On a machine found-list, ask nothing: tell the person that the run\s+failed, most likely because `N` is taken, and stop\./);
+  assert.match(skill, /On a machine found-list, ask nothing: tell the person that the run\s+failed, and\s+that `N` may be taken, and stop\./);
+  // A provider that names an unavailable username (awebai/oats-aweb#286): nothing was created, so a new N is asked, not looked for.
+  assert.match(skill, /\*\*`E_SETUP_USERNAME_UNAVAILABLE`:\*\* aw refused `N` \(its message says\s+why: taken, reserved or its format\), and nothing was created\. On a\s+machine found-list, ask nothing: tell the person what it says, and\s+stop\. Otherwise ask the person for another `N`/);
 });
 
 test("the steward's harness is recorded before readiness and harness trust read it", () => {
