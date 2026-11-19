@@ -423,6 +423,7 @@ const DEFAULTS = [
   ["workspace.previous","Alt+↑"],
   ["workspace.next","Alt+↓"],
   ["instance.edit",{"mac":"Mod+Alt+R","other":"Alt+R"}],
+  ["agent.viewFocus",{"mac":"Mod+Alt+T","other":"Alt+T"}],
   ["app.chooseSoul",{"mac":"Mod+N","other":"Ctrl+Shift+N"}],
   ["app.shortcuts","Mod+,"],
   ["app.themeToggle",null],
@@ -487,6 +488,7 @@ const CTRL_ALT_MOVED = {
   "instance.edit": "Ctrl+Alt+R",
   // New agent (the Desktop UI rework, 2026-11-19): the Desktop's own chord, not a shared row yet, family by family too.
   "app.newAgent": "Ctrl+Alt+N",
+  "agent.viewFocus": "Ctrl+Alt+T",
   "tabs.nextPage": "Alt+Shift+→",
   "tabs.prevPage": "Alt+Shift+←",
   ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`tabs.goto${i + 1}`, `Ctrl+Alt+${i + 1}`])),

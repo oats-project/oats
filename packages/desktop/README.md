@@ -56,6 +56,10 @@ The shell has three navigation contexts:
 - **Instances** — the shell's single sidebar becomes a compact, recursively
   nested roster. Selecting a running instance opens its direct tmux-attach
   xterm terminal in the main area. Terminal tabs are scoped to this context.
+  With an OATS that reports the agent's board (feature `instance-board`), the terminal tab is the
+  **agent view**: the agent's facts above its terminal and its open questions under it, answered by
+  number onto the terminal's input line and sent by the person's own Enter (docs/desktop.md, "The
+  agent view: facts and questions"; renderer/README.md).
 - **Home** (where a window opens, the Desktop UI rework's slice 2) — what needs you (the agents waiting on you,
   then the running ones) and what you have (a count for each part of the workspace, each opening its
   Workspace tab), Home › Agents (every agent), and a first run for a workspace with no agents yet.

@@ -2301,6 +2301,28 @@ basis is `--tab-name-min` (102px, what the floor budgets the name), so line
 breaking sees the name at its minimum and the number wraps out of sight, whole,
 only when even that does not fit (`shell.css`, `.tab-trigger`).
 
+### The agent view (`agent-board.mjs`, `agent-board-tabs.mjs`)
+
+With the kernel's board (feature `instance-board`; the shared contract module
+`packages/client/instance-board.mjs` validates the row's `board` and the
+`inspect --home --board` answer, and holds the rules both clients share: the
+three shown facts, the hidden-fact rule, the typed answer `<id>: <option>`,
+the dialog claims), a terminal tab is the agent's view. `syncTabNeedsInput`
+calls `tabBoards.sync(tab, row, claim, workspace)` for each terminal tab, and
+gives the waiting row the claim only when that answers false: the board's own
+claim (producer `oats.board`) shows in the question zone instead. The view
+prepends `.agent-facts` and appends `.agent-questions` either side of the
+tab's `.term-wrap` (`place`, also after the shell appends the wrap), and the
+pane becomes a flex column (`.agent-view`), as with the waiting row; the
+terminal's geometry is never set here. Its two reads, the detail through
+`/api/capabilities` (`board: true`) and the claims through
+`/api/instance-events`, each carry a latest-intent counter checked on success
+and on rejection, and run when the view opens and when the board or the claim
+changes, never on an unchanged poll. The answer goes through
+`createTerminalTab`'s `type(text)`, the tab's own PTY lease (no control
+character, no line end), and the person's Enter is seen through its
+`onInput` observer. Alt+T is `agent.viewFocus` (`keybindings.mjs`).
+
 ### Workspace-local tab memory
 
 `workspace-tab-memory.mjs` retains each workspace's group membership/order,

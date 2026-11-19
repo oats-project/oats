@@ -9,7 +9,7 @@
  *   maxAge   seconds the kernel may reuse remote observations on a miss (a local inspect only)
  *   exec     how the CLI is run (cli-adapter.mjs `runJson`'s `io.exec`); without it, execFile
  *
- *   request  { action: 'inspect', selector: { soul, agentsRoot } | { home }, refresh?, instructions?, skills?, composedSkills? }
+ *   request  { action: 'inspect', selector: { soul, agentsRoot } | { home }, refresh?, instructions?, skills?, composedSkills?, board? }
  *   context  { workspace, cli, agents, instances, localCwd, catalogKey }
  *
  * It resolves the kernel's result with `observedAt` and `refreshing`, and throws an Error with a stable `code`
@@ -28,7 +28,8 @@ import { cliCapability, operationArgs } from './cli-adapter.mjs';
 import { inspectKey } from './inspect-cache.mjs';
 import { observationData } from './deployment-data.mjs';
 import { OBSERVE_MAX_AGE_FEATURE } from './deployment-contract.mjs';
-import { hostComposes, hostReportsSkills, hostComposesSkills } from './composed-gate.mjs';
+import { hostComposes, hostReportsSkills, hostComposesSkills, hostAdvertises, PROBE_FEATURES_FEATURE } from './composed-gate.mjs';
+import { BOARD_FEATURE } from './instance-board.mjs';
 import { canAddressRemote, unaddressableSentence, hostReason, shownLabel, unroutableReason } from './remote-address.mjs';
 
 const fail = (message, code = 'E_BAD_ARGS') => { throw Object.assign(new Error(message), { code }); };
@@ -37,7 +38,7 @@ const TEAM_LABEL = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 /** Admit a capability request in its context, or throw. `actions`: the actions the caller serves (an inspect
  * boundary serves only 'inspect'); any other is the same refusal as an unknown one. Returns what the call needs:
- * `{ action, server, label, refresh, instructions, skills, composedSkills, soul, agentsRoot, home, context, key }`, where
+ * `{ action, server, label, refresh, instructions, skills, composedSkills, board, soul, agentsRoot, home, context, key }`, where
  * `context` is the --dir the CLI runs in and `key` the inspect cache's key for the subject. */
 export function capabilityAdmission(request, { workspace, cli, agents = [], instances = [], catalogKey = null }, actions = ['inspect', 'run']) {
   if (!workspace) fail('Select a known workspace', 'E_WORKSPACE_UNKNOWN');
@@ -78,6 +79,13 @@ export function capabilityAdmission(request, { workspace, cli, agents = [], inst
   // the same way again: inspect of a soul only; routed only when the held row says the host lists them (hostComposesSkills).
   if (request.composedSkills !== undefined && (action !== 'inspect' || typeof request.composedSkills !== 'boolean' || selector.soul === undefined)) fail('Invalid composed skills flag');
   const composedSkills = request.composedSkills === true && (!server || hostComposesSkills(cli, workspace.group));
+  // board (feature instance-board): the agent's board with each fact's history and each question's context
+  // (`inspect --home --board`), inspect of a home only, read-only. Sent only to a CLI that advertises the feature;
+  // routed only when the held roster row says the host has it too (its own probe.features, relayed by a CLI with
+  // server-probe-features); otherwise it is dropped and the read is today's, which carries no history.
+  if (request.board !== undefined && (action !== 'inspect' || typeof request.board !== 'boolean' || selector.home === undefined)) fail('Invalid board flag');
+  const has = feature => !!cli?.ok && Array.isArray(cli.features) && cli.features.includes(feature);
+  const board = request.board === true && has(BOARD_FEATURE) && (!server || (has(PROBE_FEATURES_FEATURE) && hostAdvertises(workspace.group, BOARD_FEATURE)));
   let soul, agentsRoot, home, key;
   let context = workspace.scope;
   if (selector.home !== undefined) {
@@ -92,7 +100,7 @@ export function capabilityAdmission(request, { workspace, cli, agents = [], inst
     context = undefined;
     // Identity coordinates: a restarted or re-spawned seat under the same home is another subject.
     key = inspectKey({ deployment: workspace.scope, server, kind: 'home', home, instance: instance.instance,
-      identity: [instance.createdAt, instance.startedAt, instance.soul, instance.modules] });
+      identity: [instance.createdAt, instance.startedAt, instance.soul, instance.modules], board });
   } else if (selector.soul !== undefined) {
     const matches = agents.filter(a => a.name === selector.soul && a.agentsRoot === selector.agentsRoot);
     if (matches.length !== 1) fail('Select one soul and its agents root in this workspace');
@@ -101,15 +109,15 @@ export function capabilityAdmission(request, { workspace, cli, agents = [], inst
     context = dirname(agentsRoot);
     key = inspectKey({ deployment: workspace.scope, server, kind: 'soul', soul, agentsRoot, catalogKey, instructions, skills, composedSkills });
   } else fail('Select a soul or an instance home (inspection has no scope subject)');
-  return { action, server, label, refresh, instructions, skills, composedSkills, soul, agentsRoot, home, context, key };
+  return { action, server, label, refresh, instructions, skills, composedSkills, board, soul, agentsRoot, home, context, key };
 }
 
 /** The CLI call's options for an admitted request (cli-adapter.mjs `cliCapability`). */
-export function capabilityCall(request, { action, server, refresh, instructions, skills, composedSkills, soul, agentsRoot, home, context }, { workspace, cli, localCwd, maxAge }) {
+export function capabilityCall(request, { action, server, refresh, instructions, skills, composedSkills, board, soul, agentsRoot, home, context }, { workspace, cli, localCwd, maxAge }) {
   return {
     action, context, server, soul, agentsRoot, home,
     operation: request.operation, ...(request.args !== undefined ? { args: request.args } : {}), ...(instructions ? { instructions } : {}),
-    ...(skills ? { skills } : {}), ...(composedSkills ? { composedSkills } : {}),
+    ...(skills ? { skills } : {}), ...(composedSkills ? { composedSkills } : {}), ...(board ? { board } : {}),
     localCwd: server ? localCwd : context || workspace.scope,
     // --max-age travels only on a LOCAL inspect (reuse is local only: the kernel refuses it with --server)
     // and only when the probe declared observe-max-age (the adapter's call).
@@ -140,7 +148,7 @@ export function createInspectBoundary({ invoke = cliCapability, cache = null, ma
     async inspect(request, context) {
       const { workspace, cli, localCwd } = context;
       const admitted = capabilityAdmission(request, context, ['inspect']);
-      const { server, refresh, key } = admitted;
+      const { server, refresh, key, board } = admitted;
       const call = () => invoke(cli.bin, capabilityCall(request, admitted, { workspace, cli, localCwd, maxAge }), io);
       let envelope, observedAt, refreshing = false;
       if (cache) {
@@ -149,7 +157,8 @@ export function createInspectBoundary({ invoke = cliCapability, cache = null, ma
         // Live (observes the remotes afresh): a refresh, a routed inspect (reuse is local only, so it never carries
         // --max-age), or any read on a kernel without the feature. A refresh joins only a live flight.
         const live = refresh || !!server || !(Array.isArray(cli.features) && cli.features.includes(OBSERVE_MAX_AGE_FEATURE));
-        ({ envelope, observedAt, refreshing } = await cache.read(key, { deployment: workspace.scope, refresh, produce: call, store: !server, live }));
+        // A board read is never stored: its facts change while the view is open, and the view reads it on a change.
+        ({ envelope, observedAt, refreshing } = await cache.read(key, { deployment: workspace.scope, refresh, produce: call, store: !server && !board, live }));
       } else {
         envelope = await call();
         if (envelope.ok) observedAt = observationData(envelope).observedAt ?? new Date().toISOString();

@@ -95,6 +95,8 @@ import { revealInScrollport } from "./reveal-in-scrollport.mjs";
 import { rosterRowFacts } from "../../client/roster-row-facts.mjs";
 import { waitingClaim, waitingSentence, waitingDetail, waitingClock } from "../../client/waiting-on-you.mjs";
 import { syncWaitingRow } from "./waiting-row.mjs";
+import { createTabBoards } from "./agent-board-tabs.mjs";
+import { eventsSupported } from "../../client/instance-events-contract.mjs";
 import { createPanelOwner } from "./panel-owner.mjs";
 import { collapseKey, instanceVisibleInTree, waitingRollup, instanceId, rosterParentId, heldHome, backgroundPlacement, BACKGROUND_FEATURE, instanceSiblings, rowPinned, PIN_FEATURE } from "../../client/instance-tree.mjs";
 import { withParentGate } from "../../client/same-work.mjs";
@@ -1877,6 +1879,10 @@ function refreshPanelInstance(instances, workspace) {
  * or cleared reaches an open tab; the dot's state stays as it was drawn. The same claim draws the waiting row over the
  * tab's terminal (waiting-row.mjs, #1502), so each group's shown tab carries its own. */
 let tabNeedsInputRoster = { instances: [], workspace: null };
+// The agent view (S2-D, agent-board-tabs.mjs): the board around a terminal tab's terminal, while the CLI reports it.
+const tabBoards = createTabBoards({ features: () => cliStatus()?.features ?? null, eventsReadable: () => eventsSupported(cliStatus()),
+  post: (pathname, body) => api(pathname, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+  openLink: (url) => ctx.openExternal(url) });
 function syncTabNeedsInput(instances, workspace) {
   tabNeedsInputRoster = { instances, workspace };
   const now = Date.now();
@@ -1904,7 +1910,8 @@ function syncTabNeedsInput(instances, workspace) {
     }
     if (trigger.getAttribute("aria-label") !== label) trigger.setAttribute("aria-label", label);
     setTabTitle(trigger, { note });
-    syncWaitingRow(tab.paneEl, claim, now);
+    // The board's own claim shows in the agent view's question zone (agent-board-tabs.mjs), not in the waiting row.
+    syncWaitingRow(tab.paneEl, tabBoards.sync(tab, row, claim, workspace) ? null : claim, now);
   }
 }
 const workspaceTabMemory = createWorkspaceTabMemory();
@@ -2283,6 +2290,7 @@ function closeTab(id, restoreFocus = false, { explicit = true, confirmed = false
     if (r && typeof r.then === "function" && t.key) reserveKey(t.key, r);
   } catch (e) { console.error(e); }
   t.tabEl.remove();
+  tabBoards.close(t);
   syncWaitingRow(t.paneEl, null);
   t.paneEl.remove();
   tabs.delete(id);
@@ -2531,6 +2539,7 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
   if (!commitDestination()) return notify('The terminal destination changed. Select the instance again.');
   const wrap = document.createElement("div");
   wrap.className = "term-wrap";
+  let madeId = null; // the tab's id once added: the board's input observer reads its record
 
   const type = terminalTypography();
   const term = new Terminal(terminalOptions({
@@ -2593,6 +2602,8 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
       if (ev.type === "keydown") handleKeydown(ev, { insideTerminal: true });
       return true;
     },
+    // The person's own typing: an Enter with a board answer on the input line hides its card (agent-board.mjs).
+    onInput: (data) => { const record = madeId === null ? null : tabs.get(madeId); if (record) tabBoards.input(record, data); },
   });
 
   const made = addTab({
@@ -2619,7 +2630,12 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
   if (!made) { unwire(); term.dispose(); return; } // lost a race to an identical tab
   // A tab opened on a waiting instance shows it at once, from the last painted roster (#558).
   syncTabNeedsInput(tabNeedsInputRoster.instances, tabNeedsInputRoster.workspace);
+  madeId = made.id;
+  // The agent view's two hooks (agent-board.mjs), read when used: its answer goes through this tab's own PTY lease, and
+  // the person's Enter sends it from the terminal, which takes the focus.
+  Object.assign(tabs.get(made.id), { typeText: (text) => tab.type(text), focusTerminal: () => term.focus() });
   made.paneEl.append(wrap);
+  tabBoards.place(tabs.get(made.id));
   term.open(wrap);
   glyphs.ensure();
   fitTerminal(term, fit);
@@ -3677,6 +3693,10 @@ for (const [id, does] of [["roster.openPrevious", "previous"], ["roster.openNext
 }
 // The instance's name and colour (#1421; CHORDS edit-instance, no leader key): the leader's target, from
 // every focus, a terminal's included. Inert under a modal dialog or the palette, as the leader is.
+// The agent view (S2-D): Alt+T moves the focus through the shown terminal tab's view: its question zone, its facts,
+// back to its terminal. Nothing when the tab shows no board. Inert under a modal dialog or the palette.
+registerAction({ id: "agent.viewFocus", label: "Agent: questions and facts (focus)", context: "global", when: () => !modalOpen(),
+  run: () => { const t = activeTab == null ? null : tabs.get(activeTab); if (!t || t.kind !== "terminal" || !tabBoards.cycleFocus(t)) sayInHint("This agent has no questions or facts to show."); } });
 registerAction({ id: "instance.edit", label: "Instance: name and colour…", context: "global", when: () => !modalOpen(),
   run: (e) => openInstanceEdit(leaderTargetId(e?.target ?? document.activeElement)) });
 

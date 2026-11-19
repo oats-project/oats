@@ -8,6 +8,7 @@ import { readIdentity } from "./workspace-views.mjs";
 import { sameRepo } from "./repo-moves.mjs";
 import { hostAdvertises } from "./composed-gate.mjs";
 import { PIN_FEATURE } from "./instance-tree.mjs";
+import { BOARD_FEATURE, boardData } from "./instance-board.mjs";
 /** Projection of the installed CLI's remote roster. Never reads remote paths locally. */
 export function remoteWorkspace(group) {
   return {
@@ -49,7 +50,7 @@ export function remotePanel(group, at) {
   const described = name => { const soul = (group.souls || []).find((a) => a?.name === name); return typeof soul?.description === "string" ? soul.description : null; };
   // A Herdr-recorded row is unsupported whatever the host's probe said: it cannot open or start.
   const instances = (group.instances || []).map(({ runtime: _released, runtimeErrorOrigin: _sent, retire: sentRetire, sameWork: sentSameWork,
-    sameWorkKnown: _gate, pinned: sentPinned, ...i }) => {
+    sameWorkKnown: _gate, pinned: sentPinned, board: sentBoard, ...i }) => {
     const unsupported = unsupportedSession(i);
     const origin = unsupported ? unsupportedSessionOrigin(i) : group.probe.ok || (group.probe.error?.message && madeByKernel(group.probe.error)) ? "kernel" : "roster-read";
     const row = {
@@ -77,6 +78,10 @@ export function remotePanel(group, at) {
       // probe.features, which a CLI with server-probe-features relays). The kernel relays a row's pinned whatever
       // its host lists, so a stray field from an older host, or an unknown list, never pins a row here.
       ...(sentPinned === true && hostAdvertises(group, PIN_FEATURE) ? { pinned: true } : {}),
+      // Feature instance-board: the agent's facts and questions (instance-board.mjs), validated again here, and only
+      // from a host whose own feature list names it, as the pin is; anything else leaves the row with no board field,
+      // so its tab is today's terminal. `null`: the host has the feature and the home has no board.
+      ...(sentBoard !== undefined && hostAdvertises(group, BOARD_FEATURE) ? { board: boardData(sentBoard) } : {}),
       ...(unsupported ? { running: null, runtimeState: "unsupported", runtimeError: unsupported } : {}),
     };
     return hasRuntimeError(row) && origin ? { ...row, runtimeErrorOrigin: origin } : row;

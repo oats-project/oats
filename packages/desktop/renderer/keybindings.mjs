@@ -405,6 +405,10 @@ function keymapIn(family) {
     // the seven) on Linux/Windows, ⌘⌥R on macOS. The instance is the leader's
     // target (shell.mjs leaderTargetId).
     "instance.edit": chordOf("instance.edit"),
+    // The agent view (S2-D): the focus through the shown agent's question zone and facts, and back to its terminal.
+    // Alt+T in the Alt family (readline's transpose-words still comes from Esc, then T), Ctrl+Alt+T in the other
+    // two, which leave Alt alone; ⌘⌥T on macOS. The Desktop's own until the shared table (slice 4) takes a row.
+    "agent.viewFocus": { mac: "Mod+Alt+T", other: family === "alt" ? "Alt+T" : "Ctrl+Alt+T" },
     "app.chooseSoul": { mac: "Mod+N", other: "Ctrl+Shift+N" },
     "app.shortcuts": "Mod+,",
     // No default (spec F): ⌘⇧T is "reopen closed tab" in browsers and Ctrl+Shift+T "new tab" in
@@ -530,7 +534,7 @@ export function defaultBinding(actionId, isMac = defaultIsMac(), family = chordF
 // out: app.openFile (Ctrl+O) and focus.next/prevRegion (F6: mc, htop, nano).
 export const TERMINAL_ALLOWLIST = Object.freeze([
   "app.leader", "app.palette", "app.quickOpenSouls", "app.newAgent", "app.workspaces", "app.chooseSoul", "app.themePicker", "app.shortcuts", "terminal.copySelection",
-  "roster.openPrevious", "roster.openNext", "workspace.previous", "workspace.next", "terminal.focusMode", "instance.edit",
+  "roster.openPrevious", "roster.openNext", "workspace.previous", "workspace.next", "terminal.focusMode", "instance.edit", "agent.viewFocus",
   "tabs.next", "tabs.prev", "tabs.nextPage", "tabs.prevPage", "tabs.close",
   ...Array.from({ length: 9 }, (_, i) => `tabs.goto${i + 1}`),
   "split.vertical", "split.horizontal", "split.close", "split.focusPrevGroup", "split.focusNextGroup",
