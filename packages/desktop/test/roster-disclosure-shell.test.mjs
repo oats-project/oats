@@ -21,7 +21,6 @@ import { runtimeState, unsupportedSession } from "../../client/instance-presenta
 import { canAddressRemote, rowReason } from "../../client/remote-address.mjs";
 import { createRuntimeBadge } from "../renderer/identity-marks.mjs";
 import { iconElement } from "../renderer/shell-icons.mjs";
-import { rosterTipFacts } from "../renderer/roster-tip.mjs";
 import { setTabTitle } from "../renderer/tab-a11y.mjs";
 import { NO_ANSWER_CODE, unservedError } from "../renderer/deployment-header.mjs";
 import { rosterKeyAction, moveTarget } from "../renderer/roster-keys.mjs";
@@ -54,8 +53,6 @@ function fixture(t, rows = ROWS, extra = {}) {
     // The shipped default: no root opened by hand.
     expandedInstances: new Set(),
     currentWorkspace: () => "A", workspaceGeneration: () => 0, collapsedInstances: new Set(),
-    rosterTip: { bind() {}, hide() {}, sync() {} }, rosterTipFacts,
-    rosterPrs: { get: () => null, refresh() {} },
     spawnJobs: { rows: () => [], announce: () => false, check() {} },
     tabs: new Map(), activeTab: null, tabOpenIntents: { applyFocus: f => f(), invalidate() {} },
     openTerminalTab: (i) => opened.push(i.instance), openInstanceStart: assert.fail, openLifecycleDialog: assert.fail,
