@@ -67,6 +67,8 @@ function shell(t, shellSource = source, { storage = {}, gitPanel } = {}) {
     // The palette action notes the leader's target as it opens (the instance entries act on it).
     palette: { toggle: () => events.push(["palette"]), isOpen: () => false }, leaderTargetId: () => null,
     quickOpen: { toggle: () => events.push(["quickOpen"]) },
+    // Slice 5: app.quickOpenSouls opens the New agent form on its soul list (shell.mjs soulSpawn), never under a modal.
+    soulSpawn: { open: (soul) => events.push(["newAgent", soul ?? null]) }, modalOpen: () => false,
     shortcutsEditor: { close() {}, open: () => events.push(["shortcuts"]) },
     THEMES, setTheme: id => events.push(["theme", id]),
     toggleTheme: () => events.push(["theme"]), themePicker: { toggle: () => events.push(["themePicker"]) },
@@ -334,10 +336,10 @@ test("the foot is one bar: the OATS mark, Spawn instance (Quick Open), the sideb
   assert.deepEqual([getBinding("app.quickOpenSouls", true), getBinding("app.quickOpenSouls", false)], ["Mod+P", "Alt+P"]);
   assert.equal(getBinding("app.chooseSoul", true), "Mod+N", "redesign shortcut chooses a soul, never launches one");
   assert.equal(getBinding("app.chooseSoul", false), "Ctrl+Shift+N", "Linux/Windows: Ctrl+Shift+N (spec F), Ctrl+N stays the program's");
-  // A click opens Quick Open, once, and supersedes a pending open; it opens no chooser.
+  // A click opens the New agent form on its soul list, once, and supersedes a pending open; it opens no chooser.
   const pending = s.c.tabOpenIntents.begin(); spawn.click();
   assert.equal(pending(), false, "a click supersedes a pending open");
-  assert.deepEqual(s.events.slice(3), [["quickOpen"]], "one click, one Quick Open (after the menu's three)");
+  assert.deepEqual(s.events.slice(3), [["newAgent", null]], "one click, one New agent form (after the menu's three)");
   assert.equal(s.loads.length, 0, "no chooser");
   // The chooser stays the registry's: app.chooseSoul, the palette's "Souls: choose a soul to spawn (Workspace › Souls)".
   const before = s.c.tabOpenIntents.begin(); runAction("app.chooseSoul");

@@ -1241,7 +1241,7 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, ca
     const draftChoice = choices(), known = local() && !!shown && shown.key === choiceKey(draftChoice.value) && !readDue();
     const refused = known && (!shown.data || !bound(shown.data));
     spawn.textContent = flight || pressed ? (phase === 'checking' ? 'Checking…' : 'Spawning…')
-      : ['unknown', 'pending'].includes(phase) ? 'Check result' : ['complete', 'partial'].includes(phase) ? 'Created' : phase === 'incomplete' ? 'Spawn incomplete' : 'Spawn';
+      : ['unknown', 'pending'].includes(phase) ? 'Check result' : ['complete', 'partial'].includes(phase) ? 'Created' : phase === 'incomplete' ? 'Spawn incomplete' : 'Start';
     spawn.setAttribute('aria-busy', String(!!(flight || pressed)));
     const recovering = ['unknown', 'pending'].includes(phase);
     spawn.disabled = !current() || busy() || !!pressed || !!blocking || ['complete', 'partial', 'incomplete'].includes(phase)
@@ -1644,13 +1644,16 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, ca
   let harnessDefaultSeen = null;
   const soulDefaultHarness = () => !local() ? remoteSoulHarness()
     : harnessDefaultSeen ?? shownLaunch(soul.launch, cli())?.effective?.harness ?? null;
-  harnessSeg.addEventListener('change', event => {
+  // On `input` too, which a click fires before `change`: the form's own `input` listener repaints the segments from the
+  // value, and must find the new one there (as the background switch is touched on the press itself).
+  const chooseHarness = event => {
     const input = event.target;
     if (input?.type !== 'radio' || !input.checked) return;
     const next = input.value === soulDefaultHarness() && !config.value ? '' : input.value;
     if (runtime.value === next) return;
     runtime.value = next; runtime.dispatchEvent(new doc.defaultView.Event('change', { bubbles: true }));
-  });
+  };
+  for (const type of ['input', 'change']) harnessSeg.addEventListener(type, chooseHarness);
   /** The segments follow the value: the chosen harness, else the one the preview for these choices launches, else the
    * soul's default; the default is marked in words. */
   function syncHarness(data) {

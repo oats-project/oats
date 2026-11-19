@@ -203,12 +203,13 @@ const flowSource = shellSource.match(/async function openTerminalTabFlow\(ref, n
 function shell(t) {
   assert.ok(composition.includes('createSpawnFollow') && composition.includes('watchOperator(document)') && flowSource, 'the shipped composition and open flow');
   const dom = new JSDOM(`<body><button id="card">card</button><input id="search" type="search"><div id="dialog" aria-modal="true"></div>
-    <div class="term-wrap" id="origin"><textarea class="xterm-helper-textarea" id="origin-input"></textarea></div><div id="tabhost"></div></body>`);
+    <div class="term-wrap" id="origin"><textarea class="xterm-helper-textarea" id="origin-input"></textarea></div><div id="tabhost"></div>
+    <button id="roster-row" class="ctx-inst">dev-x</button></body>`);
   t.after(() => dom.window.close());
   const document = dom.window.document;
   document.getElementById('dialog').hidden = true;
   const live = { ...row, createdAt: '2026-10-01T10:00:00.000Z', tmux: { session: 'dev-x' } };
-  const panels = [], marked = [], said = [], watches = [];
+  const panels = [], marked = [], said = [], watches = [], shownRows = [];
   const c = {
     createSpawnFollow, instanceActionTarget, sameInstanceActionTarget, instanceId, terminalKey, document,
     // jsdom's events are untrusted; the browser's are the operator's.
@@ -222,16 +223,19 @@ function shell(t) {
     api: () => { const gate = deferred(); panels.push(gate); return gate.promise; },
     resolveTerminalOpen: (instances, ref, ws) => { const inst = instances.find(i => i.home === ref.home); return inst ? { inst, key: terminalKey(ws, inst) } : { error: 'unknown', name: ref.instance }; },
     whenKeyFree: async () => {},
+    // The roster selects the new row and gives it the keyboard focus (shell.mjs showInRoster, read: false).
+    showInRoster: async (r, options) => { shownRows.push([r.instance, options]); document.getElementById('roster-row').focus(); return true; },
     // The terminal's mount: addTab makes and selects its tab at once, only while the open still owns it; its
     // input takes focus when it is ready (`ready`), only if the open still owns it and it is still selected.
     ready: undefined, newInput: null,
-    openTerminalTabInner: async (inst, ws, key, owns) => {
+    // Its input takes focus only when the open asks for it (`focusContent`, the shipped openTerminalTabInner's 8th).
+    openTerminalTabInner: async (inst, ws, key, owns, _notify, _commit, _read, focusContent = true) => {
       if (!owns()) return;
       const paneEl = document.createElement('div'); const input = document.createElement('textarea'); input.className = 'xterm-helper-textarea';
       paneEl.append(input); document.getElementById('tabhost').append(paneEl); c.newInput = input;
       c.tabs.set(7, { kind: 'terminal', key, instanceRef: inst, paneEl }); c.activeTab = 7;
       await c.ready;
-      if (owns() && c.activeTab === 7) input.focus();
+      if (focusContent && owns() && c.activeTab === 7) input.focus();
     },
   };
   t.after(() => watches.forEach(w => w.dispose()));
@@ -243,7 +247,7 @@ function shell(t) {
   const el = id => document.getElementById(id);
   // The press: the dialog was opened from a terminal and its close returned focus there.
   const press = () => { el('origin-input').focus(); follow.follow('spawn-1'); };
-  return { document, el, c, follow, live, panels, marked, said, panel, press, settle: () => new Promise(r => setImmediate(r)) };
+  return { document, el, c, follow, live, panels, marked, said, shownRows, panel, press, settle: () => new Promise(r => setImmediate(r)) };
 }
 
 async function arrive(u) {
@@ -252,11 +256,14 @@ async function arrive(u) {
   return arrival;
 }
 
-test('shell: opened from a terminal, focus returned there, no input since the press → its terminal opens and is selected', async t => {
+test('shell: opened from a terminal, focus returned there, no input since the press → its terminal opens and is selected, without input focus', async t => {
   const u = shell(t);
   u.press();
   assert.equal(await arrive(u), 'opened');
-  assert.equal(u.c.activeTab, 7); assert.equal(u.document.activeElement, u.c.newInput);
+  assert.equal(u.c.activeTab, 7);
+  // launch-instance-opens-view-without-input-focus: its row is selected and holds the keyboard; the terminal takes no keys.
+  assert.equal(JSON.stringify(u.shownRows), JSON.stringify([['dev-x', { read: false }]]));
+  assert.equal(u.document.activeElement, u.el('roster-row')); assert.notEqual(u.document.activeElement, u.c.newInput);
   assert.deepEqual(u.marked, []); assert.deepEqual(u.said, ['dev-x spawned']);
 });
 

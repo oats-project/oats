@@ -24,7 +24,7 @@ const created = name => kernel(name).result;
 test('after the first settle, no field is disabled, hidden or rebuilt while a newer preview reads; focus and caret stay', async t => {
   const g = gates(); const u = await mountSpawn(t, { previewGate: g.gate });
   await u.open();
-  assert.equal(u.q('.spawn-preview').closest('[hidden]'), null, 'the scoped preview column');
+  assert.equal(u.q('.spawn-preview').closest('[hidden]'), null, 'the preview, in Advanced');
   const before = formControls(u);
   g.hold();
   const purpose = u.q('.fpurpose'); purpose.focus();
@@ -35,10 +35,10 @@ test('after the first settle, no field is disabled, hidden or rebuilt while a ne
   const during = formControls(u);
   assert.equal(during.length, before.length, 'no control added or removed');
   during.forEach((c, i) => { assert.equal(c.el, before[i].el, 'the same element: not rebuilt'); assert.equal(c.disabled, before[i].disabled, c.el.className); assert.equal(c.hidden, before[i].hidden, c.el.className); });
-  assert.equal(u.q('.fspawn').disabled, false, 'Spawn stays pressable while the preview reads');
+  assert.equal(u.q('.fspawn').disabled, false, 'Start stays pressable while the preview reads');
   assert.equal(u.doc.activeElement, purpose); assert.deepEqual([purpose.selectionStart, purpose.selectionEnd], [1, 2]);
   // Other fields change while it reads: nothing waits.
-  u.q('.spawn-seg input[value=child]').click(); u.q('.spawn-seg input[value=unrelated]').click();
+  u.q('.fharness input[value=claude]').click(); u.q('.fharness input[value=pi]').click();
   g.open(); for (const h of g.held) h.resolve(); await settle(20);
   formControls(u).forEach((c, i) => { assert.equal(c.el, before[i].el); assert.equal(c.disabled, before[i].disabled, c.el.className); });
   assert.equal(u.q('.spawn-preview').getAttribute('aria-busy'), 'false'); assert.equal(u.q('.spawn-preview-updating').hidden, true);
@@ -110,7 +110,7 @@ test('an edit while the press waits drops it: "Changed: press Start again", noth
   }
 });
 
-test('a pending press whose preview fails shows the failure, and the button returns to Spawn; nothing spawns', async t => {
+test('a pending press whose preview fails shows the failure, and the button returns to Start; nothing spawns', async t => {
   const g = gates();
   const u = await mountSpawn(t, { previewGate: g.gate, previewName: (_soul, choices) => choices.purpose === 'broken' ? 'preview-clone-missing' : undefined });
   await u.open(); g.hold();
