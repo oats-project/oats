@@ -114,7 +114,6 @@ export const soulInstructionsCSS = `
 .soul-instructions .cap-tree [role=treeitem] [role=group] .cap-node-name.mono { font-family:var(--mono,monospace); font-size:11.5px; }
 .soul-instructions .soul-section-title { margin:4px 6px 6px; color:var(--fg); font-size:11.5px; font-weight:650; }
 .soul-instructions .soul-section + .soul-section { margin-top:12px; padding-top:10px; border-top:1px solid var(--border); }
-.soul-instructions .soul-subgroup > .cap-contents-group-label { margin-top:12px; }
 `;
 
 /** The two tabs (OWN, the soul's own AGENTS.md; COMPOSED, the composed one), and a skill file's key: in "Defined in
@@ -446,33 +445,28 @@ export function createSoulInstructions(doc, { openExternal = null, canOpenCapabi
     navBody.replaceChildren();
     const count = Array.isArray(composedSkills) ? composedSkills.length : Array.isArray(skills) ? skills.length : null;
     skillsCount.textContent = count === null ? '' : `· ${count}`;
-    // One tree of two labelled sections (one tab stop; the arrows cross every boundary).
+    // One tree of two labelled sections, each a group of skills or its note (one tab stop; the arrows cross the boundary).
     const tree = node('ul', 'cap-tree'); tree.setAttribute('role', 'tree'); tree.setAttribute('aria-label', `${SOUL_INSTRUCTIONS_COPY.skillsGroup} of ${name || 'this soul'}`);
     tree.addEventListener('keydown', keys.onKey);
-    const group = (parent, id, title, cls) => {
-      const wrap = node('li', cls); wrap.setAttribute('role', 'none');
-      title.id = id;
-      const items = node('ul'); items.setAttribute('role', 'group'); items.setAttribute('aria-labelledby', id);
-      wrap.append(title, items); parent.append(wrap); return items;
-    };
     const section = (id, title) => {
       const wrap = node('li', 'soul-section'); wrap.setAttribute('role', 'none');
-      const heading = node('div', 'soul-section-title', title); heading.id = id; wrap.append(heading); tree.append(wrap); return wrap;
+      const heading = node('div', 'soul-section-title', title); heading.id = id;
+      const items = node('ul'); items.setAttribute('role', 'group'); items.setAttribute('aria-labelledby', id);
+      wrap.append(heading, items); tree.append(wrap); return items;
     };
-    const noteRow = (parent, ...notes) => { parent.append(...notes.map(text => node('p', 'cap-contents-note', text))); };
+    /** Notes in place of a section's skills (or after them): rows that are not tree items. */
+    const noteRow = (parent, ...notes) => { const row = node('li'); row.setAttribute('role', 'none'); row.append(...notes.map(text => node('p', 'cap-contents-note', text))); parent.append(row); };
     const listed = Array.isArray(skills) && skills.length > 0;
     const mine = section(`${uid}-soul`, SOUL_INSTRUCTIONS_COPY.soulSection);
-    if (listed) { const items = group(mine, `${uid}-skills`, node('div', 'cap-contents-group-label', SOUL_INSTRUCTIONS_COPY.skillsGroup), 'soul-subgroup'); for (const skill of skills) items.append(skillItem(skill)); }
+    if (listed) for (const skill of skills) mine.append(skillItem(skill));
     else noteRow(mine, skillsNote());
     const theirs = section(`${uid}-composed`, SOUL_INSTRUCTIONS_COPY.composedSection);
-    const composedGroup = () => group(theirs, `${uid}-composed-skills`, node('div', 'cap-contents-group-label', SOUL_INSTRUCTIONS_COPY.skillsGroup), 'soul-subgroup');
     if (composedSkills !== undefined) {
-      if (Array.isArray(composedSkills) && composedSkills.length) { const items = composedGroup(); for (const skill of composedSkills) items.append(skillItem(skill, skillSource(skill.source))); }
+      if (Array.isArray(composedSkills) && composedSkills.length) for (const skill of composedSkills) theirs.append(skillItem(skill, skillSource(skill.source)));
       else noteRow(theirs, composedSkills === null ? SOUL_INSTRUCTIONS_COPY.composedSkillsUnlistable
         : composedSkills === false ? SOUL_INSTRUCTIONS_COPY.composedSkillsUnreadable : SOUL_INSTRUCTIONS_COPY.noComposedSkills);
     } else if (listed) {
-      const items = composedGroup();
-      for (const skill of skills) items.append(skillItem(skill, skillSource('soul')));
+      for (const skill of skills) theirs.append(skillItem(skill, skillSource('soul')));
       noteRow(theirs, SOUL_INSTRUCTIONS_COPY.capabilitySkills);
     } else if (Array.isArray(skills)) noteRow(theirs, skillsNote(), SOUL_INSTRUCTIONS_COPY.capabilitySkills);
     else noteRow(theirs, skillsNote());
