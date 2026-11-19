@@ -26,11 +26,7 @@
      "tmux": null,
      "session": {
       "provider": "oats.bb",
-      "endpoint": {
-       "server": "http://127.0.0.1:38886",
-       "projectId": "proj_release",
-       "threadId": "thr_release"
-      }
+      "threadId": "thr_release"
      },
      "running": null,
      "runtimeState": "unknown",
@@ -70,11 +66,7 @@
      "tmux": null,
      "session": {
       "provider": "oats.bb",
-      "endpoint": {
-       "server": "http://127.0.0.1:38886",
-       "projectId": "proj_redesign",
-       "threadId": "thr_redesign"
-      }
+      "threadId": "thr_redesign"
      },
      "running": true,
      "runtimeState": "unknown",
@@ -109,11 +101,7 @@
      "tmux": null,
      "session": {
       "provider": "oats.bb",
-      "endpoint": {
-       "server": "http://127.0.0.1:38886",
-       "projectId": "proj_mockups",
-       "threadId": "thr_mockups"
-      }
+      "threadId": "thr_mockups"
      },
      "running": true,
      "runtimeState": "unknown",
@@ -148,11 +136,7 @@
      "tmux": null,
      "session": {
       "provider": "oats.bb",
-      "endpoint": {
-       "server": "http://127.0.0.1:38886",
-       "projectId": "proj_harvest",
-       "threadId": "thr_harvest"
-      }
+      "threadId": "thr_harvest"
      },
      "running": null,
      "runtimeState": "unknown",
@@ -187,11 +171,7 @@
      "tmux": null,
      "session": {
       "provider": "oats.bb",
-      "endpoint": {
-       "server": "http://127.0.0.1:38886",
-       "projectId": "proj_ci",
-       "threadId": "thr_ci"
-      }
+      "threadId": "thr_ci"
      },
      "running": null,
      "runtimeState": "unknown",
@@ -257,11 +237,7 @@
      "tmux": null,
      "session": {
       "provider": "oats.bb",
-      "endpoint": {
-       "server": "http://127.0.0.1:38886",
-       "projectId": "proj_research",
-       "threadId": "thr_research"
-      }
+      "threadId": "thr_research"
      },
      "running": null,
      "runtimeState": "unknown",
@@ -301,11 +277,7 @@
      "tmux": null,
      "session": {
       "provider": "oats.bb",
-      "endpoint": {
-       "server": "http://127.0.0.1:38886",
-       "projectId": "proj_digest",
-       "threadId": "thr_digest"
-      }
+      "threadId": "thr_digest"
      },
      "running": false,
      "runtimeState": "stopped",

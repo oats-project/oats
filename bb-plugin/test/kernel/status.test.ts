@@ -46,8 +46,8 @@ describe("A4 status()", () => {
       team: "default:oats.aweb.ai",
       address: null,
       backend: "bb",
-      server: "http://127.0.0.1:38886",
-      projectId: "proj_release",
+      server: null,
+      projectId: null,
       threadId: "thr_release",
       running: null,
       runtimeState: "unknown",
@@ -98,7 +98,7 @@ describe("A4 status()", () => {
     for (const group of roster.agents) {
       for (const instance of group.instances) {
         instance.futureFact = { a: 1 };
-        if (instance.session) instance.session.endpoint.region = "eu";
+        if (instance.session) instance.session.endpoint = { server: "http://127.0.0.1:38886", region: "eu" };
         if (instance.waitingOnYou) instance.waitingOnYou.urgency = "high";
       }
     }

@@ -1,5 +1,5 @@
 // `oats status --json`: the roster, read into the plugin's Agent rows (the interface agreed with the
-// kernel side, v2). Unknown fields are ignored; a row with no `instance` fails the whole read.
+// kernel side, v3). Unknown fields are ignored; a row with no `instance` fails the whole read.
 import { z } from "zod";
 import type { Agent } from "../model/types.js";
 import { shaped } from "./envelope.js";
@@ -18,9 +18,7 @@ const row = z.looseObject({
   identityAddress: text,
   capabilityMeta: z.record(z.string(), z.unknown()).nullish(),
   backend: text,
-  session: z
-    .looseObject({ endpoint: z.looseObject({ server: text, projectId: text, threadId: text }).nullish() })
-    .nullish(),
+  session: z.looseObject({ threadId: text }).nullish(),
   running: z.boolean().nullish(),
   runtimeState: text,
   runtimeError: text,
@@ -31,6 +29,14 @@ const roster = z.looseObject({
   agents: z.array(z.looseObject({ name: z.string().min(1), instances: z.array(row) })),
   workspace: z.looseObject({ key: text }).nullish(),
 });
+
+/**
+ * The bb thread a status row is joined by: `session.threadId`. The one place that reads it, since
+ * the kernel side may still move it.
+ */
+function threadIdOf(source: z.output<typeof row>): string | null {
+  return source.session?.threadId ?? null;
+}
 
 const identityMeta = z.looseObject({ alias: text, team: text });
 
@@ -50,7 +56,6 @@ function toAgent(group: { name: string }, source: z.output<typeof row>): Agent {
       }
     }
   }
-  const endpoint = source.session?.endpoint ?? null;
   const waiting = source.waitingOnYou ?? null;
   return {
     instance: source.instance,
@@ -65,9 +70,11 @@ function toAgent(group: { name: string }, source: z.output<typeof row>): Agent {
     address: source.identityAddress ?? source.identity?.address ?? null,
     // A row of a kernel that names no backend is a tmux home: tmux was the only one.
     backend: source.backend ?? "tmux",
-    server: endpoint?.server ?? null,
-    projectId: endpoint?.projectId ?? null,
-    threadId: endpoint?.threadId ?? null,
+    // A status row carries the thread id alone (interface v3): the server and the project are on
+    // `oats session inspect` and on a launched spawn's answer, which nothing here draws.
+    server: null,
+    projectId: null,
+    threadId: threadIdOf(source),
     running: source.running ?? null,
     runtimeState: source.runtimeState ?? null,
     runtimeError: source.runtimeError ?? null,
