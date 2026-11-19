@@ -78,7 +78,9 @@ export const ACTIONS = Object.freeze([
   // Pinned instances (feature instance-pin; docs/tui.md, "Pinning"): at once, no confirmation (a pin only orders the
   // list, and the same key undoes it). `p` is a new default key: a tui.json that gives it to another action is
   // refused at the start with the line that says so (config.mjs), until that action moves or pin gets another key.
-  { id: "pin", keys: ["p"], label: "pin", views: [["instances", "pin the selected agent to the top of its machine's list, or unpin it, as oats instance pin <name> on|off does; everyone viewing that machine sees it; it needs an OATS that lists instance-pin, and says so without one"]] },
+  // Lower-case, unlike the four acts above: it opens no confirmation and changes nothing but the order. Its help
+  // line fits one row of the help: the shared pin and the feature's line are in docs/tui.md and on the status line.
+  { id: "pin", keys: ["p"], label: "pin", views: [["instances", "pin the selected agent at the top of its list or unpin it, as oats instance pin <name> on|off; needs instance-pin"]] },
   { id: "help", label: "help" },
   { id: "close", keys: ["escape"], label: "close" },
   { id: "quit", keys: ["q", "ctrl+c"], label: "quit" },

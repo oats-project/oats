@@ -109,8 +109,7 @@ test("the help lists p, what it does, and the command it runs; the key is the ac
   const pin = ACTIONS.find((action) => action.id === "pin");
   assert.deepEqual(pin.keys, ["p"]);
   const text = rowStrings(helpRows(ACTIONS, false, 400), 400).join("\n");
-  assert.match(text, /\bp +pin the selected agent to the top of its machine's list, or unpin it, as oats instance pin <name> on\|off does/);
-  assert.match(text, /needs an OATS that lists instance-pin/);
+  assert.match(text, /\bp +pin the selected agent at the top of its list or unpin it, as oats instance pin <name> on\|off; needs instance-pin$/m, "one row: the key, the act, the command and the feature it needs");
 });
 
 test("pinInstance runs the kernel's verb as argv and reads its answer by the shared rule", async () => {
