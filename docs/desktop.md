@@ -270,11 +270,11 @@ workspace on a server: `name — server`).
 
 The sidebar, top to bottom: the **Workspace** heading, with **Add local
 workspace…** (the **+**) at its end, over the list of workspaces; a thin line;
-two pinned rows, **Workspace overview** and **Automations**, drawn like the
+two pinned rows, **Home** and **Automations**, drawn like the
 instance rows (Automations shows a red dot, and says "a run failed", while a
 schedule's last run failed: see [Scheduling agents](#scheduling-agents-and-wake-messages));
-another line; **Instances**, a heading with the running count over the list of
-instances; and, over a line, the foot, one bar: at its left **N need you**, the
+another line; **Agents**, a heading with the running count over the list of
+agents; and, over a line, the foot, one bar: at its left **N need you**, the
 number of this workspace's agents that need input (hidden when none does;
 it takes you to the first of them, in the roster's order, expanding a collapsed
 parent or opening the Background section to show it), and at its right
@@ -284,10 +284,35 @@ shortcuts. The foot has no mark, no Hide sidebar button and no settings menu:
 ⌘B / Ctrl+Shift+B and the palette's **Sidebar: toggle (hide/show)** hide the
 sidebar, and the palette's **Theme: choose…**, **Font: choose…** and
 **Shortcuts: edit keyboard shortcuts…** open the theme, the font and the
-shortcuts. A window opens on the **Workspace overview** page, on its **Souls**
-tab: at launch, and after you choose a workspace for it. Connections is in the
+shortcuts. A window opens on **Home**: at launch, and after you choose a
+workspace for it. Connections is in the
 command palette (**Settings: Connections…**), and the palette opens with its
 shortcut or Ctrl+X then `k`.
+**Home** answers two questions on one page: what needs you, and what you
+have.
+
+- **The board.** **Needs you** lists the agents waiting on you, each with its
+  message, newest first; **Running** lists the live ones, newest first. A
+  group with nobody in it isn't shown. Stopped agents aren't on the board, and
+  a live agent is "running": OATS doesn't report working or idle yet, and the
+  Desktop doesn't guess it. There is no "New" group yet either, since nothing
+  records which agents stopped or finished since you last looked. Enter (or a
+  click) on a row opens it as it does in the roster: a running agent's
+  terminal, a stopped one's Start.
+- **The overview.** Agents, Souls, Capabilities, Teams, Machines and Graph,
+  each with what you have ("You have 4 souls"). Enter opens that part of the
+  Workspace page on its tab (the Machines canvas stands in for the Graph for
+  now), and Esc there comes back to Home. Agents opens **Home › Agents**: every
+  agent, running or stopped, with its soul and machine, its state, and who
+  started it (the person it's attributed to, or the agent that spawned it).
+  An agent waiting on you wears the needs-input mark there too, and says
+  "needs you". Esc or the **‹ Home** button returns.
+- **A workspace with no agents yet** shows what OATS does in two lines and
+  three keys (New agent, the command palette, Home), then the overview.
+
+Home has no key of its own yet: the palette's **View: Home** opens it. The
+board never changes the roster's order: urgency is sorted on Home only.
+
 The instances have no search field: to find one by name, type it in the
 command palette, which opens its terminal. ⌘F / Alt+F (**Focus the
 instance roster**) and `/` in the sidebar go to the roster's current row;
@@ -377,7 +402,8 @@ a choice saved for it is ignored.)
 - **The current workspace** has its circle filled, like a running
   instance's, and its name in bold; the others have the ring a stopped
   instance has. It has no background of its own: the selection's background
-  marks the current page (Workspace overview or Automations), so the
+  marks the current page (Home, whose row also stands for the Workspace page it
+  opens, or Automations), so the
   sidebar fills one "you are here" row. A screen reader hears it as current,
   and the list's description names it, by the same name as its row.
 - **The needs-input mark.** A row has an exclamation mark (a small amber
@@ -1306,11 +1332,12 @@ and adds fresh AppImage probes with `--dir <fixture> --instance smoke-probe`,
 asserting main's selection-request diagnostic. Repeated launches of the same
 arguments reach the running app. Both launches of the running fixture must
 open its terminal tab in the main area while keeping keyboard focus on its
-roster row. Before the repeated running launch, the smoke switches to Workspace
-overview, then requires that launch to reactivate the retained tab with exactly
+roster row. Before the repeated running launch, the smoke switches to Home,
+then requires that launch to reactivate the retained tab with exactly
 one viewer and no terminal focus event. CDP sends a key to the window;
 independent tmux pane/output reads prove no input reached the inert harness. The stopped fixture stays selected
-only, with no tab or Start dialog, on Workspace overview. The smoke also
+only, with no tab or Start dialog, on Home (its row current and its view
+shown, since Home's row also stands for the Workspace page). The smoke also
 asserts that viewer cleanup restores its private tmux baseline. The fixture's
 workspace/member source, soul definition and inert harness executable are authored by the test-only
 [`launch-fixture.mjs`](../packages/desktop/test/helpers/launch-fixture.mjs).

@@ -27,9 +27,9 @@ Flags/env:
 
 `assets/brand/oats-logo.png` is the one source of the app's brand artwork
 (the human-supplied logo, SHA-256 `b1d21d9a…de69e`). Every derived icon —
-the macOS `oats.icns`, the Linux `NxN.png` set and the 2x sidebar mark (drawn
-at 20px in the sidebar's foot until slice 1 of the Desktop UI rework took the
-mark out of it; still generated and packaged, nothing draws it now) — lives
+the macOS `oats.icns` and the Linux `NxN.png` set (the sidebar mark left the
+foot in slice 1 of the Desktop UI rework, and slice 2 stopped generating and
+packaging it) — lives
 in `assets/brand/generated/` and is regenerated from the source by one
 command:
 
@@ -55,7 +55,10 @@ The shell has three navigation contexts:
 - **Instances** — the shell's single sidebar becomes a compact, recursively
   nested roster. Selecting a running instance opens its direct tmux-attach
   xterm terminal in the main area. Terminal tabs are scoped to this context.
-- **Soul roster** (Workspace › Souls, where a window opens) — searchable soul cards with explicit **Spawn** and
+- **Home** (where a window opens, the Desktop UI rework's slice 2) — what needs you (the agents waiting on you,
+  then the running ones) and what you have (a count for each part of the workspace, each opening its
+  Workspace tab), Home › Agents (every agent), and a first run for a workspace with no agents yet.
+- **Soul roster** (Workspace › Souls) — searchable soul cards with explicit **Spawn** and
   **View brain** actions. Brain and markdown artifacts are scoped to this
   context; the markdown reader is the flagship file surface.
 
