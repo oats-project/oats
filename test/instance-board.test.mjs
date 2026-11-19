@@ -104,6 +104,11 @@ test("ask opens questions q1, q2…, never reusing an id; --id; 2 to 4 options; 
   assert.equal(retry.changed, false);
   refused(agent(home, ["ask", "Deploy tomorrow?", "--option", "yes", "--option", "later", "--id", "deploy"]), "E_BAD_ARGS", "other text under an open id");
   refused(agent(home, ["ask", "--clear", "q1", "--option", "x"]), "E_BAD_ARGS", "--clear takes nothing else");
+  const inline = ok(agent(home, ["ask", "Inline?", "--option", "a", "--option", "b", "--id", "inline"]), "for --clear=<id>");
+  assert.equal(ok(agent(home, ["ask", "--clear=inline"]), "--clear=<id> is --clear <id>").changed, true);
+  assert.equal(inline.id, "inline");
+  const attention = fx.cli(["instance", "attention", "--clear=x", "--json"], { cwd: home, env: { OATS_INSTANCE_HOME: home } });
+  assert.match(JSON.parse(attention.stdout).error.message, /--clear takes no value/, "attention's --clear stays a switch");
 
   const cleared = ok(agent(home, ["ask", "--clear", "q1"]), "clear q1");
   assert.equal(cleared.id, "q1"); assert.equal(cleared.changed, true);
