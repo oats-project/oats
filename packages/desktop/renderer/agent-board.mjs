@@ -90,12 +90,13 @@ function sparkline(doc, values) {
  *                                  false when nothing was written (no live lease)
  * @param {() => void} o.focusTerminal
  * @param {(url: string) => void} o.openLink   the system browser (the Desktop's external-open path)
+ * @param {() => Promise<object[] | null>} [o.checkClaims]  the agent's live claims, read now (null: unknown)
  * @param {ReturnType<typeof createHiddenFacts>} [o.hidden]
  * @param {() => number} [o.now]
  */
-export function createAgentBoard({ pane, home, name, type, focusTerminal, openLink, hidden = createHiddenFacts(), now = () => Date.now() }) {
+export function createAgentBoard({ pane, home, name, type, focusTerminal, openLink, checkClaims = null, hidden = createHiddenFacts(), now = () => Date.now() }) {
   const doc = pane.ownerDocument;
-  let board = null, detail = null, dialog = false, unfolded = false, index = 0, shownId = null, pending = null, alive = true;
+  let board = null, detail = null, dialog = false, unfolded = false, index = 0, shownId = null, pending = null, alive = true, chooseSeq = 0;
   const answered = new Set(); // ids whose answer the person sent from this tab (hidden until the agent clears them)
 
   // ── the facts strip ──
@@ -141,16 +142,40 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     paint();
   }
   /** Option `i` of the shown question: types `<id>: <option>` and gives the terminal the focus. */
-  function choose(i) {
-    const list = open(), q = list[index];
-    if (!q || dialog) return false;
-    const answer = answerText(q, i);
+  /** Option `i` of the shown question: types `<id>: <option>` and gives the terminal the focus. With `checkClaims`,
+   * the agent's claims are read again first: a harness dialog that opened since the view last read them adds a
+   * claim the row may not show (its newest claim with a message can be the board's own), so the numbers are checked
+   * at the moment they would type. A newer press, a closed view or another question shown meanwhile types nothing. */
+  async function choose(i) {
+    const q = open()[index];
+    if (!q || dialog || answerText(q, i) === null) return false;
+    const seq = ++chooseSeq;
+    if (checkClaims) {
+      zone.setAttribute('aria-busy', 'true');
+      let fresh = null;
+      try { fresh = await checkClaims(); } catch { fresh = null; }
+      if (seq === chooseSeq) zone.removeAttribute('aria-busy');
+      if (!alive || seq !== chooseSeq) return false;
+      // Unknown (the read failed) is not a dialog: the person's Enter, with the terminal in view, stays the consent.
+      if (Array.isArray(fresh) && dialogOpen(fresh) !== dialog) { dialog = dialogOpen(fresh); paint(); }
+      if (dialog || open()[index]?.id !== q.id) return false;
+    }
+    const answer = answerText(open()[index], i);
     if (!answer || !type(answer)) return false;
     pending = q.id;
     focusTerminal();
     return true;
   }
 
+  // Reaching the zone (Alt+T, a click) reads the claims again, so a dialog that opened since shows before a press.
+  let engageSeq = 0;
+  zone.addEventListener('focusin', ev => {
+    if (!checkClaims || zone.contains(ev.relatedTarget)) return;
+    const seq = ++engageSeq;
+    Promise.resolve().then(checkClaims).then(fresh => {
+      if (alive && seq === engageSeq && Array.isArray(fresh) && dialogOpen(fresh) !== dialog) { dialog = dialogOpen(fresh); paint(); }
+    }, () => { /* unknown: the numbers stay as the last read left them */ });
+  });
   zone.addEventListener('keydown', ev => {
     if (!plain(ev)) return;
     const list = open();
@@ -263,7 +288,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     setText(age, ` · asked ${waitedText(q.since, now())} ago`.replace('under a minute ago', 'just now'));
     age.title = q.since;
     setText(text, q.withheld ? displayLine(q.question) : q.question);
-    const focusedOption = zone.contains(doc.activeElement) && doc.activeElement.dataset?.option;
+    const hadFocus = zone.contains(doc.activeElement), focusedOption = hadFocus && doc.activeElement.dataset?.option;
     options.replaceChildren(...q.options.map((o, i) => {
       const li = node(doc, 'li');
       const b = node(doc, 'button', 'agent-q-option'); b.type = 'button'; b.dataset.option = String(i);
@@ -275,7 +300,9 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
       li.append(b);
       return li;
     }));
-    if (focusedOption) options.querySelector(`[data-option="${focusedOption}"]`)?.focus();
+    if (focusedOption) options.querySelector(`[data-option="${focusedOption}"]:not([disabled])`)?.focus();
+    // A focused option that is gone or disabled now (a dialog opened) leaves the focus on the zone, never on the page.
+    if (hadFocus && !zone.contains(doc.activeElement)) zone.focus();
     note.hidden = !dialog; setText(note, dialog ? DIALOG_NOTE : '');
     zone.setAttribute('aria-label', `${count ? `${count[0].toUpperCase()}${count.slice(1)}` : 'A question'} from ${name}`);
     // The context: read with the detail (inspect --board) once the view is open; attributed, plain text, line breaks kept.
