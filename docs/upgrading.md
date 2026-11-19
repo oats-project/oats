@@ -219,8 +219,8 @@ here.
 
 - **[0.69.20](release-notes/v0.69.20.md#upgrade):** the catalog pins
   oats.okf 6.2.0 and oats.framework 1.26.0. Retiring an old home whose
-  recorded cleanup hooks cannot run is refused until its external state is
-  cleaned up and `oats retire --force` is run. Team-container deployments
+  recorded cleanup hooks cannot run is refused; clean up its external state,
+  then run `oats retire --force`. Team-container deployments
   recreate their agent containers, and those with a local registry service set
   `team.registryRoute: local`. Respawn instances to take the new texts.
 - **[0.69.19](release-notes/v0.69.19.md#upgrade):** the catalog pins
