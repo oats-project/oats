@@ -13,6 +13,9 @@ import { DESKTOP_TERMS } from "../renderer/desktop-terms.mjs";
 import { registerAction } from "../renderer/keybindings.mjs";
 import { instanceId } from "../../client/instance-tree.mjs";
 import { requestDeploymentTab } from "../renderer/deployment-tabs.mjs";
+import { currentWorkspace, setWorkspace } from "../renderer/views/common.mjs";
+import { cli as eventsCli, target as eventsTarget, data as eventsFixture, birth, deferred } from "./helpers/instance-events-fixture.mjs";
+import { eventsData } from "../renderer/instance-events-data.mjs";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 const DEPLOYMENTS = [
@@ -26,13 +29,13 @@ const row = (instance, extra = {}) => {
     createdAt: "2026-11-01T00:00:00.000Z", deployment: { id: server ? `${server}:/w` : "/w" }, ...(server ? { server, remote: true } : {}), ...extra };
 };
 
-function fixture(t, { rows = [], phase = "ready", deployments = DEPLOYMENTS, note = null } = {}) {
+function fixture(t, { rows = [], phase = "ready", deployments = DEPLOYMENTS, note = null, api = async () => ({}), events = {} } = {}) {
   const dom = new JSDOM("<!doctype html><body><main></main></body>", { pretendToBeVisual: true });
   const doc = dom.window.document, el = doc.querySelector("main");
   const listeners = new Set(), opened = [], details = [], souls = [], registered = [];
   let state = { rows, phase, deployments, note, stale: () => false, here: "falcon", retry: () => { state.retried = true; } };
   const ctx = {
-    api: async () => ({}),
+    api,
     homeRoster: () => state,
     subscribeHomeRoster: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     openAgent: (r) => { opened.push(r.instance); return true; },
@@ -41,7 +44,7 @@ function fixture(t, { rows = [], phase = "ready", deployments = DEPLOYMENTS, not
   };
   const ws = { gen: 1, listeners: new Set() };
   const graph = createGraph(el, ctx, { doc, generation: () => ws.gen, subscribeWorkspace: (fn) => { ws.listeners.add(fn); return () => ws.listeners.delete(fn); },
-    register: (a) => { registered.push(a); return registerAction(a); } });
+    register: (a) => { registered.push(a); return registerAction(a); }, events });
   t.after(() => { graph.dispose(); dom.window.close(); });
   const nodes = () => [...el.querySelectorAll("[data-graph-node]")];
   const nodeOf = (name) => nodes().find((n) => n.getAttribute("aria-label").startsWith(`${name},`));
@@ -274,6 +277,7 @@ test("slice6b mount contract", () => {
 });
 
 test("slice6b a deployment request focuses its column; a workspace switch closes the menu and the events dialog", (t) => {
+  const was = currentWorkspace(); setWorkspace("ws"); t.after(() => setWorkspace(was));
   const u = fixture(t, { rows: [row("lead"), row("builder", { server: "polaris" })] });
   requestDeploymentTab("ws", "polaris:/w", null);
   assert.equal(u.focused(), "builder", "the switcher's Not matched entry lands on that machine's column");
@@ -394,4 +398,65 @@ test("slice6b an open menu survives a roster change, on the item it was on", (t)
   u.set({ rows: [row("b"), row("newcomer")] });
   assert.equal(u.el.querySelector('[role="menu"]'), null);
   assert.ok(u.doc.activeElement?.dataset?.graphNode, "a node has the focus");
+});
+
+test("slice6b a deployment request made before the Graph mounts is still taken (the stage loads lazily)", (t) => {
+  const was = currentWorkspace(); setWorkspace("ws"); t.after(() => setWorkspace(was));
+  requestDeploymentTab("ws", "polaris:/w", null);
+  const u = fixture(t, { rows: [row("lead"), row("builder", { server: "polaris" })] });
+  assert.equal(u.focused(), "builder"); assert.equal(u.nodeOf("builder").tabIndex, 0);
+  u.set({ rows: [row("lead"), row("builder", { server: "polaris" }), row("x")] });
+  u.nodeOf("lead").focus(); u.set({ rows: [row("lead"), row("builder", { server: "polaris" })] });
+  assert.equal(u.focused(), "lead", "taken once: a later paint doesn't move the focus back");
+});
+
+test("slice6b a root whose recorded parent resolves to no row says who it records, visibly", (t) => {
+  const u = fixture(t, { rows: [row("orphan", { parentInstance: "retired-parent" }),
+    row("lead", { server: "polaris" }), row("lead", { server: "vega", deployment: { id: "vega:/w" } }), row("twin-kid", { parentInstance: "lead" })],
+    deployments: [...DEPLOYMENTS, { id: "vega:/w", machine: "vega", path: "/w", local: false, reachable: true }] });
+  assert.match(u.nodeOf("orphan").querySelector(".graph-node-sub").textContent, /started by retired-parent/);
+  assert.match(u.nodeOf("twin-kid").querySelector(".graph-node-sub").textContent, /started by lead$/, "an ambiguous name: no edge, the name it records");
+  assert.equal(u.edges().filter((p) => p.dataset.to.endsWith("twin-kid")).length, 0);
+});
+
+test("slice6b Fit fits a 50+ agent column whatever the zoom floor", (t) => {
+  const rows = Array.from({ length: 61 }, (_, i) => row(`solo-${i}`));
+  const u = fixture(t, { rows });
+  const canvas = u.el.querySelector(".graph-canvas");
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 600 });
+  u.graph.focus(); u.key(u.doc.activeElement, "0");
+  const scale = Number(u.el.querySelector(".graph-stage").style.transform.match(/scale\(([\d.]+)\)/)[1]);
+  const place = layoutGraph(u.graph.graph);
+  assert.ok(place.height * scale <= 600 - 2 * GRAPH_GEOMETRY.PAD, `the whole column is on screen (${place.height} × ${scale})`);
+  assert.ok(scale < 0.3, "below the manual floor");
+  u.key(u.doc.activeElement, "-");
+  assert.equal(Number(u.el.querySelector(".graph-stage").style.transform.match(/scale\(([\d.]+)\)/)[1]), scale, "zooming out from there stays");
+  u.key(u.doc.activeElement, "=");
+  assert.ok(Number(u.el.querySelector(".graph-stage").style.transform.match(/scale\(([\d.]+)\)/)[1]) > scale, "and zooming in moves up from it");
+});
+
+// Recent events keeps the old popup's ownership: a read belongs to the agent's incarnation it was asked for, on
+// success and on rejection, and the dialog goes with its agent.
+for (const outcome of ["success", "rejection"]) test(`slice6b Recent events: a newer incarnation at the same address revokes an older read (${outcome})`, async (t) => {
+  const devA = (createdAt = birth) => ({ instance: "dev-a", agent: "dev", agentsRoot: eventsTarget.selector.agentsRoot, home: eventsTarget.home, createdAt,
+    running: true, runtimeState: "running", deployment: { id: "ws" } });
+  const pending = deferred(), reads = [];
+  const u = fixture(t, { rows: [devA()], api: (path) => { reads.push(path); return pending.promise; },
+    events: { cli: () => eventsCli, subscribeCli: () => () => {}, generation: () => 1, connectionGeneration: () => 0, subscribeConnections: () => () => {} } });
+  u.nodes()[0].focus();
+  u.doc.activeElement.dispatchEvent(new u.dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  u.el.querySelector('[role="menu"] [data-action="events"]').click();
+  const dialog = u.el.querySelector('[role="dialog"]');
+  dialog.querySelector(".events-load").click();
+  assert.equal(reads.length, 1, "the read was asked");
+  u.set({ rows: [devA("2026-11-19T00:00:00.000Z")] });
+  const said = dialog.querySelector(".events-status").textContent;
+  if (outcome === "success") pending.resolve({ instanceEventsViewApi: 1, status: "available", target: structuredClone(eventsTarget), data: eventsData(eventsFixture(), eventsTarget), reason: null });
+  else pending.reject(Object.assign(new Error("read failed"), { code: "E_CLI_PROTOCOL" }));
+  await new Promise((r) => setTimeout(r, 0)); await new Promise((r) => setTimeout(r, 0));
+  assert.doesNotMatch(dialog.textContent, /Reported observation loaded|Current recorded incarnation/, "the older read lands nowhere");
+  assert.equal(dialog.querySelector(".events-status").textContent, said, "its outcome says nothing either");
+  // The agent gone: its dialog goes with it.
+  u.set({ rows: [row("someone-else")] });
+  assert.equal(u.el.querySelector('[role="dialog"]'), null);
 });

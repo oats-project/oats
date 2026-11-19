@@ -28,13 +28,13 @@ import { iconElement } from "../shell-icons.mjs";
 import { paintDotColor } from "../instance-dot.mjs";
 import { keymapTakes, registerAction } from "../keybindings.mjs";
 import { resolveViewKey } from "../view-keys.mjs";
-import { onDeploymentTabRequest } from "../deployment-tabs.mjs";
+import { onDeploymentTabRequest, takeDeploymentRequest } from "../deployment-tabs.mjs";
 import { deploymentsPageCSS, deploymentReasonBlock, deploymentHasWords } from "../deployments-page.mjs";
 import { splitByDeployment, deploymentState } from "../../../client/roster-sections.mjs";
 import { deploymentLabel } from "../../../client/deployment-label.mjs";
 import { whenRightButtonReleased } from "../context-menu-release.mjs";
 import { createInstanceEventsView, instanceEventsCSS } from "../instance-events-view.mjs";
-import { workspaceGeneration, onWorkspaceChange, rowDeployment } from "./common.mjs";
+import { workspaceGeneration, onWorkspaceChange, rowDeployment, currentWorkspace } from "./common.mjs";
 
 export const GRAPH_COPY = Object.freeze({
   title: "Graph",
@@ -53,7 +53,9 @@ export const GRAPH_COPY = Object.freeze({
 
 /* Geometry, in stage pixels (the zoom scales the stage). */
 export const GRAPH_GEOMETRY = Object.freeze({ COL_W: 300, FIELD_W: 420, MIN_NODE_W: 180, COL_GAP: 64, HEAD: 58, ROW: 52, NODE_H: 42, IND: 24, GUIDE: 14, INSET: 12, PAD: 24 });
-const G = GRAPH_GEOMETRY, Z_MIN = 0.3, Z_MAX = 2, Z_STEP = 1.2, DRAG_THRESHOLD = 4;
+// Z_MIN is the manual zoom's floor; Fit goes lower when a picture needs it (FIT_MIN), and zooming out from there
+// stays where it is rather than jumping back up to the floor.
+const G = GRAPH_GEOMETRY, Z_MIN = 0.3, FIT_MIN = 0.05, Z_MAX = 2, Z_STEP = 1.2, DRAG_THRESHOLD = 4;
 
 export const graphCSS = `
 .graph { display:flex; flex-direction:column; height:100%; min-height:0; background:var(--bg); color:var(--fg);
@@ -119,10 +121,6 @@ ${instanceEventsCSS}
 /** The mode the Graph opens in: the last one chosen in this window (columns until then). */
 let lastMode = "columns";
 
-/** The deployment a request asked to show (the switcher's "Not matched" entries, deployment-tabs.mjs): its column
- * takes the focus when the Graph next paints it. */
-let requestedColumn = null;
-onDeploymentTabRequest(({ tab }) => { requestedColumn = typeof tab === "string" ? tab : null; });
 
 /** A node's state, in words (Home's): "needs you", "running", "stopped", "status unknown", or a held home's status. */
 export function nodeState(row, { stale = false } = {}) {
@@ -215,7 +213,7 @@ export function edgePath(edge, at, mode) {
 }
 
 export function createGraph(el, ctx, { doc = el.ownerDocument, generation = workspaceGeneration, subscribeWorkspace = onWorkspaceChange,
-  register = registerAction } = {}) {
+  register = registerAction, events = {} } = {}) {
   const win = doc.defaultView;
   const node = (tag, className, text) => { const n = doc.createElement(tag); if (className) n.className = className; if (text != null) n.textContent = text; return n; };
   const roster = () => (typeof ctx.homeRoster === "function" ? ctx.homeRoster() : { rows: [], deployments: [], phase: "loading", stale: () => false, here: null });
@@ -269,7 +267,7 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     // Not measurable yet (hidden behind a terminal, not laid out): drawn at 1, and fitted once it has a size.
     if (!rect?.width || !rect?.height) { z = 1; tx = G.PAD; ty = G.PAD; applyTransform(); return; }
     fitted = true;
-    z = Math.min(1, Math.max(Z_MIN, Math.min((rect.width - G.PAD * 2) / place.width, (rect.height - G.PAD * 2 - 36) / place.height)));
+    z = Math.min(1, Math.max(FIT_MIN, Math.min((rect.width - G.PAD * 2) / place.width, (rect.height - G.PAD * 2 - 36) / place.height)));
     tx = G.PAD; ty = G.PAD; applyTransform();
   }
   function zoomBy(factor, cx, cy) {
@@ -277,7 +275,7 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     fitted = true;
     const rect = canvas.getBoundingClientRect?.() || { left: 0, top: 0, width: 0, height: 0 };
     const px = cx != null ? cx - rect.left : rect.width / 2, py = cy != null ? cy - rect.top : rect.height / 2;
-    const nz = Math.min(Z_MAX, Math.max(Z_MIN, z * factor)), k = nz / z;
+    const nz = Math.min(Z_MAX, Math.max(Math.min(Z_MIN, z), z * factor)), k = nz / z;
     tx = px - (px - tx) * k; ty = py - (py - ty) * k; z = nz;
     applyTransform();
   }
@@ -360,7 +358,9 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     const copy = node("span", "graph-node-copy");
     copy.append(node("span", "graph-node-name", facts.name));
     const sub = node("span", "graph-node-sub");
-    const by = n.crossColumn && n.parent ? `started by ${startedByWords(n, rowsById, labels)}` : null;
+    // Who started it, in words, where no edge in its own column says so: a parent in another column, or one it records
+    // that no row resolves to (gone, or a name two rows share).
+    const by = (n.crossColumn && n.parent) || (!n.parent && n.recordedParent) ? `started by ${startedByWords(n, rowsById, labels)}` : null;
     const parts = [facts.soul, mode === "field" ? n.machine : null, by].filter(Boolean);
     sub.textContent = parts.join(" · ");
     if (n.sameWork) { if (parts.length) sub.append(" · "); sub.append(node("b", null, GRAPH_COPY.sameWork)); }
@@ -381,7 +381,9 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
 
   /** What a paint depends on: the graph's facts and its mode (a poll that changes nothing repaints nothing). */
   const signatureOf = (data) => JSON.stringify([mode, data.phase, data.note ?? null, data.here ?? null, data.deployments ?? [],
-    (data.rows || []).map((r) => [instanceId(r), r.instance, r.agent, r.running, r.runtimeState, r.parentInstance, r.attributedHuman, r.sameWork, r.sameWorkKnown,
+    // Every fact a node, a hand-off or the events dialog reads: its identity and incarnation (createdAt), its soul.
+    (data.rows || []).map((r) => [instanceId(r), r.instance, r.agent, r.home, r.agentsRoot, r.server, r.createdAt, r.soulKey, r.soul?.repoKey,
+      r.running, r.runtimeState, r.parentInstance, r.attributedHuman, r.sameWork, r.sameWorkKnown,
       r.color, r.waitingOnYou, r.deployment?.id, r.spawnInProgress, r.retirePending, r.rollbackIncomplete, r.retireInFlight, r.retire, data.stale?.(r) === true])]);
 
   function paint({ keepFocus = false } = {}) {
@@ -416,14 +418,21 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     // An open menu survives the repaint: reopened on the same agent, on the item it was on (the roster menu's rule).
     const kept = menu ? { id: menu.id, action: menu.element.contains(doc.activeElement) ? doc.activeElement?.dataset?.action ?? null : null } : null;
     draw(data);
+    // The events dialog follows the roster: gone with its agent, and re-checked against its current facts (a newer
+    // incarnation at the same address revokes a read the old one asked for: instance-events-view.mjs owns it).
+    if (pop && !rowsById.has(pop.id)) closePop();
+    else pop?.view?.sync?.();
     if (kept && nodeEls.has(kept.id)) { focusId = kept.id; openMenu(kept.id, null, kept.action); }
     else if (kept?.action) focusAfter = true; // its agent is gone: the focus lands on a node, never on <body>
     // The focus stays on the node it was on, else the requested column's first, else the first node (roving tabindex).
     const stops = graphStops(graph).flat();
     let target = focusId && nodeEls.has(focusId) ? focusId : null;
-    if (requestedColumn && mode === "columns") {
-      const first = graphStops(graph)[graph.columns.findIndex((c) => c.key === requestedColumn)]?.[0];
-      if (first) { target = first.id; requestedColumn = null; focusAfter = true; }
+    // A deployment the switcher asked to show (its "Not matched" entries, deployment-tabs.mjs, held there for a Graph
+    // not loaded yet): its column's first agent takes the focus, once.
+    if (mode === "columns") {
+      const stopsOf = (tab) => graphStops(graph)[graph.columns.findIndex((c) => c.key === tab)]?.[0] ?? null;
+      const asked = takeDeploymentRequest(currentWorkspace(), (tab) => !!stopsOf(tab));
+      if (asked) { target = stopsOf(asked).id; focusAfter = true; }
     }
     focusId = target ?? stops[0]?.id ?? null;
     for (const [id, e] of nodeEls) e.tabIndex = id === focusId ? 0 : -1;
@@ -443,7 +452,7 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     if (focused) [...notes.querySelectorAll("[data-deployment]")].find((b) => b.dataset.deployment === focused)?.querySelector("summary")?.focus();
   }
 
-  function clear() { tree.replaceChildren(); nodeEls.clear(); graph = null; place = null; closeMenu(); }
+  function clear() { tree.replaceChildren(); nodeEls.clear(); graph = null; place = null; rowsById = new Map(); closeMenu(); closePop(); }
 
   function draw() {
     nodeEls.clear(); closeMenu({ restore: false });
@@ -523,6 +532,13 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     if (ctx.openAgent(row) === false) ctx.notify?.(`${row.instance} isn't in the roster now.`);
   }
 
+  // The node with the focus is the tab stop, however it got there (a click, Tab, a test's focus()).
+  root.addEventListener("focusin", (e) => {
+    const id = e.target?.dataset?.graphNode;
+    if (!alive || !id || !nodeEls.has(id) || id === focusId) return;
+    for (const [other, x] of nodeEls) x.tabIndex = other === id ? 0 : -1;
+    focusId = id;
+  });
   root.addEventListener("keydown", (e) => {
     if (!alive || e.defaultPrevented || e.isComposing) return;
     const id = e.target?.dataset?.graphNode;
@@ -621,17 +637,14 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
         home: now.home, incarnation: now.createdAt ?? null, serverLabel: serverLabel(now) };
     };
     pop = { id, element: box, view: null };
-    pop.view = createInstanceEventsView(box, { ctx, summary, selection, owner: owns });
+    pop.view = createInstanceEventsView(box, { ctx, summary, selection, owner: owns, ...events });
     close.focus();
   }
 
   const unsubscribe = typeof ctx.subscribeHomeRoster === "function" ? ctx.subscribeHomeRoster(() => paint()) : () => {};
   // A deployment asked for while the Graph is shown: its column takes the focus now (the module's listener keeps it
   // for a Graph mounted later).
-  const offRequest = onDeploymentTabRequest(({ tab }) => {
-    if (!alive || typeof tab !== "string" || !graph?.columns.some((c) => c.key === tab)) return;
-    requestedColumn = tab; paint({ keepFocus: true });
-  });
+  const offRequest = onDeploymentTabRequest(() => { if (alive && graph) paint({ keepFocus: true }); });
   const unsubscribeWorkspace = subscribeWorkspace(() => {
     if (!alive || generation() === gen) return;
     gen = generation(); focusId = null; fitted = false; signature = null; closeMenu(); closePop(); paint();
@@ -660,4 +673,3 @@ export function mount(el, ctx) {
   return () => { mounted.delete(view); view.dispose(); };
 }
 export function unmount() { for (const view of mounted) view.dispose(); mounted.clear(); }
-

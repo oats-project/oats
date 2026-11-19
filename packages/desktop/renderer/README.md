@@ -743,8 +743,9 @@ split into sections) is `packages/client/roster-sections.mjs`.
 The Machines tab's canvas of before (the Deployments page, the Active overview) is the **Graph**, a stage of its
 own: NAV `graph` (`pinned: false`, its row Home's, `pinnedRowFor`), opened by Home's Graph row (`ctx.openStage`),
 the palette's **Workspace: Graph** (the entry's `command`, which the palette and the shortcuts editor use for its
-label) and a deployment request from the switcher's "Not matched" entries (`onDeploymentTabRequest`: the Graph
-focuses that deployment's column). It has no key of its own yet. Esc on it goes back to Home (shell.mjs's stage
+label) and a deployment request from the switcher's "Not matched" entries (`requestDeploymentTab`, held in
+`deployment-tabs.mjs` until a page takes it, `takeDeploymentRequest`, since the Graph loads lazily: it focuses that
+deployment's column once). It has no key of its own yet. Esc on it goes back to Home (shell.mjs's stage
 listener, as on the Workspace page).
 
 - **Facts.** The roster the sidebar shows (`ctx.homeRoster`, its paints through `ctx.subscribeHomeRoster`, as Home
@@ -776,7 +777,8 @@ listener, as on the Workspace page).
   Home End within a column, Enter opens the agent as the roster's Enter does (`ctx.openAgent`, which activates the
   roster row, so its gates hold). A chord the keymap binds is the keymap's (`keymapTakes`). `m`, `=`/`+`, `-` and `0`
   are rebindable actions of the never-activated context `view:graph`, resolved with `resolveViewKey`. Drag pans, the
-  wheel scrolls, Ctrl/⌘ + the wheel zooms; nothing animates.
+  wheel scrolls, Ctrl/⌘ + the wheel zooms; nothing animates. Fit (`0`, the button) goes below the manual zoom's floor
+  when a picture needs it, and a root whose recorded parent resolves to no row says "started by <name>" on its node.
 - **The node's menu** (a right-click, Shift+F10, the Menu key) replaces the old popover: **Open terminal**
   (`ctx.openAgent`), **Details** (`ctx.openAgentDetails`, shell.mjs `openRosterDetails`: the roster menu's
   "Knowledge & capabilities…" inspection, `preselectHome`, owned by a tab-open intent, which never starts a stopped
@@ -785,7 +787,9 @@ listener, as on the Workspace page).
   row of another deployment than the primary or one that records none; `ctx.openSoulOf` → `openSoulPage` →
   `preselectSoul`) and **Recent
   events…** (`instance-events-view.mjs` in a small dialog by the node, owned by that dialog and the workspace it was
-  opened in; it goes when slice 6a's Details carries the events). Esc or Tab close the menu back on its node, and a
+  opened in; it goes when slice 6a's Details carries the events). The dialog follows the roster: re-checked on every
+  repaint (a newer incarnation at the same address, `createdAt`, revokes an older read, on success and on rejection),
+  and closed when its agent leaves. Esc or Tab close the menu back on its node, and a
   roster repaint reopens an open menu on the same agent and item.
 
 ## Spawn dialog — workspace model v2

@@ -60,12 +60,22 @@ export function selectedDeploymentTab(viewId, deployments, storage = defaultStor
 }
 
 const listeners = new Set();
-/** Open a deployment's tab of a view (the switcher's "Not matched" entries): remembered, then announced
- * to the listeners as `{ view, tab }`. */
+/** The last request not yet taken (`{ view, tab }`), held here because the page that shows it (the Graph, slice 6b)
+ * loads lazily: a request made before it is imported is still there for it. */
+let pending = null;
+/** Open a deployment's tab of a view (the switcher's "Not matched" entries): remembered, held until a page takes it,
+ * then announced to the listeners as `{ view, tab }`. */
 export function requestDeploymentTab(viewId, tab, storage = defaultStorage()) {
   if (!validId(viewId) || !validId(tab)) return;
   rememberDeploymentTab(viewId, tab, storage);
+  pending = { view: viewId, tab };
   for (const fn of [...listeners]) { try { fn({ view: viewId, tab }); } catch { /* one listener must not break another */ } }
+}
+/** Take the request held for `viewId`, once, when `accept(tab)` says the page can show it (its deployment is drawn);
+ * else null, and the request stays held. */
+export function takeDeploymentRequest(viewId, accept = () => true) {
+  if (!pending || pending.view !== viewId || !accept(pending.tab)) return null;
+  const { tab } = pending; pending = null; return tab;
 }
 /** Listen to tab requests; returns the unsubscribe. */
 export function onDeploymentTabRequest(fn) { listeners.add(fn); return () => listeners.delete(fn); }
