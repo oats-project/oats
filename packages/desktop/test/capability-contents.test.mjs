@@ -366,8 +366,8 @@ test('the page places Skills under what it does and Contents in its Files fold, 
   const row = { ...packageRow, skills: ['oats-aweb'], commands: [], hooks: [] };
   const render = from => renderCapabilityPage(page, { row, status: null, instances: [], root: '/ws', onBack() {}, contents: u.contents.element, skills: u.contents.skills, skillView: u.contents.skillView, ...(from ? { from } : {}) });
   render();
-  const order = () => [...page.querySelector('.page-main').children].map(el => el.dataset.fold ?? el.dataset.section ?? el.className);
-  assert.deepEqual(order(), ['cap-page-head', 'Skills', 'commands', 'hooks', 'used-by', 'source', 'files']);
+  const order = () => [...page.querySelector('.page-main').children, ...page.querySelector('.cap-folds').children].map(el => el.dataset.fold ?? el.dataset.section ?? el.className);
+  assert.deepEqual(order(), ['cap-page-head', 'Skills', 'cap-folds', 'commands', 'hooks', 'used-by', 'source', 'files']);
   assert.equal(page.querySelector('details[data-fold=files]').lastElementChild, u.contents.element);
   page.querySelector('details[data-fold=files]').open = true;
   const item = page.querySelector('[data-path="inject.md"]'); item.focus();
@@ -375,7 +375,7 @@ test('the page places Skills under what it does and Contents in its Files fold, 
   render({ label: 'soul-x' });
   keep();
   assert.equal(u.doc.activeElement, item);
-  assert.deepEqual(order(), ['cap-page-head', 'Skills', 'commands', 'hooks', 'used-by', 'source', 'files'], 'the soul form too');
+  assert.deepEqual(order(), ['cap-page-head', 'Skills', 'cap-folds', 'commands', 'hooks', 'used-by', 'source', 'files'], 'the soul form too');
   assert.equal(page.querySelector('details[data-fold=files]').open, true, 'a fold opened on this capability stays open across the rebuild');
 });
 
@@ -398,7 +398,7 @@ test('slice3b capability page skills open whole and folds', async t => {
     [['oats-aweb', "The OATS instance's aweb playbook."], ['aweb-identity', null]]);
   assert.equal(skillRows[0].getAttribute('aria-label'), 'oats-aweb: open the whole skill');
   // Then Commands, Triggers (none declared here), Hooks, Used by, Source and Files, each folded: a native disclosure.
-  const folds = $$('.page-main > details.cap-fold');
+  const folds = $$('.page-main > .cap-folds > details.cap-fold');
   assert.deepEqual(folds.map(d => [d.dataset.fold, d.open, d.querySelector('summary .cap-fold-title').textContent]),
     [['commands', false, 'Commands'], ['hooks', false, 'Hooks'], ['used-by', false, 'Used by'], ['source', false, 'Comes from'], ['files', false, 'Files']]);
   assert.deepEqual($$('details[data-fold=commands] .provides-chip').map(c => c.textContent), ['aweb-connect']);

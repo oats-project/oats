@@ -1987,7 +1987,7 @@ for (const [name] of palettes) test(`${name}: capability Contents navigation, re
   const skillRow = page.querySelector('button.cap-skill-row');
   for (const [selector, painted, fg, bg] of [['.provides-chip', '.provides-chip', 'fg', 'tag-bg'], ['.provides-items .page-note', '.oats-view', 'muted', 'bg'],
     ['.cap-skill-name', 'button.cap-skill-row', 'fg', 'surface'], ['.cap-skill-desc', 'button.cap-skill-row', 'muted', 'surface']]) {
-    const el = page.querySelector(selector), surface = page.querySelector(painted); assert.ok(el && surface, selector);
+    const el = page.querySelector(selector), surface = page.querySelector(painted) || doc.querySelector(painted); assert.ok(el && surface, selector);
     const color = dom.window.getComputedStyle(el).color;
     assert.ok(color === `var(--${fg})` || (fg === 'fg' && ['', 'var(--fg)'].includes(color)), `${selector}: ${color}`);
     assert.equal(dom.window.getComputedStyle(surface).background.replace(/^.*(var\(--[\w-]+\)).*$/, '$1'), `var(--${bg})`, painted);

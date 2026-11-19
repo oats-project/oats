@@ -102,6 +102,8 @@ export const capabilityPageCSS = `
 .cap-page-where { color:var(--muted); }
 .capability-page .cap-page-what { color:var(--fg); font-size:14px; line-height:1.55; max-width:72ch; }
 /* A fold: a native disclosure, its summary a row with a turning chevron. */
+.cap-folds { display:flex; flex-direction:column; min-width:0; }
+.cap-folds:empty { display:none; }
 .cap-fold { min-width:0; border-top:1px solid var(--border); }
 .cap-fold:last-child { border-bottom:1px solid var(--border); }
 .cap-fold > summary { display:flex; align-items:center; gap:8px; min-height:40px; padding:0 4px; list-style:none; cursor:pointer; border-radius:6px; color:var(--fg); font-size:13.5px; font-weight:650; }
@@ -303,11 +305,13 @@ export function renderCapabilityPage(host, { row, status, instances, souls = [],
   main.append(head);
   // Skills (the Contents controller's rows, re-appended on every rebuild so a focused row survives a repaint).
   if (skills) main.append(skills);
+  // The folds: one group of native disclosures, a rule between them.
+  const folds = node('div', undefined, 'cap-folds'); main.append(folds);
   const fold = (id, label, count = null) => {
     const d = node('details', undefined, 'cap-fold'); d.dataset.fold = id; d.open = unfolded.has(id);
     const summary = node('summary'); summary.append(iconElement(doc, 'chevronRight', { size: 13 }), node('span', label, 'cap-fold-title'));
     if (count !== null) summary.append(node('span', String(count), 'cap-fold-count'));
-    d.append(summary); main.append(d); return d;
+    d.append(summary); folds.append(d); return d;
   };
   const names_ = (label, items) => {
     const d = fold(label.toLowerCase(), label, Array.isArray(items) ? items.length : null);

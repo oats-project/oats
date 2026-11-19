@@ -420,7 +420,8 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
     const s = observed();
     // The gate's copy is its own truthful state (CLI, deployment); it is never a skeleton. The catalog's
     // loading line, stale line and skeleton / failed host show on the Capabilities tab only.
-    status.textContent = unavailable;
+    // Machines' list reads no catalog: the catalog's gate is not its own (its route says why when it has nothing).
+    status.textContent = tab === 'machines' ? '' : unavailable;
     const catalogTab = tab === 'capabilities' && !unavailable;
     loadStatus.hidden = notice.hidden = capState.hidden = !catalogTab;
     refreshHost.hidden = !catalogTab;
@@ -429,7 +430,7 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
     // The status's observation stamp moves on every poll and nothing here paints it: it is left out.
     const stableStatus = s && { ...s, workspace: s.workspace && { ...s.workspace, observedAt: undefined } };
     // The souls' composition (souls-capabilities) and marks feed "Used by".
-    const key = JSON.stringify([tab, setupMember, souls.map(a => [a?.team ?? null, a?.name, a?.key, a?.color, a?.agentsRoot, a?.capabilities]), soulsComposition(cliStatus()), query, unavailable, catalog, stableStatus, rosterState(), deployment?.withheld, deployment?.reachable, instances.map(i => [i.agent, i.agentsRoot, i.modules, i.running])]);
+    const key = JSON.stringify([tab, machinesView, setupMember, souls.map(a => [a?.team ?? null, a?.name, a?.key, a?.color, a?.agentsRoot, a?.capabilities]), soulsComposition(cliStatus()), query, unavailable, catalog, stableStatus, rosterState(), deployment?.withheld, deployment?.reachable, instances.map(i => [i.agent, i.agentsRoot, i.modules, i.running])]);
     if (key === rendered) return;
     rendered = key;
     const restoreNotes = captureFocusState(notes, { scroller: null }); // a warning's Details or Open capability (by its focus key)
@@ -437,8 +438,9 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
     const restoreBody = tab === 'capabilities' || tab === 'sources' ? captureFocusState(body, { scroller: null }) : null;
     notes.replaceChildren(); body.replaceChildren();
     for (const child of [...capLead.children]) if (child !== about.button) child.remove(); // the "i" stays, focus and all
-    if (unavailable || owned(tab)) return; // the view paints its own panels
+    if (owned(tab)) return; // the view paints its own panels
     if (tab === 'machines') { const card = machinesCard(); if (card) body.append(card); return; }
+    if (unavailable) return;
     for (const note of deploymentNotes(deployment)) notes.append(node('p', note.text, `catalog-note${note.warn ? ' warn' : ''}`));
     if (tab === 'teams') {
       // Team model v2: this computer's teams (the kernel's `oats teams`), editable here. A workspace

@@ -127,7 +127,7 @@ test('Setup list: one column, the lede, the overview, Shared through Git above T
   assert.deepEqual([...setup.children].map(c => c.className), ['setup-lede', 'setup-explain', 'setup-sec', 'setup-zone']);
   assert.deepEqual([...setup.querySelectorAll('.setup-sec-title')].map(h => [h.tagName, h.textContent]), [['H3', 'Shared through Git'], ['H3', 'This computer']]);
   assert.deepEqual([...setup.querySelectorAll('.setup-sec-lead')].map(p => p.textContent),
-    ['What the workspace declares: the same on every computer that runs it.', "Not shared: this deployment's own settings, clones and machines."]);
+    ['What the workspace declares: the same on every computer that runs it.', "Not shared: this deployment's own settings and clones. The computers it runs on are under Machines."]);
   assert.equal(root.querySelector('.setup-cols, .setup-col, .setup-legend, .setup-header, .setup-scope'), null, 'the right column, the legend and the scope chips are gone');
   assert.deepEqual([...root.querySelectorAll('[data-zone=shared] .setup-box-head')].map(h => [h.firstChild.tagName, h.textContent]), [
     ['H4', 'MembersEach repository and whether both of its links are in place.'],

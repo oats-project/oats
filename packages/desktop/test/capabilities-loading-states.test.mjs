@@ -190,7 +190,7 @@ test('opened from a soul before the catalog is read: the page stands with the ca
   await u.resolveRead(0, okRead());
   const after = pageOf(u); assert.notEqual(after, before, 'filled in place'); assert.equal(after.dataset.catalogPending, undefined);
   assert.equal(after.querySelector('.page-lede.skeleton'), null); assert.equal(after.querySelector('.page-facts-skeleton'), null);
-  assert.match(after.querySelector('.page-side').textContent, /Path.*capabilities\/nw-house-style/s, "the catalog's facts");
+  assert.match(after.querySelector('details.cap-fold[data-fold="source"]').textContent, /Path.*capabilities\/nw-house-style/s, "the catalog's facts");
   assert.equal(u.doc.activeElement, after.querySelector('.page-back'), 'focus is kept on the same control');
   assert.equal(u.q('.workspace-cap-page').hidden, false);
 });
