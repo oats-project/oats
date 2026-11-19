@@ -246,14 +246,15 @@ test("slice2 Enter on a section lands focus on its Workspace tab, so Esc goes st
   const document = dom.window.document, host = document.getElementById("tabhost"), went = [];
   const homeTrigger = document.createElement("button"); document.body.append(homeTrigger);
   const tabs = new Map([[1, { kind: "page", page: "home", paneEl: document.getElementById("home-pane"), triggerEl: homeTrigger }]]);
-  const c = { document, tabs, activeTab: 1, page: "home", isShown: (el) => el.isConnected,
+  const c = { document, tabs, activeTab: 1, page: "home", isShown: (el) => el.isConnected && !el.closest("[hidden]"),
     tabOpenIntents: { watch: () => () => true }, currentPage: () => c.page,
     focusRegions: { focusRegion: (name) => went.push(`region:${name}`) },
     openWorkspaceSouls: async (tab) => {
       const pane = document.createElement("div"); pane.className = "tab-pane"; pane.innerHTML = `<div role="tablist"><button id="workspace-tab-${tab}" role="tab">tab</button></div>`;
+      document.getElementById("home-pane").hidden = true; // Home's tab hides behind the Workspace page's
       host.append(pane); tabs.set(2, { kind: "page", page: "spawn", paneEl: pane, triggerEl: document.createElement("button") }); c.activeTab = 2; c.page = "spawn";
     },
-    showStage: async (name) => { went.push(name); c.page = name; c.activeTab = 1; } };
+    showStage: async (name) => { went.push(name); c.page = name; c.activeTab = 1; document.getElementById("home-pane").hidden = false; } };
   const handoff = shell.match(/async function openWorkspaceTabFocused\(tab, options\) \{[^]*?\n\}/)[0];
   const esc = shell.match(/document\.getElementById\("tabhost"\)\.addEventListener\("keydown", \(e\) => \{[^]*?\n\}\);/)[0];
   const { runInNewContext } = await import("node:vm");

@@ -105,7 +105,7 @@ test("showStage routes a NAV_TABS name to openWorkspaceSouls(tab); showStageFocu
     "after the no-workspace guard, before a page tab opens (slice 6a: pages are tabs)");
   const focused = src.match(/async function showStageFocused\(name\) \{[^]*?\n\}/)[0];
   assert.match(focused, /page = navTab\(name\)\?\.page \?\? name;/);
-  assert.match(focused, /if \(!owns\(\) \|\| currentPage\(\) !== page\) return;/, "it compares the shown page tab with the page");
+  assert.match(focused, /if \(currentPage\(\) !== page\) return;/, "it compares the shown page tab with the page");
   // openWorkspaceSouls names each tab it can open (its failure notice) and awaits the page.
   const open = src.match(/async function openWorkspaceSouls\(tab = "souls", options = undefined\) \{[^]*?\n\}/)[0];
   // Home's Machines and Graph rows name the Machines tab's view (slice 3b's option; an older page ignores it).

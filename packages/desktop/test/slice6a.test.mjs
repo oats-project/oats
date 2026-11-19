@@ -76,7 +76,7 @@ test("slice6a pages open as tabs", async () => {
 test("slice6a new pane opens Home", async () => {
   const tabs = new Map([[1, { kind: "terminal", workspace: "A" }]]);
   const c = { tabs, split: null, activeTab: 1, tabLayerVisible: true, canActivateTab, requestSplit, splitControlsState, currentWorkspace: () => "A",
-    asked: [], tabOpenIntents: { invalidate() {}, watch: () => () => true }, activateTab() {},
+    asked: [], tabOpenIntents: { invalidate() {}, watch: () => () => true }, activateTab() {}, focusRoster() {},
     showStage: async (name) => { c.asked.push(name); } };
   const run = runInNewContext(`${fn("splitPane")}\n({ splitPane })`, c);
   run.splitPane("row");
@@ -117,7 +117,7 @@ test("slice6a details for a stopped agent", (t) => {
   // Every way in: i on a row, Ctrl+Shift+I (panel.toggle), the row's menu and the palette.
   assert.match(shell, /if \(e\.key !== "i" \|\| e\.altKey \|\| e\.ctrlKey \|\| e\.metaKey \|\| e\.shiftKey \|\| typeof openDetailsTab !== "function"\) return;\n          e\.preventDefault\(\); openDetailsTab\(i\);/);
   assert.match(shell, /registerAction\(\{ id: "panel\.toggle", label: "Agent: Details"/);
-  assert.match(shell, /\{ action: 'details', actionId: 'panel\.toggle', label: 'Details', reason: '', always: true \},/);
+  assert.match(shell, /\{ action: 'details', actionId: 'panel\.toggle', label: 'Details', reason: '', always: true, secondary: true \},/);
   assert.match(shell, /if \(action === 'details'\) \{ openDetailsTab\(instance\); return; \}/);
   assert.match(shell, /\{ label: "Agent: Details", detail: chordDetail\("panel\.toggle"\)/);
 });

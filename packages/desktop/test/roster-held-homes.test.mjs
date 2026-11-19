@@ -262,7 +262,7 @@ test("instanceActions: a spawning home has no actions (its context menu opens no
     const heldRow = rowFor();
     const held = instanceActions(doc, instance("q", undefined, { running: true, ...hold }), { row: heldRow, extra, say: line => said.push(line) });
     heldRow.after(held);
-    assert.deepEqual([...held.querySelectorAll("[role=menuitem]")].map(item => item.dataset.action), ["details", "retire"], JSON.stringify(hold));
+    assert.deepEqual([...held.querySelectorAll("[role=menuitem]")].map(item => item.dataset.action), ["retire"], JSON.stringify(hold) + " (this menu's extras carry no always item)");
     contextMenu(heldRow);
     assert.equal(held.dataset.instanceMenuOpen, "true", `limited, not held: its menu opens (${JSON.stringify(hold)})`);
     held.hidePopover();
@@ -431,5 +431,5 @@ test("the same row reads every state of its retire in turn, and back to an ordin
   assert.equal(u.row("dev-r").querySelector(".ctx-meta").className, "ctx-meta ctx-row-detail", "its own second line again: the soul and the machine");
   assert.equal(meta, "dev · This Mac");
   assert.ok(u.row("dev-r").querySelector(".ctx-dot.on"), "and its liveness on its dot");
-  assert.deepEqual(u.menu("dev-r"), ["open-split", "open-pr", "inspect", "restart", "stop", "retire"]);
+  assert.deepEqual(u.menu("dev-r"), ["details", "open-split", "open-pr", "inspect", "restart", "stop", "retire"]);
 });

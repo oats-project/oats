@@ -439,6 +439,7 @@ async function showStage(name) {
   }
   // One open of a page at a time per workspace and group: a second ask while the first is mounting waits for it.
   const pendingKey = `${ws}\u0000${name}\u0000${focusedGroup?.id ?? ""}`;
+  if (typeof openViewTab !== "function") return; // a harness without the tab host: no page to open
   const opens = typeof pageOpens === "object" ? pageOpens : new Map(); // a harness without the map opens each ask
   if (opens.has(pendingKey)) return opens.get(pendingKey);
   if (typeof hideEmptyState === "function") hideEmptyState();
@@ -500,9 +501,10 @@ onWindowState((state) => {
  * control — never <body> after the terminal it was in is hidden (spec F audit). */
 async function showStageFocused(name) {
   const page = navTab(name)?.page ?? name;
-  const owns = tabOpenIntents.watch();
   await showStage(name);
-  if (!owns() || currentPage() !== page) return;
+  // (Its open begins its own intent, so a watch taken before would always say "superseded": the page tab shown and
+  // focus with no place are the test, as before.)
+  if (currentPage() !== page) return;
   // From the keyboard, focus lands in the page tab (its trigger, which the tab keys walk), never <body>.
   const active = document.activeElement;
   if (!active || active === document.body || !isShown(active)) tabs.get(activeTab)?.triggerEl.focus();
@@ -1416,7 +1418,8 @@ function renderContextRoster(instances) {
           shortcut: id => { const chord = getBinding(id, isMac); return chord ? formatChord(chord, isMac) : ''; },
           extra: [
             // Details (slice 6a): every row's, running or not, held included: a static read of what the roster knows.
-            { action: 'details', actionId: 'panel.toggle', label: 'Details', reason: '', always: true },
+            // Secondary: never the menu's default act, so each row keeps the default it had.
+            { action: 'details', actionId: 'panel.toggle', label: 'Details', reason: '', always: true, secondary: true },
             { action: 'open-split', actionId: 'instance.openSplit', label: 'Open in split', reason: () => !actionTarget ? 'Instance identity is not fully reported.'
               : unsupportedLine(i) || (i.running !== true ? 'No live terminal is reported.' : instanceSplitPlan(splitOpenState()).reason) },
             { action: 'open-pr', actionId: 'instance.openPullRequest', label: 'Open pull request…', reason: !actionTarget ? 'Instance identity is not fully reported.'
@@ -2107,9 +2110,13 @@ function splitPane(orientation) {
   // A new pane opens Home as its first tab (slice 6a; editor-group-layout-ownership's empty placeholder before), so
   // the person picks what goes there; focus goes to its tab.
   if (!focused.tabs.length) {
-    const owns = tabOpenIntents.watch(), group = focused.id;
+    // The roster first, as before (where Home can't open, the person picks there), then Home's tab once it opens.
+    focusRoster();
+    const group = focused.id;
     void showStage("home").then(() => {
-      if (owns() && split?.focusedGroup === group && tabs.get(activeTab)?.page === "home") tabs.get(activeTab).triggerEl.focus();
+      // Still this pane, and its Home shown: focus moves from the roster to Home's tab. (The open begins its own
+      // intent, so a watch taken before it would always read superseded.)
+      if (split?.focusedGroup === group && tabs.get(activeTab)?.page === "home") tabs.get(activeTab).triggerEl.focus();
     });
   }
 }
@@ -2771,9 +2778,8 @@ const WORKSPACE_TAB_NAMES = { machines: "Machines", souls: "Souls", capabilities
  * (stageHost's listener). Only while the page that open showed is still the stage, and only when focus has no place
  * (on <body> or a hidden control): a choice made meanwhile keeps its own focus. */
 async function openWorkspaceTabFocused(tab, options) {
-  const owns = tabOpenIntents.watch();
   await openWorkspaceSouls(tab, options);
-  if (!owns() || currentPage() !== "spawn") return;
+  if (currentPage() !== "spawn") return;
   const active = document.activeElement;
   if (active && active !== document.body && isShown(active)) return;
   const control = document.getElementById(`workspace-tab-${tab}`);
