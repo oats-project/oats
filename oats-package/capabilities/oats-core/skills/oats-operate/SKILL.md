@@ -328,7 +328,7 @@ runs every module's retire hook (identities, scheduled jobs) and retains a
 worktree with work in it unless told to discard. An extra tree in the home is
 removed when it is clean and retained when it holds work; discarding does not
 apply to it.
-A home whose recorded retire hooks cannot run refuses with
+From OATS 0.69.20, a home whose recorded retire hooks cannot run refuses with
 `E_UNIDENTIFIED_INSTANCE_HOME` before stopping anything, children included;
 `--plan` and Desktop Remove refuse the same way. This affects homes spawned
 before `capabilityRuntime` and captured homes from before 0.26, unless their
