@@ -501,7 +501,8 @@ the palette's **Agent: Details**. It is the instance panel's content in a
 tab: the Instance page (its work, paths, session, lineage, messaging and
 teams, and Needs input while it waits on you), the Soul page and the
 Developer page (its Git state and pull request), with Start, Stop and Retire
-at the foot. One Details tab per workspace follows the agent you asked for,
+at the foot, and under them a folded **Recent events** section, its reported
+lifecycle activity, read when you ask (it was the Machines canvas's popup). One Details tab per workspace follows the agent you asked for,
 and is titled by its name. A terminal tab no longer opens a panel beside it:
 its agent's Details is `i` or ⌘I / Ctrl+Shift+I away. A row's tooltip still
 gives its repository, branch, harness and model to the mouse; the keyboard
