@@ -45,36 +45,31 @@ describe("A5 spawn", () => {
     expect(preview.value.summary.problems).toEqual([]);
   });
 
-  it("spawns by previewing, then applying that decision with the idempotency key", async () => {
-    const spawned = await oats.spawn({ soul: "oats-developer", name: "flaky-ci-2-developer", task: "Fix it.", key: "spawn-1f0c9a7e", revision: null }, context());
+  it("applies a previewed decision with the idempotency key", async () => {
+    const preview = await oats.spawnPreview({ soul: "oats-developer", name: "flaky-ci-2-developer", task: "Fix it." }, context());
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    const spawned = await oats.spawn({ soul: "oats-developer", name: "flaky-ci-2-developer", task: "Fix it.", key: "spawn-1f0c9a7e", revision: preview.value.revision }, context());
+    expect(spawned).toEqual({ ok: true, value: { instance: "flaky-ci-2-developer", threadId: "thr_ci2" } });
     const calls = await fake.calls();
     expect(calls.map((call) => call.verb)).toEqual(["spawn --preview", "spawn"]);
     const apply = calls[1]!;
-    expect(spawned).toEqual({ ok: true, value: { instance: "flaky-ci-2-developer", threadId: "thr_ci2", revision: apply.argv[apply.argv.indexOf("--expect-decision") + 1] } });
     expect(apply.argv).toEqual([
       "spawn", "oats-developer", "--backend", "bb", "--name", "flaky-ci-2-developer", "--task-file", apply.taskFile?.path,
-      "--expect-decision", spawned.ok ? spawned.value.revision : "", "--idempotency-key", "spawn-1f0c9a7e", "--json",
+      "--expect-decision", preview.value.revision, "--idempotency-key", "spawn-1f0c9a7e", "--json",
     ]);
     expect(apply.argv).not.toContain("--preview");
-    // One file for the two processes, 0600, gone afterwards.
-    expect(apply.taskFile?.path).toBe(calls[0]?.taskFile?.path);
+    // A file of its own for each process, 0600, gone afterwards.
     expect(apply.taskFile).toMatchObject({ mode: "600", text: "Fix it." });
+    expect(apply.taskFile?.path.startsWith(fake.tempDir)).toBe(true);
     expect(await leftInTemp()).toEqual([]);
-  });
-
-  it("replays a known decision without a second preview", async () => {
-    const spawned = await oats.spawn({ soul: "oats-developer", name: "flaky-ci-2-developer", task: "Fix it.", key: "spawn-1f0c9a7e", revision: "c557d8ec9a272ba1c1739dc3" }, context());
-    expect(spawned.ok).toBe(true);
-    const calls = await fake.calls();
-    expect(calls.map((call) => call.verb)).toEqual(["spawn"]);
-    expect(calls[0]?.argv).toContain("c557d8ec9a272ba1c1739dc3");
   });
 
   it("refuses a soul that is not in the list before any process starts", async () => {
     for (const soul of ["no-such-soul", "--help", "oats-developer --yolo", ""]) {
       const preview = await oats.spawnPreview({ soul, name: "x-developer", task: "t" }, context());
       expect(preview.ok === false && preview.error.code, soul).toBe(codes.invalidInput);
-      const spawned = await oats.spawn({ soul, name: "x-developer", task: "t", key: "spawn-1f0c9a7e", revision: null }, context());
+      const spawned = await oats.spawn({ soul, name: "x-developer", task: "t", key: "spawn-1f0c9a7e", revision: "c557d8ec9a272ba1c1739dc3" }, context());
       expect(spawned.ok === false && spawned.error.code, soul).toBe(codes.invalidInput);
     }
     expect(await fake.calls()).toEqual([]);
@@ -85,7 +80,7 @@ describe("A5 spawn", () => {
     for (const name of ["two words", "a/b", "../escape", "Upper", "-leading", "--preview", "", "a".repeat(64), "name\nnewline", "x;id"]) {
       const preview = await oats.spawnPreview({ soul: "oats-developer", name, task: "t" }, context());
       expect(preview.ok === false && preview.error.code, name).toBe(codes.invalidInput);
-      const spawned = await oats.spawn({ soul: "oats-developer", name, task: "t", key: "spawn-1f0c9a7e", revision: null }, context());
+      const spawned = await oats.spawn({ soul: "oats-developer", name, task: "t", key: "spawn-1f0c9a7e", revision: "c557d8ec9a272ba1c1739dc3" }, context());
       expect(spawned.ok === false && spawned.error.code, name).toBe(codes.invalidInput);
     }
     expect(await fake.calls()).toEqual([]);
@@ -93,7 +88,7 @@ describe("A5 spawn", () => {
   });
 
   it("refuses a key or a revision that is not the kernel's shape before any process starts", async () => {
-    const bad = await oats.spawn({ soul: "oats-developer", name: "x-developer", task: "t", key: "--force", revision: null }, context());
+    const bad = await oats.spawn({ soul: "oats-developer", name: "x-developer", task: "t", key: "--force", revision: "c557d8ec9a272ba1c1739dc3" }, context());
     expect(bad.ok === false && bad.error.code).toBe(codes.invalidInput);
     const worse = await oats.spawn({ soul: "oats-developer", name: "x-developer", task: "t", key: "spawn-1f0c9a7e", revision: "--no-launch" }, context());
     expect(worse.ok === false && worse.error.code).toBe(codes.invalidInput);
@@ -103,20 +98,20 @@ describe("A5 spawn", () => {
   it("removes the task file when the kernel refuses the spawn, and answers the kernel's code and message", async () => {
     const refused = { schemaVersion: 1, ok: false, error: { code: "E_INSTANCE_NAME_TAKEN", message: 'instance name "flaky-ci-developer" is taken', details: { instance: "flaky-ci-developer" } } };
     await fake.behave({ spawn: { stdout: JSON.stringify(refused) } });
-    const spawned = await oats.spawn({ soul: "oats-developer", name: "flaky-ci-developer", task: "again", key: "spawn-1f0c9a7e", revision: null }, context());
+    const spawned = await oats.spawn({ soul: "oats-developer", name: "flaky-ci-developer", task: "again", key: "spawn-1f0c9a7e", revision: "c557d8ec9a272ba1c1739dc3" }, context());
     expect(spawned).toEqual({ ok: false, error: { code: "E_INSTANCE_NAME_TAKEN", message: 'instance name "flaky-ci-developer" is taken' } });
     const calls = await fake.calls();
-    expect(calls.map((call) => call.verb)).toEqual(["spawn --preview", "spawn"]);
-    expect(calls[1]?.taskFile).toMatchObject({ mode: "600", text: "again" });
-    expect(existsSync(calls[1]!.taskFile!.path)).toBe(false);
+    expect(calls.map((call) => call.verb)).toEqual(["spawn"]);
+    expect(calls[0]?.taskFile).toMatchObject({ mode: "600", text: "again" });
+    expect(existsSync(calls[0]!.taskFile!.path)).toBe(false);
     expect(await leftInTemp()).toEqual([]);
   });
 
-  it("removes the task file when the preview fails, and starts no spawn", async () => {
-    await fake.behave({ "spawn --preview": { stdout: "", stderr: "oats: crashed\n", exit: 2 } });
-    const spawned = await oats.spawn({ soul: "oats-developer", name: "x-developer", task: "t", key: "spawn-1f0c9a7e", revision: null }, context());
+  it("removes the task file when oats fails with no answer", async () => {
+    await fake.behave({ spawn: { stdout: "", stderr: "oats: crashed\n", exit: 2 } });
+    const spawned = await oats.spawn({ soul: "oats-developer", name: "x-developer", task: "t", key: "spawn-1f0c9a7e", revision: "c557d8ec9a272ba1c1739dc3" }, context());
     expect(spawned.ok === false && spawned.error.code).toBe(codes.failed);
-    expect((await fake.calls()).map((call) => call.verb)).toEqual(["spawn --preview"]);
+    expect((await fake.calls()).map((call) => call.verb)).toEqual(["spawn"]);
     expect(await leftInTemp()).toEqual([]);
   });
 

@@ -137,7 +137,13 @@ export function parseRetirePlan(document: unknown): Result<Plan> {
   const facts = plan.facts ?? {};
   const defaults = plan.defaults ?? {};
   const lines: string[] = [];
-  lines.push(`Removed: the home of ${plan.instance}${plan.home ? ` (${plan.home})` : ""}. Its session is ${sessionWords(facts.session)}${idle(facts.session?.state) ? "" : " and is stopped first"}.`);
+  const established = facts.session && facts.session.established !== false;
+  const sessionLine = !established
+    ? "Whether its session runs is not known; one that runs is stopped first."
+    : idle(facts.session?.state)
+      ? "Its session is not running."
+      : "Its session is running and is stopped first.";
+  lines.push(`Removed: the home of ${plan.instance}${plan.home ? ` (${plan.home})` : ""}. ${sessionLine}`);
   if (facts.ownWorktree === true) {
     const branch = facts.work?.branch ? ` on branch ${facts.work.branch}` : "";
     const pending = workWords(facts.work);

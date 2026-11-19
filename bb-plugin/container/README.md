@@ -26,7 +26,7 @@ host's home; the checkout goes in through `tar` and the artefacts come out to `c
 The live checks of the backend:
 
 - **L1** the installed plugin reads the deployment through the host entry (`bb plugin rpc call oats snapshot`).
-- **L2** one line appended to `<deployment>/.agents/events/` reaches the snapshot with no poll and no refresh (the host watch, the `changed` signal, the reread).
+- **L2** with the poll off (no RPC for 50 s), one line appended to `<deployment>/.agents/events/` makes the server run `oats status`: the host watch, the `changed` signal, the reread. The proof is the fake's call log.
 - **A14** (the backend's part) with `oats` removed, the snapshot says what is missing and bb's own lists answer; with `oats` back, the snapshot is back.
 - **A15** `bb plugin reload oats` while a fake `oats` sleeps and holds a child of its own: neither process is left.
 - **A15b** the same when bb itself is stopped.

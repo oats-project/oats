@@ -4,7 +4,7 @@
 # checks; the app's (A13, A14: screenshots at two widths) are container/live-ui.mjs, run from here
 # when it is there.
 #   L1  the installed plugin reads the deployment through the host entry
-#   L2  a line appended to the deployment's event log invalidates the snapshot (watch -> signal -> reread)
+#   L2  a line appended to the deployment's event log, with the poll off, makes the server reread (watch -> signal -> reread)
 #   A14 (backend) with the fake oats removed, the snapshot says what is missing and bb answers as usual
 #   A15 `bb plugin reload oats` during a slow oats leaves no oats process
 #   A15b stopping bb during a slow oats leaves none either
@@ -77,18 +77,26 @@ else
 fi
 grep -q '"cwd":"'"$DEPLOYMENT"'"' "$FAKE_LOG" && pass "L1 oats ran with the deployment as its cwd" || fail "L1 cwd"
 
-# ---- L2: the watch. A new roster, then one line in the event log; no RPC asks for a reread.
-sleep 5.5 # past the floor between two reads
-before=$(field at <<<"$(rpc snapshot)")
+# ---- L2: the watch alone. The server polls only while a client is connected, and counts one as
+# connected for 45 s after a snapshot call: so no RPC for 50 s, then one line in the event log, and
+# the proof is the fake's own log: a status call that nothing but the watch can have caused.
+say "L2 waiting 50 s with no RPC, so that the 15 s poll is off"
+sleep 50
+: > "$FAKE_LOG"
+sleep 16 # a poll tick, had the poll been on
+if grep -q '"verb":"status"' "$FAKE_LOG"; then fail "L2 precondition: the poll still runs with no client"; fi
 fake '{"status":{"stdout":"{\"root\":\"/abs/deployment\",\"agents\":[]}"}}'
 echo '{"kind":"spawned"}' >> "$DEPLOYMENT/.agents/events/oats-maintainer--release-070-maintainer.jsonl"
-changed() { [ "$(field at <<<"$(rpc snapshot)")" != "$before" ]; }
-if wait_until 8 changed && [ "$(field agents.length <<<"$(rpc snapshot)")" = 0 ]; then
-  pass "L2 a line in .agents/events made the server reread (no poll, no refresh)"
+if wait_until 8 grep -q '"verb":"status"' "$FAKE_LOG"; then
+  pass "L2 a line in .agents/events made the server run oats status (no poll, no RPC)"
 else
-  fail "L2 the event log's change did not reach the snapshot"
+  fail "L2 the event log's change caused no reread"
 fi
+sleep 1
+[ "$(field agents.length <<<"$(rpc snapshot)")" = 0 ] && pass "L2 the cached snapshot is the new roster" || fail "L2 the snapshot is not the new roster"
 fake
+sleep 5.5 # past the floor between two reads
+rpc refresh > /dev/null
 
 # ---- A14, the backend's part: no oats.
 mv "$OATS" "$OATS.away"

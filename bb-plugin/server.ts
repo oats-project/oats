@@ -46,12 +46,17 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+/** The kernel's (or the plugin's) code behind each refusal built here, for the handlers that act on one. */
+const refusedWith = new WeakMap<object, string>();
+
 /** A kernel refusal or a failed `oats`, as the RPC refusal the app shows: the code, then the message, unchanged. */
 function refusal(error: KernelError): experimental_PluginRpcRefusal {
-  return new experimental_PluginRpcRefusal({
+  const refused = new experimental_PluginRpcRefusal({
     code: error.code === codes.invalidInput ? "invalid" : "conflict",
     message: error.code === codes.invalidInput ? error.message : `${error.code}: ${error.message}`,
   });
+  refusedWith.set(refused, error.code);
+  return refused;
 }
 const invalid = (message: string) => new experimental_PluginRpcRefusal({ code: "invalid", message });
 
@@ -219,8 +224,9 @@ export default async function plugin(bb: BbPluginApi) {
     if (!lifetime.signal.aborted) void reread();
   };
 
+  /** The cached snapshot; before the first one, the read in flight, or one started now. */
   async function current(): Promise<Snapshot> {
-    return cached ?? (await reread());
+    return cached ?? (await (running ?? reread()));
   }
 
   /** The agent the kernel's snapshot names; an instance it does not name is refused. */
@@ -240,15 +246,20 @@ export default async function plugin(bb: BbPluginApi) {
 
   /** Runs one verb on the machine; a kernel refusal, a failed `oats` and an unreachable machine are RPC refusals. */
   async function call<Method extends Verb>(method: Method, extra: Extra<Method>, timeoutMs: number, signal: AbortSignal): Promise<Value<Method>> {
-    const where = await base(signal);
-    if ("ok" in where) throw refusal({ code: where.code, message: where.message });
-    let answer: Answer<unknown>;
+    let where: Awaited<ReturnType<typeof base>>;
+    let answer: Answer<unknown> | null = null;
     try {
-      const input = { ...where.input, ...extra } as z.input<(typeof hostContract)[Method]["input"]>;
-      answer = (await host.call(method, input, { hostId: where.target.hostId, signal, timeoutMs })) as Answer<unknown>;
+      // Finding the machine and the deployment asks bb and the host daemon too: the same refusal.
+      where = await base(signal);
+      if (!("ok" in where)) {
+        const input = { ...where.input, ...extra } as z.input<(typeof hostContract)[Method]["input"]>;
+        answer = (await host.call(method, input, { hostId: where.target.hostId, signal, timeoutMs })) as Answer<unknown>;
+      }
     } catch (error) {
       throw refusal({ code: codes.hostUnreachable, message: `The machine that runs oats did not answer: ${String((error as Error).message)}` });
     }
+    if ("ok" in where) throw refusal({ code: where.code, message: where.message });
+    if (answer === null) throw refusal({ code: codes.hostUnreachable, message: "The machine that runs oats did not answer." });
     if (!answer.ok) throw refusal(answer.error);
     return answer.value as Value<Method>;
   }
@@ -331,6 +342,11 @@ export default async function plugin(bb: BbPluginApi) {
       let spawned: Value<"spawn">;
       try {
         spawned = await call("spawn", { soul, name, task, key, revision: decision.revision }, HOST_TIMEOUT.long, lifetime.signal);
+      } catch (error) {
+        // The decision moved and the kernel created nothing: there is nothing to replay under this
+        // key, so the next call with it reads the decision again instead of sending the stale one.
+        if (error instanceof Error && refusedWith.get(error) === "E_DECISION_STALE") spawns.delete(key);
+        throw error;
       } finally {
         rereadSoon();
       }

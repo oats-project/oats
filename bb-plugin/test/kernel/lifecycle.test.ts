@@ -122,6 +122,20 @@ describe("retire", () => {
     expect((await fake.calls()).map((call) => call.argv)).toEqual([["retire", "weekly-digest-helper", "--plan", "--json"]]);
   });
 
+  it("says so when the kernel could not establish whether the session runs", async () => {
+    const answer = JSON.parse(await readFile(join(FIXTURES, "retire-plan.json"), "utf8"));
+    answer.result.facts.session = { state: "unestablished", present: null, backend: null, established: false, reason: "E_SESSION_UNAVAILABLE" };
+    await fake.behave({ "retire --plan": { stdout: JSON.stringify(answer) } });
+    const plan = await oats.retirePlan("weekly-digest-helper");
+    expect(plan.ok && plan.value.lines[0]).toBe(
+      "Removed: the home of weekly-digest-helper (/abs/deployment/agents/oats-expert/instances/weekly-digest-helper). Whether its session runs is not known; one that runs is stopped first.",
+    );
+    answer.result.facts.session = { state: "unknown", present: true, backend: "bb", established: true };
+    await fake.behave({ "retire --plan": { stdout: JSON.stringify(answer) } });
+    const running = await oats.retirePlan("weekly-digest-helper");
+    expect(running.ok && running.value.lines[0]).toMatch(/Its session is running and is stopped first\.$/);
+  });
+
   it("applies the plan: the first answer is the receipt itself, a replay is an envelope", async () => {
     const apply = { instance: "weekly-digest-helper", revision: "4e5f6a7b8c9d0e1f2a3b4c5d", key: "retire-2b9d4e6f8a1c" };
     expect(await oats.retireApply(apply)).toEqual({ ok: true, value: {} });

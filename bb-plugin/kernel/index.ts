@@ -91,29 +91,22 @@ export class Oats {
   }
 
   /**
-   * Reads the decision (unless `revision` is the one an earlier call with this key applied), then
-   * applies exactly that decision with the idempotency key.
+   * Applies the decision `revision` (a preview's) with the idempotency key: the kernel refuses a
+   * decision that moved since, and replays a spawn it already made under this key.
    */
   async spawn(
-    input: spawn.SpawnInput & { task: string; key: string; revision: string | null },
+    input: spawn.SpawnInput & { task: string; key: string; revision: string },
     context: { knownSouls: readonly string[]; tempDir: string },
     signal?: AbortSignal,
-  ): Promise<Result<{ instance: string; threadId: string | null; revision: string }>> {
+  ): Promise<Result<{ instance: string; threadId: string | null }>> {
     const checked = spawn.checkSpawn(input, context.knownSouls);
     if (!checked.ok) return checked;
-    // The key is checked before the preview runs: a bad one must start no process either.
-    const probe = spawn.spawnArgv(checked.value, "task", { revision: input.revision ?? "0", key: input.key });
+    // The key and the revision are checked before the task file is written.
+    const probe = spawn.spawnArgv(checked.value, "task", input);
     if (!probe.ok) return probe;
-    return withTaskFile(context.tempDir, input.task, async (taskFile) => {
-      let revision = input.revision;
-      if (revision === null) {
-        const preview = await this.#run(spawn.spawnPreviewArgv(checked.value, taskFile), spawn.parseSpawnPreview, this.#timeouts.preview, signal);
-        if (!preview.ok) return preview;
-        revision = preview.value.revision;
-      }
-      const applied = await this.#run(spawn.spawnArgv(checked.value, taskFile, { revision, key: input.key }), spawn.parseSpawn, this.#timeouts.long, signal);
-      return applied.ok ? { ok: true, value: { ...applied.value, revision } } : applied;
-    });
+    return withTaskFile(context.tempDir, input.task, (taskFile) =>
+      this.#run(spawn.spawnArgv(checked.value, taskFile, input), spawn.parseSpawn, this.#timeouts.long, signal),
+    );
   }
 
   stopPlan(instance: string, signal?: AbortSignal): Promise<Result<lifecycle.Plan>> {

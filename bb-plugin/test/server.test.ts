@@ -1,6 +1,6 @@
 // The server entry on bb's fake plugin host, with the real host entry behind it (bb's host-entry
 // harness) and the fake `oats` behind that: the whole backend, from an RPC to a process and back.
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createFakePluginHost, makeHostResponse, type FakePluginHost } from "@get-bb/plugin-sdk/testing";
 import { experimental_createHostEntryHarness } from "@get-bb/plugin-sdk/testing/host";
@@ -9,7 +9,7 @@ import { REALTIME_CHANGED } from "../contract.js";
 import { createHostEntry } from "../host.js";
 import { codes } from "../kernel/index.js";
 import plugin, { MIN_INTERVAL_MS } from "../server.js";
-import { installFakeOats, type FakeOats } from "./support/fake-oats.js";
+import { FIXTURES, installFakeOats, type FakeOats } from "./support/fake-oats.js";
 
 let fake: FakeOats;
 let hostEntry: ReturnType<typeof experimental_createHostEntryHarness<any, any>>;
@@ -103,6 +103,18 @@ describe("snapshot", () => {
     await expect.poll(async () => (await verbs()).length, { timeout: MIN_INTERVAL_MS + 4_000 }).toBe(2);
   }, 20_000);
 
+  it("shares the read in flight with a snapshot call that arrives before the first answer", async () => {
+    await fake.behave({ status: { sleepMs: 700 } });
+    const service = server.harness.runService("snapshot");
+    await expect.poll(async () => (await verbs()).length).toBe(1);
+    const started = Date.now();
+    expect((await rpc("snapshot")).ok).toBe(true);
+    expect(Date.now() - started).toBeLessThan(MIN_INTERVAL_MS - 1_000);
+    expect(await verbs()).toEqual(["status"]);
+    service.controller.abort();
+    await service.done;
+  });
+
   it("says in one line that oats is missing, and keeps answering", async () => {
     await server.harness.setSettings({ oatsBin: join(fake.deployment, "no-oats-here") });
     const snapshot = await rpc("snapshot");
@@ -175,6 +187,16 @@ describe("the pages", () => {
     expect((await verbs()).filter((verb) => verb === "souls")).toHaveLength(1);
   });
 
+  it("refuses, and does not crash, when the machine cannot be asked where the deployment is", async () => {
+    await server.harness.dispose();
+    await hostEntry.experimental_dispose(); // every host call now fails
+    await load();
+    const refused = await refusalOf(rpc("souls"));
+    expect(refused.code).toBe("conflict");
+    expect(refused.message).toMatch(/^HOST_UNREACHABLE: The machine that runs oats did not answer: /);
+    expect(await rpc("snapshot")).toMatchObject({ ok: false, code: codes.hostUnreachable });
+  });
+
   it("refuses with the kernel's code and message when a page's verb fails, and reads again next time", async () => {
     await fake.behave({ teams: { stdout: JSON.stringify({ schemaVersion: 1, ok: false, error: { code: "E_WORKSPACE_SCHEMA", message: "oats-workspace.yaml: teams must be a mapping" } }) } });
     expect(await refusalOf(rpc("teams"))).toEqual({ code: "conflict", message: "E_WORKSPACE_SCHEMA: oats-workspace.yaml: teams must be a mapping" });
@@ -203,6 +225,30 @@ describe("acts", () => {
     expect(calls.map((call) => call.verb)).toEqual(["spawn --preview", "spawn", "spawn"]);
     expect(calls[2]!.argv.slice(8)).toEqual(calls[1]!.argv.slice(8));
     expect(await refusalOf(rpc("spawn", { ...input, name: "another-developer" }))).toMatchObject({ code: "invalid" });
+  });
+
+  it("reads the decision again after the kernel refused a stale one, under the same key", async () => {
+    const input = { soul: "oats-developer", name: "flaky-ci-2-developer", task: "Fix the flaky CI job.", key: "spawn-1f0c9a7e" };
+    await fake.behave({ spawn: { stdout: JSON.stringify({ schemaVersion: 1, ok: false, error: { code: "E_DECISION_STALE", message: "the decision moved", details: {} } }) } });
+    expect(await refusalOf(rpc("spawn", input))).toEqual({ code: "conflict", message: "E_DECISION_STALE: the decision moved" });
+    // The decision the kernel would confirm now is another one.
+    const preview = JSON.parse(await readFile(join(FIXTURES, "spawn-preview.json"), "utf8"));
+    preview.result.decision.revision = "aaaaaaaaaaaaaaaaaaaaaaaa";
+    await fake.behave({ "spawn --preview": { stdout: JSON.stringify(preview) } });
+    expect(await rpc("spawn", input)).toEqual({ instance: "flaky-ci-2-developer", threadId: "thr_ci2" });
+    const calls = (await fake.calls()).filter((call) => call.verb.startsWith("spawn"));
+    expect(calls.map((call) => call.verb)).toEqual(["spawn --preview", "spawn", "spawn --preview", "spawn"]);
+    expect(calls[3]!.argv[calls[3]!.argv.indexOf("--expect-decision") + 1]).toBe("aaaaaaaaaaaaaaaaaaaaaaaa");
+    expect(calls[1]!.argv[calls[1]!.argv.indexOf("--expect-decision") + 1]).not.toBe("aaaaaaaaaaaaaaaaaaaaaaaa");
+  });
+
+  it("keeps the decision for a retry when the spawn failed another way", async () => {
+    const input = { soul: "oats-developer", name: "flaky-ci-2-developer", task: "Fix the flaky CI job.", key: "spawn-1f0c9a7e" };
+    await fake.behave({ spawn: { stdout: JSON.stringify({ schemaVersion: 1, ok: false, error: { code: "E_SPAWN_INCOMPLETE", message: "launched, not confirmed" } }) } });
+    expect(await refusalOf(rpc("spawn", input))).toMatchObject({ code: "conflict" });
+    await fake.behave({});
+    await rpc("spawn", input);
+    expect((await fake.calls()).filter((call) => call.verb.startsWith("spawn")).map((call) => call.verb)).toEqual(["spawn --preview", "spawn", "spawn"]);
   });
 
   it("refuses a soul that is not listed and a name that is no instance name, with no spawn process", async () => {
