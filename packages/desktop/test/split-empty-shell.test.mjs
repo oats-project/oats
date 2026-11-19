@@ -560,13 +560,16 @@ async function panelChoiceRace(t, outcome, shellSource = source) {
 }
 for (const outcome of ['resolve', 'reject']) {
   test(`late terminal lookup ${outcome} cannot overwrite a newer real panel choice`, t => panelChoiceRace(t, outcome));
-  test(`mutation: real panel entry must supersede a terminal lookup ${outcome}`, async t => {
+  test(`mutation: inside Details the pane's own selection supersedes a terminal lookup ${outcome} too`, async t => {
     const guard = 'onIntent: () => { if (!tabOpenIntents.isApplyingFocus()) tabOpenIntents.invalidate(); }';
     const start = source.indexOf('const contextPanel = createContextPanel'), end = source.indexOf('/** Projection only:', start);
     const block = source.slice(start, end);
     assert.equal(block.split(guard).length, 2, 'target the panel, not another component with the same guard');
     const mutant = source.replace(block, block.replace(guard, 'onIntent: () => {}'));
-    await assert.rejects(panelChoiceRace(t, outcome, mutant), outcome === 'resolve' ? /chosen-panel/ : /obsolete panel lookup/);
+    // Slice 6a: the panel lives in the Details tab's pane, whose own selection (wirePaneSelection: the pointer or focus
+    // entering it) supersedes the lookup as well, so the race holds without the panel's guard; it stays as defence in
+    // depth, and the race is pinned by the test above.
+    await panelChoiceRace(t, outcome, mutant);
   });
 }
 

@@ -1880,7 +1880,8 @@ function openDetailsTab(row, { focus = true } = {}) {
   }
   hideEmptyState();
   let events = null;
-  const made = addTab({ title, key: "details", kind: "details", workspace: ws,
+  // Keyed per workspace: addTab's dedup reads every tab's key, and another workspace's Details is not this one.
+  const made = addTab({ title, key: JSON.stringify([ws, "details"]), kind: "details", workspace: ws,
     focusContent: () => contextPanel.focus(),
     onClose: () => { events?.dispose?.(); placeContextPanel(null); syncContextPanel(); } });
   if (!made) return false;
