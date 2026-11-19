@@ -372,8 +372,8 @@ window.addEventListener('pagehide', () => spawnJobs.dispose(), { once: true });
 const stageHost = document.getElementById("stagehost");
 // Esc on the Workspace page goes back to Home, which opens it (slice 2): only an Esc nothing on the page took
 // (a field, a list, a menu or a dialog handles its own, and marks it), from no text field.
-stageHost.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape" || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || stage?.name !== "spawn") return;
+document.getElementById("tabhost").addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || currentPage() !== "spawn") return;
   if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable="true"], dialog, [role="dialog"], [role="menu"], [role="listbox"]')) return;
   e.preventDefault();
   void showStageFocused("home");
@@ -395,51 +395,56 @@ async function closeStage() {
   return myOp === stageOp ? myOp : null;
 }
 
+/** The page the active tab shows ("home", "spawn", "automations"), or null (slice 6a: pages are tabs). */
+function currentPage() {
+  const t = tabLayerVisible ? tabs.get(activeTab) : null;
+  return t?.kind === "page" && canActivateTab(t, currentWorkspace()) ? t.page : null;
+}
+/** The mounted module of the open page tab `name` of this workspace, or null. */
+function pageModule(name) {
+  for (const t of tabs.values()) if (t.kind === "page" && t.page === name && canActivateTab(t, currentWorkspace())) return t.mod ?? null;
+  return null;
+}
+let homeSeq = 0;
+/** Open a page as a tab in the focused pane (the Desktop UI rework, slice 6a), or focus its tab. The page views are
+ * one tab each per workspace (views/spawn.mjs and automations.mjs hold module state), except Home, which mounts
+ * one instance per tab: a Home tab in the focused group is focused, else a new one opens there. A Workspace tab
+ * (NAV_TABS: Machines) opens the Workspace page on that tab. Returns once the tab is open. */
 async function showStage(name) {
   // A window with no workspace shows only its choice (#481): no view may read with no workspace.
   if (windowState() === "choosing") { void showChooser(); return; }
-  // A destination that is a tab of a page (Machines, of Workspace): that page, on that tab.
   const asTab = navTab(name);
   if (asTab) return openWorkspaceSouls(asTab.tab);
-  tabOpenIntents.invalidate(); // navigating away supersedes pending tab selections
   const v = NAV.find((x) => x.name === name);
-  setSidebarMode(stageSidebarMode(name));
-  setNavActive(name);
-  showTabLayer(false);
-  if (stage && stage.name === name) return;   // already on this surface
-  const myOp = await closeStage();
-  if (myOp === null) return;                  // superseded by a faster switch
-  let mod;
-  try { mod = await loadStageView(name); }
-  catch (e) {
-    if (myOp !== stageOp) return;
-    const notice = document.createElement("div"); notice.className = "placeholder";
-    notice.textContent = `${name}: view module failed to load: ${e.message}`;
-    stageHost.replaceChildren(notice);
-    return;
-  }
-  if (myOp !== stageOp) return;
-  const life = createViewLifecycle(mod, (e) => console.error(e));
-  const el = document.createElement("div");
-  el.style.height = "100%";
-  stageHost.innerHTML = "";
-  stageHost.append(el);
-  const mounted = stage = { name, life, el, mod };
-  mounted.panelOwner = createPanelOwner(contextPanel, mounted, workspaceGeneration);
-  syncContextPanel();
-  // Re-derive contexts from the CURRENT layer state: the user may have
-  // activated a tab while this stage was loading — a late mount completion
-  // must not replace the live "tabs" context with a hidden stage context.
-  updateActiveContexts();
-  try { await life.mounted(el, { ...ctx, rightPanel: mounted.panelOwner }); }
-  catch (e) {
-    if (myOp !== stageOp || stage !== mounted) return;
-    mounted.panelOwner.dispose();
-    const notice = document.createElement("div"); notice.className = "placeholder";
-    notice.textContent = `${v?.title || name}: mount failed: ${e.message}`;
-    el.replaceChildren(notice);
-  }
+  if (!v) return;
+  const ws = currentWorkspace();
+  const open = [...tabs].filter(([, t]) => t.kind === "page" && t.page === name && canActivateTab(t, ws));
+  const focusedGroup = split?.groups.find((g) => g.id === split.focusedGroup) ?? null;
+  const here = focusedGroup ? open.find(([id]) => focusedGroup.tabs.includes(id)) : open[0];
+  const reuse = here ?? (name === "home" ? null : open[0]);
+  if (reuse) { selectTab(reuse[0]); return; }
+  // One open of a page at a time per workspace and group: a second ask while the first is mounting waits for it.
+  const pendingKey = `${ws}\u0000${name}\u0000${focusedGroup?.id ?? ""}`;
+  if (pageOpens.has(pendingKey)) return pageOpens.get(pendingKey);
+  hideEmptyState();
+  const opening = openViewTab(name, v.title, {}, name === "home" ? `page:home:${++homeSeq}` : `page:${name}`, "page")
+    .finally(() => pageOpens.delete(pendingKey));
+  pageOpens.set(pendingKey, opening);
+  return opening;
 }
+const pageOpens = new Map();
+/** No tab at all in this workspace (slice 6a): the main area says so and offers Home, with its keys. */
+function showEmptyState() {
+  if (stageHost.querySelector(".tabs-empty")) return;
+  const el = document.createElement("div"); el.className = "placeholder tabs-empty";
+  const heading = document.createElement("h2"); heading.textContent = "No tabs open";
+  const text = document.createElement("p"); text.textContent = "Open Home to see what needs you, or pick an agent in the sidebar.";
+  const open = document.createElement("button"); open.type = "button"; open.className = "primary"; open.textContent = "Open Home";
+  open.addEventListener("click", () => { void showStageFocused("home"); });
+  el.append(heading, text, open);
+  stageHost.replaceChildren(el);
+}
+function hideEmptyState() { stageHost.querySelector(".tabs-empty")?.remove(); }
 
 /** One window per workspace (#481): a window with no workspace (a New Window, or one whose view moved
  * to a workspace another window has) shows the switcher over an empty state, and reads nothing. Its
@@ -479,11 +484,13 @@ onWindowState((state) => {
  * control: where it was when that is still shown (the nav button), else the stage's first
  * control — never <body> after the terminal it was in is hidden (spec F audit). */
 async function showStageFocused(name) {
-  const op = stageOp, page = navTab(name)?.page ?? name;
+  const page = navTab(name)?.page ?? name;
+  const owns = tabOpenIntents.watch();
   await showStage(name);
-  if (stage?.name !== page || tabLayerVisible || (stageOp !== op && stageOp !== op + 1)) return;
+  if (!owns() || currentPage() !== page) return;
+  // From the keyboard, focus lands in the page tab (its trigger, which the tab keys walk), never <body>.
   const active = document.activeElement;
-  if (!active || active === document.body || !isShown(active)) focusRegions.focusRegion("main");
+  if (!active || active === document.body || !isShown(active)) tabs.get(activeTab)?.triggerEl.focus();
 }
 
 // A request to open one deployment's tab of the Machines tab (the switcher's "Not matched" entries,
@@ -1695,11 +1702,13 @@ function showTerminalContext() {
   const ws = currentWorkspace();
   const restored = restoreTerminalTab(tabs, ws, wsActiveTerminal.get(ws));
   if (restored) { activateTab(restored[0]); return; }
-  // With the tree permanently visible, closing/switching away from the last
-  // terminal restores the prior stage surface.
-  setSidebarMode(stageSidebarMode(stage?.name));
+  // No terminal: the newest other tab of the workspace (a page, a brain, a file), else the empty state
+  // (slice 6a: no stage behind the tabs).
+  const other = [...tabs].filter(([, t]) => canActivateTab(t, ws)).at(-1);
+  if (other) { activateTab(other[0]); return; }
   showTabLayer(false);
-  setNavActive(stage?.name || "home");
+  setNavActive(null);
+  showEmptyState();
 }
 
 // ── tabs ──────────────────────────────────────────────────────────────────
@@ -1806,7 +1815,7 @@ function syncContextPanel() {
   const terminal = tab?.kind === "terminal" && canActivateTab(tab, currentWorkspace());
   // Its Needs input facts (slice 1: the hover card's) through the sidebar's own gate: a row held stale has no claim.
   const instance = terminal ? tab.instanceRef : null;
-  contextPanel.setContext({ workspace: currentWorkspace(), owner: tabLayerVisible ? null : stage,
+  contextPanel.setContext({ workspace: currentWorkspace(), owner: tab?.kind === "page" ? tab : tabLayerVisible ? null : stage,
     instance, key: terminal && tab.instanceRef ? tab.key : null,
     waiting: instance ? waitingClaim(instance, { stale: rosterStale || rowStale(instance, contextDeployments) }) : null });
 }
@@ -2000,8 +2009,14 @@ function splitPane(orientation) {
   // re-selecting the source tab and silently stealing the destination back.
   const focused = split.groups.find(g => g.id === split.focusedGroup);
   activateTab(focused.activeTab, { keepGroupFocus: true });
-  // an empty focused group is filled by picking an instance — take the user there
-  if (!focused.tabs.length) focusRoster();
+  // A new pane opens Home as its first tab (slice 6a; editor-group-layout-ownership's empty placeholder before), so
+  // the person picks what goes there; focus goes to its tab.
+  if (!focused.tabs.length) {
+    const owns = tabOpenIntents.watch(), group = focused.id;
+    void showStage("home").then(() => {
+      if (owns() && split?.focusedGroup === group && tabs.get(activeTab)?.page === "home") tabs.get(activeTab).triggerEl.focus();
+    });
+  }
 }
 
 function closeSplit() {
@@ -2141,6 +2156,10 @@ function activateTab(id, { keepGroupFocus = false } = {}) {
     // Project its nav even when the mode already fits, rather than retaining
     // the stage highlight left by the workspace we just departed.
     setNavActive(sidebarMode === "souls" ? "spawn" : null);
+  } else if (current?.kind === "page") {
+    // A page tab (slice 6a): its pinned row is the current one (Home's for the Workspace page).
+    setSidebarMode(stageSidebarMode(current.page));
+    setNavActive(current.page);
   }
   showTabLayer(true);
   // The split renders for a terminal OR its empty focused destination;
@@ -2288,9 +2307,11 @@ function closeTab(id, restoreFocus = false, { explicit = true, confirmed = false
     } else {
       activeTab = null;
       showTabLayer(false);
-      if (stage) setNavActive(stage.name);
+      // The last tab closed (slice 6a: no stage behind the tabs): the empty state, its Open Home the way back.
+      setNavActive(null);
+      showEmptyState();
       if (restoreFocus) focusAfterLastTab("artifact", {
-        stageEntry: navEl.querySelector(".nav-item.active") || navEl.querySelector(".nav-item"),
+        stageEntry: stageHost.querySelector(".tabs-empty button") || navEl.querySelector(".nav-item"),
       });
     }
   } else if (restoreFocus) {
@@ -2354,12 +2375,23 @@ async function openViewTab(name, title, extra = {}, key = `view:${name}`,
   const el = document.createElement("div");
   el.style.height = "100%";
   made.paneEl.append(el);
+  // A page tab (slice 6a): its page and module, for the nav, the quick-open return and Esc; and its own owner of
+  // the context panel, which shows the page's panel while its tab is the active one (as the stage's owner did).
+  let pageOwner = null;
+  if (kind === "page") {
+    const record = tabs.get(made.id);
+    record.page = name; record.mod = mod;
+    pageOwner = record.panelOwner = createPanelOwner(contextPanel, record, workspaceGeneration);
+    const close = record.onClose;
+    record.onClose = () => { pageOwner.dispose(); return close?.(); };
+    syncContextPanel();
+  }
   try {
     // Retained artifacts never change identity with the global workspace bus.
     // Late events from a hidden/closed artifact cannot open work in another scope.
     const visibleOwner = () => tabs.has(made.id) && currentWorkspace() === workspace;
     await life.mounted(el, {
-      ...ctx, ...extra, workspace,
+      ...ctx, ...extra, workspace, ...(pageOwner ? { rightPanel: pageOwner } : {}),
       // Once created, an immutable file belongs to its tab, not foreground
       // selection. Hidden reads may finish without activating/focusing it;
       // returning to the tab must not leave a permanently stale Loading state.
@@ -2640,9 +2672,9 @@ const WORKSPACE_TAB_NAMES = { machines: "Machines", souls: "Souls", capabilities
  * (stageHost's listener). Only while the page that open showed is still the stage, and only when focus has no place
  * (on <body> or a hidden control): a choice made meanwhile keeps its own focus. */
 async function openWorkspaceTabFocused(tab, options) {
-  const op = stageOp;
+  const owns = tabOpenIntents.watch();
   await openWorkspaceSouls(tab, options);
-  if (stage?.name !== "spawn" || tabLayerVisible || (stageOp !== op && stageOp !== op + 1)) return;
+  if (!owns() || currentPage() !== "spawn") return;
   const active = document.activeElement;
   if (active && active !== document.body && isShown(active)) return;
   const control = document.getElementById(`workspace-tab-${tab}`);
@@ -3366,12 +3398,12 @@ function cycleRegion(delta) {
   focusRegions.cycle(delta);
 }
 const surfaceReturn = createSurfaceReturn({ doc: document, currentWorkspace, workspaceGeneration,
-  surface: () => ({ stage: stage?.name ?? null, tab: activeTab, tabLayerVisible,
-    workspaceTab: stage?.name === "spawn" ? stage.mod?.currentWorkspaceTab?.() ?? null : null }),
+  surface: () => ({ stage: currentPage(), tab: activeTab, tabLayerVisible,
+    workspaceTab: currentPage() === "spawn" ? pageModule("spawn")?.currentWorkspaceTab?.() ?? null : null }),
   tabPane: id => { const t = tabs.get(id); return t && canActivateTab(t, currentWorkspace()) ? t.paneEl : null; },
   showStage, selectTab: (id, opts) => selectTab(id, opts), focusRegion: name => focusRegions.focusRegion(name),
-  selectWorkspaceTab: name => stage?.name === "spawn" && stage.mod?.preselectWorkspaceTab?.(name)
-    && stage.mod.currentWorkspaceTab?.() === name ? document.getElementById(`workspace-tab-${name}`) : null,
+  selectWorkspaceTab: name => currentPage() === "spawn" && pageModule("spawn")?.preselectWorkspaceTab?.(name)
+    && pageModule("spawn").currentWorkspaceTab?.() === name ? document.getElementById(`workspace-tab-${name}`) : null,
   host: "spawn" });
 
 // ── action registry: every mouse affordance, one keyboard action ────────
@@ -3790,11 +3822,15 @@ function restoreWorkspaceTabs() {
   tabOpenIntents.invalidate();
   workspaceLabel.reset(currentWorkspace());
   // Where the keyboard was in the workspace left (focus-place.mjs), taken before its tabs are hidden.
+  const leaving = tabWorkspace, leavingPages = takePageTabs(leaving);
   workspaceTabMemory.remember(tabWorkspace, { split, activeTab, sidebarMode, tabLayerVisible, place: focusPlaces.take(tabWorkspace) });
   // Hide synchronously and park ALL nodes before replacing group identities.
   // Workspace-local group ids can overlap; deleting old cells first would
   // otherwise orphan their retained tabs/panes (and live terminals).
   showTabLayer(false);
+  // Its page tabs close (slice 6a: a page reads the current workspace, and the Workspace and Automations views hold
+  // one module state); the memory keeps them, by page and group, and reopens them when the workspace comes back.
+  closePageTabs(leaving, leavingPages);
   renderSplit(false);
   tabWorkspace = currentWorkspace();
   const restored = workspaceTabMemory.recall(tabWorkspace, tabs);
@@ -3810,13 +3846,47 @@ function restoreWorkspaceTabs() {
   if (restored.tabLayerVisible) {
     setSidebarMode(restored.sidebarMode);
     activateTab(restored.activeTab, { keepGroupFocus: true });
-  } else {
-    setSidebarMode(stageSidebarMode(stage?.name));
-    setNavActive(stage?.name || "home");
-  }
+  } else setNavActive(null);
   updateContextTabs();
   focusArrival(restored.place ?? null);
   refreshContextRoster();
+  void reopenPageTabs(tabWorkspace);
+}
+/** Page tabs a workspace keeps while another shows (slice 6a: tab memory remembers page tabs): its pages, each with
+ * its group and whether it was the active tab. */
+const workspacePages = new Map();
+function takePageTabs(ws) {
+  return [...tabs].filter(([, t]) => t.kind === "page" && t.workspace === ws)
+    .map(([id, t]) => ({ id, page: t.page, group: groupOfTab(split, id)?.id ?? null, active: id === activeTab }));
+}
+function closePageTabs(ws, pages) {
+  if (!ws) return;
+  workspacePages.set(ws, pages.map(({ page, group, active }) => ({ page, group, active })));
+  for (const { id } of pages) closeTab(id, false, { explicit: false, passive: true });
+}
+/** Reopen the page tabs a workspace had, each in its group, the active one active again; a workspace that had none
+ * and has no tab at all lands on Home. */
+async function reopenPageTabs(ws) {
+  const pages = workspacePages.get(ws) ?? null;
+  workspacePages.delete(ws);
+  const owns = tabOpenIntents.watch();
+  const still = () => owns() && currentWorkspace() === ws;
+  if (!pages?.length) {
+    if (still() && ![...tabs.values()].some((t) => canActivateTab(t, ws))) await showStage("home");
+    return;
+  }
+  const wasActive = activeTab;
+  let activePage = null;
+  for (const p of pages) {
+    if (!still()) return;
+    if (split && p.group != null && split.groups.some((g) => g.id === p.group)) split = { ...split, focusedGroup: p.group };
+    const title = NAV.find((v) => v.name === p.page)?.title ?? p.page;
+    await openViewTab(p.page, title, {}, p.page === "home" ? `page:home:${++homeSeq}` : `page:${p.page}`, "page", () => true, owns);
+    if (p.active) activePage = [...tabs].filter(([, t]) => t.kind === "page" && t.page === p.page && t.workspace === ws).at(-1)?.[0] ?? null;
+  }
+  if (!still()) return;
+  const back = activePage ?? (wasActive != null && tabs.has(wasActive) ? wasActive : null);
+  if (back != null) selectTab(back, { intent: owns });
 }
 /** Workspace views (#482): per-workspace state saved under a deployment id — a selection from before
  * views, an unattached deployment that has matched a workspace since — or under a view id the server
