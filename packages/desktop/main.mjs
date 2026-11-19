@@ -690,7 +690,7 @@ ipcMain.handle("api", async (e, pathname, opts) => {
   // A remote window's Retry: the server answers once its roster read landed, which the CLI adapter allows 60 s
   // (`cliRemoteRoster`; remote-roster-proxy-deadline.test.mjs holds the two together).
   const timeout = lifecycle ? mutation ? 610_000 : 50_000 : forge?.timeout ?? (route === 'capabilities' || route === 'workspace-sync' ? 310_000
-    : route === 'automations' ? 90_000 : route === 'instance-git' || route === 'instance-color' || route === 'instance-background' ? 50_000 : route === 'machine-connect' ? 980_000 : route === 'machines' ? 130_000
+    : route === 'automations' ? 90_000 : route === 'instance-git' || route === 'instance-color' || route === 'instance-background' || route === 'instance-pin' ? 50_000 : route === 'machine-connect' ? 980_000 : route === 'machines' ? 130_000
     : route === 'instance-start' || route === 'remote-roster' ? 70_000 : 20_000);
   const init = { ...(forge?.init ?? apiInit(opts)), signal: AbortSignal.timeout(timeout) };
   // The generation this request is made under: the panel's advertised set below is committed only while

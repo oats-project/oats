@@ -67,7 +67,7 @@ const ACTIONS_FROM = {
 };
 // Routes whose request names no action: the route is the operation.
 const ROUTE_LEVEL = ['/api/forge-connections', '/api/instance-forge', '/api/forge-roster', '/api/instance-color',
-  '/api/instance-background', '/api/schedules', '/api/models', '/api/server-check', '/api/server-remove',
+  '/api/instance-background', '/api/instance-pin', '/api/schedules', '/api/models', '/api/server-check', '/api/server-remove',
   '/api/server-connect', '/api/server-forget', '/api/window-state', '/api/windows', '/api/remote-roster/refresh',
   '/api/cli/reprobe', '/api/start', '/api/restart', '/api/retire'];
 
@@ -165,6 +165,7 @@ test('acceptance (inventory): every POST route asks the gate first, with its rou
   const { request } = await loadServer(alexState().state, { FORGE_EPOCH_HEADER, validForgeEpoch, MAX_WINDOW_VIEWS: 16,
     instanceColorRequest: boundary('instance-color'), instanceColorNotRun: boundary('instance-color'),
     instanceBackgroundRequest: boundary('instance-background'), instanceBackgroundNotRun: boundary('instance-background'),
+    instancePinRequest: boundary('instance-pin'), instancePinNotRun: boundary('instance-pin'),
     aboveTestedRefusal: (cli, operation) => { asked.push(operation); return refusal; } });
   const missed = [];
   for (const route of postRoutes()) {

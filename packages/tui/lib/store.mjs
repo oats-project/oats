@@ -12,7 +12,7 @@
 import { ACTIONS, LEADER_KEYS, backKeyLabel, bindings, chordKeys, chordsRead, paletteKeys } from "./actions.mjs";
 import { CHORDS, chordFamilyFrom, collapseKey, workspaceStep, displayLine, instanceActs, instanceId, outcomeWords, pendingEntry, spawnProblem } from "./client.mjs";
 import { defaultDetachKey } from "./config.mjs";
-import { BACKGROUND_ID, backgroundOpen, BUTTON_ORDER, SPAWN_WORDS, LEADER_WORDS, SPLIT_WORDS, TAB_WORDS, actDecision, capabilitiesHeight, capabilitiesOf, capabilityUsersOf, disclosure, openDecision, paletteItems, paletteStep, preflightLine, returnedLine, roster, soulNames, soulOfAgent, soulsOf, spawnChoices, spawnChoicesKey, spawnLine, spawnPickerItems, spawnReady, spawnRing, spawnSelector, spawnedRow, switcher, switcherHeight, switcherWindow, memoryKey, memoryKeys, LIST_WORDS, WORKSPACE_WORDS, listChoice, listChoices, workspaceList } from "./model.mjs";
+import { BACKGROUND_ID, backgroundOpen, BUTTON_ORDER, PIN_WORDS, pinDecision, pinLine, SPAWN_WORDS, LEADER_WORDS, SPLIT_WORDS, TAB_WORDS, actDecision, capabilitiesHeight, capabilitiesOf, capabilityUsersOf, disclosure, openDecision, paletteItems, paletteStep, preflightLine, returnedLine, roster, soulNames, soulOfAgent, soulsOf, spawnChoices, spawnChoicesKey, spawnLine, spawnPickerItems, spawnReady, spawnRing, spawnSelector, spawnedRow, switcher, switcherHeight, switcherWindow, memoryKey, memoryKeys, LIST_WORDS, WORKSPACE_WORDS, listChoice, listChoices, workspaceList } from "./model.mjs";
 import { backKeyId, backKeySequences, isBackKey } from "./term/through.mjs";
 import { windowOf } from "./views/scroll.mjs";
 import { SPLIT_MIN, splitFits } from "./views/split.mjs";
@@ -133,7 +133,7 @@ export function initialState({ deployment = null, cli, home, entry = null, actio
     selected: null, collapsed: new Set(), background: new Set(), filter: NO_FILTER, focus: "list", top: 0, loose: false, detailTop: 0, places: new Map(), unread: new Map(), unreadKeys: new Map(), workspaceCursor: null, colour,
     switcher: NO_SWITCHER,
     listed: NO_LIST, identities: new Map(),
-    helpTop: 0, actions, ascii, detachKey, opening: null, terminal: null, outcome: null, act: null, acted: 0, starting: new Map(), retiring: new Set(),
+    helpTop: 0, actions, ascii, detachKey, opening: null, terminal: null, outcome: null, act: null, acted: 0, starting: new Map(), retiring: new Set(), pinning: new Set(),
     leaderKey: backKeyId(detachKey), leader: null, keyboard: null, keysRead, mac: platform === "darwin", chords: chordKeys(platform === "darwin", actions, CHORDS, keysRead.family, backKeyId(detachKey)), palette: null, paletteKeys: paletteKeys(platform === "darwin"), recent: new Map(), layouts: new Map(), restoring: null, leftFocus: null, souls: NO_SOULS, capabilities: NO_CAPABILITIES,
     spawn: null, spawning: null, spawnCheck: null, arriving: null, previews: 0, tabs: Object.freeze([]), split: null, group: 0, aside: null,
     notice: null,
@@ -735,6 +735,23 @@ function listedHeard(state, { rows, failure }) {
 function resumedHeard(state, reading) {
   if (reading?.kind === "answered") return { state, effect: { refresh: { live: true } } };
   return { state, effect: null };
+}
+
+/** The pin key on `row` (feature instance-pin; lib/model.mjs pinDecision): at once, no confirmation. The line under
+ *  the sidebar's title says it is changing, the row is held from a second press until the answer, and the loop runs
+ *  the kernel's verb (`{ pin }`); a key it does nothing for says why on that line. */
+function pinOn(state, row) {
+  const decision = pinDecision(state, row, instanceActs(row));
+  if (!decision.open) return { state: next(state, { outcome: decision.said }), effect: null };
+  const pinning = new Set(state.pinning); pinning.add(decision.id);
+  const outcome = Object.freeze({ said: PIN_WORDS.pinning(decision.name, decision.pinned), under: Object.freeze([]) });
+  return { state: next(state, { pinning, outcome }), effect: { pin: Object.freeze({ id: decision.id, row, pinned: decision.pinned }) } };
+}
+/** A pin answered (lib/main.mjs): the line says how, the row is free again, and the rows are read again, so the
+ *  list moves (a refusal changes nothing, and the read says so too). */
+function pinHeard(state, { id, name, pinned, answer }) {
+  const pinning = new Set(state.pinning); pinning.delete(id);
+  return { state: next(state, { pinning, outcome: pinLine(name, pinned, answer) }), effect: { refresh: { live: true } } };
 }
 
 /** A Remove answered (lib/main.mjs): the switcher says how, and the list is read again. */
@@ -1661,6 +1678,7 @@ function reduced(state, event, keymap) {
   if (event.retiring !== undefined) return { state: next(state, { retiring: new Set(event.retiring) }), effect: null };
   if (event.listed !== undefined) return listedHeard(state, event.listed);
   if (event.removed !== undefined) return removedHeard(state, event.removed);
+  if (event.pinned !== undefined) return pinHeard(state, event.pinned);
   // The machine sweep's reading: no line, at most a live read.
   if (event.resumed !== undefined) return resumedHeard(state, event.resumed);
   // Shown once, in the line under the sidebar's title, as the line after an open is.
@@ -1762,6 +1780,7 @@ function reduced(state, event, keymap) {
       return refused === true ? { state, effect: null } : refused !== null ? { state: next(state, { outcome: refused }), effect: null } : splitKey(state, action, false);
     }
     case "stop": case "retire": case "start": case "restart": return at < 0 ? stay : actOn(state, r.items[at].row, action);
+    case "pin": return at < 0 || !r.items[at].row ? stay : pinOn(state, r.items[at].row);
     case "detail": return at < 0 ? stay : { state: next(state, { focus: state.focus === "detail" ? "list" : "detail" }), effect: null };
     case "up": case "down": case "top": case "bottom": case "page-up": case "page-down": {
       if (state.focus === "detail") return { state: next(state, { detailTop: scrolled(state.detailTop) }), effect: null };

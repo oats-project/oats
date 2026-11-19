@@ -18,7 +18,7 @@ export const TARGET = join(HERE, 'renderer', 'lucide-icons.mjs');
 export const LUCIDE_NAMES = Object.freeze([
   'app-window', 'arrow-left', 'arrow-right', 'book-open', 'brain', 'check', 'chevron-down', 'chevron-left', 'chevron-right', 'circle', 'circle-alert', 'circle-dot', 'clock',
   'columns-2', 'contrast', 'copy', 'ellipsis', 'external-link', 'file-text', 'folder', 'folder-git-2', 'git-branch', 'git-pull-request', 'house',
-  'flask-conical', 'info', 'keyboard', 'laptop', 'layers', 'link', 'list-checks', 'mail', 'maximize-2', 'minus', 'package', 'panel-left', 'panel-right', 'play', 'plus', 'refresh-cw', 'rotate-ccw', 'rows-2',
+  'flask-conical', 'info', 'keyboard', 'laptop', 'layers', 'link', 'list-checks', 'mail', 'maximize-2', 'minus', 'package', 'panel-left', 'panel-right', 'pin', 'pin-off', 'play', 'plus', 'refresh-cw', 'rotate-ccw', 'rows-2',
   'search', 'settings', 'sliders-horizontal', 'sparkles', 'square', 'square-terminal', 'terminal', 'trash-2',
   'triangle-alert', 'type', 'users', 'workflow', 'x', 'zap',
 ]);

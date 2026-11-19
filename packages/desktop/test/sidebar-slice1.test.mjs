@@ -27,6 +27,7 @@ import { createFocusRegions } from "../renderer/focus-regions.mjs";
 import { NAV, NAV_TABS } from "../renderer/shell-nav.mjs";
 import { rosterRowFacts } from "../../client/roster-row-facts.mjs";
 import { THEMES } from "../renderer/theme.mjs";
+import { PIN_LABELS } from "../renderer/instance-pin-menu.mjs";
 const tree = { ...treeShared, ...treeView, ...sameWork }; // the renderer's client imports, shipped
 
 const read = name => readFileSync(new URL(`../renderer/${name}`, import.meta.url), "utf8");
@@ -408,6 +409,8 @@ test("slice1 foot and palette", t => {
     desktopBridge: {}, takePickerFocusReturn: () => null, openInstanceEdit() {}, windowState: () => "bound", currentWorkspace: () => "A",
     instanceRecency: { snapshot: () => new Map() }, api: async () => ({}), panelDeployments: () => [], heldHome: () => null, shownRows: r => r, heldLine: () => null,
     openTerminalTab() {}, pickerCycleDirection: () => 0, paletteGroupDirection: () => 0, paletteGroupHint: () => "", paletteTargetId: null,
+    // Pinned instances: the palette's Instance: Pin to top / Unpin carry their real labels and offer themselves for no target.
+    PIN_LABELS, pinTargetOffer: () => null, runPinCommand: async () => {},
   });
   for (const [label, action] of [[/^Theme: choose…$/, "app.themePicker"], [/^Font: choose…$/, "app.fontPicker"], [/keyboard shortcuts…$/i, "app.shortcuts"], [/^Sidebar: toggle \(hide\/show\)$/, "sidebar.toggle"]]) {
     const command = commands.find(c => label.test(c.label));

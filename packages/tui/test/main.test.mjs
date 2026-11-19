@@ -303,7 +303,7 @@ test("the action table binds each key to one action, and a key bound twice is re
   assert.deepEqual(Object.fromEntries(bindings(ACTIONS)), {
     up: "up", k: "up", down: "down", j: "down", g: "top", home: "top", G: "bottom", end: "bottom", pageup: "page-up", pagedown: "page-down",
     left: "collapse", h: "collapse", right: "expand", l: "expand", tab: "detail", "/": "filter", r: "refresh", 1: "instances", 2: "souls", 3: "capabilities",
-    w: "workspaces", enter: "open", delete: "remove", i: "soul-instances", z: "zoom", c: "close-terminal", "[": "tab-previous", "]": "tab-next", "|": "split-right", "-": "split-down", X: "stop", D: "retire", S: "start", R: "restart", n: "spawn", N: "spawn-another", C: "spawn-check",
+    w: "workspaces", enter: "open", delete: "remove", i: "soul-instances", z: "zoom", c: "close-terminal", "[": "tab-previous", "]": "tab-next", "|": "split-right", "-": "split-down", X: "stop", D: "retire", S: "start", R: "restart", n: "spawn", N: "spawn-another", C: "spawn-check", p: "pin",
     "?": "help", escape: "close", q: "quit", "ctrl+c": "quit", "ctrl+z": "suspend", "ctrl+l": "redraw", "ctrl+k": "palette",
   });
   assert.throws(() => bindings([{ id: "a", keys: ["x"], label: "a" }, { id: "b", keys: ["x"], label: "b" }]), /key x is bound to a and to b/);
@@ -311,8 +311,9 @@ test("the action table binds each key to one action, and a key bound twice is re
   assert.deepEqual(["?", "q", "escape", "ctrl+c", "shift+tab", "f5", "ctrl+alt+up", "space", "alt+x"].map(keyLabel), ["?", "q", "Esc", "Ctrl+C", "Shift+Tab", "F5", "Ctrl+Alt+Up", "Space", "Alt+X"]);
   // Enter opens the selected agent's terminal in the list and the selected workspace in the
   // switcher: one action. The capitals are the acts on an instance, G, another of the selected
-  // instance's soul (N) and the check of a spawn's result (C): no act is a lower-case key (Enter is
-  // cheap, a capital takes Shift). A spawn's own key is n: it opens a prompt, and spawns nothing.
+  // instance's soul (N) and the check of a spawn's result (C): no act that opens a confirmation is a
+  // lower-case key (Enter is cheap, a capital takes Shift). A spawn's own key is n: it opens a prompt,
+  // and spawns nothing. Pin's is p: it confirms nothing, changes only the order, and p again undoes it.
   assert.equal(bindings(ACTIONS).get("enter"), "open");
   assert.deepEqual([...bindings(ACTIONS).keys()].filter((key) => /^[A-Z]$/.test(key)), ["G", "X", "D", "S", "R", "N", "C"]);
   for (const id of ["stop", "retire", "start", "restart"]) assert.equal(ACTIONS.find((action) => action.id === id).keys.every((key) => /^[A-Z]$/.test(key)), true, id);
@@ -2562,6 +2563,43 @@ async function acting(options = {}) {
   await settle();
   return r;
 }
+
+test("p pins the selected agent through the kernel's verb, as a change of this run labelled pin, and its answer reads the rows again (feature instance-pin)", async () => {
+  const PIN_CLI = Object.freeze({ ...CLI, features: Object.freeze([...CLI.features, "instance-pin"]) });
+  const r = await started({ kernel: { ok: true, cli: PIN_CLI } });
+  r.reader.answer(ENTRY);
+  await settle();
+  const home = `${DEPLOYMENT}/agents/acme-expert/instances/acme-expert-tui`;
+  // The line under the sidebar's title goes with the next key (Ctrl+L too): read what the run painted.
+  r.stdout.take();
+  r.stdin.type("p");
+  await settle(); await settle();
+  assert.match(textOf(r.stdout.take()), /Pinning acme-expert-tui…/);
+  assert.equal(r.reader.changed.length, 1, "one change");
+  const [change] = r.reader.changed;
+  assert.deepEqual(change.argv, ["instance", "pin", "acme-expert-tui", "on", "--home", home, "--dir", DEPLOYMENT, "--json"]);
+  assert.deepEqual(change.options.label, { verb: "pin", name: "acme-expert-tui" });
+  const before = readerDid(r).filter(([what]) => what === "request").length;
+  change.callback(null, JSON.stringify({ schemaVersion: 1, ok: true, result: { instancePinApi: 1, instance: "acme-expert-tui", home, pinned: true, changed: true } }), "");
+  await settle(); await settle();
+  assert.match(textOf(r.stdout.take()), /acme-expert-tui is pinned to the top/, "the line, wrapped at the sidebar's width");
+  assert.deepEqual(readerDid(r).filter(([what]) => what === "request").slice(before), [["request", { live: true }]]);
+  r.stdin.type("q");
+  assert.equal(await r.status, 0);
+});
+
+test("p on a kernel without instance-pin runs nothing and says why", async () => {
+  const r = await started();
+  r.reader.answer(ENTRY);
+  await settle();
+  r.stdout.take();
+  r.stdin.type("p");
+  await settle();
+  assert.equal(r.reader.changed.length, 0);
+  assert.match(textOf(r.stdout.take()), /This OATS can't pin instances/);
+  r.stdin.type("q");
+  assert.equal(await r.status, 0);
+});
 
 test("keys that came in one read with the key that opened a confirmation never press its act: X⏎ and Xl⏎ and Dl⏎ cancel, X⇥⏎ and D⇥⏎ review again, X⇥⇥⏎ is ignored; Enter in a read of its own presses it (Done 2)", async () => {
   for (const [typed, calls, closed, verb] of [["X\r", [], 1, "stop"], ["Xl\r", [], 1, "stop"], ["Dl\r", [], 1, "retire"], ["X\t\r", ["refresh"], 0, "stop"], ["D\t\r", ["refresh"], 0, "retire"], ["X\t\t\r", [], 0, "stop"]]) {

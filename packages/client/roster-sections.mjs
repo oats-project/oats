@@ -58,11 +58,13 @@ export const rowStale = (row, deployments) => {
  * most recent first, then the panel's order. Without it, the panel's order (the sidebar's and the TUI's).
  * `roster` (optional; #1579): the full roster `instances` is a part of (the main tree's rows or the Background
  * section's, `sidebarSections`). Names resolve over its rows of the same deployment, and a relation to a row outside
- * `instances` is none: that row's relatives are roots here. Without it, `instances`. */
-export function rosterSections(instances, visible, deployments, terms, { lastFocus, roster = instances } = {}) {
+ * `instances` is none: that row's relatives are roots here. Without it, `instances`.
+ * `pins` (optional): this computer's CLI lists instance-tree.mjs `PIN_FEATURE`: pinned rows lead each section's
+ * order (`clusterInstances`). The section split comes first, so a pin ranks only within its own section. */
+export function rosterSections(instances, visible, deployments, terms, { lastFocus, roster = instances, pins = false } = {}) {
   requireTerms(terms, 'rosterSections');
   const recency = lastFocus instanceof Map ? { lastFocus } : {};
-  const groupsOf = (all, shown, whole) => rosterGroups(all, shown, { ...recency, roster: whole }); // the relation groups the palette lists too
+  const groupsOf = (all, shown, whole) => rosterGroups(all, shown, { ...recency, roster: whole, pins }); // the relation groups the palette lists too
   if (!isMultiDeployment(deployments)) return [{ deployment: null, label: null, groups: groupsOf(instances, visible, roster) }];
   const sectionOf = splitByDeployment(deployments);
   const all = sectionOf(instances), shown = sectionOf(visible), whole = sectionOf(roster), labels = machineLabelParts(deployments, terms);
@@ -110,17 +112,18 @@ export function rosterSectionKey(deployments, placement = new Set()) {
  * one included), and `sections` its own tree, `rosterSections` over its rows (with the machine sub-headings in a
  * view of two or more deployments), empty while closed. Each part is a tree of its own: a relation to a row of the
  * other part is none (a background row whose parent is in the main tree is a root of the Background section), and
- * names still resolve over the full roster. The palette never asks this: it lists every row. */
-export function sidebarSections(instances, visible, deployments, terms, { placement = new Set(), open = false, listed = instances, stale = () => false } = {}) {
+ * names still resolve over the full roster. The palette never asks this: it lists every row.
+ * `pins`: as for `rosterSections`; a pinned row in the Background section leads that section's own tree. */
+export function sidebarSections(instances, visible, deployments, terms, { placement = new Set(), open = false, listed = instances, stale = () => false, pins = false } = {}) {
   requireTerms(terms, 'sidebarSections');
   const inside = row => placement.has(instanceId(row));
-  const main = rosterSections(instances.filter(r => !inside(r)), visible.filter(r => !inside(r)), deployments, terms, { roster: instances });
+  const main = rosterSections(instances.filter(r => !inside(r)), visible.filter(r => !inside(r)), deployments, terms, { roster: instances, pins });
   const rows = instances.filter(inside), count = listed.filter(inside).length;
   if (!count) return { main, background: null };
   return { main, background: {
     count, open: !!open,
     waiting: rows.some(row => waitingClaim(row, { stale: stale(row) }) !== null),
-    sections: open ? rosterSections(rows, visible.filter(inside), deployments, terms, { roster: instances }) : [],
+    sections: open ? rosterSections(rows, visible.filter(inside), deployments, terms, { roster: instances, pins }) : [],
   } };
 }
 

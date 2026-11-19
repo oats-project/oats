@@ -1034,7 +1034,10 @@ focused row and Left closes it. Every instance at the top of the tree, the
 [Background section](#background-instances)'s included, starts collapsed in
 each new window, except one still being set up or retired, or whose retire
 failed: while its row shows that state, it has no chevron and its group
-stays open, so an instance under it that needs input is never hidden. An instance inside a group starts open, and each one with
+stays open, so an instance under it that needs input is never hidden. A
+group that holds a pinned instance, its top instance included, starts open
+too, so the pin is seen with its group ([Pinned instances](#pinned-instances));
+close it and it stays closed. An instance inside a group starts open, and each one with
 children has its own chevron. What you open or close stays as you left it
 until the window closes. **Show in roster**, `--instance` and a spawn from
 the Desktop open the rows above the instance they show. The TUI's list still
@@ -1047,7 +1050,8 @@ changes for it. A group of related instances sits where its first instance's
 spawn time puts it, so spawning a child doesn't move the group, and starting
 or stopping an instance moves nothing. Instances spawned at the same moment
 are in name order, and an instance whose spawn time can't be read comes after
-every one whose time can.
+every one whose time can. Pinned instances come before all of these, at every
+level ([Pinned instances](#pinned-instances)).
 
 Children that do their parent's work come first under it. When the instances'
 OATS has the `instance-same-work` feature, a child the kernel reports as doing
@@ -1105,7 +1109,8 @@ open.
 
 A row has no ⋯ button. Its actions (Open in split, Open pull request…,
 Knowledge & capabilities…, Start…, Restart with…, Stop…, Retire instance…,
-Move to background or out of it ([Background instances](#background-instances)), and
+Move to background or out of it ([Background instances](#background-instances)),
+Pin to top or Unpin ([Pinned instances](#pinned-instances)), and
 Forget… for an instance its server no longer lists) are in the row's context
 menu (right-click, Shift+F10 or the ContextMenu key), as a workspace row's are.
 It opens where you right-click, or on the row from the keyboard; the arrow keys,
@@ -1160,6 +1165,47 @@ This needs OATS with the `instance-background` feature on this computer,
 and for an instance on a server, on that server too. With an older OATS the
 sidebar lists every instance in the main tree, and the switch and the menu
 items are not shown.
+
+## Pinned instances
+
+A pinned instance is listed at the top of its machine's list, so the agents
+you come back to stay in reach. A pin changes only the order. The instance
+starts, opens, takes input and retires as any other.
+
+- **The order.** Pinned instances come first at every level of the tree: the
+  groups of a machine's list, the instances of a group, and the children of
+  one parent. An instance counts as pinned when it or any instance below it
+  is pinned. Pinning a child lifts its whole group to the top of its
+  machine's list, and the path down to it rises among its siblings. A group
+  that holds a pinned instance, its top instance included, doesn't start
+  collapsed, so the pin is seen with its group; closed by hand, it stays
+  closed until you open it. Among
+  pinned instances the usual order stands: spawn time, newest first. There
+  is no manual order. Under one parent, the children joined by the parent's
+  line still come first ([the tree](#the-sidebars-instance-tree)). A pinned instance
+  in the Background section is first in that section's own tree. A pinned
+  child whose parent is on another machine is first only in its own
+  machine's list. A filter never reorders the list. The command palette
+  lists the instances you have focused by recency, as before, and every
+  other instance in this order.
+- **The mark.** A pinned row shows a small pin after its name. A screen
+  reader hears "Pinned" with the row's name. An instance that is listed
+  first only because one below it is pinned carries no pin.
+- **Pinning.** A row's context menu offers **Pin to top**, or **Unpin** on a
+  pinned instance, which runs `oats instance pin <name> on|off`. Each is an
+  act at once, with no dialog. The row moves when the roster is next read,
+  right after the change. The command palette offers **Instance: Pin to
+  top** or **Instance: Unpin** for the instance the leader keys act on. An
+  instance that is held (spawning, or being retired) offers neither.
+- **Shared.** The pin is kept in the instance's home, so everyone who views
+  that machine sees the same pins, in the Desktop, the TUI and another
+  machine's view. There is no pin of your own. Retiring a pinned instance
+  removes its pin with it.
+
+This needs OATS with the `instance-pin` feature on this computer, and for an
+instance on a server, on that server too. With an older OATS the list keeps
+its usual order, no row shows a pin, and the menu items and palette commands
+are not shown.
 
 ## An instance's colour
 

@@ -9,8 +9,8 @@
    Why these and not others: the four traced cases on #1879 (schedule edit at 0.40, Remove at 0.49 and
    0.53, the Stop outcome at 0.52) all sit where the Desktop words a consequence itself or writes a whole
    definition. What stays on is a read, a terminal, or a change fenced by the kernel's own answer: Spawn
-   applies only the decision its preview showed (`--expect-decision`), and Start, Restart, colour and
-   background report only an answer the Desktop reads in full (each fails closed on a shape it does not
+   applies only the decision its preview showed (`--expect-decision`), and Start, Restart, colour,
+   background and pin report only an answer the Desktop reads in full (each fails closed on a shape it does not
    know).
 
    Enforcement is not the renderer's. Every place an operation enters the backend asks
@@ -65,6 +65,7 @@ export const OPERATIONS = Object.freeze({
   // ── An instance's own record.
   'POST /api/instance-color': allowed("colour: one field of the instance's own record, the answer read in full"),
   'POST /api/instance-background': allowed("background: one field of the instance's own record, the answer read in full"),
+  'POST /api/instance-pin': allowed("pin: one field of the instance's own record, the answer read in full"),
   // ── Reads.
   'POST /api/instance-git git': read('git'),
   'POST /api/instance-git diff': read('git'),

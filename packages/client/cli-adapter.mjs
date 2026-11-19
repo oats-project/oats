@@ -655,7 +655,7 @@ export function operationArgs(args) {
 }
 /** A verb that writes one field of an instance's own record: `oats instance <verb> <instance> <values…> --home <home>
  * (--dir <context> | --server <server>) --json`, addressed as `oats instance stop` is (lifecycle-cli.mjs: a routed
- * command never carries --dir). Shared by `instance color` and `instance background` (server/instance-record.mjs);
+ * command never carries --dir). Shared by `instance color`, `instance background` and `instance pin` (server/instance-record.mjs);
  * each checks its own value first. Anything out of shape is refused here and nothing runs. A read's deadline:
  * 30 s, 45 s routed. The envelope comes back as the kernel printed it; the caller decodes it. */
 function runInstanceRecord(bin, { instance, home, context, server }, verb, values, io) {
@@ -685,6 +685,14 @@ export async function cliInstanceBackground(bin, args, io = {}) {
   const { background } = args;
   if (typeof background !== "boolean") return instanceRecordRefused();
   return runInstanceRecord(bin, args, "background", [background ? "on" : "off"], io);
+}
+/** Whether an instance is pinned (feature instance-pin): `oats instance pin <instance> (on | off) …`
+ * (runInstanceRecord). `pinned` is a boolean; anything else is refused here and nothing runs. Over `--server`, a
+ * host without the feature refuses it (E_REMOTE_INCOMPATIBLE). */
+export async function cliInstancePin(bin, args, io = {}) {
+  const { pinned } = args;
+  if (typeof pinned !== "boolean") return instanceRecordRefused();
+  return runInstanceRecord(bin, args, "pin", [pinned ? "on" : "off"], io);
 }
 
 /** `maxAge` (feature observe-max-age) is inspect's alone; `features` is the probe's list and

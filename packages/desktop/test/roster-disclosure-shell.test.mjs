@@ -140,6 +140,37 @@ test("what the operator opens or closes is kept: a nested row closed by hand sta
   assert.deepEqual(new Set(u.drawn()), new Set(["lead", "mid", "side", "duo", "solo"]));
 });
 
+test("pinned instances (spec B): a root with a pinned row under it starts open, so the pin is seen; closed by hand, it stays closed through a repaint", t => {
+  const rows = ROWS.map(r => (r.instance === "tip" ? { ...r, pinned: true } : r));
+  const u = fixture(t, rows, { pinsShown: () => true });
+  assert.equal(u.row("lead").getAttribute("aria-expanded"), "true", "lead starts open: tip, two levels down, is pinned");
+  assert.ok(u.drawn().includes("tip"), "the pinned row is drawn");
+  assert.ok(u.row("tip").querySelector(".ctx-pin"), "with its mark");
+  assert.equal(u.row("duo").getAttribute("aria-expanded"), "false", "a root with nothing pinned under it starts collapsed");
+  u.click(u.mark("lead"));
+  assert.equal(u.row("lead").getAttribute("aria-expanded"), "false", "closed by hand");
+  assert.equal(u.drawn().includes("tip"), false);
+  u.s.render(rows);
+  assert.equal(u.row("lead").getAttribute("aria-expanded"), "false", "still closed after a repaint");
+  // Without the feature the pin is ignored: lead starts collapsed as any root does.
+  const off = fixture(t, rows);
+  assert.equal(off.row("lead").getAttribute("aria-expanded"), "false");
+  assert.equal(off.drawn().includes("tip"), false);
+});
+
+test("pinned instances (spec B): a root pinned itself, with nothing pinned below, starts open with its group; closed by hand, closed; without the feature, collapsed", t => {
+  const rows = ROWS.map(r => (r.instance === "duo" ? { ...r, pinned: true } : r));
+  const u = fixture(t, rows, { pinsShown: () => true });
+  assert.equal(u.row("duo").getAttribute("aria-expanded"), "true", "duo, pinned itself, starts open");
+  assert.ok(u.drawn().includes("duo-kid"), "its group is drawn");
+  assert.equal(u.row("lead").getAttribute("aria-expanded"), "false", "a root with no pin in its subtree starts collapsed");
+  u.click(u.mark("duo"));
+  u.s.render(rows);
+  assert.equal(u.row("duo").getAttribute("aria-expanded"), "false", "closed by hand, it stays closed through a repaint");
+  const off = fixture(t, rows);
+  assert.equal(off.row("duo").getAttribute("aria-expanded"), "false", "without the feature it starts collapsed");
+});
+
 test("the tree keys open and close a root that starts collapsed", t => {
   const u = fixture(t);
   u.row("duo").focus();

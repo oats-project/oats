@@ -2,6 +2,7 @@
 // DOM/API/module-loader fixtures. No Electron, browser, server or live mutations.
 import test from "node:test";
 import { viewContext } from "./helpers/view-context.mjs";
+import { PIN_LABELS } from "../renderer/instance-pin-menu.mjs";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
@@ -67,6 +68,8 @@ function shell(t, shellSource = source, { storage = {}, gitPanel } = {}) {
     registerAction(action) { const off = registerAction(action); offs.push(off); return off; }, runAction,
     // The palette action notes the leader's target as it opens (the instance entries act on it).
     palette: { toggle: () => events.push(["palette"]), isOpen: () => false }, leaderTargetId: () => null,
+    // Instance: Pin to top / Unpin (instance-pin-menu.mjs): their real labels, offered for no target here.
+    PIN_LABELS, pinTargetOffer: () => null, runPinCommand: async () => {},
     quickOpen: { toggle: () => events.push(["quickOpen"]) },
     shortcutsEditor: { close() {}, open: () => events.push(["shortcuts"]) },
     THEMES, setTheme: id => events.push(["theme", id]),

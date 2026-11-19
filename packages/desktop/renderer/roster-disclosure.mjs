@@ -13,7 +13,9 @@
    retiring or left half done: shell.mjs draws its state there) is always drawn open, whatever was chosen for it:
    its lines have no room for the needs-input roll-up, so a collapse there would hide a waiting child with no mark.
    It wears no disclosure and the tree keys do not collapse it; a choice made by hand before is kept, and applies
-   again once its lifecycle is over. What the operator opens or closes is kept in memory per workspace, as a
+   again once its lifecycle is over. A root whose subtree in its section holds a pinned row, its own pin included (feature instance-pin; spec B
+   of the pinned instances, agreed with this module's lead) starts open, so the pinned row is seen; closed by hand,
+   it stays closed (`startsOpen`). What the operator opens or closes is kept in memory per workspace, as a
    collapse always was:
    `collapsed` holds the rows closed by hand, `expanded` the roots opened by hand. A waiting row a default
    collapse hides rolls up onto its root ("! N below") as any collapse's does (waitingRollup; decision
@@ -38,17 +40,33 @@ export function sectionChildren(instances, section) {
 }
 
 /** The collapse keys the roster draws collapsed (instanceVisibleInTree, waitingRollup): the rows closed by hand,
- * and every root of its section that has children there and was not opened by hand; never a row `staysOpen(id)`
- * says its lifecycle takes, closed by hand or not. `children`: sectionChildren. */
-export function collapsedRows(workspace, { collapsed, expanded, children, staysOpen = () => false }) {
+ * and every root of its section that has children there, was not opened by hand and that `startsOpen(id)` does not
+ * open by default (a root whose subtree holds a pinned row); never a row `staysOpen(id)` says its lifecycle takes, closed
+ * by hand or not. `startsOpen` changes only the default: a root closed by hand stays closed. `children`:
+ * sectionChildren. */
+export function collapsedRows(workspace, { collapsed, expanded, children, staysOpen = () => false, startsOpen = () => false }) {
   const out = new Set(collapsed);
   const under = new Set([...children.values()].flat());
   for (const id of children.keys()) {
     const key = collapseKey(workspace, id);
     if (staysOpen(id)) out.delete(key);
-    else if (!under.has(id) && !expanded.has(key)) out.add(key);
+    else if (!under.has(id) && !expanded.has(key) && !startsOpen(id)) out.add(key);
   }
   return out;
+}
+
+/** Whether a row under `id` in its section, at any depth, passes `test(rowId)` (cycle-safe). `children`:
+ * sectionChildren. The row itself is not asked. */
+export function anyBelow(children, id, test) {
+  const seen = new Set([id]), stack = [...(children.get(id) || [])];
+  while (stack.length) {
+    const next = stack.pop();
+    if (seen.has(next)) continue;
+    seen.add(next);
+    if (test(next)) return true;
+    stack.push(...(children.get(next) || []));
+  }
+  return false;
 }
 
 /** How many rows sit under `id` in its section, at every depth (cycle-safe). `children`: sectionChildren. */

@@ -52,6 +52,8 @@ import { createLifecycleDialog, lifecycleCSS } from './lifecycle-dialog.mjs';
 import { createForgetDialog, forgetSuccessor } from './forget-dialog.mjs';
 import { createInstanceColorDialog, instanceColorCSS } from './instance-color-dialog.mjs';
 import { createInstanceBackgroundMenu } from './instance-background-menu.mjs';
+import { createInstancePinMenu, PIN_LABELS } from './instance-pin-menu.mjs';
+import { desktopActs } from './desktop-acts.mjs';
 import { successorRow } from "./focus-return.mjs";
 import { createThemePicker, createFontPicker, themePickerCSS } from './theme-picker.mjs';
 import { rosterKeyAction, moveTarget } from "./roster-keys.mjs";
@@ -93,11 +95,11 @@ import { rosterRowFacts } from "../../client/roster-row-facts.mjs";
 import { waitingClaim, waitingSentence, waitingDetail, waitingClock } from "../../client/waiting-on-you.mjs";
 import { syncWaitingRow } from "./waiting-row.mjs";
 import { createPanelOwner } from "./panel-owner.mjs";
-import { collapseKey, instanceVisibleInTree, waitingRollup, instanceId, rosterParentId, heldHome, backgroundPlacement, BACKGROUND_FEATURE, instanceSiblings } from "../../client/instance-tree.mjs";
+import { collapseKey, instanceVisibleInTree, waitingRollup, instanceId, rosterParentId, heldHome, backgroundPlacement, BACKGROUND_FEATURE, instanceSiblings, rowPinned, PIN_FEATURE } from "../../client/instance-tree.mjs";
 import { withParentGate } from "../../client/same-work.mjs";
 import { createRetiresInFlight, retiringRows } from "../../client/retire-in-flight.mjs";
 import { captureTreeRenderState, relationSpan, stateSpan, rosterResponseOwns, clusterSeparator, renderRosterCount,
-  terminalKey, resolveTerminalOpen, createRosterLoading, rosterSignature, ROSTER_STALE_TITLE, rosterName } from "./instance-tree-view.mjs";
+  terminalKey, resolveTerminalOpen, createRosterLoading, rosterSignature, ROSTER_STALE_TITLE, rosterName, pinnedMark } from "./instance-tree-view.mjs";
 import {
   tabVisibleInContext, canActivateTab,
   fallbackTabForContext, restoreTerminalTab,
@@ -107,7 +109,7 @@ import { retiredTabs, tabShowsRow, otherIncarnation, terminalOrigin } from "./re
 import { notePanel, panelDeployments, deploymentHeading } from "./view-deployments.mjs";
 import { deploymentState, rowStale, rosterSectionKey, sidebarSections, isMultiDeployment, splitByDeployment } from "../../client/roster-sections.mjs";
 import { backgroundHeading } from "./background-heading.mjs";
-import { sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen } from "./roster-disclosure.mjs";
+import { sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen, anyBelow } from "./roster-disclosure.mjs";
 import { cliStatus, onCliChange, cliHeldBack } from "./views/cli-status.mjs";
 import { DESKTOP_TERMS, DESKTOP_NOUNS } from "./desktop-terms.mjs";
 import { onDeploymentTabRequest } from "./deployment-tabs.mjs";
@@ -170,6 +172,12 @@ onWorkspaceChange(() => { void automationsFailure.refresh(null); });
 // Move to background / out of it (#1579; instance-background-menu.mjs): the row menu's items, gated as the route is.
 const backgroundMenu = createInstanceBackgroundMenu({ deploymentOf: rowDeployment,
   request: async (row, body) => (await desk.api(`/api/instance-background?ws=${encodeURIComponent(rowDeployment(row))}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).body,
+  onGate: () => { if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances); } });
+// Pin to top / Unpin (feature instance-pin; instance-pin-menu.mjs): the row menu's item and the palette's, gated as the
+// route is. The roster's next read moves the row.
+const pinMenu = createInstancePinMenu({ deploymentOf: rowDeployment,
+  request: async (row, body) => (await desk.api(`/api/instance-pin?ws=${encodeURIComponent(rowDeployment(row))}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).body,
   onGate: () => { if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances); } });
 let connectionGeneration = 0;
@@ -557,10 +565,18 @@ const backgroundOpen = new Set();
 // The section exists only while this computer's CLI lists the kernel's feature (BACKGROUND_FEATURE): without it
 // nothing moves, whatever a row carries. A probe that changes the answer repaints the roster.
 const backgroundShown = () => { const features = cliStatus()?.features; return Array.isArray(features) && features.includes(BACKGROUND_FEATURE); };
-let backgroundFeature = backgroundShown();
+// Pinned first (feature instance-pin): a row's `pinned` orders the roster and draws its mark only while this computer's
+// CLI lists the feature (a remote row keeps its pin only from a host that lists it too: remote-roster.mjs remotePanel);
+// without it, it is ignored.
+const pinsShown = () => { const features = cliStatus()?.features; return Array.isArray(features) && features.includes(PIN_FEATURE); };
+// The features that change how the held roster is painted, Background's and the pin's: a probe that changes either
+// repaints it (the rows are the same, so a roster poll's signature would not).
+const rosterFeatures = () => `${backgroundShown()}|${pinsShown()}`;
+let paintedFeatures = rosterFeatures();
 onCliChange(() => {
-  if (backgroundShown() === backgroundFeature) return;
-  backgroundFeature = !backgroundFeature;
+  const now = rosterFeatures();
+  if (now === paintedFeatures) return;
+  paintedFeatures = now;
   if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances);
 });
 // Collapsed agent groups (sidebar group headers), keyed like instances.
@@ -1036,8 +1052,11 @@ function renderContextRoster(instances) {
   // A choice made by hand stays in the sets and applies again once its lifecycle is over.
   const childrenHere = sectionChildren(instances, rowSection);
   const lifecycleRows = new Set(instances.filter((i) => i.pendingSpawn || heldHome(i)).map(instanceId));
+  // A root whose subtree in its section holds a pinned row, its own pin included, starts open (feature instance-pin):
+  // the pin is seen with its group. Closed by hand, it stays closed.
+  const pinnedRows = new Set(instances.filter((i) => rowPinned(i, pinsShown())).map(instanceId));
   const collapsedNow = collapsedRows(ws, { collapsed: collapsedInstances, expanded: expandedInstances, children: childrenHere,
-    staysOpen: (id) => lifecycleRows.has(id) });
+    staysOpen: (id) => lifecycleRows.has(id), startsOpen: (id) => pinnedRows.has(id) || (pinnedRows.size > 0 && anyBelow(childrenHere, id, (row) => pinnedRows.has(row))) });
   const visible = instances.filter((i) => instanceVisibleInTree(
     i, instances, collapsedNow, ws, false, { section: rowSection },
   ));
@@ -1050,7 +1069,7 @@ function renderContextRoster(instances) {
   // heading's count and wait, and its own tree while it is open. Every row in it may be: then the main tree is
   // empty and the heading is the list.
   const { main, background } = sidebarSections(instances, visible, contextDeployments, DESKTOP_TERMS,
-    { placement, open: backgroundOpen.has(ws), stale: rowHeldStale });
+    { placement, open: backgroundOpen.has(ws), stale: rowHeldStale, pins: pinsShown() });
   if (!visible.length && !background) {
     const empty = document.createElement("div"); empty.className = "ctx-empty"; empty.dataset.emptyRoster = "";
     empty.textContent = emptyRosterLine();
@@ -1086,9 +1105,11 @@ function renderContextRoster(instances) {
   // The relations in words (slice 1, D26: the roster draws no lineage or sibling lines; indentation and the gap
   // between bundles show the tree): "under <parent>" for a row indented under its parent and "sibling of …" for an
   // explicit sibling link, resolved per deployment over its full roster as the command palette's are, said after
-  // the row's lines to assistive technology.
+  // the row's lines to assistive technology. Its siblings are listed pinned first with the feature (instance-pin), as
+  // the palette and the TUI list them.
   const ownRows = isMultiDeployment(contextDeployments) ? splitByDeployment(contextDeployments)(instances) : null;
-  const siblingsOf = new Map(ownRows ? [...ownRows.values()].flatMap((list) => [...instanceSiblings(list)]) : instanceSiblings(instances));
+  const siblingPins = { pins: pinsShown() };
+  const siblingsOf = new Map(ownRows ? [...ownRows.values()].flatMap((list) => [...instanceSiblings(list, siblingPins)]) : instanceSiblings(instances, siblingPins));
   // A child its host reports doing its parent's work (#1577: `sameWork` where the host declares the feature, the
   // flag the drawn line said before D26) says so too: "same work"; a child the host reports not doing it, or one
   // whose host doesn't report the flag, says nothing more.
@@ -1227,10 +1248,13 @@ function renderContextRoster(instances) {
         // row (below). Its words follow the name.
         const told = hasChildren ? rowDisclosure(document, { count: rowsUnder(childrenHere, instanceId(i)) }) : null;
         const disclosure = told?.mark ?? null;
-        if (isNew || disclosure) {
+        // A pinned row's mark (feature instance-pin): beside the name, before New, so a pin is seen, not inferred.
+        const pinned = rowPinned(i, pinsShown());
+        if (isNew || disclosure || pinned) {
           const line = document.createElement("span"); line.className = "ctx-name-line";
           if (disclosure) line.append(disclosure);
           line.append(name);
+          if (pinned) line.append(pinnedMark(document));
           if (told) line.append(told.spoken);
           if (isNew) {
             const mark = document.createElement("span"); mark.className = "ctx-new";
@@ -1291,10 +1315,12 @@ function renderContextRoster(instances) {
             { action: 'open-pr', actionId: 'instance.openPullRequest', label: 'Open pull request…', reason: !actionTarget ? 'Instance identity is not fully reported.'
               : i.server || i.remote ? 'Remote PR inspection is unavailable; no local fallback.' : '' },
             ...backgroundMenu.items(i, placement),
+            ...pinMenu.items(i),
           ],
           invoke: async (action, instance) => {
             if (currentWorkspace() !== ws || workspaceGeneration() !== rosterGeneration) throw new Error("Workspace changed; select the instance again");
             if (backgroundMenu.handles(action)) return backgroundMenu.run(action, instance);
+            if (pinMenu.handles(action)) return pinMenu.run(action, instance);
             if (action === 'open-split') return openTerminalTab(instance, { inSplit: true, expected: actionTarget, valid: menuOwner });
             if (action === 'open-pr') return instancePrAction.open(actionTarget);
             if (action === "start" || action === "restart") { openInstanceStart(instance, { restart: action === "restart" }); return; }
@@ -2559,7 +2585,7 @@ const palette = createPalette({
     const recent = instanceRecency.snapshot(ws);
     const p = await api(`/api/panel${ws ? `?ws=${encodeURIComponent(ws)}` : ""}`);
     // One snapshot: the palette sections and clusters by these deployments, as the sidebar does.
-    return { instances: p.instances || [], deployments: panelDeployments(p), recent };
+    return { instances: p.instances || [], deployments: panelDeployments(p), recent, pins: pinsShown() };
   },
   // A held home (spawning, retiring, left half cleaned) opens nothing from here either, as its roster row does not:
   // the row as this window reads it (its own retires in flight held), said as the row says it.
@@ -2593,6 +2619,10 @@ const palette = createPalette({
     // selected.") the focus stays there, never on <body>; the dialog returns to it when it closes.
     { label: "Instance: name and colour…", detail: chordDetail("instance.edit"),
       run: () => { takePickerFocusReturn(document)?.restore(); openInstanceEdit(paletteTargetId); } },
+    // Pin to top / Unpin (feature instance-pin): listed only where the leader's target offers it, as its row menu does.
+    ...Object.entries(PIN_LABELS).map(([action, label]) => ({ label: `Instance: ${label}`,
+      when: () => pinTargetOffer(paletteTargetId) === action,
+      run: () => { takePickerFocusReturn(document)?.restore(); runPinCommand(paletteTargetId, action); } })),
     { label: "Sidebar: toggle (hide/show)", detail: chordDetail("sidebar.toggle"), run: () => toggleSidebar() },
     { label: "Sidebar: reset width", detail: chordDetail("sidebar.resetWidth"), run: () => runAction("sidebar.resetWidth") },
     { label: "Instance panel: show / hide", detail: chordDetail("panel.toggle"), run: () => runAction("panel.toggle") },
@@ -2804,6 +2834,26 @@ const instanceColorDialog = createInstanceColorDialog({ doc: document,
   generation: workspaceGeneration, subscribeWorkspace: onWorkspaceChange,
   onIntent: () => tabOpenIntents.invalidate(), applyFocus: fn => tabOpenIntents.applyFocus(fn),
 });
+/** The pin item the instance `id` names (leaderTargetId) offers, as its row menu does: "pin-on", "pin-off", or null
+ * (no such row, a row that offers no act of a client's own, a stale one, or no feature where it lives). */
+function pinTargetOffer(id) {
+  const instance = rosterInstance(id);
+  if (!instance || rosterStale || rowStale(instance, contextDeployments)) return null;
+  const offer = desktopActs(instance);
+  if (offer.blocked || offer.limited) return null;
+  return pinMenu.items(instance)[0]?.action ?? null;
+}
+/** Runs Pin to top / Unpin for the instance `id` names, from the palette; a failure is said as the row menu says it. */
+async function runPinCommand(id, action) {
+  const instance = rosterInstance(id);
+  if (!instance || pinTargetOffer(id) !== action) { sayInHint("No instance is focused or selected."); return; }
+  const ws = currentWorkspace(), generation = workspaceGeneration();
+  try { await pinMenu.run(action, instance); }
+  catch (error) {
+    if (currentWorkspace() !== ws || workspaceGeneration() !== generation) return;
+    notifications.notify(`${PIN_LABELS[action]} didn't finish for ${instance.instance}.`, { detail: error?.message || "" });
+  }
+}
 /** Opens it for the instance `id` names (leaderTargetId), as this window's roster shows it (its own retires in
  * flight held); with none, the hint says so. */
 function openInstanceEdit(id) {
