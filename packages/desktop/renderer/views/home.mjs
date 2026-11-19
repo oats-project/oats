@@ -56,14 +56,14 @@ export function overviewLine(key, counts, nouns = DESKTOP_NOUNS) {
 
 /** The first run's two lines and three keys. `chord(id)`: the bound key's text, or "". */
 export function firstRunCopy(chord, nouns = DESKTOP_NOUNS) {
-  const key = (id, fallback) => chord(id) || fallback;
+  const key = (id, fallback) => (chord(id) ? { key: chord(id) } : { hint: fallback });
   return {
     lines: [`OATS runs your ${nouns.instances}: each one is a soul at work on a machine of yours.`,
       `Start one, and Home shows what needs you and what you have.`],
     keys: [
-      { label: `New ${nouns.instance}`, key: key("app.quickOpenSouls", "the sidebar's New " + nouns.instance) },
-      { label: "Command palette", key: key("app.palette", "") },
-      { label: "Home", key: key("stage.home", "View: Home in the palette") },
+      { label: `New ${nouns.instance}`, ...key("app.quickOpenSouls", `the sidebar's New ${nouns.instance}`) },
+      { label: "Command palette", ...key("app.palette", "not bound") },
+      { label: "Home", ...key("stage.home", "View: Home in the palette") },
     ],
   };
 }
@@ -95,7 +95,7 @@ export const homeCSS = `
 .home-failed { display:flex; align-items:center; gap:12px; margin:0; font-size:13px; color:var(--fg); }
 .home-first p { margin:0 0 4px; font-size:14px; }
 .home-keys { list-style:none; margin:12px 0 0; padding:0; display:flex; flex-direction:column; gap:4px; font-size:13px; }
-.home-keys kbd { font-family:var(--mono); font-size:12px; color:var(--fg); }
+.home-keys kbd { font:inherit; font-weight:600; color:var(--fg); } /* D2: the chrome is sans; monospace is the terminal's */
 .home-back { margin:0 0 12px; }
 `;
 
@@ -200,7 +200,7 @@ export function createHome(el, ctx, { doc = el.ownerDocument, now = () => Date.n
     const keys = node("ul", "home-keys");
     for (const k of copy.keys) {
       const li = node("li"); li.append(`${k.label}: `);
-      if (k.key) li.append(node("kbd", null, k.key));
+      li.append(k.key ? node("kbd", null, k.key) : k.hint);
       keys.append(li);
     }
     s.append(keys);
