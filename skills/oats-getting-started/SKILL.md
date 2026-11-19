@@ -4,7 +4,8 @@ description: >-
   The way into OATS (Open Agent Team Specification) for a person who has only
   a coding agent. Asks about their project, installs OATS, OATS Desktop and
   the messaging CLI, creates the workspace's messaging account and team (with
-  no sign-in, or on the person's own account if they sign in), writes a new
+  no sign-in, on the person's own account if they sign in, or on their own
+  aweb server), writes a new
   workspace's skeleton (or joins this machine to an existing workspace),
   spawns the workspace's setup expert, which does the rest, and opens the
   Desktop on it. Offers the TUI.
@@ -82,7 +83,10 @@ costs the person a round. After that yes, nothing more is asked.
 - **One yes covers the changes to their computer.** Step 1's message lists
   them in plain words, and their yes covers every one: don't ask again step
   by step. The list, from step 2's checks: the tools you install (on Linux
-  per user, under `~/.local`; on macOS with Homebrew), the line that puts
+  per user, under `~/.local`; on macOS with Homebrew), on their own aweb
+  server (step 1) `aw` at the version this OATS release was tested with on
+  such a server, when none is installed or the installed one is older (a
+  newer one is kept), the line that puts
   them on their PATH in their shell's startup file (`~/.local/bin` on Linux;
   on macOS, Homebrew's `brew shellenv` line, only when Homebrew is new), the
   aweb channel plugin in Claude (Claude only) or pi's aweb extension,
@@ -235,6 +239,30 @@ the final values in one short message before you go on. The rules:
   - Tell them they attach themselves to that account later in the setup, with
     the setup expert. Only if they want the team on their own aweb account
     now, they sign in to it in their browser in step 5 instead.
+  - **Hosted aweb, or their own aweb server?** The line says "on aweb's
+    hosted service, unless you run your own aweb server"; hosted is the
+    default. Keep its second half in your own words too: it is how a
+    person with their own server learns this branch exists. With their own
+    server, the same round asks three things, none of them secret: the
+    namespace domain `ND` they control (for example
+    `agents.acme.com`, written in lowercase), the server's public address
+    `U` (`https://…`, the API URL their server gives its users), and whether
+    their server uses the public AWID registry. Answers given in the prompt
+    that started you are used without asking. When it uses a private
+    registry, the own-server branch stops here, before anything is written:
+    tell the person in one sentence that a private registry needs oats.aweb
+    with `oats aweb setup --registry`, and that this skill stops here. Offer
+    hosted aweb now (the hosted defaults above, `N` among them, shown in one
+    short message) or waiting for that release. Otherwise, tell them, in
+    plain words, what must already be in place on their side, since you
+    make none of it: the namespace's controller key on this computer, for
+    this computer account; the `_awid.ND` DNS record published for that
+    key; and their server reachable at `U`. Step 9
+    checks them, read-only. On their own server there is no account `N` and
+    no step 5: the team is `<workspace>:ND`, created in step 9 in their
+    namespace, and `A` is `<workspace>-root` as on hosted. Never offer it on
+    a machine found-list, or for an existing workspace: its invite carries
+    the team and the server.
 - **The harness for the setup expert:** `claude`, `codex` or `pi`. Default:
   the one you are, if it is one of these.
 - **The deployment directory `D`:** where OATS lives on this machine.
@@ -560,11 +588,63 @@ you can check `"skills":[]`:
 node -e 'const fs=require("fs"),path=require("path"),os=require("os");const f=path.join(process.env.PI_CODING_AGENT_DIR||path.join(os.homedir(),".pi","agent"),"settings.json");const s=JSON.parse(fs.readFileSync(f,"utf8"));const ours=(e)=>/^npm:@awebai\/pi(@|$)/.test(typeof e==="string"?e:e&&e.source||"");s.packages=(s.packages||[]).map((e)=>ours(e)?{...(typeof e==="object"?e:{}),source:typeof e==="string"?e:e.source,skills:[]}:e);fs.writeFileSync(f,JSON.stringify(s,null,2)+"\n");console.log(JSON.stringify(s.packages.filter(ours)))'
 ```
 
+**On hosted aweb** (the default), the latest `aw`:
+
 ```bash
 npm install -g @awebai/aw && aw version
 ```
 
 `aw` must be 1.36.33 or later.
+
+**On their own aweb server** (step 1), `aw` is the version this OATS
+release's `oats.aweb` was tested with, which `oats.aweb` publishes in its
+`aw-compat.json`: hosted aweb upgrades its server before a new `aw` comes
+out, but their own server has no such order. Read that version at the exact
+`oats.aweb` release the installed CLI's catalog names, never at `main`.
+This prints `TESTED <version>`, or why it can't:
+
+```bash
+node -e 'const c=require(process.argv[1]).packages["oats.aweb"],m=/^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?$/.exec(c.url),v=/^v(\d+)\.(\d+)\.(\d+)$/.exec(c.ref);if(!m){console.log("NOT_GITHUB "+c.url);process.exit(1)}if(!v||v.slice(1).reduce((d,x,i)=>d||x-[1,42,1][i],0)<0){console.log("TOO_OLD "+c.ref);process.exit(1)}const u="https://raw.githubusercontent.com/"+m[1]+"/"+m[2]+"/"+c.ref+"/"+c.path+"/capabilities/oats-aweb/aw-compat.json";fetch(u).then(r=>{if(!r.ok)throw new Error("HTTP "+r.status+" "+u);return r.json()}).then(j=>{if(Object.keys(j).sort().join()!=="min,tested"||typeof j.tested!=="string"||!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/.test(j.tested))throw new Error("unexpected "+JSON.stringify(j));console.log("TESTED "+j.tested)}).catch(e=>{console.log("FAILED "+e.message);process.exit(1)})' "$(oats root)/package-catalog.json"
+```
+
+- **`TOO_OLD`:** this OATS release's `oats.aweb` is older than `v1.42.1`,
+  the first that sets up a team on a person's own server.
+  **`NOT_GITHUB` or `FAILED`:** the tested version can't be read. Either
+  way, the own-server branch stops here. Tell the person in one sentence,
+  and offer hosted aweb now (step 1's hosted defaults, `N` among them,
+  shown in one short message) or waiting for the next OATS release.
+- **`TESTED <tested>`:** compare it with the `aw` already installed, in
+  `oats.aweb`'s own version order, where a pre-release of a newer version
+  counts as newer. With `<tested>` written in:
+
+  ```bash
+  node -e 'const P=(s)=>{const m=/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(s);if(!m)return null;const r=[m[1],m[2],m[3]].map(Number);return r.every(Number.isSafeInteger)?{r,p:m[4]?m[4].split("."):[]}:null};const C=(a,b)=>{for(let i=0;i<3;i++)if(a.r[i]!==b.r[i])return a.r[i]-b.r[i];if(!a.p.length||!b.p.length)return b.p.length-a.p.length;for(let i=0;i<Math.min(a.p.length,b.p.length);i++){const x=a.p[i],y=b.p[i],xn=/^\d+$/.test(x),yn=/^\d+$/.test(y);if(x===y)continue;if(xn&&yn)return x.length!==y.length?x.length-y.length:x<y?-1:1;if(xn!==yn)return xn?-1:1;return x<y?-1:1}return a.p.length-b.p.length};const t=P(process.argv[1]),l=/^aw (\S+)$/.exec(process.argv[2]||""),v=l&&P(l[1]);if(!t){console.log("FAILED tested "+process.argv[1]);process.exit(1)}const d=v?C(v,t):-1;console.log(d<0?"INSTALL":d===0?"EQUAL "+l[1]:"NEWER "+l[1])' "<tested>" "$(aw version 2>/dev/null | head -n 1)"
+  ```
+
+  - **`INSTALL`:** no `aw`, a version it can't read, or one below
+    `<tested>` (below `oats.aweb`'s floor included). Install exactly
+    `<tested>`, then check it:
+
+    ```bash
+    npm install -g "@awebai/aw@<tested>" && aw version && file -L "$(command -v aw)" && uname -m
+    ```
+
+    `aw version`'s first line must be exactly `aw <tested>`, and the `file`
+    line must name this machine's architecture, the one `uname -m` prints
+    (`x86-64` for `x86_64`, `aarch64` for `aarch64` on Linux; `x86_64` or
+    `arm64` on macOS). A different version, or a program for another
+    machine or no program at all (npm put a wrong or missing build in
+    place), stops the own-server branch as above. Where `file` itself is
+    missing (`command not found`), say so in the hand-over and rely on
+    `aw version`: a program that runs and prints its version was built for
+    this machine. Keep `aw <tested>` for the hand-over.
+  - **`EQUAL <tested>`:** that version is installed already: install
+    nothing. Keep `aw <tested>` for the hand-over.
+  - **`NEWER <version>`:** a newer `aw` is installed. Keep it, install
+    nothing, and go on: another deployment on this computer may need it.
+    Keep "aw <version> is newer than the tested <tested>; kept" for the
+    hand-over: it is the version this setup ran with.
+  - **`FAILED`** stops the own-server branch as above.
 
 **Then the Desktop. Every step verifies before it installs.** Wait for step
 3's download, then read its log. Run this once: it waits up to a minute
@@ -650,8 +730,9 @@ Categories=Development;
 
 **Only for a new workspace with aweb whose person chose, in step 1, the team
 on their own aweb account now.** Otherwise skip it: step 9 creates the
-workspace's account (the default), joins an existing workspace and signs up a machine
-found-list.
+workspace's account (the default), joins an existing workspace, signs up a machine
+found-list and creates the team on their own aweb server, which has no
+account to sign in to.
 
 The workspace's agents share one team, its **default team**, which the
 person's own aweb account creates here. Say to them, in your words, exactly
@@ -789,6 +870,11 @@ defaultTeam: acme                     # every soul starts in this team
   9's signup creates, checked there against this line. With step 5's
   sign-in, it is `T` from step 5 instead, written in literally. Its label
   (here `acme`) is the workspace name.
+- **On their own aweb server,** the team is `<workspace>:ND` (here
+  `acme:agents.acme.com`), with `ND` from step 1: the team step 9 creates
+  in their namespace, checked there against this line. It is the only team
+  and the default: no `default:…aweb.ai` team anywhere in the file, and no
+  `localTeams`.
 - **The `oats.machine` line,** at the catalog's
   `packages."oats.machine".ref`, only on a machine found-list.
 - **The `tasks` line** is step 1's tasks answer: `oats.aweb-tasks` without
@@ -957,8 +1043,9 @@ readiness still reports a problem.
      `oats sync --dir D`, then check again.
 2. **A new workspace without step 5's sign-in, and a machine found-list:
    sign up the workspace's aweb account and team,** with `N` and `A` from
-   step 1: no API key or token, nothing for the person to type. Preview
-   first, then run it:
+   step 1: no API key or token, nothing for the person to type. On their
+   own aweb server there is no signup: take "Their own aweb server", the
+   last part of this item, instead. Otherwise preview first, then run it:
 
    ```bash
    cd "D" && oats aweb setup --soul S --username N --name A --label L --plan --json
@@ -998,6 +1085,57 @@ readiness still reports a problem.
        unchanged, and it reuses that root. Anything else, the preview
        failing included: stop, spawn nothing, and tell the person what it
        shows.
+   - **Their own aweb server (step 1), in place of the signup.** Nothing for
+     the person to type, and no key passes through you. `ND`, `U` and `A`
+     come from step 1, and `L` is step 7's label.
+     - **First, the prerequisites, read-only:**
+
+       ```bash
+       cd "D" && aw id namespace check-txt --domain ND --json; echo "exit=$?"
+       ```
+
+       It fails when the controller key for `ND` is not on this computer
+       for this account, or when the `_awid.ND` record is missing, not
+       visible yet, or names another key. Its output says which. Then stop
+       and spawn nothing. Tell the person in one plain sentence which one is
+       missing, and that it's theirs to put in place, on their side. Once
+       they say it is, run this part again from here. Never make the key
+       (`aw id namespace prepare-controller`) or touch `~/.awid`.
+     - **Then create the team,** registered with their server. It takes up
+       to a few minutes. There is no preview, and it prints text, not JSON:
+
+       ```bash
+       cd "D" && AWEB_URL="U" oats aweb setup --soul S --create L --namespace ND --name A
+       ```
+     - **Success** prints `✓ created <T>, accepted it into <root>, recorded
+       roots[<T>]`. `<T>` must be step 7's team line, `L:ND`. Anything else:
+       stop, spawn nothing, and tell the person what it shows. Two more of
+       its lines are expected, and need nothing from you. Since step 7
+       wrote no `localTeams`, it says the workspace "does not allow local
+       teams" and shows `teams:` lines to commit: step 7 committed them
+       already, so when the team they show is step 7's line, nothing is
+       left to do. Its `readiness:` line can say
+       `needs-configuration`: item 5's check decides, not that line.
+     - **`team key: <path>`** is where the key of their agents' group now
+       lives on this computer. Tell the person that, in plain words, and that
+       they keep it backed up and never share it. The path, never the key,
+       goes in the hand-over.
+     - **"already exists in the registry, and its team key is not on this
+       machine":** `L:ND` is taken in their namespace, and nothing was
+       created. Ask the person for another name for the group, in the same
+       form as the workspace name. In `D/<repo>/oats-workspace.yaml`, change
+       the team's label, its `team:` and `defaultTeam` to it, then commit
+       and push it, and run `oats sync --dir D`. Run the create again, with
+       the new label as `L`.
+     - **"re-run the same command to resume",** or a run that was killed or
+       timed out: run the same line again, unchanged. It continues the
+       create, and never makes a second team.
+     - **Anything else** (a refused registration, a team-server record that
+       names another address, a missing controller key): stop, spawn
+       nothing, and tell the person in one sentence what it means. Never
+       rerun it with other values.
+     - **Then tell the person,** in your words: this is the group their
+       agents talk in, on their own server, in their namespace `ND`.
 3. **Existing workspace: the person gets an invite** from a member of `L`,
    whose own agent runs
    `oats aweb invite --soul <their soul> --label L --json` in their
@@ -1184,8 +1322,10 @@ are cloned, knowledge tools, messaging wanted or not>
   team T on aweb account N, created for the workspace, not yet attached to
   the person (new workspace), or T owned by aweb account <handle>
   (signed in at step 5), or new account N signed up (machine found-list),
-  or joined L by invite (existing) | not set up (the setup expert has no
-  messaging)
+  or joined L by invite (existing), or team T on their own aweb server U,
+  namespace ND, aw <tested> (oats.aweb's tested version) or "aw <version>
+  is newer than the tested <tested>; kept", its key at
+  <team key path> | not set up (the setup expert has no messaging)
 - Harness channel mode: development, confirmed by OATS at each start
   (Claude with aweb) | none (Codex, pi or no messaging)
 - Tasks (new workspace with aweb): oats.aweb-tasks | none: the agents use
@@ -1349,7 +1489,12 @@ the setup expert, not in this message. You are done.
   push to a repository other than the new workspace's host they agreed to in
   step 1 (step 6 creates or clones it).
 - **Guess the team id:** it is the signup's `default:N.aweb.ai`, checked in
-  step 9, or step 5's answer after its sign-in.
+  step 9, step 5's answer after its sign-in, or `<workspace>:ND` on their own
+  aweb server, checked against step 9's create.
+- **On their own aweb server:** make or touch the namespace's controller key
+  (`aw id namespace prepare-controller`, `~/.awid`), set or ask for
+  `AWEB_API_KEY`, or write a hosted `default:…aweb.ai` team or
+  `localTeams` into the workspace.
 - **Write a setup soul into the workspace:** the setup expert is
   `oats.framework`'s.
 - **The Desktop:** never download it through a browser, skip a verification
