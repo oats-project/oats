@@ -441,6 +441,10 @@ A self-contained package has an `oats.json`:
 - `triggerSources` (optional) declares the capability's
   [trigger sources](#trigger-sources-triggersources). It is checked only
   where a source is used, never when the capability loads.
+- `sessionProviders` (optional) declares the session backends the
+  capability supplies beside the kernel's tmux
+  ([session providers](#session-providers-sessionproviders)). It is checked
+  only where a provider is used, never when the capability loads.
 - Target names never appear in a package manifest.
 
 `capability` is the only manifest identity field; it may also carry
@@ -655,11 +659,17 @@ A spawn hook also gets `OATS_TASK`, `OATS_REPO`, `OATS_BRANCH`, `OATS_WORK`,
 `OATS_TRIGGER_EVENT_FILE`. A launch hook also gets `OATS_HARNESS` and
 `OATS_PREVIOUS_HARNESS`, and `OATS_LAUNCH_PREVIEW=1` when it runs for a
 preview (only a preview-aware hook does, below); on a real run
-`OATS_LAUNCH_PREVIEW` is not set. A worktree hook also gets the tree
+`OATS_LAUNCH_PREVIEW` is not set. A spawn hook and a launch hook also get
+`OATS_BACKEND` (feature `session-providers`): the session
+backend the instance launches on, `tmux` or the name of a
+[session provider](#session-providers-sessionproviders). A spawn that launches
+nothing (`--no-launch`) sets it too: it is what a later start launches on. A
+kernel without the feature sets none, which means tmux. A worktree hook also gets the tree
 variables of [The worktree event](#the-worktree-event).
 
 A spawn or launch hook also gets `OATS_HARNESS_EXECUTABLE`, for every harness
-and the same way in a preview: the absolute real path of the executable the
+on tmux and the same way in a preview (a session provider runs the harness
+itself, so the variable is absent there): the absolute real path of the executable the
 pane will run, found the way the pane finds it. It is reserved, so a launch
 configuration's `env` or a trigger cannot set it, and an inherited value is
 dropped. It doesn't reach the harness's pane, even from an existing server's
@@ -1960,3 +1970,270 @@ whole poll, resolution included, gets 35 s, and polls run only while they can
 end within 50 s of the tick's start. Answer from a cache or a quick query: a
 source slower than that should cache.
 
+## Session providers (`sessionProviders`)
+
+A kernel that lists the feature `session-providers` in `oats version --json`
+has this contract. tmux is the kernel's own session backend. A capability can supply another one, a
+**session provider**: the instance's agent then runs wherever the provider
+runs it (a thread of another product, a remote runner), and the kernel reaches
+it through four of the capability's own commands. The kernel keeps what a
+backend must not own: the receipts and the authority check, the lifecycle
+claims, the refusals and the JSON answers. What an operator sees is in
+[execution-targets.md](execution-targets.md#session-providers).
+
+```json
+"commands": { "session-launch": "bin/session.mjs launch", "session-inspect": "bin/session.mjs inspect",
+              "session-input": "bin/session.mjs input", "session-stop": "bin/session.mjs stop",
+              "session-inspect-many": "bin/session.mjs inspect-many" },
+"sessionProviders": {
+  "bb": {
+    "description": "Runs the agent as a bb thread",
+    "harnesses": ["claude"],
+    "commands": { "launch": "session-launch", "inspect": "session-inspect", "input": "session-input",
+                  "stop": "session-stop", "inspectMany": "session-inspect-many" }
+  }
+}
+```
+
+- The **name** is 1 to 40 lowercase letters, digits and dashes, starting with
+  a letter or digit. `tmux`, `session-provider` and `herdr` are reserved. It
+  is what `--backend` takes, and what a hook reads in `OATS_BACKEND`. At most
+  16 providers.
+- **`commands`** names `launch`, `inspect`, `input` and `stop`, and optionally
+  `inspectMany` and `check`. Each value is a key of the manifest's
+  `commands`.
+- **`harnesses`** lists the harnesses the provider runs (1 to 16 names). A
+  spawn or a start on another one is refused `E_BACKEND_HARNESS`.
+- **`description`** is optional: one line of at most 200 characters.
+- No other key.
+
+**Containment.** A malformed `sessionProviders` never refuses the capability:
+it is validated where a provider is used. A problem inside one provider
+disables that provider only, and `--backend <name>` then answers
+`E_BACKEND_UNKNOWN` with the problem. `oats capabilities show <name> --json`
+adds `sessionProviders` (as declared) and, when there is one,
+`sessionProviderProblems: [{provider, pointer, message}]`.
+[`docs/capability-manifest.schema.json`](capability-manifest.schema.json)
+carries the same shape; that a verb names one of the manifest's commands is
+checked by the kernel only.
+
+**One name, one meaning.** A provider is selected among the capabilities of
+the instance being spawned. Two of them declaring the same name is
+`E_BACKEND_AMBIGUOUS`: compose only one.
+
+### The call
+
+Every call runs the **home's own copy** of the capability:
+`node <home>/.oats/modules/<capability>/<script> <args>`, with the home as
+its working directory.
+
+- **Environment:** what a lifecycle hook of the capability gets in that home
+  ([Commands and hooks](#commands-and-hooks)): `OATS_INSTANCE`,
+  `OATS_INSTANCE_HOME`, `OATS_SETTINGS` (the settings captured at spawn),
+  `OATS_META`, `OATS_CLI_BIN` and the rest, with `OATS_EVENT=session` and
+  `OATS_BACKEND=<name>`.
+- **stdin:** one JSON request,
+  `{ "schemaVersion": 1, "phase": "session", "capability": "<id>", "provider": "<name>", "verb": "<verb>", "input": { … } }`.
+- **stdout:** exactly one JSON document of at most 1 MiB, the same five header
+  keys echoed, then `"ok": true, "result": { … }` or
+  `"ok": false, "error": { "code": "E_…", "message": "…" }`. No other key.
+  A refusal's code is `E_` followed by capitals, digits and underscores.
+- **Exit status 0**, for a result and for a refusal.
+- **Timeouts:** launch 120 s, stop 20 s plus the grace it is given, every
+  other verb 20 s. The command is killed (SIGKILL) at its timeout.
+- stderr is never read.
+
+A call that does not end that way (another exit status, a signal, the
+timeout, no or malformed JSON, a wrong envelope, a result that breaks its
+verb's rules) is a **failed call**. A failed call is never read as an answer:
+an inspect that failed is never "stopped".
+
+| Verb | A failed call, or a refusal the kernel does not relay |
+|---|---|
+| `inspect`, `inspectMany` | `E_SESSION_UNAVAILABLE`; the status row reads `running: null`, `runtimeState: "unreachable"` |
+| `check` | the readiness item reads `unknown`; a launch is refused `E_BACKEND_NOT_READY` |
+| `input` | `E_SESSION_INPUT_FAILED` |
+| `stop` | `E_SESSION_STOP_FAILED` |
+| `launch` | `E_SESSION_START_FAILED` |
+
+The kernel relays these refusals under the provider's own code: from
+`launch`, any `E_BACKEND_*`; from `input`, `E_SESSION_PROMPT_OPEN` and
+`E_SESSION_INPUT_QUEUED`. The message of any refusal is carried into the
+kernel's, made safe to print and cut to 500 characters.
+
+### launch
+
+In:
+
+```json
+{ "home": "/abs/home", "instance": "dev-a", "harness": "claude", "model": "id-or-null", "yolo": true,
+  "env": [ { "name": "OATS_INSTANCE", "value": "dev-a", "source": "kernel" },
+           { "name": "AWEB_IDENTITY_HOME", "value": "/abs/…", "source": "capability", "capability": "oats.aweb" },
+           { "name": "REGION", "value": "eu", "source": "launch-config" },
+           { "name": "API_KEY", "value": "…", "source": "launch-config-reference", "secret": true } ],
+  "unset": ["NAME"],
+  "pathPrepend": ["/abs/home/.oats/bin"],
+  "args": ["--flag", "value"],
+  "promptFile": "/abs/home/TASK.md",
+  "resume": null,
+  "previous": null }
+```
+
+- `env` is every variable the launch sets, in the order a tmux launch sets
+  them. `source` says where each comes from: `kernel` (the instance's
+  identity, a trigger's event file), `capability` (a hook's `env`, with the
+  `capability` that owns it), `launch-config` (a launch configuration's
+  literal value) or `launch-config-reference` (a launch configuration's
+  `fromEnv` or `fromFile`: a secret source, marked `secret: true`, its value
+  read on this host).
+- `unset` lists the names the launch removes: declared by a capability and
+  left out of this launch.
+- `pathPrepend` is the home's kernel shim directory. Put it first on the
+  agent's `PATH`, so its plain `oats` is the kernel that launched it.
+- `args` is the launch configuration's arguments, then the capabilities'
+  launch arguments for the harness. The kernel's own choices are never in
+  it: they are `model` (null: the harness's default), `yolo` (`true`,
+  `false`, or `null` when nobody chose) and the prompt.
+- `promptFile` is the home's `TASK.md`: the briefing a fresh conversation
+  starts on.
+- `resume` is always `null`: a provider home is resumed through `input`,
+  never relaunched.
+- `previous` is the endpoint of the session a start or a restart replaces,
+  which the kernel has already stopped; `null` for the home's first launch.
+
+**A provider that cannot carry an env entry, an argument or `unset`
+refuses, naming it** (`E_BACKEND_LAUNCH_ENV`, `E_BACKEND_LAUNCH_ARG`). It
+never drops one silently, and it never stores a `secret` value where others
+can read it.
+
+Out: `{ "endpoint": { … } }`. The endpoint is a JSON object whose canonical
+JSON is at most 4 KiB (4096 bytes). The kernel records it as given, in the
+home's `instance.json` and its receipt, and hands it back on every call. It
+holds **locators only, never a credential**.
+
+The kernel refuses, before anything is created, a launch configuration that
+declares `executable` for a provider backend (`E_BACKEND_LAUNCH_ARG`): the
+provider runs the harness itself.
+
+### inspect and inspectMany
+
+`inspect` in: `{ "home", "endpoint" }`. Out:
+`{ "present": true|false, "state": "unknown"|"shell"|"stopped", "running": true|false|null, "open"?: { "label", "url" } }`,
+exactly those keys.
+
+| The session | present | state | running |
+|---|---|---|---|
+| a turn or a start is in progress | true | `unknown` | true |
+| there, and the provider cannot tell a live idle session from a settled one | true | `unknown` | null |
+| gone: missing, deleted, or in error with nothing running | false | `stopped` | false |
+| the harness ended and something else holds the session, as a terminal left at its shell | true | `shell` | false |
+
+Map only what the product shows; never infer. **A session that is gone on a
+home OATS did not stop is a lost session**: OATS resumes it through `input`,
+under its cap ([below](#what-the-kernel-does-around-the-verbs)). So answer a
+session whose run ended in error as gone, not as `shell`, when your product
+restarts it on the next input. `open` is what a client may
+show instead of a terminal: a one-line `label` of at most 100 characters and
+an `http` or `https` `url` of at most 2000, without credentials.
+
+`inspectMany` (optional) in:
+`{ "homes": [ { "home", "instance", "endpoint" } ] }`, at most 200. Out:
+`{ "results": [ … ] }`, one per home in the same order, each an inspect
+result or `{ "error": { "code", "message" } }`. `oats status` calls it once
+per group of homes that share the capability's module copy (same digest),
+the provider and the settings; the call's environment is the group's first
+home's. Each entry is judged as one `inspect` answer would be. A batch that
+fails or is not one result per home, and an entry that is neither a result
+nor a refusal, fall back to that home's own `inspect`, never to "stopped".
+Without `inspectMany`, status calls `inspect` per home.
+
+**The kernel never calls inspect for a home OATS stopped** (below).
+
+### input
+
+In: `{ "home", "endpoint", "text" }`. Out: `{ "submitted": true, "verified": true|false }`
+**only when the text was dispatched** to the session. `submitted` is never
+`false` in a result: an input that was not dispatched is a refusal.
+
+- A session with a prompt open (a permission prompt, a question) is not
+  answered by an input: refuse `E_SESSION_PROMPT_OPEN` and send nothing.
+  Otherwise any mail could approve a permission.
+- An input the product queued instead of dispatching is not a submission:
+  withdraw it and refuse `E_SESSION_INPUT_QUEUED`.
+
+Both reach the caller as they are, with `ok: false`. The messaging broker
+leaves such a mail unread; a scheduled wake records it not delivered.
+
+### stop
+
+In: `{ "home", "endpoint", "graceSeconds" }`. Out: `{ "stopped": true }`.
+`endpoint` is `null` in one case: a launch whose answer was lost. Then stop
+whatever live session is rooted at the home, and answer `stopped: true` also
+when there is none.
+
+### check (optional)
+
+The provider's readiness. In: `{ "home": "/abs/home" | null, "soul": "<name>" | null, "settings": { … } }`:
+a home, or, before any home exists, a soul. Out:
+`{ "status": "ready" | "needs-configuration" | "authorization-required" | "unavailable", "problems": [ { "code", "message" } ], "warnings": [ { "code", "message" } ] }`
+(`warnings` optional; no problem on `ready`). Say where a credential comes
+from, never print it.
+
+- `oats readiness` relays the answer as a `providers` item, the shape a
+  binding check's answer has: for a home, its own backend's, required; for a
+  soul, each provider its capabilities offer, not required (the soul can
+  launch on tmux).
+- **The kernel asks it right before every launch** (a spawn's, a start's, a
+  restart's before its stop). A status other than `ready` refuses the launch:
+  with the first problem's code when that is an `E_BACKEND_*` code, else
+  `E_BACKEND_NOT_READY`, the message carrying your problems. A check that
+  fails or answers outside these words is not ready.
+
+### Requirements by backend (`requires[].backends`)
+
+A harness-package requirement (`requires: [{ harness, package, … }]`) is for
+the harness install on this host. A row may say which backends it is for:
+`"backends": ["tmux"]`, `["session-provider"]` (any session provider) or
+both. Without the key it applies to every backend, a provider's launch
+included, where it is probed on this host. It is a key of its own, never
+inside `when`, whose keys are the capability's settings. A kernel without
+`session-providers` knows no such key and applies the row to every launch:
+a package that uses `backends` raises its OATS floor to a kernel that lists
+the feature.
+
+### What the kernel does around the verbs
+
+- **Stop stays stopped.** At every OATS stop (`oats instance stop`, a
+  restart's stop, a retire, `oats host run`'s shutdown) the kernel records
+  `stoppedAt` in the home's receipt **before** it calls `stop`, and a start
+  clears it. While it is set, inspect answers stopped (`present: false`,
+  `running: false`) without calling the provider, and every input (a
+  person's `oats session input`, a scheduled wake, a client, the messaging
+  broker) is refused `E_SESSION_NOT_RUNNING` before any call. A provider
+  whose product restarts a session on its next input can rely on this.
+- **Hooks first.** The capabilities' spawn hooks (at a spawn) and launch
+  hooks (at a start or a restart) run before `launch`, as before a tmux
+  window, with `OATS_BACKEND`.
+- **Retire** records `stoppedAt`, calls `stop`, then runs the retire hooks
+  and removes the home. The retire hook is not handed the endpoint: a
+  provider that archives its session finds it by the home.
+- **A launch that fails** leaves the home as it was (stopped, or never
+  launched; a spawn is rolled back). When its answer was lost, the kernel
+  calls `stop` with `endpoint: null` first.
+- **Which stop it was** is on the home's stop receipt, never a field of
+  yours: `oats host run`'s shutdown is a loss that the sweep resumes, an
+  operator's stop is the intent that keeps the home down.
+- **A lost session is resumed through `input`.** A home whose session you
+  answer as gone, and that OATS did not stop, is resumed by the sweep with
+  one notice, and any other input to it is a resume too. The kernel counts
+  each against the home's cap before it calls `input` (at most 3 in an hour,
+  within one boot), refuses at the cap with `E_SESSION_NOT_RUNNING` without
+  calling you, and first waits (a resume) or refuses (an input) while a
+  process still works in the home. So an `inspect` precedes every `input`.
+  A notice you refuse (`E_SESSION_PROMPT_OPEN`, `E_SESSION_INPUT_QUEUED`) is
+  not counted.
+- **Nothing of your endpoint leaves the host.** A status row carries the
+  capability and, on its own host only, the endpoint's `threadId` when it
+  is a string; the endpoint is on local inspect, spawn and start answers.
+  `open` is relayed: make its `url` one a viewer may open, never your API's
+  address off its host, and put no token in either.

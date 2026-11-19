@@ -610,3 +610,29 @@ test("a failed close cannot certify quiescence while its owned child still runs"
   assert.equal(work.quiescent,false,'rejected cleanup is not evidence that launch-capable work ended');
   assert.doesNotThrow(()=>process.kill(pid,0),'the owned child really is still alive');
 });
+
+test("the stop covers every home on a session provider the listing answered, idle or in error included (its row carries backend)", async (t) => {
+  // A provider restarts such a session on its next input: the stop, recorded with a resume asked,
+  // is what keeps input refused while the host goes down. A tmux row is stopped only when it runs.
+  const w = world(t, { at: `${D}10:00:00.000Z` });
+  const running = hostRun(w.options);
+  await settle();
+  await w.answer(SWEEP, ok({ rows: [] }));
+  w.signal("SIGTERM");
+  await settle();
+  const home = (name) => `/srv/deploy/agents/dev/instances/${name}`;
+  const row = (instance, rest) => ({ deployment: "/srv/deploy", instance, home: home(instance), ...rest });
+  await w.answer(LIST, ok({ rows: [
+    row("tmux-running", { outcome: "already-running" }),
+    row("tmux-lost", { outcome: "resumed" }),
+    row("tmux-unknown", { outcome: "skipped", reason: "unknown" }),
+    row("bb-idle", { backend: "bb", outcome: "already-running" }),
+    row("bb-error", { backend: "bb", outcome: "skipped", reason: "not-lost" }),
+    row("bb-unreachable", { backend: "bb", outcome: "skipped", reason: "unknown" }),
+    row("bb-host-stopped", { backend: "bb", outcome: "resumed" }),
+  ] }));
+  assert.deepEqual(w.stops.map((s) => s.home), ["tmux-running", "bb-idle", "bb-error", "bb-unreachable", "bb-host-stopped"].map(home));
+  for (const stop of w.stops) stop.answer({ ok: true, home: stop.home, stopped: !stop.home.endsWith("bb-host-stopped"), alreadyIdle: stop.home.endsWith("bb-host-stopped"), state: "stopped" });
+  const answer = await running;
+  assert.deepEqual(answer.stopped.map((s) => [s.home, s.stopped]), [[home("tmux-running"), true], [home("bb-idle"), true], [home("bb-error"), true], [home("bb-unreachable"), true], [home("bb-host-stopped"), false]]);
+});

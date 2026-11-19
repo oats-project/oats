@@ -1550,6 +1550,34 @@ still name the old path. A child attached to one of the home's extra trees
 is handled the same way, tree by tree
 ([extra trees at retire](#extra-trees-at-retire)).
 
+#### Retiring a home on a session provider
+
+A home whose session runs on a
+[session provider](execution-targets.md#session-providers) (its
+`instance.json` records `backend` and `session`) is retired by a kernel that
+lists the feature `session-providers`, in this order:
+
+1. **The stop is recorded** (`stoppedAt` in the home's receipt): from then on
+   inspect answers stopped and every input to the home is refused
+   `E_SESSION_NOT_RUNNING`, so nothing restarts its session.
+2. **The provider is asked to stop the session**, with the usual grace,
+   never escalated.
+3. The retire hooks run (the provider's own archives its session there), the
+   work is preserved as for any home, and the home is removed.
+
+**When the provider cannot confirm the stop** (it fails, it does not answer,
+or its capability is no longer among the home's modules after an upgrade),
+the retire does not strand the home. It goes on only when no process works
+in the home, and its answer then carries a warning that the session was not
+stopped through its backend: archive or remove that session with the
+provider's own tooling. With a process working in the home, or when that
+cannot be told, the retire refuses `E_RUNTIME_QUIESCE_FAILED`, names the
+processes and keeps the home; its stop stays recorded.
+
+A retire's plan (`oats retire <instance> --plan`) reads the session through
+the provider, as `oats session inspect` does. A kernel without the feature
+refuses to retire such a home (`E_RUNTIME_ENDPOINT_UNKNOWN`) and keeps it.
+
 #### What `work/` is at retire
 
 The retire and its plan read what is at `<home>/work` once, by one rule

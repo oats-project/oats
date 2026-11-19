@@ -165,6 +165,13 @@
                 "description": "Applies only when every named capability setting has the given effective value (a requirement conditional on configuration, e.g. delivery: channel).",
                 "additionalProperties": {}
               },
+              "backends": {
+                "type": "array",
+                "description": "The session backends this requirement is for (feature session-providers): \"tmux\", \"session-provider\" (any session provider), or both. Without the key the requirement applies to every backend. A manifest that uses it needs a kernel that lists session-providers: an older kernel applies the row to every launch.",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": { "enum": ["tmux", "session-provider"] }
+              },
               "minVersion": {
                 "type": "string",
                 "description": "Lowest acceptable installed version of the package, read from the package.json under the install directory the harness's listing names; an older or absent manifest fails the requirement with the install remedy.",
@@ -243,6 +250,35 @@
                 "required": { "type": "boolean" },
                 "description": { "type": "string" }
               }
+            }
+          }
+        }
+      }
+    },
+    "sessionProviders": {
+      "description": "Session providers (feature session-providers): session backends this capability supplies beside the kernel's own tmux. `oats spawn --backend <name>` (a schedule's backend, a trigger's spawn.backend) selects one among the instance's capabilities; the kernel then calls the named commands for that instance's session, each with one JSON request on stdin and one JSON answer on stdout (docs/capabilities.md, Session providers). Validated only where a provider is used, never when the capability loads: a malformed declaration cannot be selected (E_BACKEND_UNKNOWN) and nothing else changes. What JSON Schema cannot say is checked there too: each command names one of this manifest's commands.",
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9-]{0,39}$", "not": { "enum": ["tmux", "session-provider", "herdr"] } },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["commands", "harnesses"],
+        "additionalProperties": false,
+        "properties": {
+          "description": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]*$" },
+          "harnesses": { "type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$" }, "description": "The harnesses this backend runs. A spawn or a start on another is refused E_BACKEND_HARNESS before anything is created or stopped." },
+          "commands": {
+            "type": "object",
+            "required": ["launch", "inspect", "input", "stop"],
+            "additionalProperties": false,
+            "description": "The provider's verbs, each naming one of this manifest's commands.",
+            "properties": {
+              "launch": { "type": "string", "minLength": 1, "description": "Starts the instance's session; answers the endpoint the kernel records." },
+              "inspect": { "type": "string", "minLength": 1, "description": "Answers one session's { present, state, running, open? }." },
+              "input": { "type": "string", "minLength": 1, "description": "Sends one text to the session; answers { submitted: true, verified } only when it was dispatched." },
+              "stop": { "type": "string", "minLength": 1, "description": "Stops the session; answers { stopped: true }." },
+              "inspectMany": { "type": "string", "minLength": 1, "description": "Optional: inspects several homes' sessions in one call (oats status)." },
+              "check": { "type": "string", "minLength": 1, "description": "Optional: the provider's readiness for a home or a soul, { status, problems, warnings }. oats readiness relays it, and the kernel asks it right before every launch." }
             }
           }
         }
