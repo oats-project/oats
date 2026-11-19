@@ -182,7 +182,9 @@ while a terminal is open); under 80 columns it has the whole width.
   place when it gains or loses one. Under one parent, the instances that do
   its work (the kernel's `sameWork`, from an OATS with `instance-same-work`)
   come first, then the others, each part newest first, as the Desktop lists
-  them. An empty row stands between each run
+  them. Pinned instances come before all of these, at every level, and an
+  instance with a pinned one below it counts as pinned
+  ([Pinning](#pinning)). An empty row stands between each run
   of instances related to no other and the group before or after it. The
   indent alone says which instance is under which: no mark is drawn for
   it. A row whose instances are folded away (`h`) says how many after its
@@ -1301,6 +1303,38 @@ The exit status never depends on it.
   there can leave `.oats-stop-pending.json` in the agent's home, and then
   the agent can be started but not stopped while that file exists.
 
+## Pinning
+
+`p` pins the selected instance to the top of its machine's list, or unpins a
+pinned one. It runs `oats instance pin <name> on|off` at once, with no
+confirmation: a pin changes only the order, and `p` again undoes it. The line
+under the sidebar's title says `Pinning <name>…`, then the result, and the
+list is read again, so the row moves.
+
+- **The order** is the Desktop's, from the same code. Pinned instances come
+  first at every level: the groups of a machine's list, the instances of a
+  group, and the children of one parent. An instance counts as pinned when
+  it or any instance below it is, so pinning a child lifts its whole group,
+  and the path down to it rises among its siblings. Among pinned instances,
+  and among the others, the order is spawn time, newest first. Under one
+  parent, the instances that do its work still come first. A pinned
+  background instance leads the Background section. A filter never
+  reorders the list. The palette lists the instances you opened most
+  recently first, as before, and the others in this order.
+- **Shared.** The pin is kept in the instance's home, so everyone who views
+  that machine sees it, in the TUI, the Desktop and another machine's view.
+  There is no pin of your own.
+- **When `p` does nothing**, the line says why: this OATS doesn't list the
+  `instance-pin` feature (then `oats instance pin <name> on|off` needs a
+  newer OATS too), the instance is held by a spawn or a retire, or its pin
+  is still changing. For an instance on another machine whose OATS doesn't
+  list the feature, the kernel refuses before it sends anything, and the
+  line gives its words.
+- **The key.** `p` is a default key from this version on. A `tui.json` that
+  gives `p` to another action is refused at the start, with a line that
+  names the key and both actions: move that action to another key, or give
+  `pin` another key (or none) in `tui.json`.
+
 ## Resuming lost sessions
 
 After a shutdown, a reboot or a crash, the instances that were running have
@@ -1472,6 +1506,7 @@ that kind.
 | close the empty group | – | – | – | – | – | `x` |
 | stop, restart, start, retire | `X`, `R`, `S`, `D` | – | – | – | – | `X`, `R`, `S`, `D` |
 | spawn another of the soul | `N` | – | – | – | – | `N` |
+| pin or unpin (`oats tui` only; the Desktop's is in the row's menu) | `p` | – | – | – | – | – |
 | the Instances, Souls, Capabilities views | `1`, `2`, `3` | – | – | – | – | `1`, `2`, `3` |
 | the help | `?` | – | – | – | – | `?` |
 | the list | `Esc` | – | – | – | – | `Esc` |
