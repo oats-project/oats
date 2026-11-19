@@ -1,0 +1,238 @@
+{
+ "status": "ready",
+ "threads": [
+  {
+   "id": "thr_release",
+   "projectId": "proj_release",
+   "title": "Release 0.70",
+   "displayTitle": "Release 0.70",
+   "status": "idle",
+   "runtimeStatus": "idle",
+   "hasPendingInteraction": false,
+   "isUnread": false,
+   "isArchived": false,
+   "isHidden": false,
+   "parentThreadId": null,
+   "href": "/projects/proj_release/threads/thr_release",
+   "providerId": "claude-code",
+   "indicator": "none",
+   "indicatorLabel": null,
+   "environment": {
+    "id": "env_release",
+    "path": "/abs/home/release",
+    "isWorktree": false,
+    "providerId": "project-checkout"
+   },
+   "host": {
+    "id": "host_falcon",
+    "name": "falcon"
+   },
+   "createdAt": 1795117000000,
+   "updatedAt": 1795117007000
+  },
+  {
+   "id": "thr_redesign",
+   "projectId": "proj_redesign",
+   "title": "Redesign the UI",
+   "displayTitle": "Redesign the UI",
+   "status": "active",
+   "runtimeStatus": "active",
+   "hasPendingInteraction": false,
+   "isUnread": false,
+   "isArchived": false,
+   "isHidden": false,
+   "parentThreadId": null,
+   "href": "/projects/proj_redesign/threads/thr_redesign",
+   "providerId": "claude-code",
+   "indicator": "none",
+   "indicatorLabel": null,
+   "environment": {
+    "id": "env_redesign",
+    "path": "/abs/home/redesign",
+    "isWorktree": false,
+    "providerId": "project-checkout"
+   },
+   "host": {
+    "id": "host_falcon",
+    "name": "falcon"
+   },
+   "createdAt": 1795117000000,
+   "updatedAt": 1795117006000
+  },
+  {
+   "id": "thr_mockups",
+   "projectId": "proj_mockups",
+   "title": "Desktop mockups",
+   "displayTitle": "Desktop mockups",
+   "status": "active",
+   "runtimeStatus": "active",
+   "hasPendingInteraction": false,
+   "isUnread": false,
+   "isArchived": false,
+   "isHidden": false,
+   "parentThreadId": null,
+   "href": "/projects/proj_mockups/threads/thr_mockups",
+   "providerId": "claude-code",
+   "indicator": "none",
+   "indicatorLabel": null,
+   "environment": {
+    "id": "env_mockups",
+    "path": "/abs/home/mockups",
+    "isWorktree": false,
+    "providerId": "project-checkout"
+   },
+   "host": {
+    "id": "host_falcon",
+    "name": "falcon"
+   },
+   "createdAt": 1795117000000,
+   "updatedAt": 1795117005000
+  },
+  {
+   "id": "thr_harvest",
+   "projectId": "proj_harvest",
+   "title": "Harvest knowledge",
+   "displayTitle": "Harvest knowledge",
+   "status": "idle",
+   "runtimeStatus": "idle",
+   "hasPendingInteraction": false,
+   "isUnread": true,
+   "isArchived": false,
+   "isHidden": false,
+   "parentThreadId": null,
+   "href": "/projects/proj_harvest/threads/thr_harvest",
+   "providerId": "claude-code",
+   "indicator": "none",
+   "indicatorLabel": null,
+   "environment": {
+    "id": "env_harvest",
+    "path": "/abs/home/harvest",
+    "isWorktree": false,
+    "providerId": "project-checkout"
+   },
+   "host": {
+    "id": "host_falcon",
+    "name": "falcon"
+   },
+   "createdAt": 1795117000000,
+   "updatedAt": 1795117004000
+  },
+  {
+   "id": "thr_ci",
+   "projectId": "proj_ci",
+   "title": "Fix flaky CI test",
+   "displayTitle": "Fix flaky CI test",
+   "status": "idle",
+   "runtimeStatus": "idle",
+   "hasPendingInteraction": true,
+   "isUnread": false,
+   "isArchived": false,
+   "isHidden": false,
+   "parentThreadId": null,
+   "href": "/projects/proj_ci/threads/thr_ci",
+   "providerId": "claude-code",
+   "indicator": "none",
+   "indicatorLabel": null,
+   "environment": {
+    "id": "env_ci",
+    "path": "/abs/home/ci",
+    "isWorktree": false,
+    "providerId": "project-checkout"
+   },
+   "host": {
+    "id": "host_falcon",
+    "name": "falcon"
+   },
+   "createdAt": 1795117000000,
+   "updatedAt": 1795117003000
+  },
+  {
+   "id": "thr_research",
+   "projectId": "proj_research",
+   "title": "Autoresearch: ranker v3",
+   "displayTitle": "Autoresearch: ranker v3",
+   "status": "idle",
+   "runtimeStatus": "idle",
+   "hasPendingInteraction": false,
+   "isUnread": false,
+   "isArchived": false,
+   "isHidden": false,
+   "parentThreadId": null,
+   "href": "/projects/proj_research/threads/thr_research",
+   "providerId": "claude-code",
+   "indicator": "none",
+   "indicatorLabel": null,
+   "environment": {
+    "id": "env_research",
+    "path": "/abs/home/research",
+    "isWorktree": false,
+    "providerId": "project-checkout"
+   },
+   "host": {
+    "id": "host_falcon",
+    "name": "falcon"
+   },
+   "createdAt": 1795117000000,
+   "updatedAt": 1795117002000
+  },
+  {
+   "id": "thr_digest",
+   "projectId": "proj_digest",
+   "title": "Weekly digest",
+   "displayTitle": "Weekly digest",
+   "status": "idle",
+   "runtimeStatus": "idle",
+   "hasPendingInteraction": false,
+   "isUnread": false,
+   "isArchived": false,
+   "isHidden": false,
+   "parentThreadId": null,
+   "href": "/projects/proj_digest/threads/thr_digest",
+   "providerId": "claude-code",
+   "indicator": "none",
+   "indicatorLabel": null,
+   "environment": {
+    "id": "env_digest",
+    "path": "/abs/home/digest",
+    "isWorktree": false,
+    "providerId": "project-checkout"
+   },
+   "host": {
+    "id": "host_falcon",
+    "name": "falcon"
+   },
+   "createdAt": 1795117000000,
+   "updatedAt": 1795117001000
+  },
+  {
+   "id": "thr_plain",
+   "projectId": "proj_plain",
+   "title": "Plain bb thread",
+   "displayTitle": "Plain bb thread",
+   "status": "idle",
+   "runtimeStatus": "idle",
+   "hasPendingInteraction": false,
+   "isUnread": false,
+   "isArchived": false,
+   "isHidden": false,
+   "parentThreadId": null,
+   "href": "/projects/proj_plain/threads/thr_plain",
+   "providerId": "pi",
+   "indicator": "none",
+   "indicatorLabel": null,
+   "environment": {
+    "id": "env_plain",
+    "path": "/abs/home/plain",
+    "isWorktree": false,
+    "providerId": "project-checkout"
+   },
+   "host": {
+    "id": "host_falcon",
+    "name": "falcon"
+   },
+   "createdAt": 1795117000000,
+   "updatedAt": 1795117000500
+  }
+ ],
+ "projects": []
+}

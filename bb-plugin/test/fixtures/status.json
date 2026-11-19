@@ -1,0 +1,334 @@
+{
+ "root": "/abs/deployment",
+ "agents": [
+  {
+   "name": "oats-maintainer",
+   "kind": "persistent",
+   "instances": [
+    {
+     "agent": "oats-maintainer",
+     "instance": "release-070-maintainer",
+     "home": "/abs/deployment/agents/oats-maintainer/instances/release-070-maintainer",
+     "parentInstance": null,
+     "attributedHuman": "joan",
+     "identity": {
+      "alias": "release-070-maintainer",
+      "team": "default:oats.aweb.ai"
+     },
+     "identityAddress": null,
+     "capabilityMeta": {
+      "oats.aweb": {
+       "alias": "release-070-maintainer",
+       "team": "default:oats.aweb.ai"
+      }
+     },
+     "backend": "bb",
+     "tmux": null,
+     "session": {
+      "provider": "oats.bb",
+      "endpoint": {
+       "server": "http://127.0.0.1:38886",
+       "projectId": "proj_release",
+       "threadId": "thr_release"
+      }
+     },
+     "running": null,
+     "runtimeState": "unknown",
+     "runtimeError": null,
+     "waitingOnYou": {
+      "since": "2026-11-19T12:22:00.000Z",
+      "producer": "oats.core",
+      "reason": "attention",
+      "message": "Green light at 9f2e1c? Second reader done."
+     },
+     "open": null
+    }
+   ]
+  },
+  {
+   "name": "oats-product-expert",
+   "kind": "persistent",
+   "instances": [
+    {
+     "agent": "oats-product-expert",
+     "instance": "redesign-ui-lead",
+     "home": "/abs/deployment/agents/oats-product-expert/instances/redesign-ui-lead",
+     "parentInstance": null,
+     "attributedHuman": "joan",
+     "identity": {
+      "alias": "redesign-ui-lead",
+      "team": "default:oats.aweb.ai"
+     },
+     "identityAddress": null,
+     "capabilityMeta": {
+      "oats.aweb": {
+       "alias": "redesign-ui-lead",
+       "team": "default:oats.aweb.ai"
+      }
+     },
+     "backend": "bb",
+     "tmux": null,
+     "session": {
+      "provider": "oats.bb",
+      "endpoint": {
+       "server": "http://127.0.0.1:38886",
+       "projectId": "proj_redesign",
+       "threadId": "thr_redesign"
+      }
+     },
+     "running": true,
+     "runtimeState": "unknown",
+     "runtimeError": null,
+     "waitingOnYou": null,
+     "open": null
+    }
+   ]
+  },
+  {
+   "name": "oats-desktop-developer",
+   "kind": "persistent",
+   "instances": [
+    {
+     "agent": "oats-desktop-developer",
+     "instance": "desktop-mockups-developer",
+     "home": "/abs/deployment/agents/oats-desktop-developer/instances/desktop-mockups-developer",
+     "parentInstance": "redesign-ui-lead",
+     "attributedHuman": "joan",
+     "identity": {
+      "alias": "desktop-mockups-developer",
+      "team": "default:oats.aweb.ai"
+     },
+     "identityAddress": null,
+     "capabilityMeta": {
+      "oats.aweb": {
+       "alias": "desktop-mockups-developer",
+       "team": "default:oats.aweb.ai"
+      }
+     },
+     "backend": "bb",
+     "tmux": null,
+     "session": {
+      "provider": "oats.bb",
+      "endpoint": {
+       "server": "http://127.0.0.1:38886",
+       "projectId": "proj_mockups",
+       "threadId": "thr_mockups"
+      }
+     },
+     "running": true,
+     "runtimeState": "unknown",
+     "runtimeError": null,
+     "waitingOnYou": null,
+     "open": null
+    }
+   ]
+  },
+  {
+   "name": "knowledge-harvester",
+   "kind": "persistent",
+   "instances": [
+    {
+     "agent": "knowledge-harvester",
+     "instance": "harvest-knowledge-helper",
+     "home": "/abs/deployment/agents/knowledge-harvester/instances/harvest-knowledge-helper",
+     "parentInstance": "redesign-ui-lead",
+     "attributedHuman": "joan",
+     "identity": {
+      "alias": "harvest-knowledge-helper",
+      "team": "default:oats.aweb.ai"
+     },
+     "identityAddress": null,
+     "capabilityMeta": {
+      "oats.aweb": {
+       "alias": "harvest-knowledge-helper",
+       "team": "default:oats.aweb.ai"
+      }
+     },
+     "backend": "bb",
+     "tmux": null,
+     "session": {
+      "provider": "oats.bb",
+      "endpoint": {
+       "server": "http://127.0.0.1:38886",
+       "projectId": "proj_harvest",
+       "threadId": "thr_harvest"
+      }
+     },
+     "running": null,
+     "runtimeState": "unknown",
+     "runtimeError": null,
+     "waitingOnYou": null,
+     "open": null
+    }
+   ]
+  },
+  {
+   "name": "oats-developer",
+   "kind": "persistent",
+   "instances": [
+    {
+     "agent": "oats-developer",
+     "instance": "flaky-ci-developer",
+     "home": "/abs/deployment/agents/oats-developer/instances/flaky-ci-developer",
+     "parentInstance": null,
+     "attributedHuman": "joan",
+     "identity": {
+      "alias": "flaky-ci-developer",
+      "team": "default:oats.aweb.ai"
+     },
+     "identityAddress": null,
+     "capabilityMeta": {
+      "oats.aweb": {
+       "alias": "flaky-ci-developer",
+       "team": "default:oats.aweb.ai"
+      }
+     },
+     "backend": "bb",
+     "tmux": null,
+     "session": {
+      "provider": "oats.bb",
+      "endpoint": {
+       "server": "http://127.0.0.1:38886",
+       "projectId": "proj_ci",
+       "threadId": "thr_ci"
+      }
+     },
+     "running": null,
+     "runtimeState": "unknown",
+     "runtimeError": null,
+     "waitingOnYou": {
+      "since": "2026-11-19T12:22:00.000Z",
+      "producer": "oats.core",
+      "reason": "permission",
+      "message": "needs your permission to use Bash"
+     },
+     "open": null
+    },
+    {
+     "agent": "oats-developer",
+     "instance": "kernel-fix-developer",
+     "home": "/abs/deployment/agents/oats-developer/instances/kernel-fix-developer",
+     "parentInstance": null,
+     "attributedHuman": "joan",
+     "identity": {
+      "alias": "kernel-fix-developer",
+      "team": "default:oats.aweb.ai"
+     },
+     "identityAddress": null,
+     "capabilityMeta": {
+      "oats.aweb": {
+       "alias": "kernel-fix-developer",
+       "team": "default:oats.aweb.ai"
+      }
+     },
+     "backend": "tmux",
+     "tmux": {
+      "session": "oats-agents",
+      "window": "kernel-fix-developer"
+     },
+     "running": true,
+     "runtimeState": "unknown",
+     "waitingOnYou": null
+    }
+   ]
+  },
+  {
+   "name": "research-expert",
+   "kind": "persistent",
+   "instances": [
+    {
+     "agent": "research-expert",
+     "instance": "ranker-v3-probe",
+     "home": "/abs/deployment/agents/research-expert/instances/ranker-v3-probe",
+     "parentInstance": null,
+     "attributedHuman": "joan",
+     "identity": {
+      "alias": "ranker-v3-probe",
+      "team": "default:oats.aweb.ai"
+     },
+     "identityAddress": null,
+     "capabilityMeta": {
+      "oats.aweb": {
+       "alias": "ranker-v3-probe",
+       "team": "default:oats.aweb.ai"
+      }
+     },
+     "backend": "bb",
+     "tmux": null,
+     "session": {
+      "provider": "oats.bb",
+      "endpoint": {
+       "server": "http://127.0.0.1:38886",
+       "projectId": "proj_research",
+       "threadId": "thr_research"
+      }
+     },
+     "running": null,
+     "runtimeState": "unknown",
+     "runtimeError": null,
+     "waitingOnYou": {
+      "since": "2026-11-19T12:22:00.000Z",
+      "producer": "oats.core",
+      "reason": "question",
+      "message": "Keep depth 6 and sweep lr, or try depth 7?"
+     },
+     "open": null
+    }
+   ]
+  },
+  {
+   "name": "oats-expert",
+   "kind": "persistent",
+   "instances": [
+    {
+     "agent": "oats-expert",
+     "instance": "weekly-digest-helper",
+     "home": "/abs/deployment/agents/oats-expert/instances/weekly-digest-helper",
+     "parentInstance": null,
+     "attributedHuman": "joan",
+     "identity": {
+      "alias": "weekly-digest-helper",
+      "team": "default:oats.aweb.ai"
+     },
+     "identityAddress": null,
+     "capabilityMeta": {
+      "oats.aweb": {
+       "alias": "weekly-digest-helper",
+       "team": "default:oats.aweb.ai"
+      }
+     },
+     "backend": "bb",
+     "tmux": null,
+     "session": {
+      "provider": "oats.bb",
+      "endpoint": {
+       "server": "http://127.0.0.1:38886",
+       "projectId": "proj_digest",
+       "threadId": "thr_digest"
+      }
+     },
+     "running": false,
+     "runtimeState": "stopped",
+     "runtimeError": null,
+     "waitingOnYou": null,
+     "open": null
+    }
+   ]
+  }
+ ],
+ "features": [
+  "session-providers",
+  "waiting-on-you"
+ ],
+ "workspace": {
+  "reachable": true,
+  "key": "github.com/awebai/oats",
+  "defaultTeam": {
+   "label": "oats",
+   "team": "default:oats.aweb.ai"
+  },
+  "teams": {
+   "oats": "default:oats.aweb.ai"
+  }
+ }
+}
