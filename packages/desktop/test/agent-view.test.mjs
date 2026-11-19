@@ -626,3 +626,59 @@ test('r3: an id cleared and asked again shows its own context, read afresh, neve
   await f.flush(); await f.flush();
   assert.match(fold(), /This deletes everything/);
 });
+
+// Round 4's findings, each pinned.
+test('r4: overlapping board reads, through the real boundary and cache, never answer for an earlier occurrence', async t => {
+  const { createInspectBoundary } = await import('../../client/inspect-boundary.mjs');
+  const { createInspectCache } = await import('../../client/inspect-cache.mjs');
+  const home = '/w/agents/dev/instances/dev-a';
+  const flights = [];
+  const invoke = () => new Promise(resolve => flights.push(resolve));
+  const cache = createInspectCache();
+  const context = { workspace: { id: 'w', scope: '/w' }, cli: { ok: true, operationsApi: 2, bin: '/bin/oats', features: [BOARD_FEATURE] },
+    instances: [{ instance: 'dev-a', home, createdAt: '2026-11-19T09:00:00.000Z' }], localCwd: '/w' };
+  const post = (path, body) => path.startsWith('/api/capabilities') ? createInspectBoundary({ invoke, cache }).inspect(body, context) : new Promise(() => {});
+  const dom = new JSDOM('<!doctype html><body><div class="tab-pane active"><div class="term-wrap"></div></div></body>');
+  t.after(() => dom.window.close());
+  const pane = dom.window.document.querySelector('.tab-pane');
+  const boards = createTabBoards({ features: () => [BOARD_FEATURE], post, openLink: () => {}, hidden: createHiddenFacts(memoryStorage()), now: () => NOW });
+  const tab = { paneEl: pane, typeText: () => true, focusTerminal: () => {}, inView: () => true };
+  const asked = (text, since) => ({ instance: 'dev-a', agent: 'dev', agentsRoot: '/w/agents', home, running: true,
+    board: boardData({ facts: [], questions: [question('q1', { question: text, since, hasContext: true })] }) });
+  const answer = (since, ctx) => ({ schemaVersion: 1, ok: true, result: { operationsApi: 2, instance: { board: { facts: [], questions: [{ ...question('q1', { since, hasContext: true }), context: ctx }] } } } });
+  boards.sync(tab, asked('Deploy version one?', '2026-11-19T10:00:00.000Z'), null, 'w');
+  await new Promise(r => setTimeout(r, 0));
+  boards.sync(tab, asked('Delete production data?', '2026-11-19T11:00:00.000Z'), null, 'w');
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(flights.length, 2, 'the second read is a CLI read of its own, never the first flight joined');
+  flights[0](answer('2026-11-19T10:00:00.000Z', 'Version one passed all tests.'));
+  await new Promise(r => setTimeout(r, 0));
+  const fold = () => pane.querySelector('.agent-q-context-body').textContent;
+  assert.doesNotMatch(fold(), /Version one/);
+  flights[1](answer('2026-11-19T11:00:00.000Z', 'This deletes everything.'));
+  await new Promise(r => setTimeout(r, 0)); await new Promise(r => setTimeout(r, 0));
+  assert.match(fold(), /This deletes everything/);
+});
+
+test('r4: an answer whose question is another occurrence of the id is not shown as this one\'s context', t => {
+  const f = fixture(t);
+  f.view.update(boardData({ facts: [], questions: [question('q1', { since: '2026-11-19T11:00:00.000Z', hasContext: true })] }));
+  f.view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'Old context.', since: '2026-11-19T10:00:00.000Z' }]]) });
+  assert.doesNotMatch(f.zone().querySelector('.agent-q-context-body').textContent, /Old context/);
+  assert.match(f.zone().querySelector('.agent-q-context-body').textContent, /Reading the context/);
+});
+
+test('r4: an unchanged repaint keeps the focus on the control that had it', t => {
+  const f = fixture(t);
+  f.view.update(boardData(board()));
+  f.facts().querySelector('li[data-key="pr"] .agent-fact-link').click();
+  assert.equal(f.doc.activeElement.className, 'agent-fact-url-open');
+  f.view.update(boardData(board()));
+  assert.equal(f.doc.activeElement.className, 'agent-fact-url-open', 'Open keeps it');
+  for (const part of ['agent-fact-link', 'agent-fact-hide']) {
+    f.facts().querySelector(`li[data-key="pr"] .${part}`).focus();
+    f.view.update(boardData(board())); f.view.detail({ state: 'ok', facts: new Map(), questions: new Map() });
+    assert.equal(f.doc.activeElement.className, part, `${part} keeps it`);
+    assert.equal(f.doc.activeElement.closest('li').dataset.key, 'pr');
+  }
+});
