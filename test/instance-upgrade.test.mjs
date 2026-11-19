@@ -16,6 +16,7 @@ import { planUpgrade, applyUpgrade } from "../lib/instance-upgrade.mjs";
 import { claimHomeFor, homeClaimHolder, releaseHomeClaim, retirementBaselinePath, writeRetirementBaseline, retireInstance, startInstanceSession } from "../lib/core.mjs";
 import { readEvents } from "../lib/instance-events.mjs";
 import { readInstanceBackground, writeInstanceBackground } from "../lib/instance-background.mjs";
+import { readInstancePin, writeInstancePin } from "../lib/instance-pin.mjs";
 import { readSameWork, writeSameWork } from "../lib/instance-same-work.mjs";
 
 const json = p => JSON.parse(readFileSync(p, "utf8"));
@@ -268,10 +269,13 @@ test("package upgrade acceptance: retire after completed upgrade and receipt rep
   const f = await fixture(t); const { fx, home } = f;
   // Feature instance-background: the record is presentation, kept by the upgrade and never work at retire.
   writeInstanceBackground(home, true);
+  // Feature instance-pin: the same.
+  writeInstancePin(home, true);
   const plan = await f.plan();
   await f.apply({ planRevision: plan.planRevision, idempotencyKey: "baseline" });
   await f.apply({ planRevision: plan.planRevision, idempotencyKey: "baseline" });
   assert.equal(readInstanceBackground(home), true, "the upgrade keeps the background record");
+  assert.equal(readInstancePin(home), true, "the upgrade keeps the pin");
   const receipt = readdirSync(join(home, ".oats")).find(n => /^upgrade-receipt\..+\.json$/.test(n));
   assert.ok(receipt, "completed upgrade has a durable receipt");
   const path = join(home, ".oats", receipt);

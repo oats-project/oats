@@ -65,6 +65,7 @@ function assertUnknown(error, command, flag, what) {
 const TYPOS = (d) => [
   ["instance color", ["instance", "color", "dev-one", "--claer"], "--claer"],
   ["instance background", ["instance", "background", "dev-one", "on", "--dri", d.fx.dep], "--dri"],
+  ["instance pin", ["instance", "pin", "dev-one", "on", "--hme", d.home], "--hme"],
   ["instance same-work", ["instance", "same-work", "dev-one", "on", "--hom", d.home], "--hom"],
   ["instance waiting set", ["instance", "waiting", "set", "--producer", "oats.core", "--reason", "permission", "--home", d.home, "--mesage", "x"], "--mesage"],
   ["instance waiting clear", ["instance", "waiting", "clear", "--producer", "oats.core", "--home", d.home, "--resaon", "permission"], "--resaon"],
@@ -140,6 +141,7 @@ test("each command's defined flags are read: one smoke case per command", async 
   const at = ["--home", d.home, "--dir", d.fx.dep, "--json"];
   assert.equal(ok(["instance", "color", "dev-one", "--clear", ...at]).color, null);
   assert.equal(ok(["instance", "background", "dev-one", "on", ...at]).background, true);
+  assert.equal(ok(["instance", "pin", "dev-one", "on", ...at]).pinned, true);
   assert.equal(ok(["instance", "same-work", "dev-one", "off", ...at]).sameWork, false);
   assert.equal(ok(["instance", "waiting", "set", "--producer", "oats.core", "--reason", "permission", "--message=a question", ...at]).waitingOnYou.message, "a question");
   assert.equal(ok(["instance", "waiting", "clear", "--producer", "oats.core", ...at]).waitingOnYou, null);

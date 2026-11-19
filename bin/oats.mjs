@@ -83,7 +83,7 @@ const { hostUnitFiles, hostUnitStatus, installHostUnit, uninstallHostUnit } = aw
 const { kernelNode, stableNode } = await kernelImport("stable-node", () => import("../lib/stable-node.mjs"));
 const { receiveAttachment, uploadAttachment, readStreamBounded, MAX_ATTACHMENT_BYTES } = await kernelImport("attachments", () => import("../lib/attachments.mjs"));
 const { observeInstanceGit, diffInstanceFile, NO_FILE_MONITOR } = await kernelImport("instance-git", () => import("../lib/instance-git.mjs"));
-const { planStop, applyStop, planRetire, retireDefaultsLine, stopClosingLine, descendantsOf, resolveInstance: resolveInstanceForCli, setInstanceColor, setInstanceBackground, setInstanceSameWork, STOP_WARNINGS } = await kernelImport("instance-lifecycle", () => import("../lib/instance-lifecycle.mjs"));
+const { planStop, applyStop, planRetire, retireDefaultsLine, stopClosingLine, descendantsOf, resolveInstance: resolveInstanceForCli, setInstanceColor, setInstanceBackground, setInstancePin, setInstanceSameWork, STOP_WARNINGS } = await kernelImport("instance-lifecycle", () => import("../lib/instance-lifecycle.mjs"));
 const { extraWorktreeLines, formatBytes, warningLines, workRecoveryLines } = await kernelImport("retire-output", () => import("../lib/retire-output.mjs"));
 const { livenessWord, lostLine, statusWord, waitingLine } = await kernelImport("status-words", () => import("../lib/status-words.mjs"));
 const { retainedRecoveryLines, retainedWorktreeLines, retainedWorktrees } = await kernelImport("retained-after-retire", () => import("../lib/retained-after-retire.mjs"));
@@ -1453,8 +1453,8 @@ async function instanceCmd() {
   if (sub === "upgrade") return instanceUpgradeCmd(name, bail);
   if (sub === "waiting" || sub === "attention") return instanceWaitingCmd(sub, bail);
   if (sub === "suggest-name") return instanceSuggestNameCmd(bail);
-  const usage = "usage: oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] [--json] | oats instance attention [--message=<text>] [--clear] [--json] | oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--dir <d>] [--json] | oats instance git <instance> [--home <abs>] [--dir <d>] [--json] | oats instance diff <instance> --file <id> --revision <rev> [--index-revision <rev>] [--home <abs>] [--dir <d>] [--json] | oats instance stop <instance> (--plan | --apply --plan-revision <rev> --idempotency-key <key>) [--no-recursive] [--grace-ms <n>] [--home <abs>] [--dir <d>] [--json] | oats instance color <instance> (<color> | --clear) [--home <abs>] [--dir <d>] [--json] | oats instance background <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance same-work <instance> on|off [--home <abs>] [--dir <d>] [--json]";
-  if (!["git", "diff", "stop", "events", "color", "background", "same-work"].includes(sub) || !name || name.startsWith("--")) return bail("E_BAD_ARGS", usage);
+  const usage = "usage: oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] [--json] | oats instance attention [--message=<text>] [--clear] [--json] | oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--dir <d>] [--json] | oats instance git <instance> [--home <abs>] [--dir <d>] [--json] | oats instance diff <instance> --file <id> --revision <rev> [--index-revision <rev>] [--home <abs>] [--dir <d>] [--json] | oats instance stop <instance> (--plan | --apply --plan-revision <rev> --idempotency-key <key>) [--no-recursive] [--grace-ms <n>] [--home <abs>] [--dir <d>] [--json] | oats instance color <instance> (<color> | --clear) [--home <abs>] [--dir <d>] [--json] | oats instance background <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance pin <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance same-work <instance> on|off [--home <abs>] [--dir <d>] [--json]";
+  if (!["git", "diff", "stop", "events", "color", "background", "pin", "same-work"].includes(sub) || !name || name.startsWith("--")) return bail("E_BAD_ARGS", usage);
   dropAmbientRoot();
   if (sub === "events") {
     // K7: typed producer events, bounded window; nothing inferred.
@@ -1523,6 +1523,25 @@ async function instanceCmd() {
       const r = setInstanceBackground(dirFlag(), root, name, { home: homeOpt, background: words[0] === "on" });
       if (JSON_MODE) { jsonOk(r); return; }
       console.log(`${r.instance}: ${r.background ? "background" : "not background"}${r.changed ? "" : " (unchanged)"}`);
+      return;
+    } catch (e) {
+      return lifecycleFail(e, "E_LIFECYCLE_FAILED", e.candidates ? { candidates: e.candidates } : e.details);
+    }
+  }
+  if (sub === "pin") {
+    // Feature instance-pin: presentation only, so no plan; addressed as `instance background` addresses an instance.
+    const homeOpt = flag("home");
+    if (homeOpt === true || (homeOpt !== undefined && !isAbsolute(homeOpt))) return bail("E_BAD_ARGS", "--home needs an absolute instance home");
+    const pinUsage = "usage: oats instance pin <instance> on|off [--home <abs>] [--dir <d>] [--json]";
+    // The words after the instance that are not a flag or the value of --home or --dir: exactly one, on or off.
+    const words = [];
+    for (let i = 3; i < args.length; i++) { if (args[i] === "--home" || args[i] === "--dir") i++; else if (!args[i].startsWith("--")) words.push(args[i]); }
+    if (words.length !== 1 || !["on", "off"].includes(words[0])) return bail("E_BAD_ARGS", `give on or off; ${pinUsage}`);
+    let root; try { root = ensureRoot(dirFlag()); } catch (e) { return lifecycleFail(e, "E_NO_ROOT"); }
+    try {
+      const r = setInstancePin(dirFlag(), root, name, { home: homeOpt, pinned: words[0] === "on" });
+      if (JSON_MODE) { jsonOk(r); return; }
+      console.log(`${r.instance}: ${r.pinned ? "pinned" : "not pinned"}${r.changed ? "" : " (unchanged)"}`);
       return;
     } catch (e) {
       return lifecycleFail(e, "E_LIFECYCLE_FAILED", e.candidates ? { candidates: e.candidates } : e.details);
@@ -5245,6 +5264,10 @@ Usage:
   oats instance background <instance> on|off [--home <abs>] [--json]
                                              whether clients list the instance under
                                              Background, presentation only
+  oats instance pin <instance> on|off [--home <abs>] [--json]
+                                             pin the instance at the top of its machine's
+                                             list; shared, as every viewer of the machine
+                                             reads it from the home
   oats instance same-work <instance> on|off [--home <abs>] [--json]
                                              record that this instance does the same work as
                                              its parent (on needs a recorded parent); clients
