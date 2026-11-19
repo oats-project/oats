@@ -354,7 +354,10 @@ The CLI requires `--policy <derived-policy.json>` and
 `--route-logs <runtime-audit.json>` and `--audit-path <common-path>` together;
 a partial signer-only call or missing audit path fails
 without an admission token. Signer policies use this additional ingress proof;
-policies without signer do not invoke the signer admission CLI. The latter file
+policies without signer do not invoke the signer admission CLI. The exported
+`probeIngress` routine refuses such a policy with
+`ingress admission requires the signer role` before sending any controls; the
+packaged CLI retains its fixed values-withheld failure diagnostic. The latter file
 has exactly the policy's declared role
 keys. Local entries hold `{ "path": "/ready", "log": "/logs/aweb.log" }` for that
 role's harmless 200 endpoint and actual backend log. Use signer `/readyz` and
@@ -506,7 +509,10 @@ a wildcard address. Configure an explicit IPv4 `gateway` in the agents network's
 adapter refuses to infer a probe address from a subnet.
 
 The shared in-container body requires the configured resolver and every declared
-HTTPS control through that resolver and proxy. Registry adds the exact provisioned
+HTTPS control through that resolver and proxy. It uses the compiler's canonical
+role order regardless of declaration order, including in the emitted program;
+the compiler and runtime share the same `policyRoles` helper.
+Registry adds the exact provisioned
 namespace TXT checks, whether or not signer is declared; missing or incorrect
 answers refuse admission. Signer adds negative human DNS and refusal of human TLS SNI. Every declaration
 requires a fresh unlisted DNS name and TLS host to be refused, and denied direct upstream,

@@ -843,8 +843,10 @@ compiler/proxy image and probes to one reviewed commit and retain image digests.
 The ingress probe keeps backend non-delivery witnesses for owned routes. A
 wrapper may explicitly mark only the registry as external for verified-TLS 200
 controls, without third-party refusal or backend-log claims. When signer is
-declared, signer and human-surface ingress controls remain required. Deployment bundles default
-`team.registryRoute` to `external`; existing bundles serving a local registry
+declared, signer and human-surface ingress controls remain required.
+`probeIngress` explicitly refuses a policy without signer before sending controls;
+runtime role controls follow the compiler's canonical order for every declaration.
+Deployment bundles default `team.registryRoute` to `external`; existing bundles serving a local registry
 must select `local` and refuse a URL their service does not serve. See the
 [route-mode contract](../container/agent/egress/README.md#ingress-admission-probe)
 for the exact probe inputs and ownership checks.

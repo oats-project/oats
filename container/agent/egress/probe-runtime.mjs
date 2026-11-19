@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { tcpReachable } from "./canary.mjs";
-import { compilePolicy } from "./policy.mjs";
+import { compilePolicy, policyRoles } from "./policy.mjs";
 import { publicCACheck, mirrorsCheck } from "../accept.mjs";
 
 export async function httpsStatus({host,path,timeoutMs,frontAddress,ca,port=443,headersOnly=false}) {
@@ -36,9 +36,9 @@ export async function probeRuntime(plan, io = {}) {
   const net = await import("node:net");
   const expect = (ok, label) => { if (!ok) { const error = new Error(label); error.name = "BoundaryFailure"; throw error; } };
   const {policy,allowedPaths,deniedBackends,gateway,caFile} = plan;
-  const names = ["aweb","secrets","logs","signer","registry"], roles = policy && Object.hasOwn(policy,"roles") ? policy.roles : names;
-  expect(policy && Array.isArray(roles) && roles.length > 0 && new Set(roles).size === roles.length
-    && Array.from(roles).every(role => names.includes(role) && policy.targets?.[role])
+  let roles;
+  try { roles=policyRoles(policy); } catch { expect(false,"runtime policy is incomplete"); }
+  expect(policy && roles.every(role => policy.targets?.[role])
     && Object.keys(policy.targets).sort().join(",") === [...roles].sort().join(",")
     && net.isIP(policy.frontAddress) === 4, "runtime policy is incomplete");
   expect(allowedPaths && typeof allowedPaths === "object" && !Array.isArray(allowedPaths)
@@ -155,7 +155,7 @@ export async function probeRuntime(plan, io = {}) {
 
 export function runtimeProgram(plan) {
   compilePolicy(plan.policy);
-  return `const httpsStatus=(${httpsStatus.toString()});const tcpReachable=(${tcpReachable.toString()});const publicCACheck=(${publicCACheck.toString()});const mirrorsCheck=(${mirrorsCheck.toString()});const probeRuntime=(${probeRuntime.toString()});try{await probeRuntime(JSON.parse(${JSON.stringify(JSON.stringify(plan))}));process.stdout.write("OATS_EGRESS_BOUNDARY_PASS\\n");}catch(error){const label=error?.name==="BoundaryFailure"?error.message:"input or runtime operation failed";process.stderr.write("egress boundary: "+label+"\\n");process.exitCode=1;}`;
+  return `const assert=(await import("node:assert/strict")).default;const policyRoles=(${policyRoles.toString()});const httpsStatus=(${httpsStatus.toString()});const tcpReachable=(${tcpReachable.toString()});const publicCACheck=(${publicCACheck.toString()});const mirrorsCheck=(${mirrorsCheck.toString()});const probeRuntime=(${probeRuntime.toString()});try{await probeRuntime(JSON.parse(${JSON.stringify(JSON.stringify(plan))}));process.stdout.write("OATS_EGRESS_BOUNDARY_PASS\\n");}catch(error){const label=error?.name==="BoundaryFailure"?error.message:"input or runtime operation failed";process.stderr.write("egress boundary: "+label+"\\n");process.exitCode=1;}`;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

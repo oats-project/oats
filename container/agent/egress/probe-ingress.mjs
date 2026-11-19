@@ -84,6 +84,7 @@ export async function probeIngress({ address, port = 443, requestOrigin, humanOr
   if (policy !== undefined || routeLogs !== undefined) {
     assert.ok(policy && routeLogs && typeof routeLogs === "object" && !Array.isArray(routeLogs),"policy and per-route audit inputs are required together");
     compilePolicy(policy);
+    assert.ok(policy.targets.signer,"ingress admission requires the signer role");
     assert.equal(policy.targets.signer.origin,requestOrigin,"signer origin differs from derived policy");
     assert.equal(policy.humanOrigin,humanOrigin,"human origin differs from derived policy");
     assert.ok(policy.targets.signer.addresses.includes(address),"ingress address is not a pinned signer address");
