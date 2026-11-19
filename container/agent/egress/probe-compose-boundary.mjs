@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { compilePolicy } from "./policy.mjs";
 import { assertComposeBoundary, assertPublicMountSource, boundaryControls, ipv4Gateway } from "./boundary.mjs";
-import { docker, tcpFromNetwork, withGatewayCanary } from "./canary.mjs";
+import { assertNamePrefix, docker, tcpFromNetwork, withGatewayCanary } from "./canary.mjs";
 import { runtimeProgram } from "./probe-runtime.mjs";
 import { agentEnvironment } from "../accept.mjs";
 
@@ -18,6 +18,23 @@ function json(args) {
 const safeName=value=>typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value);
 
 export async function probeComposeBoundary(plan) {
+  const receipts=[];
+  try { return await runBoundary(plan,receipts); }
+  catch (error) {
+    receipts.splice(0,receipts.length,...new Map([...receipts,...(error.receipts || [])].map(receipt=>[receipt.name,receipt])).values());
+    error.receipts=receipts;
+    throw error;
+  } finally {
+    // Report partial attempts on refusal as well as fully cleaned-up runs.
+    for (const receipt of receipts) reportReceipt(receipt);
+  }
+}
+function reportReceipt(receipt) {
+  process.stderr.write("egress boundary receipt: "+JSON.stringify(receipt)+"\n");
+  if (!receipt.absentVerified) process.stderr.write("egress boundary leftover: "+receipt.name+"\n");
+}
+async function runBoundary(plan,receipts) {
+  assertNamePrefix(plan.namePrefix);
   compilePolicy(plan.policy);
   for(const key of ["probeContainer","proxyContainer","agentsNetwork","servicesNetwork"])assert.ok(safeName(plan[key]),"runtime resource name is invalid");
   for(const image of [plan.probeImage,plan.proxyImage])assert.ok(typeof image === "string" && /^(?:[A-Za-z0-9][A-Za-z0-9._:/-]*@)?sha256:[a-f0-9]{64}$/.test(image),"reviewed probe and proxy images must be pinned by digest");
@@ -73,11 +90,13 @@ export async function probeComposeBoundary(plan) {
     const checked=new Set();
     for(const control of controls) {
       const key=[control.network,control.address,control.port].join(":");if(checked.has(key))continue;checked.add(key);
-      assert.ok(tcpFromNetwork({image:plan.proxyImage,...control}),"live upstream or backend positive control failed");
+      const result=tcpFromNetwork({image:plan.proxyImage,...control,namePrefix:plan.namePrefix});
+      receipts.push(result.receipt);
+      assert.ok(result.reachable,"live upstream or backend positive control failed");
     }
   };
   verifyControls();
-  await withGatewayCanary({image:plan.proxyImage,controlNetwork:plan.servicesNetwork,controlAddress,gatewayAddress:gateway},async endpoint=>{
+  receipts.push(...await withGatewayCanary({image:plan.proxyImage,controlNetwork:plan.servicesNetwork,controlAddress,gatewayAddress:gateway,namePrefix:plan.namePrefix},async endpoint=>{
     const program=runtimeProgram({policy:plan.policy,allowedPaths:plan.allowedPaths,deniedBackends:plan.deniedBackends,
       uid:plan.uid,gid:plan.gid,caFile:plan.caFile,mirrors:approvedMounts.some(mount=>mount.Destination === "/mirrors"),
       protectedPaths:plan.protectedPaths||[],gateway:endpoint});
@@ -87,19 +106,26 @@ export async function probeComposeBoundary(plan) {
       throw new Error(/^egress boundary: [A-Za-z0-9 /:._-]{1,160}$/.test(first)?first:"in-container boundary probe failed (output withheld)");
     }
     assert.equal(result.stdout.trim(),"OATS_EGRESS_BOUNDARY_PASS","in-container boundary probe did not confirm all checks");
-  });
+  }));
   verifyControls();
   for (const group of ["universal", "declared"]) for (const control of report[group])
     process.stderr.write(`egress boundary ${group}: ${control}\n`);
-  return true;
+  return {passed:true,receipts};
 }
 
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href) {
+  const args=process.argv.slice(2), jsonMode=args.includes("--json");
+  if (jsonMode) args.splice(args.indexOf("--json"),1);
   try {
-    assert.ok(process.argv.length===4 && process.argv[2]==="--plan","pass the derived runtime plan with --plan");
-    const stat=statSync(process.argv[3]);assert.ok(stat.isFile() && stat.size<=128*1024,"runtime plan file is invalid");
-    let plan;try {plan=JSON.parse(readFileSync(process.argv[3],"utf8"));} catch {throw new Error("runtime plan JSON is invalid (values withheld)");}
-    await probeComposeBoundary(plan);
-    process.stdout.write("OATS_EGRESS_BOUNDARY_PASS\n");
-  } catch(error) {process.stderr.write("egress boundary: "+String(error.message).split("\n")[0]+"\n");process.exitCode=1;}
+    assert.ok(args.length===2 && args[0]==="--plan","pass the derived runtime plan with --plan");
+    const stat=statSync(args[1]);assert.ok(stat.isFile() && stat.size<=128*1024,"runtime plan file is invalid");
+    let plan;try {plan=JSON.parse(readFileSync(args[1],"utf8"));} catch {throw new Error("runtime plan JSON is invalid (values withheld)");}
+    const result=await probeComposeBoundary(plan);
+    process.stdout.write(jsonMode ? JSON.stringify(result)+"\n" : "OATS_EGRESS_BOUNDARY_PASS\n");
+  } catch(error) {
+    const result={passed:false,receipts:error.receipts || [],error:"boundary probe refused"};
+    if(jsonMode) process.stdout.write(JSON.stringify(result)+"\n");
+    process.stderr.write("egress boundary: "+String(error.message).split("\n")[0]+"\n");
+    process.exitCode=1;
+  }
 }

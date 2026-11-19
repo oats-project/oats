@@ -485,6 +485,7 @@ The runtime JSON is derived by the deployment wrapper. Its fields are:
 | `allowedPaths` | Exactly the declared roles (all five without a declaration), with an existing harmless HTTP 200 control path per API; for example `/ready`, signer `/readyz`, registry `/health`. |
 | `deniedBackends` | Two `{role,address,port,controlNetwork?}` records, roles `postgres` and `redis`; each address is in `policy.deniedAddresses`. `controlNetwork` selects an existing backend network for its live control, otherwise `servicesNetwork`. |
 | `caFile` | Optional public CA path inside the probe. The supported agent trust fragment uses `/etc/agent-trust/ca.pem` and exactly its two fixed trust settings. An explicit CA at another public probe path remains probe-only evidence. No private key in the file. |
+| `namePrefix` | Optional caller-owned prefix for every temporary canary and TCP control. Use 2–64 Docker-safe characters, starting with an alphanumeric and ending in `-`; for example `lab-probe-`. |
 | `protectedPaths` | Optional additional service-private paths that must not exist inside the probe. Standard secret/socket/custody paths are always checked. |
 
 The operator-side adapter checks actual image IDs, inert entrypoint, non-root
@@ -528,7 +529,34 @@ unlisted DNS/TLS refusal and absence of protected paths. An alternate bridge or
 host must never be admitted to make a subset pass. The end-to-end TLS proxy does
 not claim to filter encrypted HTTP paths; signer ingress admission separately
 checks the witnessed authority/path combinations above.
-The adapter removes only its own canary/control containers.
+The adapter names each temporary container with a UUID. Without `namePrefix`,
+the defaults are `oats-egress-canary-` and `oats-egress-tcp-`. A fresh ownership
+label identifies each attempt. Cleanup inspects the exact name and removes it
+only if that label matches; a reported name collision refuses without removing
+the existing container. An anchored exact-name `docker ps -a` check must verify
+absence. A Docker timeout or signal triggers an exact-name ownership inspection,
+owned cleanup and another absence check; it still refuses the unproven run.
+A failed observation refuses, with the exact leftover or unverified name.
+
+Every attempt has a receipt `{name,image,network,created,absentVerified}`.
+`created` means creation was confirmed by a successful run or matching ownership
+inspection, never assumed after a timeout; `absentVerified` means the exact-name
+absence check succeeded. Both success and refusal write `egress boundary receipt:`
+JSON lines to stderr, with `egress boundary leftover:` names where absence could
+not be verified. Retain these lines even when the probe refuses.
+
+Add `--json` to the command for machine-readable stdout. Success returns
+`{"passed":true,"receipts":[...]}`; refusal returns
+`{"passed":false,"receipts":[...],"error":"boundary probe refused"}` and exits 1.
+The error is static; stderr retains the diagnostic and receipt lines in either
+mode. Without `--json`, success keeps the `OATS_EGRESS_BOUNDARY_PASS` token and
+refusal leaves stdout empty. The exported `probeComposeBoundary(plan)` returns
+`{passed:true,receipts}` and thrown failures carry `.receipts`.
+The helper `tcpFromNetwork` returns `{reachable,receipt}`; callers must check
+`.reachable`. `withGatewayCanary` and `checkDockerGateway` return the canary and
+two TCP control receipts, and failures carry partial receipts too.
+These host-side helpers are outside the closed egress image build context;
+the egress image inputs do not change.
 
 Kubernetes uses `probe-runtime.mjs --emit-program <runtime.json>` to emit the
 same in-container body for its adapter's operator connection. That adapter must
