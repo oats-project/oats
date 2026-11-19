@@ -1,4 +1,4 @@
-# deploy-team provisions agentUID:outboxGID mode 2750 under an operator-owned parent.
+# The operator provisions agentUID:outboxGID mode 2750 under an operator-owned parent.
 services:
   agent:
     group_add:

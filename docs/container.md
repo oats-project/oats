@@ -250,7 +250,7 @@ outside the agent container. Publisher credentials stay outside it too. This fra
 provides a generic bind only; provider authorization and publication are separate
 integration concerns.
 
-For an export queue, `deploy-team` provisions `TEAM_OUTBOX_DIR` under an
+For an export queue, the operator provisions `TEAM_OUTBOX_DIR` under an
 operator-owned parent, with ownership `AGENT_UID:TEAM_OUTBOX_GID` and mode
 2750 (setgid). Keep its resolved source separate from `/state`, optional
 `/work`, and all read-only input sources. Supply a dedicated non-root numeric
