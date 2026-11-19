@@ -40,6 +40,7 @@ export const MACHINES_COPY = Object.freeze({
   unknownAgents: 'agents unknown',
   unknownAgentsTitle: 'Not reached: this Desktop has not read its agents',
   readingAgentsTitle: 'Still reading its agents',
+  notReadAgentsTitle: 'Not read yet: no roster read of this machine so far',
   staleAgentsTitle: 'as last read: the latest read did not reach it',
 });
 
@@ -114,7 +115,7 @@ export const THIS_COMPUTER = ':here';
  * focus or starts the next step, and the owner disposes the section. `instances()`: the roster's rows the
  * agent counts are read from; `cli()`: the CLI probe (this computer's OATS version). `sync()` repaints them. */
 export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backfillDelay = BACKFILL_POLL_MS, instances = () => [], cli = () => null, gated = true, here = () => true, elsewhere = () => [],
-  rosterState = () => 'ready', localObservation = () => ({ status: 'observed' }), observed = () => null, observedKnown = () => false }) {
+  rosterState = () => 'ready', localObservation = () => ({ status: 'observed' }), observed = () => null }) {
   const el = (tag, value, cls) => { const n = doc.createElement(tag); if (value !== undefined && value !== null) n.textContent = value; if (cls) n.className = cls; return n; };
   const query = () => `?ws=${encodeURIComponent(ws)}`;
   const element = el('section', undefined, 'machines'); element.dataset.section = 'machines';
@@ -160,18 +161,16 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
   /** Your agents on a machine (null: this computer), only from a settled good roster read of that machine's deployment:
    * the roster read (`rosterState`), this computer's observation (`localObservation`), and another machine's deployment
    * as the panel reports it (`observed(m)`: #482's entry bound by the registration's id; reached, or kept from an earlier
-   * read: stale). A machine check is not a roster read. Only a panel that names no machine's deployment (an older one)
-   * lets a machine its check reached count. Else no claim. */
+   * read: stale). A machine check is not a roster read: a registration with no deployment of its own makes no claim. */
   function agentsText(m) {
     const roster = rosterState();
     if (roster !== 'ready' && roster !== 'empty') return unknown(roster === 'pending' ? MACHINES_COPY.readingAgentsTitle : ROSTER_STALE_TITLE);
     const rows = list(instances()).filter(i => m ? i?.server === m.id : !i?.server);
     if (!m) { const o = localObservation(); return o?.status === 'observed' ? counted(rows) : unknown(o?.status === 'pending' ? MACHINES_COPY.readingAgentsTitle : text(o?.text) ? o.text : MACHINES_COPY.unknownAgentsTitle); }
+    // No deployment of its own in the panel (none, or two claiming it; a machine added since the last roster read):
+    // nothing was read of it, whatever its check says. No claim.
     const d = observed(m);
-    if (d) return deploymentAgents(d, rows);
-    // The panel names its machines' deployments (observedKnown) but none (or two) is this registration's: no claim.
-    if (observedKnown()) return unknown(MACHINES_COPY.unknownAgentsTitle);
-    return rows.length || m.check?.reachable === true ? counted(rows) : unknown(MACHINES_COPY.unknownAgentsTitle);
+    return d ? deploymentAgents(d, rows) : unknown(MACHINES_COPY.notReadAgentsTitle);
   }
   /** Your agents on a deployment the panel reports: counted when it was read now (reachable, not stale), counted as last
    * read when it is stale, else no claim. */

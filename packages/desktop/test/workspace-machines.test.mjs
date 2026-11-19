@@ -40,7 +40,9 @@ test('slice3b machines section lists servers', async t => {
   const instances = [{ instance: 'a' }, { instance: 'b' }, { instance: 'c', server: 'devbox-aweb' }, { instance: 'd', server: 'devbox-aweb' }, { instance: 'e', server: 'devbox-aweb' }];
   const u = setup(t, {
     '/api/servers': () => answer([machine('devbox-aweb', { check: { reachable: true, version: '0.69.20', error: null } }), machine('laptop-aweb', { check: { reachable: false, version: null, error: 'ssh to laptop failed: timeout' } })]),
-  }, { instances: () => instances, cli: () => ({ version: '0.69.21' }) });
+  }, { instances: () => instances, cli: () => ({ version: '0.69.21' }),
+    // The panel's deployments, by registration id: devbox read now; laptop not reached.
+    observed: m => ({ 'devbox-aweb': { server: 'devbox-aweb', reachable: true }, 'laptop-aweb': { server: 'laptop-aweb', reachable: false } })[m.id] ?? null });
   await settle();
   assert.equal(u.q('.machines-title').textContent, 'Machines');
   assert.equal(u.q('.machines-lead').textContent, 'The computers this workspace runs on, and how many of your agents run on each, as this Desktop reads them.');
@@ -120,7 +122,8 @@ test('lists this workspace\'s machines and checks each unchecked one once in the
   // The row's title keeps the facts a narrow row hides.
   assert.equal(u.row('laptop-aweb').querySelector('.machine-row').title, 'laptop-aweb · laptop · laptop · /home/alex/laptop-aweb');
   released(); await settle();
-  assert.deepEqual(u.cells('devbox-aweb'), ['devbox-aweb', 'reachable', '0 agents', 'oats 0.39.0'], 'reached, and none of your agents there');
+  assert.deepEqual(u.cells('devbox-aweb'), ['devbox-aweb', 'reachable', '—', 'oats 0.39.0'], 'its check reached it, but no roster read did: no claim');
+  assert.equal(u.row('devbox-aweb').querySelector('.agents').title, 'Not read yet: no roster read of this machine so far');
   assert.ok(u.row('devbox-aweb').querySelector('.machine-state[data-reachable=true] svg'), 'reachable: a check and a muted word');
   u.ui.refresh(); await settle();
   assert.equal(u.calls.filter(c => c.path.startsWith('/api/server-check')).length, 1, 'once per machine per run');
