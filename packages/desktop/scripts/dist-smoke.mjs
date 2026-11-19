@@ -608,10 +608,13 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
                 || sample.terminalTabs.length !== 1 || sample.terminalTabs[0] !== "smoke-probe" || sample.mainNavigation !== null))
                 throw new Error(`${label} running launch did not show the exact fixture terminal in the main area`);
             } else if (observation.samples.some(sample => sample.mainNavigation !== "Home" || sample.terminals || sample.terminalTabs.length)
-              // Home's view itself, not only its row (which also stands for the Workspace page): shown by the last
-              // sample, and never gone again once shown (it may still be mounting in the first samples).
+              // Home's view itself, not only its row (which also stands for the Workspace page): the first launch may
+              // see it still mounting, then shown and never gone again; by the repeated launch it has been shown, so
+              // every one of its samples must show it.
               || !observation.samples.at(-1)?.homeShown
-              || observation.samples.slice(observation.samples.findIndex(sample => sample.homeShown)).some(sample => !sample.homeShown)) {
+              || (label === "first"
+                ? observation.samples.slice(observation.samples.findIndex(sample => sample.homeShown)).some(sample => !sample.homeShown)
+                : observation.samples.some(sample => !sample.homeShown))) {
               throw new Error(`${label} stopped launch left Home or opened a tab`);
             }
           }
