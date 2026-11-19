@@ -24,15 +24,18 @@ import { runtimeState } from "../../../client/instance-presentation.mjs";
 import { teamModelOf } from "../../../client/team-rows.mjs";
 import { displayLine } from "../../../client/display-text.mjs";
 import { teamsAnswer } from "../computer-teams.mjs";
+import { iconElement } from "../shell-icons.mjs";
 
-/** The overview's sections, in order: what each opens (`agents`: Home › Agents here; else a Workspace tab id). */
+/** The overview's sections, in order: what each opens (`agents`: Home › Agents here; else a Workspace tab id, with
+ * the Machines tab's view where it has one: its List for Machines, its Map, today's canvas, for the Graph until
+ * slice 6; slice 3b's `preselectWorkspaceTab(tab, { machinesView })`, which an older page ignores). */
 export const OVERVIEW = Object.freeze([
   { key: "agents", label: "Agents", opens: "agents" },
   { key: "souls", label: "Souls", opens: "souls" },
   { key: "capabilities", label: "Capabilities", opens: "capabilities" },
   { key: "teams", label: "Teams", opens: "teams" },
-  { key: "machines", label: "Machines", opens: "machines" },
-  { key: "graph", label: "Graph", opens: "machines" },
+  { key: "machines", label: "Machines", opens: "machines", options: { machinesView: "list" } },
+  { key: "graph", label: "Graph", opens: "machines", options: { machinesView: "map" } },
 ]);
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -87,7 +90,7 @@ export const homeCSS = `
 .home-row-side { flex:none; font-size:12px; color:var(--muted); }
 .home-dot { flex:none; width:8px; height:8px; border-radius:50%; background:var(--faint); }
 .home-dot.on { background:var(--live); }
-.home-dot.waiting { background:var(--attn-dot); }
+.home-mark { width:10px; height:10px; margin:0 -1px; }
 .home-quiet, .home-status { margin:0; font-size:13px; color:var(--muted); }
 .home-failed { display:flex; align-items:center; gap:12px; margin:0; font-size:13px; color:var(--fg); }
 .home-first p { margin:0 0 4px; font-size:14px; }
@@ -123,7 +126,10 @@ export function createHome(el, ctx, { doc = el.ownerDocument, now = () => Date.n
   function agentRow(row, { claim = null, side = null, state = runtimeState(row), deployments, here }) {
     const facts = rosterRowFacts(row, DESKTOP_TERMS, { deployments, here });
     const b = node("button", "home-row"); b.type = "button"; b.dataset.homeAgent = row.instance;
-    const dot = node("span", `home-dot ${claim ? "waiting" : state === "running" ? "on" : ""}`.trim()); dot.setAttribute("aria-hidden", "true");
+    // The needs-input mark is the roster's (.attn-mark): yellow means needs input only, never a dot's fill.
+    const dot = claim ? iconElement(doc, "attention", { size: 10, className: "shell-icon attn-mark home-mark" })
+      : node("span", `home-dot ${state === "running" ? "on" : ""}`.trim());
+    dot.setAttribute("aria-hidden", "true");
     const copy = node("span", "home-row-copy");
     copy.append(node("span", "home-row-name", facts.name), node("span", "home-row-meta", facts.detail));
     if (claim) copy.append(node("span", "home-row-meta", displayLine(waitingDetail(claim) ?? waitingLabel(claim)) || waitingLabel(claim)));
@@ -165,7 +171,7 @@ export function createHome(el, ctx, { doc = el.ownerDocument, now = () => Date.n
   function openSection(entry) {
     returnTo = { key: entry.key, gen };
     if (entry.opens === "agents") { view = "agents"; paint({ focus: "first" }); return; }
-    void ctx.openWorkspaceTab?.(entry.opens);
+    void ctx.openWorkspaceTab?.(entry.opens, entry.options);
   }
 
   function boardSection(data) {

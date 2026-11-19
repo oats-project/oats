@@ -252,9 +252,9 @@ const ctx = {
   // Home (slice 2): the roster as the sidebar shows it, a subscription to its paints, a row's activation, and a
   // Workspace tab by its id (Souls, Capabilities, Teams, Machines, Setup), which Esc leaves back to Home.
   homeRoster: () => homeRoster(),
-  subscribeHomeRoster: (fn) => { homeRosterListeners.add(fn); return () => homeRosterListeners.delete(fn); },
+  subscribeHomeRoster: (fn) => subscribeHomeRoster(fn),
   openAgent: (row) => openRosterInstance(row),
-  openWorkspaceTab: (tab) => openWorkspaceSouls(tab),
+  openWorkspaceTab: (tab, options) => openWorkspaceSouls(tab, options),
   // A bound action's key as the keyboard reference writes it ("Ctrl+K"), or "" when it has none.
   chordText: (id) => { const b = getBinding(id, navigator.platform.includes("Mac")); return b ? formatChord(b, navigator.platform.includes("Mac")) : ""; },
   subscribeRetires: (fn) => { retireListeners.add(fn); return () => retireListeners.delete(fn); },
@@ -536,10 +536,22 @@ let contextRosterGen = 0;
 let shownRoster = null;
 let contextRosterEl = null;
 let contextInstances = [];
-/** Home (slice 2) reads the roster the sidebar shows: its listeners run after each paint of it, and after a first
- * read fails with nothing shown. */
+/** Home (slice 2) reads the roster the sidebar shows: its listeners run after each change the roster's paint makes
+ * to the sidebar's list (rows, a loading or failed state, the count), batched by a MutationObserver watching it from
+ * the first subscription, so no paint path has to remember to say so. */
 const homeRosterListeners = new Set();
-function homeRosterChanged() { for (const fn of homeRosterListeners) { try { fn(); } catch (e) { console.error(e); } } }
+let homeRosterObserver = null;
+function subscribeHomeRoster(fn) {
+  homeRosterListeners.add(fn);
+  if (!homeRosterObserver) {
+    const rosterEl = document.getElementById("instance-roster");
+    homeRosterObserver = new MutationObserver(() => {
+      for (const listener of homeRosterListeners) { try { listener(); } catch (e) { console.error(e); } }
+    });
+    if (rosterEl) homeRosterObserver.observe(rosterEl, { childList: true, subtree: true, characterData: true });
+  }
+  return () => homeRosterListeners.delete(fn);
+}
 /** Open a roster row as its activation (click, Enter) does, on the roster or on Home: a running row's terminal, a
  * stopped row's Start. Refused, opening nothing, for a held home, a row whose state isn't known or whose remote
  * can't be addressed, and a stopped row of a stale roster (its last read failed: it may be running by now). The
@@ -845,7 +857,7 @@ async function refreshContextRoster({ user = false } = {}) {
       // The rows are rebuilt once, to disable their actions; a repeat failure keeps them. Without
       // data, the count's pill stops (nothing is loading): the reserved box, empty and still.
       if (rosterState?.hasData && !rosterStale) { rosterStale = true; renderContextRoster(contextInstances); }
-      else if (rosterState && !rosterState.hasData) { renderRosterCount(contextRosterEl.querySelector(".ctx-count"), [], { failed: true }); applyRosterPlace(); homeRosterChanged(); }
+      else if (rosterState && !rosterState.hasData) { renderRosterCount(contextRosterEl.querySelector(".ctx-count"), [], { failed: true }); applyRosterPlace(); }
       refreshPanelInstance([], ws);
     }
     return;
@@ -1020,7 +1032,6 @@ function emptyRosterLine() {
 
 function renderContextRoster(instances) {
   instances = shownRows(instances);
-  queueMicrotask(homeRosterChanged); // Home reads the roster this paint shows (slice 2), once the paint is done
   const listEl = contextRosterEl.querySelector(".ctx-list");
   const restoreTreeState = captureTreeRenderState(listEl);
   // #1579: what had focus in the list, for the Background heading (no instance identity: it keeps its own focus)
@@ -2602,7 +2613,7 @@ for (const button of document.querySelectorAll("#nav-foot [data-action]")) {
 // workspace visit + selection before import, and contain stale rejections too.
 // The leader's 3 opens the same way on Capabilities (`tab`), and stage.hierarchy on Machines.
 const WORKSPACE_TAB_NAMES = { machines: "Machines", souls: "Souls", capabilities: "Capabilities" };
-async function openWorkspaceSouls(tab = "souls") {
+async function openWorkspaceSouls(tab = "souls", options = undefined) {
   const selectionOwns = tabOpenIntents.begin();
   const owns = () => selectionOwns() && ![...document.querySelectorAll('[aria-modal="true"]')]
     .some(dialog => !dialog.closest("[hidden]"));
@@ -2614,7 +2625,7 @@ async function openWorkspaceSouls(tab = "souls") {
     return;
   }
   if (!owns()) return;
-  mod.preselectWorkspaceTab(tab);
+  mod.preselectWorkspaceTab(tab, options);
   await showStage("spawn");
 }
 

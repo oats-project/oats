@@ -22,7 +22,7 @@ function fixture(t, { rows = [], phase = "ready", deployments = [], api = async 
     homeRoster: () => state,
     subscribeHomeRoster: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     openAgent: (r) => { opened.push(r.instance); return true; },
-    openWorkspaceTab: (tab) => { tabs.push(tab); },
+    openWorkspaceTab: (tab, options) => { tabs.push(options ? [tab, options.machinesView] : tab); },
     chordText: (id) => ({ "app.quickOpenSouls": "Ctrl+N", "app.palette": "Ctrl+K" })[id] ?? "",
   };
   const home = createHome(el, ctx, { doc });
@@ -111,9 +111,10 @@ test("slice2 overview counts and enter opens section, esc returns", async (t) =>
   assert.match(u.openButton("graph").textContent, /2 agents on 2 machines/);
   assert.equal(overviewLine("souls", { souls: 1 }), "You have 1 soul");
   assert.equal(overviewLine("souls", { souls: "failed" }), "Couldn't count them");
-  // Enter on a section opens the Workspace page on its tab; Machines and the Graph open the Machines canvas.
-  u.openButton("souls").click(); u.openButton("teams").click(); u.openButton("graph").click();
-  assert.deepEqual(u.tabs, ["souls", "teams", "machines"]);
+  // Enter on a section opens the Workspace page on its tab; Machines opens the Machines tab's List, the Graph its
+  // Map (today's canvas, until slice 6).
+  u.openButton("souls").click(); u.openButton("teams").click(); u.openButton("machines").click(); u.openButton("graph").click();
+  assert.deepEqual(u.tabs, ["souls", "teams", ["machines", "list"], ["machines", "map"]]);
   // Esc on the Workspace page comes back to Home (shell.mjs): only an Esc nothing on the page took, from no field.
   assert.match(shell, /if \(e\.key !== "Escape" \|\| e\.defaultPrevented \|\| e\.altKey \|\| e\.ctrlKey \|\| e\.metaKey \|\| e\.shiftKey \|\| stage\?\.name !== "spawn"\) return;/);
   assert.match(shell, /e\.preventDefault\(\);\n  void showStageFocused\("home"\);/);

@@ -107,8 +107,9 @@ test("showStage routes a NAV_TABS name to openWorkspaceSouls(tab); showStageFocu
   assert.match(focused, /page = navTab\(name\)\?\.page \?\? name;/);
   assert.match(focused, /if \(stage\?\.name !== page \|\|/);
   // openWorkspaceSouls names each tab it can open (its failure notice) and awaits the page.
-  const open = src.match(/async function openWorkspaceSouls\(tab = "souls"\) \{[^]*?\n\}/)[0];
-  assert.match(open, /mod\.preselectWorkspaceTab\(tab\);\n  await showStage\("spawn"\);/);
+  const open = src.match(/async function openWorkspaceSouls\(tab = "souls", options = undefined\) \{[^]*?\n\}/)[0];
+  // Home's Machines and Graph rows name the Machines tab's view (slice 3b's option; an older page ignores it).
+  assert.match(open, /mod\.preselectWorkspaceTab\(tab, options\);\n  await showStage\("spawn"\);/);
   // Quick Open's return (surface-return.mjs) knows the Workspace tab it left and goes back to it, through the
   // mounted view's own module: never a tab the page can't show (its control only once it shows).
   assert.match(src, /workspaceTab: stage\?\.name === "spawn" \? stage\.mod\?\.currentWorkspaceTab\?\.\(\) \?\? null : null/);
