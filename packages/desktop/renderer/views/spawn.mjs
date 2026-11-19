@@ -205,6 +205,7 @@ function inspectSoul(s, agent, intent = nextSelectionIntent()) {
   if (!ownsSelection(s, intent)) return;
   s.discovery?.setTab("souls");
   s.inspectRef = { name: agent.name, agentsRoot: agent.agentsRoot, server: agent.server };
+  pageTitle(s, agent.name); // the soul's page names its tab (slice 6a; its one opener)
   renderGrid(s);
   // A soul opens as a full page in the Workspace view; instances keep the sidebar.
   showPage(s, "soul");
@@ -501,11 +502,11 @@ const focusable = el => el.isConnected && !el.disabled && (el.matches("button, a
 function closeCapability(s, { restoreFocus = false } = {}) {
   const open = s.capOpen; s.capOpen = null;
   open?.contents.dispose();
-  if (open) pageTitle(s, SECTION_TITLES[s.discovery?.tab]); // back to its section's title
   const host = s.q("workspace-cap-page"); if (host) host.replaceChildren();
   if (!open) return;
   // Back to where it was opened: the soul's page (still shown) or the Capabilities table.
   const backToSoul = !!open.from && !!s.inspectRef && s.inspectRef.name === open.from.name && s.inspectRef.agentsRoot === open.from.agentsRoot;
+  pageTitle(s, backToSoul ? s.inspectRef.name : SECTION_TITLES[s.discovery?.tab]); // the tab's title follows back
   showPage(s, backToSoul ? "soul" : null);
   // Back to the list where it was: its scroll offset (filters and search live in the discovery's state).
   const list = s.q("workspace-discovery");
@@ -624,6 +625,7 @@ ${spawnDialogCSS}</style>
     closed: ({ restoreFocus } = {}) => {
       const ref = s.inspectRef; s.inspectRef = null;
       if (!s.alive) return;
+      pageTitle(s, SECTION_TITLES[s.discovery?.tab]); // back to its section's title
       showPage(s, null);
       renderGrid(s, { restoreFocus: false });
       // The grid is rebuilt by polling; return to composite identity only on
