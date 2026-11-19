@@ -836,7 +836,16 @@ Preflight is read-only on the Linux engine host and refuses failed observations
 or CIDR overlaps across every Docker IPAM entry, route table and link address.
 Every role set keeps unlisted DNS/TLS refusal, alternate-network refusal, a live
 host-gateway canary, direct upstream/backend denial and an explicit IPv4 IPAM
-gateway. The report separates universal and declared controls. Stage public
+gateway. The report separates universal and declared controls. The Compose probe
+accepts an optional derived `namePrefix` for its temporary containers and reports
+`{name,image,network,created,absentVerified}` receipts on success and refusal.
+Cleanup removes only an exact name whose per-attempt ownership label matches;
+timeouts require inspection and never count as absence. A failed observation
+refuses and reports the unverified name. The new `--json` mode returns
+`{passed,receipts,error?}` on stdout, with exit 1 on refusal; the default PASS token
+and stderr receipt lines remain available. See the
+[Compose probe contract](../container/agent/egress/README.md#boundary-probe-on-an-existing-compose-deployment).
+Stage public
 sources before credentials; there is no codeload exception. Pin wrapper,
 compiler/proxy image and probes to one reviewed commit and retain image digests.
 

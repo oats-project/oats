@@ -4,6 +4,7 @@ proxy image and probe. Never run against a deployment or a shared Mac daemon.
 """
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -131,10 +132,31 @@ net.createServer(socket=>socket.end()).listen(Number(process.argv[2]),'0.0.0.0',
             "probeImage":agent_image,"proxyImage":proxy_image,"uid":20001,"gid":20001,
             "approvedProbeMounts":approved,"protectedSources":[str(scratch / "key.pem")],"caFile":"/input/ca.pem",
             "deniedBackends":[{"role":"postgres","address":"172.27.91.11","port":5432},{"role":"redis","address":"172.27.91.12","port":6379}]}
+    custom_prefix = None if sys.argv[3] == "full" else "lab.fixture-" + str(os.getpid()) + "-"
+    if custom_prefix:
+        plan["namePrefix"] = custom_prefix
     probe = ["node", str(root / "container/agent/egress/probe-compose-boundary.mjs"), "--plan", write("runtime.json",json.dumps(plan))]
+    if custom_prefix:
+        probe.append("--json")
     result = subprocess.run(probe, env=env, text=True, capture_output=True)
     print(result.stderr, end="", flush=True)
-    assert result.returncode == 0 and result.stdout == "OATS_EGRESS_BOUNDARY_PASS\n", "real Compose boundary probe failed"
+    assert result.returncode == 0, "real Compose boundary probe failed"
+    receipts = [json.loads(line[len("egress boundary receipt: "):]) for line in result.stderr.splitlines()
+                if line.startswith("egress boundary receipt: ")]
+    assert len(receipts) == 9 and len({r["name"] for r in receipts}) == 9
+    for receipt in receipts:
+        assert set(receipt) == {"name", "image", "network", "created", "absentVerified"}
+        assert receipt["created"] is True and receipt["absentVerified"] is True
+        assert receipt["image"] == proxy_image and receipt["network"] in ("host", env["SERVICES_NETWORK"])
+        prefix = custom_prefix or ("oats-egress-canary-" if receipt["network"] == "host" else "oats-egress-tcp-")
+        assert receipt["name"].startswith(prefix)
+        assert docker("ps", "-a", "--filter", "name=^" + re.escape(receipt["name"]) + "$", "--format", "{{.ID}}") == ""
+    assert sum(r["network"] == "host" for r in receipts) == 1
+    if custom_prefix:
+        assert json.loads(result.stdout) == {"passed":True, "receipts":receipts}
+    else:
+        assert result.stdout == "OATS_EGRESS_BOUNDARY_PASS\n"
+    print("PASS container receipts:", "custom JSON" if custom_prefix else "default token", sys.argv[3], flush=True)
     if "registry" in roles:
         assert "egress boundary declared: registry: exact namespace authority TXT\n" in result.stderr
         print("PASS registry authority TXT:",sys.argv[3],flush=True)
@@ -145,6 +167,10 @@ net.createServer(socket=>socket.end()).listen(Number(process.argv[2]),'0.0.0.0',
     result = subprocess.run(probe, env=env, text=True, capture_output=True)
     assert result.returncode != 0 and "OATS_EGRESS_BOUNDARY_PASS" not in result.stdout
     assert "exactly one isolated network" in result.stderr
+    if custom_prefix:
+        assert json.loads(result.stdout) == {"passed":False, "receipts":[], "error":"boundary probe refused"}
+    else:
+        assert result.stdout == ""
     docker("network","disconnect",env["SERVICES_NETWORK"],plan["probeContainer"])
     print("PASS alternate-network mutant:",sys.argv[3],flush=True)
 finally:
