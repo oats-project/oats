@@ -9,8 +9,9 @@
 // - the file is kernel-owned: a capability cannot declare it, and it is no change to the home's stored digest;
 // - the CLI: the answer, `changed`, on/off twice, the refusals, resolution as `instance background` answers
 //   it; status rows and inspect --home carry it; a recorded `pinned` in instance.json is never trusted;
-// - beside a retire: E_INSTANCE_RETIRING or E_LIFECYCLE_BUSY, and nothing is written; a retire removes the
-//   pin with the home.
+// - beside a retire: E_INSTANCE_RETIRING (a live one) or E_LIFECYCLE_BUSY (a claim that cannot be read), and
+//   nothing is written; beside a live stop, start or upgrade the pin goes through, as background's does; a retire
+//   removes the pin with the home.
 // The pin surviving restart, stop/start and `instance upgrade` is pinned beside those paths
 // (test/session-restart.test.mjs, test/instance-upgrade.test.mjs); the routed verb and the remote roster's
 // relay in test/remote-parity.test.mjs; the answer's shape and the feature in test/cli-json-contract.test.mjs.
@@ -22,7 +23,7 @@ import { fixtureBase } from "./helpers/host-fixture.mjs";
 import { v2Deployment } from "./helpers/v2-deployment.mjs";
 import { PIN_FILE, RECORD_MAX, readInstancePin, writeInstancePin } from "../lib/instance-pin.mjs";
 import { disposableHomeRootProblem } from "../lib/capability-contract.mjs";
-import { KERNEL_HOME_RECEIPTS, lifecycleClaimRefusals, retireClaimPath, retirePendingMarkerPath, storedTreeDigest } from "../lib/core.mjs";
+import { KERNEL_HOME_RECEIPTS, claimHomeFor, lifecycleClaimRefusals, releaseHomeClaim, retireClaimPath, retirePendingMarkerPath, storedTreeDigest } from "../lib/core.mjs";
 
 function okResult(r, what) {
   assert.equal(r.status, 0, `${what}: ${r.stdout}${r.stderr}`);
@@ -262,6 +263,35 @@ test("beside a held lifecycle claim, oats instance pin says the pin was not chan
   assert.equal(existsSync(join(spawned.home, PIN_FILE)), false, "nothing was written");
   rmSync(lock);
   assert.equal(okResult(fx.cli(["instance", "pin", spawned.instance, "on", "--json"]), "after").pinned, true);
+});
+
+test("beside a live stop, start or upgrade the pin goes through, as background's does; beside a live retire it is refused and nothing is written", async (t) => {
+  // The lead's decision on spec A: the pin mirrors `instance background` (refuseBesideRetire). The pin is its own
+  // file, which no start, stop or upgrade writes, so only a retire, which removes the home, refuses it.
+  const fx = v2Deployment({ t });
+  const spawned = okResult(fx.cli(["spawn", "dev", "--purpose", "h", "--no-launch", "--json"]), "spawn");
+  const name = spawned.instance;
+  const file = join(spawned.home, PIN_FILE);
+  for (const verb of ["stop", "start", "upgrade"]) {
+    const held = await fx.inEnv(() => claimHomeFor(verb, name, spawned.home));
+    try {
+      assert.deepEqual(okResult(fx.cli(["instance", "pin", name, "on", "--json"]), `on beside ${verb}`), { instancePinApi: 1, instance: name, home: spawned.home, pinned: true, changed: true });
+      assert.equal(readInstancePin(spawned.home), true, `${verb}: pinned`);
+      assert.equal(okResult(fx.cli(["instance", "pin", name, "off", "--json"]), `off beside ${verb}`).changed, true);
+      assert.equal(existsSync(file), false, `${verb}: unpinned`);
+    } finally { await fx.inEnv(() => releaseHomeClaim(held)); }
+  }
+  okResult(fx.cli(["instance", "pin", name, "on", "--json"]), "pinned before the retire");
+  const bytes = readFileSync(file);
+  const held = await fx.inEnv(() => claimHomeFor("retire", name, spawned.home));
+  try {
+    for (const state of ["on", "off"]) {
+      const e = refused(fx.cli(["instance", "pin", name, state, "--json"]), `${state} beside a live retire`);
+      assert.equal(e.code, "E_INSTANCE_RETIRING", `${state}: ${e.message}`);
+      assert.match(e.message, /the pin was not changed/, state);
+      assert.deepEqual(readFileSync(file), bytes, `${state}: the pin's bytes are unchanged`);
+    }
+  } finally { await fx.inEnv(() => releaseHomeClaim(held)); }
 });
 
 test("retire removes the pin with the home, and the pin is no unexplained change at retire", (t) => {

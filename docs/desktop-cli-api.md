@@ -6900,7 +6900,14 @@ The text answer is `<instance>: pinned` or `<instance>: not pinned`, with
 | Code | When |
 |---|---|
 | `E_BAD_ARGS` | Not exactly one of `on` or `off`, or an argument after it: the usage line |
-| *(as `oats instance background`)* | Instance resolution (`E_SESSION_UNKNOWN`, `E_AMBIGUOUS_INSTANCE`, `E_HOME_MISMATCH`), `E_INSTANCE_RETIRING`, `E_LIFECYCLE_BUSY` |
+| `E_SESSION_UNKNOWN`, `E_AMBIGUOUS_INSTANCE`, `E_HOME_MISMATCH` | Instance resolution, as `oats instance background` answers it |
+| `E_INSTANCE_RETIRING` | A retire of the home is running (its live lifecycle claim, or its pending marker), or the home is quarantined |
+| `E_LIFECYCLE_BUSY` | The home's lifecycle claim cannot be read, or its holder is a retire whose liveness cannot be read |
+
+Beside a running stop, start or upgrade, the pin goes through, as `oats
+instance background` does: the pin is a file of its own that none of them
+writes, and refusing would fail every pin for the whole length of a start.
+In each refusal, the pin was not changed.
 
 Routed with `--server <id>`, the command runs on the host
 ([Routed reads and plans](#routed-reads-and-plans)); a host whose probe does
