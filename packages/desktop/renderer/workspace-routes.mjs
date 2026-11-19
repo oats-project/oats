@@ -4,7 +4,7 @@
  * Shared by main (api-url.mjs pins and refuses by it) and the renderer (a window with no workspace
  * sends none of these, #481). */
 export function workspaceScoped(pathname) {
-  return pathname === "/api/panel" || pathname === "/api/agents" || pathname === '/api/spawn' || pathname === '/api/automations' || pathname === '/api/forge-roster'
+  return pathname === "/api/panel" || pathname === "/api/agents" || pathname === '/api/spawn' || pathname === '/api/automations'
     || pathname === '/api/team-members'
     || /^\/api\/(?:instance|workspace)-[a-z-]+$/.test(pathname) // entire body-addressed scoped families
     || /^\/api\/(?:brain|start|restart)\//.test(pathname);

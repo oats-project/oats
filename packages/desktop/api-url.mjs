@@ -41,7 +41,6 @@ export function classifyApiRoute(pathname) {
       case '/api/automations': return 'automations';
       case '/api/forge-connections':
       case '/api/instance-forge':
-      case '/api/forge-roster':
       case '/api/instance-review-threads': return 'forge';
       case '/api/capabilities': return 'capabilities';
       case '/api/workspace-sync': return 'workspace-sync';
@@ -122,7 +121,7 @@ export function apiUrl(pathname, wsId = null, allowedWs = undefined, { bound = f
   if (wsId && workspaceScoped(url.pathname)) {
     // Preserve duplicate selectors for the strict server boundary to REFUSE;
     // set() must not turn malformed requests into an admitted read.
-    if ((url.pathname === '/api/spawn' || url.pathname === '/api/automations' || url.pathname === '/api/forge-roster' || url.pathname === '/api/team-members' || /^\/api\/(?:instance|workspace)-[a-z-]+$/.test(url.pathname)) && url.searchParams.getAll('ws').length > 1) return url;
+    if ((url.pathname === '/api/spawn' || url.pathname === '/api/automations' || url.pathname === '/api/team-members' || /^\/api\/(?:instance|workspace)-[a-z-]+$/.test(url.pathname)) && url.searchParams.getAll('ws').length > 1) return url;
     const asked = url.searchParams.get("ws");
     // Workspace switching is a real feature on shared multi-workspace
     // servers — but only to workspaces the server actually advertises;

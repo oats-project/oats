@@ -9,3 +9,7 @@
 - **Home follows the roster in any pane**, with the sidebar collapsed or hidden. **Home › Agents** puts pinned agents first, as the roster does.
 - **A terminal tab no longer opens the instance panel beside it.** Its agent's Details is one key away.
 - **With no tab open**, the main area offers **Open Home** in place of a page behind the tabs.
+
+## Removed
+
+- **The Desktop server's `/api/forge-roster` route** (#1973). Nothing used it any more: Details reads each agent's pull request on its Developer page.

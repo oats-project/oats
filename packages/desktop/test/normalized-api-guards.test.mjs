@@ -21,7 +21,7 @@ assert.ok(start >= 0 && end > start);
 const callback = source.slice(start, end), origin = 'http://oats-backend.invalid', renderer = 'file:///fixture/index.html';
 const routes = [
   ['/api/workspace-readiness', 'readiness'], ['/api/instance-lifecycle', 'lifecycle'],
-  ['/api/forge-connections', 'forge'], ['/api/instance-forge', 'forge'], ['/api/forge-roster', 'forge'], ['/api/instance-review-threads', 'forge'],
+  ['/api/forge-connections', 'forge'], ['/api/instance-forge', 'forge'], ['/api/instance-review-threads', 'forge'],
   ['/api/capabilities', 'capabilities'], ['/api/panel', 'panel'], ['/api/automations', 'automations'], ['/api/instance-git', 'instance-git'], ['/api/instance-color', 'instance-color'],
   ['/api/instance-background', 'instance-background'], ['/api/instance-pin', 'instance-pin'],
 ];
@@ -94,7 +94,7 @@ for (const [path, kind] of routes) test(`${path}: valid aliases preserve workspa
     if (kind === 'lifecycle' || kind === 'readiness' || path === '/api/instance-forge') assert.equal(url.searchParams.get('ws'), 'team');
     if (kind === 'forge') {
       assert.deepEqual(Object.entries(init.headers).filter(([k]) => k.toLowerCase() === FORGE_EPOCH_HEADER), [[FORGE_EPOCH_HEADER, 'fixture:0']]);
-      assert.equal(init.signal.timeout, ['/api/instance-forge', '/api/forge-roster', '/api/instance-review-threads'].includes(path) ? 50000 : 25000);
+      assert.equal(init.signal.timeout, ['/api/instance-forge', '/api/instance-review-threads'].includes(path) ? 50000 : 25000);
     } else if (kind !== 'readiness') assert.equal(init.signal.timeout, kind === 'lifecycle' || kind === 'instance-git' || kind === 'instance-color' || kind === 'instance-background' || kind === 'instance-pin' ? 50000 : kind === 'capabilities' ? 310000 : kind === 'automations' ? 90000 : 20000);
     if (kind === 'panel') assert.deepEqual([...f.context.allowedWs], ['team', 'other']);
   }
@@ -141,7 +141,7 @@ test('lifecycle apply backend replacement remains unknown for every normalized a
   }
 });
 test('duplicate workspace query survives normalization for strict backend refusal', async () => {
-  for (const path of ['/api/instance-lifecycle', '/api/instance-forge', '/api/workspace-readiness', '/api/automations', '/api/forge-roster']) {
+  for (const path of ['/api/instance-lifecycle', '/api/instance-forge', '/api/workspace-readiness', '/api/automations']) {
     const f = fixture(); await f.call(aliases(path)[1] + '?ws=team&ws=other');
     assert.deepEqual(f.calls[0].url.searchParams.getAll('ws'), ['team', 'other']);
   }

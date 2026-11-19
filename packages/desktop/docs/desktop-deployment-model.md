@@ -616,8 +616,8 @@ cards spawn.
   the view id: the server reads the view's primary deployment. Spawn sends
   the chosen deployment's id, and a remote spawn's reply names the view that
   holds the new group.
-- **View-level:** `/api/panel`, `/api/team-members` and `/api/forge-roster`
-  (the union of the view's local deployments' rows and clones).
+- **View-level:** `/api/panel` and `/api/team-members` (`/api/forge-roster`, the
+  union of the view's local deployments' rows and clones, was removed in slice 6a, #1973).
 - "Is this still the workspace on screen?" checks are keyed by the view id.
   Main lets a caller select every id `servedSelectors(panel.workspaces)`
   returns (`api-url.mjs`): every view id and every deployment id, so a

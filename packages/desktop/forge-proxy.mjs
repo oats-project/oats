@@ -7,7 +7,7 @@ export function forgeProxyOptions(path, opts, epoch) {
   const init = apiInit(opts);
   const headers = Object.fromEntries(Object.entries(init.headers || {}).filter(([key]) => key.toLowerCase() !== FORGE_EPOCH_HEADER));
   headers[FORGE_EPOCH_HEADER] = epoch;
-  return { init: { ...init, headers }, timeout: ['/api/instance-forge', '/api/forge-roster', '/api/instance-review-threads'].includes(path) ? 50_000 : 25_000 };
+  return { init: { ...init, headers }, timeout: ['/api/instance-forge', '/api/instance-review-threads'].includes(path) ? 50_000 : 25_000 };
 }
 export function installForgeAuthHandlers({ ipc, broker, rendererUrl, wireOwner = () => {} }) {
   const methods = { 'forge:connect': ['connect', 1], 'forge:disconnect': ['disconnect', 1],

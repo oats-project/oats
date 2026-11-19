@@ -110,7 +110,7 @@ import { MAX_WINDOW_VIEWS } from "../window-activity.mjs";
 import { START_UNCONFIRMED } from "../renderer/start-unconfirmed.mjs";
 import { startInstance, verifiedLocalHome as localHomeIn } from "../../client/session-start.mjs";
 import { rosterRows, kernelLiveness, livenessInput, livenessAnswers, panelInstances, pendingEntry, failedEntry, observedEntry } from "../../client/deployment-panel.mjs";
-import { deployments, viewFor, deploymentFor, surfaceDeployment, viewForgeContext, deploymentRows, isServed, teamMembersFor, machineScope, panelData, cliReadsRemotes, rosterWorkspaceKeys } from "../../client/panel-views.mjs";
+import { deployments, viewFor, deploymentFor, surfaceDeployment, deploymentRows, isServed, teamMembersFor, machineScope, panelData, cliReadsRemotes, rosterWorkspaceKeys } from "../../client/panel-views.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 // Identity (GET /api/version): main checks that the server it started is this
@@ -1292,7 +1292,7 @@ const server = createServer(async (req, res) => {
         return send(res, status, { ...body, error: displayLine(e.kernelMessage) ?? "" });
       }
     }
-    if (["/api/forge-connections", "/api/instance-forge", "/api/forge-roster", "/api/instance-review-threads"].includes(path) && req.method === "POST") {
+    if (["/api/forge-connections", "/api/instance-forge", "/api/instance-review-threads"].includes(path) && req.method === "POST") {
       try {
         const epoch = req.headers[FORGE_EPOCH_HEADER] ?? "standalone:0";
         if (!validForgeEpoch(epoch)) throw new Error("bad epoch");
@@ -1310,9 +1310,6 @@ const server = createServer(async (req, res) => {
           // clones[]: the kernel's member keys and this computer's clone paths (#217), for the roster.
           return { workspace, cli: cliState, instances: observed?.instances || [], clones: observed?.deployment?.workspaceStatus?.clones || [] };
         };
-        // The pull-request roster is the VIEW's: every local deployment's rows (keyed by home) and clones.
-        // A view with no local deployment is remote, as a remote deployment was before views.
-        if (path === "/api/forge-roster") return send(res, 200, await forgeBoundary.roster(request, () => viewForgeContext(held(), url.searchParams.get("ws"), DESKTOP_TERMS), epoch));
         if (path === "/api/instance-review-threads") {
           // The paste goes to the instance's agent pane, as the kernel answers it, in its own anchored tmux
           // window in THIS workspace, looked up fresh.

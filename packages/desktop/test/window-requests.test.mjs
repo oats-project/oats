@@ -10,7 +10,7 @@ import { apiUrl, workspaceScoped, windowRefusal } from '../api-url.mjs';
 const VERIFIED = '/d/first';
 const WINDOW = 'ws:0123456789abcdef0123';
 const ADVERTISED = new Set([VERIFIED, WINDOW, '/d/second', 'remote:devbox:/srv/agents']);
-const SCOPED = ['/api/panel', '/api/agents', '/api/spawn', '/api/automations', '/api/forge-roster', '/api/team-members',
+const SCOPED = ['/api/panel', '/api/agents', '/api/spawn', '/api/automations', '/api/team-members',
   '/api/instance-lifecycle', '/api/instance-git', '/api/instance-events', '/api/workspace-readiness', '/api/workspace-spawn-preview',
   '/api/workspace-sync', '/api/brain/notes', '/api/start/dev', '/api/restart/dev'];
 // The last four were instance routes until #609 and #627: they are no route now, so nothing pins or refuses them.

@@ -44,19 +44,18 @@ function http({ remote = false, run, discover, raw = state(), transform = source
 }
 test('both forge POSTs are behind Host/Origin guards, including malformed body attacks', async () => {
   const h = http();
-  for (const url of ['/api/instance-forge?ws=team', '/api/forge-connections', '/api/forge-roster?ws=team', '/api/instance-review-threads?ws=team']) for (const headers of [
+  for (const url of ['/api/instance-forge?ws=team', '/api/forge-connections', '/api/instance-review-threads?ws=team']) for (const headers of [
     {}, { host: 'evil' }, { host: '127.0.0.1', origin: 'https://evil' }, { host: 'localhost', origin: 'null' }, { host: 'localhost', origin: 'invalid' },
   ]) assert.equal((await h.request({ url, headers, body: '{' })).code, 403);
   assert.equal(h.count(), 0);
 });
 test('GET/auth-mutation routes, duplicate/extra/missing ws, unknown machine query and malformed bodies never run a process', async () => {
   const h = http();
-  for (const url of ['/api/instance-forge?ws=team', '/api/forge-connections', '/api/forge-roster?ws=team', '/api/instance-review-threads?ws=team']) assert.equal((await h.request({ url, method: 'GET' })).code, 404);
+  for (const url of ['/api/instance-forge?ws=team', '/api/forge-connections', '/api/instance-review-threads?ws=team']) assert.equal((await h.request({ url, method: 'GET' })).code, 404);
   for (const url of ['/api/instance-review-threads', '/api/instance-review-threads?ws=team&ws=team', '/api/instance-review-threads?ws=team&x=1']) assert.equal((await h.request({ url, body: '{}' })).code, 400, url);
-  for (const url of ['/api/forge-roster', '/api/forge-roster?ws=', '/api/forge-roster?ws=team&ws=team', '/api/forge-roster?ws=team&cwd=/x']) assert.equal((await h.request({ url, body: '{}' })).code, 400, url);
   for (const url of ['/api/forge-login', '/api/forge-logout']) assert.equal((await h.request({ url })).code, 404);
   for (const url of ['/api/instance-forge', '/api/instance-forge?ws=', '/api/instance-forge?ws=team&ws=team', '/api/instance-forge?ws=team&cwd=/x', '/api/forge-connections?ws=team']) assert.equal((await h.request({ url })).code, 400);
-  for (const body of ['{', 'null', '[]', '0', ' '.repeat(65537)]) for (const url of ['/api/instance-forge?ws=team', '/api/forge-connections', '/api/forge-roster?ws=team', '/api/instance-review-threads?ws=team']) assert.equal((await h.request({ url, body })).code, 400);
+  for (const body of ['{', 'null', '[]', '0', ' '.repeat(65537)]) for (const url of ['/api/instance-forge?ws=team', '/api/forge-connections', '/api/instance-review-threads?ws=team']) assert.equal((await h.request({ url, body })).code, 400);
   assert.equal((await h.request({ headers: { host: 'localhost', [FORGE_EPOCH_HEADER]: 'bad/epoch' } })).code, 400);
   assert.equal(h.count(), 0);
 });
@@ -85,14 +84,10 @@ test('HTTP burst coalesces in one epoch, auth generation starts a new flight, er
   assert.ok(results.every(r => r.body.reason.code === 'E_GH_TIMEOUT')); assert.doesNotMatch(JSON.stringify(results), /PRIVATE/);
 });
 
-test('forge-roster: the shipped route binds its one workspace, refuses a remote one, and answers bounded rows', async () => {
+test('forge-roster is gone (#1973, slice 6a): Details reads a row's pull request through instance-forge; the route answers nothing', async () => {
   const h = http();
-  const ok = await h.request({ url: '/api/forge-roster?ws=team', body: '{}' });
-  assert.equal(ok.code, 200); assert.equal(ok.body.status, 'ok'); assert.deepEqual(ok.body.rows, [], 'no instance with a branch in a github clone: nothing read');
-  assert.equal(h.count(), 0);
-  const remote = http({ remote: true });
-  assert.equal((await remote.request({ url: '/api/forge-roster?ws=team', body: '{}' })).body.reason.code, 'unsupported-remote-operation');
-  assert.equal(remote.count(), 0);
+  const gone = await h.request({ url: '/api/forge-roster?ws=team', body: '{}' });
+  assert.notEqual(gone.code, 200); assert.equal(h.count(), 0, 'no process runs');
 });
 
 test('send review threads: the shipped route refuses a remote workspace before any process, and renderer text', async () => {

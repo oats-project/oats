@@ -84,7 +84,6 @@ export const OPERATIONS = Object.freeze({
   'POST /api/automations schedule:list': read('status'),
   'POST /api/forge-connections': read('git'),
   'POST /api/instance-forge': read('git'),
-  'POST /api/forge-roster': read('git'),
   'POST /api/instance-review-threads preview': read('git'),
   'POST /api/models': read('preview'),
   'POST /api/cli/reprobe': read('version'),
