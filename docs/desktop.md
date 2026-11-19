@@ -1135,9 +1135,12 @@ agent writes it with `oats instance board set` and `oats instance board ask`,
    show** brings them all back.
 2. **The agent's own terminal**, unchanged: the same viewer, the same cell
    geometry, the only part that scrolls (a long context scrolls inside its
-   own open fold, at most twelve lines tall). It keeps at least 120 px, or
-   40% of the pane: in a short pane the facts give way to one (the rest stay
-   behind **N more**), then the questions drop their key hint. It gives up exactly the rows the
+   own open fold, at most twelve lines tall). The board leaves it at least
+   120 px, or 40% of the pane: in a short pane the facts give way to one (the
+   rest stay behind **N more**), then the questions drop their key hint, then
+   an open context shortens to three lines. A pane too short even for that
+   keeps its terminal smaller, and a number types only while at least two of
+   its lines show. It gives up exactly the rows the
    facts and the questions take.
 3. **Questions**: one at a time, under the terminal, so they sit right by the
    agent's input line at the bottom of its screen. "question 2 of 3", ‹ › and
