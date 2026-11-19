@@ -122,7 +122,7 @@ test("runtime follows the compiler's canonical role order for reversed declarati
 test("emitted runtime executes the shared role helper before its real identity guard", () => {
   const {plan}=runtime(subset(["registry","aweb"]));
   // Fail before any filesystem/network probes on this host. A missing emitted
-  // dependency would produce the generic runtime error instead of this guard.
+  // dependency would be refused as an incomplete runtime policy before this guard.
   plan.uid=process.getuid()===20001?20002:20001;
   const result=spawnSync(process.execPath,["--input-type=module","-"],{
     input:runtimeProgram(plan),encoding:"utf8",timeout:5000,
