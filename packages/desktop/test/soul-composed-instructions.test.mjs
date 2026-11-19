@@ -189,13 +189,15 @@ test('without the feature the tab says so; a null answer is a note pointing at t
   u.section.update(without);
   const note = () => u.c('.soul-panel-note');
   assert.equal(note().hidden, false); assert.equal(note().textContent, SOUL_INSTRUCTIONS_COPY.composeAbsent);
+  assert.equal(u.panel(COMPOSED).tabIndex, 0, 'no reader in it: the panel is Tab\'s stop after the tablist');
   assert.equal(u.c('.soul-doc').hidden, true, 'no empty reader'); assert.equal(u.c('.soul-part'), null);
   u.section.update(row({ composedInstructions: null }));
-  assert.equal(note().textContent, SOUL_INSTRUCTIONS_COPY.cannotCompose);
+  assert.equal(note().textContent, SOUL_INSTRUCTIONS_COPY.cannotCompose); assert.equal(u.panel(COMPOSED).tabIndex, 0);
   u.section.update(row({ composedInstructions: { text: 'x' } }));
-  assert.equal(note().textContent, SOUL_INSTRUCTIONS_COPY.cannotRead);
+  assert.equal(note().textContent, SOUL_INSTRUCTIONS_COPY.cannotRead); assert.equal(u.panel(COMPOSED).tabIndex, 0);
   u.section.update(row());
   assert.equal(note().hidden, true); assert.equal(u.c('.soul-doc').hidden, false); assert.ok(u.c('.soul-part'));
+  assert.equal(u.panel(COMPOSED).hasAttribute('tabindex'), false, 'with a reader, the reader and its sections are the stops');
 });
 
 test('a part past the size limit says so in its section; a cut part is flagged in its header', t => {

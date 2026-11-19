@@ -417,6 +417,8 @@ export function createSoulInstructions(doc, { openExternal = null, canOpenCapabi
     const reason = composed === undefined ? SOUL_INSTRUCTIONS_COPY.composeAbsent : composed === null ? SOUL_INSTRUCTIONS_COPY.cannotCompose
       : composed === false ? SOUL_INSTRUCTIONS_COPY.cannotRead : null;
     d.note.textContent = reason ?? ''; d.note.hidden = !reason; d.box.hidden = !!reason;
+    // With no reader in it, the panel itself is the stop Tab lands on from the tablist (the accessible-tabs pattern).
+    if (reason) panels.get(COMPOSED).tabIndex = 0; else panels.get(COMPOSED).removeAttribute('tabindex');
     if (reason) { d.fileReader.clear(); d.nav.replaceChildren(); d.nav.hidden = true; return; }
     d.fileReader.paintHead(SOUL_INSTRUCTIONS_COPY.composed, { bytes: composed.truncated ? null : utf8Bytes(composed.text),
       flag: composed.truncated ? SOUL_INSTRUCTIONS_COPY.truncated : null, actions: [copyButton(composed.text)] });

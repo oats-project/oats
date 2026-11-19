@@ -267,3 +267,48 @@ test('slice3a soul page: a catalog update or a roster poll never paints another 
   waits[0].resolve(structuredClone(inspection('beta'))); await settle();
   assert.equal(u.$('.soul-capabilities'), null, 'a reply for a closed subject paints nothing');
 });
+
+// Review round 3: Ready's Details reads the soul's readiness checks (readinessApi 2) only when first opened, once per
+// subject, with the soul's selector in the view's workspace; a read still pending when the subject changes paints nothing.
+test('slice3a soul page: Ready\'s Details reads the soul\'s readiness once, on first open, and never into another soul\'s page', async t => {
+  const { refreshCli, resetCliStateForTests } = await import('../renderer/views/cli-status.mjs');
+  const R = await import('./helpers/readiness-fixture.mjs');
+  await refreshCli({ api: async () => ({ ...R.cli }) });
+  const previous = currentWorkspace(); setWorkspace('/team');
+  const dom = new JSDOM('<body><main><section hidden></section></main></body>', { pretendToBeVisual: true }), el = dom.window.document.querySelector('section');
+  const reads = [];
+  const inspector = createSoulInspector(el, { layout: 'page', workspace: () => ({ ...R.workspace }),
+    ctx: { api: async (url, opts) => {
+      const body = JSON.parse(opts.body);
+      if (url.startsWith('/api/capabilities')) return structuredClone(inspection(body.selector.soul));
+      if (url.startsWith('/api/workspace-readiness')) { const d = R.deferred(); reads.push({ url, body, d }); return d.promise; }
+      return { status: 'ok' };
+    } } });
+  t.after(() => { inspector.dispose(); dom.window.close(); setWorkspace(previous); resetCliStateForTests(); });
+  const show = async name => { await inspector.show({ agent: { name, agentsRoot: '/team/agents' }, selector: { soul: name, agentsRoot: '/team/agents' } }); await settle(); };
+  const details = () => el.querySelector('details.soul-ready-details');
+  const toggle = open => { details().open = open; details().dispatchEvent(new dom.window.Event('toggle')); };
+  await show('dev');
+  assert.equal(reads.length, 0, 'nothing read before Details opens');
+  toggle(true); await settle();
+  assert.equal(reads.length, 1);
+  assert.equal(reads[0].url, '/api/workspace-readiness?ws=team');
+  assert.deepEqual(reads[0].body, { action: 'read', selector: { kind: 'soul', soul: 'dev', agentsRoot: '/team/agents' } });
+  reads[0].d.resolve(R.view(R.target)); await settle();
+  assert.ok(details().querySelectorAll('.readiness-check').length >= 1, 'the checks, behind Details');
+  toggle(false); toggle(true); await settle();
+  assert.equal(reads.length, 1, 'closing and reopening reads nothing more');
+  // A read failure shows as the readiness view's failed block.
+  await show('beta'); toggle(true); await settle();
+  assert.equal(reads.length, 2);
+  reads[1].d.reject(Object.assign(new Error('down'), { code: 'E_BRIDGE' })); await settle();
+  assert.ok(details().querySelector('.loading-failed'), 'the failed block');
+  // Pending when the subject changes: its answer paints nothing on the next soul's page.
+  await show('gamma'); toggle(true); await settle();
+  assert.equal(reads.length, 3);
+  await show('delta');
+  reads[2].d.resolve(R.view({ ...R.target, selector: { ...R.target.selector, soul: 'gamma' } })); await settle();
+  assert.equal(el.querySelector('h2').textContent, 'delta');
+  assert.equal(details().querySelector('.readiness-check, .readiness-view'), null, 'gamma\'s checks never reach delta');
+  assert.equal(details().open, false, 'delta\'s Details starts closed');
+});
