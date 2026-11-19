@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import { createFocusRegions, REGIONS, isShown } from "../renderer/focus-regions.mjs";
 import { createSidebarWidth } from "../renderer/sidebar-width.mjs";
-import { NAV } from "../renderer/shell-nav.mjs";
+import { PINNED } from "../renderer/shell-nav.mjs";
 import { createSurfaceReturn } from "../renderer/surface-return.mjs";
 import { captureFocusReturn } from "../renderer/focus-return.mjs";
 
@@ -25,9 +25,9 @@ function shell(t, { tabs = false } = {}) {
   const doc = dom.window.document;
   const style = doc.createElement("style"); style.textContent = read("shell.css"); doc.head.append(style);
   // What the shell paints: the workspace list (one roving stop, the current row), the nav's items under the list
-  // from the shipped manifest (Workspace overview current), roster rows (one roving stop), a stage and a panel with tabs.
+  // from the shipped manifest (Home current), roster rows (one roving stop), a stage and a panel with tabs.
   doc.getElementById("ws-options").innerHTML = `<ul class="ws-group"><li class="ws-option-row"><button type="button" class="ws-option" aria-current="true" tabindex="0" data-workspace-id="/w/a">Team A</button></li><li class="ws-option-row"><button type="button" class="ws-option" tabindex="-1" data-workspace-id="/w/b">Team B</button></li></ul>`;
-  doc.getElementById("nav").innerHTML = NAV.map(v => v.name === "spawn"
+  doc.getElementById("nav").innerHTML = PINNED.map(v => v.name === "home"
     ? `<button class="nav-item active" data-view="${v.name}" aria-current="page">${v.label}</button>`
     : `<button class="nav-item" data-view="${v.name}">${v.label}</button>`).join("");
   doc.querySelector("#instance-roster .ctx-list").innerHTML = `<div class="ctx-tree-row"><button class="ctx-inst" tabindex="-1" data-tree-instance="a">a</button></div><div class="ctx-tree-row active"><button class="ctx-inst active" tabindex="0" data-tree-instance="b">b</button></div><div class="ctx-tree-row ctx-spawn-row ctx-spawn-unknown"><button class="ctx-inst pending" tabindex="-1" aria-disabled="true" data-tree-instance="c">c</button><span class="ctx-row-tools ctx-spawn-tools"><button class="act ctx-start ctx-spawn-check">Check result</button></span></div>`;
@@ -63,11 +63,11 @@ test("F6 order: workspaces → views → roster → main → panel → workspace
   }
   const visited = [];
   for (let i = 0; i < 6; i++) { assert.equal(s.regions.cycle(1), true); visited.push(s.where()); }
-  assert.deepEqual(visited, ["Team A", "Workspace overview", "b", "Souls", "Soul", "Team A"],
+  assert.deepEqual(visited, ["Team A", "Home", "b", "Souls", "Soul", "Team A"],
     "the list's tab stop, the current view's nav item, the selected roster row, the stage's first control, the panel's selected tab");
   const back = [];
   for (let i = 0; i < 5; i++) { s.regions.cycle(-1); back.push(s.where()); }
-  assert.deepEqual(back, ["Soul", "Souls", "b", "Workspace overview", "Team A"], "Shift+F6 walks it backwards");
+  assert.deepEqual(back, ["Soul", "Souls", "b", "Home", "Team A"], "Shift+F6 walks it backwards");
 });
 
 // Where each sidebar region lands when its first choice is missing: never <body>, never a control of
@@ -82,12 +82,12 @@ test("workspaces lands on the list's tab stop, else Add local workspace…; view
   assert.equal(s.regions.focusRegion("workspaces"), true); assert.equal(s.where(), "#ws-add-open");
   assert.equal(s.regions.regionOfFocus(), "workspaces");
   const nav = s.doc.getElementById("nav");
-  assert.deepEqual([...nav.querySelectorAll("button")].map(b => b.textContent), ["Workspace overview", "Automations"],
-    "the views under the list: Workspace overview, then Automations (the product owner, 2026-10-26)");
-  assert.equal(s.regions.focusRegion("views"), true); assert.equal(s.where(), "Workspace overview", "the current view's nav item");
+  assert.deepEqual([...nav.querySelectorAll("button")].map(b => b.textContent), ["Home", "Automations"],
+    "the views under the list: Home, then Automations (the Desktop UI rework, slice 2)");
+  assert.equal(s.regions.focusRegion("views"), true); assert.equal(s.where(), "Home", "the current view's nav item");
   nav.querySelector('[aria-current="page"]').removeAttribute("aria-current"); // a terminal in front: no current view
   nav.querySelector(".nav-item:last-child").focus(); // focus elsewhere, so the landing is the region's, not where it was
-  assert.equal(s.regions.focusRegion("views"), true); assert.equal(s.where(), "Workspace overview", "else the first nav item (Workspace overview, first in NAV)");
+  assert.equal(s.regions.focusRegion("views"), true); assert.equal(s.where(), "Home", "else the first nav item (Home, first in NAV)");
   nav.innerHTML = "";
   const before = s.doc.activeElement;
   assert.equal(s.regions.focusRegion("views"), false, "no nav item: nothing to land on (never the foot's buttons)");
@@ -123,9 +123,9 @@ test("regionOfFocus: the head's + and the rows are workspaces; the nav items are
 test("from a control inside a region (the workspace list, a row's tools, a head's control) F6 moves on to the next region", t => {
   const s = shell(t);
   s.doc.querySelector('#ws-options .ws-option[aria-current="true"]').focus(); s.regions.cycle(1);
-  assert.equal(s.where(), "Workspace overview", "the workspace list is the first region: next are the views under it");
+  assert.equal(s.where(), "Home", "the workspace list is the first region: next are the views under it");
   s.doc.getElementById("ws-add-open").focus(); s.regions.cycle(1);
-  assert.equal(s.where(), "Workspace overview", "so is the head's Add local workspace…");
+  assert.equal(s.where(), "Home", "so is the head's Add local workspace…");
   s.doc.getElementById("ws-add-open").focus(); s.regions.cycle(-1);
   assert.equal(s.where(), "Soul", "Shift+F6 from the head's + goes back to the panel");
   s.doc.querySelector('#ws-options .ws-option[tabindex="-1"]').focus(); s.regions.cycle(-1);
@@ -155,12 +155,12 @@ test("F6 with the roster hidden: from the foot on to main, Shift+F6 back to the 
     s.doc.getElementById(id).focus(); assert.equal(s.regions.cycle(1), true);
     assert.equal(s.where(), "Souls", `from the foot's ${id}, main (not the workspaces)`);
     s.doc.getElementById(id).focus(); assert.equal(s.regions.cycle(-1), true);
-    assert.equal(s.where(), "Workspace overview", `Shift+F6 from the foot's ${id}, the views above the hidden roster`);
+    assert.equal(s.where(), "Home", `Shift+F6 from the foot's ${id}, the views above the hidden roster`);
   }
   s.doc.querySelector("#nav button").focus(); s.regions.cycle(1);
   assert.equal(s.where(), "Souls", "from the views past the hidden roster, main");
   s.regions.cycle(-1);
-  assert.equal(s.where(), "Workspace overview", "and Shift+F6 from main back to the views");
+  assert.equal(s.where(), "Home", "and Shift+F6 from main back to the views");
 });
 
 test("hidden regions are skipped: a hidden sidebar, focus mode, an empty panel", t => {
@@ -233,7 +233,7 @@ test("the roster without a row stop lands on a control it shows (a Retry), else 
   s.regions.cycle(1);
   assert.equal(s.where(), "Souls", "F6 from the empty roster's stop goes on as from the roster: main");
   spawn.focus(); s.regions.cycle(-1);
-  assert.equal(s.where(), "Workspace overview", "Shift+F6 from the empty roster's stop goes back as from the roster: the views");
+  assert.equal(s.where(), "Home", "Shift+F6 from the empty roster's stop goes back as from the roster: the views");
   // The foot's other buttons stay below the roster: Shift+F6 from them is as from main, onto the roster's stop.
   for (const id of ["sidebar-need-you", "sidebar-help"]) {
     s.doc.getElementById(id).focus(); s.regions.cycle(-1);

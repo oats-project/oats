@@ -8,7 +8,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import builder from '../electron-builder.config.cjs';
-import { decodeICNS, decodePNG, deriveIconSet, encodePNG, GENERATED, ICNS_TYPES, LINUX_SIZES, pixelDigest, resize, SIDEBAR_SIZE, SOURCE } from '../build-icons.mjs';
+import { decodeICNS, decodePNG, deriveIconSet, encodePNG, GENERATED, ICNS_TYPES, LINUX_SIZES, pixelDigest, resize, SOURCE } from '../build-icons.mjs';
 
 const PKG = fileURLToPath(new URL('../', import.meta.url));
 const read = path => readFileSync(join(PKG, path));
@@ -43,8 +43,6 @@ test('every checked-in PNG decodes to the pixels its size derives from the sourc
     assert.equal(pixelDigest(image), derived.manifest.pixels[String(size)], `${size}px`);
     assert.equal(image.pixels[3], 0, `${size}px keeps the transparent ground`);
   }
-  const sidebar = decodePNG(read(`${GENERATED}/sidebar-${SIDEBAR_SIZE}.png`));
-  assert.equal(pixelDigest(sidebar), derived.manifest.pixels[String(SIDEBAR_SIZE)]);
 });
 
 test('the ICNS container carries each Apple type at its size, derived from the source', () => {
@@ -75,10 +73,11 @@ test('the codec and resampler are exact: round trip, identity size, premultiplie
   assert.throws(() => decodePNG(Buffer.from('not a png')), /not a PNG/);
 });
 
-test('electron-builder wires the derived icons per platform; only the sidebar mark ships as a file', () => {
+test('electron-builder wires the derived icons per platform; no brand image ships as a file', () => {
   assert.equal(builder.mac.icon, `${GENERATED}/oats.icns`);
   assert.equal(builder.linux.icon, `${GENERATED}/linux`);
-  assert.ok(builder.files.includes(`${GENERATED}/sidebar-${SIDEBAR_SIZE}.png`));
+  assert.ok(!builder.files.some(f => f.startsWith(`${GENERATED}/`)), 'no generated image ships as a file (the sidebar mark went in slice 2)');
+  assert.ok(!existsSync(join(PKG, GENERATED, 'sidebar-48.png')), 'nor is it generated');
   assert.ok(!builder.files.some(f => /oats-logo\.png|assets\/brand\/\*|assets\/\*\*/.test(f)), 'the source artwork is not packaged');
   assert.ok(builder.files.includes('!build-icons.mjs'));
   for (const path of [builder.mac.icon, builder.linux.icon]) assert.ok(existsSync(join(PKG, path)), path);
@@ -86,8 +85,8 @@ test('electron-builder wires the derived icons per platform; only the sidebar ma
   assert.equal(scripts.icons, 'node build-icons.mjs', 'regenerate from source is one command');
 });
 
-// The sidebar (slice 1 of the Desktop UI rework): the brand mark left the foot, so the renderer draws no mark in the
-// sidebar. The generated sidebar-48.png stays pinned and packaged (above) for a later surface; nothing draws it now.
+// The sidebar (the Desktop UI rework): the brand mark left the foot in slice 1, so the renderer draws no mark in the
+// sidebar, and slice 2 stopped generating and packaging sidebar-48.png (above).
 test('the renderer shows no sidebar mark; nothing references a download path', () => {
   const html = read('renderer/index.html').toString('utf8');
   assert.doesNotMatch(html, /ws-brand-image|ws-brand-mark/, 'the old head mark is gone');

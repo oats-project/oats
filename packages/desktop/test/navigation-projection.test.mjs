@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { withShellWindowGlobals } from './helpers/shell-window-globals.mjs';
 import { JSDOM } from "jsdom";
-import { NAV, NAV_TABS, navTab, stageSidebarMode } from "../renderer/shell-nav.mjs";
+import { NAV, NAV_TABS, PINNED, pinnedRowFor, navTab, stageSidebarMode } from "../renderer/shell-nav.mjs";
 import { isShown } from "../renderer/focus-regions.mjs";
 import { createSelectionOwnership, wirePaneSelection } from "../renderer/selection-ownership.mjs";
 import { createIntentGate, prepareOwnedOpen } from "../renderer/open-intent.mjs";
@@ -40,12 +40,12 @@ function shell(t, shellSource = source) {
   t.after(() => dom.window.close());
   const document = dom.window.document, loads = [], contexts = [], focusCalls = [], navWrites = [], preselected = [], regionCalls = [];
   const navEl = document.getElementById("nav");
-  for (const view of NAV) {
+  for (const view of PINNED) { // the rows the shell pins (Home, Automations: slice 2)
     const b = document.createElement("button"); b.className = "nav-item";
     b.dataset.view = view.name; b.textContent = view.label; navEl.append(b);
   }
   const c = {
-    document, console, navigator: { platform: "MacIntel" }, NAV, NAV_TABS, navTab, stageSidebarMode, isShown,
+    document, console, navigator: { platform: "MacIntel" }, NAV, NAV_TABS, navTab, pinnedRowFor, stageSidebarMode, isShown,
     // The Workspace page's module, as openWorkspaceSouls imports it: only its tab preselection is read.
     loadSpawnView: async () => ({ preselectWorkspaceTab: tab => { preselected.push(tab); return true; } }),
     focusRegions: { focusRegion: name => { regionCalls.push(name); return false; } },
@@ -141,7 +141,7 @@ test("live-driver order: covered Souls stage → independent A/B splits → A ha
 });
 
 async function restoredFile(t, context, shellSource = source) {
-  const s = shell(t, shellSource), expected = context === "souls" ? ["spawn"] : [];
+  const s = shell(t, shellSource), expected = context === "souls" ? ["home"] : []; // the Workspace page's row is Home's (slice 2)
   await s.stage(context === "souls" ? "spawn" : "automations");
   if (context === "instances") s.seed();
   const file = s.seed("file");
@@ -167,7 +167,7 @@ for (const context of ["instances", "souls"]) {
 test("brain restoration keeps Souls navigation; returning to a stage reflects the visible stage", async t => {
   const s = shell(t); await s.stage("spawn"); const brain = s.seed("brain");
   s.switchTo("B"); await s.stage("automations"); s.switchTo("A");
-  assert.equal(s.c.activeTab, brain.id); assert.deepEqual(s.nav(), ["spawn"]);
+  assert.equal(s.c.activeTab, brain.id); assert.deepEqual(s.nav(), ["home"]);
   await s.stage("automations");
   assert.equal(s.c.tabLayerVisible, false); assert.deepEqual(s.nav(), ["automations"]);
   assert.deepEqual(s.contexts, ["stage:automations"]);
@@ -203,7 +203,7 @@ for (const boundary of ["load", "mount"]) for (const outcome of ["resolve", "rej
     await old; await tick();
     assert.equal(s.loads.at(-1).name, "spawn");
     s.loads.at(-1).resolve({ mount() {} }); await newer;
-    assert.deepEqual(s.nav(), ["spawn"]); assert.deepEqual(s.contexts, ["stage:spawn"]);
+    assert.deepEqual(s.nav(), ["home"]); assert.deepEqual(s.contexts, ["stage:spawn"]);
     assert.equal(s.c.tabLayerVisible, false);
   });
 }
@@ -252,8 +252,9 @@ async function machinesFrom(t, start, shellSource = source) {
   await done;
   return s;
 }
-test("the sidebar's views: Workspace overview, then Automations, each a page; Machines is the Workspace page's tab", () => {
-  assert.deepEqual(NAV.map(v => [v.name, v.label]), [["spawn", "Workspace overview"], ["automations", "Automations"]]);
+test("the sidebar's views: Home, the Workspace page (no row of its own: Home's) and Automations, each a page; Machines is the Workspace page's tab", () => {
+  assert.deepEqual(NAV.map(v => [v.name, v.label]), [["home", "Home"], ["spawn", "Workspace overview"], ["automations", "Automations"]]);
+  assert.deepEqual(NAV.filter(v => v.pinned !== false).map(v => v.name), ["home", "automations"]);
   assert.deepEqual(NAV_TABS, [{ name: "hierarchy", label: "Workspace › Machines", page: "spawn", tab: "machines" }]);
   assert.deepEqual(navTab("hierarchy"), NAV_TABS[0]);
   assert.equal(navTab("automations"), null, "a page of its own again"); assert.equal(navTab("spawn"), null);
@@ -263,7 +264,7 @@ for (const start of [null, "automations"]) test(`stage.hierarchy from ${start ??
   assert.deepEqual(s.preselected, ["machines"], "the tab is chosen before the page shows");
   assert.equal(s.c.stage.name, "spawn");
   assert.ok(!s.loads.some(load => load.name === "hierarchy"), "Machines is no page of its own");
-  assert.deepEqual(s.nav(), ["spawn"], "the Workspace overview nav item is the current one");
+  assert.deepEqual(s.nav(), ["home"], "Home's row is the current one: Home opens the Workspace page (slice 2)");
   assert.equal(s.c.sidebarMode, "souls"); assert.deepEqual(s.contexts, ["stage:spawn"]);
   // showStageFocused compares the stage on screen with the PAGE (spawn), so a keyboard open keeps focus on a control.
   assert.deepEqual(s.regionCalls, ["main"], "focus was on <body>: the stage's first control");
@@ -273,7 +274,7 @@ test("stage.hierarchy while the Workspace page is on screen switches its tab, wi
   const s = await machinesFrom(t, "spawn");
   assert.deepEqual(s.preselected, ["machines"]);
   assert.equal(s.loads.length, 1, "the page already on screen stays mounted");
-  assert.equal(s.c.stage.name, "spawn"); assert.deepEqual(s.nav(), ["spawn"]);
+  assert.equal(s.c.stage.name, "spawn"); assert.deepEqual(s.nav(), ["home"]);
   assert.deepEqual(s.regionCalls, ["main"]);
 });
 
