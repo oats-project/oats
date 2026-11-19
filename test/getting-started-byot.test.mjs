@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { parseVersion } from "../mirrors/oats-aweb/lib/aw-floor.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const read = (rel) => readFileSync(join(ROOT, rel), "utf8");
@@ -91,6 +92,11 @@ test("the tested-version reader reads aw-compat.json at the catalog's ref, never
   assert.deepEqual([run({ url: "https://gitlab.com/awebai/oats-aweb.git" }).out, run({ url: "https://gitlab.com/awebai/oats-aweb.git" }).code], ["NOT_GITHUB https://gitlab.com/awebai/oats-aweb.git", 1]);
   assert.match(run({}, { status: "404" }).out, /^FAILED HTTP 404 /, "a catalog older than the file stops the branch");
   assert.match(run({}, { body: { min: "1.36.33", tested: "latest" } }).out, /^FAILED unexpected /, "tested must be an exact version");
+  // The reader takes exactly the versions the provider's own parser takes (aw-floor.mjs parseVersion).
+  for (const tested of ["1.36.58", "1.36.58-rc.3", "1.36.58-0.a-1", "1.36.58+build.1", "1.36.58-rc.1+b.2", "1.36.58-01", "1.36.58-a..b", "1.36.58-", "01.36.58", "1.36", "1.36.58 ", "1.36.58;x", ["1.36.58"], 1.3658]) {
+    const accepted = typeof tested === "string" && parseVersion(tested) !== null;
+    assert.equal(run({}, { body: { min: "1.36.33", tested } }).out, accepted ? `TESTED ${tested}` : `FAILED unexpected ${JSON.stringify({ min: "1.36.33", tested })}`, JSON.stringify(tested));
+  }
   assert.match(run({}, { body: { min: "1.36.33", tested: "1.36.58", extra: 1 } }).out, /^FAILED unexpected /, "exactly min and tested");
 });
 
