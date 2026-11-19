@@ -29,7 +29,7 @@ an author soul:
 ```yaml
 # oats-workspace.yaml
 packages:
-  oats.framework: v1.25.2            # provides oats.core, oats.setup, oats.knowledge-theory
+  oats.framework: v1.26.0            # provides oats.core, oats.setup, oats.knowledge-theory
 
 # souls/<author-soul>/soul.yaml
 capabilities:
