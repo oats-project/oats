@@ -175,6 +175,11 @@ export const CHORDS = Object.freeze([
   // such action, so it binds no key for it (chordKeys skips a `does` it does not handle). Not one of
   // the seven the Ctrl+Shift family moves: Ctrl+Alt+R in both of those (the maintainer's ruling).
   { does: "edit-instance", mac: "cmd+alt+r", alt: "alt+r", other: "ctrl+alt+r" },
+  // The Desktop's alone for now (S2-M3): the agent's mail, a read-only sheet from the right. No leader key; the TUI
+  // skips it as it skips edit-instance until it has the sheet. Not one of the seven: Ctrl+Alt+M in both other
+  // families (Ctrl+Shift+M is zoom in the Ctrl+Shift family). Alt+M takes Emacs' M-m (back-to-indentation) and
+  // zsh's (copy-prev-shell-word) in a terminal; the program still gets it from Esc, then m.
+  { does: "mail", mac: "cmd+alt+m", alt: "alt+m", other: "ctrl+alt+m" },
 ].map((entry) => Object.freeze({ ...entry, alt: entry.alt ?? entry.other, shift: entry.shift ?? entry.other })));
 
 /** The palette's own keys, read only while the palette is open: there they win over every binding

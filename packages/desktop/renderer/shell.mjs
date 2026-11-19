@@ -52,6 +52,7 @@ import { createStatusLine, statusLineCSS } from "./status-line.mjs";
 import { sheetCSS } from "./sheet.mjs";
 import { createForgetDialog, forgetSuccessor } from './forget-dialog.mjs';
 import { createInstanceColorDialog, instanceColorCSS } from './instance-color-dialog.mjs';
+import { createMailSheet, mailSheetCSS } from './mail-sheet.mjs';
 import { createInstanceBackgroundMenu } from './instance-background-menu.mjs';
 import { createInstancePinMenu, PIN_LABELS } from './instance-pin-menu.mjs';
 import { desktopActs } from './desktop-acts.mjs';
@@ -149,7 +150,7 @@ hostTheme.start();
 window.addEventListener("pagehide", () => hostTheme.dispose(), { once: true });
 mountShellIcons(document);
 const identityStyle = document.createElement("style");
-identityStyle.textContent = identityCSS + contextPanelCSS + teamsCSS + instanceSoulCSS + instanceGitCSS + notificationCSS + statusLineCSS + sheetCSS + connectionsCSS + settingsTerminalCSS + lifecycleCSS + instanceColorCSS + themePickerCSS; document.head.append(identityStyle);
+identityStyle.textContent = identityCSS + contextPanelCSS + teamsCSS + instanceSoulCSS + instanceGitCSS + notificationCSS + statusLineCSS + sheetCSS + connectionsCSS + settingsTerminalCSS + lifecycleCSS + instanceColorCSS + mailSheetCSS + themePickerCSS; document.head.append(identityStyle);
 // The sidebar's foot (slice 1): its count of the rows that need you, painted with the roster; its button focuses the
 // first of them (focusFirstNeedingYou).
 const sidebarFoot = createSidebarFoot(document, { nouns: DESKTOP_NOUNS, onNeedYou: () => focusFirstNeedingYou() });
@@ -1801,6 +1802,8 @@ const contextPanel = createContextPanel({
     forget: (instance, workspace) => openForgetDialog(instance, workspace),
   },
   // Soul tab → the soul in the Workspace view (same hand-off as Quick Open).
+  // Messaging's Mail → the mail sheet for this row (as the chord opens it; mail-sheet.mjs).
+  openMail: ({ instance }) => { if (instance) openInstanceMail(instanceId(instance)); },
   openSoul: async ({ workspace, name, agentsRoot, server }) => {
     const owns = tabOpenIntents.begin();
     let mod;
@@ -2781,6 +2784,8 @@ const palette = createPalette({
     // selected.") the focus stays there, never on <body>; the dialog returns to it when it closes.
     { label: "Instance: name and colour…", detail: chordDetail("instance.edit"),
       run: () => { takePickerFocusReturn(document)?.restore(); openInstanceEdit(paletteTargetId); } },
+    { label: "Agent: mail", detail: chordDetail("instance.mail"),
+      run: () => { takePickerFocusReturn(document)?.restore(); openInstanceMail(paletteTargetId); } },
     // Pin to top / Unpin (feature instance-pin): listed only where the leader's target offers it, as its row menu does.
     // Named with D3's noun ("Agent: Pin to top"), from DESKTOP_NOUNS, as the slice 4 palette's own rows are.
     ...Object.entries(PIN_LABELS).map(([action, label]) => ({ label: `${DESKTOP_NOUNS.instance[0].toUpperCase()}${DESKTOP_NOUNS.instance.slice(1)}: ${label}`,
@@ -3037,6 +3042,29 @@ const appearance = createAppearanceSheet({ doc: document, themes: THEMES, curren
   currentFamily: () => terminalTypography().fontFamily,
   onIntent: () => tabOpenIntents.invalidate() });
 window.addEventListener('pagehide', () => appearance.dispose(), { once: true });
+
+/* The agent's mail (S2-M3; mail-sheet.mjs): a read-only sheet from the right, for the leader's target, opened by its
+ * chord (instance.mail), the palette's entry and Details' Mail button. It reads only `messaging:mail`, through the
+ * capabilities route the Teams card uses, on open and on its own Refresh: never on the poll. */
+const mailSheet = createMailSheet({ doc: document,
+  request: (workspace, body) => api(`/api/capabilities?ws=${encodeURIComponent(workspace)}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  }),
+  generation: workspaceGeneration, subscribeWorkspace: onWorkspaceChange, cli: cliStatus,
+  heldBack: () => cliHeldBack('POST /api/capabilities run'),
+  onIntent: () => tabOpenIntents.invalidate(), applyFocus: fn => tabOpenIntents.applyFocus(fn),
+});
+/** Opens the mail sheet for the instance `id` names (leaderTargetId), as this window's roster shows it; with none,
+ * the hint says so. The sheet already open for it closes (the chord toggles). */
+function openInstanceMail(id) {
+  const instance = rosterInstance(id);
+  if (!instance) { sayInHint("No agent is focused or selected."); return; }
+  const open = mailSheet.current();
+  if (open && open.home === instance.home && open.server === (instance.server ?? null)) { mailSheet.close(); return; }
+  connections.close(); shortcutsEditor.close(); lifecycleDialog.close(); forgetDialog.close();
+  mailSheet.open(instance, rowDeployment(instance));
+}
+window.addEventListener('pagehide', () => mailSheet.dispose(), { once: true });
 
 /** The sidebar's way into the instances, never nothing (the roster's filter was that once): the roster's current
  * row (the roving stop), else its first row, else a control the roster shows (Retry, after a failed read), else, on
@@ -3693,6 +3721,10 @@ for (const [id, does] of [["roster.openPrevious", "previous"], ["roster.openNext
 // every focus, a terminal's included. Inert under a modal dialog or the palette, as the leader is.
 registerAction({ id: "instance.edit", label: "Instance: name and colour…", context: "global", when: () => !modalOpen(),
   run: (e) => openInstanceEdit(leaderTargetId(e?.target ?? document.activeElement)) });
+// The agent's mail (CHORDS mail): the leader's target, from every focus, a terminal's included. Inert under any other
+// modal dialog or the palette; with the mail sheet open the chord closes it.
+registerAction({ id: "instance.mail", label: "Agent: mail", context: "global", when: () => !modalOpen() || mailSheet.isOpen(),
+  run: (e) => { if (mailSheet.isOpen()) { mailSheet.close(); return; } openInstanceMail(leaderTargetId(e?.target ?? document.activeElement)); } });
 
 // Chord-suffixed tooltips, live against the keymap: any control that
 // declares data-action gets “ … (chord)” appended to its base title.
