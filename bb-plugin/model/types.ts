@@ -63,3 +63,51 @@ export type View = {
   /** state idle and the thread unread */
   finished: Node[];
 };
+
+// ---- The rows of the four pages and of the spawn preview (contract.ts holds their schemas). ----
+
+/** One soul of `oats souls`. */
+export type Soul = {
+  /** what `oats spawn` takes */
+  name: string;
+  description: string;
+  /** display text, as the kernel words it */
+  origin: string;
+  /** names of the capabilities the soul composes; empty when the kernel cannot say */
+  capabilities: string[];
+  spawnable: boolean;
+  /** "<code>: <message>", the kernel's, when the soul cannot be spawned */
+  problem: string | null;
+};
+
+/** One capability of `oats capabilities`. */
+export type Capability = {
+  id: string;
+  description: string;
+  origin: string;
+  /** how many of this deployment's souls compose it */
+  souls: number;
+};
+
+/** One team of `oats teams`. */
+export type Team = { label: string; team: string; isDefault: boolean };
+
+/** This machine, or one registered server of `oats server list`. */
+export type Machine = {
+  id: string;
+  /** the ssh alias the kernel recorded; null for this machine */
+  route: string | null;
+  isThisMachine: boolean;
+  /** what the kernel last recorded about it */
+  note: string | null;
+};
+
+/** What `oats spawn --preview` would do, as the form draws it. */
+export type SpawnSummary = {
+  modules: string[];
+  teams: string[];
+  /** harness and model, with where the model comes from */
+  launch: string | null;
+  warnings: string[];
+  problems: string[];
+};

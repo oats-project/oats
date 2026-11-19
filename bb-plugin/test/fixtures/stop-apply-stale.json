@@ -1,0 +1,125 @@
+{
+ "schemaVersion": 1,
+ "ok": false,
+ "error": {
+  "code": "E_PLAN_STALE",
+  "message": "the stop plan for redesign-ui-lead changed since revision 9c1f2e3d4b5a69788796a5b4 was read; read the plan again and confirm it",
+  "details": {
+   "plan": {
+    "lifecycleApi": 1,
+    "action": "stop",
+    "instance": "redesign-ui-lead",
+    "home": "/abs/deployment/agents/oats-product-expert/instances/redesign-ui-lead",
+    "recursive": true,
+    "at": "2026-11-19T12:31:00.000Z",
+    "targets": [
+     {
+      "instance": "desktop-mockups-developer",
+      "agent": "oats-desktop-developer",
+      "home": "/abs/deployment/agents/oats-desktop-developer/instances/desktop-mockups-developer",
+      "depth": 1,
+      "workMode": "worktree",
+      "launched": true,
+      "session": {
+       "state": "unknown",
+       "present": true,
+       "backend": "bb",
+       "established": true
+      },
+      "work": {
+       "observed": true,
+       "revision": "46c20668d4e2a1b7c3f09e5d8a6b7c1d2e3f4a5b",
+       "branch": "agents/desktop-mockups-developer",
+       "detached": false,
+       "drift": false,
+       "changed": 2,
+       "untracked": 1,
+       "upstream": {
+        "ref": null,
+        "ahead": null,
+        "behind": null
+       },
+       "base": {
+        "ref": "origin/main",
+        "ahead": 1,
+        "behind": 1
+       },
+       "remote": {
+        "host": "github.com",
+        "path": "awebai/oats"
+       }
+      },
+      "retiring": false,
+      "stopPending": false,
+      "midTask": true
+     },
+     {
+      "instance": "harvest-knowledge-helper",
+      "agent": "knowledge-harvester",
+      "home": "/abs/deployment/agents/knowledge-harvester/instances/harvest-knowledge-helper",
+      "depth": 1,
+      "workMode": "directory",
+      "launched": true,
+      "session": {
+       "state": "unknown",
+       "present": true,
+       "backend": "bb",
+       "established": true
+      },
+      "work": {
+       "observed": false,
+       "reason": "no-worktree"
+      },
+      "retiring": false,
+      "stopPending": false,
+      "midTask": false
+     },
+     {
+      "instance": "redesign-ui-lead",
+      "agent": "oats-product-expert",
+      "home": "/abs/deployment/agents/oats-product-expert/instances/redesign-ui-lead",
+      "depth": 0,
+      "workMode": "worktree",
+      "launched": true,
+      "session": {
+       "state": "unknown",
+       "present": true,
+       "backend": "bb",
+       "established": true
+      },
+      "work": {
+       "observed": true,
+       "revision": "46c20668d4e2a1b7c3f09e5d8a6b7c1d2e3f4a5b",
+       "branch": "agents/redesign-ui-lead",
+       "detached": false,
+       "drift": false,
+       "changed": 3,
+       "untracked": 1,
+       "upstream": {
+        "ref": null,
+        "ahead": null,
+        "behind": null
+       },
+       "base": {
+        "ref": "origin/main",
+        "ahead": 1,
+        "behind": 1
+       },
+       "remote": {
+        "host": "github.com",
+        "path": "awebai/oats"
+       }
+      },
+      "retiring": false,
+      "stopPending": false,
+      "midTask": true
+     }
+    ],
+    "skipped": [],
+    "ambiguous": [],
+    "planRevision": "0a1b2c3d4e5f60718293a4b5",
+    "notes": []
+   }
+  }
+ }
+}

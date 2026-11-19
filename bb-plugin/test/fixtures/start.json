@@ -1,0 +1,32 @@
+{
+ "schemaVersion": 1,
+ "ok": true,
+ "result": {
+  "instance": "weekly-digest-helper",
+  "agent": "oats-expert",
+  "home": "/abs/deployment/agents/oats-expert/instances/weekly-digest-helper",
+  "harness": "pi",
+  "backend": "bb",
+  "session": {
+   "provider": "oats.bb",
+   "endpoint": {
+    "server": "http://127.0.0.1:38886",
+    "projectId": "proj_digest",
+    "threadId": "thr_digest2"
+   }
+  },
+  "model": null,
+  "launchConfig": null,
+  "yolo": null,
+  "target": null,
+  "startedAt": "2026-11-19T12:40:00.000Z",
+  "reused": false,
+  "warnings": [],
+  "launchPrompts": {
+   "status": "not-engaged",
+   "startId": "st_4f1c",
+   "at": "2026-11-19T12:40:00.000Z"
+  },
+  "restartCount": 0
+ }
+}

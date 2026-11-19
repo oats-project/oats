@@ -1,0 +1,94 @@
+{
+ "schemaVersion": 1,
+ "ok": true,
+ "result": {
+  "instance": "flaky-ci-2-developer",
+  "agent": "oats-developer",
+  "home": "/abs/deployment/agents/oats-developer/instances/flaky-ci-2-developer",
+  "work": "worktree",
+  "branch": "agents/flaky-ci-2-developer",
+  "base": {
+   "ref": "github.com/awebai/oats",
+   "oid": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422"
+  },
+  "launched": true,
+  "warnings": [
+   "the bb server at http://127.0.0.1:38886 runs bb-app 0.50.1; the capability was tested up to 0.50.1"
+  ],
+  "tmux": null,
+  "backend": "bb",
+  "session": {
+   "provider": "oats.bb",
+   "endpoint": {
+    "server": "http://127.0.0.1:38886",
+    "projectId": "proj_ci2",
+    "threadId": "thr_ci2"
+   }
+  },
+  "repo": "/abs/clones/oats",
+  "harness": "pi",
+  "model": "github-copilot/claude-fable-5.1",
+  "parent": null,
+  "sibling": null,
+  "relation": null,
+  "spawnOrigin": "operator",
+  "attach": "oats session attach --home /abs/deployment/agents/oats-developer/instances/flaky-ci-2-developer",
+  "decision": {
+   "instance": "flaky-ci-2-developer",
+   "home": "/abs/deployment/agents/oats-developer/instances/flaky-ci-2-developer",
+   "branch": "agents/flaky-ci-2-developer",
+   "base": {
+    "ref": "github.com/awebai/oats",
+    "oid": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422"
+   },
+   "effective": {
+    "repo": "/abs/clones/oats",
+    "work": "worktree",
+    "harness": "pi",
+    "model": "github-copilot/claude-fable-5.1",
+    "launchConfig": null,
+    "yolo": null,
+    "backend": "bb",
+    "childSpawns": true,
+    "relation": null,
+    "providers": {
+     "oats.aweb": {},
+     "oats.build": {},
+     "oats.core": {},
+     "oats.developer": {},
+     "oats.landing-rules": {}
+    }
+   },
+   "resolution": "370495ec8a708df4d543f7aa",
+   "revision": "f48a98cea8a3a34508aab024"
+  },
+  "replayed": false,
+  "wake": {
+   "requested": false,
+   "saved": null,
+   "error": null
+  },
+  "launchConfig": null,
+  "launch": {
+   "version": 2,
+   "harness": "pi",
+   "launchConfig": null,
+   "launchConfigSource": null,
+   "executable": "/usr/local/bin/pi",
+   "executableDeclared": null,
+   "executableResolvedFrom": "PATH",
+   "args": [],
+   "env": {},
+   "model": "github-copilot/claude-fable-5.1",
+   "hooks": {
+    "launch": {},
+    "env": {},
+    "contributions": []
+   },
+   "prompt": {
+    "kind": "task-file",
+    "file": "TASK.md"
+   }
+  }
+ }
+}

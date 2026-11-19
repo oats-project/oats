@@ -1,0 +1,34 @@
+{
+ "schemaVersion": 1,
+ "ok": true,
+ "result": {
+  "file": "/abs/home/.oats/servers.json",
+  "servers": [
+   {
+    "id": "devbox-oats",
+    "sshHost": "devbox",
+    "workspace": "/srv/oats",
+    "label": "devbox",
+    "workspaceKey": "github.com/awebai/oats",
+    "target": {
+     "sshHost": "devbox",
+     "workspace": "/srv/oats",
+     "oatsPath": "oats"
+    },
+    "snapshots": 2
+   },
+   {
+    "id": "build",
+    "sshHost": "build.internal",
+    "workspace": "/home/ci/oats",
+    "workspaceKey": null,
+    "target": {
+     "sshHost": "build.internal",
+     "workspace": "/home/ci/oats",
+     "oatsPath": "oats"
+    },
+    "snapshots": 0
+   }
+  ]
+ }
+}

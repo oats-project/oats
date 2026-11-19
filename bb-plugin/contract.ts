@@ -134,3 +134,83 @@ export const hostVerbs = [
 export const hostSignals = {
   changed: { payload: z.object({ reason: z.string() }).strict() },
 } satisfies ExperimentalHostSignals;
+
+// ---- The host contract: one method per entry of `hostVerbs`, each with its own typed input. ----
+// Every method that runs `oats` answers `{ ok: true, value } | { ok: false, error: { code, message } }`
+// and never throws for a kernel refusal or a failed process: `code` is the kernel's (`E_*`) or one
+// of the plugin's own (kernel/result.ts), and `message` is the kernel's, unchanged.
+
+/** Where the host entry runs `oats`: the deployment directory (its cwd) and the binary ("" = `oats` on PATH). */
+const hostBase = { deployment: z.string().min(1), oatsBin: z.string() };
+const kernelError = z.object({ code: z.string(), message: z.string() });
+const answer = <Value extends z.ZodType>(value: Value) =>
+  z.union([
+    z.object({ ok: z.literal(true), value }),
+    z.object({ ok: z.literal(false), error: kernelError }),
+  ]);
+const hostRead = z.object(hostBase).strict();
+const hostInstance = z.object({ ...hostBase, instance: instanceName }).strict();
+const hostApply = z.object({ ...hostBase, instance: instanceName, revision: z.string(), key }).strict();
+const hostHome = z.object({ ...hostBase, home: z.string().min(1) }).strict();
+const hostSpawn = z.object({ ...hostBase, ...spawnInput.shape });
+const threadAnswer = answer(z.object({ threadId: z.string().nullable() }));
+
+/** `oats capabilities` rows; the server adds the number of souls from `oats souls`. */
+export const hostCapability = capability.omit({ souls: true });
+/** `oats teams` rows as the kernel says them: an unmapped shared team has no provider id. */
+export const hostTeam = team.extend({ team: z.string().nullable() });
+
+const hostMethods = {
+  /**
+   * Finds the deployment directory. `deployment` is the setting ("" = walk up from each of `roots`,
+   * the bb project roots on this machine, to the first directory holding `oats-local.yaml`).
+   */
+  discover: {
+    experimental_retryable: true,
+    input: z.object({ deployment: z.string(), roots: z.array(z.string()) }).strict(),
+    output: z.object({ deployment: z.string().nullable(), machine: z.string() }),
+  },
+  status: {
+    experimental_retryable: true,
+    input: hostRead,
+    output: answer(z.object({ root: z.string(), workspace: z.string().nullable(), agents: z.array(agent) })),
+  },
+  souls: { experimental_retryable: true, input: hostRead, output: answer(z.object({ souls: z.array(soul) })) },
+  capabilities: {
+    experimental_retryable: true,
+    input: hostRead,
+    output: answer(z.object({ capabilities: z.array(hostCapability) })),
+  },
+  teams: { experimental_retryable: true, input: hostRead, output: answer(z.object({ teams: z.array(hostTeam) })) },
+  servers: { experimental_retryable: true, input: hostRead, output: answer(z.object({ machines: z.array(machine) })) },
+  /** `revision` is the kernel's decision revision for this soul, name and task. */
+  spawnPreview: {
+    experimental_retryable: true,
+    input: hostSpawn.strict(),
+    output: answer(z.object({ summary: spawnSummary, revision: z.string() })),
+  },
+  /**
+   * The kernel takes an idempotency key only with the decision it confirms, so the host entry reads
+   * the preview and applies it in one call. `revision` is the decision an earlier call with the same
+   * key applied (null on the first call): with it the kernel replays that spawn instead of refusing.
+   */
+  spawn: {
+    input: hostSpawn.extend({ key, revision: z.string().nullable() }).strict(),
+    output: answer(z.object({ instance: z.string(), threadId: z.string().nullable(), revision: z.string() })),
+  },
+  stopPlan: { experimental_retryable: true, input: hostInstance, output: answer(plan) },
+  stopApply: { input: hostApply, output: answer(z.object({})) },
+  /** `home` is the home the kernel's status named for the instance; never a caller's. */
+  start: { input: hostHome, output: threadAnswer },
+  restart: { input: hostHome, output: threadAnswer },
+  /** Not retryable: each retire plan appends one `retire-planned` event to the workspace log. */
+  retirePlan: { input: hostInstance, output: answer(plan) },
+  retireApply: { input: hostApply, output: answer(z.object({})) },
+  /** Watches the deployment's event log; each batch is one `changed` signal. Null: nothing to watch yet. */
+  watch: {
+    input: z.object({ deployment: z.string().min(1) }).strict(),
+    output: z.object({ watching: z.string().nullable() }),
+  },
+} satisfies Record<(typeof hostVerbs)[number], unknown>;
+
+export const hostContract = defineRpcContract(hostMethods);
