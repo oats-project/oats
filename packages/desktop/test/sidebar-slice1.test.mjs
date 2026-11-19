@@ -116,24 +116,24 @@ test("slice1 row shows name and soul · machine only", t => {
   u.render([local("same-a"), local("same-b", { running: false }), local("same-c", { running: null })]);
   assert.deepEqual(["same-a", "same-b", "same-c"].map(n => u.row(n).querySelector(".ctx-state")?.textContent), [", running", ", stopped", ", status unknown"]);
   assert.ok(u.row("same-b").querySelector(".ctx-state").classList.contains("sr-only"));
-  // A row the roster reports setting up its worktree keeps its reported facts on its tooltip, its soul included (its
-  // state takes line 2); a pending row only this window knows guesses none.
+  // Slice 6a moved the interim tooltip facts to Details: a row setting up its worktree says only why it waits; a
+  // pending row only this window knows says the same, guessing nothing.
   u.render([local("setting-up", { running: false, spawnInProgress: true, branch: "b/setting-up", model: "opus" })]);
-  assert.equal(u.row("setting-up").title.split("\n")[1], "Soul: oats-desktop-developer · Repository: desktop-repo · Branch: b/setting-up · Claude · opus");
+  assert.equal(u.row("setting-up").title.includes("\n"), false, "no facts on the tooltip: they are Details'");
   u.context.spawnJobs = { rows: () => [{ id: "j1", instance: "fresh", agent: "oats-expert", home: "/synthetic/fresh", agentsRoot: "/synthetic/agents", pending: "spawning" }], announce: () => false, check() {} };
   u.render([]);
   assert.equal(u.row("fresh").title.includes("\n"), false, "nothing reported, nothing added");
   u.context.spawnJobs = { rows: () => [], announce: () => false, check() {} };
-  // The facts the card held that the lines don't (an interim the lead agreed): the repository, the branch and the
-  // harness and model, on the row's native tooltip only; never in its description, and no card is mounted.
+  // The tooltip keeps the name and the state (slice 6a: the repository, branch, harness and model are Details'); never
+  // in its description, and no card is mounted.
   u.render([local("desktop-mockups", { model: "opus" })]);
-  assert.equal(u.row("desktop-mockups").title, "Repository: desktop-repo · Branch: b/desktop-mockups · Claude · opus");
+  assert.equal(u.row("desktop-mockups").title, "Desktop mockups, running");
   assert.equal(u.row("desktop-mockups").hasAttribute("aria-description"), false);
   assert.equal(u.doc.querySelector(".ctx-tip, [role=tooltip]"), null);
   // A row with no terminal has no instance panel: its runtime error, with its speaker, is its title and description
   // (the hover card said it), and line 2 stays soul · machine.
   u.render([local("broken", { running: false, runtimeError: "the last start failed", runtimeErrorOrigin: "kernel" })]);
-  assert.equal(u.row("broken").title, "OATS says: the last start failed\nRepository: desktop-repo · Branch: b/broken · Claude", "its error, then its facts");
+  assert.equal(u.row("broken").title, "OATS says: the last start failed\nBroken, stopped", "its error, then its name and state");
   assert.equal(u.row("broken").getAttribute("aria-description"), "OATS says: the last start failed");
   assert.deepEqual(u.lines("broken"), ["Broken", "oats-desktop-developer · This Mac"]);
   u.render([remote("far", { running: null, serverUnreached: true, runtimeError: "ssh failed" })]);
@@ -170,8 +170,9 @@ test("slice1 context menu keeps every action", t => {
   // What the removed overlay offered, per row (shell.mjs before slice 1): the pull request's link on a local row that is
   // not held, and Start… on a stopped row that is not held. Today's menu items besides (instance-acts.mjs, #1559).
   const overlay = { running: ["open-pr"], stopped: ["open-pr", "start"], unknown: ["open-pr"], held: [], "remote stopped": ["start"] };
-  const today = { running: ["open-split", "open-pr", "inspect", "restart", "stop", "retire"], stopped: ["open-split", "open-pr", "inspect", "start", "stop", "retire"],
-    unknown: ["open-split", "open-pr", "inspect", "stop", "retire"], held: ["retire"], "remote stopped": ["open-split", "open-pr", "inspect", "start", "stop", "retire"] };
+  // Slice 6a adds Details, first, to every row's menu.
+  const today = { running: ["details", "open-split", "open-pr", "inspect", "restart", "stop", "retire"], stopped: ["details", "open-split", "open-pr", "inspect", "start", "stop", "retire"],
+    unknown: ["details", "open-split", "open-pr", "inspect", "stop", "retire"], held: ["details", "retire"], "remote stopped": ["details", "open-split", "open-pr", "inspect", "start", "stop", "retire"] };
   for (const [kind, row] of Object.entries(rows)) {
     const items = u.menu(row.instance).map(item => item.dataset.action);
     assert.deepEqual(items, today[kind], `${kind}: today's menu, unchanged`);
@@ -412,7 +413,7 @@ test("slice1 foot and palette", t => {
     // Pinned instances: the palette's Instance: Pin to top / Unpin carry their real labels and offer themselves for no target.
     PIN_LABELS, pinTargetOffer: () => null, runPinCommand: async () => {},
   });
-  for (const [label, action] of [[/^Theme: choose…$/, "app.themePicker"], [/^Font: choose…$/, "app.fontPicker"], [/keyboard shortcuts…$/i, "app.shortcuts"], [/^Sidebar: toggle \(hide\/show\)$/, "sidebar.toggle"]]) {
+  for (const [label, action] of [[/^Theme: choose…$/, "app.themePicker"], [/^Font: choose…$/, "app.fontPicker"], [/keyboard shortcuts…$/i, "app.shortcuts"], [/^Sidebar: collapse to the rail \/ expand$/, "sidebar.toggle"]]) { // slice 6a: full ↔ rail
     const command = commands.find(c => label.test(c.label));
     assert.ok(command, `the palette lists ${label}`);
     ran.length = 0; command.run(); assert.deepEqual(ran, [action], `${command.label} runs ${action}`);

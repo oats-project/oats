@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { JSDOM } from "jsdom";
 import { NAV, NAV_TABS, PINNED, navTab, pinnedRowFor } from "../renderer/shell-nav.mjs";
-import { requestSplit, groupOfTab } from "../renderer/split-layout.mjs";
+import { requestSplit, groupOfTab, removeSplitTab } from "../renderer/split-layout.mjs";
 import { splitControlsState } from "../renderer/split-controls.mjs";
 import { tabVisibleInContext, canActivateTab } from "../renderer/workspace-tabs.mjs";
 import { createSidebarRail } from "../renderer/sidebar-rail.mjs";
@@ -28,7 +28,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
  * are doubles that record what they were asked. */
 function pages({ split = null, open = [] } = {}) {
   const tabs = new Map(open.map((t, i) => [i + 1, { workspace: "A", ...t }]));
-  const c = { tabs, split, NAV, navTab, canActivateTab, opened: [], selected: [], souls: [],
+  const c = { tabs, split, NAV, navTab, canActivateTab, groupOfTab, removeSplitTab, opened: [], selected: [], souls: [],
     windowState: () => "bound", showChooser() {}, hideEmptyState() {}, currentWorkspace: () => "A", homeSeq: 0,
     openWorkspaceSouls: (tab) => { c.souls.push(tab); },
     selectTab: (id) => { c.selected.push(id); return true; },
@@ -64,6 +64,8 @@ test("slice6a pages open as tabs", async () => {
   home.c.split = { ...split, groups: [{ id: 1, tabs: [1], activeTab: 1 }, { id: 2, tabs: [2], activeTab: 2 }] };
   await home.showStage("home");
   assert.deepEqual(home.c.selected, [2], "the focused pane's own Home is focused");
+  // A one-tab page open in another pane moves to the focused one.
+  assert.match(fn("showStage"), /if \(!here && split && focusedGroup && groupOfTab\(split, reuse\[0\]\)\) split = \{ \.\.\.removeSplitTab\(split, reuse\[0\]\)\.split, focusedGroup: focusedGroup\.id \};/);
   // Every tab kind lives in the strip and the groups: a page beside a terminal.
   assert.equal(tabVisibleInContext({ kind: "page", workspace: "A" }, "instances", "A"), true);
   assert.equal(splitControlsState(null, 1, "page", true).visible, true, "a page tab can split");
@@ -115,7 +117,7 @@ test("slice6a details for a stopped agent", (t) => {
   // Every way in: i on a row, Ctrl+Shift+I (panel.toggle), the row's menu and the palette.
   assert.match(shell, /if \(e\.key !== "i" \|\| e\.altKey \|\| e\.ctrlKey \|\| e\.metaKey \|\| e\.shiftKey \|\| typeof openDetailsTab !== "function"\) return;\n          e\.preventDefault\(\); openDetailsTab\(i\);/);
   assert.match(shell, /registerAction\(\{ id: "panel\.toggle", label: "Agent: Details"/);
-  assert.match(shell, /\{ action: 'details', actionId: 'panel\.toggle', label: 'Details', reason: '' \},/);
+  assert.match(shell, /\{ action: 'details', actionId: 'panel\.toggle', label: 'Details', reason: '', always: true \},/);
   assert.match(shell, /if \(action === 'details'\) \{ openDetailsTab\(instance\); return; \}/);
   assert.match(shell, /\{ label: "Agent: Details", detail: chordDetail\("panel\.toggle"\)/);
 });

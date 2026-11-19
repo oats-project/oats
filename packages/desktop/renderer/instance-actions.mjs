@@ -186,9 +186,10 @@ export function instanceActions(doc, instance, { row, invoke, openLifecycle, ope
   }
   // The caller's own items go in front only on a row that offers everything a home normally does: a blocked
   // row has no menu, and a limited one (#802: a home a spawn or a retire left half cleaned; #1247: one being
-  // retired, its Retire secondary) offers Retire alone.
+  // retired, its Retire secondary) offers Retire alone, and the caller's items marked `always` (Details, slice 6a:
+  // every row's, held included, a read of what the roster knows).
   // An act listed with a reason (Start on a row whose session backend is gone) stays visible, disabled, with it.
-  const descriptors = forgets ? [{ action: 'forget', label: LABELS.forget }] : [...(offer.blocked || offer.limited ? [] : extra),
+  const descriptors = forgets ? [{ action: 'forget', label: LABELS.forget }] : [...(offer.blocked || offer.limited ? extra.filter(row => row.always === true) : extra),
     ...offer.acts.map(({ verb, reason, secondary }) => ({ action: verb, label: LABELS[verb], ...(reason ? { reason: reasonLine(reason) ?? '', unavailable: true } : {}),
       ...(secondary ? { secondary: true } : {}) }))];
   for (const descriptor of descriptors) {

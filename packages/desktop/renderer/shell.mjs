@@ -79,7 +79,6 @@ import { createSidebarRail, railCSS } from "./sidebar-rail.mjs";
 import { createAutomationsFailure, FAILED_RUN_TEXT } from "./automations-failure.mjs";
 import { automationsSupported } from "./views/automations.mjs";
 import { identityCSS } from "./identity-marks.mjs";
-import { rowFactsTitle } from "./row-facts-title.mjs";
 import { createContextPanel, contextPanelCSS } from "./context-panel.mjs";
 import { createInstanceTeamsSection, teamsCSS } from "./instance-teams.mjs";
 import { createInstanceSoulSection, instanceSoulCSS } from "./instance-soul.mjs";
@@ -428,7 +427,13 @@ async function showStage(name) {
   const focusedGroup = split?.groups.find((g) => g.id === split.focusedGroup) ?? null;
   const here = focusedGroup ? open.find(([id]) => focusedGroup.tabs.includes(id)) : open[0];
   const reuse = here ?? (name === "home" ? null : open[0]);
-  if (reuse) { selectTab(reuse[0]); return; }
+  if (reuse) {
+    // A one-tab page open in another pane moves to the focused one (the lead, slice 6a): out of its group, then
+    // activation adds it to the focused group.
+    if (!here && split && focusedGroup && groupOfTab(split, reuse[0])) split = { ...removeSplitTab(split, reuse[0]).split, focusedGroup: focusedGroup.id };
+    selectTab(reuse[0]);
+    return;
+  }
   // One open of a page at a time per workspace and group: a second ask while the first is mounting waits for it.
   const pendingKey = `${ws}\u0000${name}\u0000${focusedGroup?.id ?? ""}`;
   if (pageOpens.has(pendingKey)) return pageOpens.get(pendingKey);
@@ -1365,12 +1370,10 @@ function renderContextRoster(instances) {
         // A row of a stale deployment (#482: its last re-read failed) is held the same way.
         const staleStart = heldStale && !i.running;
         if (staleStart) { row.title = ROSTER_STALE_TITLE; row.setAttribute("aria-description", ROSTER_STALE_TITLE); }
-        // The facts the hover card held that line 2 doesn't say (slice 1, an interim the lead agreed): the repository,
-        // the branch and the harness and model, on a line of the row's native tooltip, after what it says already.
-        // Nothing in its description: a screen reader doesn't hear them on every row (a known limitation for the
-        // keyboard until Details serves any row, a later slice); the instance panel shows them with a terminal open.
-        const factsTitle = rowFactsTitle(i);
-        if (factsTitle) row.title = [row.title, factsTitle].filter(Boolean).join("\n");
+        // The row's tooltip: what it says already (an error, a held read), then its name and state (slice 6a: the
+        // interim facts of slice 1, the repository, the branch, the harness and model, moved to Details, which every
+        // row has now, by keyboard too).
+        row.title = [row.title, `${instanceDisplayName(i.instance) || i.instance}, ${state === "running" ? "running" : state === "stopped" ? "stopped" : "status unknown"}`].filter(Boolean).join("\n");
         row.addEventListener("click", (e) => {
           // A click on the disclosure opens or closes the row, whatever the row's state, and opens nothing; the
           // focus stays on the row, as the tree keys leave it.
@@ -1409,7 +1412,7 @@ function renderContextRoster(instances) {
           shortcut: id => { const chord = getBinding(id, isMac); return chord ? formatChord(chord, isMac) : ''; },
           extra: [
             // Details (slice 6a): every row's, running or not, held included: a static read of what the roster knows.
-            { action: 'details', actionId: 'panel.toggle', label: 'Details', reason: '' },
+            { action: 'details', actionId: 'panel.toggle', label: 'Details', reason: '', always: true },
             { action: 'open-split', actionId: 'instance.openSplit', label: 'Open in split', reason: () => !actionTarget ? 'Instance identity is not fully reported.'
               : unsupportedLine(i) || (i.running !== true ? 'No live terminal is reported.' : instanceSplitPlan(splitOpenState()).reason) },
             { action: 'open-pr', actionId: 'instance.openPullRequest', label: 'Open pull request…', reason: !actionTarget ? 'Instance identity is not fully reported.'
@@ -1510,11 +1513,8 @@ function pendingSpawnRow(i, startedAt = null, relation = "") {
   const why = settingUp ? held.sentence(i.instance) : unknown ? `The outcome of spawning ${i.instance} is not known yet. Check result asks again.`
     : reported ? `${i.instance} is being spawned. It opens once the spawn finishes.` : `${i.instance} is being spawned. It opens once the roster reports it.`;
   row.setAttribute("aria-description", why);
-  // A row the roster reports (a home setting up its worktree, an in-flight job's reported home) adds its reported
-  // facts to its tooltip, as an ordinary row does (the slice 1 interim), with its soul, which its state line
-  // replaces; a row only this window knows has none to add, so nothing is guessed.
-  const reportedFacts = reported ? [typeof i.agent === "string" && i.agent ? `Soul: ${i.agent}` : null, rowFactsTitle(i)].filter(Boolean).join(" · ") : "";
-  row.title = [why, reportedFacts].filter(Boolean).join("\n");
+  // Its tooltip says why it waits; its facts are its Details' (slice 6a).
+  row.title = why;
   const mark = document.createElement("span");
   mark.setAttribute("aria-hidden", "true");
   mark.className = unknown && !checking ? "ctx-dot unknown" : "ctx-spawn-spinner";
