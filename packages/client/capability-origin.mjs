@@ -1,5 +1,8 @@
 /** Who made a capability, as both clients say it on a capability row (the Desktop UI rework, D24): "official"
- * (published by OATS: a small ✓, "Verified: published by OATS") or "by <source>". Decided from facts the kernel
+ * (a small ✓ whose words say which fact made it official: "Official: in the OATS catalog" or "Official: from the
+ * OATS repository") or "by <source>". The words say only what the rule shows: "verified" or "published by OATS" is a
+ * trust claim a client rule can't make (dec-feb06c322c75, "listed is not trusted"); a kernel fact for "official" is
+ * oats-project/oats#1981. Decided from facts the kernel
  * already reports, never from a name (an `oats.` prefix proves nothing) and never from a new field:
  *
  *  - a **package** capability is official when `oats workspace status` reports its package pinned from the
@@ -21,7 +24,8 @@ export const OATS_REPO_KEY = 'github.com/oats-project/oats';
 
 export const ORIGIN_COPY = Object.freeze({
   official: 'OATS',
-  title: 'Verified: published by OATS',
+  // The mark's words per the fact that made it official (`reason`): its tooltip and its accessible name.
+  officialTitle: Object.freeze({ catalog: 'Official: in the OATS catalog', 'oats-repo': 'Official: from the OATS repository' }),
   by: source => `by ${source}`,
 });
 

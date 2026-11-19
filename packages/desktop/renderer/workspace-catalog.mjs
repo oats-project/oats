@@ -1,6 +1,6 @@
 /** Workspace › Capabilities (the Desktop UI rework, slice 3b; guide tour step 34): every capability of the
  * workspace as one flat list of calm rows, core ones first ("show core and other ones as really the same").
- * A row says its name, who made it (a ✓, "Verified: published by OATS", or "by <source>":
+ * A row says its name, who made it (a ✓, "Official: in the OATS catalog" / "Official: from the OATS repository", or "by <source>":
  * packages/client/capability-origin.mjs), one line of what it does, and its tags: "core" for a knowledge,
  * messaging or tasks capability, "default" for one the workspace gives every soul (workspace-defaults.mjs says
  * what defaults are, in one sentence above the list), "repo only" for a capability only its repository's souls may
@@ -31,8 +31,8 @@ export const catalogCSS = `
 /* Dim tags: muted words in a hairline frame, never a tint. */
 .cap-tag { flex:none; display:inline-flex; align-items:center; height:18px; padding:0 6px; border:1px solid var(--border); border-radius:4px; color:var(--muted); font-weight:500; font-size:11px; line-height:normal; white-space:nowrap; box-sizing:border-box; }
 .cap-origin { flex:none; display:inline-flex; align-items:center; gap:5px; margin-left:auto; padding-left:12px; color:var(--muted); font-size:12px; white-space:nowrap; }
-/* The verified mark: a check in a circle, its meaning in the title and the accessible name. */
-.cap-verified { display:inline-grid; place-items:center; width:16px; height:16px; border:1px solid var(--muted); border-radius:50%; color:var(--fg); box-sizing:border-box; }
+/* The official mark: a check in a circle, its meaning in the title and the accessible name. */
+.cap-official { display:inline-grid; place-items:center; width:16px; height:16px; border:1px solid var(--muted); border-radius:50%; color:var(--fg); box-sizing:border-box; }
 .cap-row-desc { min-width:0; color:var(--muted); font-size:12.5px; line-height:1.4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .source-chip { display:inline-flex; align-items:center; gap:7px; min-width:0; color:var(--muted); font-weight:normal; font-size:12px; line-height:normal; font-family:var(--mono,monospace); }
 .source-chip .shell-icon { flex:none; }
@@ -47,15 +47,16 @@ export const catalogCSS = `
 .catalog-note.warn { color:var(--warn); }
 `;
 
-/** A row's origin: the verified mark (official) or "by <source>". Its words are the element's accessible text; `words`
+/** A row's origin: the official mark (its words: which fact made it official, ORIGIN_COPY.officialTitle) or "by <source>". Its words are the element's accessible text; `words`
  * shows them beside the mark too (the capability page's origin line). */
 export function originElement(doc, origin, { words: visible = false } = {}) {
   const el = doc.createElement('span'); el.className = 'cap-origin';
   if (origin.official) {
-    el.dataset.official = 'true'; el.title = ORIGIN_COPY.title;
-    const mark = doc.createElement('span'); mark.className = 'cap-verified'; mark.setAttribute('aria-hidden', 'true');
+    const said = ORIGIN_COPY.officialTitle[origin.reason];
+    el.dataset.official = 'true'; el.title = said;
+    const mark = doc.createElement('span'); mark.className = 'cap-official'; mark.setAttribute('aria-hidden', 'true');
     mark.append(iconElement(doc, 'check', { size: 11 }));
-    const words = doc.createElement('span'); words.className = visible ? 'cap-origin-words' : 'workspace-sr-only'; words.textContent = ORIGIN_COPY.title;
+    const words = doc.createElement('span'); words.className = visible ? 'cap-origin-words' : 'workspace-sr-only'; words.textContent = said;
     el.append(mark, words);
   } else el.textContent = ORIGIN_COPY.by(origin.by);
   return el;

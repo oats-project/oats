@@ -86,7 +86,7 @@ test('Capabilities is the kernel catalog: one flat list, who made each, no appro
   // members are "by" their source; no package name or version on the page.
   const row = name => u.rows().find(el => el.dataset.capability === name);
   assert.deepEqual(u.rows().map(el => el.dataset.capability), ['nw-brand-voice', 'nw-campaign-metrics', 'nw-deploy', 'nw-house-style', 'nw-lint', 'nw-release-tooling', 'nw-tools-dev', 'nw-warehouse-access', 'oats.core', 'oats.okf']);
-  assert.equal(row('oats.okf').querySelector('.cap-origin').title, 'Verified: published by OATS');
+  assert.equal(row('oats.okf').querySelector('.cap-origin').title, 'Official: in the OATS catalog');
   assert.equal(row('nw-deploy').querySelector('.cap-origin').textContent, 'by nw-tools', 'a git pin: its repository');
   assert.equal(row('nw-brand-voice').querySelector('.cap-origin').textContent, 'by marketing');
   assert.doesNotMatch(u.doc.querySelector('.workspace-discovery .cap-list').textContent, /2\.1\.3|0\.4\.0|oats\.framework/);

@@ -410,7 +410,7 @@ export function renderCapabilityPage(host, { row, status, instances, souls = [],
   host.append(page);
   return page;
 }
-/** The origin line: who made it (the verified mark with its words, or "by <source>"), then where it comes from. */
+/** The origin line: who made it (the official mark with its words, or "by <source>"), then where it comes from. */
 function originLine(doc, row, status, names) {
   const line = el(doc, 'p', null, 'cap-page-origin');
   line.append(originElement(doc, capabilityOrigin(row, status, names), { words: true }));

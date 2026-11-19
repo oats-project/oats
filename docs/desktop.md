@@ -487,18 +487,25 @@ name. There are no sections, repository groups or colour marks. Each row
 shows:
 
 - the capability's name;
-- who made it: a small ✓ in a circle (its tooltip says **Verified: published
-  by OATS**) or **by** its source (a member repository's name, or a git
-  package's repository);
+- who made it: a small ✓ in a circle for an official one (its tooltip says
+  which fact made it official: **Official: in the OATS catalog** or **Official:
+  from the OATS repository**), or **by** its source (a member repository's
+  name, or a git package's repository);
 - one line of what it does (the manifest's description, cut to one line);
 - its tags: **core**, **default** for one the workspace gives every soul,
   **default · off** for one the workspace turns off, and **repo only** for one
   only its own repository's souls can use.
 
-A capability is verified when OATS publishes it, decided from what the kernel
-already reports: a package the workspace pins from the official catalog
+A capability is official by a rule of the Desktop over what the kernel
+already reports: a package the workspace pins from the catalog
 (`oats workspace status` reports its source as `catalog:<id>`), or a
-capability of the OATS repository itself. Its name proves nothing. A package's
+capability of the OATS repository itself. Its name proves nothing. The mark
+says only that: it is not a trust claim, since being listed is not being
+trusted. Its limit: `OATS_PACKAGE_CATALOG` can point the kernel at another
+catalog file, and workspace status doesn't say which catalog was read, so an
+operator who points it elsewhere sees that catalog's packages marked official.
+A kernel fact for "official" is
+[oats-project/oats#1981](https://github.com/oats-project/oats/issues/1981). A package's
 name and version are not on this list: **Setup**'s Packages box shows them,
 and so does the capability's page.
 

@@ -60,19 +60,23 @@ test('slice3b capabilities one list core first with tags', t => {
   assert.equal(u.$$('.caps h2, .caps h3, .catalog-pills, .catalog-tile, .identity-mark, .capability-nav').length, 0);
   // Core first in slot order (knowledge, messaging, tasks), then the rest by name; every row says who made it.
   assert.deepEqual(u.$$('.cap-row').map(line), [
-    'oats.okf [core] [default] Verified: published by OATS',
-    'oats.aweb [core] Verified: published by OATS',
-    'oats.jira [core] Verified: published by OATS',
-    'oats.authoring [default · off] Verified: published by OATS',
-    'oats.core [default] Verified: published by OATS',
+    'oats.okf [core] [default] Official: in the OATS catalog',
+    'oats.aweb [core] Official: in the OATS catalog',
+    'oats.jira [core] Official: in the OATS catalog',
+    'oats.authoring [default · off] Official: from the OATS repository',
+    'oats.core [default] Official: in the OATS catalog',
     'oats.folio by oats-apps',
     'own-runbook [repo only] by agents',
     'zeta-notes [default] by agents',
   ]);
-  // The verified mark is a check in a circle; its words are its title and its accessible text.
+  // The official mark is a check in a circle; its words (which fact made it official) are its title and its accessible
+  // text. Never "verified" or "published by": a client rule can't claim trust (dec-feb06c322c75).
   const official = u.$('.cap-row .cap-origin[data-official]');
-  assert.equal(official.title, 'Verified: published by OATS');
-  assert.ok(official.querySelector('.cap-verified[aria-hidden=true] svg'));
+  assert.equal(official.title, 'Official: in the OATS catalog');
+  assert.equal(official.textContent, 'Official: in the OATS catalog', 'the accessible text');
+  assert.ok(official.querySelector('.cap-official[aria-hidden=true] svg'));
+  assert.equal(u.$('[data-capability="oats.authoring"] .cap-origin').title, 'Official: from the OATS repository');
+  assert.doesNotMatch(u.$('.cap-list').textContent + u.$$('[title]').map(e => e.title).join(' '), /verified|published by/i);
   // The core tag names its slot in its tooltip; no package name or version on the row.
   assert.match(u.$('[data-tag=core]').title, /^Core: Knowledge/);
   assert.doesNotMatch(u.$('.cap-list').textContent, /2\.1\.3|oats\.framework|1\.4\.0/);
