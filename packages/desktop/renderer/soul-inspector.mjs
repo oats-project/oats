@@ -707,18 +707,21 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
     // when it differs, where the choice is set) are small lines under it.
     const launch = said.launch, harness = harnessOf(soul);
     const harnessCell = [];
+    // The harness, then (muted) its model, a launch configuration and what chose it: one phrase, " · " between its parts.
     if (launch) {
       const e = launch.effective;
-      harnessCell.push(createRuntimeBadge(doc, e.harness), node('span', `${launchHarnessName(e.harness)} · ${launchModelText(e)}`, 'strong'),
-        node('span', [e.launchConfig ? `launch configuration ${e.launchConfig}` : null, launchFromText(launch.from)].filter(Boolean).map(t => ` · ${t}`).join(''), 'muted'));
+      harnessCell.push(createRuntimeBadge(doc, e.harness), node('span', launchHarnessName(e.harness), 'strong'),
+        node('span', [launchModelText(e), e.launchConfig ? `launch configuration ${e.launchConfig}` : null, launchFromText(launch.from)].filter(Boolean).join(' · '), 'muted'));
     } else if (typeof harness === 'string' && harness) {
       harnessCell.push(createRuntimeBadge(doc, harness), node('span', launchHarnessName(harness), 'strong'));
-      if (typeof soul.model === 'string' && soul.model) harnessCell.push(node('span', ` · ${soul.model} by default`, 'muted'));
+      if (typeof soul.model === 'string' && soul.model) harnessCell.push(node('span', `${soul.model} by default`, 'muted'));
     }
-    const notes = [...(launch ? [declaredText(launch)].filter(Boolean) : []), ...said.notes];
     const harnessValue = row('harness', 'Harness · model', ...harnessCell);
-    for (const note of notes) harnessValue.append(node('span', note, 'soul-top-note'));
-    harnessValue.dataset.launchNotes = '';
+    // Under it, small: the soul's own preference when this computer runs something else, and where the choice is set
+    // (a launch problem is the Ready row's). The notes carry the side panel's classes (launch-declared, launch-at).
+    const notes = [...(launch ? [declaredText(launch)].filter(Boolean).map(text => [text, 'launch-declared']) : []), ...said.notes.map(text => [text, 'launch-at'])];
+    for (const [text, cls] of notes) harnessValue.append(node('span', text, `soul-top-note ${cls}`));
+    if (notes.length) harnessValue.dataset.launchNotes = '';
     // Teams: the ones it may join (mapped here), the default marked; "Teams here" (this computer's, editable) folded under it.
     const { teamModel, soulKey } = teamsHereConditions();
     const labels = mapped.length ? mapped.map(t => t.default === true ? `${t.label} (default)` : t.label).join(' · ')

@@ -5,6 +5,7 @@
  * it. Up/Down, Home and End move between the rows of one list (`roveCapabilityLines`), one tab stop for the list.
  *
  * Every word on the row is the kernel's (the name, the source, the manifest's description), shown as text. */
+import { iconElement } from './shell-icons.mjs';
 
 export const CAPABILITY_LINE_COPY = Object.freeze({
   core: 'core',
@@ -50,7 +51,11 @@ export function capabilityLine(doc, { name, by = null, description = null, core 
   row.dataset.capability = name;
   const head = node('span', undefined, 'cap-line-head');
   head.append(node('span', name, 'cap-line-name'));
-  if (verified) { const mark = node('span', '✓', 'cap-line-verified'); mark.title = CAPABILITY_LINE_COPY.verified; mark.setAttribute('aria-label', CAPABILITY_LINE_COPY.verified); head.append(mark); }
+  if (verified) {
+    const mark = node('span', undefined, 'cap-line-verified'); mark.title = CAPABILITY_LINE_COPY.verified;
+    mark.setAttribute('role', 'img'); mark.setAttribute('aria-label', CAPABILITY_LINE_COPY.verified);
+    mark.append(iconElement(doc, 'check', { size: 12 })); head.append(mark);
+  }
   else if (typeof by === 'string' && by) head.append(node('span', CAPABILITY_LINE_COPY.by(by), 'cap-line-by'));
   if (core) head.append(node('span', CAPABILITY_LINE_COPY.core, 'cap-line-tag'));
   if (isDefault) head.append(node('span', CAPABILITY_LINE_COPY.isDefault, 'cap-line-tag'));
