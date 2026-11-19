@@ -653,6 +653,18 @@ split into sections) is `packages/client/roster-sections.mjs`.
   decided on the full roster (a filter or a collapse moves no row, #971). The palette alone passes its
   last-focus record (`{ lastFocus }`): the clusters are ordered by `recencyOrder` first (#1383), and the
   sidebar and the TUI never pass it.
+- **The disclosure, and roots that start collapsed** (the product owner, 2026-11-19; `roster-disclosure.mjs`):
+  `sectionChildren` lists each row's children inside its own section (the main tree or the Background section,
+  and a deployment's part), and a row with any gets `span.ctx-disclosure` on its `.ctx-name-line`, after the
+  name and "New": a chevron (`svg.ctx-disclosure-chevron`, turned down by `.ctx-inst[aria-expanded="true"]`), the
+  count of every row under it (`rowsUnder`, `aria-hidden`) and a `.sr-only` ", N below". The row's click handler
+  opens or closes the row when the click lands on the mark (no terminal opens; the focus and the roving stop stay
+  on the row), and the tree keys do the same (`onRosterRowKey`). The rows drawn collapsed are `collapsedRows`: the
+  shell's `collapsedInstances` (closed by hand) and every root of its section with children that is not in
+  `expandedInstances` (opened by hand); both are in memory per workspace and re-homed together
+  (`rehomeWorkspaceState`), and `setRowOpen` is the one place both change (the row keys, the mark, `showInRoster`
+  and `revealPendingSpawn`). Tests of other behaviour draw every root open (test/helpers/view-context.mjs
+  `expandedInstances`); `roster-disclosure-shell.test.mjs` runs the default.
 - **A row's name is its words** (0.68.1, the product owner): `rosterName(doc, name)` (instance-tree-view.mjs)
   builds `.ctx-name` for both row builders (shell.mjs `renderContextRoster` and `pendingSpawnRow`). Its first
   child is `instanceDisplayName(name)` (`packages/client/instance-display-name.mjs`, the TUI's too:
