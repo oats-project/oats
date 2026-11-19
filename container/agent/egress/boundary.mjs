@@ -22,7 +22,8 @@ export function boundaryControls(plan) {
       "IPv4 IPAM gateway required", "host gateway denied with live canary", "direct upstream access denied",
       "PostgreSQL and Redis denied with live controls", "secret and socket paths absent"],
     declared: roles.map(role => `${role}: proxy DNS and verified HTTPS 200`)
-      .concat(roles.includes("signer") ? ["signer: namespace authority TXT and human DNS/TLS refusal; separate ingress admission required"] : []),
+      .concat(roles.includes("registry") ? ["registry: exact namespace authority TXT"] : [])
+      .concat(roles.includes("signer") ? ["signer: human DNS/TLS refusal; separate ingress admission required"] : []),
   };
 }
 

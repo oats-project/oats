@@ -44,6 +44,9 @@ For example, a messaging-only derived policy is:
   "frontAddress": "172.30.0.2",
   "privateIngressAddresses": ["10.20.0.10"],
   "deniedAddresses": ["10.20.0.11", "10.20.0.12"],
+  "authorityRecords": [
+    {"name": "_awid.team.example.invalid", "text": "awid=v1; controller=did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7; registry=https://registry.example.invalid;"}
+  ],
   "targets": {
     "aweb": {"origin": "https://aweb.example.invalid", "addresses": ["10.20.0.10"]},
     "registry": {"origin": "https://registry.example.invalid", "addresses": ["10.20.0.10"]}
@@ -51,10 +54,14 @@ For example, a messaging-only derived policy is:
 }
 ```
 
-`humanOrigin` and `authorityRecords` belong to the signer: both are required
-when signer is declared (including the legacy full set), and both are refused
-when signer is absent. A subset without signer needs no signer profile or
-fabricated authority records. Adding Secrets requires adding `secrets` to both
+`humanOrigin` is required with signer and refused without signer.
+`authorityRecords` is required with registry and refused without registry,
+independently of signer. The full default keeps both fields. Namespace authority
+is needed for registry discovery and sender verification in messaging-only
+deployments too: this resolver is authoritative for the root and has no
+forwarding fallback for `_awid.<domain>`. A subset without signer uses its
+provisioned registry authorities and needs no invented signer service.
+Adding Secrets requires adding `secrets` to both
 `roles` and `targets`, with its actual origin and pinned address.
 
 Origins are exact HTTPS DNS origins
@@ -173,10 +180,13 @@ contains no login, seat or model request and removes its own resources. Set
 plain-versus-isolated gateway regression. Neither fixture proves a model turn,
 verified wake, the actual deployment boundary or Kubernetes enforcement.
 
-When signer is declared, the wrapper derives `authorityRecords` only from the signer's validated
-`namespace_authorities` and `registry_origin`, using the existing AWID TXT
-encoding and parser. It checks the profile against `team.registryUrl` and the
-configured signer origins. Enabling the signer role requires that profile. Each
+When registry is declared, the wrapper supplies `authorityRecords` from the
+existing provisioned public namespace authorities, using the existing AWID TXT
+encoding/parser and registry-origin/profile binding against `team.registryUrl`.
+These authorities are not a signer dependency. Where a signer profile supplies
+the material, keep its validated `namespace_authorities`, `registry_origin` and
+configured signer-origin checks; reduced sets still require the registry's
+provisioned authority material without inventing a signer profile or service. Each
 `name` is the exact `_awid.<domain>` owner name, without a trailing dot; `text`
 is the complete existing AWID record, without zone-file quotes. This component
 serializes those public records into the authoritative zone. It does not invent
@@ -496,8 +506,9 @@ a wildcard address. Configure an explicit IPv4 `gateway` in the agents network's
 adapter refuses to infer a probe address from a subnet.
 
 The shared in-container body requires the configured resolver and every declared
-HTTPS control through that resolver and proxy. Signer adds exact namespace TXT
-records, negative human DNS and refusal of human TLS SNI. Every declaration
+HTTPS control through that resolver and proxy. Registry adds the exact provisioned
+namespace TXT checks, whether or not signer is declared; missing or incorrect
+answers refuse admission. Signer adds negative human DNS and refusal of human TLS SNI. Every declaration
 requires a fresh unlisted DNS name and TLS host to be refused, and denied direct upstream,
 PostgreSQL, Redis and host-canary connections. Secret and engine-socket paths
 must be absent. It reads no service credential. Only after final live controls

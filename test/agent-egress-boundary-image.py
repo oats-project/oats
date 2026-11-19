@@ -63,7 +63,9 @@ try:
     if sys.argv[3] != "full":
         policy["roles"] = list(roles)
     if "signer" in roles:
-        policy.update(humanOrigin="https://" + human, authorityRecords=[{
+        policy["humanOrigin"] = "https://" + human
+    if "registry" in roles:
+        policy.update(authorityRecords=[{
             "name":"_awid.team.example.invalid",
             "text":"awid=v1; controller=did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7; registry=https://registry.example.invalid;"}])
     policy_file = write("policy.json", json.dumps(policy))
@@ -133,6 +135,9 @@ net.createServer(socket=>socket.end()).listen(Number(process.argv[2]),'0.0.0.0',
     result = subprocess.run(probe, env=env, text=True, capture_output=True)
     print(result.stderr, end="", flush=True)
     assert result.returncode == 0 and result.stdout == "OATS_EGRESS_BOUNDARY_PASS\n", "real Compose boundary probe failed"
+    if "registry" in roles:
+        assert "egress boundary declared: registry: exact namespace authority TXT\n" in result.stderr
+        print("PASS registry authority TXT:",sys.argv[3],flush=True)
     print("PASS real Compose boundary:",sys.argv[3],flush=True)
     # An alternate network is refused on every declaration, even if all service
     # controls still answer. Restore only our endpoint before normal cleanup.

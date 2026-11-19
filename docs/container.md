@@ -817,8 +817,11 @@ non-secret runtime policy from the shared deployment configuration and signer
 profile when signer is declared. An optional derived `roles` array selects a
 nonempty subset of aweb, logs, registry, secrets and signer, with exactly matching
 targets and probe paths. Omission retains the five-role policy and output.
-Signer `humanOrigin` and `authorityRecords` are required with signer and refused
-without it. The proxy permits only the named API and registry routes and serves
+Signer `humanOrigin` is required with signer and refused without it. Registry
+`authorityRecords` are required with registry and refused without it, independently
+of signer: messaging-only namespaces still need exact `_awid` TXT evidence for
+discovery and sender verification. The root-authoritative resolver has no
+forwarding fallback. The proxy permits only the named API and registry routes and serves
 only the declared public namespace authority records. Service custody keys,
 PostgreSQL, Redis and the Docker socket stay outside the agent container.
 

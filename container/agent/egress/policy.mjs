@@ -70,14 +70,15 @@ function externalRoutes(policy, hosts) {
 
 export function compilePolicy(policy) {
   assert.ok(policy && typeof policy === "object" && !Array.isArray(policy), "egress policy has an invalid field set");
-  const roles = policyRoles(policy), signer = roles.includes("signer");
+  const roles = policyRoles(policy), signer = roles.includes("signer"), registry = roles.includes("registry");
   const fields = ["deniedAddresses", "frontAddress", "privateIngressAddresses", "targets"];
-  if (signer) fields.push("authorityRecords", "humanOrigin");
+  if (signer) fields.push("humanOrigin");
+  if (registry) fields.push("authorityRecords");
   if (Object.hasOwn(policy, "roles")) fields.push("roles");
   if (Object.hasOwn(policy,"externalTargets") || Object.hasOwn(policy,"externalResolverAddresses"))
     fields.push("externalTargets", "externalResolverAddresses");
   assert.equal(Object.keys(policy).sort().join(","), fields.sort().join(","),
-    "egress policy has an invalid field set; declare roles and supply signer fields only with signer");
+    "egress policy has an invalid field set; supply authorityRecords with registry and humanOrigin with signer");
   assert.ok(isIP(policy.frontAddress) === 4, "egress policy front address must be IPv4");
   assert.ok(policy.targets && typeof policy.targets === "object" && !Array.isArray(policy.targets)
     && Object.keys(policy.targets).sort().join(",") === [...roles].sort().join(","),
@@ -97,9 +98,10 @@ export function compilePolicy(policy) {
       && (!inRanges(ip, privateRanges) || policy.privateIngressAddresses.includes(ip)), "egress policy upstream address denied");
   }
   const external=externalRoutes(policy,hosts);
-  // Records have already passed the existing AWID parser and profile binding in
-  // the wrapper. Here only their DNS owner/data envelope is serialized.
-  if (signer) assert.ok(Array.isArray(policy.authorityRecords) && policy.authorityRecords.length > 0
+  // Registry discovery needs these records even without signer. The wrapper
+  // applies the existing AWID parser and registry binding before serialization;
+  // here only the DNS owner/data envelope is checked.
+  if (registry) assert.ok(Array.isArray(policy.authorityRecords) && policy.authorityRecords.length > 0
     && policy.authorityRecords.length <= 64, "egress policy requires provisioned namespace authority records");
   const recordNames = new Set();
   for (const record of policy.authorityRecords ?? []) {

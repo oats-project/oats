@@ -11,7 +11,8 @@ function subset(roles = ["aweb", "registry"]) {
   const policy = full();
   policy.roles = roles;
   policy.targets = Object.fromEntries(roles.map(role => [role, policy.targets[role]]));
-  if (!roles.includes("signer")) { delete policy.humanOrigin; delete policy.authorityRecords; }
+  if (!roles.includes("signer")) delete policy.humanOrigin;
+  if (!roles.includes("registry")) delete policy.authorityRecords;
   return policy;
 }
 
@@ -34,21 +35,34 @@ test("all nonempty declared subsets compile only their actual services", () => {
   }
 });
 
-test("missing, unknown, duplicate and extra roles or signer fields are refused", () => {
+test("missing, unknown, duplicate and extra roles or role-specific fields are refused", () => {
   for (const change of [
     p => { p.roles = []; }, p => { p.roles = null; }, p => { p.roles = "aweb"; },
     p => { p.roles.push("aweb"); }, p => { p.roles.push("unknown"); },
     p => { p.roles.push("logs"); }, p => { delete p.targets.aweb; },
     p => { p.targets.logs = full().targets.logs; }, p => { delete p.roles; },
     p => { p.targets = []; }, p => { p.humanOrigin = full().humanOrigin; },
-    p => { p.authorityRecords = full().authorityRecords; },
   ]) {
     const policy = subset(); change(policy);
     assert.throws(() => compilePolicy(policy), /egress policy/);
   }
-  for (const key of ["humanOrigin", "authorityRecords"]) {
-    const policy = subset(["signer"]); delete policy[key];
+  for (const [key,roles] of [["humanOrigin",["signer"]],["authorityRecords",["registry"]]]) {
+    const policy = subset(roles); delete policy[key];
     assert.throws(() => compilePolicy(policy), /egress policy/);
+  }
+  for (const roles of [["aweb"],["signer"]])
+    assert.throws(()=>compilePolicy({...subset(roles),authorityRecords:full().authorityRecords}),/egress policy/);
+});
+
+test("registry requires provisioned TXT records independently of signer", () => {
+  for (const roles of [["registry"],["aweb","registry"],["aweb","registry","secrets"]]) {
+    const policy=subset(roles),compiled=compilePolicy(policy);
+    assert.ok(compiled.zone.includes('_awid.team.example.invalid. 30 IN TXT "awid=v1;'));
+    for (const records of [undefined,[],null,[{...policy.authorityRecords[0],text:"not an AWID record"}]]) {
+      const invalid={...policy,authorityRecords:records};
+      if (records===undefined)delete invalid.authorityRecords;
+      assert.throws(()=>compilePolicy(invalid),/egress policy/);
+    }
   }
 });
 
@@ -61,7 +75,7 @@ test("health works without aweb and without invented signer fields", async () =>
 });
 
 function runtime(policy = subset()) {
-  const calls = { https: [], tls: [], tcp: [], dns: [] };
+  const calls = { https: [], tls: [], tcp: [], dns: [], txt: [] };
   const plan = { policy, uid: 20001, gid: 20001,
     allowedPaths: Object.fromEntries(Object.keys(policy.targets).map(role => [role, "/ready"])),
     deniedBackends: [{role:"postgres",address:"10.20.0.11",port:5432},{role:"redis",address:"10.20.0.12",port:6379}],
@@ -74,7 +88,10 @@ function runtime(policy = subset()) {
       calls.dns.push(host);
       if (Object.values(policy.targets).some(target => new URL(target.origin).hostname === host)) return [policy.frontAddress];
       throw Object.assign(new Error("not listed"), { code: "ENOTFOUND" });
-    }, resolveTxt: async host => policy.authorityRecords.filter(record => record.name === host).map(record => [record.text]) },
+    }, resolveTxt: async host => {
+      calls.txt.push(host);
+      return policy.authorityRecords.filter(record => record.name === host).map(record => [record.text]);
+    } },
     getStatus: async options => { calls.https.push(options); return 200; },
     tlsReachable: async options => { calls.tls.push(options); return false; },
     tcpReachable: async (address, port) => { calls.tcp.push([address, port]); return false; },
@@ -83,16 +100,31 @@ function runtime(policy = subset()) {
 }
 
 test("runtime derives role controls but always probes unlisted TLS/DNS, backends and gateway", async () => {
-  for (const roles of [["aweb", "registry"], ["aweb", "registry", "secrets"], ["registry"], Object.keys(full().targets)]) {
+  for (const roles of [["aweb"], ["signer"], ["aweb", "registry"], ["aweb", "registry", "secrets"], ["registry"], Object.keys(full().targets)]) {
     const {plan,io,calls} = runtime(subset(roles));
     assert.equal(await probeRuntime(plan, io), true);
     assert.equal(calls.https.length, roles.length);
+    assert.deepEqual(calls.txt,(plan.policy.authorityRecords??[]).map(record=>record.name));
     assert.ok(calls.dns.some(host => /^denied-.*\.invalid$/.test(host)));
     assert.ok(calls.tls.some(options => /^denied-.*\.invalid$/.test(options.host)));
     assert.ok(calls.tcp.some(([ip, port]) => ip === plan.gateway.address && port === plan.gateway.port));
     assert.ok(calls.tcp.some(([ip, port]) => ip === "10.20.0.11" && port === 5432));
     assert.ok(calls.tcp.some(([ip, port]) => ip === "10.20.0.12" && port === 6379));
     assert.match(runtimeProgram(plan), /OATS_EGRESS_BOUNDARY_PASS/);
+  }
+});
+
+test("registry runtime refuses missing or incorrect authority TXT evidence", async () => {
+  for (const roles of [["aweb","registry"],["aweb","registry","secrets"]]) {
+    const {plan,io}=runtime(subset(roles));
+    assert.equal(await probeRuntime(plan,io),true);
+    for (const answer of [[],[["awid=v1; controller=wrong; registry=https://elsewhere.invalid;"]]])
+      await assert.rejects(probeRuntime(plan,{...io,resolver:{...io.resolver,resolveTxt:async()=>answer}}),/namespace authority differs/);
+    await assert.rejects(probeRuntime(plan,{...io,resolver:{...io.resolver,resolveTxt:async()=>{
+      throw Object.assign(new Error("missing TXT"),{code:"ENOTFOUND"});
+    }}}),/namespace authority lookup failed/);
+    for (const records of [undefined,[]])
+      await assert.rejects(probeRuntime({...plan,policy:{...plan.policy,authorityRecords:records}},io),/namespace authority/);
   }
 });
 
@@ -164,8 +196,9 @@ test("control report identifies universal versus declared obligations and refuse
   const {plan}=runtime(),report=boundaryControls(plan);
   assert.ok(report.universal.some(item=>item.includes("gateway")));
   assert.ok(report.universal.some(item=>item.includes("unlisted TLS")));
-  assert.equal(report.declared.length,2);
+  assert.equal(report.declared.length,3);
   assert.ok(report.declared.every(item=>/^(aweb|registry):/.test(item)));
+  assert.ok(report.declared.includes("registry: exact namespace authority TXT"));
   assert.throws(()=>ipv4Gateway({IPAM:{Config:[{Subnet:"172.27.90.0/24"}]}},"agents"),/explicit IPv4 IPAM gateway/);
   assert.throws(()=>ipv4Gateway({IPAM:{Config:[{Gateway:"fd00::1"}]}},"agents"),/IPv4/);
 });

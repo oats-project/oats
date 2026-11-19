@@ -10,7 +10,8 @@
 | `signer.humanOrigin` | derived policy `humanOrigin` | exact HTTPS DNS origin; required with signer, refused without signer | none | Prevent the browser approval surface becoming an agent destination. |
 | `team.registryUrl` | derived policy `targets.registry.origin` | exact HTTPS DNS origin on 443; equals validated profile `registry_origin` | none | Sender verification in the broker's Node channel-core child and Go aw. |
 | `team.registryRoute` | runtime audit `registry` entry: `{path,log}` or `{path,external:true}` | wrapper-owned `local` or `external`; only registry may be external | external in the deployment bundle | Local ownership requires its backend witness; external uses matched verified-TLS 200 only, with no remote refusal/non-delivery claim. Existing local-registry bundles must select `local`. |
-| `signer.profileFile` | wrapper reads public `namespace_authorities` and `registry_origin` into `authorityRecords` | validated existing ProtectedServiceProfile; required with signer, derived field refused without signer | none | Derive only its provisioned `_awid` TXT records using the existing AWID encoder/parser; no second namespace/controller input. |
+| derived namespace authority inventory | wrapper supplies `authorityRecords` from provisioned public authorities | required with registry, refused without registry; existing AWID parser and registry-origin/profile binding against `team.registryUrl` | none | Exact `_awid` TXT records for registry discovery and sender verification, independently of signer; no invented signer dependency or second namespace/controller input. |
+| `signer.profileFile` | existing signer profile validation | validated existing ProtectedServiceProfile, only with signer | none | Where it supplies authority material, retain its `namespace_authorities` and `registry_origin` checks; registry authority records remain required without signer. |
 | `egress.privateIngressAddresses` | derived policy `privateIngressAddresses` | explicit approved IPv4 ingress addresses; no CIDR or wildcard | empty | Permit private TLS ingress only where declared. Reserved/metadata/loopback and protected-backend denials still take precedence. |
 | derived upstream inventory | policy `targets.<role>.addresses` | 1–8 pinned IPv4 addresses per role, resolved/checked before launch | none | No runtime DNS rebinding or general outbound proxy. |
 | `egress.external.source` | derived `externalTargets.source.origin` | boolean selects only `https://github.com` | false | Direct Git HTTPS source reads; no repository/path/method restriction. |
@@ -32,13 +33,13 @@
 Image: `container/agent/egress/Dockerfile`, one built digest; fixed uid/gid 10001:10001, no credential or operator allowlist baked in.
 Port: UDP/TCP 53 and TCP 443, component DNS/service name `egress`.
 Health: `node /opt/egress/health.mjs`; exact approved DNS answer, unknown-name NXDOMAIN and live TLS listener; readiness only, not boundary proof.
-Depends on: validated shared deployment config and a signer profile only with signer; pinned ingress inventory; an enforcing network boundary and owned TLS ingress rejecting SNI/Host/:authority disagreement before routing; no PostgreSQL, Redis or custody mount.
+Depends on: validated shared deployment config, provisioned namespace authorities with registry and a signer profile only with signer; pinned ingress inventory; an enforcing network boundary and owned TLS ingress rejecting SNI/Host/:authority disagreement before routing; no PostgreSQL, Redis or custody mount.
 
 The probe's `allowedPaths` inventory matches exactly the declared roles. Its
 stderr report distinguishes universal obligations (unlisted DNS/TLS refusal,
 sole isolated network, explicit IPv4 IPAM gateway, live host-gateway refusal,
 backend/direct-upstream denial and protected-path absence) from declared HTTPS
-controls and signer-specific authority/human-host checks. The proxy does not
+controls, registry-specific exact authority TXT checks and signer-specific human-host checks. The proxy does not
 filter encrypted HTTP paths. Stage public sources before credentials, without
 a codeload exception. Keep compiler/proxy image, minimal wrapper and probes at
 one reviewed source commit and retain built image digests. Team-image CI builds
