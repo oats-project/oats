@@ -17,13 +17,16 @@ export const NAV = [
   // overview opens it on a tab, and its row stays Home's while it shows). ⌘2 / Ctrl+2 and ⌘3 / Ctrl+3 stay theirs
   // (bound by id), and so does its palette command, View: Workspace overview.
   { name: "spawn", label: "Workspace overview", icon: "workspace", title: "Workspace overview", pinned: false },
+  // The Graph (slice 6b): who started whom, and where each agent runs; the Machines tab's canvas of before, a page of
+  // its own. Home's overview opens it (Home › Graph), and so does its palette command, "Workspace: Graph" (`command`:
+  // the palette's and the shortcuts editor's label, for an entry not named "View: …"). No key of its own yet.
+  { name: "graph", label: "Graph", icon: "overview", title: "Graph", pinned: false, command: "Workspace: Graph" },
   // Schedules and Triggers are one destination with two subtabs (human, 2026-09-28).
   { name: "automations", label: "Automations", icon: "automations", title: "Automations" },
 ];
 
-/** Destinations that are a tab of a NAV page, not a page of their own (2026-10-26): Machines, the
- * Deployments page of before (#482: the overview trees, split by deployment, one tab each), is a tab of
- * the Workspace page, before Setup. Its action (`stage.hierarchy`, ⌘1 / Ctrl+1), its palette command and every
+/** Destinations that are a tab of a NAV page, not a page of their own (2026-10-26): Machines is a tab of the
+ * Workspace page, before Setup: the list of the computers (slice 3b; its canvas became the Graph, slice 6b). Its action (`stage.hierarchy`, ⌘1 / Ctrl+1), its palette command and every
  * open of the name land on that page and tab. Its `label` says where that is, the page's label, then the
  * tab's ("View: Workspace › Machines" in the palette and the shortcuts editor). */
 export const NAV_TABS = [
@@ -38,9 +41,9 @@ export function navTab(name) {
 /** The NAV entries the sidebar pins as rows (Home, then Automations): every one not marked `pinned: false`. */
 export const PINNED = NAV.filter((v) => v.pinned !== false);
 
-/** The pinned row that stands for a stage: its own, else Home's for the Workspace page, which Home opens. */
+/** The pinned row that stands for a stage: its own, else Home's for the Workspace page and the Graph, which Home opens. */
 export function pinnedRowFor(name) {
-  return name === "spawn" ? "home" : name;
+  return name === "spawn" || name === "graph" ? "home" : name;
 }
 
 /** Sidebar mode a stage view pairs with (spawn shows the souls context). */

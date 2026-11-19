@@ -29,13 +29,10 @@ import { trackStickyTop, trackScrolledEdge } from './sticky-top.mjs';
 
 export const workspaceTabs = ['souls', 'capabilities', 'teams', 'machines', 'sources'];
 // What a person reads (the ids stay stable): Souls, Capabilities, Teams, Machines, Setup (product owner, 2026-10-26).
-// Machines (the Desktop UI rework, slice 3b) opens on the list of the computers the workspace runs on
-// (workspace-machines.mjs); its Map is the Deployments page of before (views/hierarchy.mjs), the instances on each
-// machine, until slice 6 makes it the Graph. Teams is who can work together; Setup is what the workspace is built
-// from (repos, packages, external souls). The page opens on Souls.
-/** The tabs whose panel the Workspace view owns (`owned`): Souls, and Machines while its Map is shown; this module shows
- * and hides it, and paints nothing in it. Machines' List is this module's. */
-export const MACHINES_VIEWS = Object.freeze([['list', 'List'], ['map', 'Map']]);
+// Machines (the Desktop UI rework, slice 3b) is the list of the computers the workspace runs on
+// (workspace-machines.mjs); its canvas of before is the Graph, a page of its own (views/graph.mjs, slice 6b). Teams is
+// who can work together; Setup is what the workspace is built from (repos, packages, external souls). The page opens
+// on Souls.
 const TAB_LABELS = { machines: 'Machines', teams: 'Teams', souls: 'Souls', capabilities: 'Capabilities', sources: 'Setup' };
 /** The Workspace page's tab bar rules for a selector: plain-text tabs, the selected one at 650 over a 2px
  * --live underline. Shared with the Deployments page's tabs (deployments-page.mjs), so the two never drift. */
@@ -185,7 +182,7 @@ function catalogSkeleton(doc, rows = 6) {
 }
 
 /** `onCatalog`: the catalog changed (a read settled, the subject was reset): a page rendered from it refreshes in place. */
-export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machinesPanel = null, onTab, onIntent, onOpenCapability = null, onCatalog = null, onTeamMember = () => {}, onOpenTeam = null, onMachinesView = null, rosterState = () => 'ready' }) {
+export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, onTab, onIntent, onOpenCapability = null, onCatalog = null, onTeamMember = () => {}, onOpenTeam = null, rosterState = () => 'ready' }) {
   const doc = header.ownerDocument;
   const node = (tag, text, cls) => { const el = doc.createElement(tag); if (text !== undefined) el.textContent = text; if (cls) el.className = cls; return el; };
   let alive = true, serial = 0, rosterGen = null, workspace = null, deployment = null, instances = [], deployments = [], tab = 'souls';
@@ -219,7 +216,7 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
   }
   // #517, slice 3b: the Machines tab's list, one per workspace (and generation), kept across renders. Without the
   // machine gates it lists this computer alone (the route answers no filtered list).
-  let machines = null, machinesFor = null, machinesView = 'list';
+  let machines = null, machinesFor = null;
   function machinesCard() {
     if (!workspace?.id) return null;
     const key = JSON.stringify([workspaceGeneration(), workspace.id, machinesGated(cliStatus())]);
@@ -237,11 +234,10 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
       localObservation: () => ({ status: deployment?.status ?? 'pending', text: deployment && deployment.status !== 'observed' && deployment.status !== 'pending' ? deploymentUnavailableText(deployment, DESKTOP_TERMS) : '' }) });
     return machines.element;
   }
-  /** Whether `name`'s panel is the view's own right now (Souls; Machines while its Map is shown). */
-  const owned = name => name === 'souls' || (name === 'machines' && machinesView === 'map');
-  /** The discovery panel's id for a tab: its own, the List's (Machines' own panel keeps `workspace-machines`), or a
-   * neutral one while another element is the tab's panel. */
-  const panelId = name => owned(name) ? 'workspace-capabilities' : name === 'machines' ? 'workspace-machines-list' : `workspace-${name}`;
+  /** Whether `name`'s panel is the view's own (Souls: the host's grid). */
+  const owned = name => name === 'souls';
+  /** The discovery panel's id for a tab: its own, or a neutral one while another element is the tab's panel. */
+  const panelId = name => owned(name) ? 'workspace-capabilities' : `workspace-${name}`;
   header.className = 'workspace-header';
   // No title in the bar (human, 2026-09-28): the sidebar already says Workspace; the tabs lead.
   const tabs = node('div', undefined, 'workspace-tabs'); tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Workspace sections'); header.append(tabs);
@@ -274,15 +270,6 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
   const setupTools = node('div', undefined, 'workspace-tools'); setupTools.dataset.tools = 'sources';
   // Setup is its list only (the graph, W2, was dropped in the Desktop UI rework, slice 3b): its one tool is Sync.
   const syncHost = node('div'); setupTools.append(syncHost);
-  // Machines: List (the computers, this module's) | Map (the Deployments view, the host's panel).
-  const machinesTools = node('div', undefined, 'workspace-tools'); machinesTools.dataset.tools = 'machines';
-  const machinesViews = node('div', undefined, 'ws-segmented'); machinesViews.setAttribute('role', 'group'); machinesViews.setAttribute('aria-label', 'Machines view');
-  for (const [id, label] of MACHINES_VIEWS) {
-    const button = node('button', label); button.type = 'button'; button.dataset.machinesView = id;
-    button.addEventListener('click', () => setMachinesView(id));
-    machinesViews.append(button);
-  }
-  machinesTools.append(machinesViews); header.append(machinesTools);
   // The Capabilities search lives in the view itself (human, 2026-09-26): a toolbar row above the sections.
   const capTools = node('div', undefined, 'ws-toolbar ws-sticky'); capTools.dataset.tools = 'capabilities';
   const capLead = node('div', undefined, 'ws-toolbar-lead'); capTools.append(capLead);
@@ -299,15 +286,10 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
   // After a sync the table is re-read live; the held table stays on screen until the new one lands (never null while the deployment is the same).
   const sync = createWorkspaceSync(syncHost, { ctx, onSynced: () => { failure = ''; void load({ refresh: true }); } });
   function syncTools() {
-    setupTools.hidden = tab !== 'sources'; capTools.hidden = tab !== 'capabilities'; machinesTools.hidden = tab !== 'machines';
-    for (const button of machinesViews.querySelectorAll('button')) button.setAttribute('aria-pressed', String(button.dataset.machinesView === machinesView));
+    setupTools.hidden = tab !== 'sources'; capTools.hidden = tab !== 'capabilities';
   }
   soulsPanel.id = 'workspace-souls'; soulsPanel.setAttribute('role', 'tabpanel'); soulsPanel.setAttribute('aria-labelledby', 'workspace-tab-souls');
-  if (machinesPanel) {
-    machinesPanel.id = 'workspace-machines'; machinesPanel.setAttribute('role', 'tabpanel');
-    machinesPanel.setAttribute('aria-labelledby', 'workspace-tab-machines');
-  }
-  const ownPanel = name => (name === 'souls' ? soulsPanel : name === 'machines' ? machinesPanel : null);
+  const ownPanel = name => (name === 'souls' ? soulsPanel : null);
   panel.className = 'workspace-discovery'; panel.setAttribute('role', 'tabpanel'); panel.tabIndex = 0;
   // `status` says the gate (a CLI or deployment state, its own truthful copy); the catalog's loading
   // controller has its own line, stale-line host and skeleton / failed host, shown on Capabilities only.
@@ -368,24 +350,11 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
       control.setAttribute('aria-selected', String(key === tab)); control.tabIndex = key === tab ? 0 : -1;
       control.setAttribute('aria-controls', owned(key) ? ownPanel(key)?.id ?? panel.id : panel.id);
     }
-    soulsPanel.hidden = tab !== 'souls'; if (machinesPanel) machinesPanel.hidden = !(tab === 'machines' && owned('machines'));
+    soulsPanel.hidden = tab !== 'souls';
     panel.hidden = owned(tab); syncTools();
     if (changed) { onIntent?.(); onTab?.(tab); }
     render(); if (tab === 'capabilities' && !catalog && !loading && !failure) void load();
     revealTab(controls.get(tab));
-    return true;
-  }
-  /** Machines' List | Map (the host mounts the Map's view while it is shown: `onMachinesView`). Focus stays on the control. */
-  function setMachinesView(view) {
-    if (!alive || !MACHINES_VIEWS.some(([id]) => id === view) || view === machinesView) return false;
-    machinesView = view;
-    if (tab === 'machines') {
-      panel.id = panelId(tab);
-      controls.get('machines').setAttribute('aria-controls', owned('machines') ? machinesPanel?.id ?? panel.id : panel.id);
-      if (machinesPanel) machinesPanel.hidden = !owned('machines');
-      panel.hidden = owned(tab);
-    }
-    syncTools(); onIntent?.(); onMachinesView?.(machinesView); render();
     return true;
   }
   /** Read the catalog. `user`: a Retry (its completion is announced); `refresh`: bypass the server's
@@ -437,13 +406,13 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
     // The status's observation stamp moves on every poll and nothing here paints it: it is left out.
     const stableStatus = s && { ...s, workspace: s.workspace && { ...s.workspace, observedAt: undefined } };
     // The souls' composition (souls-capabilities) and marks feed "Used by".
-    const key = JSON.stringify([tab, machinesView, deployments, deployment?.status, setupMember, souls.map(a => [a?.team ?? null, a?.name, a?.key, a?.color, a?.agentsRoot, a?.capabilities]), soulsComposition(cliStatus()), query, unavailable, catalog, stableStatus, rosterState(), deployment?.withheld, deployment?.reachable, instances.map(i => [i.agent, i.agentsRoot, i.modules, i.running])]);
+    const key = JSON.stringify([tab, deployments, deployment?.status, setupMember, souls.map(a => [a?.team ?? null, a?.name, a?.key, a?.color, a?.agentsRoot, a?.capabilities]), soulsComposition(cliStatus()), query, unavailable, catalog, stableStatus, rosterState(), deployment?.withheld, deployment?.reachable, instances.map(i => [i.agent, i.agentsRoot, i.modules, i.running])]);
     if (key === rendered) return;
     rendered = key;
     const restoreNotes = captureFocusState(notes, { scroller: null }); // a warning's Details or Open capability (by its focus key)
     // Machines' list is one long-lived section that keeps its own focus across its repaints (sync): it stays mounted,
     // never detached under a focused row or control.
-    if (tab === 'machines' && !owned(tab)) {
+    if (tab === 'machines') {
       notes.replaceChildren();
       for (const child of [...capLead.children]) if (child !== about.button) child.remove();
       const card = machinesCard();
@@ -532,8 +501,6 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
   updateCounts(); setTab('souls');
   return {
     setTab, updateRoster, syncCli, get tab() { return tab; },
-    /** Machines' view: 'list' (the computers) or 'map' (the Deployments view, the host's panel). */
-    get machinesView() { return machinesView; }, setMachinesView,
     /** A team's page, painted by the Teams page into `host` (computer-teams.mjs showTeam): false when there is no such team. */
     openTeam: (host, label, options) => !!teamsCard() && computerTeams.showTeam(host, label, options),
     closeTeam() { computerTeams?.hideTeam(); },

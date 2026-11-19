@@ -254,6 +254,11 @@ const ctx = {
   homeRoster: () => homeRoster(),
   subscribeHomeRoster: (fn) => subscribeHomeRoster(fn),
   openAgent: (row) => openRosterInstance(row),
+  // The Graph's node menu (slice 6b): Details opens the agent as Enter does and shows its instance panel; Open soul is
+  // the panel's own hand-off to the soul's page.
+  openAgentDetails: (row) => openRosterDetails(row),
+  openSoulOf: (row) => (row?.agent ? openSoulPage({ workspace: currentWorkspace(), name: row.agent, agentsRoot: row.agentsRoot, server: row.server || undefined }) : undefined),
+  openStage: (name) => showStageFocused(name),
   openWorkspaceTab: (tab, options) => openWorkspaceTabFocused(tab, options),
   // A bound action's key as the keyboard reference writes it ("Ctrl+K"), or "" when it has none.
   chordText: (id) => { const b = getBinding(id, navigator.platform.includes("Mac")); return b ? formatChord(b, navigator.platform.includes("Mac")) : ""; },
@@ -368,10 +373,10 @@ window.addEventListener('pagehide', () => spawnJobs.dispose(), { once: true });
 // you accumulate and close, not places you navigate. Selecting a nav item
 // hides the tab layer; activating a tab covers the stage.
 const stageHost = document.getElementById("stagehost");
-// Esc on the Workspace page goes back to Home, which opens it (slice 2): only an Esc nothing on the page took
+// Esc on the Workspace page and on the Graph goes back to Home, which opens them (slices 2 and 6b): only an Esc nothing on the page took
 // (a field, a list, a menu or a dialog handles its own, and marks it), from no text field.
 stageHost.addEventListener("keydown", (e) => {
-  if (e.key !== "Escape" || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || stage?.name !== "spawn") return;
+  if (e.key !== "Escape" || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || !["spawn", "graph"].includes(stage?.name)) return;
   if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable="true"], dialog, [role="dialog"], [role="menu"], [role="listbox"]')) return;
   e.preventDefault();
   void showStageFocused("home");
@@ -484,9 +489,9 @@ async function showStageFocused(name) {
   if (!active || active === document.body || !isShown(active)) focusRegions.focusRegion("main");
 }
 
-// A request to open one deployment's tab of the Machines tab (the switcher's "Not matched" entries,
-// deployment-tabs.mjs) shows that stage; the page itself reads the requested tab.
-onDeploymentTabRequest(() => { void showStageFocused("hierarchy"); });
+// A request to show one deployment (the switcher's "Not matched" entries, deployment-tabs.mjs) shows the Graph, whose
+// column of that deployment takes the focus (slice 6b; the Machines canvas's tab of before).
+onDeploymentTabRequest(() => { void showStageFocused("graph"); });
 
 function setNavActive(name) {
   const row = pinnedRowFor(name);
@@ -574,6 +579,28 @@ function openRosterInstance(i) {
   if (!el) return false;
   el.click();
   return true;
+}
+/** Details of a roster row (the Graph's node menu, slice 6b): the row opened as the roster opens it, then the instance
+ * panel shown and focused (instance details follow the active terminal tab). Returns whether a row was opened. */
+function openRosterDetails(i) {
+  if (!openRosterInstance(i)) return false;
+  if (contextPanel.isFocusMode()) contextPanel.setFocusMode(false);
+  contextPanel.setCollapsed(false);
+  // The open lands the row's terminal tab, and with it the panel's instance, on its own turn: the focus follows it.
+  requestAnimationFrame(() => contextPanel.focus());
+  return true;
+}
+/** A soul's page on the Workspace page (the instance panel's Soul tab and the Graph's Open soul; the same hand-off as
+ * Quick Open): intent-guarded, so a newer navigation drops it; a miss says why nothing opened. */
+async function openSoulPage({ workspace, name, agentsRoot, server }) {
+  const owns = tabOpenIntents.begin();
+  let mod;
+  try { mod = await import("./views/spawn.mjs"); }
+  catch (e) { if (owns()) ctx.notify(`Could not open soul: ${e.message || e}`); return; }
+  if (!owns() || workspace !== currentWorkspace()) return;
+  const gen = workspaceGeneration();
+  mod.preselectSoul({ name, agentsRoot, server, onMiss: count => { if (workspaceGeneration() === gen) ctx.notify(count ? `Several souls are named ${name}; pick it in the Workspace view.` : `${name} is not in this workspace's souls.`); } });
+  showStage("spawn");
 }
 /** Home's view of the roster: the rows the sidebar shows (held retires included), its deployments, the read's
  * phase ("loading" before a first answer, "failed" when that failed, "unavailable" when the answer says the
@@ -1747,17 +1774,7 @@ const contextPanel = createContextPanel({
     forget: (instance, workspace) => openForgetDialog(instance, workspace),
   },
   // Soul tab → the soul in the Workspace view (same hand-off as Quick Open).
-  openSoul: async ({ workspace, name, agentsRoot, server }) => {
-    const owns = tabOpenIntents.begin();
-    let mod;
-    try { mod = await import("./views/spawn.mjs"); }
-    catch (e) { if (owns()) ctx.notify(`Could not open soul: ${e.message || e}`); return; }
-    if (!owns() || workspace !== currentWorkspace()) return;
-    // The hand-off is intent-guarded by the view (a newer selection drops it); a miss says why nothing opened.
-    const gen = workspaceGeneration();
-    mod.preselectSoul({ name, agentsRoot, server, onMiss: count => { if (workspaceGeneration() === gen) ctx.notify(count ? `Several souls are named ${name}; pick it in the Workspace view.` : `${name} is not in this workspace's souls.`); } });
-    showStage("spawn");
-  },
+  openSoul: (soul) => openSoulPage(soul),
   onIntent: () => { if (!tabOpenIntents.isApplyingFocus()) tabOpenIntents.invalidate(); },
   applyFocus: callback => tabOpenIntents.applyFocus(callback),
   onFocusModeChange: () => updateSidebarControls(),
@@ -2685,7 +2702,7 @@ const palette = createPalette({
   commands: [
     // View commands derive from the nav manifest so a new rail destination
     // can never be palette-invisible (review 8441961 nit).
-    ...[...NAV, ...NAV_TABS].map((v) => ({ label: `View: ${v.label}`, detail: chordDetail(`stage.${v.name}`), run: () => showStageFocused(v.name) })),
+    ...[...NAV, ...NAV_TABS].map((v) => ({ label: v.command ?? `View: ${v.label}`, detail: chordDetail(`stage.${v.name}`), run: () => showStageFocused(v.name) })),
     { label: "Souls: choose a soul to spawn (Workspace › Souls)", detail: chordDetail("app.chooseSoul"), run: () => runAction("app.chooseSoul") },
     { label: "Souls: quick open…", detail: chordDetail("app.quickOpenSouls"), run: () => runAction("app.quickOpenSouls") },
     { label: "File: open read-only…", detail: chordDetail("app.openFile"), run: () => runAction("app.openFile") },
@@ -3332,7 +3349,7 @@ window.addEventListener("pagehide", () => { tabOpenIntents.invalidate(); unregis
 // stage-switch actions derive from the nav manifest (same rule as the
 // palette): a new rail destination can never be shortcut-invisible.
 [...NAV, ...NAV_TABS].forEach((v) => registerAction({
-  id: `stage.${v.name}`, label: `View: ${v.label}`, context: "global",
+  id: `stage.${v.name}`, label: v.command ?? `View: ${v.label}`, context: "global",
   run: () => showStageFocused(v.name),
 }));
 // A held chord (key repeat) does nothing: it never opens and closes the picker over and over.

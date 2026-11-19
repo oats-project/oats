@@ -7,8 +7,8 @@
      (the activity contract isn't built) and none is inferred: a live row is "running". The "New" group (stopped or
      finished since you last looked) has no fact to read, so it isn't drawn. The board never reorders the roster.
    - The overview: Agents, Souls, Capabilities, Teams, Machines and Graph, each "You have N …" from reads the app
-     makes already. Agents opens Home › Agents here; the others open the Workspace page on their tab
-     (ctx.openWorkspaceTab), whose Esc comes back to Home (shell.mjs). The Machines canvas stands in for the Graph.
+     makes already. Agents opens Home › Agents here, the Graph its own page (ctx.openStage, views/graph.mjs); the
+     others open the Workspace page on their tab (ctx.openWorkspaceTab). Esc on either comes back to Home (shell.mjs).
    - Home › Agents: every agent, running or stopped, flat: name, soul · machine, state, who started it. Esc or Back
      returns to the board.
    - First run (no agents): OATS in two lines, three keys, then the overview.
@@ -27,16 +27,15 @@ import { displayLine } from "../../../client/display-text.mjs";
 import { teamsAnswer } from "../computer-teams.mjs";
 import { iconElement } from "../shell-icons.mjs";
 
-/** The overview's sections, in order: what each opens (`agents`: Home › Agents here; else a Workspace tab id, with
- * the Machines tab's view where it has one: its List for Machines, its Map, today's canvas, for the Graph until
- * slice 6; slice 3b's `preselectWorkspaceTab(tab, { machinesView })`, which an older page ignores). */
+/** The overview's sections, in order: what each opens (`agents`: Home › Agents here; `stage`: a page of its own, the
+ * Graph (slice 6b); else a Workspace tab id). */
 export const OVERVIEW = Object.freeze([
   { key: "agents", label: "Agents", opens: "agents" },
   { key: "souls", label: "Souls", opens: "souls" },
   { key: "capabilities", label: "Capabilities", opens: "capabilities" },
   { key: "teams", label: "Teams", opens: "teams" },
-  { key: "machines", label: "Machines", opens: "machines", options: { machinesView: "list" } },
-  { key: "graph", label: "Graph", opens: "machines", options: { machinesView: "map" } },
+  { key: "machines", label: "Machines", opens: "machines" },
+  { key: "graph", label: "Graph", opens: "graph", stage: true },
 ]);
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -179,7 +178,8 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
   function openSection(entry) {
     returnTo = { key: entry.key, gen };
     if (entry.opens === "agents") { view = "agents"; paint({ focus: "first" }); return; }
-    void ctx.openWorkspaceTab?.(entry.opens, entry.options);
+    if (entry.stage) { void ctx.openStage?.(entry.opens); return; }
+    void ctx.openWorkspaceTab?.(entry.opens);
   }
 
   function boardSection(data) {

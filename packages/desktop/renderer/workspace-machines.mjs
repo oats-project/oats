@@ -4,7 +4,7 @@
  * reachable (this computer: whether its deployment was read; a registration: its last check) and its OATS version.
  * Enter opens a registered machine's row: its ssh host and folder, Check and Remove. "Add a machine to this
  * workspace…" is the dialog (renderer/add-machine-dialog.mjs). The guide's agents per machine are not shown in this
- * slice (the effort's lead, after a third review major on binding roster observations to machines): the Map and the
+ * slice (the effort's lead, after a third review major on binding roster observations to machines): the Graph and the
  * roster show where agents run.
  *
  * - A machine with no check this run is checked once in the background (`/api/server-check`), at most

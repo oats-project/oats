@@ -38,7 +38,6 @@ import { resolveViewKey } from "../view-keys.mjs";
 import { cliAvailable, cliKnownUnavailable, cliStatus, refreshCli, onCliChange, cliCard, cliAboveTested, aboveTestedCard } from "./cli-status.mjs";
 import { preselectSchedule } from "./schedules.mjs";
 import { preselectAutomationsTab } from "./automations.mjs";
-import { mount as mountMachines, unmount as unmountMachines } from "./hierarchy.mjs";
 import { inspectSupported } from "../../../client/inspect-contract.mjs";
 import { createDataState, skeleton, statusLine, captureFocusState } from "../loading.mjs";
 import { canAddressRemote } from "../../../client/remote-address.mjs";
@@ -130,9 +129,6 @@ ${groupHeadingCSS}
 .oats-view .souls .soul-tile > button.soul-spawn:disabled { color:var(--muted); }
 .oats-view .souls button.spawn-act:not(:disabled), .oats-view .souls button.fspawn:not(:disabled) { background:var(--primary-bg); color:var(--primary-fg); border-color:var(--primary-bg); }
 .souls-grid[hidden] { display:none; }
-/* The Machines tab (the Deployments page of before, views/hierarchy.mjs): its view fills the panel, as it filled the page. */
-.workspace-machines-panel { flex:1; min-height:0; min-width:0; display:flex; flex-direction:column; }
-.workspace-machines-panel[hidden] { display:none; }
 .spawn-modal { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 24px; background: var(--scrim); }
 .spawn-dialog { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
 .spawn-dialog-head { display: flex; }
@@ -167,10 +163,9 @@ function ownsSelection(s, ref) {
 }
 /** The shell's navigation to a Workspace tab (⌘1 on Machines, app.chooseSoul's chord on Souls, the leader's 3
  * on Capabilities, the palette's) is an inspection intent, never a launch. */
-export function preselectWorkspaceTab(name, { machinesView = null } = {}) {
+export function preselectWorkspaceTab(name) {
   if (!workspaceTabs.includes(name)) return false;
-  // `machinesView` ('list' | 'map'): the Machines tab's view to land on (slice 3b); none keeps the one last chosen.
-  pendingWorkspaceTab = { name, ...(name === "machines" && machinesView ? { machinesView } : {}), ...nextSelectionIntent() };
+  pendingWorkspaceTab = { name, ...nextSelectionIntent() };
   if (state?.alive) applyWorkspaceTab(state);
   return true;
 }
@@ -185,7 +180,7 @@ function applyWorkspaceTab(s) {
   // The handoff's own tab change is not a newer choice: minting one here would supersede the soul or home
   // this same handoff carries (Go to soul from the Machines tab turned the page and opened nothing).
   s.handoffTab = true;
-  try { if (intent.machinesView) s.discovery?.setMachinesView(intent.machinesView); s.discovery?.setTab(intent.name); } finally { s.handoffTab = false; }
+  try { s.discovery?.setTab(intent.name); } finally { s.handoffTab = false; }
 }
 export function preselectHome(instance) {
   const intent = nextSelectionIntent();
@@ -331,22 +326,8 @@ function showPage(s, mode) {
   s.q("souls-grid").hidden = !!mode || !souls;
   s.q("souls-bar").hidden = !!mode || !souls;
   s.q("souls-notice").hidden = !!mode || !souls; // the grid's stale line belongs to the grid
-  // Machines' Map is the Deployments view's panel; its List is the discovery's (slice 3b).
-  const machines = s.discovery?.tab === "machines" && s.discovery?.machinesView === "map";
-  s.q("workspace-machines-panel").hidden = !!mode || !machines;
-  s.q("workspace-discovery").hidden = !!mode || souls || machines;
-}
-/** The Machines tab's view (views/hierarchy.mjs, the Deployments page of before): mounted while the tab's Map is shown and
- * unmounted when its List or another tab is chosen or the view leaves, so it reads nothing in the background. */
-function syncMachines(s) {
-  const shown = s.alive && s.discovery?.tab === "machines" && s.discovery?.machinesView === "map";
-  // Its "Workspace" (s, Go to soul's page) is this page: the Souls tab, not a stage switch to the page already shown.
-  // Already on Souls (Go to soul's handoff turned the page and opened the soul), it does nothing: setTab would show
-  // the grid again under the soul's page.
-  const ctx = { ...s.ctx, openView: name => (name !== "spawn" ? s.ctx.openView?.(name)
-    : s.discovery.tab === "souls" ? true : s.discovery.setTab("souls")) };
-  if (shown && !s.machines) { s.machines = true; mountMachines(s.q("workspace-machines-panel"), ctx); }
-  else if (!shown && s.machines) { s.machines = false; unmountMachines(); s.q("workspace-machines-panel").replaceChildren(); }
+  // Machines is the discovery's list (slice 3b); its canvas became the Graph, a page of its own (slice 6b).
+  s.q("workspace-discovery").hidden = !!mode || souls;
 }
 /** A team's page, from its card on the Teams board (packages/desktop/docs/desktop-teams.md "A team's page"). The
  * Teams page paints it (computer-teams.mjs showTeam) and keeps it current; Back and Esc return to the board, at its
@@ -554,7 +535,6 @@ ${spawnDialogCSS}</style>
             </div>
             <div class="souls-notice"></div>
             <div class="souls-grid"></div>
-            <div class="workspace-machines-panel" hidden></div>
             <section class="workspace-discovery" hidden></section>
             <section id="workspace-soul-page" class="workspace-page workspace-soul-page" aria-label="Soul details" hidden></section>
             <section class="workspace-page workspace-cap-page" aria-label="Capability details" hidden></section>
@@ -630,19 +610,17 @@ ${spawnDialogCSS}</style>
     },
   });
   s.discovery = createWorkspaceDiscovery(s.q("workspace-header"), s.q("workspace-discovery"), {
-    ctx, soulsPanel: s.q("souls-grid"), machinesPanel: s.q("workspace-machines-panel"), onIntent: () => { if (!s.handoffTab) nextSelectionIntent(); },
+    ctx, soulsPanel: s.q("souls-grid"), onIntent: () => { if (!s.handoffTab) nextSelectionIntent(); },
     // A catalog read settled (or began, or was reset): the open page follows, and a capability handoff waiting for it opens.
     onCatalog: () => { syncCapabilityPage(s); applyCapability(s); },
     rosterState: () => rosterSettledState(s), // "Used by" claims are roster-derived: none while the roster is not settled-good
     onOpenCapability: row => openCapability(s, row, null),
     onTeamMember: (action, member) => void teamMemberAction(s, action, member),
     onOpenTeam: label => openTeam(s, label),
-    onMachinesView: () => syncMachines(s), // Map mounts the Deployments view, List unmounts it (it reads no more)
     onTab: tab => {
       if (tab !== "souls") s.aboutSouls?.close({ focus: "none" }); // leaving Souls closes its dialog, moving no focus
       s.spawnOp++; closeSpawnModal(s); s.inspector.close(); closeCapability(s); closeTeam(s); s.page.close();
       s.q("souls-bar").hidden = tab !== "souls"; s.q("souls-notice").hidden = tab !== "souls";
-      syncMachines(s);
     },
   });
   // Capture actual tab choices before discovery projects them. Its onTab
@@ -658,10 +636,9 @@ ${spawnDialogCSS}</style>
   }, true);
   s.q("workspace-header").append(s.q("wssel")); // standalone switcher stays reachable on every subtab
   applyWorkspaceTab(s);
-  // The page opens on Souls unless a handoff chose another tab: then the Souls bar and its notice wait for Souls, and
-  // on Machines its view mounts (onTab runs on changes only).
+  // The page opens on Souls unless a handoff chose another tab: then the Souls bar and its notice wait for Souls
+  // (onTab runs on changes only).
   if (s.discovery.tab !== "souls") { s.q("souls-bar").hidden = true; s.q("souls-notice").hidden = true; }
-  syncMachines(s);
   applyCapability(s); // a handoff made before the mount: its tab now, its page when the catalog lands
   s.q("filter").addEventListener("input", (e) => { s.filterText = e.target.value; renderGrid(s); });
   s.q("filter").before(iconElement(el.ownerDocument, "search", { size: 14 }));
@@ -772,7 +749,6 @@ export function unmount() {
   state.inspector.dispose(); state.page.dispose(); state.capOpen?.contents.dispose();
   state.presentation?.dispose();
   state.gridState?.dispose();
-  if (state.machines) { state.machines = false; unmountMachines(); }
   state.discovery.dispose(); state.aboutSouls?.dispose();
   state.timers.forEach(clearInterval);
   (state.disposers || []).forEach((off) => { try { off(); } catch {} });
