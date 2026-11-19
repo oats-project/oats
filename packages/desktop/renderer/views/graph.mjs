@@ -31,6 +31,7 @@ import { resolveViewKey } from "../view-keys.mjs";
 import { onDeploymentTabRequest } from "../deployment-tabs.mjs";
 import { deploymentsPageCSS, deploymentReasonBlock, deploymentHasWords } from "../deployments-page.mjs";
 import { splitByDeployment, deploymentState } from "../../../client/roster-sections.mjs";
+import { deploymentLabel } from "../../../client/deployment-label.mjs";
 import { whenRightButtonReleased } from "../context-menu-release.mjs";
 import { createInstanceEventsView, instanceEventsCSS } from "../instance-events-view.mjs";
 import { workspaceGeneration, onWorkspaceChange, rowDeployment } from "./common.mjs";
@@ -51,7 +52,7 @@ export const GRAPH_COPY = Object.freeze({
 });
 
 /* Geometry, in stage pixels (the zoom scales the stage). */
-export const GRAPH_GEOMETRY = Object.freeze({ COL_W: 300, FIELD_W: 420, COL_GAP: 64, HEAD: 58, ROW: 52, NODE_H: 42, IND: 24, MAX_INDENT: 6, INSET: 12, PAD: 24 });
+export const GRAPH_GEOMETRY = Object.freeze({ COL_W: 300, FIELD_W: 420, MIN_NODE_W: 180, COL_GAP: 64, HEAD: 58, ROW: 52, NODE_H: 42, IND: 24, GUIDE: 14, INSET: 12, PAD: 24 });
 const G = GRAPH_GEOMETRY, Z_MIN = 0.3, Z_MAX = 2, Z_STEP = 1.2, DRAG_THRESHOLD = 4;
 
 export const graphCSS = `
@@ -139,7 +140,7 @@ export function startedByWords(node, rowsById, labels) {
   if (node.parent) {
     const parent = rowsById.get(node.parent.id);
     const name = parent?.instance ?? node.recordedParent;
-    return node.parent.cross ? `${name} on ${labels.get(node.parent.column) ?? "another machine"}` : name;
+    return node.parent.crossColumn ? `${name} on ${labels.get(node.parent.column) ?? "another machine"}` : name;
   }
   return node.recordedParent || null;
 }
@@ -152,24 +153,51 @@ export function nodeLabel(node, { rowsById, labels, stale = false }) {
     node.sameWork ? GRAPH_COPY.sameWork : null, nodeState(row, { stale })].filter(Boolean).join(", ");
 }
 
-/** Lay a graph out in stage pixels: Map<id|you-key, { x, y, w, h, column }>, the columns' boxes, and the stage size. */
+/** Open soul's hand-off for a row: `{ ref }` for views/spawn.mjs `preselectSoul` (the exact soul, never one found by a
+ * bare name), or `{ reason }` the menu item says. A local row hands its recorded soul key and its soul source's repoKey,
+ * which the Workspace page matches exactly (and refuses a soul whose name another of its root shares); a remote row
+ * hands its agent dir, root and server, unique per root. The Workspace page shows only the souls of the view's primary
+ * deployment, so a row of another one is refused before anything opens. `labels`: the Graph's column labels. */
+export function soulHandoff(row, deployments, labels = new Map()) {
+  const none = { reason: `This ${DESKTOP_NOUNS.instance} doesn't record the soul it was spawned from.` };
+  if (!row || typeof row.agent !== "string" || !row.agent || typeof row.agentsRoot !== "string" || !row.agentsRoot) return none;
+  const list = Array.isArray(deployments) ? deployments.filter((d) => d && typeof d.id === "string") : [];
+  const id = typeof row.deployment?.id === "string" ? row.deployment.id : null;
+  if (id && list.length >= 2) {
+    const primary = list.find((d) => d.primary) || list[0];
+    if (primary.id !== id) {
+      // The Graph's own column labels where it has them (this computer by its name), else the deployment's label.
+      const label = (d) => (d ? labels.get(d.id) ?? deploymentLabel(d, DESKTOP_TERMS) : "another deployment");
+      return { reason: `This ${DESKTOP_NOUNS.instance} is on ${label(list.find((d) => d.id === id))}; the Workspace page shows only the souls of ${label(primary)}.` };
+    }
+  }
+  if (typeof row.server === "string" && row.server) return { ref: { name: row.agent, agentsRoot: row.agentsRoot, server: row.server } };
+  if (typeof row.soulKey !== "string" || !row.soulKey || typeof row.soul?.repoKey !== "string" || !row.soul.repoKey) return none;
+  return { ref: { name: row.agent, key: row.soulKey, repoKey: row.soul.repoKey, agentsRoot: row.agentsRoot } };
+}
+
+/** Lay a graph out in stage pixels: Map<id|you-key, { x, y, w, h, column }>, the columns' boxes, and the stage size.
+ * Every level indents by IND, uncapped: a column widens to hold its deepest node at MIN_NODE_W, so a parent's guide
+ * (GUIDE in from its left edge) always runs left of every node below it in its subtree, and no edge passes a node. */
 export function layoutGraph(graph) {
-  const width = graph.mode === "field" ? G.FIELD_W : G.COL_W;
+  const base = graph.mode === "field" ? G.FIELD_W : G.COL_W;
   const at = new Map(), boxes = [];
-  let height = 0;
-  graph.columns.forEach((c, ci) => {
-    const x0 = ci * (width + G.COL_GAP);
+  let height = 0, x0 = 0;
+  graph.columns.forEach((c) => {
+    const deepest = c.rows.reduce((d, r) => Math.max(d, r.depth), 0);
+    const width = Math.max(base, G.INSET * 2 + deepest * G.IND + G.MIN_NODE_W);
     c.rows.forEach((r, ri) => {
-      const indent = Math.min(r.depth, G.MAX_INDENT) * G.IND, x = x0 + G.INSET + indent, y = G.HEAD + ri * G.ROW;
-      const w = r.kind === "you" ? 64 : Math.max(150, width - G.INSET * 2 - indent);
+      const indent = r.depth * G.IND, x = x0 + G.INSET + indent, y = G.HEAD + ri * G.ROW;
+      const w = r.kind === "you" ? 64 : width - G.INSET * 2 - indent;
       at.set(r.kind === "you" ? r.key : r.id, { x, y: r.kind === "you" ? y + 9 : y, w, h: r.kind === "you" ? 24 : G.NODE_H, column: c.key });
     });
     const h = G.HEAD + Math.max(c.rows.length, 1) * G.ROW + 6;
     boxes.push({ key: c.key, x: x0, y: 0, w: width, h });
     height = Math.max(height, h);
+    x0 += width + G.COL_GAP;
   });
   for (const b of boxes) b.h = height; // one height, so the columns line up
-  return { at, boxes, width: Math.max(width, graph.columns.length * (width + G.COL_GAP) - G.COL_GAP), height: Math.max(height, G.HEAD + G.ROW) };
+  return { at, boxes, width: Math.max(base, x0 - G.COL_GAP), height: Math.max(height, G.HEAD + G.ROW) };
 }
 
 /** An edge's path: within a column, down the parent's guide and across to the child (orthogonal: a tree's edges
@@ -177,12 +205,12 @@ export function layoutGraph(graph) {
 export function edgePath(edge, at, mode) {
   const a = at.get(edge.from), b = at.get(edge.to);
   if (!a || !b) return null;
-  if (edge.kind === "cross" && mode === "columns" && a.column !== b.column) {
+  if ((edge.kind === "cross" || edge.kind === "column") && mode === "columns" && a.column !== b.column) {
     const right = a.x < b.x, x1 = right ? a.x + a.w : a.x, x2 = right ? b.x : b.x + b.w;
     const y1 = a.y + a.h / 2, y2 = b.y + b.h / 2, dx = Math.max(24, Math.abs(x2 - x1) / 2) * (right ? 1 : -1);
     return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
   }
-  const gx = a.x + 14, y2 = b.y + b.h / 2;
+  const gx = a.x + G.GUIDE, y2 = b.y + b.h / 2;
   return `M ${gx} ${a.y + a.h} V ${y2} H ${b.x}`;
 }
 
@@ -218,7 +246,7 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
   let alive = true, mode = lastMode, graph = null, place = null, signature = null, gen = generation();
   let z = 1, tx = G.PAD, ty = G.PAD, fitted = false, focusId = null, pop = null, menu = null, intent = 0;
   const nodeEls = new Map();
-  let rowsById = new Map(), labels = new Map(), staleOf = () => false;
+  let rowsById = new Map(), labels = new Map(), staleOf = () => false, deployments = [];
   const fixOpen = new Set(); // the deployments whose "How to fix" is open, kept across repaints
 
   zoomButton("graph-zoom-out", "Zoom out", "zoomOut", () => zoomBy(1 / Z_STEP));
@@ -332,7 +360,7 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     const copy = node("span", "graph-node-copy");
     copy.append(node("span", "graph-node-name", facts.name));
     const sub = node("span", "graph-node-sub");
-    const by = n.crossMachine && n.parent ? `started by ${startedByWords(n, rowsById, labels)}` : null;
+    const by = n.crossColumn && n.parent ? `started by ${startedByWords(n, rowsById, labels)}` : null;
     const parts = [facts.soul, mode === "field" ? n.machine : null, by].filter(Boolean);
     sub.textContent = parts.join(" · ");
     if (n.sameWork) { if (parts.length) sub.append(" · "); sub.append(node("b", null, GRAPH_COPY.sameWork)); }
@@ -378,16 +406,21 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     }
     paintNotes(data);
     if (!data.rows?.length) { say(GRAPH_COPY.empty); showCanvas(false); clear(); return; }
+    let focusAfter = false;
     showCanvas(true);
     staleOf = (row) => data.stale?.(row) === true;
     graph = instanceGraph(data.rows, data.deployments, DESKTOP_TERMS, { mode, here: data.here });
     place = layoutGraph(graph);
-    rowsById = new Map(data.rows.map((r) => [instanceId(r), r]));
+    rowsById = new Map(data.rows.map((r) => [instanceId(r), r])); deployments = data.deployments || [];
     labels = graph.labels;
+    // An open menu survives the repaint: reopened on the same agent, on the item it was on (the roster menu's rule).
+    const kept = menu ? { id: menu.id, action: menu.element.contains(doc.activeElement) ? doc.activeElement?.dataset?.action ?? null : null } : null;
     draw(data);
+    if (kept && nodeEls.has(kept.id)) { focusId = kept.id; openMenu(kept.id, null, kept.action); }
+    else if (kept?.action) focusAfter = true; // its agent is gone: the focus lands on a node, never on <body>
     // The focus stays on the node it was on, else the requested column's first, else the first node (roving tabindex).
     const stops = graphStops(graph).flat();
-    let target = focusId && nodeEls.has(focusId) ? focusId : null, focusAfter = false;
+    let target = focusId && nodeEls.has(focusId) ? focusId : null;
     if (requestedColumn && mode === "columns") {
       const first = graphStops(graph)[graph.columns.findIndex((c) => c.key === requestedColumn)]?.[0];
       if (first) { target = first.id; requestedColumn = null; focusAfter = true; }
@@ -395,7 +428,7 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     focusId = target ?? stops[0]?.id ?? null;
     for (const [id, e] of nodeEls) e.tabIndex = id === focusId ? 0 : -1;
     if (!fitted) fit(); else applyTransform();
-    if ((hadFocus || keepFocus || focusAfter) && focusId) focusNode(focusId, { reveal: focusAfter });
+    if (!menu && (hadFocus || keepFocus || focusAfter) && focusId) focusNode(focusId, { reveal: focusAfter });
   }
 
   /** Each deployment with something to say (not live, not matched, or a note): its heading's words above the canvas. */
@@ -514,23 +547,28 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
   function closeMenu({ restore = false } = {}) {
     if (menu) { const m = menu; menu = null; try { m.element.hidePopover?.(); } catch { /* already closed */ } m.element.remove(); if (restore) nodeEls.get(m.id)?.focus(); }
   }
-  function openMenu(id, at) {
+  function openMenu(id, at, focusAction = null) {
     const row = rowsById.get(id), anchor = nodeEls.get(id);
     if (!row || !anchor) return;
     closeMenu(); closePop();
     const m = node("div", "ctx-instance-menu graph-menu"); m.setAttribute("role", "menu"); m.setAttribute("aria-label", `Actions for ${row.instance}`);
     m.setAttribute("popover", "auto"); m.tabIndex = -1;
     const items = [];
-    const item = (action, label, iconName, run, enabled = true) => {
-      const b = node("button"); b.type = "button"; b.tabIndex = -1; b.setAttribute("role", "menuitem"); b.dataset.action = action; b.disabled = !enabled;
+    // `reason`: why the item can't act now, said under its label and as its title (the roster menu's grammar).
+    const item = (action, label, iconName, run, reason = null) => {
+      const b = node("button"); b.type = "button"; b.tabIndex = -1; b.setAttribute("role", "menuitem"); b.dataset.action = action; b.disabled = !!reason;
       const glyph = node("span", "ctx-menu-icon"); glyph.setAttribute("aria-hidden", "true"); glyph.append(iconElement(doc, iconName, { size: 15 }));
       b.append(glyph, node("span", null, label));
+      if (reason) { b.title = reason; b.append(node("small", null, reason)); }
       b.addEventListener("click", () => { if (!alive || b.disabled) return; closeMenu({ restore: true }); run(); });
       items.push(b); m.append(b);
     };
-    item("open", "Open terminal", "terminal", () => open(id), typeof ctx.openAgent === "function");
-    item("details", "Details", "info", () => { if (ctx.openAgentDetails?.(row) === false) ctx.notify?.(`${row.instance} isn't in the roster now.`); }, typeof ctx.openAgentDetails === "function");
-    item("soul", "Open soul", "soul", () => ctx.openSoulOf?.(row), typeof ctx.openSoulOf === "function" && !!row.agent);
+    const unavailable = "Not available here.";
+    item("open", "Open terminal", "terminal", () => open(id), typeof ctx.openAgent === "function" ? null : unavailable);
+    item("details", "Details", "info", () => { if (ctx.openAgentDetails?.(row) === false) ctx.notify?.(`${row.instance} isn't in the roster now.`); },
+      typeof ctx.openAgentDetails === "function" ? null : unavailable);
+    const soul = soulHandoff(row, deployments, labels);
+    item("soul", "Open soul", "soul", () => ctx.openSoulOf?.(soul.ref), typeof ctx.openSoulOf !== "function" ? unavailable : soul.reason ?? null);
     item("events", "Recent events…", "overview", () => openEvents(id));
     m.addEventListener("keydown", (e) => {
       if (e.key === "Tab") { closeMenu({ restore: true }); return; }
@@ -549,7 +587,7 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     const x = at ? at.x : box.left + 8, y = at ? at.y : box.bottom + 4;
     m.style.left = `${Math.max(8, Math.min(x, (win.innerWidth || 0) - size.width - 8))}px`;
     m.style.top = `${Math.max(8, y + size.height + 8 <= (win.innerHeight || Infinity) ? y : y - size.height - (at ? 0 : box.height + 8))}px`;
-    (items.find((b) => !b.disabled) || m).focus();
+    (items.find((b) => b.dataset.action === focusAction && !b.disabled) || items.find((b) => !b.disabled) || m).focus();
   }
 
   /* Recent events: the old popup's events view (instance-events-view.mjs), for one agent, in a small dialog by its

@@ -12,17 +12,21 @@
  * - A column is `{ key, label, deployment, local, rows }`; `label` is the machine (deployment-label.mjs
  *   `machineLabelParts`: the folder's tail too only when one machine holds two), this computer's own name (`here`)
  *   where it is known. `rows`, top to bottom, are the outline: `{ kind: 'you', key, depth: 0 }`, or `{ kind:
- *   'agent', id, row, depth, machine, parent, recordedParent, byYou, sameWork, crossMachine }`.
+ *   'agent', id, row, depth, machine, parent, recordedParent, byYou, sameWork, crossColumn, crossMachine }`. A
+ *   column's `machine` is its machine's identity (this computer, or the deployment's machine): two folders of one
+ *   computer are two columns of one machine.
  * - Edges are "started by", parent → child: `{ from, to, kind, sameWork }`, `kind` 'started' (solid), 'you' (from a
- *   column's "You" root) or 'cross' (the parent is in another column: drawn dotted between them). A field keeps
- *   a cross-machine edge's kind, so it is drawn the same way in both modes.
+ *   column's "You" root), 'column' (the parent is in another column of the same machine: drawn solid between them)
+ *   or 'cross' (the parent is on another machine: drawn dotted). A field keeps a cross-machine edge's kind, so it is
+ *   drawn the same way in both modes.
  * - `labels`: Map<column key, machine label> of the view's columns, in both modes (a field names each agent's).
  *
  * The facts, read as the kernel reports them, and nothing guessed beyond the one display rule below:
  * - A parent is the row's `parentInstance`, resolved among its own column's rows (instance-tree.mjs `resolveLinkId`:
  *   the same host, then the same agents root). The kernel never resolves a parent across hosts, so a parent on
  *   another machine is a display rule: a name no row of its own column has, which exactly one row of another
- *   column has, is drawn to that row as a cross-machine edge. Anything else (no such row, or two) is no edge: the row
+ *   column has, is drawn to that row: a cross-machine edge when the two columns are on different machines, a
+ *   between-columns edge when they are two folders of one machine. Anything else (no such row, or two) is no edge: the row
  *   is a root, and `recordedParent` keeps the name it records so its node can still say who started it.
  * - "You" (`byYou`): a row with an attributed human (attributed-human.mjs) and no recorded parent. Each column with
  *   such rows has one "You" root above them. The guide's schedule ("clock") root needs a fact no row carries
@@ -61,23 +65,24 @@ function nameIndex(rows) {
 function columnsOf(rows, deployments, terms, here) {
   const list = Array.isArray(deployments) ? deployments.filter((d) => record(d) && typeof d.id === 'string' && d.id) : [];
   const hereName = shown(here) ?? terms.thisMachine;
-  if (!list.length) return [{ key: 'here', label: hereName, deployment: null, local: true, rows }];
+  if (!list.length) return [{ key: 'here', label: hereName, deployment: null, local: true, machine: ':here', rows }];
   const labels = machineLabelParts(list, terms), parts = splitByDeployment(list)(rows);
   const columns = list.map((d) => {
     const local = d.local === true, { machine = terms.thisMachine, tail = '' } = labels.get(d.id) || {};
     // This computer's own deployment carries its name where the caller knows it; a second folder of one machine its tail.
     const label = [local ? hereName : machine, tail].filter(Boolean).join(' · ');
-    return { key: d.id, label, deployment: d, local, rows: parts.get(d.id) || [] };
+    return { key: d.id, label, deployment: d, local, machine: local ? ':here' : (typeof d.machine === 'string' && d.machine ? `machine:${d.machine}` : `deployment:${d.id}`), rows: parts.get(d.id) || [] };
   });
   const primary = primaryDeployment(list)?.id;
   return columns.sort((a, b) => Number(b.local) - Number(a.local) || a.label.localeCompare(b.label)
     || Number(b.key === primary) - Number(a.key === primary) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 }
 
-/** Each row's parent: Map<id, { id, cross }>, resolved within its column first, then (a display rule) by a name
- * exactly one row of another column has. */
+/** Each row's parent: Map<id, { id, column, machine }>: `column` whether it is in another column, `machine` whether it
+ * is on another machine. Resolved within the row's column first, then (a display rule) by a name exactly one row of
+ * another column has. */
 function parents(columns) {
-  const columnOf = new Map(), all = [];
+  const columnOf = new Map(), machineOf = new Map(columns.map((c) => [c.key, c.machine])), all = [];
   for (const c of columns) for (const row of c.rows) { columnOf.set(instanceId(row), c.key); all.push(row); }
   const everywhere = nameIndex(all), out = new Map();
   for (const c of columns) {
@@ -86,10 +91,13 @@ function parents(columns) {
       const name = recorded(row), id = instanceId(row);
       if (!name || name === row.instance) continue;
       const local = resolveLinkId(row, name, own);
-      if (local && local !== id) { out.set(id, { id: local, cross: false }); continue; }
+      if (local && local !== id) { out.set(id, { id: local, column: false, machine: false }); continue; }
       if (own.has(name)) continue; // the name is here, but not one row: no edge, never a guess elsewhere
       const elsewhere = (everywhere.get(name) || []).filter((r) => columnOf.get(instanceId(r)) !== c.key);
-      if (elsewhere.length === 1) out.set(id, { id: instanceId(elsewhere[0]), cross: true });
+      if (elsewhere.length === 1) {
+        const pc = columnOf.get(instanceId(elsewhere[0]));
+        out.set(id, { id: instanceId(elsewhere[0]), column: true, machine: machineOf.get(pc) !== c.machine });
+      }
     }
   }
   return { parentOf: out, columnOf };
@@ -111,12 +119,12 @@ function outline(key, rows, parentOf, columnOf, labels, mode) {
     const id = instanceId(row), p = parentOf.get(id);
     placed.add(id);
     out.push({ kind: 'agent', id, row, depth, column: key, machine: labels.get(columnOf.get(id)) ?? null,
-      parent: p ? { id: p.id, column: columnOf.get(p.id) ?? null, cross: p.cross } : null, recordedParent: recorded(row),
-      byYou: !recorded(row) && !!attributedHumanData(row.attributedHuman), sameWork: !!p && same(row), crossMachine: !!p?.cross });
+      parent: p ? { id: p.id, column: columnOf.get(p.id) ?? null, crossColumn: p.column, crossMachine: p.machine } : null, recordedParent: recorded(row),
+      byYou: !recorded(row) && !!attributedHumanData(row.attributedHuman), sameWork: !!p && same(row), crossColumn: !!p?.column, crossMachine: !!p?.machine });
     for (const child of children.get(id) || []) {
       const cid = instanceId(child);
       if (placed.has(cid)) continue; // the way back into a cycle: not drawn
-      edges.push({ from: id, to: cid, kind: parentOf.get(cid)?.cross ? 'cross' : 'started', sameWork: same(child) });
+      edges.push({ from: id, to: cid, kind: parentOf.get(cid)?.machine ? 'cross' : 'started', sameWork: same(child) });
       walk(child, depth + 1);
     }
   };
@@ -131,14 +139,14 @@ function outline(key, rows, parentOf, columnOf, labels, mode) {
     walk(row, 0);
     // A parent in another column: the edge runs between the two columns.
     const p = parentOf.get(instanceId(row));
-    if (mode === 'columns' && p?.cross) edges.push({ from: p.id, to: instanceId(row), kind: 'cross', sameWork: same(row) });
+    if (mode === 'columns' && p?.column) edges.push({ from: p.id, to: instanceId(row), kind: p.machine ? 'cross' : 'column', sameWork: same(row) });
   }
   // A parentInstance cycle has no root: it is cut at its first row in the roster's order, drawn as a root.
   for (const row of sorted) {
     if (placed.has(instanceId(row))) continue;
     const at = out.length;
     walk(row, 0);
-    Object.assign(out[at], { parent: null, sameWork: false, crossMachine: false });
+    Object.assign(out[at], { parent: null, sameWork: false, crossColumn: false, crossMachine: false });
   }
   return { rows: out, edges };
 }
@@ -157,7 +165,7 @@ export function instanceGraph(rows, deployments, terms, { mode = 'columns', here
   const laid = columns.map((c) => {
     const o = outline(c.key, c.rows, parentOf, columnOf, labels, kind);
     edges.push(...o.edges);
-    return { key: c.key, label: c.label, deployment: c.deployment, local: c.local, rows: o.rows };
+    return { key: c.key, label: c.label, deployment: c.deployment, local: c.local, machine: c.machine, rows: o.rows };
   });
   return { mode: kind, columns: laid, edges, labels };
 }

@@ -254,10 +254,11 @@ const ctx = {
   homeRoster: () => homeRoster(),
   subscribeHomeRoster: (fn) => subscribeHomeRoster(fn),
   openAgent: (row) => openRosterInstance(row),
-  // The Graph's node menu (slice 6b): Details opens the agent as Enter does and shows its instance panel; Open soul is
-  // the panel's own hand-off to the soul's page.
+  // The Graph's node menu (slice 6b): Details inspects the agent as the roster menu's "Knowledge & capabilities…"
+  // does, never starting it (slice 6a's Details tab replaces it); Open soul hands the exact soul (views/graph.mjs
+  // soulHandoff) to the Workspace page.
   openAgentDetails: (row) => openRosterDetails(row),
-  openSoulOf: (row) => (row?.agent ? openSoulPage({ workspace: currentWorkspace(), name: row.agent, agentsRoot: row.agentsRoot, server: row.server || undefined }) : undefined),
+  openSoulOf: (ref) => (ref?.name ? openSoulPage({ workspace: currentWorkspace(), ...ref }) : undefined),
   openStage: (name) => showStageFocused(name),
   openWorkspaceTab: (tab, options) => openWorkspaceTabFocused(tab, options),
   // A bound action's key as the keyboard reference writes it ("Ctrl+K"), or "" when it has none.
@@ -580,26 +581,36 @@ function openRosterInstance(i) {
   el.click();
   return true;
 }
-/** Details of a roster row (the Graph's node menu, slice 6b): the row opened as the roster opens it, then the instance
- * panel shown and focused (instance details follow the active terminal tab). Returns whether a row was opened. */
+/** Details of a roster row (the Graph's node menu, slice 6b, until slice 6a's Details tab): the agent inspected on the
+ * Workspace page (`preselectHome`, the roster menu's "Knowledge & capabilities…"), whatever its state: a stopped or
+ * held agent is inspected too, never started. Owned by a tab-open intent, so a newer navigation drops it. Returns
+ * whether the row is in the roster now. */
 function openRosterDetails(i) {
-  if (!openRosterInstance(i)) return false;
-  if (contextPanel.isFocusMode()) contextPanel.setFocusMode(false);
-  contextPanel.setCollapsed(false);
-  // The open lands the row's terminal tab, and with it the panel's instance, on its own turn: the focus follows it.
-  requestAnimationFrame(() => contextPanel.focus());
+  const id = i ? instanceId(i) : null, row = id ? shownRows(contextInstances).find((r) => instanceId(r) === id) : null;
+  if (!row) return false;
+  const owns = tabOpenIntents.begin(), ws = currentWorkspace();
+  import("./views/spawn.mjs").then((mod) => {
+    if (!owns() || ws !== currentWorkspace()) return;
+    mod.preselectHome(row); return showStage("spawn");
+  }).catch((e) => { if (owns()) ctx.notify(`Could not open ${row.instance}'s details: ${e.message || e}`); });
   return true;
 }
 /** A soul's page on the Workspace page (the instance panel's Soul tab and the Graph's Open soul; the same hand-off as
- * Quick Open): intent-guarded, so a newer navigation drops it; a miss says why nothing opened. */
-async function openSoulPage({ workspace, name, agentsRoot, server }) {
+ * Quick Open): intent-guarded, so a newer navigation drops it; a miss says why nothing opened. `key` and `repoKey`
+ * (the Graph's exact soul) narrow it to that soul (views/spawn.mjs preselectSoul). */
+async function openSoulPage({ workspace, name, agentsRoot, server, key, repoKey }) {
   const owns = tabOpenIntents.begin();
   let mod;
   try { mod = await import("./views/spawn.mjs"); }
   catch (e) { if (owns()) ctx.notify(`Could not open soul: ${e.message || e}`); return; }
   if (!owns() || workspace !== currentWorkspace()) return;
-  const gen = workspaceGeneration();
-  mod.preselectSoul({ name, agentsRoot, server, onMiss: count => { if (workspaceGeneration() === gen) ctx.notify(count ? `Several souls are named ${name}; pick it in the Workspace view.` : `${name} is not in this workspace's souls.`); } });
+  const gen = workspaceGeneration(), keyed = typeof key === "string";
+  mod.preselectSoul({ name, agentsRoot, server, ...(keyed ? { key } : {}), ...(typeof repoKey === "string" ? { repoKey } : {}), onMiss: (count, { sharedName } = {}) => {
+    if (workspaceGeneration() !== gen) return;
+    ctx.notify(sharedName ? `Another soul in this workspace is also named ${sharedName}, so the Workspace page can't open ${key}.`
+      : count ? `Several souls are named ${name}; pick it in the Workspace view.`
+      : keyed ? `The soul ${name} was spawned from (${key}) is not among this workspace's souls now.` : `${name} is not in this workspace's souls.`);
+  } });
   showStage("spawn");
 }
 /** Home's view of the roster: the rows the sidebar shows (held retires included), its deployments, the read's

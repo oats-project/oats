@@ -436,3 +436,17 @@ test('preselectCapability from an open soul page closes it and opens the capabil
   assert.equal(u.selectedTab().id, 'workspace-tab-capabilities');
   assert.equal(u.doc.querySelector('.workspace-discovery').hidden, false);
 });
+
+// The Graph's Open soul (slice 6b, views/graph.mjs soulHandoff) hands the soul an agent was spawned from by its key
+// and its source's repoKey: a soul of the same name that replaced it is not that soul, and nothing opens.
+test('a keyed soul handoff opens only the exact soul: a same-named replacement is a miss', async t => {
+  const u = await setup(t);
+  u.setAgents([{ ...soul('/b/agents'), key: 'new-key', soulSource: { repoKey: 'github.com/acme/new' } }]);
+  u.poll(); await settle();
+  const misses = [];
+  spawn.preselectSoul({ name: 'dev', agentsRoot: '/b/agents', key: 'old-key', repoKey: 'github.com/acme/old', onMiss: count => misses.push(count) }); await settle();
+  assert.deepEqual(misses, [0], 'the replacement is not the recorded soul');
+  assert.equal(u.doc.querySelector('.workspace-soul-page').hidden, true, 'no soul page opened');
+  spawn.preselectSoul({ name: 'dev', agentsRoot: '/b/agents', key: 'new-key', repoKey: 'github.com/acme/new', onMiss: count => misses.push(count) }); await settle();
+  assert.deepEqual(misses, [0]); assert.equal(u.doc.querySelector('.workspace-soul-page').hidden, false, 'the exact soul opens');
+});

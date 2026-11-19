@@ -756,13 +756,16 @@ listener, as on the Workspace page).
   others by label; `machineLabelParts` adds the folder only when one machine holds two), each an outline tree in the
   roster's order. A parent resolves in its own column (`resolveLinkId`); a name no row of the column has, which
   exactly one row of another column has, is a cross-machine edge (a display rule: the kernel never resolves a parent
-  across hosts), drawn dotted between the columns, and its node says "started by <parent> on <machine>". **You** is
+  across hosts), drawn dotted between the columns when they are on different machines (each column knows its
+  machine: two folders of one computer are one machine, drawn solid between them), and its node says "started by
+  <parent> on <column>". **You** is
   one root per column above the rows with an attributed human and no recorded parent. Same work is the kernel's flag,
   read only where the host declares the feature (`sameWorkKnown`), said "same work" on the node. A `parentInstance`
   cycle is cut at its first row. `m` gives one field: every agent in one tree, its machine on its node. The schedule
   clock root and a same-work label have no fact to read (gap map, contradictions 13 and 3).
-- **Drawing.** `layoutGraph` places rows at fixed heights, indented by depth (capped), and `edgePath` draws an edge
-  in a column down its parent's guide and across to the child, so no two cross; a cross-machine edge is a curve
+- **Drawing.** `layoutGraph` places rows at fixed heights, indented by depth with no cap (a column widens to hold its
+  deepest node at `MIN_NODE_W`), and `edgePath` draws an edge in a column down its parent's guide and across to the
+  child: the guide runs left of every node of the parent's subtree, so no edge passes a node; a cross-machine edge is a curve
   between the columns' sides (`.cross`, dotted). The edges use `--graph-edge` (3:1 on every surface it is drawn on).
   A node is the roster's `.ctx-dot` (the needs-input mark, `paintDotColor`), the display name and its soul. Not-live
   deployments' headings (`deployments-page.mjs` `deploymentReasonBlock`: the state, the short reason, **How to fix**)
@@ -775,10 +778,15 @@ listener, as on the Workspace page).
   are rebindable actions of the never-activated context `view:graph`, resolved with `resolveViewKey`. Drag pans, the
   wheel scrolls, Ctrl/⌘ + the wheel zooms; nothing animates.
 - **The node's menu** (a right-click, Shift+F10, the Menu key) replaces the old popover: **Open terminal**
-  (`ctx.openAgent`), **Details** (`ctx.openAgentDetails`: the row opened, then the instance panel shown and
-  focused), **Open soul** (`ctx.openSoulOf`: the instance panel's own hand-off, `openSoulPage`) and **Recent
+  (`ctx.openAgent`), **Details** (`ctx.openAgentDetails`, shell.mjs `openRosterDetails`: the roster menu's
+  "Knowledge & capabilities…" inspection, `preselectHome`, owned by a tab-open intent, which never starts a stopped
+  agent; slice 6a's Details tab, `ctx.openDetails`, replaces it), **Open soul** (`soulHandoff`: the exact soul, a
+  local row's `soulKey` and `soul.repoKey`, a remote row's agent dir, root and server, refused with its reason for a
+  row of another deployment than the primary or one that records none; `ctx.openSoulOf` → `openSoulPage` →
+  `preselectSoul`) and **Recent
   events…** (`instance-events-view.mjs` in a small dialog by the node, owned by that dialog and the workspace it was
-  opened in). Esc or Tab close the menu back on its node.
+  opened in; it goes when slice 6a's Details carries the events). Esc or Tab close the menu back on its node, and a
+  roster repaint reopens an open menu on the same agent and item.
 
 ## Spawn dialog — workspace model v2
 

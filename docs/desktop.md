@@ -881,7 +881,8 @@ the roster's dot (the needs-input mark included), the agent's name and its soul.
 A child that does its parent's work says **same work** on its node. **You** sits
 above the agents a person started that have no parent. A parent on another
 machine is drawn as a dotted line between the columns, and its node says
-"started by lead on falcon".
+"started by lead on falcon". Two folders of one computer are two columns of one
+machine: a parent in the other folder is a solid line between them.
 
 Two things the design shows aren't drawn yet, because OATS doesn't report them:
 a clock for an agent a schedule started, and a same-work label (OATS reports
@@ -894,7 +895,11 @@ Keys, on a node: ← → between machines, ↑ ↓ between the agents of a machi
 does, **m** switches between machines as columns and one field (every agent in
 one tree, its machine on its node), **+** and **−** zoom and **0** fits. The menu
 key, Shift+F10 or a right-click opens a node's menu: **Open terminal**,
-**Details** (the agent's instance panel), **Open soul** and **Recent events…**.
+**Details** (what the agent is made of, on the Workspace page, for a stopped
+agent too), **Open soul** (the exact soul it was spawned from; a soul that
+replaced it under the same name doesn't open, and an agent of another
+deployment than the one the Workspace page shows says so) and **Recent
+events…**.
 Esc goes back to Home. Drag pans, the wheel scrolls, and Ctrl or ⌘ with the
 wheel zooms. The Graph reads the roster the sidebar shows, so it is as current
 as the sidebar, and it reads nothing else but an agent's recent events, when

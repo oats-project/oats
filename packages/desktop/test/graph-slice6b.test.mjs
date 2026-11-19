@@ -4,7 +4,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
-import { createGraph, mount, GRAPH_COPY, nodeLabel, layoutGraph, edgePath } from "../renderer/views/graph.mjs";
+import { createGraph, mount, GRAPH_COPY, nodeLabel, layoutGraph, edgePath, soulHandoff, GRAPH_GEOMETRY } from "../renderer/views/graph.mjs";
+import { runInNewContext } from "node:vm";
 import { NAV, NAV_TABS, pinnedRowFor } from "../renderer/shell-nav.mjs";
 import { OVERVIEW } from "../renderer/views/home.mjs";
 import { instanceGraph } from "../../client/instance-graph.mjs";
@@ -20,7 +21,8 @@ const DEPLOYMENTS = [
 ];
 const row = (instance, extra = {}) => {
   const server = extra.server ?? null;
-  return { instance, agent: "oats-developer", home: `/h/${server ?? "here"}/${instance}`, agentsRoot: "/r", running: true, runtimeState: "running",
+  return { instance, agent: "oats-developer", soulKey: "oats-developer", soul: { repoKey: "github.com/acme/agents" },
+    home: `/h/${server ?? "here"}/${instance}`, agentsRoot: "/r", running: true, runtimeState: "running",
     createdAt: "2026-11-01T00:00:00.000Z", deployment: { id: server ? `${server}:/w` : "/w" }, ...(server ? { server, remote: true } : {}), ...extra };
 };
 
@@ -35,7 +37,7 @@ function fixture(t, { rows = [], phase = "ready", deployments = DEPLOYMENTS, not
     subscribeHomeRoster: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
     openAgent: (r) => { opened.push(r.instance); return true; },
     openAgentDetails: (r) => { details.push(r.instance); return true; },
-    openSoulOf: (r) => { souls.push(r.agent); },
+    openSoulOf: (ref) => { souls.push(ref); },
   };
   const ws = { gen: 1, listeners: new Set() };
   const graph = createGraph(el, ctx, { doc, generation: () => ws.gen, subscribeWorkspace: (fn) => { ws.listeners.add(fn); return () => ws.listeners.delete(fn); },
@@ -134,7 +136,8 @@ test("slice6b keyboard moves and opens", (t) => {
   assert.deepEqual(u.details, ["dev"]); assert.equal(u.focused(), "dev", "the menu closes back on its node");
   u.doc.activeElement.dispatchEvent(new u.dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
   u.el.querySelector('[role="menu"] [data-action="soul"]').click();
-  assert.deepEqual(u.souls, ["oats-developer"]);
+  assert.deepEqual(u.souls, [{ name: "oats-developer", key: "oats-developer", repoKey: "github.com/acme/agents", agentsRoot: "/r" }],
+    "the exact soul it was spawned from: its key and its source");
   u.doc.activeElement.dispatchEvent(new u.dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
   u.key(u.el.querySelector('[role="menu"]'), "Escape");
   assert.equal(u.el.querySelector('[role="menu"]'), null); assert.equal(u.focused(), "dev");
@@ -300,4 +303,95 @@ test("slice6b hostile names stay text", (t) => {
   assert.equal(u.el.querySelector("img,script,iframe"), null);
   assert.ok(u.nodes().every((n) => !n.id.includes("<")), "no identity becomes an id");
   assert.match(u.nodeOf("kid").getAttribute("aria-label"), /started by x'"><img/);
+});
+
+test("slice6b Open soul hands the exact soul, and says why it can't", (t) => {
+  // A local row: its recorded soul key and source; a remote row: its agent dir, root and server.
+  assert.deepEqual(soulHandoff(row("a"), DEPLOYMENTS), { ref: { name: "oats-developer", key: "oats-developer", repoKey: "github.com/acme/agents", agentsRoot: "/r" } });
+  const primaryRemote = [{ ...DEPLOYMENTS[1], primary: true }, { ...DEPLOYMENTS[0], primary: false }];
+  assert.deepEqual(soulHandoff(row("b", { server: "polaris" }), primaryRemote), { ref: { name: "oats-developer", agentsRoot: "/r", server: "polaris" } });
+  // Nothing recorded; another deployment than the one the Workspace page shows.
+  assert.match(soulHandoff(row("c", { soulKey: undefined }), DEPLOYMENTS).reason, /doesn't record the soul it was spawned from/);
+  assert.equal(soulHandoff(row("d", { server: "polaris" }), DEPLOYMENTS, new Map([["/w", "falcon"], ["polaris:/w", "polaris"]])).reason,
+    "This agent is on polaris; the Workspace page shows only the souls of falcon.");
+  // The menu shows the reason on a disabled Open soul.
+  const u = fixture(t, { rows: [row("lead"), row("far", { server: "polaris" })] });
+  u.nodeOf("far").focus();
+  u.doc.activeElement.dispatchEvent(new u.dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  const soul = u.el.querySelector('[role="menu"] [data-action="soul"]');
+  assert.equal(soul.disabled, true); assert.equal(soul.querySelector("small").textContent, "This agent is on polaris; the Workspace page shows only the souls of falcon.");
+  assert.equal(soul.title, soul.querySelector("small").textContent);
+  // The shell's hand-off passes the key and the source to the Workspace page, and words a replaced soul's miss.
+  const shell = read("../renderer/shell.mjs");
+  const fn = shell.match(/async function openSoulPage\([^]*?\n\}/)[0].replace('import("./views/spawn.mjs")', "loadSpawn()");
+  const handed = [], notes = [], stages = [];
+  const run = runInNewContext(`(${fn})`, { tabOpenIntents: { begin: () => () => true }, currentWorkspace: () => "/w", workspaceGeneration: () => 1,
+    ctx: { notify: (m) => notes.push(m) }, showStage: (n) => stages.push(n), loadSpawn: async () => ({ preselectSoul: (ref) => { handed.push(ref); ref.onMiss(0); } }) });
+  return run({ workspace: "/w", name: "dev", agentsRoot: "/r", key: "old-key", repoKey: "old/repo" }).then(() => {
+    assert.deepEqual(handed.map(({ onMiss: _m, ...ref }) => ref), [{ name: "dev", agentsRoot: "/r", server: undefined, key: "old-key", repoKey: "old/repo" }]);
+    assert.match(notes[0], /The soul dev was spawned from \(old-key\) is not among this workspace's souls now\./);
+    assert.deepEqual(stages, ["spawn"]);
+  });
+});
+
+test("slice6b Details inspects the agent, stopped or held, and never starts it", async () => {
+  const shell = read("../renderer/shell.mjs");
+  const fn = shell.match(/function openRosterDetails\(i\) \{[^]*?\n\}/)[0].replace('import("./views/spawn.mjs")', "loadSpawn()");
+  const stopped = row("off", { running: false, runtimeState: "stopped" }), held = row("busy", { spawnInProgress: true });
+  let owned = true;
+  const seen = [], stages = [], started = [];
+  const c = { instanceId, shownRows: (rows) => rows, contextInstances: [stopped, held], tabOpenIntents: { begin: () => () => owned },
+    currentWorkspace: () => "/w", ctx: { notify() {} }, showStage: (n) => stages.push(n), openInstanceStart: (r) => started.push(r.instance),
+    loadSpawn: async () => ({ preselectHome: (r) => seen.push(r.instance) }) };
+  const details = runInNewContext(`(${fn})`, c);
+  assert.equal(details(stopped), true); await new Promise((r) => setTimeout(r, 0));
+  assert.equal(details(held), true); await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(seen, ["off", "busy"]); assert.deepEqual(stages, ["spawn", "spawn"]); assert.deepEqual(started, [], "never the Start path");
+  // A newer navigation before the module loads drops it; a row the roster doesn't have opens nothing.
+  owned = false; assert.equal(details(stopped), true); await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(seen, ["off", "busy"]);
+  assert.equal(details(row("gone")), false);
+});
+
+test("slice6b deep trees: no edge passes through a node, at any depth", () => {
+  const rows = [row("c0")];
+  for (let i = 1; i <= 9; i++) rows.push(row(`c${i}`, { parentInstance: `c${i - 1}` }));
+  rows.push(row("kidA", { parentInstance: "c9", createdAt: "2026-11-02T00:00:00.000Z" }), row("kidB", { parentInstance: "c9" }), row("kidA1", { parentInstance: "kidA" }));
+  const graph = instanceGraph(rows, DEPLOYMENTS, DESKTOP_TERMS), place = layoutGraph(graph);
+  const boxes = [...place.at.entries()];
+  for (const e of graph.edges) {
+    const d = edgePath(e, place.at, graph.mode), [, x, y1, y2, x2] = d.match(/^M ([\d.]+) ([\d.]+) V ([\d.]+) H ([\d.]+)$/).map(Number);
+    for (const [id, b] of boxes) {
+      if (id === e.from || id === e.to) continue;
+      const vertical = x > b.x && x < b.x + b.w && y2 > b.y && y1 < b.y + b.h;
+      const horizontal = y2 > b.y && y2 < b.y + b.h && Math.max(x, x2) > b.x && Math.min(x, x2) < b.x + b.w;
+      assert.ok(!vertical && !horizontal, `${e.from} → ${e.to} passes ${id}`);
+    }
+  }
+  // Every node keeps its minimum width, the column widening to hold the deepest.
+  for (const [, b] of boxes) if (b.h === GRAPH_GEOMETRY.NODE_H) assert.ok(b.w >= GRAPH_GEOMETRY.MIN_NODE_W);
+});
+
+test("slice6b two folders of one computer: two columns, a solid edge between them, never dotted", (t) => {
+  const deps = [DEPLOYMENTS[0], { id: "/v", machine: "", path: "/v", local: true, reachable: true }];
+  const u = fixture(t, { deployments: deps, rows: [row("lead"), row("kid", { deployment: { id: "/v" }, parentInstance: "lead" })] });
+  const between = u.edges().filter((p) => p.dataset.to === "/h/here/kid");
+  assert.deepEqual(between.map((p) => [p.dataset.kind, p.classList.contains("cross")]), [["column", false]]);
+  assert.match(between[0].getAttribute("d"), / C /, "drawn between the columns");
+  assert.match(u.nodeOf("kid").getAttribute("aria-label"), /started by lead on falcon · w/);
+});
+
+test("slice6b an open menu survives a roster change, on the item it was on", (t) => {
+  const u = fixture(t, { rows: [row("a"), row("b")] });
+  u.nodeOf("a").focus();
+  u.doc.activeElement.dispatchEvent(new u.dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  u.key(u.doc.activeElement, "ArrowDown");
+  assert.equal(u.doc.activeElement.dataset.action, "details");
+  u.set({ rows: [row("a"), row("b"), row("newcomer")] });
+  assert.ok(u.el.querySelector('[role="menu"]'), "reopened on the same agent");
+  assert.equal(u.doc.activeElement.dataset.action, "details", "on the same item");
+  // Its agent gone: the menu goes, and the focus lands on a node, never on <body>.
+  u.set({ rows: [row("b"), row("newcomer")] });
+  assert.equal(u.el.querySelector('[role="menu"]'), null);
+  assert.ok(u.doc.activeElement?.dataset?.graphNode, "a node has the focus");
 });

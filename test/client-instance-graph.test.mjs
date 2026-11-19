@@ -28,10 +28,19 @@ test('no deployments reported: one column, this machine, by its name when known'
   assert.equal(instanceGraph([row('a')], [], terms).columns[0].label, 'This machine');
 });
 
-test('one machine with two folders: two columns, each with its folder', () => {
-  const g = instanceGraph([row('a'), row('b', { deployment: { id: '/v' } })],
+test('two folders of one machine: a column each, one machine, and an edge between them that is not cross-machine', () => {
+  // One column per deployment (the lead's decision for slice 6b), labelled by its machine and folder; both are this
+  // computer, so a parent in one and its child in the other are on one machine.
+  const g = instanceGraph([row('a'), row('b', { deployment: { id: '/v' }, parentInstance: 'a' })],
     [HERE, { id: '/v', machine: '', path: '/v', local: true }], terms, { here: 'falcon' });
-  assert.deepEqual(g.columns.map((c) => c.label), ['falcon · v', 'falcon · w']);
+  assert.deepEqual(g.columns.map((c) => [c.label, c.machine]), [['falcon · v', ':here'], ['falcon · w', ':here']]);
+  assert.deepEqual(g.edges.map((e) => e.kind), ['column']);
+  const b = g.columns[0].rows[0];
+  assert.deepEqual([b.crossColumn, b.crossMachine], [true, false]);
+  // Two folders of one registered machine: one machine too; a parent on this computer is another machine.
+  const r = instanceGraph([row('lead'), row('x', { server: 'polaris', parentInstance: 'lead' }), row('y', { server: 'polaris', deployment: { id: 'polaris:/v' }, parentInstance: 'x' })],
+    [HERE, POLARIS, { id: 'polaris:/v', machine: 'polaris', path: '/v', local: false }], terms);
+  assert.deepEqual(r.edges.map((e) => [e.to.split('/').pop(), e.kind]).sort(), [['x', 'cross'], ['y', 'column']]);
 });
 
 test('the roster order at every level (newest spawn first); an untagged row joins the primary', () => {
