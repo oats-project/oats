@@ -9,7 +9,7 @@ import { JSDOM } from "jsdom";
 import { prepareOwnedOpen } from "../renderer/open-intent.mjs";
 import { createViewLifecycle } from "../renderer/view-lifecycle.mjs";
 import { createSelectionOwnership } from "../renderer/selection-ownership.mjs";
-import { fillEmptyGroup } from "../renderer/split-layout.mjs";
+import { fillEmptyGroup, groupOfTab, removeSplitTab } from "../renderer/split-layout.mjs";
 import { otherIncarnation, terminalOrigin } from "../renderer/retired-tabs.mjs";
 import { navTab } from "../renderer/shell-nav.mjs";
 
@@ -80,10 +80,11 @@ for (const kind of ["terminal", "artifact"]) {
 test("navigating to a stage cancels an older terminal open", async t => {
   const f = fixture(t, "terminal");
   const pendingTerminal = f.run("first");
-  const navigate = runInNewContext(`${extract("closeStage")}\n(${extract("showStage")})`, withShellWindowGlobals({
+  // Slice 6a: a page opens as a tab (showStage → openViewTab), whose open begins the newer intent.
+  const navigate = runInNewContext(`${extract("openViewTab")}\n(${extract("showStage")})`, withShellWindowGlobals({
     // Automations, a page of its own (the product owner, 2026-10-26; hierarchy is now the Workspace page's Machines tab).
-    ...f.context, NAV: [{ name: "automations" }], navTab /* the shipped NAV_TABS lookup: showStage reads it first */, stage: { name: "automations" },
-    stageSidebarMode: () => "overview", showTabLayer() {},
+    ...f.context, NAV: [{ name: "automations", title: "Automations" }], navTab /* the shipped NAV_TABS lookup: showStage reads it first */,
+    split: null, groupOfTab, removeSplitTab, canActivateTab: (tab, ws) => !!tab && tab.workspace === ws, stageSidebarMode: () => "overview", showTabLayer() {},
   }));
   assert.equal(navTab("automations"), null, "a page, not a tab of one");
   await navigate("automations");

@@ -353,6 +353,8 @@ for (const [name, hold] of Object.entries(RETIRING)) {
     menu.openActionMenu();
     assert.equal(u.doc.activeElement, menu);
     menu.dispatchEvent(new u.doc.defaultView.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    assert.equal(u.doc.activeElement.dataset.action, "details", "Details first (slice 6a: every row's)");
+    menu.dispatchEvent(new u.doc.defaultView.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
     assert.equal(u.doc.activeElement, retireItem, "reachable");
     retireItem.click(); await new Promise(r => setImmediate(r));
     assert.equal(u.lifecycle.length, 1); assert.equal(u.lifecycle[0][0], "retire"); assert.equal(u.lifecycle[0][1].home, "/synthetic/dev-r");

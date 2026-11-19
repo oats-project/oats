@@ -112,9 +112,10 @@ test("showStage routes a NAV_TABS name to openWorkspaceSouls(tab); showStageFocu
   assert.match(open, /mod\.preselectWorkspaceTab\(tab, options\);\n  await showStage\("spawn"\);/);
   // Quick Open's return (surface-return.mjs) knows the Workspace tab it left and goes back to it, through the
   // mounted view's own module: never a tab the page can't show (its control only once it shows).
-  assert.match(src, /workspaceTab: stage\?\.name === "spawn" \? stage\.mod\?\.currentWorkspaceTab\?\.\(\) \?\? null : null/);
-  assert.match(src, /selectWorkspaceTab: name => stage\?\.name === "spawn" && stage\.mod\?\.preselectWorkspaceTab\?\.\(name\)\s*&& stage\.mod\.currentWorkspaceTab\?\.\(\) === name \? document\.getElementById\(`workspace-tab-\$\{name\}`\) : null/);
-  assert.match(src, /const mounted = stage = \{ name, life, el, mod \};/);
+  // (Slice 6a: the Workspace page is a page tab: its module is the tab's, pageModule("spawn").)
+  assert.match(src, /workspaceTab: currentPage\(\) === "spawn" \? pageModule\("spawn"\)\?\.currentWorkspaceTab\?\.\(\) \?\? null : null/);
+  assert.match(src, /selectWorkspaceTab: name => currentPage\(\) === "spawn" && pageModule\("spawn"\)\?\.preselectWorkspaceTab\?\.\(name\)\s*&& pageModule\("spawn"\)\.currentWorkspaceTab\?\.\(\) === name \? document\.getElementById\(`workspace-tab-\$\{name\}`\) : null/);
+  assert.match(src, /record\.page = name; record\.mod = mod;/, "a page tab keeps its page and module");
   assert.match(src, /const WORKSPACE_TAB_NAMES = \{ machines: "Machines", souls: "Souls", capabilities: "Capabilities" \};/);
 });
 
