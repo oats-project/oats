@@ -52,7 +52,7 @@ export const GRAPH_COPY = Object.freeze({
 });
 
 /* Geometry, in stage pixels (the zoom scales the stage). */
-export const GRAPH_GEOMETRY = Object.freeze({ COL_W: 300, FIELD_W: 420, MIN_NODE_W: 180, COL_GAP: 64, HEAD: 58, ROW: 52, NODE_H: 42, IND: 24, GUIDE: 14, INSET: 12, PAD: 24 });
+export const GRAPH_GEOMETRY = Object.freeze({ COL_W: 300, FIELD_W: 420, MIN_NODE_W: 180, COL_GAP: 64, LANE_TOP: 16, LANE: 10, GAP_SPREAD: 6, HEAD: 58, ROW: 52, NODE_H: 42, IND: 24, GUIDE: 14, INSET: 12, PAD: 24 });
 // Z_MIN is the manual zoom's floor; Fit goes lower when a picture needs it (FIT_MIN), and zooming out from there
 // stays where it is rather than jumping back up to the floor.
 const G = GRAPH_GEOMETRY, Z_MIN = 0.3, FIT_MIN = 0.05, Z_MAX = 2, Z_STEP = 1.2, DRAG_THRESHOLD = 4;
@@ -195,18 +195,34 @@ export function layoutGraph(graph) {
     x0 += width + G.COL_GAP;
   });
   for (const b of boxes) b.h = height; // one height, so the columns line up
-  return { at, boxes, width: Math.max(base, x0 - G.COL_GAP), height: Math.max(height, G.HEAD + G.ROW) };
+  // An edge between two columns that aren't next to each other runs below every column, one lane each.
+  const index = new Map(boxes.map((b, i) => [b.key, i])), lanes = new Map();
+  if (graph.mode === "columns") for (const e of graph.edges) {
+    const a = at.get(e.from), b = at.get(e.to);
+    if (a && b && Math.abs(index.get(a.column) - index.get(b.column)) > 1) lanes.set(`${e.from}\n${e.to}`, lanes.size);
+  }
+  const columnsHeight = Math.max(height, G.HEAD + G.ROW);
+  return { at, boxes, lanes, columnsHeight, width: Math.max(base, x0 - G.COL_GAP), height: columnsHeight + (lanes.size ? G.LANE_TOP + lanes.size * G.LANE : 0) };
 }
 
-/** An edge's path: within a column, down the parent's guide and across to the child (orthogonal: a tree's edges
- * never cross); between columns, a curve from the parent's side to the child's. */
-export function edgePath(edge, at, mode) {
+/** An edge's path (`place`: layoutGraph's). Within a column, down the parent's guide and across to the child
+ * (orthogonal: a tree's edges never cross). Between columns, orthogonal and only through empty space: out of the
+ * parent's side along its own row (a column has one node per row), into the gap beside its column, then (columns next
+ * to each other) along that gap to the child's row, or (columns further apart) down to its lane below every column,
+ * along it, and up the gap beside the child's column, into the child's side. */
+export function edgePath(edge, place, mode) {
+  const { at, boxes, lanes, columnsHeight } = place;
   const a = at.get(edge.from), b = at.get(edge.to);
   if (!a || !b) return null;
   if ((edge.kind === "cross" || edge.kind === "column") && mode === "columns" && a.column !== b.column) {
-    const right = a.x < b.x, x1 = right ? a.x + a.w : a.x, x2 = right ? b.x : b.x + b.w;
-    const y1 = a.y + a.h / 2, y2 = b.y + b.h / 2, dx = Math.max(24, Math.abs(x2 - x1) / 2) * (right ? 1 : -1);
-    return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+    const ca = boxes.find((x) => x.key === a.column), cb = boxes.find((x) => x.key === b.column);
+    const right = ca.x < cb.x, lane = lanes.get(`${edge.from}\n${edge.to}`);
+    const spread = (((lane ?? 0) % 5) - 2) * G.GAP_SPREAD;
+    const x1 = right ? a.x + a.w : a.x, x2 = right ? b.x : b.x + b.w, y1 = a.y + a.h / 2, y2 = b.y + b.h / 2;
+    const out = (right ? ca.x + ca.w + G.COL_GAP / 2 : ca.x - G.COL_GAP / 2) + spread;
+    if (lane === undefined) return `M ${x1} ${y1} H ${out} V ${y2} H ${x2}`;
+    const into = (right ? cb.x - G.COL_GAP / 2 : cb.x + cb.w + G.COL_GAP / 2) + spread, ly = columnsHeight + G.LANE_TOP + lane * G.LANE;
+    return `M ${x1} ${y1} H ${out} V ${ly} H ${into} V ${y2} H ${x2}`;
   }
   const gx = a.x + G.GUIDE, y2 = b.y + b.h / 2;
   return `M ${gx} ${a.y + a.h} V ${y2} H ${b.x}`;
@@ -420,7 +436,7 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     draw(data);
     // The events dialog follows the roster: gone with its agent, and re-checked against its current facts (a newer
     // incarnation at the same address revokes a read the old one asked for: instance-events-view.mjs owns it).
-    if (pop && !rowsById.has(pop.id)) closePop();
+    if (pop && !rowsById.has(pop.id)) { if (pop.element.contains(doc.activeElement)) focusAfter = true; closePop(); }
     else pop?.view?.sync?.();
     if (kept && nodeEls.has(kept.id)) { focusId = kept.id; openMenu(kept.id, null, kept.action); }
     else if (kept?.action) focusAfter = true; // its agent is gone: the focus lands on a node, never on <body>
@@ -486,7 +502,7 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
       parts.push(group);
     });
     for (const e of graph.edges) {
-      const d = edgePath(e, place.at, graph.mode);
+      const d = edgePath(e, place, graph.mode);
       if (!d) continue;
       const path = doc.createElementNS(NS, "path");
       path.setAttribute("d", d); path.dataset.from = e.from; path.dataset.to = e.to; path.dataset.kind = e.kind;

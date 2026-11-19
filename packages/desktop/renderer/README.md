@@ -766,8 +766,10 @@ listener, as on the Workspace page).
   clock root and a same-work label have no fact to read (gap map, contradictions 13 and 3).
 - **Drawing.** `layoutGraph` places rows at fixed heights, indented by depth with no cap (a column widens to hold its
   deepest node at `MIN_NODE_W`), and `edgePath` draws an edge in a column down its parent's guide and across to the
-  child: the guide runs left of every node of the parent's subtree, so no edge passes a node; a cross-machine edge is a curve
-  between the columns' sides (`.cross`, dotted). The edges use `--graph-edge` (3:1 on every surface it is drawn on).
+  child: the guide runs left of every node of the parent's subtree, so no edge passes a node. An edge between columns
+  is orthogonal too, through empty space only: along its own row into the gap beside the parent's column, then along
+  that gap (columns next to each other) or down to a lane of its own below every column and back up beside the child's
+  (`.cross`, dotted, for another machine). The edges use `--graph-edge` (3:1 on every surface it is drawn on).
   A node is the roster's `.ctx-dot` (the needs-input mark, `paintDotColor`), the display name and its soul. Not-live
   deployments' headings (`deployments-page.mjs` `deploymentReasonBlock`: the state, the short reason, **How to fix**)
   sit above the canvas, readable at any zoom; their disclosures stay open across repaints.

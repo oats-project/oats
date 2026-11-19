@@ -175,8 +175,8 @@ test("slice6b cross-machine edge dotted", (t) => {
   assert.equal(cross[0].dataset.from, "/h/here/lead"); assert.equal(cross[0].dataset.to, instanceId(row("builder", { server: "polaris" })));
   assert.ok(cross[0].classList.contains("cross"));
   assert.match(read("../renderer/views/graph.mjs"), /\.graph-edges path\.cross \{ stroke-dasharray:/, "drawn dotted");
-  // Between the columns: from the parent's side to the child's.
-  assert.match(cross[0].getAttribute("d"), /^M \d+ \d+(\.\d+)? C /);
+  // Between the columns: from the parent's side, along the gap between them, into the child's side.
+  assert.match(cross[0].getAttribute("d"), /^M [\d.]+ [\d.]+ H [\d.]+ V [\d.]+ H [\d.]+$/);
   // Not by the line's style alone: the node says where its parent runs.
   const builder = u.nodeOf("builder");
   assert.match(builder.querySelector(".graph-node-sub").textContent, /started by lead on falcon/);
@@ -254,7 +254,7 @@ test("slice6b layout: no crossings inside a column at 50+ agents", () => {
     const between = graph.columns[0].rows.slice(index.get(e.from) + 1, index.get(e.to));
     const depth = graph.columns[0].rows[index.get(e.from)].depth;
     assert.ok(between.every((r) => r.depth > depth), "no edge passes another branch");
-    assert.match(edgePath(e, place.at, graph.mode), /^M [\d.]+ [\d.]+ V [\d.]+ H [\d.]+$/);
+    assert.match(edgePath(e, place, graph.mode), /^M [\d.]+ [\d.]+ V [\d.]+ H [\d.]+$/);
   }
 });
 
@@ -364,7 +364,7 @@ test("slice6b deep trees: no edge passes through a node, at any depth", () => {
   const graph = instanceGraph(rows, DEPLOYMENTS, DESKTOP_TERMS), place = layoutGraph(graph);
   const boxes = [...place.at.entries()];
   for (const e of graph.edges) {
-    const d = edgePath(e, place.at, graph.mode), [, x, y1, y2, x2] = d.match(/^M ([\d.]+) ([\d.]+) V ([\d.]+) H ([\d.]+)$/).map(Number);
+    const d = edgePath(e, place, graph.mode), [, x, y1, y2, x2] = d.match(/^M ([\d.]+) ([\d.]+) V ([\d.]+) H ([\d.]+)$/).map(Number);
     for (const [id, b] of boxes) {
       if (id === e.from || id === e.to) continue;
       const vertical = x > b.x && x < b.x + b.w && y2 > b.y && y1 < b.y + b.h;
@@ -381,7 +381,7 @@ test("slice6b two folders of one computer: two columns, a solid edge between the
   const u = fixture(t, { deployments: deps, rows: [row("lead"), row("kid", { deployment: { id: "/v" }, parentInstance: "lead" })] });
   const between = u.edges().filter((p) => p.dataset.to === "/h/here/kid");
   assert.deepEqual(between.map((p) => [p.dataset.kind, p.classList.contains("cross")]), [["column", false]]);
-  assert.match(between[0].getAttribute("d"), / C /, "drawn between the columns");
+  assert.match(between[0].getAttribute("d"), / H [\d.]+ V [\d.]+ H /, "drawn between the columns");
   assert.match(u.nodeOf("kid").getAttribute("aria-label"), /started by lead on falcon · w/);
 });
 
@@ -459,4 +459,48 @@ for (const outcome of ["success", "rejection"]) test(`slice6b Recent events: a n
   // The agent gone: its dialog goes with it.
   u.set({ rows: [row("someone-else")] });
   assert.equal(u.el.querySelector('[role="dialog"]'), null);
+});
+
+/** The segments of an orthogonal path ("M x y H x V y …") as [[x1, y1, x2, y2], …]. */
+function segments(d) {
+  const parts = d.trim().split(/\s+/), out = [];
+  let x = Number(parts[1]), y = Number(parts[2]);
+  for (let i = 3; i < parts.length; i += 2) {
+    const v = Number(parts[i + 1]), [nx, ny] = parts[i] === "H" ? [v, y] : [x, v];
+    out.push([x, y, nx, ny]); x = nx; y = ny;
+  }
+  return out;
+}
+const crosses = ([x1, y1, x2, y2], b) => Math.max(x1, x2) > b.x && Math.min(x1, x2) < b.x + b.w && Math.max(y1, y2) > b.y && Math.min(y1, y2) < b.y + b.h;
+
+test("slice6b an edge between columns never runs through a node, next to each other or further apart", () => {
+  const deps = [{ id: "/w", machine: "", path: "/w", local: true, primary: true }, { id: "alpha:/w", machine: "alpha", path: "/w", local: false },
+    { id: "zeta:/w", machine: "zeta", path: "/w", local: false }];
+  const rows = [row("parent"), row("other"), row("unrelated", { server: "alpha" }), row("busy", { server: "alpha" }), row("near", { server: "alpha", parentInstance: "other" }),
+    row("child", { server: "zeta", parentInstance: "parent" }), row("back", { server: "zeta" }), row("left", { parentInstance: "back" })];
+  const graph = instanceGraph(rows, deps, DESKTOP_TERMS), place = layoutGraph(graph);
+  const between = graph.edges.filter((e) => e.kind === "cross");
+  assert.equal(between.length, 3, "parent → child (two columns over), other → near (next door), back → left (leftward, two over)");
+  for (const e of between) {
+    const d = edgePath(e, place, graph.mode);
+    assert.match(d, /^M [\d.]+ [\d.]+( [HV] [\d.]+)+$/, "orthogonal");
+    for (const [id, b] of place.at) {
+      if (id === e.from || id === e.to) continue;
+      for (const seg of segments(d)) assert.ok(!crosses(seg, b), `${e.from} → ${e.to} passes ${id}`);
+    }
+  }
+  // The far edges run below every column, each in its own lane, and the picture is tall enough to hold them.
+  assert.equal(place.lanes.size, 2);
+  assert.ok(place.height > place.columnsHeight);
+});
+
+test("slice6b removing the agent of a focused events dialog leaves the focus on a node", (t) => {
+  const u = fixture(t, { rows: [row("a"), row("b")] });
+  u.nodeOf("a").focus();
+  u.doc.activeElement.dispatchEvent(new u.dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  u.el.querySelector('[role="menu"] [data-action="events"]').click();
+  assert.ok(u.el.querySelector('[role="dialog"]').contains(u.doc.activeElement));
+  u.set({ rows: [row("b")] });
+  assert.equal(u.el.querySelector('[role="dialog"]'), null);
+  assert.equal(u.focused(), "b", "a surviving node, never <body>");
 });
