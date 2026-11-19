@@ -192,9 +192,12 @@ export function updatedText(at, now = Date.now()) {
   return `updated ${new Date(Date.parse(at)).toISOString().slice(0, 10)}`;
 }
 /** When the view reads the detail again (the maintainer's condition, 2026-11-19): a fact's `at` changed (or a fact
- * came or went), or a question with context was asked. Never on an unchanged poll. */
+ * came or went), or a question with context was asked (an occurrence: questionOccurrence). Never on an unchanged poll. */
 export const detailSignature = board => board ? JSON.stringify([board.facts.map(f => [f.key, f.at]),
-  board.questions.filter(q => q.hasContext).map(q => q.id)]) : 'none';
+  board.questions.filter(q => q.hasContext).map(questionOccurrence)]) : 'none';
+/** A question's occurrence: its id and when it was asked. An id the agent clears and asks again (a new `since`) is
+ * another question, with its own answer and its own context, even when no poll saw it cleared in between. */
+export const questionOccurrence = q => `${q.id}@${q.since}`;
 /** A board's identity for repaints: changes when a fact's value or time, or the set of questions, changes. */
 export const boardSignature = board => board ? JSON.stringify([board.facts.map(f => [f.key, f.value, f.unit, f.link?.href ?? null, f.at, f.label]),
   board.questions.map(q => [q.id, q.question, q.options, q.hasContext, q.since])]) : 'none';
