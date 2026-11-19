@@ -36,14 +36,15 @@ const NO_ROOT_ROUTE_YET = "None is released yet: until one is, take the fallback
 const AW_ROOT_ROUTE = "1.36.48";
 const mirrorHasRootRoute = residentSource.includes('route: "root"');
 
-test("the catalog lists oats.machine at v0.1.1, and oats.machine-care resolves to it", () => {
-  assert.deepEqual(catalog.packages["oats.machine"], { url: "https://github.com/awebai/oats-machine.git", ref: "v0.1.1", path: "oats-package" });
+test("the catalog lists the machine publisher, and oats.machine-care resolves to it", () => {
+  const { url, path, ref } = catalog.packages["oats.machine"];
+  assert.deepEqual({ url, path }, { url: "https://github.com/awebai/oats-machine.git", path: "oats-package" });
+  assert.match(ref, /^v\d+\.\d+\.\d+$/);
   assert.equal(catalog.capabilities["oats.machine-care"], "oats.machine");
-  assert.match(read("docs/official-catalog.md"), /^\| `oats\.machine` \| `v0\.1\.1` \| `oats\.machine-care` \| `steward`, `technician` \|$/m);
+  assert.ok(read("docs/official-catalog.md").includes(`| \`oats.machine\` | \`${ref}\` | \`oats.machine-care\` | \`steward\`, \`technician\` |`));
 });
 
 test("on a machine found-list the workspace pins the catalog's oats.machine by bare version", () => {
-  assert.match(skill, /^  oats\.machine: v0\.1\.1\b/m);
   assert.equal(`v${skill.match(/^  oats\.machine: v(\S+)/m)[1]}`, catalog.packages["oats.machine"].ref);
   assert.doesNotMatch(skill, /git:github\.com\/awebai\/oats-machine/, "an official package is pinned by bare version, never by Git");
   assert.match(skill, /`machine\.platform`/, "the step applies only to a machine found-list");

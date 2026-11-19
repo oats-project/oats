@@ -25,7 +25,8 @@ function fixture(t, { rootCapability = false } = {}) {
   git("add", "."); git("commit", "-qm", "fixture"); git("tag", "v1.0.0"); git("push", "-q", "origin", "refs/tags/v1.0.0");
   write(join(root, "package-catalog.json"), JSON.stringify({ packages: { "oats.fixture": { url: origin, ref: "v1.0.0", path: "oats-package" } } }));
   mkdirSync(join(root, "mirrors")); mkdirSync(join(root, "scripts"));
-  return { root, source, git, origin };
+  const object = (type, input, literal = false) => execFileSync("git", ["hash-object", "-w", "-t", type, ...(literal ? ["--literally"] : []), "--stdin"], { cwd: source, env, input, encoding: "utf8" }).trim();
+  return { root, source, git, origin, object };
 }
 
 test("every checked-in mirror matches its immutable inventory and catalog pin", () => {
@@ -105,4 +106,39 @@ test("generation refuses an escaping source symlink before replacing payload or 
   assert.deepEqual(readFileSync(join(f.root, INVENTORY_PATH)), before);
   assert.equal(readFileSync(join(f.root, "mirrors/fixture/tool.mjs"), "utf8"), "export const value = 1;\n");
   assert.equal(existsSync(join(f.root, "outside")), false);
+});
+
+test("a malformed duplicate-name Git tree cannot write through a staged symlink", t => {
+  const f = fixture(t);
+  const victim = join(f.root, "victim"); mkdirSync(victim);
+  const tree = entries => Buffer.concat(entries.map(([mode, name, hash]) => Buffer.concat([Buffer.from(`${mode} ${name}\0`), Buffer.from(hash, "hex")])));
+  const payload = f.object("blob", "PWNED");
+  const child = f.object("tree", tree([["100644", "pwned.txt", payload]]));
+  const link = f.object("blob", victim);
+  const manifest = f.git("rev-parse", "HEAD:oats-package/oats-package.json");
+  const capability = f.git("rev-parse", "HEAD:oats-package/capabilities/fixture/oats.json");
+  const malformed = f.object("tree", tree([["100644", "oats.json", capability], ["120000", "x", link], ["40000", "x", child]]), true);
+  const caps = f.object("tree", tree([["40000", "fixture", malformed]]));
+  const distribution = f.object("tree", tree([["40000", "capabilities", caps], ["100644", "oats-package.json", manifest]]));
+  const root = f.object("tree", tree([["40000", "oats-package", distribution]]));
+  const commit = f.git("commit-tree", root, "-m", "malformed fixture");
+  f.git("tag", "-f", "v1.0.0", commit); f.git("push", "--force", "-q", "origin", "refs/tags/v1.0.0");
+  assert.throws(() => generateMirror("oats.fixture", f.source, { repoRoot: f.root }));
+  assert.equal(existsSync(join(victim, "pwned.txt")), false, "refuse malformed paths before a staging write can follow their symlink");
+  assert.equal(existsSync(join(f.root, INVENTORY_PATH)), false);
+});
+
+test("a published tag moved at an unchanged pin is refused even after catalog key reordering", t => {
+  const f = fixture(t);
+  generateMirror("oats.fixture", f.source, { repoRoot: f.root });
+  const before = readFileSync(join(f.root, INVENTORY_PATH));
+  write(join(f.source, "new"), "new"); f.git("add", "."); f.git("commit", "-qm", "move published tag"); f.git("tag", "-f", "v1.0.0");
+  f.git("push", "--force", "-q", "origin", "refs/tags/v1.0.0");
+  const catalog = join(f.root, "package-catalog.json");
+  const data = JSON.parse(readFileSync(catalog));
+  const { url, ref, path } = data.packages["oats.fixture"];
+  data.packages["oats.fixture"] = { path, ref, url }; write(catalog, JSON.stringify(data));
+  assert.throws(() => generateMirror("oats.fixture", f.source, { repoRoot: f.root }), /moved since prior generation/);
+  assert.deepEqual(readFileSync(join(f.root, INVENTORY_PATH)), before);
+  checkMirrors({ repoRoot: f.root });
 });

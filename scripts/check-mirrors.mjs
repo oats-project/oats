@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { devNull } from "node:os";
+import { isDeepStrictEqual } from "node:util";
 import { basename, dirname, isAbsolute, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkOkfMirror, payloadEntries } from "./check-okf-mirror.mjs";
@@ -111,7 +112,7 @@ export function generateMirror(id, source, { repoRoot = REPO_ROOT } = {}) {
   directory(repoRoot); directory(join(repoRoot, "mirrors")); directory(join(repoRoot, "scripts"));
   const inventory = loadInventory(repoRoot);
   const prior = inventory.packages[id];
-  if (prior && JSON.stringify(prior.pin) === JSON.stringify(pin)) {
+  if (prior && isDeepStrictEqual(prior.pin, pin)) {
     assert.equal(commit, prior.commit, "published catalog tag moved since prior generation");
     assert.equal(tagObject, prior.tagObject, "published catalog tag object moved since prior generation");
   }
@@ -130,9 +131,28 @@ export function generateMirror(id, source, { repoRoot = REPO_ROOT } = {}) {
     for (const cap of manifest.capabilities) {
       const dest = join(stage, "mirrors", mirrorName(cap, manifest.package)); mkdirSync(dest, { recursive: true });
       const rows = git(source, ["ls-tree", "-r", "-t", "-z", cap === "." ? tree : `${tree}/${cap}`]).split("\0").filter(Boolean);
-      for (const row of rows) {
+      const entries = rows.map(row => {
         const at = row.indexOf("\t"), [mode, type, hash] = row.slice(0, at).split(" "), path = row.slice(at + 1);
         safePath(path); assert.match(hash, oid);
+        assert.ok((type === "tree" && mode === "040000") || (type === "blob" && ["100644", "100755", "120000"].includes(mode)), `unsupported Git entry: ${path}`);
+        return { mode, type, hash, path };
+      });
+      // Validate the whole tree before its first write: malformed raw Git
+      // objects can duplicate a name as a symlink and a directory. A later
+      // containment walk would discover that only after a write followed it.
+      const byPath = new Map();
+      for (const entry of entries) {
+        assert.ok(!byPath.has(entry.path), `duplicate Git payload path: ${entry.path}`);
+        byPath.set(entry.path, entry);
+      }
+      for (const { path } of entries) {
+        const parts = path.split("/");
+        for (let i = 1; i < parts.length; i++) {
+          const parent = parts.slice(0, i).join("/");
+          assert.equal(byPath.get(parent)?.type, "tree", `non-directory Git payload parent: ${parent}`);
+        }
+      }
+      for (const { mode, type, hash, path } of entries) {
         const target = join(dest, path); mkdirSync(dirname(target), { recursive: true });
         if (type === "tree" && mode === "040000") mkdirSync(target, { recursive: true });
         else {
@@ -173,7 +193,7 @@ export function generateRemoteMirror(id, { repoRoot = REPO_ROOT } = {}) {
     git(source, ["init", "--bare", "--quiet"]);
     git(source, ["remote", "add", "origin", identity(pin.url)]);
     const ref = `refs/tags/${pin.ref}`; git(source, ["check-ref-format", ref]);
-    git(source, ["-c", `core.hooksPath=${devNull}`, "fetch", "--quiet", "--depth=1", "--no-recurse-submodules", "origin", `${ref}:${ref}`]);
+    git(source, ["-c", `core.hooksPath=${devNull}`, "-c", "fetch.fsckObjects=true", "fetch", "--quiet", "--depth=1", "--no-recurse-submodules", "origin", `${ref}:${ref}`]);
     return generateMirror(id, source, { repoRoot });
   } finally { rmSync(source, { recursive: true, force: true }); }
 }
