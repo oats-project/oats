@@ -12,12 +12,15 @@
   aweb. It also names the prerequisites, which stay on the person's side:
   the namespace's controller key on this computer, its `_awid` DNS record,
   and the server reachable. Then:
-  - The skill installs `aw` at the version `oats.aweb` was tested with
-    (`tested` in its `aw-compat.json`, read at the catalog's exact
-    `oats.aweb` ref, never `main`). It checks the version `aw` prints, and
-    that the program `file` reports is for this machine's architecture. On
-    an OATS release whose `oats.aweb` is older than `v1.42.1`, the branch
-    stops and offers hosted aweb.
+  - The skill reads the version `oats.aweb` was tested with (`tested` in
+    its `aw-compat.json`, read at the catalog's exact `oats.aweb` ref, never
+    `main`) and compares the installed `aw` with it, in `oats.aweb`'s own
+    version order. A missing or older `aw` is replaced by `tested`: the skill
+    checks the version `aw` prints, and that the program `file` reports is
+    for this machine's architecture. A newer `aw` is kept, since another
+    deployment may need it, and the hand-over says "aw X is newer than the
+    tested Y; kept". On an OATS release whose `oats.aweb` is older than
+    `v1.42.1`, the branch stops and offers hosted aweb.
   - The workspace commits the team `<workspace>:<namespace>` as its only
     team and its default. It writes no hosted `default:…aweb.ai` team and no
     `localTeams`.

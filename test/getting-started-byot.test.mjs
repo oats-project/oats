@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { parseVersion } from "../mirrors/oats-aweb/lib/aw-floor.mjs";
+import { compareVersions, parseVersion } from "../mirrors/oats-aweb/lib/aw-floor.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const read = (rel) => readFileSync(join(ROOT, rel), "utf8");
@@ -48,8 +48,9 @@ test("step 1 asks hosted or own server, with the three non-secret inputs and the
   assert.ok(flat.includes("Answers given in the prompt that started you are used without asking."), "the headless path keeps working");
   for (const prerequisite of ["the namespace's controller key on this computer, for this computer account", "the `_awid.ND` DNS record published for that key", "their server reachable at `U`"]) assert.ok(flat.includes(prerequisite), prerequisite);
   assert.ok(flat.includes("Never offer it on a machine found-list, or for an existing workspace"));
-  // The yes names the pinned aw, which may replace an installed one.
-  assert.ok(flat.includes("on their own aweb server (step 1) `aw` at the version this OATS release was tested with on such a server, in place of any other `aw` installed"));
+  // The yes names the pinned aw, which replaces only a missing or older one (dec-0d099aabf650's open case, settled (b) on #1962).
+  assert.ok(flat.includes("on their own aweb server (step 1) `aw` at the version this OATS release was tested with on such a server, when none is installed or the installed one is older (a newer one is kept)"));
+  assert.ok(!flat.includes("in place of any other `aw` installed"), "no unqualified replacement");
 });
 
 test("step 4 keeps hosted on the latest aw and pins the own server to oats.aweb's tested aw", () => {
@@ -103,6 +104,31 @@ test("the tested-version reader reads aw-compat.json at the catalog's ref, never
   assert.match(run({}, { body: { min: "1.36.33", tested: "1.36.58", extra: 1 } }).out, /^FAILED unexpected /, "exactly min and tested");
 });
 
+test("the installed aw is compared with tested in oats.aweb's own version order: only a missing or older one is replaced", () => {
+  const lines = [...step4.matchAll(/^ *node -e '(.+)' "<tested>" "\$\(aw version 2>\/dev\/null \| head -n 1\)"$/gm)].map((m) => m[1]);
+  assert.equal(lines.length, 1, "step 4 carries the comparison as one node -e line on <tested> and aw version's first line");
+  const [script] = lines;
+  const run = (tested, first) => {
+    const r = spawnSync(process.execPath, ["-e", script, tested, first], { encoding: "utf8" });
+    return { code: r.status, out: r.stdout.trim() };
+  };
+  // Each outcome has its instruction, and a kept aw is named in the hand-over.
+  for (const outcome of ["- **`INSTALL`:** no `aw`, a version it can't read, or one below `<tested>`", "- **`EQUAL <tested>`:** that version is installed already: install nothing.", "- **`NEWER <version>`:** a newer `aw` is installed. Keep it, install nothing, and go on"]) assert.ok(flat.includes(outcome), outcome);
+  assert.ok(flat.includes('Keep "aw <version> is newer than the tested <tested>; kept" for the hand-over'));
+  assert.ok(flat.includes('namespace ND, aw <tested> (oats.aweb\'s tested version) or "aw <version> is newer than the tested <tested>; kept"'), "the hand-over's Messaging line");
+
+  // Agrees with the provider's compareVersions (aw-floor.mjs) on every pair, pre-releases included.
+  const versions = ["1.36.33", "1.36.57", "1.36.58-rc.1", "1.36.58-rc.10", "1.36.58-rc.2", "1.36.58-alpha", "1.36.58-1", "1.36.58", "1.36.58+build.7", "1.36.59-rc.3", "1.36.59", "1.37.0", "2.0.0-0"];
+  for (const tested of versions) for (const installed of versions) {
+    const d = compareVersions(parseVersion(installed), parseVersion(tested));
+    const want = d < 0 ? "INSTALL" : d === 0 ? `EQUAL ${installed}` : `NEWER ${installed}`;
+    assert.deepEqual(run(tested, `aw ${installed}`), { code: 0, out: want }, `${installed} against ${tested}`);
+  }
+  // No aw, or a first line it can't read, installs tested; an unreadable tested stops.
+  for (const first of ["", "aw", "aw 1.36", "aw v1.36.58", "aw 01.36.58", "aw 1.36.58 extra", "command not found: aw"]) assert.deepEqual(run("1.36.58", first), { code: 0, out: "INSTALL" }, JSON.stringify(first));
+  assert.deepEqual(run("latest", "aw 1.36.58"), { code: 1, out: "FAILED tested latest" });
+});
+
 test("steps 5 and 7 on the own server: no sign-in, and the team <workspace>:ND is the only team", () => {
   assert.ok(flat.includes("and creates the team on their own aweb server, which has no account to sign in to."), "step 5 is skipped");
   assert.ok(flat.includes("- **On their own aweb server,** the team is `<workspace>:ND` (here `acme:agents.acme.com`)"));
@@ -151,7 +177,7 @@ test("step 9's own-server form checks the prerequisites read-only, then creates 
 });
 
 test("the hand-over and Never carry the own-server branch", () => {
-  assert.ok(flat.includes("or team T on their own aweb server U, namespace ND, aw <tested> (oats.aweb's tested version), its key at <team key path>"));
+  assert.ok(flat.includes("or team T on their own aweb server U, namespace ND, aw <tested> (oats.aweb's tested version) or \"aw <version> is newer than the tested <tested>; kept\", its key at <team key path>"));
   assert.ok(flat.includes("- **On their own aweb server:** make or touch the namespace's controller key (`aw id namespace prepare-controller`, `~/.awid`), set or ask for `AWEB_API_KEY`, or write a hosted `default:…aweb.ai` team or `localTeams` into the workspace."));
   assert.ok(flat.includes("or `<workspace>:ND` on their own aweb server, checked against step 9's create."));
 });

@@ -85,7 +85,8 @@ costs the person a round. After that yes, nothing more is asked.
   by step. The list, from step 2's checks: the tools you install (on Linux
   per user, under `~/.local`; on macOS with Homebrew), on their own aweb
   server (step 1) `aw` at the version this OATS release was tested with on
-  such a server, in place of any other `aw` installed, the line that puts
+  such a server, when none is installed or the installed one is older (a
+  newer one is kept), the line that puts
   them on their PATH in their shell's startup file (`~/.local/bin` on Linux;
   on macOS, Homebrew's `brew shellenv` line, only when Homebrew is new), the
   aweb channel plugin in Claude (Claude only) or pi's aweb extension,
@@ -612,22 +613,38 @@ node -e 'const c=require(process.argv[1]).packages["oats.aweb"],m=/^https:\/\/gi
   way, the own-server branch stops here. Tell the person in one sentence,
   and offer hosted aweb now (step 1's hosted defaults, `N` among them,
   shown in one short message) or waiting for the next OATS release.
-- **`TESTED <tested>`:** install exactly that version, with `<tested>`
-  written in, then check it:
+- **`TESTED <tested>`:** compare it with the `aw` already installed, in
+  `oats.aweb`'s own version order, where a pre-release of a newer version
+  counts as newer. With `<tested>` written in:
 
   ```bash
-  npm install -g "@awebai/aw@<tested>" && aw version && file -L "$(command -v aw)" && uname -m
+  node -e 'const P=(s)=>{const m=/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(s);if(!m)return null;const r=[m[1],m[2],m[3]].map(Number);return r.every(Number.isSafeInteger)?{r,p:m[4]?m[4].split("."):[]}:null};const C=(a,b)=>{for(let i=0;i<3;i++)if(a.r[i]!==b.r[i])return a.r[i]-b.r[i];if(!a.p.length||!b.p.length)return b.p.length-a.p.length;for(let i=0;i<Math.min(a.p.length,b.p.length);i++){const x=a.p[i],y=b.p[i],xn=/^\d+$/.test(x),yn=/^\d+$/.test(y);if(x===y)continue;if(xn&&yn)return x.length!==y.length?x.length-y.length:x<y?-1:1;if(xn!==yn)return xn?-1:1;return x<y?-1:1}return a.p.length-b.p.length};const t=P(process.argv[1]),l=/^aw (\S+)$/.exec(process.argv[2]||""),v=l&&P(l[1]);if(!t){console.log("FAILED tested "+process.argv[1]);process.exit(1)}const d=v?C(v,t):-1;console.log(d<0?"INSTALL":d===0?"EQUAL "+l[1]:"NEWER "+l[1])' "<tested>" "$(aw version 2>/dev/null | head -n 1)"
   ```
 
-  `aw version`'s first line must be exactly `aw <tested>`, and the `file`
-  line must name this machine's architecture, the one `uname -m` prints
-  (`x86-64` for `x86_64`, `aarch64` for `aarch64` on Linux; `x86_64` or
-  `arm64` on macOS). A different version, or a program for another machine
-  or no program at all (npm put a wrong or missing build in place), stops
-  the own-server branch as above. Where `file` itself is missing
-  (`command not found`), say so in the hand-over and rely on `aw version`:
-  a program that runs and prints its version was built for this machine.
-  Keep `aw <tested>` for the hand-over.
+  - **`INSTALL`:** no `aw`, a version it can't read, or one below
+    `<tested>` (below `oats.aweb`'s floor included). Install exactly
+    `<tested>`, then check it:
+
+    ```bash
+    npm install -g "@awebai/aw@<tested>" && aw version && file -L "$(command -v aw)" && uname -m
+    ```
+
+    `aw version`'s first line must be exactly `aw <tested>`, and the `file`
+    line must name this machine's architecture, the one `uname -m` prints
+    (`x86-64` for `x86_64`, `aarch64` for `aarch64` on Linux; `x86_64` or
+    `arm64` on macOS). A different version, or a program for another
+    machine or no program at all (npm put a wrong or missing build in
+    place), stops the own-server branch as above. Where `file` itself is
+    missing (`command not found`), say so in the hand-over and rely on
+    `aw version`: a program that runs and prints its version was built for
+    this machine. Keep `aw <tested>` for the hand-over.
+  - **`EQUAL <tested>`:** that version is installed already: install
+    nothing. Keep `aw <tested>` for the hand-over.
+  - **`NEWER <version>`:** a newer `aw` is installed. Keep it, install
+    nothing, and go on: another deployment on this computer may need it.
+    Keep "aw <version> is newer than the tested <tested>; kept" for the
+    hand-over: it is the version this setup ran with.
+  - **`FAILED`** stops the own-server branch as above.
 
 **Then the Desktop. Every step verifies before it installs.** Wait for step
 3's download, then read its log. Run this once: it waits up to a minute
@@ -1268,7 +1285,8 @@ are cloned, knowledge tools, messaging wanted or not>
   the person (new workspace), or T owned by aweb account <handle>
   (signed in at step 5), or new account N signed up (machine found-list),
   or joined L by invite (existing), or team T on their own aweb server U,
-  namespace ND, aw <tested> (oats.aweb's tested version), its key at
+  namespace ND, aw <tested> (oats.aweb's tested version) or "aw <version>
+  is newer than the tested <tested>; kept", its key at
   <team key path> | not set up (the setup expert has no messaging)
 - Harness channel mode: development, confirmed by OATS at each start
   (Claude with aweb) | none (Codex, pi or no messaging)
