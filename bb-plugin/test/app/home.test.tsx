@@ -144,22 +144,77 @@ test("a pending interaction with no claim: bb's title is the question, and its c
   expect(slot.inspection.sdkCalls.filter((call) => call.method === "threads.interactions.list").map((call) => (call.args[0] as { threadId: string }).threadId)).toEqual(["thr_ci"]);
 });
 
-test("a kind the plugin cannot answer in place keeps Open only", async () => {
+test("an approval beside the kernel's claim: the claim, what is approved, and Allow answers through resolve", async () => {
+  let pending = true;
   const slot = await homePage({
     sdk: {
       threads: {
         interactions: {
           list: async () =>
-            [{ id: "pint_2", threadId: "thr_ci", status: "pending", payload: { kind: "approval", reason: "Run rm -rf build?", availableDecisions: ["allow_once", "deny"] } }] as never,
+            (pending
+              ? [
+                  {
+                    id: "pint_2",
+                    threadId: "thr_ci",
+                    status: "pending",
+                    payload: { kind: "approval", reason: "scripted", subject: { kind: "command", command: "git push --force origin fix/ci-race" }, availableDecisions: ["allow_once", "allow_for_session", "deny"] },
+                  },
+                ]
+              : []) as never,
+          resolve: async () => ((pending = false), {}) as never,
         },
       },
     },
   });
   const card = (await slot.findAllByTestId("oats-needs-card")).find((candidate) => candidate.textContent!.includes("Fix flaky CI test"))!;
+  await waitFor(() => expect(within(card).getAllByTestId("oats-needs-choice").map((choice) => choice.textContent)).toEqual(["Allow", "Deny"]));
+  expect(within(card).getByTestId("oats-needs-question").textContent).toBe("needs your permission to use Bash"); // the kernel's claim
+  expect(within(card).getByTestId("oats-needs-detail").textContent).toBe("Run: git push --force origin fix/ci-race");
+  fireEvent.click(within(card).getAllByTestId("oats-needs-choice")[0]!);
+  await waitFor(() => expect(within(card).queryAllByTestId("oats-needs-choice")).toEqual([]));
+  expect(slot.inspection.sdkCalls.filter((call) => call.method.startsWith("threads.interactions.res"))).toEqual([
+    { method: "threads.interactions.resolve", args: [{ threadId: "thr_ci", interactionId: "pint_2", resolution: { decision: "allow_once", grantedPermissions: null } }] },
+  ]);
+});
+
+test("a question with options answers through resolve with the option's value; a refused answer is shown and the choices stay", async () => {
+  let refuse = true;
+  const slot = await homePage({
+    sdk: {
+      threads: {
+        interactions: {
+          list: async () =>
+            [{ id: "pint_3", threadId: "thr_ci", status: "pending", payload: { kind: "user_question", questions: [{ id: "q1", prompt: "Which depth?", multiSelect: false, allowFreeText: false, options: [{ label: "Depth 6", value: "6" }, { label: "Depth 7", value: "7" }] }] } }] as never,
+          resolve: async () => {
+            if (refuse) throw new Error("interaction is no longer pending");
+            return {} as never;
+          },
+        },
+      },
+    },
+  });
+  const card = (await slot.findAllByTestId("oats-needs-card")).find((candidate) => candidate.textContent!.includes("Fix flaky CI test"))!;
+  await waitFor(() => expect(within(card).getAllByTestId("oats-needs-choice").map((choice) => choice.textContent)).toEqual(["Depth 6", "Depth 7"]));
+  fireEvent.click(within(card).getAllByTestId("oats-needs-choice")[1]!);
+  expect((await within(card).findByRole("alert")).textContent).toBe("interaction is no longer pending");
+  expect(within(card).getAllByTestId("oats-needs-choice")).toHaveLength(2);
+  refuse = false;
+  fireEvent.click(within(card).getAllByTestId("oats-needs-choice")[1]!);
+  await waitFor(() => expect(within(card).queryAllByTestId("oats-needs-choice")).toEqual([]));
+  expect(slot.inspection.sdkCalls.filter((call) => call.method === "threads.interactions.resolve").at(-1)!.args).toEqual([
+    { threadId: "thr_ci", interactionId: "pint_3", resolution: { kind: "user_answer", answers: { q1: { selected: ["7"] } } } },
+  ]);
+});
+
+test("a kind the plugin cannot answer in place keeps Open only", async () => {
+  const slot = await homePage({
+    sdk: { threads: { interactions: { list: async () => [{ id: "pint_4", threadId: "thr_ci", status: "pending", payload: { kind: "plugin", title: "A plugin's form", data: {} } }] as never } } },
+  });
+  const card = (await slot.findAllByTestId("oats-needs-card")).find((candidate) => candidate.textContent!.includes("Fix flaky CI test"))!;
   await waitFor(() => expect(slot.inspection.sdkCalls).toHaveLength(1));
   expect(within(card).queryAllByTestId("oats-needs-choice")).toEqual([]);
+  expect(within(card).queryByTestId("oats-needs-detail")).toBeNull();
   expect(within(card).getByTestId("oats-needs-open")).toBeTruthy();
-  // the kernel's claim stays the question
   expect(within(card).getByTestId("oats-needs-question").textContent).toBe("needs your permission to use Bash");
 });
 

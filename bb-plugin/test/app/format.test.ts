@@ -43,20 +43,21 @@ describe("format", () => {
 
 describe("question(): bb's pending interactions as the home draws them", () => {
   const pi = (data: object, status = "pending") => ({ id: "p1", status, payload: { kind: "provider-pi/extension-ui", title: "Confirm", data } });
-  test("pi's confirm: the full title, Yes and No as booleans", () => {
+  const respond = (value: boolean | string) => ({ via: "respond", value });
+  test("pi's confirm: the full title, Yes and No as booleans, through respond", () => {
     expect(question([pi({ method: "confirm", fullTitle: "Force-push?" })])).toEqual({
       interactionId: "p1",
       title: "Force-push?",
       choices: [
-        { label: "Yes", value: true },
-        { label: "No", value: false },
+        { label: "Yes", answer: respond(true) },
+        { label: "No", answer: respond(false) },
       ],
     });
   });
   test("pi's select: one choice per option, answered with the option itself", () => {
     expect(question([pi({ method: "select", options: ["depth 6", "depth 7"] })])!.choices).toEqual([
-      { label: "depth 6", value: "depth 6" },
-      { label: "depth 7", value: "depth 7" },
+      { label: "depth 6", answer: respond("depth 6") },
+      { label: "depth 7", answer: respond("depth 7") },
     ]);
   });
   test("pi's input and editor, and a select with odd options, give no choices", () => {
@@ -65,19 +66,53 @@ describe("question(): bb's pending interactions as the home draws them", () => {
     expect(question([pi({ method: "select", options: [1, 2] })])!.choices).toEqual([]);
     expect(question([pi({ method: "select" })])!.choices).toEqual([]);
   });
-  test("the provider's approval and question kinds, and a plugin's form: a title, no choices", () => {
-    expect(question([{ id: "a", status: "pending", payload: { kind: "approval", reason: "Run rm?" } }])).toEqual({ interactionId: "a", title: "Run rm?", choices: [] });
-    expect(question([{ id: "q", status: "pending", payload: { kind: "user_question", questions: [{ prompt: "Which palette?" }] } }])).toEqual({
-      interactionId: "q",
-      title: "Which palette?",
-      choices: [],
+  const approval = (payload: object) => ({ id: "a", status: "pending", payload: { kind: "approval", ...payload } });
+  test("an approval: what it is about, Allow (once) and Deny through resolve, only where offered", () => {
+    expect(
+      question([approval({ reason: "scripted", subject: { kind: "command", command: "rm -rf build" }, availableDecisions: ["allow_once", "allow_for_session", "deny"] })]),
+    ).toEqual({
+      interactionId: "a",
+      title: "Run: rm -rf build",
+      choices: [
+        { label: "Allow", answer: { via: "resolve", resolution: { decision: "allow_once", grantedPermissions: null } } },
+        { label: "Deny", answer: { via: "resolve", resolution: { decision: "deny" } } },
+      ],
     });
+    expect(question([approval({ reason: "Write notes.md", subject: { kind: "file_change" }, availableDecisions: ["deny"] })])).toEqual({
+      interactionId: "a",
+      title: "Write notes.md",
+      choices: [{ label: "Deny", answer: { via: "resolve", resolution: { decision: "deny" } } }],
+    });
+    expect(question([approval({ reason: null, subject: { kind: "tool_use", tool: "WebFetch" } })])).toEqual({ interactionId: "a", title: "Use WebFetch", choices: [] });
+    expect(question([approval({ reason: null })])!.title).toBeNull();
+  });
+  const asks = (questions: object[]) => ({ id: "q", status: "pending", payload: { kind: "user_question", questions } });
+  const options = [{ label: "Depth 6", value: "6" }, { value: "7" }];
+  test("one question with one answer: a button per option, answered by its value under the question's id", () => {
+    expect(question([asks([{ id: "depth", prompt: "Which depth?", multiSelect: false, options }])])).toEqual({
+      interactionId: "q",
+      title: "Which depth?",
+      choices: [
+        { label: "Depth 6", answer: { via: "resolve", resolution: { kind: "user_answer", answers: { depth: { selected: ["6"] } } } } },
+        { label: "7", answer: { via: "resolve", resolution: { kind: "user_answer", answers: { depth: { selected: ["7"] } } } } },
+      ],
+    });
+  });
+  test("several questions, several answers, free text only, or an option with no value: the question and no choices", () => {
+    const one = { id: "depth", prompt: "Which depth?", options };
+    expect(question([asks([one, { ...one, id: "lr" }])])).toEqual({ interactionId: "q", title: "Which depth?", choices: [] });
+    expect(question([asks([{ ...one, multiSelect: true }])])!.choices).toEqual([]);
+    expect(question([asks([{ id: "depth", prompt: "Which depth?" }])])!.choices).toEqual([]);
+    expect(question([asks([{ ...one, options: [{ label: "no value" }] }])])!.choices).toEqual([]);
+    expect(question([asks([{ prompt: "no id", options }])])!.choices).toEqual([]);
+    expect(question([asks([])])).toEqual({ interactionId: "q", title: null, choices: [] });
+  });
+  test("another plugin's form: its title, no choices", () => {
     expect(question([{ id: "f", status: "pending", payload: { kind: "plugin", title: "Spike question", data: {} } }])).toEqual({
       interactionId: "f",
       title: "Spike question",
       choices: [],
     });
-    expect(question([{ id: "n", status: "pending", payload: { kind: "approval", reason: null } }])!.title).toBeNull();
   });
   test("only an interaction still pending counts; the first one wins", () => {
     expect(question([])).toBeNull();

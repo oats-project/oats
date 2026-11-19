@@ -126,9 +126,23 @@ Backend tests: `experimental_createHostEntryHarness` (`experimental_call`,
 `createFakePluginHost`'s `experimental_callHostRpc`, `experimental_hostRpcCalls`,
 `experimental_emitHostSignal`, `experimental_watchRpc`.
 
-App: listed by the frontend half (below).
+App, slots: `experimental_threadList`, `experimental_threadHeaderRow`, `experimental_tab` (a fixed
+thread tab), `experimental_threadAction`, `experimental_appOverlay` (draws the plan dialogs of Stop
+and Retire, which a thread action has no place to draw), and on `navPanel`:
+`experimental_useBadge`, `experimental_hideFromNavigation`.
 
-<!-- frontend: the app's experimental_* names -->
+App, hooks and components: `experimental_useSidebarThreads`, `experimental_useRpcQuery` (the
+watched reads), `experimental_useAppPanel` (`openTab`), `experimental_useTabVisible`,
+`experimental_usePluginId`, `experimental_THREAD_ACTION_GROUPS`,
+`experimental_ThreadActionsContextMenu`, `experimental_ThreadStatusGlyph`,
+`experimental_resolveThreadStatus`.
+
+App tests: `renderSlot`'s `experimental_panel`, and its `inspection.experimental_panelCalls`.
+
+Not experimental, but bb's to change: the thread rows' `data-sidebar-thread-shortcut-target` and
+`data-sidebar-thread-id` attributes, the settings route `/settings/plugins/<plugin id>` (the
+"Choose a machine" link), the icon names (`app.tsx`, `ICON`), and bb's compact breakpoint
+`(max-width: 767px)` (`app/IdentityRow.tsx`).
 
 ## Developing
 

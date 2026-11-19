@@ -17,6 +17,23 @@ import { useOats } from "./app/oats";
 import type { Oats } from "./app/oats";
 import type { Contract, Rpc } from "./app/store";
 
+/**
+ * Icon names, each checked at runtime on bb-app 0.50.1: bb draws its generic glyph for a name its
+ * set does not resolve, and says nothing (`Users`, `Monitor`, `Diamond`, `Hexagon`, `RotateCw`,
+ * `CircleStop` do not resolve). Check a new name in the running app before using it.
+ */
+const ICON = {
+  home: "Bot",
+  souls: "Brain",
+  capabilities: "Puzzle",
+  teams: "Layers",
+  machines: "Laptop",
+  stop: "Square",
+  start: "Play",
+  restart: "RotateCcw",
+  retire: "Trash2",
+} as const;
+
 type ActionData = { oats: Oats; rpc: Rpc };
 const useActionData = (): ActionData => ({ oats: useOats(), rpc: useRpc<Contract>() });
 
@@ -62,7 +79,7 @@ export default definePluginApp((app) => {
   app.slots.navPanel({
     id: "home",
     title: "OATS",
-    icon: "Bot",
+    icon: ICON.home,
     path: "home",
     component: HomePage,
     experimental_useBadge: useHomeBadge,
@@ -72,35 +89,35 @@ export default definePluginApp((app) => {
     context: { kind: "thread" },
     availability: "fixed",
     title: "OATS",
-    icon: "Bot",
+    icon: ICON.home,
     layout: "flush",
     component: HomeTab,
   });
 
   // The four pages are opened from the "oats" block at the top of our thread list, and stay out
   // of bb's own navigation.
-  app.slots.navPanel({ id: "souls", title: "Souls", icon: "Bot", path: "souls", experimental_hideFromNavigation: true, component: SoulsPage });
-  app.slots.navPanel({ id: "capabilities", title: "Capabilities", icon: "Bot", path: "capabilities", experimental_hideFromNavigation: true, component: CapabilitiesPage });
-  app.slots.navPanel({ id: "teams", title: "Teams", icon: "Bot", path: "teams", experimental_hideFromNavigation: true, component: TeamsPage });
-  app.slots.navPanel({ id: "machines", title: "Machines", icon: "Bot", path: "machines", experimental_hideFromNavigation: true, component: MachinesPage });
+  app.slots.navPanel({ id: "souls", title: "Souls", icon: ICON.souls, path: "souls", experimental_hideFromNavigation: true, component: SoulsPage });
+  app.slots.navPanel({ id: "capabilities", title: "Capabilities", icon: ICON.capabilities, path: "capabilities", experimental_hideFromNavigation: true, component: CapabilitiesPage });
+  app.slots.navPanel({ id: "teams", title: "Teams", icon: ICON.teams, path: "teams", experimental_hideFromNavigation: true, component: TeamsPage });
+  app.slots.navPanel({ id: "machines", title: "Machines", icon: ICON.machines, path: "machines", experimental_hideFromNavigation: true, component: MachinesPage });
 
   app.slots.experimental_threadAction(
-    lifecycle("stop", 0, "Stop agent (OATS)", "Bot", (state) => state === "working" || state === "idle" || state === "needs-you", (instance) =>
+    lifecycle("stop", 0, "Stop agent (OATS)", ICON.stop, (state) => state === "working" || state === "idle" || state === "needs-you", (instance) =>
       askPlan("stop", instance),
     ),
   );
   app.slots.experimental_threadAction(
-    lifecycle("start", 1, "Start agent (OATS)", "Bot", (state) => state === "stopped" || state === "error", (instance, { data, navigate }) =>
+    lifecycle("start", 1, "Start agent (OATS)", ICON.start, (state) => state === "stopped" || state === "error", (instance, { data, navigate }) =>
       run("start", instance, data.rpc, navigate),
     ),
   );
   app.slots.experimental_threadAction(
-    lifecycle("restart", 2, "Restart agent (OATS)", "Bot", (state) => state !== "stopped", (instance, { data, navigate }) =>
+    lifecycle("restart", 2, "Restart agent (OATS)", ICON.restart, (state) => state !== "stopped", (instance, { data, navigate }) =>
       run("restart", instance, data.rpc, navigate),
     ),
   );
   app.slots.experimental_threadAction(
-    lifecycle("retire", 3, "Retire agent (OATS)", "Bot", () => true, (instance) => askPlan("retire", instance), "destructive"),
+    lifecycle("retire", 3, "Retire agent (OATS)", ICON.retire, () => true, (instance) => askPlan("retire", instance), "destructive"),
   );
 
   // Draws the plan dialogs of Stop and Retire, wherever they were asked from.

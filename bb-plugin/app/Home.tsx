@@ -76,8 +76,14 @@ function NeedsYouCard({ node, thread, soul }: { node: Node; thread: PluginSideba
     if (asked === null || answering) return;
     setAnswering(true);
     setError(null);
+    const target = { threadId: thread.id, interactionId: asked.interactionId };
+    const { answer: how } = choice;
     Promise.resolve()
-      .then(() => sdk.threads.interactions.respond({ threadId: thread.id, interactionId: asked.interactionId, value: choice.value }))
+      .then(() =>
+        how.via === "respond"
+          ? sdk.threads.interactions.respond({ ...target, value: how.value })
+          : sdk.threads.interactions.resolve({ ...target, resolution: how.resolution }),
+      )
       .then(
       () => {
         setAnswering(false);
@@ -92,6 +98,8 @@ function NeedsYouCard({ node, thread, soul }: { node: Node; thread: PluginSideba
 
   const since = age(node.agent.waiting?.since ?? null, now);
   const text = node.agent.waiting?.message ?? asked?.title ?? "needs your input";
+  // What an in-place answer is about, when the line above is the kernel's claim and not bb's title.
+  const detail = asked !== null && asked.choices.length > 0 && asked.title !== null && asked.title !== text ? asked.title : null;
   return (
     <li data-testid="oats-needs-card" className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3">
       <div className="flex min-w-0 items-center gap-2">
@@ -105,9 +113,14 @@ function NeedsYouCard({ node, thread, soul }: { node: Node; thread: PluginSideba
       <p data-testid="oats-needs-question" className="whitespace-pre-wrap break-words">
         {clean(text)}
       </p>
+      {detail === null ? null : (
+        <p data-testid="oats-needs-detail" className="whitespace-pre-wrap break-words rounded-md bg-muted px-2 py-1 text-xs">
+          {clean(detail)}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         {(asked?.choices ?? []).map((choice) => (
-          <Button key={String(choice.value)} data-testid="oats-needs-choice" disabled={answering} onClick={() => answer(choice)}>
+          <Button key={choice.label} data-testid="oats-needs-choice" disabled={answering} onClick={() => answer(choice)}>
             {clean(choice.label)}
           </Button>
         ))}
