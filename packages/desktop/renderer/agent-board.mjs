@@ -28,6 +28,16 @@ import { displayLine } from '../../client/display-text.mjs';
 /** What the zone says while a harness dialog is open (contract D30 v4, "How an answer is typed"). */
 export const DIALOG_NOTE = "The agent's terminal is showing a prompt: answer it there first.";
 /** The zone's key hint. */
+/** What the view says for each outcome of the detail read (instance-board.mjs boardDetailData, and `failed`), and
+ * for a row board that was not read whole: none of them reads as "no history" or "no questions". */
+export const DETAIL_NOTES = Object.freeze({
+  failed: { history: 'History could not be read.', context: 'The context could not be read.' },
+  malformed: { history: 'History came in a shape this Desktop can\'t read.', context: 'The context came in a shape this Desktop can\'t read.' },
+  unsupported: { history: 'This OATS sends no history.', context: 'This OATS sends no context: ask the agent.' },
+  none: { history: 'The agent has no board now.', context: 'The agent has no board now.' },
+});
+export const BOARD_MALFORMED = "This agent's board could not be read.";
+export const boardDropped = n => `${n} ${n === 1 ? 'entry' : 'entries'} of this agent's board could not be shown.`;
 export const ZONE_HINT = '1–4 put the answer on the input line · Enter there sends it · Esc back to the terminal';
 const HIDDEN_STORE = 'oats.desktop.board.hidden';
 
@@ -104,8 +114,9 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   facts.setAttribute('aria-label', `${DESKTOP_BOARD_WORDS.facts} from ${name}`);
   const factList = node(doc, 'ul', 'agent-fact-list');
   const fold = node(doc, 'button', 'agent-facts-fold'); fold.type = 'button';
+  const factsNote = node(doc, 'span', 'agent-facts-note');
   const shown = node(doc, 'button', 'agent-facts-unhide'); shown.type = 'button';
-  facts.append(factList, fold, shown);
+  facts.append(factList, fold, shown, factsNote);
   fold.addEventListener('click', () => { unfolded = !unfolded; paint(); fold.focus(); });
   shown.addEventListener('click', () => { hidden.showAll(home); paint(); focusFacts(); });
 
@@ -225,7 +236,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     const value = node(doc, 'b', 'agent-fact-value', f.withheld ? displayLine(f.value) : f.value); value.dir = 'auto';
     body.append(label, ' ', value);
     if (f.unit) body.append(' ', node(doc, 'span', 'agent-fact-unit', displayLine(f.unit)));
-    const values = sparkValues(detail?.facts.get(f.key)?.history);
+    const values = sparkValues(detail?.state === 'ok' ? detail.facts.get(f.key)?.history : null);
     if (values) body.append(' ', sparkline(doc, values), node(doc, 'span', 'agent-fact-sparknote', ` last ${values.length}`));
     const when = node(doc, 'span', 'agent-fact-updated', updatedText(f.at, now())); when.title = f.at;
     body.append(' ', when);
@@ -251,7 +262,10 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
 
   function paintFacts() {
     const view = factsView(board?.facts ?? [], hidden.get(home), { unfolded });
-    const any = view.shown.length + view.folded.length + view.hidden.length > 0;
+    const notes = [board?.malformed ? BOARD_MALFORMED : board?.dropped > 0 ? boardDropped(board.dropped) : null,
+      board?.facts.length && detail && detail.state !== 'ok' ? (DETAIL_NOTES[detail.state] ?? DETAIL_NOTES.malformed).history : null].filter(Boolean);
+    setText(factsNote, notes.join(' ')); factsNote.hidden = !notes.length;
+    const any = view.shown.length + view.folded.length + view.hidden.length > 0 || notes.length > 0;
     if (!any) { facts.remove(); return; }
     const focusedKey = facts.contains(doc.activeElement) ? doc.activeElement.closest?.('li')?.dataset.key : null;
     factList.replaceChildren(...view.shown.map(paintFact));
@@ -306,11 +320,12 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     note.hidden = !dialog; setText(note, dialog ? DIALOG_NOTE : '');
     zone.setAttribute('aria-label', `${count ? `${count[0].toUpperCase()}${count.slice(1)}` : 'A question'} from ${name}`);
     // The context: read with the detail (inspect --board) once the view is open; attributed, plain text, line breaks kept.
-    const ctx = boardContext(detail?.questions.get(q.id)?.context);
+    const ctx = detail?.state === 'ok' ? boardContext(detail.questions.get(q.id)?.context) : null;
     context.hidden = !q.hasContext;
     if (q.hasContext) {
       const lead = node(doc, 'p', 'agent-q-says', `${name} says:`);
-      const body = ctx ? node(doc, 'p', 'agent-q-context-text', ctx) : node(doc, 'p', 'agent-q-context-none', detail ? 'The context could not be read.' : 'Reading the context…');
+      const words = !detail ? 'Reading the context…' : detail.state === 'ok' ? 'The agent sent no context for this question.' : DETAIL_NOTES[detail.state]?.context ?? DETAIL_NOTES.malformed.context;
+      const body = ctx ? node(doc, 'p', 'agent-q-context-text', ctx) : node(doc, 'p', 'agent-q-context-none', words);
       if (ctx) body.dir = 'auto';
       contextBody.replaceChildren(lead, body);
     }

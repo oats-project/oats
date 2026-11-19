@@ -711,7 +711,8 @@ body {
 .agent-fact-hide { width: 22px; padding: 0; }
 .agent-fact-hide:hover, .agent-fact-hide:focus-visible, .agent-facts-fold:hover, .agent-facts-fold:focus-visible,
 .agent-facts-unhide:hover, .agent-facts-unhide:focus-visible { background: var(--sel); color: var(--fg); outline: none; }
-.agent-facts-fold[hidden], .agent-facts-unhide[hidden] { display: none; }
+.agent-facts-fold[hidden], .agent-facts-unhide[hidden], .agent-facts-note[hidden] { display: none; }
+.agent-facts-note { color: var(--muted); font-size: 11.5px; }
 .agent-questions { flex: none; max-height: 45%; overflow: auto; box-sizing: border-box; padding: 8px 12px 6px;
   border-top: 1px solid var(--attn-border); background-color: var(--attn-bg); color: var(--fg); font-size: 13px; line-height: 18px; outline: none; }
 .agent-questions:focus-visible { box-shadow: inset 0 0 0 1px var(--accent); }

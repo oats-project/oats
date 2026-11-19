@@ -967,6 +967,16 @@ agent writes it with `oats instance board set` and `oats instance board ask`,
    have the focus. A question with context has a **Context** fold, attributed
    to the agent, as plain text. With no open question there is no zone.
 
+**What the view says when it can't show something.** History and context come
+from a second read while the view is open (`oats inspect --home <h> --board`,
+sent only when this computer's OATS, and for an agent on another machine that
+machine's OATS too, has the feature). The view reads it when it opens, when a
+fact changes and when a question with context is asked, never on the roster's
+poll. When that read fails, comes back in a shape the Desktop can't read, or
+comes from an OATS without the feature, the facts strip and the context fold
+say which. A board the Desktop can't read, or one with entries it had to leave
+out, says so too. None of these hides a question or reads as "no questions".
+
 **Answering.** **Alt+T** (Ctrl+Alt+T in the Ctrl+Alt and Ctrl+Shift families,
 ⌘⌥T on macOS) moves the focus from the terminal to the questions, then to the
 facts, then back; Esc goes back to the terminal. A number, or a press on an
