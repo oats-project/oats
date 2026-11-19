@@ -1009,7 +1009,15 @@ readiness still reports a problem.
    owner decides.
 4. **Existing workspace: the person joins in their own terminal,** which you
    open for them ("How to work"), pasting the token at the hidden prompt,
-   with `D`, `S` and `A` filled in:
+   with `D`, `S` and `A` filled in. Before you open it, list the per-team
+   roots `D` already holds, read-only, and keep what it prints (often
+   nothing) for item 5:
+
+   ```bash
+   ls -d "D"/.aweb-roots/*/.aw 2>/dev/null
+   ```
+
+   Then open the window:
 
    ```text
    cd "D" && sh -c 'stty -echo; printf "Invite token: "; read -r T; stty echo; echo; printf "%s\n" "$T" | oats aweb setup --soul S --invite-stdin --name A'
@@ -1032,17 +1040,38 @@ readiness still reports a problem.
    ```
 
 5. **After items 2 to 4, check again** (item 1), and expect `"member": true`.
-   On `"member": false`, stop and spawn nothing. With `"root": null` after
-   item 4's invite-only form, look first, read-only:
-   `ls -d "D"/.aweb-roots/*/.aw 2>/dev/null`. Nothing printed: the join
-   refused before redeeming anything: ask the person for the `E_SETUP_`
-   code their window shows (a code, no secret), tell them in plain words
-   what it means, and that a new invite is the inviter's to send. A path
-   printed for a label other than `L`: the invite was for that team, and
-   this machine joined it instead: tell them so, and that an invite for
-   `L` is the inviter's to send. Otherwise tell the person the run
-   left this machine's root outside `L`, with what the check shows, and
-   don't rerun the signup or the join (you can't see the join's output).
+   On `"member": false`, stop and spawn nothing, and read why from what ran:
+   - **`"root": null` after item 2's signup:** no root was made in `D/.aw`:
+     the signup didn't finish. Tell the person so, with what the check
+     shows, and don't rerun it.
+   - **`"root": null` after a team create in item 2** (a create line, not
+     the signup): the create recorded no root. Run the same create line
+     again, unchanged, then check again.
+   - **`"root": null` after item 4's invite-only form:** run item 4's
+     listing again, read-only, and compare it with what it printed before
+     the window opened: only a path that is new is this join's. The folder
+     before `/.aw` is the team's label as the provider writes a team name:
+     lowercase, each run of `_` or `.` as one `-`, and no `-` at either end
+     (`My_Team.` is `my-team`). Write `L` that way too before you compare.
+     - **No new path:** the join made no root here. It refused before
+       redeeming anything, or aw's own accept failed and the join removed
+       the empty folder it had made. Ask the person for the `E_SETUP_` code
+       their window shows, if any (a code, no secret); with no code, ask
+       what the window's last line says (no secret). Tell them in plain
+       words what it means, and that a new invite is the inviter's to send.
+     - **A new path under another name:** the invite was for that team,
+       and this machine joined it instead: tell them so, and that an invite
+       for `L` is the inviter's to send.
+     - **A new path under `L`'s name:** the join began in `L`'s folder and
+       didn't finish. Tell the person so, with what the check shows.
+   - **`"root": null` after item 4's labelled form:** the join recorded no
+     root: it stopped at a refusal or a failure, which its window shows.
+     Ask for the `E_SETUP_` code there, if any, or else the window's last
+     line (no secret), and tell the person in plain words what it means.
+   - **With a `root`:** the run left this machine's root outside `L`. Tell
+     the person so, with what the check shows.
+
+   Don't rerun the signup or the join (you can't see the join's output).
    When another machine of the same name may already be in the team, say
    that a taken name is a likely cause: the person who invited them can ask
    their own agent whether that name is in the group (its agent reads

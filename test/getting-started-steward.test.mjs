@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { normalizeAwebTeamName } from "../mirrors/oats-aweb/lib/team-roots.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const read = (rel) => readFileSync(join(ROOT, rel), "utf8");
@@ -229,8 +230,8 @@ test("getting-started: an existing workspace names its setup expert after this m
   assert.ok(teamDefault.includes("doc.defaultTeam.from !== 'deployment'") && teamDefault.includes("throw setupFailure('E_SETUP_DEFAULT_PRESERVE'"), "the provider refuses an unnamed team where the default is the workspace's");
   assert.ok(flat.includes("In that exception, an invite for a team the workspace doesn't name is redeemed instead"));
   assert.ok(setupInviteSources().includes('join(resolve(base), ".aweb-roots", normalizeAwebTeamName(label))'), "a redemption makes the per-team root item 5 looks for");
-  assert.ok(flat.includes("With `\"root\": null` after item 4's invite-only form, look first, read-only: `ls -d \"D\"/.aweb-roots/*/.aw 2>/dev/null`. Nothing printed: the join refused before redeeming anything"), "a refusal is not read as a root left outside L");
-  assert.ok(flat.includes("A path printed for a label other than `L`: the invite was for that team, and this machine joined it instead"), "a redeemed invite for another team is not read as a refusal");
+  assert.ok(flat.includes("- **No new path:** the join made no root here. It refused before redeeming anything"), "a refusal is not read as a root left outside L");
+  assert.ok(flat.includes("- **A new path under another name:** the invite was for that team, and this machine joined it instead"), "a redeemed invite for another team is not read as a refusal");
   const setupInvite = read("mirrors/oats-aweb/lib/setup-invite.mjs");
   const awFloor = setupInvite.match(/AW_INVITE_INSPECT = '([0-9.]+)'/);
   assert.ok(awFloor && flat.includes(`aw ${awFloor[1]} or later (\`aw.version\` in item 1's check)`), "the skill's aw floor is the provider's");
@@ -242,6 +243,39 @@ test("getting-started: an existing workspace names its setup expert after this m
   const invite = read("mirrors/oats-aweb/lib/invite.mjs");
   const [maj, min, pat] = providerVersion.split(".").map(Number);
   if (maj > 1 || (maj === 1 && (min > 33 || (min === 33 && pat >= 1)))) assert.ok(invite.includes("awebUrl"), "the invite answer carries awebUrl from 1.33.1");
+});
+
+test("getting-started: item 5 reads a failed join from what ran, read-only (#1746)", () => {
+  const flat = read("skills/oats-getting-started/SKILL.md").replace(/\s+/g, " ");
+  const item5 = flat.slice(flat.indexOf("5. **After items 2 to 4, check again**"), flat.indexOf("6. **Codex, or `delivery: session`"));
+  // Gap 1: "outside L" is said only of a root; "root": null after the signup or the labelled form says no root was
+  // made or recorded. A create (BYOT, item 2) that recorded no root is rerun unchanged: each of its steps resumes.
+  assert.ok(item5.includes("- **`\"root\": null` after item 2's signup:** no root was made in `D/.aw`: the signup didn't finish. Tell the person so, with what the check shows, and don't rerun it."));
+  assert.ok(item5.includes("- **`\"root\": null` after a team create in item 2** (a create line, not the signup): the create recorded no root. Run the same create line again, unchanged, then check again."));
+  assert.ok(item5.includes("- **`\"root\": null` after item 4's labelled form:** the join recorded no root: it stopped at a refusal or a failure, which its window shows."));
+  assert.ok(item5.includes("- **With a `root`:** the run left this machine's root outside `L`."), "outside L only where there is a root");
+  assert.equal(item5.split("outside `L`").length - 1, 1, "no other branch says the root is outside L");
+  assert.ok(read("mirrors/oats-aweb/bin/oats-aweb.mjs").includes("a re-run of the same command resumes a partial create"), "the provider resumes a partial create on the same line");
+  // Gap 2: the listing is taken before item 4's window opens and compared after; only a new path is this join's.
+  const item4 = flat.slice(flat.indexOf("4. **Existing workspace: the person joins in their own terminal,**"), flat.indexOf("5. **After items 2 to 4"));
+  const listing = 'ls -d "D"/.aweb-roots/*/.aw 2>/dev/null';
+  assert.ok(item4.indexOf(`Before you open it, list the per-team roots \`D\` already holds, read-only, and keep what it prints (often nothing) for item 5: \`\`\`bash ${listing} \`\`\``) >= 0, "item 4 takes the listing");
+  assert.ok(item4.indexOf(listing) < item4.indexOf("| oats aweb setup --soul S --invite-stdin --name A'"), "before the window opens");
+  assert.ok(item5.includes("run item 4's listing again, read-only, and compare it with what it printed before the window opened: only a path that is new is this join's."));
+  // Gap 3: L is compared as the provider names the folder, normalizeAwebTeamName. The skill's example is the function's.
+  const teamRoots = read("mirrors/oats-aweb/lib/team-roots.mjs");
+  assert.ok(teamRoots.includes('String(label || "").toLowerCase().replace(/[_.]+/g, "-").replace(/^-+|-+$/g, "")'), "the provider's normalization is the one the skill states");
+  assert.ok(item5.includes("The folder before `/.aw` is the team's label as the provider writes a team name: lowercase, each run of `_` or `.` as one `-`, and no `-` at either end (`My_Team.` is `my-team`). Write `L` that way too before you compare."));
+  assert.equal(normalizeAwebTeamName("My_Team."), "my-team", "the skill's example");
+  assert.ok(item5.includes("- **A new path under `L`'s name:** the join began in `L`'s folder and didn't finish."));
+  // Gap 4: aw's own accept can fail after every check, with no code: the join removes the empty root it made.
+  assert.ok(read("mirrors/oats-aweb/bin/oats-aweb.mjs").includes("if (createdRoot) { try { rmdirSync(teamRoot); }"), "a failed accept removes the empty per-team root");
+  assert.ok(item5.includes("or aw's own accept failed and the join removed the empty folder it had made. Ask the person for the `E_SETUP_` code their window shows, if any (a code, no secret); with no code, ask what the window's last line says (no secret)."));
+  assert.ok(!item5.includes("ask the person for the `E_SETUP_` code their window shows (a code, no secret), tell them"), "a code is not assumed");
+  // The read-only rule: the agent never sees the join's output, never reruns the signup or the join, and asks for no secret.
+  assert.ok(item5.includes("Don't rerun the signup or the join (you can't see the join's output)."));
+  assert.ok(!/rerun the join|run the (?:signup|join) again|open the window again/i.test(item5.replace("Don't rerun the signup or the join", "")), "no branch reruns the signup or the join");
+  assert.ok(!/token|password|key\b/i.test(item5), "item 5 asks for no secret");
 });
 
 test("the Desktop's background download is installed only once its checksum and attestation passed", () => {
