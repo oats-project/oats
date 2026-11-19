@@ -13,6 +13,10 @@ const CODE = /^E_[A-Z0-9_]{1,62}$/;
 const record = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 const text = (v, max) => typeof v === 'string' && v.length > 0 && v.length <= max && !/[\x00-\x1f\x7f]/.test(v);
 
+/** The codes this client's CLI runner gives a run that ended without an answer (own-codes.mjs): such a run's outcome
+ * is unknown, and its code says why. Any other code there reads as E_OUTCOME_UNKNOWN. */
+const CLI_RUN_CODES = new Set(['E_CLI_FAILED', 'E_CLI_OUTPUT_LIMIT', 'E_CLI_PROTOCOL', 'E_CLI_TIMEOUT', 'E_CLI_UNAVAILABLE']);
+
 export function recordOutcome(envelope, answer) {
   if (envelope?.ok === true) {
     let ok = null;
@@ -23,5 +27,5 @@ export function recordOutcome(envelope, answer) {
   if (madeByKernel(error) && typeof error.code === 'string' && CODE.test(error.code)) {
     return { status: 'refused', reason: { code: error.code, message: text(error.message, 512) ? error.message : '' } };
   }
-  return { status: 'unknown', reason: { code: typeof error?.code === 'string' && /^E_CLI_[A-Z_]+$/.test(error.code) ? error.code : 'E_OUTCOME_UNKNOWN' } };
+  return { status: 'unknown', reason: { code: CLI_RUN_CODES.has(error?.code) ? error.code : 'E_OUTCOME_UNKNOWN' } };
 }
