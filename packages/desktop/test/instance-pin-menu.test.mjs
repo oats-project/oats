@@ -25,7 +25,6 @@ import { runtimeState, unsupportedSession } from '../../client/instance-presenta
 import { canAddressRemote, rowReason } from '../../client/remote-address.mjs';
 import { createRuntimeBadge } from '../renderer/identity-marks.mjs';
 import { iconElement } from '../renderer/shell-icons.mjs';
-import { rosterTipFacts } from '../renderer/roster-tip.mjs';
 import { setTabTitle } from '../renderer/tab-a11y.mjs';
 import { NO_ANSWER_CODE, unservedError } from '../renderer/deployment-header.mjs';
 import { rosterKeyAction, moveTarget } from '../renderer/roster-keys.mjs';
@@ -277,7 +276,7 @@ function sidebar(t, { feature = true } = {}) {
     contextRosterEl: doc.querySelector('#instance-roster'), contextWorkspace: 'A', contextInstances: [], contextDeployments: [],
     rosterState: { hasData: true, state: 'ready' }, rosterStale: false, contextDeploymentNote: null,
     currentWorkspace: () => 'A', workspaceGeneration: () => 0, collapsedInstances: new Set(),
-    rosterTip: { bind() {}, hide() {}, sync() {} }, rosterTipFacts, rosterPrs: { get: () => null, refresh() {} },
+    rosterPrs: { get: () => null, refresh() {} },
     spawnJobs: { rows: () => [], announce: () => false, check() {}, isNew: () => false, seen() {} },
     tabs: new Map(), activeTab: null, tabOpenIntents: { applyFocus: f => f(), invalidate() {} },
     openTerminalTab() {}, openInstanceStart() {}, openLifecycleDialog: assert.fail,
