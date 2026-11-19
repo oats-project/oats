@@ -106,7 +106,7 @@ test('one identity: no team label; nothing at all: the empty line; one identity 
   const part = rig(t, { answer: () => fixture(d => { d.identities[1].error = 'no-mail-read'; d.messages = [d.messages[0]]; }) });
   part.sheet.open(row, 'ws-1'); await settle();
   const problem = part.one('[data-mail-identity="product"]');
-  assert.equal(problem.textContent, "Mail from product can't be read: it may not read mail (no mail.read grant, or the server refused)");
+  assert.equal(problem.textContent, "Mail from product can't be read: no-mail-read — it may not read mail (no mail.read grant, or the server refused)");
   const other = rig(t, { answer: () => fixture(d => { d.identities[1].error = 'some-new-slug'; }) });
   other.sheet.open(row, 'ws-1'); await settle();
   assert.equal(other.one('[data-mail-identity="product"]').textContent, "Mail from product can't be read: some-new-slug", 'an unknown error as given');
@@ -336,4 +336,24 @@ test('focus that left the sheet anyway: Esc still closes it, Tab brings focus ba
   u.doc.activeElement.blur();
   assert.equal(u.key('Escape', {}, u.doc.body).defaultPrevented, true); assert.equal(u.sheet.isOpen(), false);
   assert.equal(u.key('Escape', {}, u.doc.body).defaultPrevented, false, 'closed: the listener is gone');
+});
+
+test('modal: a real shortcut that focuses the roster behind the scrim (Alt+F) leaves focus in the sheet; a dialog over it closes it', async t => {
+  const { registerAction, handleKeydown, setActiveContexts } = await import('../renderer/keybindings.mjs');
+  const u = rig(t);
+  const roster = u.doc.createElement('button'); roster.className = 'ctx-inst'; roster.textContent = 'dev-1'; u.doc.getElementById('main').append(roster);
+  const off = registerAction({ id: 'sidebar.focusFilter', label: 'Focus the roster', context: 'global', run: () => roster.focus() });
+  t.after(off); setActiveContexts(['global']);
+  u.sheet.open(row, 'ws-1'); await settle();
+  const toggles = () => u.all('.mail-item-toggle');
+  toggles()[1].focus();
+  const altF = new u.dom.window.KeyboardEvent('keydown', { key: 'f', code: 'KeyF', altKey: true, bubbles: true, cancelable: true });
+  assert.equal(handleKeydown(altF, { isMac: false }), true, 'the shortcut ran');
+  assert.equal(u.doc.activeElement, toggles()[1], 'focus came back to where it was in the sheet');
+  u.key('ArrowDown'); assert.equal(u.doc.activeElement, toggles()[2], 'the next key acts in the sheet');
+  // Another modal taking focus: the sheet yields.
+  const dialog = u.doc.createElement('section'); dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true');
+  const ok = u.doc.createElement('button'); dialog.append(ok); u.doc.body.append(dialog);
+  ok.focus();
+  assert.equal(u.sheet.isOpen(), false); assert.equal(u.doc.activeElement, ok);
 });

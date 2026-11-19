@@ -52,7 +52,9 @@ title, an alias or an id: the sheet accepts any of them and shows the first
 ↑ and ↓ (Home, End) move between messages, and Tab stays inside the sheet. When
 a read replaces the control that had focus (an error's Details, Refresh while it
 reads), focus moves to the next one in the sheet, never out of it; and Esc closes
-the sheet wherever focus is. **r**
+the sheet wherever focus is. A shortcut that would focus something behind the
+scrim (the roster's Alt+F, say) leaves focus in the sheet; a dialog that opens
+over it closes it. **r**
 or the refresh button reads the mail again, keeping what was expanded.
 
 ## Reading never acknowledges
@@ -82,7 +84,7 @@ computer's OATS can route operations there.
 | The agent's copy of its messaging layer predates the operation (`E_OPERATION_UNKNOWN`) | This agent's messaging is too old to show mail; stop it and upgrade it (`oats instance upgrade`), or start a new agent of its soul. |
 | No messaging layer in the agent's home (`E_OPERATION_UNAVAILABLE`) | This agent has no messaging layer, so it has no mail. |
 | This computer's aw is older than the provider needs (`E_AW_TOO_OLD`) | This computer's aw is too old to read mail: and the provider's own message, which names the version it needs. |
-| One identity can't be read (`identities[].error`) | Mail from *team* can't be read: and what its error means (oats.aweb's `identity-missing`, `identity-unreadable`, `no-mail-read`, `threads-unreadable`, `conversation-unreadable`, `too-many-threads`; any other as given); the rest of the mail shows. |
+| One identity can't be read (`identities[].error`) | Mail from *team* can't be read: and its error, with what it means for oats.aweb's `identity-missing`, `identity-unreadable`, `no-mail-read`, `threads-unreadable`, `conversation-unreadable`, `too-many-threads`; any other as given); the rest of the mail shows. |
 | No identity can be read (`E_MAIL_UNREADABLE`) | None of this agent's mail identities could be read. |
 | A server's OATS can't run operations (`E_REMOTE_INCOMPATIBLE`) | The OATS on *server* is too old to read this agent's mail. |
 | An answer outside the contract | The messaging layer answered mail this Desktop can't read. |

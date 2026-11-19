@@ -34,8 +34,9 @@ import { displayLine, DETAIL_WITHHELD } from '../../client/display-text.mjs';
 const agent = DESKTOP_NOUNS.instance;
 
 /** The sheet's sentences. The "too old" one is the contract's (contract-mail-read v2, "Who builds what"). */
-/** What an identity's error means (oats.aweb's slugs); any other is shown as given. An identity with an error may
- * still have messages: the sheet shows them. */
+/** What an identity's error means, beside the error itself (oats.aweb's words; another provider's error is shown as given,
+ * and one of these words from it reads as oats.aweb means it). An identity with an error may still have messages: the
+ * sheet shows them. */
 export const IDENTITY_ERRORS = Object.freeze({ __proto__: null,
   'identity-missing': 'its identity is missing from the agent\'s home',
   'identity-unreadable': 'its identity could not be read',
@@ -61,7 +62,7 @@ export const MAIL_WORDS = Object.freeze({
   remoteTooOld: server => `The OATS on ${server} is too old to read this ${agent}'s mail.`,
   unreadable: `The messaging layer answered mail this Desktop can't read. Update OATS Desktop, or this ${agent}'s messaging.`,
   failed: `Couldn't read the ${agent}'s mail.`,
-  identityFailed: (team, code) => `Mail from ${team} can't be read: ${IDENTITY_ERRORS[code] ?? mailLine(code)}`,
+  identityFailed: (team, code) => `Mail from ${team} can't be read: ${mailLine(code)}${IDENTITY_ERRORS[code] ? ` — ${IDENTITY_ERRORS[code]}` : ''}`,
   noIdentity: `None of this ${agent}'s mail identities could be read.`,
   received: 'From', sent: 'To',
   encrypted: 'Encrypted', unread: `Not read by the ${agent} yet`, high: 'High priority',
@@ -180,13 +181,14 @@ let sheets = 0;
  */
 export function createMailSheet({ doc, request, generation = () => 0, subscribeWorkspace = () => () => {}, cli = () => null,
   heldBack = () => null, onIntent = () => {}, applyFocus = fn => fn(), now = () => Date.now() } = {}) {
-  let alive = true, overlay = null, ui = null, restore = null, life = 0, serial = 0, release = null, outside = null;
+  let alive = true, overlay = null, ui = null, restore = null, life = 0, serial = 0, release = null, outside = null, contain = null;
   const node = (tag, cls, value) => { const el = doc.createElement(tag); if (cls) el.className = cls; if (value !== undefined && value !== null) el.textContent = value; return el; };
   const unsubscribe = subscribeWorkspace(() => close({ focus: 'none' }));
 
   function close({ focus = 'opener' } = {}) {
     release?.(); release = null;
     if (outside) { doc.removeEventListener('keydown', outside, true); outside = null; }
+    if (contain) { doc.removeEventListener('focusin', contain, true); contain = null; }
     if (!overlay) return;
     life++; serial++; overlay.remove(); overlay = null; ui = null;
     const back = restore; restore = null;
@@ -419,6 +421,18 @@ export function createMailSheet({ doc, request, generation = () => 0, subscribeW
       else if (event.key === 'Tab') { event.preventDefault(); event.stopPropagation(); keepFocus('sheet'); }
     };
     doc.addEventListener('keydown', outside, true);
+    // Focus is contained too: a shortcut that focuses something behind the scrim (the roster's Alt+F, the workspace
+    // list's Alt+O) brings it straight back to where it was in the sheet. Another modal that takes focus (a dialog
+    // over this one) closes the sheet instead, as the shared pickers' handoff does.
+    let last = null;
+    contain = event => {
+      if (!owns()) return;
+      if (overlay.contains(event.target)) { last = event.target; return; }
+      if (event.target?.closest?.('[aria-modal="true"], .palette-overlay')) { close({ focus: 'none' }); return; }
+      const back = last && last.isConnected && !last.disabled ? last : null;
+      if (back) back.focus(); else keepFocus('sheet');
+    };
+    doc.addEventListener('focusin', contain, true);
     release = joinPickerFocusReturn(doc, { opener: restore, dismiss: () => close({ focus: 'none' }) });
     closeButton.focus();
     void read();
