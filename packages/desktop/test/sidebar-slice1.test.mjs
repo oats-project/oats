@@ -127,13 +127,13 @@ test("slice1 row shows name and soul · machine only", t => {
   // The tooltip keeps the name and the state (slice 6a: the repository, branch, harness and model are Details'); never
   // in its description, and no card is mounted.
   u.render([local("desktop-mockups", { model: "opus" })]);
-  assert.equal(u.row("desktop-mockups").title, "Desktop mockups, running");
+  assert.equal(u.row("desktop-mockups").title, "desktop-mockups, running");
   assert.equal(u.row("desktop-mockups").hasAttribute("aria-description"), false);
   assert.equal(u.doc.querySelector(".ctx-tip, [role=tooltip]"), null);
   // A row with no terminal has no instance panel: its runtime error, with its speaker, is its title and description
   // (the hover card said it), and line 2 stays soul · machine.
   u.render([local("broken", { running: false, runtimeError: "the last start failed", runtimeErrorOrigin: "kernel" })]);
-  assert.equal(u.row("broken").title, "OATS says: the last start failed\nBroken, stopped", "its error, then its name and state");
+  assert.equal(u.row("broken").title, "OATS says: the last start failed\nbroken, stopped", "its error, then its name and state");
   assert.equal(u.row("broken").getAttribute("aria-description"), "OATS says: the last start failed");
   assert.deepEqual(u.lines("broken"), ["Broken", "oats-desktop-developer · This Mac"]);
   u.render([remote("far", { running: null, serverUnreached: true, runtimeError: "ssh failed" })]);

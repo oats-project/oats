@@ -1379,7 +1379,8 @@ function renderContextRoster(instances) {
         // The row's tooltip: what it says already (an error, a held read), then its name and state (slice 6a: the
         // interim facts of slice 1, the repository, the branch, the harness and model, moved to Details, which every
         // row has now, by keyboard too).
-        row.title = [row.title, `${instanceDisplayName(i.instance) || i.instance}, ${state === "running" ? "running" : state === "stopped" ? "stopped" : "status unknown"}`].filter(Boolean).join("\n");
+        // The real name, as every attribute of the row keeps it (its words are visible text only).
+        row.title = [row.title, `${i.instance}, ${state === "running" ? "running" : state === "stopped" ? "stopped" : "status unknown"}`].filter(Boolean).join("\n");
         row.addEventListener("click", (e) => {
           // A click on the disclosure opens or closes the row, whatever the row's state, and opens nothing; the
           // focus stays on the row, as the tree keys leave it.

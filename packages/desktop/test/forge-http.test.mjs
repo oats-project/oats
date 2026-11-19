@@ -84,7 +84,7 @@ test('HTTP burst coalesces in one epoch, auth generation starts a new flight, er
   assert.ok(results.every(r => r.body.reason.code === 'E_GH_TIMEOUT')); assert.doesNotMatch(JSON.stringify(results), /PRIVATE/);
 });
 
-test('forge-roster is gone (#1973, slice 6a): Details reads a row's pull request through instance-forge; the route answers nothing', async () => {
+test("forge-roster is gone (#1973, slice 6a): Details reads a row's pull request through instance-forge; the route answers nothing", async () => {
   const h = http();
   const gone = await h.request({ url: '/api/forge-roster?ws=team', body: '{}' });
   assert.notEqual(gone.code, 200); assert.equal(h.count(), 0, 'no process runs');
