@@ -13,7 +13,7 @@
    retiring or left half done: shell.mjs draws its state there) is always drawn open, whatever was chosen for it:
    its lines have no room for the needs-input roll-up, so a collapse there would hide a waiting child with no mark.
    It wears no disclosure and the tree keys do not collapse it; a choice made by hand before is kept, and applies
-   again once its lifecycle is over. A root with a pinned row under it in its section (feature instance-pin; spec B
+   again once its lifecycle is over. A root whose subtree in its section holds a pinned row, its own pin included (feature instance-pin; spec B
    of the pinned instances, agreed with this module's lead) starts open, so the pinned row is seen; closed by hand,
    it stays closed (`startsOpen`). What the operator opens or closes is kept in memory per workspace, as a
    collapse always was:
@@ -41,7 +41,7 @@ export function sectionChildren(instances, section) {
 
 /** The collapse keys the roster draws collapsed (instanceVisibleInTree, waitingRollup): the rows closed by hand,
  * and every root of its section that has children there, was not opened by hand and that `startsOpen(id)` does not
- * open by default (a root with a pinned row under it); never a row `staysOpen(id)` says its lifecycle takes, closed
+ * open by default (a root whose subtree holds a pinned row); never a row `staysOpen(id)` says its lifecycle takes, closed
  * by hand or not. `startsOpen` changes only the default: a root closed by hand stays closed. `children`:
  * sectionChildren. */
 export function collapsedRows(workspace, { collapsed, expanded, children, staysOpen = () => false, startsOpen = () => false }) {

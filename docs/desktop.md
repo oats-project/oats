@@ -992,9 +992,9 @@ focused row and Left closes it. Every instance at the top of the tree, the
 each new window, except one still being set up or retired, or whose retire
 failed: while its row shows that state, it has no chevron and its group
 stays open, so an instance under it that needs input is never hidden. A
-group with a pinned instance under its top instance starts open too, so the
-pin is seen ([Pinned instances](#pinned-instances)); close it and it stays
-closed. An instance inside a group starts open, and each one with
+group that holds a pinned instance, its top instance included, starts open
+too, so the pin is seen with its group ([Pinned instances](#pinned-instances));
+close it and it stays closed. An instance inside a group starts open, and each one with
 children has its own chevron. What you open or close stays as you left it
 until the window closes. **Show in roster**, `--instance` and a spawn from
 the Desktop open the rows above the instance they show. The TUI's list still
@@ -1134,8 +1134,9 @@ starts, opens, takes input and retires as any other.
   one parent. An instance counts as pinned when it or any instance below it
   is pinned. Pinning a child lifts its whole group to the top of its
   machine's list, and the path down to it rises among its siblings. A group
-  with a pinned instance under its top instance doesn't start collapsed, so
-  the pin is seen; closed by hand, it stays closed until you open it. Among
+  that holds a pinned instance, its top instance included, doesn't start
+  collapsed, so the pin is seen with its group; closed by hand, it stays
+  closed until you open it. Among
   pinned instances the usual order stands: spawn time, newest first. There
   is no manual order. Under one parent, the children joined by the parent's
   line still come first ([the tree](#the-sidebars-instance-tree)). A pinned instance

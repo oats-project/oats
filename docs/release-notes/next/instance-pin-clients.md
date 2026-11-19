@@ -19,8 +19,9 @@
     a pinned instance, and the command palette offers **Instance: Pin to
     top** / **Instance: Unpin** for the instance the leader keys act on. A
     pinned row shows a pin after its name, which a screen reader hears as
-    "Pinned". A group with a pinned instance under its top instance doesn't
-    start collapsed, so the pin is seen; closed by hand, it stays closed.
+    "Pinned". A group that holds a pinned instance, its top instance
+    included, doesn't start collapsed, so the pin is seen with its group;
+    closed by hand, it stays closed.
   - The TUI: `p` pins or unpins the selected instance at once, and the line
     under the sidebar's title says what it did, or why it did nothing.
   - Both run `oats instance pin <name> on|off`. The pin is the instance's

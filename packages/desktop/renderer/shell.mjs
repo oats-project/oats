@@ -1052,11 +1052,11 @@ function renderContextRoster(instances) {
   // A choice made by hand stays in the sets and applies again once its lifecycle is over.
   const childrenHere = sectionChildren(instances, rowSection);
   const lifecycleRows = new Set(instances.filter((i) => i.pendingSpawn || heldHome(i)).map(instanceId));
-  // A root with a pinned row under it in its section starts open (feature instance-pin): the pin is seen. Closed by
-  // hand, it stays closed.
+  // A root whose subtree in its section holds a pinned row, its own pin included, starts open (feature instance-pin):
+  // the pin is seen with its group. Closed by hand, it stays closed.
   const pinnedRows = new Set(instances.filter((i) => rowPinned(i, pinsShown())).map(instanceId));
   const collapsedNow = collapsedRows(ws, { collapsed: collapsedInstances, expanded: expandedInstances, children: childrenHere,
-    staysOpen: (id) => lifecycleRows.has(id), startsOpen: (id) => pinnedRows.size > 0 && anyBelow(childrenHere, id, (row) => pinnedRows.has(row)) });
+    staysOpen: (id) => lifecycleRows.has(id), startsOpen: (id) => pinnedRows.has(id) || (pinnedRows.size > 0 && anyBelow(childrenHere, id, (row) => pinnedRows.has(row))) });
   const visible = instances.filter((i) => instanceVisibleInTree(
     i, instances, collapsedNow, ws, false, { section: rowSection },
   ));

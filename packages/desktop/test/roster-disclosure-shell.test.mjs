@@ -158,6 +158,19 @@ test("pinned instances (spec B): a root with a pinned row under it starts open, 
   assert.equal(off.drawn().includes("tip"), false);
 });
 
+test("pinned instances (spec B): a root pinned itself, with nothing pinned below, starts open with its group; closed by hand, closed; without the feature, collapsed", t => {
+  const rows = ROWS.map(r => (r.instance === "duo" ? { ...r, pinned: true } : r));
+  const u = fixture(t, rows, { pinsShown: () => true });
+  assert.equal(u.row("duo").getAttribute("aria-expanded"), "true", "duo, pinned itself, starts open");
+  assert.ok(u.drawn().includes("duo-kid"), "its group is drawn");
+  assert.equal(u.row("lead").getAttribute("aria-expanded"), "false", "a root with no pin in its subtree starts collapsed");
+  u.click(u.mark("duo"));
+  u.s.render(rows);
+  assert.equal(u.row("duo").getAttribute("aria-expanded"), "false", "closed by hand, it stays closed through a repaint");
+  const off = fixture(t, rows);
+  assert.equal(off.row("duo").getAttribute("aria-expanded"), "false", "without the feature it starts collapsed");
+});
+
 test("the tree keys open and close a root that starts collapsed", t => {
   const u = fixture(t);
   u.row("duo").focus();
