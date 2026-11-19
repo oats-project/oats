@@ -22,7 +22,7 @@ No frameworks, no dependencies; data comes from the bundled backend HTTP API.
   Souls come from `GET /api/agents` (the kernel's `oats souls` catalog),
   grouped by where they come from (the member repository, the host first,
   then packages with their pinned version, then external souls) and, inside a
-  group, in kind order (`packages/client/soul-kind.mjs` `compareSouls`: maintainers,
+  group, in kind order (`packages/client/soul-role.mjs` `compareSoulsByRole`: maintainers,
   experts, developers, operations, the rest; a name rule until the kernel reports a
   role). They show as cards or as a table (`v`, `spawn.view`, or the toolbar's
   Grid | Table; `rememberSoulsView` keeps the choice per view id in localStorage,

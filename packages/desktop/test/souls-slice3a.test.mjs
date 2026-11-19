@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { soulKind, compareSouls, SOUL_KINDS } from '../../client/soul-kind.mjs';
+import { soulRole, compareSoulsByRole, SOUL_ROLES } from '../../client/soul-role.mjs';
 import { createSoulInstructions, SOUL_INSTRUCTIONS_COPY, OWN, COMPOSED } from '../renderer/soul-instructions.mjs';
 import { createSoulInspector } from '../renderer/soul-inspector.mjs';
 import { setWorkspace, currentWorkspace } from '../renderer/views/common.mjs';
@@ -70,12 +70,12 @@ test('slice3a kind rule', () => {
     // A word Object.prototype names is no kind: never an inherited property.
     'constructor': 'other', 'acme-toString': 'other', 'has-own-property': 'other',
   };
-  for (const [name, kind] of Object.entries(cases)) assert.equal(soulKind({ name }), kind, name);
-  assert.equal(soulKind('oats-expert'), 'expert', 'a bare name reads the same');
-  assert.equal(soulKind('__proto__'), 'other');
-  assert.deepEqual(['constructor', 'app-maintainer'].sort(compareSouls), ['app-maintainer', 'constructor'], 'an inherited name sorts with the rest');
-  assert.deepEqual(SOUL_KINDS, ['maintainer', 'expert', 'developer', 'operations', 'other']);
-  assert.deepEqual(['b-developer', 'z', 'a-expert', 'c-maintainer', 'x-setup-expert', 'a-developer'].map(name => ({ name })).sort(compareSouls).map(s => s.name),
+  for (const [name, kind] of Object.entries(cases)) assert.equal(soulRole({ name }), kind, name);
+  assert.equal(soulRole('oats-expert'), 'expert', 'a bare name reads the same');
+  assert.equal(soulRole('__proto__'), 'other');
+  assert.deepEqual(['constructor', 'app-maintainer'].sort(compareSoulsByRole), ['app-maintainer', 'constructor'], 'an inherited name sorts with the rest');
+  assert.deepEqual(SOUL_ROLES, ['maintainer', 'expert', 'developer', 'operations', 'other']);
+  assert.deepEqual(['b-developer', 'z', 'a-expert', 'c-maintainer', 'x-setup-expert', 'a-developer'].map(name => ({ name })).sort(compareSoulsByRole).map(s => s.name),
     ['c-maintainer', 'a-expert', 'a-developer', 'b-developer', 'x-setup-expert', 'z']);
 });
 

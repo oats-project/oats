@@ -508,7 +508,7 @@ what a soul is. The souls are grouped by where they come from: the workspace's
 own repository first, then its other member repositories, then each package,
 then the external souls. Inside a group they are in kind order: maintainers,
 experts, developers, operations, then the rest, each by name. The kind is read
-from the soul's name (`packages/client/soul-kind.mjs`): a name with a word
+from the soul's name (`packages/client/soul-role.mjs`): a name with a word
 `setup`, `operator`, `admin`, `ops` or `operations` is operations; else a name
 ending in `-maintainer`, `-expert` or `-developer` is that; else other. OATS
 reports no kind of its own, so the name is the rule.

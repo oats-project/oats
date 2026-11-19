@@ -9,7 +9,7 @@ import { capabilityRow } from "../workspace-catalog.mjs";
 import { renderCapabilityPage, capabilityPageCSS, pageCardCSS, soulCapabilitiesCSS, catalogNotice, catalogNoticeKind, updateCatalogNotice } from "../capability-page.mjs";
 import { sameRepo } from "../../../client/repo-moves.mjs";
 import { spawnRefusal, cantSpawnLine, soulMatches, desktopFacts, soulFacts } from "../../../client/soul-facts.mjs";
-import { soulKind, compareSouls, SOUL_KIND_WORDS } from "../../../client/soul-kind.mjs";
+import { soulRole, compareSoulsByRole, SOUL_ROLE_WORDS } from "../../../client/soul-role.mjs";
 import { createCapabilityContents, capabilityContentsCSS } from "../capability-contents.mjs";
 import { sourceQuoteCSS } from "../source-quote.mjs";
 import { sourceText } from "../source-chip.mjs";
@@ -79,7 +79,7 @@ const CSS = `
 .workspace-sr-only { position:absolute; top:0; left:0; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 .souls-bar .souls-bar-lead { flex:1 1 auto; }
 /* Souls (the Desktop UI rework, slice 3a): grouped by where a soul comes from (the workspace's repository,
-   then each package), each group in kind order (packages/client/soul-kind.mjs), as cards or as a table
+   then each package), each group in kind order (packages/client/soul-role.mjs), as cards or as a table
    (v, or the toolbar's Grid | Table). Souls of a member that has not joined are listed apart, with the reason. */
 .souls-grid { position:relative; flex:1; min-height:0; min-width:0; overflow-y:auto; overscroll-behavior:contain; padding:0 20px 16px; display:flex; flex-direction:column; gap:14px; border-top:1px solid transparent; }
 /* The bar above is outside this scroller, so it never moves; once cards scroll under it, a 1px edge (spec G, sticky-top.mjs). */
@@ -446,7 +446,7 @@ function paintCapabilityPage(s) {
   // "Used by" reads the souls' composition (souls-capabilities) and marks, or the roster's module rows.
   // Whether the Contents controller's Trigger sources row has content decides the Provides card's shape (what the row says does not).
   const signature = JSON.stringify([current === row ? null : current, catalogPending, context.instances, context.root, context.rosterState, context.composition,
-    context.composition ? context.souls.map(a => [a.name, a.key, a.color, a.agentsRoot, a.soulKind, a.package, a.capabilities]) : null,
+    context.composition ? context.souls.map(a => [a.name, a.key, a.color, a.agentsRoot, a.soulRole, a.package, a.capabilities]) : null,
     open.contents.triggerSources.childElementCount > 0]);
   const host = s.q("workspace-cap-page");
   if (signature !== open.signature) { // an unchanged catalog never rebuilds the page under focus
@@ -991,10 +991,10 @@ function renderGrid(s, { restoreFocus = true } = {}) {
   }
   // Grouped by where the soul comes from (the workspace's own repository first, its other members, each package,
   // the external souls), and inside a group in kind order: maintainers, experts, developers, operations, then the
-  // rest, each by name (packages/client/soul-kind.mjs). Souls of a member that is not confirmed are listed last,
+  // rest, each by name (packages/client/soul-role.mjs). Souls of a member that is not confirmed are listed last,
   // apart, with the member's reason (workspace status).
   const groups = new Map();
-  for (const a of [...list].sort(compareSouls)) {
+  for (const a of [...list].sort(compareSoulsByRole)) {
     const g = repoGroup(s, a);
     if (!groups.has(g.key)) groups.set(g.key, { ...g, souls: [] });
     groups.get(g.key).souls.push(a);
@@ -1275,11 +1275,11 @@ function soulCard(s, a) {
   // already running, so the foot keeps their count.
   if (problem) { const note = span("sproblem", problem.line); note.title = problem.text; card.append(note); }
   foot.append(span("sactivity" + (running ? " running" : ""), agentsText(running, instances.length)));
-  foot.append(span("skind", `· ${SOUL_KIND_WORDS[soulKind(a)]}`));
+  foot.append(span("skind", `· ${SOUL_ROLE_WORDS[soulRole(a)]}`));
   card.append(foot);
   // Its name names it; what it does, its agents and its kind describe it.
   card.setAttribute("aria-label", a.name);
-  card.setAttribute("aria-description", [a.description, problem?.line, agentsText(running, instances.length), `${SOUL_KIND_WORDS[soulKind(a)]} soul`].filter(Boolean).join(". "));
+  card.setAttribute("aria-description", [a.description, problem?.line, agentsText(running, instances.length), `${SOUL_ROLE_WORDS[soulRole(a)]} soul`].filter(Boolean).join(". "));
   card.title = [a.name, a.description].filter(Boolean).join("\n");
   return card;
 }
@@ -1300,7 +1300,7 @@ function soulRow(s, a) {
   const readyCell = node("td", ready?.ready === false ? undefined : ready ? ready.text : "—", ready ? (ready.ready ? "ready" : "problem") : "muted");
   if (ready?.ready === false) { readyCell.append(node("span", ready.text, "clamp")); readyCell.title = ready.text; }
   if (!ready) readyCell.title = "This OATS does not report whether a spawn here would be refused.";
-  row.append(name, what, node("td", SOUL_KIND_WORDS[soulKind(a)], "kind"), agents, node("td", launch ?? "—", launch ? "launch" : "launch muted"), readyCell);
+  row.append(name, what, node("td", SOUL_ROLE_WORDS[soulRole(a)], "kind"), agents, node("td", launch ?? "—", launch ? "launch" : "launch muted"), readyCell);
   return row;
 }
 

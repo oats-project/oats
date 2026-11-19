@@ -10,18 +10,18 @@
  * (`oats.engineering/code-reviewer`) reads the same as its bare one. The description is not read: a sentence
  * that says a soul "operates" something would misfile it, and the name is what the soul's author chose.
  *
- * A kernel `role` fact on the soul row would replace this rule: then `soulKind` reads it, and every client
+ * A kernel `role` fact on the soul row would replace this rule: then `soulRole` reads it, and every client
  * keeps calling the same two functions.
  *
- *   soulKind(row)          -> 'maintainer' | 'expert' | 'developer' | 'operations' | 'other'
- *   SOUL_KINDS             the kinds, in list order
- *   SOUL_KIND_WORDS        a kind in words, singular ("developer")
- *   compareSouls(a, b)     list order: kind, then name; for Array.prototype.sort
+ *   soulRole(row)          -> 'maintainer' | 'expert' | 'developer' | 'operations' | 'other'
+ *   SOUL_ROLES             the kinds, in list order
+ *   SOUL_ROLE_WORDS        a kind in words, singular ("developer")
+ *   compareSoulsByRole(a, b)     list order: kind, then name; for Array.prototype.sort
  *
  * No state, no DOM. */
 
-export const SOUL_KINDS = Object.freeze(['maintainer', 'expert', 'developer', 'operations', 'other']);
-export const SOUL_KIND_WORDS = Object.freeze({ maintainer: 'maintainer', expert: 'expert', developer: 'developer', operations: 'operations', other: 'other' });
+export const SOUL_ROLES = Object.freeze(['maintainer', 'expert', 'developer', 'operations', 'other']);
+export const SOUL_ROLE_WORDS = Object.freeze({ maintainer: 'maintainer', expert: 'expert', developer: 'developer', operations: 'operations', other: 'other' });
 const OPERATIONS = new Set(['setup', 'operator', 'operators', 'admin', 'ops', 'operations']);
 const LAST = Object.freeze({ maintainer: 'maintainer', expert: 'expert', developer: 'developer' });
 
@@ -29,14 +29,14 @@ const nameOf = row => typeof row === 'string' ? row : typeof row?.name === 'stri
 const words = name => name.toLowerCase().split(/[-_./]+/).filter(Boolean);
 
 /** The soul's kind, from its name (a row with a `name`, or the name itself). */
-export function soulKind(row) {
+export function soulRole(row) {
   const parts = words(nameOf(row));
   if (parts.some(part => OPERATIONS.has(part))) return 'operations';
   const last = parts.at(-1);
   return last !== undefined && Object.hasOwn(LAST, last) ? LAST[last] : 'other';
 }
 
-/** List order inside a group: the kind's place in SOUL_KINDS, then the name. */
-export function compareSouls(a, b) {
-  return SOUL_KINDS.indexOf(soulKind(a)) - SOUL_KINDS.indexOf(soulKind(b)) || nameOf(a).localeCompare(nameOf(b));
+/** List order inside a group: the kind's place in SOUL_ROLES, then the name. */
+export function compareSoulsByRole(a, b) {
+  return SOUL_ROLES.indexOf(soulRole(a)) - SOUL_ROLES.indexOf(soulRole(b)) || nameOf(a).localeCompare(nameOf(b));
 }

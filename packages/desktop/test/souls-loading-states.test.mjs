@@ -14,7 +14,7 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const CLI = { ok: true, operationsApi: 2, features: ['operations'], relations: true };
 const soul = (name, agentsRoot = '/a/agents') => ({ name, agentsRoot, runtime: 'pi', work: 'worktree', description: `${name} soul`, repoName: 'r' });
-// Two souls of one kind (other: packages/client/soul-kind.mjs), so the grid lists them by name.
+// Two souls of one kind (other: packages/client/soul-role.mjs), so the grid lists them by name.
 const ROSTER = [soul('dev'), soul('pm')];
 const observed = { status: 'observed', root: '/a', workspaceStatus: { members: [] } };
 

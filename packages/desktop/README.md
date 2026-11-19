@@ -56,7 +56,7 @@ The shell has three navigation contexts:
   nested roster. Selecting a running instance opens its direct tmux-attach
   xterm terminal in the main area. Terminal tabs are scoped to this context.
 - **Souls** (Workspace › Souls, where a window opens) — the souls grouped by where they come from, in kind
-  order (`packages/client/soul-kind.mjs`), as a searchable grid of cards or a table (`v`); a soul's page shows its
+  order (`packages/client/soul-role.mjs`), as a searchable grid of cards or a table (`v`); a soul's page shows its
   facts, its capabilities as one list of rows and its two prompts as two tabs, its skills folded below. Brain and
   markdown artifacts are scoped to this context; the markdown reader is the flagship file surface.
 
@@ -311,7 +311,7 @@ boundary and its cache (`inspect-boundary.mjs`, `inspect-cache.mjs`), the gate
 for a soul's composed AGENTS.md and skills (`composed-gate.mjs`), the launch
 vocabulary (`launch-view.mjs`), what is said about a soul
 (`soul-facts.mjs`, which the page loads) and a soul's kind and list order
-(`soul-kind.mjs`, a name rule until OATS reports a role). The catalog, the cache and the
+(`soul-role.mjs`, a name rule until OATS reports a role). The catalog, the cache and the
 boundary are factories: a client makes its own, with its own terms and its
 own `exec`, and two of them share nothing. The boundary holds nothing itself,
 so `server/capabilities.mjs` makes one per request around the backend's
