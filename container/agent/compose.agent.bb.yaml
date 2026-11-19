@@ -1,0 +1,6 @@
+# Include only for a team that runs a bb server; AGENT_IMAGE is then an image
+# built from container/agent-bb.
+services:
+  agent:
+    environment:
+      AGENT_BB: "1"

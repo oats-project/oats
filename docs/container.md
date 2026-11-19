@@ -19,7 +19,9 @@ container is one trust group ([trust-model.md](trust-model.md)):
   rewrite the launch configurations in `/state/deploy` and the schedule
   registry in `/state/home`, rewrite the wake registrations under
   `/state/home/.config/aw/wake`, and stop sshd, `oats host run`, the wake
-  broker or its supervisor.
+  broker or its supervisor. With the optional bb server, each agent can also
+  read and drive every bb thread and read bb's database
+  ([A bb server for the team](#a-bb-server-for-the-team)).
 - **It holds one team, never several.** Agents that must not be able to read
   each other's identities or affect each other's work get separate
   containers. Nothing in OATS makes sharing one safe.
@@ -147,6 +149,7 @@ Supply these plain variables to the bundle's env file:
 | `AGENT_CA_FILE` | Optional absolute public PEM path from `agents.caFile`; selects `compose.agent.trust.yaml`. |
 | `AGENT_MIRRORS_DIR` | Optional absolute mirror directory from `agents.mirrorsDir`; selects `compose.agent.mirrors.yaml`. |
 | `AGENTS_NETWORK`, `AGENT_IP` | Installer-created external network and container address. |
+| `AGENT_BB` | Optional; exactly `1` when `compose.agent.bb.yaml` is included, for acceptance. `AGENT_IMAGE` is then an image built from `container/agent-bb`. |
 
 The bundle owns the network, resolver, forwarder, firewall and their bypass
 checks. The agent service publishes no ports and sets no DNS or extra-hosts
@@ -175,6 +178,11 @@ changing a trust bundle so the broker, Node children and captured sessions all
 start with the same approved anchors.
 A successful probe using an explicit CA does not establish that the
 real broker trusts it; prove that through the deployment's HTTPS registry.
+
+Include `compose.agent.bb.yaml` only for a team that runs a bb server. It sets
+exactly one fixed environment entry, `AGENT_BB: "1"`, and adds no mount, port,
+network or capability
+([A bb server for the team](#a-bb-server-for-the-team)).
 
 Include `compose.agent.mirrors.yaml` only when `agents.mirrorsDir` is configured.
 The operator provisions and refreshes the bare mirrors outside the container,
@@ -525,7 +533,9 @@ What the image's files fix for that:
   run alone and keeps the wake broker alive until host run finishes stopping
   the agents. Then it stops sshd and the broker in parallel, allowing sshd three seconds
   and the broker six seconds before escalation. The broker budget preserves
-  its channel children's five-second delivery drain. A broker or
+  its channel children's five-second delivery drain. With a bb server, bb is
+  stopped in that same step, with eight seconds, so it runs until host run
+  has stopped the agents. A broker or
   host-run exit is reported and drains the other children before a nonzero
   container exit, so
   the restart policy can restart it. The broker runs as the agent uid; its
@@ -575,6 +585,179 @@ or, in the container, `oats schedule host install --register-only --dir
 systemd user manager. The registry is in `/state/home`, so it persists
 across container runs.
 
+## A bb server for the team
+
+[bb](https://github.com/get-bb/bb) (npm `bb-app`, MIT) is a server that runs
+coding agents as threads and shows them in a web, desktop and phone app. A
+team can run one bb server in its container, supervised beside the wake
+broker, sshd and `oats host run`. It is opt-in: a container that does not
+ask for it runs exactly as before, and the team image holds no bb.
+
+The server is unused until agents are spawned with the bb session provider,
+which arrives with a later kernel. Until then it starts, listens and holds
+no thread of OATS's.
+
+### Turning it on
+
+Two things, together:
+
+1. **The derived image.** `container/agent-bb/` builds on a team image and
+   adds only `bb-app`, at the one version its committed `package.json` and
+   `package-lock.json` pin, installed with `npm ci --ignore-scripts`: no
+   lifecycle script, no rebuild, no OS package. bb's native modules are the
+   prebuilt ones in its locked packages. It keeps the team image's
+   entrypoint, user, `HOME` and environment, and bb runs the Claude Code that
+   image already holds, `/usr/local/bin/claude`: the derived image adds no
+   second one. It is about 280 MB larger.
+
+   ```sh
+   docker build --platform linux/amd64 \
+     --build-arg AGENT_IMAGE=oats-agent:reviewed \
+     -t oats-agent-bb:reviewed container/agent-bb
+   ```
+
+   Select it with `AGENT_IMAGE`. To change bb's version, change its one
+   dependency version, regenerate that directory's lock with npm 11 or later
+   (`npm install --package-lock-only --ignore-scripts`; npm 10 drops the
+   `libc` field of platform packages, and `npm ci` then also installs their
+   musl builds), review both files and build a new image.
+
+2. **The fragment.** Append `-f container/agent/compose.agent.bb.yaml` to
+   the Compose commands. It sets `AGENT_BB: "1"` and nothing else. Export
+   `AGENT_BB=1` with the other variables when you run acceptance.
+
+The supervisor reads `AGENT_BB` once, at start. Unset or empty, it does
+what it did before. Any value but `1` is refused at start. Nothing else
+about bb is configurable: its arguments, its address and its environment
+are fixed in the image.
+
+### What runs
+
+After the broker is ready and before sshd and host run, the supervisor
+starts `bb-app --no-in-app-updates --server-bind-host 127.0.0.1`. Its
+environment is the supervisor's own plus two entries:
+
+- `BB_TELEMETRY=false`: telemetry is off.
+- `CLAUDE_CODE_OAUTH_TOKEN`, read from `/etc/agent-login/claude-token` when
+  that file exists, so bb's Claude threads use the team's inference token.
+  The supervisor reads the file once and gives the value to bb alone: never
+  to the broker, sshd or host run, never in an argument or a log line. With
+  no file, or an empty one, bb starts without the variable.
+
+bb reads its environment once, when it starts. After replacing the token,
+restart the container; restart the agents as
+[After changing a credential](#after-changing-a-credential) says.
+
+bb keeps its data in its default directory, `/state/home/.bb`. It needs no
+getbb.app account. At start it looks up `getbb.app` and
+`registry.npmjs.org`; the egress boundary refuses both and bb works without
+them, so neither needs an allowlist entry. A thread's model calls go through
+the egress boundary as an agent's do.
+
+Push notifications need a service outside the container. Keep them off:
+
+```sh
+ssh team-agent bb plugin disable push-notifications
+```
+
+### Trust
+
+bb's API has no login. It listens on the container's loopback only, on
+ports 38886 (the server) and 38887 (its host daemon), and the service
+publishes no port. Inside the container that changes what the trust group
+shares ([One team, one trust group](#one-team-one-trust-group)):
+
+- Any agent can read and drive every bb thread: read it, send it a message,
+  start one, stop one.
+- Any agent can read bb's database under `/state/home/.bb`. It holds every
+  conversation of every thread. It is on `/state`, so it outlives the
+  container and is in any copy of the volume, and OATS never trims it
+  ([Where conversations are stored](#where-conversations-are-stored)).
+- The token in bb's environment is the one every agent can already read.
+
+One bb serves one container. Never share one across teams, and never point
+two containers at one `/state`.
+
+### Reaching it
+
+bb listens only inside the container, and sshd's forwarding stays off. The
+operator reaches bb over the SSH route they already have
+([OATS over SSH](#oats-over-ssh)), with a small relay that runs on the
+operator's machine. It is in the checkout, never in an image, and needs only
+Node and `ssh`:
+
+```sh
+node container/agent-bb/relay.mjs --ssh team-agent --listen 48886
+```
+
+It listens on `127.0.0.1:48886` and nowhere else; it refuses any other
+address. Each connection becomes one SSH command channel to the container,
+whose command pipes to bb on `127.0.0.1:38886` there. The relay keeps up to
+nine channels on one SSH connection of its own (sshd allows ten sessions per
+connection) and opens a separate connection for each one beyond that. If that
+shared connection ends, it starts it again; meanwhile new connections work,
+each on a connection of its own. TERM or Ctrl+C closes the listener and
+every channel. Use one local port per team.
+
+- **Desktop app, on the same machine.** Server menu, Add Server,
+  `http://127.0.0.1:48886`. Add one server per team and name it. Nothing
+  is set in bb.
+- **Phone, or another machine.** Serve the relay's port under HTTPS on your
+  own tailnet, one port per team (Tailscale Serve:
+  `tailscale serve --bg --https=443 http://127.0.0.1:48886`). bb refuses a
+  name it was not told about, so set it once, over the SSH route:
+
+  ```sh
+  ssh team-agent bb-app config set BB_APP_URL 'https://<name>[:port]'
+  ```
+
+  Then add one Direct profile per team in the app, with that URL.
+
+**Whoever reaches the relay's port, or that name, runs commands in that
+team's container**: bb starts agents and terminals for anyone who can talk to
+it. So the operator's machine, and the tailnet's access rules for that name,
+become part of the team's boundary. Never use Tailscale Funnel or any public
+address for it, and never make the relay listen wider.
+
+### Limits
+
+bb counts toward the container's limits. Add to `AGENT_MEMORY` and
+`AGENT_PIDS` about 650 MB and 180 pids for bb itself, and about 200 MB and
+30 pids for each live thread.
+
+### When it fails
+
+- **`AGENT_BB=1` on an image without bb.** The supervisor refuses at start,
+  before any child: one line naming `container/agent-bb`, exit 1. Select the
+  derived image.
+- **bb is not ready.** The supervisor polls the host daemon's status
+  (`http://127.0.0.1:38887/status`) until it says `connected: true` and the
+  bb process it started is still alive, for up to 30 seconds. A bb that
+  exits first, a timeout, or a status that already answers before bb starts
+  fails the container start: neither sshd nor host run starts, the exit is
+  nonzero and the restart policy starts the container again. An unreadable
+  token file fails the start too, before any child.
+- **bb ends later.** That is not a container failure. The supervisor
+  writes `agent-supervisor: bb exited (<code or signal>)`, removes what bb's
+  launcher left running, and starts bb again after 1 second, doubling to 60
+  seconds, and from 1 second again once a bb has stayed up five minutes.
+  sshd, the broker, host run and the agents keep running. bb threads stop
+  with their bb.
+- **Stopping.** Host run goes first, as without bb, and bb keeps running
+  while it stops the agents. Then sshd, the broker and bb are stopped side by
+  side; bb gets SIGTERM and eight seconds before SIGKILL. A bb that had to be
+  killed, or that ended while host run was still stopping agents, makes the
+  stop a failed one. The whole order fits the 50-second stop grace: at most
+  35 seconds for host run and 8 for the slowest of the three.
+
+### What was run
+
+Run on amd64, in the real image under the Compose flags: the build, bb ready
+at start, a bb restart after `kill` and after `kill -9`, the ordered stop,
+acceptance with the fragment, and the relay with the real `ssh` (the bb web
+page and API through it). **NOT RUN:** arm64; a real Claude token or a real
+model; Tailscale Serve; the desktop and phone apps; push notifications.
+
 ## Acceptance and evidence
 
 The host needs Docker and Node 22.5+. Export the same plain variables used for
@@ -607,7 +790,12 @@ variables. It resolves `AGENT_IMAGE` independently and requires that image's
 ID, reference and start command, and its complete environment (printing only
 names of differing variables). Other comparisons include supplementary
 groups, namespace overrides, sysctls, published ports, resolver overrides
-and the single network/address. The stop timeout must be 50 seconds and the
+and the single network/address. With `AGENT_BB=1` exported it admits the bb
+fragment's one environment entry, reads the container's listening TCP
+sockets and requires every one to be on a loopback address except sshd's
+port 2222, with bb's two ports among them, and requires `bb --version` to
+equal `container/agent-bb`'s pin. Without it, a container that has `AGENT_BB`
+set is refused. The stop timeout must be 50 seconds and the
 healthcheck the service file's, so a container made before either was set
 is refused until it is recreated. The OCI runtime must match the daemon's
 independently read default; shared memory stays at Docker's 64 MiB default,
@@ -705,6 +893,11 @@ unmodified `accept.sh --evidence target-amd64`. Cleanup removes the service,
 network and fixture paths on success or failure. This is image acceptance;
 it provisions no seat or inference token. The script's `NOT RUN` items
 remain outside this check.
+
+The same job then builds `container/agent-bb` from the image it just
+accepted, with no registry in between, and runs the same fixture and the
+same unmodified acceptance once more with `compose.agent.bb.yaml`. The bb
+image is not exported or published.
 
 The `publish-team-image` job in
 [Release](../.github/workflows/release.yml) waits for the existing `publish`
