@@ -142,3 +142,44 @@ test("a published tag moved at an unchanged pin is refused even after catalog ke
   assert.deepEqual(readFileSync(join(f.root, INVENTORY_PATH)), before);
   checkMirrors({ repoRoot: f.root });
 });
+
+for (const [label, linkName, directoryName] of [["case", "X", "x"], ["normalization", "E\u0301", "É"]]) {
+  test(`generation refuses ${label}-folded symlink/tree names before any write`, t => {
+    const f = fixture(t);
+    const victim = join(f.root, "victim"); mkdirSync(victim);
+    const tree = entries => Buffer.concat(entries.map(([mode, name, hash]) => Buffer.concat([Buffer.from(`${mode} ${name}\0`), Buffer.from(hash, "hex")])));
+    const payload = f.object("blob", "PWNED");
+    const child = f.object("tree", tree([["100644", "pwned.txt", payload]]));
+    const link = f.object("blob", victim);
+    const manifest = f.git("rev-parse", "HEAD:oats-package/oats-package.json");
+    const capability = f.git("rev-parse", "HEAD:oats-package/capabilities/fixture/oats.json");
+    const entries = [["120000", linkName, link], ["100644", "oats.json", capability], ["40000", directoryName, child]];
+    entries.sort((a, b) => Buffer.compare(Buffer.from(a[1] + (a[0] === "40000" ? "/" : "")), Buffer.from(b[1] + (b[0] === "40000" ? "/" : ""))));
+    const capabilityTree = f.object("tree", tree(entries));
+    const caps = f.object("tree", tree([["40000", "fixture", capabilityTree]]));
+    const distribution = f.object("tree", tree([["40000", "capabilities", caps], ["100644", "oats-package.json", manifest]]));
+    const root = f.object("tree", tree([["40000", "oats-package", distribution]]));
+    const commit = f.git("commit-tree", root, "-m", "valid colliding names fixture");
+    f.git("tag", "-f", "v1.0.0", commit);
+    f.git("fsck", "--strict", "--no-dangling");
+    f.git("push", "--force", "-q", "origin", "refs/tags/v1.0.0");
+    assert.throws(() => generateMirror("oats.fixture", f.source, { repoRoot: f.root }), /folded Git payload path/);
+    assert.equal(existsSync(join(victim, "pwned.txt")), false, "the staging write must never follow a folded symlink");
+    assert.equal(existsSync(join(f.root, INVENTORY_PATH)), false);
+  });
+}
+
+test("a git workspace pin must name the catalog repository as well as its ref", t => {
+  const f = fixture(t);
+  const catalog = join(f.root, "package-catalog.json");
+  const data = JSON.parse(readFileSync(catalog));
+  data.packages["oats.fixture"].url = "https://github.com/awebai/oats-okf.git";
+  write(catalog, JSON.stringify(data));
+  const workspace = join(f.root, "oats-workspace.yaml");
+  write(workspace, "packages:\n  oats.fixture: git:github.com/someone/fork@v1.0.0\n");
+  assert.throws(() => checkCatalogReferences(f.root), /workspace.*pin differs/);
+  for (const repo of ["awebai/oats-okf", "oats-project/oats-okf"]) {
+    write(workspace, `packages:\n  oats.fixture: git:github.com/${repo}@v1.0.0\n`);
+    checkCatalogReferences(f.root);
+  }
+});

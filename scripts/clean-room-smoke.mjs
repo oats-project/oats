@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { CAPABILITY_PATH, EXPERT_PATH, SKILL_PATH, checkKnowledgeTheoryPackage, checkReferenceClosure, treeFiles } from "./check-knowledge-theory-package.mjs";
 import { checkJavaScript, checkKernelPackFiles } from "./check-package-dry-runs.mjs";
 import { checkMirrors } from "./check-mirrors.mjs";
-import { CAPABILITY_PATHS, capabilityEntries, checkOkfMirror, checkOkfPayload, materializeOkfGitPayload, payloadEntries } from "./check-okf-mirror.mjs";
+import { CAPABILITY_PATHS, capabilityEntries, checkOkfPayload, materializeOkfGitPayload, payloadEntries } from "./check-okf-mirror.mjs";
 
 const started = Date.now();
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -125,8 +125,7 @@ try {
   // The "official" oats.okf is the checkout's verified mirror (mirrors/),
   // materialized as the exact standalone Git payload: never invent wrapper
   // bytes or synthesize CLAUDE.md.
-  checkMirrors({ repoRoot: repo });
-  const inventory = checkOkfMirror({ repoRoot: repo });
+  const inventory = checkMirrors({ repoRoot: repo })["oats.okf"];
   const officialRepo = join(room, "official", "oats-okf");
   const payload = join(officialRepo, "oats-package");
   materializeOkfGitPayload(payload, { repoRoot: repo });

@@ -5,6 +5,9 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { parseConfigData } from "../lib/config-data.mjs";
+import { parsePackageRequest } from "../lib/packages.mjs";
+import { parseRepoRef } from "../lib/remote.mjs";
+import { sameRepo } from "../lib/repo-moves.mjs";
 
 export function checkCatalogReferences(root) {
   const catalog = JSON.parse(readFileSync(join(root, "package-catalog.json"), "utf8")).packages;
@@ -14,7 +17,8 @@ export function checkCatalogReferences(root) {
   for (const [id, value] of Object.entries(workspace.packages ?? {})) {
     const pin = catalog[id];
     assert.ok(pin, `workspace package missing from official catalog: ${id}`);
-    assert.ok(value === versionRef(id) || value.endsWith(`@${pin.ref}`), `oats-workspace.yaml: ${id} pin differs from catalog`);
+    const request = parsePackageRequest(id, value, { packages: catalog });
+    assert.ok(request.at === pin.ref && sameRepo(parseRepoRef(request.remoteRef).key, parseRepoRef(pin.url).key), `oats-workspace.yaml: ${id} pin differs from catalog`);
     examples++;
   }
   const files = [];

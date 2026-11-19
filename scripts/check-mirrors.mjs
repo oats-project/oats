@@ -140,10 +140,13 @@ export function generateMirror(id, source, { repoRoot = REPO_ROOT } = {}) {
       // Validate the whole tree before its first write: malformed raw Git
       // objects can duplicate a name as a symlink and a directory. A later
       // containment walk would discover that only after a write followed it.
-      const byPath = new Map();
+      const byPath = new Map(), foldedNfc = new Set(), foldedNfd = new Set();
       for (const entry of entries) {
         assert.ok(!byPath.has(entry.path), `duplicate Git payload path: ${entry.path}`);
-        byPath.set(entry.path, entry);
+        const nfc = entry.path.normalize("NFC").toLowerCase().normalize("NFC");
+        const nfd = entry.path.normalize("NFD").toLowerCase().normalize("NFD");
+        assert.ok(!foldedNfc.has(nfc) && !foldedNfd.has(nfd), `folded Git payload path: ${entry.path}`);
+        byPath.set(entry.path, entry); foldedNfc.add(nfc); foldedNfd.add(nfd);
       }
       for (const { path } of entries) {
         const parts = path.split("/");
@@ -152,15 +155,19 @@ export function generateMirror(id, source, { repoRoot = REPO_ROOT } = {}) {
           assert.equal(byPath.get(parent)?.type, "tree", `non-directory Git payload parent: ${parent}`);
         }
       }
-      for (const { mode, type, hash, path } of entries) {
+      // No filesystem write may traverse a staged symlink, including an alias
+      // the host filesystem folds differently from JavaScript. Materialize all
+      // directories and regular files first; links are the final pass only.
+      for (const { mode, type, hash, path } of entries.filter(entry => entry.mode !== "120000")) {
         const target = join(dest, path); mkdirSync(dirname(target), { recursive: true });
-        if (type === "tree" && mode === "040000") mkdirSync(target, { recursive: true });
+        if (type === "tree") mkdirSync(target, { recursive: true });
         else {
-          assert.ok(type === "blob" && ["100644", "100755", "120000"].includes(mode), `unsupported Git entry: ${path}`);
-          const bytes = git(source, ["cat-file", "blob", hash], null);
-          if (mode === "120000") symlinkSync(exactUtf8(bytes), target);
-          else { writeFileSync(target, bytes, { flag: "wx" }); chmodSync(target, mode === "100755" ? 0o755 : 0o644); }
+          writeFileSync(target, git(source, ["cat-file", "blob", hash], null), { flag: "wx" });
+          chmodSync(target, mode === "100755" ? 0o755 : 0o644);
         }
+      }
+      for (const { hash, path } of entries.filter(entry => entry.mode === "120000")) {
+        symlinkSync(exactUtf8(git(source, ["cat-file", "blob", hash], null)), join(dest, path));
       }
     }
     const record = { pin, commit, tagObject, manifestText, manifestSha256: sha256(manifestText), entries: entriesOf(stage, manifest) };

@@ -148,7 +148,9 @@ at an unchanged pin is refused against the previous inventory. All bytes,
 executable bits, file sets and symlink targets are recorded in
 `scripts/mirror-source-inventory.json`. Root capability exports (`.`) are
 supported; escaping, broken and directory symlinks are refused by the shared
-payload walker before replacement.
+payload walker before replacement. Git paths that collide under case or Unicode
+normalization are refused before staging writes; symlinks are created only
+after every directory and regular file, so no staging write traverses one.
 
 OKF keeps its existing stricter release finalization and wrapper/soul/trigger
 inventory; use [the OKF mirror procedure](release-lane.md#mirroring-a-released-oatsokf)
