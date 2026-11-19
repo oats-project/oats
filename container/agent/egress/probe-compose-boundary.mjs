@@ -19,19 +19,24 @@ const safeName=value=>typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]*$
 
 export async function probeComposeBoundary(plan) {
   const receipts=[];
+  let unownedNames=[];
   try { return await runBoundary(plan,receipts); }
   catch (error) {
     receipts.splice(0,receipts.length,...new Map([...receipts,...(error.receipts || [])].map(receipt=>[receipt.name,receipt])).values());
     error.receipts=receipts;
+    unownedNames=error.unownedNames || [];
     throw error;
   } finally {
     // Report partial attempts on refusal as well as fully cleaned-up runs.
-    for (const receipt of receipts) reportReceipt(receipt);
+    for (const receipt of receipts) reportReceipt(receipt,unownedNames.includes(receipt.name));
   }
 }
-function reportReceipt(receipt) {
+function reportReceipt(receipt, unowned) {
   process.stderr.write("egress boundary receipt: "+JSON.stringify(receipt)+"\n");
-  if (!receipt.absentVerified) process.stderr.write("egress boundary leftover: "+receipt.name+"\n");
+  if (!receipt.absentVerified) {
+    const classification=receipt.created && !unowned ? "leftover" : "unowned or unverified";
+    process.stderr.write("egress boundary "+classification+": "+receipt.name+"\n");
+  }
 }
 async function runBoundary(plan,receipts) {
   assertNamePrefix(plan.namePrefix);

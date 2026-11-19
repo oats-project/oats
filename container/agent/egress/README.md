@@ -542,8 +542,12 @@ Every attempt has a receipt `{name,image,network,created,absentVerified}`.
 `created` means creation was confirmed by a successful run or matching ownership
 inspection, never assumed after a timeout; `absentVerified` means the exact-name
 absence check succeeded. Both success and refusal write `egress boundary receipt:`
-JSON lines to stderr, with `egress boundary leftover:` names where absence could
-not be verified. Retain these lines even when the probe refuses.
+JSON lines to stderr. If absence could not be verified, confirmed creations use
+`egress boundary leftover:` when ownership inspection has not refused them.
+Collisions, replaced names and failed ownership observations use
+`egress boundary unowned or unverified:`, as do attempts whose creation was never
+confirmed. A receipt records historical creation, not authority to remove the
+current container: establish the per-attempt ownership label before any removal. Retain these lines even when the probe refuses.
 
 Add `--json` to the command for machine-readable stdout. Success returns
 `{"passed":true,"receipts":[...]}`; refusal returns

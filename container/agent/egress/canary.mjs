@@ -68,8 +68,9 @@ function ownedContainer({ image, network, namePrefix }, defaultPrefix) {
   const receipt = {name:(namePrefix ?? defaultPrefix)+randomUUID(), image, network, created:false, absentVerified:false};
   return {receipt, token:randomUUID(), uncertain:false, collision:false};
 }
-function withReceipts(error, receipts) {
+function withReceipts(error, receipts, cleanup) {
   error.receipts = [...new Map([...receipts, ...(error.receipts || [])].map(receipt => [receipt.name, receipt])).values()];
+  if (cleanup?.unownedNames) error.unownedNames=[...new Set([...(error.unownedNames || []),...cleanup.unownedNames])];
   return error;
 }
 function startContainer(attempt, mode, command) {
@@ -110,7 +111,12 @@ function releaseContainer(attempt) {
   if (info?.Name === "/"+r.name && info.Config?.Labels?.[ownershipLabel] === attempt.token) {
     r.created = true;
     if (!completed(dockerResult(["rm","-f",r.name]))) fail();
-  } else fail();
+  } else {
+    fail();
+    // Creation evidence is historical. A replaced name or failed ownership
+    // observation must never be presented as an owned leftover.
+    failure.unownedNames=[r.name];
+  }
   if (!verifyAbsent()) fail();
   return failure;
 }
@@ -123,7 +129,7 @@ export function tcpFromNetwork({ image, network, address, port, payload = false,
     reachable=startContainer(attempt,"--rm",["--input-type=module","-e",tcpProgram,address,String(port),payload ? "canary" : "tcp"]).trim() === "CONNECTED";
   } catch (error) { failure=error; }
   const cleanup=attempt && releaseContainer(attempt);
-  if (failure || cleanup) throw withReceipts(failure || cleanup,attempt ? [attempt.receipt] : []);
+  if (failure || cleanup) throw withReceipts(failure || cleanup,attempt ? [attempt.receipt] : [],cleanup);
   return {reachable,receipt:attempt.receipt};
 }
 
@@ -156,7 +162,7 @@ export async function withGatewayCanary({ image, controlNetwork, gatewayAddress,
     assert.equal(docker(["logs",name]).match(/^CANARY_HIT$/gm)?.length, 2 + expectedProbeHits, "forbidden probe reached the host canary");
   } catch (error) { failure=withReceipts(error,receipts); }
   const cleanup=releaseContainer(attempt);
-  if (failure || cleanup) throw withReceipts(failure || cleanup,receipts);
+  if (failure || cleanup) throw withReceipts(failure || cleanup,receipts,cleanup);
   return receipts;
 }
 

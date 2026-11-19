@@ -67,6 +67,7 @@ function recordingDocker(t, mode={}) {
         assert.equal(args.length,2);
         if(mode.inspectFailure || ((mode.noCreate || mode.firstObservation) && !inventory.has(args[1])))return {...ok(""),status:1};
         assert.ok(inventory.has(args[1]),"inspect must target the exact allocated name");
+        if (mode.takeover) inventory.get(args[1]).Config.Labels["org.oats.egress.attempt"]="someone-else";
         return ok(mode.badInspect?"not json":JSON.stringify([inventory.get(args[1])]));
       }
       if(args[0]==="rm") {
@@ -210,22 +211,26 @@ test("Compose refusal carries the failed attempt plus previously collected recei
     assert.equal(error.receipts.length,1);assert.equal(error.receipts[0].created,false);assert.equal(error.receipts[0].absentVerified,false);return true;
   });
 });
-test("CLI refusal preserves empty default stdout and supplies static JSON plus the same leftover receipt with --json",t=>{
+test("CLI refusal distinguishes confirmed leftovers from unowned or unverified names in both modes",t=>{
   const fixture=runtimeFixture(t), planFile=join(fixture.dir,"plan.json"),preload=join(fixture.dir,"docker-double.mjs");
   writeFileSync(planFile,JSON.stringify(fixture.plan));
   const imports=`import assert from 'node:assert/strict';import childProcess from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';import {tcpProgram} from ${JSON.stringify(new URL("../container/agent/egress/canary.mjs",import.meta.url).href)};`;
-  writeFileSync(preload,imports+`const image=${JSON.stringify(image)},network=${JSON.stringify(network)},gateway=${JSON.stringify(gateway)},uuid=${JSON.stringify(uuid)};`+recordingDocker.toString()+`\nrecordingDocker({after:fn=>process.on('exit',fn)},${JSON.stringify({responses:fixture.responses,collision:true})});`);
-  const cli=fileURLToPath(new URL("../container/agent/egress/probe-compose-boundary.mjs",import.meta.url));
-  for(const flags of [[],["--json"]]){
-    const result=childProcess.spawnSync(process.execPath,["--import",preload,cli,"--plan",planFile,...flags],{encoding:"utf8",timeout:5000});
-    assert.equal(result.status,1);assert.equal(result.signal,null);
-    const line=result.stderr.split("\n").find(line=>line.startsWith("egress boundary receipt: "));
-    assert.ok(line,result.stderr);const r=JSON.parse(line.slice("egress boundary receipt: ".length));
-    assert.equal(r.created,false);assert.equal(r.absentVerified,false);
-    assert.ok(result.stderr.includes("egress boundary leftover: "+r.name+"\n"));
-    if(flags.length)assert.deepEqual(JSON.parse(result.stdout),{passed:false,receipts:[r],error:"boundary probe refused"});
-    else assert.equal(result.stdout,"");
-    assert.doesNotMatch(result.stdout,/foreign|Conflict/);
+  for (const mode of [{collision:true},{timeout:true,inspectFailure:true},{timeout:true,removeFailure:true}]) {
+    writeFileSync(preload,imports+`const image=${JSON.stringify(image)},network=${JSON.stringify(network)},gateway=${JSON.stringify(gateway)},uuid=${JSON.stringify(uuid)};`+recordingDocker.toString()+`\nrecordingDocker({after:fn=>process.on('exit',fn)},${JSON.stringify({responses:fixture.responses,...mode})});`);
+    const cli=fileURLToPath(new URL("../container/agent/egress/probe-compose-boundary.mjs",import.meta.url));
+    for(const flags of [[],["--json"]]){
+      const result=childProcess.spawnSync(process.execPath,["--import",preload,cli,"--plan",planFile,...flags],{encoding:"utf8",timeout:5000});
+      assert.equal(result.status,1);assert.equal(result.signal,null);
+      const line=result.stderr.split("\n").find(line=>line.startsWith("egress boundary receipt: "));
+      assert.ok(line,result.stderr);const r=JSON.parse(line.slice("egress boundary receipt: ".length));
+      assert.equal(r.created,Boolean(mode.removeFailure));assert.equal(r.absentVerified,false);
+      const classification=r.created ? "leftover" : "unowned or unverified";
+      assert.ok(result.stderr.includes("egress boundary "+classification+": "+r.name+"\n"));
+      if (!r.created) assert.doesNotMatch(result.stderr,/egress boundary leftover:/);
+      if(flags.length)assert.deepEqual(JSON.parse(result.stdout),{passed:false,receipts:[r],error:"boundary probe refused"});
+      else assert.equal(result.stdout,"");
+      assert.doesNotMatch(result.stdout,/foreign|Conflict/);
+    }
   }
 });
 
@@ -277,4 +282,19 @@ test("CLI success returns the full receipts JSON and retains the default token",
     if(flags.length)assert.deepEqual(JSON.parse(result.stdout),{passed:true,receipts});else assert.equal(result.stdout,"OATS_EGRESS_BOUNDARY_PASS\n");
     assert.doesNotMatch(result.stderr,/egress boundary leftover:/);
   }
+});
+
+test("a replaced name keeps historical creation evidence but is diagnosed as unowned",async t=>{
+  const fixture=runtimeFixture(t);
+  const double=recordingDocker(t,{responses:fixture.responses,takeover:true});
+  const lines=[],write=process.stderr.write;
+  process.stderr.write=line=>{lines.push(line);return true;};
+  t.after(()=>{process.stderr.write=write;});
+  await assert.rejects(probeComposeBoundary(fixture.plan),error=>{
+    const r=error.receipts.find(r=>r.network==="host");
+    assert.equal(r.created,true);assert.equal(r.absentVerified,false);
+    assert.ok(lines.includes("egress boundary unowned or unverified: "+r.name+"\n"));
+    assert.ok(!lines.includes("egress boundary leftover: "+r.name+"\n"));return true;
+  });
+  assert.ok(!double.calls.some(args=>args[0]==="rm"));
 });
