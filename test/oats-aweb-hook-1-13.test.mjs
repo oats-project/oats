@@ -134,6 +134,14 @@ function runHook(bin, event, env) {
 function logLines(base) {
   return readFileSync(join(base, "aw.log"), "utf8").trim().split(/\n/).filter(Boolean).map((l) => JSON.parse(l));
 }
+
+// oats.aweb 1.43.0 (awebai/oats-aweb#279): revoke names the grant's team. `revoked(...)` is the exact
+// argv; `revokeAttempted` matches any revoke of the id, whatever flags follow, so a "never revoked"
+// assertion cannot pass just because the argv gained a flag.
+const revokeLine = (id, team = "t:example.test") => `id grant revoke ${id} --team=${team} --json`;
+const revoked = (base, id, team) => logLines(base).some((l) => l.argv.join(" ") === revokeLine(id, team));
+const revokeAttempted = (base, id) => logLines(base).some((l) => l.argv.slice(0, 4).join(" ") === `id grant revoke ${id}`);
+
 // oats.aweb 1.17 passes aw value flags as one `--flag=value` argument.
 function argvValue(argv, flag) {
   return argv.find((a) => a.startsWith(`${flag}=`))?.slice(flag.length + 1) ?? argv[argv.indexOf(flag) + 1];
@@ -318,7 +326,7 @@ test("grant attachment verification failures revoke the grant, remove the home, 
       assert.notEqual(r.status, 0, JSON.stringify(env));
       assert.match(r.doc.warning, pattern);
       assert.equal(existsSync(join(home, ".aweb-identity")), false, "failed grant home removed");
-      assert.ok(logLines(base).some((l) => l.argv.join(" ") === "id grant revoke grant-spawn --json"), "minted grant revoked");
+      assert.ok(revoked(base, "grant-spawn"), "minted grant revoked");
     } finally { rmSync(base, { recursive: true, force: true }); }
   }
 });
@@ -408,7 +416,7 @@ test("launch renewal mints into a fresh grant home, emits the new locator, and r
     assert.equal(existsSync(join(r.doc.env.AWEB_IDENTITY_HOME, "grant.yaml")), true);
     assert.equal(r.doc.meta.identity.grant.id.startsWith("grant-"), true);
     assert.equal(r.doc.meta.identity.grant.home, r.doc.env.AWEB_IDENTITY_HOME);
-    assert.ok(logLines(base).some((l) => l.argv.join(" ") === "id grant revoke grant-old --json"));
+    assert.ok(revoked(base, "grant-old"));
     assert.equal(logLines(base).some((l) => l.argv.join(" ").includes("foreign-parent-grant")), false);
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
@@ -425,7 +433,7 @@ test("launch renewal keeps the old grant and locator when mint fails", () => {
     assert.equal(r.doc.meta.identity.grant.id, "grant-old");
     assert.equal(existsSync(oldHome), true);
     assert.match(r.doc.warning, /renewal mint failed/);
-    assert.equal(logLines(base).some((l) => l.argv.join(" ") === "id grant revoke grant-old --json"), false);
+    assert.equal(revokeAttempted(base, "grant-old"), false);
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
 
@@ -451,9 +459,9 @@ test("launch renewal keeps the old grant when attachment verification or preflig
       if (minted.length) {
         const newHome = argvValue(minted[0].argv, "--out");
         assert.equal(existsSync(newHome), false, "failed renewal grant home removed");
-        assert.ok(logLines(base).some((l) => l.argv.join(" ") === "id grant revoke grant-" + newHome.split(".aweb-identity-").at(-1) + " --json"));
+        assert.ok(revoked(base, "grant-" + newHome.split(".aweb-identity-").at(-1)));
       }
-      assert.equal(logLines(base).some((l) => l.argv.join(" ") === "id grant revoke grant-old --json"), false);
+      assert.equal(revokeAttempted(base, "grant-old"), false);
     } finally { rmSync(base, { recursive: true, force: true }); }
   }
 });
@@ -481,7 +489,7 @@ test("retire revokes the current grant id and removes every .aweb-identity direc
     const meta = { identity: { mode: "global", resident: "merlin", grant: { id: "grant-current", expiresAt: "ttl", scopes: ["mail.read"] } } };
     const r = runHook(bin, "retire", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_META: JSON.stringify(meta), OATS_SETTINGS: JSON.stringify({ residents: { merlin: custody } }) });
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    assert.ok(logLines(base).some((l) => l.argv.join(" ") === "id grant revoke grant-current --json"));
+    assert.ok(revoked(base, "grant-current"));
     assert.equal(existsSync(join(home, ".aweb-identity")), false);
     assert.equal(existsSync(join(home, ".aweb-identity-1")), false);
     assert.equal(existsSync(join(home, ".aweb-identity-2")), false);

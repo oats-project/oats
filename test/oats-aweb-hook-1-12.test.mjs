@@ -198,10 +198,14 @@ test("global mode revokes and removes the grant when the minted team differs fro
     const r = runHook(bin, "spawn", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_SETTINGS: JSON.stringify({ identity: { mode: "global", resident: "merlin" }, residents: { merlin: custody } }), ...defaultTeamEnv("expected:team"), FAKE_GRANT_TEAM: "wrong:team" });
     assert.notEqual(r.status, 0);
     assert.equal(existsSync(join(home, ".aweb-identity")), false, "mismatched grant home removed after revoke");
-    assert.equal(r.doc.meta.identity.grant.id, "grant-123", "meta is still emitted for idempotent retire compensation");
-    assert.match(r.doc.warning, /minted grant team wrong:team differs from expected:team/);
+    // oats.aweb 1.43.0: a confirmed compensation revoke returns only the seat, in the seat's team,
+    // so retire sweeps by label and never owes cleanup for the revoked grant.
+    assert.equal(r.doc.meta.identity.grant, undefined, "a revoked grant is not returned as cleanup still owed");
+    assert.match(r.doc.meta.identity.seat, /^[0-9a-f]{16}$/, "the seat is returned for retire's sweep");
+    assert.equal(r.doc.meta.identity.team, "expected:team");
+    assert.match(r.doc.warning, /minted grant team wrong:team differs from expected:team; the grant was revoked and nothing was kept/);
     const revoke = logLines(base).find((l) => l.argv.join(" ").includes("id grant revoke"));
-    assert.deepEqual(revoke.argv, ["id", "grant", "revoke", "grant-123", "--json"]);
+    assert.deepEqual(revoke.argv, ["id", "grant", "revoke", "grant-123", "--team=wrong:team", "--json"], "compensation revokes in the team the mint receipt names");
     assert.equal(revoke.cwd, realpathSync(custody));
     assert.equal(revoke.identityHome, null);
   } finally { rmSync(base, { recursive: true, force: true }); }
@@ -213,10 +217,12 @@ test("global mode compensates if wake registration fails after mint", () => {
     const bin = fakeAw(base); const { root, home } = deployment(base); const custody = resident(base);
     const r = runHook(bin, "spawn", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_SETTINGS: JSON.stringify({ delivery: "session", identity: { mode: "global", resident: "merlin" }, residents: { merlin: custody } }), FAKE_WAKE_REGISTER_FAIL: "1" });
     assert.notEqual(r.status, 0);
-    assert.equal(r.doc.meta.identity.grant.id, "grant-123");
+    assert.equal(r.doc.meta.identity.grant, undefined, "oats.aweb 1.43.0: a revoked grant is not returned as cleanup still owed");
+    assert.match(r.doc.meta.identity.seat, /^[0-9a-f]{16}$/, "the seat is returned for retire's sweep");
     assert.equal(existsSync(join(home, ".aweb-identity")), false, "grant home removed after wake registration failure");
     const revoke = logLines(base).find((l) => l.argv.join(" ").includes("id grant revoke"));
     assert.ok(revoke, "minted grant revoked during compensation");
+    assert.deepEqual(revoke.argv, ["id", "grant", "revoke", "grant-123", "--team=t:example.test", "--json"]);
     assert.match(r.doc.warning, /wake register/);
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
@@ -227,9 +233,10 @@ test("global mode compensates when mint writes a grant home but prints no JSON",
     const bin = fakeAw(base); const { root, home } = deployment(base); const custody = resident(base);
     const r = runHook(bin, "spawn", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_SETTINGS: JSON.stringify({ identity: { mode: "global", resident: "merlin" }, residents: { merlin: custody } }), FAKE_MINT_NO_JSON: "1" });
     assert.notEqual(r.status, 0);
-    assert.equal(r.doc.meta.identity.grant.id, "grant-123");
+    assert.equal(r.doc.meta.identity.grant, undefined, "oats.aweb 1.43.0: a revoked grant is not returned as cleanup still owed");
+    assert.match(r.doc.meta.identity.seat, /^[0-9a-f]{16}$/, "the seat is returned for retire's sweep");
     assert.equal(existsSync(join(home, ".aweb-identity")), false, "grant home removed after malformed mint output");
-    assert.ok(logLines(base).some((l) => l.argv.join(" ").includes("id grant revoke grant-123")), "grant revoked despite missing JSON output");
+    assert.ok(logLines(base).some((l) => l.argv.join(" ") === "id grant revoke grant-123 --team=t:example.test --json"), "grant revoked despite missing JSON output, in the team grant.yaml records");
     assert.match(r.doc.warning, /returned no JSON/);
     assert.match(r.doc.warning, /revoked it/);
   } finally { rmSync(base, { recursive: true, force: true }); }
@@ -243,7 +250,7 @@ test("global mode reports a failed recovery revoke truthfully while keeping gran
     assert.notEqual(r.status, 0);
     assert.equal(r.doc.meta.identity.grant.id, "grant-123", "meta kept for retire compensation retry");
     assert.equal(existsSync(join(home, ".aweb-identity")), false, "grant home removed even when revoke failed");
-    assert.match(r.doc.warning, /revoke failed \(.*revoke unavailable\), so grant grant-123 stays valid until revoked: run `aw id grant revoke grant-123` in /);
+    assert.match(r.doc.warning, /revoke failed \(.*revoke unavailable\), so grant grant-123 stays valid until revoked: run `aw id grant revoke --team=t:example\.test -- grant-123` in /);
     assert.doesNotMatch(r.doc.warning, /revoked it/);
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
@@ -257,7 +264,7 @@ test("global retire revokes the grant through custody and deregisters session de
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.equal(r.doc.meta.identityRevoked, true);
     const lines = logLines(base);
-    const revoke = lines.find((l) => l.argv.join(" ") === ["id", "grant", "revoke", "grant-123", "--json"].join(" "));
+    const revoke = lines.find((l) => l.argv.join(" ") === ["id", "grant", "revoke", "grant-123", "--team=t:example.test", "--json"].join(" "));
     assert.ok(revoke);
     assert.equal(revoke.cwd, realpathSync(custody));
     assert.equal(revoke.identityHome, null);
@@ -274,8 +281,8 @@ test("global retire treats a maybe-applied revoke timeout as success when grant 
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.equal(r.doc.meta.identityRevoked, true);
     const lines = logLines(base);
-    assert.ok(lines.some((l) => l.argv.join(" ") === "id grant revoke grant-123 --json"));
-    assert.ok(lines.some((l) => l.argv.join(" ") === "id grant show grant-123 --json"));
+    assert.ok(lines.some((l) => l.argv.join(" ") === "id grant revoke grant-123 --team=t:example.test --json"));
+    assert.ok(lines.some((l) => l.argv.join(" ") === "id grant show grant-123 --team=t:example.test --json"), "the uncertain revoke is checked with show in the same team");
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
 
@@ -290,6 +297,6 @@ test("global retire with no grant answers the documented nothing-to-delete outco
     r = runHook(bin, "retire", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_META: JSON.stringify({ identity: { mode: "global", resident: "merlin", grant: { id: "grant-123", expiresAt: "2026-09-24T07:00:00Z", scopes: [] } } }), OATS_SETTINGS: JSON.stringify({ residents: { merlin: custody } }), FAKE_REVOKE_FAIL: "1" });
     assert.notEqual(r.status, 0);
     assert.match(r.doc.warning, /grant grant-123 was not revoked/);
-    assert.match(r.doc.warning, /grant grant-123 stays valid until 2026-09-24T07:00:00Z unless revoked: run `aw id grant revoke grant-123` in /);
+    assert.match(r.doc.warning, /grant grant-123 stays valid until 2026-09-24T07:00:00Z unless revoked: run `aw id grant revoke --team=t:example\.test -- grant-123` in /);
   } finally { rmSync(base, { recursive: true, force: true }); }
 });

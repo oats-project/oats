@@ -216,7 +216,9 @@ test("setup in v2 reads the settings root and the default team, and prints v2 re
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.match(r.stdout, /oats aweb setup --username <u>/);
     assert.match(r.stdout, /AWEB_API_KEY=<key> oats aweb setup/);
-    assert.match(r.stdout, /oats aweb setup --join <label> --invite <token>/);
+    // oats.aweb 1.43.0 (awebai/oats-aweb#286) keeps invite tokens off screens: the remedy reads the invite without echo.
+    assert.match(r.stdout, /oats aweb setup --join <label> --invite-stdin/);
+    assert.doesNotMatch(r.stdout, /--invite <token>/);
     assert.match(r.stdout, /settings\.oats\.aweb\.root/);
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
