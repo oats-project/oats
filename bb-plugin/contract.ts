@@ -59,7 +59,8 @@ export const capability = z.object({
   origin: z.string(),
   souls: z.number().int(),
 });
-export const team = z.object({ label: z.string(), team: z.string(), isDefault: z.boolean() });
+/** `team` is null for a shared team no provider id is committed for yet ("not mapped"). */
+export const team = z.object({ label: z.string(), team: z.string().nullable(), isDefault: z.boolean() });
 export const machine = z.object({
   id: z.string(),
   route: z.string().nullable(),
@@ -157,8 +158,6 @@ const threadAnswer = answer(z.object({ threadId: z.string().nullable() }));
 
 /** `oats capabilities` rows; the server adds the number of souls from `oats souls`. */
 export const hostCapability = capability.omit({ souls: true });
-/** `oats teams` rows as the kernel says them: an unmapped shared team has no provider id. */
-export const hostTeam = team.extend({ team: z.string().nullable() });
 
 const hostMethods = {
   /**
@@ -181,7 +180,7 @@ const hostMethods = {
     input: hostRead,
     output: answer(z.object({ capabilities: z.array(hostCapability) })),
   },
-  teams: { experimental_retryable: true, input: hostRead, output: answer(z.object({ teams: z.array(hostTeam) })) },
+  teams: { experimental_retryable: true, input: hostRead, output: answer(z.object({ teams: z.array(team) })) },
   servers: { experimental_retryable: true, input: hostRead, output: answer(z.object({ machines: z.array(machine) })) },
   /** `revision` is the kernel's decision revision for this soul, name and task. */
   spawnPreview: {

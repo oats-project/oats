@@ -29,7 +29,9 @@ export function parseSouls(document: unknown): Result<{ souls: Soul[] }> {
     souls: parsed.value.souls.map((row) => {
       const problem = row.problem ? [row.problem.code, row.problem.message].filter(Boolean).join(": ") : null;
       return {
-        // The soul key is what `oats spawn` takes: `<package>/<soul>` for a package soul.
+        // Soul.name is the soul's `key`: what `oats spawn` takes, `<package>/<soul>` for a package
+        // soul. status.ts gives Agent.soul the roster's `key` where the kernel names one, so the two
+        // are equal there (spec r3, question 5).
         name: row.key ?? row.qualifiedName ?? row.name,
         description: row.description ?? "",
         origin: row.origin ?? "",
@@ -75,10 +77,7 @@ const teamsDocument = z.looseObject({
   teams: z.array(z.looseObject({ label: z.string().min(1), team: text, default: z.boolean().nullish() })),
 });
 
-/** `team` is null for a shared team no provider id is committed for yet. */
-export type KernelTeam = Omit<Team, "team"> & { team: string | null };
-
-export function parseTeams(document: unknown): Result<{ teams: KernelTeam[] }> {
+export function parseTeams(document: unknown): Result<{ teams: Team[] }> {
   const parsed = shaped(teamsDocument, document, "oats teams");
   if (!parsed.ok) return parsed;
   return ok({

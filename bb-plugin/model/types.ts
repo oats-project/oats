@@ -90,7 +90,12 @@ export type Capability = {
 };
 
 /** One team of `oats teams`. */
-export type Team = { label: string; team: string; isDefault: boolean };
+export type Team = {
+  label: string;
+  /** the provider's team id; null for a shared team that is not mapped yet */
+  team: string | null;
+  isDefault: boolean;
+};
 
 /** This machine, or one registered server of `oats server list`. */
 export type Machine = {

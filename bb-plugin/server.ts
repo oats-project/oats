@@ -299,10 +299,7 @@ export default async function plugin(bb: BbPluginApi) {
       return { capabilities };
     },
     async teams() {
-      const teams = await page<Team[]>("teams", async (signal) =>
-        // A shared team with no provider id yet is listed with an empty id.
-        (await call("teams", {}, HOST_TIMEOUT.read, signal)).teams.map((row) => ({ ...row, team: row.team ?? "" })),
-      );
+      const teams = await page<Team[]>("teams", async (signal) => (await call("teams", {}, HOST_TIMEOUT.read, signal)).teams);
       return { teams };
     },
     async machines() {

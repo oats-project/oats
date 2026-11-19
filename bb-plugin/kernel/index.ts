@@ -1,6 +1,6 @@
 // One function per `oats` command: it builds the argv, runs it (kernel/run.ts) and reads the answer
 // with a schema into the plugin's types. No bb and no React import, so plain unit tests cover it.
-import type { Capability, Machine, Soul, SpawnSummary } from "../model/types.js";
+import type { Capability, Machine, Soul, SpawnSummary, Team } from "../model/types.js";
 import { answerOf } from "./envelope.js";
 import * as lifecycle from "./lifecycle.js";
 import * as pages from "./pages.js";
@@ -66,7 +66,7 @@ export class Oats {
   capabilities(signal?: AbortSignal): Promise<Result<{ capabilities: Omit<Capability, "souls">[] }>> {
     return this.#run(pages.capabilitiesArgv(), pages.parseCapabilities, this.#timeouts.read, signal);
   }
-  teams(signal?: AbortSignal): Promise<Result<{ teams: pages.KernelTeam[] }>> {
+  teams(signal?: AbortSignal): Promise<Result<{ teams: Team[] }>> {
     return this.#run(pages.teamsArgv(), pages.parseTeams, this.#timeouts.read, signal);
   }
   servers(signal?: AbortSignal): Promise<Result<{ machines: Machine[] }>> {

@@ -153,6 +153,21 @@ describe("A4 status()", () => {
     ]);
   });
 
+  it("names an agent's soul by the roster's soul key when the kernel gives one, else by the row's agent", async () => {
+    const instance = (name: string, agent: string) => ({ agent, instance: name, home: `/w/agents/${agent}/instances/${name}`, running: null });
+    const roster = {
+      root: "/w/agents",
+      agents: [
+        { name: "oats-framework--oats-setup-expert", key: "oats.framework/oats-setup-expert", instances: [instance("setup-1", "oats-framework--oats-setup-expert")] },
+        { name: "oats-okf--knowledge-harvester", key: null, instances: [instance("harvest-1", "oats-okf--knowledge-harvester")] },
+        { name: "dev", instances: [instance("dev-1", "dev")] },
+      ],
+    };
+    await fake.behave({ status: { stdout: JSON.stringify(roster) } });
+    const status = await oats().status();
+    expect(status.ok && status.value.agents.map((agent) => agent.soul)).toEqual(["oats.framework/oats-setup-expert", "oats-okf--knowledge-harvester", "dev"]);
+  });
+
   it("answers the kernel's own code and message for a refusal", async () => {
     await fake.behave({
       status: { stdout: JSON.stringify({ schemaVersion: 1, ok: false, error: { code: "E_LOCAL_MISSING", message: "no oats-local.yaml in reach of /somewhere" } }) },
