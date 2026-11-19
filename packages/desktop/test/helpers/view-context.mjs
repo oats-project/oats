@@ -17,6 +17,9 @@
 // Slice 1 of the Desktop UI rework: a row's two lines (packages/client roster-row-facts.mjs) are pure and shared the
 // same way; the foot's count is inert (`sidebarFoot`, sidebar-foot-shell.test.mjs drives the shipped one), and the empty
 // roster's line is the shipped words with no chord bound. The relations in words (D26: no drawn lines) are pure too.
+// Feature instance-pin: the pin's order and mark are pure and shared the same way; a suite about other behaviour runs
+// without the feature (`pinsShown`), so nothing moves and no mark is drawn, and its row menu offers no pin item.
+// instance-pin-sidebar.test.mjs turns the feature on.
 import { deploymentState, rosterSections, rowStale, splitByDeployment, rosterSectionKey, sidebarSections, isMultiDeployment } from "../../../client/roster-sections.mjs";
 import { siblingText } from "../../../client/instance-presentation.mjs";
 import { backgroundHeading } from "../../renderer/background-heading.mjs";
@@ -27,7 +30,8 @@ import { rowFactsTitle } from "../../renderer/row-facts-title.mjs";
 import { deploymentHeading, notePanel, panelDeployments } from "../../renderer/view-deployments.mjs";
 import { createViewMembership, rehomeMap } from "../../renderer/workspace-rehome.mjs";
 import { waitingClaim, waitingSentence, waitingDetail, waitingClock } from "../../../client/waiting-on-you.mjs";
-import { waitingRollup, backgroundPlacement } from "../../../client/instance-tree.mjs";
+import { waitingRollup, backgroundPlacement, rowPinned } from "../../../client/instance-tree.mjs";
+import { pinnedMark } from "../../renderer/instance-tree-view.mjs";
 import { rowReasonLine, runtimeErrorLine, unsupportedLine, speakerLine, keptFailureLine, heldLine } from "../../renderer/speaker-line.mjs";
 import { keptFailure } from "../../../client/deployment-facts.mjs";
 import { retiredTabs, tabShowsRow, otherIncarnation, terminalOrigin } from "../../renderer/retired-tabs.mjs";
@@ -71,4 +75,6 @@ export const viewContext = () => ({
   // The pinned Automations row's failure mark (automations-failure.mjs): a roster read asks it; a suite about other
   // behaviour reads nothing. automations-failure.test.mjs drives the shipped reader.
   automationsFailure: { refresh: async () => {} },
+  rowPinned, pinnedMark, pinsShown: () => false,
+  pinMenu: { items: () => [], handles: () => false, run: async () => {} },
 });

@@ -60,11 +60,15 @@ export const PALETTE_COMMAND_CAP = 12;
  * the listed rows), and a row without one has no `sibling` field. An ancestor
  * shown only as a match's context carries { context: true } and no run. No row
  * is marked to open on: the picker starts on the first selectable row, the top
- * of the list (with a query, the first match), #1391. */
+ * of the list (with a query, the first match), #1391.
+ * `roster.pins` (feature instance-pin, this computer's CLI lists it): pinned rows lead each section's order, as in
+ * the sidebar, so rows never focused keep it; recency still leads (`recencyOrder`). A command with `when()` is
+ * listed only while it answers true (an instance command that applies to the leader's target). */
 export function paletteRows(roster, commands, raw, { openTerminal } = {}) {
   const instances = (Array.isArray(roster) ? roster : roster?.instances) || [];
   const deployments = (Array.isArray(roster) ? null : roster?.deployments) || [];
   const recent = !Array.isArray(roster) && roster?.recent instanceof Map ? roster.recent : new Map();
+  const pins = !Array.isArray(roster) && roster?.pins === true;
   const cmdMode = raw.startsWith(">");
   const q = (cmdMode ? raw.slice(1) : raw).trim();
   const rows = [];
@@ -76,12 +80,12 @@ export function paletteRows(roster, commands, raw, { openTerminal } = {}) {
     // Relations resolve inside a deployment, over its full roster, as the sidebar's do (#482).
     const multi = isMultiDeployment(deployments);
     const own = multi ? splitByDeployment(deployments)(instances) : null;
-    const siblings = new Map(multi ? [...own.values()].flatMap((list) => [...instanceSiblings(list)]) : instanceSiblings(instances));
+    const siblings = new Map(multi ? [...own.values()].flatMap((list) => [...instanceSiblings(list, { pins })]) : instanceSiblings(instances, { pins }));
     // What a query leaves of each deployment's roster: its matches and their ancestor paths.
     const visible = !q ? instances
       : multi ? [...own.values()].flatMap((list) => filterInstanceTree(list, q, matches)) : filterInstanceTree(instances, q, matches);
     const opens = (inst) => () => openTerminal({ instance: inst.instance, home: inst.home, agentsRoot: inst.agentsRoot, ...(inst.server ? { server: inst.server } : {}) });
-    for (const section of rosterSections(instances, visible, deployments, DESKTOP_TERMS, { lastFocus: recent })) {
+    for (const section of rosterSections(instances, visible, deployments, DESKTOP_TERMS, { lastFocus: recent, pins })) {
       const full = section.deployment ? own.get(section.deployment.id) : instances;
       for (const each of section.groups) {
         // A group is named, and kept apart, by its deployment where there are several.
@@ -115,6 +119,7 @@ export function paletteRows(roster, commands, raw, { openTerminal } = {}) {
   }
   const commandRows = [];
   for (const c of commands) {
+    if (typeof c.when === "function" && !c.when()) continue;
     const sc = q ? subsequenceScore(c.label, q) : 0;
     if (sc == null) continue;
     // detail may be a function so chord labels stay live against the
