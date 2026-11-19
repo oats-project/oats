@@ -1,6 +1,6 @@
 # Sandboxes: boundaries declared in the workspace, started by `oats sync`
 
-**Status:** proposed, 2026-11-19. Nothing is built. Every contract below (C1–C10) is
+**Status:** proposed, 2026-11-19, revised after the product lane's direction read. Nothing is built. Every contract below (C1–C10) is
 for Pepe's side and Juan's side to decide together before anyone builds it (the lane
 map's "Contract changes" line). When this record and a reference page disagree after
 it is built, the reference page wins.
@@ -88,6 +88,11 @@ is declared in the workspace and never in a machine's local file.
 
 - On a host that lists S and has it started, a spawn of such a soul (by hand, or by a
   schedule tick) is routed into S, as a remote spawn through S's server registration.
+  S1 builds on #1912's floor (lane:juan, held): the task goes on stdin, the apply is
+  bound to its preview and keyed, and a host below 0.69.15 is refused. This costs
+  nothing, because the sandbox's kernel must already be the release with `sandboxes`.
+  S1 does not merge before #1912. If #1912 is withdrawn, S1 itself requires the same
+  three properties of the sandbox's kernel, rather than relying on today's fallbacks.
 - On a host that does not list S, the spawn is refused with `E_SANDBOX_NOT_HERE`, naming
   S and the local key that would list it. A sandboxed soul never falls back to the host.
 - Inside S, its deployment refuses to spawn any soul not placed in S
@@ -121,9 +126,8 @@ operator's account, and never enter the container.
    instead of printing it.
 
 A controller key held by the same OS user as host-side agents can be read by those
-agents. On a host that runs sandboxes, the operator account holding the controller key
-and credential sources must be a different OS user from any host-side agent. Readiness
-checks this and refuses otherwise (C10).
+agents. So a deployment that lists a sandbox runs no host-side agents. A host-placed
+spawn there is refused with `E_SANDBOX_HOST_AGENT` (C10).
 
 ### Credentials (v1)
 
@@ -186,6 +190,14 @@ sandboxes:
 - It is closed (`additionalProperties: false`), like every workspace block. An older
   kernel refuses the file with `E_WORKSPACE_SCHEMA` and its existing "upgrade OATS"
   hint, which is the error that tells existing deployments what to do.
+- **Adding it breaks every older host of the workspace, not only the sandbox host.**
+  Every host reads the shared file, so the first commit that adds `sandboxes:` makes
+  each host on an older kernel refuse the whole workspace. A workspace adds the block
+  only once every one of its hosts runs the release that has feature `sandboxes`. The
+  person who commits it checks that first: the kernel cannot see another person's host.
+  The release notes' Upgrade section and the reference page that owns the workspace
+  file ([workspaces.md](../workspaces.md)) both say this, and give the check:
+  `oats version --json` on each host lists `sandboxes`.
 - Feature `sandboxes` in `oats version --json`.
 
 ### C2. The three ways round a sandbox are refused (Juan's side's edge cases)
@@ -229,9 +241,19 @@ settings:
   limits). The provider refuses a file that sets a boundary field the workspace owns
   (`team.id`, `egress.external`, `aweb.federationOutbound`): boundaries are declared
   once.
-- Inside a sandbox, the provider writes `sandbox: { self: ingest }` into that
-  deployment's local file. That deployment then enforces C2's placement from the inside
-  (`E_SANDBOX_PLACEMENT`).
+### C3b. `oats-local.yaml` inside a sandbox: `sandbox: { self: <name> }` (new root key)
+
+The provider writes it into the in-sandbox deployment's local file. It is a contract of
+its own because a kernel reads it:
+
+- `self` must name a sandbox the workspace declares. That deployment then spawns only
+  souls placed in that sandbox, and refuses others with `E_SANDBOX_PLACEMENT`.
+- It may not be combined with `sandboxes:` (a sandbox runs no sandboxes),
+  `credentials:` (credentials reach it as mounts only), local `teams:` or local
+  `defaultTeam`. Each combination is refused with `E_WORKSPACE_SCHEMA`, reason
+  `sandbox-self-conflict`.
+- An older kernel refuses the key as unknown. That is why the agent image's kernel is
+  the release that has feature `sandboxes`.
 
 ### C4. The kernel–provider hook: `sandbox`
 
@@ -270,9 +292,16 @@ outcome is uncertain reports `unknown`, never `ready`.
   `{sandboxApi:1, host, sandboxes:[{name, team:{label,id}, listedHere, state, server, egress, credentials:[{name, source:"present"|"missing"}], problems}]}`.
 - `oats sync --json` gains `sandboxes` with the same entries plus `action`
   (`build|start|stop|none`). The field is additive, so `syncApi` stays 1.
-- `oats status --json` gains `placement: {sandbox}` on each instance placed in one. The
-  Desktop reads both files, so it consumes the additions first. The Desktop needs no
-  change to keep working.
+- `oats status --json` gains `placement: {sandbox}` on each instance placed in one.
+- **That these are additive must be shown, not assumed.** The readers of sync's answer
+  are `packages/desktop/server/workspace-sync.mjs`,
+  `packages/desktop/renderer/workspace-sync-view.mjs`,
+  `packages/client/deployment-data.mjs` and `packages/client/workspace-cli.mjs`. The
+  readers of the status answer are the client's roster readers and the warm reader. S1
+  lists every reader it finds, with file and line, and pins one test per reader feeding
+  it an answer with the new fields. If a reader refuses unknown fields, the change is
+  not additive: that answer's API version goes up, and the reader changes first, in its
+  own PR.
 
 ### C6. oats.aweb settings and behaviour
 
@@ -281,18 +310,37 @@ outcome is uncertain reports `unknown`, never `ready`.
   deletes the delivered copy after connecting. It is refused together with
   `identity.source` and with global mode.
 - Retire, for an identity minted by the host for a sandbox: the host runs
-  `aw id team remove-member` with the controller key it holds, and reports it. A failure
-  keeps today's recorded command and warning.
+  `aw id team remove-member` with the controller key it holds, and reports it. It
+  removes by the certificate ID that the mint recorded, never by alias. It removes only
+  an identity listed in the provider's ledger of seats this host minted for this
+  sandbox. An identity it did not mint is never removed, and is reported instead. A
+  failure keeps today's recorded command and warning.
+- Between mint and delivery, the instance's private key sits in the host's staging
+  directory (0700, under the operator account). `seat` deletes the staging copy on
+  every path: success, a failed mint, a failed delivery, a timeout and an interrupted
+  hook. The next `seat` or `status` call finds and removes a copy left by a killed hook,
+  and reports it. One test per path pins this.
 - `oats.aweb-sandbox` (new capability, same package): its settings are
   `sandboxes.<name>.deployment` and `sandboxes.<name>.settings` (C3).
 
 ### C7. The sandbox's server registration
 
 The provider registers each started sandbox as server `sandbox-<name>`, using the
-existing Docker-context SSH relay from container.md. It provisions the known-hosts file
-from the sandbox's host key and the operator key it generates for that sandbox, under the
-operator account. The `sandbox-` prefix is reserved for this. A hand-registered server
-with that prefix is refused.
+existing Docker-context SSH relay from container.md.
+
+- It uses only the fields `servers.json` accepts today (`sshHost`, `workspace`,
+  `oatsPath`, `path`), so an older kernel still reads the file. Anything else the
+  provider keeps goes in its own state, never in `servers.json`.
+- The `sshHost` alias lives in an OpenSSH file the provider owns,
+  `~/.oats/sandboxes/ssh_config`, which holds the relay, the per-sandbox operator key
+  it generates and the known-hosts file it provisions from the sandbox's host key. The
+  operator adds one `Include` of that file to their own SSH configuration once. Readiness
+  reports `sandbox-ssh-include-missing` until they have.
+- The `sandbox-` prefix is reserved. A new `oats server add|connect` with that prefix is
+  refused (`E_SERVER_INVALID`, reason `reserved-prefix`). A `sandbox-*` server that is
+  already registered is reported by `oats sandbox status`, not refused: refusing
+  configuration that was accepted before would itself be a contract change. The provider
+  will not adopt or overwrite it, and that sandbox's start refuses, naming the server.
 
 ### C8. teamctl and the container (Juan's side)
 
@@ -327,16 +375,36 @@ egress routes only.
   provider ships, and checked against that provider's interface before it is released.
   This keeps Pepe's decision to design both now, and Juan's side's point that a public
   contract must not take its shape from one unshipped product.
+- **A change the provider forces is a contract decision.** If checking against the
+  first real provider shows the agreed shape must change, the change goes back to both
+  sides as a contract decision before it is built. It is never a doc edit.
 
-### C10. Readiness
+### C10. Readiness reports; the acts refuse
 
-`oats readiness` adds sandbox items:
+`oats readiness` reports, and refuses nothing. Its new items are:
 
 - `sandbox-listed-not-running`;
 - `sandbox-credential-missing`;
-- `sandbox-controller-shared-user`: the controller key or a credential source is
-  readable by the OS user that runs host-side agents;
-- `sandbox-provider-missing`.
+- `sandbox-host-agents`: a deployment that lists a sandbox has host-placed instances;
+- `sandbox-provider-missing`;
+- `sandbox-ssh-include-missing`.
+
+The refusals belong to the acts:
+
+| Condition | Refused by | Code |
+| --- | --- | --- |
+| Listed sandbox, no provider | `oats sandbox start`, sync's start, a routed spawn | `E_SANDBOX_PROVIDER` |
+| A declared credential with no source, or a missing source file | `oats sandbox start`, sync's start | `E_SANDBOX_CREDENTIAL` |
+| A host-placed spawn in a deployment that lists a sandbox | `oats spawn`, a schedule's spawn | `E_SANDBOX_HOST_AGENT` |
+| A sandboxed soul on a host that does not list or run its sandbox | `oats spawn`, a schedule's spawn | `E_SANDBOX_NOT_HERE` |
+| A soul not placed in this sandbox, inside it | the in-sandbox `oats spawn` | `E_SANDBOX_PLACEMENT` |
+
+**Why `E_SANDBOX_HOST_AGENT`.** The controller key and the credential sources sit under
+the account that runs the deployment, because that account mints the seats. A host-side
+agent of the same deployment would run as that account and could read them. So in v1, a
+deployment that lists a sandbox runs every agent in a sandbox. Agents that belong on the
+host run from another deployment, under another OS user. This replaces checking file
+modes against users, which cannot be proved from inside one account.
 
 ## Left out of v1
 
