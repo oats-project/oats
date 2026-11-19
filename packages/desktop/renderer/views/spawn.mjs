@@ -437,6 +437,7 @@ function paintCapabilityPage(s) {
     open.signature = signature; open.noticeSignature = null;
     const restore = captureFocusState(host, { fallback: () => host.querySelector(".page-back") }), keep = open.contents.hold();
     renderCapabilityPage(host, { row: shown, ...context, catalogPending, contents: open.contents.element, triggerSources: open.contents.triggerSources,
+      skills: open.contents.skills, skillView: open.contents.skillView,
       openExternal: url => s.ctx.openExternal?.(url),
       backLabel: from ? from.name : "Capabilities", from: from ? { label: from.name, why } : null,
       onBack: () => closeCapability(s, { restoreFocus: true }),

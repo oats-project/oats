@@ -15,8 +15,8 @@ import { setupCSS, renderSetup, teamsBox } from './workspace-setup.mjs';
 import { createWorkspaceMachines, machinesCSS } from './workspace-machines.mjs';
 import { machinesGated } from '../../client/machine-contract.mjs';
 import { computerTeamsCSS, createComputerTeams, teamsAnswer } from './computer-teams.mjs';
-import { catalogCSS, renderCapabilitySections, renderRepoPills, rovePill, repoChoices, filterCapabilities, deploymentNotes, syncCapabilityNav } from './workspace-catalog.mjs';
-import { capabilitySections, matchCapabilities, hostKeyOf, memberNames, soulsComposition } from '../../client/capability-rows.mjs';
+import { catalogCSS, renderCapabilityList, deploymentNotes } from './workspace-catalog.mjs';
+import { soulsComposition } from '../../client/capability-rows.mjs';
 import { createWorkspaceSync, syncCSS, reasonText } from './workspace-sync-view.mjs';
 import { iconElement } from './shell-icons.mjs';
 import { defaultsCSS } from './workspace-defaults.mjs';
@@ -82,8 +82,6 @@ ${tabBarCSS('.workspace-tabs')}
 .ws-toolbar { display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-end; gap:8px 10px; min-width:0; min-height:28px; margin:0 0 16px; }
 .ws-toolbar[hidden] { display:none; }
 .ws-toolbar-lead { flex:1 1 auto; min-width:0; display:flex; align-items:center; }
-.ws-toolbar-lead .capability-nav { margin:0; }
-.ws-toolbar-lead .capability-nav + .ws-info-button { margin-left:8px; }
 .ws-toolbar-label { color:var(--muted); font-size:12px; }
 .ws-search { position:relative; display:flex; align-items:center; min-width:0; flex:0 1 220px; }
 .ws-search .shell-icon { position:absolute; left:10px; color:var(--muted); pointer-events:none; }
@@ -94,12 +92,12 @@ ${tabBarCSS('.workspace-tabs')}
    words, loading-sr) are clipped by it instead of stretching the document, which then scrolled the
    whole Workspace, header included, at the end of the content; its overscroll never chains out. */
 .workspace-discovery { --ws-pad-top:18px; position:relative; padding:var(--ws-pad-top) 20px 18px; overflow:auto; overscroll-behavior:contain; min-width:0; min-height:0; flex:1; container-type:inline-size; }
-/* Capabilities (W5) reads as one centred column. */
+/* Capabilities reads as one centred column of rows. */
 .workspace-discovery[data-tab=capabilities] { --ws-pad-top:16px; padding:var(--ws-pad-top) 28px 20px; }
-.workspace-discovery[data-tab=capabilities] > * { max-width:1000px; margin-inline:auto; }
+.workspace-discovery[data-tab=capabilities] > * { max-width:880px; margin-inline:auto; }
 .workspace-discovery[data-tab=sources] { --ws-pad-top:20px; padding:var(--ws-pad-top) 24px 20px; }
-/* Setup's list view reads as one centred column; the graph keeps the tab's width. */
-.workspace-discovery[data-tab=sources]:has(.setup[data-view=list]) > * { max-width:1080px; margin-inline:auto; }
+/* Setup reads as one centred column. */
+.workspace-discovery[data-tab=sources] > * { max-width:1080px; margin-inline:auto; }
 /* Teams reads as one centred column: the teams card is a list, not a dashboard. */
 .workspace-discovery[data-tab=teams] { --ws-pad-top:20px; padding:var(--ws-pad-top) 24px 20px; }
 .workspace-discovery[data-tab=teams] > * { max-width:760px; margin-inline:auto; }
@@ -114,7 +112,7 @@ ${tabBarCSS('.workspace-tabs')}
 /* The Capabilities toolbar keeps its 16px below: 8px inside the edge, 7px + the 1px edge outside. */
 .workspace-discovery > .ws-toolbar.ws-sticky { padding-bottom:8px; margin-bottom:7px; }
 /* Jumping to a section or focusing a row never leaves it under the pinned block. */
-.workspace-discovery :is(.capability-section-title, .catalog-group, [data-capability], .catalog-row, .ws-default-cell, .computer-teams .ct-body :is(button, a[href], input, select, textarea, [tabindex])) { scroll-margin-top:var(--ws-sticky-h, 60px); }
+.workspace-discovery :is([data-capability], .cap-row, .computer-teams .ct-body :is(button, a[href], input, select, textarea, [tabindex])) { scroll-margin-top:var(--ws-sticky-h, 60px); }
 .discovery-status { margin:0 0 14px; color:var(--muted); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
 .discovery-status:empty { display:none; }
 .discovery-status[hidden] { display:none; }
@@ -123,15 +121,9 @@ ${tabBarCSS('.workspace-tabs')}
 .discovery-notice[hidden], .catalog-state[hidden] { display:none; }
 .discovery-notice .loading-notice { margin:0 0 14px; }
 .ws-toolbar .loading-refreshing { margin-right:auto; }
-.catalog-state .capability-section-title.skeleton { height:15px; width:30%; margin:0 0 2px; }
-.catalog-state .catalog-head .skeleton { height:9px; width:60%; }
 .skeleton-catalog-row { pointer-events:none; }
-.skeleton-catalog-row .catalog-tile.skeleton { background:color-mix(in srgb, var(--fg) 10%, transparent); }
-.skeleton-catalog-row .catalog-cap { gap:6px; }
-.skeleton-catalog-row .skeleton-name { height:13px; width:45%; }
-.skeleton-catalog-row .skeleton-desc { height:11px; width:80%; }
-.skeleton-catalog-row .skeleton-cell { height:11px; width:70%; }
-.skeleton-catalog-row .skeleton-chevron { width:14px; height:14px; }
+.skeleton-catalog-row .skeleton-name { height:13px; width:35%; }
+.skeleton-catalog-row .skeleton-desc { height:11px; width:70%; }
 `;
 
 const list = value => Array.isArray(value) ? value : [];
@@ -174,23 +166,16 @@ function gateTransient(workspace, deployment) {
   return !deployment || deployment.status === 'pending';
 }
 
-/** Pending catalog: one section's worth of the real card rows (a disabled, aria-hidden button wears
- * the table's own classes, so workspace-catalog.mjs's CSS gives the height, frame and columns): the
- * card's four cells — tile | capability | used by | chevron — placed as the settled cards are, wide and narrow. */
+/** Pending catalog: the list's own rows (an aria-hidden list wearing the list's classes, so workspace-catalog.mjs's CSS
+ * gives the frame and the row height): each row's name line and its one line of what it does. */
 function catalogSkeleton(doc, rows = 6) {
-  const section = doc.createElement('div'); section.className = 'capability-section skeleton-item'; section.setAttribute('aria-hidden', 'true'); section.dataset.skeleton = 'catalog-rows';
+  const list = doc.createElement('ul'); list.className = 'cap-list skeleton-item'; list.setAttribute('aria-hidden', 'true'); list.dataset.skeleton = 'catalog-rows';
   const bone = cls => { const el = doc.createElement('span'); el.className = `skeleton ${cls}`; el.setAttribute('aria-hidden', 'true'); return el; };
-  section.append(bone('capability-section-title'));
-  const table = doc.createElement('div'); table.className = 'catalog-table';
-  const head = doc.createElement('div'); head.className = 'catalog-head'; head.append(doc.createElement('span'), bone('skeleton-cell'), bone('skeleton-cell'), doc.createElement('span')); table.append(head);
   for (let i = 0; i < rows; i++) {
-    const row = doc.createElement('button'); row.type = 'button'; row.className = 'catalog-row skeleton-catalog-row'; row.disabled = true; row.tabIndex = -1; row.setAttribute('aria-hidden', 'true');
-    const cap = doc.createElement('span'); cap.className = 'catalog-cap'; cap.append(bone('skeleton-name'), bone('skeleton-desc'));
-    row.append(bone('catalog-tile'), cap, bone('skeleton-cell catalog-used'), bone('skeleton-chevron catalog-chevron'));
-    table.append(row);
+    const item = doc.createElement('li'), row = doc.createElement('div'); row.className = 'cap-row skeleton-catalog-row';
+    row.append(bone('skeleton-name'), bone('skeleton-desc')); item.append(row); list.append(item);
   }
-  section.append(table);
-  return section;
+  return list;
 }
 
 /** `onCatalog`: the catalog changed (a read settled, the subject was reset): a page rendered from it refreshes in place. */
@@ -198,10 +183,10 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
   const doc = header.ownerDocument;
   const node = (tag, text, cls) => { const el = doc.createElement(tag); if (text !== undefined) el.textContent = text; if (cls) el.className = cls; return el; };
   let alive = true, serial = 0, rosterGen = null, workspace = null, deployment = null, instances = [], tab = 'souls';
-  // `repo`: the Workspace owned repository pill (a group key; null = All), remembered while the subject stays.
-  let catalog = null, loading = false, failure = '', repo = null, rendered = null;
+  let catalog = null, loading = false, failure = '', rendered = null;
   let warningsDrawn = { signature: null, element: null }; // Sources' warnings list, kept while it is unchanged
-  let setupView = 'list', query = '', setupMember = null, souls = [];
+  // `setupMember`: the Setup member whose panel is open under its row.
+  let query = '', setupMember = null, souls = [];
   // The Souls tab's count: a number, 'pending' (a pill reserving its width) or null (a failed roster read: nothing, still).
   let soulsCount = 'pending';
   // Team model v2 (kernel feature team-model-2): the Teams tab's "Teams on this computer", one card
@@ -267,14 +252,8 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
   // inherits the view's control styles and is removed with it.
   // Each tab's own controls sit at the right of the bar (Souls brings its own).
   const setupTools = node('div', undefined, 'workspace-tools'); setupTools.dataset.tools = 'sources';
-  const views = node('div', undefined, 'ws-segmented'); views.setAttribute('role', 'group'); views.setAttribute('aria-label', 'Setup view');
-  const viewButtons = new Map();
-  for (const [id, label] of [['list', 'List'], ['graph', 'Graph']]) {
-    const button = node('button', label); button.type = 'button'; button.dataset.setupView = id;
-    button.addEventListener('click', () => { if (setupView === id) return; setupView = id; syncTools(); render(); });
-    viewButtons.set(id, button); views.append(button);
-  }
-  const syncHost = node('div'); setupTools.append(views, syncHost);
+  // Setup is its list only (the graph, W2, was dropped in the Desktop UI rework, slice 3b): its one tool is Sync.
+  const syncHost = node('div'); setupTools.append(syncHost);
   // The Capabilities search lives in the view itself (human, 2026-09-26): a toolbar row above the sections.
   const capTools = node('div', undefined, 'ws-toolbar ws-sticky'); capTools.dataset.tools = 'capabilities';
   const capLead = node('div', undefined, 'ws-toolbar-lead'); capTools.append(capLead);
@@ -292,7 +271,6 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
   const sync = createWorkspaceSync(syncHost, { ctx, onSynced: () => { failure = ''; void load({ refresh: true }); } });
   function syncTools() {
     setupTools.hidden = tab !== 'sources'; capTools.hidden = tab !== 'capabilities';
-    for (const [id, button] of viewButtons) button.setAttribute('aria-pressed', String(id === setupView));
   }
   soulsPanel.id = 'workspace-souls'; soulsPanel.setAttribute('role', 'tabpanel'); soulsPanel.setAttribute('aria-labelledby', 'workspace-tab-souls');
   if (machinesPanel) {
@@ -311,8 +289,8 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
   const capState = node('div', undefined, 'catalog-state');
   const refreshHost = node('span', undefined, 'discovery-refreshing'); capTools.prepend(refreshHost);
   const notes = node('div', undefined, 'catalog-notes');
-  const filterHost = node('div'), body = node('div');
-  panel.append(capTools, status, loadStatus, notice, notes, filterHost, capState, body);
+  const body = node('div');
+  panel.append(capTools, status, loadStatus, notice, notes, capState, body);
   const win = doc.defaultView;
   const loadState = createDataState({ doc, noun: 'capabilities', region: capState, skeleton: () => catalogSkeleton(doc), status: loadStatus,
     indicatorHost: refreshHost, noticeHost: notice, onRetry: () => { void load({ user: true, refresh: true }); },
@@ -415,15 +393,13 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
     // The status's observation stamp moves on every poll and nothing here paints it: it is left out.
     const stableStatus = s && { ...s, workspace: s.workspace && { ...s.workspace, observedAt: undefined } };
     // The souls' composition (souls-capabilities) and marks feed "Used by".
-    const key = JSON.stringify([tab, setupView, setupMember, souls.map(a => [a?.team ?? null, a?.name, a?.key, a?.color, a?.agentsRoot, a?.capabilities]), soulsComposition(cliStatus()), query, unavailable, repo, catalog, stableStatus, rosterState(), deployment?.withheld, deployment?.reachable, privateListed(), instances.map(i => [i.agent, i.agentsRoot, i.modules, i.running])]);
+    const key = JSON.stringify([tab, setupMember, souls.map(a => [a?.team ?? null, a?.name, a?.key, a?.color, a?.agentsRoot, a?.capabilities]), soulsComposition(cliStatus()), query, unavailable, catalog, stableStatus, rosterState(), deployment?.withheld, deployment?.reachable, instances.map(i => [i.agent, i.agentsRoot, i.modules, i.running])]);
     if (key === rendered) return;
     rendered = key;
-    // A focused pill is rebuilt below: focus returns to the same repository's pill (by its key).
-    const focusedPill = filterHost.contains(doc.activeElement) ? doc.activeElement.closest('.catalog-pills button')?.dataset.repo ?? null : null;
     const restoreNotes = captureFocusState(notes, { scroller: null }); // a warning's Details or Open capability (by its focus key)
-    // A Workspace defaults column or chip (its data-focus-key) is found again after the sections are rebuilt.
-    const restoreBody = tab === 'capabilities' ? captureFocusState(body, { scroller: null }) : null;
-    notes.replaceChildren(); filterHost.replaceChildren(); body.replaceChildren(); filterHost.className = '';
+    // A capability row (its data-focus-key) or a Setup member's control is found again after the list is rebuilt.
+    const restoreBody = tab === 'capabilities' || tab === 'sources' ? captureFocusState(body, { scroller: null }) : null;
+    notes.replaceChildren(); body.replaceChildren();
     for (const child of [...capLead.children]) if (child !== about.button) child.remove(); // the "i" stays, focus and all
     if (unavailable || OWN_PANELS.includes(tab)) return; // the view paints its own panels
     for (const note of deploymentNotes(deployment)) notes.append(node('p', note.text, `catalog-note${note.warn ? ' warn' : ''}`));
@@ -460,69 +436,29 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
         canOpen: (name, w) => opens.has(w), open: typeof onOpenCapability === 'function' ? (name, w) => { const row = catalog ? warnedRow(catalog.capabilities, name, w.path) : null; if (row) onOpenCapability(row); } : null }) };
       const warned = warningsDrawn.element;
       if (warned) { notes.append(warned); restoreNotes(); }
-      renderSetup(body, { status: s, instances, souls, cli: cliStatus(), view: setupView, selected: setupMember,
-        onSelect: key => selectMember(key), onOpenRepo: openRepo, onOpenPackages: openPackages, openExternal: url => ctx.openExternal?.(url), machines: machinesCard() }); return;
+      renderSetup(body, { status: s, instances, cli: cliStatus(), selected: setupMember,
+        onSelect: key => selectMember(key), openExternal: url => ctx.openExternal?.(url) });
+      restoreBody?.(); return;
     }
     if (!catalog) return; // pending, or failed with nothing held: the controller's skeleton or failed block stands in capState
     for (const problem of list(catalog.problems)) notes.append(node('p', reasonText(problem), 'catalog-note warn'));
-    const names = memberNames(s), hostKey = hostKeyOf(s);
-    const sections = capabilitySections(catalog.capabilities);
-    const repos = repoChoices(sections.workspace, names, hostKey);
-    // A remembered repository the catalog no longer offers falls back to All.
-    if (repo && !repos.some(choice => choice.key === repo)) repo = null;
-    const shown = filterCapabilities(sections.workspace, { repo }, names, hostKey);
-    renderRepoPills(filterHost, { repos, value: repo, total: sections.workspace.length, shown: matchCapabilities(shown, query).length,
-      narrowed: !!repo || !!String(query || '').trim(), onChange: next => { repo = next; render(); refocusPill(repo ?? ''); } });
-    renderCapabilitySections(body, { sections, shown, filterHost, privateListed: privateListed(), query,
-      status: s, instances, souls, composition: soulsComposition(cliStatus()), root: workspace?.id, rosterState: rosterState(), onOpen: onOpenCapability });
+    renderCapabilityList(body, { rows: catalog.capabilities, status: s, query, onOpen: onOpenCapability });
     restoreBody?.();
-    if (focusedPill !== null) refocusPill(focusedPill);
-    reveal();
   }
-  // Repo owned is shown only when the kernel lists private capabilities.
-  const privateListed = () => list(cliStatus()?.features).includes('capabilities-private');
-  // Setup: a member's membership opens in the graph's Member panel; focus follows it.
+  // Setup: a member's panel opens under its row ("Why?" or "Details"); focus moves into it, and back to the row's
+  // control when it closes.
   function selectMember(key) {
+    const was = setupMember;
     setupMember = key || null;
-    if (setupMember && setupView !== 'graph') { setupView = 'graph'; syncTools(); }
     render();
-    const target = setupMember ? body.querySelector('.setup-panel .icon-act') : body.querySelector('.setup-node[aria-pressed]');
+    const target = setupMember ? body.querySelector('.setup-row-panel .icon-act')
+      : [...body.querySelectorAll('.setup-link-act[data-focus-key]')].find(el => el.dataset.focusKey === `member:${was}`);
     target?.focus({ preventScroll: false });
   }
-  // Setup → Capabilities: a repository's capabilities (filtered), or the Packages section.
-  let pendingReveal = null;
-  function openRepo(key) {
-    pendingReveal = { repo: `member:${key}` }; repo = `member:${key}`;
-    if (!setTab('capabilities')) pendingReveal = null;
-  }
-  function openPackages() {
-    pendingReveal = { section: 'packages' };
-    if (!setTab('capabilities')) pendingReveal = null;
-  }
-  function reveal() {
-    if (!pendingReveal) return;
-    const want = pendingReveal; pendingReveal = null;
-    let target = null;
-    if (want.section) target = body.querySelector(`#capability-section-${want.section}`);
-    else if (repo === want.repo) target = body.querySelector('#capability-section-workspace');
-    else target = [...body.querySelectorAll('.catalog-group')].find(el => el.dataset.repo === want.repo) || body.querySelector('#capability-section-workspace');
-    if (!target) return;
-    target.tabIndex = -1; target.scrollIntoView?.({ block: 'start' }); target.focus({ preventScroll: true });
-  }
-  // The pill row is rebuilt on a change or a repaint; focus stays on the same repository's pill
-  // ('' = All), which becomes the group's tab stop. A pill no longer offered leaves focus to the pressed one.
-  function refocusPill(key) {
-    const pills = filterHost.querySelector('.catalog-pills'); if (!pills) return;
-    const buttons = [...pills.querySelectorAll('button')];
-    const target = buttons.find(button => button.dataset.repo === key) || buttons.find(button => button.getAttribute('aria-pressed') === 'true');
-    if (!target) return;
-    rovePill(pills, target); target.focus({ preventScroll: true });
-  }
-  panel.addEventListener('scroll', () => { if (tab === 'capabilities') syncCapabilityNav(body, panel, capLead); }, { passive: true });
   function updateRoster(agents, panelAnswer) {
     const gen = workspaceGeneration();
     // Another workspace generation is another subject: the table is forgotten. Within one, it is never set to null.
-    if (rosterGen !== gen) { catalog = null; failure = ''; repo = null; setupMember = null; serial++; loading = false; loadState.reset(); about.close({ focus: 'none' }); }
+    if (rosterGen !== gen) { catalog = null; failure = ''; setupMember = null; serial++; loading = false; loadState.reset(); about.close({ focus: 'none' }); }
     rosterGen = gen; workspace = panelAnswer.workspace || null; deployment = panelAnswer.deployment || null; souls = list(agents);
     instances = list(panelAnswer.instances);
     updateCounts(agents.length); render();
@@ -557,7 +493,7 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
       machines?.dispose(); machines = null; machinesFor = null; // another workspace: its dialog and reads go with it
       about.close({ focus: 'none' });
       serial++; rosterGen = null; workspace = null; deployment = null; instances = []; catalog = null; loading = false; failure = '';
-      repo = null; sync.reset(); loadState.reset(); updateCounts('pending'); render(); onCatalog?.();
+      setupMember = null; sync.reset(); loadState.reset(); updateCounts('pending'); render(); onCatalog?.();
     },
     dispose() { alive = false; serial++; about.dispose(); sync.dispose(); computerTeams?.dispose(); machines?.dispose(); loadState.dispose(); stickyTop.dispose(); soulsEdge.dispose(); },
   };
