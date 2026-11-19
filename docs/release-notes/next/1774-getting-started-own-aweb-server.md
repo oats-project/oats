@@ -1,8 +1,9 @@
 ## Added
 
 - **The `oats-getting-started` skill sets up a new workspace on the
-  person's own aweb server** (#1774, #1775). Step 1 asks "hosted aweb (the
-  default), or your own aweb server?". The own-server answer collects
+  person's own aweb server** (#1774, #1775). Step 1's messaging line names
+  hosted aweb as the default, "unless you run your own aweb server". The
+  own-server answer collects
   three things, none of them secret: the namespace domain the person
   controls, the server's public URL, and whether the server uses the public
   AWID registry. A server on a private registry is not set up yet: the
