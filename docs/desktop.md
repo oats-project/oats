@@ -268,31 +268,37 @@ workspace on a server: `name — server`).
 
 ## Workspaces
 
-The sidebar, top to bottom: the **Workspace** heading, with **Show only the
-current workspace** and **Add local workspace…** at its end, over the list of
-workspaces; a thin line; the two main views, **Workspace overview** and
-**Automations**, one under the other; another line; **Instances**, a heading
-with the running count over the list of instances; and, over a line, the
-foot, one bar: the OATS mark and the sidebar toggle (**Hide the sidebar**)
-after it, and at the bar's right **Spawn instance**, its words alone (a ground
-only on hover), which
-opens Quick Open (⌘P / Alt+P, named in its tooltip) to pick a soul and then
-the spawn dialog, and the settings cog, whose menu holds **Theme…**, **Font…** and
-**Keyboard shortcuts…**, each with its shortcut when it has one. A window opens on the **Workspace
-overview** page, on its **Souls** tab: at launch, and after you choose a
-workspace for it. Connections is in the command palette
-(**Settings: Connections…**), and the palette opens with its shortcut or
-Ctrl+X then `k`.
+The sidebar, top to bottom: the **Workspace** heading, with **Add local
+workspace…** (the **+**) at its end, over the list of workspaces; a thin line;
+two pinned rows, **Workspace overview** and **Automations**, drawn like the
+instance rows (Automations shows a red dot, and says "a run failed", while a
+schedule's last run failed: see [Scheduling agents](#scheduling-agents-and-wake-messages));
+another line; **Instances**, a heading with the running count over the list of
+instances; and, over a line, the foot, one bar: at its left **N need you**, the
+number of this workspace's agents that need input (hidden when none does;
+it takes you to the first of them, in the roster's order, expanding a collapsed
+parent or opening the Background section to show it), and at its right
+**New agent**, which opens Quick Open (⌘P / Alt+P, named in its tooltip) to
+pick a soul and then the spawn dialog, and **?**, which opens the keyboard
+shortcuts. The foot has no mark, no Hide sidebar button and no settings menu:
+⌘B / Ctrl+Shift+B and the palette's **Sidebar: toggle (hide/show)** hide the
+sidebar, and the palette's **Theme: choose…**, **Font: choose…** and
+**Shortcuts: edit keyboard shortcuts…** open the theme, the font and the
+shortcuts. A window opens on the **Workspace overview** page, on its **Souls**
+tab: at launch, and after you choose a workspace for it. Connections is in the
+command palette (**Settings: Connections…**), and the palette opens with its
+shortcut or Ctrl+X then `k`.
 The instances have no search field: to find one by name, type it in the
 command palette, which opens its terminal. ⌘F / Alt+F (**Focus the
 instance roster**) and `/` in the sidebar go to the roster's current row;
-on an empty roster, to its one action, the foot's **Spawn instance**, where
-F6 lands too (a failed read's **Retry** comes first).
+on an empty roster, which says "No agents yet · ⌘P starts one" (New
+agent's key, Alt+P off macOS, as you bound it), to its one action, the foot's **New
+agent**, where F6 lands too (a failed read's **Retry** comes first).
 
 The sidebar is 288px wide, and you can make it wider or narrower: drag its
 right edge, between 240px and 480px (or 45% of the window, when that is
 less, so the terminals keep the rest). With the keyboard, Tab to that edge
-(after the settings cog) and use ← and → (8px a step, 32px with Shift), Home
+(after the foot's **?**) and use ← and → (8px a step, 32px with Shift), Home
 and End for the narrowest and the widest. A double-click on the edge, Enter
 on it, or the command palette's **Sidebar: reset width** put it back to 288px.
 The width is remembered on this computer, and kept while the sidebar is
@@ -300,10 +306,10 @@ hidden; a window too narrow for it shows it narrower, and gives it back when
 the window grows again. The terminals refit as it moves, and their programs
 hear the new size once, when you let go.
 
-**Theme and font.** The settings cog's **Theme…**, the palette's **Theme: choose…** and
+**Theme and font.** The palette's **Theme: choose…** and
 ⇧⌘Space / Ctrl+Shift+Space open the theme picker (White, Solarized, Dark, or
 This computer, which follows the computer's own theme). The font has a picker
-of its own, the settings cog's **Font…** or **Font: choose…** in the palette (no
+of its own, **Font: choose…** in the palette (no
 shortcut unless you give it one in the shortcuts editor), with two choices:
 
 - **Omarchy's font**, the default on a computer that runs Omarchy. On Linux the whole window and its
@@ -359,16 +365,10 @@ below, a line under the list says how many ("2 more below"), with the
 needs-input mark at its right when one of them has an instance that needs
 input.
 
-**Show only the current workspace** is the toggle before the **+** in the
-heading, for working in one workspace at a time. Pressed (its icon in the
-accent colour), the list shows the current workspace's row alone. Nothing
-stands for the others: no "N more" line, and no needs-input mark for one of
-them that waits. Press it again, or use ⌥⇧⌘O on macOS / Ctrl+Alt+Shift+O on
-Linux and Windows (the same in every chord family, and from a terminal) or the
-palette's **Show only the current workspace**, to see every workspace again.
-Ctrl+X then ↑ / ↓ still move to the previous / next workspace, which then
-shows alone. A window choosing a workspace shows them all. The choice is remembered on this
-computer.
+The list always shows every workspace: one is shown at a time by construction,
+and everything under the list belongs to it. (**Show only the current
+workspace** is gone, with its ⌥⇧⌘O / Ctrl+Alt+Shift+O and its palette command;
+a choice saved for it is ignored.)
 
 - **A row is one line: a circle and the workspace's name.** No icon, no
   machine, no state: a workspace's own pages show its machines and
@@ -746,7 +746,12 @@ pattern and time zone; new agent jobs also offer harness, model, permissions
 and session backend. The list shows the next run, last observed outcome and
 whether the host scheduler is enabled. Pause, edit, run now and delete operate
 on that workspace's saved jobs. Launching an agent is reported separately from
-the end of its run; neither means its task succeeded.
+the end of its run; neither means its task succeeded. While a schedule's last
+run is **launch failed** or **invalid**, the sidebar's **Automations** shows a
+red dot, and a screen reader hears "Automations, a run failed"; it clears once
+no last run has failed. The sidebar reads both lists when the workspace opens
+and then at most once a minute. A trigger's last run carries no outcome, so a
+trigger never marks it.
 
 Each schedule and trigger can carry a one-line **summary** (up to 200
 characters), shown under its name in the list. Without one, the list shows the
@@ -969,9 +974,13 @@ error in the terminal. Each drop/paste accepts up to 16 files totaling 25 MB.
 ## The sidebar's instance tree
 
 The sidebar lists a workspace's instances as a tree: a child sits one step
-right of its parent, and related instances are grouped together. Siblings are
-joined by a dotted line through their dots. A parent's line to its children
-runs just to the right of the dotted line, so the two never merge.
+right of its parent, and related instances are grouped together, with a little
+space before the next group. The sidebar draws no lines between them: the
+indent and that space show the tree. A screen reader hears each row's state ("running", "stopped" or "status
+unknown") after its two lines, then each child "under"
+its parent, with "same work" when its host reports it doing its parent's work,
+and each instance linked as a sibling "sibling of" the other, after the row's
+two lines.
 
 The sidebar shows the top-level instances only until you open one. An
 instance with children has a chevron before its name, with the number of
@@ -989,34 +998,43 @@ the Desktop open the rows above the instance they show. The TUI's list still
 shows every instance open.
 
 The newest instance is on top: the tree is in spawn order, newest first, at
-every level. A group of related instances sits where its first instance's
+every level. A little space separates each top-level group (an instance with
+its children and the siblings joined to it) from the next; the order never
+changes for it. A group of related instances sits where its first instance's
 spawn time puts it, so spawning a child doesn't move the group, and starting
 or stopping an instance moves nothing. Instances spawned at the same moment
 are in name order, and an instance whose spawn time can't be read comes after
 every one whose time can.
 
-A parent's line joins only the children that do its work. When the instances'
+Children that do their parent's work come first under it. When the instances'
 OATS has the `instance-same-work` feature, a child the kernel reports as doing
 its parent's work (`sameWork: true` in its row, set with `oats spawn …
---same-work` or `oats instance same-work <instance> on`) is joined to its
-parent, and any other child keeps its place and its indent with no line to its
-parent. Under one parent the joined children are listed first, then the others,
-each part newest first, so the parent's line ends at its last joined child and
-never passes one it doesn't join. Nothing else marks the flag: no label, no
-tag, and nothing for a screen reader, which still hears each child "under" its
-parent in the command palette. The command palette draws the same lines, in
-its own recency order inside each part. For another machine's instances, its
-host must report the feature too, through an installed OATS with
-`server-probe-features`. A host without the feature, or one whose features are
-not known (its last read failed), keeps a line to every child. A spawn from the
-Desktop never sets the flag.
+--same-work` or `oats instance same-work <instance> on`) is listed before its
+parent's other children, each part newest first. The command palette still
+draws lines: there a parent's line joins only those children (siblings by a
+dotted line through their dots), in its own recency order inside each part.
+For another machine's instances, its host must report the feature too, through
+an installed OATS with `server-probe-features`. A host without the feature, or
+one whose features are not known (its last read failed), lists every child as
+doing its parent's work. A spawn from the Desktop never sets the flag.
 
 A row shows the instance's name as words: each `-` is a space, and the first
 letter is a capital, so `oats-expert-maintainer-lanes` reads "Oats expert
-maintainer lanes". Only the row's label changes. The hover card, the command
-palette (which still finds the instance by its name), its terminal tab, a
-screen reader and the `oats` CLI all use the instance's real name. The TUI's
-sidebar shows the same words.
+maintainer lanes". Only the row's label changes. The instance panel, the
+command palette (which still finds the instance by its name), its terminal tab,
+a screen reader and the `oats` CLI all use the instance's real name. The TUI's
+sidebar shows the same words. A long name is cut at its end with "…".
+
+A row's second line says its soul and the machine it runs on, "oats-expert ·
+falcon", or the machine alone when its soul isn't known. This computer's rows
+name it by the host name OATS records for it (`host.name` in its
+`oats-local.yaml`); with none recorded, they say "This Mac". A limit for now:
+the Desktop learns that name from its Automations read, so these rows say
+"This Mac" until that read answers, and keep saying it where the installed
+OATS serves no automations ([#1972](https://github.com/oats-project/oats/issues/1972)
+tracks reading it from the status answer instead). That's all a row
+says: its repository, branch, pull request and harness are in the instance
+panel. Rows are 44px tall, the dot centred on the row.
 
 A row's dot says the instance's state: filled while it runs, a ring when it is
 stopped, a grey ring with a small grey centre when its state is unknown (the
@@ -1026,14 +1044,21 @@ instance that needs input (a running session's claim, from OATS with the
 slightly larger amber disc with a "!" cut out of it, the mark its terminal tab
 and the workspace list show. Amber means needs input and nothing else.
 Elsewhere, a dot that flags a problem is red: a keyboard shortcut that clashes
-with another (on the settings cog), Setup or Teams needing attention (on the
-Workspace page's tabs), and an automation that doesn't run here or a
-scheduler that is off.
-The row keeps its soul and repository on its second line. A screen reader
-hears "Needs input" after the name, and the hover card gives the reason and
-how long it has waited. A collapsed parent shows "! N below" on its second
-line for the rows it hides that need input, beside its own mark when it waits
-too. Rows never move or grow, and nothing animates.
+with another (on the foot's **?**), Setup or Teams needing attention (on the
+Workspace page's tabs), the sidebar's **Automations** while a last run failed,
+and an automation that doesn't run here or a scheduler that is off.
+The row keeps its soul and machine on its second line. A screen reader
+hears "Needs input" after the name, then the reason and when it started
+waiting; the instance panel's **Needs input** section gives the reason, how
+long it has waited and the agent's message. A collapsed parent shows "! N
+below" on its second line for the rows it hides that need input, beside its
+own mark when it waits too. Rows never move or grow, and nothing animates. The
+row has no hover card: its facts are the instance panel's, and a row's error
+("OATS says: the last start failed") is its tooltip and its description. Until
+the panel serves a row with no terminal open, the row's tooltip also says its
+repository, branch, harness and model; a screen reader doesn't hear these on
+the row, so with the keyboard alone they show once the row's terminal is
+open.
 
 A row has no ⋯ button. Its actions (Open in split, Open pull request…,
 Knowledge & capabilities…, Start…, Restart with…, Stop…, Retire instance…,
@@ -1045,8 +1070,9 @@ Home and End move in it, and Esc or Tab close it with the focus back on the
 row. A right-click never opens the row's terminal. While the menu can't be used
 (the roster is out of date, one of its actions is still running, or the row
 can't be used from this computer), it opens nothing, and one line at the
-bottom of the main area says why, as a leader key that can't act does. The row's own tools stay: its pull request link and, on a
-stopped row, **Start…**.
+bottom of the main area says why, as a leader key that can't act does. A row
+draws no tools of its own: its pull request opens with **Open pull request…**,
+and a stopped row starts with **Start…**, both in its menu.
 
 ## Background instances
 
@@ -1143,9 +1169,9 @@ letters. So `oats-desktop-expert` is DE, `oats-okf--knowledge-maintainer` KM and
 `oats.aweb` OA. Two names can share a mark (`oats-expert` and
 `oats-operator-expert` are both OE); the name and the colour tell them apart.
 
-Roster rows, soul cards, the soul page, the context panel and the spawn
-dialog show each instance's or soul's harness as a small badge, next to its
-name. The badge names the harness the CLI reports; it says nothing about
+Soul cards, the soul page, the context panel and the spawn dialog show each
+instance's or soul's harness as a small badge, next to its name (a roster row
+doesn't: its second line is its soul and machine). The badge names the harness the CLI reports; it says nothing about
 whether that harness is installed or signed in. Pi's badge is the official
 pi.dev press-kit mark (MIT), and Claude Code's is Anthropic's Claude spark
 in the theme's colours. The Codex badge is OATS's own drawing, not OpenAI's

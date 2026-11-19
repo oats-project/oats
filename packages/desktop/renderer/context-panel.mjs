@@ -2,7 +2,8 @@ import { servedIdentityText } from '../../client/deployment-facts.mjs';
 import { iconElement } from './shell-icons.mjs';
 import { ageText } from './age-text.mjs';
 import { createSoulMark, createRuntimeBadge, harnessName } from './identity-marks.mjs';
-import { reasonLine, unsupportedLine } from './speaker-line.mjs';
+import { reasonLine, unsupportedLine, runtimeErrorLine } from './speaker-line.mjs';
+import { waitingLabel, waitedText, waitingClock } from '../../client/waiting-on-you.mjs';
 import { desktopActs } from './desktop-acts.mjs';
 import { needsInputReportingGap } from '../../client/needs-input-reporting-gap.mjs';
 import { rowReason, serverLabel, shownLabel, unaddressableSentence } from '../../client/remote-address.mjs';
@@ -106,6 +107,12 @@ export const contextPanelCSS = `
 #context-panel .context-panel-session { display:flex; flex-direction:column; gap:10px; min-width:0; padding:10px 12px; border:1px solid var(--border); border-radius:9px; background:var(--surface); }
 #context-panel .context-panel-session-lines { display:flex; align-items:center; gap:10px; min-width:0; }
 #context-panel .context-panel-session-note { margin:0; font-size:12px; line-height:1.5; }
+/* Needs input (slice 1: the facts the roster's hover card held): the claim's words and how long it has waited, then
+   the agent's message as text. The needs-input mark leads the line; the words carry the state, never the colour. */
+#context-panel .context-panel-waiting-head { display:flex; align-items:center; gap:6px; margin:0; font-size:12.5px; font-weight:600; line-height:1.5; }
+#context-panel .context-panel-waiting-head > .attn-mark { width:10px; height:10px; }
+#context-panel .context-panel-waiting-message { margin:4px 0 0; font-size:12.5px; line-height:1.5; white-space:pre-wrap; }
+#context-panel .context-panel-status-note { margin:6px 0 0; font-size:12px; line-height:1.5; }
 #context-panel .context-panel-session-badge { flex:none; }
 #context-panel .context-panel-session-badge:empty { display:none; }
 #context-panel .context-panel-session-badge .runtime-badge { width:26px; height:26px; border-radius:7px; font-size:11px; }
@@ -261,7 +268,7 @@ export function createContextPanel({
   let disposed = false, focusMode = false, applyingFocus = false, epoch = 0;
   let detailsOpen = false;
   try { detailsOpen = instanceOpen.read() === true; } catch { /* storage-less: closed */ }
-  let context = { workspace: null, owner: null, instance: null, key: null };
+  let context = { workspace: null, owner: null, instance: null, key: null, waiting: null };
   let gitSummary = null, prSummary = null, gitChanged = false, notified = false;
   const contextIdentity = () => JSON.stringify([context.workspace, context.key, context.instance?.home, context.instance?.agent,
     context.instance?.agentsRoot, context.instance?.server || null, context.instance?.createdAt ?? null]);
@@ -400,6 +407,13 @@ export function createContextPanel({
   }
   // Work (Spec A): one card — the work mode's tile and one sentence saying what the mode means
   // for this instance, then Folder and Home behind a closed Paths disclosure (an operator's lookup).
+  // Needs input (the Desktop UI rework, slice 1, which removed the roster's hover card): the row's claim as the
+  // sidebar's gate passed it (setContext's `waiting`), its words and how long it has waited, then its message.
+  const waitingSection = section('instance', 'Needs input'); waitingSection.dataset.contextSection = 'waiting'; waitingSection.hidden = true;
+  const waitingHead = node('p', 'context-panel-waiting-head'), waitingWords = node('span');
+  waitingHead.append(iconElement(document, 'attention', { size: 10, className: 'shell-icon attn-mark' }), waitingWords);
+  const waitingMessage = node('p', 'context-panel-waiting-message'); waitingMessage.hidden = true;
+  waitingSection.append(waitingHead, waitingMessage);
   const workSection = section('instance', 'Work');
   const workCard = node('div', 'context-panel-work'), workMain = node('div', 'context-panel-work-main');
   const modeTile = node('span', 'context-panel-mode-tile'), workSentence = node('p', 'context-panel-work-sentence');
@@ -455,7 +469,9 @@ export function createContextPanel({
   startedLine.append('started ', field('span', null, 'startedAt'));
   sessionSide.append(tmuxLine, startedLine, createdLine);
   sessionLines.append(sessionBadge, sessionCopy, sessionSide);
-  sessionCard.append(sessionLines, sessionNote); session.append(sessionCard);
+  // The row's runtime error, said with who made it (speaker-line.mjs), where the roster's hover card said it.
+  const statusNote = node('p', 'context-panel-status-note context-panel-note'); statusNote.dataset.contextStatusNote = ''; statusNote.hidden = true;
+  sessionCard.append(sessionLines, sessionNote, statusNote); session.append(sessionCard);
   // Messaging & Teams (teams contract): injected like Git — this host performs no IO.
   // Header: the label and a tools slot (the section's icon Refresh); then two
   // labelled parts: the Messaging ID (with an icon Copy), then Teams, whose lead
@@ -633,6 +649,15 @@ export function createContextPanel({
     const reportingGap = needsInputReportingGap(instance);
     sessionNote.textContent = reportingGap ? `This agent's Claude questions and permission requests don't show as needs input: its oats.core (oats.framework ${reportingGap}) is older than 2.4.0. Upgrade or respawn it to report them.` : '';
     sessionNote.hidden = !reportingGap;
+    // Needs input: the claim's words, "waiting N min (since 14:03)" computed now (each paint: the roster's poll), and
+    // the message as text, never markup.
+    const claim = context.waiting && typeof context.waiting === 'object' ? context.waiting : null, now = Date.now();
+    waitingSection.hidden = !claim;
+    const waitingText = claim ? `${waitingLabel(claim)} · waiting ${waitedText(claim.since, now)}${waitingClock(claim.since, now) ? ` (since ${waitingClock(claim.since, now)})` : ''}` : '';
+    if (waitingWords.textContent !== waitingText) waitingWords.textContent = waitingText;
+    const message = typeof claim?.message === 'string' ? claim.message : '';
+    if (waitingMessage.textContent !== message) waitingMessage.textContent = message;
+    waitingMessage.hidden = !message;
     const harness = typeof instance.harness === 'string' && instance.harness ? instance.harness : null;
     if (sessionBadge.dataset.harness !== (harness ?? '')) { sessionBadge.dataset.harness = harness ?? ''; sessionBadge.replaceChildren(...(harness ? [createRuntimeBadge(document, harness)] : [])); }
     const tmux = typeof instance.tmux?.session === 'string' && instance.tmux.session ? `tmux · ${instance.tmux.session}` : '';
@@ -695,6 +720,12 @@ export function createContextPanel({
       : limited && (acts.some(act => act.secondary) || limited.origin !== undefined) ? reasonLine(limited) ?? '' : '';
     if (actionsNote.textContent !== why) actionsNote.textContent = why;
     actionsNote.hidden = !why;
+    // The runtime error, unless the lifecycle row's note already says it.
+    const runtime = runtimeErrorLine(instance) ?? '';
+    const status = runtime && runtime !== why ? runtime : '';
+    if (statusNote.textContent !== status) statusNote.textContent = status;
+    statusNote.hidden = !status;
+    if (status) session.hidden = false;
     // A section with nothing reported is not shown; the header sub-line omits an unreported description.
     soulSub.hidden = fields.get('description').textContent === 'Not reported';
     lineage.hidden = [...lineage.querySelectorAll('[data-row]')].every(r => r.hidden);
@@ -725,14 +756,14 @@ export function createContextPanel({
   const offConnection = subscribeConnections(() => { gitSummary = null; prSummary = null; paintGitDot(); });
   render();
   return {
-    setContext({ workspace = null, owner = null, instance = null, key = null } = {}) {
+    setContext({ workspace = null, owner = null, instance = null, key = null, waiting = null } = {}) {
       project(() => {
         if (workspace !== context.workspace) {
           epoch++;
           for (const slot of slots.values()) slot.present = false;
         }
         const previous = contextIdentity();
-        context = { workspace, owner, instance, key };
+        context = { workspace, owner, instance, key, waiting };
         if (previous !== contextIdentity() || owner != null) { gitSummary = null; prSummary = null; }
         // Paths opens per selection: another instance starts with it closed.
         if (previous !== contextIdentity()) paths.open = false;
@@ -797,7 +828,7 @@ export function createContextPanel({
         const changed = focusMode;
         focusMode = false; app?.classList.remove('focus-mode');
         for (const slot of slots.values()) slot.wrapper.remove();
-        slots.clear(); context = { workspace: null, owner: null, instance: null, key: null };
+        slots.clear(); context = { workspace: null, owner: null, instance: null, key: null, waiting: null };
         gitPanel?.dispose(); teamsSection?.dispose?.();
         generic.remove(); stages.remove();
         if (changed) onFocusModeChange(false);

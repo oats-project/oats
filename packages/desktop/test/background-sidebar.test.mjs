@@ -17,9 +17,7 @@ import { instanceActionTarget } from "../renderer/instance-action-target.mjs";
 import { instanceSplitPlan } from "../renderer/instance-split.mjs";
 import { runtimeState, unsupportedSession } from "../../client/instance-presentation.mjs";
 import { canAddressRemote, rowReason } from "../../client/remote-address.mjs";
-import { createRuntimeBadge } from "../renderer/identity-marks.mjs";
 import { iconElement } from "../renderer/shell-icons.mjs";
-import { rosterTipFacts } from "../renderer/roster-tip.mjs";
 import { setTabTitle } from "../renderer/tab-a11y.mjs";
 import { NO_ANSWER_CODE, unservedError } from "../renderer/deployment-header.mjs";
 import { rosterKeyAction, moveTarget } from "../renderer/roster-keys.mjs";
@@ -55,13 +53,12 @@ function fixture(t, { feature = true, deployments = [] } = {}) {
   const doc = dom.window.document;
   const context = {
     ...tree, ...viewContext(), document: doc, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason,
-    createRuntimeBadge, iconElement, setTabTitle, NO_ANSWER_CODE, unservedError, instanceActionTarget, instanceSplitPlan,
+    iconElement, setTabTitle, NO_ANSWER_CODE, unservedError, instanceActionTarget, instanceSplitPlan,
     connectionGeneration: 0, menuState() {}, sayInHint() {}, runAction: assert.fail,
     applyChordTitles() {}, updateActiveContexts() {}, getBinding: () => null, formatChord: c => c, isMac: true,
     contextRosterEl: doc.querySelector("#instance-roster"), contextWorkspace: "A", contextInstances: [], contextDeployments: deployments,
     rosterState: { hasData: true, state: "ready" }, rosterStale: false, contextDeploymentNote: null,
     currentWorkspace: () => "A", workspaceGeneration: () => 0, collapsedInstances: new Set(),
-    rosterTip: { bind() {}, hide() {}, sync() {} }, rosterTipFacts, rosterPrs: { get: () => null, refresh() {} },
     spawnJobs: { rows: () => [], announce: () => false, check() {} },
     tabs: new Map(), activeTab: null, tabOpenIntents: { applyFocus: f => f(), invalidate() {} },
     openTerminalTab() {}, openInstanceStart() {}, openLifecycleDialog: assert.fail,
@@ -210,7 +207,7 @@ test("Needs input on the heading while a row in the section waits, closed and op
   assert.equal(u.heading().getAttribute("aria-label"), "Background, 4 instances");
 });
 
-test("every instance background: the heading alone, never “No instances.”", t => {
+test("every instance background: the heading alone, never “No agents yet”", t => {
   const u = fixture(t);
   u.render([at("a", { background: true }), at("b", { parentInstance: "a" })]);
   assert.equal(u.list.querySelector(".ctx-empty"), null);
@@ -218,7 +215,7 @@ test("every instance background: the heading alone, never “No instances.”", 
   assert.deepEqual(u.drawn(), ["|Background|"]);
   assert.equal(u.heading().tabIndex, 0, "the list's tab stop");
   u.render([]);
-  assert.match(u.list.textContent, /No instances\./, "an empty roster still says so");
+  assert.equal(u.list.textContent, "No agents yet", "an empty roster still says so");
 });
 
 test("the open state is per workspace, kept across repaints, closed for a workspace never opened", t => {
@@ -276,17 +273,19 @@ test("the selected row in the closed section gives the heading the roster's tab 
   assert.deepEqual([...u.list.querySelectorAll('[tabindex="0"]')], [u.heading()]);
 });
 
-test("no connector crosses the parts: a section root has no elbow, its main parent no stem", t => {
+test("no relation crosses the parts: a section root is a root (no indent, no \"under\"), and the roster draws no lines", t => {
   const u = fixture(t);
   u.render(ROSTER);
   u.s.setBackgroundOpen("A", true);
-  const guides = name => [...u.rowEl(name).closest(".ctx-tree-row").querySelectorAll(".ctx-guide")].map(g => g.className.replace("ctx-guide ", ""));
-  // lead's only child is in the section: no stem down from its dot.
-  assert.ok(!guides("lead").includes("down"), guides("lead").join());
-  // maint is a root of the section: no elbow or line into it, only its own stem to expert (and the roots' link).
-  assert.ok(!guides("maint").some(k => k === "elbow" || k === "line"), guides("maint").join());
-  assert.ok(guides("maint").includes("down"));
-  assert.ok(guides("expert").includes("elbow"));
+  // Slice 1 (D26): no lineage or sibling lines; indentation and the relations in words show the tree.
+  assert.equal(u.list.querySelector(".ctx-guide, .ctx-guides"), null, "no lines");
+  const depth = name => u.rowEl(name).closest(".ctx-tree-row").style.getPropertyValue("--depth");
+  const words = name => u.rowEl(name).querySelector(".ctx-relation")?.textContent ?? null;
+  // lead's only child is in the section: nothing of lead's says it has one here.
+  assert.equal(u.rowEl("lead").hasAttribute("aria-expanded"), false, "no disclosure for a child of the other part");
+  // maint is a root of the section: no indent, no "under lead"; expert is under it.
+  assert.deepEqual([depth("maint"), words("maint")], ["0", null]);
+  assert.deepEqual([depth("expert"), words("expert")], ["1", ", under maint"]);
 });
 
 test("two deployments: the section keeps the machine sub-headings, a level under the heading", t => {

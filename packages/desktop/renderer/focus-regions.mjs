@@ -7,16 +7,16 @@
 //   workspaces  the list of workspaces' tab stop (the row last focused, else the current one), else
 //               the heading's Add local workspace…
 //   roster  the roster's tab stop (the selected row), else its first control (Retry after a failed read),
-//           else, for an empty roster, the foot's Spawn instance (its one action; F6 goes on from there as
+//           else, for an empty roster, the foot's New agent (its one action; F6 goes on from there as
 //           from the roster)
 //   views   the current view's nav item (aria-current), else the first one
 //   main    the active tab's content (a terminal's input) through the shell's hook, else the
 //           stage's first control
 //   panel   its selected tab (or the first control of a stage's content). A closed panel is out
 //           of the cycle (Spec B): from a terminal, panel.toggle's chord opens it.
-// The tab strip, the split controls and Show sidebar / Show instance panel count as main. The head's controls
-// (Show only the current workspace, Add local workspace…) count as workspaces. The sidebar's foot (Spawn
-// instance, then the bar: the OATS mark, the sidebar toggle, the settings cog and its menu) is not a region: Tab reaches it, and F6 from there moves on as from between the
+// The tab strip, the split controls and Show sidebar / Show instance panel count as main. The head's control
+// (Add local workspace…) counts as workspaces. The sidebar's foot (slice 1 of the Desktop UI rework: N need you,
+// New agent and ?) is not a region: Tab reaches it, and F6 from there moves on as from between the
 // roster and main (on to main, Shift+F6 back to the roster). The sidebar's width handle (#sidebar-resizer,
 // sidebar-width.mjs), the Tab stop after the foot, counts as the foot.
 

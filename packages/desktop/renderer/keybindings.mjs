@@ -391,9 +391,6 @@ function keymapIn(family) {
     // target (shell.mjs leaderTargetId).
     "instance.edit": chordOf("instance.edit"),
     "app.chooseSoul": { mac: "Mod+N", other: "Ctrl+Shift+N" },
-    // Show only the current workspace (2026-10-23): the list of workspaces' ⌥⌘O / Ctrl+Alt+O with Shift, the same in
-    // every family (in the Alt family too, whose own key for the list is Alt+O); the Desktop's alone (no TUI action).
-    "workspaces.currentOnly": { mac: "Mod+Alt+Shift+O", other: "Ctrl+Alt+Shift+O" },
     "app.shortcuts": "Mod+,",
     // No default (spec F): ⌘⇧T is "reopen closed tab" in browsers and Ctrl+Shift+T "new tab" in
     // Linux terminals. The palette keeps the command; the editor can bind one.
@@ -516,7 +513,7 @@ export function defaultBinding(actionId, isMac = defaultIsMac(), family = chordF
 // Every plain Ctrl+letter, every other Alt key and the F-keys stay the program's, so these stay
 // out: app.openFile (Ctrl+O) and focus.next/prevRegion (F6: mc, htop, nano).
 export const TERMINAL_ALLOWLIST = Object.freeze([
-  "app.leader", "app.palette", "app.quickOpenSouls", "app.workspaces", "workspaces.currentOnly", "app.chooseSoul", "app.themePicker", "app.shortcuts", "terminal.copySelection",
+  "app.leader", "app.palette", "app.quickOpenSouls", "app.workspaces", "app.chooseSoul", "app.themePicker", "app.shortcuts", "terminal.copySelection",
   "roster.openPrevious", "roster.openNext", "workspace.previous", "workspace.next", "terminal.focusMode", "instance.edit",
   "tabs.next", "tabs.prev", "tabs.nextPage", "tabs.prevPage", "tabs.close",
   ...Array.from({ length: 9 }, (_, i) => `tabs.goto${i + 1}`),

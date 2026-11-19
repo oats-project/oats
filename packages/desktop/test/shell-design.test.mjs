@@ -14,7 +14,8 @@ import { createInstanceSoulSection } from '../renderer/instance-soul.mjs';
 import { THEMES } from "../renderer/theme.mjs";
 import { NAV, NAV_TABS, navTab } from "../renderer/shell-nav.mjs";
 import { shellIcon, mountShellIcons } from "../renderer/shell-icons.mjs";
-import { createSettingsMenu } from "../renderer/sidebar-settings.mjs";
+import { createSidebarFoot } from "../renderer/sidebar-foot.mjs";
+import { DESKTOP_NOUNS } from "../renderer/desktop-terms.mjs";
 import { createSelectionOwnership } from "../renderer/selection-ownership.mjs";
 import { createWorkspaceSwitcher } from "../renderer/workspace-switcher.mjs";
 import { revealInScrollport } from "../renderer/reveal-in-scrollport.mjs";
@@ -55,7 +56,7 @@ function shell(t, shellSource = source, { storage = {}, gitPanel } = {}) {
   const loads = [], events = [], notices = [], offs = [];
   const c = {
     document, window: dom.window, localStorage: dom.window.localStorage,
-    NAV, NAV_TABS, navTab, shellIcon, createSettingsMenu, createContextPanel, createInstanceGitPanel: gitPanel ?? createInstanceGitPanel, createInstanceTeamsSection, createInstanceSoulSection, workspace: "A", generation: 0, events, notices,
+    NAV, NAV_TABS, navTab, shellIcon, createSidebarFoot, DESKTOP_NOUNS, createContextPanel, createInstanceGitPanel: gitPanel ?? createInstanceGitPanel, createInstanceTeamsSection, createInstanceSoulSection, workspace: "A", generation: 0, events, notices,
     connectionGeneration: 0, subscribeConnections: () => () => {},
     connections: { close() {}, open: () => events.push(['connections']) }, lifecycleDialog: { close() {} },
     currentWorkspace: () => c.workspace, workspaceGeneration: () => c.generation,
@@ -85,9 +86,12 @@ function shell(t, shellSource = source, { storage = {}, gitPanel } = {}) {
   const actionsEnd = shellSource.indexOf('// THE one window keydown listener', actionsStart);
   const registry = shellSource.slice(actionsStart, actionsEnd);
   const titleCode = shellSource.slice(shellSource.indexOf("const baseTitles ="), shellSource.indexOf("onKeymapChange(() => applyChordTitles"));
-  const functions = ["setNavActive", "sidebarHidden", "setSidebarHidden", "updateSidebarControls", "toggleSidebar", "rosterEntry", "setRovingRow", "focusRoster", "openShortcutsEditor", "openConnections", "stableFocusTarget"].map(name => fn(name, shellSource));
+  const functions = ["setNavActive", "sidebarHidden", "setSidebarHidden", "updateSidebarControls", "toggleSidebar", "rosterEntry", "setRovingRow", "focusRoster", "focusFirstNeedingYou", "openShortcutsEditor", "openConnections", "stableFocusTarget"].map(name => fn(name, shellSource));
+  // The foot (slice 1), as the shell builds it at its start: its words, and its count's activation.
+  const foot = shellSource.match(/^const sidebarFoot = createSidebarFoot\([^\n]*\n/m)?.[0];
+  assert.ok(foot, "exercise the shipped foot");
   const panelSetup = shellSource.slice(shellSource.indexOf("const contextPanel = createContextPanel"), shellSource.indexOf("/** Projection only:"));
-  const s = runInNewContext(`${panelSetup}\n${navigation}\nconst SIDEBAR_HIDDEN_KEY = "oats-desktop-sidebar-hidden";\n${functions.join("\n")}\n${registry}\n${titleCode}\napplyChordTitles();\n({ openWorkspaceSouls, setNavActive, setSidebarHidden, applyChordTitles, contextPanel, settingsMenu });`, withShellWindowGlobals(c));
+  const s = runInNewContext(`${panelSetup}\n${navigation}\nconst SIDEBAR_HIDDEN_KEY = "oats-desktop-sidebar-hidden";\n${functions.join("\n")}\n${foot}${registry}\n${titleCode}\napplyChordTitles();\n({ openWorkspaceSouls, setNavActive, setSidebarHidden, applyChordTitles, contextPanel, sidebarFoot, paintAutomationsFailed });`, withShellWindowGlobals(c));
   offs.push(onKeymapChange(s.applyChordTitles));
   t.after(() => s.contextPanel.dispose());
   // Execute the production Show sidebar / Show instance panel bindings too.
@@ -114,20 +118,21 @@ function shell(t, shellSource = source, { storage = {}, gitPanel } = {}) {
   };
 }
 
-// The sidebar (the product owner, 2026-10-26), the list of workspaces on top: the head (the Workspace heading, Show
-// only the current workspace, Add local workspace…), the list, the views, a line, the instances, then the foot.
-test("the head is the Workspace heading, Show only the current workspace and Add local workspace…; the list's semantics and ids survive", t => {
+// The sidebar (the product owner, 2026-10-26; slice 1 of the Desktop UI rework), the list of workspaces on top: the head
+// (the Workspace heading and Add local workspace…), the list, the pinned views, a line, the instances, then the foot.
+test("the head is the Workspace heading and Add local workspace…; the list's semantics and ids survive", t => {
   const { document } = shell(t);
   const sidebar = document.getElementById("sidebar");
   const head = document.querySelector("#sidebar > .side-head");
   assert.equal(document.getElementById("ws-heading").parentElement, head);
-  // The head is the list's heading, the toggle and Add local workspace…; no mark (it is the bar's), no trigger, no
-  // popup menu, no cog (the bar's too).
-  assert.deepEqual([...head.children].map(el => el.id), ["ws-heading", "ws-current-only", "ws-add-open"]);
-  assert.match(html, /<div class="side-head">\s*<span id="ws-heading" class="ws-heading">Workspace<\/span>\s*<button id="ws-current-only" class="side-icon-button ws-current-only icon-button" type="button" aria-pressed="false" data-action="workspaces\.currentOnly"><\/button>\s*<button id="ws-add-open" class="ws-add-open side-icon-button icon-button"/, "the markup says the same");
+  // The head is the list's heading and Add local workspace…; no Show only the current workspace (slice 1), no mark, no
+  // trigger, no popup menu, no cog.
+  assert.deepEqual([...head.children].map(el => el.id), ["ws-heading", "ws-add-open"]);
+  assert.equal(document.getElementById("ws-current-only"), null, "no Show only the current workspace");
+  assert.match(html, /<div class="side-head">\s*<span id="ws-heading" class="ws-heading">Workspace<\/span>\s*<button id="ws-add-open" class="ws-add-open side-icon-button icon-button"/, "the markup says the same");
   assert.equal(document.querySelector(".ws-head, .ctx-head.ws-head, .ws-brand-mark, .ws-brand-image, .ws-brand-icon, [data-shell-icon=\"oats\"]"), null, "no plain heading of 2026-10-23, no mark in the head");
   assert.equal(head.querySelector("img"), null, "the heading shows no artwork");
-  assert.deepEqual([...sidebar.querySelectorAll("img")].map(img => img.className), ["sidebar-brand-image"], "the sidebar's one artwork: the bottom bar's mark");
+  assert.deepEqual([...sidebar.querySelectorAll("img")], [], "no artwork in the sidebar (slice 1: the mark left the foot)");
   assert.equal(document.getElementById("ws-trigger"), null, "the dropdown's trigger is gone");
   assert.equal(document.getElementById("ws-menu"), null, "the dropdown's menu is gone");
   assert.equal(document.getElementById("ws-menu-search"), null, "the menu's search is gone");
@@ -135,9 +140,7 @@ test("the head is the Workspace heading, Show only the current workspace and Add
   const addOpen = document.getElementById("ws-add-open");
   assert.equal(addOpen.tagName, "BUTTON"); assert.equal(addOpen.type, "button");
   assert.equal(addOpen.getAttribute("aria-label"), "Add local workspace…");
-  for (const button of [document.getElementById("ws-current-only"), addOpen]) {
-    assert.ok(button.classList.contains("side-icon-button") && button.classList.contains("icon-button"), `${button.id}: the head's icon button`);
-  }
+  assert.ok(addOpen.classList.contains("side-icon-button") && addOpen.classList.contains("icon-button"), "the head's icon button");
   // Top to bottom: the head, the list right under it, the views, the instances, then the foot (#482 UI spec: no
   // deployments block there); no current workspace's section around the views and the instances.
   assert.equal(document.getElementById("ws-deployments"), null);
@@ -254,140 +257,108 @@ test("static SVG inventory stays 16px, hidden to AT and rejects arbitrary markup
   }
 });
 
-test("the foot is one bar: the OATS mark, Spawn instance (Quick Open), the sidebar toggle and the settings cog (theme, font, shortcuts); all dispatch the real registry", async t => {
+test("the foot is one bar: N need you, New agent (Quick Open) and ? (Keyboard shortcuts); no mark, no toggle, no cog; all dispatch the real registry", async t => {
   const s = shell(t), q = id => s.document.getElementById(id);
   // The tools row is gone again (the product owner, 2026-10-26): no theme, shortcuts, leader or palette button
-  // anywhere. The shortcuts editor (the cog's Keyboard shortcuts…, Mod+, and the palette) lists the leader's commands;
-  // the palette keeps its chord; Connections is the palette's (Settings: Connections…).
-  for (const id of ["sidebar-tools", "sidebar-theme", "sidebar-shortcuts", "sidebar-palette"]) assert.equal(q(id), null, `${id} is gone`);
-  assert.equal(s.document.querySelector('#sidebar [data-action="app.connections"], #sidebar [data-action="app.palette"]'), null);
+  // anywhere. Slice 1 of the Desktop UI rework: the brand mark, Hide sidebar and the settings cog leave the foot too
+  // (Ctrl+Shift+B and the palette hide the sidebar; Theme…, Font… and Keyboard shortcuts… are the palette's).
+  for (const id of ["sidebar-tools", "sidebar-theme", "sidebar-shortcuts", "sidebar-palette", "sidebar-toggle", "sidebar-settings", "sidebar-settings-menu"]) assert.equal(q(id), null, `${id} is gone`);
+  assert.equal(s.document.querySelector("#sidebar .sidebar-brand, #sidebar img"), null, "no brand mark");
+  assert.equal(s.document.querySelector('#sidebar [data-action="app.connections"], #sidebar [data-action="app.palette"], #sidebar [data-action="sidebar.toggle"]'), null);
   const foot = q("nav-foot");
   assert.deepEqual([...foot.children].map(el => el.id), ["sidebar-bar"], "the bar alone");
   assert.equal(foot, q("sidebar").lastElementChild, "the sidebar's bottom row");
-  // The bar (the product owner, 2026-10-26): the OATS mark, the sidebar toggle after it, then at the right Spawn
-  // instance and the cog (its menu, a popover, right after it).
   const bar = q("sidebar-bar");
   assert.equal(bar.getAttribute("role"), "group"); assert.equal(bar.getAttribute("aria-label"), "Sidebar tools");
-  assert.deepEqual([...bar.children].map(el => el.id || el.className), ["sidebar-brand", "sidebar-toggle", "sidebar-spawn", "sidebar-settings", "sidebar-settings-menu"]);
-  for (const button of [q("sidebar-toggle"), q("sidebar-settings")]) {
-    assert.equal(button.type, "button"); assert.equal(button.hidden, false); assert.equal(button.disabled, false); assert.ok(button.tabIndex >= 0);
-    assert.ok(button.classList.contains("side-icon-button") && button.classList.contains("icon-button"), `${button.id}: the sidebar's small icon button`);
-    assert.equal(button.classList.contains("ws-add-open"), false, `${button.id}: not Add local workspace…'s own class`);
-    assert.ok(button.querySelector('svg[aria-hidden="true"]'), `${button.id}: an icon, hidden from assistive tech`);
-    assert.equal(button.textContent.trim(), "", `${button.id}: icon only`);
-  }
-  // The mark: first in the bar, the generated sidebar artwork, decorative (hidden, an empty alt, no tab stop).
-  const brand = bar.firstElementChild, image = brand.querySelector("img");
-  assert.equal(brand.className, "sidebar-brand"); assert.equal(brand.getAttribute("aria-hidden"), "true");
-  assert.deepEqual([...brand.children], [image], "the image alone");
-  assert.equal(image.getAttribute("src"), "../assets/brand/generated/sidebar-48.png");
-  assert.equal(image.className, "sidebar-brand-image");
-  assert.equal(image.getAttribute("alt"), "", "decorative: no name");
-  assert.deepEqual([image.getAttribute("width"), image.getAttribute("height"), image.getAttribute("draggable")], ["20", "20", "false"]);
-  for (const el of [brand, image]) {
-    assert.equal(el.hasAttribute("tabindex"), false, `${el.className}: no tab stop`); assert.ok(el.tabIndex < 0, `${el.className}: not focusable`);
-    el.focus(); assert.notEqual(s.document.activeElement, el, `${el.className}: focus does not land on it`);
-  }
-  assert.equal(brand.closest("button, a, [role=button]"), null, "not inside a control");
-  const toggle = q("sidebar-toggle");
-  assert.equal(toggle.dataset.action, "sidebar.toggle");
-  assert.equal(toggle.getAttribute("aria-label"), "Hide the sidebar"); assert.equal(toggle.getAttribute("aria-controls"), "sidebar");
-  assert.equal(toggle.getAttribute("aria-expanded"), "true");
-  assert.equal(toggle.querySelector("[data-shell-icon]")?.dataset.shellIcon, "sidebar");
-  assert.equal(toggle.title, "Hide the sidebar (Ctrl+Shift+B)", "the title is the label, then the bound chord");
-  assert.match(html, /<button id="sidebar-toggle" class="side-icon-button icon-button" type="button" data-action="sidebar\.toggle"\s+title="Hide the sidebar" aria-label="Hide the sidebar" aria-controls="sidebar" aria-expanded="true">/, "the markup says the same before scripts run");
-  // The cog: an icon button with its name, its menu's state and its menu.
-  const cog = q("sidebar-settings");
-  assert.equal(cog.getAttribute("aria-label"), "Settings"); assert.equal(cog.title, "Settings");
-  assert.equal(cog.dataset.action, undefined, "the cog runs no action of its own: it opens its menu");
-  assert.equal(cog.getAttribute("aria-haspopup"), "menu"); assert.equal(cog.getAttribute("aria-controls"), "sidebar-settings-menu");
-  assert.deepEqual(s.settingsMenu.items.map(b => [b.dataset.menuAction, b.querySelector(".sidebar-settings-label").textContent]),
-    [["app.themePicker", "Theme…"], ["app.fontPicker", "Font…"], ["app.shortcuts", "Keyboard shortcuts…"]], "no Connections, no Hide sidebar");
-  // Each item shows its effective chord.
-  assert.deepEqual(s.settingsMenu.items.map(b => { const k = b.querySelector("kbd"); return k.hidden ? null : k.textContent; }), ["Ctrl+Shift+Space", null, "Ctrl+,"],
-    "Font… has no default chord");
-  for (const item of s.settingsMenu.items) item.click();
-  assert.deepEqual(s.events, [["themePicker"], ["fontPicker"], ["shortcuts"]], "each item runs its action, once");
-  cog.click(); assert.deepEqual(s.events, [["themePicker"], ["fontPicker"], ["shortcuts"]], "the cog itself runs nothing");
-  // Spawn instance (the product owner, 2026-10-26): the bar's words alone, no visible
-  // hint; it runs Quick Open (app.quickOpenSouls: pick a soul by name), the chord appended to its title.
+  assert.deepEqual([...bar.children].map(el => el.id), ["sidebar-need-you", "sidebar-spawn", "sidebar-help"]);
+  // N need you: hidden while nothing needs you (the shell paints it with the roster; sidebar-slice1.test.mjs).
+  const need = q("sidebar-need-you");
+  assert.equal(need.type, "button"); assert.equal(need.hidden, true); assert.equal(need.textContent, "");
+  s.sidebarFoot.paint(2);
+  assert.equal(need.hidden, false); assert.equal(need.textContent, "2 need you"); assert.equal(need.getAttribute("aria-label"), "2 agents need you. Go to the first");
+  assert.equal(need.querySelector("svg.attn-mark")?.getAttribute("aria-hidden"), "true", "the needs-input mark, decoration beside the words");
+  s.sidebarFoot.paint(0); assert.equal(need.hidden, true);
+  // ?: Keyboard shortcuts (app.shortcuts), the sheet that exists today, its chord in its title.
+  const help = q("sidebar-help");
+  assert.equal(help.type, "button"); assert.equal(help.dataset.action, "app.shortcuts");
+  assert.ok(help.classList.contains("side-icon-button") && help.classList.contains("icon-button"), "the sidebar's small icon button");
+  assert.equal(help.getAttribute("aria-label"), "Keyboard shortcuts"); assert.equal(help.textContent.trim(), "?");
+  assert.equal(help.title, "Keyboard shortcuts (Ctrl+,)", "the title is the label, then the bound chord");
+  help.click(); assert.deepEqual(s.events, [["shortcuts"]], "it runs its action, once");
+  // New agent: the spawn flow (app.quickOpenSouls, Quick Open), its noun DESKTOP_NOUNS's, the chord appended to its title.
   const spawn = q("sidebar-spawn");
   assert.equal(spawn.type, "button"); assert.equal(spawn.hidden, false); assert.equal(spawn.disabled, false); assert.ok(spawn.tabIndex >= 0);
-  assert.equal(spawn.classList.contains("primary"), false, "its words alone, no primary fill (the product owner, 2026-10-26)");
-  assert.equal(spawn.classList.contains("side-icon-button"), false, "not an icon button");
+  assert.equal(spawn.classList.contains("primary"), false, "its words, no primary fill");
   assert.equal(spawn.dataset.action, "app.quickOpenSouls");
-  assert.equal(spawn.getAttribute("aria-label"), "Spawn instance");
-  assert.equal(spawn.title, "Spawn instance (Alt+P)", "the title is the label, then the bound chord");
-  assert.equal(spawn.querySelector("[data-shell-icon], svg"), null, "no icon");
-  assert.equal(spawn.textContent, "Spawn instance");
+  assert.equal(spawn.getAttribute("aria-label"), "New agent");
+  assert.equal(spawn.title, "New agent (Alt+P)", "the title is the label, then the bound chord");
+  assert.equal(spawn.textContent, "New agent");
+  assert.equal(spawn.querySelector("svg")?.getAttribute("aria-hidden"), "true", "its + is decoration");
   assert.equal(spawn.querySelector(".shortcut-hint, [data-shortcut], kbd"), null, "no hint element: the chord is in the tooltip");
-  assert.equal(spawn.previousElementSibling, q("sidebar-toggle"), "after the toggle");
-  assert.equal(spawn.nextElementSibling, q("sidebar-settings"), "right before the cog");
-  assert.match(html, /<button id="sidebar-spawn" type="button" data-action="app\.quickOpenSouls"\s+title="Spawn instance" aria-label="Spawn instance">Spawn instance<\/button>/, "the markup says the same before scripts run");
-  // The Instances heading: its title and the count only (no + : Spawn instance is the foot's).
+  assert.match(html, /<button id="sidebar-spawn" type="button" data-action="app\.quickOpenSouls"><\/button>/, "its words are the shell's, from desktop-terms.mjs");
+  // The Instances heading: its title and the count only (no + : New agent is the foot's).
   const head = s.document.querySelector("#instance-roster > .ctx-head");
   assert.deepEqual([...head.children].map(el => el.id || el.className || el.textContent), ["Instances", "ctx-count"]);
   assert.equal(head.querySelector("button"), null);
   assert.equal(getBinding('app.connections'), null, 'Connections does not invent a new global chord');
   assert.match(source, /label: "Settings: Connections…"/, "Connections stays in the palette");
   assert.ok(getBinding("app.palette"), "the palette keeps its chord");
+  assert.deepEqual([getBinding("sidebar.toggle", true), getBinding("sidebar.toggle", false)], ["Mod+B", "Ctrl+Shift+B"], "Hide sidebar keeps its chord");
   assert.deepEqual([getBinding("app.quickOpenSouls", true), getBinding("app.quickOpenSouls", false)], ["Mod+P", "Alt+P"]);
   assert.equal(getBinding("app.chooseSoul", true), "Mod+N", "redesign shortcut chooses a soul, never launches one");
   assert.equal(getBinding("app.chooseSoul", false), "Ctrl+Shift+N", "Linux/Windows: Ctrl+Shift+N (spec F), Ctrl+N stays the program's");
   // A click opens Quick Open, once, and supersedes a pending open; it opens no chooser.
   const pending = s.c.tabOpenIntents.begin(); spawn.click();
   assert.equal(pending(), false, "a click supersedes a pending open");
-  assert.deepEqual(s.events.slice(3), [["quickOpen"]], "one click, one Quick Open (after the menu's three)");
+  assert.deepEqual(s.events.slice(1), [["quickOpen"]], "one click, one Quick Open (after ?'s one)");
   assert.equal(s.loads.length, 0, "no chooser");
   // The chooser stays the registry's: app.chooseSoul, the palette's "Souls: choose a soul to spawn (Workspace › Souls)".
   const before = s.c.tabOpenIntents.begin(); runAction("app.chooseSoul");
   assert.equal(before(), false); assert.equal(s.loads.length, 1, "one run, one chooser");
   await s.settle(s.loads[0], "resolve");
-  assert.deepEqual(s.events.slice(4), [["tab", "souls"], ["stage", "spawn"]]);
+  assert.deepEqual(s.events.slice(2), [["tab", "souls"], ["stage", "spawn"]]);
   assert.match(source, /label: "Souls: choose a soul to spawn \(Workspace › Souls\)", detail: chordDetail\("app.chooseSoul"\), run: \(\) => runAction\("app.chooseSoul"\)/);
 });
 
-test("a stored rebind's clash marks the settings cog and its Keyboard shortcuts… item, and clears from both", t => {
-  const s = shell(t), cog = s.document.getElementById("sidebar-settings");
-  const item = s.settingsMenu.items.find(b => b.dataset.menuAction === "app.shortcuts");
+test("a stored rebind's clash marks the foot's ? (Keyboard shortcuts), and clears", t => {
+  const s = shell(t), help = s.document.getElementById("sidebar-help");
   let clashes = [];
-  const mark = runInNewContext(`${fn("markShortcutClashes")}\nmarkShortcutClashes`, { ...s.c, settingsMenu: s.settingsMenu, keymapConflicts: () => clashes });
-  const others = () => s.settingsMenu.items.filter(b => b !== item && (b.classList.contains("has-clash") || b.hasAttribute("aria-description")));
+  const mark = runInNewContext(`${fn("markShortcutClashes")}\nmarkShortcutClashes`, { ...s.c, keymapConflicts: () => clashes });
   mark();
-  for (const el of [cog, item]) { assert.equal(el.classList.contains("has-clash"), false); assert.equal(el.getAttribute("aria-description"), null); }
+  assert.equal(help.classList.contains("has-clash"), false); assert.equal(help.getAttribute("aria-description"), null);
   clashes = [{}];
   mark();
-  for (const el of [cog, item]) {
-    assert.equal(el.classList.contains("has-clash"), true, `${el.id || el.dataset.menuAction}: the clash dot`);
-    assert.equal(el.getAttribute("aria-description"), "1 shortcut you set clashes with another: open Keyboard shortcuts… to review");
-  }
-  assert.deepEqual(others(), [], "no other item is marked");
+  assert.equal(help.classList.contains("has-clash"), true, "the clash dot");
+  assert.equal(help.getAttribute("aria-description"), "1 shortcut you set clashes with another: open Keyboard shortcuts… to review");
+  assert.deepEqual([...s.document.querySelectorAll(".has-clash")], [help], "nothing else is marked");
   clashes = [{}, {}];
   mark();
-  for (const el of [cog, item]) assert.equal(el.getAttribute("aria-description"), "2 shortcuts you set clash with another: open Keyboard shortcuts… to review");
+  assert.equal(help.getAttribute("aria-description"), "2 shortcuts you set clash with another: open Keyboard shortcuts… to review");
   clashes = [];
   mark();
-  for (const el of [cog, item]) { assert.equal(el.classList.contains("has-clash"), false); assert.equal(el.getAttribute("aria-description"), null, "cleared"); }
+  assert.equal(help.classList.contains("has-clash"), false); assert.equal(help.getAttribute("aria-description"), null, "cleared");
+  const css = readFileSync(new URL("../renderer/shell.css", import.meta.url), "utf8");
+  assert.match(css, /#sidebar-help\.has-clash::after \{[^}]*background: var\(--danger\);/, "a --danger dot, never yellow");
 });
 
 test("hide/show returns focus to visible controls and aria-expanded follows sidebar state", t => {
   const s = shell(t), q = id => s.document.getElementById(id), display = id => s.document.defaultView.getComputedStyle(q(id)).display;
   assert.equal(q("show-sidebar").hidden, true, "Show sidebar appears only while the sidebar is away");
-  q("sidebar-toggle").focus(); q("sidebar-toggle").click();
+  q("sidebar-help").focus(); runAction("sidebar.toggle");
   assert.equal(q("app").classList.contains("sidebar-hidden"), true);
   assert.equal(display("sidebar"), "none");
   assert.equal(s.document.activeElement, q("show-sidebar"), "hiding with focus inside moves focus to Show sidebar");
   assert.equal(q("show-sidebar").hidden, false);
-  assert.equal(q("sidebar-toggle").getAttribute("aria-expanded"), "false");
   assert.equal(q("show-sidebar").getAttribute("aria-expanded"), "false");
   assert.equal(q("show-sidebar").getAttribute("aria-controls"), "sidebar");
   q("show-sidebar").click();
   assert.equal(q("app").classList.contains("sidebar-hidden"), false);
   assert.equal(display("sidebar"), "flex");
   assert.equal(q("show-sidebar").hidden, true);
-  assert.equal(s.document.activeElement, q("sidebar-toggle"), "never <body>: the sidebar's own toggle");
-  assert.equal(q("sidebar-toggle").getAttribute("aria-expanded"), "true");
-  assert.equal(q("sidebar-settings").getAttribute("aria-expanded"), "false", "the cog's aria-expanded is its menu's, never the sidebar's");
+  assert.equal(s.document.activeElement, q("sidebar-spawn"), "never <body>: the roster's way in (an empty roster: New agent)");
+  const rows = s.paintRows(1);
+  runAction("sidebar.toggle"); assert.equal(s.document.activeElement, q("show-sidebar"));
+  q("show-sidebar").click(); assert.equal(s.document.activeElement, rows[1], "with rows: the roster's current row");
 });
 
 test("SVG split controls retain their names and context-gated registry wiring", t => {
@@ -426,15 +397,15 @@ test("visible shortcut hints and tooltips follow rebind, unbind and platform wit
   const s = shell(t); s.c.isMac = true; s.applyChordTitles();
   t.after(() => { resetBinding("sidebar.focusFilter"); resetBinding("app.chooseSoul"); });
   t.after(() => resetBinding("app.quickOpenSouls"));
-  // No visible hint ships (the product owner, 2026-10-26): Spawn instance's tooltip carries Quick Open's chord.
+  // No visible hint ships (the product owner, 2026-10-26): New agent's tooltip carries Quick Open's chord.
   assert.equal(s.document.querySelector("[data-shortcut], .shortcut-hint"), null, "no visible shortcut hint ships");
   const spawn = s.document.getElementById("sidebar-spawn");
-  assert.equal(spawn.title, "Spawn instance (⌘P)");
-  setBinding("app.quickOpenSouls", "Mod+Shift+J"); assert.equal(spawn.title, "Spawn instance (⇧⌘J)");
-  setBinding("app.quickOpenSouls", null); assert.equal(spawn.title, "Spawn instance");
-  assert.equal(spawn.getAttribute("aria-label"), "Spawn instance", "the name never carries the chord");
-  resetBinding("app.quickOpenSouls"); assert.equal(spawn.title, "Spawn instance (⌘P)");
-  s.c.isMac = false; s.applyChordTitles(); assert.equal(spawn.title, "Spawn instance (Alt+P)", "the platform's chord");
+  assert.equal(spawn.title, "New agent (⌘P)");
+  setBinding("app.quickOpenSouls", "Mod+Shift+J"); assert.equal(spawn.title, "New agent (⇧⌘J)");
+  setBinding("app.quickOpenSouls", null); assert.equal(spawn.title, "New agent");
+  assert.equal(spawn.getAttribute("aria-label"), "New agent", "the name never carries the chord");
+  resetBinding("app.quickOpenSouls"); assert.equal(spawn.title, "New agent (⌘P)");
+  s.c.isMac = false; s.applyChordTitles(); assert.equal(spawn.title, "New agent (Alt+P)", "the platform's chord");
   // The roster filter's ⌘F hint went with the filter (still gone): the command keeps its chord with no control to
   // title (the palette and the shortcuts editor show it).
   assert.equal(s.document.querySelector(".ctx-filter, [data-shortcut=\"sidebar.focusFilter\"]"), null);
@@ -452,7 +423,7 @@ for (const outcome of ["resolve", "reject"]) test(`Focus the instance roster rev
   assert.equal(s.document.getElementById("app").classList.contains("sidebar-hidden"), false);
   assert.equal(s.document.activeElement, rows[1], "the roster's current row");
   assert.equal(s.document.defaultView.getComputedStyle(s.document.getElementById("sidebar")).display, "flex", "the sidebar is shown");
-  assert.equal(s.document.getElementById("sidebar-toggle").getAttribute("aria-expanded"), "true");
+  assert.equal(s.document.getElementById("show-sidebar").hidden, true, "Show sidebar is away while the sidebar is shown");
   await s.settle(s.loads[0], outcome);
   assert.deepEqual(s.events, []); assert.deepEqual(s.notices, []);
   assert.equal(s.document.activeElement, rows[1], "the stale chooser does not take focus back");
@@ -502,7 +473,7 @@ for (const outcome of ["resolve", "reject"]) test(`reported workspace/root/host 
     currentWorkspace: () => c.workspace, rosterResponseOwns, staleWorkspaceSelection,
     contextRosterEl: document.getElementById("instance-roster"),
     api(path) { const gate = { ...deferred(), path }; requests.push(gate); return gate.promise; },
-    renderContextRoster() {}, refreshPanelInstance() {}, rosterPrs: { get: () => null, refresh() {} }, spawnJobs: { rows: () => [], announce: () => false, observe() {}, settling: () => false, check() {} }, // label-only polling fixture
+    renderContextRoster() {}, refreshPanelInstance() {}, spawnJobs: { rows: () => [], announce: () => false, observe() {}, settling: () => false, check() {} }, // label-only polling fixture
     workspaceLabel: createWorkspaceSwitcher({ document, selectWorkspace() {}, discoverSuggestions: async () => [], addWorkspace: async () => ({}), pickWorkspace: async () => ({}) }),
   };
   const s = runInNewContext(`${fn("refreshContextRoster")}\n({ refreshContextRoster });`, withShellWindowGlobals(c));
@@ -533,23 +504,19 @@ for (const outcome of ["resolve", "reject"]) test(`reported workspace/root/host 
 test('White, Solarized, Dark and This computer have explicit registry/palette choices without new default chords; the cycle keeps its label', t => {
   const s = shell(t);
   t.after(() => resetBinding('app.themePicker'));
-  const item = s.settingsMenu.items.find(b => b.dataset.menuAction === 'app.themePicker'), keys = item.querySelector('kbd');
   const cycleLabel = 'Cycle White / Solarized / Dark / This computer theme';
   assert.equal(listActions().find(action => action.id === 'app.themeToggle')?.label, cycleLabel, 'the cycle action stays as it is');
-  // The settings cog's Theme… opens the picker (app.themePicker); it shows the effective chord, never a hard-coded one.
-  assert.equal(item.getAttribute('role'), 'menuitem');
-  assert.equal(item.querySelector('.sidebar-settings-label').textContent, 'Theme…');
-  assert.equal(keys.textContent, 'Ctrl+Shift+Space', 'the bound chord'); assert.equal(keys.hidden, false);
-  assert.doesNotMatch(html, /data-action="app\.themePicker"/, 'no theme button in the markup: the menu is built by sidebar-settings.mjs');
+  // The palette's Theme: choose… opens the picker (app.themePicker; slice 1: the settings cog is gone); it shows the
+  // effective chord, never a hard-coded one.
+  assert.doesNotMatch(html, /data-action="app\.themePicker"/, 'no theme button in the markup');
   assert.equal(listActions().find(action => action.id === 'app.themePicker')?.label, 'Choose a theme…');
-  setBinding('app.themePicker', 'Ctrl+Alt+T');
-  assert.equal(keys.textContent, 'Ctrl+Alt+T', 'a rebind follows');
-  assert.equal(item.querySelector('.sidebar-settings-label').textContent, 'Theme…', 'the words never carry the chord');
   const start = source.indexOf('// ── command palette');
   const end = source.indexOf('// ── Quick Open', start);
   const commands = runInNewContext(`${source.slice(start, end)}\npalette.commands`, {
     ...s.c, navigator: { platform: 'Linux' }, createPalette: options => options,
   });
+  assert.equal(commands.find(item => item.label === 'Theme: choose…').detail(), 'Ctrl+Shift+Space', 'the bound chord');
+  setBinding('app.themePicker', 'Ctrl+Alt+T');
   assert.deepEqual(THEMES.map(({ id, label }) => [id, label]), [['light', 'White'], ['solarized', 'Solarized'], ['dark', 'Dark'], ['host', 'This computer']]);
   for (const { id, label } of THEMES) {
     assert.equal(getBinding(`app.theme.${id}`), null, `${label} has no new default keyboard chord`);
@@ -564,7 +531,7 @@ test('White, Solarized, Dark and This computer have explicit registry/palette ch
   assert.equal(choose.length, 1, 'one palette entry opens the picker');
   assert.equal(choose[0].detail(), 'Ctrl+Alt+T', 'its hint is the effective chord');
   resetBinding('app.themePicker');
-  assert.equal(choose[0].detail(), 'Ctrl+Shift+Space'); assert.equal(keys.textContent, 'Ctrl+Shift+Space');
+  assert.equal(choose[0].detail(), 'Ctrl+Shift+Space');
   choose[0].run(); assert.deepEqual(s.events.at(-1), ['themePicker']);
   assert.ok(commands.indexOf(choose[0]) < commands.indexOf(cycle), 'listed before the cycle');
   // The chord toggles the picker once; a held chord (key repeat) does nothing.
@@ -644,14 +611,13 @@ test('the bottom summary bar is gone; the tab bar keeps only the two split butto
   runAction('panel.toggle');
   // Focus mode: registry action (and palette, below) only. Focus leaving the hidden sidebar lands on the active tab.
   const trigger = s.document.createElement('button'); q('tabbar').append(trigger); s.c.activeTrigger = trigger;
-  q('sidebar-toggle').focus();
+  q('sidebar-help').focus();
   const pending = s.c.tabOpenIntents.begin(); runAction('app.focusMode');
   assert.equal(pending(), false); assert.equal(panel.isFocusMode(), true);
   assert.equal(q('context-panel').hidden, true);
   assert.equal(s.document.activeElement, trigger, 'hidden sidebar focus lands on the active tab');
   assert.equal(s.document.defaultView.getComputedStyle(q('sidebar')).display, 'none');
   assert.equal(q('show-sidebar').hidden, false, 'Show sidebar is the way back');
-  assert.equal(q('sidebar-toggle').getAttribute('aria-expanded'), 'false');
   runAction('app.focusMode');
   assert.equal(panel.isFocusMode(), false); assert.equal(q('context-panel').hidden, false);
 });
@@ -664,7 +630,7 @@ test('Show sidebar is focus mode\'s visible exit; panel.toggle leaves it and sho
   panel.setCollapsed(true);
   // A shown tab group whose active trigger is gone: the tab bar's actions are up, no trigger to land on.
   q('tabbar').append(s.document.createElement('span')); q('tab-actions').hidden = false;
-  q('sidebar-toggle').focus(); runAction('app.focusMode'); assert.equal(panel.isFocusMode(), true);
+  q('sidebar-help').focus(); runAction('app.focusMode'); assert.equal(panel.isFocusMode(), true);
   // No active trigger: focus leaving the hidden sidebar lands on a stable visible control, never <body>.
   assert.equal(s.document.activeElement, q('show-sidebar'), 'no active trigger: Show sidebar takes focus');
   assert.ok(shown(q('show-sidebar')), 'Show sidebar and its ancestors stay visible by shipped CSS');
@@ -676,25 +642,24 @@ test('Show sidebar is focus mode\'s visible exit; panel.toggle leaves it and sho
   assert.equal(q('context-panel').hidden, false); assert.equal(shown(q('show-panel')), false);
   assert.equal(q('app').classList.contains('focus-mode'), false);
   assert.ok(shown(q('sidebar')), 'the sidebar is back too'); assert.equal(q('show-sidebar').hidden, true);
-  assert.equal(q('sidebar-toggle').getAttribute('aria-expanded'), 'true');
   // On a stage (no terminal tab, no panel content) Show sidebar is the exit; Show instance panel is not shown.
   panel.setContext({ workspace: 'A' }); q('tab-actions').hidden = true;
-  q('sidebar-toggle').focus(); runAction('app.focusMode'); assert.equal(panel.isFocusMode(), true);
+  q('sidebar-help').focus(); runAction('app.focusMode'); assert.equal(panel.isFocusMode(), true);
   assert.equal(s.document.activeElement, q('show-sidebar'), 'on a stage focus lands on Show sidebar');
   assert.ok(shown(q('show-sidebar'))); assert.equal(shown(q('sidebar')), false); assert.equal(shown(q('show-panel')), false);
   q('show-sidebar').click();
   assert.equal(panel.isFocusMode(), false); assert.ok(shown(q('sidebar'))); assert.equal(shown(q('show-sidebar')), false);
-  assert.equal(s.document.activeElement, q('sidebar-toggle'));
+  assert.equal(s.document.activeElement, q('sidebar-spawn'), "the roster's way in (an empty roster: New agent)");
 });
 
-test('focus fallback prefers a shown active tab, then the sidebar toggle, Show sidebar or Show instance panel; never <body>', t => {
+test('focus fallback prefers a shown active tab, then the foot\'s ?, Show sidebar or Show instance panel; never <body>', t => {
   const s = shell(t), q = id => s.document.getElementById(id);
   const target = runInNewContext(`${fn('stableFocusTarget')}\nstableFocusTarget`, s.c);
   const trigger = s.document.createElement('button'); q('tabbar').append(trigger);
   s.c.activeTrigger = trigger; assert.equal(target(), trigger);
-  trigger.hidden = true; assert.equal(target(), q('sidebar-toggle'), 'hidden tab: the sidebar toggle');
+  trigger.hidden = true; assert.equal(target(), q('sidebar-help'), "hidden tab: the foot's ?");
   s.contextPanel.setContext({ workspace: 'A', instance: { instance: 'selected', home: '/A/selected' }, key: 'exact:A:selected' });
-  q('tab-actions').hidden = false; assert.equal(target(), q('sidebar-toggle'), 'the split buttons are never a fallback');
+  q('tab-actions').hidden = false; assert.equal(target(), q('sidebar-help'), 'the split buttons are never a fallback');
   s.c.activeTrigger = null; s.contextPanel.setContext({ workspace: 'A' }); s.setSidebarHidden(true);
   assert.equal(target(), q('show-sidebar'), 'sidebar hidden: Show sidebar');
 });
@@ -708,7 +673,7 @@ test('a focus-mode change made after focus was lost (the palette removed its inp
   assert.equal(s.document.activeElement, trigger, 'entering: the active tab');
   s.document.activeElement.blur(); assert.equal(s.document.activeElement, s.document.body);
   s.c.activeTrigger = null; runAction('app.focusMode'); assert.equal(s.contextPanel.isFocusMode(), false);
-  assert.equal(s.document.activeElement, q('sidebar-toggle'), 'leaving with no active tab: the sidebar toggle');
+  assert.equal(s.document.activeElement, q('sidebar-help'), "leaving with no active tab: the foot's ?");
   s.document.activeElement.blur(); s.contextPanel.setContext({ workspace: 'A', key: 'terminal' });
   assert.equal(s.document.activeElement, s.document.body, 'a background projection never moves focus');
 });
@@ -753,7 +718,6 @@ for (const hidden of [false, true]) test(`focus mode overrides but restores raw 
   assert.equal(q('app').classList.contains('sidebar-hidden'), hidden);
   assert.equal(s.c.localStorage.getItem(key), hidden ? '1' : null);
   assert.equal(s.document.defaultView.getComputedStyle(q('sidebar')).display, hidden ? 'none' : 'flex');
-  assert.equal(q('sidebar-toggle').getAttribute('aria-expanded'), String(!hidden));
   assert.equal(q('show-sidebar').hidden, !hidden);
   assert.equal(q('context-panel').hidden, true, 'focus override also preserves the closed panel');
   assert.equal(s.c.localStorage.getItem('oats-desktop-instance-panel-open'), null);
@@ -853,10 +817,10 @@ test('Spec B: Show instance panel carries the Developer change dot and says so i
 test('Spec B exception to point 5: entering focus mode from the sidebar focuses the active tab, not Show sidebar; sidebar.toggle still does', t => {
   const s = shell(t), q = id => s.document.getElementById(id);
   const trigger = s.document.createElement('button'); q('tabbar').append(trigger); s.c.activeTrigger = trigger;
-  q('sidebar-toggle').focus(); runAction('app.focusMode');
+  q('sidebar-help').focus(); runAction('app.focusMode');
   assert.equal(s.contextPanel.isFocusMode(), true); assert.equal(q('show-sidebar').hidden, false);
   assert.equal(s.document.activeElement, trigger, 'focus mode: the active tab, the content it is for');
-  runAction('app.focusMode'); q('sidebar-toggle').focus(); runAction('sidebar.toggle');
+  runAction('app.focusMode'); q('sidebar-help').focus(); runAction('sidebar.toggle');
   assert.equal(s.document.activeElement, q('show-sidebar'), 'plain sidebar.toggle: Show sidebar');
 });
 
@@ -881,13 +845,13 @@ test('focusRoster exits focus mode, reveals the sidebar and focuses the roster\'
   assert.equal(q('app').classList.contains('sidebar-hidden'), false);
   assert.equal(s.c.localStorage.getItem('oats-desktop-sidebar-hidden'), null);
   assert.equal(s.document.defaultView.getComputedStyle(q('sidebar')).display, 'flex', 'the sidebar is shown');
-  assert.equal(q('sidebar-toggle').getAttribute('aria-expanded'), 'true');
+  assert.equal(q('show-sidebar').hidden, true);
   assert.equal(s.document.activeElement, rows[2], 'the roving stop');
   assert.equal(rows.filter(r => r.tabIndex === 0).length, 1, 'still one stop');
   assert.equal(listActions().find(a => a.id === 'sidebar.focusFilter')?.label, 'Focus the instance roster', 'same id, relabelled');
 });
 
-test('focusRoster without a roving stop lands on the first row, else Retry, else the foot\'s Spawn instance, else (no roster) the workspace list: never nothing', t => {
+test('focusRoster without a roving stop lands on the first row, else Retry, else the foot\'s New agent, else (no roster) the workspace list: never nothing', t => {
   const s = shell(t), q = id => s.document.getElementById(id), list = s.document.querySelector('#instance-roster .ctx-list');
   const rows = s.paintRows(-1);
   q('sidebar-spawn').focus(); runAction('sidebar.focusFilter');
@@ -895,7 +859,7 @@ test('focusRoster without a roving stop lands on the first row, else Retry, else
   assert.equal(rows[0].tabIndex, 0, 'and it becomes the stop');
   list.innerHTML = '<div class="loading-failed"><button type="button" class="act">Retry</button></div>';
   q('sidebar-spawn').focus(); runAction('sidebar.focusFilter');
-  assert.equal(s.document.activeElement.textContent, 'Retry', 'a failed first read: its Retry, never the foot\'s Spawn instance before it');
+  assert.equal(s.document.activeElement.textContent, 'Retry', 'a failed first read: its Retry, never the foot\'s New agent before it');
   // A stale notice's Retry sits between the heading and the list (instance-tree-view.mjs createRosterLoading).
   list.innerHTML = '<div class="ctx-empty">No instances.</div>';
   const notice = s.document.createElement('div'); notice.className = 'ctx-status'; notice.innerHTML = '<button type="button" class="act">Retry</button>';
@@ -903,11 +867,11 @@ test('focusRoster without a roving stop lands on the first row, else Retry, else
   q('sidebar-spawn').focus(); runAction('sidebar.focusFilter');
   assert.equal(s.document.activeElement, notice.firstElementChild, "a stale notice's Retry");
   notice.remove();
-  // No instances: the roster's one action, the foot's Spawn instance (as F6's: see the next test), never the workspaces.
+  // No instances: the roster's one action, the foot's New agent (as F6's: see the next test), never the workspaces.
   list.innerHTML = '<div class="ctx-empty">No instances.</div>';
   q('ws-options').innerHTML = '<ul class="ws-group"><li class="ws-option-row"><button type="button" class="ws-option" aria-current="true" tabindex="0">A</button></li></ul>';
   q('ws-add-open').focus(); runAction('sidebar.focusFilter');
-  assert.equal(s.document.activeElement, q('sidebar-spawn'), 'an empty roster: the foot\'s Spawn instance');
+  assert.equal(s.document.activeElement, q('sidebar-spawn'), 'an empty roster: the foot\'s New agent');
   // A window with no workspace hides the roster: the list of workspaces' stop.
   q('instance-roster').hidden = true;
   q('sidebar-spawn').blur(); runAction('sidebar.focusFilter');
@@ -917,9 +881,9 @@ test('focusRoster without a roving stop lands on the first row, else Retry, else
   assert.equal(s.document.activeElement, q('ws-add-open'), 'and with no workspace row: Add local workspace…');
 });
 
-// One rule for an empty roster (the product owner): its keyboard way in is its one action, the foot's Spawn instance, by
+// One rule for an empty roster (the product owner): its keyboard way in is its one action, the foot's New agent, by
 // F6 (the region cycle needs a stop inside the roster) and by ⌘F / Alt+F alike; a failed read's Retry comes first.
-test('an empty roster: F6 and ⌘F / Alt+F (sidebar.focusFilter) both land on the foot\'s Spawn instance, a Retry before it', t => {
+test('an empty roster: F6 and ⌘F / Alt+F (sidebar.focusFilter) both land on the foot\'s New agent, a Retry before it', t => {
   const s = shell(t), q = id => s.document.getElementById(id), list = s.document.querySelector('#instance-roster .ctx-list');
   const regions = createFocusRegions({ doc: s.document });
   s.document.getElementById('nav').innerHTML = '<button type="button" class="nav-item" aria-current="page">Workspace overview</button>';
@@ -929,7 +893,7 @@ test('an empty roster: F6 and ⌘F / Alt+F (sidebar.focusFilter) both land on th
     F6: () => { s.document.querySelector('#nav button').focus(); regions.cycle(1); },
     'sidebar.focusFilter': () => { q('ws-add-open').focus(); runAction('sidebar.focusFilter'); },
   };
-  for (const [name, go] of Object.entries(ways)) { go(); assert.equal(s.document.activeElement, q('sidebar-spawn'), `${name}: Spawn instance`); }
+  for (const [name, go] of Object.entries(ways)) { go(); assert.equal(s.document.activeElement, q('sidebar-spawn'), `${name}: New agent`); }
   list.innerHTML = '<div class="loading-failed"><button type="button" class="act">Retry</button></div>';
   for (const [name, go] of Object.entries(ways)) { go(); assert.equal(s.document.activeElement, list.querySelector('.act'), `${name}: a failed read's Retry first`); }
 });

@@ -17,7 +17,6 @@ import { runInNewContext } from "node:vm";
 import { JSDOM } from "jsdom";
 import { NAV, NAV_TABS, navTab, stageSidebarMode, loadStageView } from "../renderer/shell-nav.mjs";
 import { shellIcon } from "../renderer/shell-icons.mjs";
-import { createSettingsMenu } from "../renderer/sidebar-settings.mjs";
 import { workspaceTabs } from "../renderer/workspace-discovery.mjs";
 
 const PKG = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -116,19 +115,19 @@ test("showStage routes a NAV_TABS name to openWorkspaceSouls(tab); showStageFocu
   assert.match(src, /const WORKSPACE_TAB_NAMES = \{ machines: "Machines", souls: "Souls", capabilities: "Capabilities" \};/);
 });
 
-// The nav sits under the list of workspaces, outside the foot; the foot's bar's controls (Spawn instance, the sidebar
-// toggle; the settings cog builds its menu) are wired by one loop over the foot's [data-action], which
-// never reaches the nav, so a nav button runs its action once (its own listener), not twice. The shipped nav build
-// and that wiring, run on the shipped index.html.
-test("a nav button runs its stage action once; the sidebar toggle, Spawn instance and each settings item run their own once; the nav is under the list", () => {
+// The nav sits under the list of workspaces, outside the foot; the foot's bar's controls (New agent and ?, slice 1;
+// "N need you" is sidebar-foot.mjs's) are wired by one loop over the foot's [data-action], which never reaches the nav,
+// so a nav button runs its action once (its own listener), not twice. The shipped nav build and that wiring, run on
+// the shipped index.html.
+test("a nav button runs its stage action once; New agent and ? run their own once; the nav is under the list", () => {
   const src = shellSource();
   const block = src.slice(src.indexOf('const navEl = document.getElementById("nav");'), src.indexOf("// This is a chooser entry"));
   assert.match(block, /for \(const button of document\.querySelectorAll\("#nav-foot \[data-action\]"\)\) \{\n  button\.addEventListener\("click", \(\) => runAction\(button\.dataset\.action\)\);\n\}/);
-  assert.match(block, /const settingsMenu = createSettingsMenu\(document, document\.getElementById\("sidebar-settings"\), \{\n  run: \(id\) => runAction\(id\),/);
+  assert.doesNotMatch(src, /createSettingsMenu|sidebar-settings/, "the settings cog is gone (slice 1)");
   assert.ok(!src.includes("#sidebar-tools"), "the tools row is gone");
   const dom = new JSDOM(readFileSync(join(PKG, "renderer", "index.html"), "utf8"));
   const document = dom.window.document, ran = [];
-  const wired = runInNewContext(`${block}\n({ settingsMenu });`, { document, NAV, shellIcon, createSettingsMenu, runAction: (id) => ran.push(id),
+  runInNewContext(block, { document, NAV, shellIcon, runAction: (id) => ran.push(id),
     getBinding: () => null, formatChord: String, isMac: false });
   const nav = document.getElementById("nav");
   assert.equal(nav.parentElement.id, "sidebar", "the nav is the sidebar's own child");
@@ -142,24 +141,15 @@ test("a nav button runs its stage action once; the sidebar toggle, Spawn instanc
     ran.length = 0; b.click();
     assert.deepEqual(ran, [b.dataset.action], `${b.dataset.view}: one run per click`);
   }
-  // The foot's actions, in the bar's order: the sidebar toggle after the mark, then Spawn instance (Quick Open) before
-  // the cog (the product owner, 2026-10-26).
+  // The foot's actions, in the bar's order (slice 1): New agent (Quick Open), then ? (Keyboard shortcuts).
   const foot = [...document.querySelectorAll("#nav-foot [data-action]")];
-  assert.deepEqual(foot.map((b) => [b.id, b.dataset.action]), [["sidebar-toggle", "sidebar.toggle"], ["sidebar-spawn", "app.quickOpenSouls"]]);
+  assert.deepEqual(foot.map((b) => [b.id, b.dataset.action]), [["sidebar-spawn", "app.quickOpenSouls"], ["sidebar-help", "app.shortcuts"]]);
   for (const b of foot) {
     for (let click = 1; click <= 2; click++) {
       ran.length = 0; b.click();
       assert.deepEqual(ran, [b.dataset.action], `${b.id}, click ${click}: one run`);
     }
   }
-  const items = wired.settingsMenu.items;
-  assert.deepEqual(items.map((b) => b.dataset.menuAction), ["app.themePicker", "app.fontPicker", "app.shortcuts"]);
-  for (const b of items) {
-    ran.length = 0; b.click();
-    assert.deepEqual(ran, [b.dataset.menuAction], `${b.dataset.menuAction}: one run per click`);
-  }
-  ran.length = 0; document.getElementById("sidebar-settings").click();
-  assert.deepEqual(ran, [], "the cog itself runs nothing: it opens its menu");
   dom.window.close();
 });
 

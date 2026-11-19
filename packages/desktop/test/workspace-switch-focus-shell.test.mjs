@@ -187,7 +187,7 @@ const body = s => s.document.body;
 
 test("focus places: transit surfaces are never a place; the tab layer, the roster and the rest are described", t => {
   const s = shell(t), { document } = s;
-  for (const el of [s.row("B"), document.getElementById("ws-add-open"), document.getElementById("ws-current-only")]) {
+  for (const el of [s.row("B"), document.getElementById("ws-add-open")]) {
     assert.equal(isTransit(el), true, `${el.id || el.textContent} is a transit surface`);
   }
   const dialog = document.createElement("div"); dialog.setAttribute("role", "dialog"); dialog.innerHTML = "<button>ok</button>";

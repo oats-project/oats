@@ -47,19 +47,15 @@ body {
 }
 .side-kicker { color: var(--muted); font-size: 10px; line-height: 1.2; font-weight: 650; letter-spacing: .075em; text-transform: uppercase; }
 .shell-icon { display: block; width: 16px; height: 16px; flex: none; }
-/* The list's heading, then Show only the current workspace and Add local workspace… at the end. */
+/* The list's heading, then Add local workspace… at the end. */
 .ws-heading { flex: 1; min-width: 0; color: var(--fg); font-size: 13.5px; line-height: 1.2; font-weight: 700;
               overflow: hidden; text-overflow: ellipsis; }
-/* The sidebar's icon buttons, one control style: the head's Show only the current workspace and Add local
-   workspace…, and the bar's sidebar toggle and settings cog. */
+/* The sidebar's icon buttons, one control style: the head's Add local workspace… and the foot's ? (Keyboard
+   shortcuts). */
 .side-icon-button { flex: none; width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px;
                     background: transparent; color: var(--muted); cursor: pointer; }
 .side-icon-button:hover { background: var(--surface-2); color: var(--fg); }
 .side-icon-button:focus-visible { background: var(--sel); color: var(--fg); }
-/* Show only the current workspace (2026-10-23): a toggle before Add. Pressed, its icon is the accent, as the
-   current nav item's, at rest, hovered and focused alike (the --accent pairs on --surface, --surface-2 and --sel:
-   theme-contrast). */
-.ws-current-only[aria-pressed="true"], .ws-current-only[aria-pressed="true"]:hover, .ws-current-only[aria-pressed="true"]:focus-visible { color: var(--accent); }
 .ws-modal[hidden] { display: none; }
 /* Bare search inputs (no wrapper): their own 1px border is the single frame (rule 3). */
 #ws-suggestion-search { width: 100%; height: 32px; padding: 0 9px; border: 1px solid var(--border);
@@ -115,31 +111,32 @@ body {
 .deployment-mark > .shell-icon { width: 12px; height: 12px; }
 /* The same room above Workspace overview and below Automations, between the two lines (the product owner,
    2026-10-26). */
-#nav { display: flex; flex: none; flex-direction: column; padding: 8px; gap: 1px; }
-/* The foot (2026-10-26): one bar. The OATS mark at the left with the sidebar toggle after it; Spawn instance, a small
-   button, at the right before the settings cog. The toggle and the cog are 24px boxes with 14px icons. The mark (20px) centres on
-   the rows' circles (18px in: the foot's 6px, the bar's 2px and half its 20px), the cog in the right-hand column (25px
-   in from the right: the foot's 10px, the bar's 3px and half its 24px). */
+#nav { display: flex; flex: none; flex-direction: column; padding: 8px 8px 8px 4px; gap: 1px; }
+/* The foot (the Desktop UI rework, slice 1): one bar. "N need you" at the left, the needs-input mark and its count
+   (hidden at 0); New instance, a small button, and ? (Keyboard shortcuts), a 24px box, at the right. Each has no
+   ground at rest: hover and keyboard focus give it theirs. */
 #nav-foot { margin-top: auto; flex: none; display: flex; flex-direction: column; padding: 4px 10px 4px 6px;
             border-top: 1px solid var(--border); }
-#sidebar-bar { display: flex; align-items: center; gap: 2px; padding: 0 3px 0 2px; }
+#sidebar-bar { display: flex; align-items: center; gap: 1px; min-height: 28px; padding: 0 3px 0 2px; }
 #sidebar-bar > .side-icon-button { width: 24px; height: 24px; border-radius: 5px; position: relative; }
-/* The supplied artwork (transparent ground) at 2x; decorative, so it holds no tab stop and no name. */
-.sidebar-brand { width: 20px; height: 20px; flex: none; display: grid; place-items: center; }
-.sidebar-brand-image { width: 20px; height: 20px; display: block; }
 #sidebar-bar .shell-icon { width: 14px; height: 14px; }
-/* The toggle 8px after the mark (the bar's 2px gap and 6px). Spawn instance: Quick Open (app.quickOpenSouls; the chord
-   is in its tooltip), its words alone, pushed to the right, 6px before the cog (the gap and 4px). Like the toggle and
-   the cog, it has no ground at rest: hover and keyboard focus give it theirs (the product owner, 2026-10-26). */
-#sidebar-bar > #sidebar-toggle { margin-left: 6px; }
-#sidebar-spawn { flex: none; display: flex; align-items: center; height: 24px; min-height: 24px; margin: 0 4px 0 auto;
-                 padding: 0 8px; border: 0; border-radius: 5px; background: transparent; color: var(--muted);
-                 font-family: inherit; font-size: 12px; line-height: 1; font-weight: 500; white-space: nowrap; cursor: pointer; }
+#sidebar-help { font-size: 13px; font-weight: 600; line-height: 1; }
+/* Budgeted for the 240px minimum in both font choices (a monospace face runs wider): compact padding and gaps, and
+   the count alone may give way (its words end in "…" only past two digits there), never pushing ? out. */
+#sidebar-need-you, #sidebar-spawn { flex: none; display: flex; align-items: center; gap: 4px; height: 24px; min-height: 24px;
+                 padding: 0 6px; border: 0; border-radius: 5px; background: transparent; color: var(--muted);
+                 font-family: inherit; font-size: 11.5px; line-height: 1; font-weight: 500; white-space: nowrap; cursor: pointer; }
+#sidebar-need-you { flex: 0 1 auto; min-width: 0; padding-left: 5px; color: var(--fg); font-weight: 600; } /* its mark on the rows' dots, 18px in */
+#sidebar-need-you > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#sidebar-need-you[hidden] { display: none; }
+#sidebar-need-you > .attn-mark { width: 10px; height: 10px; flex: none; }
+#sidebar-spawn { margin: 0 0 0 auto; padding: 0 5px; }
+#sidebar-spawn > .shell-icon { width: 12px; height: 12px; }
+#sidebar-need-you:hover, #sidebar-spawn:hover:not(:disabled) { background: var(--surface-2); color: var(--fg); }
+#sidebar-need-you:focus-visible, #sidebar-spawn:focus-visible { background: var(--sel); color: var(--fg); }
 .shortcut-hint { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
                  font-weight: 500; font-size: 10.5px; line-height: normal; font-family: var(--mono); }
 .shortcut-hint[hidden] { display: none; }
-#sidebar-spawn:hover:not(:disabled) { background: var(--surface-2); color: var(--fg); }
-#sidebar-spawn:focus-visible { background: var(--sel); color: var(--fg); }
 #sidebar-spawn:disabled { background: transparent; color: var(--faint); cursor: default; }
 
 /* ── persistent instance tree (the same shell sidebar, never a second) ── */
@@ -168,10 +165,13 @@ body {
 /* A stale count is the last observation: muted, its dot no longer the live accent. */
 .ctx-count[data-stale] { color: var(--muted); }
 .ctx-count[data-stale] .ctx-count-dot { background: var(--muted); }
-/* Agent groups (Workspace v4): a 14px gap, no title; the separator names the group for AT.
-   The first one sits just under the head, so it is shorter (human, 2026-09-29). */
-.ctx-group { height: 14px; }
-.ctx-group:first-child { height: 7px; }
+/* Agent groups (Workspace v4): a gap, no title; the separator names the group for AT. Air between groups (the Desktop
+   UI rework, slice 1): 12px, and the same 12px before each top-level bundle inside a group (.ctx-bundle-gap, a spacer
+   no row box carries), so every bundle has air before the next. The first one sits just under the head, so it is
+   shorter (human, 2026-09-29). */
+.ctx-group { height: 12px; }
+.ctx-bundle-gap { height: 12px; }
+.ctx-group:first-child { height: 6px; }
 /* Deployment headings (#482), only in a view of two or more deployments: the machine label in the
    roster's group-label type (the agent clusters' "independent" / cluster-name label: muted 11px 650
    uppercase), a status mark beside it when not live, then the deployment's agent groups as before. */
@@ -195,16 +195,16 @@ body {
 .ctx-background-toggle[aria-expanded="true"] > .ctx-background-chevron { transform: rotate(90deg); }
 .ctx-background-count { flex: none; font-variant-numeric: tabular-nums; }
 .ctx-background-attn { margin-left: auto; text-transform: none; letter-spacing: normal; }
-/* One instance row: a 48px box, 18px per level; the row (not the button)
-   carries hover/selection so it spans the indent like the design. Its
-   background fills 44px, clipped inside 2px transparent borders top and
+/* One instance row: a 44px box (the Desktop UI rework, slice 1: two lines, the dot centred), 18px per level; the row
+   (not the button) carries hover/selection so it spans the indent like the design. Its
+   background fills 40px, clipped inside 2px transparent borders top and
    bottom, so neighbouring backgrounds never touch (human, 2026-09-29) while
    the connectors, which span the whole box, stay continuous. The vertical
    radius adds the border so the painted corners stay 7px round. State rules
    set background-color only: the background shorthand resets the clip to
    border-box, which painted the gap and made a selected row and a hovered
    neighbour touch (human, 2026-10-03). */
-.ctx-tree-row { --tree-step: 18px; --tree-branch-offset: 5px; --tree-link-shift: 2px; --row-gap: 2px; --row-solid: var(--surface); position: relative; width: 100%; min-height: 48px;
+.ctx-tree-row { --tree-step: 18px; --tree-branch-offset: 5px; --tree-link-shift: 2px; --row-gap: 2px; --row-solid: var(--surface); position: relative; width: 100%; min-height: 44px;
                 box-sizing: border-box; display: flex; align-items: center;
                 border-top: var(--row-gap) solid transparent; border-bottom: var(--row-gap) solid transparent;
                 background-clip: padding-box; border-radius: 7px / 9px;
@@ -213,10 +213,11 @@ body {
 .ctx-tree-row.active { --row-solid: var(--sel); background-color: var(--sel); }
 /* Spec E: the pending row of the spawn just pressed, revealed without taking focus: the selection's own fill. */
 .ctx-tree-row.ctx-spawn-revealed { --row-solid: var(--sel); background-color: var(--sel); }
+/* A pending spawn's own tool (its Check result), at the row's end; instance rows have no tools (slice 1: their acts are
+   the context menu's). */
 .ctx-row-tools { position: absolute; top: 50%; right: 6px; transform: translateY(-50%); z-index: 2;
                  display: flex; align-items: center; gap: 4px; padding-left: 6px;
                  background: var(--row-solid); visibility: hidden; }
-.ctx-tree-row:is(:hover, :focus-within) > .ctx-row-tools { visibility: visible; }
 .ctx-instance-menu { position: fixed; inset: auto; margin: 0; width: 240px; max-width: calc(100vw - 16px);
   max-height: calc(100vh - 16px); overflow-y: auto;
   padding: 6px; background: var(--surface); color: var(--fg); border: 1px solid var(--border);
@@ -265,7 +266,7 @@ body {
 .launch-config-editor { margin-top: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; }
 .launch-config-editor summary { cursor: pointer; }
 .launch-preview-output { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--surface-2); max-height: 240px; overflow: auto; }
-.ctx-inst { position: relative; min-width: 0; flex: 1; min-height: 44px; height: auto; display: flex; align-items: center; gap: 9px;
+.ctx-inst { position: relative; min-width: 0; flex: 1; min-height: 40px; height: auto; display: flex; align-items: center; gap: 9px;
             padding: 0 8px 0 10px; border: 0; border-radius: 7px; background: none; color: var(--fg);
             font: inherit; text-align: left; cursor: pointer; }
 .ctx-inst.idle, .ctx-inst:disabled, .ctx-inst[aria-disabled="true"] { color: var(--muted); }
@@ -367,28 +368,24 @@ body {
 .ctx-attn:has(> .attn-mark:first-child) { padding-left: 2.5px; }
 /* Its size is set here: .shell-icon's 16px would win over the SVG's own width and height. */
 .ctx-attn > .attn-mark { width: 10px; height: 10px; }
-/* The mark in place of the meta line's text: the line keeps its place, so the row never reorders or grows (48px). */
+/* The mark in place of the meta line's text: the line keeps its place, so the row never reorders or grows (44px). */
 .ctx-meta.ctx-attn-line { display: flex; min-width: 0; }
 .ctx-repo-label { display: block; color: var(--muted); font-family: var(--mono); font-size: 11.5px; font-weight: 400; line-height: normal; }
-/* The meta line (2026-10-26): the soul at the left in the UI face, the repository at the right in the repo's
-   style; the soul is cut first (its far larger shrink), the repository keeps about 10ch before it is cut too. */
-.ctx-meta.ctx-soul-repo { display: flex; align-items: baseline; gap: 8px; width: 100%; color: var(--muted); font-size: 11.5px;
-                          font-weight: 400; line-height: normal; }
-.ctx-meta-soul { flex: 1 1000 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ctx-meta-repo { flex: 0 1 auto; min-width: min(10ch, 100%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-                 font-family: var(--mono); text-align: right; }
-.ctx-runtime { width: 18px; height: 18px; flex: none; display: grid; place-items: center; border-radius: 5px;
-               font-size: 9.5px; font-weight: 700; }
-/* A stopped instance's provider mark dims (design): the chip pair, --chip-fg on
-   --chip-bg, which the contrast inventory holds at AA in every theme. */
-#app .ctx-inst.idle .runtime-badge.ctx-runtime[data-runtime] { background: var(--chip-bg); color: var(--chip-fg); }
+/* Line 2 (the Desktop UI rework, slice 1): `<soul> · <machine>` in the UI face, muted, one line cut at its end. */
+.ctx-meta.ctx-row-detail { color: var(--muted); font-size: 11.5px; font-weight: 400; line-height: normal; }
 .ctx-empty { padding: 20px 10px; color: var(--muted); text-align: center; font-size: 12px; }
+/* The pinned destinations (the Desktop UI rework, slice 1): rows in the roster rows' style, one line: the icon in the
+   column of the roster's dots (the nav's 4px and the row's 6px, centred 18px in), the name in the roster's name type. */
 .nav-item {
-  display: flex; align-items: center; gap: 9px; min-height: 30px;
-  background: none; border: none; border-radius: 6px;
-  color: var(--nav-fg); font: inherit; font-weight: 500; text-align: left;
-  padding: 5px 9px; cursor: pointer;
+  display: flex; align-items: center; gap: 9px; min-height: 32px;
+  background: none; border: none; border-radius: 7px;
+  color: var(--fg); font: inherit; font-size: var(--name-size, 12.5px); font-weight: 600; text-align: left;
+  padding: 4px 8px 4px 6px; cursor: pointer;
 }
+.nav-item > .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A run failed (automations-failure.mjs): a --danger dot at the row's far right, its words for assistive tech. */
+.nav-failed { flex: none; margin-left: auto; margin-right: 2px; display: grid; place-items: center; width: 14px; } /* centred 25px from the right, the marks' column */
+.nav-failed-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
 .nav-item:hover { background: var(--surface-2); color: var(--fg); }
 .nav-item.active { background: var(--sel); color: var(--fg); font-weight: 650; }
 .nav-item .icon { width: 16px; flex: none; text-align: center; color: var(--nav-fg); }
@@ -804,17 +801,10 @@ body {
 .kb-marks { flex: none; width: 112px; display: flex; justify-content: flex-end; gap: 8px; }
 .kb-mark { color: var(--muted); font-size: 11px; }
 .kb-clashes { margin: 0; padding: 8px 16px; color: var(--warn); font-size: 12px; border-bottom: 1px solid var(--border); }
-/* The settings cog and its Keyboard shortcuts… item, while a stored rebind clashes (keymapConflicts): a --danger dot,
-   since a key no longer does what it says (yellow means needs input only; the words are their aria-description). */
-#sidebar-settings.has-clash::after { content: ""; position: absolute; top: 4px; right: 4px; width: 7px; height: 7px;
+/* The foot's ? (Keyboard shortcuts), while a stored rebind clashes (keymapConflicts): a --danger dot, since a key no
+   longer does what it says (yellow means needs input only; the words are its aria-description). */
+#sidebar-help.has-clash::after { content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px;
   border-radius: 50%; background: var(--danger); }
-.sidebar-settings-menu button.has-clash > .sidebar-settings-label::after { content: ""; display: inline-block; width: 7px; height: 7px;
-  margin-left: 6px; border-radius: 50%; background: var(--danger); vertical-align: middle; }
-/* The settings menu's items: the icon, the words, the chord. */
-.sidebar-settings-menu { width: 220px; }
-.ctx-instance-menu.sidebar-settings-menu button { grid-template-columns: 15px minmax(0, 1fr) auto; align-items: center; }
-.sidebar-settings-menu .ctx-menu-icon { display: grid; }
-.sidebar-settings-menu .ctx-menu-icon > .shell-icon { width: 15px; height: 15px; }
 /* The chord: a button holding one keycap per key, right-aligned in a fixed column (four keys fit)
    so keycaps and the markers before them line up from row to row. The button fits its keycaps,
    and its own focus ring replaces the global --sel tint, so its text stays on the row's surface. */
@@ -853,6 +843,3 @@ body {
   .kb-marks { width: auto; margin-left: auto; }
   .kb-chord-cell { width: auto; }
 }
-/* forge-roster: open the row's pull request (the chip on the name line says which). */
-.ctx-pr-open { flex: none; display: grid; place-items: center; width: 24px; height: 22px; padding: 0; color: var(--accent); background: var(--surface);
-  border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }

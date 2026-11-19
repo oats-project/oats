@@ -17,7 +17,7 @@ import { instanceActionTarget, sameInstanceActionTarget } from "./instance-actio
 import { createInstancePrAction } from "./instance-pr-action.mjs";
 import { instanceSplitPlan, instanceSplitIdentity } from "./instance-split.mjs";
 import { createInstanceStarter } from "./start-instance.mjs";
-import { runtimeState } from "../../client/instance-presentation.mjs";
+import { runtimeState, siblingText } from "../../client/instance-presentation.mjs";
 import { NOT_SERVED_CODE, NO_ANSWER_CODE, unservedError, createPendingWatch } from "./deployment-header.mjs";
 import { deploymentUnavailableText, keptFailure } from "../../client/deployment-facts.mjs";
 import { panelErrorCause } from "../../client/deployment-contract.mjs";
@@ -71,8 +71,11 @@ import { createSelectionOwnership, wirePaneSelection } from "./selection-ownersh
 import { createWorkspaceSwitcher } from "./workspace-switcher.mjs";
 import { NAV, NAV_TABS, navTab, stageSidebarMode, loadStageView } from "./shell-nav.mjs";
 import { shellIcon, mountShellIcons, iconElement } from "./shell-icons.mjs";
-import { createSettingsMenu } from "./sidebar-settings.mjs";
-import { createRuntimeBadge, identityCSS } from "./identity-marks.mjs";
+import { createSidebarFoot, emptyRosterText } from "./sidebar-foot.mjs";
+import { createAutomationsFailure, FAILED_RUN_TEXT } from "./automations-failure.mjs";
+import { automationsSupported } from "./views/automations.mjs";
+import { identityCSS } from "./identity-marks.mjs";
+import { rowFactsTitle } from "./row-facts-title.mjs";
 import { createContextPanel, contextPanelCSS } from "./context-panel.mjs";
 import { createInstanceTeamsSection, teamsCSS } from "./instance-teams.mjs";
 import { createInstanceSoulSection, instanceSoulCSS } from "./instance-soul.mjs";
@@ -86,16 +89,15 @@ import { createSpawnFollow, watchOperator } from "./spawn-follow.mjs";
 import { createLaunchFocus } from "./launch-focus.mjs";
 import { registerSpawnDialogKeys } from "./spawn-dialog-keys.mjs";
 import { revealInScrollport } from "./reveal-in-scrollport.mjs";
-import { createRosterTip, rosterTipFacts, rosterTipCSS } from "./roster-tip.mjs";
+import { rosterRowFacts } from "../../client/roster-row-facts.mjs";
 import { waitingClaim, waitingSentence, waitingDetail, waitingClock } from "../../client/waiting-on-you.mjs";
 import { syncWaitingRow } from "./waiting-row.mjs";
-import { createRosterPrs, prText, rosterPrCSS } from "./roster-pr.mjs";
 import { createPanelOwner } from "./panel-owner.mjs";
-import { collapseKey, instanceRepoLabel, instanceVisibleInTree, waitingRollup, instanceId, rosterParentId, heldHome, backgroundPlacement, BACKGROUND_FEATURE } from "../../client/instance-tree.mjs";
+import { collapseKey, instanceVisibleInTree, waitingRollup, instanceId, rosterParentId, heldHome, backgroundPlacement, BACKGROUND_FEATURE, instanceSiblings } from "../../client/instance-tree.mjs";
 import { withParentGate } from "../../client/same-work.mjs";
 import { createRetiresInFlight, retiringRows } from "../../client/retire-in-flight.mjs";
-import { treeConnectors, treeGuides, captureTreeRenderState, rosterResponseOwns, clusterSeparator, renderRosterCount,
-  terminalKey, resolveTerminalOpen, createRosterLoading, rosterSignature, markStaleControl, staleBlocked, ROSTER_STALE_TITLE, rosterName } from "./instance-tree-view.mjs";
+import { captureTreeRenderState, relationSpan, stateSpan, rosterResponseOwns, clusterSeparator, renderRosterCount,
+  terminalKey, resolveTerminalOpen, createRosterLoading, rosterSignature, ROSTER_STALE_TITLE, rosterName } from "./instance-tree-view.mjs";
 import {
   tabVisibleInContext, canActivateTab,
   fallbackTabForContext, restoreTerminalTab,
@@ -103,11 +105,11 @@ import {
 import { createWorkspaceTabMemory } from "./workspace-tab-memory.mjs";
 import { retiredTabs, tabShowsRow, otherIncarnation, terminalOrigin } from "./retired-tabs.mjs";
 import { notePanel, panelDeployments, deploymentHeading } from "./view-deployments.mjs";
-import { deploymentState, rowStale, rosterSectionKey, sidebarSections } from "../../client/roster-sections.mjs";
+import { deploymentState, rowStale, rosterSectionKey, sidebarSections, isMultiDeployment, splitByDeployment } from "../../client/roster-sections.mjs";
 import { backgroundHeading } from "./background-heading.mjs";
 import { sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen } from "./roster-disclosure.mjs";
 import { cliStatus, onCliChange, cliHeldBack } from "./views/cli-status.mjs";
-import { DESKTOP_TERMS } from "./desktop-terms.mjs";
+import { DESKTOP_TERMS, DESKTOP_NOUNS } from "./desktop-terms.mjs";
 import { onDeploymentTabRequest } from "./deployment-tabs.mjs";
 import { ROSTER_POLL_FOCUSED_MS, rosterPollDue } from "./roster-cadence.mjs";
 import { scopedRequest } from "./workspace-routes.mjs";
@@ -143,13 +145,28 @@ hostTheme.start();
 window.addEventListener("pagehide", () => hostTheme.dispose(), { once: true });
 mountShellIcons(document);
 const identityStyle = document.createElement("style");
-identityStyle.textContent = identityCSS + contextPanelCSS + teamsCSS + instanceSoulCSS + instanceGitCSS + notificationCSS + connectionsCSS + settingsTerminalCSS + lifecycleCSS + instanceColorCSS + themePickerCSS + rosterTipCSS + rosterPrCSS; document.head.append(identityStyle);
-const rosterTip = createRosterTip(document);
-// The PR of each local instance's branch (forge-roster), re-read at most once a minute.
-const rosterPrs = createRosterPrs({
-  request: (ws) => api(`/api/forge-roster?ws=${encodeURIComponent(ws)}`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }),
-  onChange: () => renderContextRoster(contextInstances),
+identityStyle.textContent = identityCSS + contextPanelCSS + teamsCSS + instanceSoulCSS + instanceGitCSS + notificationCSS + connectionsCSS + settingsTerminalCSS + lifecycleCSS + instanceColorCSS + themePickerCSS; document.head.append(identityStyle);
+// The sidebar's foot (slice 1): its count of the rows that need you, painted with the roster; its button focuses the
+// first of them (focusFirstNeedingYou).
+const sidebarFoot = createSidebarFoot(document, { nouns: DESKTOP_NOUNS, onNeedYou: () => focusFirstNeedingYou() });
+// The pinned Automations row's failure mark (slice 1; paintAutomationsFailed draws it), read with the roster.
+// This machine's own name (slice 1, Joan's call: a local row's line 2 names its machine as a remote row does): the
+// host name the kernel reports (oats-local.yaml `host.name`), read from the schedule list the failure mark reads;
+// until one is known, or where this machine has none, DESKTOP_TERMS.thisMachine.
+let thisHostName = null;
+const automationsFailure = createAutomationsFailure({
+  read: async (ws, kind) => {
+    const r = await api(`/api/automations?ws=${encodeURIComponent(ws)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind, action: "list" }) });
+    if (r?.status !== "ok") throw new Error(r?.reason?.message || "Automations are unavailable.");
+    return r.result;
+  },
+  supported: () => automationsSupported(cliStatus()),
+  onChange: paintAutomationsFailed,
+  onHost: (name) => { if (name !== thisHostName) { thisHostName = name; if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances); } },
 });
+// A workspace switch (or the chooser) revokes the mark and any read in flight at once, before the new workspace's
+// roster answers: a late answer for the workspace left never marks the one shown (the roster's read asks again).
+onWorkspaceChange(() => { void automationsFailure.refresh(null); });
 // Move to background / out of it (#1579; instance-background-menu.mjs): the row menu's items, gated as the route is.
 const backgroundMenu = createInstanceBackgroundMenu({ deploymentOf: rowDeployment,
   request: async (row, body) => (await desk.api(`/api/instance-background?ws=${encodeURIComponent(rowDeployment(row))}`, {
@@ -571,7 +588,6 @@ const workspaceLabel = createWorkspaceSwitcher({
   selectWorkspace: (id, how) => switchWorkspace(id, { ...how, takeOver: true }),
   openInNewWindow: typeof desktopBridge.windowOpenWorkspace === "function" ? (id) => { void desktopBridge.windowOpenWorkspace(id); } : null,
   mac: navigator.platform.includes("Mac"),
-  storage: (() => { try { return window.localStorage; } catch { return null; } })(),
   // Its repaint keeps the focus on the row that had it: no new intent (a switch's waiting roster place stays owned).
   applyFocus: fn => tabOpenIntents.applyFocus(fn),
   // Feature-detected while tui-dev lands the approved privileged contract.
@@ -866,7 +882,8 @@ async function refreshContextRoster({ user = false } = {}) {
     shownRoster = { gen: myGen, read, ws: resolvedWs, instances: contextInstances };
     spawnJobs.observe(resolvedWs, contextInstances);
   }
-  void rosterPrs.refresh(panel.workspace?.remote ? null : resolvedWs);
+  // The pinned Automations row's failure mark (slice 1): re-read with the roster, at most once a minute per workspace.
+  void automationsFailure.refresh(resolvedWs);
   refreshPanelInstance(contextInstances, resolvedWs);
   if (!unchanged) {
     rosterSignaturePainted = signature;
@@ -932,6 +949,13 @@ function retiresChanged() {
   for (const fn of [...retireListeners]) { try { fn(); } catch { /* a view's repaint changes nothing here */ } }
 }
 
+/** The empty roster's line (slice 1): "No agents yet · <key> starts one", the key being the spawn action's chord
+ * from the keymap (none bound: the words alone). Said again when the keymap changes (applyChordTitles). */
+function emptyRosterLine() {
+  const mac = navigator.platform.includes("Mac"), chord = getBinding("app.quickOpenSouls", mac);
+  return emptyRosterText(DESKTOP_NOUNS, chord ? formatChord(chord, mac) : "");
+}
+
 function renderContextRoster(instances) {
   instances = shownRows(instances);
   const listEl = contextRosterEl.querySelector(".ctx-list");
@@ -946,6 +970,9 @@ function renderContextRoster(instances) {
   const pending = !!rosterState && !rosterState.hasData, failed = pending && rosterState.state === "failed";
   renderRosterCount(contextRosterEl.querySelector(".ctx-count"), instances, { pending: pending && !failed, failed, stale: rosterStale });
   const ws = contextWorkspace || currentWorkspace();
+  // The foot's "N need you" (slice 1): this workspace's rows with a needs-input claim, through the row's own gate (a
+  // row held stale carries none), every row counted whether a collapse or the closed Background section hides it.
+  sidebarFoot.paint(pending ? 0 : instances.filter((row) => waitingClaim(row, { stale: rosterStale || rowStale(row, contextDeployments) })).length);
   // #558: every paint re-syncs the open terminal tabs through the row's own gate, before any early return:
   // a stale paint (an overdue read) or a pending one (a reset subject: no rows yet) clears their cues too.
   syncTabNeedsInput(pending ? [] : instances, ws);
@@ -957,7 +984,7 @@ function renderContextRoster(instances) {
     listEl.prepend(note);
   };
   if (pending) {
-    for (const el of listEl.querySelectorAll(":scope > .ctx-tree-row, :scope > .ctx-group, :scope > .ctx-empty, :scope > .ctx-background")) el.remove();
+    for (const el of listEl.querySelectorAll(":scope > .ctx-tree-row, :scope > .ctx-group, :scope > .ctx-bundle-gap, :scope > .ctx-empty, :scope > .ctx-background")) el.remove();
     paintNote();
     tabOpenIntents.applyFocus(restoreTreeState);
     if (failed) applyRosterPlace(); // its Retry is the roster's landing
@@ -1025,7 +1052,9 @@ function renderContextRoster(instances) {
   const { main, background } = sidebarSections(instances, visible, contextDeployments, DESKTOP_TERMS,
     { placement, open: backgroundOpen.has(ws), stale: rowHeldStale });
   if (!visible.length && !background) {
-    listEl.innerHTML = `<div class="ctx-empty">No instances.</div>`;
+    const empty = document.createElement("div"); empty.className = "ctx-empty"; empty.dataset.emptyRoster = "";
+    empty.textContent = emptyRosterLine();
+    listEl.replaceChildren(empty);
     paintNote();
     tabOpenIntents.applyFocus(restoreTreeState);
     applyRosterPlace();
@@ -1054,6 +1083,18 @@ function renderContextRoster(instances) {
   // one part's: no stem, elbow or sibling link reaches a row of the other part.
   const partGroups = (sections, level) => sections.flatMap((section) => section.groups.map((group, at) => ({ ...group, heading: at === 0 && section.deployment ? section : null, level })));
   const groups = [...partGroups(main, 3), ...(background ? [{ background }, ...partGroups(background.sections, 4)] : [])];
+  // The relations in words (slice 1, D26: the roster draws no lineage or sibling lines; indentation and the gap
+  // between bundles show the tree): "under <parent>" for a row indented under its parent and "sibling of …" for an
+  // explicit sibling link, resolved per deployment over its full roster as the command palette's are, said after
+  // the row's lines to assistive technology.
+  const ownRows = isMultiDeployment(contextDeployments) ? splitByDeployment(contextDeployments)(instances) : null;
+  const siblingsOf = new Map(ownRows ? [...ownRows.values()].flatMap((list) => [...instanceSiblings(list)]) : instanceSiblings(instances));
+  // A child its host reports doing its parent's work (#1577: `sameWork` where the host declares the feature, the
+  // flag the drawn line said before D26) says so too: "same work"; a child the host reports not doing it, or one
+  // whose host doesn't report the flag, says nothing more.
+  const underWords = (i) => (i.depth || 0) > 0 && i.parentInstance
+    ? `under ${i.parentInstance}${i.sameWorkKnown === true && i.sameWork === true ? ", same work" : ""}` : null;
+  const relationWords = (i) => [underWords(i), siblingText(siblingsOf.get(instanceId(i)))].filter(Boolean).join(", ");
   for (const group of groups) {
     if (group.background) {
       const head = backgroundHeading(document, group.background), toggle = head.querySelector(".ctx-background-toggle");
@@ -1069,12 +1110,21 @@ function renderContextRoster(instances) {
       listEl.append(head);
     }
     listEl.append(clusterSeparator(document, { label: group.label, count: group.clusters.reduce((n, c) => n + c.instances.length, 0) }));
-    for (const cluster of group.clusters) {
+    group.clusters.forEach((cluster, clusterAt) => {
       const items = cluster.instances;
+      // Air between bundles (the Desktop UI rework, slice 1): a top-level bundle (a relation cluster) after another
+      // in the same group gets the 12px a group after a group gets from its separator, as a spacer of its own (no row
+      // box is spaced: rows stay the one 44px box). The order never changes.
+      if (clusterAt > 0 && items.length) {
+        const gap = document.createElement("div"); gap.className = "ctx-bundle-gap"; gap.setAttribute("aria-hidden", "true");
+        listEl.append(gap);
+      }
       for (const i of items) {
         // #802: a home the roster reports setting up its worktree (spawned here or anywhere) wears the pending row's treatment too.
         const held = heldHome(i);
-        if (i.pendingSpawn || held?.kind === "spawning") { listEl.append(pendingSpawnRow(i, items, instances, spawnStart(i))); continue; }
+        if (i.pendingSpawn || held?.kind === "spawning") {
+          listEl.append(pendingSpawnRow(i, spawnStart(i), relationWords(i))); continue;
+        }
         const rowWrap = document.createElement("div");
         rowWrap.className = "ctx-tree-row";
         rowWrap.style.setProperty("--depth", String(i.depth || 0));
@@ -1087,10 +1137,6 @@ function renderContextRoster(instances) {
         // A held home's row is drawn here too (a pending row drew above): it stays open and offers no collapse.
         const hasChildren = childrenHere.has(instanceId(i)) && !lifecycleRows.has(instanceId(i));
         const collapsed = collapsedNow.has(key);
-
-        // Design connectors drawn from the dots: rounded solid elbows into
-        // children, solid stems/pass-throughs, dotted sibling links.
-        const guides = treeGuides(document, treeConnectors(items, i, instances));
 
         const row = document.createElement("button");
         row.type = "button";
@@ -1107,29 +1153,38 @@ function renderContextRoster(instances) {
         // #802: a home a spawn or a retire left half cleaned, or one being retired (#1247; held: the spawning one drew
         // above), opens and starts nothing either; its context menu offers Retire only (secondary while retiring).
         if (unavailable || held) { row.setAttribute("aria-disabled", "true"); row.classList.add("unavailable"); }
-        // Why it can't open: a short label on the meta line, the full sentence as its title and description.
+        // Why it can't open: the full sentence as its title and description (line 2 stays soul · machine).
         // A sentence that is the row's own text is said with who made it (speaker-line.mjs).
         const reason = rowReason(i);
         const why = rowReasonLine(reason) || heldLine(held) || runtimeErrorLine(i) || (i.running ? `Open ${i.instance} terminal` : `Start ${i.instance}`);
-        // Workspace v4: an enabled row explains itself in the hover/focus card; an unavailable one keeps its reason as a title.
-        const pr = held || i.server || i.remote ? null : rosterPrs.get(i.home);
+        // Slice 1 (the Desktop UI rework): no hover card. An unavailable row keeps its reason as a title; every row's
+        // waiting facts are its description, and the instance panel shows them in full (its Needs input line).
+        // Line 2: `<soul> · <machine>`, the shared row facts (packages/client roster-row-facts.mjs), the machine in
+        // this Desktop's words for this one. The repository, the branch, the harness and the pull request are the
+        // instance panel's; a row's reason is its description.
+        const facts = rosterRowFacts(i, DESKTOP_TERMS, { deployments: contextDeployments, here: thisHostName });
         const heldStale = rowHeldStale(i);
         // Needs input: this row's own claim (waitingClaim is the only gate), and the waiting rows hidden under it.
         const claim = waitingClaim(i, { stale: heldStale }), below = waitingBelow.get(instanceId(i)) || [];
-        // Spec D (human, 2026-10-20): the name line keeps the name, whole; the roll-up takes the meta line in place
-        // of its text (the repository, pull request and branch stay in the hover card, as a held home's do; a row
-        // with no card says them in its title and description, and the line keeps its own title). A row's own
-        // claim marks its dot instead, so a waiting parent shows both. A held home's state wins that line: its
-        // description says the wait. "New" stays beside the name.
+        // Spec D (human, 2026-10-20): the name line keeps the name, whole; the roll-up takes line 2 in place of its
+        // text, which the row's description then says (soul · machine). A row's own claim marks its dot instead, so a
+        // waiting parent shows both. A held home's state wins that line: its description says the wait. "New" stays
+        // beside the name.
         const attn = held || !below.length ? null : needsInputMark(below.length);
+        const replaced = attn ? ` · ${facts.detail}` : "";
         if (unavailable) {
-          const replaced = attn ? [instanceRepoLabel(i), pr ? prText(pr) : null, i.branch].filter(Boolean).map(part => ` · ${part}`).join("") : "";
           const said = why + replaced + waitingSentence(claim, below, Date.now()); row.title = said; row.setAttribute("aria-description", said);
         }
+        // A held home's state takes its meta line over the mark (below): its description says the wait.
+        else if (held) row.setAttribute("aria-description", why + waitingSentence(claim, below, Date.now()));
         else {
-          rosterTip.bind(row, () => rosterTipFacts(i, why, pr, { below, stale: heldStale }));
-          // A held home's state takes its meta line over the mark (below): its description says the wait.
-          if (held) row.setAttribute("aria-description", why + waitingSentence(claim, below, Date.now()));
+          // The row's runtime error (a stopped row's "OATS says: the last start failed"), with its speaker, is its
+          // title and starts its description: the hover card said it, and a row with no terminal has no panel.
+          // Absolute times only (waitingSentence): the description is painted once, as the row is.
+          const error = runtimeErrorLine(i);
+          const said = ((error ? ` · ${error}` : "") + replaced + waitingSentence(claim, below, Date.now())).replace(/^ · /, "");
+          if (said) row.setAttribute("aria-description", said);
+          if (error) row.title = error;
         }
         // A waiting row's dot is the needs-input mark (the product owner, 2026-10-26): the --warn disc with its "!"
         // cut out, the only yellow mark (unknown liveness is a --muted bullseye), whatever the liveness, never in the
@@ -1148,19 +1203,14 @@ function renderContextRoster(instances) {
         const name = rosterName(document, i.instance);
         const spoken = claim && !held ? document.createElement("span") : null;
         if (spoken) { spoken.className = "sr-only"; spoken.textContent = " Needs input"; }
-        // The meta line (the product owner, 2026-10-26): the soul at the left, the repository at the right; the
-        // soul is cut first, the repository keeps about 10ch. The branch and the pull request are the hover card's
-        // (rosterTipFacts); the pull request's link stays in the row tools.
+        const relation = relationSpan(document, relationWords(i));
+        // Its state in words (a held home's line says its own): what opening it does, running or stopped, is heard.
+        const stateWords = held ? null : stateSpan(document, state);
         const meta = document.createElement("span");
-        meta.className = "ctx-meta ctx-soul-repo";
-        const soulPart = document.createElement("span"); soulPart.className = "ctx-meta-soul";
-        soulPart.textContent = [i.agent, reason?.label].filter(Boolean).join(" · ");
-        const repoPart = document.createElement("span"); repoPart.className = "ctx-meta-repo";
-        repoPart.textContent = instanceRepoLabel(i) || "";
-        meta.append(soulPart, repoPart);
-        meta.title = `Soul: ${i.agent || "unknown"}\nRepository: ${instanceRepoLabel(i)}`;
+        meta.className = "ctx-meta ctx-row-detail";
+        meta.textContent = facts.detail;
         // #802: a quarantined home reads its state (text, never colour alone) and what finishes it, muted; its
-        // repository and branch stay in the hover card.
+        // repository and branch stay in the instance panel.
         const heldLines = [];
         if (held) {
           meta.className = "ctx-meta ctx-spawn-state"; meta.removeAttribute("title"); meta.textContent = held.state;
@@ -1187,14 +1237,9 @@ function renderContextRoster(instances) {
             const markDot = document.createElement("span"); markDot.className = "ctx-new-dot"; markDot.setAttribute("aria-hidden", "true");
             mark.append(markDot, "New"); line.append(mark);
           }
-          copy.append(line, ...[spoken].filter(Boolean), meta, ...heldLines);
-        } else copy.append(name, ...[spoken].filter(Boolean), meta, ...heldLines);
+          copy.append(line, ...[spoken].filter(Boolean), meta, ...heldLines, ...[stateWords, relation].filter(Boolean));
+        } else copy.append(name, ...[spoken].filter(Boolean), meta, ...heldLines, ...[stateWords, relation].filter(Boolean));
         row.append(dot, copy);
-        if (typeof i.harness === "string" && i.harness) {
-          const runtime = createRuntimeBadge(document, i.harness);
-          runtime.classList.add("ctx-runtime");
-          row.append(runtime);
-        }
         // pass the FULL reference: same-named instances in other agents
         // roots must open THEIR tmux session, not the first name match
         // A stale roster (the last read failed) may say running:false for an instance that is running by now:
@@ -1203,6 +1248,12 @@ function renderContextRoster(instances) {
         // A row of a stale deployment (#482: its last re-read failed) is held the same way.
         const staleStart = heldStale && !i.running;
         if (staleStart) { row.title = ROSTER_STALE_TITLE; row.setAttribute("aria-description", ROSTER_STALE_TITLE); }
+        // The facts the hover card held that line 2 doesn't say (slice 1, an interim the lead agreed): the repository,
+        // the branch and the harness and model, on a line of the row's native tooltip, after what it says already.
+        // Nothing in its description: a screen reader doesn't hear them on every row (a known limitation for the
+        // keyboard until Details serves any row, a later slice); the instance panel shows them with a terminal open.
+        const factsTitle = rowFactsTitle(i);
+        if (factsTitle) row.title = [row.title, factsTitle].filter(Boolean).join("\n");
         row.addEventListener("click", (e) => {
           // A click on the disclosure opens or closes the row, whatever the row's state, and opens nothing; the
           // focus stays on the row, as the tree keys leave it.
@@ -1222,25 +1273,8 @@ function renderContextRoster(instances) {
         row.dataset.rosterCollapsed = collapsed ? "1" : "0";
         row.tabIndex = -1;
         row.addEventListener("keydown", onRosterRowKey);
-        rowWrap.append(guides, row);
-        // Row tools (the PR link, Start…) overlay the row end on hover/focus only.
-        const tools = document.createElement("span");
-        tools.className = "ctx-row-tools";
-        if (pr?.url) {
-          const open = document.createElement("button"); open.type = "button"; open.className = "act ctx-pr-open"; open.dataset.verb = "pr";
-          open.append(iconElement(document, "external", { size: 13 })); open.title = `Open pull request ${prText(pr)} on GitHub`;
-          open.setAttribute("aria-label", `Open ${i.instance}'s pull request ${prText(pr)} on GitHub`);
-          open.addEventListener("click", () => ctx.openExternal(pr.url));
-          tools.append(open);
-        }
-        if (i.running === false && !held) {
-          const start = document.createElement("button"); start.className = "act ctx-start";
-          start.textContent = "Start…"; start.setAttribute("aria-label", `Start ${i.instance}`);
-          start.disabled = !canAddressRemote(i);
-          if (heldStale) markStaleControl(start);
-          start.addEventListener("click", () => { if (!staleBlocked(start)) openInstanceStart(i); });
-          tools.append(start);
-        }
+        rowWrap.append(row);
+        // Slice 1: no tools overlay. Its acts (Open pull request…, Start…) are the context menu's, for every row.
         const actionTarget = instanceActionTarget(ws, i), menuConnection = connectionGeneration;
         const menuOwner = () => currentWorkspace() === ws && workspaceGeneration() === rosterGeneration && connectionGeneration === menuConnection
           && (!actionTarget || ownsInstanceTarget(actionTarget));
@@ -1291,12 +1325,10 @@ function renderContextRoster(instances) {
             notifications.notify(headline, { detail });
           },
         });
-        // Only what the row holds overlays its end: a running row without a known pull request has no tools.
-        if (tools.childElementCount) rowWrap.append(tools);
         rowWrap.append(rowMenu);
         listEl.append(rowWrap);
       }
-    }
+    });
   }
   paintNote();
   const heading = listEl.querySelector(".ctx-background-toggle");
@@ -1312,7 +1344,6 @@ function renderContextRoster(instances) {
     if (!restoreTreeState() && toHeading) (heading || [...listEl.querySelectorAll(".ctx-inst")].at(-1))?.focus({ preventScroll: true });
     restoreActionMenu();
   });
-  rosterTip.sync(listEl);
   // roving tabindex: exactly one row enters the tab order — the focused row
   // when it survived the rebuild, else the selected one (its terminal is the
   // active tab), else the Background heading when the closed section holds the selected one (#1579), else the first
@@ -1332,16 +1363,15 @@ function renderContextRoster(instances) {
    unknown outcome reads "Outcome unknown" with a visible Check result (the existing result action).
    #802: a home the roster reports setting up its worktree (spawnInProgress, this window's job or a spawn
    made anywhere) reads "Setting up worktree…" in the same treatment, with no tools, and "since <local
-   time>" when a job of this window knows its start (`startedAt`). A row the roster reports (a held home,
-   or an in-flight job's home) explains itself in the hover card, with the roster's facts. */
-function pendingSpawnRow(i, items, instances, startedAt = null) {
+   time>" when a job of this window knows its start (`startedAt`). Its sentence is its title and description
+   (slice 1: no hover card). */
+function pendingSpawnRow(i, startedAt = null, relation = "") {
   const p = i.pendingSpawn ?? null, held = heldHome(i), settingUp = held?.kind === "spawning";
   const unknown = !settingUp && !!p && p.pending !== "spawning", checking = unknown && p.pending === "checking";
   const reported = !p || !!i.reportedSpawn;
   const rowWrap = document.createElement("div");
   rowWrap.className = "ctx-tree-row ctx-spawn-row" + (unknown ? " ctx-spawn-unknown" : "") + (p?.revealed ? " ctx-spawn-revealed" : "");
   rowWrap.style.setProperty("--depth", String(i.depth || 0));
-  const guides = treeGuides(document, treeConnectors(items, i, instances));
   const row = document.createElement("button");
   row.type = "button";
   row.className = "ctx-inst pending";
@@ -1353,8 +1383,11 @@ function pendingSpawnRow(i, items, instances, startedAt = null) {
   const why = settingUp ? held.sentence(i.instance) : unknown ? `The outcome of spawning ${i.instance} is not known yet. Check result asks again.`
     : reported ? `${i.instance} is being spawned. It opens once the spawn finishes.` : `${i.instance} is being spawned. It opens once the roster reports it.`;
   row.setAttribute("aria-description", why);
-  if (reported) rosterTip.bind(row, () => rosterTipFacts(i, why, null, {}));
-  else row.title = why;
+  // A row the roster reports (a home setting up its worktree, an in-flight job's reported home) adds its reported
+  // facts to its tooltip, as an ordinary row does (the slice 1 interim), with its soul, which its state line
+  // replaces; a row only this window knows has none to add, so nothing is guessed.
+  const reportedFacts = reported ? [typeof i.agent === "string" && i.agent ? `Soul: ${i.agent}` : null, rowFactsTitle(i)].filter(Boolean).join(" · ") : "";
+  row.title = [why, reportedFacts].filter(Boolean).join("\n");
   const mark = document.createElement("span");
   mark.setAttribute("aria-hidden", "true");
   mark.className = unknown && !checking ? "ctx-dot unknown" : "ctx-spawn-spinner";
@@ -1364,13 +1397,13 @@ function pendingSpawnRow(i, items, instances, startedAt = null) {
   const meta = document.createElement("span");
   meta.className = "ctx-meta ctx-spawn-state";
   meta.textContent = settingUp ? held.state : checking ? "Checking result…" : unknown ? "Outcome unknown" : "Spawning…";
-  copy.append(name, meta);
+  copy.append(name, meta, ...[relationSpan(document, relation)].filter(Boolean));
   const since = settingUp && startedAt !== null ? waitingClock(startedAt) : "";
   if (since) { const line = document.createElement("span"); line.className = "ctx-meta ctx-held-hint ctx-spawn-since"; line.textContent = `since ${since}`; copy.append(line); }
   row.append(mark, copy);
   row.tabIndex = -1;
   row.addEventListener("keydown", onRosterRowKey);
-  rowWrap.append(guides, row);
+  rowWrap.append(row);
   if (unknown) {
     const tools = document.createElement("span");
     tools.className = "ctx-row-tools ctx-spawn-tools";
@@ -1665,8 +1698,11 @@ function updatePanelControl({ present, open, changes }) {
 function syncContextPanel() {
   const tab = tabLayerVisible ? tabs.get(activeTab) : null;
   const terminal = tab?.kind === "terminal" && canActivateTab(tab, currentWorkspace());
+  // Its Needs input facts (slice 1: the hover card's) through the sidebar's own gate: a row held stale has no claim.
+  const instance = terminal ? tab.instanceRef : null;
   contextPanel.setContext({ workspace: currentWorkspace(), owner: tabLayerVisible ? null : stage,
-    instance: terminal ? tab.instanceRef : null, key: terminal && tab.instanceRef ? tab.key : null });
+    instance, key: terminal && tab.instanceRef ? tab.key : null,
+    waiting: instance ? waitingClaim(instance, { stale: rosterStale || rowStale(instance, contextDeployments) }) : null });
 }
 function activeTabTrigger() { return activeTab != null ? tabs.get(activeTab)?.triggerEl ?? null : null; }
 /** Where focus goes when the control holding it disappears: the active tab's trigger when it is shown, else a
@@ -1680,7 +1716,7 @@ function stableFocusTarget() {
     }
     return true;
   };
-  return [activeTabTrigger(), ...["sidebar-toggle", "show-sidebar", "show-panel"].map(id => document.getElementById(id))].find(shown) ?? null;
+  return [activeTabTrigger(), ...["sidebar-help", "show-sidebar", "show-panel"].map(id => document.getElementById(id))].find(shown) ?? null;
 }
 function refreshPanelInstance(instances, workspace) {
   syncTabNeedsInput(instances, workspace); // also on a poll whose roster signature is unchanged (no repaint)
@@ -2452,6 +2488,9 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
 // prove every entry resolves to a real mount-exporting view. The permanent
 // instance tree in the sidebar is the instances surface itself — selecting
 // an instance opens its terminal; there is no separate Instances stage.
+// The pinned destinations (the Desktop UI rework, slice 1): Workspace overview and Automations, rows under the
+// switcher in the roster rows' style. Automations carries a --danger dot while a run failed (automations-failure.mjs,
+// paintAutomationsFailed), its words after the name, so the row's name says it ("Automations, a run failed").
 const navEl = document.getElementById("nav");
 for (const v of NAV) {
   const b = document.createElement("button");
@@ -2466,16 +2505,25 @@ for (const v of NAV) {
   b.addEventListener("click", () => runAction(`stage.${v.name}`));
   navEl.append(b);
 }
+/** Show or clear the Automations row's failure mark: the --danger dot and, after the name, its words (the row's
+ * accessible name then says "Automations, a run failed"). Absent while nothing failed, so it says nothing then. */
+function paintAutomationsFailed(failed) {
+  const row = document.querySelector('#nav .nav-item[data-view="automations"]');
+  if (!row) return;
+  row.querySelector(":scope > .nav-failed")?.remove();
+  if (!failed) return;
+  const mark = document.createElement("span"); mark.className = "nav-failed";
+  const dot = document.createElement("span"); dot.className = "nav-failed-dot"; dot.setAttribute("aria-hidden", "true");
+  const said = document.createElement("span"); said.className = "sr-only"; said.textContent = FAILED_RUN_TEXT;
+  mark.append(dot, said); row.append(mark);
+}
 
-// The foot's controls use exactly the same registry as keyboard actions (the nav's buttons run theirs above):
-// Spawn instance (Quick Open, app.quickOpenSouls: the product owner, 2026-10-26), the bar's sidebar toggle, and its
-// settings cog's menu.
+// The foot's controls use exactly the same registry as keyboard actions (the nav's buttons run theirs above): New
+// instance (Quick Open, app.quickOpenSouls, the spawn flow) and ? (Keyboard shortcuts, app.shortcuts). Hide sidebar
+// is Ctrl+Shift+B and the palette's; Theme…, Font… and Keyboard shortcuts… are the palette's (slice 1).
 for (const button of document.querySelectorAll("#nav-foot [data-action]")) {
   button.addEventListener("click", () => runAction(button.dataset.action));
 }
-const settingsMenu = createSettingsMenu(document, document.getElementById("sidebar-settings"), {
-  run: (id) => runAction(id), shortcut: (id) => { const chord = getBinding(id, isMac); return chord ? formatChord(chord, isMac) : ""; },
-});
 
 // This is a chooser entry, not a launch or an inspection preselection. Capture
 // workspace visit + selection before import, and contain stale rejections too.
@@ -2536,10 +2584,6 @@ const palette = createPalette({
     { label: "Shortcuts: edit keyboard shortcuts…", detail: chordDetail("app.shortcuts"), run: () => openShortcutsEditor() },
     { label: "Settings: Connections…", detail: "GitHub CLI accounts on this machine", run: () => openConnections() },
     { label: "Workspace: switch…", detail: chordDetail("app.workspaces"), run: () => focusWorkspaceList() },
-    // The palette hands focus to its command: back where it was opened first (a row the toggle hides then passes it to
-    // the current row; a terminal keeps it), then the toggle, as its chord does from there.
-    { label: "Workspaces: show only the current workspace (on / off)", detail: chordDetail("workspaces.currentOnly"),
-      run: () => { takePickerFocusReturn(document)?.restore(); runAction("workspaces.currentOnly"); } },
     // One window per workspace (#481): on macOS also File → New Window ⌘⇧N; elsewhere no default chord.
     ...(typeof desktopBridge.windowOpenWorkspace === "function" ? [{ label: "Window: new window",
       detail: () => chordDetail("app.newWindow")() || (isMac ? formatChord("Mod+Shift+N", true) : ""), run: () => runAction("app.newWindow") }] : []),
@@ -2614,14 +2658,13 @@ onWorkspaceChange(() => {
   palette.close();
 });
 
-// ── shortcuts editor (the settings cog's Keyboard shortcuts… + palette + Mod+,) ────────────
+// ── shortcuts editor (the foot's ?, the palette's Keyboard shortcuts… and Mod+,) ────────────
 const shortcutsEditor = createKeybindingsEditor({ doc: document, isMac, chordFamily });
 // Stored rebinds vs the effective keymap (spec F review): a clash is never resolved silently;
-// the settings cog and its Keyboard shortcuts… item carry a warn dot and a description until the operator rebinds or resets.
+// the foot's ? carries a warn dot and a description until the operator rebinds or resets.
 function markShortcutClashes() {
   const clashes = keymapConflicts(isMac).length;
-  const item = settingsMenu.items.find(el => el.dataset.menuAction === "app.shortcuts");
-  for (const button of [document.getElementById("sidebar-settings"), item]) {
+  for (const button of [document.getElementById("sidebar-help")]) {
     if (!button) continue;
     button.classList.toggle("has-clash", clashes > 0);
     if (clashes) button.setAttribute("aria-description", `${clashes === 1 ? "1 shortcut you set clashes" : `${clashes} shortcuts you set clash`} with another: open Keyboard shortcuts… to review`);
@@ -2802,6 +2845,34 @@ function rosterEntry() {
     || document.querySelector('#ws-options [tabindex="0"]') || document.getElementById("ws-add-open");
 }
 
+/** The foot's "N need you" (slice 1): focus the first row in the roster's order that needs you, itself, without
+ * opening it. The row is chosen from the model, in the order the roster paints it (its main tree's sections, groups
+ * and clusters, then the Background section's), with the gate the count uses (waitingClaim, the held-stale rule):
+ * so a row a held parent's collapse hides, which draws no roll-up, is found too. Then its section is opened and
+ * every collapsed ancestor expanded (its parent chain, by identity over the full roster), the list painted again,
+ * and the row focused. Nothing that waits: nothing moves. */
+function focusFirstNeedingYou() {
+  tabOpenIntents.invalidate();
+  const ws = contextWorkspace || currentWorkspace();
+  const instances = shownRows(contextInstances);
+  const stale = (row) => rosterStale || rowStale(row, contextDeployments);
+  const placement = backgroundPlacement(instances, backgroundShown());
+  const { main, background } = sidebarSections(instances, instances, contextDeployments, DESKTOP_TERMS, { placement, open: true, stale });
+  const ordered = [...main, ...(background?.sections ?? [])].flatMap((section) => section.groups.flatMap((group) => group.clusters.flatMap((cluster) => cluster.instances)));
+  const target = ordered.find((row) => waitingClaim(row, { stale: stale(row) }));
+  if (!target) return;
+  const id = instanceId(target);
+  if (placement.has(id)) backgroundOpen.add(ws);
+  for (let parent = rosterParentId(instances, id), seen = new Set(); parent && !seen.has(parent); parent = rosterParentId(instances, parent)) {
+    // Opened through the disclosure's own record (#1970): a root closed by default opens as one closed by hand does.
+    seen.add(parent); setRowOpen({ collapsed: collapsedInstances, expanded: expandedInstances }, collapseKey(ws, parent), true);
+  }
+  renderContextRoster(contextInstances);
+  const list = contextRosterEl?.querySelector(".ctx-list");
+  const row = [...(list?.querySelectorAll(".ctx-inst") ?? [])].find((el) => el.dataset.treeInstance === id);
+  if (row) setRovingRow(list, row);
+}
+
 /** sidebar.focusFilter, kept under its id (a keys.json rebind still applies) since the roster's filter went
  * (the command palette finds an instance by name): focus the roster's current row, else rosterEntry's next best
  * (an empty roster's Spawn instance). */
@@ -2824,12 +2895,13 @@ function sidebarHidden() {
 }
 function updateSidebarControls() {
   const visible = !sidebarHidden() && !contextPanel.isFocusMode();
-  document.getElementById("sidebar-toggle").setAttribute("aria-expanded", String(visible));
-  // Show sidebar (Spec B) is shown only while the sidebar is away: it is always the collapsed side.
+  // Show sidebar (Spec B) is shown only while the sidebar is away: it is always the collapsed side. The sidebar has no
+  // toggle of its own (slice 1: Ctrl+Shift+B and the palette hide it), so a focused Show sidebar hands its focus to
+  // the roster's way in.
   const show = document.getElementById("show-sidebar");
   const focused = document.activeElement === show;
   show.hidden = visible;
-  if (visible && focused) document.getElementById("sidebar-toggle").focus();
+  if (visible && focused) rosterEntry()?.focus({ preventScroll: true });
 }
 function setSidebarHidden(on) {
   document.getElementById("app").classList.toggle("sidebar-hidden", on);
@@ -3136,7 +3208,6 @@ THEMES.forEach(({ id, label }) => registerAction({
   id: `app.theme.${id}`, label: `Theme: ${label}`, context: "global", run: () => setTheme(id),
 }));
 registerAction({ id: "app.workspaces", label: "Focus the list of workspaces", context: "global", run: () => focusWorkspaceList() });
-registerAction({ id: "workspaces.currentOnly", label: "Show only the current workspace", context: "global", run: () => workspaceLabel.toggleCurrentOnly() });
 registerAction({ id: "sidebar.focusFilter", label: "Focus the instance roster", context: "global", run: () => focusRoster() });
 registerAction({ id: "sidebar.toggle", label: "Toggle the sidebar", context: "global", run: () => toggleSidebar() });
 registerAction({ id: "sidebar.resetWidth", label: "Reset the sidebar's width", context: "global", run: () => sidebarWidth.reset() });
@@ -3380,7 +3451,7 @@ registerAction({ id: "instance.edit", label: "Instance: name and colour…", con
 // declares data-action gets “ … (chord)” appended to its base title.
 const baseTitles = new WeakMap();
 function applyChordTitles() {
-  settingsMenu.refresh();
+  for (const el of document.querySelectorAll("[data-empty-roster]")) el.textContent = emptyRosterLine();
   for (const el of document.querySelectorAll("[data-action]")) {
     if (!baseTitles.has(el)) baseTitles.set(el, el.title || "");
     const chord = getBinding(el.dataset.action, isMac);

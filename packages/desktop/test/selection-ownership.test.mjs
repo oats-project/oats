@@ -35,7 +35,6 @@ import { instanceActionTarget, sameInstanceActionTarget } from '../renderer/inst
 import { instanceSplitPlan, instanceSplitIdentity } from '../renderer/instance-split.mjs';
 import { runtimeState, unsupportedSession } from "../../client/instance-presentation.mjs";
 import { canAddressRemote, rowReason } from "../../client/remote-address.mjs";
-import { createRuntimeBadge } from "../renderer/identity-marks.mjs";
 import { rosterKeyAction, moveTarget } from "../renderer/roster-keys.mjs";
 import { revealInStrip, revealInScrollport } from "../renderer/reveal-in-scrollport.mjs";
 import { createLeader } from "../renderer/leader.mjs";
@@ -83,7 +82,7 @@ function shell(t, { shellSource = source, ownership = createSelectionOwnership, 
     tabs: new Map(), nextTabId: 1, activeTab: null, split: null, sidebarMode: "instances", tabLayerVisible: false,
     contextRosterGen: 0, contextInstances: [], collapsedInstances: new Set(), focusRegions: { focusRegion: () => false, regionOfFocus: () => null },
     rosterState: null, rosterStale: false, contextDeploymentNote: null, ...viewContext(), rosterSignaturePainted: null, // initContextRoster builds the real controller; tests mark it ready before rendering rows
-    rosterTip: { bind() {}, hide() {}, sync() {} }, rosterTipFacts: () => ({}), rosterPrs: { get: () => null, refresh() {} }, spawnJobs: { rows: () => [], announce: () => false, observe() {}, settling: () => false, check() {} },
+    spawnJobs: { rows: () => [], announce: () => false, observe() {}, settling: () => false, check() {} },
     // The palette's last-focus record (Spec C), inert here: the shell code under test writes to it.
     instanceRecency: createInstanceRecency({ storage: null }), recencyIdFromTerminalKey,
     wsActiveTerminal: new Map(), pendingTerms: new Set(),
@@ -98,7 +97,7 @@ function shell(t, { shellSource = source, ownership = createSelectionOwnership, 
     // Panel behavior is covered with the real presenter in split-empty-shell.
     syncContextPanel() {}, contextPanel: { setFocusMode() {} },
     updateSplitControls() {}, revealInStrip, revealInScrollport, tabStripResize: null /* spec F: the shipped active-tab reveal runs too */, numberTabStrips, tabNumberObserver: null, refreshContextRoster() {}, setNavActive() {}, setSidebarHidden() {},
-    ...instanceTree, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason, createRuntimeBadge, rosterKeyAction, moveTarget,
+    ...instanceTree, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason, rosterKeyAction, moveTarget,
     api: () => { const gate = deferred(); requests.push(gate); return gate.promise; },
     prepareOwnedOpen: opts => prepareOwnedOpen({ ...opts, load() {
       const gate = deferred(); loads.push(gate); return gate.promise;
@@ -517,13 +516,19 @@ function ambiguousClusterGuides(t, ambiguity, shellSource = source) {
   const rows = [...s.document.querySelectorAll(".ctx-tree-row")];
   assert.equal(rows.length, full.length, "ambiguity must not hide a row");
   const row = name => rows.find(r => r.querySelector(".ctx-name").dataset.name === name);
-  assert.equal(row("worker").querySelectorAll(".ctx-guide.elbow").length, 0, "shipped caller must not forge an ambiguous parent guide");
-  assert.equal(row("child").querySelectorAll(".ctx-guide.elbow").length, 1, "unambiguous parent still draws its elbow");
+  // Slice 1 (D26): no drawn lines; a row's parent is its indent and its "under <parent>" words, decided on the full
+  // roster (an ambiguous parent name forges neither).
+  const words = name => row(name).querySelector(".ctx-relation")?.textContent ?? "";
+  assert.equal(s.document.querySelector(".ctx-guide"), null, "the roster draws no lines");
+  assert.doesNotMatch(words("worker"), /under/, "shipped caller must not forge an ambiguous parent");
+  assert.equal(row("worker").style.getPropertyValue("--depth"), "0");
+  assert.match(words("child"), /under worker/, "an unambiguous parent is still said");
+  assert.equal(row("child").style.getPropertyValue("--depth"), "1");
 }
 for (const ambiguity of ["same-root", "cross-root"]) {
-  test(`shipped roster guides use the full roster for ${ambiguity} ambiguity across clusters`, t => ambiguousClusterGuides(t, ambiguity));
-  test(`mutation: omitting the full roster for ${ambiguity} guides is caught at the shipped caller`, t => {
-    const mutant = source.replace("treeConnectors(items, i, instances)", "treeConnectors(items, i)");
+  test(`shipped roster relations use the full roster for ${ambiguity} ambiguity across clusters`, t => ambiguousClusterGuides(t, ambiguity));
+  test(`mutation: saying a parent the tree did not resolve (${ambiguity}) is caught at the shipped caller`, t => {
+    const mutant = source.replace("const underWords = (i) => (i.depth || 0) > 0 && i.parentInstance", "const underWords = (i) => i.parentInstance");
     assert.notEqual(mutant, source);
     assert.throws(() => ambiguousClusterGuides(t, ambiguity, mutant), /shipped caller must not forge/);
   });

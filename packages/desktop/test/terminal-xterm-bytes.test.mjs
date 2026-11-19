@@ -51,8 +51,6 @@ const SHARED_SENDS = {
   "tabs.next": { data: "\t", plainer: "Tab" },
   "tabs.prev": { data: "\x1b[Z", plainer: "Shift+Tab" },
   "split.close": ctrlAlt("W"),
-  // Show only the current workspace, Ctrl+Alt+Shift+O in every family: ESC ^O, which Esc, then Ctrl+O still sends.
-  "workspaces.currentOnly": ctrlAlt("O"),
   "focus.leaveTerminal": { data: "\x1b[17;6~", plainer: null },
 };
 const CTRL_ALT_SENDS = {

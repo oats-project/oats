@@ -16,7 +16,6 @@ import { instanceActionTarget, sameInstanceActionTarget } from '../renderer/inst
 import { instanceSplitPlan } from '../renderer/instance-split.mjs';
 import { runtimeState, unsupportedSession } from "../../client/instance-presentation.mjs";
 import { canAddressRemote, rowReason } from "../../client/remote-address.mjs";
-import { createRuntimeBadge } from "../renderer/identity-marks.mjs";
 
 const read = name => readFileSync(new URL(`../renderer/${name}`, import.meta.url), "utf8");
 const css = read("shell.css"), html = read("index.html");
@@ -52,12 +51,12 @@ function fixture(t, stylesheet = css) {
     return matches[0].style;
   };
   const context = {
-    ...tree, document: doc, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason, createRuntimeBadge,
+    ...tree, document: doc, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason,
     instanceActionTarget, instanceSplitPlan, connectionGeneration: 0, menuState() {}, runAction: assert.fail, sayInHint: line => said.push(line),
     applyChordTitles() {}, updateActiveContexts() {}, getBinding: () => null, formatChord: c => c, isMac: true,
     contextRosterEl: doc.querySelector("#instance-roster"), contextWorkspace: "A",
     rosterState: { hasData: true, state: "ready" }, rosterStale: false, contextDeploymentNote: null, ...viewContext(), // loading state: a read succeeded
-    contextInstances: roster, currentWorkspace: () => "A", workspaceGeneration: () => 0, collapsedInstances: new Set(), rosterTip: { bind() {}, hide() {}, sync() {} }, rosterTipFacts: () => ({}), rosterPrs: { get: () => null, refresh() {} }, spawnJobs: { rows: () => [], announce: () => false, observe() {}, settling: () => false, check() {} },
+    contextInstances: roster, currentWorkspace: () => "A", workspaceGeneration: () => 0, collapsedInstances: new Set(), spawnJobs: { rows: () => [], announce: () => false, observe() {}, settling: () => false, check() {} },
     tabs: new Map([[1, { kind: "terminal", key: tree.terminalKey("A", roster[1]) }]]), activeTab: 1,
     tabOpenIntents: { applyFocus: fn => fn() },
     // Display-only fixture: any attempted navigation/action is a test failure.
@@ -75,14 +74,14 @@ function fixture(t, stylesheet = css) {
 }
 
 function assertRoom(u) {
-  // Human, 2026-09-29: a 48px row box whose background fills 44px inside 2px transparent borders,
-  // so neighbouring backgrounds keep a 4px gap and never touch.
-  assert.equal(u.rule(".ctx-tree-row").minHeight, "48px", "a 48px row box");
+  // Slice 1 of the Desktop UI rework: a 44px row box (two lines, the dot centred) whose background fills 40px inside
+  // 2px transparent borders, so neighbouring backgrounds keep a 4px gap and never touch (human, 2026-09-29).
+  assert.equal(u.rule(".ctx-tree-row").minHeight, "44px", "a 44px row box");
   assert.equal(u.rule(".ctx-tree-row").borderTop, "var(--row-gap) solid transparent");
   assert.equal(u.rule(".ctx-tree-row").borderBottom, "var(--row-gap) solid transparent");
   assert.equal(u.rule(".ctx-tree-row").getPropertyValue("--row-gap"), "2px");
   assert.equal(u.rule(".ctx-tree-row").backgroundClip, "padding-box", "the background stops short of the gap");
-  assert.equal(u.rule(".ctx-inst").minHeight, "44px", "the whole painted row is one click target");
+  assert.equal(u.rule(".ctx-inst").minHeight, "40px", "the whole painted row is one click target");
   assert.equal(u.rule(".ctx-inst").height, "auto", "never squeeze two labels into a fixed box");
   assert.equal(u.rule(".ctx-copy").gap, "3px", "name/meta gap follows the supplied 3px stack");
   assert.equal(u.rule(".ctx-head").height, "36px", "the head is the only chrome above the list");
@@ -101,7 +100,7 @@ function assertRoom(u) {
   }
 }
 
-test("roster spacing (non-layout): 48px rows with a 4px gap, padded controls, the list right under the head", t => {
+test("roster spacing (non-layout): 44px rows with a 4px gap, padded controls, the list right under the head", t => {
   const u = fixture(t);
   assertRoom(u);
   // No filter field since the product owner removed it (the command palette finds an instance by name).
@@ -128,19 +127,19 @@ test("roster spacing (non-layout): a selected or hovered row keeps its 4px gap (
 });
 
 // The product owner (2026-10-23): a parent and its child are as far apart as two independent instances. Every row
-// is the one .ctx-tree-row box (min-height 48px, 2px transparent borders); depth only indents it. No other rule may
+// is the one .ctx-tree-row box (min-height 44px, 2px transparent borders); depth only indents it. No other rule may
 // space a row, its button or its children by depth, relation or state.
 test("a parent and its child are spaced as two independent rows: no rule spaces rows by depth", t => {
   const u = fixture(t);
   const base = u.rule(".ctx-tree-row");
-  assert.equal(base.minHeight, "48px");
+  assert.equal(base.minHeight, "44px");
   assert.equal(base.borderTop, "var(--row-gap) solid transparent"); assert.equal(base.borderBottom, "var(--row-gap) solid transparent");
   assert.equal(base.paddingLeft, "calc(var(--depth) * var(--tree-step))", "depth indents, nothing else");
   const SPACING = ["margin", "margin-top", "margin-bottom", "padding-top", "padding-bottom", "border-top", "border-bottom",
     "border-top-width", "border-bottom-width", "border-width", "min-height", "height", "--row-gap"];
   for (const rule of u.rules.filter(r => /\.ctx-(?:tree-row|inst)\b/.test(r.selectorText || ""))) {
     if (rule.selectorText === ".ctx-tree-row" || rule.selectorText === ".ctx-inst") continue;
-    // A row's own descendants (its name, meta line, tools) are inside the 48px box: only the row boxes themselves count.
+    // A row's own descendants (its name, second line, tools) are inside the 44px box: only the row boxes themselves count.
     if (!/\.ctx-(?:tree-row|inst)(?:[.:\[][^ >+~]*)?$/.test(rule.selectorText.split(",").at(-1).trim())) continue;
     for (const prop of SPACING) assert.equal(rule.style.getPropertyValue(prop), "", `${rule.selectorText} sets ${prop}`);
   }
@@ -149,28 +148,24 @@ test("a parent and its child are spaced as two independent rows: no rule spaces 
 test("roster typography (non-layout): valid control family and supplied sidebar label scale", t => {
   const u = fixture(t);
   assert.deepEqual(u.rules.filter(r => /\.ctx-filter/.test(r.selectorText || "")).map(r => r.selectorText), [], "no roster filter rule ships");
-  assert.equal(u.rule(".ctx-group").height, "14px", "a 14px gap after a group (the product owner, 2026-10-26: as before the 6px of 2026-10-23)");
-  assert.equal(u.rule(".ctx-group:first-child").height, "7px", "the first row sits closer to the head (human, 2026-09-29)");
+  assert.equal(u.rule(".ctx-group").height, "12px", "a 12px gap after a group (slice 1: the air between groups)");
+  assert.equal(u.rule(".ctx-bundle-gap").height, "12px", "and the same before a bundle inside a group");
+  assert.equal(u.rule(".ctx-group:first-child").height, "6px", "the first row sits closer to the head (human, 2026-09-29)");
   assert.equal(u.rule(".ctx-inst").getPropertyValue("font"), "inherit");
   assert.equal(u.rule(".ctx-name").fontSize, "var(--name-size, 12.5px)", "12.5px, or the font choice's (12px in Omarchy's font)");
   assert.equal(u.rule(".ctx-name").fontWeight, "600");
-  // The meta line (the product owner, 2026-10-26): the soul in the UI face at the left, the repository in mono at the right.
-  assert.equal(u.rule(".ctx-meta.ctx-soul-repo").fontSize, "11.5px", "Inconsolata is narrow: a step up from 10.5 (the operator, 2026-10-02)");
-  assert.equal(u.rule(".ctx-meta.ctx-soul-repo").fontFamily, "", "the soul in the UI face");
-  assert.equal(u.rule(".ctx-meta-soul").fontFamily, "");
-  assert.equal(u.rule(".ctx-meta-repo").fontFamily, "var(--mono)", "the repository is reference metadata, mono like the design (the shared token: Inconsolata first)");
+  // The second line (slice 1): `<soul> · <machine>` in the UI face, 11.5px (Inconsolata is narrow: the operator,
+  // 2026-10-02, kept), muted; an unknown row keeps it (its reason is its description).
+  assert.equal(u.rule(".ctx-meta.ctx-row-detail").fontSize, "11.5px");
+  assert.equal(u.rule(".ctx-meta.ctx-row-detail").fontFamily, "", "in the UI face");
   for (const row of u.rows) {
     const name = row.querySelector(".ctx-name"), meta = row.querySelector(".ctx-meta");
     // A parent's name sits on its name line after the disclosure (the product owner, 2026-11-19).
     const first = row.querySelector(".ctx-disclosure") ? name.parentElement : name;
     assert.equal(first.nextElementSibling, meta, "both lines remain in the same vertical stack");
-    assert.equal(meta.className, "ctx-meta ctx-soul-repo");
-    const soul = meta.querySelector(".ctx-meta-soul"), repo = meta.querySelector(".ctx-meta-repo");
-    assert.deepEqual([...meta.children], [soul, repo], "the soul, then the repository");
-    assert.equal(soul.textContent, row.querySelector(".ctx-inst").getAttribute("aria-disabled") === "true" ? "dev · state unknown" : "dev");
-    assert.equal(repo.textContent, "desktop-repo");
-    assert.equal(meta.title, "Soul: dev\nRepository: desktop-repo");
-    for (const label of [name, soul, repo]) {
+    assert.equal(meta.className, "ctx-meta ctx-row-detail");
+    assert.equal(meta.textContent, "dev · This Mac", "soul · machine, whatever the row's state");
+    for (const label of [name, meta]) {
       assert.equal(u.computed(label).textOverflow, "ellipsis");
       assert.equal(u.computed(label).whiteSpace, "nowrap");
       assert.equal(u.computed(label).visibility, "visible");
@@ -207,7 +202,10 @@ function assertConnectors(u) {
     "the dot's ring hides the line under it, in the row's own solid colour");
 }
 
-test("tree connectors (non-layout): lines leave the dots; a parent's chevron sits on its name line, never on the lines", t => {
+// Slice 1 of the Desktop UI rework (D26, decided): the roster draws no lineage or sibling lines; indentation (18px a
+// level) and the gap before the next bundle show the tree, and each row says its relations in words. A parent wears
+// its disclosure on its name line (#1970). The connectors' rules stay for the command palette (assertConnectors).
+test("tree (non-layout): indentation, no lines, a parent's chevron on its name line; the connector rules stay for the palette", t => {
   const u = fixture(t);
   assertConnectors(u);
   assert.equal(u.rule(".ctx-tree-row").getPropertyValue("--tree-step"), "18px");
@@ -220,9 +218,9 @@ test("tree connectors (non-layout): lines leave the dots; a parent's chevron sit
     assert.ok(row.querySelector(".ctx-name-line > .ctx-disclosure:first-child"), "first on the name line");
   }
   assert.deepEqual(u.rows.map(row => row.style.getPropertyValue("--depth")), ["0", "1", "2", "1", "2", "0"]);
-  assert.deepEqual(u.rows.map(row => [...row.querySelectorAll(".ctx-guide")].map(g => `${g.className.replace("ctx-guide ", "")}@${g.style.getPropertyValue("--guide-level")}`)), [
-    ["down@0"], ["elbow@0", "line@0", "down@1"], ["line@0", "elbow@1"], ["elbow@0", "down@1"], ["elbow@1"], [],
-  ]);
+  assert.deepEqual(u.rows.map(row => row.querySelectorAll(".ctx-guide, .ctx-guides").length), [0, 0, 0, 0, 0, 0], "no lines on any row");
+  assert.deepEqual(u.rows.map(row => row.querySelector(".ctx-relation")?.textContent ?? null),
+    [null, ", under root", ", under child-a", ", under root", ", under child-b", null], "each child says its parent");
 });
 
 test("roster DOM contract: named group separators, identity, active state, hidden-but-reachable tools and closed context menus", t => {
@@ -257,47 +255,44 @@ test("roster DOM contract: named group separators, identity, active state, hidde
   assert.equal(u.doc.activeElement.classList.contains("active"), true);
   assert.equal(u.rule(".ctx-inst").color, "var(--fg)");
   assert.equal(u.rule(".ctx-tree-row.active").backgroundColor, "var(--sel)");
-  assert.equal(u.rule(".ctx-meta.ctx-soul-repo").color, "var(--muted)");
-  assert.equal(u.rule(".ctx-meta.ctx-soul-repo").background, "", "reference metadata is a plain subline, not a repository pill");
-  assert.equal(u.rule(".ctx-meta-repo").background, "");
-  // What tools remain (Start… on a stopped row) overlay the row they belong to; the menu stays beside them, not inside.
+  assert.equal(u.rule(".ctx-meta.ctx-row-detail").color, "var(--muted)");
+  assert.equal(u.rule(".ctx-meta.ctx-row-detail").background, "", "reference metadata is a plain subline, not a pill");
+  // Slice 1: a stopped row has no tools either (no Start… overlay); its context menu offers Start….
   u.render([...roster, { ...instance("stopped"), running: false }]);
   const stopped = [...u.doc.querySelectorAll(".ctx-tree-row")].find(row => row.querySelector(".ctx-name").dataset.name === "stopped");
-  assert.equal(stopped.querySelector(".ctx-start").closest(".ctx-row-tools")?.parentElement, stopped, "tools overlay the row");
-  assert.equal(stopped.querySelector(".ctx-row-tools .ctx-instance-menu"), null);
+  assert.equal(stopped.querySelector(".ctx-row-tools, .ctx-start"), null, "no tools overlay the row");
   assert.equal(stopped.querySelector(".ctx-instance-menu").parentElement, stopped);
+  assert.ok([...stopped.querySelectorAll(".ctx-instance-menu [role=menuitem]")].some(item => item.dataset.action === "start"), "Start… is the menu's");
   assert.equal(stopped.querySelector(".ctx-instance-actions"), null, "a stopped row has no ⋯ trigger either");
 });
 
 function assertTools(u) {
-  // Hidden tools must never be semi-transparent text (WCAG: no opacity compositing).
+  // A pending spawn's tool (its Check result) is the only row tool left (slice 1): shown, never semi-transparent text
+  // (WCAG: no opacity compositing), and no hover or focus reveals tools on an instance row.
   assert.equal(u.rule(".ctx-row-tools").visibility, "hidden", "tools hide by visibility, never opacity");
   assert.equal(u.rule(".ctx-row-tools").opacity, "");
-  assert.equal(u.rule(".ctx-tree-row:is(:hover, :focus-within) > .ctx-row-tools").visibility, "visible",
-    "hover or keyboard focus reveals the row tools");
+  assert.equal(u.rule(".ctx-tree-row > .ctx-spawn-tools").visibility, "visible", "a pending spawn's own tool is shown");
+  assert.equal(u.rules.filter(r => /:hover|:focus-within/.test(r.selectorText || "") && /ctx-row-tools/.test(r.selectorText || "")).length, 0,
+    "no hover tools overlay");
 }
 
-// The meta line holds the soul and the repository, never the branch (the product owner, 2026-10-26: the hover card
-// keeps it); what the row reports is text, never markup.
-test("sidebar metadata uses the reported soul, repository and harness, no branch, without claiming membership or installation", t => {
+// The second line holds the soul and the machine, never the repository, the branch or the harness (slice 1: the
+// instance panel's); what the row reports is text, never markup.
+test("sidebar metadata uses the reported soul and the machine, no repository, branch or harness badge, without claiming membership or installation", t => {
   const u = fixture(t);
   u.render([{ ...roster[0], agent: "soul-<literal>", branch: "feature/<branch>", harness: "pi" }]);
   const row = u.doc.querySelector(".ctx-inst");
-  assert.deepEqual([...row.querySelector(".ctx-meta").children].map(el => [el.className, el.textContent]),
-    [["ctx-meta-soul", "soul-<literal>"], ["ctx-meta-repo", "desktop-repo"]]);
-  assert.equal(row.querySelector(".ctx-meta").title, "Soul: soul-<literal>\nRepository: desktop-repo");
-  assert.doesNotMatch(row.textContent, /feature/, "the branch is not on the row");
-  assert.equal(row.querySelector(".ctx-runtime").dataset.runtime, "pi");
-  assert.equal(row.querySelector(".ctx-runtime > svg.runtime-mark").getAttribute("viewBox"), "0 0 560 560", "Pi's badge, not a letter");
-  assert.equal(row.querySelector(".ctx-runtime").textContent, "");
-  assert.equal(row.querySelector(".ctx-runtime").getAttribute("aria-label"), "Harness: Pi");
+  assert.equal(row.querySelector(".ctx-meta").textContent, "soul-<literal> · This Mac");
+  assert.equal(row.querySelector(".ctx-meta").children.length, 0);
+  assert.doesNotMatch(row.textContent, /feature|desktop-repo/, "neither the branch nor the repository is on the row");
+  assert.equal(row.querySelector(".ctx-runtime, .runtime-badge"), null, "no harness badge on the row");
   assert.equal(row.querySelector("literal, branch"), null);
 });
 
 // Mutants exist only as in-memory stylesheets: no shared-file rollback, reload
 // or browser is needed to prove the contracts reject the reported regressions.
 for (const [label, before, after, check, message] of [
-  ["fixed button height", "min-height: 44px; height: auto; display: flex", "min-height: 44px; height: 40px; display: flex", assertRoom, /fixed box/],
+  ["fixed button height", "min-height: 40px; height: auto; display: flex", "min-height: 40px; height: 36px; display: flex", assertRoom, /fixed box/],
   ["cramped label gap", "align-items: flex-start; gap: 3px", "align-items: flex-start; gap: 0", assertRoom, /3px stack/],
   ["sibling links off the dot column", "left: calc(13.25px - var(--tree-link-shift, 0px) + var(--guide-level)", "left: calc(8px + var(--guide-level)", assertConnectors, /dot centre column/],
   ["sibling links on the lineage column", "{ left: calc(13.25px - var(--tree-link-shift, 0px) + var(--guide-level) * var(--tree-step));", "{", assertConnectors, /dot centre column/],
@@ -359,7 +354,7 @@ test("keyboard: an unavailable row stays focusable with its context menu; the ta
   assert.deepEqual(stops.map(b => b.dataset.treeInstance), [tree.instanceId(roster[1])], "one tab stop: the selected row");
 });
 
-test('a row that cannot open says why on its meta line (text, not colour), with the full sentence as its title and aria-description', t => {
+test('a row that cannot open keeps soul · machine on its second line and says why in its title and aria-description', t => {
   const u = fixture(t);
   const remote = (name, extra) => ({ ...instance(name), home: `/srv/agents/dev/instances/${name}`, agentsRoot: '/srv/agents', server: 'build',
     repoName: 'Build box', addressable: true, missingRemotely: false, ...extra });
@@ -373,19 +368,18 @@ test('a row that cannot open says why on its meta line (text, not colour), with 
     [{ ...instance('unsure'), running: null }, 'state unknown', 'unsure: status unknown'],
   ];
   u.render(rows.map(([row]) => row));
-  for (const [row, label, sentence] of rows) {
+  // The short label (the second column, rowReason's) was the second line's before slice 1; the sentence still says it.
+  for (const [row, , sentence] of rows) {
     const button = [...u.doc.querySelectorAll('.ctx-inst')].find(b => b.querySelector('.ctx-name').dataset.name === row.instance);
     assert.ok(button, row.instance);
-    const meta = button.querySelector('.ctx-meta-soul').textContent;
-    assert.equal(meta, `dev · ${label}`, `${row.instance}: the meta line's soul side "${meta}" shows "${label}"`);
-    assert.equal(button.querySelector('.ctx-meta-repo').textContent, row.repoName, 'the repository on its own side');
+    assert.equal(button.querySelector('.ctx-meta').textContent, `dev · ${row.server ? row.repoName : 'This Mac'}`, `${row.instance}: soul · machine`);
     assert.equal(button.getAttribute('aria-disabled'), 'true');
-    assert.equal(button.title, sentence); assert.equal(button.getAttribute('aria-description'), sentence);
+    assert.equal(button.title.split('\n')[0], sentence); assert.equal(button.getAttribute('aria-description'), sentence);
     assert.equal(button.closest('.ctx-tree-row').querySelector('.ctx-instance-actions'), null, `${row.instance}: no ⋯ trigger (#1559)`);
   }
   // An addressable foreign row (no saved route here) opens like any other: no reason, no disabled state.
   u.render([remote('foreign', { savedRoute: false })]);
   const foreign = u.doc.querySelector('.ctx-inst');
   assert.equal(foreign.getAttribute('aria-disabled'), null);
-  assert.deepEqual([...foreign.querySelector('.ctx-meta').children].map(el => el.textContent), ['dev', 'Build box'], 'the soul alone, then the repository');
+  assert.equal(foreign.querySelector('.ctx-meta').textContent, 'dev · Build box', 'the soul, then the machine');
 });

@@ -263,7 +263,7 @@ test("index.html ships the split buttons and shell wires the group projection th
   assert.doesNotMatch(html, /tab-actions-sep/);
   assert.ok(!/id="pane-tabs"/.test(html), "the PR #44 pane-tabs row is gone (phantom chrome fix)");
   assert.doesNotMatch(html, /id="sidebar-restore"/, "a hidden sidebar leaves no edge (Spec B)");
-  for (const a of ["split.vertical", "split.horizontal", "sidebar.toggle", "panel.toggle"]) {
+  for (const a of ["split.vertical", "split.horizontal", "sidebar.toggle", "panel.toggle", "app.shortcuts", "app.quickOpenSouls"]) {
     assert.match(html, new RegExp(`data-action="${a.replace(".", "\\.")}"`), `${a} button is chord-titled`);
   }
   const src = read("renderer/shell.mjs");
@@ -274,41 +274,36 @@ test("index.html ships the split buttons and shell wires the group projection th
   const footerDom = new JSDOM(html);
   t.after(() => footerDom.window.close());
   const document = footerDom.window.document;
-  // The foot (the product owner, 2026-10-26): only its bar, the OATS mark, the sidebar toggle, Spawn instance, the cog.
-  const toggle = document.querySelector('#nav-foot > #sidebar-bar > button#sidebar-toggle');
-  assert.ok(toggle, "the sidebar toggle is in the foot's bar");
+  // The foot (slice 1 of the Desktop UI rework): only its bar, N need you, New agent and ?; no OATS mark, no
+  // sidebar toggle (Ctrl+Shift+B, the palette and Show sidebar), no cog.
+  assert.equal(document.getElementById("sidebar-toggle"), null, "no sidebar toggle in the foot");
   const spawn = document.querySelector("#nav-foot > #sidebar-bar > button#sidebar-spawn");
-  assert.ok(spawn, "Spawn instance is in the bar");
-  assert.equal(toggle, document.querySelector("#sidebar-bar > button"), "the bar's first button");
-  assert.ok(toggle.previousElementSibling.classList.contains("sidebar-brand"), "the toggle after the OATS mark");
-  assert.equal(spawn.previousElementSibling, toggle, "Spawn instance after the toggle");
-  assert.equal(spawn.nextElementSibling.id, "sidebar-settings", "then the cog");
+  const help = document.querySelector("#nav-foot > #sidebar-bar > button#sidebar-help");
+  assert.ok(spawn && help, "New agent and ? are in the bar");
+  assert.equal(spawn.previousElementSibling.id, "sidebar-need-you", "New agent after the count");
+  assert.equal(spawn.nextElementSibling, help, "then ?");
   assert.equal(spawn.dataset.action, "app.quickOpenSouls", "it runs Quick Open");
   assert.equal(spawn.querySelector("kbd"), null, "no chord hint element: the chord is in its tooltip");
-  assert.equal(toggle.getAttribute("aria-label"), "Hide the sidebar", "icon-only button has an accessible name");
-  assert.equal(toggle.dataset.action, "sidebar.toggle");
-  // The foot's controls are wired here (every [data-action] in #nav-foot: Spawn instance and the toggle; the cog builds
-  // its own menu), the nav's buttons, under the list of workspaces, by their own listener (shell.mjs nav rail), so no
-  // click runs twice.
+  assert.equal(help.getAttribute("aria-label"), "Keyboard shortcuts", "an icon-like button has an accessible name");
+  assert.equal(help.dataset.action, "app.shortcuts");
+  // The foot's controls are wired here (every [data-action] in #nav-foot: New agent and ?), the nav's buttons, under
+  // the list of workspaces, by their own listener (shell.mjs nav rail), so no click runs twice.
   const wiring = src.match(/for \(const button of document\.querySelectorAll\("#nav-foot \[data-action\]"\)\) \{[^]*?\n\}/)?.[0];
-  const registration = src.split("\n").find(line => line.startsWith('registerAction({ id: "sidebar.toggle"'));
-  assert.ok(wiring && registration, "exercise shipped sidebar dispatch and registry binding");
+  assert.ok(wiring, "exercise shipped foot dispatch");
   // A nav button, as the nav rail adds them before this wiring runs (it carries its stage action too).
   assert.equal(document.querySelector("#nav-foot #nav"), null, "the nav is not in the foot");
-  const navButton = document.createElement("button"); navButton.dataset.action = "sidebar.toggle";
+  const navButton = document.createElement("button"); navButton.dataset.action = "app.shortcuts";
   document.getElementById("nav").append(navButton);
-  let toggles = 0, quickOpens = 0;
+  let shortcuts = 0, quickOpens = 0;
   t.after(registerAction({ id: "app.quickOpenSouls", label: "Quick Open", run: () => quickOpens++ }));
-  runInNewContext(`${wiring}\n${registration}`, {
-    document, runAction, toggleSidebar: () => toggles++,
-    registerAction: action => { t.after(registerAction(action)); },
-  });
-  toggle.click();
-  assert.equal(toggles, 1, "the foot's toggle runs sidebar.toggle through the actual action registry");
+  t.after(registerAction({ id: "app.shortcuts", label: "Keyboard shortcuts", run: () => shortcuts++ }));
+  runInNewContext(wiring, { document, runAction });
+  help.click();
+  assert.equal(shortcuts, 1, "? runs app.shortcuts through the actual action registry");
   spawn.click();
-  assert.deepEqual([toggles, quickOpens], [1, 1], "and Spawn instance runs Quick Open through it");
+  assert.deepEqual([shortcuts, quickOpens], [1, 1], "and New agent runs Quick Open through it");
   navButton.click();
-  assert.equal(toggles, 1, "that wiring never adds a second dispatch to the nav's buttons");
+  assert.equal(shortcuts, 1, "that wiring never adds a second dispatch to the nav's buttons");
   const css = read("renderer/shell.css");
   assert.doesNotMatch(css, /#sidebar-restore/);
   assert.match(css, /\.main-edge-control\[hidden\] \{ display: none; \}/);

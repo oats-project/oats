@@ -24,6 +24,23 @@ export function rosterName(doc, instanceName) {
   return name;
 }
 
+/** A roster row's state in words for assistive technology (slice 1: the hover card said it, and the dot says it by
+ * shape and colour alone): ", running", ", stopped" or ", status unknown", visually hidden after its second line. */
+export function stateSpan(doc, state) {
+  const span = doc.createElement("span"); span.className = "sr-only ctx-state";
+  span.textContent = `, ${state === "running" ? "running" : state === "stopped" ? "stopped" : "status unknown"}`;
+  return span;
+}
+
+/** A roster row's relations in words for assistive technology (the Desktop UI rework, slice 1, D26: the roster draws
+ * no lineage or sibling lines), ", under p, sibling of s", visually hidden after its lines; null when it has none.
+ * The words are the command palette's ("under …", siblingText's "sibling of …"). */
+export function relationSpan(doc, words) {
+  if (!words) return null;
+  const span = doc.createElement("span"); span.className = "sr-only ctx-relation"; span.textContent = `, ${words}`;
+  return span;
+}
+
 /** Agent-group boundary for the instances sidebar (Workspace v4): no title,
  * a 6px gap (2026-10-23; was 14px), with the cluster's indent and its root,
  * and the boundary is still exposed to assistive technology (role=separator with the group's name and
@@ -243,17 +260,9 @@ export function renderRosterCount(el, instances, { pending = false, stale = fals
 }
 
 /* ── the roster's loading state (desktop/loading-states) ─────────────────── */
-/** Why Start… is disabled, and the row's context menu held, while the roster is stale: the reason a
- * disabled control carries for the pointer (title) and for assistive tech (aria-description),
- * since a greyed look alone says nothing. */
+/** Why a stopped row's Start, and the row's context menu, are held while the roster is stale: the reason the row
+ * carries for the pointer (title) and for assistive tech (aria-description), since a greyed look alone says nothing. */
 export { ROSTER_STALE_TITLE };
-export function markStaleControl(control) {
-  // aria-disabled, never `disabled`: Chromium blurs a focused control that becomes disabled, and the roster
-  // repaints under focus. Every handler on a stale-marked control checks `staleBlocked()` first.
-  control.setAttribute("aria-disabled", "true"); control.title = ROSTER_STALE_TITLE; control.setAttribute("aria-description", ROSTER_STALE_TITLE);
-}
-/** True when `markStaleControl` marked this control: its activation must do nothing. */
-export const staleBlocked = control => control?.getAttribute?.("aria-disabled") === "true";
 /** The pending skeleton: five roster rows, the height of the real ones. */
 export const ROSTER_SKELETON_ROWS = 5;
 

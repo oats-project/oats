@@ -40,20 +40,17 @@ function brainStyles() {
 
 const markup = `<div id="app"><aside id="sidebar">
   <div class="side-head"><span id="ws-heading" class="ws-heading">Workspace</span>
-    <button id="ws-current-only" class="side-icon-button ws-current-only icon-button" type="button" aria-pressed="true" aria-label="Show only the current workspace"></button>
     <button id="ws-add-open" class="ws-add-open side-icon-button icon-button" type="button" aria-label="Add local workspace…"></button></div>
   <section id="ws-list" class="ws-list"><div id="ws-options" class="ws-options"><ul class="ws-group">
     <li class="ws-option-row"><button class="ws-option ws-current" aria-current="true">One</button></li>
     <li class="ws-option-row"><button class="ws-option ws-other">Two</button></li></ul></div></section>
-  <nav id="nav"><button class="nav-item active" aria-current="page"><span class="icon"></span><span class="label">Workspace overview</span></button><button class="nav-item"><span class="icon"></span><span class="label">Automations</span></button></nav>
+  <nav id="nav"><button class="nav-item active" aria-current="page"><span class="icon"></span><span class="label">Workspace overview</span></button><button class="nav-item"><span class="icon"></span><span class="label">Automations</span><span class="nav-failed"><span class="nav-failed-dot" aria-hidden="true"></span><span class="sr-only">, a run failed</span></span></button></nav>
   <section id="instance-roster">
     <div class="ctx-head"><span>Instances</span><span class="ctx-count"></span></div>
     <div class="ctx-list"><div class="ctx-tree-row"><button class="ctx-inst">Row</button></div></div></section>
-  <div id="nav-foot"><div id="sidebar-bar" role="group" aria-label="Sidebar tools"><span class="sidebar-brand" aria-hidden="true"></span>
-      <button id="sidebar-spawn" type="button">Spawn instance</button>
-      <button id="sidebar-toggle" class="side-icon-button icon-button" type="button" aria-label="Hide the sidebar">S</button>
-      <button id="sidebar-settings" class="side-icon-button sidebar-settings icon-button" type="button" aria-label="Settings" aria-haspopup="menu"></button>
-      <div id="sidebar-settings-menu" class="ctx-instance-menu sidebar-settings-menu" role="menu"><button role="menuitem" data-menu-action="app.themePicker">Theme…</button></div></div></div></aside>
+  <div id="nav-foot"><div id="sidebar-bar" role="group" aria-label="Sidebar tools"><button id="sidebar-need-you" type="button">2 need you</button>
+      <button id="sidebar-spawn" type="button">New agent</button>
+      <button id="sidebar-help" class="side-icon-button icon-button" type="button" aria-label="Keyboard shortcuts">?</button></div></div></aside>
   <main id="main"><div id="tabstrip"><div id="tabbar-row"><div id="tabbar">
     <div class="tab active"><button class="tab-trigger">Tab</button><button class="close">×</button></div>
   </div><div id="tab-actions"><button id="split-right">▥</button></div></div></div>
@@ -169,11 +166,10 @@ test("focus: one global 1px inset accent edge and tint replace every 2px ring an
 
 test("focus: keyboard focus on plain shell controls paints the tint and the edge", t => {
   const u = fixture(t);
-  // The nav's items, the head's controls (Show only the current workspace, Add local workspace…), the bar's (the
-  // sidebar toggle, Spawn instance, the settings cog) and the settings menu's items are plain controls (the product
-  // owner, 2026-10-26).
-  for (const selector of [".ws-option.ws-other", ".ws-option.ws-current", ".side-icon-button", "#nav .nav-item:not(.active)", "#nav .nav-item.active", "#ws-current-only", "#ws-add-open",
-    "#sidebar-toggle", "#sidebar-spawn", "#sidebar-settings", ".sidebar-settings-menu [role=menuitem]", ".ctx-inst", ".tab-trigger", ".tab .close",
+  // The pinned rows (the nav's items), the head's Add local workspace… and the foot's controls (N need you, New
+  // instance, ?) are plain controls (the product owner, 2026-10-26; slice 1 of the Desktop UI rework).
+  for (const selector of [".ws-option.ws-other", ".ws-option.ws-current", ".side-icon-button", "#nav .nav-item:not(.active)", "#nav .nav-item.active", "#ws-add-open",
+    "#sidebar-need-you", "#sidebar-spawn", "#sidebar-help", ".ctx-inst", ".tab-trigger", ".tab .close",
     "#tab-actions button", ".ws-suggestion", ".ws-dialog-foot .secondary", ".kb-chord", ".kb-close", ".ws-segmented [aria-pressed=false]",
     ".ctx-instance-menu button", ".lifecycle-close", ".lifecycle-review", ".lifecycle-check", ".oats-view .act:not(.primary):not(.danger)"]) {
     const s = u.focused(selector);
@@ -241,12 +237,9 @@ for (const palette of ["light", "solarized", "dark"]) test(`${palette}: selected
   }
   assert.equal(u.style(".ws-segmented [aria-pressed=true]").color, "var(--accent)");
   assert.equal(u.rule("#ws-suggestion-search:focus-visible").borderColor, "var(--accent)");
-  // The nav's items, the head's icon buttons, the bar's (the sidebar toggle, Spawn instance, the settings cog) and the
-  // settings menu's items: their ink, idle and keyboard-focused, on the --sel tint they focus to, through the effective
-  // tokens (the edge is checked above).
-  // Show only the current workspace, pressed (the fixture's): its --accent icon, idle and focused alike.
-  assert.deepEqual([u.style("#ws-current-only").color, u.focused("#ws-current-only").color], ["var(--accent)", "var(--accent)"]);
-  for (const selector of ["#nav .nav-item:not(.active)", "#nav .nav-item.active", "#ws-current-only", "#ws-add-open", "#sidebar-toggle", "#sidebar-spawn", "#sidebar-settings", ".sidebar-settings-menu [role=menuitem]"]) {
+  // The pinned rows, the head's icon button and the foot's controls (N need you, New agent, ?): their ink, idle
+  // and keyboard-focused, on the --sel tint they focus to, through the effective tokens (the edge is checked above).
+  for (const selector of ["#nav .nav-item:not(.active)", "#nav .nav-item.active", "#ws-add-open", "#sidebar-need-you", "#sidebar-spawn", "#sidebar-help"]) {
     const idle = u.style(selector).color, focus = u.focused(selector);
     for (const ink of [idle, focus.color]) {
       const name = ink.match(/^var\(--([\w-]+)\)$/)?.[1];

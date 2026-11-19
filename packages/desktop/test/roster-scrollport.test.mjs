@@ -19,11 +19,11 @@ const fn = name => {
   return found[0];
 };
 
-const ROW = 48, TOP = 60, HEIGHT = 120; // the list's top edge and its 120px scrollport: two and a half rows
-/** Six roster rows in an overflowing list, the last one selected. Every row box is ROW px; a row's
- * button sits inside it, 2px from each edge (the row's transparent borders), its tools on the right. */
+const ROW = 44, TOP = 60, HEIGHT = 120; // the list's top edge and its 120px scrollport: under three rows
+/** Six roster rows in an overflowing list, the last one selected. Every row box is ROW px (slice 1's 44px); a row's
+ * button sits inside it, 2px from each edge (the row's transparent borders). */
 function fixture(t) {
-  const rows = Array.from({ length: 6 }, (_, i) => `<div class="ctx-tree-row"><button class="ctx-inst" type="button" tabindex="${i ? -1 : 0}" data-tree-instance="i${i}" data-tree-control="terminal">i${i}</button><span class="ctx-row-tools"><button class="ctx-start" type="button">Start…</button></span></div>`).join("");
+  const rows = Array.from({ length: 6 }, (_, i) => `<div class="ctx-tree-row"><button class="ctx-inst" type="button" tabindex="${i ? -1 : 0}" data-tree-instance="i${i}" data-tree-control="terminal">i${i}</button></div>`).join("");
   const dom = new JSDOM(`<!doctype html><body><div id="app"><aside id="sidebar"><nav id="nav"><button>Workspace overview</button></nav><section id="instance-roster"><div class="ctx-head"><span>Instances</span><span class="ctx-count"></span></div><div class="ctx-list">${rows}</div></section></aside><main id="main"><div id="stagehost"><button>Stage</button></div></main><aside id="context-panel" hidden></aside></div></body>`);
   t.after(() => dom.window.close());
   const doc = dom.window.document, list = doc.querySelector(".ctx-list"), sidebar = doc.getElementById("sidebar");
@@ -38,7 +38,6 @@ function fixture(t) {
     const rect = inset => () => { const top = TOP + i * ROW - list.scrollTop + inset; return { top, bottom: top + ROW - 2 * inset, height: ROW - 2 * inset }; };
     box.getBoundingClientRect = rect(0);
     box.querySelector(".ctx-inst").getBoundingClientRect = rect(2);
-    box.querySelector(".ctx-start").getBoundingClientRect = rect(12);
   });
   const fully = el => { const r = el.getBoundingClientRect(); return r.top >= TOP && r.bottom <= TOP + HEIGHT; };
   const row = i => boxes[i].querySelector(".ctx-inst");
@@ -68,7 +67,6 @@ test("End and Down reveal the focused last row of an overflowing list inside the
   assert.equal(u.doc.activeElement, u.row(5), "End focuses the last row");
   assert.equal(u.list.scrollTop, 6 * ROW - HEIGHT, "just enough to show its whole row box");
   assert.ok(u.fully(u.boxes[5]), "the last row is fully inside the list's scrollport");
-  assert.ok(u.fully(u.boxes[5].querySelector(".ctx-start")), "and so are its tools, shown on focus");
   assert.equal(u.row(5).tabIndex, 0, "the roving stop follows");
   u.key(u.row(5), "ArrowUp");
   assert.equal(u.doc.activeElement, u.row(4));

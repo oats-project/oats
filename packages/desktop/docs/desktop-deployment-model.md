@@ -153,7 +153,7 @@ lines is shown as one; a text the filter withholds (control characters, a
 credential's shape) reads "[withheld]" alone, with no speaker in
 front; a text with nothing to show leaves the place saying what it said
 before for a row without one. The places: a roster row's title and
-description and its hover card's Status, the row's context menu (what it
+description, the instance panel's Session note (the runtime error), the row's context menu (what it
 says when it is held, Start's reason, Open in split's reason), the notice of a terminal that
 cannot open, the start dialog's status, the context panel's Start, the
 overview's Go to instance and Start…, the roster's failure notice and the
@@ -568,7 +568,7 @@ at most 32 views). When the tabs overflow, the strip scrolls horizontally and
 the selected or focused tab is revealed, as in the terminal tab strip. The
 header's count line counts the selected tab and sits at the right of the
 header. The tab has no Spawn button (Spec E): `S` on the canvas (which goes
-to the Souls tab), the sidebar's Spawn instance, Quick Open and the soul
+to the Souls tab), the sidebar's New agent, Quick Open and the soul
 cards spawn.
 
 - **All** stacks one section per deployment, headed by `deploymentLabel`
@@ -840,9 +840,10 @@ held), shown in its workspace's view; its rows carry `server`, `home`, and the k
   machine) decides only when this computer's OATS predates 0.31 and reports no
   `addressable`: a row it spawned stays reachable through its saved route.
 - **Why a row can't open.** `rowReason(row)` in the same module is the one
-  source of a row's reason: a short label on the roster meta line (Herdr no
-  longer supported, gone from `<server>`, not reachable on `<server>`,
-  `<server>` not reached, state unknown), and the full sentence used as the
+  source of a row's reason: a short label (Herdr no longer supported, gone from
+  `<server>`, not reachable on `<server>`, `<server>` not reached, state
+  unknown; on the roster's meta line until slice 1 of the Desktop UI rework made
+  that line `<soul> · <machine>`), and the full sentence used as the
   row's `title`, `aria-description` and the reason its context menu says. When the
   sentence is the row's own `runtimeError` the reason carries its `origin`
   ([Who made a shown text](#who-made-a-shown-text)); a sentence written

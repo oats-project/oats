@@ -642,7 +642,7 @@ parent when there is a relation (the placement the kernel will record:
 `pendingPlacement`), with the kernel's name from the decision. It reads
 **Spawning…** beside a small spinner (the text carries the state; the spinner
 stands still under reduced motion), is `aria-disabled` with no instance actions
-and no hover card, and is announced once through the roster's polite live
+(its sentence is its title and description), and is announced once through the roster's polite live
 region. It carries the real row's identity (`data-tree-instance` is the decided
 home), so when the roster reports that home the real row replaces it in place
 and a focused pending row stays focused. While the job is in flight, a reported

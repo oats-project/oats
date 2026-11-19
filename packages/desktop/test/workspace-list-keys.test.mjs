@@ -103,7 +103,8 @@ function rig(t, { platform = "Linux x86_64" } = {}) {
     shipped(/const isMac = navigator\.platform\.includes\("Mac"\);/),
     shipped(/const chordDetail = \(id\) => \(\) => \{[^]*?\n\};/),
     shipped(/const SIDEBAR_HIDDEN_KEY = [^\n]+/),
-    shipped("sidebarHidden"), shipped("updateSidebarControls"), shipped("setSidebarHidden"), shipped("focusWorkspaceList"),
+    // Shown again with Show sidebar focused, the sidebar hands the focus to the roster's way in (rosterEntry, slice 1).
+    shipped("sidebarHidden"), shipped("updateSidebarControls"), shipped("rosterEntry"), shipped("setSidebarHidden"), shipped("focusWorkspaceList"),
     shipped(/registerAction\(\{ id: "app\.workspaces"[^\n]+/),
     // The engine's one window keydown listener, and the leader as the shell builds and binds it.
     shipped(/window\.addEventListener\("keydown", \(e\) => handleKeydown\(e\)\);/),
@@ -332,21 +333,10 @@ test("⌘K / Ctrl+Alt+K after A → B → A: A's instances most recently selecte
   assert.deepEqual([...s.c.instanceRecency.snapshot("B").keys()].map(id => id.split("/").at(-1)).sort(), ["b1", "b2"], "B's record is B's alone");
 });
 
-// The palette lists its own commands (shell.mjs createPalette's `commands`), not the keymap's registry: Show only
-// the current workspace has its entry there, with its live chord, and runs its action (review of PR 8).
-test("the palette has Show only the current workspace: the shipped entry, found by search, its chord, running workspaces.currentOnly", () => {
+// Slice 1 of the Desktop UI rework dropped Show only the current workspace: the palette lists no entry for it.
+test("the palette has no Show only the current workspace (the list always shows every workspace)", () => {
   const src = readFileSync(new URL("../renderer/shell.mjs", import.meta.url), "utf8");
   const commands = src.slice(src.indexOf("  commands: [\n"), src.indexOf("\n  ],\n});", src.indexOf("  commands: [\n")));
-  const line = commands.match(/^ {4}\{ label: "Workspaces: show only the current workspace \(on \/ off\)"[^]*?\} \},$/m)?.[0];
-  assert.ok(line, "an entry of the palette's commands");
-  const ran = [];
-  // It takes the palette's focus handoff back first (workspace-open-in-window runs it through the real palette).
-  const entry = runInNewContext(`[${line}][0]`, { chordDetail: id => () => `chord of ${id}`, runAction: id => ran.push(id),
-    document: {}, takePickerFocusReturn: () => ({ restore: () => { ran.push("restore"); return true; } }) });
-  assert.equal(entry.detail(), "chord of workspaces.currentOnly", "its detail is the action's live chord");
-  entry.run(); assert.deepEqual(ran, ["restore", "workspaces.currentOnly"], "focus back first, then the toggle");
-  for (const query of [">show only", ">current workspace", "show only the current"]) {
-    const rows = paletteRows([], [entry], query, { openTerminal() {} });
-    assert.ok(rows.some(row => row.label === entry.label), `"${query}" finds it`);
-  }
+  assert.ok(commands.length > 100, "the palette's commands");
+  assert.doesNotMatch(commands, /show only the current workspace|workspaces\.currentOnly/i);
 });

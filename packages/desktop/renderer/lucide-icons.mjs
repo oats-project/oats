@@ -15,7 +15,6 @@ export const LUCIDE_ICONS = Object.freeze({
   "chevron-down":[["path",[["d","m6 9 6 6 6-6"]]]],
   "chevron-left":[["path",[["d","m15 18-6-6 6-6"]]]],
   "chevron-right":[["path",[["d","m9 18 6-6-6-6"]]]],
-  "chevrons-down-up":[["path",[["d","m7 20 5-5 5 5"]]],["path",[["d","m7 4 5 5 5-5"]]]],
   "circle":[["circle",[["cx","12"],["cy","12"],["r","10"]]]],
   "circle-alert":[["circle",[["cx","12"],["cy","12"],["r","10"]]],["line",[["x1","12"],["x2","12"],["y1","8"],["y2","12"]]],["line",[["x1","12"],["x2","12.01"],["y1","16"],["y2","16"]]]],
   "circle-dot":[["circle",[["cx","12"],["cy","12"],["r","1"]]],["circle",[["cx","12"],["cy","12"],["r","10"]]]],

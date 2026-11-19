@@ -11,7 +11,6 @@ import { JSDOM } from "jsdom";
 import {
   SIDEBAR_KEYS, registerAction, resetAllBindings, setActiveContexts, matchEvent, parseChord, getBinding, setBinding,
 } from "../renderer/keybindings.mjs";
-import { createSettingsMenu } from "../renderer/sidebar-settings.mjs";
 
 let contexts = new Set();
 
@@ -40,10 +39,10 @@ function rig(t) {
     setActiveContexts: set => { contexts = new Set(set); setActiveContexts(set); } };
   const updateActiveContexts = runInNewContext(`${source}; updateActiveContexts;`, c);
   const sidebarKeysLive = () => { updateActiveContexts(); return contexts.has("sidebar"); };
-  // What the shell draws there: the settings cog's menu (sidebar-settings.mjs, as shell.mjs mounts it), a row of
-  // the workspace list (a list of buttons, workspace-switcher.mjs), a roster row, a nav button (under the list), an
-  // instance row's open context menu (instance-actions.mjs); and in the main area a terminal's input.
-  const settings = createSettingsMenu(doc, doc.getElementById("sidebar-settings"), { run: () => {} });
+  // What the shell draws there: a row of the workspace list (a list of buttons, workspace-switcher.mjs), a roster row,
+  // a nav button (under the list), an instance row's open context menu (instance-actions.mjs); and in the main area a
+  // terminal's input. The foot's count is shown, as while a row needs you (sidebar-foot.mjs).
+  doc.getElementById("sidebar-need-you").hidden = false;
   const wsRow = doc.createElement("button"); wsRow.type = "button"; wsRow.className = "ws-option"; wsRow.tabIndex = 0;
   wsRow.setAttribute("aria-current", "true"); wsRow.dataset.workspaceId = "/w/a";
   const wsItem = doc.createElement("li"); wsItem.className = "ws-option-row"; wsItem.append(wsRow);
@@ -73,21 +72,21 @@ function rig(t) {
     return matchEvent(e, { isMac: false });
   };
   return { win, doc, row, nav, item, textarea, pressAt, ran, sidebarKeysLive, wsRow,
-    field, settings, controls: [...doc.querySelectorAll("#sidebar > .side-head > button, #sidebar .ctx-head button, #sidebar-bar > button")], main: doc.getElementById("show-panel") };
+    field, controls: [...doc.querySelectorAll("#sidebar > .side-head > button, #sidebar .ctx-head button, #sidebar-bar > button")], main: doc.getElementById("show-panel") };
 }
 
-test("each sidebar key fires on a workspace list row, a roster row, a nav button, the head's two controls and the foot's buttons, by its real (shifted) keydown", t => {
+test("each sidebar key fires on a workspace list row, a roster row, a nav button, the head's control and the foot's buttons, by its real (shifted) keydown", t => {
   const r = rig(t);
-  // The sidebar top to bottom (the product owner, 2026-10-26): the head (Show only the current workspace, Add local
-  // workspace…), the list, the nav under it, the instances (their heading holds no control), then the foot (its
-  // bar: the OATS mark, the sidebar toggle, Spawn instance and the settings cog).
+  // The sidebar top to bottom (the product owner, 2026-10-26; slice 1): the head (Add local workspace…), the list,
+  // the pinned rows under it, the instances (their heading holds no control), then the foot (its bar: N need you,
+  // New agent and ?).
   const sidebar = r.doc.getElementById("sidebar");
   assert.equal(r.doc.getElementById("ws-current"), null, "no current-workspace section any more");
   assert.equal(r.doc.getElementById("nav").parentElement, sidebar, "the nav is the sidebar's own");
   assert.equal(r.doc.getElementById("nav").previousElementSibling, r.doc.getElementById("ws-list"), "the nav sits under the list");
   assert.equal(r.doc.getElementById("nav").nextElementSibling, r.doc.getElementById("instance-roster"), "the instances under the nav");
   assert.ok(r.doc.getElementById("nav").contains(r.nav));
-  assert.deepEqual(r.controls.map(b => b.id), ["ws-current-only", "ws-add-open", "sidebar-toggle", "sidebar-spawn", "sidebar-settings"]);
+  assert.deepEqual(r.controls.map(b => b.id), ["ws-add-open", "sidebar-need-you", "sidebar-spawn", "sidebar-help"]);
   // The list is buttons, not a listbox, and the guard names no popup of it: the plain keys stay live there.
   assert.equal(r.doc.querySelector('#ws-list[role], #ws-options[role], .ws-group[role="listbox"]'), null);
   assert.doesNotMatch(shell.match(/function updateActiveContexts\([^]*?\n\}/)[0], /ws-menu/);
@@ -100,7 +99,7 @@ test("each sidebar key fires on a workspace list row, a roster row, a nav button
   }
 });
 
-test("the shipped sidebar has no text field (no roster filter); never in a field, an open menu (an instance row's context menu, the settings cog's), main or a terminal", t => {
+test("the shipped sidebar has no text field (no roster filter); never in a field, an open menu (an instance row's context menu), main or a terminal", t => {
   const r = rig(t);
   assert.deepEqual([...r.doc.querySelectorAll("#sidebar :is(input, textarea, select), .ctx-filter")].filter(el => el !== r.field), [],
     "the shipped sidebar holds no editable field");
@@ -109,7 +108,6 @@ test("the shipped sidebar has no text field (no roster filter); never in a field
     const chord = getBinding(id, false);
     assert.equal(r.pressAt(r.field, chord), null, `${id}: a text field types it`);
     assert.equal(r.pressAt(r.item, chord), null, `${id}: an instance row's context menu is its own`);
-    for (const item of r.settings.items) assert.equal(r.pressAt(item, chord), null, `${id}: the settings menu is its own (${item.dataset.menuAction})`);
     assert.equal(r.pressAt(r.textarea, chord), null, `${id}: the terminal's`);
     assert.equal(r.pressAt(r.main, chord), null, `${id}: the main area's`);
   }
@@ -159,9 +157,9 @@ test("off in an editable field, a modified rebind included: a sidebar text field
   assert.equal(ctrlX(editable), null, "nor in an editable region");
 });
 
-// The target of X D S R N (and of the leader's) when focus is on one of a row's tools (Start…, the
-// PR link) or an item of its context menu, which sit beside the row in its .ctx-tree-row: that row,
-// not the active terminal's instance. The shipped leaderTargetId, on the shipped markup's relation.
+// The target of X D S R N (and of the leader's) when focus is on a row's tool (a pending spawn's Check result: an
+// instance row has none since slice 1) or an item of its context menu, which sit beside the row in its .ctx-tree-row:
+// that row, not the active terminal's instance. The shipped leaderTargetId, on the shipped markup's relation.
 test("a key on a row's tool targets that row, not the active terminal's instance", () => {
   const dom = new JSDOM(html);
   const doc = dom.window.document;
@@ -173,7 +171,7 @@ test("a key on a row's tool targets that row, not the active terminal's instance
   const wrap = doc.createElement("div"); wrap.className = "ctx-tree-row";
   const row = doc.createElement("button"); row.className = "ctx-inst"; row.dataset.treeInstance = "/h/b";
   const tools = doc.createElement("div"); tools.className = "ctx-row-tools";
-  const start = doc.createElement("button"); start.className = "ctx-start";
+  const start = doc.createElement("button"); start.className = "act ctx-start ctx-spawn-check";
   tools.append(start);
   // The row's context menu (instance-actions.mjs), beside the row in its wrap as the shell places it.
   const menu = doc.createElement("div"); menu.className = "ctx-instance-menu"; menu.setAttribute("role", "menu");
@@ -182,8 +180,8 @@ test("a key on a row's tool targets that row, not the active terminal's instance
   doc.querySelector(".ctx-list").append(wrap);
   assert.equal(leaderTargetId(row), "/h/b");
   assert.equal(leaderTargetId(menuItem), "/h/b", "an item of its context menu");
-  assert.equal(leaderTargetId(start), "/h/b", "Start…");
-  const foot = ["sidebar-toggle", "sidebar-spawn", "sidebar-settings"];
+  assert.equal(leaderTargetId(start), "/h/b", "Check result");
+  const foot = ["sidebar-need-you", "sidebar-spawn", "sidebar-help"];
   for (const id of foot) assert.equal(leaderTargetId(doc.getElementById(id)), "/h/a", `${id} (a foot control): the active terminal's`);
   context.activeTab = null;
   assert.equal(leaderTargetId(menuItem), "/h/b", "with no terminal open too");

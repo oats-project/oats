@@ -23,12 +23,11 @@
 <body>
   <div id="app">
     <aside id="sidebar">
-      <!-- The sidebar (the product owner, 2026-10-26): the head (the Workspace heading, Show only the current workspace
-           and Add local workspace…), the list of workspaces, the main views, a line, the instances, then the foot: the
-           OATS mark, Spawn instance (Quick Open) beside it, and the sidebar toggle and the settings cog. -->
+      <!-- The sidebar (the Desktop UI rework, slice 1): the head (the Workspace heading and Add local workspace…), the
+           list of workspaces, the pinned destinations (Workspace overview, Automations), a line, the instances, then the
+           foot: how many instances need you, Keyboard shortcuts (?) and New instance. -->
       <div class="side-head">
         <span id="ws-heading" class="ws-heading">Workspace</span>
-        <button id="ws-current-only" class="side-icon-button ws-current-only icon-button" type="button" aria-pressed="false" data-action="workspaces.currentOnly"></button>
         <button id="ws-add-open" class="ws-add-open side-icon-button icon-button" type="button" aria-label="Add local workspace…" title="Add local workspace…"></button>
       </div>
       <!-- The workspace list (workspace-switcher.mjs): always shown, one row per workspace, a list of buttons. -->
@@ -40,16 +39,14 @@
         <div class="ctx-head"><span>Instances</span><span class="ctx-count"></span></div>
         <div class="ctx-list"></div>
       </section>
-      <!-- The foot: the OATS mark (decorative) and the sidebar toggle, then at the right Spawn instance and the
-           settings cog (sidebar-settings.mjs builds its menu). -->
+      <!-- The foot (sidebar-foot.mjs): "N need you" (hidden at 0; it focuses the first such row), then at the right
+           New instance (Quick Open) and ? (Keyboard shortcuts). Hide sidebar is Ctrl+Shift+B and the palette's. -->
       <div id="nav-foot">
         <div id="sidebar-bar" role="group" aria-label="Sidebar tools">
-          <span class="sidebar-brand" aria-hidden="true"><img class="sidebar-brand-image" src="../assets/brand/generated/sidebar-48.png" width="20" height="20" alt="" draggable="false"></span>
-          <button id="sidebar-toggle" class="side-icon-button icon-button" type="button" data-action="sidebar.toggle"
-                  title="Hide the sidebar" aria-label="Hide the sidebar" aria-controls="sidebar" aria-expanded="true"><span data-shell-icon="sidebar" aria-hidden="true"></span></button>
-          <button id="sidebar-spawn" type="button" data-action="app.quickOpenSouls"
-                  title="Spawn instance" aria-label="Spawn instance">Spawn instance</button>
-          <button id="sidebar-settings" class="side-icon-button sidebar-settings icon-button" type="button" aria-label="Settings" title="Settings"></button>
+          <button id="sidebar-need-you" type="button" hidden></button>
+          <button id="sidebar-spawn" type="button" data-action="app.quickOpenSouls"></button>
+          <button id="sidebar-help" class="side-icon-button icon-button" type="button" data-action="app.shortcuts"
+                  title="Keyboard shortcuts" aria-label="Keyboard shortcuts"><span aria-hidden="true">?</span></button>
         </div>
       </div>
     </aside>
