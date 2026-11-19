@@ -1,9 +1,12 @@
 # Sandboxes: boundaries declared in the workspace, started by `oats sync`
 
-**Status:** proposed, 2026-11-19, revised after the product lane's direction read. Nothing is built. Every contract below (C1–C10) is
-for Pepe's side and Juan's side to decide together before anyone builds it (the lane
-map's "Contract changes" line). When this record and a reference page disagree after
-it is built, the reference page wins.
+**Status:** contracts decided, 2026-11-19. Pepe's side and Juan's side agreed C1–C10
+and C3b as written at 0849ef12, with Juan's side's four changes, which Pepe's side
+accepted: the registry setting (C3, C6), a keyed `seat` (C4), the receipt of the host's
+`remove-member` (C6) and the credential-mount probe (C8). The connector half of C9
+stays designed only. Nothing is built yet. A later change to a contract goes back to
+both sides (the lane map's "Contract changes" line). When this record and a reference
+page disagree after it is built, the reference page wins.
 
 ## The goal
 
@@ -91,7 +94,8 @@ is declared in the workspace and never in a machine's local file.
   S1 builds on #1912's floor (lane:juan, held): the task goes on stdin, the apply is
   bound to its preview and keyed, and a host below 0.69.15 is refused. This costs
   nothing, because the sandbox's kernel must already be the release with `sandboxes`.
-  S1 does not merge before #1912. If #1912 is withdrawn, S1 itself requires the same
+  S1 may be built now, but does not merge before #1912, whose hold (for the routed-host
+  upgrade and a demo) lifts about 2026-11-27 at the earliest. If #1912 is withdrawn, S1 itself requires the same
   three properties of the sandbox's kernel, rather than relying on today's fallbacks.
 - On a host that does not list S, the spawn is refused with `E_SANDBOX_NOT_HERE`, naming
   S and the local key that would list it. A sandboxed soul never falls back to the host.
@@ -114,7 +118,8 @@ operator's account, and never enter the container.
 
 1. Before routing the spawn, the provider mints the instance's identity on the host
    from the host's root for the sandbox team (`roots[T]`), into a private staging
-   directory.
+   directory. Where the sandbox team's registry is private, the host deployment sets
+   `settings.oats.aweb.registry` for the mint (C3).
 2. It delivers only the identity's authority files (the same list retained seats copy
    today) into the sandbox's state, at `/state/seats/<instance>/.aw`, and deletes the
    staging copy.
@@ -230,7 +235,10 @@ settings:
     sandboxes:
       ingest:
         deployment: /srv/oats-operator/ingest/deployment.yaml   # teamctl host facts
-        settings: { oats.okf: { github-token-file: /run/oats-credentials/knowledge-propose } }
+        settings:
+          oats.aweb: { registry: https://registry.example.org }   # private registry only
+          oats.okf: { github-token-file: /run/oats-credentials/knowledge-propose }
+  oats.aweb: { registry: https://registry.example.org }   # the host-side mint (C6)
 ```
 
 - `sandboxes` lists names that the workspace declares. An unknown name is refused, and so
@@ -241,6 +249,13 @@ settings:
   limits). The provider refuses a file that sets a boundary field the workspace owns
   (`team.id`, `egress.external`, `aweb.federationOutbound`): boundaries are declared
   once.
+- **A private registry.** oats.aweb refuses an ambient `AWID_REGISTRY_URL`
+  (awebai/oats-aweb#284), so where the sandbox team's registry is private the setting
+  is written twice: `settings.oats.aweb.registry` on the host deployment, for the mint
+  and for `remove-member` (C6), and the same key in the sandbox's `settings`, which the
+  provider writes into the in-sandbox local file. Without the in-sandbox one, the
+  in-sandbox spawn refuses with `registry-setting-required`.
+
 ### C3b. `oats-local.yaml` inside a sandbox: `sandbox: { self: <name> }` (new root key)
 
 The provider writes it into the in-sandbox deployment's local file. It is a contract of
@@ -282,8 +297,10 @@ The hook prints one JSON answer on stdout:
 `plan` is read-only. `start` and `stop` carry the plan's revision and an idempotency key,
 on the pattern of `oats instance stop`: a stale plan gets `E_PLAN_STALE` with the fresh
 plan, and the same key replays its receipt. `seat` mints and delivers one instance's seat
-(the Identities section) and answers `{seat:"/state/seats/<instance>/.aw"}`. A start whose
-outcome is uncertain reports `unknown`, never `ready`.
+(the Identities section) and answers `{seat:"/state/seats/<instance>/.aw"}`. It too
+carries `planRevision` and `idempotencyKey`: a replay of the same key returns the same
+seat, or `unknown`, and never mints a second identity. A start whose outcome is
+uncertain reports `unknown`, never `ready`.
 
 ### C5. CLI and JSON
 
@@ -313,8 +330,10 @@ outcome is uncertain reports `unknown`, never `ready`.
   `aw id team remove-member` with the controller key it holds, and reports it. It
   removes by the certificate ID that the mint recorded, never by alias. It removes only
   an identity listed in the provider's ledger of seats this host minted for this
-  sandbox. An identity it did not mint is never removed, and is reported instead. A
-  failure keeps today's recorded command and warning.
+  sandbox. An identity it did not mint is never removed, and is reported instead. It
+  uses the host's configured registry pin (`settings.oats.aweb.registry`, C3), and
+  records its receipt in the retire's meta. A failure, or an outcome it cannot be sure
+  of, keeps today's recorded command and warning, and is never retried automatically.
 - Between mint and delivery, the instance's private key sits in the host's staging
   directory (0700, under the operator account). `seat` deletes the staging copy on
   every path: success, a failed mint, a failed delivery, a timeout and an interrupted
@@ -348,6 +367,9 @@ existing Docker-context SSH relay from container.md.
   host file. It is rendered as read-only binds at `/run/oats-credentials/<name>` through a
   new `container/agent/compose.agent.credentials.yaml` fragment. teamctl's
   `agents.secrets` stays the harness login only.
+- **Probe:** the boundary probe asserts that each credential mount is read-only, that
+  it lies only under `/run/oats-credentials`, and that no undeclared credential path is
+  mounted. Its receipt joins the probe's `--json` receipts (#1958).
 - **Optional, later:** a slimmer profile without Secrets and Logs. v1 runs with
   teamctl's four base routes.
 - No other teamctl change is needed. OATS reads its exit codes as they are.
@@ -369,8 +391,9 @@ egress routes only.
   key. `oats connector call <name> <operation> --request-id <id> [--input-file <f>] --json`
   takes the same outcome states, through a `connector-broker` hook. aweb has no
   connectors broker built or filed, and whether one is planned is Juan's to say. The
-  shape is offered so that a provider-neutral gateway can implement it. It is not built
-  until a provider exists.
+  shape is offered so that a provider-neutral gateway can implement it. It stays
+  designed only, and is not built, until Juan says whether aweb plans a connectors
+  broker and a provider exists.
 - **Order:** both contracts are agreed in this record. Each is built when its first real
   provider ships, and checked against that provider's interface before it is released.
   This keeps Pepe's decision to design both now, and Juan's side's point that a public
@@ -435,12 +458,12 @@ modes against users, which cannot be proved from inside one account.
   only, by its own contract.
 - **A lease service for schedules:** none exists, and `runsOn` already names one host.
 
-## Delivery, once C1–C10 are decided
+## Delivery
 
 | Spec | Surface | Lane | Builds first |
 | --- | --- | --- | --- |
-| S1 Kernel: C1, C2, C3, C4's caller, C5, C10, placement and routing | `lib/`, `bin/`, schemas, `docs/` | lane:product | first; the provider builds against its hook |
-| S2 Provider: `oats.aweb-sandbox`, C4's hook, C6, C7 | the oats-aweb package | lane:setup, Juan's side reads first | after S1's contract is merged |
+| S1 Kernel: C1, C2, C3, C4's caller, C5, C10, placement and routing | `lib/`, `bin/`, schemas, `docs/` | lane:product | first; built now, merged after #1912's hold lifts |
+| S2 Provider: `oats.aweb-sandbox`, C4's hook, C6, C7, the registry setting (C3) | the oats-aweb package | lane:setup, Juan's side reads first | after S1's contract is merged |
 | S3 Credential mount: C8 | `container/agent`, and teamctl on Juan's side | lane:juan | in parallel with S1 |
 | S4 Broker contracts: C9 docs, then the client verbs | `docs/`, `lib/` | lane:product | after the first real provider |
 
