@@ -12,7 +12,7 @@
  *    opens with a question and when the row's claim or questions change.
  * Unknown (a read refused or failed) is never a dialog, and never history: the view shows what the row says. */
 import { createAgentBoard, createHiddenFacts } from './agent-board.mjs';
-import { rowHasBoard, boardClaim, boardSignature, boardDetailData } from '../../client/instance-board.mjs';
+import { rowHasBoard, boardClaim, detailSignature, boardDetailData } from '../../client/instance-board.mjs';
 import { eventsSelector } from '../../client/instance-events-contract.mjs';
 
 /**
@@ -54,8 +54,8 @@ export function createTabBoards({ features, eventsReadable = () => false, post, 
       const answer = await post(`/api/capabilities?ws=${encodeURIComponent(workspace)}`, { action: 'inspect', selector: { home: row.home }, board: true });
       if (owns()) state.view.detail(boardDetailData(answer));
     } catch {
-      // Refused or failed: no history and no context; the view says the context could not be read.
-      if (owns()) state.view.detail({ facts: new Map(), questions: new Map() });
+      // Refused or failed: the view says so (agent-board.mjs DETAIL_NOTES), never "no history".
+      if (owns()) state.view.detail({ state: 'failed' });
     }
   }
   async function readClaims(state, view, row) {
@@ -85,8 +85,9 @@ export function createTabBoards({ features, eventsReadable = () => false, post, 
       state ??= open(tab, row);
       state.board = row.board ?? null; state.claim = claim ?? null; state.row = row; state.workspace = workspace;
       state.view.update(state.board, { claims: [state.claim, ...state.claims] });
-      const sig = boardSignature(state.board);
-      // History and context: when the view opens, and again when the board changes (a new value, a new question).
+      // History and context: when the view opens, and again when a fact's `at` changes or a question with context is
+      // asked (instance-board.mjs detailSignature); never on an unchanged poll.
+      const sig = detailSignature(state.board);
       if ((fresh || sig !== state.detailSig) && state.board && (state.board.facts.length || state.board.questions.some(q => q.hasContext))) {
         state.detailSig = sig; void readDetail(state, workspace, row);
       } else if (fresh || sig !== state.detailSig) state.detailSig = sig;

@@ -18,7 +18,7 @@ test('board: the row field validated; facts in the order set, questions in the o
   assert.deepEqual(out.facts[1].link, { href: 'https://github.com/oats-project/oats/pull/1990', host: 'github.com' });
   assert.equal(boardData(null), null, 'null: the home has no board file');
   assert.equal(boardData(undefined), null);
-  assert.deepEqual(boardData({}), { facts: [], questions: [] });
+  assert.deepEqual(boardData({}), { facts: [], questions: [], malformed: false, dropped: 0 });
 });
 
 test('board: a malformed entry drops only itself, within the kernel bounds', () => {
@@ -73,7 +73,7 @@ test('board detail: history and context from inspect --board; a sparkline needs 
   assert.deepEqual(sparkValues(d.facts.get('score').history), [0.4, 41]);
   assert.equal(sparkValues([{ value: '1', at: AT }]), null);
   assert.equal(boardDetailData({ instance: { board: { facts: [], questions: [] } } }).facts.size, 0, 'instance.board read too');
-  assert.equal(boardDetailData({ operationsApi: 2 }), null);
+  assert.deepEqual(boardDetailData({ operationsApi: 2 }), { state: 'unsupported' });
 });
 
 test('board words: updated <time>, question n of N, turning wraps', () => {
@@ -111,4 +111,49 @@ test('board read: inspect --home --board, admitted for a home only, sent only to
   await cliCapability('/bin/oats', call, { exec }).catch(() => {});
   assert.ok(argv?.includes('--board') && argv.includes('--home'), `argv: ${argv}`);
   await assert.rejects(cliCapability('/bin/oats', { action: 'inspect', soul: 'dev', board: true, features: [BOARD_FEATURE] }), /home inspection/);
+});
+
+// The maintainer's conditions for the board read (2026-11-19), each pinned.
+test('board read condition 1: the gate is the server boundary; a renderer\'s board: true is intent, not evidence', async () => {
+  const { capabilityRequest } = await import('../server/capabilities.mjs');
+  const instance = { instance: 'a', home: '/w/agents/dev/instances/a', createdAt: AT, server: 'box', addressable: true, savedRoute: true };
+  const run = async ({ features, group = null, server = null }) => {
+    const calls = [];
+    const invoke = async (bin, call) => { calls.push(call); return { ok: true, result: { operationsApi: 2 } }; };
+    await capabilityRequest({ action: 'inspect', selector: { home: instance.home }, board: true },
+      { workspace: { id: 'w', scope: '/w', ...(server ? { server, remote: true, registrationPresent: true, group } : {}) },
+        cli: { ok: true, operationsApi: 2, bin: '/bin/oats', features, remote: ['operations'] }, instances: [server ? instance : { ...instance, server: undefined }], localCwd: '/w', invoke });
+    return calls[0].board === true;
+  };
+  assert.equal(await run({ features: [BOARD_FEATURE] }), true, 'local: the CLI declares the feature');
+  assert.equal(await run({ features: [] }), false, 'local: dropped without it');
+  const host = features => ({ probe: { ok: true, features } });
+  assert.equal(await run({ server: 'box', features: [BOARD_FEATURE, 'server-probe-features'], group: host([BOARD_FEATURE]) }), true, 'routed: both declared');
+  assert.equal(await run({ server: 'box', features: [BOARD_FEATURE], group: host([BOARD_FEATURE]) }), false, 'routed: no server-probe-features');
+  assert.equal(await run({ server: 'box', features: [BOARD_FEATURE, 'server-probe-features'], group: host([]) }), false, 'routed: the host does not declare it');
+  assert.equal(await run({ server: 'box', features: [BOARD_FEATURE, 'server-probe-features'], group: { probe: { ok: false } } }), false, 'routed: an unread host row');
+});
+
+test('board read condition 2: no board, an empty board, unsupported, malformed are distinct outcomes', () => {
+  assert.equal(boardData(null), null);
+  assert.deepEqual(boardData({ facts: [], questions: [] }), { facts: [], questions: [], malformed: false, dropped: 0 });
+  assert.equal(boardData('board').malformed, true);
+  assert.equal(boardData({ facts: 'x' }).malformed, true);
+  assert.equal(boardData({ facts: [fact('a'), fact('BAD')], questions: [question('q1', { options: [] })] }).dropped, 2);
+  assert.deepEqual(boardDetailData({ board: null }), { state: 'none' });
+  assert.deepEqual(boardDetailData({ operationsApi: 2 }), { state: 'unsupported' });
+  assert.deepEqual(boardDetailData('x'), { state: 'malformed' });
+  assert.deepEqual(boardDetailData({ board: { facts: {} } }), { state: 'malformed' });
+  assert.equal(boardDetailData({ board: { facts: [], questions: [] } }).state, 'ok');
+});
+
+test('board read condition 3: history and context within the contract\'s bounds, kept as text', () => {
+  const long = 'x'.repeat(2001);
+  const d = boardDetailData({ board: { facts: [{ key: 'a', history: [{ value: 'y'.repeat(81), at: AT }, { value: '<b>1</b>', at: AT }] }],
+    questions: [{ id: 'q1', context: long }, { id: 'q2', context: '<img src=x onerror=alert(1)>' }] } });
+  assert.deepEqual(d.facts.get('a').history.map(h => h.value), ['<b>1</b>'], 'a value over 80 code points is left out');
+  assert.equal(d.questions.get('q1').context, null, 'over 2000 code points');
+  assert.equal(d.questions.get('q2').context, '<img src=x onerror=alert(1)>', 'text, shown with textContent');
+  const many = boardDetailData({ board: { facts: [{ key: 'a', history: Array.from({ length: 30 }, (_, i) => ({ value: String(i), at: AT })) }], questions: [] } });
+  assert.equal(many.facts.get('a').history.length, 20);
 });
