@@ -213,8 +213,10 @@ function refusal(reason, plan, { operation, leftover }, terms) {
     return { status: { headline: LEFTOVER_HELD, more: [], next: 'retire-with-force', code: reason.code }, blocks: [{ type: 'quote', text: shown.detail }] };
   // A reason with no code reads as the table's fallback, and says that fallback's code; a code only the client
   // raises (one the table does not know) keeps its own, so the client can word it.
-  const table = lifecycleReason(reason?.code, terms), own = typeof reason?.code === 'string' && reason.code ? reason.code : table.code;
-  const status = remote ? { headline: remote.message, code: remote.code } : undescribed ? { headline: undescribed.message, code: reason.code }
+  const table = lifecycleReason(reason?.code, terms, { operation });
+  const own = typeof reason?.code === 'string' && reason.code ? reason.code : table.code;
+  // This code's headline must hold for every cause, even when a relayed sentence still offers force.
+  const status = remote ? { headline: remote.code === 'E_UNIDENTIFIED_INSTANCE_HOME' ? table.message : remote.message, code: remote.code } : undescribed ? { headline: undescribed.message, code: reason.code }
     : { headline: table.message, code: own };
   return { status: { more: [], next: null, ...status }, blocks: shown ? [{ type: 'details', reason: shown, bare: !!undescribed }] : [] };
 }
