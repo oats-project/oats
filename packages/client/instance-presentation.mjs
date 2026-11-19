@@ -55,8 +55,10 @@ export function unsupportedSession(instance) {
 }
 
 /** A session provider's name, by the session-provider contract: 1 to 40 lowercase letters, digits and dashes.
- * `tmux` is the kernel's own backend, never a provider's name. Not on the stable surface. */
-const PROVIDER_NAME = /^[a-z0-9-]{1,40}$/;
+ * Here it also starts with a letter or a digit: a name is a `--backend` value, and one that starts with a dash
+ * is an option to the CLI's parser. `tmux` is the kernel's own backend, never a provider's name. Not on the
+ * stable surface. */
+const PROVIDER_NAME = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const sessionProviderName = (value) => typeof value === "string" && value !== "tmux" && PROVIDER_NAME.test(value);
 
 /** The session provider a row runs on, by name, or null for a row that runs in tmux. A provider (a

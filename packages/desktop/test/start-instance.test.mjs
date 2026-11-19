@@ -235,3 +235,16 @@ test("an instance whose state is not known: the dialog's status carries the row'
   assert.equal(markup.textContent, `Desktop's terminal check says: ${MARKUP}`); assert.equal(markup.querySelector("b, script"), null);
   assert.equal((await status({ runtimeError: CONTROL, runtimeErrorOrigin: "kernel" })).textContent, DETAIL_WITHHELD);
 });
+
+// Session providers (spec C1): a row whose `backend` is a provider's name has no terminal.
+test("a started instance on a session provider: the dialog closes, no terminal is opened or waited for, and nothing is said of one", async () => {
+  for (const ready of [true, false, async () => assert.fail("no terminal is waited for")]) {
+    const s = setup({ ready, row: { backend: "bb", tmux: null, session: { provider: "oats.bb", endpoint: { threadId: "thr_x" } } } });
+    try {
+      await tick(); s.submit(); await tick(); await tick();
+      assert.ok(s.calls.some((c) => c.path.startsWith("/api/start/")), "the start is sent, as for any row");
+      assert.equal(s.modal.isConnected, false);
+      assert.deepEqual([s.opened, s.notified], [[], []]);
+    } finally { s.cleanup(); }
+  }
+});

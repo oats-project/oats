@@ -11,8 +11,11 @@ export const DESCRIPTION_MAX = 200;
 export const descriptionValid = v => typeof v === 'string' && v.length > 0 && [...v].length <= DESCRIPTION_MAX && !/[\p{Cc}\u2028\u2029]/u.test(v);
 const draftString = v => typeof v === 'string' && v.length <= 1048576 && !v.includes('\0');
 /** Exact legacy editor inputs only: no previews/redactions/trim, no captured fields.
- * If the adapter cannot preserve a definition, it is not an editable draft. */
-export function scheduleDraft(v) {
+ * If the adapter cannot preserve a definition, it is not an editable draft.
+ * `backends`: the session backends the kernel lists for the schedule's soul (packages/client/session-backends.mjs
+ * `sessionBackendNames`: its own and the soul's session providers); "tmux" alone when none is given. A spawn
+ * schedule whose `backend` is one of them is a draft, and the form keeps it; any other value is not. */
+export function scheduleDraft(v, { backends = ['tmux'] } = {}) {
   if (!record(v) || policyKeys.some(k => Object.hasOwn(v, k)) || !scheduleId(v.id)
     || !['spawn', 'wake', 'operation'].includes(v.kind) || !draftString(v.cron) || !v.cron.trim()
     || !draftString(v.tz) || !v.tz.trim() || typeof v.enabled !== 'boolean') return null;
@@ -44,8 +47,9 @@ export function scheduleDraft(v) {
         || ['cron', 'tz', 'message'].some(k => !draftString(v.wake[k]) || !v.wake[k].trim())) return null;
       out.wake = { cron: v.wake.cron, tz: v.wake.tz, message: v.wake.message };
     }
-    // The current form cannot retain an unknown select option.
-    if (out.harness && !HARNESSES.includes(out.harness) || v.backend && v.backend !== 'tmux') return null;
+    // The current form cannot retain an unknown select option: a harness it does not list, or a backend the
+    // kernel does not (the form adds the option of a listed provider's name, views/schedules.mjs).
+    if (out.harness && !HARNESSES.includes(out.harness) || v.backend && !(Array.isArray(backends) && backends.includes(v.backend))) return null;
   }
   return out;
 }

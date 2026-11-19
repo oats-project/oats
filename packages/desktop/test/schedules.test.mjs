@@ -223,3 +223,60 @@ test("keyboard: the schedule form is a modal dialog that keeps Tab inside", asyn
     tab(first, true); assert.equal(doc.activeElement, cancel, "Shift+Tab from the first wraps to the last");
   } finally { s.cleanup(); }
 });
+
+// Session providers (spec C1): the schedule reader keeps a schedule whose backend the kernel lists.
+const providerSchedule = { id: "bb-review", kind: "spawn", enabled: true, cron: "0 3 * * *", tz: "UTC", agent: "reviewer", agentsRoot: "/team/src/agents", repo: "src", task: "Review work", backend: "bb" };
+test("editing a schedule on a session provider the soul's inspection lists: the form keeps the backend, and a save sends it unchanged", async () => {
+  let saved; const inspected = [];
+  for (const sessionProviders of [[{ name: "bb", capability: "oats.bb" }], { bb: { capability: "oats.bb" } }]) {
+    const s = setup({ read: async () => ({ schedules: [providerSchedule], scheduler: { installed: true, active: true, registered: true } }), mutate: async (path, body) => {
+      if (path.startsWith("/api/capabilities")) { inspected.push(body); return { operationsApi: 2, sessionProviders }; }
+      return scheduleRequest(body, { workspace, cli, agents: [{ name: "reviewer", agentsRoot: "/team/src/agents", repo: "src", work: "worktree" }], invoke: async (bin, args) => {
+        saved = args.spec; return { ok: true, result: { schedule: { ...args.spec, id: "bb-review" } } };
+      } });
+    } });
+    try {
+      await tick(); s.rowAction("bb-review", "edit").click(); await tick(); await tick();
+      assert.deepEqual(inspected.at(-1), { action: "inspect", selector: { soul: "reviewer", agentsRoot: "/team/src/agents" } }, "the schedule's own soul is asked, once");
+      const form = s.el.querySelector("form");
+      assert.equal(s.el.querySelector(".schedule-sheet").hidden, false); assert.equal(form.elements.id.value, "bb-review");
+      assert.deepEqual([...form.elements.backend.options].map(o => o.value), ["", "tmux", "bb"]);
+      assert.equal(form.elements.backend.value, "bb");
+      form.elements.cron.value = "0 4 * * *";
+      form.dispatchEvent(new s.dom.window.Event("submit", { cancelable: true })); await tick();
+      assert.equal(saved.cron, "0 4 * * *"); assert.equal(saved.backend, "bb");
+      // A new schedule opened after it is offered no provider.
+      s.el.querySelector(".schedule-new").click(); await tick();
+      assert.deepEqual([...form.elements.backend.options].map(o => o.value), ["", "tmux"]);
+    } finally { s.cleanup(); }
+  }
+  assert.equal(inspected.length, 2);
+});
+
+test("a schedule whose backend the kernel does not list is refused as before: an unlisted provider, a failed inspection, an answer without the list", async () => {
+  for (const answer of [async () => ({ operationsApi: 2, sessionProviders: [{ name: "other" }] }), async () => { throw new Error("inspect failed"); }, async () => ({ operationsApi: 2 })]) {
+    const s = setup({ read: async () => ({ schedules: [providerSchedule], scheduler: { installed: true, active: true, registered: true } }),
+      mutate: async (path) => { assert.ok(path.startsWith("/api/capabilities"), path); return answer(); } });
+    try {
+      await tick(); s.rowAction("bb-review", "edit").click(); await tick(); await tick();
+      assert.equal(s.el.querySelector(".schedule-sheet").hidden, true, "no form");
+      assert.match(s.el.textContent, /bb-review carries settings this editor cannot keep; edit it with the CLI\./);
+    } finally { s.cleanup(); }
+  }
+});
+
+test("a later Edit wins: an inspection answered after another row's Edit opens nothing of its own", async () => {
+  let release; const held = new Promise(resolve => { release = resolve; });
+  const plain = { ...providerSchedule, id: "plain" }; delete plain.backend;
+  const s = setup({ read: async () => ({ schedules: [providerSchedule, plain], scheduler: { installed: true, active: true, registered: true } }),
+    mutate: async () => { await held; return { operationsApi: 2, sessionProviders: [{ name: "bb" }] }; } });
+  try {
+    await tick(); s.rowAction("bb-review", "edit").click(); await tick();
+    assert.equal(s.el.querySelector(".schedule-sheet").hidden, true, "waiting on the inspection");
+    s.rowAction("plain", "edit").click(); await tick();
+    const form = s.el.querySelector("form"); assert.equal(form.elements.id.value, "plain");
+    release(); await tick(); await tick();
+    assert.equal(form.elements.id.value, "plain", "the earlier Edit's answer changes nothing");
+    assert.deepEqual([...form.elements.backend.options].map(o => o.value), ["", "tmux"]);
+  } finally { s.cleanup(); }
+});

@@ -267,6 +267,15 @@ while a terminal is open); under 80 columns it has the whole width.
 - **Opening an agent.** `Enter` on an instance that runs opens its terminal
   beside the sidebar, where the detail was, as a tab: see
   [Open an agent's terminal](#open-an-agents-terminal) and [Tabs](#tabs).
+- **An agent that runs on a session provider** (a capability's session
+  backend, such as bb) has no terminal. The list shows it in the state OATS
+  reports, and `S`, `R`, `X` and `D` act on it as on any agent. `Enter` opens
+  nothing: the line says where it runs ("Runs in a bb thread; open it in
+  bb.") and, when the provider offers a link, prints it under that
+  (`OATS says: Open in bb: http://…`) for you to open. The palette does not
+  list it among the agents to open, the agent steps pass over it, and a
+  workspace's remembered tabs never open it
+  ([how the clients read `backend`](desktop-cli-api.md#row-backend-clients)).
 
 **A view of more than one deployment** (this machine and another, or two
 deployments on one machine) is one list, grouped as the Desktop groups it:
@@ -704,7 +713,8 @@ Each terminal open in the panel is a tab, and the panel holds up to four.
     as the workspace was left. The shown tab is the most recent for
     [the palette](#the-palette).
   - A tab whose instance is gone or cannot be opened now (retired,
-    stopped) is dropped, and nothing is said of it. A group the drops
+    stopped, or now running on a session provider, which has no terminal)
+    is dropped, and nothing is said of it. A group the drops
     leave with no tab goes, as when its last tab is closed; a group that
     was empty when the workspace was left is empty again. A shown tab
     dropped gives its place to the next, else the one before.

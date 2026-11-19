@@ -13,6 +13,8 @@ import { observeLiveness } from "../packages/client/liveness.mjs";
 import { instanceActs, openAct } from "../packages/client/instance-acts.mjs";
 import { sessionProvider, sessionProviderName, openLink, sessionThreadId } from "../packages/client/instance-presentation.mjs";
 import { remotePanel } from "../packages/client/remote-roster.mjs";
+import { sessionProviderNames, sessionBackendNames } from "../packages/client/session-backends.mjs";
+import { spawnArgv } from "../packages/client/cli-adapter.mjs";
 
 const CLI = { ok: true, features: ["workspace-v2", "status-liveness", "session-providers"] };
 const home = (name) => `/d/agents/dev/instances/${name}`;
@@ -115,7 +117,7 @@ test("another machine's bb row: its acts by its state, no terminal, and no link 
 
 test("the three readers: a provider's name, the link, the thread id", () => {
   for (const name of ["bb", "my-provider-2", "0", "a".repeat(40)]) assert.equal(sessionProviderName(name), true, name);
-  for (const name of ["tmux", "", "BB", "b b", "bb!", "a".repeat(41), "bb\n", null, undefined, 7, ["bb"]]) assert.equal(sessionProviderName(name), false, String(name));
+  for (const name of ["tmux", "", "BB", "b b", "bb!", "a".repeat(41), "bb\n", "-bb", "--json", null, undefined, 7, ["bb"]]) assert.equal(sessionProviderName(name), false, String(name));
   assert.equal(sessionProvider({ backend: "bb" }), "bb");
   assert.equal(sessionProvider({ backend: "tmux" }), null);
   assert.equal(sessionProvider({}), null);
@@ -129,4 +131,24 @@ test("the three readers: a provider's name, the link, the thread id", () => {
   assert.equal(openLink(null), null);
   assert.equal(sessionThreadId({ session: { endpoint: { threadId: "thr_x" } } }), "thr_x");
   for (const session of [undefined, null, {}, { endpoint: null }, { endpoint: { threadId: "" } }, { endpoint: { threadId: 7 } }, { endpoint: { threadId: "x".repeat(201) } }]) assert.equal(sessionThreadId({ session }), null);
+});
+
+test("the backend names the kernel lists: its own from the probe, a soul's session providers from its inspection, and nothing else", () => {
+  // The inspection's list, as rows, as names or keyed by name; only names the contract allows, each once.
+  assert.deepEqual(sessionProviderNames({ sessionProviders: [{ name: "bb", capability: "oats.bb" }, { name: "other" }] }), ["bb", "other"]);
+  assert.deepEqual(sessionProviderNames({ sessionProviders: ["bb", "bb"] }), ["bb"]);
+  assert.deepEqual(sessionProviderNames({ sessionProviders: { bb: { capability: "oats.bb" } } }), ["bb"]);
+  assert.deepEqual(sessionProviderNames({ sessionProviders: [{ name: "tmux" }, { name: "Not A Name" }, { name: 7 }, null, 7, { capability: "x" }, "--json"] }), []);
+  for (const inspection of [null, undefined, {}, { sessionProviders: null }, { sessionProviders: "bb" }, "bb", []]) assert.deepEqual(sessionProviderNames(inspection), [], JSON.stringify(inspection));
+  // With the probe's own list first; "tmux" alone for a probe record without one; never herdr.
+  assert.deepEqual(sessionBackendNames({ sessionBackends: ["tmux"] }), ["tmux"]);
+  assert.deepEqual(sessionBackendNames({ sessionBackends: ["tmux", "herdr"] }, { sessionProviders: [{ name: "bb" }] }), ["tmux", "bb"]);
+  assert.deepEqual(sessionBackendNames({}, { sessionProviders: [{ name: "bb" }] }), ["tmux", "bb"]);
+  assert.deepEqual(sessionBackendNames(null), ["tmux"]);
+  assert.deepEqual(sessionBackendNames({ sessionBackends: [] }), [], "a kernel that lists none offers none");
+  assert.deepEqual(sessionBackendNames({ sessionBackends: ["tmux", 7, "", null] }), ["tmux"]);
+  // What the list is for: a spawn's --backend is held to it.
+  const backends = sessionBackendNames({ sessionBackends: ["tmux"] }, { sessionProviders: [{ name: "bb" }] });
+  assert.ok(spawnArgv("dev", "/ws", "/t", { backend: "bb", backends }).includes("bb"));
+  assert.throws(() => spawnArgv("dev", "/ws", "/t", { backend: "bb", backends: sessionBackendNames({ sessionBackends: ["tmux"] }) }), /invalid backend value/);
 });

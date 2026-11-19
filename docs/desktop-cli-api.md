@@ -3761,6 +3761,35 @@ its absence.
   output, not the exit status, and nothing is printed, whether or not it can
   be read or written. A status routed with `--server` records nothing on this
   machine ([execution-targets.md](execution-targets.md#which-losses-come-back)).
+- <a id="row-backend-clients"></a>**How the clients read `backend`** (the
+  Desktop and the TUI, `packages/client`). A row whose `backend` is a session
+  provider's name (1 to 40 lowercase letters, digits and dashes, the first a
+  letter or a digit; not `tmux`)
+  runs in no terminal:
+  - Its `running`, `runtimeState` and `runtimeError` are shown as the kernel
+    reports them. No client asks tmux about it: with an older kernel, whose
+    rows a client's own terminal check refines, such a row is never passed
+    to that check.
+  - Its acts are the ones of its state: Restart, Stop and Retire while it
+    runs; Start, Stop and Retire stopped; Stop and Retire when the kernel
+    answers `running: null`.
+  - Open is never offered. The clients say where the agent runs ("Runs in a
+    bb thread; open it in bb.") and, when the row carries `open`
+    (`{label, url}`), show it as a link: the Desktop opens it in the system
+    browser from the row's menu, the TUI prints the url. Only an `http` or
+    `https` url with no credentials in it is shown, and only on a row of
+    this machine: another machine's url is that machine's own loopback. No
+    client attaches, splits or restores a terminal for the row.
+  - The Desktop shows the backend and `session.endpoint.threadId`, when it
+    is text, as `bb · thread thr_…`. Nothing else of `session.endpoint` is
+    read, and the id addresses nothing.
+
+  A row with no `backend`, or with `tmux`, is read as before. A row recorded
+  on Herdr keeps its own reason (`E_HERDR_REMOVED`) before any of this, and a
+  `backend` that is no name of that form is ignored. `--backend` on a
+  client's spawn is held to the names the kernel lists: `sessionBackends` of
+  `oats version --json` and the session providers `oats inspect --json`
+  reports.
 - **`color`** (feature `instance-color`): the instance's colour, one of
   `sand`, `sage`, `slate`, `mauve`, `clay`, `olive`, or `null` for none,
   from the home's own record ([An instance's colour](#an-instances-colour-oats-instance-color));

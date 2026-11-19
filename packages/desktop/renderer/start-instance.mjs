@@ -10,6 +10,7 @@ import { retainedStartMessage, launchFlagIgnored, flagIgnoredNotice } from "../.
 import { displayLine } from "../../client/display-text.mjs";
 import { startRefusalSentence } from "../../client/start-messages.mjs";
 import { runtimeErrorLine } from "./speaker-line.mjs";
+import { noTerminal } from "./provider-row.mjs";
 import { kernelLines } from "../../client/kernel-lines.mjs";
 import { DESKTOP_TERMS } from "./desktop-terms.mjs";
 import { sourceQuoteCSS } from "./source-quote.mjs";
@@ -115,7 +116,9 @@ export function createInstanceStarter(doc, ctx, { waitForReady = waitForInstance
     // After the dialog closed: the started instance's terminal, while this window still shows the
     // workspace it was started from and the operator has chosen nothing since (`chosen`, the shell's
     // selection watch). The open's own selection ticket supersedes the watch from then on.
+    // A row on a session provider (provider-row.mjs) has no terminal: its start opens none and says nothing of one.
     const openWhenReady = async (chosen) => {
+      if (noTerminal(instance)) return;
       const ours = () => ws === currentWorkspace() && generation === workspaceGeneration() && chosen();
       try {
         const ready = await waitForReady({ ctx }, instance, ours);
