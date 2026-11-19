@@ -198,7 +198,7 @@ ${capabilityLineCSS}
 
 /** presentation is an optional host lease. Presence belongs to this controller;
  * effective visibility/collapse belongs to the host, not request completions. */
-export function createSoulInspector(container, { ctx, presentation, openSoul = null, layout = 'sidebar', backLabel = 'Souls', openInstance = null, capabilityFacts = null, openCapability = null, launch, schedule, files, canFiles = () => false, canLaunch = () => true, spawnRefusal = () => null, launchReason = () => 'Requires a compatible installed OATS CLI.', available = () => true, instances = () => [], instancesState = () => 'ready', workspace = () => null, closed, clock = {} }) {
+export function createSoulInspector(container, { ctx, presentation, openSoul = null, layout = 'sidebar', backLabel = 'Souls', openInstance = null, currentRow = null, capabilityFacts = null, openCapability = null, launch, schedule, files, canFiles = () => false, canLaunch = () => true, spawnRefusal = () => null, launchReason = () => 'Requires a compatible installed OATS CLI.', available = () => true, instances = () => [], instancesState = () => 'ready', workspace = () => null, closed, clock = {} }) {
   const doc = container.ownerDocument;
   // `serial` is the latest read (a Refresh bumps it: a superseded inspection paints nothing); `subject` is
   // the shown subject (bumped by a new selection or reset only): the frame's and the content's controls
@@ -955,16 +955,28 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
   /** The host's capability facts changed (its catalog was read): the page's rows follow, in place (focus kept), only
    * when what they say changed. */
   function syncCatalog() {
-    if (!alive || layout !== 'page' || !shownCurrent() || container.hidden || !selection?.agent) return;
+    // Also while a capability page covers this one (hidden): Back then shows the rows as they are now.
+    if (!alive || layout !== 'page' || !shownCurrent() || !selection?.agent) return;
     const soul = shownInspection.souls[0]; if (!soul) return;
     const coreRows = coreEntries(shownInspection, { layersFrom: layersFrom(), facts: desktopFacts(cliStatus()) });
     const entries = compositionEntries(shownInspection, soul, { facts: desktopFacts(cliStatus()) });
     const caps = [...coreRows.filter(e => e.id).map(e => e.cap), ...entries.filter(e => e.why !== 'off' && e.cap).map(e => e.cap)];
     if (JSON.stringify(caps.map(cap => cap ? describeCapability(cap) : null)) === capabilityWords) return;
+    // Hidden, nothing in it holds focus: repaint without moving any.
+    if (container.hidden) { render(shownInspection); return; }
     const restore = captureFocusState(content, { scroller: container, fallback: refreshControl });
     render(shownInspection); restore();
   }
-  function syncRoster() { if (alive && selection?.agent && !container.hidden) renderSoulRoster(); }
+  /** The host's roster read settled: the subject's row is re-read from it (`currentRow`: the one current row of the
+   * same soul, by its composite identity, else null), so what the row says (a spawn refusal, the lede, the facts) and
+   * the actions that read it (New agent) follow a poll. A soul that left the roster, or became ambiguous, keeps its
+   * last row; the host's own checks (canLaunch) refuse its actions. The page follows while a capability page covers it. */
+  function syncRoster() {
+    if (!alive || !selection?.agent || (container.hidden && (layout !== 'page' || selectionGen !== workspaceGeneration()))) return;
+    const fresh = typeof currentRow === 'function' ? currentRow(selection.agent) : null;
+    if (fresh && fresh !== selection.agent) { selection = { ...selection, agent: fresh }; syncAvailability(); }
+    renderSoulRoster();
+  }
   return { show, close, syncAvailability, syncRoster, syncCatalog,
     focusLaunch(agent) {
       const selected = selection?.agent;

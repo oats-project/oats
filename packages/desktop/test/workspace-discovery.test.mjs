@@ -371,3 +371,23 @@ test('Setup: without servers-per-workspace and server-connect there is no Regist
   assert.equal([...u.doc.querySelectorAll('button')].some(b => b.textContent === 'Add a machine to this workspace…'), false);
   assert.equal(u.calls.some(c => c.path.startsWith('/api/servers?')), false);
 });
+
+// Review round 2: the soul page follows its roster row across polls: a refusal that appears or clears changes its
+// Ready line and New agent, as it changes the card, from the real roster read (not an injected refusal).
+test('a roster poll that refuses or clears a soul moves its page\'s Ready line and New agent, both ways', async t => {
+  const cli = { ...CLI, features: [...CLI.features, 'desktop-facts'] };
+  const ready = { ...soul(), spawnable: true, problem: null };
+  const refused = { ...soul(), spawnable: false, problem: { code: 'E_SOUL_DISABLED', message: 'Disabled on this computer.' } };
+  const u = await setup(t, { cli, agents: [ready] });
+  u.doc.querySelector('.soul-card').click(); await tick(); await tick();
+  const line = () => u.doc.querySelector('.workspace-soul-page .soul-ready-line').textContent;
+  const newAgent = () => u.doc.querySelector('.workspace-soul-page .spawn-act');
+  assert.equal(line(), 'Ready'); assert.equal(newAgent().disabled, false);
+  u.setAgents([refused]); u.polls[0](); await tick(); await tick();
+  assert.equal(line(), 'Disabled on this computer.', 'the refusal reaches the page');
+  assert.equal(newAgent().disabled, true, 'and New agent');
+  newAgent().ownerDocument.querySelector('.workspace-soul-page button[title="Inspect again"]').click(); await tick(); await tick();
+  assert.equal(line(), 'Disabled on this computer.', 'an explicit Refresh keeps the current row');
+  u.setAgents([ready]); u.polls[0](); await tick(); await tick();
+  assert.equal(line(), 'Ready', 'cleared again'); assert.equal(newAgent().disabled, false);
+});

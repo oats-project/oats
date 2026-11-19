@@ -516,3 +516,21 @@ test('soulReadiness: a refusal holds for an attached soul; an attached soul\'s l
   assert.deepEqual(spawn.soulReadiness({ name: 'reviewer', work: 'attached', spawnable: true }, facts), { ready: true, text: 'Ready' });
   assert.equal(spawn.soulReadiness(refused, { features: [] }), null, 'this OATS does not say: no claim');
 });
+
+// Review round 2: a catalog read that lands while a capability page covers the soul page still reaches its rows: Back
+// shows each capability's one line, and focus returns to the row that opened the capability.
+test('a catalog that lands while a capability page covers the soul page: Back shows the rows\' descriptions, focus on the row', async t => {
+  const held = deferred();
+  const described = f2('capabilities').result.capabilities.map(r => ({ ...r, description: `About ${r.name}.` }));
+  const u = await fixture(t, { cli: V2_CLI, sync: () => held.promise });
+  u.get('.soul-card').click(); await tick(); await tick();
+  const soulPage = u.get('.workspace-soul-page');
+  assert.equal(soulPage.querySelectorAll('.cap-line-desc').length, 0, 'no catalog yet: no line');
+  soulPage.querySelector('.cap-line[data-capability="nw-house-style"]').click(); await tick();
+  assert.equal(soulPage.hidden, true, 'the capability page covers it');
+  held.resolve(catalogReply(described)); await tick(); await tick(); await tick();
+  key(u, u.doc.activeElement, 'Escape'); await tick();
+  assert.equal(soulPage.hidden, false);
+  assert.equal(soulPage.querySelector('.cap-line[data-capability="nw-house-style"] .cap-line-desc')?.textContent, 'About nw-house-style.');
+  assert.equal(u.doc.activeElement?.dataset.capability, 'nw-house-style', 'focus back on the row');
+});

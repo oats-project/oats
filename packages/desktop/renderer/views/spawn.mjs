@@ -604,6 +604,11 @@ ${spawnDialogCSS}</style>
       inspectSoul(s, matches[0]); return true;
     },
     canLaunch: agent => canLaunchSoul(s, agent),
+    // The one current roster row of a soul, by its composite identity (a poll replaces the rows), else null.
+    currentRow: agent => {
+      const rows = s.souls.agents.filter(x => x.name === agent.name && (x.agentsRoot || "") === (agent.agentsRoot || "") && (x.server || "") === (agent.server || ""));
+      return rows.length === 1 && s.rosterGen === workspaceGeneration() ? rows[0] : null;
+    },
     spawnRefusal: agent => spawnRefusal(agent, cliStatus()),
     launchReason: agent => spawnRefusal(agent, cliStatus()) ? `Can't spawn here: ${spawnRefusal(agent, cliStatus())}` : cliProbePending() ? "Checking for a compatible oats CLI — spawning enables once it is verified" : "Requires a compatible installed OATS CLI and a current standalone soul.",
     available: () => cliAvailable() && inspectSupported(cliStatus()),
