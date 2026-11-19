@@ -303,7 +303,7 @@ test("closing a focused group's last tab keeps that empty group, not a neighbori
   assert.equal(s.attachments.length, 2); assert.deepEqual(s.detached, [2]);
 });
 
-test("empty layout survives stage and workspace round-trip; old-cell callbacks cannot select or resize the new visit", async t => {
+test("empty layout survives a workspace round-trip; old-cell callbacks cannot select or resize the new visit", async t => {
   assert.match(source, /label: "Split: return to terminal groups"[^\n]*run: \(\) => restoreTerminalGroups\(\)/,
     "return command must be reachable from the shipped palette");
   assert.equal(DEFAULT_KEYMAP["split.restore"], undefined, "recovery adds no keyboard default");
@@ -313,12 +313,7 @@ test("empty layout survives stage and workspace round-trip; old-cell callbacks c
   left.getBoundingClientRect = right.getBoundingClientRect = () => ({ width: 400, height: 200 });
   s.event(left.querySelector(".split-resizer"), "keydown", { key: "ArrowRight" });
   const saved = structuredClone(s.c.split), oldCell = right, oldEmpty = s.empty(2), oldCallbacks = s.projections.at(-1);
-  assert.equal(navTab("automations"), null, "a page of its own: showStage mounts it, no Workspace tab route");
-  await s.showStage("automations");
-  const stageIntent = s.c.tabOpenIntents.begin(); s.event(oldEmpty, "pointerdown");
-  assert.equal(stageIntent(), true); assert.equal(s.c.tabLayerVisible, false);
-  s.actions.get("split.restore")();
-  assert.equal(s.document.activeElement, s.empty(1), "explicit return command makes the empty destination reachable");
+  // (Slice 6a: no stage covers the layout any more: a page opens as a tab into the focused group, slice6a.test.mjs.)
   assert.deepEqual(structuredClone(s.c.split), saved); assert.equal(s.c.activeTab, null); assert.equal(s.c.tabLayerVisible, true);
   s.document.getElementById("workspace").focus();
   s.switchTo("B"); await s.open("workspace-b"); s.splitPane("col");
@@ -410,18 +405,14 @@ for (const outcome of ["resolve", "reject"]) test(`empty selection revokes retai
   assert.equal(s.attachments.length, 1); assert.deepEqual(s.detached, []);
 });
 
-test("files/brains only cover empty terminal destinations; split controls/actions remain terminal-only", async t => {
+test("files and brains join the focused group beside the terminals, and split as a terminal does (slice 6a)", async t => {
   const s = shell(t), terminal = await s.open("covered"); s.splitPane("row");
-  for (const kind of ["file", "brain"]) {
-    const file = s.addTab({ title: kind, kind });
-    const snapshot = structuredClone(s.c.split);
-    assert.equal(s.c.tabActionsEl.hidden, true); assert.equal(s.cells().length, 0);
-    s.actions.get("split.horizontal")();
-    assert.deepEqual(structuredClone(s.c.split), snapshot); assert.equal(s.c.activeTab, file.id);
-    s.actions.get("split.restore")();
-    assert.equal(s.c.activeTab, null); assert.equal(s.document.activeElement, s.empty(2));
-    assert.deepEqual(structuredClone(s.c.split), snapshot);
-  }
+  const file = s.addTab({ title: "file", kind: "file" });
+  // A file opens into the focused (empty) group: no tab kind covers another; both groups show.
+  assert.equal(layout.groupOfTab(s.c.split, file.id).id, 2); assert.equal(s.cells().length, 2);
+  assert.equal(s.c.activeTab, file.id); assert.equal(s.c.tabActionsEl.hidden, false, "split controls for any active tab");
+  const brain = s.addTab({ title: "brain", kind: "brain" });
+  assert.equal(layout.groupOfTab(s.c.split, brain.id).id, 2, "a brain joins the same focused group");
   assert.equal(layout.groupOfTab(s.c.split, terminal.id).id, 1);
   assert.equal(s.attachments.length, 1); assert.deepEqual(s.detached, []);
 });
@@ -484,10 +475,12 @@ test('repeated close coalesces cleanup but retains the latest explicit close foc
   assert.equal(s.c.activeTab, newer.id); assert.equal(s.document.activeElement, s.c.tabs.get(newer.id).triggerEl);
 });
 
+/** Slice 6a (Details for any agent, superseding closed-panels-return-main-area-space's right-hand instance panel): a
+ * terminal tab, committed or retained, brings no instance panel; its agent's facts are its Details tab's (the panel's
+ * content, moved into that tab: slice6a.test.mjs). `ref`, the terminal the old panel followed, names the case only. */
 function assertPanel(s, ref) {
-  assert.equal(s.panelRoot.hidden, ref == null, 'panel visibility follows the committed terminal, not a retained neighbor');
-  assert.equal(s.field('instance'), ref?.instance ?? 'Not reported');
-  assert.equal(s.field('home'), ref?.home ?? 'Not reported');
+  assert.equal(s.panelRoot.hidden, true, `no instance panel beside a terminal${ref ? ` (${ref.instance})` : ''}: Details is a tab`);
+  assert.equal(s.field('instance'), 'Not reported', 'the panel holds no terminal\'s instance');
 }
 
 test('resolved instance context is committed before pending PTY readiness; panel entry revokes input focus only', async t => {

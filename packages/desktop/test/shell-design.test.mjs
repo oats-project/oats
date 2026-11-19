@@ -80,6 +80,8 @@ function shell(t, shellSource = source, { storage = {}, gitPanel } = {}) {
     fileOpener: { choose() {}, dispose() {} },
     getBinding, formatChord, paletteGroupDirection, paletteGroupHint, isMac: false, contextRosterEl: document.getElementById("instance-roster"),
     activeTrigger: null, activeTabTrigger: () => c.activeTrigger, revealInScrollport,
+    // The rail (slice 6a): its element stands in for the drawn rail; updating it is the rail's own module's test.
+    sidebarRailView: { element: document.createElement("nav"), update() {} }, updateRail() {}, SIDEBAR_RAIL_KEY: "oats-desktop-sidebar-rail",
   };
   c.tabOpenIntents = createSelectionOwnership(c);
   const start = shellSource.indexOf('const navEl = document.getElementById("nav");');
@@ -89,7 +91,7 @@ function shell(t, shellSource = source, { storage = {}, gitPanel } = {}) {
   const actionsEnd = shellSource.indexOf('// THE one window keydown listener', actionsStart);
   const registry = shellSource.slice(actionsStart, actionsEnd);
   const titleCode = shellSource.slice(shellSource.indexOf("const baseTitles ="), shellSource.indexOf("onKeymapChange(() => applyChordTitles"));
-  const functions = ["setNavActive", "sidebarHidden", "setSidebarHidden", "updateSidebarControls", "toggleSidebar", "rosterEntry", "setRovingRow", "focusRoster", "focusFirstNeedingYou", "openShortcutsEditor", "openConnections", "stableFocusTarget"].map(name => fn(name, shellSource));
+  const functions = ["setNavActive", "sidebarHidden", "setSidebarHidden", "updateSidebarControls", "toggleSidebar", "sidebarRail", "setSidebarRail", "rosterEntry", "setRovingRow", "focusRoster", "focusFirstNeedingYou", "openShortcutsEditor", "openConnections", "stableFocusTarget"].map(name => fn(name, shellSource));
   // The foot (slice 1), as the shell builds it at its start: its words, and its count's activation.
   const foot = shellSource.match(/^const sidebarFoot = createSidebarFoot\([^\n]*\n/m)?.[0];
   assert.ok(foot, "exercise the shipped foot");
@@ -348,7 +350,14 @@ test("a stored rebind's clash marks the foot's ? (Keyboard shortcuts), and clear
 test("hide/show returns focus to visible controls and aria-expanded follows sidebar state", t => {
   const s = shell(t), q = id => s.document.getElementById(id), display = id => s.document.defaultView.getComputedStyle(q(id)).display;
   assert.equal(q("show-sidebar").hidden, true, "Show sidebar appears only while the sidebar is away");
+  // Slice 6a: sidebar.toggle collapses the sidebar to the rail and back; hiding is the palette's Sidebar: hide.
   q("sidebar-help").focus(); runAction("sidebar.toggle");
+  assert.equal(q("app").classList.contains("sidebar-rail"), true, "full → rail");
+  assert.equal(q("app").classList.contains("sidebar-hidden"), false);
+  assert.equal(q("show-sidebar").hidden, true, "the rail is the sidebar's own: no Show sidebar");
+  runAction("sidebar.toggle");
+  assert.equal(q("app").classList.contains("sidebar-rail"), false, "rail → full");
+  q("sidebar-help").focus(); s.setSidebarHidden(true);
   assert.equal(q("app").classList.contains("sidebar-hidden"), true);
   assert.equal(display("sidebar"), "none");
   assert.equal(s.document.activeElement, q("show-sidebar"), "hiding with focus inside moves focus to Show sidebar");
@@ -356,12 +365,12 @@ test("hide/show returns focus to visible controls and aria-expanded follows side
   assert.equal(q("show-sidebar").getAttribute("aria-expanded"), "false");
   assert.equal(q("show-sidebar").getAttribute("aria-controls"), "sidebar");
   q("show-sidebar").click();
-  assert.equal(q("app").classList.contains("sidebar-hidden"), false);
+  assert.equal(q("app").classList.contains("sidebar-hidden"), false, "a hidden sidebar comes back full");
   assert.equal(display("sidebar"), "flex");
   assert.equal(q("show-sidebar").hidden, true);
   assert.equal(s.document.activeElement, q("sidebar-spawn"), "never <body>: the roster's way in (an empty roster: New agent)");
   const rows = s.paintRows(1);
-  runAction("sidebar.toggle"); assert.equal(s.document.activeElement, q("show-sidebar"));
+  s.setSidebarHidden(true); assert.equal(s.document.activeElement, q("show-sidebar"));
   q("show-sidebar").click(); assert.equal(s.document.activeElement, rows[1], "with rows: the roster's current row");
 });
 
@@ -690,7 +699,7 @@ test('the palette keeps focus mode reachable without the bar and names the insta
     ...s.c, navigator: { platform: 'Linux' }, createPalette: options => options,
   });
   assert.equal(commands.some(item => /context panel/i.test(item.label)), false, 'the panel is the instance panel now');
-  const panelCommand = commands.find(item => item.label === 'Instance panel: show / hide'); assert.ok(panelCommand);
+  const panelCommand = commands.find(item => item.label === 'Agent: Details'); assert.ok(panelCommand, "slice 6a: panel.toggle is Agent: Details");
   assert.equal(panelCommand.detail(), 'Ctrl+Shift+I');
   s.contextPanel.setContext({ workspace: 'A', instance: { instance: 'selected', home: '/A/selected' }, key: 'exact:A:selected' });
   assert.equal(s.document.getElementById('context-panel').hidden, true, 'closed until the user opens it');
@@ -824,8 +833,9 @@ test('Spec B exception to point 5: entering focus mode from the sidebar focuses 
   q('sidebar-help').focus(); runAction('app.focusMode');
   assert.equal(s.contextPanel.isFocusMode(), true); assert.equal(q('show-sidebar').hidden, false);
   assert.equal(s.document.activeElement, trigger, 'focus mode: the active tab, the content it is for');
-  runAction('app.focusMode'); q('sidebar-help').focus(); runAction('sidebar.toggle');
-  assert.equal(s.document.activeElement, q('show-sidebar'), 'plain sidebar.toggle: Show sidebar');
+  // Slice 6a: hiding the sidebar is the palette's Sidebar: hide (setSidebarHidden), which still hands focus to Show sidebar.
+  runAction('app.focusMode'); q('sidebar-help').focus(); s.setSidebarHidden(true);
+  assert.equal(s.document.activeElement, q('show-sidebar'), 'plain hide: Show sidebar');
 });
 
 test('Spec B: the soul inspector keeps opening on soul selection, whatever the instance preference', t => {

@@ -84,8 +84,10 @@ export function describeLayout(tabs, split, activeTab, workspace) {
   if (split && Array.isArray(split.groups) && split.groups.length >= 2) {
     const groups = split.groups.slice(0, MAX_SPLIT_GROUPS).map((group) => {
       const members = group.tabs.map(at).filter((i) => i !== null);
-      const active = at(group.activeTab);
-      return { tabs: members, active: active !== null && members.includes(active) ? active : null,
+      // A group whose active tab doesn't move (a page, a brain, a file: slice 6a puts them in the groups) is
+      // described by the terminal it shows next to them: its newest one, else none.
+      const own = at(group.activeTab), active = own !== null && members.includes(own) ? own : members.at(-1) ?? null;
+      return { tabs: members, active,
         ...(Number.isFinite(group.weight) && group.weight > 0 && group.weight <= 1e6 ? { weight: group.weight } : {}) };
     });
     const focused = split.groups.findIndex((group) => group.id === split.focusedGroup);

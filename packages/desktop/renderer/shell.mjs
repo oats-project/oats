@@ -3555,7 +3555,7 @@ registerAction({ id: "sidebar.resetWidth", label: "Reset the sidebar's width", c
 // a tab; with none selected, the panel as before (a page's own panel).
 registerAction({ id: "panel.toggle", label: "Agent: Details", context: "global", run: () => {
   tabOpenIntents.invalidate();
-  const row = detailsTarget();
+  const row = typeof detailsTarget === "function" ? detailsTarget() : null; // (a harness without Details: the panel)
   if (row) openDetailsTab(row); else contextPanel.toggle();
 } });
 // Focus mode lives on the keyboard (rebindable, no default chord) and the palette.
