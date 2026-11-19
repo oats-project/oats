@@ -105,7 +105,6 @@ export const homeCSS = `
 .home button.home-back:hover { background:var(--surface-2); }
 `;
 
-let returnTo = null; // the overview key Home last opened, focused again when Home mounts (per workspace generation)
 
 export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, subscribeCli = onCliChange, subscribeWorkspace = onWorkspaceChange,
   generation = workspaceGeneration, setTimeout: schedule = (fn, ms) => globalThis.setTimeout(fn, ms),
@@ -116,7 +115,7 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
   const inner = doc.createElement("div"); inner.className = "home-inner";
   root.append(style, inner);
   el.replaceChildren(root);
-  let view = "board", alive = true;
+  let view = "board", alive = true, returnKey = null;
   const counts = { souls: "loading", capabilities: "loading", teams: "loading" };
   let gen = generation();
   const chord = (id) => (typeof ctx.chordText === "function" ? ctx.chordText(id) : "") || "";
@@ -169,6 +168,7 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
       const line = overviewLine(entry.key, all, nouns);
       if (line) copy.append(node("span", "home-row-meta", line));
       b.append(copy);
+      if (entry.key === returnKey) b.dataset.homeReturn = "";
       b.addEventListener("click", () => openSection(entry));
       const li = node("li"); li.append(b); ul.append(li);
     }
@@ -177,7 +177,9 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
   }
 
   function openSection(entry) {
-    returnTo = { key: entry.key, gen };
+    // The section it opened, marked so the way back lands on it (slice 6a: Home stays mounted in its tab, and Esc on
+    // the Workspace tab focuses this mark; shell.mjs).
+    returnKey = entry.key; paint();
     if (entry.opens === "agents") { view = "agents"; paint({ focus: "first" }); return; }
     void ctx.openWorkspaceTab?.(entry.opens, entry.options);
   }
@@ -332,7 +334,7 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
    * switch, so Home follows it itself). */
   function workspaceChanged() {
     if (!alive || generation() === gen) return;
-    gen = generation(); view = "board"; returnTo = null; clearRetries();
+    gen = generation(); view = "board"; returnKey = null; clearRetries();
     readCounts();
   }
 
@@ -346,8 +348,6 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
   };
   root.addEventListener("keydown", onKey);
   paint();
-  if (returnTo && returnTo.gen === gen) find("homeOpen", returnTo.key)?.focus();
-  returnTo = null;
   readCounts();
 
   return {

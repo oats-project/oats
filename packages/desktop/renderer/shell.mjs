@@ -376,7 +376,13 @@ document.getElementById("tabhost").addEventListener("keydown", (e) => {
   if (e.key !== "Escape" || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || currentPage() !== "spawn") return;
   if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable="true"], dialog, [role="dialog"], [role="menu"], [role="listbox"]')) return;
   e.preventDefault();
-  void showStageFocused("home");
+  // Back to Home in this pane, on the section that opened the Workspace page (Home marks it), else Home's tab.
+  const owns = tabOpenIntents.watch();
+  void showStage("home").then(() => {
+    if (!owns() || currentPage() !== "home") return;
+    const pane = tabs.get(activeTab)?.paneEl;
+    (pane?.querySelector("[data-home-return]") ?? tabs.get(activeTab)?.triggerEl)?.focus();
+  });
 });
 let stage = null;           // { name, life, el, mod }
 let stageOp = 0;            // switch generation — a slow mount must not paint over a newer switch
@@ -2384,6 +2390,8 @@ async function openViewTab(name, title, extra = {}, key = `view:${name}`,
     pageOwner = record.panelOwner = createPanelOwner(contextPanel, record, workspaceGeneration);
     const close = record.onClose;
     record.onClose = () => { pageOwner.dispose(); return close?.(); };
+    // addTab activated it before its page was known: the nav and the panel follow now.
+    if (activeTab === made.id) { setSidebarMode(stageSidebarMode(name)); setNavActive(name); }
     syncContextPanel();
   }
   try {
