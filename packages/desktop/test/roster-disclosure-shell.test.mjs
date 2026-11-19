@@ -31,7 +31,7 @@ const tree = { ...treeShared, ...treeView, ...sameWork }; // the renderer's clie
 const read = name => readFileSync(new URL(`../renderer/${name}`, import.meta.url), "utf8");
 const css = read("shell.css"), html = read("index.html"), shell = read("shell.mjs");
 const fn = name => shell.match(new RegExp(`(?:async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`))?.[0];
-const source = ["renderContextRoster", "needsInputMark", "onRosterRowKey", "setRovingRow", "showInRoster"]
+const source = ["renderContextRoster", "pendingSpawnRow", "announceSpawn", "needsInputMark", "onRosterRowKey", "setRovingRow", "showInRoster"]
   .map(name => { const s = fn(name); assert.ok(s, name); return s; }).join("\n");
 
 const instance = (name, parentInstance, extra = {}) => ({ instance: name, parentInstance, agent: "dev",
@@ -162,6 +162,29 @@ test("a root collapsed by default rolls up its hidden waiting row: the needs-inp
   assert.equal(u.row("lead").querySelector(".ctx-attn"), null, "opened, the roll-up goes");
   assert.ok(u.row("tip").querySelector(".ctx-dot.waiting"), "and the waiting row shows its own mark");
 });
+
+// A root whose row its lifecycle takes (a pending row, or a held home's state on its meta line) has no room for the
+// disclosure or the roll-up: it starts open, so a waiting child stays drawn with its own mark (review round 1).
+const CLAIM = { since: "2026-10-03T09:00:00.000Z", producer: "claude-hooks", reason: "permission", message: null };
+for (const [what, lead, extra] of [
+  ["a reported row whose spawn is still being checked", instance("lead"),
+    { spawnJobs: { rows: () => [{ id: "job-1", instance: "lead", agent: "dev", home: "/synthetic/lead", agentsRoot: "/synthetic/agents", pending: "checking" }], announce: () => false, check() {} } }],
+  ["a home the roster reports still setting up", instance("lead", undefined, { spawnInProgress: true }), {}],
+  ["a home whose retire failed", instance("lead", undefined, { running: false, runtimeState: "stopped",
+    retire: { state: "failed", since: "2026-11-19T10:00:00Z", self: true, code: "E_CHILDREN_RUNNING", message: "A child could not be stopped." } }), {}],
+]) {
+  test(`a root drawn as ${what} starts open: its waiting child stays drawn, with its own mark`, t => {
+    const rows = [lead, instance("tip", "lead", { waitingOnYou: CLAIM })];
+    const u = fixture(t, rows, extra);
+    assert.deepEqual(u.drawn(), ["lead", "tip"], "nothing is hidden behind the root");
+    assert.ok(u.row("tip").querySelector(".ctx-dot.waiting"), "the waiting child shows its own needs-input mark");
+    // The same rows once the root's lifecycle is over: the default collapse applies, and the wait rolls up.
+    u.context.spawnJobs = { rows: () => [], announce: () => false, check() {} };
+    u.s.render([instance("lead"), rows[1]]);
+    assert.deepEqual(u.drawn(), ["lead"]);
+    assert.equal(u.row("lead").querySelector(".ctx-attn")?.textContent, "1 below need input");
+  });
+}
 
 test("Show in roster opens the default-collapsed root of the row it shows, and the root stays open", async t => {
   const u = fixture(t);

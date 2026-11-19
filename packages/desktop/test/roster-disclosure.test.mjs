@@ -41,6 +41,13 @@ test("collapsedRows: a root opened by hand is open; a row closed by hand is clos
   assert.deepEqual(collapsedRows("A", { collapsed: new Set(), expanded: new Set([collapseKey("B", id("lead"))]), children }), keys("lead"));
 });
 
+test("collapsedRows: a root its lifecycle takes (startsOpen) starts open; closed by hand, it is closed", () => {
+  const children = sectionChildren(ROWS, one);
+  const startsOpen = rowId => rowId === id("lead");
+  assert.deepEqual(collapsedRows("A", { collapsed: new Set(), expanded: new Set(), children, startsOpen }), new Set());
+  assert.deepEqual(collapsedRows("A", { collapsed: keys("lead"), expanded: new Set(), children, startsOpen }), keys("lead"));
+});
+
 test("collapsedRows: a root of the Background section starts collapsed too", () => {
   const section = row => (["side", "kid"].includes(row.instance) ? "background" : "main");
   const rows = [...ROWS, at("kid", "side")];

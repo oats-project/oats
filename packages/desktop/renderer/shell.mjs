@@ -1004,8 +1004,12 @@ function renderContextRoster(instances) {
   // A row's disclosure counts only children of its own section: a main row whose children are all in the
   // Background section has nothing to collapse here. A root of its section with children starts collapsed
   // (roster-disclosure.mjs): the rows drawn collapsed are the ones closed by hand and the roots not opened by hand.
+  // A root drawn as a pending row, or as a held home (its state takes its meta line), starts open: neither row has
+  // room for the disclosure or the roll-up, so a default collapse would hide a waiting child behind it.
   const childrenHere = sectionChildren(instances, rowSection);
-  const collapsedNow = collapsedRows(ws, { collapsed: collapsedInstances, expanded: expandedInstances, children: childrenHere });
+  const lifecycleRows = new Set(instances.filter((i) => i.pendingSpawn || heldHome(i)).map(instanceId));
+  const collapsedNow = collapsedRows(ws, { collapsed: collapsedInstances, expanded: expandedInstances, children: childrenHere,
+    startsOpen: (id) => lifecycleRows.has(id) });
   const visible = instances.filter((i) => instanceVisibleInTree(
     i, instances, collapsedNow, ws, false, { section: rowSection },
   ));
