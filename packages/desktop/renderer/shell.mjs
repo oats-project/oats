@@ -552,16 +552,27 @@ function subscribeHomeRoster(fn) {
   }
   return () => homeRosterListeners.delete(fn);
 }
-/** Open a roster row as its activation (click, Enter) does, on the roster or on Home: a running row's terminal, a
- * stopped row's Start. Refused, opening nothing, for a held home, a row whose state isn't known or whose remote
- * can't be addressed, and a stopped row of a stale roster (its last read failed: it may be running by now). The
- * same gates the row's own markup states (its title and description). Returns whether it opened. */
+/** Open a roster row from Home (slice 2) as the roster's own activation does, by activating its row: the row's
+ * click handler holds the gates (a held home, a row whose state isn't known or whose remote can't be addressed, a
+ * stopped row of a stale roster: refused, opening nothing), so Home can't drift from them. A row the roster hides
+ * (under a collapsed parent, in the closed Background section) is shown first: its section opened, its collapsed
+ * ancestors expanded, the list painted again. Returns whether a row was there to activate. */
 function openRosterInstance(i) {
   const ws = contextWorkspace || currentWorkspace();
-  if (!i || heldHome(i) || i.running == null || !canAddressRemote(i)) return false;
-  if ((rosterStale || rowStale(i, contextDeployments)) && !i.running) return false;
-  spawnJobs.seen?.(ws, i);
-  if (i.running) openTerminalTab(i); else openInstanceStart(i);
+  const id = i ? instanceId(i) : null;
+  const instances = shownRows(contextInstances);
+  if (!id || !contextRosterEl || !instances.some((row) => instanceId(row) === id)) return false;
+  const rowEl = () => [...contextRosterEl.querySelectorAll(".ctx-list .ctx-inst")].find((el) => el.dataset.treeInstance === id) ?? null;
+  if (!rowEl()) {
+    if (backgroundPlacement(instances, backgroundShown()).has(id)) backgroundOpen.add(ws);
+    for (let parent = rosterParentId(instances, id), seen = new Set(); parent && !seen.has(parent); parent = rosterParentId(instances, parent)) {
+      seen.add(parent); setRowOpen({ collapsed: collapsedInstances, expanded: expandedInstances }, collapseKey(ws, parent), true);
+    }
+    renderContextRoster(contextInstances);
+  }
+  const el = rowEl();
+  if (!el) return false;
+  el.click();
   return true;
 }
 /** Home's view of the roster: the rows the sidebar shows (held retires included), its deployments, the read's

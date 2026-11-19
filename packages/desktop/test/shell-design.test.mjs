@@ -13,7 +13,7 @@ import { createInstanceGitPanel } from "../renderer/instance-git.mjs";
 import { createInstanceTeamsSection } from '../renderer/instance-teams.mjs';
 import { createInstanceSoulSection } from '../renderer/instance-soul.mjs';
 import { THEMES } from "../renderer/theme.mjs";
-import { NAV, NAV_TABS, navTab } from "../renderer/shell-nav.mjs";
+import { NAV, NAV_TABS, PINNED, pinnedRowFor, navTab } from "../renderer/shell-nav.mjs";
 import { shellIcon, mountShellIcons } from "../renderer/shell-icons.mjs";
 import { createSidebarFoot } from "../renderer/sidebar-foot.mjs";
 import { DESKTOP_NOUNS } from "../renderer/desktop-terms.mjs";
@@ -57,7 +57,7 @@ function shell(t, shellSource = source, { storage = {}, gitPanel } = {}) {
   const loads = [], events = [], notices = [], offs = [];
   const c = {
     document, window: dom.window, localStorage: dom.window.localStorage,
-    NAV, NAV_TABS, navTab, shellIcon, createSidebarFoot, DESKTOP_NOUNS, createContextPanel, createInstanceGitPanel: gitPanel ?? createInstanceGitPanel, createInstanceTeamsSection, createInstanceSoulSection, workspace: "A", generation: 0, events, notices,
+    NAV, NAV_TABS, PINNED, pinnedRowFor, navTab, shellIcon, createSidebarFoot, DESKTOP_NOUNS, createContextPanel, createInstanceGitPanel: gitPanel ?? createInstanceGitPanel, createInstanceTeamsSection, createInstanceSoulSection, workspace: "A", generation: 0, events, notices,
     connectionGeneration: 0, subscribeConnections: () => () => {},
     connections: { close() {}, open: () => events.push(['connections']) }, lifecycleDialog: { close() {} },
     currentWorkspace: () => c.workspace, workspaceGeneration: () => c.generation,

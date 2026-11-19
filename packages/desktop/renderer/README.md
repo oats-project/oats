@@ -2435,8 +2435,9 @@ doesn't read already:
   `POST /api/workspace-teams {action:"list"}` (only where the CLI has a team model), Machines from the roster's
   deployments (a workspace with no deployment list is this machine's: one). One read serial per mount, checked with
   the workspace generation on each answer and each failure.
-- **Opening**: an agent row runs `ctx.openAgent(row)`, the shell's `openRosterInstance`, the roster row's own
-  activation and gates (held, unknown or unaddressable, stopped on a stale roster: refused). An overview row runs
+- **Opening**: an agent row runs `ctx.openAgent(row)`, the shell's `openRosterInstance`, which activates the
+  roster's own row (showing it first if a collapsed parent or the closed Background section hides it), so its gates
+  are the row's (held, unknown or unaddressable, stopped on a stale roster: refused) and can't drift. An overview row runs
   `ctx.openWorkspaceTab(tab)` (`openWorkspaceSouls`); the Workspace page's unclaimed Esc (no field, dialog, menu or
   list took it) goes back to Home (`stageHost`'s keydown in shell.mjs), and Home focuses the row that opened it.
   Agents opens Home › Agents in place; its Esc, or Back to Home, returns to the board.
