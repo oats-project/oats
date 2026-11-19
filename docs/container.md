@@ -741,8 +741,9 @@ bb counts toward the container's limits. Add to `AGENT_MEMORY` and
   writes `agent-supervisor: bb exited (<code or signal>)`, removes what bb's
   launcher left running, and starts bb again after 1 second, doubling to 60
   seconds, and from 1 second again once a bb has stayed up five minutes.
-  sshd, the broker, host run and the agents keep running. bb threads stop
-  with their bb.
+  sshd, the broker, host run and the agents keep running. A thread's
+  process ends with its bb, and the thread itself is kept: the next bb lists
+  it idle, and a message to it (`bb thread tell`) starts a new turn.
 - **Stopping.** Host run goes first, as without bb, and bb keeps running
   while it stops the agents. Then sshd, the broker and bb are stopped side by
   side; bb gets SIGTERM and eight seconds before SIGKILL. A bb that had to be
@@ -753,7 +754,8 @@ bb counts toward the container's limits. Add to `AGENT_MEMORY` and
 ### What was run
 
 Run on amd64, in the real image under the Compose flags: the build, bb ready
-at start, a bb restart after `kill` and after `kill -9`, the ordered stop,
+at start, a bb restart after `kill` and after `kill -9`, each followed by a
+new turn in a thread made before it (on a mock model), the ordered stop,
 acceptance with the fragment, and the relay with the real `ssh` (the bb web
 page and API through it). **NOT RUN:** arm64; a real Claude token or a real
 model; Tailscale Serve; the desktop and phone apps; push notifications.
