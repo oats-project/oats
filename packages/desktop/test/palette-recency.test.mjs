@@ -256,7 +256,7 @@ test("the sidebar roster keeps its stable order: recency reaches only the palett
   assert.deepEqual(rosterGroups(ROSTER, ROSTER).flatMap(g => g.clusters.flatMap(c => c.instances.map(i => i.instance))), before);
   const shell = readFileSync(new URL("../renderer/shell.mjs", import.meta.url), "utf8");
   assert.equal(shell.match(/instanceRecency\.snapshot\(/g)?.length, 1, "read once: by the palette's loader");
-  assert.match(shell, /const recent = instanceRecency\.snapshot\(ws\);[\s\S]{0,400}return \{ instances: p\.instances \|\| \[\], deployments: panelDeployments\(p\), recent \}/);
+  assert.match(shell, /const recent = instanceRecency\.snapshot\(ws\);[\s\S]{0,400}return \{ instances: p\.instances \|\| \[\], deployments: panelDeployments\(p\), recent, pins: pinsShown\(\) \}/);
   assert.match(shell, /function activateTab\([\s\S]*?instanceRecency\.record\(current\.workspace, recencyIdFromTerminalKey\(current\.workspace, current\.key\)\)[\s\S]*?\n\}/,
     "recorded at the one activation seam");
   assert.doesNotMatch(shell, /lastFocus/, "the sidebar never passes a last-focus record");

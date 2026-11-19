@@ -46,6 +46,7 @@ async function serve(cli) {
     startInstance: async (cliState, inst, choices, { restart }) => { ran.push(restart ? 'restart' : 'start'); return { ok: true, result: { instance: inst.instance } }; },
     instanceColorRequest: exec('instance-color', { status: 'not-run' }), instanceColorNotRun: () => ({}),
     instanceBackgroundRequest: exec('instance-background', { status: 'not-run' }), instanceBackgroundNotRun: () => ({}),
+    instancePinRequest: exec('instance-pin', { status: 'not-run' }), instancePinNotRun: () => ({}),
     instanceGitRequest: exec('instance-git'),
     // What the handler does around a boundary's answer: nothing here runs a command.
     rereadsRoster: () => false, observeMutation: () => {}, refreshRemoteSnapshot: async () => {}, remoteLoop: { request() {} },
@@ -108,6 +109,7 @@ const ALLOWED = [
   ['Restart', `/api/restart/dev-a${WS}&home=${encodeURIComponent(HOME)}`, {}, 'restart'],
   ['the colour', `/api/instance-color${WS}`, { selector: { home: HOME }, color: 'teal' }, 'instance-color'],
   ['the background', `/api/instance-background${WS}`, { selector: { home: HOME }, background: true }, 'instance-background'],
+  ['the pin', `/api/instance-pin${WS}`, { selector: { home: HOME }, pinned: true }, 'instance-pin'],
   ['a read (Git)', `/api/instance-git${WS}`, { action: 'git', selector: { home: HOME } }, 'instance-git'],
   ['a read (a trigger list)', `/api/automations${WS}`, { kind: 'trigger', action: 'list' }, 'automations'],
 ];

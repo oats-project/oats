@@ -8,22 +8,19 @@
  * any other row, except one that is in the Background section only through an ancestor (instance-tree.mjs
  * backgroundPlacement): its flag is not what placed it, so it offers neither (move the parent).
  *
- * The gate is the route's own (`{ check: true }`, which runs nothing): this computer's CLI lists the feature and,
- * for a remote row, so does its host. The menu is drawn synchronously on every roster paint, so the answer is
- * held per deployment (a deployment is one machine, so one host's features) and asked again once it is older than
- * `ttlMs`, the held one staying in force meanwhile. Until a deployment's first answer, and where the feature is
- * missing, the items are not drawn (an older OATS shows no item, as it shows no section); a held answer that
- * changes calls `onGate()`, for the caller to repaint. */
+ * The gate is the route's own (`{ check: true }`, which runs nothing), held per deployment (instance-record-gate.mjs):
+ * until a deployment's first answer, and where the feature is missing, the items are not drawn (an older OATS shows
+ * no item, as it shows no section); a held answer that changes calls `onGate()`, for the caller to repaint. */
 import { backgroundPlacement, instanceId } from "../../client/instance-tree.mjs";
-import { canAddressRemote, serverLabel, shownLabel } from "../../client/remote-address.mjs";
+import { serverLabel, shownLabel } from "../../client/remote-address.mjs";
 import { displayLine, DETAIL_WITHHELD } from "../../client/display-text.mjs";
 import { kernelLines } from "../../client/kernel-lines.mjs";
 import { DESKTOP_TERMS } from "./desktop-terms.mjs";
+import { createInstanceRecordGate } from "./instance-record-gate.mjs";
 
 /** The menu's words for each item (an act at once: no dialog follows, so no ellipsis). */
 export const BACKGROUND_LABELS = Object.freeze({ "background-on": "Move to background", "background-off": "Move out of background" });
 export const BACKGROUND_UNAVAILABLE = "E_INSTANCE_BACKGROUND_UNAVAILABLE";
-const HELD_MS = 60_000;
 
 /** The item a row offers, or null. `placed`: backgroundPlacement's set for the rows it is drawn with. */
 export function backgroundOffer(instance, placed) {
@@ -52,30 +49,9 @@ export function backgroundFailure(answer, row, background) {
  * @param {(row) => string} deps.deploymentOf  the row's deployment id (the route's ?ws=)
  * @param {() => void} [deps.onGate]  a deployment's held answer changed: repaint
  */
-export function createInstanceBackgroundMenu({ request, deploymentOf, onGate = () => {}, now = () => Date.now(), ttlMs = HELD_MS }) {
-  const gates = new Map(); // deployment id -> { enabled: boolean|null, at, flight }
+export function createInstanceBackgroundMenu({ request, deploymentOf, onGate = () => {}, now = () => Date.now(), ttlMs }) {
+  const { gate, answered } = createInstanceRecordGate({ request, deploymentOf, unavailable: BACKGROUND_UNAVAILABLE, onGate, now, ttlMs });
   const placements = new WeakMap(); // the rows array a paint draws with -> its placement (one walk per paint)
-  /** Whether the row's deployment offers the items: true, false, or null (not known yet; a check was started). */
-  function gate(row) {
-    let key;
-    try { key = deploymentOf(row); } catch { return null; }
-    if (typeof key !== "string" || !key) return null;
-    const held = gates.get(key) ?? { enabled: null, at: -Infinity, flight: null };
-    gates.set(key, held);
-    // Only a row the route can admit asks (a remote row its host reports addressable); its answer is the deployment's.
-    if (!held.flight && now() - held.at >= ttlMs && typeof row?.home === "string" && canAddressRemote(row)) {
-      const flight = held.flight = Promise.resolve().then(() => request(row, { instance: row.instance, home: row.home, check: true })).then(answer => {
-        const enabled = answer?.status === "ok" && answer.check === true ? true
-          : answer?.status === "not-run" && answer.reason?.code === BACKGROUND_UNAVAILABLE ? false : held.enabled;
-        return enabled;
-      }, () => held.enabled).then(enabled => {
-        if (held.flight !== flight) return;
-        held.flight = null; held.at = now();
-        if (enabled !== held.enabled) { held.enabled = enabled; try { onGate(); } catch { /* a repaint must not break the gate */ } }
-      });
-    }
-    return held.enabled;
-  }
   return {
     gate,
     /** The menu's item for `row`, as instance-actions.mjs `extra` descriptors: none or one. `placed`: the paint's
@@ -100,10 +76,7 @@ export function createInstanceBackgroundMenu({ request, deploymentOf, onGate = (
       const why = backgroundFailure(answer, row, background);
       if (why !== null) {
         // The feature is gone where it was held (a CLI or host changed): the items go with the next paint.
-        if (answer?.status === "not-run" && answer.reason?.code === BACKGROUND_UNAVAILABLE) {
-          const held = gates.get(deploymentOf(row));
-          if (held && held.enabled !== false) { held.enabled = false; held.at = now(); try { onGate(); } catch { /* as above */ } }
-        }
+        answered(row, answer);
         throw new Error(why);
       }
       return answer;

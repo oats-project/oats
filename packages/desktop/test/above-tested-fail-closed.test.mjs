@@ -4,8 +4,8 @@
 //
 // Each surface through its own boundary, as the backend runs it, with the CLI's answer injected and every
 // call counted: the Spawn preview and apply (packages/client/spawn-preview.mjs, spawn-apply.mjs), Start and
-// Restart (packages/client/session-start.mjs), the colour and the background (server/instance-color.mjs,
-// server/instance-background.mjs).
+// Restart (packages/client/session-start.mjs), the colour, the background and the pin (server/instance-color.mjs,
+// server/instance-background.mjs, server/instance-pin.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSpawnPreviewBoundary, createSpawnPreviewFlights } from '../../client/spawn-preview.mjs';
@@ -14,6 +14,7 @@ import { startInstance } from '../../client/session-start.mjs';
 import { clientTerms } from '../../client/client-terms.mjs';
 import { createInstanceColorBoundary, INSTANCE_COLOR_FEATURE } from '../server/instance-color.mjs';
 import { createInstanceBackgroundBoundary, INSTANCE_BACKGROUND_FEATURE } from '../server/instance-background.mjs';
+import { createInstancePinBoundary, INSTANCE_PIN_FEATURE } from '../server/instance-pin.mjs';
 import { context, request, data, envelope, selector, target } from './helpers/spawn-preview-fixture.mjs';
 import { applyContext, applyPreview, creation } from './helpers/spawn-apply-fixture.mjs';
 
@@ -151,7 +152,7 @@ for (const restart of [false, true]) {
   });
 }
 
-// ── The colour and the background: an answer it does not know is not applied ────────────────────────────
+// ── The colour, the background and the pin: an answer it does not know is not applied ────────────────────────────
 const LOCAL = { id: 'team', scope: '/fixture/team' };
 const recordRow = { instance: 'dev-1', home: '/fixture/team/agents/dev/instances/dev-1' };
 const RECORDS = [
@@ -163,6 +164,10 @@ const RECORDS = [
     [{ instanceBackgroundApi: 2, instance: 'dev-1', home: recordRow.home, background: true, changed: true },
       { instanceBackgroundApi: 1, instance: 'dev-1', home: recordRow.home, background: 'yes', changed: true },
       { instanceBackgroundApi: 1, instance: 'dev-2', home: recordRow.home, background: true, changed: true }]],
+  ['pin', createInstancePinBoundary, INSTANCE_PIN_FEATURE, { pinned: true },
+    [{ instancePinApi: 2, instance: 'dev-1', home: recordRow.home, pinned: true, changed: true },
+      { instancePinApi: 1, instance: 'dev-1', home: recordRow.home, pinned: 'yes', changed: true },
+      { instancePinApi: 1, instance: 'dev-2', home: recordRow.home, pinned: true, changed: true }]],
 ];
 for (const [name, create, feature, write, unknowns] of RECORDS) {
   for (const result of [...unknowns, undefined]) {

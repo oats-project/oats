@@ -12,6 +12,8 @@ export { cliDeploymentRead } from "../../client/deployment-read-cli.mjs";
 export { cliDeploymentList } from "../../client/deployment-list-cli.mjs";
 export { deploymentsListSupported } from "../../client/deployment-list.mjs";
 export { cliRemoteRoster } from "../../client/cli-adapter.mjs";
+// Pinned instances (feature instance-pin): the pin key runs the kernel's verb, read by the shared home.
+export { pinInstance } from "../../client/instance-pin.mjs";
 export { createDeploymentObserver, mapBounded, MAX_DEPLOYMENT_OBSERVATIONS } from "../../client/deployment-observer.mjs";
 export { createWarmReader } from "../../client/warm-reader.mjs";
 export { createRefreshLoop } from "../../client/refresh-loop.mjs";
@@ -23,7 +25,7 @@ export { remoteRosterState } from "../../client/remote-roster.mjs";
 export { observeIdentities, identityMemory } from "../../client/remote-identity-memory.mjs";
 export { workspaceChoiceRows, choiceMatches, UNMATCHED_SECTION } from "../../client/workspace-choices.mjs";
 export { shortPath, deploymentLabel, machineLabels } from "../../client/deployment-label.mjs";
-export { instanceId, instanceVisibleInTree, waitingRollup, collapseKey, filterInstanceTree, hasInstanceChildren, heldHome, instanceSiblings, backgroundPlacement, BACKGROUND_FEATURE } from "../../client/instance-tree.mjs";
+export { instanceId, instanceVisibleInTree, waitingRollup, collapseKey, filterInstanceTree, hasInstanceChildren, heldHome, instanceSiblings, backgroundPlacement, BACKGROUND_FEATURE, PIN_FEATURE } from "../../client/instance-tree.mjs";
 export { rosterSections, deploymentState, rowStale, primaryDeployment, isMultiDeployment, rosterSectionKey, sidebarSections } from "../../client/roster-sections.mjs";
 export { runtimeState, runtimeCounts, originLead, siblingText, instanceColor } from "../../client/instance-presentation.mjs";
 export { instanceDisplayName } from "../../client/instance-display-name.mjs";

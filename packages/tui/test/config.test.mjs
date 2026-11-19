@@ -12,7 +12,7 @@ import { isKeyId } from "../lib/term/keys.mjs";
 import { BACK_KEY_RULE } from "../lib/term/through.mjs";
 
 const FILE = "/cfg/config/tui.json";
-const IDS = "up, down, top, bottom, page-up, page-down, collapse, expand, detail, filter, refresh, instances, souls, capabilities, workspaces, palette, open, remove, soul-instances, zoom, close-terminal, tab-previous, tab-next, split-right, split-down, group-next, group-previous, tab-move, group-close, stop, retire, start, restart, spawn, spawn-another, spawn-check, help, close, quit, suspend, redraw";
+const IDS = "up, down, top, bottom, page-up, page-down, collapse, expand, detail, filter, refresh, instances, souls, capabilities, workspaces, palette, open, remove, soul-instances, zoom, close-terminal, tab-previous, tab-next, split-right, split-down, group-next, group-previous, tab-move, group-close, stop, retire, start, restart, spawn, spawn-another, spawn-check, pin, help, close, quit, suspend, redraw";
 const KEY_IDS = "key ids look like q, ctrl+c, shift+tab, f5, space";
 /** The whole line of a refusal, as it is printed. */
 const line = (clause, file = FILE) => `oats: \`oats tui\` cannot use ${file}: ${clause} (E_TUI_CONFIG)`;
@@ -351,6 +351,21 @@ test("the switcher's Remove holds Delete by default, and no letter: a file that 
   const unbound = load({ keys: { refresh: ["r", "delete"], remove: [] } });
   assert.equal(unbound.ok, true);
   assert.deepEqual([unbound.actions.find((action) => action.id === "remove").keys, bindings(unbound.actions).get("delete")], [[], "refresh"]);
+});
+
+test("pin holds p by default (feature instance-pin): a file that gives p to another action is refused at the start, naming the key and both actions, until that action moves or pin gets another key", () => {
+  assert.deepEqual(ACTIONS.find((action) => action.id === "pin").keys, ["p"]);
+  assert.equal(bindings(ACTIONS).get("p"), "pin");
+  // A file written before pin existed, that gives p to an action: the line that refuses it says what to change.
+  assert.deepEqual(load({ keys: { refresh: ["p"] } }).lines, [line("the key p is given to pin and to refresh; a key does one thing")]);
+  assert.deepEqual(load({ keys: { help: ["?", "p"] } }).lines, [line("the key p is given to pin and to help; a key does one thing")]);
+  assert.equal(load({ keys: { refresh: ["p"] } }).ok, false);
+  // Either change the release note names makes it taken: the action moves off p, or pin gets another key.
+  assert.equal(load({ keys: { refresh: ["f5"] } }).ok, true);
+  const rebound = load({ keys: { refresh: ["p"], pin: ["P"] } });
+  assert.equal(rebound.ok, true);
+  assert.deepEqual([bindings(rebound.actions).get("p"), bindings(rebound.actions).get("P")], ["refresh", "pin"]);
+  assert.equal(load({ keys: { refresh: ["p"], pin: [] } }).ok, true, "or none: then only `oats instance pin` pins");
 });
 
 test("refused: one key given to two actions by two lists of the file, found at the second", () => {

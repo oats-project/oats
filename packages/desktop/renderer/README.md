@@ -677,7 +677,10 @@ split into sections) is `packages/client/roster-sections.mjs`.
   a start or a stop moves no row. Keys: `cluster:<n>:<name>`, `independent:<first member's instanceId>`,
   decided on the full roster (a filter or a collapse moves no row, #971). The palette alone passes its
   last-focus record (`{ lastFocus }`): the clusters are ordered by `recencyOrder` first (#1383), and the
-  sidebar and the TUI never pass it.
+  sidebar and the TUI never pass it. Pinned first (feature `instance-pin`, `pins`): at every level a node whose
+  subtree holds a pinned row comes before the others, each part in the order above, so a pin lifts its
+  bundle and the path down to it; a cluster's rank within its part is still its first root's without pins
+  (`docs/desktop.md`, "Pinned instances"). The palette's focused rows keep their recency order.
 - **The disclosure, and roots that start collapsed** (the product owner, 2026-11-19; `roster-disclosure.mjs`):
   `sectionChildren` lists each row's children inside its own section (the main tree or the Background section,
   and a deployment's part), and a row with any gets `span.ctx-disclosure` (`aria-hidden`) first on its
@@ -689,7 +692,9 @@ split into sections) is `packages/client/roster-sections.mjs`.
   shell's `collapsedInstances` (closed by hand) and every root of its section with children that is not in
   `expandedInstances` (opened by hand). A row drawn as a pending row or a held home is never drawn collapsed
   (`staysOpen`: its lifecycle takes the row, which has no room for the roll-up) and wears no mark, so the keys have
-  nothing to collapse there; a choice made by hand stays in the sets and applies again afterwards. Both are in memory per workspace and re-homed together
+  nothing to collapse there; a choice made by hand stays in the sets and applies again afterwards. A root whose
+  subtree in its section holds a pinned row, its own included (feature `instance-pin`, `rowPinned`), is not collapsed
+  by default (`startsOpen`: its own pin, or one `anyBelow` it), so the pin is seen with its group; a root closed by hand stays closed. Both sets are in memory per workspace and re-homed together
   (`rehomeWorkspaceState`), and `setRowOpen` is the one place both change (the row keys, the mark, `showInRoster`
   and `revealPendingSpawn`). Tests of other behaviour draw every root open (test/helpers/view-context.mjs
   `expandedInstances`); `roster-disclosure-shell.test.mjs` runs the default.
