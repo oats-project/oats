@@ -485,13 +485,15 @@ after 400 ms, for about the CLI's timeout, and is never shown while it retries.
 
 ### What will be created
 
-Wide, it is the dialog's left column. Below 760px (one column) it follows the
-form's last field (Name, then the folded Developer settings) in the form's own
-scroll area, above the footer, which stays in view: the Opening instruction,
-focused on open, is what shows first. It is moved in the document there, so
-reading and Tab order follow the screen.
+In the New agent form (slice 5) it is the last section of **Advanced**, in the
+form's own scroll area above the footer, at every width. Under the fields, one
+dim line says it in short, from the same state (`renderPreviewLine`): "Creates
+`<name>` · `<harness>` · `<model>` · `<work>`", "Reading what will be created…"
+before the first answer, **Updating…** at its end while a newer read is due, an
+empty preview's sentence, and nothing for a refusal, which the footer says. It is
+never truer or staler than the full preview.
 
-The column reads top to bottom:
+The preview reads top to bottom:
 
 1. **The instance.** Its name comes first and largest (mono, `--fg`). Under it
    is its home (mono, `--muted`), relative to the deployment (the preview's
@@ -505,7 +507,8 @@ The column reads top to bottom:
    - **Team.** "`<default>` · default", then a muted "may also join …" line
      naming the other teams in `teams`.
    - **Relationship.** Shown only when the spawn is not independent: "child of
-     `<anchor>`".
+     `<anchor>`". The New agent form spawns top-level (D6), so it shows only a
+     kernel's own answer.
    - **Setup.** Shown only when the preview's `worktreeHooks` is a non-empty
      array: the capabilities whose `worktree` hook will set up `./work`, in the
      order they run, "(required)" after required ones, then the muted line "Runs

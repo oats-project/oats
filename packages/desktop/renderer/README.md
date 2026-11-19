@@ -36,7 +36,7 @@ No frameworks, no dependencies; data comes from the bundled backend HTTP API.
   confirmed `/api/spawn?ws=` transaction. An empty opening instruction waits
   for instructions; attached-mode souls cannot launch standalone. The shell's
   `app.chooseSoul` (⌘N / Ctrl+Shift+N, **Souls: choose a soul to spawn (Workspace › Souls)**) navigates to soul
-  selection, and the sidebar foot's **Spawn instance** opens Quick Open (`app.quickOpenSouls`); neither launches.
+  selection, and the sidebar foot's **Spawn instance** opens the New agent form on its Soul list (`app.quickOpenSouls`); neither launches.
   Capability facts and source provenance use negotiated read-only inspection,
   never inferred membership, installation or remote discovery. Shared CLI recovery
   stays visible across subtabs; incompatible installations are observation-only.
@@ -545,7 +545,7 @@ split into sections) is `packages/client/roster-sections.mjs`.
   `[mark][toggle] … [spawn][cog]`: the OATS mark (`.sidebar-brand`, the generated `sidebar-48.png` drawn at
   20px, decorative: `aria-hidden`, an empty alt, no tab stop); 8px after it the sidebar toggle
   (`#sidebar-toggle`, `sidebar.toggle`, its `aria-expanded` kept by `updateSidebarControls`); then at the right
-  end **Spawn instance** (`#sidebar-spawn`, `app.quickOpenSouls`: Quick Open), its words alone (24px tall,
+  end **Spawn instance** (`#sidebar-spawn`, `app.quickOpenSouls`: the New agent form on its Soul list), its words alone (24px tall,
   12px `--muted`, no icon and no fill at rest; the icon buttons' `--surface-2` on hover and `--sel` on keyboard
   focus, in rules of its own) with no hint element, its chord in its title (`applyChordTitles`), and 6px after
   it the settings cog (`#sidebar-settings`, `sidebar-settings.mjs`: Theme…, Font…, Keyboard shortcuts…). The toggle
@@ -776,72 +776,73 @@ still the popover's (`s.soulRead`, dropped by `closePop`), and a miss on arrival
 is said in the popover's status line, or as a notification once the page has
 gone.
 
-## Spawn dialog — workspace model v2
+## New agent form (the spawn dialog) — workspace model v2
 
-`spawn-dialog.mjs` owns the form; `views/spawn.mjs` is a thin host (modal,
-focus trap, Esc/backdrop close, the `spawn.submit` binding and the handoff). In
-the shell a confirmed local press is handed to `spawn-jobs.mjs` (`ctx.spawnJobs`)
-and the dialog closes at once; the store runs the shared transaction
+`spawn-dialog.mjs` owns the form (Desktop UI rework, slice 5; guide steps 22 to 24); `views/spawn.mjs` is a thin host
+(`hostSheet`: the sheet over a dim backdrop, the focus trap, Esc/backdrop/× close, the `spawn.submit` binding and the
+handoff; `focusSheet`: the first focus). In the shell a confirmed local press is handed to `spawn-jobs.mjs`
+(`ctx.spawnJobs`) and the sheet closes at once; the store runs the shared transaction
 (`packages/client/spawn-transaction.mjs` `createSpawnTransaction`), owns the roster's
-pending row (`shell.mjs` `pendingSpawnRow`), the outcome notifications and the
-**New** marks, and keeps the draft for **Reopen spawn** (`preselectSpawn({…, draft})`).
+pending row (`shell.mjs` `pendingSpawnRow`: the dot pulsing, `.ctx-dot.starting`, still under reduced motion), the
+outcome notifications and the **New** marks, and keeps the draft for **Reopen spawn** (`preselectSpawn({…, draft})`).
 After the press the shell reveals the pending row without focus (`ctx.followSpawn`)
-and, when the instance runs, `spawn-follow.mjs` takes the operator to its terminal
-unless they acted since the press (input, a focus move, a navigation) or an overlay is
-open; focus merely resting where the dialog returned it does not count. Otherwise its row says New. See
+and, when the instance runs, `spawn-follow.mjs` selects its roster row (which takes the keyboard focus) and opens its
+terminal without input focus (`focusContent: false`, as a launch's `--instance` does), unless the operator acted since
+the press (input, a focus move, a navigation) or an overlay is open; focus merely resting where the sheet returned it
+does not count. Otherwise its row says New. See
 `docs/desktop-spawn-preview.md`, "Background spawn". Souls come from the kernel's spawn catalog (`oats souls --json` via
-`GET /api/agents`), never from the roster. Two layouts, switched in place
-(design board 6): **scoped** — opened from a soul card's Spawn or the soul
-page's Spawn — heads the dialog *Spawn <soul>* with where the soul comes from
-and shows the preview column (*What will be created*: name, works in, harness
-and where it came from, default team; *Core capabilities* and *Capabilities*
-from the preview's projected `modules`, each with its source and, when the
-preview reports it, its reason; a skeleton while it reads, the footer's
-refusal sentence when it fails). The facts are data from the shared home's
-`previewFacts` (`packages/client/spawn-preview-facts.mjs`), which any client
-draws its own way; the dialog draws them. **Change soul** switches the same dialog to
-the **picker** (the soul chooser, grouped by source, alphabetical, externals
-last, keyed by `agentsRoot + name + server`); switching soul keeps the typed
-name and instruction, and a soul chosen there reopens in the picker. Quick
-Open (⌘P / Alt+P) opens the scoped layout too (`preselectSpawn`), and
-dismissing that dialog returns to where the operator was.
+`GET /api/agents`), never from the roster.
 
-Keyboard (spec F; `../docs/desktop-keyboard.md`): Mod+Enter (`spawn.submit`)
-spawns from any field, plain Enter in Name never does; DOM order is Tab order;
-Relationship and Teams are one tab stop each (`roveSegment`: arrows, Home/End);
-the soul chooser is a `listbox` of `option` buttons where typing filters,
-Enter in the search picks the best match and Enter, Space or a click on a soul
-picks it, every pick moving focus to the first field. The dialog opens on its
-first field, the Opening instruction (`focusFirst`: no scroll, the caret at the
-end of a restored draft); Name is optional and last. Mod+1–Mod+7 jump to the
-instruction, Harness, Model, Relationship, Teams, Name (`focusName`: caret at
-the end) and Developer settings: the keys follow the form's order
-(`spawn-dialog-keys.mjs` registers them with `spawn.submit` in the
-`spawn-dialog-local` context, once, for the editor; the host resolves and stops
-them; `jump()` and `setShortcuts()` are the dialog's).
+The form, in order: **Soul** (`spawn-soul-field.mjs`), **Task**, **Harness** and **Where** (only with two or more
+machines), then one dim line of the preview (`renderPreviewLine`) and the **Advanced** link. Copy says "agent" through
+`DESKTOP_NOUNS` (`desktop-terms.mjs`).
 
-Main form, in order: the **Opening instruction**, **Runtime** and **Model** (always visible, showing the kernel's real defaults
-with a *default* pill), **Relationship** (Independent / Child of / Sibling of /
-Parent of, a segmented control; choosing one reveals the instance picker), **Teams**
-and **Name · optional**. Below `SPAWN_NARROW` (760px, one column) the preview column moves
-into the form's scroll area after its last field, above the footer (`placePreview`, a
-`matchMedia` listener): moved in the document, so reading and Tab order stay the order on screen. Name: with `spawn-name` on a local spawn
-(`roleNamed()`), a typed name goes as `--name`, lowercased (the kernel uses a
-name exactly as given) and with nothing appended (`finalName`), and
-an empty one reads "Left empty, the kernel numbers it." (with `spawn-suggest-name`
-and a field never typed in: "Left empty, the instance is named from its task.", and the
-task's suggested name is the placeholder and the choices' `name`; the suggest read is in
-`packages/desktop/docs/desktop-spawn-preview.md`); otherwise (an older
-kernel, a remote target, whose `/api/spawn` takes a purpose) it is a purpose
-with the `<soul>-` prefix shown. The 64-character check runs on the final name
-(the typed name itself, or `<soul>-<purpose>`);
-the kernel's name refusals show under the field. **Developer settings** is collapsed: work area (base | branch,
-the worktree path relative to the deployment, *Use a worktree instead* for
-checkout souls), permissions, **messaging identity** (Default / Local /
-Global + resident, sent as `--provider <cap> identity.mode=…` to the messaging
-provider the preview reports; shown only with `spawn-provider-payload` and a
-messaging provider, and its hint says what the decision binds), launch
-configuration, session backend, Run on and the wake schedule. The footer (Cancel, Spawn ⌘↵) is sticky.
+- **Soul**: the chosen soul as a button (its mark, name and description); opened, a combobox (the text field keeps the
+  focus, `aria-activedescendant` names the active option) over a listbox of every soul with its description, filtered
+  and ordered by Quick Open's `quickOpenRows` (`limit: Infinity`). ↑↓ move (wrapping, passing over a soul that can't be
+  started), Enter chooses, Escape closes the list back to the soul. A pick goes to the host (`choose`), which reopens
+  the form on that soul with what was typed (the task, the name) and focus in Task. Opened with no soul
+  (`preselectSpawn({ soulFirst: true })`: Quick Open's key, `app.quickOpenSouls`, and the sidebar's New agent), the
+  host shows `createSoulStep`: the same sheet with the list open and focused, Task typed ahead, Harness waiting.
+- **Task**: a textarea. Enter starts the agent through the same press as the Start button and `spawn.submit`;
+  Shift+Enter is a newline; an input method's composition never submits. Its hint (`renderTaskHint`) says how the
+  agent will be named.
+- **Harness**: a segmented control (`roveSegment`) of the harnesses the CLI launches, in the order claude · codex · pi;
+  the soul's default (the preview's answer with no harness or launch configuration chosen, else the catalog row's
+  launch) is marked and chosen until another is. The hidden `fruntime` select holds the value: choosing the default
+  sends nothing.
+- **Where**: this computer and the workspace's machines (below); hidden with one machine, when *Add a machine…* and the
+  route's reason wait in Advanced. With two or more deployments the Deployment field takes its place.
+- **No name field** in the form: the kernel names the agent from its task (`namesFromTask`). On a kernel that can't (no
+  `spawn-suggest-name` here, no `instance-suggest-name` or `spawn-apply-suggest-name` for another machine), the Name field
+  comes back into the form with one dim line saying why (`placeName`).
+- **No relation picker** (D6, decided 2026-11-19: a human's spawn is top-level): `choices().relation` is always
+  `{ kind: 'unrelated' }`, a remote spawn sends no relation, and a draft's relation is not restored.
+- **Advanced** (`details.spawn-advanced`, a dim link, ⌘7 / Ctrl+7): model, the kernel name (an optional override), the
+  work area (base | branch, the worktree path relative to the deployment, *Use a worktree instead* for checkout souls),
+  teams, Run in background, permissions and launch configuration, **messaging identity** (Default / Local / Global +
+  resident, sent as `--provider <cap> identity.mode=…` to the messaging provider the preview reports; shown only with
+  `spawn-provider-payload` and a messaging provider), session backend, the wake schedule, and **What will be created**
+  (name, works in, harness and where it came from, default team; *Core capabilities* and *Capabilities* from the
+  preview's projected `modules`, each with its source and reason; a skeleton while it reads, the footer's refusal
+  sentence when it fails). The facts are data from the shared home's `previewFacts`
+  (`packages/client/spawn-preview-facts.mjs`), which any client draws its own way. An unmapped default team, which
+  blocks the spawn, is also said on the preview line, so a disabled Start is never unexplained.
+
+Name, wherever it is: with `spawn-name` on a local spawn (`roleNamed()`), a typed name goes as `--name`, lowercased
+(the kernel uses a name exactly as given) and with nothing appended (`finalName`); an empty one is named from its task
+where the kernel suggests names (the suggestion is the placeholder and the choices' `name`; the suggest read is in
+`packages/desktop/docs/desktop-spawn-preview.md`), else numbered; otherwise (an older kernel, a remote target, whose
+`/api/spawn` takes a purpose) it is a purpose with the `<soul>-` prefix shown. The 64-character check runs on the final
+name; the kernel's name refusals show under the field.
+
+Keyboard (spec F; `../docs/desktop-keyboard.md`): Enter in Task and Mod+Enter (`spawn.submit`) from any field start
+it, plain Enter in Name never does; DOM order is Tab order; Harness and Teams are one tab stop each (`roveSegment`:
+arrows, Home/End). The form opens on Task (`focusFirst`: no scroll, the caret at the end of a restored draft), or on the
+soul list. Mod+1, 2, 3, 5, 6 and 7 jump to Task, Harness, Model, Teams, Name (`focusName`: caret at the end) and
+Advanced, opening Advanced for the ones it holds (`spawn-dialog-keys.mjs` registers them with `spawn.submit` in the
+`spawn-dialog-local` context, once, for the editor's **New agent** group; the host resolves and stops them; `jump()`
+and `setShortcuts()` are the form's). Mod+4 was Relationship's.
 
 Every value shown is the kernel's own preview: the dialog reads
 `POST /api/workspace-spawn-preview` in the background (debounced; a newer
@@ -849,24 +850,24 @@ choice starts its own read at once and only the latest ticket settles,
 owner-checked on success and rejection) and never resolves a default itself.
 Editing never waits on it: no field is disabled or rebuilt by a read, and after
 the first settle the preview column keeps the last settled facts marked
-**Updating…** (`aria-busy`) while the Name fact follows the form. **Spawn** is
-one click, pressable whenever the form is valid (a press before the preview for
+**Updating…** (`aria-busy`) while the Name fact follows the form. **Start** is
+one press, pressable whenever the form is valid (a press before the preview for
 those choices settled waits as **Checking…**, and an edit drops it): prepare →
 the server checks the prepared decision still matches what was shown → apply
 with the bound revision and key.
-If the kernel decided differently at Spawn time nothing is applied and the
+If the kernel decided differently at Start time nothing is applied and the
 dialog shows the new values for review. An unknown outcome offers **Check
 result** on the same intent. A completed receipt hands off to the terminal
 only after an exact composite roster match; partial wake results stay
-created with **View schedules**. Execution-server spawns (Run on, or a remote
+created with **View schedules**. Execution-server spawns (Where, or a remote
 soul) use the host's own defaults and naming. The `spawn.submit` chord hint
 lives on `data-chord`, not `data-shortcut`, so the shell's shortcut titling
-never hides the Spawn button.
+never hides the Start button.
 
 **Deployment** (#482, decision Q2; `spawn-deployment-field.mjs`, wired in one
 delimited block of `spawn-dialog.mjs`). A workspace view can hold several
 deployments (`/api/panel` `deployments`). With two or more, the form shows a
-**Deployment** field first, before Name, in place of *Where to run*: the form's
+**Deployment** field after Harness, in place of *Where*: the form's
 segmented control with two or three deployments, the Harness-style dropdown with
 more (never a native select). Options are named by `machineLabels` ("This Mac",
 "devbox", "This Mac · oats-qa") with a state tag when not live; the preview
@@ -895,8 +896,7 @@ there is no field and the form is unchanged. Rules:
   `created()`.
 - **Changing deployment** clears the settled preview and re-reads (Spec B's
   prepare/apply/cache are unchanged). The choice key includes the deployment, so
-  a reply for the previous one never settles. Relation anchors are the chosen
-  deployment's rows only.
+  a reply for the previous one never settles.
 - **A remote deployment** spawns through the execution-server path: `serverId`
   is its server and `agentsRoot` comes from its catalog row. The reply's
   `workspaceId` is a view, and `doSpawn` switches only when that view is not
@@ -906,14 +906,14 @@ there is no field and the form is unchanged. Rules:
   check). The deployment is kept in `sessionStorage` across a reload, and a
   created row becomes real only when its own deployment's row reports it.
 
-*Where to run* (one-deployment views) lists the registered servers, or, with
+*Where* (one-deployment views, two or more machines) lists the registered servers, or, with
 `servers-per-workspace` and `server-connect`, only the window's machines
 (`/api/servers?ws=`) followed by *Add a machine to this workspace…*
 (`add-machine-dialog.mjs`; a button under the Deployment field in views of two
-or more deployments). See `../docs/desktop-machines.md`. Its disabled states
+or more deployments, and in Advanced while there is one machine: adding one shows Where with it chosen). See
+`../docs/desktop-machines.md`. Its disabled states
 come from every view holding a remote deployment (`serverFacts`, since
-`/api/team-members` is view-scoped). A chosen group's relation rows are that
-group's deployment only (`serverRows`).
+`/api/team-members` is view-scoped).
 
 Problems read as one plain sentence about what happened and what to do, keyed
 by the contract's stable code: the shared home says what happened (`fact`) and
@@ -1809,14 +1809,13 @@ section is the module map.
   `onTerminalTypographyChange`), so every open terminal and the control follow
   each other. A typed size applies on Enter or on leaving the field, never per
   keystroke. The font family stays on the palette's prompt.
-- **quick-open.mjs** — Quick Open for souls (⌘P / Alt+P, also “Souls: quick
-  open…” in the palette): fuzzy-find a soul from the Spawn view's data
-  source and hand off through `views/spawn.mjs` `preselectSpawn()`: the
-  spawn dialog scoped to that soul, as its card's Spawn opens it, with focus
-  in Name. Opening never spawns; Spawn stays explicit. Attached-only, refused
-  and CLI pending/unavailable souls open their soul page instead, which says
-  why. Dismissing the dialog returns to where the operator was
-  (`surface-return.mjs`). No second spawn form exists.
+- **quick-open.mjs** — `quickOpenRows`, the souls' matcher the New agent form's Soul field and the palette share
+  (each row carries its catalog row, `soul`; `limit` how many). Its overlay (`createQuickOpen`, still reachable from the
+  palette's “Souls: quick open…”) hands off through `views/spawn.mjs` `preselectSpawn()`: the New agent form on that
+  soul, focus in Task. ⌘P / Alt+P (`app.quickOpenSouls`) now opens the form itself on its Soul list (slice 5); the
+  overlay goes with the palette's regrouping (slice 4). Opening never spawns. Attached-only, refused and CLI
+  pending/unavailable souls open their soul page instead, which says why. Dismissing the form returns to where the
+  operator was (`surface-return.mjs`). No second spawn form exists.
 - **keybindings-editor.mjs** — the shortcuts editor dialog (`Mod+,`). Its first section is
   **Most useful** (`usefulRows`): a read-only table (a row header per action, then its keys) of
   the shared keymap's most used rows, read from the live keymap at every render (platform,

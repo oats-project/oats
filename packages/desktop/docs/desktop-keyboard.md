@@ -286,8 +286,8 @@ say why in the same line when they cannot act.
 | Tab, Shift+Tab | focuses the next / previous editor group's active tab, or the group when it is empty, wrapping (`split.focusNextGroup`, `split.focusPrevGroup`). On macOS the previous group has no chord, so Shift+Tab here is its key |
 | `x` | closes the split, every tab kept (`split.close`) |
 | `X`, `R`, `S`, `D` | Stop… / Restart… / Start… / Retire… for the target: the same dialogs and availability as its row's context menu |
-| `n` | Quick Open: pick a soul, then the spawn dialog (`app.quickOpenSouls`) |
-| `N` | the spawn dialog for the target's soul, as Quick Open opens it |
+| `n` | the New agent form on its Soul list (`app.quickOpenSouls`) |
+| `N` | the New agent form on the target's soul |
 | `/` | the instance roster's current row (`sidebar.focusFilter`) |
 | `o` | focuses the [list of workspaces](#the-list-of-workspaces) on its current row (`app.workspaces`) |
 | `?` | the shortcuts editor (`app.shortcuts`), the Desktop's help |
@@ -850,7 +850,7 @@ settings cog's menu), and never with focus outside the sidebar.
 | `[` `]` | `sidebar.key.tabPrevious`, `…tabNext` | previous / next tab |
 | `\|` `-` | `sidebar.key.splitRight`, `…splitDown` | split right / split down |
 | `X` `D` `S` `R` | `sidebar.key.stop`, `…retire`, `…start`, `…restart` | Stop… / Retire… / Start… / Restart… for the focused roster row (on a workspace row, a heading's control, a nav button or the foot, the active terminal tab's instance) |
-| `n`, `N` | `sidebar.key.spawn`, `…spawnAnother` | Quick Open; the spawn dialog for the focused row's soul |
+| `n`, `N` | `sidebar.key.spawn`, `…spawnAnother` | the New agent form on its Soul list; the form on the focused row's soul |
 | `?` | `sidebar.key.help` | the shortcuts editor |
 
 A key that cannot act says why in one line at the bottom of the main area, as
@@ -1116,77 +1116,62 @@ control.
   relations are read as the words above. Options carry no `aria-level`, which
   is not an option's attribute.
 
-## Quick Open and the spawn dialog
+## The New agent form (Quick Open's key)
 
-- **⌘P / Alt+P** finds a soul, from a terminal too; picking it opens
-  the spawn dialog scoped to that soul, exactly as its card's Spawn does (the
-  Workspace stage behind it). A soul
-  that can't be spawned here (attached only, refused, no verified CLI) opens
-  its soul page instead, which says why. Focus lands on the dialog's first
-  field.
-- Dismissing the dialog (Cancel, Esc, ×, the backdrop) returns to where the
-  operator was before Quick Open: the same tab re-activated (its terminal
-  focused when that is where they were), or the same stage and control, else
-  that region's current item. If they moved on while the dialog was open (a
-  workspace switch, another stage or tab), the return is not forced and the
-  dialog restores focus itself. A successful spawn closes the dialog at once and,
-  when the instance runs, opens its terminal unless the operator acted since the
-  press (a key other than a lone modifier, a paste, a focus move, a navigation) or
-  an overlay is open (`docs/desktop-spawn-preview.md`, Background spawn).
-- **Focus on open:** the form's first field, the Opening instruction,
-  whenever the dialog opens for a chosen soul (a card, the soul page, Quick
-  Open, Reopen spawn, a pick in the soul list), without scrolling, with the
-  caret at the end of a restored instruction (never selected). Name is optional
-  and the form's last field; its section key (Mod+6) reaches it, with the caret
-  at the end of a restored name. Quick Open from a tab opens the dialog just before the
-  Workspace stage is shown; the first field takes focus once it is, unless the
-  operator has focused something else by then.
-- **Spawn: Mod+Enter (⌘↵ / Ctrl+Enter) from any field**, the Opening
-  instruction and the segmented controls included; plain Enter in Name does
-  not spawn, Enter or Space on the focused Spawn button does. The button
-  shows the effective chord.
-- **Tab order** is the visual order: Opening instruction → Deployment (when
-  shown) → Harness → Model (its field, then its suggestions button) → Where to
-  run (when shown) → Relationship (one stop) → its target when shown → Teams
-  (one stop) → Name → Developer settings → (in a narrow window, What will be
-  created, below the fields) → (Details, when a problem shows it) → Cancel →
-  Spawn, then the header's Change soul and Close. Tab is trapped in the dialog.
-- Segmented controls and radio groups are one tab stop: Arrow keys move (and
-  choose, in a radio group), Home/End go to the ends (`roveSegment`).
-- The Harness and Model pickers open with Enter, Space or Alt+Down and close
-  with Escape back on their trigger. Escape closes an open picker first; with
-  none open it closes the dialog.
-- **Change soul** shows the soul list, focus on the selected soul (the search
-  when the filter hides it): a listbox with Arrow/Home/End. Typing on the list
-  filters it through its search; Enter in the search picks the best match;
-  Enter, Space or a click on a soul picks it. Every pick moves focus to the
-  form's first field.
-- **Section keys** (Spec E), from any field of the dialog:
+The New agent form (slice 5 of the Desktop UI rework) is done entirely by keyboard: choose a soul, say the task, press
+Enter.
+
+- **⌘P / Alt+P** (`app.quickOpenSouls`, from a terminal too) opens the form on its **Soul** list, its text field
+  focused. Typing filters the souls (the palette's matching), ↑↓ move the active soul (wrapping, passing over one that
+  can't be started), Enter chooses it and moves to **Task**; with no soul chosen, Escape closes the form. Under another
+  dialog the key does nothing. A soul's card, its page, the leader's `N` and Reopen spawn open the form on that soul,
+  with focus in Task. A soul that can't be spawned here (attached only, refused, no verified CLI) opens its soul page
+  instead, which says why.
+- Dismissing the form (Cancel, Esc, ×, the backdrop) returns to where the operator was before it opened: the same tab
+  re-activated (its terminal focused when that is where they were), or the same stage and control, else that region's
+  current item. If they moved on while it was open (a workspace switch, another stage or tab), the return is not forced
+  and the form restores focus itself. A successful start closes the form at once; when the instance runs its row is
+  selected, holding the keyboard focus, and its terminal opens without input focus, unless the operator acted since the
+  press (a key other than a lone modifier, a paste, a focus move, a navigation) or an overlay is open
+  (`docs/desktop-spawn-preview.md`, Background spawn).
+- **Focus on open:** Task, whenever the form opens on a soul, without scrolling, with the caret at the end of a restored
+  task (never selected). The form opened from a tab shows just before the Workspace stage is; Task takes focus once it
+  is, unless the operator has focused something else by then.
+- **Start: Enter in Task; Shift+Enter is a new line.** ⌘↵ / Ctrl+Enter (`spawn.submit`) starts it from any field; plain
+  Enter in Name or on a segmented control does not, Enter or Space on the focused Start button does. An input method's
+  composition never starts it. A press before the preview for the inputs on screen has answered waits for it
+  (**Checking…**).
+- **Tab order** is the visual order: the header's Close → Soul → Task → Harness (one stop) → Where or Deployment (when
+  shown) → Name (only on an older kernel) → Advanced (its summary; open, its fields: Model and its suggestions button,
+  the kernel name, Work, Teams, Run in background, permissions, launch configuration, identity, backend, the wake-up,
+  Add a machine) → (Details, when a problem shows it) → Cancel → Start. Tab is trapped in the form.
+- **The Soul field**, with a soul chosen, is a button showing it: Enter, Space, ↓ or a click open its list (focus in the
+  list's text field, the chosen soul active), and typing a character opens it with that character typed. Escape closes
+  the list back to the soul; leaving the field closes it too.
+- Segmented controls and radio groups (Harness, Teams, Deployment) are one tab stop: Arrow keys move (and choose, in a
+  radio group), Home/End go to the ends (`roveSegment`).
+- The Model picker opens with Enter, Space or Alt+Down and closes with Escape back on its trigger. Escape closes an
+  open picker or the soul list first; with none open it closes the form.
+- **Section keys** (Spec E), from any field of the form:
 
   | Section | macOS | Linux / Windows | Lands on |
   |---|---|---|---|
-  | Opening instruction (`spawn.jumpTask`) | ⌘1 | Ctrl+1 | the instruction |
-  | Harness (`spawn.jumpHarness`) | ⌘2 | Ctrl+2 | the Harness picker |
-  | Model (`spawn.jumpModel`) | ⌘3 | Ctrl+3 | the Model field |
-  | Relationship (`spawn.jumpRelationship`) | ⌘4 | Ctrl+4 | the selected segment |
-  | Teams (`spawn.jumpTeams`) | ⌘5 | Ctrl+5 | the first team that can be ticked (nothing when Teams is not shown) |
-  | Name (`spawn.jumpName`) | ⌘6 | Ctrl+6 | the Name field |
-  | Developer settings (`spawn.toggleAdvanced`) | ⌘7 | Ctrl+7 | opens it on its first control; again closes it back on its summary |
+  | Task (`spawn.jumpTask`) | ⌘1 | Ctrl+1 | Task |
+  | Harness (`spawn.jumpHarness`) | ⌘2 | Ctrl+2 | the chosen harness |
+  | Model (`spawn.jumpModel`) | ⌘3 | Ctrl+3 | the Model field, opening Advanced |
+  | Teams (`spawn.jumpTeams`) | ⌘5 | Ctrl+5 | the first team that can be ticked, opening Advanced (nothing when Teams is not shown) |
+  | Name (`spawn.jumpName`) | ⌘6 | Ctrl+6 | the name field (in Advanced, or in the form on an older kernel) |
+  | Advanced (`spawn.toggleAdvanced`) | ⌘7 | Ctrl+7 | opens it on its first control; again closes it back on its summary |
 
-  The section keys follow the form's order: ⌘1–⌘7 reach the fields in the
-  order they are on screen, so the Opening instruction, the form's first
-  field, is ⌘1 and Name, its last before Developer settings, ⌘6 (in 0.67.1
-  and earlier Name was ⌘1 and the Opening instruction ⌘6; a rebind of either
-  is kept, by action id). Where a rebind of yours shares a chord with another section's
-  default, yours runs, as everywhere in the keymap. A closed disclosure holding the target opens first. Each chord shows as a
-  quiet hint beside its section's label (`aria-hidden`; the control carries
-  `aria-keyshortcuts`). They are actions of the `spawn-dialog-local` context
-  (`renderer/spawn-dialog-keys.mjs`, with Mod+Enter): the shortcuts editor
-  lists them under **Spawn dialog** from the start and they can be rebound,
-  but only the open dialog dispatches them. While it is open these chords are
-  the dialog's: it stops them, held or not, so ⌘1–⌘3 never switch the stage
-  behind the modal. A modal dialog's own context clashes only with itself in
-  the editor (`findConflict`), never with a global key it shadows.
+  ⌘4 was Relationship's, which went with the relation picker (D6: a human's spawn is top-level); no other chord moved,
+  so a rebind of any of them is kept, by action id. Where a rebind of yours shares a chord with another section's
+  default, yours runs, as everywhere in the keymap. A closed disclosure holding the target opens first. Each chord
+  shows as a quiet hint beside its section's label (`aria-hidden`; the control carries `aria-keyshortcuts`). They are
+  actions of the `spawn-dialog-local` context (`renderer/spawn-dialog-keys.mjs`, with Mod+Enter): the shortcuts editor
+  lists them under **New agent** from the start and they can be rebound, but only the open form dispatches them. While
+  it is open these chords are the form's: it stops them, held or not, so ⌘1–⌘3 never switch the stage behind the sheet.
+  A modal dialog's own context clashes only with itself in the editor (`findConflict`), never with a global key it
+  shadows.
 - ⌘N / Ctrl+Shift+N goes to Workspace › Souls; it never spawns. (While the
   command palette is open, ⌘N is its next group.)
 
@@ -1244,9 +1229,9 @@ the rig). "Fixed" marks a gap this change closed.
 | Instance panel tabs | F6 (selected tab); roving | Left/Right/Home/End |
 | Show instance panel (end of the main area's top bar, while the panel is closed and has something to show) | Tab, last in the Main region; closing the panel moves focus to it | Enter/Space: `panel.toggle`, then focus on the panel's selected tab |
 | Panel sections: soul link, copy, details, Open soul page, Teams, Git, lifecycle Restart…/Start…/Stop…/Retire… | Tab | Native buttons and summaries |
-| Spawn dialog | Spawn on a card, a soul page, Quick Open | See above |
+| New agent form | ⌘P / Alt+P, Spawn on a card or a soul page | See above |
 | Command palette, Quick Open | ⌘K / Alt+K, ⌘P / Alt+P (from a terminal too) | Type, arrows, Enter, Esc; Tab stays in the input; in the palette its chord cycles rows (⇧ + it: up), skipping context rows, and ⌘N / ⌥⌘N (Alt+Shift+↓ / ↑ on Linux/Windows) move to the next / previous group's first row, named in its footer (see "The command palette") |
-| Shortcuts editor | ⌘, / Ctrl+, (from a terminal too); focus starts in its search | Its first section, **Most useful**, is a read-only table (each row an action, then its keys) of the palette, Quick Open, the tab moves, tabs 1–9, the workspace moves, the splits, the moves between split panes, close tab, focus mode and the leader then `?`, read from the live keymap: the platform, the chord family and your rebinds as they are, and the leader's key where an action has no chord (the workspace moves in the Ctrl+Alt and Ctrl+Shift families: the leader then ↑ / ↓); a search hides it. Then the list: the **Leader** group comes first (the leader's own row, then one fixed row per key after it), then **Sidebar keys**; typing in the search filters by name, group or keys (`shift+b` and `ctrl shift b` find Ctrl+Shift+B, `ctrl+x k` finds the leader's `k`), and the count is announced; Down enters the rows, Up/Down move between them, Up from the first returns to the search; Tab reaches each row's shortcut and Reset; Enter records, Esc cancels a recording, Backspace unbinds; Esc clears the search, then closes; trapped, the search its first stop. A row shows "terminal" when its shortcut works while a terminal has focus and "changed" when it differs from the default. What has no button in the sidebar is taught by its rows, with no line of their own above them: the command palette is the Leader group's first key (the leader then K or Space) and a Global row (⌘K, Alt+K, Ctrl+Alt+K or Ctrl+Shift+K by the family); Connections, which the settings cog's menu leaves out, is the Global row **Settings: Connections…**, unbound by default and bound from that row; **Quick open a soul to spawn** (the sidebar foot's Spawn instance runs it), **View: Workspace › Machines**, **View: Workspace overview** and **View: Automations** show their chords |
+| Shortcuts editor | ⌘, / Ctrl+, (from a terminal too); focus starts in its search | Its first section, **Most useful**, is a read-only table (each row an action, then its keys) of the palette, Quick Open, the tab moves, tabs 1–9, the workspace moves, the splits, the moves between split panes, close tab, focus mode and the leader then `?`, read from the live keymap: the platform, the chord family and your rebinds as they are, and the leader's key where an action has no chord (the workspace moves in the Ctrl+Alt and Ctrl+Shift families: the leader then ↑ / ↓); a search hides it. Then the list: the **Leader** group comes first (the leader's own row, then one fixed row per key after it), then **Sidebar keys**; typing in the search filters by name, group or keys (`shift+b` and `ctrl shift b` find Ctrl+Shift+B, `ctrl+x k` finds the leader's `k`), and the count is announced; Down enters the rows, Up/Down move between them, Up from the first returns to the search; Tab reaches each row's shortcut and Reset; Enter records, Esc cancels a recording, Backspace unbinds; Esc clears the search, then closes; trapped, the search its first stop. A row shows "terminal" when its shortcut works while a terminal has focus and "changed" when it differs from the default. What has no button in the sidebar is taught by its rows, with no line of their own above them: the command palette is the Leader group's first key (the leader then K or Space) and a Global row (⌘K, Alt+K, Ctrl+Alt+K or Ctrl+Shift+K by the family); Connections, which the settings cog's menu leaves out, is the Global row **Settings: Connections…**, unbound by default and bound from that row; **New agent: choose a soul** (the sidebar foot's Spawn instance runs it), **View: Workspace › Machines**, **View: Workspace overview** and **View: Automations** show their chords |
 | Settings (Connections, Terminal) | The palette's **Settings: Connections…** | Trapped, through the Terminal size field too; the sign-in terminal has an explicit Shift+Tab exit; the font size stepper's − and + stay focusable at 9 and 28 (aria-disabled) and a typed size applies on Enter or on leaving the field |
 | Notifications | Tab (they come last in the document) | Open and Dismiss are buttons; focus moves on after dismissing |
 

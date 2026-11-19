@@ -276,8 +276,8 @@ with the running count over the list of instances; and, over a line, the
 foot, one bar: the OATS mark and the sidebar toggle (**Hide the sidebar**)
 after it, and at the bar's right **Spawn instance**, its words alone (a ground
 only on hover), which
-opens Quick Open (⌘P / Alt+P, named in its tooltip) to pick a soul and then
-the spawn dialog, and the settings cog, whose menu holds **Theme…**, **Font…** and
+opens the **New agent** form on its soul list (⌘P / Alt+P, named in its tooltip),
+and the settings cog, whose menu holds **Theme…**, **Font…** and
 **Keyboard shortcuts…**, each with its shortcut when it has one. A window opens on the **Workspace
 overview** page, on its **Souls** tab: at launch, and after you choose a
 workspace for it. Connections is in the command palette
@@ -546,19 +546,53 @@ older server, or one whose last read failed), its soul pages show no composed
 **AGENTS.md**. A soul's skills follow the same rule, with the server's OATS
 saying it reports them.
 
-The **Spawn** dialog's left column, **What will be created**, starts with the
-new instance's name and its home. Then come where it works, its harness and
-model (with where that choice came from), its default team and the teams it may
-also join, and its relationship when it has one. Under them are its core
-capabilities and its other capabilities.
+**New agent** is one short form, a sheet over a dim backdrop, done entirely by
+keyboard: choose a soul, say the task, press Enter. Its fields are **Soul**,
+**Task**, **Harness** and, only when the workspace has two or more machines,
+**Where**.
 
-The dialog's first field is the **Opening instruction**, and the dialog opens
-with the cursor in it (after a restored instruction's text). In a narrow window,
-**What will be created** comes after the form's last field, above **Spawn**:
-scroll down with the fields to read it.
+- **Soul** is a list of the workspace's souls, each with its description.
+  Typing filters it (the same matching as the command palette), ↑↓ move, and
+  Enter chooses and moves to Task. ⌘P / Alt+P opens the form with this list
+  first; a soul's card or page, or the palette's soul rows, open it on that
+  soul, with the cursor in Task. A soul that can't be started here is listed
+  and marked, and can't be chosen.
+- **Task** is what the agent should do, on several lines. **Enter starts the
+  agent; Shift+Enter is a new line** (⌘↵ / Ctrl+Enter starts it from any
+  field). Left empty, the agent starts waiting for you.
+- **Harness** is Claude Code, Codex or Pi, the soul's default marked "default"
+  and chosen until you choose another.
+- **Where** chooses this computer or one of the workspace's other machines.
+  With one machine there is no Where; **Add a machine to this workspace…** is in
+  Advanced.
 
-The dialog's last field before **Developer settings** is **Name · optional**.
-Left empty, the kernel numbers the new instance (`<soul>-<n>`). A name you type
+There is no name field: the agent is named from its task (below). There is no
+relationship either: a spawn from the Desktop is top-level, and agents make
+their own children. Everything else the spawn can set is in **Advanced**, a dim
+link under the fields (⌘7 / Ctrl+7): model, the kernel name (an optional
+override), the work area and base branch, teams, Run in background,
+permissions, launch configuration, messaging identity, session backend, the
+recurring wake-up, and **What will be created**.
+
+**What will be created** is the spawn's preview: the new agent's name and
+home, where it works, its harness and model (with where that choice came from),
+its default team and the teams it may also join, and its core and other
+capabilities. One line under the fields says the same in short ("Creates
+release-notes-manager · Claude Code · opus · worktree on agents/…"), and says
+**Updating…** while a newer preview is being read. Enter starts the agent only
+against a preview for exactly what is on screen: pressed before that preview
+has answered, the button says **Checking…** and the press goes on once it does.
+On Enter the sheet closes at once. The new agent's row appears in the
+sidebar with a pulsing dot (still, with reduced motion) and its name, and its
+terminal opens beside it without taking the keyboard: the row keeps the focus,
+and keys reach the agent once you go there.
+
+**The name.** In Advanced, **Kernel name · optional** overrides the name.
+Left empty, the agent is named from its task, or numbered by the kernel
+(`<soul>-<n>`) when it can't be. With an OATS that can't name agents from their
+task (older than spawn-suggest-name here, or instance-suggest-name for another
+machine), the field comes back into the form as **Name · optional**, with one
+dim line saying why. A name you type
 is used in lowercase, as typed: nothing is appended to it, and the soul is
 shown beside the instance. What to name it is
 [oats.core's naming rule](../oats-package/capabilities/oats-core/skills/oats-souls/SKILL.md#name-the-instance)
@@ -572,19 +606,19 @@ OATS this computer has not heard from, what you type is a purpose instead: the
 instance is named `<soul>-<purpose>`, and the field shows that prefix.
 
 **Named from its task.** When the installed OATS can suggest names (feature
-`spawn-suggest-name`), the help under an empty Name reads "Left empty, the
-instance is named from its task." Once the Opening instruction holds at
+`spawn-suggest-name`), the line under Task says how the agent will be named.
+Once Task holds at
 least seven words, the Desktop asks OATS for a name as you type. The soul's
 own harness reads the instruction and replies with a short name: a few words
 for the work, then the instance's role as the instruction gives it. The name
-shows as the field's
-placeholder ("release-notes-manager"), on the line under the field ("(from
-the task)") and in **What will be created**. It belongs to the instruction it
+shows under Task ("Named release-notes-manager from its task"), as the kernel
+name's placeholder, and in **What will be created**; the sidebar shows it on the
+new row. It belongs to the instruction it
 was made for: when you change the instruction it goes, and the Desktop asks
-again for the new instruction while it holds seven words or more. Typing in
-Name replaces it and stops suggestions for the rest of the dialog, even if
-you empty the field again. Press **Spawn** with Name empty and no name yet, and the
-dialog says **Naming…** and asks once, however short the instruction. When OATS
+again for the new instruction while it holds seven words or more. Typing a
+name replaces it and stops suggestions for the rest of the form, even if
+you empty the field again. Press Enter with no name yet, and the
+form says **Naming…** and asks once, however short the task. When OATS
 can't name it, the instance is numbered and a notification says why, for
 example "Named oats-desktop-expert-3: naming took longer than 20 seconds."
 That happens when there is no instruction, when the harness doesn't suggest
@@ -595,7 +629,7 @@ a timer.
 
 A spawn on a server whose OATS takes an exact name is named from its task the
 same way, with one difference: the name is chosen on this computer. The
-Opening instruction is sent to this computer's harness and model, as for a
+task is sent to this computer's harness and model, as for a
 spawn here: the Harness you chose, else the soul's default on that server,
 else Claude Code, with this computer's launch configuration for it. That needs
 an OATS here that can name a spawn for another machine (feature
@@ -727,7 +761,7 @@ heading. The tab you chose is
   capability's or a team's page. The side panel names it ("On This Mac ·
   ~/acme", under a soul's name) when there are two or more, as do Brain and
   the Sync sheet, and the Machines tab shows each deployment on its own tab.
-- **Spawn.** With two or more deployments, the Spawn dialog asks first which
+- **Spawn.** With two or more deployments, the New agent form's Where asks which
   one to spawn in (and says "Runs on" in its summary), starting on the one you last used in that workspace when it
   offers the soul, else the first that does (this Mac first). With one, it
   asks nothing.
@@ -772,12 +806,12 @@ parameters, and runs it once only when you press **Run test**. Nothing is
 recorded or spawned, and testing does not trust or start a trigger that this
 computer doesn't trust.
 
-The Spawn dialog also has an optional **Recurring wake-up** setting. It binds
+The New agent form's Advanced also has an optional **Recurring wake-up** setting. It binds
 the schedule to the newly created home, preserving that agent's identity and
 work. A wake starts that same home if it is stopped, then sends the saved
 message through its terminal when ready. It sends no interrupt; the harness
 decides when to process submitted input. Missed cron times are skipped. If the
-agent is created but its wake schedule cannot be saved, the dialog reports both
+agent is created but its wake schedule cannot be saved, a notification reports both
 facts and directs you to Schedules without spawning another agent.
 
 Use **Enable host scheduler** when the view reports that the timer or workspace
@@ -813,12 +847,13 @@ the machines that run the workspace (**Registered machines**).
 A window offers only the machines that run its workspace: those whose
 registration reports the same workspace key as the window's deployment on this
 computer (OATS CLI with `servers-per-workspace` and `server-connect`). The
-spawn dialog's **Where to run** lists "This computer" and those machines; the
+New agent form's **Where** (shown once there are two or more machines) lists "This computer" and those machines; the
 Workspace › Setup tab's **Registered machines** lists them with their OATS version and whether they can
 be reached, with **Check** and **Remove**. Registrations whose key is not known
 yet are checked once in the background after the Desktop starts.
 
-**Add a machine to this workspace…** (the last entry of Where to run, and a
+**Add a machine to this workspace…** (the last entry of Where, a button in
+the New agent form's Advanced while there is only this computer, and a
 button in Setup) takes an ssh host alias, a name, the folder on that machine
 and whether to install OATS there, and runs `oats server connect` from this
 deployment; when the workspace uses oats.aweb for messaging, it then runs `oats

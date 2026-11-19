@@ -1,7 +1,7 @@
 # A workspace's own machines (#517)
 
 A window shows one workspace, so it offers only the machines that run that
-workspace: **Where to run** in the spawn dialog, the **Registered machines** box of the
+workspace: **Where** in the New agent form, the **Registered machines** box of the
 Workspace › Setup tab, and **Add a machine to this workspace…** in both. Every
 read and change is the installed CLI's (`oats server … --json`, `oats aweb
 connect --json`); the Desktop keeps no registry.
@@ -11,7 +11,7 @@ connect --json`); the Desktop keeps no registry.
 The probe (`oats version --json`) must declare `servers-per-workspace` and
 `server-connect`. The messaging step also needs `capability-route`. Without
 them nothing here changes: `/api/servers` answers the registered list as
-before, Where to run lists every registered server, there is no Add entry and
+before, Where lists every registered server, there is no Add entry and
 no Registered machines box (`machinesGated`, `awebConnectGated` in
 `packages/client/machine-contract.mjs`).
 
@@ -80,14 +80,18 @@ no Registered machines box (`machinesGated`, `awebConnectGated` in
   routes `machine-connect` and `machines`) waits 980 s for a connect and 130 s
   for a check, a remove or the list, so each reports itself.
 
-## Where to run
+## Where
 
-In a one-deployment view, Where to run lists "This computer", then the
+The New agent form shows Where only with two or more machines (slice 5). In a
+one-deployment view, Where lists "This computer", then the
 window's machines (disabled with why from their roster group, as before), then
 **Add a machine to this workspace…**. Choosing that entry opens the dialog and
 leaves the choice as it was; a machine added is listed, selected, and the form
-reads for it. In a view of two or more deployments the Deployment field
-replaces Where to run, so Add a machine is a link-style button under it; a
+reads for it. With no other machine there is no Where: **Add a machine to this
+workspace…** is a button in Advanced, with the route's reason when it gives one,
+and a machine added there shows Where with it chosen. In a view of two or more
+deployments the Deployment field
+replaces Where, so Add a machine is a link-style button under it; a
 machine added there shows up as a Deployment option once the roster reads it,
 and is not selected.
 
