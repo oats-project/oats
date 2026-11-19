@@ -967,11 +967,16 @@ check" cause on stderr and a nonzero exit; a confirmed absence is
 retry. `join --plan` uses `E_SETUP_MEMBERSHIP` for an unreadable root instead of
 a false membership row; scripts must handle that command error.
 
-`setup --create` and tokenless `setup --join` also require readable membership from an
-existing configured default root, even when the target is a separate per-team
-root. On that refusal nothing was created or redeemed: repair the named root's
-membership, or choose another default with `oats teams default <label>`, then
-retry.
+`setup --create` and tokenless `setup --join` check only their selected per-team
+root's membership and report that root's readiness. An unrelated default root's
+membership does not block them. An existing target with unreadable or wrong-team
+membership refuses before effects. Explicit `--name` and `AWEB_URL` avoid
+default-root locator reads; otherwise the existing alias/service fallbacks stay.
+A needed unavailable locator refuses with the explicit input remedy. Bare API-key
+setup refuses before init in another team's root: configure `roots[team]` to the
+intended team's root or a fresh `.aweb-roots/<label>` destination and retry.
+Setup human output and existing missing-root diagnostics name their root source;
+an absent default root is described as having no identity yet.
 
 The invite token is never in argv, a file, a log or output **on this side**;
 it stays in memory and the routed join's stdin. On the host, native
@@ -986,7 +991,7 @@ check or permission inferred from onboarding.
 
 | Act / context | Exact command in D | Writes / success / one next step | Emitted error or template → remedy |
 |---|---|---|---|
-| Install missing, unreadable-version or below-floor aw; retain `--soul S` for outside-session dispatch | `oats aweb setup --install-aw [--aw-version <v>] --soul S` | Runs `npm install -g @awebai/aw@<v>` (default `^1.36.33`), rechecks the 1.36.33 floor, then continues ordinary setup. At/above floor, skips npm even with a version supplied. Success: usable aw and the selected setup's own success predicate. Next: follow that setup card's one next step. | `npm install -g <package> failed ...` (`E_AW_INSTALL` in check-only JSON) → operator resolves npm/access failure before retry; `npm install -g <package> ran, but ...` (`E_AW_FLOOR`) → resolve PATH/version so the selected aw meets the floor. |
+| Install missing, unreadable-version or below-floor aw; retain `--soul S` for outside-session dispatch | `oats aweb setup --install-aw [--aw-version <v>] --soul S` | Runs `npm install -g @awebai/aw@<v>` (default: `aw-compat.json`'s exact tested version), rechecks the 1.36.33 floor, then continues ordinary setup. At/above floor, skips npm even with a version supplied. Success: usable aw and the selected setup's own success predicate. Next: follow that setup card's one next step. | `npm install -g <package> failed ...` (`E_AW_INSTALL` in check-only JSON) → operator resolves npm/access failure before retry; `npm install -g <package> ran, but ...` (`E_AW_FLOOR`) → resolve PATH/version so the selected aw meets the floor. |
 
 `<v>` accepts an exact version or `^`/`~` range; `--aw-version` requires
 `--install-aw`. This option does not promise an upgrade of an already-usable CLI

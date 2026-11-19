@@ -59,12 +59,18 @@ export function controllerCleanupProblem({ team, certificateId, registry } = {})
   return undefined;
 }
 
-/** The command the team's controller runs to remove a member certificate, built only from
- *  validated values; undefined when any of them is invalid (controllerCleanupProblem). */
-export function controllerCleanupCommand({ team, certificateId, registry } = {}) {
+/** The controller's command argv, without output formatting. Only validated
+ *  authoritative fields are used; the record's stored command is never read. */
+export function controllerCleanupArgs({ team, certificateId, registry } = {}) {
   if (controllerCleanupProblem({ team, certificateId, registry })) return undefined;
   const [name, namespace] = team.split(":");
-  return `aw id team remove-member --namespace ${namespace} --team ${name} --cert-id ${certificateId}${registry ? ` --registry ${registry}` : ""} --json`;
+  return ["aw", "id", "team", "remove-member", "--namespace", namespace, "--team", name, "--cert-id", certificateId, ...(registry ? ["--registry", registry] : [])];
+}
+
+/** The compatibility writer keeps its released command text byte-for-byte. */
+export function controllerCleanupCommand(entry = {}) {
+  const args = controllerCleanupArgs(entry);
+  return args ? [...args, "--json"].join(" ") : undefined;
 }
 
 /** The record's entries, or null when the text is not a version-1 record whose every
