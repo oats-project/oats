@@ -81,7 +81,7 @@ function spawnTime(instance) {
  * recognition rule, whose name order this replaces; #1083's running-first order stays out of the roster). The one
  * place the roster's order is decided; a pin ranks before it at every level (`pinnedFirst`, `clusterInstances`,
  * `instanceSiblings`), and pinning or unpinning is the one act besides adding or removing a row that moves one. */
-function rosterOrder(a, b) {
+export function rosterOrder(a, b) {
   const ta = spawnTime(a), tb = spawnTime(b);
   if (ta !== tb) return ta === null ? 1 : tb === null ? -1 : tb - ta;
   const ia = instanceId(a), ib = instanceId(b);

@@ -13,7 +13,7 @@ import { createInstanceGitPanel } from "../renderer/instance-git.mjs";
 import { createInstanceTeamsSection } from '../renderer/instance-teams.mjs';
 import { createInstanceSoulSection } from '../renderer/instance-soul.mjs';
 import { THEMES } from "../renderer/theme.mjs";
-import { NAV, NAV_TABS, navTab } from "../renderer/shell-nav.mjs";
+import { NAV, NAV_TABS, PINNED, pinnedRowFor, navTab } from "../renderer/shell-nav.mjs";
 import { shellIcon, mountShellIcons } from "../renderer/shell-icons.mjs";
 import { createSidebarFoot } from "../renderer/sidebar-foot.mjs";
 import { DESKTOP_NOUNS } from "../renderer/desktop-terms.mjs";
@@ -57,7 +57,7 @@ function shell(t, shellSource = source, { storage = {}, gitPanel } = {}) {
   const loads = [], events = [], notices = [], offs = [];
   const c = {
     document, window: dom.window, localStorage: dom.window.localStorage,
-    NAV, NAV_TABS, navTab, shellIcon, createSidebarFoot, DESKTOP_NOUNS, createContextPanel, createInstanceGitPanel: gitPanel ?? createInstanceGitPanel, createInstanceTeamsSection, createInstanceSoulSection, workspace: "A", generation: 0, events, notices,
+    NAV, NAV_TABS, PINNED, pinnedRowFor, navTab, shellIcon, createSidebarFoot, DESKTOP_NOUNS, createContextPanel, createInstanceGitPanel: gitPanel ?? createInstanceGitPanel, createInstanceTeamsSection, createInstanceSoulSection, workspace: "A", generation: 0, events, notices,
     connectionGeneration: 0, subscribeConnections: () => () => {},
     connections: { close() {}, open: () => events.push(['connections']) }, lifecycleDialog: { close() {} },
     currentWorkspace: () => c.workspace, workspaceGeneration: () => c.generation,
@@ -149,7 +149,7 @@ test("the head is the Workspace heading and Add local workspace…; the list's s
   assert.equal(document.getElementById("ws-deployments"), null);
   assert.equal(document.getElementById("ws-current"), null);
   assert.deepEqual([...sidebar.children].map(el => el.id || el.className), ["side-head", "ws-list", "nav", "instance-roster", "nav-foot"]);
-  assert.match(html, /<\/section>\s*<nav id="nav" aria-label="Main views"><\/nav>\s*<section id="instance-roster" aria-label="Instances">/, "the markup says the same");
+  assert.match(html, /<\/section>\s*<nav id="nav" aria-label="Main views"><\/nav>\s*<section id="instance-roster" aria-label="Agents">/, "the markup says the same");
   const list = document.getElementById("ws-list");
   assert.equal(list.tagName, "SECTION");
   assert.equal(list.getAttribute("aria-labelledby"), "ws-heading");
@@ -194,10 +194,10 @@ test("the head is the Workspace heading and Add local workspace…; the list's s
 
 test("only current destinations render, dispatch unchanged stage ids, and project aria-current", t => {
   const s = shell(t), buttons = [...s.document.querySelectorAll("#nav button")];
-  // Workspace overview and Automations (the product owner, 2026-10-26): Machines, the Deployments page of before, is
-  // the Workspace page's tab (NAV_TABS), not a nav item.
-  assert.deepEqual(buttons.map(b => b.textContent), ["Workspace overview", "Automations"]);
-  assert.deepEqual(buttons.map(b => b.dataset.action), ["stage.spawn", "stage.automations"]);
+  // Home and Automations (the Desktop UI rework, slice 2): the Workspace page has no row of its own (Home opens it),
+  // and Machines, the Deployments page of before, is the Workspace page's tab (NAV_TABS), not a nav item.
+  assert.deepEqual(buttons.map(b => b.textContent), ["Home", "Automations"]);
+  assert.deepEqual(buttons.map(b => b.dataset.action), ["stage.home", "stage.automations"]);
   assert.equal(s.document.querySelector('#nav [data-view="hierarchy"]'), null);
   assert.deepEqual(NAV_TABS.map(({ name, page, tab }) => ({ name, page, tab })), [{ name: "hierarchy", page: "spawn", tab: "machines" }]);
   for (const button of buttons) {
@@ -299,9 +299,10 @@ test("the foot is one bar: N need you, New agent (Quick Open) and ? (Keyboard sh
   assert.equal(spawn.querySelector("svg")?.getAttribute("aria-hidden"), "true", "its + is decoration");
   assert.equal(spawn.querySelector(".shortcut-hint, [data-shortcut], kbd"), null, "no hint element: the chord is in the tooltip");
   assert.match(html, /<button id="sidebar-spawn" type="button" data-action="app\.quickOpenSouls"><\/button>/, "its words are the shell's, from desktop-terms.mjs");
-  // The Instances heading: its title and the count only (no + : New agent is the foot's).
+  // The roster's heading (Agents: DESKTOP_NOUNS, slice 2): its title and the count only (no + : New agent is the foot's).
   const head = s.document.querySelector("#instance-roster > .ctx-head");
-  assert.deepEqual([...head.children].map(el => el.id || el.className || el.textContent), ["Instances", "ctx-count"]);
+  assert.deepEqual([...head.children].map(el => el.id || el.className || el.textContent), ["Agents", "ctx-count"]);
+  assert.match(source, /const rosterTitle = DESKTOP_NOUNS\.instances\[0\]\.toUpperCase\(\) \+ DESKTOP_NOUNS\.instances\.slice\(1\);\n  contextRosterEl\.setAttribute\("aria-label", rosterTitle\);/, "the shell names it from DESKTOP_NOUNS");
   assert.equal(head.querySelector("button"), null);
   assert.equal(getBinding('app.connections'), null, 'Connections does not invent a new global chord');
   assert.match(source, /label: "Settings: Connections…"/, "Connections stays in the palette");

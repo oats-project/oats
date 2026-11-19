@@ -12,7 +12,7 @@ export TEAM_STATE_DIR="$fixture/state" TEAM_LOGIN_DIR="$fixture/login"
 export AUTHORIZED_KEYS_FILE="$fixture/authorized_keys" RESOLV_CONF_FILE="$fixture/resolv.conf"
 export AGENTS_NETWORK="oats-$TEAM" AGENT_IP=172.30.88.2
 # The base service intentionally has no optional /work mount.
-unset TEAM_WORK_DIR
+unset TEAM_WORK_DIR TEAM_INPUT_DIR AGENT_CA_FILE AGENT_MIRRORS_DIR TEAM_OUTBOX_DIR TEAM_OUTBOX_GID
 compose=(docker compose -p "oats-$TEAM" -f container/agent/compose.agent.yaml)
 # AGENT_BB=1 runs the same fixture with the bb fragment, on an image built from
 # container/agent-bb. bb adds about 650 MB and 180 pids to an idle team.
@@ -59,6 +59,29 @@ docker network create --internal --ipv6=false \
 "${compose[@]}" up -d --wait --wait-timeout 120
 container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64
 
+# The source is operator-provisioned synthetic data, outside writable state.
+# Accept the base first: it must have no /inputs, then accept the fragment.
+export TEAM_INPUT_DIR="$fixture/inputs"
+sudo install -d -o 0 -g "$AGENT_GID" -m 750 "$TEAM_INPUT_DIR"
+printf 'synthetic input\n' | sudo tee "$TEAM_INPUT_DIR/example.txt" > /dev/null
+sudo chown "0:$AGENT_GID" "$TEAM_INPUT_DIR/example.txt"
+sudo chmod 640 "$TEAM_INPUT_DIR/example.txt"
+compose+=(-f container/agent/compose.agent.inputs.yaml)
+"${compose[@]}" up -d --wait --wait-timeout 120
+container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64
+docker exec "oats-agent-$TEAM" node -e '
+  require("node:assert/strict").equal(require("node:fs").readFileSync("/inputs/example.txt", "utf8"), "synthetic input\n");
+'
+
+# A dedicated setgid export queue is the only extra writable bind.
+export TEAM_OUTBOX_DIR="$fixture/outbox" TEAM_OUTBOX_GID=20002
+sudo install -d -o "$AGENT_UID" -g "$TEAM_OUTBOX_GID" -m 2750 "$TEAM_OUTBOX_DIR"
+compose+=(-f container/agent/compose.agent.outbox.yaml)
+"${compose[@]}" up -d --wait --wait-timeout 120
+# umask077-style subdirectories must be scanned as the agent, not root without DAC capabilities.
+docker exec "oats-agent-$TEAM" node -e 'require("node:fs").mkdirSync("/outbox/private", {mode: 0o700});'
+container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64
+
 # This assertion runs in the accepted container, before cleanup or any registry
 # credential. Version metadata alone is not runtime evidence.
 accepted=$(docker inspect --format '{{.Image}}' "oats-agent-$TEAM")
@@ -70,4 +93,32 @@ if [ -n "${EXPECTED_OATS_VERSION:-}" ]; then
     node .github/scripts/check-team-image-release.mjs --installed "$EXPECTED_OATS_VERSION")
   printf 'kernel-version=%s\n' "$installed" >> "${GITHUB_OUTPUT:?}"
 fi
+# Recreate with an absent source: Compose must fail, without making it.
+"${compose[@]}" down --timeout 45
+export TEAM_INPUT_DIR="$fixture/missing-inputs"
+test ! -e "$TEAM_INPUT_DIR"
+test ! -L "$TEAM_INPUT_DIR"
+if "${compose[@]}" up -d --wait --wait-timeout 120 > "$fixture/missing-inputs.log" 2>&1; then
+  echo 'Missing input source unexpectedly started' >&2
+  exit 1
+fi
+# Require the failure to name the bind source, rather than an unrelated error.
+grep -F "$TEAM_INPUT_DIR" "$fixture/missing-inputs.log"
+test ! -e "$TEAM_INPUT_DIR"
+test ! -L "$TEAM_INPUT_DIR"
+printf 'PASS missing input source: startup refused without host-path creation\n'
+# Restore the input source so a missing outbox is tested independently.
+"${compose[@]}" down --timeout 45
+export TEAM_INPUT_DIR="$fixture/inputs"
+export TEAM_OUTBOX_DIR="$fixture/missing-outbox"
+test ! -e "$TEAM_OUTBOX_DIR"
+test ! -L "$TEAM_OUTBOX_DIR"
+if "${compose[@]}" up -d --wait --wait-timeout 120 > "$fixture/missing-outbox.log" 2>&1; then
+  echo 'Missing outbox source unexpectedly started' >&2
+  exit 1
+fi
+grep -F "$TEAM_OUTBOX_DIR" "$fixture/missing-outbox.log"
+test ! -e "$TEAM_OUTBOX_DIR"
+test ! -L "$TEAM_OUTBOX_DIR"
+printf 'PASS missing outbox source: startup refused without host-path creation\n'
 printf 'image-id=%s\n' "$accepted" >> "${GITHUB_OUTPUT:?}"

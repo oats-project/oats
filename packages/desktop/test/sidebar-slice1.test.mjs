@@ -24,7 +24,7 @@ import { createAutomationsFailure, failedRuns, lastRunFailed, FAILED_RUN_TEXT, A
 import { automationRow } from "../renderer/automation-rows.mjs";
 import { createWorkspaceSwitcher } from "../renderer/workspace-switcher.mjs";
 import { createFocusRegions } from "../renderer/focus-regions.mjs";
-import { NAV, NAV_TABS } from "../renderer/shell-nav.mjs";
+import { NAV, NAV_TABS, PINNED } from "../renderer/shell-nav.mjs";
 import { rosterRowFacts } from "../../client/roster-row-facts.mjs";
 import { THEMES } from "../renderer/theme.mjs";
 import { PIN_LABELS } from "../renderer/instance-pin-menu.mjs";
@@ -270,7 +270,7 @@ test("slice1 automations failure mark", async t => {
   t.after(() => dom.window.close());
   const doc = dom.window.document;
   const block = shell.slice(shell.indexOf('const navEl = document.getElementById("nav");'), shell.indexOf("// The foot's controls use exactly the same registry"));
-  const { paintAutomationsFailed } = runInNewContext(`${block}\n({ paintAutomationsFailed })`, { document: doc, NAV, shellIcon, runAction() {}, FAILED_RUN_TEXT });
+  const { paintAutomationsFailed } = runInNewContext(`${block}\n({ paintAutomationsFailed })`, { document: doc, NAV, PINNED, shellIcon, runAction() {}, FAILED_RUN_TEXT });
   const row = doc.querySelector('#nav .nav-item[data-view="automations"]');
   const name = () => row.textContent.replace(/\s+/g, " ").trim();
   assert.equal(name(), "Automations"); assert.equal(row.querySelector(".nav-failed"), null);

@@ -63,7 +63,12 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
   equal("OOM killer disabled", !!h.OomKillDisable, false);
   equal("device cgroup rules", h.DeviceCgroupRules || [], []);
   equal("shared memory size", h.ShmSize, 67108864);
-  equal("supplementary groups added", h.GroupAdd || [], []);
+  const outboxGid = env.TEAM_OUTBOX_DIR ? required(env, "TEAM_OUTBOX_GID") : null;
+  if (outboxGid !== null) {
+    assert.match(outboxGid, /^[1-9]\d*$/, "TEAM_OUTBOX_GID must be a non-root numeric GID");
+    assert.ok(Number(outboxGid) < 4294967295 && outboxGid !== gid, "TEAM_OUTBOX_GID must be a dedicated GID distinct from AGENT_GID");
+  } else assert.ok(!env.TEAM_OUTBOX_GID, "TEAM_OUTBOX_GID requires TEAM_OUTBOX_DIR and the outbox fragment");
+  equal("supplementary groups added", h.GroupAdd || [], outboxGid === null ? [] : [outboxGid]);
   equal("user namespace override", h.UsernsMode || "", "");
   equal("UTS namespace override", h.UTSMode || "", "");
   equal("cgroup namespace", h.CgroupnsMode, "private");
@@ -114,6 +119,8 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
     ["RESOLV_CONF_FILE", "/etc/resolv.conf", false],
     ...(env.AGENT_CA_FILE ? [["AGENT_CA_FILE", "/etc/agent-trust/ca.pem", false]] : []),
     ...(env.AGENT_MIRRORS_DIR ? [["AGENT_MIRRORS_DIR", "/mirrors", false]] : []),
+    ...(env.TEAM_INPUT_DIR ? [["TEAM_INPUT_DIR", "/inputs", false]] : []),
+    ...(env.TEAM_OUTBOX_DIR ? [["TEAM_OUTBOX_DIR", "/outbox", true]] : []),
     ...(env.TEAM_WORK_DIR ? [["TEAM_WORK_DIR", "/work", true]] : []),
   ].map(([name, target, rw]) => {
     const source = required(env, name);
@@ -121,16 +128,18 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
     assert.ok(!source.includes("docker.sock"), "no Docker socket source");
     return { source: resolve(source), target, rw, type: "bind" };
   });
-  for (const input of mounts.filter(m => m.target === "/etc/agent-trust/ca.pem" || m.target === "/mirrors")) {
-    for (const writable of mounts.filter(m => m.rw)) {
+  for (const input of mounts.filter(m => m.target === "/etc/agent-trust/ca.pem" || m.target === "/mirrors" || m.target === "/inputs" || m.target === "/outbox")) {
+    for (const writable of mounts.filter(m => m.target !== input.target && (m.rw || input.target === "/outbox"))) {
       let source, protectedSource;
       try { source = hostPath(input.source); protectedSource = hostPath(writable.source); }
-      catch { assert.fail("public CA and mirrors require resolvable Docker-host sources (paths withheld)"); }
+      catch { assert.fail("optional inputs and outbox require resolvable Docker-host sources (paths withheld)"); }
       const overlaps = source === protectedSource || source.startsWith(protectedSource.endsWith("/") ? protectedSource : protectedSource + "/")
         || protectedSource.startsWith(source.endsWith("/") ? source : source + "/");
-      assert.ok(!overlaps,"public CA and mirrors must stay outside agent-writable sources");
+      assert.ok(!overlaps,"optional inputs and outbox must stay outside agent-writable sources");
     }
   }
+  equal("writable bind destinations", info.Mounts.filter(m => m.Type === "bind" && m.RW).map(m => m.Destination).sort(),
+    ["/state", ...(env.TEAM_WORK_DIR ? ["/work"] : []), ...(env.TEAM_OUTBOX_DIR ? ["/outbox"] : [])].sort());
   const sort = (v) => v.sort((a, b) => a.target.localeCompare(b.target));
   equal("exact approved mounts (no extra home, socket or service-account mount)", sort(info.Mounts.map((m) => ({ source: m.Source, target: m.Destination, rw: m.RW, type: m.Type }))), sort(mounts));
   equal("legacy auto-creating binds", h.Binds || [], []);
@@ -138,14 +147,18 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
   return evidence;
 }
 
-function runtimeCheck(uid, gid) {
+function runtimeCheck(uid, gid, outboxGid) {
   const fs = require("node:fs");
   const assert = require("node:assert/strict");
   const status = fs.readFileSync("/proc/self/status", "utf8");
   assert.equal(process.getuid(), Number(uid));
   assert.equal(process.getgid(), Number(gid));
   assert.match(status, new RegExp(`^Gid:\\s+${gid}\\s+${gid}\\s+${gid}\\s+${gid}$`, "m"));
-  assert.match(status, new RegExp(`^Groups:[\\t ]*(?:${gid}[\\t ]*)?$`, "m"));
+  const groups = status.match(/^Groups:[\t ]*(.*)$/m);
+  assert.ok(groups, "process supplementary groups are required");
+  const actualGroups = groups[1].trim().split(/\s+/).filter(Boolean);
+  assert.ok(actualGroups.every(group => group === gid || group === outboxGid), "only primary and approved outbox groups are allowed");
+  if (outboxGid) assert.ok(actualGroups.includes(outboxGid), "outbox supplementary group is required");
   assert.match(status, /^CapEff:\s+0+$/m);
   assert.match(status, /^NoNewPrivs:\s+1$/m);
   console.log(`process uid=${process.getuid()} gid=${process.getgid()}; ${status.match(/^Gid:.*$/m)[0]}; ${status.match(/^Groups:.*$/m)[0]}; CapEff=0; NoNewPrivs=1`);
@@ -153,9 +166,16 @@ function runtimeCheck(uid, gid) {
   assert.match(pid, /^\d+$/);
   const daemon = fs.readFileSync(`/proc/${pid}/status`, "utf8");
   assert.match(daemon, new RegExp(`^Uid:\\s+${uid}\\s+${uid}\\s+${uid}\\s+${uid}$`, "m"));
+  if (outboxGid) {
+    const daemonGroups = daemon.match(/^Groups:[\t ]*(.*)$/m);
+    assert.ok(daemonGroups, "sshd supplementary groups are required");
+    const actualDaemonGroups = daemonGroups[1].trim().split(/\s+/).filter(Boolean);
+    assert.ok(actualDaemonGroups.includes(outboxGid) && actualDaemonGroups.every(group => group === gid || group === outboxGid),
+      "sshd requires the approved outbox group and no extra groups");
+  }
   assert.match(fs.readFileSync(`/proc/${pid}/cmdline`, "utf8"), /sshd/);
   console.log(`sshd pid=${pid}; ${daemon.match(/^Uid:.*$/m)[0]}`);
-  for (const path of ["/state/home", "/state/ssh", "/state/deploy"]) {
+  for (const path of ["/state", "/state/home", "/state/ssh", "/state/deploy"]) {
     const st = fs.statSync(path);
     assert.equal(st.mode & 0o777, 0o700, path);
     assert.equal(st.uid, Number(uid), path);
@@ -237,6 +257,53 @@ export function mirrorsCheck(fs = require("node:fs")) {
   } catch { throw new Error("mirrors must be a readable read-only directory (contents withheld)"); }
 }
 
+// Serialized inside the container: input names and filesystem diagnostics stay private.
+export function inputsCheck(enabled, fs = require("node:fs")) {
+  const root = "/inputs";
+  try {
+    if (!enabled) {
+      try { fs.lstatSync(root); }
+      catch (error) {
+        if (error.code === "ENOENT") return "inputs: absent without the optional fragment";
+        throw error;
+      }
+      throw new Error("unexpected inputs");
+    }
+    if (!fs.statSync(root).isDirectory()) throw new Error("not a directory");
+    fs.readdirSync(root);
+    const probe = `${root}/.oats-read-only-probe-${process.pid}`;
+    let wrote = false;
+    try { fs.writeFileSync(probe, "probe", {flag: "wx", mode: 0o600}); wrote = true; }
+    catch (error) { if (error.code !== "EROFS" && error.code !== "EACCES") throw error; }
+    if (wrote) { fs.unlinkSync(probe); throw new Error("writable inputs"); }
+    return "inputs: readable read-only directory; contents withheld";
+  } catch { throw new Error("inputs must match the optional readable read-only directory (contents withheld)"); }
+}
+
+export function outboxCheck(enabled, uid, gid, fs = require("node:fs")) {
+  try {
+    if (!enabled) {
+      try { fs.lstatSync("/outbox"); }
+      catch (error) {
+        if (error.code === "ENOENT") return "outbox: absent without the optional fragment";
+        throw error;
+      }
+      throw new Error("unexpected outbox");
+    }
+    const root = fs.statSync("/outbox"), state = fs.statSync("/state");
+    if (!root.isDirectory() || root.uid !== Number(uid) || root.gid !== Number(gid)
+      || (root.mode & 0o7777) !== 0o2750 || !state.isDirectory() || (state.mode & 0o7777) !== 0o700) {
+      throw new Error("queue or state metadata");
+    }
+    const probe = `/outbox/.oats-write-probe-${process.pid}`;
+    fs.writeFileSync(probe, "probe", {flag: "wx", mode: 0o600});
+    try {
+      if (fs.statSync(probe).gid !== Number(gid)) throw new Error("probe group");
+    } finally { fs.unlinkSync(probe); }
+    return `outbox: setgid queue writable with group ${gid}; state remains private`;
+  } catch { throw new Error("outbox must match the optional setgid writable queue with private state (contents withheld)"); }
+}
+
 // Validate the mount even before a token is provisioned; never create a placeholder.
 export function tokenCheck(gid, strict) {
   const fs = require("node:fs"), assert = require("node:assert/strict");
@@ -281,7 +348,7 @@ function credentialScan(roots, excluded = []) {
   console.log(`no .credentials.json: searched ${roots.join(", ")}${excluded.length ? ` excluding ${excluded.join(", ")}` : ""}; ${files} entries; no contents read`);
 }
 
-function main(args, env) {
+export function main(args, env, { spawnSync: run = spawnSync } = {}) {
   const container = args.shift();
   let label, home;
   while (args.length) {
@@ -294,7 +361,7 @@ function main(args, env) {
   assert.ok(["local", "target-amd64", "live-lab"].includes(label), "an explicit --evidence label is required");
   const report = (s) => console.log(`[${label}] ${s}`);
   const docker = (argv, input, timeout = 60000) => {
-    const r = spawnSync("docker", argv, { encoding: "utf8", input, timeout, maxBuffer: 8 * 1024 * 1024 });
+    const r = run("docker", argv, { encoding: "utf8", input, timeout, maxBuffer: 8 * 1024 * 1024 });
     assert.equal(r.status, 0, `docker ${argv[0]} failed: ${r.error?.message || r.stderr || r.stdout}`);
     return r.stdout.trim();
   };
@@ -307,7 +374,7 @@ function main(args, env) {
   const arch = docker(["exec", container, "node", "-p", "process.arch"]);
   if (label !== "local") assert.equal(arch, "x64", "target evidence requires amd64");
   report(`PASS architecture=${arch}; image=${info.Image}`);
-  report(`PASS ${program(runtimeCheck, [uid, gid]).replaceAll("\n", `\n[${label}] PASS `)}`);
+  report(`PASS ${program(runtimeCheck, [uid, gid, env.TEAM_OUTBOX_DIR ? env.TEAM_OUTBOX_GID : null]).replaceAll("\n", `\n[${label}] PASS `)}`);
   const token = JSON.parse(program(tokenCheck, [gid, label !== "local"]));
   for (const line of token.evidence) report(line);
   if (env.AGENT_CA_FILE) report(`PASS ${JSON.parse(program(publicCACheck, []))}`);
@@ -318,9 +385,11 @@ function main(args, env) {
     assert.equal(docker(["exec", container, "bb", "--version"]), pinned, "bb --version must equal container/agent-bb's pinned bb-app");
     report(`PASS bb: ${pinned} (container/agent-bb's pin)`);
   }
-  report(`PASS ${program(credentialScan, [["/"], ["/proc", "/sys", "/dev", "/state", "/tmp", "/run", "/work"]], true)}`);
-  const writableRoots = ["/state", "/tmp", "/run", "/work", "/dev/shm", "/dev/mqueue"];
-  report(`PASS ${program(credentialScan, [writableRoots])}`);
+  report(`PASS ${JSON.parse(program(inputsCheck, [!!env.TEAM_INPUT_DIR]))}`);
+  report(`PASS ${JSON.parse(program(outboxCheck, [!!env.TEAM_OUTBOX_DIR, uid, env.TEAM_OUTBOX_GID || null]))}`);
+  report(`PASS ${program(credentialScan, [["/"], ["/proc", "/sys", "/dev", "/state", "/tmp", "/run", "/work", "/inputs", "/outbox"]], true)}`);
+  const writableRoots = [...(env.TEAM_OUTBOX_DIR ? ["/outbox"] : []), "/state", "/tmp", "/run", "/work", "/dev/shm", "/dev/mqueue"];
+  report(`PASS ${program(credentialScan, [[...writableRoots, ...(env.TEAM_INPUT_DIR ? ["/inputs"] : [])]])}`);
   const denied = docker(["exec", container, "sh", "-eu", "-c", `
     test "$(npm prefix -g)" = /usr/local
     probe=$(mktemp -d /tmp/oats-npm-probe.XXXXXX)
@@ -342,7 +411,7 @@ function main(args, env) {
   if (home && token.present) {
     // Keep project hooks/instructions away from the named live instance.
     // Never record Claude's raw output: authentication failures may echo data.
-    const r = spawnSync("docker", ["exec", container, "sh", "-eu", "-c", `
+    const r = run("docker", ["exec", container, "sh", "-eu", "-c", `
       test -f "$1/instance.json"
       probe=$(mktemp -d /tmp/oats-claude-probe.XXXXXX)
       trap 'rm -rf "$probe"' EXIT

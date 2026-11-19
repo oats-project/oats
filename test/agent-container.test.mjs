@@ -267,6 +267,55 @@ test("acceptance refuses drift in the admitted container settings", async t => {
   const nestedMirrors=structuredClone(mirrored),nestedSource=env.TEAM_STATE_DIR+"/mirrors";
   nestedMirrors.Mounts.at(-1).Source=nestedSource;nestedMirrors.HostConfig.Mounts.at(-1).Source=nestedSource;
   assert.throws(()=>inspectAgent(nestedMirrors,{...mirrorEnv,AGENT_MIRRORS_DIR:nestedSource},image),/outside agent-writable sources/);
+  const inputs = structuredClone(inspected), inputEnv = {...env, TEAM_INPUT_DIR: "/operator/inputs"};
+  inputs.Mounts.push({Source: inputEnv.TEAM_INPUT_DIR, Destination: "/inputs", RW: false, Type: "bind"});
+  inputs.HostConfig.Mounts.push({Type: "bind", Source: inputEnv.TEAM_INPUT_DIR, Target: "/inputs", ReadOnly: true, BindOptions: {}});
+  assert.doesNotThrow(() => inspectAgent(inputs, inputEnv, image));
+  assert.throws(() => inspectAgent(inputs, env, image), "base must reject an undeclared input mount");
+  assert.throws(() => inspectAgent(inspected, inputEnv, image), "declared inputs must be mounted");
+  for (const mutate of [
+    v => { v.Mounts.at(-1).RW = true; },
+    v => { v.HostConfig.Mounts.at(-1).ReadOnly = false; },
+    v => { v.HostConfig.Mounts.at(-1).BindOptions.CreateMountpoint = true; },
+    v => { v.Mounts.push({Source: "/operator/output", Destination: "/output", RW: true, Type: "bind"}); },
+    v => { v.Config.Env.push("PUBLISHER_TOKEN=VALUE_MUST_BE_WITHHELD"); },
+  ]) {
+    const changed = structuredClone(inputs); mutate(changed);
+    assert.throws(() => inspectAgent(changed, inputEnv, image), error => !error.message.includes("VALUE_MUST_BE_WITHHELD"));
+  }
+  for (const source of ["relative/inputs", env.TEAM_STATE_DIR + "/inputs", "/srv/team"]) {
+    const changed = structuredClone(inputs);
+    changed.Mounts.at(-1).Source = source; changed.HostConfig.Mounts.at(-1).Source = source;
+    assert.throws(() => inspectAgent(changed, {...inputEnv, TEAM_INPUT_DIR: source}, image));
+  }
+  const outbox = structuredClone(inputs), outboxEnv = {...inputEnv, TEAM_OUTBOX_DIR: "/operator/outbox", TEAM_OUTBOX_GID: "20002"};
+  outbox.Mounts.push({Source: outboxEnv.TEAM_OUTBOX_DIR, Destination: "/outbox", RW: true, Type: "bind"});
+  outbox.HostConfig.Mounts.push({Type: "bind", Source: outboxEnv.TEAM_OUTBOX_DIR, Target: "/outbox", ReadOnly: false, BindOptions: {}});
+  outbox.HostConfig.GroupAdd = [outboxEnv.TEAM_OUTBOX_GID];
+  assert.doesNotThrow(() => inspectAgent(outbox, outboxEnv, image));
+  assert.throws(() => inspectAgent(outbox, inputEnv, image));
+  for (const group of [undefined, "0", "root", "-1", "20001", "1.5", "4294967295"]) {
+    assert.throws(() => inspectAgent(outbox, {...outboxEnv, TEAM_OUTBOX_GID: group}, image));
+  }
+  for (const group of [[], ["20003"], ["20002", "20003"]]) {
+    const changed = structuredClone(outbox); changed.HostConfig.GroupAdd = group;
+    assert.throws(() => inspectAgent(changed, outboxEnv, image));
+  }
+  for (const source of ["relative/outbox", env.TEAM_STATE_DIR, env.TEAM_STATE_DIR + "/outbox", "/srv/team", inputEnv.TEAM_INPUT_DIR, env.TEAM_LOGIN_DIR, env.AUTHORIZED_KEYS_FILE]) {
+    const changed = structuredClone(outbox);
+    changed.Mounts.at(-1).Source = source; changed.HostConfig.Mounts.at(-1).Source = source;
+    assert.throws(() => inspectAgent(changed, {...outboxEnv, TEAM_OUTBOX_DIR: source}, image));
+  }
+  const outboxAlone = structuredClone(outbox), outboxOnlyEnv = {...outboxEnv};
+  delete outboxOnlyEnv.TEAM_INPUT_DIR;
+  outboxAlone.Mounts = outboxAlone.Mounts.filter(m => m.Destination !== "/inputs");
+  outboxAlone.HostConfig.Mounts = outboxAlone.HostConfig.Mounts.filter(m => m.Target !== "/inputs");
+  assert.doesNotThrow(() => inspectAgent(outboxAlone, outboxOnlyEnv, image));
+  for (const mutate of [
+    v => {v.Mounts.at(-1).RW = false;},
+    v => {v.HostConfig.Mounts.at(-1).ReadOnly = true;},
+    v => {v.HostConfig.Mounts.at(-1).BindOptions.CreateMountpoint = true;},
+  ]) {const changed = structuredClone(outbox); mutate(changed); assert.throws(() => inspectAgent(changed, outboxEnv, image));}
   const withoutCmd = structuredClone(image);
   delete withoutCmd.Config.Cmd;
   assert.ok(inspectAgent(inspected, env, withoutCmd).length >= 8, "Docker image metadata omits Cmd while container metadata uses null");
@@ -338,7 +387,7 @@ test("acceptance refuses drift in the admitted container settings", async t => {
     t.after(() => rmSync(root, {recursive:true, force:true}));
     for (const name of ["state", "work", "operator"]) mkdirSync(join(root,name));
     const realEnv = {...env, TEAM_STATE_DIR:join(root,"state"), TEAM_WORK_DIR:join(root,"work")};
-    for (const [name, target] of [["AGENT_CA_FILE","/etc/agent-trust/ca.pem"], ["AGENT_MIRRORS_DIR","/mirrors"]]) {
+    for (const [name, target] of [["AGENT_CA_FILE","/etc/agent-trust/ca.pem"], ["AGENT_MIRRORS_DIR","/mirrors"], ["TEAM_INPUT_DIR","/inputs"]]) {
       for (const location of ["state", "work", "operator"]) {
         const source = join(root,location,name);
         if (name === "AGENT_CA_FILE") writeFileSync(source, "public CA fixture");
@@ -346,7 +395,7 @@ test("acceptance refuses drift in the admitted container settings", async t => {
         const alias = join(root, `${location}-${name}`);
         symlinkSync(source, alias);
         const settings = {...realEnv,[name]:alias};
-        const info = structuredClone(name === "AGENT_CA_FILE" ? trusted : mirrored);
+        const info = structuredClone(name === "AGENT_CA_FILE" ? trusted : name === "TEAM_INPUT_DIR" ? inputs : mirrored);
         info.Mounts = info.Mounts.filter(mount => mount.Destination !== target);
         info.Mounts.find(mount => mount.Destination === "/state").Source = settings.TEAM_STATE_DIR;
         info.Mounts.push({Source:settings.TEAM_WORK_DIR, Destination:"/work", RW:true, Type:"bind"},
@@ -367,6 +416,131 @@ test("acceptance refuses drift in the admitted container settings", async t => {
       }
     }
   });
+  await t.test("outbox source aliases cannot expose state, work or read-only mounts", t => {
+    const root = mkdtempSync(join(tmpdir(), "oats-outbox-alias-"));
+    t.after(() => rmSync(root, {recursive: true, force: true}));
+    const settings = {...outboxOnlyEnv}, info = structuredClone(outboxAlone);
+    for (const mount of info.Mounts) {
+      mount.Source = join(root, mount.Destination.replaceAll("/", "-")); mkdirSync(mount.Source);
+      const name = {"/state": "TEAM_STATE_DIR", "/outbox": "TEAM_OUTBOX_DIR", "/etc/agent-login": "TEAM_LOGIN_DIR",
+        "/etc/agent-ssh/authorized_keys": "AUTHORIZED_KEYS_FILE", "/etc/resolv.conf": "RESOLV_CONF_FILE"}[mount.Destination];
+      settings[name] = mount.Source;
+    }
+    const alias = join(root, "queue-alias");
+    symlinkSync(join(root, "-state"), alias);
+    settings.TEAM_OUTBOX_DIR = alias;
+    info.Mounts.find(m => m.Destination === "/outbox").Source = alias;
+    info.HostConfig.Mounts = info.Mounts.map(m => ({Type: "bind", Source: m.Source, Target: m.Destination, ReadOnly: !m.RW, BindOptions: {}}));
+    assert.throws(() => inspectOnHost(info, settings, image), /outside agent-writable sources/);
+  });
+  await t.test("main executes input and outbox probes through the Docker boundary", async t => {
+    const {main} = await import("../container/agent/accept.mjs");
+    const root = mkdtempSync(join(tmpdir(), "oats-mount-main-"));
+    t.after(() => rmSync(root, {recursive: true, force: true}));
+    const lines = [];
+    t.mock.method(console, "log", line => lines.push(line));
+    for (const enabled of [false, true]) {
+      const settings = {...env};
+      const info = structuredClone(enabled ? outbox : inspected);
+      if (enabled) Object.assign(settings, outboxEnv);
+      for (const mount of info.Mounts) {
+        const name = {"/state": "TEAM_STATE_DIR", "/inputs": "TEAM_INPUT_DIR", "/outbox": "TEAM_OUTBOX_DIR",
+          "/etc/agent-login": "TEAM_LOGIN_DIR", "/etc/agent-ssh/authorized_keys": "AUTHORIZED_KEYS_FILE", "/etc/resolv.conf": "RESOLV_CONF_FILE"}[mount.Destination];
+        settings[name] = join(root, name);
+        mkdirSync(settings[name], {recursive: true});
+        mount.Source = settings[name];
+      }
+      info.HostConfig.Mounts = info.Mounts.map(m => ({Type: "bind", Source: m.Source, Target: m.Destination, ReadOnly: !m.RW, BindOptions: {}}));
+      let inputsRan = false, outboxRan = false, removed = false, rootScanRan = false, agentScanRan = false;
+      const fs = {
+        lstatSync: () => { throw Object.assign(new Error("absent"), {code: "ENOENT"}); },
+        statSync(path) {
+          if (path === "/state") return {mode: 0o40700, isDirectory: () => true};
+          return {uid: 20001, gid: 20002, mode: 0o42750, isDirectory: () => true};
+        },
+        readdirSync: () => [],
+        writeFileSync(path) { if (path.startsWith("/inputs/")) throw Object.assign(new Error("read-only"), {code: "EROFS"}); },
+        unlinkSync() { removed = true; },
+      };
+      const run = (tool, argv, options) => {
+        assert.equal(tool, "docker");
+        const ok = stdout => ({status: 0, stdout, stderr: ""});
+        if (argv[0] === "inspect") return ok(JSON.stringify([info]));
+        if (argv[0] === "image") return ok(JSON.stringify([image]));
+        if (argv[0] === "info") return ok("runc");
+        if (argv.includes("process.arch")) return ok("x64");
+        const source = options.input || "";
+        if (source.includes("function runtimeCheck")) {
+          // Execute the real serialized runtime check with filesystem and TCP boundaries.
+          let output = "";
+          const groups = enabled ? "20001 20002" : "20001";
+          const runtimeFS = {...fs, statSync: () => ({mode: 0o40700, uid: 20001}), readFileSync(path) {
+            if (path === "/tmp/agent-sshd.pid") return "42";
+            if (path.endsWith("cmdline")) return "sshd";
+            return `Uid: 20001 20001 20001 20001\nGid: 20001 20001 20001 20001\nGroups: ${groups}\nCapEff: 0000\nNoNewPrivs: 1\n`;
+          }};
+          const socket = {setTimeout() {}, destroy() {}, once(event, callback) { if (event === "data") callback("SSH-2.0-OpenSSH_fixture"); }};
+          const execute = statusFS => runInNewContext(source, {process: {getuid: () => 20001, getgid: () => 20001}, console: {log: line => { output += line + "\n"; }},
+            require: name => name === "node:fs" ? statusFS : name === "node:assert/strict" ? assert : {connect: () => socket}});
+          execute(runtimeFS);
+          assert.throws(() => execute({...runtimeFS, readFileSync: path => path === "/proc/self/status" ? runtimeFS.readFileSync(path).replace(`Groups: ${groups}`, "Groups: 20001 20003") : runtimeFS.readFileSync(path)}));
+          if (enabled) {
+            assert.throws(() => execute({...runtimeFS, readFileSync: path => path === "/proc/self/status" ? runtimeFS.readFileSync(path).replace(`Groups: ${groups}`, "Groups: 20001") : runtimeFS.readFileSync(path)}));
+            for (const daemonGroups of ["20001", "20001 20002 20003"]) {
+              assert.throws(() => execute({...runtimeFS, readFileSync: path => path === "/proc/42/status" ? runtimeFS.readFileSync(path).replace(`Groups: ${groups}`, `Groups: ${daemonGroups}`) : runtimeFS.readFileSync(path)}));
+            }
+          }
+          return ok(output);
+        }
+        if (source.includes("function tokenCheck")) return ok(JSON.stringify({present: false, evidence: []}));
+        if (source.includes("function inputsCheck") || source.includes("function outboxCheck")) {
+          if (source.includes("function inputsCheck")) inputsRan = true;
+          else outboxRan = true;
+          let result;
+          runInNewContext(source, {process: {pid: 100}, require: () => fs, console: {log: line => { result = line; }}});
+          return ok(result);
+        }
+        if (source.includes("function credentialScan")) {
+          const privileged = argv.includes("--user");
+          const visited = [];
+          const entry = name => ({name, isDirectory: () => true});
+          const scanFS = {existsSync: () => true, readdirSync(path) {
+            visited.push(path);
+            if (path === "/") return [entry("inputs"), entry("outbox"), entry("system")];
+            if (privileged && ["/inputs", "/outbox"].some(root => path === root || path.startsWith(root + "/"))) {
+              throw Object.assign(new Error("private subtree must not be scanned as root"), {code: "EACCES"});
+            }
+            if (path === "/inputs" || path === "/outbox") return [entry("agent-private")];
+            return [];
+          }};
+          let output = "";
+          runInNewContext(source, {require: name => name === "node:fs" ? scanFS : name === "node:path" ? {join} : assert,
+            console: {log: line => { output += line; }}});
+          if (privileged) {
+            rootScanRan = true;
+            assert.ok(visited.includes("/system"));
+            assert.ok(!visited.includes("/inputs") && !visited.includes("/outbox"));
+          } else {
+            agentScanRan = true;
+            assert.equal(visited.includes("/inputs/agent-private"), enabled);
+            assert.equal(visited.includes("/outbox/agent-private"), enabled);
+          }
+          return ok(output);
+        }
+        assert.ok(inputsRan && outboxRan, "both probes must execute before the remaining acceptance checks");
+        throw new Error("remaining checks boundary");
+      };
+      assert.throws(() => main(["fixture-agent", "--evidence", "target-amd64"], settings, {spawnSync: run}), /remaining checks boundary/);
+      assert.equal(inputsRan, true); assert.equal(outboxRan, true);
+      assert.equal(removed, enabled);
+      assert.equal(rootScanRan, true); assert.equal(agentScanRan, true);
+    }
+    assert.ok(lines.some(line => line.includes("inputs: absent")));
+    assert.ok(lines.some(line => line.includes("outbox: absent")));
+    assert.ok(lines.some(line => line.includes("inputs: readable read-only")));
+    assert.ok(lines.some(line => line.includes("outbox: setgid queue writable")));
+  });
+
 });
 
 
@@ -827,6 +1001,93 @@ test("mirror acceptance requires readable directories and refuses writable mirro
   assert.equal(removed,true,"an unexpected write is removed before reporting failure");
   assert.throws(()=>run({...fs,statSync:()=>({isDirectory:()=>false})}),/mirrors/);
   assert.throws(()=>run({...fs,readdirSync:()=>{throw new Error("unreadable")}}),/mirrors/);
+});
+
+
+test("optional inputs fragment adds only one pre-provisioned read-only directory", () => {
+  const path = new URL("../container/agent/compose.agent.inputs.yaml", import.meta.url);
+  assert.ok(existsSync(path), "the supported optional inputs fragment is required");
+  assert.deepEqual(parse(readFileSync(path, "utf8")), {services: {agent: {volumes: [{
+    type: "bind", source: "${TEAM_INPUT_DIR:?Set TEAM_INPUT_DIR}", target: "/inputs", read_only: true, bind: {create_host_path: false},
+  }]}}});
+});
+
+test("input acceptance checks readable directories, failed writes and absence without the fragment", async () => {
+  const {inputsCheck} = await import("../container/agent/accept.mjs");
+  assert.equal(typeof inputsCheck, "function", "a serialized input directory probe is required");
+  const fault = code => Object.assign(new Error("PRIVATE_INPUT_CONTENTS"), {code});
+  const fs = {
+    statSync(path) { assert.equal(path, "/inputs"); return {isDirectory: () => true}; },
+    readdirSync(path) { assert.equal(path, "/inputs"); return ["PRIVATE_INPUT_CONTENTS"]; },
+    writeFileSync(path, data, options) {
+      assert.match(path, /^\/inputs\/\.oats-read-only-probe-/);
+      assert.equal(options.flag, "wx");
+      throw fault("EROFS");
+    },
+    unlinkSync: () => assert.fail("no probe was written"),
+    lstatSync: () => { throw fault("ENOENT"); },
+  };
+  const run = (system, enabled = true) => runInNewContext(`(${inputsCheck.toString()})(${enabled})`, {
+    process: {pid: 100}, require: () => system,
+  });
+  assert.equal(run(fs), "inputs: readable read-only directory; contents withheld");
+  assert.equal(run(fs, false), "inputs: absent without the optional fragment");
+  for (const system of [
+    {...fs, statSync: () => { throw fault("ENOENT"); }},
+    {...fs, statSync: () => ({isDirectory: () => false})},
+    {...fs, readdirSync: () => { throw fault("EACCES"); }},
+    {...fs, writeFileSync: () => { throw fault("EIO"); }},
+  ]) assert.throws(() => run(system), error => /inputs/.test(error.message) && !error.message.includes("PRIVATE_INPUT_CONTENTS"));
+  assert.equal(run({...fs, writeFileSync: () => { throw fault("EACCES"); }}), "inputs: readable read-only directory; contents withheld");
+  let removed = false;
+  assert.throws(() => run({...fs, writeFileSync: () => {}, unlinkSync: () => { removed = true; }}), /inputs/);
+  assert.equal(removed, true, "unexpected probe writes are removed before failure");
+  for (const lstatSync of [() => ({}), () => { throw fault("EACCES"); }]) {
+    assert.throws(() => run({...fs, lstatSync}, false), /inputs/);
+  }
+});
+
+
+test("optional outbox fragment adds only the queue and its dedicated numeric group", () => {
+  const path = new URL("../container/agent/compose.agent.outbox.yaml", import.meta.url);
+  assert.ok(existsSync(path), "the optional outbox fragment is required");
+  assert.deepEqual(parse(readFileSync(path, "utf8")), {services: {agent: {
+    group_add: ["${TEAM_OUTBOX_GID:?Set TEAM_OUTBOX_GID}"],
+    volumes: [{type: "bind", source: "${TEAM_OUTBOX_DIR:?Set TEAM_OUTBOX_DIR}", target: "/outbox", bind: {create_host_path: false}}],
+  }}});
+  assert.match(read("entrypoint.sh"), /^umask 077$/m);
+});
+
+test("outbox acceptance checks setgid ownership, write inheritance, private state and absence", async () => {
+  const {outboxCheck} = await import("../container/agent/accept.mjs");
+  assert.equal(typeof outboxCheck, "function");
+  const denied = code => Object.assign(new Error("PRIVATE_OUTBOX_CONTENTS"), {code});
+  let written = false, removed = false;
+  const system = {
+    statSync(path) {
+      if (path === "/state") return {mode: 0o40700, isDirectory: () => true};
+      if (path === "/outbox") return {uid: 20001, gid: 20002, mode: 0o42750, isDirectory: () => true};
+      assert.ok(written); return {gid: 20002};
+    },
+    lstatSync: () => { throw denied("ENOENT"); },
+    writeFileSync(path, data, options) { assert.match(path, /^\/outbox\/\.oats-write-probe-/); assert.equal(options.flag, "wx"); assert.equal(options.mode, 0o600); written = true; },
+    unlinkSync() { removed = true; },
+  };
+  const run = (fs = system, enabled = true) => runInNewContext(`(${outboxCheck.toString()})(${enabled}, "20001", "20002")`, {
+    process: {pid: 100}, require(name) { return name === "node:fs" ? fs : assert; },
+  });
+  assert.equal(run(), "outbox: setgid queue writable with group 20002; state remains private");
+  assert.equal(removed, true);
+  assert.equal(run(system, false), "outbox: absent without the optional fragment");
+  for (const mutate of [
+    stat => ({...stat, gid: 20003}), stat => ({...stat, uid: 0}), stat => ({...stat, mode: 0o40750}), stat => ({...stat, isDirectory: () => false}),
+  ]) assert.throws(() => run({...system, statSync: path => path === "/outbox" ? mutate(system.statSync(path)) : system.statSync(path)}), /outbox/);
+  removed = false;
+  assert.throws(() => run({...system, statSync: path => path.startsWith("/outbox/.") ? {gid: 20003} : system.statSync(path)}), /outbox/);
+  assert.equal(removed, true, "failed inheritance checks clean up their own probe");
+  assert.throws(() => run({...system, statSync: path => path === "/state" ? {mode: 0o40750, isDirectory: () => true} : system.statSync(path)}), /outbox/);
+  assert.throws(() => run({...system, writeFileSync: () => { throw denied("EACCES"); }}), error => /outbox/.test(error.message) && !error.message.includes("PRIVATE_OUTBOX_CONTENTS"));
+  for (const lstatSync of [() => ({}), () => { throw denied("EACCES"); }]) assert.throws(() => run({...system, lstatSync}, false), /outbox/);
 });
 
 
