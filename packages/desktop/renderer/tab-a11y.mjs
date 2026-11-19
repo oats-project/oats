@@ -29,6 +29,14 @@ const titleParts = new WeakMap();
 /** Set some of a tab trigger's tooltip parts ({ name, key, note }; null clears key or note) and write
  * the title they make: "name (key)\nnote". A trigger not drawn by createTabChrome starts from its
  * own title as the name. */
+/** Retitle a tab (slice 6a: a Details tab follows its agent, a page tab its page): its label, its accessible name
+ * and its tooltip's name. */
+export function retitleTab(trigger, title) {
+  const label = trigger.querySelector(".tab-label");
+  if (label) { label.classList.remove("split"); label.textContent = title; }
+  trigger.setAttribute("aria-label", title);
+  setTabTitle(trigger, { name: title });
+}
 export function setTabTitle(trigger, parts) {
   const own = titleParts.get(trigger) ?? { name: trigger.title, key: null, note: null };
   Object.assign(own, parts);

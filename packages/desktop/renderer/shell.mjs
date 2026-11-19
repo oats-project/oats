@@ -65,7 +65,7 @@ import { createSidebarWidth } from "./sidebar-width.mjs";
 import { createTerminalAtlasRecovery } from "./terminal-atlas-recovery.mjs";
 import { attachClipboardWrite, attachSelectionCopy, copyTerminalSelection } from "./terminal-clipboard.mjs";
 import { attachTerminalMouse } from "./terminal-mouse.mjs";
-import { createTabChrome, tabKeyAction, focusAfterLastTab, tabNameTailStart, setTabTitle } from "./tab-a11y.mjs";
+import { createTabChrome, tabKeyAction, focusAfterLastTab, tabNameTailStart, setTabTitle, retitleTab } from "./tab-a11y.mjs";
 import { numberTabStrips } from "./tab-numbers.mjs";
 import { dotColor, paintDotColor } from "./instance-dot.mjs";
 import { revealInStrip } from "./reveal-in-scrollport.mjs";
@@ -1389,6 +1389,11 @@ function renderContextRoster(instances) {
         row.dataset.rosterChildren = hasChildren ? "1" : "0";
         row.dataset.rosterCollapsed = collapsed ? "1" : "0";
         row.tabIndex = -1;
+        // i: Details for this row's agent (slice 6a), running or not.
+        row.addEventListener("keydown", (e) => {
+          if (e.key !== "i" || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || typeof openDetailsTab !== "function") return;
+          e.preventDefault(); openDetailsTab(i);
+        });
         row.addEventListener("keydown", onRosterRowKey);
         rowWrap.append(row);
         // Slice 1: no tools overlay. Its acts (Open pull request…, Start…) are the context menu's, for every row.
@@ -1818,12 +1823,71 @@ function updatePanelControl({ present, open, changes }) {
 /** Projection only: foreground comes from the committed active tab/stage. */
 function syncContextPanel() {
   const tab = tabLayerVisible ? tabs.get(activeTab) : null;
-  const terminal = tab?.kind === "terminal" && canActivateTab(tab, currentWorkspace());
+  const details = tab?.kind === "details" && canActivateTab(tab, currentWorkspace());
+  // Details (the Desktop UI rework, slice 6a) is a tab for any agent, running or not: the instance panel's own
+  // content (its Instance, Soul and Developer pages, its lifecycle footer), moved into the Details tab's pane while
+  // that tab shows, and back beside the main area for a page's own panel (the Workspace page's). A terminal tab no
+  // longer brings a right-hand instance panel: its agent's Details is `i`, Ctrl+Shift+I, the row's menu or the palette.
+  placeContextPanel(details ? tab.paneEl : null);
+  const instance = details ? liveRow(tab.detailsRef) : null;
+  const terminalKey = instance ? [...tabs.values()].find((t) => t.kind === "terminal" && t.instanceRef && instanceId(t.instanceRef) === instanceId(instance))?.key ?? null : null;
   // Its Needs input facts (slice 1: the hover card's) through the sidebar's own gate: a row held stale has no claim.
-  const instance = terminal ? tab.instanceRef : null;
   contextPanel.setContext({ workspace: currentWorkspace(), owner: tab?.kind === "page" ? tab : tabLayerVisible ? null : stage,
-    instance, key: terminal && tab.instanceRef ? tab.key : null,
+    instance, key: terminalKey,
     waiting: instance ? waitingClaim(instance, { stale: rosterStale || rowStale(instance, contextDeployments) }) : null });
+  if (details) contextPanel.setCollapsed?.(false);
+}
+/** The roster's current row for an agent (by identity), else the row Details was opened with. */
+function liveRow(ref) {
+  if (!ref) return null;
+  const id = instanceId(ref);
+  return shownRows(contextInstances).find((row) => instanceId(row) === id) ?? ref;
+}
+const contextPanelHome = { parent: null, next: null };
+/** Put the instance panel's element in `pane` (the Details tab's), or back where the page shell keeps it. */
+function placeContextPanel(pane) {
+  const el = document.getElementById("context-panel");
+  if (!el) return;
+  if (!contextPanelHome.parent) { contextPanelHome.parent = el.parentElement; contextPanelHome.next = el.nextSibling; }
+  if (pane) { if (el.parentElement !== pane) pane.append(el); el.classList.add("in-details"); return; }
+  if (el.parentElement !== contextPanelHome.parent) contextPanelHome.parent.insertBefore(el, contextPanelHome.next);
+  el.classList.remove("in-details");
+}
+/** Open Details for an agent (slice 6a): one Details tab per workspace, retargeted to the agent asked for, titled by
+ * its name; opened in the focused pane. */
+function openDetailsTab(row, { focus = true } = {}) {
+  if (!row) return false;
+  const ws = currentWorkspace();
+  const title = `Details · ${instanceDisplayName(row.instance) || row.instance}`;
+  const existing = [...tabs].find(([, t]) => t.kind === "details" && canActivateTab(t, ws));
+  if (existing) {
+    const [id, t] = existing;
+    t.detailsRef = row; t.title = title;
+    retitleTab(t.triggerEl, title);
+    selectTab(id, { focusContent: focus });
+    syncContextPanel();
+    return true;
+  }
+  hideEmptyState();
+  const made = addTab({ title, key: "details", kind: "details", workspace: ws,
+    focusContent: () => contextPanel.focus(),
+    onClose: () => { placeContextPanel(null); syncContextPanel(); } });
+  if (!made) return false;
+  const t = tabs.get(made.id);
+  t.detailsRef = row;
+  syncContextPanel();
+  if (focus) contextPanel.focus();
+  return true;
+}
+/** The agent Details opens for: the roster's focused row, else the active terminal's agent, else the open Details'. */
+function detailsTarget() {
+  const focusedRow = document.activeElement?.closest?.(".ctx-inst")?.dataset.treeInstance;
+  const rows = shownRows(contextInstances);
+  if (focusedRow) { const row = rows.find((r) => instanceId(r) === focusedRow); if (row) return row; }
+  const active = tabs.get(activeTab);
+  if (active?.kind === "terminal" && active.instanceRef) return liveRow(active.instanceRef);
+  if (active?.kind === "details") return liveRow(active.detailsRef);
+  return null;
 }
 function activeTabTrigger() { return activeTab != null ? tabs.get(activeTab)?.triggerEl ?? null : null; }
 /** Where focus goes when the control holding it disappears: the active tab's trigger when it is shown, else a
@@ -2761,7 +2825,7 @@ const palette = createPalette({
     { label: "Sidebar: collapse to the rail / expand", detail: chordDetail("sidebar.toggle"), run: () => toggleSidebar() },
     { label: "Sidebar: hide", run: () => { setSidebarRail(false); setSidebarHidden(true); } },
     { label: "Sidebar: reset width", detail: chordDetail("sidebar.resetWidth"), run: () => runAction("sidebar.resetWidth") },
-    { label: "Instance panel: show / hide", detail: chordDetail("panel.toggle"), run: () => runAction("panel.toggle") },
+    { label: "Agent: Details", detail: chordDetail("panel.toggle"), run: () => runAction("panel.toggle") },
     { label: "Focus mode: toggle", detail: chordDetail("app.focusMode"), run: () => runAction("app.focusMode") },
     { label: "Split: terminal right (side by side)", detail: chordDetail("split.vertical"), run: () => splitPane("row") },
     { label: "Split: terminal down (stacked)", detail: chordDetail("split.horizontal"), run: () => splitPane("col") },
@@ -3454,7 +3518,13 @@ registerAction({ id: "app.workspaces", label: "Focus the list of workspaces", co
 registerAction({ id: "sidebar.focusFilter", label: "Focus the instance roster", context: "global", run: () => focusRoster() });
 registerAction({ id: "sidebar.toggle", label: "Toggle the sidebar", context: "global", run: () => toggleSidebar() });
 registerAction({ id: "sidebar.resetWidth", label: "Reset the sidebar's width", context: "global", run: () => sidebarWidth.reset() });
-registerAction({ id: "panel.toggle", label: "Show or hide the instance panel", context: "global", run: () => { tabOpenIntents.invalidate(); contextPanel.toggle(); } });
+// Ctrl+Shift+I / ⌘I (slice 6a): Details for the selected agent (the focused roster row, else the active terminal's),
+// a tab; with none selected, the panel as before (a page's own panel).
+registerAction({ id: "panel.toggle", label: "Agent: Details", context: "global", run: () => {
+  tabOpenIntents.invalidate();
+  const row = detailsTarget();
+  if (row) openDetailsTab(row); else contextPanel.toggle();
+} });
 // Focus mode lives on the keyboard (rebindable, no default chord) and the palette.
 registerAction({ id: "app.focusMode", label: "Toggle focus mode (sidebar and instance panel)", context: "global", run: () => { tabOpenIntents.invalidate(); contextPanel.toggleFocusMode(); } });
 // splits live on the tab layer (they arrange terminal tabs); the actions
