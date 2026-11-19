@@ -21,7 +21,6 @@ export const OATS_REPO_KEY = 'github.com/oats-project/oats';
 
 export const ORIGIN_COPY = Object.freeze({
   official: 'OATS',
-  mark: '✓',
   title: 'Verified: published by OATS',
   by: source => `by ${source}`,
 });
