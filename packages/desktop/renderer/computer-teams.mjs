@@ -27,7 +27,7 @@
 import { iconElement } from './shell-icons.mjs';
 import { createSoulMark } from './identity-marks.mjs';
 import { deploymentLabel, shortPath } from '../../client/deployment-label.mjs';
-import { DESKTOP_TERMS } from './desktop-terms.mjs';
+import { DESKTOP_TERMS, DESKTOP_NOUNS } from './desktop-terms.mjs';
 import { cliHeldBack, holdControl, syncHeldControls } from './views/cli-status.mjs';
 
 /** Above the tested bound (#1879) every team write is held back (packages/client/above-tested.mjs): its controls are
@@ -36,6 +36,18 @@ const TEAM_WRITE = 'POST /api/workspace-teams add';
 import { ageText } from './age-text.mjs';
 import { captureFocusState } from './loading.mjs';
 import { pageBar } from './capability-page.mjs';
+
+const capitalized = word => word.charAt(0).toUpperCase() + word.slice(1);
+/** The Teams page's section names and their one sentence each (the Desktop UI rework, slice 3b; D22). */
+export const TEAMS_COPY = Object.freeze({
+  shared: 'Workspace teams',
+  sharedLead: 'Declared by this workspace in oats-workspace.yaml and shared through Git: everyone who opens the workspace sees them.',
+  sharedNone: "No workspace teams. A workspace team is declared in the workspace's oats-workspace.yaml and committed, so everyone who opens the workspace has it.",
+  local: "This computer's teams",
+  localLead: "Declared only on this computer, in its oats-local.yaml: not shared with the workspace.",
+  localNone: "No teams of this computer. One lives in this computer's oats-local.yaml and is seen only here.",
+  localNoneClosed: "No teams of this computer",
+});
 
 /** The Desktop's teams routes (#269, packages/desktop/docs/desktop-teams.md): `{status: 'ok',
  * teams}` (/api/workspace-teams) or `{status: 'ok', soulTeams}` (/api/workspace-soul-teams) answer
@@ -459,10 +471,10 @@ export function memberGroups(members, servers = []) {
  * other machines" when some run elsewhere, ", <machine>[, <machine>] not reached" for its groups not reached (each
  * machine once); "None of your instances" for none. */
 export function memberSummaryParts(members, servers = []) {
-  if (!members.length) return [{ kind: 'more', text: 'None of your instances' }];
+  if (!members.length) return [{ kind: 'more', text: `None of your ${DESKTOP_NOUNS.instances}` }];
   const elsewhere = members.filter(m => m.server).length;
   const unreached = [...new Set(memberGroups(members, servers).filter(g => !g.reached).map(g => g.machine))];
-  return [{ kind: 'count', text: `${members.length} of your instances` },
+  return [{ kind: 'count', text: `${members.length} of your ${DESKTOP_NOUNS.instances}` },
     ...(elsewhere ? [{ kind: 'more', text: `, ${elsewhere} on other machines` }] : []),
     ...(unreached.length ? [{ kind: 'warn', text: `, ${unreached.join(', ')} not reached` }] : [])];
 }
@@ -514,7 +526,7 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
   const addButton = el(doc, 'button', null, 'ct-act ct-add'); addButton.type = 'button';
   // The team writes follow the CLI: a reprobe into or out of the tested bound holds them back or gives them back.
   const offHeld = syncHeldControls(() => [page, shown?.content]);
-  addButton.append(iconElement(doc, 'plus', { size: 13 }), el(doc, 'span', 'Add a local team'));
+  addButton.append(iconElement(doc, 'plus', { size: 13 }), el(doc, 'span', 'Add a team on this computer'));
   addButton.setAttribute('aria-expanded', 'false');
   addButton.addEventListener('click', () => { if (addButton.disabled) return; openAdd('head'); });
   head.append(titles, addButton);
@@ -624,7 +636,7 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
       if (e.kind === 'every') parts.push(['every soul', ...(e.except ? [' except ', ...everyBut(e.except)] : [])]);
       else if (e.kind === 'fallback') parts.push(e.nobody ? [el(doc, 'span', 'fallback; every soul has its own default', 'ct-quiet')]
         : [`every soul without its own default${e.from === 'deployment' ? " (this deployment's choice)" : ''}`]);
-      else if (e.kind === 'local') parts.push(['every soul (local team)']);
+      else if (e.kind === 'local') parts.push(["every soul (this computer's team)"]);
       else if (e.kind === 'repo' && e.except) parts.push([ofRepo, ...name(e), ' except ', ...series(e.except, name)]);
       // The repos without exceptions read as one series ("souls of a, b and c"), as do the single souls.
       else if (e === plainRepos[0]) parts.push([ofRepo, ...series(plainRepos, name)]);
@@ -648,7 +660,7 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
       const heading = el(doc, 'h4', null, 'ct-name-h');
       if (openable) {
         const open = el(doc, 'button', team.label, 'ct-open'); open.type = 'button';
-        open.setAttribute('aria-description', "Opens the team's page with your instances on it");
+        open.setAttribute('aria-description', `Opens the team's page with your ${DESKTOP_NOUNS.instances} on it`);
         open.addEventListener('click', () => onOpenTeam(team.label));
         heading.append(open);
       } else heading.append(el(doc, 'span', team.label, 'ct-label'));
@@ -701,7 +713,7 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
   }
 
   function addForm() {
-    const form = el(doc, 'form', null, 'ct-form'); form.noValidate = true; form.setAttribute('aria-label', 'Add a local team');
+    const form = el(doc, 'form', null, 'ct-form'); form.noValidate = true; form.setAttribute('aria-label', 'Add a team on this computer');
     const field = (name, caption, placeholder, cls = '') => {
       const label = el(doc, 'label', caption, cls), wrap = el(doc, 'span', null, 'ct-field'), input = el(doc, 'input');
       input.name = name; input.value = draft[name]; input.placeholder = placeholder; input.autocomplete = 'off'; input.spellcheck = false;
@@ -719,7 +731,7 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
       event.preventDefault();
       if (cliHeldBack(TEAM_WRITE)) return;
       const label = draft.label.trim(), team = draft.team.trim(), description = draft.description.trim();
-      if (!label || !team) { cardError = { message: 'A local team needs a label and its provider team id.' }; render(); return; }
+      if (!label || !team) { cardError = { message: "A team of this computer needs a label and its provider team id." }; render(); return; }
       // The kernel's label grammar (lowercase only); said here instead of a bare E_BAD_ARGS from the route.
       if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(label)) { cardError = { message: 'A label is lowercase letters and digits, with . _ or - after the first character.' }; render(); return; }
       void run({ action: 'add', label, team, ...(description ? { description } : {}) });
@@ -745,7 +757,7 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
     if (!rules.length) {
       // With local teams allowed, every soul may also join each of this deployment's local teams (via local).
       const local = localAllowed(current) && list(current.teams).some(t => t.from === 'local');
-      wrap.append(emptyCard(`No souls: entries: a soul may join its default team${local ? " and this deployment's local teams" : ' only'}.`));
+      wrap.append(emptyCard(`No souls: entries: a soul may join its default team${local ? " and this computer's teams" : ' only'}.`));
       return wrap;
     }
     const card = el(doc, 'div', null, 'ct-souls-card'), table = el(doc, 'table', null, 'ct-souls');
@@ -800,15 +812,18 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
     // The default team's card leads its section; the others keep the document's order (a stable sort).
     const teams = list(current.teams).slice().sort((a, b) => (b.default === true) - (a.default === true));
     const shared = teams.filter(t => t.from === 'shared'), local = teams.filter(t => t.from !== 'shared');
-    const sharedSection = section('shared', 'Shared teams', 'Declared in oats-workspace.yaml and shared through Git, so every computer that runs the workspace has them.');
+    // The two sections' names (the Desktop UI rework, slice 3b; D22): a kernel local team is declared in this
+    // computer's oats-local.yaml (docs/configuration.md `teams.<label>`), not another workspace's team this computer
+    // joined, so the second section is this computer's teams. The kernel words stay in the sentence under each title.
+    const sharedSection = section('shared', TEAMS_COPY.shared, TEAMS_COPY.sharedLead);
     for (const team of shared) sharedSection.append(teamCard(team));
-    if (!shared.length) sharedSection.append(emptyCard("No shared teams. A shared team is declared in the workspace's oats-workspace.yaml and committed, so every computer running the workspace has it."));
-    const localSection = section('local', 'Local teams', 'Only on this computer, in its oats-local.yaml. Not shared.');
+    if (!shared.length) sharedSection.append(emptyCard(TEAMS_COPY.sharedNone));
+    const localSection = section('local', TEAMS_COPY.local, TEAMS_COPY.localLead);
     for (const team of local) localSection.append(teamCard(team));
-    if (!local.length && !adding && !localAllowed(current)) localSection.append(el(doc, 'p', `No local teams: ${LOCAL_TEAMS_CLOSED}.`, 'ct-dashed'));
+    if (!local.length && !adding && !localAllowed(current)) localSection.append(el(doc, 'p', `${TEAMS_COPY.localNoneClosed}: ${LOCAL_TEAMS_CLOSED}.`, 'ct-dashed'));
     else if (!local.length && !adding) {
-      const empty = emptyCard("No local teams. A local team lives in this computer's oats-local.yaml and is visible only here.");
-      empty.append(holdControl(button('Add a local team', 'ct-link', () => openAdd('link')), TEAM_WRITE));
+      const empty = emptyCard(TEAMS_COPY.localNone);
+      empty.append(holdControl(button('Add a team on this computer', 'ct-link', () => openAdd('link')), TEAM_WRITE));
       localSection.append(empty);
     }
     if (cardError) localSection.append(problemBox(cardError));
@@ -884,25 +899,26 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
     card.append(head, table);
     return card;
   }
-  /** "Your instances on this team": the counts, then one card per machine; nothing until the members are known. */
+  /** "Your agents on this team" (team-instance-lists-state-their-observation-scope): the counts, then one card per
+   * machine; nothing until the members are known. */
   function yours(team) {
-    const wrap = section('yours', 'Your instances on this team',
-      `On this computer and the machines you added to this workspace. Instances other people run on ${team.label} are not listed here.`);
-    if (!text(team.team)) { wrap.append(el(doc, 'p', 'This team has no provider id yet, so no instance can be on it.', 'ct-dashed')); return wrap; }
+    const wrap = section('yours', `Your ${DESKTOP_NOUNS.instances} on this team`,
+      `On this computer and the machines you added to this workspace. ${capitalized(DESKTOP_NOUNS.instances)} other people run on ${team.label} are not listed here.`);
+    if (!text(team.team)) { wrap.append(el(doc, 'p', `This team has no provider id yet, so no ${DESKTOP_NOUNS.instance} can be on it.`, 'ct-dashed')); return wrap; }
     if (!roster) return wrap;
     const members = membersOf(team);
-    if (!members.length) { wrap.append(el(doc, 'p', `None of your instances is on ${team.label}.`, 'ct-dashed')); return wrap; }
+    if (!members.length) { wrap.append(el(doc, 'p', `None of your ${DESKTOP_NOUNS.instances} is on ${team.label}.`, 'ct-dashed')); return wrap; }
     const groups = memberGroups(members, roster.servers), kinds = members.map(stateKind);
     const count = kind => kinds.filter(k => k === kind).length, running = count('run'), stopped = count('stop'), attention = count('warn');
     const machines = new Set(groups.map(g => g.server ?? '')).size;
     const sum = el(doc, 'p', null, 'ct-yours-sum');
     const fact = (n, words, cls = '') => { const part = el(doc, 'span', null, cls || null); part.append(el(doc, 'b', String(n)), words); sum.append(part); };
-    fact(members.length, members.length === 1 ? 'instance' : 'instances'); fact(running, 'running');
+    fact(members.length, members.length === 1 ? DESKTOP_NOUNS.instance : DESKTOP_NOUNS.instances); fact(running, 'running');
     if (stopped) fact(stopped, 'stopped');
     if (attention) fact(attention, attention === 1 ? 'needs attention' : 'need attention', 'warn');
     sum.append(el(doc, 'span', `on ${plural(machines, 'machine')}`, 'ct-yours-machines'));
     wrap.append(sum);
-    if (team.default) wrap.append(el(doc, 'p', 'Every instance joins its default team, so all of your instances are here.', 'ct-default-note'));
+    if (team.default) wrap.append(el(doc, 'p', `Every ${DESKTOP_NOUNS.instance} joins its default team, so all of your ${DESKTOP_NOUNS.instances} are here.`, 'ct-default-note'));
     // A machine's card is named by its machine, with its path where two cards share a machine.
     const repeated = name => groups.filter(g => g.machine === name).length > 1;
     const cards = el(doc, 'div', null, 'ct-mcards'); wrap.append(cards);
