@@ -528,7 +528,8 @@ const elsewhere = (row) => typeof row.server === "string" && row.server !== "";
  *        for a row of another machine (its preflight runs first)
  *    { open: false, said: { said, under } }             opens nothing, and this says why
  *  Whether a row can be opened is the shared openAct's, switched on its reason's code, never on a
- *  sentence. The viewer is started with no key of its own (the TUI takes the back key before the
+ *  sentence. A row on a session provider is never opened, from the list, the palette, the steps or a
+ *  workspace's remembered tabs (they all ask here); its reason's link is printed under its sentence. The viewer is started with no key of its own (the TUI takes the back key before the
  *  pane sees it), so a kernel or a host of any version is opened alike. */
 export function openDecision(state, row, acts) {
   const name = row.instance, id = instanceId(row);
@@ -542,7 +543,11 @@ export function openDecision(state, row, acts) {
   if (!act.enabled) {
     if (act.reason.code === "not-running") return no(OPEN_WORDS.notRunning(name));
     if (act.reason.code === "state-unknown") return no(OPEN_WORDS.stateUnknown(name));
-    return no([], outside(reasonSpoken(act.reason)));
+    // A row on a session provider (code `no-terminal`) has no terminal: the shared home's sentence says where
+    // the agent runs, and under it the link the provider offers, as the kernel's row gave it (its label and
+    // its url, one text from outside), for the person to open themselves. Nothing is attached or started.
+    const link = act.reason.link ? spoken(`${act.reason.link.label}: ${act.reason.link.url}`, "kernel", false) : null;
+    return no([], [...outside(reasonSpoken(act.reason)), ...outside(link)]);
   }
   if (!elsewhere(row)) return { open: true, id, name, machine, target: { home: row.home }, routed: false };
   return { open: true, id, name, machine, target: { serverId: row.server, instance: row.instance, home: row.home }, routed: true };

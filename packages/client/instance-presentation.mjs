@@ -54,6 +54,48 @@ export function unsupportedSession(instance) {
   return (instance?.sessionTarget !== undefined && instance?.sessionTarget !== null) || instance?.backend === "herdr" ? stem : null;
 }
 
+/** A session provider's name, by the session-provider contract: 1 to 40 lowercase letters, digits and dashes.
+ * `tmux` is the kernel's own backend, never a provider's name. Not on the stable surface. */
+const PROVIDER_NAME = /^[a-z0-9-]{1,40}$/;
+export const sessionProviderName = (value) => typeof value === "string" && value !== "tmux" && PROVIDER_NAME.test(value);
+
+/** The session provider a row runs on, by name, or null for a row that runs in tmux. A provider (a
+ * capability's session backend, "bb" say) has no tmux target and no terminal: a client takes such a row's
+ * `running`, `runtimeState` and `runtimeError` from the kernel as given, never probes tmux for it
+ * (liveness.mjs) and opens, splits or restores no terminal for it (instance-acts.mjs `openAct`).
+ *
+ * It is the row's `backend` when that is a provider's name. A row with no `backend`, with "tmux", or with
+ * a value that is no name the contract allows is not one, and reads as it always did. A Herdr-recorded row
+ * (`unsupportedSession`, `backend: "herdr"` included) is never one: its own reason comes first, everywhere.
+ * Not on the stable surface: a client reads `openAct`'s answer. */
+export function sessionProvider(instance) {
+  if (unsupportedSession(instance)) return null;
+  return sessionProviderName(instance?.backend) ? instance.backend : null;
+}
+
+/** What a provider offers in place of a terminal: the row's `open`, `{ label, url }`, or null. Kept only
+ * when both are text and the url is an http or https one with no credentials in it: a client opens nothing
+ * else in a browser. The label is the provider's own text: a client shows it through display-text.mjs
+ * `displayLine`. Not on the stable surface. */
+const MAX_LINK_LABEL = 200, MAX_LINK_URL = 2048;
+export function openLink(instance) {
+  const open = instance?.open;
+  if (open === null || typeof open !== "object" || Array.isArray(open)) return null;
+  const { label, url } = open;
+  if (typeof label !== "string" || !label || label.length > MAX_LINK_LABEL || typeof url !== "string" || !url || url.length > MAX_LINK_URL) return null;
+  let parsed;
+  try { parsed = new URL(url); } catch { return null; }
+  if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) return null;
+  return { label, url };
+}
+
+/** The id of the provider's thread a row runs in: `session.endpoint.threadId` when it is text, else null.
+ * For display only, through `displayLine`: it addresses nothing here. Not on the stable surface. */
+export function sessionThreadId(instance) {
+  const id = instance?.session?.endpoint?.threadId;
+  return typeof id === "string" && id && id.length <= 200 ? id : null;
+}
+
 /** Who wrote what `unsupportedSession` answers for a row as the kernel or a host reported it: "kernel"
  * for the row's own text, null for the stand-in written here (and for a row it answers null for). Asked
  * where the text is chosen (liveness.mjs, remote-roster.mjs), of the reported row: a panel's row already

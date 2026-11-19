@@ -53,6 +53,8 @@ export function kernelLiveness(cli) {
  * `running` is the kernel's answer: the collector leaves a row it answered `null` as the kernel has it. */
 export function livenessInput(rows) {
   return rows.map((i) => ({ instance: i.instance, running: i.running, tmux: i.tmux, sessionTarget: i.sessionTarget,
+    // A row on a session provider is never probed (liveness.mjs): the collector knows it by its `backend`.
+    ...(i.backend !== undefined ? { backend: i.backend } : {}),
     runtimeState: i.runtimeState, runtimeError: i.runtimeError }));
 }
 
@@ -105,6 +107,12 @@ export function panelInstance(i) {
     // Who made that text: only beside a `runtimeError`, and only one of the three speakers.
     ...(hasRuntimeError(i) && knownOrigin(i.runtimeErrorOrigin) ? { runtimeErrorOrigin: i.runtimeErrorOrigin } : {}),
     tmux: i.tmux, git: null,
+    // Session providers: the row's backend ("tmux" or a provider's name), the provider's capability and thread
+    // id, and the link it offers in place of a terminal, each as deployment-data.mjs validated it; absent stays
+    // absent. instance-presentation.mjs `sessionProvider` and instance-acts.mjs `openAct` read them.
+    ...(i.backend !== undefined ? { backend: i.backend } : {}),
+    ...(i.session !== undefined ? { session: i.session } : {}),
+    ...(i.open !== undefined ? { open: i.open } : {}),
     // Workspace-model v2 facts exactly as `oats status --json` reported them:
     // module drift rows (or the recorded map when the workspace is
     // unreachable), the soul source and the served identity. Identity is

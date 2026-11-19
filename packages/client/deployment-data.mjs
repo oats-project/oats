@@ -10,7 +10,7 @@ import { readIdentity } from './workspace-views.mjs';
 import { waitingOnYouData } from './waiting-on-you.mjs';
 import { attributedHumanData } from './attributed-human.mjs';
 import { retireData } from './retire-state.mjs';
-import { instanceColor } from './instance-presentation.mjs';
+import { instanceColor, sessionProviderName, openLink, sessionThreadId } from './instance-presentation.mjs';
 const text = value => typeof value === 'string' && value.length <= 8192 && !value.includes('\0');
 const absolute = value => text(value) && isAbsolute(value) && resolve(value) === value;
 const own = (value, key) => Object.hasOwn(value, key);
@@ -215,6 +215,18 @@ export function deploymentStatusData(document, deployment) {
       }
       if (own(instance, 'tmux')) row.tmux = instance.tmux === null ? null : fields(instance.tmux, ['session', 'window', 'socket']);
       if (own(instance, 'sessionTarget')) row.sessionTarget = sessionTarget(instance.sessionTarget);
+      // Session providers (feature session-providers): where the instance runs, when it is not tmux's. Validated,
+      // never check()ed: `backend` is kept as "tmux" or a name the contract allows (instance-presentation.mjs
+      // `sessionProvider` reads it), else dropped, and the row reads as one with none. Of `session` the row keeps
+      // the provider's capability and its thread id, both for display only; of `open` the link a client may show
+      // in place of a terminal (`openLink`: an http(s) url). The endpoint's other keys address nothing here.
+      if (own(instance, 'backend') && (instance.backend === 'tmux' || sessionProviderName(instance.backend))) row.backend = instance.backend;
+      if (own(instance, 'session') && record(instance.session)) {
+        const provider = instance.session.provider, threadId = sessionThreadId(instance);
+        const session = { ...(text(provider) && provider.length > 0 && provider.length <= 200 ? { provider } : {}), ...(threadId !== null ? { endpoint: { threadId } } : {}) };
+        if (Object.keys(session).length) row.session = session;
+      }
+      if (own(instance, 'open') && openLink(instance) !== null) row.open = openLink(instance);
       if (own(instance, 'retirePending')) row.retirePending = true;
       // #1247 (feature status-retire-state): the retire that runs, or failed, or was interrupted. Validated, never
       // check()ed: a value out of the contract is dropped and the row reads as if it had none.

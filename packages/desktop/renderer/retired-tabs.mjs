@@ -14,6 +14,9 @@
        tab recorded. Null or absent on either side is no evidence (an older kernel, a saved route).
    (G) Gone on its host: every row with the tab's identity is a remote row the kernel reports
        `missingRemotely: true` (the host was reached and did not list it; lib/servers.mjs).
+   (P) On a session provider: every row with the tab's identity runs on a session provider (provider-row.mjs:
+       its `backend` is a provider's name, "bb" say). Such a row has no tmux target and no terminal, so a
+       terminal tab left on it shows nothing of it: it closes, quietly, as a retired one does.
    (A) Absent from a good read: no row has the tab's identity, and this answer carries a successful,
        current read of the deployment the tab came from. The panel facts that prove it
        (client/panel-views.mjs `deploymentInfo` / `deploymentEntry`, `panelData`):
@@ -34,6 +37,7 @@
    copies, so a row held as Retiring… only by this window closes nothing). */
 import { terminalKey } from "./instance-tree-view.mjs";
 import { keptFailure } from "../../client/deployment-facts.mjs";
+import { sessionProvider } from "../../client/instance-presentation.mjs";
 
 const text = v => typeof v === "string" && v.length > 0;
 
@@ -70,11 +74,12 @@ function currentRead(panel, id, remote) {
   return !panel.instances.some(row => row?.serverUnreached === true && deploymentOf(row) === id);
 }
 
-/** A row's own evidence (R or G), only from a current read of its deployment: a row held from an unreached,
+/** A row's own evidence (R, G or P), only from a current read of its deployment: a row held from an unreached,
  * kept or unasked read keeps the facts it was last read with, which prove nothing now. */
 function rowSaysGone(panel, tab, row) {
   if (row.serverUnreached === true || !currentRead(panel, deploymentOf(row), text(row.server))) return false;
-  return otherIncarnation(tab.origin?.incarnation, row.createdAt) || (text(row.server) && row.missingRemotely === true);
+  return otherIncarnation(tab.origin?.incarnation, row.createdAt) || (text(row.server) && row.missingRemotely === true)
+    || sessionProvider(row) !== null;
 }
 
 /** The ids of the open terminal tabs of the panel's workspace that this panel answer shows retired.

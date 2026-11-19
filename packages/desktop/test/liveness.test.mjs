@@ -145,3 +145,55 @@ test('livenessOrigin: the stand-in for a Herdr row of an older kernel has no spe
   assert.equal(livenessOrigin({ instance: 't' }), 'terminal-probe');
   assert.equal(livenessOrigin(undefined), 'terminal-probe');
 });
+
+// Session providers (spec C1): a row whose `backend` is a provider's name has no tmux target. It is never
+// passed to the tmux reader, and its fields stay the kernel's.
+test('A1: rows on a session provider are never passed to the tmux reader and keep the kernel\'s running and runtimeState', () => {
+  const r = reader(), tmux = { session: 'oats-agents', window: 'c', socket: '/memory/tmux.sock' };
+  const rows = observeLiveness([
+    { instance: 'a', backend: 'bb', running: true, runtimeState: 'unknown' },
+    { instance: 'b', backend: 'bb', running: false, runtimeState: 'stopped' },
+    { instance: 'c', running: true, tmux },
+  ], r);
+  assert.deepEqual(r.seen, ['c']);
+  assert.deepEqual(rows[0], { running: true, runtimeState: 'unknown' });
+  assert.deepEqual(rows[1], { running: false, runtimeState: 'stopped' });
+  assert.deepEqual(rows[2], { tmux, running: true, runtimeState: 'running' });
+});
+
+test('a provider row: unknown and unreachable stay the kernel\'s, with its text; no answer carries a tmux key; its text is the kernel\'s', () => {
+  const r = reader();
+  const sent = [
+    { instance: 'a', backend: 'bb', running: null, runtimeState: 'unreachable', runtimeError: 'E_SESSION_UNAVAILABLE: bb did not answer' },
+    { instance: 'b', backend: 'bb', running: null, runtimeState: 'unknown', tmux: null },
+    { instance: 'c', backend: 'bb', running: null },
+    { instance: 'd', backend: 'bb', running: 'yes', runtimeState: 'unknown' },
+    { instance: 'e', backend: 'bb', running: true },
+  ];
+  assert.deepEqual(observeLiveness(sent, r), [
+    { running: null, runtimeState: 'unreachable', runtimeError: 'E_SESSION_UNAVAILABLE: bb did not answer' },
+    { running: null, runtimeState: 'unknown' },
+    { running: null, runtimeState: 'unreachable' },
+    { running: null, runtimeState: 'unknown' },
+    { running: true },
+  ]);
+  assert.deepEqual(r.seen, []);
+  for (const row of sent) assert.equal(livenessOrigin(row), 'kernel', row.instance);
+});
+
+test('which rows are a provider\'s: no backend, "tmux" and a value that is no provider name are probed as before; Herdr comes first', () => {
+  const r = reader();
+  const rows = observeLiveness([
+    { instance: 't1', running: true },
+    { instance: 't2', backend: 'tmux', running: false },
+    { instance: 't3', backend: 'Not A Name', running: true },
+    { instance: 't4', backend: '', running: true },
+    { instance: 't5', backend: 7, running: true },
+    { instance: 'h1', backend: 'herdr', running: true },
+    { instance: 'h2', backend: 'bb', sessionTarget, running: true },
+  ], r);
+  assert.deepEqual(r.seen, ['t1', 't2', 't3', 't4', 't5']);
+  for (const row of rows.slice(0, 5)) assert.deepEqual(row, { tmux: undefined, running: true, runtimeState: 'running' });
+  for (const row of rows.slice(5)) assert.deepEqual(row, { running: null, runtimeState: 'unsupported', runtimeError: kernelText, tmux: null });
+  assert.equal(livenessOrigin({ instance: 't2', backend: 'tmux', running: false }), 'terminal-probe');
+});

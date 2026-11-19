@@ -169,3 +169,21 @@ test("a row's own evidence counts only from a current read of its deployment: he
   // The same facts from a current read do close it (the positives above), whichever deployment is primary.
   assert.deepEqual(retiredTabs(tabs(REMOTE), answer({ far: [respawned] })), [1]);
 });
+
+// Session providers (spec C1): a row whose `backend` is a provider's name has no terminal.
+test("(P) A4: a tab for instance 'a' whose current row has backend 'bb' is closed as a retired one is, and nothing errors; only from a current read", () => {
+  const bb = { backend: "bb", tmux: null, session: { provider: "oats.bb", endpoint: { threadId: "thr_x" } }, open: { label: "Open in bb", url: "http://127.0.0.1:38886/t/thr_x" } };
+  const A_TAB = tabOf(answer({ a: [row(A, "a", { createdAt: T1 })] }), "a");
+  // The same home, the same incarnation, now on a session provider: in any state.
+  for (const state of [{ running: true }, { running: false, runtimeState: "stopped" }, { running: null, runtimeState: "unknown" }]) {
+    assert.deepEqual(retiredTabs(tabs(A_TAB), answer({ a: [row(A, "a", { createdAt: T1, ...bb, ...state })] })), [1], JSON.stringify(state));
+  }
+  // With no incarnation on either side, and on another machine.
+  assert.deepEqual(retiredTabs(tabs(A_TAB), answer({ a: [row(A, "a", { createdAt: null, ...bb })] })), [1]);
+  assert.deepEqual(retiredTabs(tabs(REMOTE), answer({ far: [remoteRow("far-a", FAR, { createdAt: T1, backend: "bb", tmux: null })] })), [1]);
+  // A tmux row, named or not, keeps its tab; so does a value that is no provider's name.
+  for (const backend of [undefined, "tmux", "Not A Name"]) assert.deepEqual(retiredTabs(tabs(A_TAB), answer({ a: [row(A, "a", { createdAt: T1, backend })] })), [], String(backend));
+  // A row held from a read that is not current proves nothing, as for (R) and (G).
+  const stale = answer({ far: [remoteRow("far-a", FAR, { createdAt: T1, backend: "bb", tmux: null })], groupExtra: { probe: { ok: false, error: { message: "unreachable" } } } });
+  assert.deepEqual(retiredTabs(tabs(REMOTE), stale), []);
+});

@@ -6,6 +6,8 @@ import { instanceId, resolveLinkId, findRosterInstance, siblingLinksOf } from '.
 import { instanceDisplayName } from '../../client/instance-display-name.mjs';
 import { drawsParentLine, drawsSiblingLink } from '../../client/related-work.mjs';
 import { iconElement } from './shell-icons.mjs';
+import { sessionProvider } from '../../client/instance-presentation.mjs';
+import { noTerminal } from './provider-row.mjs';
 
 /** An instance row's name (0.68.1, the product owner): the words shown (instanceDisplayName: "Oats expert maintainer
  * lanes"), the real name kept where it identifies the instance. The words are hidden from assistive tech and a visually
@@ -167,7 +169,8 @@ export function terminalKey(workspace, ref) {
  * instance, never the caller's ref shape, so a bare-name open and a sidebar
  * object open of the same identity share one tab, and a stale bare-name
  * tab can never be activated once the name has become ambiguous (resolution
- * refuses first). Returns { inst, key } or { error: "ambiguous"|"unknown" }.
+ * refuses first). Returns { inst, key } or { error: "ambiguous"|"unknown" }, or, for a row that runs on a
+ * session provider, { error: "no-terminal", sentence }: it has no terminal, whoever asks.
  * Importable so the ordering regression exercises this exact layer. */
 export function resolveTerminalOpen(instances, ref, workspace) {
   const name = typeof ref === "string" ? ref : ref.instance;
@@ -176,6 +179,10 @@ export function resolveTerminalOpen(instances, ref, workspace) {
     const dup = instances.filter((i) => i.instance === name).length > 1;
     return { error: dup ? "ambiguous" : "unknown", name };
   }
+  // A row on a session provider (provider-row.mjs) has no terminal: refused here, before any key or tab is
+  // decided, so no path opens, splits, reuses or restores one for it. `sentence` says where the agent runs (the
+  // shared home's), or that the row has none when the kernel holds it.
+  if (sessionProvider(inst)) return { error: "no-terminal", name, sentence: noTerminal(inst)?.sentence ?? `${name} has no terminal to open.` };
   return { inst, key: terminalKey(workspace, inst), name };
 }
 
