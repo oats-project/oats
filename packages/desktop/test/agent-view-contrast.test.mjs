@@ -42,7 +42,7 @@ for (const name of ['light', 'solarized', 'dark']) test(`${name}: the agent view
   many.questions[0].options = ['Yes', 'token=abcdefghij'];
   many.questions[0].hasContext = true;
   view.update(boardData(many));
-  view.detail({ facts: new Map(), questions: new Map([['q1', { context: 'one\ntwo' }]]) });
+  view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'one\ntwo' }]]) });
   const root = win.getComputedStyle(doc.documentElement), value = t => channels(root.getPropertyValue(`--${t}`).trim());
   for (const [selector, surface, bg] of TEXTS) {
     const el = doc.querySelector(selector), under = doc.querySelector(surface);

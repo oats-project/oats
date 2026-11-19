@@ -71,14 +71,18 @@ function unique(list, make, by, max) {
   return out;
 }
 
-/** A row's `board`, validated: `{ facts, questions }` (facts in the order first set, questions in the order asked),
- * or null when the row has none (absent, `null`, or not a board). Never throws. */
+/** A row's `board`, validated: `{ facts, questions, malformed, dropped }` (facts in the order first set, questions in
+ * the order asked), or null when the row has none (absent or `null`: the home has no board file). A value that is not
+ * a board is `malformed` (nothing shown from it), and `dropped` counts the entries left out as out of the contract, so
+ * the view can say the board was not read whole: neither ever reads as "no questions". Never throws. */
 export function boardData(v) {
-  if (!record(v)) return null;
-  return {
-    facts: Array.isArray(v.facts) ? unique(v.facts, fact, 'key', BOARD_LIMITS.facts) : [],
-    questions: Array.isArray(v.questions) ? unique(v.questions, question, 'id', BOARD_LIMITS.questions) : [],
-  };
+  if (v === null || v === undefined) return null;
+  if (!record(v)) return { facts: [], questions: [], malformed: true, dropped: 0 };
+  const lists = Array.isArray(v.facts ?? []) && Array.isArray(v.questions ?? []);
+  const rawFacts = Array.isArray(v.facts) ? v.facts : [], rawQuestions = Array.isArray(v.questions) ? v.questions : [];
+  const facts = unique(rawFacts, fact, 'key', BOARD_LIMITS.facts), questions = unique(rawQuestions, question, 'id', BOARD_LIMITS.questions);
+  return { facts, questions, malformed: !lists,
+    dropped: Math.min(rawFacts.length, BOARD_LIMITS.facts) - facts.length + Math.min(rawQuestions.length, BOARD_LIMITS.questions) - questions.length };
 }
 /** Whether the agent view replaces the plain terminal for this row: its kernel reports the board (the CLI lists
  * BOARD_FEATURE and the row carries the field, `null` included). A remote row carries `board` only when its host
@@ -86,13 +90,22 @@ export function boardData(v) {
 export const rowHasBoard = (row, features) => record(row) && Object.hasOwn(row, 'board')
   && Array.isArray(features) && features.includes(BOARD_FEATURE);
 
-/** `oats inspect --home <h> --board --json`'s board, validated: each fact with its `history` (`[{ value, at }]`,
- * oldest first, at most 20, the current value included when the kernel lists it) and each question with its
- * `context` (text of at most 2000 code points, LF line breaks kept, or null). The board is the answer's `board`, or its
- * `instance.board`. Null when the answer has no board. */
+/** `oats inspect --home <h> --board --json`'s board, validated, as one of five outcomes the view tells apart:
+ *  - `{ state: 'ok', facts, questions }`: each fact's `history` (`[{ value, at }]`, oldest first, at most 20, each value
+ *    within the contract's bounds) and each question's `context` (boardContext, or null);
+ *  - `{ state: 'none' }`: the answer's board is `null` (the home has no board file);
+ *  - `{ state: 'unsupported' }`: the answer has no board at all (an OATS, or a routed host, without the feature: the
+ *    backend dropped the flag);
+ *  - `{ state: 'malformed' }`: the answer is not an inspection, or its board is not one.
+ * The fifth, `failed` (the read refused or failed), is the caller's. The board is the answer's `board`, or its
+ * `instance.board`. Never throws. */
 export function boardDetailData(v) {
-  const board = !record(v) ? null : record(v.board) ? v.board : record(v.instance) && record(v.instance.board) ? v.instance.board : null;
-  if (!board) return null;
+  if (!record(v)) return { state: 'malformed' };
+  const has = Object.hasOwn(v, 'board') ? 'board' : record(v.instance) && Object.hasOwn(v.instance, 'board') ? 'instance' : null;
+  if (!has) return { state: 'unsupported' };
+  const board = has === 'board' ? v.board : v.instance.board;
+  if (board === null) return { state: 'none' };
+  if (!record(board) || !Array.isArray(board.facts ?? []) || !Array.isArray(board.questions ?? [])) return { state: 'malformed' };
   const facts = new Map(), questions = new Map();
   for (const f of Array.isArray(board.facts) ? board.facts : []) {
     if (!record(f) || typeof f.key !== 'string' || !KEY.test(f.key) || facts.has(f.key)) continue;
@@ -107,7 +120,7 @@ export function boardDetailData(v) {
     questions.set(q.id, { context: boardContext(q.context) });
     if (questions.size >= BOARD_LIMITS.questions) break;
   }
-  return { facts, questions };
+  return { state: 'ok', facts, questions };
 }
 /** A question's context: lines of text (LF only), at most 2000 code points, none of the refused characters but the
  * line feed, not UNSAFE; null otherwise. Kept as the agent wrote it, line breaks included: shown as a quote. */
@@ -178,6 +191,10 @@ export function updatedText(at, now = Date.now()) {
   const d = Math.floor(h / 24); if (d < 30) return `updated ${d} d ago`;
   return `updated ${new Date(Date.parse(at)).toISOString().slice(0, 10)}`;
 }
+/** When the view reads the detail again (the maintainer's condition, 2026-11-19): a fact's `at` changed (or a fact
+ * came or went), or a question with context was asked. Never on an unchanged poll. */
+export const detailSignature = board => board ? JSON.stringify([board.facts.map(f => [f.key, f.at]),
+  board.questions.filter(q => q.hasContext).map(q => q.id)]) : 'none';
 /** A board's identity for repaints: changes when a fact's value or time, or the set of questions, changes. */
 export const boardSignature = board => board ? JSON.stringify([board.facts.map(f => [f.key, f.value, f.unit, f.link?.href ?? null, f.at, f.label]),
   board.questions.map(q => [q.id, q.question, q.options, q.hasContext, q.since])]) : 'none';

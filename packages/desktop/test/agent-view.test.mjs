@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { createAgentBoard, createHiddenFacts, DIALOG_NOTE } from '../renderer/agent-board.mjs';
+import { createAgentBoard, createHiddenFacts, DIALOG_NOTE, DETAIL_NOTES, BOARD_MALFORMED, boardDropped } from '../renderer/agent-board.mjs';
 import { createTabBoards } from '../renderer/agent-board-tabs.mjs';
 import { boardData, BOARD_FEATURE } from '../../client/instance-board.mjs';
 import { defaultBinding, TERMINAL_ALLOWLIST, DEFAULT_KEYMAPS } from '../renderer/keybindings.mjs';
@@ -61,7 +61,7 @@ test('agent view facts: a fact updates in place, and the sparkline comes from in
   const f = fixture(t);
   f.view.update(boardData(board()));
   assert.equal(f.facts().querySelector('.agent-fact-spark'), null);
-  f.view.detail({ facts: new Map([['score', { history: [{ value: '0.40' }, { value: '0.42' }, { value: '0.4312' }] }]]), questions: new Map() });
+  f.view.detail({ state: 'ok', facts: new Map([['score', { history: [{ value: '0.40' }, { value: '0.42' }, { value: '0.4312' }] }]]), questions: new Map() });
   assert.ok(f.facts().querySelector('li[data-key="score"] .agent-fact-spark'));
   f.view.update(boardData({ ...board(), facts: [fact('score', { label: 'best nDCG@10', value: '0.4400', at: new Date(NOW - 5000).toISOString() })] }));
   const score = f.facts().querySelector('li[data-key="score"]');
@@ -122,7 +122,7 @@ test('agent view questions: the context fold is attributed plain text, read with
   f.view.update(boardData({ ...board(), questions: [question('q1', { hasContext: true })] }));
   const fold = f.zone().querySelector('.agent-q-context');
   assert.equal(fold.hidden, false); assert.match(fold.textContent, /Reading the context/);
-  f.view.detail({ facts: new Map(), questions: new Map([['q1', { context: 'Three commits:\nfix, <b>test</b>, docs.' }]]) });
+  f.view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'Three commits:\nfix, <b>test</b>, docs.' }]]) });
   assert.equal(fold.querySelector('.agent-q-says').textContent, 'dev-a says:');
   assert.equal(fold.querySelector('.agent-q-context-text').textContent, 'Three commits:\nfix, <b>test</b>, docs.');
   assert.equal(fold.querySelector('b'), null, 'never markup');
@@ -337,4 +337,60 @@ test('agent view focus: an option disabled under the focus (a dialog opened) lea
   f.zone().querySelector('.agent-q-option').focus();
   f.view.update(boardData(board()), { claims: [{ producer: 'pi.harness', waiting: true, reason: 'question' }] });
   assert.equal(f.doc.activeElement, f.zone());
+});
+
+// The maintainer's conditions for the board read (2026-11-19), as the view shows them.
+test('board read condition 2: the view says which outcome it has; none of them hides the questions', t => {
+  const withContext = () => boardData({ ...board(), questions: [question('q1', { hasContext: true })] });
+  for (const [state, text] of [['failed', DETAIL_NOTES.failed], ['malformed', DETAIL_NOTES.malformed], ['unsupported', DETAIL_NOTES.unsupported], ['none', DETAIL_NOTES.none]]) {
+    const f = fixture(t);
+    f.view.update(withContext());
+    f.view.detail({ state });
+    assert.equal(f.facts().querySelector('.agent-facts-note').textContent, text.history, `${state}: the strip says so`);
+    assert.equal(f.zone().querySelector('.agent-q-context-none').textContent, text.context, `${state}: the fold says so`);
+    assert.equal(f.view.question, 'q1', `${state}: the question stays`);
+  }
+  const ok = fixture(t);
+  ok.view.update(withContext()); ok.view.detail({ state: 'ok', facts: new Map(), questions: new Map() });
+  assert.equal(ok.facts().querySelector('.agent-facts-note').hidden, true, 'a read board: no note');
+  assert.match(ok.zone().querySelector('.agent-q-context-none').textContent, /sent no context/);
+  const bad = fixture(t);
+  bad.view.update(boardData('not a board'));
+  assert.equal(bad.facts().querySelector('.agent-facts-note').textContent, BOARD_MALFORMED, 'a malformed row board is said, not shown as empty');
+  const part = fixture(t);
+  part.view.update(boardData({ facts: [fact('a'), fact('BAD')], questions: [] }));
+  assert.equal(part.facts().querySelector('.agent-facts-note').textContent, boardDropped(1));
+  const empty = fixture(t);
+  empty.view.update(boardData({ facts: [], questions: [] }));
+  assert.equal(empty.view.shown, false, 'an empty board: nothing to show, and nothing claimed');
+});
+
+test('board read condition 3: the context is the agent\'s plain text, attributed, never markup', t => {
+  const f = fixture(t);
+  f.view.update(boardData({ ...board(), questions: [question('q1', { hasContext: true })] }));
+  f.view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: '<img src=x onerror=alert(1)> and\nmore' }]]) });
+  const fold = f.zone().querySelector('.agent-q-context');
+  assert.equal(fold.querySelector('img'), null);
+  assert.equal(fold.querySelector('.agent-q-says').textContent, 'dev-a says:');
+  assert.equal(fold.querySelector('.agent-q-context-text').textContent, '<img src=x onerror=alert(1)> and\nmore');
+});
+
+test('board read condition 4: read on open and on a changed fact `at`, never on the poll; a home no longer shown changes nothing', async t => {
+  const f = tabsFixture(t, { events: false });
+  const detailCalls = () => f.calls.filter(c => c.path.startsWith('/api/capabilities')).length;
+  f.boards.sync(f.tab, f.row(), null, 'w');
+  assert.equal(detailCalls(), 1, 'on open');
+  f.boards.sync(f.tab, f.row(), null, 'w'); f.boards.sync(f.tab, f.row(), null, 'w');
+  assert.equal(detailCalls(), 1, 'not on an unchanged poll');
+  const sameAt = boardData({ ...board(), questions: [question('q9')] });
+  f.boards.sync(f.tab, f.row({ board: sameAt }), null, 'w');
+  assert.equal(detailCalls(), 1, 'a question without context is not a reason');
+  const moved = boardData({ ...board(), facts: [fact('score', { value: '0.5', at: '2026-11-19T10:03:00.000Z' })] });
+  f.boards.sync(f.tab, f.row({ board: moved }), null, 'w');
+  assert.equal(detailCalls(), 2, 'a changed fact at');
+  // The tab now shows another home: the answer for the first changes nothing.
+  const late = f.pending.find(p => p.path.startsWith('/api/capabilities'));
+  f.boards.sync(f.tab, f.row({ home: '/w/agents/dev/instances/dev-z', instance: 'dev-z' }), null, 'w');
+  late.resolve(detail()); await f.flush();
+  assert.equal(f.pane.querySelector('.agent-fact-spark'), null, 'the old home\'s history is not painted');
 });
