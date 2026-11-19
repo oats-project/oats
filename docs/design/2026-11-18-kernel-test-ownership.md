@@ -24,13 +24,15 @@ at `v1.43.0` (commit `00f60a241cfb5bc5aa6acbf1ebcb111756ee8fa0`), in its
 
 | Removed kernel case | Released covering test |
 | --- | --- |
-| hook-1-10 unattached locator | “real aw fixture: unattached grant home reports the released custody locator error” (line 213) |
-| hook-1-13 custody preflight | “real aw at the floor: custody preflight reports needs-configuration instead of faking a pass” (line 195) |
-| hook-1-13 unattached locator | The same released locator test (line 213) |
+| hook-1-10 unattached locator | “real aw fixture: unattached grant home reports the released custody locator error” (line 212) |
+| hook-1-13 custody preflight | “real aw at the floor: custody preflight reports needs-configuration instead of faking a pass” (line 194) |
+| hook-1-13 unattached locator | The same released locator test (line 212) |
 
-These are the exact released source assertions, independently checked with
+The outcome assertions match the released source, independently checked with
 `git show v1.43.0:test/oats-aweb-hook-1-13.test.mjs`. Their removal makes no
-claim that those package opt-ins run in CI. Future kernel tests titled `real aw`/`real-aw` fail
+claim that those package opt-ins run in CI. Admission floors differ: the
+released custody test accepts 1.36.32+ and its locator test 1.36.13+, while
+the removed kernel copies required 1.36.33+. Future kernel tests titled `real aw`/`real-aw` fail
 the root gate if skipped; the count, file and title are reported.
 
 No version-named suite is retired by this change. Their substantive provider
@@ -44,21 +46,22 @@ were removed because they did not execute the advertised behaviour:
 
 - Literal spelling of the setup check's `console.log(JSON.stringify(...))`.
 - Literal `predictedTeam` assignment and signup return-object spelling.
-- Presence of four invite refusal codes in concatenated source files.
-- Presence of policy/default-preservation throw statements and root-path
-  construction expressions.
-- Presence of `awebUrl` in invite source for a version range.
+- Presence of the setup policy/default-preservation throw statements.
 
-`AW_INVITE_INSPECT` is now imported from the provider's export, rather than
-extracted from its source with a regex. These provider behaviours belong to
-its own executable setup/invite tests. Kernel guidance checks continue to
-hold the documented operator instructions: stop on `member:false`, preserve
-workspace default-team policy, do not spend an unusable invite, and wait for
-the broker before spawning an expert it delivers to. In particular, the
-broker prose assertions formerly at lines 541–549 remain: they guard the
-explicit step 9/item 6 contract in `skills/oats-getting-started/SKILL.md`.
-Other source inspections outside the review's specified groups remain out of
-scope; this change claims no blanket conversion of the steward file.
+These groups are the content at lines 136–138, 152–153 and 227–229 of the
+spec's pinned source, kernel `3a5503c2993a307a0bb48d0b41dcab7d175adc27`.
+Their line numbers moved in later main commits. Other provider-source checks
+(the four-code loop, root construction, invite output and floor extraction)
+remain; this change claims no blanket conversion of the steward file.
+
+The prose test “getting-started: a join never runs aw team ensure”, at the
+original 3a5503c2 lines 541–549, remains. It guards the documented workflow
+contract in [the getting-started skill](../../skills/oats-getting-started/SKILL.md):
+team creation belongs only to step 5 for a new workspace; joining an existing
+workspace must not create a second team. The broker-before-spawn and later
+souls.launch/reviewer-model guidance guards also remain, separately; the
+launch-preference contract is documented in
+[the launch preference design](2026-09-28-soul-launch-preference.md).
 
 ## Container checks
 
@@ -70,7 +73,8 @@ The auth test invokes the real acceptance orchestration through an injected
 Docker subprocess boundary. Its strict double returns nonzero and prints
 unexpected argv. It checks the complete emitted Claude command, scratch-cwd
 program and absence of a Docker `--workdir` pointing at the instance. This
-pins orchestration argv; it does not claim Docker accepted it. Team-image CI
+pins orchestration argv; it captures and asserts the simulated report rather
+than printing fixture PASS receipts, and does not claim Docker accepted it. Team-image CI
 owns real image/container acceptance. Production still defaults to
 `spawnSync`, and the CLI calls the orchestration exactly as before.
 

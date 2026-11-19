@@ -13,7 +13,6 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { normalizeAwebTeamName } from "../mirrors/oats-aweb/lib/team-roots.mjs";
-import { AW_INVITE_INSPECT } from "../mirrors/oats-aweb/lib/setup-invite.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const read = (rel) => readFileSync(join(ROOT, rel), "utf8");
@@ -21,6 +20,7 @@ const skill = read("skills/oats-getting-started/SKILL.md");
 const catalog = JSON.parse(read("package-catalog.json"));
 const residentSource = read("mirrors/oats-aweb/lib/resident.mjs");
 const providerVersion = JSON.parse(read("mirrors/oats-aweb/oats.json")).version;
+const setupInviteSources = () => read("mirrors/oats-aweb/lib/setup-invite.mjs") + read("mirrors/oats-aweb/bin/oats-aweb.mjs");
 const atLeast = (v, min) => {
   const a = v.split(".").map(Number), b = min.split(".").map(Number);
   for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
@@ -211,20 +211,29 @@ test("getting-started: an existing workspace names its setup expert after this m
   // --service, which the invite-only form never passes, so the skill names none.
   assert.ok(flat.includes("Before redeeming anything, it refuses an invite it can't use here"));
   assert.ok(!/refuses an invite[^.]*another service/.test(flat), "no service refusal is promised for the invite-only form");
+  const providerSources = setupInviteSources();
+  for (const code of ["E_SETUP_INVITE_INSPECT", "E_SETUP_INVITE_SCOPE", "E_SETUP_LABEL_COLLISION", "E_SETUP_ALREADY_MEMBER"])
+    assert.ok(providerSources.includes(code), `the provider refuses with ${code}`);
   // A team the workspace doesn't name is refused before redeeming: E_SETUP_POLICY where local teams are closed, and
   // E_SETUP_DEFAULT_PRESERVE where the default comes from the workspace file. Only a machine whose own oats-local.yaml
   // sets the default redeems it and maps that team under a label of its own; item 5 tells the two apart read-only,
   // because a per-team root is made only by a redemption.
   assert.ok(flat.includes("one for a team this workspace doesn't name (unless the workspace allows local teams and this machine's own `oats-local.yaml` sets its default team)"));
   assert.ok(flat.includes("In that exception, an invite for a team the workspace doesn't name is redeemed instead"));
+  assert.ok(setupInviteSources().includes('join(resolve(base), ".aweb-roots", normalizeAwebTeamName(label))'), "a redemption makes the per-team root item 5 looks for");
   assert.ok(flat.includes("- **No new path:** the join made no root here. It refused before redeeming anything"), "a refusal is not read as a root left outside L");
   assert.ok(flat.includes("- **A new path under another name:** the invite was for that team, and this machine joined it instead"), "a redeemed invite for another team is not read as a refusal");
-  assert.ok(flat.includes(`aw ${AW_INVITE_INSPECT} or later (\`aw.version\` in item 1's check)`), "the skill names the provider's exported invite floor");
+  const setupInvite = read("mirrors/oats-aweb/lib/setup-invite.mjs");
+  const awFloor = setupInvite.match(/AW_INVITE_INSPECT = '([0-9.]+)'/);
+  assert.ok(awFloor && flat.includes(`aw ${awFloor[1]} or later (\`aw.version\` in item 1's check)`), "the skill's aw floor is the provider's");
   // Older providers keep the labelled form; awebUrl is new in oats.aweb 1.33.1 and may be null: that join works without --service.
   assert.ok(flat.includes("from oats.aweb 1.33.1 the answer's `result.awebUrl`, no secret"));
   assert.ok(flat.includes("When it is `null` or absent, leave `--service U` out of item 4's labelled form"));
   assert.ok(flat.includes("| oats aweb setup --soul S --join L --invite-stdin --name A --service U'"));
   assert.ok(!flat.includes("default service"), "the provider has no default service: the join fails without one");
+  const invite = read("mirrors/oats-aweb/lib/invite.mjs");
+  const [maj, min, pat] = providerVersion.split(".").map(Number);
+  if (maj > 1 || (maj === 1 && (min > 33 || (min === 33 && pat >= 1)))) assert.ok(invite.includes("awebUrl"), "the invite answer carries awebUrl from 1.33.1");
 });
 
 test("getting-started: item 5 reads a failed join from what ran, read-only (#1746)", () => {

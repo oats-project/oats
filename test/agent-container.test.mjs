@@ -224,7 +224,8 @@ test("SSH guard refuses repeated keywords or conditional configuration", () => {
   for (const prefix of ["PasswordAuthentication yes", "disableforwarding no", "  Match User agent", "  Include /tmp/unreviewed.conf", "disableforwarding=no", "PasswordAuthentication=yes", "DisableForwarding = no", "Include=/tmp/unreviewed.conf", '"PasswordAuthentication" yes']) assert.throws(() => sshSettings(prefix + "\n" + read("sshd_config")), prefix);
 });
 
-test("Claude auth orchestration uses a scratch cwd and only user settings", async () => {
+test("Claude auth orchestration uses a scratch cwd and only user settings", async t => {
+  const report = t.mock.method(console, "log", () => {});
   // Pins orchestration argv at the Docker subprocess boundary. Docker's
   // acceptance of those arguments belongs to team-image CI.
   const { main } = await import("../container/agent/accept.mjs");
@@ -258,7 +259,8 @@ test("Claude auth orchestration uses a scratch cwd and only user settings", asyn
   };
   main([container, "--evidence", "local", "--claude", home], env, { spawnSync: run });
   assert.equal(calls.length, expected.length);
-  const auth = calls[12];
+  const auth = calls.find(argv => argv.includes("oats-claude-probe"));
+  assert.ok(auth, "the orchestration emits one auth probe");
   assert.deepEqual(auth.slice(0, 5), ["exec", container, "sh", "-eu", "-c"]);
   assert.deepEqual(auth.slice(6), ["oats-claude-probe", home]);
   assert.ok(calls.every(argv => !argv.includes("--workdir")), "the instance home is never a Docker workdir");
@@ -269,6 +271,8 @@ test("Claude auth orchestration uses a scratch cwd and only user settings", asyn
   assert.ok(command, "the auth probe invokes Claude");
   const { tokens } = parseLaunchCommand("'claude' " + command.slice("claude ".length));
   assert.deepEqual(tokens.map(token => token.value), ["claude", "-p", "--setting-sources", "user", "--tools", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--no-session-persistence", "Reply with exactly OATS_CONTAINER_AUTH_OK"]);
+  const authReceipt = `[local] PASS claude -p for ${home}: OATS_CONTAINER_AUTH_OK (scratch cwd; user settings only; token read only inside the process)`;
+  assert.equal(report.mock.calls.filter(call => call.arguments[0] === authReceipt).length, 1, "capture and assert the simulated report instead of emitting a PASS receipt");
 });
 
 
