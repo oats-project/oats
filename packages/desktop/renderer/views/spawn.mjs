@@ -8,7 +8,7 @@ import { createWorkspaceDiscovery, discoveryCSS, workspaceTabs } from "../worksp
 import { capabilityRow } from "../workspace-catalog.mjs";
 import { renderCapabilityPage, capabilityPageCSS, pageCardCSS, soulCapabilitiesCSS, catalogNotice, catalogNoticeKind, updateCatalogNotice } from "../capability-page.mjs";
 import { sameRepo } from "../../../client/repo-moves.mjs";
-import { spawnRefusal, cantSpawnLine, soulMatches, desktopFacts } from "../../../client/soul-facts.mjs";
+import { spawnRefusal, cantSpawnLine, soulMatches, desktopFacts, soulFacts } from "../../../client/soul-facts.mjs";
 import { soulKind, compareSouls, SOUL_KIND_WORDS } from "../../../client/soul-kind.mjs";
 import { createCapabilityContents, capabilityContentsCSS } from "../capability-contents.mjs";
 import { sourceQuoteCSS } from "../source-quote.mjs";
@@ -100,11 +100,11 @@ ${groupHeadingCSS}
 .soul-card.unavailable .stitle { color:var(--muted); }
 .soul-card .sdesc { margin:0; color:var(--fg); font-size:12.5px; line-height:1.45; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow-wrap:anywhere; }
 .soul-card .sdesc:empty { display:none; }
-.soul-card .sfoot { display:flex; align-items:center; gap:6px; min-width:0; margin-top:auto; padding-top:4px; color:var(--muted); font-size:12px; line-height:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.soul-card .sfoot { display:flex; align-items:center; gap:0; min-width:0; margin-top:auto; padding-top:4px; color:var(--muted); font-size:12px; line-height:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .soul-card .sactivity { min-width:0; overflow:hidden; text-overflow:ellipsis; }
 .soul-card .sactivity.running { color:var(--fg); font-weight:600; }
 .soul-card .sactivity.running::before { content:""; display:inline-block; width:7px; height:7px; margin-right:6px; border-radius:50%; background:var(--live); vertical-align:1px; }
-.soul-card .skind { flex:none; }
+.soul-card .skind { flex:none; margin-left:.35em; }
 .soul-card .sproblem { min-width:0; color:var(--warn); font-weight:600; overflow:hidden; text-overflow:ellipsis; }
 /* The table: the same souls as rows, the same groups as heading rows. The name is the row's one button. */
 .souls-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:12.5px; color:var(--fg); }
@@ -118,6 +118,8 @@ ${groupHeadingCSS}
 .souls-table td.what { color:var(--fg); white-space:normal; overflow-wrap:anywhere; }
 .souls-table td.muted, .souls-table td .muted { color:var(--muted); }
 .souls-table td.problem { color:var(--warn); font-weight:600; white-space:normal; overflow-wrap:anywhere; }
+/* Two lines at most: the full sentence is the cell's title and the soul's page. */
+.souls-table td.problem .clamp { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
 .oats-view .souls .souls-table button.soul-row-open { display:block; max-width:100%; height:auto; min-height:0; margin:0; padding:0; border:0; background:none; color:var(--fg); font:inherit; font-weight:650; text-align:left;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
 .oats-view .souls .souls-table button.soul-row-open:hover { text-decoration:underline; }
@@ -1216,12 +1218,23 @@ function launchText(a) {
   if (typeof harness !== "string" || !harness) return null;
   return launch ? `${launchHarnessName(harness)} · ${launch.model ?? "default model"}` : launchHarnessName(harness);
 }
-/** Whether the soul is ready here, from its row: "Ready", or why a spawn here would be refused (kernel #217
- * desktop-facts), or null when this CLI does not report it (no claim is made). */
+/** What stops a spawn of this soul here, from its row, in the soul page's order: the kernel's refusal (kernel #217
+ * desktop-facts), else the launch problem its launch report carries (0.30 launch preferences: the kernel's own
+ * message); null when neither is reported. `line` is the card's, `text` the table's and the page's sentence. */
+export function soulProblem(a, cli) {
+  if (a?.work === "attached") return null;
+  const refusal = spawnRefusal(a, cli);
+  if (refusal !== null) return { text: refusal, line: cantSpawnLine(refusal) };
+  const problem = soulFacts(a, null, cli, DESKTOP_TERMS).problem;
+  const said = problem ? problem.lines[0] ?? problem.lead : null;
+  return said ? { text: said, line: said } : null;
+}
+/** Whether the soul is ready here, from its row: "Ready", or what stops a spawn here (soulProblem); null when this CLI
+ * does not report whether a spawn here would be refused (no claim is made). */
 export function soulReadiness(a, cli) {
   if (!desktopFacts(cli)) return null;
-  const refusal = spawnRefusal(a, cli);
-  return refusal === null ? { ready: true, text: "Ready" } : { ready: false, text: refusal };
+  const problem = soulProblem(a, cli);
+  return problem === null ? { ready: true, text: "Ready" } : { ready: false, text: problem.text };
 }
 const isOpen = (s, a) => (s.selAgent?.name === a.name && s.selAgent?.agentsRoot === a.agentsRoot && s.selAgent?.server === a.server)
   || (s.inspectRef?.name === a.name && s.inspectRef?.agentsRoot === a.agentsRoot && s.inspectRef?.server === a.server);
@@ -1247,15 +1260,15 @@ function soulCard(s, a) {
   const instances = soulInstances(s, a);
   const running = instances.filter(i => i.running === true).length;
   const foot = span("sfoot");
-  const refusal = a.work === "attached" ? null : spawnRefusal(a, cliStatus());
-  // A refused soul says why first: its readiness is the one thing a person needs before anything else.
-  if (refusal) { const note = span("sproblem", cantSpawnLine(refusal)); note.title = refusal; foot.append(note); }
+  const problem = soulProblem(a, cliStatus());
+  // A soul a spawn here would refuse says why first: its readiness is the one thing a person needs before anything else.
+  if (problem) { const note = span("sproblem", problem.line); note.title = problem.text; foot.append(note); }
   else foot.append(span("sactivity" + (running ? " running" : ""), agentsText(running, instances.length)));
   foot.append(span("skind", `· ${SOUL_KIND_WORDS[soulKind(a)]}`));
   card.append(foot);
   // Its name names it; what it does, its agents and its kind describe it.
   card.setAttribute("aria-label", a.name);
-  card.setAttribute("aria-description", [a.description, refusal ? cantSpawnLine(refusal) : agentsText(running, instances.length), `${SOUL_KIND_WORDS[soulKind(a)]} soul`].filter(Boolean).join(". "));
+  card.setAttribute("aria-description", [a.description, problem ? problem.line : agentsText(running, instances.length), `${SOUL_KIND_WORDS[soulKind(a)]} soul`].filter(Boolean).join(". "));
   card.title = [a.name, a.description].filter(Boolean).join("\n");
   return card;
 }
@@ -1273,7 +1286,8 @@ function soulRow(s, a) {
   agents.title = agentsText(running, instances.length);
   const launch = launchText(a);
   const ready = soulReadiness(a, cliStatus());
-  const readyCell = node("td", ready ? ready.text : "—", ready ? (ready.ready ? "ready" : "problem") : "muted");
+  const readyCell = node("td", ready?.ready === false ? undefined : ready ? ready.text : "—", ready ? (ready.ready ? "ready" : "problem") : "muted");
+  if (ready?.ready === false) { readyCell.append(node("span", ready.text, "clamp")); readyCell.title = ready.text; }
   if (!ready) readyCell.title = "This OATS does not report whether a spawn here would be refused.";
   row.append(name, what, node("td", SOUL_KIND_WORDS[soulKind(a)], "kind"), agents, node("td", launch ?? "—", launch ? "launch" : "launch muted"), readyCell);
   return row;

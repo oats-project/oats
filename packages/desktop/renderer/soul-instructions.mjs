@@ -81,6 +81,8 @@ export const soulInstructionsCSS = `
 .oats-view .soul-tabs button.soul-tab:hover { color:var(--fg); }
 .soul-tab-lead { margin:0; color:var(--muted); font-size:12px; }
 .soul-tabpanel { display:flex; flex-direction:column; gap:8px; min-width:0; }
+/* The section's own display rules (grid, flex) would beat the HTML hidden attribute: hidden always wins here. */
+.soul-instructions [hidden] { display:none !important; }
 /* A tab's document: its sections on the left when the pane is wide, the text at a readable measure. */
 .soul-doc { display:grid; grid-template-columns:200px minmax(0,1fr); height:min(75vh, 820px); min-width:0; background:var(--bg); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
 .soul-doc-nav { min-height:0; overflow:auto; padding:10px 8px 12px; border-right:1px solid var(--border); box-sizing:border-box; font-size:12px; }
