@@ -166,7 +166,7 @@ test("with a failed snapshot: every thread is listed, the error's first line sho
   failing = false;
   fireEvent.click(slot.getByRole("button", { name: "Retry" }));
   await slot.findByTestId("oats-tree");
-  expect(slot.inspection.rpcCalls.map((call) => call.method)).toEqual(["snapshot", "refresh", "snapshot"]);
+  expect(slot.inspection.rpcCalls.map((call) => call.method).filter((method) => method !== "souls")).toEqual(["snapshot", "refresh", "snapshot"]);
 });
 
 test("when the plugin's server does not answer at all, the threads are listed with the error and Retry", async () => {
@@ -187,7 +187,8 @@ test("an oats/changed event rereads the snapshot once, and the tree follows", as
   agents = agents.filter((agent) => agent.instance !== "weekly-digest-helper");
   await slot.behavior.emitRealtime("oats/changed", { at: "2026-11-19T12:40:00.000Z" });
   await waitFor(() => expect(ids(slot.getAllByTestId("oats-other-row"))).toEqual(["thr_digest", "thr_plain"]));
-  expect(slot.inspection.rpcCalls.map((call) => call.method)).toEqual(["snapshot", "snapshot"]);
+  // the souls are read once, for their names: a status change does not reread them
+  expect(slot.inspection.rpcCalls.map((call) => call.method).sort()).toEqual(["snapshot", "snapshot", "souls"]);
 });
 
 test("a title with markup is drawn as text", async () => {
@@ -203,4 +204,24 @@ test("a title with markup is drawn as text", async () => {
   const other = await slot.findByTestId("oats-other-row");
   expect(other.textContent).toContain("<img src=x onerror=alert(1)>");
   expect(other.querySelector("img")).toBeNull();
+});
+
+test("a row's soul is the matching soul's key once the souls are read, else the roster's name", async () => {
+  const { slot } = await sidebar({
+    souls: () => ({
+      souls: [{ name: "oats.okf/knowledge-harvester", agent: "knowledge-harvester", description: "", origin: "oats.okf 2.1.0", capabilities: [], spawnable: true, problem: null }],
+    }),
+  });
+  const rows = await slot.findAllByTestId("oats-agent-row");
+  const row = (id: string) => rows.find((candidate) => candidate.getAttribute("data-sidebar-thread-id") === id)!;
+  await waitFor(() => expect(row("thr_harvest").textContent).toContain("oats.okf/knowledge-harvester"));
+  expect(row("thr_release").textContent).toContain("oats-maintainer");
+});
+
+test("several machines and none chosen: the line links to the plugin's settings", async () => {
+  const { slot } = await sidebar({
+    snapshot: () => ({ ok: false, at: "t", code: "CHOOSE_HOST", message: "This bb server has 2 machines: choose the one that holds the OATS homes." }),
+  });
+  const link = await slot.findByRole("link", { name: "Choose a machine" });
+  expect(link.getAttribute("href")).toBe("/settings/plugins/test-plugin");
 });

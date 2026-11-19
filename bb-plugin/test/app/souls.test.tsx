@@ -181,3 +181,13 @@ test("when souls cannot be read: the kernel's message and Retry", async () => {
   fireEvent.click(slot.getByRole("button", { name: "Retry" }));
   expect(await slot.findAllByTestId("oats-soul-row")).toHaveLength(2);
 });
+
+test("a package soul's agents are matched by its roster agent name, not by its key", async () => {
+  const slot = await souls("oats.okf%2Fknowledge-harvester", {
+    souls: () => ({
+      souls: [{ name: "oats.okf/knowledge-harvester", agent: "knowledge-harvester", description: "Harvests.", origin: "oats.okf 2.1.0", capabilities: [], spawnable: true, problem: null }],
+    }),
+  });
+  expect((await slot.findByTestId("oats-soul-agent")).getAttribute("href")).toBe("/projects/proj_harvest/threads/thr_harvest");
+  expect(slot.getByTestId("oats-soul-row").textContent).toBe("oats.okf/knowledge-harvester1 agent");
+});

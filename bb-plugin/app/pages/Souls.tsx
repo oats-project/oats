@@ -158,7 +158,7 @@ function SpawnForm({ soul }: { soul: Soul }) {
 function SoulAgents({ soul, oats }: { soul: Soul; oats: Ready }) {
   const rpc = useRpc<Contract>();
   const navigate = useBbNavigate();
-  const mine = oats.agents.filter((agent) => agent.soul === soul.name);
+  const mine = oats.agents.filter((agent) => agent.soul === soul.agent);
   if (mine.length === 0) return <Note>No agent of this soul in this deployment.</Note>;
   const detached = new Set(oats.view.detached);
   return (
@@ -272,7 +272,8 @@ export function SoulsPage({ subPath }: PluginNavPanelProps) {
   }
   const list = souls.data.souls;
   const soul = picked === null ? undefined : list.find((candidate) => candidate.name === picked);
-  const agentsOf = (name: string) => (oats.phase === "ready" ? oats.agents.filter((agent) => agent.soul === name).length : null);
+  // A soul's agents are the roster rows under its agent name (`soul.agent`), not under its key.
+  const agentsOf = (soul: Soul) => (oats.phase === "ready" ? oats.agents.filter((agent) => agent.soul === soul.agent).length : null);
 
   return (
     <Page testId="oats-souls-page">
@@ -284,7 +285,7 @@ export function SoulsPage({ subPath }: PluginNavPanelProps) {
           {list.length === 0 ? <Note>This deployment offers no souls.</Note> : null}
           <ul className="flex flex-col">
             {list.map((candidate) => {
-              const n = agentsOf(candidate.name);
+              const n = agentsOf(candidate);
               return (
                 <li key={candidate.name}>
                   <button

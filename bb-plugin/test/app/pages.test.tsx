@@ -44,12 +44,13 @@ test("Teams: label, team id, default or not, and this deployment's agents in eac
       teams: [
         { label: "oats", team: "default:oats.aweb.ai", isDefault: true },
         { label: "wider", team: "wider:oats.aweb.ai", isDefault: false },
+        { label: "shared", team: null, isDefault: false },
       ],
     }),
   });
   const rows = await slot.findAllByTestId("oats-team-row");
   await slot.findByText("8 agents");
-  expect(rows.map((row) => row.textContent)).toEqual(["oatsdefault8 agentsdefault:oats.aweb.ai", "wider0 agentswider:oats.aweb.ai"]);
+  expect(rows.map((row) => row.textContent)).toEqual(["oatsdefault8 agentsdefault:oats.aweb.ai", "wider0 agentswider:oats.aweb.ai", "sharednot mapped"]);
 });
 
 test("Machines: this machine with its agents in bb and elsewhere, then what the kernel recorded; no check is run", async () => {
@@ -68,7 +69,7 @@ test("Machines: this machine with its agents in bb and elsewhere, then what the 
   ]);
   await slot.findByText("7 agents in bb · 1 agent elsewhere");
   expect(slot.getByTestId("oats-this-machine").textContent).toContain("falcon");
-  expect(slot.inspection.rpcCalls.map((call) => call.method).sort()).toEqual(["machines", "snapshot"]);
+  expect(slot.inspection.rpcCalls.map((call) => call.method).sort()).toEqual(["machines", "snapshot", "souls"]);
 });
 
 test("an empty answer says so in one line", async () => {

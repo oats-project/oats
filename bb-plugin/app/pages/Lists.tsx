@@ -68,13 +68,14 @@ export function TeamsPage() {
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <span className="min-w-0 break-words font-semibold">{clean(team.label)}</span>
                   {team.isDefault ? <Chip>default</Chip> : null}
-                  {oats.phase === "ready" ? (
+                  {team.team !== null && oats.phase === "ready" ? (
                     <span className="text-xs text-muted-foreground">
                       {count(oats.agents.filter((agent) => agent.team === team.team).length, "agent")}
                     </span>
                   ) : null}
                 </div>
-                <p className="break-all text-xs text-muted-foreground">{clean(team.team)}</p>
+                {/* A shared team with no provider id yet: nothing can be counted under it. */}
+                <p className="break-all text-xs text-muted-foreground">{team.team === null ? "not mapped" : clean(team.team)}</p>
               </li>
             ))}
           </ul>

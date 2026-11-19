@@ -178,7 +178,7 @@ test("the reply box sends through bb's own send, to the agent picked", async () 
       args: [{ threadId: "thr_mockups", mode: "auto", input: [{ type: "text", text: "Use the darker palette.", mentions: [] }] }],
     },
   ]);
-  expect(slot.inspection.rpcCalls.map((call) => call.method)).toEqual(["snapshot"]); // never an OATS verb
+  expect(slot.inspection.rpcCalls.map((call) => call.method).sort()).toEqual(["snapshot", "souls"]); // reads only: never an OATS act
 });
 
 test("a failed send says why and keeps the text", async () => {
@@ -236,7 +236,7 @@ test("a hidden tab does not read the four pages", async () => {
   );
   await slot.findByTestId("oats-home-needs");
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(slot.inspection.rpcCalls.map((call) => call.method)).toEqual(["snapshot"]);
+  expect(slot.inspection.rpcCalls.map((call) => call.method).sort()).toEqual(["snapshot", "souls"]); // souls: for the names only
 });
 
 test("when bb cannot list a thread's interactions, the card keeps the claim and Open", async () => {

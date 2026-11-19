@@ -46,7 +46,7 @@ export function IdentityRow({ threadId }: ExperimentalThreadHeaderRowProps) {
       className="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap border-b border-border px-3 py-1.5"
     >
       <Chip title="soul">
-        <span data-testid="oats-chip-soul">{clean(agent.soul)}</span>
+        <span data-testid="oats-chip-soul">{clean(oats.soulOf(agent))}</span>
       </Chip>
       <Chip title="instance">
         <span data-testid="oats-chip-instance">{clean(agent.instance)}</span>

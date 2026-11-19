@@ -16,13 +16,12 @@ import type {
   PluginThreadActionTarget,
   PluginThreadListProps,
 } from "@get-bb/plugin-sdk/app";
+import { codes } from "../kernel/result";
 import type { Node } from "../model/types";
 import { clean, count, needsYouLabel } from "./format";
 import { firstLine, useOats } from "./oats";
 import { Button, Dot } from "./ui";
 
-/** The snapshot code that means "several machines, none chosen": the line links to the setting. */
-export const CHOOSE_HOST = "E_PLUGIN_CHOOSE_HOST";
 
 export const PAGES = [
   { path: "souls", title: "Souls" },
@@ -107,7 +106,7 @@ export function Sidebar({ activeThreadId, onNavigate }: PluginThreadListProps) {
                 <ThreadTitle threadId={thread.id} />
               </span>
               <span className="truncate text-xs text-muted-foreground">
-                {clean(node.agent.soul)}
+                {clean(oats.soulOf(node.agent))}
                 {node.state === "stopped" ? " · stopped" : ""}
               </span>
             </span>
@@ -162,7 +161,7 @@ export function Sidebar({ activeThreadId, onNavigate }: PluginThreadListProps) {
             <span className="break-words text-muted-foreground">{clean(firstLine(oats.message))}</span>
             <span className="flex flex-wrap items-center gap-2">
               <Button onClick={oats.retry}>Retry</Button>
-              {oats.code === CHOOSE_HOST ? (
+              {oats.code === codes.chooseHost ? (
                 <a className="underline" href={`/settings/plugins/${encodeURIComponent(pluginId)}`}>
                   Choose a machine
                 </a>

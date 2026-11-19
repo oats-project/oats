@@ -1,25 +1,23 @@
-// One cached copy of each of the plugin's reads, shared by every slot of this app window. Slots
-// subscribe; the realtime channel only invalidates, and the app refetches through RPC.
-import { useEffect, useRef, useSyncExternalStore } from "react";
-import { useRealtime, useRealtimeConnectionState, useRpc } from "@get-bb/plugin-sdk/app";
+// The plugin's reads, as every slot takes them: bb's watched RPC reads (one shared copy per app
+// window, whatever number of slots ask), reread when the server publishes `oats/changed`.
+//
+// `snapshot` must be a watched read: the server polls OATS only while a client watches it
+// (`bb.rpc.experimental_whileWatched`).
+import { useEffect, useRef } from "react";
+import { experimental_useRpcQuery as useRpcQuery, useRealtime, useRpc } from "@get-bb/plugin-sdk/app";
 import type { PluginRpcClient, PluginRpcResult } from "@get-bb/plugin-sdk/app";
-import type { REALTIME_CHANGED, rpcContract } from "../contract";
+import { REALTIME_CHANGED, rpcContract } from "../contract";
 
 export type Contract = typeof rpcContract;
 export type Rpc = PluginRpcClient<Contract>;
 export type ReadMethod = "snapshot" | "souls" | "capabilities" | "teams" | "machines";
 export type Result<Method extends keyof Contract> = PluginRpcResult<Contract[Method]>;
 
-/** The realtime channel, checked against the contract's constant without bundling the schemas. */
-const CHANGED: typeof REALTIME_CHANGED = "oats/changed";
-
 export type Read<T> =
   | { status: "loading"; data: undefined; error: null }
   | { status: "ready"; data: T; error: null }
   /** The last attempt failed. `data` is what an earlier attempt read, if any. */
   | { status: "error"; data: T | undefined; error: string };
-
-const LOADING: Read<never> = { status: "loading", data: undefined, error: null };
 
 /** What a failed call says, unchanged: the kernel's code and message come through the server. */
 export function errorMessage(cause: unknown): string {
@@ -28,75 +26,15 @@ export function errorMessage(cause: unknown): string {
   return "The OATS plugin's server did not answer.";
 }
 
-class Resource<T> {
-  private state: Read<T> = LOADING;
-  private listeners = new Set<() => void>();
-  private inFlight = false;
-  private again: Rpc | null = null;
-  private seen: string | null = null;
+/**
+ * The invalidation each read last acted on. Every mounted slot hears the same `oats/changed`
+ * event; the first to hear it rereads the shared copy, the others find it already asked for.
+ */
+const acted = new Map<ReadMethod, string>();
 
-  constructor(private readonly method: ReadMethod) {}
-
-  subscribe = (listener: () => void): (() => void) => {
-    this.listeners.add(listener);
-    return () => this.listeners.delete(listener);
-  };
-  get = (): Read<T> => this.state;
-
-  /** Load once: the first subscriber of an app window starts the read. */
-  ensure(rpc: Rpc): void {
-    if (this.state.status === "loading" && !this.inFlight) this.load(rpc);
-  }
-
-  /**
-   * Reread. Never two calls at once: a request that arrives during a read runs one more read
-   * after it. `token` names the invalidation, so the same event seen by several slots rereads once.
-   */
-  reload(rpc: Rpc, token?: string): void {
-    if (token !== undefined) {
-      if (token === this.seen) return;
-      this.seen = token;
-    }
-    if (this.inFlight) this.again = rpc;
-    else this.load(rpc);
-  }
-
-  reset(): void {
-    this.state = LOADING;
-    this.inFlight = false;
-    this.again = null;
-    this.seen = null;
-    this.listeners.clear();
-  }
-
-  private load(rpc: Rpc): void {
-    this.inFlight = true;
-    const settle = (next: Read<T>) => {
-      this.inFlight = false;
-      this.state = next;
-      for (const listener of [...this.listeners]) listener();
-      const again = this.again;
-      this.again = null;
-      if (again !== null) this.load(again);
-    };
-    (rpc.call(this.method, null) as Promise<T>).then(
-      (data) => settle({ status: "ready", data, error: null }),
-      (cause: unknown) => settle({ status: "error", data: this.state.data, error: errorMessage(cause) }),
-    );
-  }
-}
-
-const resources: { [Method in ReadMethod]: Resource<Result<Method>> } = {
-  snapshot: new Resource("snapshot"),
-  souls: new Resource("souls"),
-  capabilities: new Resource("capabilities"),
-  teams: new Resource("teams"),
-  machines: new Resource("machines"),
-};
-
-/** Forget every read. For tests: a new app window starts empty by construction. */
+/** For tests: a new app window has acted on nothing. */
 export function resetReads(): void {
-  for (const resource of Object.values(resources)) resource.reset();
+  acted.clear();
 }
 
 function tokenOf(payload: unknown): string | undefined {
@@ -108,45 +46,42 @@ function tokenOf(payload: unknown): string | undefined {
 }
 
 /**
- * One of the plugin's reads, kept fresh: loaded on first use, reread when the server publishes
- * `oats/changed`, and after the realtime connection comes back (signals are not replayed).
+ * One of the plugin's reads, kept fresh: loaded on first use and reread when the server publishes
+ * `oats/changed`. bb itself rereads every plugin read when its realtime connection comes back.
+ * `live: false` reads once and leaves the rereading to the slots that show the read itself.
  */
 export function useRead<Method extends ReadMethod>(
   method: Method,
-  options: { enabled?: boolean } = {},
+  options: { enabled?: boolean; live?: boolean } = {},
 ): Read<Result<Method>> & { retry(): void } {
   const enabled = options.enabled ?? true;
+  const live = options.live ?? true;
   const rpc = useRpc<Contract>();
-  const resource = resources[method] as unknown as Resource<Result<Method>>;
-  const state = useSyncExternalStore(resource.subscribe, resource.get, resource.get);
-
+  const query = useRpcQuery({ contract: rpcContract, method, input: null, enabled });
+  const refetch = useRef(query.refetch);
   useEffect(() => {
-    if (enabled) resource.ensure(rpc);
-  }, [enabled, resource, rpc]);
-
-  useRealtime(CHANGED, (payload) => {
-    if (enabled) resource.reload(rpc, tokenOf(payload));
+    refetch.current = query.refetch;
   });
 
-  const connection = useRealtimeConnectionState();
-  const wasConnected = useRef<boolean | null>(null);
-  useEffect(() => {
-    const connected = connection === "connected";
-    // Every slot sees the reconnection; the shared token makes them reread once between them.
-    if (connected && wasConnected.current === false && enabled) {
-      resource.reload(rpc, `reconnected:${Math.floor(Date.now() / 2000)}`);
+  useRealtime(REALTIME_CHANGED, (payload) => {
+    if (!enabled || !live) return;
+    const token = tokenOf(payload);
+    if (token !== undefined) {
+      if (acted.get(method) === token) return;
+      acted.set(method, token);
     }
-    if (connected || wasConnected.current !== null) wasConnected.current = connected;
-  }, [connection, enabled, resource, rpc]);
+    void refetch.current();
+  });
 
-  return {
-    ...state,
-    retry: () => {
-      // Retry asks the server to reread now, then reads what it has.
-      rpc.call("refresh", null).then(
-        () => resource.reload(rpc),
-        () => resource.reload(rpc),
-      );
-    },
+  const data = query.data as Result<Method> | undefined;
+  const retry = () => {
+    // Retry asks the server to reread OATS now, then reads what it has.
+    const reread = () => void refetch.current();
+    Promise.resolve()
+      .then(() => rpc.call("refresh", null))
+      .then(reread, reread);
   };
+  if (query.error !== null) return { status: "error", data, error: errorMessage(query.error), retry };
+  if (data === undefined) return { status: "loading", data: undefined, error: null, retry };
+  return { status: "ready", data, error: null, retry };
 }

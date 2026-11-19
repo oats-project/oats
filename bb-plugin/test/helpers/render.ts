@@ -24,6 +24,7 @@ export function resetApp(): void {
 export const SOULS = [
   {
     name: "oats-developer",
+    agent: "oats-developer",
     description: "Builds and proves one spec.",
     origin: "oats.framework 1.12.0",
     capabilities: ["oats.core", "oats.aweb", "oats.developer"],
@@ -32,6 +33,7 @@ export const SOULS = [
   },
   {
     name: "broken-soul",
+    agent: "broken-soul",
     description: "",
     origin: "this repository",
     capabilities: [],

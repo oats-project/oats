@@ -42,7 +42,7 @@ function useOpenThread(): (thread: PluginSidebarThread) => { href: string; onCli
 }
 
 /** One agent that needs the person: the question, and where bb lists choices, the answer in place. */
-function NeedsYouCard({ node, thread }: { node: Node; thread: PluginSidebarThread }) {
+function NeedsYouCard({ node, thread, soul }: { node: Node; thread: PluginSidebarThread; soul: string }) {
   const sdk = useSdk();
   const open = useOpenThread()(thread);
   const [asked, setAsked] = useState<Question | null>(null);
@@ -101,7 +101,7 @@ function NeedsYouCard({ node, thread }: { node: Node; thread: PluginSidebarThrea
         </a>
         {since === null ? null : <span className="shrink-0 text-xs text-muted-foreground">{since}</span>}
       </div>
-      <p className="text-xs text-muted-foreground">{clean(node.agent.soul)}</p>
+      <p className="text-xs text-muted-foreground">{clean(soul)}</p>
       <p data-testid="oats-needs-question" className="whitespace-pre-wrap break-words">
         {clean(text)}
       </p>
@@ -138,7 +138,7 @@ function AgentRows({ nodes, oats, testId }: { nodes: readonly Node[]; oats: Read
               <span className="min-w-0 flex-1 truncate">
                 <ThreadTitle threadId={thread.id} />
               </span>
-              <span className="shrink-0 truncate text-xs text-muted-foreground">{clean(node.agent.soul)}</span>
+              <span className="shrink-0 truncate text-xs text-muted-foreground">{clean(oats.soulOf(node.agent))}</span>
             </a>
           </li>,
         ];
@@ -277,7 +277,7 @@ function Sections({ oats, where, visible }: { oats: Oats; where: "page" | "tab";
           <ul className="flex flex-col gap-2">
             {view.needsYou.flatMap((node) => {
               const thread = oats.threadById.get(node.thread.id);
-              return thread === undefined ? [] : [<NeedsYouCard key={thread.id} node={node} thread={thread} />];
+              return thread === undefined ? [] : [<NeedsYouCard key={thread.id} node={node} thread={thread} soul={oats.soulOf(node.agent)} />];
             })}
           </ul>
         )}

@@ -15,6 +15,11 @@ export type Oats = {
   threadsStatus: "error" | "loading" | "ready";
   threadById: ReadonlyMap<string, PluginSidebarThread>;
   retry(): void;
+  /**
+   * The soul to print for an agent: the key of the matching soul (`<package>/<soul>` for a
+   * package soul) once the souls are read, else the roster's name for it.
+   */
+  soulOf(agent: Agent): string;
 } & (
   | { phase: "loading" }
   /** No snapshot: `code` is the server's, or "E_PLUGIN_RPC" when the call itself failed. */
@@ -32,6 +37,8 @@ export type Oats = {
 
 export function useOats(): Oats {
   const read = useRead("snapshot");
+  // Only for the souls' names: the Souls page keeps this read fresh, a status change does not.
+  const souls = useRead("souls", { live: false }).data?.souls;
   const sidebar = useSidebarThreads();
   const threads = sidebar.threads;
   const snapshot = read.status === "ready" ? read.data : undefined;
@@ -48,7 +55,9 @@ export function useOats(): Oats {
     };
   }, [snapshot, threads]);
 
-  const base = { threads, threadsStatus: sidebar.status, threadById, retry: read.retry };
+  const soulNames = useMemo(() => new Map((souls ?? []).map((soul) => [soul.agent, soul.name])), [souls]);
+  const soulOf = (agent: Agent) => soulNames.get(agent.soul) ?? agent.soul;
+  const base = { threads, threadsStatus: sidebar.status, threadById, retry: read.retry, soulOf };
   if (read.status === "loading") return { ...base, phase: "loading" };
   if (read.status === "error") return { ...base, phase: "failed", code: "E_PLUGIN_RPC", message: read.error };
   if (!read.data.ok) return { ...base, phase: "failed", code: read.data.code, message: read.data.message };
