@@ -372,7 +372,8 @@ test("acceptance refuses drift in the admitted container settings", async t => {
 
 async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false, statusSpawnThrowsOnce = false, statusIgnoresTerm = false, stubbornFinish = false, brokerStatusPid = "owned", pauseAfterStarted = "", brokerDrainMs = 0, productionStopBudgets = false,
   // bb: the value of AGENT_BB (absent: unset); a real fixture child serves bb's daemon status.
-  bb, bbInstalled = true, bbToken, bbTokenError = "", bbMode = "connected", externalStatus = false } = {}) {
+  bb, bbInstalled = true, bbToken, bbTokenError = "", bbMode = "connected", externalStatus = false,
+  bbBackoffMs = 20, bbBackoffMaxMs = 80, bbStableMs, hostDrainMs = 80 } = {}) {
   const supervisor = new URL("../container/agent/supervisor.mjs", import.meta.url);
   assert.ok(existsSync(supervisor), "the image must own broker readiness and ordered child shutdown");
   const { supervise } = await import(supervisor);
@@ -396,13 +397,13 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
   const reads = [], existChecks = [];
   writeFileSync(childFile, `
     const fs = require("node:fs");
-    const [role, events, mode, pidFile, pidMode, pausedRole, brokerDrainMs, bbPort, bbSeen] = process.argv.slice(2);
+    const [role, events, mode, pidFile, pidMode, pausedRole, brokerDrainMs, bbPort, bbSeen, hostDrainMs] = process.argv.slice(2);
     if (role === "bb") {
       // What the real child process received, read by the tests.
       fs.writeFileSync(bbSeen, JSON.stringify({ env: process.env }));
       if (mode === "leaves-server") {
         // As bb-app does: the launcher's server child holds the port and outlives a killed launcher.
-        if (process.argv[11] !== "server") {
+        if (process.argv[12] !== "server") {
           const server = require("node:child_process").spawn(process.execPath, [...process.argv.slice(1), "server"], { stdio: "ignore" });
           fs.appendFileSync(events, "bb server pid " + server.pid + "\\n");
           fs.appendFileSync(events, "bb started\\n");
@@ -442,7 +443,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
         log(role + " TERM");
         if (mode === "stubborn" && (role === "ssh" || role === "broker")) return;
         if (role === "bb" && mode === "stubborn-bb") return;
-        setTimeout(() => { log(role + " ended"); process.exit(0); }, role === "host" ? 80 : role === "broker" ? Number(brokerDrainMs) : 0);
+        setTimeout(() => { log(role + " ended"); process.exit(0); }, role === "host" ? Number(hostDrainMs) : role === "broker" ? Number(brokerDrainMs) : 0);
       });
       // Publish the long-lived child's stop handshake only after TERM can drain it.
       started();
@@ -457,7 +458,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
   delete env.AGENT_BB;
   if (bb !== undefined) env.AGENT_BB = bb;
   const running = supervise({
-    env, bbFile, bbTokenFile, bbStatusUrl: `http://127.0.0.1:${bbPort}/status`, bbBackoffMs: 20, bbBackoffMaxMs: 80,
+    env, bbFile, bbTokenFile, bbStatusUrl: `http://127.0.0.1:${bbPort}/status`, bbBackoffMs, bbBackoffMaxMs, ...(bbStableMs === undefined ? {} : {bbStableMs}),
     ...(productionStopBudgets ? {} : {bbStopMs: 500}),
     fileExists(path) { existChecks.push(path); return existsSync(path); },
     readFile(path, encoding) {
@@ -467,7 +468,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
     },
     spawnChild(file, args, options) {
       const role = file === bbFile ? "bb" : file === "aw" ? (args[1] === "run" ? "broker" : "status") : file === "oats" ? "host" : "ssh";
-      spawned.push({role, file, args, options});
+      spawned.push({role, file, args, options, at: Date.now()});
       const mode = role === "bb" ? bbMode : role === "status" && statusIgnoresTerm ? "probe-stubborn" : statusTrueAfterBrokerExit ? "after-exit" : stubbornFinish ? "stubborn" : ready ? "ready" : "not-ready";
       appendFileSync(events, role + " spawned\n");
       if (role === "status" && statusSpawnThrowsOnce && !statusFailed) {
@@ -476,7 +477,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
       }
       const failProbe = role === "status" && statusSpawnFailsOnce && !statusFailed;
       if (failProbe) statusFailed = true;
-      const child = spawn(failProbe ? join(dir, "missing-probe") : process.execPath, failProbe ? [] : [childFile, role, events, mode, brokerPid, brokerStatusPid, pauseAfterStarted, String(brokerDrainMs), String(bbPort), bbSeen], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
+      const child = spawn(failProbe ? join(dir, "missing-probe") : process.execPath, failProbe ? [] : [childFile, role, events, mode, brokerPid, brokerStatusPid, pauseAfterStarted, String(brokerDrainMs), String(bbPort), bbSeen, String(hostDrainMs)], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
       if (pauseAfterStarted) {
         const kill = child.kill.bind(child);
         child.kill = signal => {
@@ -986,7 +987,7 @@ test("TERM stops host run first and bb only after host run has ended", async t =
   assert.ok(events.indexOf("bb TERM") < events.indexOf("bb ended"));
 });
 
-test("TERM while bb waits to restart starts no further bb", async t => {
+test("bb lost while host run drains is a failed stop and is not restarted", async t => {
   const fx = await supervisorFixture(t, {bb: "1"});
   await fx.until(() => fx.text().includes("host started"));
   fx.term();
@@ -994,6 +995,60 @@ test("TERM while bb waits to restart starts no further bb", async t => {
   fx.children.get("bb").kill("SIGKILL");
   assert.equal(await fx.running, 1, "bb lost while host run drains is a failed stop, as for the broker");
   assert.deepEqual(roles(fx), ["broker", "bb", "ssh", "host"], "no bb starts once stopping");
+});
+
+test("TERM while bb waits to restart starts no further bb", async t => {
+  const timers = () => process.getActiveResourcesInfo().filter(resource => resource === "Timeout").length;
+  // The restart falls due while host run still drains: it must not start a bb then.
+  const draining = await supervisorFixture(t, {bb: "1", bbBackoffMs: 300, bbBackoffMaxMs: 300, hostDrainMs: 900});
+  await draining.until(() => draining.text().includes("host started"));
+  draining.children.get("bb").kill("SIGKILL");
+  await draining.until(() => draining.said.includes("bb exited (SIGKILL)"));
+  draining.term();
+  assert.equal(await draining.running, 0, "a bb that ended before TERM does not fail the stop");
+  const drained = draining.text().split("\n"), hostAt = draining.spawned.find(entry => entry.role === "host").at;
+  assert.ok(drained.indexOf("host ended") > drained.indexOf("host TERM") && Date.now() - hostAt >= 900, "the drain outlasted the 300 ms backoff");
+  assert.deepEqual(roles(draining), ["broker", "bb", "ssh", "host"], "no bb starts once stopping");
+  // The restart is still pending when the supervisor returns: nothing of it may
+  // remain, or the container would stay up until the timer ran out.
+  const before = timers();
+  const pending = await supervisorFixture(t, {bb: "1", bbBackoffMs: 5_000, bbBackoffMaxMs: 5_000});
+  await pending.until(() => pending.text().includes("host started"));
+  pending.children.get("bb").kill("SIGKILL");
+  await pending.until(() => pending.said.includes("bb exited (SIGKILL)"));
+  assert.equal(timers(), before + 1, "the restart is pending");
+  pending.term();
+  assert.equal(await pending.running, 0);
+  assert.equal(timers(), before, "the pending restart was cancelled");
+  assert.deepEqual(roles(pending), ["broker", "bb", "ssh", "host"]);
+});
+
+test("bb restarts after 1 s doubling to 60 s, and from 1 s again after five minutes up", async t => {
+  // The same schedule at a tenth of a second, capped at 0.3 s, reset after 1 s up.
+  const fx = await supervisorFixture(t, {bb: "1", bbBackoffMs: 100, bbBackoffMaxMs: 300, bbStableMs: 1000});
+  await fx.until(() => fx.text().includes("host started"));
+  const bbs = () => fx.spawned.filter(entry => entry.role === "bb");
+  // Kills the newest bb and answers how long the supervisor waited to start the next.
+  const restartAfterKill = async () => {
+    const count = bbs().length, exits = fx.said.filter(line => line === "bb exited (SIGKILL)").length;
+    fx.children.get("bb").kill("SIGKILL");
+    await fx.until(() => fx.said.filter(line => line === "bb exited (SIGKILL)").length > exits);
+    const exited = Date.now();
+    await fx.until(() => bbs().length > count);
+    return { atLeast: bbs().at(-1).at - exited + 15, atMost: bbs().at(-1).at - exited };
+  };
+  // `atLeast` allows for the checkpoint's 10 ms poll after the exit was reported.
+  const waits = [];
+  for (let i = 0; i < 4; i += 1) waits.push(await restartAfterKill());
+  for (const [i, expected] of [100, 200, 300, 300].entries()) assert.ok(waits[i].atLeast >= expected, `restart ${i + 1} waited ${waits[i].atMost} ms, expected ${expected}`);
+  assert.ok(waits[1].atMost < 300 && waits[3].atMost < 600, "doubling, capped: " + JSON.stringify(waits));
+  await delay(1100);
+  const afterStable = await restartAfterKill();
+  assert.ok(afterStable.atLeast >= 100 && afterStable.atMost < 250, "a bb that stayed up starts the schedule over: " + JSON.stringify(afterStable));
+  const afterShort = await restartAfterKill();
+  assert.ok(afterShort.atLeast >= 200, "and it doubles again: " + JSON.stringify(afterShort));
+  fx.term();
+  assert.equal(await fx.running, 0);
 });
 
 test("TERM during bb readiness starts neither SSH nor host run", async t => {
