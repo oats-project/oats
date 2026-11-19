@@ -181,6 +181,9 @@ test("server roster: instance rows carry the remote status facts, null where the
     parentInstance: "boss", siblingInstance: "dev-b", relation: "child", relativeTo: "boss", spawnOrigin: "instance",
     // #675: the host's work record and its own drift observation, relayed as it answered them.
     work: "worktree", repo: "/srv/ws/repo", branch: "agents/dev-a", modelFrom: "soul", color: "sage", background: true, pinned: true, sameWork: true, attributedHuman: "Ada Lovelace",
+    // Feature instance-board: relayed as the host's row says it, read by this kernel's rule.
+    board: { facts: [{ key: "pr", label: "Pull request", value: "#1990", unit: null, link: "https://github.com/oats-project/oats/pull/1990", at: "2026-09-29T10:05:00.000Z" }],
+      questions: [{ id: "q1", question: "Squash?", options: ["yes", "no"], hasContext: false, since: "2026-09-29T10:06:00.000Z" }] },
     spawnedBy: { instance: "boss", home: "/srv/ws/agents/dev/instances/boss" },
     soul: { repoKey: "github.com/acme/agents", commit: "1111111111111111111111111111111111111111", current: "2222222222222222222222222222222222222222", status: "moved" },
     modules: [
@@ -193,8 +196,11 @@ test("server roster: instance rows carry the remote status facts, null where the
   // Feature instance-background: only `true` is relayed; anything else is absent, never false.
   // Feature instance-same-work: anything but `sameWork: true` is relayed as absent.
   // Feature instance-pin: only exactly `true` is relayed; `"true"` and `1` are absent, never false.
-  const odd = { instance: "dev-c", home: "/srv/ws/agents/dev/instances/dev-c", running: false, color: "teal", background: "yes", pinned: "true", sameWork: "true" };
-  const oddPin = { instance: "dev-d", home: "/srv/ws/agents/dev/instances/dev-d", running: false, pinned: 1 };
+  // Feature instance-board: a board out of its rules (a link that is not https) is relayed as an empty board;
+  // null stays null; a row without the key carries none.
+  const odd = { instance: "dev-c", home: "/srv/ws/agents/dev/instances/dev-c", running: false, color: "teal", background: "yes", pinned: "true", sameWork: "true",
+    board: { facts: [{ key: "pr", label: "PR", value: "#1", unit: null, link: "javascript:alert(1)", at: "2026-09-29T10:05:00.000Z" }], questions: [] } };
+  const oddPin = { instance: "dev-d", home: "/srv/ws/agents/dev/instances/dev-d", running: false, pinned: 1, board: null };
   const status = { root: "/srv/ws/agents", agents: [{ name: "dev", harness: "claude", instances: [full, bare, odd, oddPin] }] };
   const { exec } = countingExec(() => JSON.stringify(status));
   const out = await rosterGroups({ io: { execFileAsync: async (...call) => exec(...call) } });
@@ -207,6 +213,10 @@ test("server roster: instance rows carry the remote status facts, null where the
   for (const n of ["dev-b", "dev-c", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === n), "background"), false, `${n}: no background key`);
   assert.equal(a.sameWork, true, "sameWork: true is relayed as the host reported it");
   assert.equal(a.pinned, true, "pinned: true is relayed");
+  assert.deepEqual(a.board, full.board, "a board is relayed as the host's row says it");
+  assert.deepEqual(rows.find((r) => r.instance === "dev-c").board, { facts: [], questions: [] }, "a board out of its rules is an empty board");
+  assert.equal(rows.find((r) => r.instance === "dev-d").board, null, "null stays null");
+  for (const n of ["dev-b", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === n), "board"), false, `${n}: no board key from a row without one`);
   for (const n of ["dev-b", "dev-c", "dev-d", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === n), "pinned"), false, `${n}: no pinned key, never false or null`);
   for (const name of ["dev-b", "dev-c", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === name), "sameWork"), false, `${name}: no sameWork, never false or null`);
   for (const k of FIELDS) assert.deepEqual(a[k], full[k], k);

@@ -17,6 +17,7 @@ import { claimHomeFor, homeClaimHolder, releaseHomeClaim, retirementBaselinePath
 import { readEvents } from "../lib/instance-events.mjs";
 import { readInstanceBackground, writeInstanceBackground } from "../lib/instance-background.mjs";
 import { readInstancePin, writeInstancePin } from "../lib/instance-pin.mjs";
+import { readBoardDocument, setBoardFact } from "../lib/instance-board.mjs";
 import { readSameWork, writeSameWork } from "../lib/instance-same-work.mjs";
 
 const json = p => JSON.parse(readFileSync(p, "utf8"));
@@ -271,11 +272,14 @@ test("package upgrade acceptance: retire after completed upgrade and receipt rep
   writeInstanceBackground(home, true);
   // Feature instance-pin: the same.
   writeInstancePin(home, true);
+  // Feature instance-board: the same.
+  setBoardFact(home, { key: "pr", label: "Pull request", value: "#1" });
   const plan = await f.plan();
   await f.apply({ planRevision: plan.planRevision, idempotencyKey: "baseline" });
   await f.apply({ planRevision: plan.planRevision, idempotencyKey: "baseline" });
   assert.equal(readInstanceBackground(home), true, "the upgrade keeps the background record");
   assert.equal(readInstancePin(home), true, "the upgrade keeps the pin");
+  assert.deepEqual(readBoardDocument(home)?.facts.map((f) => f.key), ["pr"], "the upgrade keeps the board");
   const receipt = readdirSync(join(home, ".oats")).find(n => /^upgrade-receipt\..+\.json$/.test(n));
   assert.ok(receipt, "completed upgrade has a durable receipt");
   const path = join(home, ".oats", receipt);

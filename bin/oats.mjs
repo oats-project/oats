@@ -19,7 +19,7 @@
  * `init` / `use` / `install` / `restore` / `list` / `catalog` / `remove` /
  * `migrate` / `trust` / `inject` are gone with the installed-capability tier.
  */
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readSync, readdirSync, readlinkSync, realpathSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readSync, readdirSync, readlinkSync, realpathSync, rmdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { constants as osConstants, homedir, tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
@@ -91,16 +91,17 @@ const { retireIncompleteProblems } = await kernelImport("retire-incomplete", () 
 const await_import_lifecycle = () => ({ resolveInstance: resolveInstanceForCli });
 const { homeTarget, soulTarget, isWorkspaceContext, inspectDocument, withComposition, withSkills, readinessDocument, policyOf, policySoul, manifestMissingRequires, INSPECT_OPERATIONS_API } = await kernelImport("instance-inspect", () => import("../lib/instance-inspect.mjs"));
 const { readEvents, setWaiting, incarnationOf } = await kernelImport("instance-events", () => import("../lib/instance-events.mjs"));
+const { readBoardDetail, askBoardQuestion, clearBoardQuestion, setBoardFact, unsetBoardFact } = await kernelImport("instance-board", () => import("../lib/instance-board.mjs"));
 const { CLIENT_VIA, addDeployment, deploymentAtOrAbove, importDesktopDeployments, listDeployments, listResolved, removeDeployment } = await kernelImport("deployments", () => import("../lib/deployments.mjs"));
 const { observeResolvedDeployment } = await kernelImport("resolved-deployment", () => import("../lib/resolved-deployment.mjs"));
 const { SESSION_RESUME_FEATURE } = await kernelImport("session-resume-contract", () => import("../lib/session-resume-contract.mjs"));
-const { KERNEL_FEATURES, READER_API } = await kernelImport("kernel-features", () => import("../lib/kernel-features.mjs"));
+const { BOARD_API, KERNEL_FEATURES, READER_API } = await kernelImport("kernel-features", () => import("../lib/kernel-features.mjs"));
 const { inheritedContextRefusal } = await kernelImport("captured-context", () => import("../lib/captured-context.mjs"));
 const { callSession, parseMaxAge, readBudget } = await kernelImport("read-call", () => import("../lib/read-call.mjs"));
 const { cachedWorkspace, legacyLayoutProblems, statusAnswer, statusView } = await kernelImport("roster-read", () => import("../lib/roster-read.mjs"));
 const { memberLabel, memberRows, packageRows, standaloneCatalogVersion, standalonePackages, workspaceName, workspaceStatusAnswer, workspaceStatusView } = await kernelImport("workspace-read", () => import("../lib/workspace-read.mjs"));
 const { expandInlineValues, flagValue } = await kernelImport("argv", () => import("../lib/argv.mjs"));
-const { APPROVAL_REMOVED, NATIVE_RECORD_REFUSED, HOST_RUN_USAGE, RESUME_LOCAL_ONLY, RETIRE_USAGE, SOUL_LAUNCH_USAGE, SPAWN_USAGE, SYNC_USAGE, TEAMS_USAGE, WORKTREE_USAGE, commandArgvProblem, commandFlags } = await kernelImport("command-flags", () => import("../lib/command-flags.mjs"));
+const { APPROVAL_REMOVED, NATIVE_RECORD_REFUSED, HOST_RUN_USAGE, RESUME_LOCAL_ONLY, RETIRE_USAGE, SOUL_LAUNCH_USAGE, SPAWN_USAGE, SYNC_USAGE, TEAMS_USAGE, WORKTREE_USAGE, BOARD_USAGE, commandArgvProblem, commandFlags } = await kernelImport("command-flags", () => import("../lib/command-flags.mjs"));
 
 const rawArgs = process.argv.slice(2);
 const { argv: args, problem: argvProblem, inline: inlineValues } = expandInlineValues(rawArgs);
@@ -618,12 +619,17 @@ async function inspectCmd() {
   // Feature soul-composed-skills: opt-in, soul subject only; it shares --instructions' one scratch composition.
   const composedSkills = args.includes("--composed-skills");
   if (composedSkills && flag("home") !== undefined) return bail("E_BAD_ARGS", "--composed-skills lists the skills a spawn of a soul would give its instance: it takes --soul, not --home (an instance's skills are in its home's .agents/skills/)");
+  // Feature instance-board: opt-in, instance subject only; the board's facts with their history and its
+  // questions with their context (the rows carry neither).
+  const board = args.includes("--board");
+  if (board && flag("home") === undefined) return bail("E_BAD_ARGS", "--board reads an instance's board: it takes --home <abs>, not --soul (a soul has no board)");
   let t = await workspaceTarget(bail, { command: "inspect" });
   if (t) {
     if (t.resolutionError) return bail(t.resolutionError.code, t.resolutionError.message, t.resolutionError.details ?? undefined);
     if (instructions || composedSkills) t = await withComposition(t, { instructions, skills: composedSkills });
     if (skills) t = await withSkills(t);
     const doc = inspectDocument(t, { kernel: OATS_VERSION });
+    if (board && doc.instance) doc.instance = { ...doc.instance, board: readBoardDetail(t.home) };
     if (JSON_MODE) { jsonOk(withObservation(doc)); return; }
     printWorkspaceInspect(doc); return;
   }
@@ -672,6 +678,16 @@ function printWorkspaceInspect(doc) {
   for (const c of doc.capabilities) console.log(`  ${c.id}@${c.version || "?"} ${c.from?.kind === "package" ? `package ${c.from.package}` : c.from?.kind === "member" ? `member ${c.from.repoKey}` : ""}${c.operations.length ? `  ops: ${c.operations.map((o) => `${o.name}${o.available ? "" : "(unavailable)"}`).join(", ")}` : ""}`);
   for (const p of doc.problems) console.log(`  ! ${p.code}: ${p.message}`);
   for (const w of doc.warnings) console.log(`  warning  ${w.code}  ${w.message}`);
+  const board = doc.instance?.board;
+  if (board !== undefined) {
+    // The agent's own text: every refused character spelled out, never interpreted (terminalText).
+    if (board === null) console.log("\nBoard: none");
+    else {
+      console.log(`\nBoard: ${board.facts.length} fact${board.facts.length === 1 ? "" : "s"}, ${board.questions.length} open question${board.questions.length === 1 ? "" : "s"}`);
+      for (const f of board.facts) console.log(terminalText(`  ${f.key}  ${f.label}: ${f.value}${f.unit ? ` ${f.unit}` : ""}${f.link ? `  ${f.link}` : ""}  (${f.history.length} value${f.history.length === 1 ? "" : "s"}, updated ${f.at})`));
+      for (const q of board.questions) console.log(terminalText(`  ${q.id}  ${q.question}  [${q.options.map((o, i) => `${i + 1}. ${o}`).join("  ")}]  (asked ${q.since})`));
+    }
+  }
   const composed = doc.souls[0].composedInstructions;
   if (composed !== undefined) console.log(composed ? `\nComposed AGENTS.md (a spawn here, resolution ${composed.resolution ?? "?"}${composed.truncated ? ", truncated" : ""}):\n\n${composed.text}` : "\nComposed AGENTS.md: unavailable (see the problems above)");
   const composedSkills = doc.souls[0].composedSkills;
@@ -1312,6 +1328,74 @@ function instanceWaitingCmd(sub, bail) {
   } catch (e) { return bail(e.code || "E_EVENTS_FAILED", e.message, e.candidates ? { candidates: e.candidates } : undefined); }
 }
 
+/** `oats instance board set|unset|ask` (feature instance-board, lib/instance-board.mjs): the agent's own
+ *  board, the facts it keeps in view for its person and the questions it asks them. Like `attention`, it
+ *  acts only on $OATS_INSTANCE_HOME (no --home, --dir or --server: lib/command-flags.mjs refuses them).
+ *  Display only: the kernel routes no answer. */
+function instanceBoardCmd(bail) {
+  dropAmbientRoot();
+  const verb = args[2];
+  const usage = BOARD_USAGE;
+  const forms = { set: ["label", "value", "unit", "link"], unset: [], ask: ["option", "id", "context-file", "clear"] };
+  if (!Object.hasOwn(forms, verb)) return bail("E_BAD_ARGS", usage);
+  // The form's words after the verb: its value flags (each once, but --option), and its operands. The
+  // dispatch (commandArgvProblem) has refused an unknown flag and an argument too many.
+  const values = new Map(), operands = [];
+  for (let i = 3; i < args.length; i++) {
+    const a = args[i];
+    if (!a.startsWith("--")) { operands.push(a); continue; }
+    const name = a.slice(2);
+    if (name === "json") continue;
+    if (!forms[verb].includes(name)) return bail("E_BAD_ARGS", `oats instance board ${verb}: unknown flag ${a}\n${usage}`);
+    const v = args[i + 1];
+    if (v === undefined || v.startsWith("--")) return bail("E_BAD_ARGS", `--${name} needs a value; ${usage}`);
+    if (values.has(name) && name !== "option") return bail("E_BAD_ARGS", `--${name} is given more than once; ${usage}`);
+    values.set(name, [...(values.get(name) ?? []), v]);
+    i++;
+  }
+  const one = (name) => values.get(name)?.[0];
+  const home = process.env.OATS_INSTANCE_HOME;
+  if (!home || !isAbsolute(home) || incarnationOf(home) === null) return bail("E_USAGE", `oats instance board runs inside an instance session: $OATS_INSTANCE_HOME is ${home ? `${home}, which is not an instance home (no readable instance.json)` : "unset"}`);
+  const root = agentsRootOfHome(home);
+  const { resolveInstance } = await_import_lifecycle();
+  try { resolveInstance(dirFlag(), root, basename(home), { home }); }
+  catch (e) { return bail("E_USAGE", `$OATS_INSTANCE_HOME (${home}) is not an instance home under ${root}: ${e.message}`); }
+  const instance = basename(home);
+  let r, line;
+  try {
+    if (verb === "set") {
+      if (operands.length !== 1) return bail("E_BAD_ARGS", `oats instance board set takes one key; ${usage}`);
+      r = setBoardFact(home, { key: operands[0], label: one("label"), value: one("value"), unit: one("unit"), link: one("link") });
+      line = `fact ${r.key} ${r.changed ? "set" : "unchanged"}`;
+    } else if (verb === "unset") {
+      if (operands.length !== 1) return bail("E_BAD_ARGS", `oats instance board unset takes one key; ${usage}`);
+      r = unsetBoardFact(home, operands[0]);
+      line = `fact ${r.key} ${r.changed ? "removed" : "was not set"}`;
+    } else if (values.has("clear")) {
+      if (operands.length || [...values.keys()].some((k) => k !== "clear")) return bail("E_BAD_ARGS", `--clear <id> takes nothing else; ${usage}`);
+      r = clearBoardQuestion(home, one("clear"));
+      line = `question ${r.id} ${r.changed ? "cleared" : "was not open"}`;
+    } else {
+      if (operands.length > 1) return bail("E_BAD_ARGS", `oats instance board ask takes one question (quote it); ${usage}`);
+      let context;
+      const file = one("context-file");
+      if (file !== undefined) {
+        try {
+          const st = statSync(file);
+          if (!st.isFile()) return bail("E_BAD_ARGS", `--context-file ${file} is not a regular file`);
+          if (st.size > 64 * 1024) return bail("E_BAD_ARGS", `--context-file ${file} is over 64 KiB; a context is at most 2000 characters`);
+          context = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(file)).replace(/\n+$/, "");
+        } catch (e) { return bail("E_BAD_ARGS", `--context-file ${file} cannot be read as UTF-8 text (${e.code || e.message})`); }
+      }
+      r = askBoardQuestion(home, { question: operands[0], options: values.get("option") ?? [], id: one("id"), context });
+      line = `question ${r.id} ${r.changed ? "asked: answers arrive typed as" : "is already open: answers arrive typed as"} "${r.id}: <text>"`;
+    }
+  } catch (e) { return bail(e.code || "E_BOARD_FAILED", e.message, e.details); }
+  const { board, changed, ...named } = r;
+  if (JSON_MODE) { jsonOk({ boardApi: BOARD_API, instance, home, ...named, changed, board }); return; }
+  console.log(`${instance}: ${line}`);
+}
+
 /** A caller that closes its end of stdout or stderr (a tool shell killed, Desktop gone, an ssh
  *  session that ended) has only stopped reading: the command goes on to its consistent end, what it
  *  can no longer print is dropped, and its exit status is the one it would have had. Unhandled,
@@ -1452,8 +1536,9 @@ async function instanceCmd() {
   const sub = args[1], name = args[2];
   if (sub === "upgrade") return instanceUpgradeCmd(name, bail);
   if (sub === "waiting" || sub === "attention") return instanceWaitingCmd(sub, bail);
+  if (sub === "board") return instanceBoardCmd(bail);
   if (sub === "suggest-name") return instanceSuggestNameCmd(bail);
-  const usage = "usage: oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] [--json] | oats instance attention [--message=<text>] [--clear] [--json] | oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--dir <d>] [--json] | oats instance git <instance> [--home <abs>] [--dir <d>] [--json] | oats instance diff <instance> --file <id> --revision <rev> [--index-revision <rev>] [--home <abs>] [--dir <d>] [--json] | oats instance stop <instance> (--plan | --apply --plan-revision <rev> --idempotency-key <key>) [--no-recursive] [--grace-ms <n>] [--home <abs>] [--dir <d>] [--json] | oats instance color <instance> (<color> | --clear) [--home <abs>] [--dir <d>] [--json] | oats instance background <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance pin <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance same-work <instance> on|off [--home <abs>] [--dir <d>] [--json]";
+  const usage = "usage: oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] [--json] | oats instance attention [--message=<text>] [--clear] [--json] | oats instance board set|unset|ask … [--json] | oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--dir <d>] [--json] | oats instance git <instance> [--home <abs>] [--dir <d>] [--json] | oats instance diff <instance> --file <id> --revision <rev> [--index-revision <rev>] [--home <abs>] [--dir <d>] [--json] | oats instance stop <instance> (--plan | --apply --plan-revision <rev> --idempotency-key <key>) [--no-recursive] [--grace-ms <n>] [--home <abs>] [--dir <d>] [--json] | oats instance color <instance> (<color> | --clear) [--home <abs>] [--dir <d>] [--json] | oats instance background <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance pin <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance same-work <instance> on|off [--home <abs>] [--dir <d>] [--json]";
   if (!["git", "diff", "stop", "events", "color", "background", "pin", "same-work"].includes(sub) || !name || name.startsWith("--")) return bail("E_BAD_ARGS", usage);
   dropAmbientRoot();
   if (sub === "events") {
@@ -4217,7 +4302,7 @@ function versionCmd() {
     // Phase B: `instance-modules` and `spawn-provider-payload` are advertised only once spawn
     // runs on resolve/materialize (contract §6); a feature the binary does not implement is
     // never listed.
-    console.log(JSON.stringify({ schemaVersion: 1, name: "@awebai/oats", version: OATS_VERSION, desktopApi: 1, harnesses: ["pi", "claude", "codex"], sessionBackends: ["tmux"], launchOptions: ["yolo"], remote: ["spawn", "retire", "status", "session", "session-start", "session-restart", "launch-config", "roster", "harvest", "schedule", "session-upload", "operations", "readiness", "instance-events", "instance-git", "lifecycle-plans"], features: KERNEL_FEATURES, automationsApi: A.AUTOMATIONS_API, workspaceApi: 2, instanceGitApi: 1, spawnApplyApi: 1, soulsApi: 2, lifecycleApi: 1, readinessApi: 2, spawnPreviewApi: 2, eventsApi: 2, scheduleHistoryApi: 3, scheduleApi: SCHEDULE_API, operationsApi: 2, capabilityShowApi: 1, readerApi: READER_API, sessionViewer: readSessionViewer(), package: OATS_PACKAGE_NAME }));
+    console.log(JSON.stringify({ schemaVersion: 1, name: "@awebai/oats", version: OATS_VERSION, desktopApi: 1, harnesses: ["pi", "claude", "codex"], sessionBackends: ["tmux"], launchOptions: ["yolo"], remote: ["spawn", "retire", "status", "session", "session-start", "session-restart", "launch-config", "roster", "harvest", "schedule", "session-upload", "operations", "readiness", "instance-events", "instance-git", "lifecycle-plans"], features: KERNEL_FEATURES, automationsApi: A.AUTOMATIONS_API, workspaceApi: 2, instanceGitApi: 1, spawnApplyApi: 1, soulsApi: 2, lifecycleApi: 1, readinessApi: 2, spawnPreviewApi: 2, eventsApi: 2, scheduleHistoryApi: 3, scheduleApi: SCHEDULE_API, operationsApi: 2, capabilityShowApi: 1, readerApi: READER_API, boardApi: BOARD_API, sessionViewer: readSessionViewer(), package: OATS_PACKAGE_NAME }));
     return;
   }
   console.log(`${OATS_PACKAGE_NAME} ${OATS_VERSION} (desktop API v1)`);
@@ -5248,6 +5333,15 @@ Usage:
   oats instance attention [--message=<text>] [--clear] [--json]
                                              run by the agent from its home: "I need a human's
                                              answer" (waiting --producer agent --reason attention)
+  oats instance board set <key> --label <text> --value <text> [--unit <text>] [--link <https-url>] [--json]
+  oats instance board unset <key> [--json]
+                                             run by the agent from its home: a fact its person
+                                             keeps in view on the agent's board (at most 12)
+  oats instance board ask <question> --option <text> --option <text> [--option <text>]… [--id <id>] [--context-file <f>] [--json]
+  oats instance board ask --clear <id> [--json]
+                                             run by the agent from its home: a question with 2
+                                             to 4 options (at most 9 open); answers arrive typed
+                                             as "<id>: <text>"; clear it once read
   oats instance upgrade <instance> --plan [--undo] [--json]
       Preview package module moves and provider adoption; session must be stopped.
   oats instance upgrade <instance> --plan-revision <rev> --idempotency-key <key> [--undo] [--json]

@@ -494,6 +494,18 @@ retire removes it with the home. No spawn flag or `soul.yaml` key sets it.
 The answer and the errors are in
 [desktop-cli-api.md](desktop-cli-api.md#pinned-instances-oats-instance-pin).
 
+`oats instance board` (feature `instance-board`) is the agent's board, written
+by the agent from its own session, like `oats instance attention`. `board set
+<key> --label <text> --value <text>` keeps a fact in its person's view (`board
+unset <key>` removes it), and `board ask <question> --option <text> --option
+<text>` asks them a question with 2 to 4 options, which it closes with `board
+ask --clear <id>` once it has read the answer. The answer arrives typed in its
+terminal as `<id>: <text>`. Facts last as long as the home; a question belongs
+to the session it was asked in. Clients read the board from the `board` on the
+instance's `oats status --json` row. Its bounds, the claim it holds while a
+question is open and the errors are in
+[desktop-cli-api.md](desktop-cli-api.md#the-agents-board-oats-instance-board).
+
 `spawnOrigin` records the caller independently of these links. For new spawns
 from OATS 0.64.0, it is `instance` when the caller's `OATS_INSTANCE` and/or
 `OATS_INSTANCE_HOME` resolve consistently to an extant home in this deployment;

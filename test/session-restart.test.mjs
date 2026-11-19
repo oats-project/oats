@@ -9,6 +9,7 @@ import { restartInstanceSession, startInstanceSession, inspectInstanceSession } 
 import { readStartExited } from "../lib/session-end.mjs";
 import { readInstanceBackground, writeInstanceBackground } from "../lib/instance-background.mjs";
 import { readInstancePin, writeInstancePin } from "../lib/instance-pin.mjs";
+import { askBoardQuestion, readBoardRow, setBoardFact } from "../lib/instance-board.mjs";
 import { soulFiles, v2Deployment } from "./helpers/v2-deployment.mjs";
 import { packageRepo } from "./helpers/package-repo.mjs";
 import { isolateSessionEnvironment, oatsSocket, waitUntil } from "./helpers/host-fixture.mjs";
@@ -123,6 +124,10 @@ test("restart: every preflight before the stop; a polite harness ends on SIGTERM
   writeInstanceBackground(home, true);
   // Feature instance-pin: the pin outlives them too.
   writeInstancePin(home, true);
+  // Feature instance-board: the board's facts outlive them too; its question belongs to the session it was
+  // asked in, which the first start's boundary ends.
+  setBoardFact(home, { key: "pr", label: "Pull request", value: "#1" });
+  askBoardQuestion(home, { question: "Squash?", options: ["yes", "no"] });
   const first = startInstanceSession(home, { env: env() });
   assert.equal(first.reused, "new");
   assert.ok(await waitFor(() => runningPid(home) !== null), "the first harness is up");
@@ -161,6 +166,8 @@ test("restart: every preflight before the stop; a polite harness ends on SIGTERM
   assert.equal(readJson(join(home, "instance.json")).launch.model, "claude-sonnet-5", "the recipe follows the model-only start");
   assert.equal(readInstanceBackground(home), true, "a start, a restart and a start after exit keep the background record");
   assert.equal(readInstancePin(home), true, "a start, a restart and a start after exit keep the pin");
+  assert.deepEqual(readBoardRow(home).facts.map((f) => [f.key, f.value]), [["pr", "#1"]], "a start, a restart and a start after exit keep the board's facts");
+  assert.deepEqual(readBoardRow(home).questions, [], "the question asked before the first start is not live after it");
 });
 
 test("restart: a harness that ignores SIGTERM is reported still running after the bounded wait; nothing is escalated or launched; a neighbour window is untouched", async () => {

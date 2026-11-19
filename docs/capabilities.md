@@ -333,7 +333,7 @@ A self-contained package has an `oats.json`:
     - an exact name that is `.oats`, `.agents` or `.claude`, or that starts
       with `.oats-events`, `.oats-stop`, `.oats-restart`, `.oats-rollback`,
       `.oats-agents-md`, `.oats-start`, `.oats-attachments`, `.oats-color`,
-      `.oats-background`, `.oats-pinned` or `.oats-same-work`: the top-level entries the kernel
+      `.oats-background`, `.oats-pinned`, `.oats-same-work` or `.oats-board`: the top-level entries the kernel
       itself writes in an instance home;
     - a prefix that starts with `.oats-`.
 
@@ -1243,6 +1243,15 @@ characters; control characters, the Unicode line and paragraph separators,
 bidi controls (U+202A–202E, U+2066–2069), U+200B, U+2060, U+FEFF and tag
 characters (U+E0000–E007F) are refused, and everything else (emoji ZWJ
 sequences, ZWNJ, LRM, RLM, ALM) is allowed.
+
+**The board's claim** (feature `instance-board`). An agent that needs a
+decision between 2 and 4 options asks it on its board, `oats instance board
+ask <question> --option <text> --option <text>`. While any board question is
+open, the kernel holds a claim of producer `oats.board`, reason `attention`,
+whose message is the oldest open question, and the last `oats instance board
+ask --clear <id>` removes it. It sits beside the agent's own `attention`
+claim and holds no scheduled wake. The board is in
+[desktop-cli-api.md](desktop-cli-api.md#the-agents-board-oats-instance-board).
 
 **The Claude Code emitter.** For a Claude instance, oats.core's spawn and
 launch hooks (`bin/oats-core.mjs`, preview-aware) write Claude Code hooks
