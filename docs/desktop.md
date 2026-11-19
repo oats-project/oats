@@ -1332,11 +1332,11 @@ and adds fresh AppImage probes with `--dir <fixture> --instance smoke-probe`,
 asserting main's selection-request diagnostic. Repeated launches of the same
 arguments reach the running app. Both launches of the running fixture must
 open its terminal tab in the main area while keeping keyboard focus on its
-roster row. Before the repeated running launch, the smoke switches to Workspace
-overview, then requires that launch to reactivate the retained tab with exactly
+roster row. Before the repeated running launch, the smoke switches to Home,
+then requires that launch to reactivate the retained tab with exactly
 one viewer and no terminal focus event. CDP sends a key to the window;
 independent tmux pane/output reads prove no input reached the inert harness. The stopped fixture stays selected
-only, with no tab or Start dialog, on Workspace overview. The smoke also
+only, with no tab or Start dialog, on Home. The smoke also
 asserts that viewer cleanup restores its private tmux baseline. The fixture's
 workspace/member source, soul definition and inert harness executable are authored by the test-only
 [`launch-fixture.mjs`](../packages/desktop/test/helpers/launch-fixture.mjs).

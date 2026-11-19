@@ -557,7 +557,7 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
                     document.addEventListener('focusin', event => {
                       if (event.target?.closest?.('.term-wrap')) window.__oatsSmokeTerminalFocuses++;
                     }, true);
-                    document.querySelector('#nav .nav-item[data-view="spawn"]')?.click();
+                    document.querySelector('#nav .nav-item[data-view="home"]')?.click(); // Home, the landing surface (slice 2)
                     setTimeout(() => resolve({
                       mainNavigation: document.querySelector('#nav .nav-item.active')?.textContent?.trim() ?? null,
                       activeTerminal: !!document.querySelector('.tab-pane.active:not([hidden]) .term-wrap'),
@@ -566,7 +566,7 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
                   })`, awaitPromise: true, returnByValue: true,
                 });
                 console.log(`dist:smoke before repeated running launch: ${JSON.stringify(between)}`);
-                if (between?.mainNavigation !== "Workspace overview" || between.activeTerminal || between.terminals !== 1)
+                if (between?.mainNavigation !== "Home" || between.activeTerminal || between.terminals !== 1)
                   throw new Error("could not leave the retained terminal before the repeated launch");
               }
               return observation;
@@ -598,8 +598,8 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
               if (observation.samples.some(sample => sample.activeInstance !== expectedRow || !sample.activeTerminal || sample.terminals !== 1
                 || sample.terminalTabs.length !== 1 || sample.terminalTabs[0] !== "smoke-probe" || sample.mainNavigation !== null))
                 throw new Error(`${label} running launch did not show the exact fixture terminal in the main area`);
-            } else if (observation.samples.some(sample => sample.mainNavigation !== "Workspace overview" || sample.terminals || sample.terminalTabs.length)) {
-              throw new Error(`${label} stopped launch left Workspace overview or opened a tab`);
+            } else if (observation.samples.some(sample => sample.mainNavigation !== "Home" || sample.terminals || sample.terminalTabs.length)) {
+              throw new Error(`${label} stopped launch left Home or opened a tab`);
             }
           }
         }
