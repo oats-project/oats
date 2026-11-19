@@ -597,6 +597,12 @@ The server is unused until agents are spawned with the bb session provider,
 which arrives with a later kernel. Until then it starts, listens and holds
 no thread of OATS's.
 
+**This is experimental.** The bb image (`container/agent-bb`),
+`compose.agent.bb.yaml` and the relay will move to the bb package repository
+once it exists. There is no compatibility promise on those paths, on
+`AGENT_BB` or on the image's recipe, so that move will not be a breaking
+change.
+
 ### Turning it on
 
 Two things, together:
@@ -625,6 +631,12 @@ Two things, together:
 2. **The fragment.** Append `-f container/agent/compose.agent.bb.yaml` to
    the Compose commands. It sets `AGENT_BB: "1"` and nothing else. Export
    `AGENT_BB=1` with the other variables when you run acceptance.
+
+bb's version is then pinned in two places: this image's
+`container/agent-bb/package.json`, and the bb session provider's `version`
+setting in the deployment. When the provider arrives, its
+`E_BACKEND_VERSION` check, at readiness and at launch, is what keeps the two
+equal.
 
 The supervisor reads `AGENT_BB` once, at start. Unset or empty, it does
 what it did before. Any value but `1` is refused at start. Nothing else
@@ -719,6 +731,11 @@ team's container**: bb starts agents and terminals for anyone who can talk to
 it. So the operator's machine, and the tailnet's access rules for that name,
 become part of the team's boundary. Never use Tailscale Funnel or any public
 address for it, and never make the relay listen wider.
+
+The relay's `127.0.0.1` port, like bb's own in the container, has no login
+either: every local user of the operator's machine can reach it, and so can
+run commands in the team's container. Run the relay only on a machine whose
+only user is the operator.
 
 ### Limits
 

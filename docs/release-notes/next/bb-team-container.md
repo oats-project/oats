@@ -10,5 +10,8 @@
   `container/agent-bb/relay.mjs`. A container that does not opt in runs as
   before, and the team image holds no bb. The server is unused until agents
   are spawned with the bb session provider, which arrives with a later
-  kernel. See
+  kernel. This is experimental: the bb image, `compose.agent.bb.yaml` and
+  the relay will move to the bb package repository once it exists, with no
+  compatibility promise on those paths, on `AGENT_BB` or on the image's
+  recipe, so that move will not be a breaking change. See
   [A bb server for the team](../container.md#a-bb-server-for-the-team).
