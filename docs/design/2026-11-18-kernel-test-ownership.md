@@ -18,9 +18,19 @@ These three tests ran a provider or `aw` directly, never kernel consumption:
 Ordinary kernel CI provisioned neither `AW_REAL_CLI_BIN` nor
 `AW_REAL_GRANT_FIXTURE`, so these were normally skipped, not successful native
 regressions. The locator case was also duplicated inside the kernel. The
-provider package owns these native paths and has counterparts in its
-`test/oats-aweb-hook-1-13.test.mjs`. Their removal makes no claim that those
-package opt-ins run in CI. Future kernel tests titled `real aw`/`real-aw` fail
+provider package owns these native paths. All three have released counterparts
+at `v1.43.0` (commit `00f60a241cfb5bc5aa6acbf1ebcb111756ee8fa0`), in its
+[`test/oats-aweb-hook-1-13.test.mjs`](https://github.com/awebai/oats-aweb/blob/v1.43.0/test/oats-aweb-hook-1-13.test.mjs):
+
+| Removed kernel case | Released covering test |
+| --- | --- |
+| hook-1-10 unattached locator | “real aw fixture: unattached grant home reports the released custody locator error” (line 213) |
+| hook-1-13 custody preflight | “real aw at the floor: custody preflight reports needs-configuration instead of faking a pass” (line 195) |
+| hook-1-13 unattached locator | The same released locator test (line 213) |
+
+These are the exact released source assertions, independently checked with
+`git show v1.43.0:test/oats-aweb-hook-1-13.test.mjs`. Their removal makes no
+claim that those package opt-ins run in CI. Future kernel tests titled `real aw`/`real-aw` fail
 the root gate if skipped; the count, file and title are reported.
 
 No version-named suite is retired by this change. Their substantive provider
