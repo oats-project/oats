@@ -46,7 +46,10 @@ export const snapshot = z.union([
 // The page rows carry only what the pages draw. The backend builder fills these from the kernel's
 // real answers; adding a field is agreed with the frontend builder, through the spec's author.
 export const soul = z.object({
+  /** the soul key: what `oats spawn` takes (`<package>/<soul>` for a package soul) */
   name: z.string(),
+  /** the roster agent name of this soul's instances: equal to their `Agent.soul` */
+  agent: z.string(),
   description: z.string(),
   origin: z.string(),
   capabilities: z.array(z.string()),

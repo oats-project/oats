@@ -25,8 +25,22 @@ describe("the pages' verbs", () => {
     if (!answer.ok) return;
     expect(answer.value.souls.map((soul) => soul.name)).toEqual([
       "code-reviewer",
+      "knowledge-harvester",
       "oats.okf/knowledge-harvester",
       "oats.okf/knowledge-maintainer",
+      "oats-desktop-developer",
+      "oats-developer",
+      "oats-expert",
+      "oats-maintainer",
+      "oats-product-expert",
+      "research-expert",
+    ]);
+    // The roster's name for each soul's agents: the bare name, `<package>--<soul>` for a package soul.
+    expect(answer.value.souls.map((soul) => soul.agent)).toEqual([
+      "code-reviewer",
+      "knowledge-harvester",
+      "oats-okf--knowledge-harvester",
+      "oats-okf--knowledge-maintainer",
       "oats-desktop-developer",
       "oats-developer",
       "oats-expert",

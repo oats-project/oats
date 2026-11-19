@@ -83,6 +83,102 @@
    },
    {
     "name": "knowledge-harvester",
+    "key": "knowledge-harvester",
+    "origin": "member github.com/awebai/oats @ e5b6c5ac",
+    "kind": "member",
+    "repoKey": "github.com/awebai/oats",
+    "commit": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422",
+    "teams": [
+     {
+      "label": "oats",
+      "team": "default:oats.aweb.ai",
+      "default": true,
+      "from": "shared",
+      "via": [
+       "default",
+       "workspace"
+      ]
+     }
+    ],
+    "defaultTeam": {
+     "label": "oats",
+     "team": "default:oats.aweb.ai",
+     "from": "deployment"
+    },
+    "private": false,
+    "path": "souls/knowledge-harvester",
+    "work": "directory",
+    "description": "Removed in oats.okf 6.0 (a stub until 7.0). Every spawn is refused with E_REMOVED naming the fix; the instance proposes its own knowledge with `oats okf propose`.",
+    "harness": "pi",
+    "model": "github-copilot/claude-fable-5.1",
+    "harnessFrom": "local-default",
+    "launch": {
+     "declared": {
+      "harness": "claude",
+      "model": "claude-opus-5-5"
+     },
+     "effective": {
+      "harness": "pi",
+      "model": "github-copilot/claude-fable-5.1",
+      "launchConfig": null
+     },
+     "from": "local-default",
+     "at": "oats-local.yaml#/souls/launch/*",
+     "problem": null
+    },
+    "file": {
+     "path": "souls/knowledge-harvester/soul.yaml",
+     "url": null
+    },
+    "spawnable": true,
+    "problem": null,
+    "capabilities": [
+     {
+      "name": "oats.aweb",
+      "kind": "package",
+      "package": "oats.aweb",
+      "from": "workspace"
+     },
+     {
+      "name": "oats.build",
+      "kind": "member",
+      "repoKey": "github.com/awebai/oats",
+      "from": "soul"
+     },
+     {
+      "name": "oats.core",
+      "kind": "package",
+      "package": "oats.framework",
+      "from": "workspace"
+     },
+     {
+      "name": "oats.engineering-expert",
+      "kind": "member",
+      "repoKey": "github.com/awebai/oats",
+      "from": "soul"
+     },
+     {
+      "name": "oats.landing-rules",
+      "kind": "member",
+      "repoKey": "github.com/awebai/oats",
+      "from": "soul"
+     },
+     {
+      "name": "oats.okf",
+      "kind": "package",
+      "package": "oats.okf",
+      "from": "workspace"
+     },
+     {
+      "name": "oats.workspace-experts",
+      "kind": "member",
+      "repoKey": "github.com/awebai/oats",
+      "from": "soul"
+     }
+    ]
+   },
+   {
+    "name": "knowledge-harvester",
     "key": "oats.okf/knowledge-harvester",
     "qualifiedName": "oats.okf/knowledge-harvester",
     "origin": "package oats.okf v6.2.0",

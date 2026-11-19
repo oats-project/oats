@@ -155,7 +155,11 @@ describe("snapshot", () => {
 describe("the pages", () => {
   it("answers souls, capabilities with their number of souls, teams and machines", async () => {
     const { souls } = await rpc("souls");
-    expect(souls).toHaveLength(9);
+    expect(souls).toHaveLength(10);
+    // Every agent of the snapshot is an agent of exactly one soul of the page.
+    for (const agent of (await rpc("snapshot")).agents) {
+      expect(souls.filter((soul: { agent: string }) => soul.agent === agent.soul), agent.soul).toHaveLength(1);
+    }
     const { capabilities } = await rpc("capabilities");
     expect(capabilities.find((row: { id: string }) => row.id === "oats.core").souls).toBeGreaterThan(1);
     const { teams } = await rpc("teams");

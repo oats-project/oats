@@ -28,7 +28,7 @@ const row = z.looseObject({
 });
 const roster = z.looseObject({
   root: z.string(),
-  agents: z.array(z.looseObject({ name: z.string().min(1), key: text, instances: z.array(row) })),
+  agents: z.array(z.looseObject({ name: z.string().min(1), instances: z.array(row) })),
   workspace: z.looseObject({ key: text }).nullish(),
 });
 
@@ -36,7 +36,7 @@ const identityMeta = z.looseObject({ alias: text, team: text });
 
 export type Status = { root: string; workspace: string | null; agents: Agent[] };
 
-function toAgent(group: { name: string; key?: string | null }, source: z.output<typeof row>): Agent {
+function toAgent(group: { name: string }, source: z.output<typeof row>): Agent {
   // The messaging identity: the row's own `identity`, else what a messaging capability recorded.
   let alias = source.identity?.alias ?? null;
   let team = source.identity?.team ?? null;
@@ -54,10 +54,9 @@ function toAgent(group: { name: string; key?: string | null }, source: z.output<
   const waiting = source.waitingOnYou ?? null;
   return {
     instance: source.instance,
-    // Agent.soul is the roster's soul `key` (the agent group's, equal to Soul.name in pages.ts) when
-    // the kernel names one, else the row's `agent` (spec r3, question 5). The kernel names none for
-    // a group whose instances record no workspace soul; such a row keeps its agent name.
-    soul: group.key ?? source.agent ?? group.name,
+    // Agent.soul is the row's `agent`, the roster's name for the soul (the group's name for a row
+    // that has none). Soul.agent (pages.ts) is the same name, computed from the soul's row.
+    soul: source.agent ?? group.name,
     home: source.home,
     parent: source.parentInstance ?? null,
     human: source.attributedHuman ?? null,

@@ -68,8 +68,10 @@ export type View = {
 
 /** One soul of `oats souls`. */
 export type Soul = {
-  /** what `oats spawn` takes */
+  /** the soul key: what `oats spawn` takes (`<package>/<soul>` for a package soul) */
   name: string;
+  /** the roster agent name of this soul's instances: equal to their `Agent.soul` */
+  agent: string;
   description: string;
   /** display text, as the kernel words it */
   origin: string;

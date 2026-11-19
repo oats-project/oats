@@ -105,7 +105,7 @@ describe("the host verbs", () => {
     const status = await harness.experimental_call("status", base());
     expect(status.ok && status.value.agents).toHaveLength(8);
     const souls = await harness.experimental_call("souls", base());
-    expect(souls.ok && souls.value.souls.length).toBe(9);
+    expect(souls.ok && souls.value.souls.length).toBe(10);
     const capabilities = await harness.experimental_call("capabilities", base());
     expect(capabilities.ok && capabilities.value.capabilities.length).toBeGreaterThan(3);
     const teams = await harness.experimental_call("teams", base());

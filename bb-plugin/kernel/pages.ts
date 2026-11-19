@@ -14,6 +14,7 @@ const soulRow = z.looseObject({
   name: z.string().min(1),
   key: text,
   qualifiedName: text,
+  package: text,
   origin: text,
   description: text,
   spawnable: z.boolean().nullish(),
@@ -29,10 +30,12 @@ export function parseSouls(document: unknown): Result<{ souls: Soul[] }> {
     souls: parsed.value.souls.map((row) => {
       const problem = row.problem ? [row.problem.code, row.problem.message].filter(Boolean).join(": ") : null;
       return {
-        // Soul.name is the soul's `key`: what `oats spawn` takes, `<package>/<soul>` for a package
-        // soul. status.ts gives Agent.soul the roster's `key` where the kernel names one, so the two
-        // are equal there (spec r3, question 5).
+        // Soul.name is the soul's `key`: what `oats spawn` takes, `<package>/<soul>` for a package soul.
         name: row.key ?? row.qualifiedName ?? row.name,
+        // Soul.agent is the name the roster gives this soul's instances, which is Agent.soul
+        // (status.ts): the bare name, or for a package soul `<package>--<soul>` with "." written
+        // "-" (docs/desktop-cli-api.md, "oats capabilities and oats souls"). The pages match by it.
+        agent: row.package ? `${row.package.replaceAll(".", "-")}--${row.name}` : row.name,
         description: row.description ?? "",
         origin: row.origin ?? "",
         capabilities: (row.capabilities ?? []).map((capability) => capability.name),
