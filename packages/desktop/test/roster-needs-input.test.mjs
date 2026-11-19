@@ -33,7 +33,7 @@ const read = name => readFileSync(new URL(`../renderer/${name}`, import.meta.url
 const css = read("shell.css"), html = read("index.html"), shell = read("shell.mjs");
 const fn = name => shell.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`))?.[0];
 // The shipped tab sync and overdue-read path too (#558): a roster paint re-syncs the open terminal tabs.
-const source = ["renderContextRoster", "needsInputMark", "syncTabNeedsInput", "failRosterUnserved"].map(name => { const s = fn(name); assert.ok(s, name); return s; }).join("\n");
+const source = ["renderContextRoster", "activateRosterRow", "needsInputMark", "syncTabNeedsInput", "failRosterUnserved"].map(name => { const s = fn(name); assert.ok(s, name); return s; }).join("\n");
 
 const SINCE = "2026-10-03T09:00:00.000Z";
 const claim = (extra = {}) => ({ since: SINCE, producer: "claude-hooks", reason: "permission", message: null, ...extra });

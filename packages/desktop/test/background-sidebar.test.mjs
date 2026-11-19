@@ -28,7 +28,7 @@ const tree = { ...treeShared, ...treeView, ...sameWork };
 const read = name => readFileSync(new URL(`../renderer/${name}`, import.meta.url), "utf8");
 const html = read("index.html"), shell = read("shell.mjs");
 const fn = name => shell.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`))?.[0];
-const source = ["renderContextRoster", "needsInputMark", "setBackgroundOpen", "onRosterRowKey", "setRovingRow", "showInRoster", "showPendingSpawn", "revealPendingSpawn"]
+const source = ["renderContextRoster", "activateRosterRow", "needsInputMark", "setBackgroundOpen", "onRosterRowKey", "setRovingRow", "showInRoster", "showPendingSpawn", "revealPendingSpawn"]
   .map(name => { const s = fn(name); assert.ok(s, name); return shell.includes(`async ${s}`) ? `async ${s}` : s; }).join("\n");
 // The previous / next instance steps read the rows drawn, by the shipped selector (shell.mjs leaderDispatch rosterRows).
 const STEP_ROWS = shell.match(/rosterRows: \(\) => \[\.\.\.\(contextRosterEl\?\.querySelectorAll\("([^"]+)"\)/)?.[1];

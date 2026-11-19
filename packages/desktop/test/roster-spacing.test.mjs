@@ -20,6 +20,8 @@ import { canAddressRemote, rowReason } from "../../client/remote-address.mjs";
 const read = name => readFileSync(new URL(`../renderer/${name}`, import.meta.url), "utf8");
 const css = read("shell.css"), html = read("index.html");
 const renderSource = read("shell.mjs").match(/function renderContextRoster\(instances\) \{[\s\S]*?\n\}/)?.[0];
+// The row's one act (slice 6a): its click runs the shipped activateRosterRow.
+const actSource = read("shell.mjs").match(/function activateRosterRow\(i, ws = contextWorkspace \|\| currentWorkspace\(\)\) \{[\s\S]*?\n\}/)?.[0];
 assert.ok(renderSource, "exercise the shipped roster composition, not a hand-copied row");
 const instance = (name, parentInstance) => ({ instance: name, parentInstance, agent: "dev",
   home: `/synthetic/${name}`, agentsRoot: "/synthetic/agents", repoName: "desktop-repo", running: true });
@@ -65,7 +67,7 @@ function fixture(t, stylesheet = css) {
   };
   context.splitOpenState = () => ({ split: null, activeId: context.activeTab, tabs: context.tabs, workspace: 'A', visible: false });
   context.ownsInstanceTarget = target => context.contextInstances.filter(row => sameInstanceActionTarget(target, row, 'A')).length === 1;
-  const render = runInNewContext(`${renderSource}\nrenderContextRoster`, context);
+  const render = runInNewContext(`${renderSource}\n${actSource}\nrenderContextRoster`, context);
   render(roster);
   // The row's context menu (#1559): a right-click at the pointer, or Shift+F10 / the Menu key (clientX = clientY = 0).
   const contextMenu = (el, { x = 0, y = 0 } = {}) => el.dispatchEvent(new dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y }));

@@ -50,7 +50,7 @@ const names = [
   "splitPane", "closeSplit", "onTabKeydown", "addTab", "selectTab", "activateTab", "revealActiveRosterRow", "closeTab", "tabStrips", "revealActiveTabs", "observeTabStrips",
   "openViewTab", "openTerminalTabFlow", "openTerminalTabInner", "focusActiveTerminal",
   "visibleTabEntries", "walkedTabs", "switchTab", "cycleTab", "gotoTab", "restoreWorkspaceTabs", "showTerminalContext",
-  "initContextRoster", "renderContextRoster", "rosterEntry", "focusRoster", "onRosterRowKey", "setRovingRow", "showInRoster", "syncTabNeedsInput",
+  "initContextRoster", "renderContextRoster", "activateRosterRow", "rosterEntry", "focusRoster", "onRosterRowKey", "setRovingRow", "showInRoster", "syncTabNeedsInput",
 ];
 // The leader's part of the shell (shell.mjs "the leader"): what a key after it, or a chord that does
 // one's work, acts on, and the shipped dispatch and engine that run it.

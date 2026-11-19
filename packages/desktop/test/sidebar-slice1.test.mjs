@@ -33,7 +33,7 @@ const tree = { ...treeShared, ...treeView, ...sameWork }; // the renderer's clie
 const read = name => readFileSync(new URL(`../renderer/${name}`, import.meta.url), "utf8");
 const shell = read("shell.mjs"), html = read("index.html"), css = read("shell.css");
 const fn = name => { const found = shell.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`)); assert.ok(found, name); return found[0]; };
-const source = ["renderContextRoster", "needsInputMark", "pendingSpawnRow", "setRovingRow", "focusFirstNeedingYou", "setBackgroundOpen"].map(fn).join("\n");
+const source = ["renderContextRoster", "activateRosterRow", "needsInputMark", "pendingSpawnRow", "setRovingRow", "focusFirstNeedingYou", "setBackgroundOpen"].map(fn).join("\n");
 
 const SINCE = "2026-10-03T09:00:00.000Z";
 const claim = (extra = {}) => ({ since: SINCE, producer: "claude-hooks", reason: "permission", message: null, ...extra });

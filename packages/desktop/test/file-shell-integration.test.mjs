@@ -149,7 +149,7 @@ function shell(t, shellSource = source, platform = "MacIntel") {
   c.ownsInstanceTarget = target => target?.workspace === c.workspace && c.contextInstances.filter(row => sameInstanceActionTarget(target, row, c.workspace)).length === 1;
   const names = ["applyChordTitles", "setSidebarMode", "updateContextTabs", "showTabLayer", "renderSplit", "selectEmptyGroup", "splitPane", "closeSplit", "restoreTerminalGroups", "onTabKeydown", "walkedTabs", "visibleTabEntries",
     "addTab", "selectTab", "activateTab", "revealActiveRosterRow", "closeTab", "tabStrips", "revealActiveTabs", "observeTabStrips", "openViewTab", "restoreWorkspaceTabs", "showTerminalContext",
-    "initContextRoster", "renderContextRoster", "onRosterRowKey", "setRovingRow", "focusRoster", "openTerminalTabFlow", "openTerminalTabInner", "syncTabNeedsInput"];
+    "initContextRoster", "renderContextRoster", "activateRosterRow", "onRosterRowKey", "setRovingRow", "focusRoster", "openTerminalTabFlow", "openTerminalTabInner", "syncTabNeedsInput"];
   const functions = names.map(name => fn(shellSource, name)).join("\n")
     .replace('import(`./views/${name}.mjs`)', "loadView(name)");
   assert.ok(functions.includes("load: () => loadView(name)"), "only dynamic import is replaced, not open/ownership logic");

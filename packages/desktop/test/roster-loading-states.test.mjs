@@ -207,7 +207,7 @@ function shell(t, { addResult = { ok: true, workspace: { id: 'A' } }, workspace 
   // shipped read generation, when the suite is about this window's retires in flight.
   if (inFlight) Object.assign(context, { retiringRows, retireListeners: new Set(),
     retires: createRetiresInFlight({ mark: () => context.contextRosterGen, onChange: () => context.retiresChanged() }) });
-  const s = runInNewContext(`${['initContextRoster', 'rosterOverdue', 'failRosterUnserved', 'reAddRosterWorkspace', 'refreshContextRoster', 'renderContextRoster', 'restoreWorkspaceTabs', 'rosterEntry', 'setRovingRow',
+  const s = runInNewContext(`${['initContextRoster', 'rosterOverdue', 'failRosterUnserved', 'reAddRosterWorkspace', 'refreshContextRoster', 'renderContextRoster', 'activateRosterRow', 'restoreWorkspaceTabs', 'rosterEntry', 'setRovingRow',
     ...(inFlight ? ['shownRows', 'retiresChanged'] : [])].map(fn).join('\n')}
     ({ initContextRoster, refreshContextRoster, renderContextRoster, restoreWorkspaceTabs });`, withShellWindowGlobals(context));
   // #sidebar is not in index.html's roster section alone; initContextRoster listens on it.

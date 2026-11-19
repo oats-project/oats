@@ -30,7 +30,7 @@ const tree = { ...treeShared, ...treeView, ...sameWork }; // the renderer's clie
 const read = name => readFileSync(new URL(`../renderer/${name}`, import.meta.url), "utf8");
 const css = read("shell.css"), html = read("index.html"), shell = read("shell.mjs");
 const fn = name => shell.match(new RegExp(`(?:async )?function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`))?.[0];
-const source = ["renderContextRoster", "pendingSpawnRow", "announceSpawn", "needsInputMark", "onRosterRowKey", "setRovingRow", "showInRoster"]
+const source = ["renderContextRoster", "activateRosterRow", "pendingSpawnRow", "announceSpawn", "needsInputMark", "onRosterRowKey", "setRovingRow", "showInRoster"]
   .map(name => { const s = fn(name); assert.ok(s, name); return s; }).join("\n");
 
 const instance = (name, parentInstance, extra = {}) => ({ instance: name, parentInstance, agent: "dev",

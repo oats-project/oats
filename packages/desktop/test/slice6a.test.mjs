@@ -165,7 +165,7 @@ test("slice6a rail", (t) => {
   // The shell hands it the roster's order (its sections, pins first) and cycles full ↔ rail on sidebar.toggle.
   assert.match(fn("railAgents"), /sidebarSections\(instances, instances, contextDeployments, DESKTOP_TERMS, \{ placement, open: true, stale, pins: pinsShown\(\) \}\)/);
   assert.match(fn("toggleSidebar"), /setSidebarRail\(!sidebarRail\(\)\);/);
-  assert.match(fn("openRosterInstance"), /el\.click\(\);/, "the agent opens through its roster row's own act");
+  assert.match(fn("openRosterInstance"), /return row \? activateRosterRow\(row\) : false;/, "the agent opens through the roster row's own act");
 });
 
 test("slice6a home works with the sidebar hidden", async (t) => {
@@ -187,6 +187,18 @@ test("slice6a home works with the sidebar hidden", async (t) => {
   assert.ok(row, "the board follows the roster change");
   row.click();
   assert.deepEqual(opened, ["late"]);
+  // The act itself needs no sidebar DOM at all (#1987): the shipped openRosterInstance and activateRosterRow, with no
+  // roster element, open a running agent's terminal and a stopped one's Start, and refuse a held or unknown row.
+  const calls = [];
+  const c = { contextInstances: [{ instance: "run", running: true, home: "/h/run" }, { instance: "stop", running: false, home: "/h/stop" },
+    { instance: "held", running: true, home: "/h/held", retirePending: true }, { instance: "unknown", running: null, home: "/h/unknown" }],
+    shownRows: (rows) => rows, instanceId: (r) => r.home, heldHome: (r) => (r.retirePending ? { kind: "retiring" } : null), canAddressRemote: () => true,
+    rosterStale: false, rowStale: () => false, contextDeployments: [], contextWorkspace: "A", currentWorkspace: () => "A", spawnJobs: {},
+    openTerminalTab: (r) => calls.push(["terminal", r.instance]), openInstanceStart: (r) => calls.push(["start", r.instance]) };
+  const act = runInNewContext(`${fn("activateRosterRow")}\n${fn("openRosterInstance")}\nopenRosterInstance`, c);
+  for (const name of ["run", "stop", "held", "unknown"]) act({ instance: name, home: `/h/${name}` });
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [["terminal", "run"], ["start", "stop"]], "the row's gates, no DOM");
+  assert.match(shell, /activateRosterRow\(i, ws\); \/\/ the row's one act/, "the row runs the same act");
 });
 
 test("slice6a home agents pins first", () => {
