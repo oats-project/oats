@@ -993,7 +993,7 @@ for (const [platform, isMac] of [["macOS", true], ["Linux", false]]) {
       // Each lands where its row says, on its default chord in either family.
       const mod = (k) => (isMac ? ["⌘", k] : ["Ctrl", k]);
       // The sidebar's Spawn instance runs Quick Open: its row, in the family in use.
-      assert.deepEqual(caps(rowIn("Global", "Quick open a soul to spawn")),
+      assert.deepEqual(caps(rowIn("Global", "New agent: choose a soul")),
         isMac ? ["⌘", "P"] : { alt: ["Alt", "P"], "ctrl+alt": ["Ctrl", "Alt", "P"], "ctrl+shift": ["Ctrl", "Shift", "P"] }[family]);
       assert.deepEqual(caps(rowIn("Global", "Souls: choose a soul to spawn (Workspace › Souls)")), isMac ? ["⌘", "N"] : ["Ctrl", "Shift", "N"]);
       const machines = rowIn("Global", "View: Workspace › Machines");
@@ -1033,7 +1033,7 @@ const usefulShown = (doc) => [...doc.querySelectorAll(".kb-useful tbody tr")]
 // family alone (Ctrl+Alt and Ctrl+Shift leave Alt+↑ / ↓ to the program), so there the leader's ↑ / ↓
 // stand in.
 const MAC_USEFUL = [
-  ["Command palette", "⌘K"], ["Quick open a soul to spawn", "⌘P"], ["Previous / next tab", "⌥← / ⌥→"],
+  ["Command palette", "⌘K"], ["New agent: choose a soul", "⌘P"], ["Previous / next tab", "⌥← / ⌥→"],
   ["Go to tab 1–9", "⌥⌘1 to ⌥⌘9"], ["Previous / next workspace", "⌥↑ / ⌥↓"], ["Split right / split down", "⌘\\ / ⇧⌘\\"],
   ["Previous / next split pane", "⌥⇧← / ⌥⇧→"], ["Close tab", "⌘W"], ["Focus mode", "⌥⌘Z"],
   ["Scroll back in a terminal", "Wheel up, ⇧PgUp or ⌃B then ["], ["The leader, then ? for everything", "⌃X then ?"],
@@ -1042,21 +1042,21 @@ const MOST_USEFUL = {
   mac: { alt: MAC_USEFUL, "ctrl+alt": MAC_USEFUL, "ctrl+shift": MAC_USEFUL },
   linux: {
     alt: [
-      ["Command palette", "Alt+K"], ["Quick open a soul to spawn", "Alt+P"], ["Previous / next tab", "Alt+← / Alt+→"],
+      ["Command palette", "Alt+K"], ["New agent: choose a soul", "Alt+P"], ["Previous / next tab", "Alt+← / Alt+→"],
       ["Go to tab 1–9", "Alt+1 to Alt+9"], ["Previous / next workspace", "Alt+↑ / Alt+↓"],
       ["Split right / split down", "Alt+E / Alt+Shift+E"], ["Previous / next split pane", "Alt+Shift+← / Alt+Shift+→"],
       ["Close tab", "Alt+W"], ["Focus mode", "Alt+Z"],
       ["Scroll back in a terminal", "Wheel up, Shift+PgUp or Ctrl+B then ["], ["The leader, then ? for everything", "Ctrl+X then ?"],
     ],
     "ctrl+alt": [
-      ["Command palette", "Ctrl+Alt+K"], ["Quick open a soul to spawn", "Ctrl+Alt+P"], ["Previous / next tab", "Alt+Shift+← / Alt+Shift+→"],
+      ["Command palette", "Ctrl+Alt+K"], ["New agent: choose a soul", "Ctrl+Alt+P"], ["Previous / next tab", "Alt+Shift+← / Alt+Shift+→"],
       ["Go to tab 1–9", "Ctrl+Alt+1 to Ctrl+Alt+9"], ["Previous / next workspace", "Ctrl+X then ↑ / ↓"],
       ["Split right / split down", "Ctrl+Alt+E / Ctrl+Alt+Shift+E"], ["Previous / next split pane", "Ctrl+Alt+Shift+A / Ctrl+Alt+A"],
       ["Close tab", "Ctrl+Alt+W"], ["Focus mode", "Ctrl+Alt+Z"],
       ["Scroll back in a terminal", "Wheel up, Shift+PgUp or Ctrl+B then ["], ["The leader, then ? for everything", "Ctrl+X then ?"],
     ],
     "ctrl+shift": [
-      ["Command palette", "Ctrl+Shift+K"], ["Quick open a soul to spawn", "Ctrl+Shift+P"], ["Previous / next tab", "Alt+Shift+← / Alt+Shift+→"],
+      ["Command palette", "Ctrl+Shift+K"], ["New agent: choose a soul", "Ctrl+Shift+P"], ["Previous / next tab", "Alt+Shift+← / Alt+Shift+→"],
       ["Go to tab 1–9", "Ctrl+Alt+1 to Ctrl+Alt+9"], ["Previous / next workspace", "Ctrl+X then ↑ / ↓"],
       ["Split right / split down", "Ctrl+Shift+E / Ctrl+Shift+D"], ["Previous / next split pane", "Ctrl+Alt+Shift+A / Ctrl+Alt+A"],
       ["Close tab", "Ctrl+Shift+W"], ["Focus mode", "Ctrl+Shift+M"],

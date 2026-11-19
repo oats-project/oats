@@ -48,20 +48,20 @@ test('the dialog shows what the kernel decided: name, harness, model and work �
   const preview = created('preview-worktree-default');
   assert.equal(u.q('.spawn-name-result strong').textContent, preview.instance, 'the kernel names an instance with no purpose');
   assert.equal(u.q('.spawn-name-prefix').textContent, 'release-manager-', 'without spawn-name (the host\'s default) a typed name is a purpose');
-  const trigger = u.q('.spawn-run .spawn-choice-trigger');
-  assert.equal(trigger.querySelector('.runtime-badge').dataset.runtime, 'pi'); assert.equal(trigger.querySelector('.spawn-trigger-tag').textContent, 'default');
-  assert.equal(trigger.getAttribute('aria-label'), 'Harness: Pi (default)');
+  // Harness: claude · codex · pi, the soul's default (the kernel's: pi) chosen and marked.
+  const pi = u.q('.fharness input[value=pi]');
+  assert.equal(u.q('.fharness input:checked'), pi); assert.equal(pi.nextElementSibling.querySelector('.spawn-harness-default').hidden, false);
+  assert.equal(pi.getAttribute('aria-label'), "Pi (the soul's default)");
   assert.equal(u.text('.spawn-model-default'), "Pi's default model"); assert.equal(u.text('.spawn-input-tag'), 'default');
   assert.equal(u.text('.spawn-run-hint'), 'Launches Pi with its own default model.');
-  // Work lives in Developer settings, collapsed by default.
+  // Work lives in Advanced, collapsed by default.
   const advanced = u.q('.spawn-advanced');
-  assert.equal(advanced.open, false); assert.equal(advanced.querySelector('summary').firstChild.textContent, 'Developer settings');
+  assert.equal(advanced.open, false); assert.equal(advanced.querySelector('summary').firstChild.textContent, 'Advanced');
   assert.ok(advanced.contains(u.q('.spawn-work')));
   assert.equal(u.q('.fbranch').placeholder, preview.branch); assert.equal(u.q('.fbase').placeholder, `HEAD · ${preview.base.oid.slice(0, 7)}`);
   assert.equal(u.text('.spawn-worktree-path code'), preview.worktree.slice(DEPLOYMENT.length + 1));
-  // The relationship is in the main form, not in Developer settings.
-  assert.equal(advanced.contains(u.q('.spawn-relationship')), false);
-  assert.equal(u.q('.spawn-seg input:checked').value, 'unrelated'); assert.equal(u.q('.frelto').hidden, true);
+  // No relation picker (D6): a human's spawn is top-level.
+  assert.equal(u.q('.spawn-relationship, .frelation, .frelto'), null);
   // Removed: capability toggles, K6 placeholders, the preview button, the soul-name prefix switch.
   assert.doesNotMatch(dialog.textContent, /Attach knowledge|Allow child spawns|Open PR|Available after|Preview invocation|Force native/i);
   // Board 6: the capabilities are the preview's facts (read-only), never a choice.
@@ -72,7 +72,7 @@ test('the dialog shows what the kernel decided: name, harness, model and work �
   assert.equal(u.q('.spawn-background').hidden, true);
   assert.equal(u.q('.spawn-prefix-toggle'), null); assert.doesNotMatch(dialog.textContent, /Prefix with the soul name/);
   assert.equal(u.q('.fspawn').disabled, false); assert.equal(u.q('.fspawn').hidden, false, 'the shell must not rewrite the Spawn button');
-  assert.equal(u.q('.fspawn').textContent, 'Spawn'); assert.ok(u.q('.fspawn').dataset.chord);
+  assert.equal(u.q('.fspawn').textContent, 'Start'); assert.ok(u.q('.fspawn').dataset.chord);
   assert.equal(u.previews().length, 1); assert.equal(u.spawns().length, 0, 'opening never prepares or applies');
 });
 
@@ -191,7 +191,7 @@ test('a stale apply (kernel E_DECISION_STALE) creates nothing, says so and reads
   await u.spawn();
   assert.equal(u.q('.fstatus').dataset.code, 'E_DECISION_STALE'); assert.match(u.text('.fstatus'), /Nothing was created/);
   assert.doesNotMatch(u.text('.fstatus'), /E_[A-Z]|[0-9a-f]{24}/); assert.equal(u.opens.length, 0);
-  assert.ok(u.previews().length > before, 're-read after a stale refusal'); assert.equal(u.q('.fspawn').textContent, 'Spawn');
+  assert.ok(u.previews().length > before, 're-read after a stale refusal'); assert.equal(u.q('.fspawn').textContent, 'Start');
 });
 
 test('#1246 D1: a press 90 s after its preview prepares from the held answer; a drift the kernel finds at apply reads as drifted and the values are read again', async t => {
@@ -205,8 +205,8 @@ test('#1246 D1: a press 90 s after its preview prepares from the held answer; a 
   assert.deepEqual(u.spawns().map(b => b.action), ['prepare', 'apply']);
   assert.equal(atApply, reads, 'prepare took the held preview: no kernel preview between the press and the apply');
   assert.equal(u.q('.fstatus').dataset.code, 'E_DECISION_STALE');
-  assert.equal(u.text('.fstatus'), 'Something changed before the spawn went through. Nothing was created — check the updated values and press Spawn again.');
-  assert.ok(u.previews().length > shown, 'the values are read again'); assert.equal(u.q('.fspawn').textContent, 'Spawn');
+  assert.equal(u.text('.fstatus'), 'Something changed before the spawn went through. Nothing was created — check the updated values and press Start again.');
+  assert.ok(u.previews().length > shown, 'the values are read again'); assert.equal(u.q('.fspawn').textContent, 'Start');
   assert.equal(u.opens.length, 0);
 });
 
@@ -273,14 +273,17 @@ test('closing the dialog while the new instance is still starting: the terminal 
   assert.equal(polls >= 1, true); assert.deepEqual(u.opens, [], 'a closed dialog never hands off'); assert.equal(u.notified.length, 0);
 });
 
-test('Ctrl/Cmd+Enter spawns from the dialog; plain Enter in the instruction is text', async t => {
-  let u; u = await mountSpawn(t, { apply: args => applyThatRuns(u)(args) });
-  await u.open(); await u.type('.fpurpose', 'api-v2');
-  const ta = u.q('.ftask'); ta.focus();
-  ta.dispatchEvent(new u.dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); await settle();
-  assert.equal(u.spawns().length, 0);
-  ta.dispatchEvent(new u.dom.window.KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true, cancelable: true })); await settle(20);
-  assert.deepEqual(u.spawns().map(b => b.action), ['prepare', 'apply']);
+test('slice 5: Enter in Task starts the agent, Shift+Enter is a newline, and Ctrl/Cmd+Enter starts it from anywhere in the form', async t => {
+  for (const enter of [{}, { ctrlKey: true }]) {
+    let u; u = await mountSpawn(t, { apply: args => applyThatRuns(u)(args) });
+    await u.open(); await u.type('.fpurpose', 'api-v2');
+    const ta = u.q('.ftask'); ta.focus();
+    assert.equal(ta.dispatchEvent(new u.dom.window.KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true, cancelable: true })), true, 'Shift+Enter is the text field\'s newline');
+    assert.equal(ta.dispatchEvent(new u.dom.window.KeyboardEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true, cancelable: true })), true, 'never while an input method composes');
+    await settle(); assert.equal(u.spawns().length, 0);
+    ta.dispatchEvent(new u.dom.window.KeyboardEvent('keydown', { key: 'Enter', ...enter, bubbles: true, cancelable: true })); await settle(20);
+    assert.deepEqual(u.spawns().map(b => b.action), ['prepare', 'apply'], JSON.stringify(enter));
+  }
 });
 
 test('Run on an execution server: no local preview; the remote spawn carries the typed fields', async t => {
@@ -313,7 +316,7 @@ test('a spawn on a server whose host advertises spawn-name is named as a local o
   assert.equal(u.q('.fpurpose').placeholder, 'e.g. pricing-page-lead');
   assert.equal(u.text('.spawn-name-result'), 'Named by build when it spawns.', 'neither this CLI nor the host names it from its task');
   await u.type('.fpurpose', 'API-v2');
-  assert.equal(u.text('.spawn-name-result'), 'Instance name: api-v2', 'lowercased, nothing appended');
+  assert.equal(u.text('.spawn-name-result'), 'Name: api-v2', 'lowercased, nothing appended');
   assert.equal(u.previews().length, before, 'still decided on the host: no local preview');
   await u.spawn();
   assert.equal(remote.length, 1); assert.equal(remote[0].serverId, 'build');
@@ -327,7 +330,7 @@ test('a remote spawn with typed pricing-page-lead sends name: "pricing-page-lead
   await u.open(); u.q('.spawn-advanced').open = true;
   await u.change('.fserver', 'build');
   await u.type('.fpurpose', 'pricing-page-lead');
-  assert.equal(u.text('.spawn-name-result'), 'Instance name: pricing-page-lead');
+  assert.equal(u.text('.spawn-name-result'), 'Name: pricing-page-lead');
   await u.spawn();
   assert.equal(remote.length, 1); assert.equal(remote[0].name, 'pricing-page-lead');
 });
@@ -360,7 +363,7 @@ test('a soul listed from a server finds its host the same way: a host with spawn
   await u.open('builder'); await settle(20);
   assert.ok(u.q('.spawn-name-input').classList.contains('unprefixed'));
   await u.type('.fpurpose', 'nightly');
-  assert.equal(u.text('.spawn-name-result'), 'Instance name: nightly');
+  assert.equal(u.text('.spawn-name-result'), 'Name: nightly');
   await u.spawn();
   assert.equal(remote[0].name, 'nightly'); assert.equal(Object.hasOwn(remote[0], 'purpose'), false);
   assert.equal(u.previews().length, 0, 'still no local preview for a remote soul');
@@ -376,9 +379,9 @@ test('the host\'s name refusal is said next to the Name field, as a local one is
   assert.ok(u.q('.spawn-name-result').classList.contains('err'));
   assert.equal(u.text('.spawn-name-result'), 'An instance with this name already exists. Choose another name.');
   assert.equal(u.text('.fstatus'), `Couldn’t spawn on build: ${message}`); assert.equal(u.q('.fstatus').dataset.code, 'E_INSTANCE_NAME_TAKEN');
-  assert.equal(u.q('.fspawn').textContent, 'Spawn', 'nothing was created: Spawn is offered again');
+  assert.equal(u.q('.fspawn').textContent, 'Start', 'nothing was created: Start is offered again');
   await u.type('.fpurpose', 'api-v3');
-  assert.equal(u.q('.spawn-name-result').classList.contains('err'), false); assert.equal(u.text('.spawn-name-result'), 'Instance name: api-v3');
+  assert.equal(u.q('.spawn-name-result').classList.contains('err'), false); assert.equal(u.text('.spawn-name-result'), 'Name: api-v3');
 });
 
 test('a host\'s late name refusal speaks only for the name it refused: a name edited meanwhile is not marked taken', async t => {
@@ -390,7 +393,7 @@ test('a host\'s late name refusal speaks only for the name it refused: a name ed
   await u.type('.fpurpose', 'api-v3');
   reply.reject(Object.assign(new Error('instance name "api-v2" is taken'), { code: 'E_INSTANCE_NAME_TAKEN' })); await pressed; await settle();
   assert.equal(u.q('.fstatus').dataset.code, 'E_INSTANCE_NAME_TAKEN', 'the footer reports the refusal');
-  assert.equal(u.q('.spawn-name-result').classList.contains('err'), false); assert.equal(u.text('.spawn-name-result'), 'Instance name: api-v3');
+  assert.equal(u.q('.spawn-name-result').classList.contains('err'), false); assert.equal(u.text('.spawn-name-result'), 'Name: api-v3');
   await u.type('.fpurpose', 'api-v2');
   assert.equal(u.q('.spawn-name-result').classList.contains('err'), false, 'an edit clears it, as for a local refusal');
 });
@@ -413,10 +416,12 @@ test('choosing a harness re-reads the kernel and swaps the suggestions', async t
   const asked = [];
   const u = await mountSpawn(t, { models: body => { asked.push(body.harness); return { models: [] }; } });
   await u.open(); await u.type('.fpurpose', 'api-v2');
-  u.q('.spawn-run .spawn-choice-trigger').click(); await settle();
-  [...u.doc.querySelectorAll('#spawn-runtime-choices button')].find(b => b.textContent.includes('Claude Code')).click(); await settle();
+  u.q('.fharness input[value=claude]').click(); await settle();
   assert.equal(last(u).harness, 'claude'); assert.equal(asked.at(-1), 'claude');
-  assert.match(u.q('.spawn-run .spawn-choice-trigger').textContent, /Claude Code/);
+  assert.equal(u.q('.fharness input:checked').value, 'claude');
+  // The soul's default again: nothing is sent, the soul decides.
+  u.q('.fharness input[value=pi]').click(); await settle();
+  assert.equal(Object.hasOwn(last(u), 'harness'), false); assert.equal(u.q('.fruntime').value, '');
 });
 
 test('a launch configuration is listed for this soul and sent only when chosen', async t => {
@@ -432,16 +437,16 @@ test('the harness, model and launch hints describe the preview for the harness, 
   const u = await mountSpawn(t, { previewGate: () => hold ? gate.promise : undefined });
   await u.open();
   assert.equal(u.text('.spawn-run-hint'), 'Launches Pi with its own default model.'); assert.equal(u.text('.spawn-model-default'), "Pi's default model");
-  assert.equal(u.q('.spawn-run .spawn-choice-trigger .spawn-trigger-tag')?.textContent, 'default');
+  assert.equal(u.q('.fharness input:checked').value, 'pi');
   hold = true; await u.change('.fyolo', 'true'); // another field: the launch facts on screen still describe this harness and model
   assert.equal(u.text('.spawn-run-hint'), 'Launches Pi with its own default model.', 'no blink while an unrelated field reads');
   assert.equal(u.text('.spawn-model-default'), "Pi's default model"); assert.equal(u.text('.spawn-input-tag'), 'default');
   await u.change('.fruntime', 'claude'); // the harness itself: the previous preview is for another launch
   assert.equal(u.text('.spawn-run-hint'), '', 'no launch sentence from the previous harness');
   assert.equal(u.text('.spawn-model-default'), ''); assert.equal(u.text('.spawn-input-tag'), '');
-  assert.equal(u.q('.spawn-run .spawn-choice-trigger .spawn-trigger-tag'), null, 'no "default" tag from the previous preview');
+  assert.equal(u.q('.fharness input:checked').value, 'claude', 'the harness chosen, while its preview reads');
   await u.change('.fruntime', ''); // back to the default harness: the settled preview speaks for it again
-  assert.equal(u.q('.spawn-run .spawn-choice-trigger').getAttribute('aria-label'), 'Harness: Pi (default)');
+  assert.equal(u.q('.fharness input:checked').value, 'pi');
   assert.equal(u.text('.spawn-model-default'), "Pi's default model");
   gate.resolve(); await settle(20);
   assert.equal(u.text('.spawn-run-hint'), 'Launches Pi with its own default model.', 'the hint stands with the matching preview');
@@ -455,40 +460,52 @@ test('permissions default to what the kernel reports and are sent only when chos
   await u.change('.fyolo', 'true'); assert.equal(last(u).yolo, true);
 });
 
-test('relationship: Child of reveals the instance picker and sends the exact anchor', async t => {
+test('D6: no relation picker; every spawn is top-level', async t => {
   const u = await mountSpawn(t);
   await u.open(); await u.type('.fpurpose', 'api-v2');
-  u.q('.spawn-seg input[value=child]').click(); await settle();
-  assert.equal(u.q('.frelto').hidden, false); assert.equal(u.q('.fspawn').disabled, true, 'a relation needs its instance');
-  await u.change('.frelto', 'release-manager-race');
-  assert.deepEqual(last(u).relation, { kind: 'child', anchor: { instance: 'release-manager-race', agent: 'release-manager', agentsRoot: ROOT, server: null } });
-  assert.match(u.text('.freldesc'), /child of release-manager-race/);
+  assert.equal(u.q('.spawn-relationship, .frelation, .frelto'), null);
+  assert.deepEqual(last(u).relation, { kind: 'unrelated' });
+  // A draft an older press kept with a relation reopens top-level.
+  spawn.preselectSpawn({ name: 'release-manager', agentsRoot: ROOT, draft: { restore: { choices: { purpose: 'api-v2', relation: { kind: 'child', anchor: { instance: 'release-manager-race', agent: 'release-manager', agentsRoot: ROOT, server: null } } } } } });
+  await settle(20);
+  assert.deepEqual(last(u).relation, { kind: 'unrelated' });
 });
 
 test('choosing another soul keeps the typed name and instruction', async t => {
   const u = await mountSpawn(t);
   await u.open(); await u.type('.fpurpose', 'api-v2'); await u.type('.ftask', 'keep me');
-  [...u.doc.querySelectorAll('.spawn-choice')].find(b => b.dataset.agent === 'support-triager').click(); await settle();
-  assert.equal(u.q('.spawn-choice[aria-selected=true]').dataset.agent, 'support-triager');
+  u.q('.spawn-soul-current').click(); await settle();
+  assert.equal(u.doc.activeElement, u.q('.spawn-soul-search'), 'the Soul field opens its list');
+  u.q('.spawn-soul-option[data-agent="support-triager"]').click(); await settle();
+  assert.equal(u.text('.spawn-soul-current strong'), 'support-triager');
   assert.equal(u.q('.fpurpose').value, 'api-v2'); assert.equal(u.q('.ftask').value, 'keep me');
-  assert.equal(u.doc.activeElement, u.q('.ftask'), 'a pick goes on to the first field, the Opening instruction (Spec E)');
+  assert.equal(u.doc.activeElement, u.q('.ftask'), 'a pick goes on to Task (Spec E)');
 });
 
-// The name (decided 2026-10-20): optional and the form's last field (the Opening instruction is its first); with spawn-name a typed name goes as
-// --name exactly as typed, lowercased, nothing appended (decided 2026-11-12); an older kernel keeps --purpose with the prefix shown.
-test('the name is optional and the last field, before Developer settings, the Opening instruction the first; no prefix switch', async t => {
+// The name (decided 2026-10-20; slice 5): optional. Where the kernel names agents from their task it is Advanced's
+// kernel name; on a kernel that can't (no spawn-suggest-name) it is back in the form after Harness, with one dim line
+// saying why. With spawn-name a typed name goes as --name exactly as typed, lowercased, nothing appended (decided
+// 2026-11-12); an older kernel keeps --purpose with the prefix shown.
+test('slice 5: the name is in the form only where the kernel can\'t name from the task; no prefix switch', async t => {
   const u = await mountSpawn(t, { spawnName: true });
   await u.open();
-  const fields = [...u.q('.spawn-form-body').children].filter(c => !c.classList.contains('workspace-sr-only'));
-  const at = cls => fields.findIndex(f => f.classList.contains(cls) || f.querySelector(`:scope > .${cls}`));
-  assert.equal(fields[0], u.q('.ftask').closest('.spawn-field'), 'the Opening instruction is the first field');
-  assert.equal(fields[at('spawn-name') + 1], u.q('.spawn-advanced'), 'right before Developer settings');
-  assert.equal(at('spawn-name'), fields.length - 2, 'the last field');
+  const fields = [...u.q('.spawn-form-body').children].filter(c => !c.classList.contains('workspace-sr-only') && !c.hidden);
+  assert.equal(fields[0], u.q('.spawn-soul'), 'Soul is the first field');
+  assert.equal(fields[1], u.q('.ftask').closest('.spawn-field'), 'then Task');
+  assert.equal(u.q('.spawn-name').nextElementSibling, u.q('.spawn-preview-line'), 'after the fields, before the compact preview');
+  assert.equal(u.q('.spawn-advanced').contains(u.q('.spawn-name')), false);
+  assert.match(u.text('.spawn-naming-fallback'), /can't name an agent from its task/);
   const label = u.q('.spawn-name > label');
   assert.equal(label.htmlFor, 'spawn-purpose'); assert.equal(label.firstChild.textContent, 'Name '); assert.equal(label.querySelector('small').textContent, '· optional');
   assert.equal(u.q('.spawn-prefix-toggle'), null); assert.equal(u.q('.fprefix'), null);
   assert.ok(u.q('.spawn-name-input').classList.contains('unprefixed'), 'no <soul>- prefix where the name goes as --name');
   assert.equal(u.q('.fpurpose').placeholder, 'e.g. pricing-page-lead');
+  // A kernel that names from the task: the name is Advanced's kernel name, and no line says why.
+  const naming = await mountSpawn(t, { spawnName: true, cli: { ...structuredClone(CLI), features: [...CLI.features, 'spawn-suggest-name'] } });
+  await naming.open();
+  assert.ok(naming.q('.spawn-advanced').contains(naming.q('.spawn-name')));
+  assert.equal(naming.q('.spawn-name > label').firstChild.textContent, 'Kernel name ');
+  assert.equal(naming.q('.spawn-naming-fallback').hidden, true);
 });
 
 test('with spawn-name: empty is numbered by the kernel; a typed name goes as --name exactly as typed (lowercased), with no soul role', async t => {
@@ -501,7 +518,7 @@ test('with spawn-name: empty is numbered by the kernel; a typed name goes as --n
   assert.deepEqual(last(u), { model: { kind: 'inherit' }, relation: { kind: 'unrelated' } }, 'nothing sent for an empty name');
   await u.type('.fpurpose', 'desktop-improvements');
   assert.deepEqual(last(u), { name: 'desktop-improvements', model: { kind: 'inherit' }, relation: { kind: 'unrelated' } });
-  assert.equal(u.text('.spawn-name-result'), 'Instance name: desktop-improvements'); assert.equal(u.q('.spawn-name-result strong').textContent, 'desktop-improvements');
+  assert.equal(u.text('.spawn-name-result'), 'Name: desktop-improvements'); assert.equal(u.q('.spawn-name-result strong').textContent, 'desktop-improvements');
   // --name is used exactly as given (the kernel slugs a purpose, not a name): what is typed is lowercased first.
   await u.type('.fpurpose', 'Pricing-Page-Lead');
   assert.equal(last(u).name, 'pricing-page-lead'); assert.equal(u.q('.spawn-name-result strong').textContent, 'pricing-page-lead');
@@ -532,7 +549,7 @@ test('with spawn-name the 64-character cap runs on the typed name itself; a kern
 
 test('a restored draft of { name: "pricing-page-lead" } puts pricing-page-lead back in the field and sends it unchanged', async t => {
   const u = await mountSpawn(t, { spawnName: true });
-  spawn.preselectSpawn({ name: 'release-manager', agentsRoot: ROOT, draft: { layout: 'scoped', restore: { choices: { name: 'pricing-page-lead' } } } }); await settle(20);
+  spawn.preselectSpawn({ name: 'release-manager', agentsRoot: ROOT, draft: { restore: { choices: { name: 'pricing-page-lead' } } } }); await settle(20);
   assert.equal(u.q('.fpurpose').value, 'pricing-page-lead');
   assert.equal(last(u).name, 'pricing-page-lead');
 });
@@ -542,7 +559,7 @@ test('an older kernel without spawn-name keeps --purpose, the <soul>- prefix sho
   await u.open(); await settle(20);
   assert.equal(u.q('.spawn-name-input').classList.contains('unprefixed'), false); assert.equal(u.text('.spawn-name-prefix'), 'release-manager-');
   assert.equal(u.q('.fpurpose').placeholder, 'purpose, e.g. api-v2');
-  assert.match(u.text('.spawn-name-result'), /^Instance name: /, 'the numbered name as today, not the spawn-name hint');
+  assert.match(u.text('.spawn-name-result'), /^Name: /, 'the numbered name as today, not the spawn-name hint');
   await u.type('.fpurpose', 'api-v2');
   assert.deepEqual(last(u), { purpose: 'api-v2', model: { kind: 'inherit' }, relation: { kind: 'unrelated' } });
   assert.equal(u.q('.spawn-prefix-toggle'), null);
@@ -571,22 +588,14 @@ test('a CLI without the confirmed-apply fence can preview but never spawn', asyn
   assert.equal(u.spawns().length, 0);
 });
 
-test('relation picker: hostile roster paths and descriptions stay inert text; colliding root tags stay distinguishable', async t => {
-  const evilRoot = `/tmp/x"><img src=x onerror=alert(1)>/agents`;
+test('hostile soul descriptions stay inert text, in the Soul field and its list', async t => {
   const agents = catalogAgents().map(a => a.name === 'release-manager' ? { ...a, description: '<img src=x onerror=alert(1)>" onpointerenter="window.__pwned=1' } : a);
-  const u = await mountSpawn(t, { agents, instances: [
-    { instance: 'dev-1', agent: 'dev', agentsRoot: '/a/project/agents', home: '/a/project/agents/dev/instances/dev-1', running: true },
-    { instance: 'dev-1', agent: 'dev', agentsRoot: '/b/project/agents', home: '/b/project/agents/dev/instances/dev-1', running: true },
-    { instance: 'evil', agent: 'dev', agentsRoot: evilRoot, home: `${evilRoot}/dev/instances/evil`, running: false },
-  ] });
+  const u = await mountSpawn(t, { agents });
   const dialog = await u.open();
+  u.q('.spawn-soul-current').click(); await settle();
   assert.equal(dialog.querySelector('img'), null);
   assert.ok(![...dialog.querySelectorAll('*')].some(el => [...el.attributes].some(at => at.name.startsWith('on'))));
-  const options = [...u.q('.frelto').options];
-  assert.equal(options.find(o => o.value === 'evil').dataset.root, evilRoot, 'the root is kept byte-for-byte as data');
-  assert.match(options.find(o => o.value === 'evil').textContent, /^evil.*\(stopped\)$/);
-  const labels = options.filter(o => o.value === 'dev-1').map(o => o.textContent);
-  assert.equal(labels.length, 2); assert.notEqual(labels[0], labels[1]);
+  assert.match(u.text('.spawn-soul-option[data-agent="release-manager"] small'), /^<img src=x/, 'the description is text');
 });
 
 test('roster refreshes while the dialog is open keep the typed name, instruction and open settings', async t => {
@@ -626,20 +635,26 @@ test('a soul name with selector metacharacters opens as data, is refused by the 
   const evil = 'a"]b[x=1\\';
   const u = await mountSpawn(t, { agents: [...catalogAgents(), { name: evil, description: '', kind: 'persistent', work: 'worktree', agentsRoot: ROOT, repoName: 'northwind' }] });
   const dialog = await u.open(evil);
-  assert.equal(u.q('.spawn-choice[aria-selected=true]').dataset.agent, evil);
+  assert.equal(u.text('.spawn-soul-current strong'), evil);
   assert.equal(u.previews().at(-1).selector.soul, evil, 'the exact name is sent as data');
   assert.equal(u.q('.fstatus').dataset.code, 'E_BAD_ARGS', 'the boundary refuses a non-kernel soul name'); assert.doesNotMatch(u.text('.fstatus'), /E_[A-Z]/); assert.equal(u.q('.fspawn').disabled, true);
   await u.type('.ftask', 'typed'); for (const poll of u.polls) poll(); await settle(20);
   assert.equal(u.dialog(), dialog); assert.equal(u.q('.ftask').value, 'typed');
 });
 
-test('the soul chooser is titled Souls, with the count beside it and the search below', async t => {
+test('the Soul field: its label names the list, a combobox over it, Escape closes the list back to the soul', async t => {
   const u = await mountSpawn(t); await u.open();
-  const chooser = u.q('.spawn-chooser'), head = chooser.firstElementChild;
-  assert.equal(head.className, 'spawn-chooser-head'); assert.equal(u.text('.spawn-chooser-title'), 'Souls');
-  assert.equal(chooser.getAttribute('aria-labelledby'), u.q('.spawn-chooser-title').id);
-  assert.match(head.querySelector('.spawn-search-count').textContent, /^\d+ of \d+$/);
-  assert.equal(head.nextElementSibling.className, 'spawn-search-label');
+  const current = u.q('.spawn-soul-current');
+  assert.equal(u.text('.spawn-soul > label'), 'Soul'); assert.equal(current.getAttribute('aria-haspopup'), 'listbox');
+  assert.equal(current.getAttribute('aria-expanded'), 'false'); assert.equal(u.q('.spawn-soul-search').hidden, true);
+  current.click(); await settle();
+  const search = u.q('.spawn-soul-search');
+  assert.equal(search.getAttribute('role'), 'combobox'); assert.equal(search.getAttribute('aria-controls'), u.q('.spawn-soul-list').id);
+  assert.equal(u.q('.spawn-soul-list').getAttribute('aria-labelledby'), u.q('.spawn-soul > label').id);
+  assert.equal(u.doc.getElementById(search.getAttribute('aria-activedescendant')).dataset.agent, 'release-manager', 'the chosen soul is the active option');
+  search.dispatchEvent(new u.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await settle();
+  assert.ok(u.dialog(), 'Escape in the list closes only the list');
+  assert.equal(u.doc.activeElement, current); assert.equal(search.hidden, true);
 });
 
 function luminance(hex) {
@@ -657,28 +672,28 @@ for (const theme of ['light', 'solarized', 'dark']) test(`${theme}: every spawn 
   u.q('.fstatus').textContent = 'x'; u.q('.fstatus').classList.add('err'); u.q('.spawn-details-toggle').hidden = false; u.q('.spawn-problem-detail').hidden = false;
   // A kernel text quoted in Details (a line of its own, #1015).
   u.q('.spawn-problem-detail').append(Object.assign(u.doc.createElement('span'), { className: 'spawn-problem-line', textContent: 'OATS says: x' }));
-  u.q('.spawn-run .spawn-choice-trigger').click(); await settle();
+  u.q('.spawn-model-controls .spawn-choice-trigger').click(); await settle();
   const view = u.dom.window, root = view.getComputedStyle(u.doc.documentElement);
   for (const [selector, surfaceSelector, fg, bg] of [
-    ['.spawn-choice[aria-selected=true] strong', '.spawn-choice[aria-selected=true]', 'fg', 'sel'],
-    ['.spawn-choice[aria-selected=true] small', '.spawn-choice[aria-selected=true]', 'muted', 'sel'],
-    ['.spawn-name > label', '.spawn-dialog', 'muted', 'surface'], ['.spawn-relationship > legend', '.spawn-dialog', 'muted', 'surface'],
+    ['.spawn-soul-current strong', '.spawn-soul-current', 'fg', 'surface'], ['.spawn-soul-current small', '.spawn-soul-current', 'muted', 'surface'],
+    ['.spawn-name > label', '.spawn-dialog', 'muted', 'surface'], ['.spawn-harness > legend', '.spawn-dialog', 'muted', 'surface'],
+    ['.spawn-naming-fallback', '.spawn-dialog', 'muted', 'surface'],
+    ['.spawn-preview-line', '.spawn-dialog', 'muted', 'surface'], ['.spawn-preview-line strong', '.spawn-dialog', 'fg', 'surface'],
     ['.spawn-name-prefix', '.spawn-name-input', 'muted', 'surface'],
     ['.spawn-name-result strong', '.spawn-dialog', 'fg', 'surface'],
     ['.spawn-hint', '.spawn-dialog', 'muted', 'surface'],
     ['.spawn-model-default', '.spawn-dialog', 'fg', 'surface'],
     ['.spawn-input-tag', '.spawn-input-tag', 'muted', 'chip-bg'],
-    ['.spawn-run .spawn-trigger-tag', '.spawn-run .spawn-trigger-tag', 'muted', 'chip-bg'],
     ['.spawn-choice-menu [aria-selected=true]', '.spawn-choice-menu [aria-selected=true]', 'fg', 'sel'],
     ['.spawn-seg input:checked + span', '.spawn-seg input:checked + span', 'accent', 'sel'], // the selected segment: brand tint (shared control rule 1)
     ['.spawn-seg input:not(:checked) + span', '.spawn-seg', 'muted', 'surface'],
-    ['.spawn-advanced > summary', '.spawn-advanced', 'fg', 'surface-2'],
-    ['.spawn-advanced > summary small', '.spawn-advanced', 'muted', 'surface-2'],
-    // Spec E: the section keys' quiet hints, on the dialog and in Developer settings' summary.
-    ['.spawn-name > label kbd.spawn-key-hint', '.spawn-dialog', 'muted', 'surface'], ['.spawn-relationship > legend kbd.spawn-key-hint', '.spawn-dialog', 'muted', 'surface'],
-    ['.spawn-advanced > summary kbd.spawn-key-hint', '.spawn-advanced', 'muted', 'surface-2'],
+    ['.spawn-advanced > summary', '.spawn-dialog', 'muted', 'surface'],
+    ['.spawn-advanced > summary small', '.spawn-dialog', 'muted', 'surface'],
+    ['.spawn-preview .spawn-preview-title', '.spawn-preview', 'muted', 'surface-2'],
+    // Spec E: the section keys' quiet hints, on the dialog and in Advanced's summary.
+    ['.spawn-name > label kbd.spawn-key-hint', '.spawn-dialog', 'muted', 'surface'], ['.spawn-harness > legend kbd.spawn-key-hint', '.spawn-dialog', 'muted', 'surface'],
+    ['.spawn-advanced > summary kbd.spawn-key-hint', '.spawn-dialog', 'muted', 'surface'],
     ['.spawn-joined-from', '.spawn-joined-from', 'muted', 'surface-2'],
-    ['.spawn-chooser-title', '.spawn-dialog', 'fg', 'surface'], ['.spawn-search-count', '.spawn-dialog', 'muted', 'surface'],
     ['.spawn-details-toggle', '.spawn-footer', 'muted', 'surface'], ['.spawn-problem-detail', '.spawn-problem-detail', 'muted', 'surface-2'],
     ['.spawn-problem-line', '.spawn-problem-detail', 'muted', 'surface-2'],
     ['.fstatus.err', '.spawn-footer', 'danger', 'surface'],
@@ -708,9 +723,9 @@ test('a name longer than the kernel cap (#159) is refused at the field before an
   assert.doesNotMatch(u.text('.spawn-name-result'), /at most 64/); assert.ok(u.previews().length > before, 'the longest derived name is previewed');
 });
 
-// Spec 02: "Where to run".
+// Spec 02: "Where to run" (slice 5: Where, only with two or more machines).
 const buildFacts = (extra = {}) => ({ server: 'build', label: 'Build host', group: 'build:1', reached: true, error: null, registered: true, ...extra });
-test('Where to run: "This computer" first, then each server by label (and id when it differs); an unreached or unregistered server is disabled with why, never for its souls', async t => {
+test('Where: "This computer" first, then each server by label (and id when it differs); an unreached or unregistered server is disabled with why, never for its souls', async t => {
   const u = await mountSpawn(t, {
     servers: [{ id: 'build', label: 'Build host', sshHost: 'build.lan' }, { id: 'same', label: 'same', sshHost: 's' }, { id: 'down', label: 'Down box', sshHost: 'd' },
       { id: 'bare', label: 'Bare box', sshHost: 'b' }, { id: 'moved', label: 'Moved box', sshHost: 'm' }],
@@ -719,12 +734,12 @@ test('Where to run: "This computer" first, then each server by label (and id whe
       buildFacts({ server: 'bare', label: 'Bare box', group: 'bare:1' }),
       buildFacts({ server: 'moved', label: 'Moved box', group: 'moved:old', registered: false })] } });
   await u.open();
-  // A primary decision: at the form's top level, directly above Relationship (whose picker depends on it), not in Developer settings.
+  // Two or more machines: Where is one of the form's fields, after Harness, not in Advanced.
   const place = u.q('.spawn-place');
-  assert.equal(place.querySelector('.spawn-label-text').textContent, 'Where to run');
+  assert.equal(place.hidden, false); assert.equal(place.querySelector('.spawn-label-text').textContent, 'Where');
   assert.equal(place.contains(u.q('.fserver')), true); assert.equal(place.contains(u.q('.spawn-server-hint')), true);
   assert.equal(u.q('.spawn-advanced').contains(place), false);
-  assert.equal(place.nextElementSibling, u.q('.spawn-relationship'));
+  assert.equal(place.previousElementSibling, u.q('.spawn-harness'));
   assert.deepEqual([...u.q('.fserver').options].map(o => [o.textContent, o.disabled]), [
     ['This computer', false], ['Build host (build)', false], ['same', false],
     ['Down box (not reached)', true], ['Bare box (bare)', false], ['Moved box (not registered)', true]]);
@@ -742,44 +757,26 @@ test('a refused remote spawn says the refusal in OATS\'s own words (a soul the h
   assert.equal(u.text('.spawn-problem-detail'), `E_SOUL_UNKNOWN · ${message}`);
 });
 
-test('Where to run a server: the hint says so, the relation picker lists only that server\'s rows, and the relation travels with the remote spawn', async t => {
+test('Where a server: the hint says so, and the remote spawn carries no relation (D6)', async t => {
   const remote = [];
-  const farRow = { instance: 'far-lead', agent: 'release-manager', agentsRoot: '/srv/agents', home: '/srv/agents/release-manager/instances/far-lead', server: 'build', running: true, addressable: true };
   const u = await mountSpawn(t, { servers: [{ id: 'build', label: 'Build host', sshHost: 'build.lan' }], teamMembers: { members: [], notReached: [], servers: [buildFacts()] },
-    serverPanels: { 'remote:build:1': [farRow] }, remote: body => { remote.push(body); return { instance: 'release-manager-api-v2', server: 'build' }; } });
+    remote: body => { remote.push(body); return { instance: 'release-manager-api-v2', server: 'build' }; } });
   await u.open(); await u.type('.fpurpose', 'api-v2');
-  const local = [...u.q('.frelto').options].map(o => o.value).filter(Boolean);
-  u.q('.spawn-advanced').open = true;
   await u.change('.fserver', 'build');
   assert.equal(u.text('.spawn-server-hint'), "Runs on Build host. Its teams and defaults come from that machine's workspace.");
-  assert.deepEqual([...u.q('.frelto').options].map(o => o.value).filter(Boolean), ['far-lead'], 'never this computer\'s rows: relations do not cross machines');
-  const child = [...u.doc.querySelectorAll('.spawn-dialog .frelation input')].find(i => i.value === 'child'); child.checked = true; child.dispatchEvent(new u.dom.window.Event('change', { bubbles: true })); await settle();
-  await u.change('.frelto', 'far-lead');
   await u.spawn();
-  assert.equal(remote.length, 1);
-  assert.deepEqual([remote[0].serverId, remote[0].relation, remote[0].relativeTo, remote[0].relativeRoot], ['build', 'child', 'far-lead', '/srv/agents']);
+  assert.equal(remote.length, 1); assert.equal(remote[0].serverId, 'build');
+  for (const field of ['relation', 'relativeTo', 'relativeRoot']) assert.equal(Object.hasOwn(remote[0], field), false, field);
   await u.change('.fserver', '');
   assert.equal(u.text('.spawn-server-hint'), '');
-  assert.deepEqual([...u.q('.frelto').options].map(o => o.value).filter(Boolean), local, 'back on this computer: its own rows again');
 });
 
-test('Where to run a server: while its rows are still being read, a relation picked on this computer cannot be sent to it', async t => {
-  const gate = deferred(), remote = [];
-  const farRow = { instance: 'far-lead', agent: 'release-manager', agentsRoot: '/srv/agents', home: '/srv/agents/release-manager/instances/far-lead', server: 'build', running: true, addressable: true };
-  const u = await mountSpawn(t, { servers: [{ id: 'build', label: 'Build host', sshHost: 'build.lan' }], teamMembers: { members: [], notReached: [], servers: [buildFacts()] },
-    serverPanels: { 'remote:build:1': [farRow] }, serverPanelGate: gate.promise, remote: body => { remote.push(body); return { instance: 'x', server: 'build' }; } });
-  await u.open(); await u.type('.fpurpose', 'api-v2');
-  const child = [...u.doc.querySelectorAll('.spawn-dialog .frelation input')].find(i => i.value === 'child'); child.checked = true; child.dispatchEvent(new u.dom.window.Event('change', { bubbles: true })); await settle();
-  const localPick = [...u.q('.frelto').options].find(o => o.value);
-  await u.change('.frelto', localPick.value);
-  u.q('.spawn-advanced').open = true;
-  await u.change('.fserver', 'build');
-  assert.equal(u.q('.fspawn').disabled, true, 'the picker still holds this computer\'s rows: nothing may be sent');
-  u.q('.fspawn').click(); await settle(); assert.equal(remote.length, 0);
-  gate.resolve(); await settle();
-  assert.deepEqual([...u.q('.frelto').options].map(o => o.value).filter(Boolean), ['far-lead']);
-  assert.equal(u.q('.frelto').value, '', 'a local pick does not carry over'); assert.equal(u.q('.fspawn').disabled, true, 'a relation still needs a pick');
-  await u.change('.frelto', 'far-lead'); assert.equal(u.q('.fspawn').disabled, false);
+test('one machine: no Where; Add a machine is in Advanced, and adding one shows Where with it chosen', async t => {
+  const u = await mountSpawn(t, { servers: { servers: [], filtered: true, deployment: '/d', aweb: false } });
+  await u.open();
+  assert.equal(u.q('.spawn-place').hidden, true, 'one machine: no Where');
+  const add = u.q('.spawn-add-machine-button');
+  assert.ok(u.q('.spawn-advanced').contains(add), 'Add a machine waits in Advanced');
 });
 
 // #802: the in-dialog local path (the view harness) follows a pending apply like the background store does.
@@ -799,7 +796,7 @@ for (const [code, words] of [['E_INTERRUPTED', /^The spawn of release-manager-ap
       const c = structuredClone(CLI); if (feature) c.features = [...c.features, 'worktree-event'];
       const u = await mountSpawn(t, { cli: c, apply: () => ({ started: true, envelope: { schemaVersion: 1, ok: false, error: { code, message: 'nw-setup failed (log: /x.log)' } } }) });
       await u.open(); await u.type('.fpurpose', 'api-v2'); await u.spawn();
-      if (feature) { assert.match(u.text('.fstatus'), words); assert.equal(u.q('.fspawn').textContent, 'Spawn'); }
+      if (feature) { assert.match(u.text('.fstatus'), words); assert.equal(u.q('.fspawn').textContent, 'Start'); }
       else assert.equal(u.q('.fstatus').dataset.code, 'E_OUTCOME_UNKNOWN');
       u.close?.();
     }

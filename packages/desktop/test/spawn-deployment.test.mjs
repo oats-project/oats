@@ -202,22 +202,22 @@ test('one deployment: no Deployment field, nothing new on screen, and the spawn 
   const u = await mountSpawn(t, { deployments: [DA] });
   await u.open(); await settle();
   assert.equal(u.q('.fdeployment'), null, 'no field'); assert.equal(u.q('.spawn-deployment'), null);
-  assert.ok(u.q('.spawn-place'), 'Where to run stays where it was');
+  assert.ok(u.q('.spawn-place'), 'Where stays where it was');
   const fields = [...u.q('.spawn-form-body').children].filter(n => n.classList.contains('spawn-field'));
-  assert.ok(fields[0].querySelector('.ftask') && fields[1].querySelector('.spawn-run'), 'the Opening instruction, then Harness, as before');
+  assert.ok(fields[0].classList.contains('spawn-soul') && fields[1].querySelector('.ftask') && fields[2].classList.contains('spawn-harness'), 'Soul, Task, then Harness, as before');
   assert.equal(facts(u)['Runs on'], undefined, 'no Runs on row'); assert.equal(facts(u).Name, 'release-manager-1', 'the summary as before');
   assert.ok(previewWs(u).length > 0); assert.ok(previewWs(u).every(ws => ws === A), 'the deployment, never the view id');
   assert.equal(u.calls.filter(c => c.path.startsWith('/api/agents?ws=')).filter(c => wsOf(c.path) === A).length, 0, 'no catalog read per deployment');
 });
 
-test('two deployments: the field comes first after the Opening instruction, before Harness, replaces Where to run, defaults to the first that has the soul; Runs on names it', async t => {
+test('two deployments: the field replaces Where, after Harness, and defaults to the first that has the soul; Runs on names it', async t => {
   const u = await mountSpawn(t, { deployments: [DA, DB], catalogs: { [A]: catalogAgents(), [B]: catalogAgents() } });
   await u.open(); await settle();
-  assert.ok(u.q('.fdeployment')); assert.equal(u.q('.spawn-place'), null, 'Where to run is replaced');
+  assert.ok(u.q('.fdeployment')); assert.equal(u.q('.spawn-place'), null, 'Where is replaced');
   const fields = [...u.q('.spawn-form-body').children].filter(n => n.classList.contains('spawn-field'));
-  assert.ok(fields[0].querySelector('.ftask'), 'the Opening instruction is the first field');
-  assert.ok(fields[1].classList.contains('spawn-deployment'), 'then Deployment'); assert.ok(fields[2].querySelector('.spawn-run'), 'then Harness');
-  assert.equal(u.doc.activeElement, u.q('.ftask'), 'focus on open: the first field, the Opening instruction');
+  assert.ok(fields[0].classList.contains('spawn-soul') && fields[1].querySelector('.ftask'), 'Soul, Task');
+  assert.ok(fields[2].classList.contains('spawn-harness'), 'then Harness'); assert.ok(fields[3].classList.contains('spawn-deployment'), 'then Deployment, as Where');
+  assert.equal(u.doc.activeElement, u.q('.ftask'), 'focus on open: Task');
   assert.equal(u.dialog().querySelector('select.fdeployment, .spawn-deployment select'), null, 'never a native select');
   assert.equal(u.q('.spawn-deployment .spawn-seg').getAttribute('role'), 'radiogroup', 'two: the segmented control');
   assert.deepEqual(options(u), ['This Mac · northwind-workspace', 'This Mac · northwind'], 'by machine; one machine with two: the path tail');
@@ -274,7 +274,7 @@ test('four deployments: the dropdown, first; a pick re-reads there and Runs on f
   await u.open(); await settle();
   assert.equal(u.q('.spawn-deployment .spawn-seg'), null); assert.equal(u.dialog().querySelector('.spawn-deployment select'), null);
   const trigger = u.q('.spawn-deployment .spawn-choice-trigger');
-  assert.ok(u.q('.spawn-form-body > .spawn-field + .spawn-field').classList.contains('spawn-deployment'), 'first after the Opening instruction');
+  assert.ok(u.q('.spawn-harness').nextElementSibling.classList.contains('spawn-deployment'), 'Where\'s place, after Harness');
   assert.equal(trigger.getAttribute('aria-label'), 'Deployment: This Mac · northwind-workspace');
   trigger.click(); await settle();
   const items = [...u.dialog().querySelectorAll('#spawn-deployment-choices [role=option]')];
@@ -334,17 +334,6 @@ test('the default when the last used lacks the soul: the first that has it; when
   assert.equal(chosen(v), B);
   assert.equal(v.q('.fspawn').disabled, true); assert.equal(v.text('.fstatus'), "release-manager isn't available on This Mac · northwind.");
   assert.equal(v.q('.spawn-preview-empty'), null, 'the footer says it, the summary does not');
-});
-
-test('relation anchors: the chosen deployment\'s rows only', async t => {
-  const row = (instance, deployment, root = ROOT) => ({ ...anchor, instance, agentsRoot: root, home: `${root}/release-manager/instances/${instance}`, running: true,
-    createdAt: 'first', tmux: { session: 's', window: 'w' }, deployment: { id: deployment, machine: 'This Mac', path: deployment } });
-  const u = await mountSpawn(t, { deployments: [DA, DB], catalogs: { [A]: catalogAgents(), [B]: catalogAgents() },
-    instances: [row('on-a', A), row('on-b', B), { ...row('far', R, '/srv/agents'), server: 'devbox' }] });
-  await u.open(); await settle();
-  const names = () => [...u.q('.frelto').options].map(o => o.value).filter(Boolean);
-  assert.deepEqual(names(), ['on-a']);
-  await choose(u, B); assert.deepEqual(names(), ['on-b']);
 });
 
 test('a remote deployment spawns through its server with its own catalog\'s root; the reply\'s view is this one, so no switch', async t => {

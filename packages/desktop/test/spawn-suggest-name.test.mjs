@@ -225,9 +225,9 @@ const NOTES = 'Write the release notes for the next version', BUDGET = 'Review t
 const pause = async () => { await new Promise(r => setTimeout(r, 15)); await settle(); };
 const lastPreview = u => u.previews().filter(b => b.action === 'preview').at(-1);
 
-test('untouched and empty: the help says the instance is named from its task; nothing is asked before typing', async t => {
+test('untouched and empty: the help says the agent is named from its task; nothing is asked before typing', async t => {
   const k = namingKernel(), u = await dialog(t, k);
-  assert.equal(u.text('.spawn-name-result'), 'Left empty, the instance is named from its task.');
+  assert.equal(u.text('.spawn-name-result'), 'Left empty, the agent is named from its task.');
   assert.equal(u.q('.fpurpose').placeholder, 'e.g. pricing-page-lead');
   assert.match(u.text('.spawn-preview'), /named from its task/, 'the preview\'s Name says so too');
   assert.doesNotMatch(u.text('.spawn-preview'), new RegExp(`${DEFAULT.instance}\\b`), 'nor the numbered name\'s home or branch, which Spawn would not create');
@@ -254,13 +254,13 @@ test('seven words while typing: one call for the burst, the suggested name alone
   assert.equal(Object.hasOwn(k.asked[0].choices, 'name') || Object.hasOwn(k.asked[0].choices, 'purpose'), false);
   assert.equal(u.q('.fpurpose').placeholder, 'release-notes-manager');
   assert.equal(u.q('.fpurpose').value, '', 'the field stays empty');
-  assert.equal(u.text('.spawn-name-result'), 'Instance name: release-notes-manager (from the task)');
+  assert.equal(u.text('.spawn-name-result'), 'Name: release-notes-manager (from the task)');
   assert.equal(lastPreview(u).choices.name, 'release-notes-manager', 'the dialog\'s preview is the --name preview');
   assert.match(u.text('.spawn-preview'), /release-notes-manager/);
   // Another text: the suggestion no longer speaks for it, at once.
   const el = u.q('.ftask'); el.value = 'Write the release notes for the next version again'; el.dispatchEvent(new u.dom.window.Event('input', { bubbles: true }));
   assert.equal(u.q('.fpurpose').placeholder, 'e.g. pricing-page-lead');
-  assert.equal(u.text('.spawn-name-result'), 'Left empty, the instance is named from its task.');
+  assert.equal(u.text('.spawn-name-result'), 'Left empty, the agent is named from its task.');
   await pause(); assert.equal(k.asked.length, 2); assert.equal(u.q('.fpurpose').placeholder, 'release-notes-again-manager');
   // Back to the first text: the answer is remembered, no second call for it.
   await u.type('.ftask', NOTES); await pause();

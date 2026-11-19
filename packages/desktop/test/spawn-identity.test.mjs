@@ -113,7 +113,7 @@ async function dialog(t, options = {}) {
 
 // The captured probe from the same kernel advertises settings-origins; f3's older probe does not.
 const ORIGINS_CLI = () => { assert.ok(f3c('version').features.includes('settings-origins')); return { ...structuredClone(CLI), features: [...CLI.features, 'settings-origins'] }; };
-test('Developer settings offer the identity once the preview reports a messaging provider; with settings-origins the Default names the manifest default', async t => {
+test('Advanced offers the identity once the preview reports a messaging provider; with settings-origins the Default names the manifest default', async t => {
   const u = await dialog(t, { cli: ORIGINS_CLI() });
   assert.equal(u.q('.spawn-identity').hidden, false);
   assert.equal(u.q('.fidentity').options[0].textContent, 'Default · local');

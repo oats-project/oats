@@ -14,7 +14,7 @@ import { cli as CLI } from './helpers/spawn-preview-fixture.mjs';
 
 const CODE = 'E_LAUNCH_PREFERENCE_UNMATCHED';
 const SAID = 'the file points "ghost" at a launch and no soul answers to that name', REMEDY = 'point the entry at a soul, then drop "ghost"';
-const OPENS = 'This machine’s launch preferences name a soul this workspace doesn’t offer, so OATS won’t choose a launch for this soul. To spawn now, pick a harness above, or a launch configuration in Developer settings. To fix it for every spawn, correct the preference (Details).';
+const OPENS = 'This machine’s launch preferences name a soul this workspace doesn’t offer, so OATS won’t choose a launch for this soul. To spawn now, pick a harness above, or a launch configuration in Advanced. To fix it for every spawn, correct the preference (Details).';
 const PRESSED = 'This machine’s launch preferences name a soul this workspace doesn’t offer, so OATS won’t choose a launch for this soul. To spawn now, pick a harness or a launch configuration for this spawn. To fix it for every spawn, correct the preference.';
 const TABLE = 'A launch preference on this machine names a soul the workspace does not offer, and this spawn names no launch.';
 const refusal = (message = SAID, fix = REMEDY) => ({ schemaVersion: 1, ok: false, error: { code: CODE, message,

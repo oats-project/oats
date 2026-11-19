@@ -1,11 +1,11 @@
 // #482 (decision Q5): the Teams board lists the members of the VIEW's deployments, grouped by deployment
 // with machine labels; a member's action stays in the view on screen and addresses the member's deployment.
-// "Where to run" reads every view's remote groups, and a group's relation rows are that group's only.
+// Where (the New agent form) reads every view's remote groups.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { createComputerTeams, computerTeamsCSS, memberGroups } from '../renderer/computer-teams.mjs';
-import { teamMemberAction, serverRows, serverFacts } from '../renderer/views/spawn.mjs';
+import { teamMemberAction, serverFacts } from '../renderer/views/spawn.mjs';
 import { currentWorkspace, setWorkspace } from '../renderer/views/common.mjs';
 
 const TEAM = 'aweb:web.aweb.ai';
@@ -84,13 +84,6 @@ test('teamMemberAction: stays in the view on screen and opens the row of the mem
     await teamMemberAction(show.s, 'show', member('dev-a', OATS));
     assert.equal(show.shown.length, 1); assert.equal(currentWorkspace(), 'ws:web');
   } finally { setWorkspace(previous); }
-});
-
-test('serverRows: a remote group\'s relation rows are that group\'s deployment only (the panel answers its whole view)', async () => {
-  const h = host([{ instances: [{ instance: 'here', deployment: { id: '/Users/alex/Agents/oats' } }, { instance: 'far', server: 'devbox', deployment: { id: 'remote:devbox:k1' } },
-    { instance: 'other', server: 'build', deployment: { id: 'remote:build:k2' } }] }]);
-  assert.deepEqual((await serverRows(h.s, 'devbox:k1')).map(r => r.instance), ['far']);
-  assert.deepEqual(h.asked, ['/api/panel?ws=remote%3Adevbox%3Ak1']);
 });
 
 test('serverFacts: every view holding a remote deployment is read, so a registered group in another view is still known', async () => {

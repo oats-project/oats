@@ -161,12 +161,12 @@ test("spawn MODAL controls are excluded from view-key dispatch: '/' and 'B' from
     const modal = doc.querySelector(".spawn-modal");
     assert.ok(modal, "modal open");
     const filter = doc.querySelector(".filter");
-    // '/' from the relation SELECT (interactive control outside any
+    // '/' from the permissions SELECT (interactive control outside any
     // .soul-card): must NOT be consumed nor focus the filter behind the
     // still-open dialog
-    const rel = modal.querySelector(".frelation");
-    rel.focus();
-    const eSlash = key(doc, rel, "/");
+    const select = modal.querySelector(".fyolo");
+    select.focus();
+    const eSlash = key(doc, select, "/");
     assert.equal(eSlash.defaultPrevented, false, "'/' not swallowed from a modal select");
     assert.notEqual(doc.activeElement, filter, "filter behind the modal never steals focus");
     assert.ok(doc.querySelector(".spawn-modal"), "modal still open");

@@ -1,5 +1,6 @@
-// #517: Where to run lists this window's machines only, ends with "Add a machine to this workspace…",
-// and selects the machine the dialog added. Gates off: today's list, no Add entry.
+// #517: Where lists this window's machines only, ends with "Add a machine to this workspace…",
+// and selects the machine the dialog added. Gates off: today's list, no Add entry. Slice 5: Where shows only with two
+// or more machines; with one, Add a machine (and why there is no other) is in Advanced.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mountSpawn, settle } from './helpers/spawn-dialog-host.mjs';
@@ -20,11 +21,18 @@ test('gated: This computer, this workspace\'s machines, then "Add a machine to t
   assert.equal(u.q('.spawn-place').hidden, false);
 });
 
-test('gated with no machine yet: Where to run still shows, to offer Add a machine', async t => {
-  const u = await mountSpawn(t, { servers: answer([]) });
+test('gated with no machine yet: no Where (one machine); Add a machine is in Advanced, and adding one shows Where with it chosen', async t => {
+  const u = await mountSpawn(t, { servers: answer([]), machineApi: () => READY });
   await u.open();
-  assert.deepEqual(options(u), [['', 'This computer'], ['+add-machine', 'Add a machine to this workspace…']]);
-  assert.equal(u.q('.spawn-place').hidden, false);
+  assert.equal(u.q('.spawn-place').hidden, true);
+  const button = u.q('.spawn-add-machine-button');
+  assert.ok(u.q('.spawn-advanced').contains(button)); assert.equal(button.textContent, 'Add a machine to this workspace…');
+  u.q('.spawn-advanced').open = true; button.click();
+  const host = u.doc.querySelector('.machine-host'); host.value = 'laptop'; host.dispatchEvent(new u.dom.window.Event('input', { bubbles: true }));
+  const folder = u.doc.querySelector('.machine-folder'); folder.value = '~/northwind'; folder.dispatchEvent(new u.dom.window.Event('input', { bubbles: true }));
+  u.doc.querySelector('.machine-primary').click(); await settle();
+  assert.equal(u.q('.spawn-place').hidden, false, 'two machines now: Where shows');
+  assert.equal(u.q('.fserver').value, 'laptop-northwind'); assert.equal(u.doc.activeElement, u.q('.fserver'));
 });
 
 test('gates off: today\'s list, unchanged, and no Add entry', async t => {
@@ -38,11 +46,11 @@ test('no workspace key: no remote machine, no Add, and one line saying why', asy
   const u = await mountSpawn(t, { servers: { servers: [], filtered: true, key: null, deployment: null, aweb: false, reason } });
   await u.open();
   assert.deepEqual(options(u), [['', 'This computer']]);
-  assert.equal(u.text('.spawn-server-hint'), reason);
-  assert.equal(u.q('.spawn-place').hidden, false);
+  assert.equal(u.q('.spawn-place').hidden, true, 'one machine: no Where');
+  assert.equal(u.text('.spawn-machines-reason'), reason); assert.ok(u.q('.spawn-advanced').contains(u.q('.spawn-machines-reason')), 'said in Advanced');
 });
 
-test('choosing Add opens the dialog and Where to run keeps its choice; Cancel returns focus to Where to run', async t => {
+test('choosing Add opens the dialog and Where keeps its choice; Cancel returns focus to Where', async t => {
   const u = await mountSpawn(t, { servers: answer([DEVBOX]) });
   await u.open();
   const previews = u.previews().length;
@@ -57,7 +65,7 @@ test('choosing Add opens the dialog and Where to run keeps its choice; Cancel re
   assert.ok(u.dialog(), 'the spawn dialog is still open');
 });
 
-test('a machine added: Where to run lists it, selects it and the form reads for it', async t => {
+test('a machine added: Where lists it, selects it and the form reads for it', async t => {
   const sent = [];
   const u = await mountSpawn(t, { servers: answer([DEVBOX]), machineApi: (body, path) => { sent.push({ body, path }); return READY; } });
   await u.open();
@@ -79,7 +87,7 @@ test('two or more deployments: Add a machine is a button under the Deployment fi
   const u = await mountSpawn(t, { deployments, servers: answer([DEVBOX]), machineApi: () => READY,
     catalogs: { '/Users/alex/Agents/northwind': () => import('./helpers/spawn-dialog-host.mjs').then(m => m.catalogAgents()), 'remote:devbox:a1': [] } });
   await u.open();
-  assert.equal(u.q('.spawn-place'), null, 'no Where to run');
+  assert.equal(u.q('.spawn-place'), null, 'no Where');
   const button = u.q('.spawn-add-machine-button');
   assert.equal(button.textContent, 'Add a machine to this workspace…');
   assert.equal(u.q('.fdeployment').closest('.spawn-field').nextElementSibling, button.closest('.spawn-add-machine'));
@@ -114,7 +122,7 @@ test('leaving the workspace while connect runs: the Add dialog goes with the spa
   assert.equal(machineDialog(u), null, 'coming back does not revive it');
 });
 
-test('while the server learns unknown keys, Where to run reads again and adds the machines it found, keeping the choice', async t => {
+test('while the server learns unknown keys, Where reads again and adds the machines it found, keeping the choice', async t => {
   const answers = [answer([DEVBOX], { backfilling: true }), answer([DEVBOX], { backfilling: true }),
     answer([DEVBOX, { ...DEVBOX, id: 'build-northwind', label: 'build' }])];
   const u = await mountSpawn(t, { servers: () => answers.length > 1 ? answers.shift() : answers[0] });

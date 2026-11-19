@@ -357,14 +357,7 @@ export function workText(data, soulWork) {
 export function permissionText(yolo) {
   return yolo === true ? 'skips prompts' : "harness's policy";
 }
-/** Where a catalog soul comes from, for the scoped header (soul rows carry soulKind/package/version/repoName/origin). */
-export function soulOriginText(soul) {
-  if (soul?.soulKind === 'package' && soul.package) return `from package ${soul.package}${soul.version ? ` ${soul.version}` : ''}`;
-  if (soul?.soulKind === 'member') return soul.repoName ? `from ${soul.repoName}` : '';
-  const from = soul?.origin || soul?.repoName;
-  return from ? `from ${from}` : '';
-}
-/** The preview column's Core capabilities and Capabilities sections (their children), from the
+/** The preview's Core capabilities and Capabilities sections (their children), from the
  * preview's `modules` rows [{name, layer, from, composedFrom?}] as previewFacts answers them
  * (packages/client/spawn-preview-facts.mjs); null when the preview carries none (no placeholder). Both are
  * bordered boxes of one row grammar: the module in mono on its own line, then its source and reason chips
@@ -536,7 +529,7 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, ca
   // Core capabilities / Capabilities: filled only when the preview carries `modules`; otherwise empty and hidden.
   const coreSection = el('section', undefined, 'spawn-preview-section spawn-preview-core'), capsSection = el('section', undefined, 'spawn-preview-section spawn-preview-caps');
   coreSection.hidden = capsSection.hidden = true;
-  const previewNote = el('p', 'Resolved by the installed CLI. Spawn refuses if this changes before you confirm.', 'spawn-preview-note');
+  const previewNote = el('p', 'Resolved by the installed CLI. Start refuses if this changes before you confirm.', 'spawn-preview-note');
   preview.append(factsSection, coreSection, capsSection, previewNote);
   // ── form
   const form = el('div', undefined, 'spawn-form');
@@ -852,7 +845,8 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, ca
         if (!current()) return;
         if (!select) { addedNote.textContent = `${id} is added. It is listed here once this computer has read it.`; addedButton.focus(); return; }
         if (![...server.options].some(o => o.value === id)) addServerOption({ id, label: id });
-        placeField.hidden = false; // two machines now
+        // Two machines now: Where shows, and carries Add a machine itself; Advanced's button goes.
+        if (placeField.hidden) { placeField.hidden = false; addedButton?.closest('.spawn-add-machine')?.remove(); }
         server.value = id; server.focus();
         server.dispatchEvent(new doc.defaultView.Event('change', { bubbles: true }));
       } });
@@ -1081,7 +1075,7 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, ca
     if (!teamsField.hidden) drawTeams();
     if (teamsOffered()) {
       teamsError.textContent = shown?.data && shown.key === choiceKey(draftChoice.value) && !joinBound(shown.data)
-        ? "The kernel didn't bind the ticked teams. Spawn waits until it does." : '';
+        ? "The kernel didn't bind the ticked teams. Start waits until it does." : '';
     }
     identityField.hidden = !identityOffered();
     residentLabel.hidden = identity.value !== 'global';
@@ -1363,7 +1357,7 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, ca
     if (next.data) {
       if (phase === 'drifted') setStatus(outcomeText('drifted', null, '', 'dialog'));
       else if (notice) setStatus(notice.text, true, notice);
-      else if (press && press.key !== key) setStatus('Changed: press Spawn again');
+      else if (press && press.key !== key) setStatus('Changed: press Start again');
       else setStatus('Preview ready', false, null, true);
     }
     else if (NAME_REFUSALS.includes(next.failure.code)) setStatus(''); // said next to the name itself
@@ -1450,7 +1444,7 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, ca
     const answer = await ask(text, { fresh: true });
     if (!current() || owner !== mount || pressed !== press) return;
     pressed = null; phase = 'idle';
-    if (!answer) { setStatus('Changed: press Spawn again'); syncButton(); return; }
+    if (!answer) { setStatus('Changed: press Start again'); syncButton(); return; }
     // A spawn on another machine never fails over naming: unnamed here, the host names or numbers it (runRemote).
     if (answer.failure && !local()) { pressNaming = { text, reason: null, harness: null }; return run(); }
     if (answer.failure) { showProblem(answer.failure, 'preview'); syncButton(); return; }
@@ -1472,7 +1466,7 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, ca
   /** An edit while a press waits: the intent belonged to the choices at press time. */
   function dropPress() {
     if (!pressed) return;
-    pressed = null; phase = 'idle'; setStatus('Changed: press Spawn again'); syncButton();
+    pressed = null; phase = 'idle'; setStatus('Changed: press Start again'); syncButton();
   }
   // A launch refusal (0.30) may carry the kernel's `fix`, flat on the reason: kept, bounded text.
   const fixOf = reason => typeof reason?.fix === 'string' && reason.fix.length && reason.fix.length <= 1024 && !/[\x00-\x1f\x7f]/.test(reason.fix) ? { fix: reason.fix } : {};
@@ -1505,7 +1499,7 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, ca
         // A suggested name is the task's, not typed: Reopen brings it back as the suggestion for that text, never into the field.
         const suggested = !purpose.value.trim() && draftChoice.value.name !== undefined ? draftChoice.value.name : null;
         const restoreChoices = structuredClone(draftChoice.value); if (suggested) delete restoreChoices.name;
-        const draftNow = { purpose: purpose.value, task: task.value, layout: 'scoped', nameTouched,
+        const draftNow = { purpose: purpose.value, task: task.value, nameTouched,
           restore: { choices: restoreChoices, ...(suggested ? { naming: { task: task.value, name: suggested } } : {}),
             ...(wakeValue ? { wake: structuredClone(wakeValue) } : {}), ...(deploymentField ? { deployment: address() } : {}) } };
         // Numbered where the dialog would have named it from its task: the spawn says why when it completes.
@@ -1728,10 +1722,13 @@ export function createSpawnDialog(modal, { ctx, soul, agents, workspace, cli, ca
     if (machines?.deployment) {
       if (deploymentField) deploymentField.element.after(addMachineRow({ select: false }));
       else { const o = el('option', 'Add a machine to this workspace…'); o.value = ADD_MACHINE; server.append(o); }
-      if (!deploymentField && placeField.hidden) wake.el.after(addMachineRow({ select: true }));
     }
-    // Why there are no machines to choose (the route's reason), where Where would be: under Advanced's button.
-    if (placeField.hidden && machines?.reason && addedNote) addedNote.textContent = machines.reason;
+    // One machine, so no Where: Add a machine, and why no other machine is offered (the route's reason), wait in Advanced.
+    if (!deploymentField && placeField.hidden) {
+      const row = machines?.deployment ? addMachineRow({ select: true }) : null;
+      const reason = machines?.reason ? el('p', machines.reason, 'spawn-hint spawn-machines-reason') : null;
+      wake.el.after(...[row, reason].filter(Boolean));
+    }
     paintServerHint();
   }).catch(() => {});
   placeField.hidden = !soul.server;

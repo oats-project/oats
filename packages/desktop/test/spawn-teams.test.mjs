@@ -74,17 +74,17 @@ test('the projection carries the kernel\'s teams (primary first, no payloads), t
   assert.equal(previewData(older, t).teams, null, 'a kernel before #179 reports no teams');
 });
 
-test('the main form shows the Teams row — one line like Relationship: the default team fixed, the teams the soul has access to unchecked, unmapped not shown', async t => {
+test('Advanced shows the Teams row — one line of chips: the default team fixed, the teams the soul has access to unchecked, unmapped not shown', async t => {
   const u = await dialog(t);
   const field = u.q('.spawn-teams');
   assert.equal(field.hidden, false); assert.equal(field.tagName, 'FIELDSET');
-  assert.equal(field.closest('.spawn-advanced'), null, 'the main form, not Developer settings');
+  assert.ok(field.closest('.spawn-advanced'), 'in Advanced (slice 5), not the form itself');
   assert.equal(field.querySelector('legend').firstChild.textContent, 'Teams', 'its jump chord is a separate, aria-hidden hint (Spec E)');
   assert.equal(u.text('.spawn-teams-hint'), "By default it's only in the workspace's default team. These are the teams release-manager has access to — tick the ones it should also join.");
   assert.deepEqual(rows(u), [['Default', "The workspace's default team — always. Every instance is in it.", true, true],
     ['engineering', 'Join engineering (northwind:eng)', false, false]], 'global is not mapped: not shown');
   const row = u.q('.spawn-teams-row');
-  assert.ok(row.classList.contains('spawn-seg'), 'the Relationship segmented control, as toggles');
+  assert.ok(row.classList.contains('spawn-seg'), 'the segmented control, as toggles');
   assert.equal(row.querySelectorAll('.spawn-team').length, 2); assert.equal(row.parentElement, field);
   assert.ok(u.previews().every(p => !Object.hasOwn(p.choices, 'join')), 'by default nothing is sent');
   assert.equal(u.q('.fspawn').disabled, false);
@@ -128,7 +128,7 @@ test('a preview that does not bind the ticked teams keeps Spawn off and says so'
   const u = await dialog(t, { kernel: () => declared(f7('preview-teams-default')) });
   await u.change('.fteam[value="engineering"]', true); await settle();
   assert.deepEqual(u.previews().at(-1).choices.join, JOIN);
-  assert.equal(u.text('.spawn-teams-error'), "The kernel didn't bind the ticked teams. Spawn waits until it does.");
+  assert.equal(u.text('.spawn-teams-error'), "The kernel didn't bind the ticked teams. Start waits until it does.");
   assert.equal(u.q('.fspawn').disabled, true);
 });
 
@@ -248,6 +248,6 @@ test('Spec B: while a newer preview reads, the Teams and identity rows keep thei
   assert.equal(u.q('.fspawn').textContent, 'Checking…');
   gate.resolve(); gate = null; await settle(30);
   assert.deepEqual(u.spawns(), [], 'the preview did not bind engineering: the press waits for one that does, so nothing is prepared');
-  assert.equal(u.text('.spawn-teams-error'), "The kernel didn't bind the ticked teams. Spawn waits until it does.");
-  assert.equal(u.q('.fspawn').textContent, 'Spawn'); assert.equal(u.q('.fspawn').disabled, true);
+  assert.equal(u.text('.spawn-teams-error'), "The kernel didn't bind the ticked teams. Start waits until it does.");
+  assert.equal(u.q('.fspawn').textContent, 'Start'); assert.equal(u.q('.fspawn').disabled, true);
 });

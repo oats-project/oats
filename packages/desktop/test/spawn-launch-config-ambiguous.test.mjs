@@ -14,7 +14,7 @@ const CODE = 'E_LAUNCH_CONFIG_AMBIGUOUS';
 const FIX = 'name one with --launch-config <name> (or souls.launch in oats-local.yaml), or mark one default: true (oats launch-config set)';
 const MESSAGE = `oats-local.yaml declares 2 claude launch configurations (personal, work) and none is default: true, and this launch names none; ${FIX}`;
 const refusal = () => ({ schemaVersion: 1, ok: false, error: { code: CODE, message: MESSAGE, details: { harness: 'claude', configurations: ['personal', 'work'], fix: FIX } } });
-const SENTENCE = 'This machine has more than one launch configuration for this soul’s harness, and none is the default. Choose one under Launch configuration in Developer settings.';
+const SENTENCE = 'This machine has more than one launch configuration for this soul’s harness, and none is the default. Choose one under Launch configuration in Advanced.';
 const FIXED = 'More than one launch configuration is declared for this harness and none is the default.';
 const configs = body => ({ selected: body.selector, configurations: [{ name: 'personal', harness: 'claude' }, { name: 'work', harness: 'claude' }] });
 

@@ -20,7 +20,7 @@ const SPAWN_ONLY = ['E_DECISION_STALE', 'E_IDEMPOTENCY_CONFLICT', 'E_PLACEMENT_T
   'E_INSTANCE_GONE', 'E_OUTCOME_UNKNOWN', 'E_SPAWN_INCOMPLETE', 'E_INPUT_PREPARATION'];
 const FALLBACK = { preview: 'OATS couldn’t work out this soul’s defaults.', spawn: 'OATS couldn’t complete the spawn.' };
 /** What names one client's own controls or places never enters a shared fact. */
-const FURNITURE = /Developer settings|press Spawn|Press Spawn|Spawn again|Details|dialog|roster|\babove\b|Reopen|Check result|Workspace view|workspace menu|Schedules/;
+const FURNITURE = /Developer settings|Advanced|press Spawn|Press Spawn|Spawn again|press Start|Press Start|Start again|Details|dialog|roster|\babove\b|Reopen|Check result|Workspace view|workspace menu|Schedules/;
 
 test('the next codes are a closed, frozen set', () => {
   assert.deepEqual([...SPAWN_NEXT], ['change-options', 'review-again', 'check-result', 'update-oats', 'choose-workspace', 'sync-workspace', 'details',

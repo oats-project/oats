@@ -1,12 +1,11 @@
-// The spawn dialog scoped to one soul (design board 6): the preview column instead of the
-// chooser, the identity header with "Change soul" switching layouts in place, the segmented
-// Relationship control and the one-border Name field. The dialog is mounted directly with a
-// stubbed ctx whose preview endpoint answers the kernel captures (test/fixtures/workspace-v2/f3).
+// The New agent form on one soul (slice 5; the preview of design board 6): the sheet, the full preview at the end of
+// Advanced, the segmented Harness control and the one-border Name field. The form is mounted directly with a stubbed
+// ctx whose preview endpoint answers the kernel captures (test/fixtures/workspace-v2/f3).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { createSpawnDialog, spawnDialogCSS, composePreviewModules, soulOriginText } from '../renderer/spawn-dialog.mjs';
+import { createSpawnDialog, spawnDialogCSS, composePreviewModules } from '../renderer/spawn-dialog.mjs';
 import { worksInText, moduleSourceText } from '../../client/spawn-preview-facts.mjs';
 import { identityCSS } from '../renderer/identity-marks.mjs';
 import { spawnProblem } from '../../client/spawn-messages.mjs';
@@ -25,7 +24,7 @@ const v2 = name => JSON.parse(readFileSync(new URL(`./fixtures/team-model-v2/${n
 // The previews here are `--purpose` captures, chosen by a typed purpose: by default the dialog's CLI lacks spawn-name,
 // the older kernel's path, where a typed name is a purpose (spawn-dialog.test.mjs covers the --name path).
 const PURPOSE_CLI = { ...CLI, features: CLI.features.filter(f => f !== 'spawn-name') };
-function mount(t, { soul = member, agents = [member, other, packaged], layout, previews = () => view(target, preview('preview-worktree-default')), cli = PURPOSE_CLI, theme = 'light', workspace = () => ({ id: 'northwind', name: 'northwind' }), instances = () => [] } = {}) {
+function mount(t, { soul = member, agents = [member, other, packaged], previews = () => view(target, preview('preview-worktree-default')), cli = PURPOSE_CLI, theme = 'light', workspace = () => ({ id: 'northwind', name: 'northwind' }) } = {}) {
   const dom = new JSDOM(`<!doctype html><html data-theme="${theme}"><body><div class="oats-view"><div class="spawn-modal"></div></div></body></html>`, { url: 'http://localhost', pretendToBeVisual: true });
   const doc = dom.window.document;
   for (const source of [themeCSS, identityCSS, spawnDialogCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
@@ -37,8 +36,8 @@ function mount(t, { soul = member, agents = [member, other, packaged], layout, p
     if (path.startsWith('/api/launch-configs')) return { selected: body.selector, configurations: [] };
     throw new Error(`unexpected ${path}`);
   } };
-  const ui = createSpawnDialog(doc.querySelector('.spawn-modal'), { ctx, soul, agents, workspace, cli: () => cli, instances,
-    owns: () => true, canChoose: () => true, choose: (candidate, draft) => chosen.push({ candidate, draft }), close: () => {}, servers: [], delay: 0, busyDelay: 0, ...(layout ? { layout } : {}) });
+  const ui = createSpawnDialog(doc.querySelector('.spawn-modal'), { ctx, soul, agents, workspace, cli: () => cli,
+    owns: () => true, canChoose: () => true, choose: (candidate, draft) => chosen.push({ candidate, draft }), close: () => {}, servers: [], delay: 0, busyDelay: 0 });
   ui.start();
   t.after(() => { ui.dispose(); dom.window.close(); });
   const q = selector => ui.dialog.querySelector(selector);
@@ -55,65 +54,36 @@ function mount(t, { soul = member, agents = [member, other, packaged], layout, p
     async type(selector, value) { const el = q(selector); el.value = value; el.dispatchEvent(new dom.window.Event('input', { bubbles: true })); await settle(); } };
 }
 
-test('scoped layout: no chooser, the identity header names the soul and where it comes from, and offers Change soul', async t => {
-  const u = mount(t, { layout: 'scoped' }); await settle();
-  assert.equal(u.ui.layout, 'scoped'); assert.equal(u.ui.dialog.dataset.layout, 'scoped');
-  assert.equal(u.hidden(u.q('.spawn-chooser')), true, 'no chooser column'); assert.equal(u.hidden(u.q('.spawn-preview')), false);
-  assert.equal(u.q('.spawn-preview').getAttribute('aria-label'), 'Spawn preview');
+test('the sheet: one column, "New agent · in <workspace>", a close button named for it, capped by the viewport', async t => {
+  const u = mount(t); await settle();
   const title = u.q('h2#spawn-dialog-title');
-  assert.equal(title.textContent, 'Spawn release-manager'); assert.equal(u.ui.dialog.getAttribute('aria-labelledby'), 'spawn-dialog-title');
-  assert.equal(u.text('.spawn-context'), 'from agents · in northwind', 'a member soul: its repository');
-  const mark = u.q('.spawn-dialog-head .identity-mark'); assert.ok(mark && !u.hidden(mark), 'the soul mark'); assert.equal(mark.textContent, 'RM');
-  const change = u.q('button.spawn-change-soul'); assert.equal(change.type, 'button'); assert.equal(change.textContent, 'Change soul'); assert.equal(u.hidden(change), false);
-  assert.equal(u.style(change).color, 'var(--accent)'); assert.equal(u.style(change).borderStyle || u.style(change).border, u.style(change).borderStyle ? 'none' : '0');
-  assert.equal(u.q('.close-act').getAttribute('aria-label'), 'Close spawn dialog');
-  assert.equal(u.style(u.ui.dialog).width, '1000px');
+  assert.equal(title.textContent, 'New agent'); assert.equal(u.ui.dialog.getAttribute('aria-labelledby'), 'spawn-dialog-title');
+  assert.equal(u.text('.spawn-context'), 'in northwind');
+  assert.equal(u.q('.close-act').getAttribute('aria-label'), 'Close New agent');
+  assert.equal(u.style(u.ui.dialog).width, '640px');
   // A narrower window never clips it: the cap is the viewport less the modal's 24px padding, not 100%
   // (the modal's centring grid track grows to the dialog, so a percentage would not cap it).
-  assert.equal(u.style(u.ui.dialog).maxWidth, 'calc(100vw - 48px)'); assert.equal(u.style(u.q('.spawn-columns')).gridTemplateColumns, '360px minmax(0,1fr)');
+  assert.equal(u.style(u.ui.dialog).maxWidth, 'calc(100vw - 48px)');
+  assert.equal(u.q('.spawn-columns, .spawn-chooser, .spawn-change-soul'), null, 'no columns, no chooser, no Change soul');
+  // The sheet eases in over 150 ms (D10), and stands still under reduced motion.
+  assert.match(spawnDialogCSS, /\.spawn-modal \.spawn-dialog \{[^}]*animation:spawn-sheet-rise \.15s ease;/);
+  assert.match(spawnDialogCSS, /@media \(prefers-reduced-motion: reduce\) \{ \.spawn-modal, \.spawn-modal \.spawn-dialog \{ animation:none; \} \}/);
 });
 
-test('the origin subline: a package soul says its package and version; an external soul its origin', async t => {
-  const u = mount(t, { layout: 'scoped', soul: packaged, previews: () => view(target, preview('preview-soul-unknown')) }); await settle();
-  assert.equal(u.text('h2'), 'Spawn code-reviewer'); assert.equal(u.text('.spawn-context'), 'from package oats.engineering 1.3.0 · in northwind');
-  assert.equal(soulOriginText({ soulKind: 'external', origin: 'github.com/acme/souls', repoName: 'external' }), 'from github.com/acme/souls');
-  assert.equal(soulOriginText({ soulKind: 'member' }), '', 'nothing invented when the row carries no repository');
-});
-
-test('the default layout is the picker: chooser, "Spawn instance · in <workspace>", no Change soul, no preview column', async t => {
+test('a soul pick in the Soul field goes to the host with what was typed; the form is never reopened by itself', async t => {
   const u = mount(t); await settle();
-  assert.equal(u.ui.layout, 'picker'); assert.equal(u.hidden(u.q('.spawn-chooser')), false); assert.equal(u.hidden(u.q('.spawn-preview')), true);
-  assert.equal(u.text('h2'), 'Spawn instance'); assert.equal(u.text('.spawn-context'), 'in northwind');
-  assert.equal(u.hidden(u.q('.spawn-change-soul')), true); assert.equal(u.hidden(u.q('.spawn-dialog-head .identity-mark')), true);
-  assert.equal(u.style(u.ui.dialog).width, '880px'); assert.equal(u.style(u.q('.spawn-columns')).gridTemplateColumns, '300px minmax(0,1fr)');
-});
-
-test('Change soul switches to the picker in place, keeps every typed value and focuses the selected row; choosing passes layout picker', async t => {
-  const u = mount(t, { layout: 'scoped' }); await settle();
   await u.type('.fpurpose', 'api-v2'); await u.type('.ftask', 'Cut 3.2');
   const dialog = u.ui.dialog;
-  u.q('.spawn-change-soul').click();
-  assert.equal(u.ui.dialog, dialog, 'never reopened'); assert.equal(u.ui.layout, 'picker');
-  assert.equal(u.hidden(u.q('.spawn-chooser')), false); assert.equal(u.hidden(u.q('.spawn-preview')), true); assert.equal(u.hidden(u.q('.spawn-change-soul')), true);
-  assert.equal(u.text('h2'), 'Spawn instance'); assert.equal(u.text('.spawn-context'), 'in northwind');
-  assert.equal(u.q('.fpurpose').value, 'api-v2'); assert.equal(u.q('.ftask').value, 'Cut 3.2');
-  const pressed = u.q('.spawn-choice[aria-selected=true]'); assert.equal(pressed.dataset.agent, 'release-manager'); assert.equal(u.doc.activeElement, pressed);
-  [...dialog.querySelectorAll('.spawn-choice')].find(row => row.dataset.agent === 'support-triager').click();
+  u.q('.spawn-soul-current').click();
+  u.q('.spawn-soul-option[data-agent="support-triager"]').click();
+  assert.equal(u.ui.dialog, dialog);
   assert.equal(u.chosen.length, 1); assert.equal(u.chosen[0].candidate.name, 'support-triager');
-  assert.deepEqual(u.chosen[0].draft, { query: '', purpose: 'api-v2', task: 'Cut 3.2', layout: 'picker' });
-  u.ui.setLayout('scoped'); assert.equal(u.ui.layout, 'scoped'); assert.equal(u.hidden(u.q('.spawn-chooser')), true); assert.equal(u.q('.fpurpose').value, 'api-v2');
-});
-
-test('Change soul with the selected row filtered out lands on the search', async t => {
-  const u = mount(t, { layout: 'scoped' }); await settle();
-  u.q('.spawn-soul-search').value = 'triager'; u.q('.spawn-soul-search').dispatchEvent(new u.dom.window.Event('input', { bubbles: true }));
-  u.q('.spawn-change-soul').click();
-  assert.equal(u.doc.activeElement, u.q('.spawn-soul-search'));
+  assert.deepEqual(u.chosen[0].draft, { query: '', purpose: 'api-v2', task: 'Cut 3.2' });
 });
 
 test('the preview column: a skeleton with aria-busy while reading, then the facts the kernel decided', async t => {
   const gate = deferred();
-  const u = mount(t, { layout: 'scoped', previews: async () => { await gate.promise; return view(target, preview('preview-worktree-default')); } });
+  const u = mount(t, { previews: async () => { await gate.promise; return view(target, preview('preview-worktree-default')); } });
   await settle();
   const aside = u.q('.spawn-preview');
   assert.equal(aside.getAttribute('aria-busy'), 'true');
@@ -121,7 +91,7 @@ test('the preview column: a skeleton with aria-busy while reading, then the fact
   assert.equal(u.style(aside.querySelector('.spawn-preview-skeleton span')).background, 'var(--tag-bg)');
   assert.equal(u.text('.spawn-preview-reading'), 'Reading the preview…'); assert.ok(u.q('.spawn-preview-reading').classList.contains('workspace-sr-only'));
   assert.equal(u.text('.spawn-preview-title'), 'What will be created', 'section titles stay while loading');
-  assert.equal(u.text('.spawn-preview-note'), 'Resolved by the installed CLI. Spawn refuses if this changes before you confirm.');
+  assert.equal(u.text('.spawn-preview-note'), 'Resolved by the installed CLI. Start refuses if this changes before you confirm.');
   assert.equal(u.text('.fstatus'), 'Reading defaults…'); assert.equal(u.q('.fstatus').classList.contains('ok'), false);
   gate.resolve(); await settle(12);
   assert.equal(aside.getAttribute('aria-busy'), 'false'); assert.equal(aside.querySelector('.spawn-preview-skeleton'), null);
@@ -153,15 +123,15 @@ test('the preview column: a skeleton with aria-busy while reading, then the fact
   assert.deepEqual([...u.q('.spawn-preview-caps').querySelectorAll('.spawn-cap-row')].map(row => row.dataset.module), others.map(m => m.name).sort());
   // A kernel without modules[]: neither section exists, not even a title.
   const bare = { ...data }; delete bare.modules;
-  const without = mount(t, { layout: 'scoped', previews: () => view(target, bare) }); await settle(12);
+  const without = mount(t, { previews: () => view(target, bare) }); await settle(12);
   assert.equal(without.hidden(without.q('.spawn-preview-core')), true); assert.equal(without.q('.spawn-preview-core').childElementCount, 0);
   assert.equal(without.hidden(without.q('.spawn-preview-caps')), true); assert.doesNotMatch(without.q('.spawn-preview').textContent, /Core capabilities|Capabilities ·/);
-  assert.equal(u.style(aside).background, 'var(--surface-2)'); assert.equal(u.rule('.spawn-preview', 'width'), '', 'sized by its 360px grid column');
+  assert.equal(u.style(aside).background, 'var(--surface-2)'); assert.equal(u.rule('.spawn-preview', 'width'), '', 'as wide as Advanced');
 });
 
 test('the preview follows the latest choice: typing keeps the settled facts, marked Updating…, and the Name fact follows the form at once', async t => {
   const gate = deferred(); let n = 0;
-  const u = mount(t, { layout: 'scoped', previews: async body => { n++; if (body.choices.purpose) await gate.promise; return view(target, preview(body.choices.purpose ? 'preview-worktree-purpose' : 'preview-worktree-default')); } });
+  const u = mount(t, { previews: async body => { n++; if (body.choices.purpose) await gate.promise; return view(target, preview(body.choices.purpose ? 'preview-worktree-purpose' : 'preview-worktree-default')); } });
   await settle();
   const aside = u.q('.spawn-preview'), mark = u.q('.spawn-preview-updating');
   assert.equal(u.facts().Name, preview('preview-worktree-default').instance); assert.equal(u.hidden(mark), true, 'nothing is updating');
@@ -188,20 +158,20 @@ test('the preview follows the latest choice: typing keeps the settled facts, mar
 test('Harness says where the launch came from (0.30 launch), Team the default the kernel resolved (team model v2)', async t => {
   const featured = { ...structuredClone(CLI), features: [...CLI.features, 'launch-preference'] };
   const data = { ...preview('preview-worktree-default'), launch: { declared: { harness: 'pi', model: null }, effective: { harness: 'pi', model: null, launchConfig: null }, from: 'soul', at: 'souls/release-manager/soul.yaml#/launch', problem: null } };
-  const u = mount(t, { layout: 'scoped', cli: featured, previews: () => view(target, data) }); await settle(12);
+  const u = mount(t, { cli: featured, previews: () => view(target, data) }); await settle(12);
   assert.equal(u.facts().Harness, "Pi · default model / the soul's preference", 'the harness and model, where it came from beneath');
-  const teams = mount(t, { layout: 'scoped', cli: { ...structuredClone(v2('version')), ok: true, bin: '/fixture/oats' }, previews: () => view(target, v2('preview').result) }); await settle(12);
+  const teams = mount(t, { cli: { ...structuredClone(v2('version')), ok: true, bin: '/fixture/oats' }, previews: () => view(target, v2('preview').result) }); await settle(12);
   // The default, then (muted, its own line) the other teams this spawn may join.
   assert.equal(teams.facts().Team, 'engineering · default / may also join global, mine');
   const teamValue = u => [...u.ui.dialog.querySelectorAll('.spawn-preview-facts dt')].find(dt => dt.textContent === 'Team').nextElementSibling;
   assert.deepEqual([...teamValue(teams).querySelectorAll('.muted')].map(m => [m.className, m.textContent]), [['muted', ' · default'], ['muted spawn-fact-sub', 'may also join global, mine']]);
-  const none = mount(t, { layout: 'scoped', cli: { ...structuredClone(v2('version')), ok: true, bin: '/fixture/oats' }, previews: () => view(target, { ...v2('preview').result, defaultTeam: null, teams: [] }) }); await settle(12);
+  const none = mount(t, { cli: { ...structuredClone(v2('version')), ok: true, bin: '/fixture/oats' }, previews: () => view(target, { ...v2('preview').result, defaultTeam: null, teams: [] }) }); await settle(12);
   assert.equal(none.facts().Team, 'none'); assert.equal(teamValue(none).querySelector('.muted').textContent, 'none');
 });
 
 test('a kernel refusal replaces the facts with the footer\'s plain sentence; a name refusal stays at the Name field', async t => {
   const refusal = kernel('preview-clone-missing');
-  const u = mount(t, { layout: 'scoped', previews: () => ({ spawnPreviewViewApi: 1, status: 'unavailable', target, data: null, reason: { code: refusal.error.code, message: refusal.error.message } }) });
+  const u = mount(t, { previews: () => ({ spawnPreviewViewApi: 1, status: 'unavailable', target, data: null, reason: { code: refusal.error.code, message: refusal.error.message } }) });
   await settle(12);
   const said = spawnText(spawnProblem({ code: refusal.error.code, message: refusal.error.message }, 'preview'), 'preview');
   assert.equal(u.text('.spawn-preview-failure'), said); assert.equal(u.text('.fstatus'), said, 'the same sentence as the footer');
@@ -209,7 +179,7 @@ test('a kernel refusal replaces the facts with the footer\'s plain sentence; a n
   assert.equal(u.style(u.q('.spawn-preview-failure')).color, 'var(--warn)');
   assert.equal(u.q('.spawn-preview-facts'), null); assert.equal(u.q('.spawn-preview').getAttribute('aria-busy'), 'false');
   const taken = kernel('preview-name-taken');
-  const n = mount(t, { layout: 'scoped', previews: () => ({ spawnPreviewViewApi: 1, status: 'unavailable', target, data: null, reason: { code: taken.error.code, message: taken.error.message } }) });
+  const n = mount(t, { previews: () => ({ spawnPreviewViewApi: 1, status: 'unavailable', target, data: null, reason: { code: taken.error.code, message: taken.error.message } }) });
   await settle(12);
   assert.equal(n.q('.spawn-preview-failure'), null, 'said once, next to the name'); assert.ok(n.q('.spawn-name-result').classList.contains('err'));
   assert.equal(n.text('.spawn-preview-empty'), 'No preview until the name is accepted.');
@@ -248,12 +218,14 @@ test('Core capabilities and Capabilities come from the preview\'s modules only',
   dom.window.close();
 });
 
-test('Relationship: the first option is Independent (value unrelated), as a tinted segmented control without a focus ring', async t => {
-  const u = mount(t, { layout: 'scoped' }); await settle();
-  const first = u.q('.spawn-seg.frelation label');
-  assert.equal(first.querySelector('input').value, 'unrelated'); assert.equal(first.querySelector('span').textContent, 'Independent');
-  assert.equal(u.text('.freldesc'), 'Independent — not linked to another instance.');
-  const seg = u.q('.spawn-seg.frelation'), checked = u.q('.spawn-seg input:checked + span'), unchecked = u.q('.spawn-seg input:not(:checked) + span');
+test('Harness: claude · codex · pi as a tinted segmented control without a focus ring; the soul\'s default marked in words', async t => {
+  const u = mount(t); await settle(12);
+  const seg = u.q('.spawn-seg.fharness');
+  assert.equal(seg.getAttribute('role'), 'radiogroup');
+  assert.deepEqual([...seg.querySelectorAll('label')].map(l => [l.querySelector('input').value, l.querySelector('span').firstChild.textContent]), [['claude', 'Claude Code'], ['codex', 'Codex'], ['pi', 'Pi']]);
+  assert.equal(u.q('.fharness input:checked').value, 'pi', 'the soul\'s default (the preview launches pi) is chosen');
+  assert.deepEqual([...seg.querySelectorAll('.spawn-harness-default')].map(m => m.hidden), [true, true, false], 'and marked "· default"');
+  const checked = u.q('.spawn-seg input:checked + span'), unchecked = u.q('.spawn-seg input:not(:checked) + span');
   const s = u.style(seg);
   assert.equal(s.background, 'var(--surface)'); assert.equal(u.rule('.spawn-seg', 'border'), '1px solid var(--border)'); assert.equal(s.padding, '2px'); assert.equal(s.borderRadius, '8px');
   const c = u.style(checked);
@@ -269,7 +241,7 @@ test('Relationship: the first option is Independent (value unrelated), as a tint
 });
 
 test('Name: one border on the wrapper that turns to the accent on focus, no ring; the inner input stays borderless', async t => {
-  const u = mount(t, { layout: 'scoped' }); await settle();
+  const u = mount(t); await settle();
   const wrapper = u.q('.spawn-name-input'), input = u.q('.fpurpose');
   assert.equal(u.rule('.spawn-name-input', 'border'), '1px solid var(--border)'); assert.equal(u.style(wrapper).height, '36px'); assert.equal(u.style(wrapper).borderRadius, '8px');
   input.focus(); assert.equal(u.doc.activeElement, input);
@@ -284,7 +256,7 @@ test('Name: one border on the wrapper that turns to the accent on focus, no ring
 
 test('a remote soul: the preview column says the host decides, without a skeleton or a read', async t => {
   const remote = { ...member, name: 'builder', server: 'build', repoName: 'team', agentsRoot: '/srv/team/agents' };
-  const u = mount(t, { layout: 'scoped', soul: remote, agents: [remote] }); await settle();
+  const u = mount(t, { soul: remote, agents: [remote] }); await settle();
   assert.equal(u.text('.spawn-preview-empty'), 'Decided on build when it spawns.'); assert.equal(u.q('.spawn-preview').getAttribute('aria-busy'), 'false');
   assert.equal(u.calls.filter(c => c.path.startsWith('/api/workspace-spawn-preview')).length, 0);
 });
@@ -295,9 +267,9 @@ function luminance(hex) {
   const c = hex.slice(1).match(/../g).map(v => parseInt(v, 16) / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4);
   return c[0] * .2126 + c[1] * .7152 + c[2] * .0722;
 }
-for (const theme of ['light', 'solarized', 'dark']) test(`${theme}: the scoped dialog's header, preview column, tags and segments meet computed-token AA with no opacity`, async t => {
+for (const theme of ['light', 'solarized', 'dark']) test(`${theme}: the form's header, preview, tags and segments meet computed-token AA with no opacity`, async t => {
   const failing = kernel('preview-clone-missing');
-  const u = mount(t, { layout: 'scoped', theme, cli: { ...structuredClone(v2('version')), ok: true, bin: '/fixture/oats' }, previews: () => view(target, v2('preview').result) }); await settle(12);
+  const u = mount(t, { theme, cli: { ...structuredClone(v2('version')), ok: true, bin: '/fixture/oats' }, previews: () => view(target, v2('preview').result) }); await settle(12);
   // Put every element on screen: the facts and a module section (with a reason tag), then a failure sentence beside them.
   const sections = composePreviewModules(u.doc, v2('preview').result.modules.map(m => ({ name: m.name, layer: m.layer, from: m.from, composedFrom: 'workspace' })));
   u.q('.spawn-preview-core').hidden = false; u.q('.spawn-preview-core').append(...sections.core); u.q('.spawn-preview-caps').hidden = false; u.q('.spawn-preview-caps').append(...sections.caps);
@@ -305,7 +277,7 @@ for (const theme of ['light', 'solarized', 'dark']) test(`${theme}: the scoped d
   const prompts = u.doc.createElement('dl'); prompts.className = 'spawn-preview-prompts'; prompts.innerHTML = '<dt>Launch prompts</dt><dd>None.</dd>'; u.q('.spawn-preview-body').append(prompts);
   const root = u.dom.window.getComputedStyle(u.doc.documentElement);
   for (const [selector, surfaceSelector, fg, bg] of [
-    ['.spawn-dialog-head h2', '.spawn-dialog', 'fg', 'surface'], ['.spawn-context', '.spawn-dialog', 'muted', 'surface'], ['.spawn-change-soul', '.spawn-dialog', 'accent', 'surface'],
+    ['.spawn-dialog-head h2', '.spawn-dialog', 'fg', 'surface'], ['.spawn-context', '.spawn-dialog', 'muted', 'surface'],
     ['.spawn-preview-title', '.spawn-preview', 'muted', 'surface-2'], ['.spawn-preview-facts dt', '.spawn-preview', 'muted', 'surface-2'], ['.spawn-preview-facts', '.spawn-preview', 'fg', 'surface-2'],
     ['.spawn-preview-facts dd .muted', '.spawn-preview', 'muted', 'surface-2'], ['.spawn-preview-name', '.spawn-preview', 'fg', 'surface-2'], ['.spawn-preview-home', '.spawn-preview', 'muted', 'surface-2'],
     ['.spawn-preview-facts .spawn-fact-sub', '.spawn-preview', 'muted', 'surface-2'], ['.spawn-preview-prompts dt', '.spawn-preview-prompts', 'muted', 'surface'], ['.spawn-preview-prompts dd', '.spawn-preview-prompts', 'muted', 'surface'], ['.spawn-preview-failure', '.spawn-preview', 'warn', 'surface-2'], ['.spawn-preview-note', '.spawn-preview', 'muted', 'surface-2'],
@@ -329,7 +301,7 @@ for (const theme of ['light', 'solarized', 'dark']) test(`${theme}: the scoped d
 test('roster polls (sync) with unchanged facts never supersede the read in flight; a changed fact re-reads under latest intent', async t => {
   // A preview slower than the poll: each read waits on its own gate.
   const gates = [], cli = structuredClone(CLI);
-  const u = mount(t, { layout: 'scoped', cli, previews: async () => { const gate = deferred(); gates.push(gate); await gate.promise; return view(target, preview(['preview-worktree-default', 'preview-name', 'preview-worktree-purpose'][gates.length - 1])); } });
+  const u = mount(t, { cli, previews: async () => { const gate = deferred(); gates.push(gate); await gate.promise; return view(target, preview(['preview-worktree-default', 'preview-name', 'preview-worktree-purpose'][gates.length - 1])); } });
   await settle();
   const reads = () => u.calls.filter(c => c.path.startsWith('/api/workspace-spawn-preview')).length;
   assert.equal(reads(), 1); assert.equal(u.q('.spawn-preview').getAttribute('aria-busy'), 'true');
@@ -359,7 +331,7 @@ const refusal = (code, message = code) => ({ spawnPreviewViewApi: 1, status: 'un
 
 test('a preview that settled on a transient failure (E_CLI_FAILED) is read again by the next poll; a settled success is not', async t => {
   let n = 0;
-  const u = mount(t, { layout: 'scoped', previews: () => { if (n++ === 0) throw Object.assign(new Error('boom'), { code: 'E_CLI_FAILED' }); return view(target, preview('preview-worktree-default')); } });
+  const u = mount(t, { previews: () => { if (n++ === 0) throw Object.assign(new Error('boom'), { code: 'E_CLI_FAILED' }); return view(target, preview('preview-worktree-default')); } });
   await settle(12);
   assert.equal(reads(u), 1); assert.ok(u.q('.spawn-preview-failure'), 'the failure is shown'); assert.equal(u.q('.fspawn').disabled, true);
   u.ui.sync(); await settle(12); // a routine poll, no fact changed
@@ -371,7 +343,7 @@ test('a preview that settled on a transient failure (E_CLI_FAILED) is read again
 
 test('E_BUSY (the server\'s two-read budget) is retried inside the dialog, never shown as a failure', async t => {
   let n = 0;
-  const u = mount(t, { layout: 'scoped', previews: () => n++ < 2 ? refusal('E_BUSY', 'The workspace is busy.') : view(target, preview('preview-worktree-default')) });
+  const u = mount(t, { previews: () => n++ < 2 ? refusal('E_BUSY', 'The workspace is busy.') : view(target, preview('preview-worktree-default')) });
   await settle(20);
   assert.equal(reads(u), 3, 'retried until a slot was free');
   assert.equal(u.q('.spawn-preview-failure'), null); assert.equal(u.q('.fstatus').classList.contains('err'), false);
@@ -380,7 +352,7 @@ test('E_BUSY (the server\'s two-read budget) is retried inside the dialog, never
 
 test('a name refusal is not retried by a poll: it waits for the operator to change the name', async t => {
   const taken = kernel('preview-name-taken').error;
-  const u = mount(t, { layout: 'scoped', previews: () => refusal(taken.code, taken.message) });
+  const u = mount(t, { previews: () => refusal(taken.code, taken.message) });
   await settle(12);
   assert.equal(reads(u), 1); assert.ok(u.q('.spawn-name-result').classList.contains('err'));
   for (let i = 0; i < 3; i++) { u.ui.sync(); await settle(); }
@@ -389,28 +361,11 @@ test('a name refusal is not retried by a poll: it waits for the operator to chan
 
 test('a workspace-id change under the open dialog re-previews for the new workspace and settles there', async t => {
   let ws = 'northwind';
-  const u = mount(t, { layout: 'scoped', workspace: () => ({ id: ws, name: ws }),
+  const u = mount(t, { workspace: () => ({ id: ws, name: ws }),
     previews: () => view({ ...target, workspace: ws }, preview(ws === 'northwind' ? 'preview-worktree-default' : 'preview-worktree-purpose')) });
   await settle(12);
   assert.equal(u.facts().Name, 'release-manager-1');
   ws = 'northwind-2'; u.ui.sync(); await settle(12);
   assert.equal(reads(u), 2); assert.match(u.calls.at(-1).path, /ws=northwind-2$/, 'read for the new workspace');
   assert.equal(u.facts().Name, 'release-manager-api-v2', 'the new workspace\'s answer is shown'); assert.equal(u.text('.fstatus'), 'Preview ready');
-});
-
-test('the relation anchor\'s roster row changing re-previews; another instance\'s row changing does not', async t => {
-  const rows = [{ instance: 'dev-1', agent: 'release-manager', agentsRoot: ROOT, running: true, home: '/h/dev-1' }, { instance: 'other-1', agent: 'support-triager', agentsRoot: ROOT, running: true, home: '/h/other-1' }];
-  let n = 0;
-  const u = mount(t, { layout: 'scoped', instances: () => rows,
-    previews: () => view(target, preview(n++ % 2 ? 'preview-worktree-purpose' : 'preview-worktree-default')) });
-  await settle(12);
-  u.q('.spawn-seg input[value=child]').click(); await settle();
-  const pick = u.q('.frelto'); pick.value = 'dev-1'; pick.dispatchEvent(new u.dom.window.Event('change', { bubbles: true })); await settle(12);
-  const before = reads(u), shown = u.facts().Name;
-  assert.deepEqual(u.calls.at(-1).body.choices.relation, { kind: 'child', anchor: { instance: 'dev-1', agent: 'release-manager', agentsRoot: ROOT, server: null } });
-  rows[1] = { ...rows[1], running: false, home: '/h/moved' }; u.ui.sync(); await settle(12);
-  assert.equal(reads(u), before, 'another instance\'s row is not a fact of this preview');
-  rows[0] = { ...rows[0], home: '/h/dev-1-moved' }; u.ui.sync(); await settle(12);
-  assert.equal(reads(u), before + 1, 'the anchor moved: read again');
-  assert.notEqual(u.facts().Name, shown, 'and the new answer settles'); assert.equal(u.text('.fstatus'), 'Preview ready');
 });

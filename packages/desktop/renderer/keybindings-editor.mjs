@@ -51,7 +51,7 @@ const CONTEXT_LABELS = {
   "view:hierarchy": "Machines",
   "view:spawn": "Soul roster",
   // a modal dialog's own keys: dispatched only by the open dialog (spawn-dialog-keys.mjs)
-  "spawn-dialog-local": "Spawn dialog",
+  "spawn-dialog-local": "New agent",
 };
 
 // A terminal lives in the tab layer, where the shell activates only the "tabs" context
@@ -142,7 +142,7 @@ export const CHORD_FAMILY_WORDS = Object.freeze({
 // The roster's filter is gone, so no row teaches `sidebar.focusFilter`.
 const USEFUL = Object.freeze([
   { name: "Command palette", does: ["palette"] },
-  { name: "Quick open a soul to spawn", does: ["spawn"] },
+  { name: "New agent: choose a soul", does: ["spawn"] },
   { name: "Previous / next tab", does: ["tab-previous", "tab-next"] },
   { name: "Go to tab 1–9", does: Array.from({ length: 9 }, (_, i) => `tab-${i + 1}`), range: true },
   { name: "Previous / next workspace", does: ["workspace-previous", "workspace-next"] },

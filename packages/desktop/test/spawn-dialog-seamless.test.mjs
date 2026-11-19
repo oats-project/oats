@@ -95,7 +95,7 @@ test('Spawn pressed while the preview reads is kept as intent: Checking…, then
   assert.equal(u.applied.length, 1); assert.equal(u.applied[0].decision.revision, created('preview-worktree-purpose').decision.revision);
 });
 
-test('an edit while the press waits drops it: "Changed: press Spawn again", nothing spawns', async t => {
+test('an edit while the press waits drops it: "Changed: press Start again", nothing spawns', async t => {
   for (const edit of [u => input(u, '.fpurpose', 'api-v3'), u => input(u, '.ftask', 'Cut 3.2'), u => { const r = u.q('.fruntime'); r.value = 'claude'; r.dispatchEvent(new u.dom.window.Event('change', { bubbles: true })); }]) {
     const g = gates(); const u = await mountSpawn(t, { previewGate: g.gate });
     await u.open(); g.hold();
@@ -103,8 +103,8 @@ test('an edit while the press waits drops it: "Changed: press Spawn again", noth
     u.q('.fspawn').click(); await settle();
     assert.equal(u.q('.fspawn').textContent, 'Checking…');
     edit(u); await settle();
-    assert.equal(u.text('.fstatus'), 'Changed: press Spawn again');
-    assert.equal(u.q('.fspawn').textContent, 'Spawn'); assert.equal(u.q('.fspawn').getAttribute('aria-busy'), 'false');
+    assert.equal(u.text('.fstatus'), 'Changed: press Start again');
+    assert.equal(u.q('.fspawn').textContent, 'Start'); assert.equal(u.q('.fspawn').getAttribute('aria-busy'), 'false');
     g.open(); for (const h of g.held) h.resolve(); await settle(30);
     assert.deepEqual(u.spawns(), [], 'the press belonged to the choices at press time');
   }
@@ -119,7 +119,7 @@ test('a pending press whose preview fails shows the failure, and the button retu
   assert.equal(u.q('.fspawn').textContent, 'Checking…');
   g.open(); g.held[0].resolve(); await settle(30);
   assert.equal(u.q('.fstatus').dataset.code, 'E_CLONE_MISSING'); assert.ok(u.q('.fstatus').classList.contains('err'));
-  assert.equal(u.q('.fspawn').textContent, 'Spawn'); assert.equal(u.q('.fspawn').getAttribute('aria-busy'), 'false');
+  assert.equal(u.q('.fspawn').textContent, 'Start'); assert.equal(u.q('.fspawn').getAttribute('aria-busy'), 'false');
   assert.deepEqual(u.spawns(), []);
 });
 
@@ -134,7 +134,7 @@ test('a pending press on a preview the world moved past (another spawn within th
   assert.deepEqual(u.spawns().map(b => b.action), ['prepare']); assert.equal(u.applied.length, 0);
   assert.match(u.text('.fstatus'), /changed since you last looked/);
   assert.equal(u.q('.spawn-name-result strong').textContent, 'release-manager-api-v2-2');
-  assert.equal(u.q('.fspawn').textContent, 'Spawn'); assert.equal(u.q('.fspawn').disabled, false, 'another explicit Spawn applies the new values');
+  assert.equal(u.q('.fspawn').textContent, 'Start'); assert.equal(u.q('.fspawn').disabled, false, 'another explicit Start applies the new values');
 });
 
 test('the busy budget: a read refused E_BUSY while this dialog\'s superseded reads hold both server slots retries as soon as one lands, never shown', async t => {
@@ -170,12 +170,12 @@ test('a read that cannot answer the pressed choices ends the press: it never spa
   assert.equal(u.q('.fspawn').textContent, 'Checking…');
   // The CLI loses the preview under the waiting press: the read returns early (not previewable).
   await u.setCli({ ...CLI, spawnPreviewApi: null, features: CLI.features.filter(f => f !== 'spawn-preview-2') }); await runPolls(u);
-  assert.equal(u.q('.fspawn').textContent, 'Spawn'); assert.equal(u.q('.fspawn').getAttribute('aria-busy'), 'false');
+  assert.equal(u.q('.fspawn').textContent, 'Start'); assert.equal(u.q('.fspawn').getAttribute('aria-busy'), 'false');
   assert.ok(u.q('.fstatus').classList.contains('err'), 'the failure shows');
   g.open(); for (const h of g.held) h.resolve(); await settle(20);
   await u.setCli(CLI); await runPolls(u);
   assert.deepEqual(u.spawns(), [], 'the press ended: no spawn without a new press');
-  assert.equal(u.q('.fspawn').textContent, 'Spawn');
+  assert.equal(u.q('.fspawn').textContent, 'Start');
 });
 
 test('an invalid form reads nothing and the column says so: no Updating…, no aria-busy; before the first settle, why there is no preview', async t => {
@@ -216,14 +216,15 @@ test('"Reading defaults…" is the first read\'s only: after a first answer that
   g.open(); g.held[0].resolve(); await settle(20);
 });
 
-test('Change soul while a press waits drops it', async t => {
+test('another soul chosen while a press waits drops it', async t => {
   const g = gates(); const u = await mountSpawn(t, { previewGate: g.gate });
   await u.open(); g.hold();
   input(u, '.fpurpose', 'api-v2'); await settle();
   u.q('.fspawn').click(); await settle();
   assert.equal(u.q('.fspawn').textContent, 'Checking…');
-  u.q('.spawn-change-soul').click(); await settle();
-  assert.equal(u.text('.fstatus'), 'Changed: press Spawn again'); assert.equal(u.q('.fspawn').textContent, 'Spawn');
+  // Opening the Soul field and choosing another soul reopens the form on it: the held press goes with the old one.
+  u.q('.spawn-soul-current').click(); u.q('.spawn-soul-option[data-agent="support-triager"]').click(); await settle();
+  assert.equal(u.text('.spawn-soul-current strong'), 'support-triager'); assert.equal(u.q('.fspawn').textContent, 'Start');
   g.open(); for (const h of g.held) h.resolve(); await settle(30);
   assert.deepEqual(u.spawns(), []);
 });

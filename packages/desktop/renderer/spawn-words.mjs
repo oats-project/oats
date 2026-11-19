@@ -8,11 +8,11 @@ import { outcomeWords } from '../../client/spawn-messages.mjs';
 /** The Desktop-only codes, which no other client meets: the window guard, and the HTTP route's body check
  * (said at a press; at the preview it reads the general failure, as it always did). */
 const OWN = { E_FORBIDDEN_FRAME: 'This window can’t start a spawn.' };
-const OWN_AT_SPAWN = { E_PLAN_REQUIRED: 'Check the values and press Spawn to confirm.' };
+const OWN_AT_SPAWN = { E_PLAN_REQUIRED: 'Check the values and press Start to confirm.' };
 
 /** The Desktop's words for each `next`, after the fact. change-options has none of its own: its words are the code's. */
 const NEXT = Object.freeze({
-  'review-again': 'Check the values and press Spawn again.',
+  'review-again': 'Check the values and press Start again.',
   'check-result': 'Use Check result before spawning again.',
   'update-oats': 'Update OATS, then open this dialog again.',
   'choose-workspace': 'Choose it again from the workspace menu.',
@@ -21,28 +21,28 @@ const NEXT = Object.freeze({
   retire: instance => `Retire ${instance} from the roster to complete it.`,
 });
 /** Where the words differ by code: the option to change (change-options) is named by its control. */
-const CHOOSE_ANOTHER = 'Choose another in Developer settings.';
+const CHOOSE_ANOTHER = 'Choose another in Advanced.';
 const BY_CODE = Object.freeze({
-  E_BAD_ARGS: 'Check the name and Developer settings.',
+  E_BAD_ARGS: 'Check the name and the options in Advanced.',
   E_CHILD_SPAWNS_DISABLED: 'Pick another one, or choose None.',
-  E_BRANCH_EXISTS: 'Choose another branch in Developer settings.',
-  E_BASE_UNKNOWN: 'Check it in Developer settings.',
+  E_BRANCH_EXISTS: 'Choose another branch in Advanced.',
+  E_BASE_UNKNOWN: 'Check it in Advanced.',
   E_LAUNCH_ENV_MISSING: CHOOSE_ANOTHER,
   E_LAUNCH_EXECUTABLE: CHOOSE_ANOTHER,
   E_LAUNCH_PROBE_UNSUPPORTED: CHOOSE_ANOTHER,
   E_LAUNCH_CONFIG_UNKNOWN: CHOOSE_ANOTHER,
   E_BACKEND_UNAVAILABLE: CHOOSE_ANOTHER,
-  E_LAUNCH_CONFIG_AMBIGUOUS: 'Choose one under Launch configuration in Developer settings.',
+  E_LAUNCH_CONFIG_AMBIGUOUS: 'Choose one under Launch configuration in Advanced.',
   E_HARNESS_UNAVAILABLE: 'Install it, or pick another harness above.',
   // Read only where the controls are above it and Details quote the kernel (the preview, with its fix).
-  E_LAUNCH_PREFERENCE_UNMATCHED: 'To spawn now, pick a harness above, or a launch configuration in Developer settings. To fix it for every spawn, correct the preference (Details).',
+  E_LAUNCH_PREFERENCE_UNMATCHED: 'To spawn now, pick a harness above, or a launch configuration in Advanced. To fix it for every spawn, correct the preference (Details).',
 });
 /** Sentences that go on after a dash, in lower case: the fact's full stop gives way to " — ". Each is said for
  * its own `next` only: where the code reads another fact (a spawn's code at the preview), the general words follow. */
 const DASHED = Object.freeze({
-  E_DECISION_STALE: ['review-again', 'check the updated values and press Spawn again.'],
-  E_IDEMPOTENCY_CONFLICT: ['review-again', 'check the updated values and press Spawn again.'],
-  E_PLACEMENT_TAKEN: ['review-again', 'check the new name and press Spawn again.'],
+  E_DECISION_STALE: ['review-again', 'check the updated values and press Start again.'],
+  E_IDEMPOTENCY_CONFLICT: ['review-again', 'check the updated values and press Start again.'],
+  E_PLACEMENT_TAKEN: ['review-again', 'check the new name and press Start again.'],
   E_CLI_TIMEOUT: ['check-result', 'use Check result before spawning again.'],
   E_CLONE_MISSING: ['details', 'Details shows how.'],
 });
@@ -68,7 +68,7 @@ const OUTCOME = Object.freeze({
   notice: { drifted: 'Reopen spawn to check them.', 'never-submitted': 'Reopen spawn to spawn with these values.',
     'pending-expired': 'Check result again in a moment; nothing else was started.',
     created: 'Open its session from the roster.', 'not-yet-visible': 'Open it from the roster when it appears.' },
-  dialog: { drifted: 'Check them and press Spawn again.', 'never-submitted': 'Press Spawn to spawn with the values shown.' },
+  dialog: { drifted: 'Check them and press Start again.', 'never-submitted': 'Press Start to start it with the values shown.' },
 });
 /** The Desktop's sentence for a transaction outcome (outcomeWords), in the store's notice or the dialog ('notice' | 'dialog'). */
 export function outcomeText(kind, view, instance, where = 'notice') {

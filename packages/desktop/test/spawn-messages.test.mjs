@@ -81,7 +81,7 @@ test('an invalid instance name says every rule, including the 64-character cap (
 
 /* ── E_LAUNCH_PREFERENCE_UNMATCHED (OATS 0.53.0, awebai/oats#1015): the Desktop's own sentence, and the kernel's
  *    two texts as parts for the client to quote. The texts here are this file's own, never a kernel sentence. ── */
-const OPENS = 'This machine’s launch preferences name a soul this workspace doesn’t offer, so OATS won’t choose a launch for this soul. To spawn now, pick a harness above, or a launch configuration in Developer settings. To fix it for every spawn, correct the preference (Details).';
+const OPENS = 'This machine’s launch preferences name a soul this workspace doesn’t offer, so OATS won’t choose a launch for this soul. To spawn now, pick a harness above, or a launch configuration in Advanced. To fix it for every spawn, correct the preference (Details).';
 // The shared fact (#855, 6b-2): the sentence's lead where the Desktop goes on to name its controls; the whole
 // shorter sentence, which names none, everywhere else.
 const LEAD = 'This machine’s launch preferences name a soul this workspace doesn’t offer, so OATS won’t choose a launch for this soul.';

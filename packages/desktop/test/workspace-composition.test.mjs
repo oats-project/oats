@@ -143,11 +143,10 @@ test('03: cards have one semantic Details entry with compact identity, descripti
   assert.equal(spawn.disabled, false);
   spawn.click(); await tick(); assert.ok(u.get('.spawn-dialog'), 'Spawn opens the spawn dialog for that soul, without opening its page');
   assert.equal(u.get('.workspace-soul-page').hidden, true);
-  // Board 6: scoped to that soul — its preview column, no soul picker, "Spawn dev" and Change soul.
+  // The New agent form (slice 5), on that soul: its Soul field shows it, and Task takes the focus.
   const dialog = u.get('.spawn-dialog');
-  assert.equal(dialog.dataset.layout, 'scoped'); assert.equal(dialog.querySelector('.spawn-chooser').hidden, true); assert.equal(dialog.querySelector('.spawn-preview').hidden, false);
-  assert.equal(dialog.querySelector('#spawn-dialog-title').textContent, 'Spawn dev'); assert.equal(dialog.querySelector('.spawn-change-soul').hidden, false);
-  assert.equal(u.doc.activeElement, dialog.querySelector('.ftask'), 'the first field, the Opening instruction, takes the focus');
+  assert.equal(dialog.querySelector('#spawn-dialog-title').textContent, 'New agent'); assert.equal(dialog.querySelector('.spawn-soul-current strong').textContent, 'dev');
+  assert.equal(u.doc.activeElement, dialog.querySelector('.ftask'), 'Task takes the focus');
   u.get('.spawn-dialog').dispatchEvent(new u.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await tick();
   assert.equal(u.get('.spawn-dialog'), null, 'Escape closes it');
   assert.equal(u.doc.activeElement, u.get('.soul-tile > .soul-spawn'), 'focus returns to the Spawn button that opened it');
@@ -179,9 +178,9 @@ test('03: cards have one semantic Details entry with compact identity, descripti
   for (const text of ['Edit defaults', 'Edit instructions']) assert.equal([...u.get('.workspace-soul-page').querySelectorAll('button')].some(b => b.textContent === text), false, `${text}: a v2 soul is edited in its repository`);
   assert.equal(u.get('.inspector-repository'), null, 'no "Edit this soul" block (human, F7)');
   assert.equal(u.get('.spawn-dialog'), null, 'keyboard inspection does not launch');
-  // The soul page's Spawn opens the same scoped dialog.
+  // The soul page's Spawn opens the same form, on that soul.
   [...u.get('.workspace-soul-page').querySelectorAll('button')].find(b => b.textContent === 'Spawn').click(); await tick();
-  assert.equal(u.get('.spawn-dialog').dataset.layout, 'scoped'); assert.equal(u.get('.spawn-dialog #spawn-dialog-title').textContent, 'Spawn dev');
+  assert.equal(u.get('.spawn-dialog .spawn-soul-current strong').textContent, 'dev');
   u.get('.spawn-dialog').dispatchEvent(new u.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); await tick();
   assert.equal(u.get('.spawn-dialog'), null);
   u.click('Schedule…'); assert.deepEqual(u.views, ['automations'], 'Automations, on its Schedules subtab');

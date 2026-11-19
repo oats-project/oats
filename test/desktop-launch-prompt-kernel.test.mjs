@@ -219,7 +219,7 @@ test("no module that makes or shows the notice holds the kernel's words: no run 
 });
 
 test("the kernel's own E_LAUNCH_CONFIG_AMBIGUOUS reads as the Desktop's sentence at a preview and at the apply's re-read", async () => {
-  const SENTENCE = "This machine has more than one launch configuration for this soul’s harness, and none is the default. Choose one under Launch configuration in Developer settings.";
+  const SENTENCE = "This machine has more than one launch configuration for this soul’s harness, and none is the default. Choose one under Launch configuration in Advanced.";
   const choice = { selection: {}, preference: null };
   const several = (count) => Object.fromEntries([...Array.from({ length: count }, (_, n) => [`claude-${String(n).padStart(2, "0")}`, { harness: "claude" }]), ["pi-only", { harness: "pi" }]]);
   for (const count of [2, 40]) {

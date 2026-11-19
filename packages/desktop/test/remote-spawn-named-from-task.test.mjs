@@ -139,13 +139,13 @@ async function onBuild(t, options) {
 
 test('a spawn on a server is named here from its task as a local one is: asked after seven words, shown, and sent as its name', async t => {
   const { u, remote } = await onBuild(t, { cli: NAMING_CLI, teamMembers: hostFacts(['spawn-name']), nameHere: () => suggested() });
-  assert.equal(u.text('.spawn-name-result'), 'Left empty, the instance is named from its task.');
+  assert.equal(u.text('.spawn-name-result'), 'Left empty, the agent is named from its task.');
   await u.type('.ftask', 'Write the release notes'); await settle(20);
   assert.equal(u.names.length, 0, 'fewer than seven words: not asked');
   await u.type('.ftask', TASK); await settle(20);
   assert.deepEqual(u.names, [{ action: 'suggest-name', soul: 'release-manager', task: TASK, dir: DEPLOYMENT }], 'no harness chosen or known: the kernel\'s default');
   assert.equal(u.q('.fpurpose').placeholder, 'release-notes-manager');
-  assert.equal(u.text('.spawn-name-result'), 'Instance name: release-notes-manager (from the task)');
+  assert.equal(u.text('.spawn-name-result'), 'Name: release-notes-manager (from the task)');
   await u.spawn();
   assert.equal(remote.length, 1); assert.equal(remote[0].name, 'release-notes-manager');
   assert.equal(Object.hasOwn(remote[0], 'suggestName') || Object.hasOwn(remote[0], 'purpose'), false);
@@ -189,7 +189,7 @@ test('Spawn with no suggestion in hand names it first ("Naming…"); unnamed her
 test('the host numbers what it was asked to name: the spawn says why, from its re-validated naming', async t => {
   const { u } = await onBuild(t, { cli: without('instance-suggest-name'), teamMembers: hostFacts(['spawn-name', 'spawn-apply-suggest-name']),
     answer: () => ({ naming: { source: 'numbered', reason: 'harness-failed', message: 'PRIVATE', ms: 3 } }) });
-  assert.equal(u.text('.spawn-name-result'), 'Left empty, the instance is named from its task on build.');
+  assert.equal(u.text('.spawn-name-result'), 'Left empty, the agent is named from its task on build.');
   await u.type('.ftask', TASK); await settle(20);
   assert.equal(u.names.length, 0, 'this CLI can\'t name it: nothing asked here');
   await u.spawn(); await settle(20);
@@ -206,8 +206,8 @@ test('naming never blocks a spawn on another machine: a failed read here falls b
 
 test('the help line says who names an empty name before the press; a typed or touched name is never named from the task', async t => {
   for (const [why, cli, features, line] of [
-    ['named here', NAMING_CLI, ['spawn-name', 'spawn-apply-suggest-name'], 'Left empty, the instance is named from its task.'],
-    ['named on the host', without('instance-suggest-name'), ['spawn-name', 'spawn-apply-suggest-name'], 'Left empty, the instance is named from its task on build.'],
+    ['named here', NAMING_CLI, ['spawn-name', 'spawn-apply-suggest-name'], 'Left empty, the agent is named from its task.'],
+    ['named on the host', without('instance-suggest-name'), ['spawn-name', 'spawn-apply-suggest-name'], 'Left empty, the agent is named from its task on build.'],
     ['this CLI can\'t ask the host', without('instance-suggest-name', 'spawn-apply-suggest-name'), ['spawn-name', 'spawn-apply-suggest-name'], 'Named by build when it spawns.'],
     ['the host can\'t', without('instance-suggest-name'), ['spawn-name'], 'Named by build when it spawns.'],
   ]) {
