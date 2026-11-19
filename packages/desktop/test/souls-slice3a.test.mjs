@@ -312,3 +312,25 @@ test('slice3a soul page: Ready\'s Details reads the soul\'s readiness once, on f
   assert.equal(details().querySelector('.readiness-check, .readiness-view'), null, 'gamma\'s checks never reach delta');
   assert.equal(details().open, false, 'delta\'s Details starts closed');
 });
+
+// Review round 4: every accepted inspection replaces the held one, an empty answer too, so a catalog update never brings
+// back an older soul page; a problem without words is still a problem in Ready.
+test('slice3a soul page: an empty refresh is not painted over by a catalog update; a wordless problem is not Ready', async t => {
+  let answer = inspection('release-manager'), words = 'first words';
+  answer.souls[0].instructions.text = '# SOUL PRIVATE TEXT\n';
+  const u = page(t, () => answer, { capabilityFacts: () => ({ by: null, description: words }) });
+  await u.inspector.show(selection('release-manager')); await settle();
+  assert.match(u.el.textContent, /SOUL PRIVATE TEXT/); assert.ok(u.$('.soul-capabilities'));
+  answer = { ...structuredClone(fixture), souls: [], capabilities: [], problems: [{ code: 'gone', message: 'The soul is no longer available.' }] };
+  await u.inspector.show(selection('release-manager'), { user: true }); await settle();
+  assert.equal(u.$('.soul-capabilities'), null); assert.doesNotMatch(u.el.textContent, /SOUL PRIVATE TEXT/);
+  words = 'second words'; u.inspector.syncCatalog(); u.inspector.syncRoster(); await settle();
+  assert.equal(u.$('.soul-capabilities, .soul-top'), null, 'the empty answer stands');
+  assert.doesNotMatch(u.el.textContent, /SOUL PRIVATE TEXT|second words/);
+  assert.match(u.el.textContent, /The soul is no longer available\./);
+  // A problem with no message: Ready says the generic sentence, never "Ready".
+  answer = inspection('release-manager'); answer.problems = [{ code: 'E_UNREADABLE' }];
+  await u.inspector.show(selection('release-manager'), { user: true }); await settle();
+  assert.equal(u.$('.soul-ready-line').textContent, 'The kernel reported a problem.');
+  assert.match(u.$('.soul-ready-problems').textContent, /E_UNREADABLE/);
+});

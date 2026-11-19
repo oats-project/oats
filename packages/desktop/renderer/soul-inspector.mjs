@@ -463,6 +463,9 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
   }
   function render(inspected) {
     operationSerial++; teamsPanel = null;
+    // Every accepted paint replaces what a later paint may reuse: only a soul page that paints this inspection holds it
+    // again (renderSoulPage), so an empty answer or an instance is never painted over by an older one.
+    shownInspection = null; shownFor = null; capabilityWords = null;
     // Instructions is re-appended below: detaching it drops its focus and scroll, so hold them first.
     const keepInstructions = instructionsSection?.hold();
     content.replaceChildren();
@@ -801,8 +804,10 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
         const agent = selection?.agent, cli = cliStatus();
         const refusal = spawnRefusal(agent);
         const said = soulFacts(agent, inspected, cli, DESKTOP_TERMS);
-        const firstProblem = inspected.problems.find(p => typeof p?.message === 'string' && p.message) ?? null;
-        const sentence = refusal ?? firstProblem?.message ?? said.problem?.lines?.[0] ?? said.problem?.lead ?? null;
+        // Any problem the inspection reports is one: a problem without words says the generic sentence (problem()'s).
+        const firstProblem = inspected.problems[0] ?? null;
+        const problemText = firstProblem ? (typeof firstProblem.message === 'string' && firstProblem.message ? firstProblem.message : 'The kernel reported a problem.') : null;
+        const sentence = refusal ?? problemText ?? said.problem?.lines?.[0] ?? said.problem?.lead ?? null;
         line.textContent = sentence ?? 'Ready';
         line.classList.toggle('problem', !!sentence);
         element.dataset.ready = String(!sentence);
