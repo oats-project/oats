@@ -5,6 +5,7 @@ import { createDataState, statusLine, skeleton, skeletonBlock, ROSTER_STALE_TITL
 import { instanceId, resolveLinkId, findRosterInstance } from '../../client/instance-tree.mjs';
 import { instanceDisplayName } from '../../client/instance-display-name.mjs';
 import { drawsParentLine } from '../../client/same-work.mjs';
+import { iconElement } from './shell-icons.mjs';
 
 /** An instance row's name (0.68.1, the product owner): the words shown (instanceDisplayName: "Oats expert maintainer
  * lanes"), the real name kept where it identifies the instance. The words are hidden from assistive tech and a visually
@@ -39,6 +40,17 @@ export function relationSpan(doc, words) {
   if (!words) return null;
   const span = doc.createElement("span"); span.className = "sr-only ctx-relation"; span.textContent = `, ${words}`;
   return span;
+}
+
+/** A pinned row's mark on its name line (feature instance-pin): the pin icon, in the muted text colour, as an image
+ * named "Pinned", so the pin is seen and heard, never inferred from the row's place, and has no colour-only meaning. */
+export function pinnedMark(doc) {
+  const mark = doc.createElement("span");
+  mark.className = "ctx-pin";
+  mark.setAttribute("role", "img");
+  mark.setAttribute("aria-label", "Pinned");
+  mark.append(iconElement(doc, "pin", { size: 12 }));
+  return mark;
 }
 
 /** Agent-group boundary for the instances sidebar (Workspace v4): no title,

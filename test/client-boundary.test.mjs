@@ -73,7 +73,9 @@ const SURFACE = Object.freeze({
   "deployment-facts.mjs": ["memberLabel", "servedIdentityText", "deploymentUnavailableText"],
   "instance-admission.mjs": ["admitInstance", "instanceSelector"],
   "instance-tree.mjs": ["instanceId", "resolveLinkId", "clusterInstances", "recencyOrder", "rosterGroups", "waitingRollup", "instanceVisibleInTree",
-    "collapseKey", "filterInstanceTree", "hasInstanceChildren", "heldHome", "instanceSiblings", "backgroundPlacement", "BACKGROUND_FEATURE"],
+    "collapseKey", "filterInstanceTree", "hasInstanceChildren", "heldHome", "instanceSiblings", "backgroundPlacement", "BACKGROUND_FEATURE", "PIN_FEATURE"],
+  // Pinned instances (feature instance-pin): a client pins through the shared run of the kernel's verb, which reads its answer.
+  "instance-pin.mjs": ["pinInstance"],
   // #1579: the roster's section key and the sidebar's sections (the main tree, then the Background section), both clients'.
   "roster-sections.mjs": ["rosterSections", "deploymentState", "rowStale", "primaryDeployment", "isMultiDeployment", "rosterSectionKey", "sidebarSections"],
   "kernel-environment.mjs": ["INSTANCE_VARIABLES", "withoutInstanceVariables"],
@@ -510,7 +512,7 @@ test("lib/ and bin/ import nothing from packages/client or packages/desktop", (t
 
 test("the stable surface names what packages/client has: every listed module, every listed export", () => {
   assert.deepEqual(surfaceProblems(repository), []);
-  assert.equal(Object.keys(SURFACE).length, 73);
+  assert.equal(Object.keys(SURFACE).length, 74);
   // #1559: the machine sweep's runner and the shared trigger, with the trigger's locality; not the reader.
   assert.deepEqual(["session-resume-cli.mjs", "session-resume.mjs", "session-resume-trigger.mjs"].map((module) => SURFACE[module]), [["runResumeSweep"], undefined, ["createResumeTrigger", "localDeploymentIds"]]);
   // #482 in a switcher: a listed deployment's identity, read before it is served.

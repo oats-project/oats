@@ -227,6 +227,9 @@ export function deploymentStatusData(document, deployment) {
       // Feature instance-background (#1579): the row is placed in the Background section. Exactly true only; any
       // other value is dropped, never checked: the row stays in the main tree.
       if (own(instance, 'background') && instance.background === true) row.background = true;
+      // Feature instance-pin: the row is listed first in its machine's list (instance-tree.mjs rowPinned). Exactly
+      // true only; any other value is dropped, never checked: the row keeps the roster's order.
+      if (own(instance, 'pinned') && instance.pinned === true) row.pinned = true;
       // #802 (feature worktree-event): a spawn running its worktree hooks, verifiably alive. Boolean true only;
       // any other value is dropped, never checked: the row stays an ordinary one.
       if (own(instance, 'spawnInProgress') && instance.spawnInProgress === true) row.spawnInProgress = true;

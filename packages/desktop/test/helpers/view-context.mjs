@@ -17,6 +17,11 @@
 // Slice 1 of the Desktop UI rework: a row's two lines (packages/client roster-row-facts.mjs) are pure and shared the
 // same way; the foot's count is inert (`sidebarFoot`, sidebar-foot-shell.test.mjs drives the shipped one), and the empty
 // roster's line is the shipped words with no chord bound. The relations in words (D26: no drawn lines) are pure too.
+// Feature instance-pin: the pin's order and mark are pure and shared the same way; a suite about other behaviour runs
+// without the feature (`pinsShown`), so nothing moves and no mark is drawn, and its row menu offers no pin item.
+// instance-pin-menu.test.mjs turns the feature on. The palette's Instance: Pin to top / Unpin carry their real labels
+// (PIN_LABELS) and offer themselves for no target here (pinTargetOffer, asked of the palette's own target, which is
+// none: paletteTargetId), so a suite that builds the palette lists neither.
 import { deploymentState, rosterSections, rowStale, splitByDeployment, rosterSectionKey, sidebarSections, isMultiDeployment } from "../../../client/roster-sections.mjs";
 import { siblingText } from "../../../client/instance-presentation.mjs";
 import { backgroundHeading } from "../../renderer/background-heading.mjs";
@@ -27,13 +32,15 @@ import { rowFactsTitle } from "../../renderer/row-facts-title.mjs";
 import { deploymentHeading, notePanel, panelDeployments } from "../../renderer/view-deployments.mjs";
 import { createViewMembership, rehomeMap } from "../../renderer/workspace-rehome.mjs";
 import { waitingClaim, waitingSentence, waitingDetail, waitingClock } from "../../../client/waiting-on-you.mjs";
-import { waitingRollup, backgroundPlacement } from "../../../client/instance-tree.mjs";
+import { waitingRollup, backgroundPlacement, rowPinned } from "../../../client/instance-tree.mjs";
+import { pinnedMark } from "../../renderer/instance-tree-view.mjs";
+import { PIN_LABELS } from "../../renderer/instance-pin-menu.mjs";
 import { rowReasonLine, runtimeErrorLine, unsupportedLine, speakerLine, keptFailureLine, heldLine } from "../../renderer/speaker-line.mjs";
 import { keptFailure } from "../../../client/deployment-facts.mjs";
 import { retiredTabs, tabShowsRow, otherIncarnation, terminalOrigin } from "../../renderer/retired-tabs.mjs";
 import { dotColor, paintDotColor } from "../../renderer/instance-dot.mjs";
 import { syncWaitingRow } from "../../renderer/waiting-row.mjs";
-import { sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen } from "../../renderer/roster-disclosure.mjs";
+import { sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen, anyBelow } from "../../renderer/roster-disclosure.mjs";
 
 /** Every root opened by hand: the roster as it was drawn before roots started collapsed. */
 class AllOpen extends Set { has() { return true; } }
@@ -63,7 +70,7 @@ export const viewContext = () => ({
   focusPlaces: { take: () => null, note() {}, forget() {}, rehome() {} }, focusArrival() {}, applyRosterPlace() {},
   backgroundPlacement, rosterSectionKey, sidebarSections, backgroundHeading, backgroundShown: () => false, backgroundOpen: new Set(),
   setBackgroundOpen() {},
-  sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen, expandedInstances: new AllOpen(),
+  sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen, anyBelow, expandedInstances: new AllOpen(),
   // The row menu's Move to background / out of it (instance-background-menu.mjs) offers nothing here: its gate is the
   // route's check, which a suite about other behaviour never answers. instance-background.test.mjs drives the shipped one.
   backgroundMenu: { items: () => [], handles: () => false, run: async () => {} },
@@ -71,4 +78,7 @@ export const viewContext = () => ({
   // The pinned Automations row's failure mark (automations-failure.mjs): a roster read asks it; a suite about other
   // behaviour reads nothing. automations-failure.test.mjs drives the shipped reader.
   automationsFailure: { refresh: async () => {} },
+  rowPinned, pinnedMark, pinsShown: () => false,
+  pinMenu: { items: () => [], handles: () => false, run: async () => {} },
+  PIN_LABELS, paletteTargetId: null, pinTargetOffer: () => null, runPinCommand: async () => {},
 });

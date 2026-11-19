@@ -358,6 +358,9 @@ body {
 .ctx-disclosure:hover { color: var(--fg); box-shadow: inset 0 0 0 1px var(--border); }
 .ctx-disclosure > .ctx-disclosure-chevron { flex: none; width: 12px; height: 12px; }
 .ctx-inst[aria-expanded="true"] .ctx-disclosure-chevron { transform: rotate(90deg); }
+/* A pinned row's mark (feature instance-pin): the pin icon in the muted text colour, as New's words are; its name is
+   "Pinned" (role=img), so it means nothing by colour alone. */
+.ctx-pin { flex: none; display: inline-flex; align-items: center; color: var(--muted); }
 /* Spec D: Needs input, rolled up on a collapsed parent ("! N below"). The pill paints its own opaque surface (--warn on --attn-bg passes AA), so it reads the same
    over every row fill; background-color, never the shorthand (#549). No animation: the dot stays liveness. */
 .ctx-attn { flex: none; display: inline-flex; align-items: center; gap: 3px; padding: 0 5px; border: 1px solid var(--attn-border);

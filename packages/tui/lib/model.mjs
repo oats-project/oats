@@ -7,7 +7,7 @@
 // in. What it adds is the TUI's: the window, the clock times, and which fact stands on which line.
 import {
   TERMS, panelData, localDeploymentIds, displayLine, DETAIL_WITHHELD, originLead, instanceId, instanceVisibleInTree, waitingRollup, collapseKey, filterInstanceTree,
-  hasInstanceChildren, heldHome, instanceSiblings, siblingText, rosterSections, rosterSectionKey, sidebarSections, backgroundPlacement, BACKGROUND_FEATURE, deploymentState, rowStale, primaryDeployment, isMultiDeployment, runtimeState, runtimeCounts, instanceColor, instanceDisplayName,
+  hasInstanceChildren, heldHome, instanceSiblings, siblingText, rosterSections, rosterSectionKey, sidebarSections, backgroundPlacement, BACKGROUND_FEATURE, PIN_FEATURE, deploymentState, rowStale, primaryDeployment, isMultiDeployment, runtimeState, runtimeCounts, instanceColor, instanceDisplayName,
   waitingClaim, waitingLabel, waitedText, waitingClock, waitingBelowText, instanceActs, rowReason,
   identityMemory, viewModel, listedViews, workspaceChoices, workspaceChoiceRows, choiceMatches, UNMATCHED_SECTION, shortPath, machineLabels,
   openAct, deployments as heldDeployments, localScrollKeys, hostScrollKeys, attachExit, preflightFailure, kernelLines,
@@ -149,6 +149,8 @@ export const BACKGROUND_ID = "\u0000background";
  *  and kept for the run per workspace as `collapsed` is (by `state.open`): `state.background` holds the
  *  ones open. */
 export const backgroundOpen = (state) => state.background.has(state.open);
+/** Whether this run's kernel lists the pin's feature (instance-pin): a row's `pinned` orders the list only then. */
+export const pinsListed = (state) => Array.isArray(state.cli?.features) && state.cli.features.includes(PIN_FEATURE);
 
 /** The key prefix of each run of instances related to no other, as the shared grouping names it
  *  (`independent:<id>`). Read by key, not by label: a cluster whose root is named `independent` has that
@@ -172,7 +174,10 @@ function build(state, at) {
   // `ordered`: every row in the shared order of the whole roster, whatever is filtered, folded or in the
   // Background section (the lists of a soul's instances read it).
   const ordered = [];
-  for (const part of rosterSections(instances, instances, deployments, TERMS)) for (const group of part.groups) for (const cluster of group.clusters) ordered.push(...cluster.instances);
+  // Pinned first (feature instance-pin), as in the Desktop: only when this run's kernel lists the feature; without
+  // it a row's `pinned` is ignored and the order is the roster's own.
+  const pins = pinsListed(state);
+  for (const part of rosterSections(instances, instances, deployments, TERMS, { pins })) for (const group of part.groups) for (const cluster of group.clusters) ordered.push(...cluster.instances);
   // The rows the Background section holds (#1579), the shared placement's: only when this run's kernel
   // lists the feature; without it a row's `background` is ignored and nothing below changes.
   const placement = backgroundPlacement(instances, Array.isArray(state.cli?.features) && state.cli.features.includes(BACKGROUND_FEATURE));
@@ -186,14 +191,14 @@ function build(state, at) {
   // left out makes an ambiguous name unique. The key without a placement is the deployment's alone.
   const deploymentOf = rosterSectionKey(deployments), bySection = new Map();
   for (const row of instances) { const key = deploymentOf(row); if (!bySection.has(key)) bySection.set(key, []); bySection.get(key).push(row); }
-  const siblings = new Map([...bySection.values()].flatMap((own) => [...instanceSiblings(own)]));
+  const siblings = new Map([...bySection.values()].flatMap((own) => [...instanceSiblings(own, { pins })]));
   const matched = soul !== null ? filterInstanceTree(instances, soul.name, (row) => soul.names.includes(row.agent)) : filterInstanceTree(instances, query);
   const visible = matched.filter((i) => instanceVisibleInTree(i, instances, state.collapsed, state.open, filtering, { section }));
   const stale = (row) => rowStale(row, deployments);
   // The main tree's sections, and the Background section after them, each a tree of its own (the shared
   // sidebarSections). A filter draws the section open, so its matches show, and changes nothing stored;
   // the heading counts the rows the filter leaves in it.
-  const { main: sections, background } = sidebarSections(instances, visible, deployments, TERMS, { placement, open: backgroundOpen(state) || filtering, listed: matched, stale });
+  const { main: sections, background } = sidebarSections(instances, visible, deployments, TERMS, { placement, open: backgroundOpen(state) || filtering, listed: matched, stale, pins });
   // How many instances each collapse folds away under its row: every descendant of the row in its
   // own section, as the shared walk finds them when it is asked with that collapse alone (so a
   // fold further down hides none of them from the count). A filter folds nothing away.
@@ -878,7 +883,7 @@ export function paletteItems(state, at = new Date(0).toISOString()) {
         sibling: siblingText(r.siblings.get(instanceId(row))), text: `${row.instance} ${machine ?? ""}`,
       };
     };
-    for (const section of rosterSections(r.instances, openable, r.deployments, TERMS, { lastFocus })) for (const group of section.groups) {
+    for (const section of rosterSections(r.instances, openable, r.deployments, TERMS, { lastFocus, pins: pinsListed(state) })) for (const group of section.groups) {
       const rows = group.clusters.flatMap((cluster) => cluster.instances).map(item).filter(matched);
       if (!rows.length) continue;
       // A group is named, and kept apart, by its deployment where there are several (the Desktop's palette.mjs).
@@ -1138,6 +1143,44 @@ export function actDecision(state, row, acts, verb) {
   }
   const machine = elsewhere(row) ? row.deployment?.machine ?? row.server : null;
   return { open: true, verb, id, name, kind: lifecycle ? "lifecycle" : "start", machine, label: machine, home: row.home ?? null };
+}
+
+/** The TUI's own words around the pin key (feature instance-pin; docs/tui.md, "Pinning"), as parts the way
+ *  ACT_WORDS are. `unavailable` says why the key does nothing on a kernel that does not list the feature, and the
+ *  command that pins. */
+export const PIN_WORDS = Object.freeze({
+  unavailable: [{ own: "This OATS can't pin instances: it doesn't list instance-pin. With a newer one, p or `oats instance pin <name> on|off` pins." }],
+  pinning: (name, pinned) => [{ own: pinned ? "Pinning " : "Unpinning " }, { shown: name }, { own: "…" }],
+  still: (name) => [{ own: "The pin of " }, { shown: name }, { own: " is still changing." }],
+  done: (name, pinned) => [{ shown: name }, { own: pinned ? " is pinned to the top of its machine's list." : " is unpinned." }],
+  notChanged: (name) => [{ own: "The pin of " }, { shown: name }, { own: " was not changed." }],
+  unconfirmed: (name) => [{ own: "OATS didn't confirm the pin of " }, { shown: name }, { own: ". The list shows it once it is read again." }],
+});
+
+/** What the pin key does on `row` (`acts`: its instanceActs answer): `{ open: true, id, name, pinned }`, `pinned`
+ *  the value it sets (Unpin on a pinned row, else Pin), or `{ open: false, said }`, the line that says why not:
+ *  without the feature, while this run's pin of the row is still changing, or on a row that offers no act of a
+ *  client's own (a held, retiring or unaddressable home: the shared reason). A remote row's host without the
+ *  feature is the kernel's to refuse (E_REMOTE_INCOMPATIBLE: nothing is sent), said as its refusal. */
+export function pinDecision(state, row, acts) {
+  const name = row.instance, id = instanceId(row);
+  const no = (said, under = []) => ({ open: false, said: Object.freeze({ said, under }) });
+  if (!pinsListed(state)) return no(PIN_WORDS.unavailable);
+  if (state.pinning?.has(id)) return no(PIN_WORDS.still(name));
+  const held = acts.blocked ?? acts.limited;
+  if (held) return no([], outside(reasonSpoken(held)));
+  return { open: true, id, name, pinned: row.pinned !== true };
+}
+
+/** The line after a pin's answer (packages/client instance-pin.mjs pinOutcome): the change, the kernel's refusal
+ *  under the TUI's sentence, or that OATS did not confirm it (the list read after it says what is true). */
+export function pinLine(name, pinned, answer) {
+  if (answer?.status === "ok" && answer.pinned === pinned) return Object.freeze({ said: PIN_WORDS.done(name, pinned), under: Object.freeze([]) });
+  if (answer?.status === "refused") {
+    const said = kernelLines(answer.reason?.message, undefined, TERMS);
+    return Object.freeze({ said: PIN_WORDS.notChanged(name), under: Object.freeze(said.length ? said : outside(displayLine(answer.reason?.code))) });
+  }
+  return Object.freeze({ said: PIN_WORDS.unconfirmed(name), under: Object.freeze([]) });
 }
 
 /** What a start's or a restart's answer (the shared startInstance's) shows, as the act view's
