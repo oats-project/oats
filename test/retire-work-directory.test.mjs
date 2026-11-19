@@ -44,10 +44,10 @@ function deployment(t, { checkout = false } = {}) {
   if (checkout) { execFileSync("git", ["init", "-q", fx.dep], { env: fx.env }); git(fx.dep, "commit", "--allow-empty", "-qm", "the deployment is a checkout"); }
   const envelope = (r) => { try { return r.json(); } catch { assert.fail(`no envelope: ${r.stdout}${r.stderr}`); } };
   /** The plan of one instance: its JSON result, its text, and the text's `defaults:` line. */
-  const plan = (instance) => {
-    const json = envelope(fx.cli(["retire", instance, "--plan", "--json"]));
+  const plan = (instance, flags = []) => {
+    const json = envelope(fx.cli(["retire", instance, "--plan", "--json", ...flags]));
     assert.equal(json.ok, true, JSON.stringify(json.error));
-    const text = fx.cli(["retire", instance, "--plan"]);
+    const text = fx.cli(["retire", instance, "--plan", ...flags]);
     assert.equal(text.status, 0, text.stdout + text.stderr);
     const lines = text.stdout.split("\n").filter((l) => l.startsWith("  defaults: "));
     assert.equal(lines.length, 1, text.stdout);
@@ -248,7 +248,7 @@ for (const receipt of [true, false]) {
     d.record(inst.home, receipt ? withoutWork : stub);
     if (!receipt) rmSync(d.baselines(inst.home), { recursive: true });
     const repo = realpathSync(d.fx.member);
-    const seen = d.plan(inst.instance);
+    const seen = d.plan(inst.instance, receipt ? [] : ["--force"]);
     assert.deepEqual(seen.defaults, { retainWorktree: true, deleteBranch: false, stopChildren: true, retainChildren: true });
     assert.equal(seen.line, OWN_TREE_LINE);
     assert.equal(seen.facts.workMode, null);

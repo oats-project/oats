@@ -5,7 +5,7 @@
 //   D3  `prepare` and `inspect --request` → E_UNKNOWN_COMMAND naming the replacements;
 //   D1  a captured home (instance.json records executionBinding|incarnationId|captured):
 //       status names it (legacy-captured-home); start, inspect|readiness|operation --home
-//       and in-home commands refuse it; retire works, naming each capability whose
+//       and in-home commands refuse it; forced retire works, naming each capability whose
 //       retire hook did NOT run;
 //   D4  captured (versioned) schedules are refused on add, and a stored one never fires.
 import test from "node:test";
@@ -63,7 +63,7 @@ test("prepare and inspect --request are removed verbs (E_UNKNOWN_COMMAND) naming
   assert.equal(e.details.removed, "inspect --request");
 });
 
-test("a captured home: status names it, start/inspect/readiness/operation --home and in-home commands refuse it, retire works and names each capability whose retire hook did NOT run", async (t) => {
+test("a captured home: status names it, start/inspect/readiness/operation --home and in-home commands refuse it, forced retire works and names each capability whose retire hook did NOT run", async (t) => {
   const fx = fixture(); t.after(fx.cleanup);
   const { home, instance } = await fx.spawn("dev", { instance: "dev-old" });
   const { home: clean } = await fx.spawn("dev", { instance: "dev-new" });
@@ -72,13 +72,16 @@ test("a captured home: status names it, start/inspect/readiness/operation --home
   const status = fx.cli(["status", "--json"]);
   assert.equal(status.status, 0, status.stderr);
   const problem = JSON.parse(status.stdout).problems?.find((p) => p.code === "legacy-captured-home");
+  assert.match(problem.message, /inspect.*clean up.*--force/);
+  assert.doesNotMatch(problem.message, /oats retire` still works/);
   assert.deepEqual([problem?.instances, problem?.homes?.map((h) => realpathSync(h))], [[instance], [realpathSync(home)]], status.stdout);
   assert.match(fx.cli(["status"]).stdout, /! legacy-captured-home: 1 captured home .* \(dev-old\)/);
 
   for (const args of [["inspect", "--home", home, "--json"], ["readiness", "--home", home, "--json"], ["operation", "run", "knowledge:x", "--home", home, "--json"]]) {
     const e = fail(fx.cli(args), args.slice(0, 2).join(" "));
     assert.equal(e.code, "E_UNSUPPORTED_MODE", args.join(" "));
-    assert.match(e.message, /is a captured home .*removed in 0\.26.*retire it/, args.join(" "));
+    assert.match(e.message, /is a captured home .*removed in 0\.26.*without proof that no spawn hook ran/, args.join(" "));
+    assert.ok(e.message.includes(`oats retire ${instance} --force`), e.message);
     assert.equal(e.details?.captured, true, args.join(" "));
   }
   const inHome = fail(fx.cli(["tool", "show", "--json"], { cwd: home, env: { OATS_INSTANCE_HOME: home } }), "in-home");
@@ -89,7 +92,12 @@ test("a captured home: status names it, start/inspect/readiness/operation --home
   const { startInstanceSession } = await import("../lib/core.mjs");
   await fx.inEnv(() => assert.throws(() => startInstanceSession(home, { launch: false }), (e) => e.code === "E_UNSUPPORTED_MODE" && /is a captured home/.test(e.message) && /nothing was started/.test(e.message)));
 
-  const r = fx.cli(["retire", instance, "--json"]);
+  for (const flags of [["--plan"], []]) {
+    const refused = fx.cli(["retire", instance, "--json", ...flags]);
+    assert.equal(refused.json().error.code, "E_UNIDENTIFIED_INSTANCE_HOME");
+    assert.match(refused.json().error.message, /--force/);
+  }
+  const r = fx.cli(["retire", instance, "--force", "--json"]);
   assert.equal(r.status, 0, `${r.stdout}${r.stderr}`);
   const out = JSON.parse(r.stdout);
   const named = (out.warnings || []).filter((w) => /its retire hook did NOT run \(captured home/.test(w)).map((w) => w.split(":")[0]);

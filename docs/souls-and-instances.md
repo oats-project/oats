@@ -2348,5 +2348,7 @@ member repository's `souls/<name>` (`soul.yaml` + `AGENTS.md`) and run
 
 Homes left by mechanisms earlier releases removed are reported once by
 `oats status` and `oats doctor`: `legacy-local-agents` (a `local-agents/`
-directory) and `legacy-captured-home`. Retire such instances and re-spawn the
-soul from the deployment.
+directory) and `legacy-captured-home`. Follow the reported cleanup remedy,
+then re-spawn the soul from the deployment. For captured homes, inspect and
+clean up external state first; without positive proof that no spawn hook
+ran, retirement needs `oats retire <instance> --force`.

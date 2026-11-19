@@ -463,8 +463,10 @@ with the soul's merged payload. `oats <namespace> --help --json` answers
 captured home (`details: {home, captured: true}`), the selectors
 `--deployment`, `--resolution` and `--artifact-set` (`details.selector`), and
 an inherited `OATS_DEPLOYMENT` or `OATS_RESOLUTION` (`details.inherited`).
-`oats version` and `oats retire` still work. `oats status --json` names such
-homes in `problems[]`: `legacy-captured-home {code, instances, homes,
+`oats version` still answers. For captured homes, inspect and clean up external
+state first; without positive proof that no spawn hook ran, retirement needs
+`oats retire <instance> --force`. `oats status --json` names such homes in
+`problems[]`: `legacy-captured-home {code, instances, homes,
 message}` and `legacy-local-agents {code, dirs, instances, message}`.
 
 <a id="observation-reuse-feature-observe-max-age-oats-0311"></a>
@@ -5675,6 +5677,9 @@ had begun.
 | `E_AMBIGUOUS` | yes | yes |
 | `E_SNAPSHOT_UNKNOWN` | yes | yes |
 
+`E_UNIDENTIFIED_INSTANCE_HOME` includes cleanup-hook admission in both retire
+plan and apply; the refusal returns no work facts when the home cannot be identified.
+
 `E_HOME_NOT_OWNED` is the answer of every command that takes a home's
 lifecycle claim (a start, a resume, a stop, a retire, an upgrade) when the
 user it runs as does not own the home. It is answered before the claim is
@@ -6578,13 +6583,10 @@ message names the entry or the state that could not be read, or the directory
 Git reads as the top level of a `work/` whose `core.worktree` names another
 one),
 `E_SESSION_UNKNOWN`, `E_AMBIGUOUS_INSTANCE`,
-`E_UNIDENTIFIED_INSTANCE_HOME` (a home with no `instance.json` and no cleanup
-descriptor, or a rollback marker that cannot drive a retry, or an
-`instance.json` that names no repository and does not show that no capability
-has a retire hook, what a spawn killed before its record leaves
-([capabilities.md](capabilities.md#manifest)), until `--force`;
-a home whose `instance.json` [cannot be read](#unreadable-record), `--plan`
-and `--force` included),
+`E_UNIDENTIFIED_INSTANCE_HOME` (a missing or unusable cleanup record, or
+recorded hooks that cannot run without proof that no cleanup is owed, until
+`--force`; a home whose `instance.json` [cannot be read](#unreadable-record)
+refuses even with `--plan` or `--force`),
 `E_NO_ROOT`, `E_LIFECYCLE_FAILED`, `E_LIFECYCLE_BUSY` (another retire of the
 home is running or scheduled, or a stop of it is running, `--force`
 included: one retire or stop of a home at a time, above; or, feature
@@ -6592,8 +6594,20 @@ included: one retire or stop of a home at a time, above; or, feature
 hooks, a row with `spawnInProgress: true`, `--force` included; or one whose start time
 cannot be read, a `rollbackIncomplete` row, until `--force`; or a hook or git
 group whose leader's start cannot be read, until `--force`; every one is
-answered before any effect and carries [`details.holder`](#busy-holder)). The
-codes a retire answers only before any effect are
+answered before any effect and carries [`details.holder`](#busy-holder)).
+
+Hook admission refuses both `--plan` (including Desktop Remove) and apply
+before anything is stopped, run or removed, children included. Causes include
+homes spawned before `capabilityRuntime`, recorded retire hooks without a
+context repository (recorded or identified by Git for its own worktree),
+and captured homes from before 0.26 without positive proof that no spawn hook ran. An ordinary home's explicit capability set with
+no retire hooks proves no hook is owed. Captured proof also excludes any
+recorded hook intents, failures or lifecycle cleanup debt. The refusal names
+known capabilities, external identities/memberships at risk, and the remedy:
+clean up with the provider's tooling, then `oats retire <instance> --force`.
+See [the cleanup rule](capabilities.md#manifest).
+
+The codes a retire answers only before any effect are
 [one list](#before-effect-codes). A recovery whose Git status disagrees with
 the source's carries `details: {home, statusDisagreement: {repo, rows: [{path,
 source, recovery}], total}}` (the first 10 paths). A worktree recovery whose

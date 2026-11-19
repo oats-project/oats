@@ -3012,7 +3012,7 @@ function retireCmd() {
     dropAmbientRoot();
     let root; try { root = ensureRoot(dirFlag()); } catch (e) { return lifecycleFail(e, "E_NO_ROOT"); }
     try {
-      const plan = planRetire(dirFlag(), root, name, { home: homeFlag });
+      const plan = planRetire(dirFlag(), root, name, { home: homeFlag, force: args.includes("--force") });
       if (args.includes("--json")) { jsonOk(plan); return; }
       console.log(`retire ${name} — plan ${plan.planRevision}`);
       console.log(`  session ${plan.facts.session.state}; work ${plan.facts.work.observed ? `${plan.facts.work.changed} changed / ${plan.facts.work.untracked} untracked on ${plan.facts.work.branch ?? (plan.facts.work.detached ? "detached" : "a ref OATS carries no branch name for")}` : `not observed (${plan.facts.work.reason})`}; children ${plan.facts.children.length}; pull request ${plan.facts.pullRequest}`);
@@ -3061,7 +3061,7 @@ function retireCmd() {
     // its extra trees as it names them (the retire refuses as stale rather than move or remove one
     // that no longer reads that way when it gets to them).
     revalidate = () => {
-      try { fresh = planRetire(dirFlag(), root, name, { home: homeFlag }); } catch (e) { planFailure = e; throw e; }
+      try { fresh = planRetire(dirFlag(), root, name, { home: homeFlag, force: args.includes("--force") }); } catch (e) { planFailure = e; throw e; }
       if (fresh.planRevision !== planRev) throw (stalePlan = Object.assign(new Error(`the retire plan changed since it was shown (${planRev} → ${fresh.planRevision}); review the fresh plan`), { code: "E_PLAN_STALE", details: { plan: fresh } }));
       return { plannedExtraWorktrees: fresh.facts.extraWorktrees, children: fresh.facts.children, ambiguous: fresh.facts.ambiguous };
     };
