@@ -41,7 +41,9 @@ const atLeast = (v, min) => {
 
 test("step 1 asks hosted or own server, with the three non-secret inputs and the prerequisites", () => {
   assert.ok(flat.includes("**Hosted aweb, or their own aweb server?** The line says \"on aweb's hosted service, unless you run your own aweb server\"; hosted is the default."));
-  for (const input of ["the namespace domain `ND` they control", "the server's public address `U`", "the registry's address `RG`, only when their server doesn't use the public AWID registry"]) assert.ok(flat.includes(input), input);
+  for (const input of ["the namespace domain `ND` they control", "the server's public address `U`", "whether their server uses the public AWID registry"]) assert.ok(flat.includes(input), input);
+  // A private registry stops the branch before anything is written: it needs oats.aweb's --registry setting (awebai/oats-aweb#284).
+  assert.ok(flat.includes("When it uses a private registry, the own-server branch stops here, before anything is written: tell the person in one sentence that a private registry needs oats.aweb with `oats aweb setup --registry`, and that this skill stops here."));
   assert.ok(flat.includes("Answers given in the prompt that started you are used without asking."), "the headless path keeps working");
   for (const prerequisite of ["the namespace's controller key on this computer, for this computer account", "the `_awid.ND` DNS record published for that key", "their server reachable at `U`"]) assert.ok(flat.includes(prerequisite), prerequisite);
   assert.ok(flat.includes("Never offer it on a machine found-list, or for an existing workspace"));
@@ -113,7 +115,9 @@ test("step 9's own-server form checks the prerequisites read-only, then creates 
   assert.ok(check !== -1 && create !== -1 && check < create, "check-txt before the create");
   assert.ok(skill.indexOf(ownServer) > skill.indexOf("## 9. Messaging on this machine"));
   assert.ok(flat.includes("On their own aweb server there is no signup: take \"Their own aweb server\", the last part of this item, instead."), "the hosted signup is skipped");
-  assert.ok(flat.includes("When step 1 gave `RG`, add `AWID_REGISTRY_URL=\"RG\"` after `AWEB_URL=\"U\"`."));
+  // No ambient registry selector: a non-public AWID_REGISTRY_URL is refused from the oats.aweb release with --registry (registry-setting-required).
+  assert.ok(!skill.includes("AWID_REGISTRY_URL"), "the skill never sets AWID_REGISTRY_URL");
+  assert.ok(!/`RG`/.test(skill), "no registry input is carried to step 9");
 
   // The create's flags and environment are the provider's: no --plan (it needs --username) and no JSON.
   assert.ok(provider.includes("--create <label> [--namespace <domain>] [--name <alias>]"));

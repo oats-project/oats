@@ -243,13 +243,18 @@ the final values in one short message before you go on. The rules:
     default. With their own server, the same round asks three things, none
     of them secret: the namespace domain `ND` they control (for example
     `agents.acme.com`, written in lowercase), the server's public address
-    `U` (`https://…`, the API URL their server gives its users), and the
-    registry's address `RG`, only when their server doesn't use the public
-    AWID registry. Answers given in the prompt that started you are used
-    without asking. Tell them, in plain words, what must already be in place
-    on their side, since you make none of it: the namespace's controller key
-    on this computer, for this computer account; the `_awid.ND` DNS record
-    published for that key; and their server reachable at `U`. Step 9
+    `U` (`https://…`, the API URL their server gives its users), and whether
+    their server uses the public AWID registry. Answers given in the prompt
+    that started you are used without asking. When it uses a private
+    registry, the own-server branch stops here, before anything is written:
+    tell the person in one sentence that a private registry needs oats.aweb
+    with `oats aweb setup --registry`, and that this skill stops here. Offer
+    hosted aweb now (the hosted defaults above, `N` among them, shown in one
+    short message) or waiting for that release. Otherwise, tell them, in
+    plain words, what must already be in place on their side, since you
+    make none of it: the namespace's controller key on this computer, for
+    this computer account; the `_awid.ND` DNS record published for that
+    key; and their server reachable at `U`. Step 9
     checks them, read-only. On their own server there is no account `N` and
     no step 5: the team is `<workspace>:ND`, created in step 9 in their
     namespace, and `A` is `<workspace>-root` as on hosted. Never offer it on
@@ -1053,8 +1058,8 @@ readiness still reports a problem.
        failing included: stop, spawn nothing, and tell the person what it
        shows.
    - **Their own aweb server (step 1), in place of the signup.** Nothing for
-     the person to type, and no key passes through you. `ND`, `U`, `RG` and
-     `A` come from step 1, and `L` is step 7's label.
+     the person to type, and no key passes through you. `ND`, `U` and `A`
+     come from step 1, and `L` is step 7's label.
      - **First, the prerequisites, read-only:**
 
        ```bash
@@ -1074,9 +1079,6 @@ readiness still reports a problem.
        ```bash
        cd "D" && AWEB_URL="U" oats aweb setup --soul S --create L --namespace ND --name A
        ```
-
-       When step 1 gave `RG`, add `AWID_REGISTRY_URL="RG"` after
-       `AWEB_URL="U"`.
      - **Success** prints `✓ created <T>, accepted it into <root>, recorded
        roots[<T>]`. `<T>` must be step 7's team line, `L:ND`. Anything else:
        stop, spawn nothing, and tell the person what it shows. Two more of
