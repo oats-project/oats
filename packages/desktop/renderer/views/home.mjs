@@ -20,7 +20,7 @@ import { DESKTOP_NOUNS, DESKTOP_TERMS } from "../desktop-terms.mjs";
 import { homeBoard, homeAgents, startedBy } from "../../../client/home-board.mjs";
 import { instanceId } from "../../../client/instance-tree.mjs";
 import { rosterRowFacts } from "../../../client/roster-row-facts.mjs";
-import { waitingDetail, waitingLabel } from "../../../client/waiting-on-you.mjs";
+import { waitingClaim, waitingDetail, waitingLabel } from "../../../client/waiting-on-you.mjs";
 import { runtimeState } from "../../../client/instance-presentation.mjs";
 import { teamModelOf } from "../../../client/team-rows.mjs";
 import { displayLine } from "../../../client/display-text.mjs";
@@ -97,7 +97,12 @@ export const homeCSS = `
 .home-first p { margin:0 0 4px; font-size:14px; }
 .home-keys { list-style:none; margin:12px 0 0; padding:0; display:flex; flex-direction:column; gap:4px; font-size:13px; }
 .home-keys kbd { font:inherit; font-weight:600; color:var(--fg); } /* D2: the chrome is sans; monospace is the terminal's */
-.home-back { margin:0 0 12px; }
+/* The back control, as the capability page's "‹ Capabilities" (capability-page.mjs .page-back): a quiet bordered
+   button with its chevron; the shell's focus ring shows on it. */
+.home button.home-back { display:inline-flex; align-items:center; gap:6px; height:30px; min-height:30px; margin:0 0 12px; padding:0 10px 0 8px;
+  border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--fg); font-weight:600; font-size:12.5px;
+  line-height:normal; font-family:var(--ui-font,system-ui); cursor:pointer; }
+.home button.home-back:hover { background:var(--surface-2); }
 `;
 
 let returnTo = null; // the overview key Home last opened, focused again when Home mounts (per workspace generation)
@@ -216,7 +221,9 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
 
   function agentsView(data) {
     const s = node("section", "home-section"); s.dataset.homeSection = "agents";
-    const back = node("button", "home-back", "Back to Home"); back.type = "button";
+    const back = node("button", "home-back"); back.type = "button";
+    back.append(iconElement(doc, "chevronLeft", { size: 15 }), node("span", null, "Home"));
+    back.setAttribute("aria-label", "Back to Home"); back.title = "Back to Home (Esc)";
     back.addEventListener("click", () => backToBoard());
     s.append(back);
     if (data.phase === "loading") { s.append(statusLine(`Reading your ${nouns.instances}…`)); return s; }
@@ -230,10 +237,12 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
     const opts = { deployments: data.deployments, here: data.here };
     const ul = node("ul", "home-list"); ul.setAttribute("aria-label", `Every ${nouns.instance}`);
     for (const row of rows) {
-      const state = runtimeState(row);
+      // The roster's and the board's dot grammar: a row that waits on you wears the needs-input mark and says so first.
+      const state = runtimeState(row), claim = waitingClaim(row, { stale: data.stale?.(row) === true });
       const by = startedBy(row);
-      const side = [state === "running" ? "running" : state === "stopped" ? "stopped" : "status unknown", by ? `started by ${by}` : null].filter(Boolean).join(" · ");
-      const li = node("li"); li.append(agentRow(row, { ...opts, state, side })); ul.append(li);
+      const said = claim ? "needs you" : state === "running" ? "running" : state === "stopped" ? "stopped" : "status unknown";
+      const side = [said, by ? `started by ${by}` : null].filter(Boolean).join(" · ");
+      const li = node("li"); li.append(agentRow(row, { ...opts, claim, state, side })); ul.append(li);
     }
     s.append(ul);
     return s;

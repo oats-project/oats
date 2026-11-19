@@ -2451,7 +2451,9 @@ doesn't read already:
   `ctx.openWorkspaceTab(tab, options)` (`openWorkspaceTabFocused`: `openWorkspaceSouls`, then the focus on the
   page's tab control where the Home button it left is gone, so the first Esc is heard); the Workspace page's unclaimed Esc (no field, dialog, menu or
   list took it) goes back to Home (`stageHost`'s keydown in shell.mjs), and Home focuses the row that opened it.
-  Agents opens Home › Agents in place; its Esc, or Back to Home, returns to the board.
+  Agents opens Home › Agents in place (the board's dot grammar: a row with a claim wears the needs-input mark and says
+  "needs you" first); its Esc, or its "‹ Home" back control (the capability page's quiet `.page-back` look, named
+  "Back to Home"), returns to the board.
 - **First run** (the roster is ready and empty): two lines, three keys (`ctx.chordText`: New agent's and the
   palette's bound keys; Home's is its palette command until it has a key), then the overview.
 

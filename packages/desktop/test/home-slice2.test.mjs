@@ -146,15 +146,24 @@ test("slice2 home agents flat list", async (t) => {
     row("child", { parentInstance: "lead-one", createdAt: "2026-11-03T00:00:00.000Z", running: false, runtimeState: "stopped" }),
     row("lead-one", { attributedHuman: "Joan", createdAt: "2026-11-02T00:00:00.000Z", waitingOnYou: claim() }),
     row("lone", { createdAt: "2026-11-04T00:00:00.000Z", running: null, runtimeState: null }),
+    row("plain-runs", { createdAt: "2026-11-01T00:00:00.000Z" }),
   ];
   const u = fixture(t, { rows });
   u.openButton("agents").click();
   const listed = [...u.el.querySelectorAll("[data-home-agent]")];
-  assert.deepEqual(listed.map((b) => b.dataset.homeAgent), ["lone", "child", "lead-one"], "every agent, running or stopped, newest first");
+  assert.deepEqual(listed.map((b) => b.dataset.homeAgent), ["lone", "child", "lead-one", "plain-runs"], "every agent, running or stopped, newest first");
   assert.match(listed[1].textContent, /Child.*oats-expert · falcon.*stopped · started by Lead one/s);
-  assert.match(listed[2].textContent, /running · started by Joan/);
+  // The roster's dot grammar (the lead's return): a waiting row wears the needs-input mark and says "needs you" first.
+  assert.match(listed[2].textContent, /needs you · started by Joan/);
+  assert.ok(listed[2].querySelector(".attn-mark"), "the needs-input mark, not a running dot");
+  assert.equal(listed[2].querySelector(".home-dot"), null);
+  assert.match(listed[3].textContent, /running$/);
+  assert.equal(listed[3].querySelector(".attn-mark"), null); assert.ok(listed[3].querySelector(".home-dot.on"));
   assert.match(listed[0].textContent, /status unknown/);
-  assert.equal(u.doc.activeElement.textContent, "Back to Home");
+  // Back is the app's quiet back control (as the capability page's), named for where it goes.
+  const back = u.doc.activeElement;
+  assert.equal(back.className, "home-back"); assert.equal(back.getAttribute("aria-label"), "Back to Home");
+  assert.equal(back.textContent, "Home"); assert.ok(back.querySelector("svg"), "its chevron");
   listed[1].click();
   assert.deepEqual(u.opened, ["child"]);
   assert.equal(startedBy({ instance: "x" }), null);

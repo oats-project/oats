@@ -305,7 +305,8 @@ have.
   now), and Esc there comes back to Home. Agents opens **Home › Agents**: every
   agent, running or stopped, with its soul and machine, its state, and who
   started it (the person it's attributed to, or the agent that spawned it).
-  Esc or **Back to Home** returns.
+  An agent waiting on you wears the needs-input mark there too, and says
+  "needs you". Esc or the **‹ Home** button returns.
 - **A workspace with no agents yet** shows what OATS does in two lines and
   three keys (New agent, the command palette, Home), then the overview.
 
