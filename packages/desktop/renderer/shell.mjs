@@ -18,6 +18,7 @@ import { createInstancePrAction } from "./instance-pr-action.mjs";
 import { instanceSplitPlan, instanceSplitIdentity } from "./instance-split.mjs";
 import { createInstanceStarter } from "./start-instance.mjs";
 import { runtimeState, siblingText } from "../../client/instance-presentation.mjs";
+import { instanceDisplayName } from "../../client/instance-display-name.mjs";
 import { NOT_SERVED_CODE, NO_ANSWER_CODE, unservedError, createPendingWatch } from "./deployment-header.mjs";
 import { deploymentUnavailableText, keptFailure } from "../../client/deployment-facts.mjs";
 import { panelErrorCause } from "../../client/deployment-contract.mjs";
@@ -74,6 +75,7 @@ import { createWorkspaceSwitcher } from "./workspace-switcher.mjs";
 import { NAV, NAV_TABS, PINNED, pinnedRowFor, navTab, stageSidebarMode, loadStageView } from "./shell-nav.mjs";
 import { shellIcon, mountShellIcons, iconElement } from "./shell-icons.mjs";
 import { createSidebarFoot, emptyRosterText } from "./sidebar-foot.mjs";
+import { createSidebarRail, railCSS } from "./sidebar-rail.mjs";
 import { createAutomationsFailure, FAILED_RUN_TEXT } from "./automations-failure.mjs";
 import { automationsSupported } from "./views/automations.mjs";
 import { identityCSS } from "./identity-marks.mjs";
@@ -496,6 +498,7 @@ function setNavActive(name) {
     if (active) b.setAttribute("aria-current", "page");
     else b.removeAttribute("aria-current");
   }
+  if (typeof updateRail === "function") updateRail(); // the rail shows the same current destination (slice 6a)
 }
 
 function showTabLayer(on) {
@@ -2715,7 +2718,8 @@ const palette = createPalette({
     ...Object.entries(PIN_LABELS).map(([action, label]) => ({ label: `Instance: ${label}`,
       when: () => pinTargetOffer(paletteTargetId) === action,
       run: () => { takePickerFocusReturn(document)?.restore(); runPinCommand(paletteTargetId, action); } })),
-    { label: "Sidebar: toggle (hide/show)", detail: chordDetail("sidebar.toggle"), run: () => toggleSidebar() },
+    { label: "Sidebar: collapse to the rail / expand", detail: chordDetail("sidebar.toggle"), run: () => toggleSidebar() },
+    { label: "Sidebar: hide", run: () => { setSidebarRail(false); setSidebarHidden(true); } },
     { label: "Sidebar: reset width", detail: chordDetail("sidebar.resetWidth"), run: () => runAction("sidebar.resetWidth") },
     { label: "Instance panel: show / hide", detail: chordDetail("panel.toggle"), run: () => runAction("panel.toggle") },
     { label: "Focus mode: toggle", detail: chordDetail("app.focusMode"), run: () => runAction("app.focusMode") },
@@ -3058,9 +3062,65 @@ function setSidebarHidden(on) {
     else localStorage.removeItem(SIDEBAR_HIDDEN_KEY);
   } catch { /* storage-less */ }
 }
+/** The sidebar's three states (slice 6a): full, the rail, hidden. Ctrl+Shift+B / leader b (sidebar.toggle) cycles
+ * full ↔ rail, the simpler of the spec's two choices; a hidden sidebar (the palette's Sidebar: hide, Spec B's Show
+ * sidebar) comes back full. */
+function sidebarRail() {
+  return document.getElementById("app").classList.contains("sidebar-rail");
+}
+function setSidebarRail(on) {
+  const app = document.getElementById("app");
+  app.classList.toggle("sidebar-rail", on);
+  // Focus never stays in what collapsed: into the rail (its agent for the focused row, else its first control),
+  // or back from the rail into the roster.
+  const from = document.activeElement;
+  if (on && document.getElementById("sidebar").contains(from)) {
+    updateRail();
+    const id = from?.closest?.(".ctx-inst")?.dataset.treeInstance;
+    const target = [...sidebarRailView.element.querySelectorAll("button")].find((b) => id && b.dataset.railKey === `agent:${id}`)
+      ?? sidebarRailView.element.querySelector("button");
+    target?.focus();
+  } else if (!on && sidebarRailView.element.contains(from)) rosterEntry()?.focus({ preventScroll: true });
+  if (on) updateRail();
+  try { if (on) localStorage.setItem(SIDEBAR_RAIL_KEY, "1"); else localStorage.removeItem(SIDEBAR_RAIL_KEY); } catch { /* storage-less */ }
+}
 function toggleSidebar() {
-  if (contextPanel.isFocusMode()) { contextPanel.setFocusMode(false); setSidebarHidden(false); }
-  else setSidebarHidden(!sidebarHidden());
+  if (contextPanel.isFocusMode()) { contextPanel.setFocusMode(false); setSidebarHidden(false); return; }
+  if (sidebarHidden()) { setSidebarHidden(false); setSidebarRail(false); return; }
+  setSidebarRail(!sidebarRail());
+}
+const SIDEBAR_RAIL_KEY = "oats-desktop-sidebar-rail";
+/** The rail's agents, in the roster's order (its sections, pins first, Background last), each with its state and
+ * whether it waits on you through the one claim gate. */
+function railAgents() {
+  const instances = shownRows(contextInstances);
+  const stale = (row) => rosterStale || rowStale(row, contextDeployments);
+  const placement = backgroundPlacement(instances, backgroundShown());
+  const { main, background } = sidebarSections(instances, instances, contextDeployments, DESKTOP_TERMS, { placement, open: true, stale, pins: pinsShown() });
+  const ordered = [...main, ...(background?.sections ?? [])].flatMap((section) => section.groups.flatMap((group) => group.clusters.flatMap((cluster) => cluster.instances)));
+  const active = tabs.get(activeTab);
+  const activeId = active?.kind === "terminal" && active.instanceRef ? instanceId(active.instanceRef) : null;
+  return ordered.map((row) => ({ row, id: instanceId(row), name: instanceDisplayName(row.instance) || row.instance,
+    state: runtimeState(row), waiting: !!waitingClaim(row, { stale: stale(row) }), current: instanceId(row) === activeId }));
+}
+function updateRail() {
+  if (!sidebarRail()) return;
+  const current = [...navEl.querySelectorAll(".nav-item")].find((b) => b.classList.contains("active"))?.dataset.view ?? null;
+  const agents = railAgents();
+  sidebarRailView.update({
+    pinned: PINNED.map((v) => ({ name: v.name, label: v.label, icon: v.icon, current: v.name === current })),
+    agents, needYou: agents.filter((a) => a.waiting).length, nouns: DESKTOP_NOUNS,
+  });
+}
+const sidebarRailView = createSidebarRail(document, {
+  onPinned: (name) => runAction(`stage.${name}`),
+  onAgent: (row) => { openRosterInstance(row); },
+  onNeedYou: () => { const first = railAgents().find((a) => a.waiting); if (first) openRosterInstance(first.row); },
+});
+{
+  const style = document.createElement("style"); style.dataset.sidebarRail = ""; style.textContent = railCSS; document.head.append(style);
+  document.getElementById("app").insertBefore(sidebarRailView.element, document.getElementById("sidebar"));
+  subscribeHomeRoster(() => updateRail());
 }
 // Spec B: a closed sidebar leaves nothing behind. Show sidebar, at the start of the main area's top bar
 // (shown only while the sidebar is hidden or focus mode is on), runs the SAME sidebar.toggle as the
@@ -3069,6 +3129,7 @@ function toggleSidebar() {
 document.getElementById("show-sidebar").addEventListener("click", () => runAction("sidebar.toggle"));
 document.getElementById("show-panel").addEventListener("click", () => { runAction("panel.toggle"); contextPanel.focus(); });
 try { if (localStorage.getItem(SIDEBAR_HIDDEN_KEY) === "1") setSidebarHidden(true); } catch { /* storage-less */ }
+try { if (localStorage.getItem(SIDEBAR_RAIL_KEY) === "1") setSidebarRail(true); } catch { /* storage-less */ }
 // The sidebar's width (sidebar-width.mjs): the handle on its right edge, kept on this computer beside the theme.
 // Hiding the sidebar leaves the width as it was.
 const sidebarWidth = createSidebarWidth({ doc: document, win: window, hold: holdTerminalResizes,
