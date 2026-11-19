@@ -391,7 +391,7 @@ test('slice3b capability page skills open whole and folds', async t => {
   // What it does, as one paragraph; its tags; the origin line ("Comes from" in one line).
   assert.equal($('.cap-page-what').textContent, row.description);
   assert.deepEqual($$('.page-title .page-tag').map(t => t.textContent), ['Core · Messaging', 'default']);
-  assert.equal($('.cap-page-origin').textContent, 'Verified: published by OATS · package oats.aweb');
+  assert.equal($('.cap-page-origin').textContent, 'Official: in the OATS catalog · package oats.aweb');
   // Skills: each skill's name and one line (the first sentence of its description); a button that opens it.
   const skillRows = $$('.cap-skills-section button.cap-skill-row');
   assert.deepEqual(skillRows.map(b => [b.querySelector('.cap-skill-name').textContent, b.querySelector('.cap-skill-desc')?.textContent ?? null]),

@@ -552,12 +552,12 @@ for (const [name] of palettes) test(`${name}: workspace catalog, sources and syn
   const root = dom.window.getComputedStyle(doc.documentElement);
   for (const [selector, painted, fg, bg] of [
     // Slice 3b: the defaults sentence on the page; each capability a row (surface) with its name, its dim tags, who made
-    // it (the verified mark's check in --fg, "by <source>" in --muted) and its one line; the boxed source chip (the page).
+    // it (the official mark's check in --fg, "by <source>" in --muted) and its one line; the boxed source chip (the page).
     ['.cap-lead', '.oats-view', 'muted', 'bg'], ['.cap-lead b', '.oats-view', 'fg', 'bg'],
     ['.cap-row-name', 'button.cap-row', 'fg', 'surface'],
     ['.cap-row-desc', 'button.cap-row', 'muted', 'surface'],
     ['.cap-tag[data-tag=core]', 'button.cap-row', 'muted', 'surface'], ['.cap-tag[data-tag=private]', 'button.cap-row', 'muted', 'surface'], ['.cap-tag[data-tag=default]', 'button.cap-row', 'muted', 'surface'],
-    ['.cap-origin:not([data-official])', 'button.cap-row', 'muted', 'surface'], ['.cap-verified', 'button.cap-row', 'fg', 'surface'],
+    ['.cap-origin:not([data-official])', 'button.cap-row', 'muted', 'surface'], ['.cap-official', 'button.cap-row', 'fg', 'surface'],
     ['.source-chip', '.source-chip.boxed', 'muted', 'surface'], ['.source-chip-name', '.source-chip.boxed', 'fg', 'surface'],
     ['.catalog-note.warn', '.oats-view', 'warn', 'bg'], ['.catalog-note:not(.warn)', '.oats-view', 'muted', 'bg'],
     // Workspace v4 Setup (W1/W2), the 2026-10-14 redesign: the lede and its summary on the page, the overview card

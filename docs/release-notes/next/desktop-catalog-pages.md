@@ -3,8 +3,10 @@
 - **Desktop: the workspace's catalogue pages read as calm rows** (the Desktop UI rework, slice 3b).
   - **Capabilities** is one list. Core capabilities (knowledge, messaging, tasks) come first with a
     dim **core** tag, then the rest by name. Each row has the capability's name and who made it: a
-    ✓ for one OATS publishes (a package pinned from the official catalog, or a capability of the
-    OATS repository), else **by** its source. It also has one line of what it does, and a
+    ✓ for an official one ("Official: in the OATS catalog" for a package pinned from the catalog,
+    "Official: from the OATS repository" for a capability of the OATS repository), else **by** its
+    source. The mark is the Desktop's rule over workspace status, not a trust claim (a kernel fact
+    is [#1981](https://github.com/oats-project/oats/issues/1981)). It also has one line of what it does, and a
     **default** tag on the workspace's defaults. One sentence above the list says what defaults are
     for. The sections, repository pills, colour tiles and two-letter marks are gone. A package's
     name and version are in Setup's Packages box.

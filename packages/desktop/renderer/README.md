@@ -1543,8 +1543,9 @@ workspace is observed through its server and never synced from here.
   button (`button.cap-row`, Enter and Space its own; ↑/↓, Home and End move
   along the list, which keeps one tab stop), two lines: the name, its dim tags
   (`core`; `default` or `default · off` from `defaultState`; `repo only` for a
-  `private` row) and who made it (`originElement`: the verified ✓ in a circle
-  with "Verified: published by OATS" as its title and accessible text, or
+  `private` row) and who made it (`originElement`: the official ✓ in a circle
+  with "Official: in the OATS catalog" or "Official: from the OATS repository" as its
+  title and accessible text, per the fact that made it official, or
   "by <source>"), then the manifest's description on one line. Who made it is
   `packages/client/capability-origin.mjs` (`capabilityOrigin`, D24): official
   when workspace status reports the row's package pinned from the catalog

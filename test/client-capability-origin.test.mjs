@@ -31,6 +31,6 @@ test('slice3b official rule', () => {
   for (const [what, row, want] of table) assert.deepEqual(capabilityOrigin(row, STATUS), want, what);
   // No status: nothing official can be claimed for a package.
   assert.deepEqual(capabilityOrigin({ name: 'oats.okf', kind: 'package', package: 'oats.okf' }, null), { official: false, by: 'oats.okf', reason: null });
-  assert.equal(ORIGIN_COPY.title, 'Verified: published by OATS');
+  assert.deepEqual(ORIGIN_COPY.officialTitle, { catalog: 'Official: in the OATS catalog', 'oats-repo': 'Official: from the OATS repository' });
   assert.equal(ORIGIN_COPY.by('agents'), 'by agents');
 });
