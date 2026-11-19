@@ -27,11 +27,14 @@ export function teamGrants(list, team) {
 export const strayGrants = (grants, label, keep) =>
   grants.filter(g => g.label === label && g.status === 'active' && g.grant_id !== keep).map(g => ({grant: g.grant_id, expiresAt: g.expires_at}));
 
+const shellWord = value => /^[A-Za-z0-9_./:@=+-]+$/.test(String(value)) ? String(value) : "'" + String(value).replaceAll("'", "'\\''") + "'";
+
 /** How long a grant that could not be revoked stays valid, and how to revoke
- *  it: a never-grant ends only when revoked. */
-export function unrevokedGrant({grant, expiresAt, custody}) {
+ *  it: a never-grant ends only when revoked. Quote opaque receipt values and
+ *  end option parsing before the grant id in the operator's shell command. */
+export function unrevokedGrant({grant, expiresAt, custody, team}) {
   const until = expiresAt === 'never' ? 'until revoked' : `until ${expiresAt || 'its TTL'} unless revoked`;
-  return `grant ${grant} stays valid ${until}: run \`aw id grant revoke ${grant}\` in ${custody}`;
+  return `grant ${grant} stays valid ${until}: run \`aw id grant revoke --team=${shellWord(team)} -- ${shellWord(grant)}\` in ${custody}`;
 }
 
 /** Revoke this seat's stray grants. Returns {checked, revoked, remaining,
@@ -43,7 +46,7 @@ export function sweepSeatGrants({list, revoke, custody, team, label, keep}) {
   const revoked = [], remaining = [];
   for (const stray of strayGrants(grants, label, keep)) {
     try { revoke(stray.grant); revoked.push(stray); }
-    catch (error) { remaining.push({...stray, custody, error: String(error?.message || error).slice(0, 200)}); }
+    catch (error) { remaining.push({...stray, custody, team, error: String(error?.message || error).slice(0, 200)}); }
   }
   return {checked: true, revoked, remaining, grants};
 }

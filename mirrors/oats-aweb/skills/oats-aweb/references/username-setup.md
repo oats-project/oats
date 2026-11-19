@@ -5,12 +5,12 @@ messaging soul S, explicit account username and root alias. Selected kernel must
 supply deployment scope and public `teams --dir D --json` (`teamsApi: 2`), add,
 default and readback. Verified public source is OATS 0.42 at `bb2ba8c9`; this is
 not an earliest-release claim or installation proof. Native argument/membership
-contract is exercised with aw 1.36.23. No live account or timed M3 claim follows.
+contract is exercised with aw 1.36.33 (commit `877bbee94ce45aa1ff103912bc9850556e61dfb4`). No live account or timed M3 claim follows.
 
 | Act / context | Exact command in D | Writes / success / one next step | Error → remedy |
 |---|---|---|---|
 | Preview selected username/root and configuration | `oats aweb setup --soul S --username <u> --name <alias> [--label L] --plan --json` | Reads policy/version and any retained membership; no install, root creation, signup or team mutation. Returns predicted team, chosen label/root and conditional add/default argv. Prediction is not membership proof; add may implicitly set default. Next: authorized apply below. | `E_SETUP_POLICY` only for `local-teams-closed` when the plan needs a team write; `E_SETUP_TEAM_CONFLICT` for an existing different/unmapped label. Reconcile policy/declaration before apply or select a different label. |
-| Create or resume, with the same authorized inputs | `oats aweb setup --soul S --username <u> --name <alias> [--label L] --json` | Missing root runs native `aw init --new-account --username <u> --name <alias> --do-not-touch-agents-md`. Retained root is read, never signed up again. Exactly one LOCAL membership must match `default:<u>.aweb.ai` and explicit alias. Observed canonical ID drives mapping; exact mapping is reused. Public kernel add/default is followed by readback; default runs only if still needed. Success requires matching membership, mapping and default. Next: `/oats-onboarding` staffing and receive verification. | `E_SETUP_MEMBERSHIP` → wrong/missing/ambiguous account, alias or scope; root is retained and nothing mapped. Reconcile the selected root; do not delete/reinitialize it. |
+| Create or resume, with the same authorized inputs | `oats aweb setup --soul S --username <u> --name <alias> [--label L] --json` | Missing root runs native `aw init --new-account --username <u> --name <alias> --do-not-touch-agents-md`. Retained root is read, never signed up again. Exactly one LOCAL membership must match `default:<u>.aweb.ai` and explicit alias. Observed canonical ID drives mapping; exact mapping is reused. Public kernel add/default is followed by readback; default runs only if still needed. Success requires matching membership, mapping and default. Next: attach the account's person (`aw --identity-home "<root>/.aw" claim-human --email <their email>`, `/oats-aweb` "attach yourself to the account"), which the success text names with the root; then `/oats-onboarding` staffing and receive verification. | `E_SETUP_USERNAME_UNAVAILABLE` (`that username is taken: choose another`, or reserved, or its format) → nothing was created: ask the person for another username and re-run with it. `E_SETUP_MEMBERSHIP` → wrong/missing/ambiguous account, alias or scope; root is retained and nothing mapped. Reconcile the selected root; do not delete/reinitialize it. |
 | Resume after a configuration failure | Repeat the same apply command after fixing its named kernel/configuration error | Retains root and matching mapping; no second signup. Reads actual state, including default side effect of add. Success requires final readback, not a successful prior command alone. Next: onboarding's staffing stage. | `E_SETUP_KERNEL` or `E_SETUP_READBACK` → inspect returned steps/observed configuration. Missing observed data means readback unavailable, not no writes. Repair the selected kernel/deployment before retry; no automatic rollback or success inference. |
 
 Without `--label`, the label uses the existing team-name normalization: lowercase,
@@ -30,8 +30,10 @@ code or silently overwrites a mapping. `E_SETUP_ARGUMENT`, `E_SETUP_DEPLOYMENT`,
 `E_SETUP_ROOT`, `E_SETUP_QUERY` and `E_SETUP_CONFIGURATION` require repairing
 inputs/context, not relabelling every failure as policy closure.
 
-`E_SETUP_NATIVE` preserves safe exit context and withholds credential-bearing
-output. A failed signup can leave partial state; no automatic retry or deletion
+`E_SETUP_USERNAME_UNAVAILABLE` names why aw refused the username (taken, reserved,
+its format, or the service's own short reason word) and nothing else of aw's
+output; aw refuses it before it creates anything. `E_SETUP_NATIVE` preserves safe
+exit context and withholds credential-bearing output. A failed signup can leave partial state; no automatic retry or deletion
 is performed. `E_SETUP_AW` requires the explicit operator installation procedure
 in `/oats-aweb` §8; `--install-aw` is never acted on by a plan. `--label/--plan`
 apply only to `--username`, not API-key, controller-team, invite-join or GLOBAL

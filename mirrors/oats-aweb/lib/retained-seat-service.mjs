@@ -12,6 +12,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { readAwebUrl, readMembershipTeamIds } from './aw-record.mjs';
 import { membershipTeamMatch } from './aweb-team-id.mjs';
+import { retainedAuthorityProblem } from './retained-seat-authority.mjs';
 // binding-wire imports this module too; these are read only when a function runs, as
 // resident-registry.mjs reads yamlScalar.
 import { NO_TEAMS_MESSAGE, unmappedDefaultMessage, yamlScalar } from './binding-wire.mjs';
@@ -111,7 +112,8 @@ function noMembershipMessage(source, team, state) {
 }
 
 /** The seat at `source`, as its spawn checks it before any effect: `refusal`, the text of the
- *  first refusal in the order the spawn makes them (the source is not an absolute path; it holds
+ *  first refusal in the order the spawn makes them (the source is not an absolute path;
+ *  its copied authority contains a symlink or special file; it holds
  *  no signing.key; it records no usable aweb_url; no team can be determined; its teams.yaml
  *  records no membership of that team), or undefined; and
  *  the `service`, `record` and `team` it would be bound with, read whatever the refusal, so a
@@ -125,11 +127,11 @@ export function retainedSeatCheck(source, env = process.env) {
   const membership = team ? retainedSeatMembership(source, team) : undefined;
   const label = envText(env, 'OATS_DEFAULT_TEAM');
   const teamRemedy = label && !envText(env, 'OATS_DEFAULT_TEAM_ID') ? unmappedDefaultMessage(label) : NO_TEAMS_MESSAGE;
-  const refusal = !existsSync(join(source, 'signing.key'))
+  const refusal = retainedAuthorityProblem(source) || (!existsSync(join(source, 'signing.key'))
     ? `identity.source ${source} holds no signing.key, so there is no identity to retain; set identity.source to the member's .aw directory, the one that holds its signing.key`
     : !service ? unknownSeatServiceMessage(source, record, env)
       : !team ? `cannot determine the team for the retained identity (${teamRemedy}, or keep an active team in ${join(source, 'teams.yaml')})`
         : membership ? noMembershipMessage(source, team, membership)
-          : undefined;
+          : undefined);
   return { refusal, service, record, team };
 }

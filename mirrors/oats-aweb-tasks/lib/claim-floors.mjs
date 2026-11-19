@@ -1,3 +1,4 @@
+import {awChildEnv} from './aw-child-env.mjs';
 // The floors that keep a home's aweb task claims present. aweb takes over a
 // claim whose presence heartbeat has gone stale, and what heartbeats depends on
 // how the home receives:
@@ -183,11 +184,11 @@ export function piExtensionWarning(version, home) {
 }
 
 /** The environment of the aw call: this check's own OATS_* removed (as for its
- *  kernel calls), and no inherited AWEB_IDENTITY_HOME, the caller's identity.
+ *  kernel calls), then the shared aw selector list removed.
  *  aw resolves the host daemon the same way from any identity. */
 function awEnv(env) {
-  const out = Object.fromEntries(Object.entries(env).filter(([k]) => !k.startsWith('OATS_') && k !== 'AWEB_IDENTITY_HOME'));
-  return { ...out, AW_NO_UPDATE_CHECK: '1' };
+  const out = Object.fromEntries(Object.entries(env).filter(([k]) => !k.startsWith('OATS_')));
+  return awChildEnv(out);
 }
 
 /** `aw wake status --json` run in `cwd`, bounded by `timeout` ms: the parsed

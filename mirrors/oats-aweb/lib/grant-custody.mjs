@@ -24,7 +24,7 @@ const FLOOR_OPS = [REPLY_CONTINUATION_OP, NEVER_TTL_OP];
 export function custodyPreflight({ custody, resident, team, e2eeRequired = true, ttl, runAw, fatalOnError = true, fatal }) {
   const failNow = (message) => { if (fatalOnError && typeof fatal === 'function') fatal(message); throw new Error(message); };
   let status;
-  try { status = parseAwJson(runAw(['aw', 'custody', 'status', '--json'], custody, { unsetEnv: ['AWEB_IDENTITY_HOME'] }), 'aw custody status'); }
+  try { status = parseAwJson(runAw(['aw', 'custody', 'status', '--json'], custody), 'aw custody status'); }
   catch (e) { failNow(`custody preflight failed for ${resident}: custody status could not be read: ${e.message || e}; start aw custody serve for ${resident}`); }
   if (!status || typeof status !== 'object' || Array.isArray(status)) failNow(`custody preflight failed for ${resident}: custody status could not be read: aw custody status returned no status object; start aw custody serve for ${resident}`);
   const state = String(status.status || 'unknown');

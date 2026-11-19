@@ -1,3 +1,4 @@
+import { parseProviderSettings } from './provider-settings.mjs';
 // `oats aweb health enable|disable|status|publish`: the operator's switch for
 // the agent status publisher (aweb-acah.3) and the command the host timer runs
 // once a minute. Run from the deployment. Enabling records the host-only
@@ -121,8 +122,8 @@ export async function healthMain(argv, {env = process.env, stdout = process.stdo
   try {
     const {action, options} = parse(argv);
     const deployment = selectedDeployment(env);
-    const settings = JSON.parse(env.OATS_SETTINGS || '{}');
-    const host = healthHost({deployment, env});
+    const settings = parseProviderSettings(env);
+    const host = healthHost({deployment, env, settings});
     const result = action === 'enable' ? await enable(options, {deployment, host, settings})
       : action === 'disable' ? await disable({deployment, host, settings})
       : action === 'status' ? await report(healthSettings(settings), {deployment, host})

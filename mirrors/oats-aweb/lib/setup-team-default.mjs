@@ -1,3 +1,4 @@
+import { parseProviderSettings } from './provider-settings.mjs';
 // Public-kernel team configuration for hosted username setup. No private kernel
 // imports or file edits: each mutation is followed by an authoritative read.
 import { execFileSync } from 'node:child_process';
@@ -6,6 +7,7 @@ import { realpathSync, existsSync, statSync, mkdirSync } from 'node:fs';
 import { selectedDeployment } from './team-roots.mjs';
 import { kernelQueryEnvironment } from './session-readiness.mjs';
 import { sameAwebTeamId, teamKeyIn } from "./aweb-team-id.mjs";
+import { usernameUnavailable, usernameUnavailableCause } from './aw-failure-cause.mjs';
 
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 export function setupFailure(code, message, details = {}) {
@@ -180,10 +182,7 @@ export async function setupUsernameDefault(options, { normalize, validTeam, ensu
     try { deployment = selectedDeployment(env, dir); } catch {
       throw setupFailure('E_SETUP_DEPLOYMENT', 'selected deployment is missing, unreadable or inconsistent');
     }
-    let settings;
-    try { settings = JSON.parse(env.OATS_SETTINGS || '{}'); } catch {
-      throw setupFailure('E_SETUP_ROOT', 'selected provider settings are malformed');
-    }
+    const settings = parseProviderSettings(env);
     if (!object(settings) || (Object.hasOwn(settings, 'identity') && !object(settings.identity)) || (Object.hasOwn(settings, 'roots') && !object(settings.roots))) throw setupFailure('E_SETUP_ROOT', 'selected provider root settings are invalid');
     if (settings.identity?.mode && settings.identity.mode !== 'local') throw setupFailure('E_SETUP_ARGUMENT', 'username account setup requires LOCAL identity mode');
     const rootsKey = teamKeyIn(settings.roots, predictedTeam);
@@ -202,7 +201,7 @@ export async function setupUsernameDefault(options, { normalize, validTeam, ensu
         throw setupFailure('E_SETUP_MEMBERSHIP', 'selected root has no readable identity directory; root retained, no repeated signup');
       }
       let doc;
-      try { doc = JSON.parse(run(['aw', 'team', 'list', '--json'], root, 45000, { secretSafe: true, unsetEnv: ['AWEB_API_KEY', 'AWEB_TEAM_ID', 'AWEB_WORKSPACE_ID'] })); } catch {
+      try { doc = JSON.parse(run(['aw', 'team', 'list', '--json'], root, 45000, { secretSafe: true, unsetEnv: ['AWEB_TEAM_ID', 'AWEB_WORKSPACE_ID'] })); } catch {
         throw setupFailure('E_SETUP_MEMBERSHIP', 'selected root membership is unavailable or malformed; root retained, no repeated signup');
       }
       if (!Array.isArray(doc?.memberships) || doc.memberships.length !== 1) throw setupFailure('E_SETUP_MEMBERSHIP', 'expected exactly one LOCAL root membership; root retained, no repeated signup');
@@ -222,9 +221,18 @@ export async function setupUsernameDefault(options, { normalize, validTeam, ensu
       mkdirSync(root, { recursive: true });
       try {
         run(['aw', 'init', '--new-account', '--username', username, '--name', name, '--do-not-touch-agents-md'], root, 120000, {
-          secretSafe: true, secrets: [username], unsetEnv: ['AWEB_API_KEY', 'AWEB_TEAM_ID', 'AWEB_WORKSPACE_ID'],
+          secretSafe: true, secrets: [username], env: {AWEB_URL: env.AWEB_URL}, unsetEnv: ['AWEB_TEAM_ID', 'AWEB_WORKSPACE_ID'],
+          classify: raw => usernameUnavailable(raw, username),
         });
       } catch (error) {
+        // aw refuses an unavailable username before it creates anything (it checks
+        // availability first, and a signup conflict creates no account), so this
+        // one cause is named, and the rest of aw's output stays withheld.
+        const reason = error.classified;
+        if (reason) {
+          steps.push({ step: 'bootstrap', status: 'refused', reason });
+          throw setupFailure('E_SETUP_USERNAME_UNAVAILABLE', `${usernameUnavailableCause(reason)}; nothing was created: re-run setup with another --username`);
+        }
         steps.push({ step: 'bootstrap', status: 'unconfirmed' });
         throw setupFailure('E_SETUP_NATIVE', `aw init failed${Number.isInteger(error.status) ? ` (exit ${error.status})` : ''}; output withheld because it handles credentials; root retained`);
       }

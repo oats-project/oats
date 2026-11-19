@@ -169,7 +169,7 @@ test("global grant spawn revokes and removes the home when grant.yaml custody so
     const r = runHook(base, bin, "spawn", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_RUNTIME: "pi", OATS_SETTINGS: globalSettings(custody), FAKE_SOCKET: join(base, "custody.sock"), FAKE_GRANT_SOCKET: join(base, "other.sock") });
     assert.notEqual(r.status, 0);
     assert.match(r.doc.warning, /grant.yaml custody.socket_path .* differs/);
-    assert.match(readFileSync(join(base, "aw.log"), "utf8"), /id grant revoke grant-new --json/);
+    assert.match(readFileSync(join(base, "aw.log"), "utf8"), /^id grant revoke grant-new --team=t:example\.test --json @/m);
     assert.equal(existsSync(join(home, ".aweb-identity")), false);
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
@@ -185,7 +185,7 @@ test("global grant renewal attaches and verifies custody before replacing launch
     assert.equal(r.doc.meta.identity.grant.id, "grant-new");
     assert.notEqual(r.doc.meta.identity.grant.home, old);
     assert.match(readFileSync(join(r.doc.meta.identity.grant.home, "grant.yaml"), "utf8"), /custody:\n    socket_path: /);
-    assert.match(readFileSync(join(base, "aw.log"), "utf8"), /id grant revoke old --json/);
+    assert.match(readFileSync(join(base, "aw.log"), "utf8"), /^id grant revoke old --team=t:example\.test --json @/m);
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
 
@@ -405,7 +405,10 @@ test("retained identity: authority files copied exactly, coordination reconnecte
     assert.match(log, /^workspace connect --service=https:\/\/app\.example\.test --team=t:example\.test --role=coordinator @/m, "connect with the source's service, the team, and the source's role, nothing else");
     assert.equal(/team join|--join-from/.test(log), false, "a retained seat is never minted");
     assert.equal(log.includes("SECRET-API-KEY"), false);
-    assert.match(log, /workspace connect[\s\S]*check --online[\s\S]*heartbeat[\s\S]*workspace status[\s\S]*whoami --json/, "connect, check, heartbeat, status, then whoami, in that order");
+    // oats.aweb 1.43.0 (awebai/oats-aweb#276) verifies by workspace status and whoami: `aw check --online`
+    // exits 0 on failed checks, so it no longer runs and cannot gate seating.
+    assert.match(log, /workspace connect[\s\S]*workspace status --json[\s\S]*heartbeat[\s\S]*whoami --json/, "connect, status, heartbeat, then whoami, in that order");
+    assert.doesNotMatch(log, /^check /m, "aw check is never a seating gate");
     const lock = JSON.parse(readFileSync(join(base, "legacy-home", ".aw-retained-seat.json"), "utf8"));
     assert.equal(lock.home, home); assert.equal(lock.alias, "merlin"); assert.equal(lock.team, "t:example.test");
     // A second seat cannot take a holder's identity while the holder's home
