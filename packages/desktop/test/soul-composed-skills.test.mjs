@@ -10,7 +10,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { createSoulInstructions, composedSkillsOf, SOUL_INSTRUCTIONS_COPY, OWN } from '../renderer/soul-instructions.mjs';
+import { createSoulInstructions, composedSkillsOf, SOUL_INSTRUCTIONS_COPY, OWN, COMPOSED } from '../renderer/soul-instructions.mjs';
 import { createSoulInspector } from '../renderer/soul-inspector.mjs';
 import { setWorkspace, currentWorkspace } from '../renderer/views/common.mjs';
 import { refreshCli, resetCliStateForTests } from '../renderer/views/cli-status.mjs';
@@ -41,7 +41,9 @@ function setup(t, options = {}) {
   const item = key => $$('[role=treeitem]').find(i => i.dataset.path === key) || null;
   const copy = path => $$('[role=treeitem]').find(i => i.dataset.focusKey === `instructions:composed-skill:${path}`) || null;
   const [soulSection, composedSection] = [0, 1].map(i => () => $$('[role=tree] > li[role=none] > ul[role=group]')[i]);
-  return { doc, host, section, opened, $, $$, item, copy, soulSection, composedSection };
+  /** The Skills reader, and the two tabs' readers (the documents a link may come from). */
+  const sk = sel => $('details.soul-skills').querySelector(sel), tab = name => $(`[role=tabpanel][data-tab="${name}"]`);
+  return { doc, host, section, opened, $, $$, item, copy, soulSection, composedSection, sk, tab };
 }
 
 /* ── the contract's decoder ──────────────────────────────────────────── */
@@ -82,14 +84,12 @@ test('the composed Skills list the kernel’s rows in its order, each saying whe
   assert.deepEqual(own.map(r => [r.getAttribute('aria-label'), r.querySelector('.cap-node-desc').textContent]), [['git-tag-release', "OATS's release lane."]]);
 });
 
-test('the composed Skills group when the list is empty, unlistable or unreadable: that case’s note alone', t => {
+test('every skill an agent gets, when the list is empty, unlistable or unreadable: that case’s note alone', t => {
   const cases = [[[], SOUL_INSTRUCTIONS_COPY.noComposedSkills], [null, SOUL_INSTRUCTIONS_COPY.composedSkillsUnlistable], ['x', SOUL_INSTRUCTIONS_COPY.composedSkillsUnreadable]];
   for (const [composedSkills, note] of cases) {
     const u = setup(t);
     u.section.update(row({ composedSkills }));
-    const skillsRow = [...u.composedSection().children].at(-1);
-    assert.deepEqual([...skillsRow.children].map(c => [c.className, c.textContent]),
-      [['cap-contents-group-label', SOUL_INSTRUCTIONS_COPY.skillsGroup], ['cap-contents-note', note]], JSON.stringify(composedSkills));
+    assert.deepEqual([...u.composedSection().children].map(c => [c.getAttribute('role'), c.textContent]), [['none', note]], JSON.stringify(composedSkills));
     assert.equal(u.composedSection().querySelector('[data-skill]'), null);
   }
   // Without the key: the soul's own again, then the note that a newer OATS lists the rest.
@@ -104,21 +104,21 @@ test('a capability’s file opens under its instance-home path with Open capabil
   u.section.update(row());
   u.copy(CORE).querySelector('.cap-node').click();
   u.item(`composed-file:${CORE}//SKILL.md`).querySelector('.cap-node').click();
-  assert.ok(u.$('.cap-reader-head').textContent.includes(`${CORE}/SKILL.md`));
-  assert.ok(!u.$('.cap-reader-head').textContent.includes('souls/'), 'not under the soul’s directory');
-  const button = u.$('.cap-reader-head button.soul-file-open');
+  assert.ok(u.sk('.cap-reader-head').textContent.includes(`${CORE}/SKILL.md`));
+  assert.ok(!u.sk('.cap-reader-head').textContent.includes('souls/'), 'not under the soul’s directory');
+  const button = u.sk('.cap-reader-head button.soul-file-open');
   assert.ok(button); assert.equal(button.textContent, SOUL_INSTRUCTIONS_COPY.openCapability); assert.equal(button.getAttribute('aria-description'), 'oats.core');
   button.click(); assert.deepEqual(opened, ['oats.core']);
   // A soul skill's composed copy: its repository path, no Open capability.
   u.copy('skills/git-tag-release').querySelector('.cap-node').click();
   u.item('composed-file:skills/git-tag-release//SKILL.md').querySelector('.cap-node').click();
-  assert.ok(u.$('.cap-reader-head').textContent.includes('souls/oats-maintainer/skills/git-tag-release/SKILL.md'));
-  assert.equal(u.$('.cap-reader-head button.soul-file-open'), null);
+  assert.ok(u.sk('.cap-reader-head').textContent.includes('souls/oats-maintainer/skills/git-tag-release/SKILL.md'));
+  assert.equal(u.sk('.cap-reader-head button.soul-file-open'), null);
   // A capability the page can't open: no button.
   const v = setup(t, { canOpenCapability: () => false, openCapability: () => assert.fail('not openable') });
   v.section.update(row());
   v.copy(CORE).querySelector('.cap-node').click(); v.item(`composed-file:${CORE}//SKILL.md`).querySelector('.cap-node').click();
-  assert.equal(v.$('.cap-reader-head button.soul-file-open'), null);
+  assert.equal(v.sk('.cap-reader-head button.soul-file-open'), null);
 });
 
 test('links: inside a capability’s skill they open its listed files; a soul file’s link keeps to the section it is read in', t => {
@@ -126,27 +126,25 @@ test('links: inside a capability’s skill they open its listed files; a soul fi
   u.section.update(row());
   u.copy(CORE).querySelector('.cap-node').click();
   u.item(`composed-file:${CORE}//SKILL.md`).querySelector('.cap-node').click();
-  u.$('.cap-reader-body a').click();
+  u.sk('.cap-reader-body a').click();
   assert.equal(u.section.selected, `composed-file:${CORE}//references/commands.md`);
   // From the composed copy of a soul skill, a link into a capability's skill opens it there.
   u.copy('skills/git-tag-release').querySelector('.cap-node').click();
   u.item('composed-file:skills/git-tag-release//SKILL.md').querySelector('.cap-node').click();
-  u.$('.cap-reader-body a').click();
+  u.sk('.cap-reader-body a').click();
   assert.equal(u.section.selected, `composed-file:${CORE}//SKILL.md`);
-  // From the soul's own AGENTS.md, a link to its skill opens the copy in "Defined in this soul".
-  u.item(OWN).querySelector('.cap-node').click();
-  u.$('.cap-reader-body a').click();
+  // From the soul's own AGENTS.md (Soul instructions), a link to its skill opens the copy in "Defined in this soul".
+  u.tab(OWN).querySelector('.cap-reader-body a').click();
   assert.equal(u.section.selected, 'file:skills/git-tag-release/SKILL.md');
   // A link to a file listed in one section only opens it there, from either section.
   const v = setup(t);
   v.section.update(row({ instructions: { file: '/c', text: `[operate](../../${CORE}/SKILL.md)`, truncated: false } }));
-  v.$('.cap-reader-body a').click();
+  v.tab(OWN).querySelector('.cap-reader-body a').click();
   assert.equal(v.section.selected, `composed-file:${CORE}//SKILL.md`);
   const w = setup(t);
   w.section.update(row({ composedSkills: null, composedInstructions: { file: null, text: AGENTS, truncated: false, resolution: 'r',
     body: { start: 0, end: AGENTS.length, truncated: false }, sources: [] } }));
-  w.item('composed').querySelector('.cap-node-name').click();
-  w.$('.cap-reader-body a').click();
+  w.tab(COMPOSED).querySelector('.soul-part a').click();
   assert.equal(w.section.selected, 'file:skills/git-tag-release/SKILL.md', 'the composed list is unlistable: the soul’s own copy');
 });
 
@@ -178,11 +176,11 @@ test('a capability’s nested skills: both rows list their files, each its own i
   u.item(ofChild).querySelector('.cap-node').click();
   assert.equal(u.section.selected, ofChild);
   assert.equal(u.item(ofChild).getAttribute('aria-selected'), 'true'); assert.equal(u.item(ofParent).getAttribute('aria-selected'), 'false');
-  u.$('.cap-reader-body a').click();
+  u.sk('.cap-reader-body a').click();
   assert.equal(u.section.selected, `composed-file:${at}/child//notes.md`, 'from the child, its own copy');
   u.copy(at).querySelector('.cap-node').click();
   u.item(`composed-file:${at}//SKILL.md`).querySelector('.cap-node').click();
-  u.$('.cap-reader-body a').click();
+  u.sk('.cap-reader-body a').click();
   assert.equal(u.section.selected, ofParent, 'from the parent, the parent’s copy');
 });
 
