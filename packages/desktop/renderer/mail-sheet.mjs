@@ -104,6 +104,7 @@ export const mailSheetCSS = `
 .mail-sheet-more { display:block; margin:12px 16px 0; height:28px; padding:0 12px; border:1px solid var(--border); border-radius:6px; background:var(--surface);
   color:var(--fg); font:600 12px/1 inherit; cursor:pointer; }
 .mail-sheet-more:hover:not(:disabled) { background:var(--surface-2); }
+.mail-sheet-more[hidden], .mail-list[hidden], .mail-sheet-empty[hidden] { display:none; }
 .mail-sheet-more:disabled { color:var(--muted); cursor:default; }
 `;
 

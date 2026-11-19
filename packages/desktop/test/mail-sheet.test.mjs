@@ -117,6 +117,10 @@ test('too old, no messaging, an old aw, an unreadable answer: each says so, and 
   assert.equal(said.textContent, "This agent's messaging is too old to show mail; stop it and upgrade it (oats instance upgrade), or start a new agent of its soul.");
   assert.equal(said.querySelector('code').textContent, 'oats instance upgrade');
   assert.equal(tooOld.all('.mail-item').length, 0); assert.equal(tooOld.calls.length, 1);
+  // Hidden by its attribute against the sheet's own display rules (the live check found Older mail drawn here).
+  for (const sel of ['.mail-sheet-more', '.mail-list', '.mail-sheet-empty']) {
+    assert.equal(tooOld.dom.window.getComputedStyle(tooOld.one(sel)).display, 'none', `${sel} is not drawn`);
+  }
   const none = rig(t, { answer: () => Promise.reject(refusal('E_OPERATION_UNAVAILABLE')) });
   none.sheet.open(row, 'ws-1'); await settle();
   assert.equal(none.one('.mail-sheet-problem > p').textContent, MAIL_WORDS.noMessaging);
@@ -233,4 +237,30 @@ test('the scrim closes it; a press on the sheet does not', async t => {
   assert.equal(u.sheet.isOpen(), true);
   u.one('.mail-sheet-overlay').dispatchEvent(new u.dom.window.MouseEvent('mousedown', { bubbles: true }));
   assert.equal(u.sheet.isOpen(), false);
+});
+
+test("Details: Messaging & Teams carries Mail, which hands the panel's agent to the host; no host, no button", async t => {
+  const { createContextPanel } = await import('../renderer/context-panel.mjs');
+  const make = openMail => {
+    const dom = new JSDOM('<!doctype html><body><aside id="context-panel"></aside></body>');
+    const document = dom.window.document, hosts = [];
+    const panel = createContextPanel({ document, root: document.getElementById('context-panel'), openMail,
+      createTeamsSection: (host, { onPresence, tools }) => { hosts.push({ host, onPresence, tools }); return { update() {}, dispose() {} }; } });
+    t.after(() => { panel.dispose(); dom.window.close(); });
+    return { document, panel, hosts };
+  };
+  const asked = [];
+  const u = make(ref => asked.push(ref));
+  const agent = { instance: 'dev-1', agent: 'dev', agentsRoot: '/w/agents', home: row.home, running: true };
+  u.panel.setContext({ workspace: 'ws-1', instance: agent, key: agent.home });
+  u.hosts[0].onPresence(true);
+  const mail = u.hosts[0].tools.querySelector('button.context-panel-mail');
+  assert.equal(mail.textContent, 'Mail'); assert.equal(mail.dataset.action, 'instance.mail');
+  assert.equal(mail.closest('[data-context-section="teams"]').hidden, false);
+  mail.click();
+  assert.deepEqual(asked.map(a => [a.workspace, a.instance.home]), [['ws-1', row.home]]);
+  u.hosts[0].onPresence(false);
+  assert.equal(mail.closest('[data-context-section="teams"]').hidden, true, 'no messaging provider: no section, no Mail');
+  const none = make(undefined);
+  assert.equal(none.hosts[0].tools.querySelector('button.context-panel-mail'), null);
 });
