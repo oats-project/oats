@@ -1446,3 +1446,30 @@ test("acceptance with the bb fragment refuses a non-loopback listener and a publ
   assert.equal(listenerCheck(proc(["00000000:08AE", "7F000001:97E6", "7F000001:97E7"]), "BE"), "listening TCP sockets: 0.0.0.0:2222, 127.0.0.1:38886, 127.0.0.1:38887; all on loopback except sshd's port 2222");
   assert.throws(() => listenerCheck({readFileSync() { throw Object.assign(new Error("unreadable"), {code: "EACCES"}); }}, "LE"));
 });
+
+test("acceptance admits the bb fragment together with the inputs, outbox and trust fragments", async () => {
+  const { inspectAgent: inspectOnHost } = await import("../container/agent/accept.mjs");
+  const inspectAgent = (info, env, image) => inspectOnHost(info, env, image, undefined, source => source);
+  const { env, image, inspected } = inspectFixture();
+  const all = structuredClone(inspected);
+  const allEnv = {...env, AGENT_BB: "1", AGENT_CA_FILE: "/operator/public-ca.pem", TEAM_INPUT_DIR: "/operator/inputs", TEAM_OUTBOX_DIR: "/operator/outbox", TEAM_OUTBOX_GID: "20002"};
+  all.Config.Env.push("SSL_CERT_FILE=/etc/agent-trust/ca.pem", "NODE_EXTRA_CA_CERTS=/etc/agent-trust/ca.pem", "AGENT_BB=1");
+  for (const [source, target, rw] of [[allEnv.AGENT_CA_FILE, "/etc/agent-trust/ca.pem", false], [allEnv.TEAM_INPUT_DIR, "/inputs", false], [allEnv.TEAM_OUTBOX_DIR, "/outbox", true]]) {
+    all.Mounts.push({Source: source, Destination: target, RW: rw, Type: "bind"});
+    all.HostConfig.Mounts.push({Type: "bind", Source: source, Target: target, ReadOnly: !rw, BindOptions: {}});
+  }
+  all.HostConfig.GroupAdd = [allEnv.TEAM_OUTBOX_GID];
+  assert.doesNotThrow(() => inspectAgent(all, allEnv, image));
+  // Each fragment is still required on its own terms beside the others.
+  const withoutBb = {...allEnv};
+  delete withoutBb.AGENT_BB;
+  assert.throws(() => inspectAgent(all, withoutBb, image), /AGENT_BB is set in the container/);
+  for (const name of ["AGENT_CA_FILE", "TEAM_INPUT_DIR", "TEAM_OUTBOX_DIR"]) {
+    const missing = {...allEnv};
+    delete missing[name];
+    assert.throws(() => inspectAgent(all, missing, image), name);
+  }
+  const noEntry = structuredClone(all);
+  noEntry.Config.Env.pop();
+  assert.throws(() => inspectAgent(noEntry, allEnv, image), /environment names differing/);
+});
