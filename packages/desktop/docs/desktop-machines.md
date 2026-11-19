@@ -1,8 +1,8 @@
 # A workspace's own machines (#517)
 
 A window shows one workspace, so it offers only the machines that run that
-workspace: **Where to run** in the spawn dialog, the **Registered machines** box of the
-Workspace › Setup tab, and **Add a machine to this workspace…** in both. Every
+workspace: **Where to run** in the spawn dialog, the Workspace page's
+**Machines** list, and **Add a machine to this workspace…** in both. Every
 read and change is the installed CLI's (`oats server … --json`, `oats aweb
 connect --json`); the Desktop keeps no registry.
 
@@ -12,7 +12,7 @@ The probe (`oats version --json`) must declare `servers-per-workspace` and
 `server-connect`. The messaging step also needs `capability-route`. Without
 them nothing here changes: `/api/servers` answers the registered list as
 before, Where to run lists every registered server, there is no Add entry and
-no Registered machines box (`machinesGated`, `awebConnectGated` in
+no machines list (`machinesGated`, `awebConnectGated` in
 `packages/client/machine-contract.mjs`).
 
 ## The window's key
@@ -56,7 +56,7 @@ no Registered machines box (`machinesGated`, `awebConnectGated` in
   runs it again; by then only unreachable hosts are still unknown).
 - A registry that cannot be read is an answer, not a refusal: `servers: []`
   with `error: { code, message }` and the window's `deployment` and `aweb`
-  kept, so the Registered machines box says why with Retry and Add stays offered.
+  kept, so the Machines list says why with Retry and Add stays offered.
 - **`POST /api/server-check?ws=`** `{ id }`: an id whose key is the window's or
   is unknown. **`POST /api/server-remove?ws=`** `{ id }`: the window's key
   only. Both admit the id against a fresh `server list`
@@ -118,28 +118,35 @@ and is not selected.
   the phase, and focus waits on the status line. Close and Escape always work:
   the CLI finishes on its own and a late answer changes nothing.
 - The dialog belongs to its opener (`owns()`): the spawn dialog, or the
-  Registered machines box of one workspace generation. When the opener goes (the spawn
+  Machines list of one workspace generation. When the opener goes (the spawn
   dialog closes, the window changes workspace), the dialog closes, and an
   answer that arrives later neither renders, takes focus nor starts the
   messaging step.
 
-## The Registered machines box (`renderer/workspace-machines.mjs`)
+## The Machines list (`renderer/workspace-machines.mjs`)
 
-On the Setup tab, inside This computer in the List view and below the graph in
-the Graph view: each machine's name, host, folder, OATS
-version and reachable or not, from its last check this run (reachable: the
-check reached its deployment, and `workspaceReadable` is not `false`; the
-kernel's `workspaceReadError` or error message is the state's title), with **Check** and
-**Remove**. In a box narrower than 860px a row keeps the name, the state and
-the actions, and the name's title gives the host, the folder and the version.
-A machine not checked yet this run is checked once in the
-background (two at a time). Remove asks first, in the row ("Remove <id>?
-Instances spawned there keep running and can still be retired from here."),
-and a refusal is said in the row in the CLI's words. A late Check or Remove
-moves focus back to its row only when no newer press or key in the box came
-since and focus is not elsewhere. The box is mounted once per workspace and
-kept across the tab's re-renders: the same element moves between the views. A
-workspace change disposes it (and its dialog).
+The Workspace page's **Machines** section (the Desktop UI rework, slice 3b; until then the Setup tab's
+Registered machines box): the computers this workspace runs on, one row each. **This computer** first
+(reachable, the CLI probe's OATS version, nothing to check or remove), then each registered machine:
+its name, reachable or not from its last check this run (reachable: the check reached its deployment,
+and `workspaceReadable` is not `false`; the kernel's `workspaceReadError` or error message is the
+state's title), how many of **your agents** run on it, and its OATS version. The agents are the
+roster's rows: this computer's carry no `server`, another machine's carry its registration id as
+`server` (`packages/client/remote-roster.mjs`). They count what this Desktop reads (your agents, on
+this computer and the machines registered here; team-instance-lists-state-their-observation-scope),
+and a machine that was not reached, with no agent read from it, shows "—" (no claim), not 0. The
+section says so in its one line.
+
+A registered machine's row is one button: Enter (or a click) opens it under its row, with its name,
+ssh host and folder, then **Check** and **Remove**; the row's title gives the same facts. A machine
+not checked yet this run is checked once in the background (two at a time). Remove asks first, in the
+opened machine ("Remove <id>? Agents started there keep running and can still be retired from
+here."), and a refusal is said there in the CLI's words. A late Check or Remove moves focus back to
+its control only when no newer press or key in the section came since and focus is not elsewhere.
+**Add a machine to this workspace…** sits at the section's head (the dialog above). The section is
+mounted once per workspace and kept across the tab's re-renders (`sync()` repaints the counts when
+the roster moves). A workspace change disposes it (and its dialog). Without the machine gates the
+route answers no filtered list: the section shows this computer only and offers no Add.
 
 ## Fixtures
 

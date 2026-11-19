@@ -70,7 +70,7 @@ async function setup(t, { holdRoster = false, holdReads = false, shows } = {}) {
     doc, timers, rosters, reads, calls, q,
     tab: async name => { doc.getElementById(`workspace-tab-${name}`).click(); await settle(); },
     count: name => q(`#workspace-tab-${name} .workspace-count`),
-    rows: () => [...doc.querySelectorAll('.catalog-table .catalog-row:not(.head):not(.skeleton-catalog-row)')],
+    rows: () => [...doc.querySelectorAll('.cap-list button.cap-row')],
     state: () => q('.catalog-state'), skeleton: () => q('.catalog-state [data-skeleton]'), status: () => q('.discovery-load-status'), notice: () => q('.discovery-notice'),
     reads_: () => calls.filter(c => c.path.startsWith('/api/workspace-sync')).map(c => c.body),
     resolveRead: async (index, reply) => { reads[index].resolve(reply); await settle(); },
@@ -88,7 +88,7 @@ async function openFromCatalog(t, answer) {
   const asked = [];
   const u = await setup(t, { holdReads: true, shows: { answer: body => { asked.push(body); return answer(body); } } });
   await u.resolveRead(0, okRead()); await u.tab('capabilities');
-  u.q(`.catalog-row[data-capability="${ROW.name}"]`).click(); await settle();
+  u.q(`.cap-row[data-capability="${ROW.name}"]`).click(); await settle();
   return { ...u, asked, lead: () => u.q('.cap-contents-section .page-section-lead'), reader: () => u.q('.cap-reader-body')?.textContent.trim() };
 }
 
@@ -104,10 +104,11 @@ test('catalog form: a refresh that moves the row\'s commit re-reads Contents; a 
   assert.equal(u.lead().textContent, 'What an instance gets, at bbbbbbb');
   assert.match(u.reader(), /Inject at bbbbbbb/);
   // The whole page follows the same row: its provenance never shows another commit than its contents.
-  const latest = [...u.doc.querySelectorAll('.page-card[data-card="Comes from"] .page-kv')].find(r => r.querySelector('dt').textContent === 'Latest').querySelector('dd');
+  const latest = [...u.doc.querySelectorAll('details.cap-fold[data-fold="source"] .page-kv')].find(r => r.querySelector('dt').textContent === 'Latest').querySelector('dd');
   assert.equal(latest.textContent, 'bbbbbbb'); assert.equal(latest.title, moved);
   assert.equal(u.q('.capability-page .page-lede').textContent, 'At bbbbbbb.');
-  assert.deepEqual([...u.doc.querySelectorAll('.capability-page [data-provides="skills"] .provides-chip')].map(i => i.textContent), ['skill-bbb']);
+  // Skills are the answer's at the same commit (it ships none), not the catalog's names.
+  assert.equal(u.q('.capability-page .cap-skills-note').textContent, CONTENTS_COPY.skillsNone);
   const gone = structuredClone(CATALOG); gone.capabilities = gone.capabilities.filter(r => r.name !== ROW.name);
   await u.cliEmit(); await u.resolveRead(2, okRead({ capabilities: gone }));
   assert.equal(u.q('.cap-contents-gate').textContent, CONTENTS_COPY.unlisted);

@@ -164,7 +164,7 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
   const svReaderHead = node('div', 'cap-reader-head'); svReaderHead.hidden = true;
   const svReaderBody = node('div', 'cap-reader-body');
   svReader.append(svReaderHead, svReaderBody); skillView.append(svHead, svFiles, svReader);
-  let fallbackSkills = null, capName = '', skillsDrawn = null, openSkillRef = null, skillFile = null, skillTicket = 0;
+  let fallbackSkills, capName = '', skillsDrawn = null, openSkillRef = null, skillFile = null, skillTicket = 0;
 
   let alive = true, subjectKey = null, identityKey = null, selector = null, rowCommit = null, show = null, files = new Map();
   let selected = null, readerPath = null, expanded = new Set(), showTicket = 0, fileTicket = 0, rendered = null, renderedWarnings = null;
@@ -201,7 +201,8 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
   function update(page) { if (!alive) return; setSubject(page); paintSkills(); syncProvides(); }
   function setSubject({ row, cli, remote = false, catalogPending = false, deployment = null }) {
     const subject = contentsSubject({ row, cli, remote, catalogPending });
-    fallbackSkills = Array.isArray(row?.skills) ? row.skills.filter(name => typeof name === 'string' && name) : null; capName = row?.name || '';
+    // The catalog's skill names: a list, null (not listable: a spawn of it would refuse) or undefined (not reported).
+    fallbackSkills = Array.isArray(row?.skills) ? row.skills.filter(name => typeof name === 'string' && name) : row?.skills === null ? null : undefined; capName = row?.name || '';
     if (subject.gate) { if (gate.textContent !== subject.gate || gate.hidden) showGate(subject.gate); return; }
     gate.hidden = true; card.hidden = false;
     reader.setAttribute('aria-label', `File of ${row?.name || 'this capability'}`);
@@ -276,7 +277,7 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
   function paintSkills() {
     const pending = !show && navState.state === 'pending' && !fallbackSkills?.length;
     const listed = show ? show.skills : null;
-    const signature = JSON.stringify([show ? 'show' : 'catalog', listed && listed.map(s => [s.name, s.path, s.description, !!s.files?.length]), show ? null : fallbackSkills, pending, capName]);
+    const signature = JSON.stringify([show ? 'show' : 'catalog', listed && listed.map(s => [s.name, s.path, s.description, !!s.files?.length]), show ? null : fallbackSkills === undefined ? 'unreported' : fallbackSkills, pending, capName]);
     if (signature === skillsDrawn) return;
     skillsDrawn = signature;
     const restore = captureFocusState(skillsBody, { scroller: null });
@@ -289,6 +290,7 @@ export function createCapabilityContents(doc, { request, openExternal = null, on
       const block = node('div', 'cap-skills-skeleton'); block.setAttribute('aria-hidden', 'true'); for (let i = 0; i < 3; i++) block.append(skeleton(doc, 'line')); skillsBody.append(block);
     } else if (fallbackSkills?.length) skillsBody.append(skillRows(fallbackSkills.map(name => ({ skill: null, name, description: null }))));
     else if (Array.isArray(fallbackSkills)) skillsBody.append(node('p', 'cap-skills-note', CONTENTS_COPY.skillsNone));
+    else if (fallbackSkills === null) skillsBody.append(node('p', 'cap-skills-note', CONTENTS_COPY.skillsUnlistable));
     skills.hidden = !skillsBody.childElementCount;
     restore();
   }

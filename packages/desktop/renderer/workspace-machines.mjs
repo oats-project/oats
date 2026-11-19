@@ -9,8 +9,7 @@
  *   two at a time; the facts the server holds (its backfill, an earlier Check) are shown as they are.
  * - Remove asks first, in the row, then runs `oats server remove` (`/api/server-remove`); a refusal is
  *   said in the row in the CLI's words.
- * - Without the gates the route answers today's list: the registered machines are not offered (this computer's
- *   row stays). Without a workspace key the list says why (the route's reason) and offers nothing.
+ * - Without the gates (`gated: false`) nothing is read: this computer's row alone, and no Add. Without a workspace key the list says why (the route's reason) and offers nothing.
  * - The section owns its state: the Machines tab mounts it once per workspace and keeps it across re-renders.
  *   Every read carries this section's latest-intent ticket; nothing lands after dispose().
  * - The agent counts are what this Desktop reads (team-instance-lists-state-their-observation-scope): your agents,
@@ -108,7 +107,7 @@ export const THIS_COMPUTER = ':here';
 /** `owns()` is the owner's latest intent (its workspace generation): once false, no answer renders, takes
  * focus or starts the next step, and the owner disposes the section. `instances()`: the roster's rows the
  * agent counts are read from; `cli()`: the CLI probe (this computer's OATS version). `sync()` repaints them. */
-export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backfillDelay = BACKFILL_POLL_MS, instances = () => [], cli = () => null }) {
+export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backfillDelay = BACKFILL_POLL_MS, instances = () => [], cli = () => null, gated = true }) {
   const el = (tag, value, cls) => { const n = doc.createElement(tag); if (value !== undefined && value !== null) n.textContent = value; if (cls) n.className = cls; return n; };
   const query = () => `?ws=${encodeURIComponent(ws)}`;
   const element = el('section', undefined, 'machines'); element.dataset.section = 'machines';
@@ -315,11 +314,12 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
   // A CLI moving into or out of the tested bound changes what the rows and Add offer.
   const offCli = onCliChange(() => { if (live()) render(); });
   render();
-  void load();
+  // Without the machine gates (machine-contract.mjs machinesGated) the route answers no list for this workspace: none is read.
+  if (gated) void load();
   return {
     element,
     /** Read the list again (a machine added or removed elsewhere). */
-    refresh() { if (live()) void load(); },
+    refresh() { if (live() && gated) void load(); },
     /** The roster or the CLI probe moved: the agent counts and this computer's version follow. */
     sync() { if (live()) render(); },
     dispose() { alive = false; ticket++; offCli(); stopFollow?.(); dialog.current?.close({ restoreFocus: false }); element.remove(); },

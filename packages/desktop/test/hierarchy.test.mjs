@@ -450,7 +450,7 @@ const CLI_OK = { ok: true, bin: "/seed/oats", version: "0.18.0", source: "path",
 
 /** The Deployments view mounted on a fixture roster. `agents(path)` answers /api/agents (a value, a promise, or a throw).
  * `inPage`: as the app mounts it since 2026-10-26, inside the Workspace page (views/spawn.mjs), on its Machines tab
- * (preselected, as stage.hierarchy does; syncMachines mounts the view in .workspace-machines-panel with the page's
+ * (preselected, as stage.hierarchy does, then its Map chosen; syncMachines mounts the view in .workspace-machines-panel with the page's
  * ctx, whose openView("spawn") is the page's Souls tab). The page and the view then read the same fixture, as they read
  * the same server; `pagePoll` is the page's own roster poll. */
 async function card(t, { instances, deployments = null, agents = () => ({ agents: [PACKAGE_SOUL, ELSEWHERE_SOUL] }), ctx: extra = {}, inPage = false } = {}) {
@@ -484,6 +484,8 @@ async function card(t, { instances, deployments = null, agents = () => ({ agents
     assert.equal(spawn.preselectWorkspaceTab("machines"), true);
     spawn.mount(doc.getElementById("spawn"), ctx);
     unmounts.push(() => { spawn.unmount(); resetCliStateForTests(); });
+    // The Machines tab opens on its list of computers (slice 3b): its Map is this view.
+    doc.querySelector('#spawn .workspace-tools[data-tools=machines] [data-machines-view=map]').click();
     host = doc.querySelector("#spawn .workspace-machines-panel");
     assert.equal(polls.length, 2, "the view's roster poll, then the page's");
     for (let i = 0; i < 4; i++) await tick();

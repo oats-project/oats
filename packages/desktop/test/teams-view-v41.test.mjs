@@ -123,15 +123,15 @@ test('the copy is the board\'s; the roster shows only matches, and nothing witho
   const u = await mount(t, 'light');
   assert.equal(u.doc.querySelector('.ct-lead').textContent, 'Who your agents can message. A team never adds capabilities or restricts what a soul can do.');
   assert.deepEqual([...u.doc.querySelectorAll('.ct-section-head')].map(h => [h.querySelector('.ct-section-title').textContent, h.querySelector('.ct-section-lead').textContent]),
-    [['Shared teams', 'Declared in oats-workspace.yaml and shared through Git, so every computer that runs the workspace has them.'],
-      ['Local teams', 'Only on this computer, in its oats-local.yaml. Not shared.']]);
+    [['Workspace teams', 'Declared by this workspace in oats-workspace.yaml and shared through Git: everyone who opens the workspace sees them.'],
+      ["This computer's teams", "Declared only on this computer, in its oats-local.yaml: not shared with the workspace."]]);
   // Each card's foot sums up your instances on it; a team with no provider id has none, so no foot (nothing opens the card here).
   assert.deepEqual([...u.doc.querySelectorAll('.ct-card')].map(c => [c.dataset.team, c.querySelector('.ct-foot')?.textContent ?? null]),
-    [['engineering', '1 of your instances'], ['global', null], ['marketing', null], ['mine', '1 of your instances']]);
+    [['engineering', '1 of your agents'], ['global', null], ['marketing', null], ['mine', '1 of your agents']]);
   // Where the card opens its team's page, every card has the foot's cue; the unmapped teams' sums stay empty.
   const open = await mount(t, 'light', { onOpenTeam: () => {} });
   assert.deepEqual([...open.doc.querySelectorAll('.ct-card')].map(c => [c.dataset.team, c.querySelector('.ct-sum').textContent, c.querySelector('.ct-go').textContent, c.querySelector('.ct-go').getAttribute('aria-hidden')]),
-    [['engineering', '1 of your instances', 'Open team', 'true'], ['global', '', 'Open team', 'true'], ['marketing', '', 'Open team', 'true'], ['mine', '1 of your instances', 'Open team', 'true']]);
+    [['engineering', '1 of your agents', 'Open team', 'true'], ['global', '', 'Open team', 'true'], ['marketing', '', 'Open team', 'true'], ['mine', '1 of your agents', 'Open team', 'true']]);
   const dom = new JSDOM('<!doctype html><body><main class="oats-view"></main></body>'), doc = dom.window.document;
   const bare = createComputerTeams(doc, { request: async () => document() }); doc.querySelector('main').append(bare.element);
   t.after(() => { bare.dispose(); dom.window.close(); }); await tick();

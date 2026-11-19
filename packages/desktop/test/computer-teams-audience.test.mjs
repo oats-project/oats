@@ -135,8 +135,8 @@ test('solo cards: only the rows with entries; this deployment\'s choice; docs ke
   assert.equal(u.fact('docs', 'default'), 'writer (acme-agents)');
   assert.equal(u.fact('docs', 'join'), null);
   assert.equal(u.fact('mine', 'default'), "every soul without its own default (this deployment's choice)");
-  assert.equal(u.fact('mine', 'join'), 'every soul (local team)');
-  assert.equal(u.fact('pairing', 'join'), 'every soul (local team)');
+  assert.equal(u.fact('mine', 'join'), "every soul (this computer's team)");
+  assert.equal(u.fact('pairing', 'join'), "every soul (this computer's team)");
   const docs = u.row('docs');
   assert.equal(docs.querySelector('dd.ct-address.none').textContent, 'no provider id yet', 'no provider id yet: the warn line');
   assert.ok(docs.querySelector('dl.ct-facts').compareDocumentPosition(docs.querySelector('.ct-warn[data-problem=team-unmapped]')) & 4, 'the warning follows the facts, the address last among them');
@@ -185,6 +185,6 @@ test('members: the board card lists none of them; its foot sums them up (their r
   const card = u.row('lab-ai-team');
   assert.equal(card.querySelector('.ct-irow, .ct-member-name, .ct-member-term'), null, 'no member rows on the board');
   assert.equal(card.lastElementChild.className, 'ct-foot');
-  assert.equal(card.querySelector('.ct-foot').textContent, '2 of your instances');
+  assert.equal(card.querySelector('.ct-foot').textContent, '2 of your agents');
   assert.ok(card.querySelector('dl.ct-facts').compareDocumentPosition(card.querySelector('.ct-foot')) & 4, 'below the facts');
 });

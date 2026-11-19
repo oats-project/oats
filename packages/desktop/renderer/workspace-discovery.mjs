@@ -29,10 +29,13 @@ import { trackStickyTop, trackScrolledEdge } from './sticky-top.mjs';
 
 export const workspaceTabs = ['souls', 'capabilities', 'teams', 'machines', 'sources'];
 // What a person reads (the ids stay stable): Souls, Capabilities, Teams, Machines, Setup (product owner, 2026-10-26).
-// Machines is the Deployments page of before (views/hierarchy.mjs): the instances on each machine. Teams is who can
-// work together; Setup is what the workspace is built from (repos, packages, external souls). The page opens on Souls.
-/** The tabs whose panel the Workspace view owns: this module shows and hides it, and paints nothing in it. */
-const OWN_PANELS = ['machines', 'souls'];
+// Machines (the Desktop UI rework, slice 3b) opens on the list of the computers the workspace runs on
+// (workspace-machines.mjs); its Map is the Deployments page of before (views/hierarchy.mjs), the instances on each
+// machine, until slice 6 makes it the Graph. Teams is who can work together; Setup is what the workspace is built
+// from (repos, packages, external souls). The page opens on Souls.
+/** The tabs whose panel the Workspace view owns (`owned`): Souls, and Machines while its Map is shown; this module shows
+ * and hides it, and paints nothing in it. Machines' List is this module's. */
+export const MACHINES_VIEWS = Object.freeze([['list', 'List'], ['map', 'Map']]);
 const TAB_LABELS = { machines: 'Machines', teams: 'Teams', souls: 'Souls', capabilities: 'Capabilities', sources: 'Setup' };
 /** The Workspace page's tab bar rules for a selector: plain-text tabs, the selected one at 650 over a 2px
  * --live underline. Shared with the Deployments page's tabs (deployments-page.mjs), so the two never drift. */
@@ -101,6 +104,9 @@ ${tabBarCSS('.workspace-tabs')}
 /* Teams reads as one centred column: the teams card is a list, not a dashboard. */
 .workspace-discovery[data-tab=teams] { --ws-pad-top:20px; padding:var(--ws-pad-top) 24px 20px; }
 .workspace-discovery[data-tab=teams] > * { max-width:760px; margin-inline:auto; }
+/* Machines' list reads as one centred column too. */
+.workspace-discovery[data-tab=machines] { --ws-pad-top:20px; padding:var(--ws-pad-top) 24px 20px; }
+.workspace-discovery[data-tab=machines] > * { max-width:880px; margin-inline:auto; }
 .workspace-discovery[hidden], .souls-bar[hidden] { display:none; }
 /* Sticky tops (spec G; sticky-top.mjs): a tab's top-level controls stay pinned while its content
    scrolls. Chromium insets a sticky box by the scroller's padding, so the block pins at -padding,
@@ -179,7 +185,7 @@ function catalogSkeleton(doc, rows = 6) {
 }
 
 /** `onCatalog`: the catalog changed (a read settled, the subject was reset): a page rendered from it refreshes in place. */
-export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machinesPanel = null, onTab, onIntent, onOpenCapability = null, onCatalog = null, onTeamMember = () => {}, onOpenTeam = null, rosterState = () => 'ready' }) {
+export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machinesPanel = null, onTab, onIntent, onOpenCapability = null, onCatalog = null, onTeamMember = () => {}, onOpenTeam = null, onMachinesView = null, rosterState = () => 'ready' }) {
   const doc = header.ownerDocument;
   const node = (tag, text, cls) => { const el = doc.createElement(tag); if (text !== undefined) el.textContent = text; if (cls) el.className = cls; return el; };
   let alive = true, serial = 0, rosterGen = null, workspace = null, deployment = null, instances = [], tab = 'souls';
@@ -211,17 +217,24 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
     } });
     return computerTeams.element;
   }
-  // #517: the Setup tab's Machines box, one per workspace (and generation), kept across renders.
-  let machines = null, machinesFor = null;
+  // #517, slice 3b: the Machines tab's list, one per workspace (and generation), kept across renders. Without the
+  // machine gates it lists this computer alone (the route answers no filtered list).
+  let machines = null, machinesFor = null, machinesView = 'list';
   function machinesCard() {
-    if (!machinesGated(cliStatus()) || !workspace?.id) return null;
-    const key = JSON.stringify([workspaceGeneration(), workspace.id]);
+    if (!workspace?.id) return null;
+    const key = JSON.stringify([workspaceGeneration(), workspace.id, machinesGated(cliStatus())]);
     if (machines && machinesFor === key) return machines.element;
     machines?.dispose(); machinesFor = key;
     const gen = workspaceGeneration();
-    machines = createWorkspaceMachines(doc, { ctx, ws: workspace.id, owns: () => alive && workspaceGeneration() === gen });
+    machines = createWorkspaceMachines(doc, { ctx, ws: workspace.id, owns: () => alive && workspaceGeneration() === gen,
+      instances: () => instances, cli: () => cliStatus(), gated: machinesGated(cliStatus()) });
     return machines.element;
   }
+  /** Whether `name`'s panel is the view's own right now (Souls; Machines while its Map is shown). */
+  const owned = name => name === 'souls' || (name === 'machines' && machinesView === 'map');
+  /** The discovery panel's id for a tab: its own, the List's (Machines' own panel keeps `workspace-machines`), or a
+   * neutral one while another element is the tab's panel. */
+  const panelId = name => owned(name) ? 'workspace-capabilities' : name === 'machines' ? 'workspace-machines-list' : `workspace-${name}`;
   header.className = 'workspace-header';
   // No title in the bar (human, 2026-09-28): the sidebar already says Workspace; the tabs lead.
   const tabs = node('div', undefined, 'workspace-tabs'); tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Workspace sections'); header.append(tabs);
@@ -254,6 +267,15 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
   const setupTools = node('div', undefined, 'workspace-tools'); setupTools.dataset.tools = 'sources';
   // Setup is its list only (the graph, W2, was dropped in the Desktop UI rework, slice 3b): its one tool is Sync.
   const syncHost = node('div'); setupTools.append(syncHost);
+  // Machines: List (the computers, this module's) | Map (the Deployments view, the host's panel).
+  const machinesTools = node('div', undefined, 'workspace-tools'); machinesTools.dataset.tools = 'machines';
+  const machinesViews = node('div', undefined, 'ws-segmented'); machinesViews.setAttribute('role', 'group'); machinesViews.setAttribute('aria-label', 'Machines view');
+  for (const [id, label] of MACHINES_VIEWS) {
+    const button = node('button', label); button.type = 'button'; button.dataset.machinesView = id;
+    button.addEventListener('click', () => setMachinesView(id));
+    machinesViews.append(button);
+  }
+  machinesTools.append(machinesViews); header.append(machinesTools);
   // The Capabilities search lives in the view itself (human, 2026-09-26): a toolbar row above the sections.
   const capTools = node('div', undefined, 'ws-toolbar ws-sticky'); capTools.dataset.tools = 'capabilities';
   const capLead = node('div', undefined, 'ws-toolbar-lead'); capTools.append(capLead);
@@ -270,7 +292,8 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
   // After a sync the table is re-read live; the held table stays on screen until the new one lands (never null while the deployment is the same).
   const sync = createWorkspaceSync(syncHost, { ctx, onSynced: () => { failure = ''; void load({ refresh: true }); } });
   function syncTools() {
-    setupTools.hidden = tab !== 'sources'; capTools.hidden = tab !== 'capabilities';
+    setupTools.hidden = tab !== 'sources'; capTools.hidden = tab !== 'capabilities'; machinesTools.hidden = tab !== 'machines';
+    for (const button of machinesViews.querySelectorAll('button')) button.setAttribute('aria-pressed', String(button.dataset.machinesView === machinesView));
   }
   soulsPanel.id = 'workspace-souls'; soulsPanel.setAttribute('role', 'tabpanel'); soulsPanel.setAttribute('aria-labelledby', 'workspace-tab-souls');
   if (machinesPanel) {
@@ -332,17 +355,30 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
     if (!workspaceTabs.includes(name) || !alive) return false;
     const changed = name !== tab; tab = name;
     if (tab !== 'capabilities') about.close({ focus: 'none' }); // leaving the tab closes its dialog, moving no focus
-    panel.id = `workspace-${OWN_PANELS.includes(name) ? 'capabilities' : name}`; panel.dataset.tab = name;
+    panel.id = panelId(name); panel.dataset.tab = name;
     panel.setAttribute('aria-labelledby', `workspace-tab-${name}`);
     for (const [key, control] of controls) {
       control.setAttribute('aria-selected', String(key === tab)); control.tabIndex = key === tab ? 0 : -1;
-      control.setAttribute('aria-controls', ownPanel(key)?.id ?? panel.id);
+      control.setAttribute('aria-controls', owned(key) ? ownPanel(key)?.id ?? panel.id : panel.id);
     }
-    soulsPanel.hidden = tab !== 'souls'; if (machinesPanel) machinesPanel.hidden = tab !== 'machines';
-    panel.hidden = OWN_PANELS.includes(tab); syncTools();
+    soulsPanel.hidden = tab !== 'souls'; if (machinesPanel) machinesPanel.hidden = !(tab === 'machines' && owned('machines'));
+    panel.hidden = owned(tab); syncTools();
     if (changed) { onIntent?.(); onTab?.(tab); }
     render(); if (tab === 'capabilities' && !catalog && !loading && !failure) void load();
     revealTab(controls.get(tab));
+    return true;
+  }
+  /** Machines' List | Map (the host mounts the Map's view while it is shown: `onMachinesView`). Focus stays on the control. */
+  function setMachinesView(view) {
+    if (!alive || !MACHINES_VIEWS.some(([id]) => id === view) || view === machinesView) return false;
+    machinesView = view;
+    if (tab === 'machines') {
+      panel.id = panelId(tab);
+      controls.get('machines').setAttribute('aria-controls', owned('machines') ? machinesPanel?.id ?? panel.id : panel.id);
+      if (machinesPanel) machinesPanel.hidden = !owned('machines');
+      panel.hidden = owned(tab);
+    }
+    syncTools(); onIntent?.(); onMachinesView?.(machinesView); render();
     return true;
   }
   /** Read the catalog. `user`: a Retry (its completion is announced); `refresh`: bypass the server's
@@ -401,7 +437,8 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
     const restoreBody = tab === 'capabilities' || tab === 'sources' ? captureFocusState(body, { scroller: null }) : null;
     notes.replaceChildren(); body.replaceChildren();
     for (const child of [...capLead.children]) if (child !== about.button) child.remove(); // the "i" stays, focus and all
-    if (unavailable || OWN_PANELS.includes(tab)) return; // the view paints its own panels
+    if (unavailable || owned(tab)) return; // the view paints its own panels
+    if (tab === 'machines') { const card = machinesCard(); if (card) body.append(card); return; }
     for (const note of deploymentNotes(deployment)) notes.append(node('p', note.text, `catalog-note${note.warn ? ' warn' : ''}`));
     if (tab === 'teams') {
       // Team model v2: this computer's teams (the kernel's `oats teams`), editable here. A workspace
@@ -463,6 +500,7 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
     instances = list(panelAnswer.instances);
     updateCounts(agents.length); render();
     computerTeams?.syncRoster(); // the Teams page's members follow the roster poll
+    machines?.sync(); // the Machines list's agent counts too
     // Read once per roster generation on any tab: the tab bar counts it.
     if (!catalog && !loading && !failure) void load();
     // The catalog's age line (when the observation is old) follows the roster poll.
@@ -476,6 +514,8 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
   updateCounts(); setTab('souls');
   return {
     setTab, updateRoster, syncCli, get tab() { return tab; },
+    /** Machines' view: 'list' (the computers) or 'map' (the Deployments view, the host's panel). */
+    get machinesView() { return machinesView; }, setMachinesView,
     /** A team's page, painted by the Teams page into `host` (computer-teams.mjs showTeam): false when there is no such team. */
     openTeam: (host, label, options) => !!teamsCard() && computerTeams.showTeam(host, label, options),
     closeTeam() { computerTeams?.hideTeam(); },
