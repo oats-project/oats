@@ -76,6 +76,8 @@ import { NAV, NAV_TABS, PINNED, pinnedRowFor, navTab, stageSidebarMode, loadStag
 import { shellIcon, mountShellIcons, iconElement } from "./shell-icons.mjs";
 import { createSidebarFoot, emptyRosterText } from "./sidebar-foot.mjs";
 import { createSidebarRail, railCSS } from "./sidebar-rail.mjs";
+import { createInstanceEventsView, instanceEventsCSS } from "./instance-events-view.mjs";
+import { serverLabel as railServerLabel } from "../../client/remote-address.mjs";
 import { createAutomationsFailure, FAILED_RUN_TEXT } from "./automations-failure.mjs";
 import { automationsSupported } from "./views/automations.mjs";
 import { identityCSS } from "./identity-marks.mjs";
@@ -1852,7 +1854,7 @@ function placeContextPanel(pane) {
   const el = document.getElementById("context-panel");
   if (!el) return;
   if (!contextPanelHome.parent) { contextPanelHome.parent = el.parentElement; contextPanelHome.next = el.nextSibling; }
-  if (pane) { if (el.parentElement !== pane) pane.append(el); el.classList.add("in-details"); return; }
+  if (pane) { if (el.parentElement !== pane) pane.prepend(el); el.classList.add("in-details"); return; }
   if (el.parentElement !== contextPanelHome.parent) contextPanelHome.parent.insertBefore(el, contextPanelHome.next);
   el.classList.remove("in-details");
 }
@@ -1872,12 +1874,30 @@ function openDetailsTab(row, { focus = true } = {}) {
     return true;
   }
   hideEmptyState();
+  let events = null;
   const made = addTab({ title, key: "details", kind: "details", workspace: ws,
     focusContent: () => contextPanel.focus(),
-    onClose: () => { placeContextPanel(null); syncContextPanel(); } });
+    onClose: () => { events?.dispose?.(); placeContextPanel(null); syncContextPanel(); } });
   if (!made) return false;
   const t = tabs.get(made.id);
   t.detailsRef = row;
+  // Recent events (the lead's addition to done-when 3): the instance-events view the Machines canvas's popup had, in
+  // a folded section under the panel's content, read for the agent Details shows, on its own deployment, only when
+  // asked (its Load button) and only while this tab is the one shown.
+  made.paneEl.classList.add("details-pane");
+  if (!document.querySelector("style[data-instance-events]")) {
+    const style = document.createElement("style"); style.dataset.instanceEvents = ""; style.textContent = instanceEventsCSS; document.head.append(style);
+  }
+  const fold = document.createElement("details"); fold.className = "details-events";
+  const summary = document.createElement("summary"); summary.textContent = "Recent events";
+  const host = document.createElement("div"); fold.append(summary, host); made.paneEl.append(fold);
+  events = createInstanceEventsView(host, { ctx,
+    selection: () => {
+      const r = liveRow(tabs.get(made.id)?.detailsRef);
+      return r ? { workspace: rowDeployment(r), selector: { instance: r.instance, agent: r.agent, agentsRoot: r.agentsRoot, server: r.server || null },
+        home: r.home, incarnation: r.createdAt ?? null, serverLabel: railServerLabel(r) } : null;
+    },
+    owner: () => tabs.has(made.id) && activeTab === made.id && tabLayerVisible });
   syncContextPanel();
   if (focus) contextPanel.focus();
   return true;

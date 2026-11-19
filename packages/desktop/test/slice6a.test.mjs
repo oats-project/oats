@@ -140,8 +140,11 @@ test("slice6a details keeps every old panel fact", (t) => {
   assert.ok(q("[data-context-status-note]"), "the runtime error's note"); assert.ok(q(".context-panel-session-note"), "the reporting gap's note");
   assert.ok([...q("#context-panel").querySelectorAll("button")].some((b) => /Stop…|Start…/.test(b.textContent)), "the lifecycle footer");
   // In a tab it fills the pane.
-  assert.match(contextPanelCSS, /#context-panel\.context-panel\.in-details \{ flex:1 1 auto; width:auto; height:100%; border-left:0; \}/);
-  assert.match(fn("placeContextPanel"), /if \(pane\) \{ if \(el\.parentElement !== pane\) pane\.append\(el\); el\.classList\.add\("in-details"\); return; \}/);
+  assert.match(contextPanelCSS, /#context-panel\.context-panel\.in-details \{ flex:1 1 auto; width:auto;/);
+  assert.match(fn("placeContextPanel"), /if \(pane\) \{ if \(el\.parentElement !== pane\) pane\.prepend\(el\); el\.classList\.add\("in-details"\); return; \}/);
+  // Recent events (the lead's addition): the instance-events view, folded, under the panel's content.
+  assert.match(fn("openDetailsTab"), /summary\.textContent = "Recent events";/);
+  assert.match(fn("openDetailsTab"), /events = createInstanceEventsView\(host, \{ ctx,/);
 });
 
 test("slice6a rail", (t) => {

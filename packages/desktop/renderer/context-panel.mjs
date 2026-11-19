@@ -15,7 +15,11 @@ export const contextPanelCSS = `
 #context-panel.context-panel[hidden], #context-panel [hidden] { display:none !important; }
 /* Details (slice 6a): the panel's content as a tab, filling its pane; no edge border, and its header's collapse
    control has nothing to collapse into. */
-#context-panel.context-panel.in-details { flex:1 1 auto; width:auto; height:100%; border-left:0; }
+#context-panel.context-panel.in-details { flex:1 1 auto; width:auto; height:auto; min-height:0; border-left:0; }
+/* The Details pane: the panel's content, then its folded Recent events (instance-events-view.mjs). */
+.tab-pane.details-pane:not([hidden]) { display:flex; flex-direction:column; min-height:0; }
+.tab-pane.details-pane > .details-events { flex:none; max-height:45%; overflow:auto; border-top:1px solid var(--border); padding:8px 16px; }
+.tab-pane.details-pane > .details-events > summary { cursor:pointer; font-size:12px; font-weight:650; color:var(--fg); padding:4px 0; }
 #context-panel .context-panel-header { display:flex; align-items:center; flex:none; height:48px; box-sizing:border-box; border-bottom:1px solid var(--border); padding:0 6px; gap:4px; }
 #context-panel .context-panel-tabs { display:flex; flex:1; min-width:0; height:100%; align-items:center; gap:2px; }
 #context-panel .context-panel-control { font:inherit; color:var(--muted); background:var(--surface); border:0; border-radius:4px; cursor:pointer; padding:6px; }
