@@ -446,7 +446,7 @@ function paintCapabilityPage(s) {
   // "Used by" reads the souls' composition (souls-capabilities) and marks, or the roster's module rows.
   // Whether the Contents controller's Trigger sources row has content decides the Provides card's shape (what the row says does not).
   const signature = JSON.stringify([current === row ? null : current, catalogPending, context.instances, context.root, context.rosterState, context.composition,
-    context.composition ? context.souls.map(a => [a.name, a.key, a.color, a.agentsRoot, a.soulRole, a.package, a.capabilities]) : null,
+    context.composition ? context.souls.map(a => [a.name, a.key, a.color, a.agentsRoot, a.soulKind, a.package, a.capabilities]) : null,
     open.contents.triggerSources.childElementCount > 0]);
   const host = s.q("workspace-cap-page");
   if (signature !== open.signature) { // an unchanged catalog never rebuilds the page under focus
