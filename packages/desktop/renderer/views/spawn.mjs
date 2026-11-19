@@ -383,8 +383,13 @@ function closeTeam(s, { restoreFocus = false, gone = false } = {}) {
 }
 /** A capability's page, from the Capabilities table (from = null) or a soul page (from = the soul; `why`:
  * the soul page's entry for it, which the page's "Why" row says). */
+/** The page tab's title (slice 6a: the Workspace page is a tab, titled by what it shows); a shell without the
+ * hook (a stage, the harness) ignores it. */
+const SECTION_TITLES = Object.freeze({ souls: "Souls", capabilities: "Capabilities", teams: "Teams", machines: "Machines", sources: "Setup" });
+function pageTitle(s, title) { if (title) s.ctx?.setPageTitle?.(title); }
 function openCapability(s, row, from = null, why = null) {
   if (!s.alive) return;
+  pageTitle(s, typeof row?.name === "string" ? row.name : null);
   // The list is hidden (display:none) while the page is open, which drops its scroll offset: keep it for Back.
   const list = s.q("workspace-discovery");
   s.capOpen?.contents.dispose();
@@ -496,6 +501,7 @@ const focusable = el => el.isConnected && !el.disabled && (el.matches("button, a
 function closeCapability(s, { restoreFocus = false } = {}) {
   const open = s.capOpen; s.capOpen = null;
   open?.contents.dispose();
+  if (open) pageTitle(s, SECTION_TITLES[s.discovery?.tab]); // back to its section's title
   const host = s.q("workspace-cap-page"); if (host) host.replaceChildren();
   if (!open) return;
   // Back to where it was opened: the soul's page (still shown) or the Capabilities table.
@@ -637,6 +643,7 @@ ${spawnDialogCSS}</style>
     onTab: tab => {
       if (tab !== "souls") s.aboutSouls?.close({ focus: "none" }); // leaving Souls closes its dialog, moving no focus
       s.spawnOp++; closeSpawnModal(s); s.inspector.close(); closeCapability(s); closeTeam(s); s.page.close();
+      pageTitle(s, SECTION_TITLES[tab]);
       s.q("souls-bar").hidden = tab !== "souls"; s.q("souls-notice").hidden = tab !== "souls";
       syncMachines(s);
     },
@@ -654,6 +661,7 @@ ${spawnDialogCSS}</style>
   }, true);
   s.q("workspace-header").append(s.q("wssel")); // standalone switcher stays reachable on every subtab
   applyWorkspaceTab(s);
+  pageTitle(s, SECTION_TITLES[s.discovery.tab]);
   // The page opens on Souls unless a handoff chose another tab: then the Souls bar and its notice wait for Souls, and
   // on Machines its view mounts (onTab runs on changes only).
   if (s.discovery.tab !== "souls") { s.q("souls-bar").hidden = true; s.q("souls-notice").hidden = true; }

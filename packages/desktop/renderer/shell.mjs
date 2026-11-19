@@ -1408,6 +1408,8 @@ function renderContextRoster(instances) {
           scope: ws, owner: menuOwner, onMenuState: menuState, onFocusChange: () => updateActiveContexts(), dispatch: runAction,
           shortcut: id => { const chord = getBinding(id, isMac); return chord ? formatChord(chord, isMac) : ''; },
           extra: [
+            // Details (slice 6a): every row's, running or not, held included: a static read of what the roster knows.
+            { action: 'details', actionId: 'panel.toggle', label: 'Details', reason: '' },
             { action: 'open-split', actionId: 'instance.openSplit', label: 'Open in split', reason: () => !actionTarget ? 'Instance identity is not fully reported.'
               : unsupportedLine(i) || (i.running !== true ? 'No live terminal is reported.' : instanceSplitPlan(splitOpenState()).reason) },
             { action: 'open-pr', actionId: 'instance.openPullRequest', label: 'Open pull request…', reason: !actionTarget ? 'Instance identity is not fully reported.'
@@ -1419,6 +1421,7 @@ function renderContextRoster(instances) {
             if (currentWorkspace() !== ws || workspaceGeneration() !== rosterGeneration) throw new Error("Workspace changed; select the instance again");
             if (backgroundMenu.handles(action)) return backgroundMenu.run(action, instance);
             if (pinMenu.handles(action)) return pinMenu.run(action, instance);
+            if (action === 'details') { openDetailsTab(instance); return; }
             if (action === 'open-split') return openTerminalTab(instance, { inSplit: true, expected: actionTarget, valid: menuOwner });
             if (action === 'open-pr') return instancePrAction.open(actionTarget);
             if (action === "start" || action === "restart") { openInstanceStart(instance, { restart: action === "restart" }); return; }
@@ -2451,6 +2454,8 @@ async function openViewTab(name, title, extra = {}, key = `view:${name}`,
   if (kind === "page") {
     const record = tabs.get(made.id);
     record.page = name; record.mod = mod;
+    // The page names its tab (slice 6a): the Workspace page by its section, or the capability it shows.
+    extra = { ...extra, setPageTitle: (title) => { if (tabs.get(made.id) === record && typeof title === "string" && title) { record.title = title; retitleTab(record.triggerEl, title); } } };
     pageOwner = record.panelOwner = createPanelOwner(contextPanel, record, workspaceGeneration);
     const close = record.onClose;
     record.onClose = () => { pageOwner.dispose(); return close?.(); };

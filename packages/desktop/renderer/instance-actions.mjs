@@ -14,7 +14,7 @@ const LABELS = Object.freeze({ inspect: 'Knowledge & capabilities…', start: 'S
 /** Decorative menu icons (the Redesign's context menu), keyed by action. */
 // Move to background / out of it (#1579; instance-background-menu.mjs): the section's layers. Pin to top / Unpin
 // (instance-pin-menu.mjs): the pin, and the struck pin.
-const MENU_ICONS = Object.freeze({ 'open-split': 'splitRight', 'open-pr': 'pullRequest', 'background-on': 'layers', 'background-off': 'layers',
+const MENU_ICONS = Object.freeze({ details: 'info', 'open-split': 'splitRight', 'open-pr': 'pullRequest', 'background-on': 'layers', 'background-off': 'layers',
   'pin-on': 'pin', 'pin-off': 'unpin',
   inspect: 'knowledge', start: 'start', restart: 'refresh', stop: 'stop', retire: 'remove', forget: 'close' });
 
