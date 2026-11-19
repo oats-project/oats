@@ -92,7 +92,7 @@ export const rowHasBoard = (row, features) => record(row) && Object.hasOwn(row, 
 
 /** `oats inspect --home <h> --board --json`'s board, validated, as one of five outcomes the view tells apart:
  *  - `{ state: 'ok', facts, questions }`: each fact's `history` (`[{ value, at }]`, oldest first, at most 20, each value
- *    within the contract's bounds) and each question's `context` (boardContext, or null);
+ *    within the contract's bounds) and each question's `context` (boardContext, or null) with its `since`;
  *  - `{ state: 'none' }`: the answer's board is `null` (the home has no board file);
  *  - `{ state: 'unsupported' }`: the answer has no board at all (an OATS, or a routed host, without the feature: the
  *    backend dropped the flag);
@@ -117,7 +117,8 @@ export function boardDetailData(v) {
   }
   for (const q of Array.isArray(board.questions) ? board.questions : []) {
     if (!record(q) || typeof q.id !== 'string' || !KEY.test(q.id) || questions.has(q.id)) continue;
-    questions.set(q.id, { context: boardContext(q.context) });
+    // Its `since` too: the view shows a context only under the occurrence it was read for.
+    questions.set(q.id, { context: boardContext(q.context), since: instant(q.since) ? q.since : null });
     if (questions.size >= BOARD_LIMITS.questions) break;
   }
   return { state: 'ok', facts, questions };

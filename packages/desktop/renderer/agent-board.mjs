@@ -309,7 +309,11 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     setText(factsNote, notes.join(' ')); factsNote.hidden = !notes.length;
     const any = view.shown.length + view.folded.length + view.hidden.length > 0 || notes.length > 0;
     if (!any) { facts.remove(); return; }
-    const focusedKey = facts.contains(doc.activeElement) ? doc.activeElement.closest?.('li')?.dataset.key : null;
+    // The control that has the focus is given it back after the repaint: the same fact's body, link or hide button,
+    // or the address's Open button (a poll repaints unchanged facts).
+    const at = facts.contains(doc.activeElement) ? doc.activeElement : null;
+    const focusedKey = at?.closest?.('li')?.dataset.key ?? null;
+    const focusedPart = !at ? null : urlBox.contains(at) ? 'open' : at.classList.contains('agent-fact-link') ? 'link' : at.classList.contains('agent-fact-hide') ? 'hide' : 'body';
     factList.replaceChildren(...view.shown.map(paintFact));
     fold.hidden = !view.folded.length && !(unfolded && view.shown.length > FACTS_SHOWN);
     setText(fold, unfolded ? 'Fold' : `${view.folded.length} more`);
@@ -333,7 +337,8 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
       urlBox.replaceChildren(node(doc, 'span', 'agent-fact-says', `${name} says:`), text, open);
     } else urlBox.replaceChildren();
     if (facts.parentNode !== pane) pane.prepend(facts);
-    if (focusedKey) factList.querySelector(`:scope > li[data-key="${focusedKey}"] > .agent-fact-focus`)?.focus();
+    if (focusedPart === 'open') urlBox.querySelector('.agent-fact-url-open')?.focus();
+    else if (focusedKey) factList.querySelector(`:scope > li[data-key="${focusedKey}"] > ${focusedPart === 'link' ? '.agent-fact-link' : focusedPart === 'hide' ? '.agent-fact-hide' : '.agent-fact-focus'}`)?.focus();
   }
 
   function paintZone() {
@@ -385,11 +390,14 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     // The context: read with the detail (inspect --board) once the view is open; attributed, plain text, line breaks kept.
     // A detail read for an earlier occurrence of this id says nothing about this one: it reads as still reading.
     const current = !!detail && (!detail.occurrences || detail.occurrences.has(occurrence(q)));
-    const ctx = current && detail.state === 'ok' ? boardContext(detail.questions.get(q.id)?.context) : null;
+    // The answer's own question must be this occurrence (its `since`), whatever the read was started for.
+    const read = current && detail.state === 'ok' ? detail.questions.get(q.id) : null;
+    const ctx = read && (read.since == null || read.since === q.since) ? boardContext(read.context) : null;
     context.hidden = !q.hasContext;
     if (q.hasContext) {
       const lead = node(doc, 'p', 'agent-q-says', `${name} says:`);
-      const words = !current ? 'Reading the context…' : detail.state === 'ok' ? 'The agent sent no context for this question.' : DETAIL_NOTES[detail.state]?.context ?? DETAIL_NOTES.malformed.context;
+      const stale = !!read && read.since != null && read.since !== q.since;
+      const words = !current || stale ? 'Reading the context…' : detail.state === 'ok' ? 'The agent sent no context for this question.' : DETAIL_NOTES[detail.state]?.context ?? DETAIL_NOTES.malformed.context;
       const body = ctx ? node(doc, 'p', 'agent-q-context-text', ctx) : node(doc, 'p', 'agent-q-context-none', words);
       // A long context scrolls inside its open fold (at most 12 lines tall), so its text takes the focus for the keys.
       if (ctx) { body.dir = 'auto'; body.tabIndex = 0; }

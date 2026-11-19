@@ -151,14 +151,15 @@ export function createInspectBoundary({ invoke = cliCapability, cache = null, ma
       const { server, refresh, key, board } = admitted;
       const call = () => invoke(cli.bin, capabilityCall(request, admitted, { workspace, cli, localCwd, maxAge }), io);
       let envelope, observedAt, refreshing = false;
-      if (cache) {
+      // A board read never goes through the cache, not even to join a flight in the air: the view reads the board when
+      // it changed, so a flight begun before that change answers for an earlier board (instance-board.mjs).
+      if (cache && !board) {
         // A remote workspace has no state key and no invalidation signal here: its inspections are shared
         // between concurrent requests but never served from an earlier visit (store: false).
         // Live (observes the remotes afresh): a refresh, a routed inspect (reuse is local only, so it never carries
         // --max-age), or any read on a kernel without the feature. A refresh joins only a live flight.
         const live = refresh || !!server || !(Array.isArray(cli.features) && cli.features.includes(OBSERVE_MAX_AGE_FEATURE));
-        // A board read is never stored: its facts change while the view is open, and the view reads it on a change.
-        ({ envelope, observedAt, refreshing } = await cache.read(key, { deployment: workspace.scope, refresh, produce: call, store: !server && !board, live }));
+        ({ envelope, observedAt, refreshing } = await cache.read(key, { deployment: workspace.scope, refresh, produce: call, store: !server, live }));
       } else {
         envelope = await call();
         if (envelope.ok) observedAt = observationData(envelope).observedAt ?? new Date().toISOString();
