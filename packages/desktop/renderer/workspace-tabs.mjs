@@ -5,14 +5,10 @@ export function terminalTabsForWorkspace(entries, ws) {
   return [...entries].filter(([, tab]) => tab.kind === "terminal" && tab.workspace === ws);
 }
 
+/** Every tab of the workspace shows in its strip, whatever the sidebar's mode (the Desktop UI rework, slice 6a:
+ * pages are tabs beside the terminals, brains and files, so no kind hides another). `mode` is kept for callers. */
 export function tabVisibleInContext(tab, mode, ws) {
-  if (!canActivateTab(tab, ws)) return false;
-  // Files are supporting artifacts in either working context, never a new
-  // primary destination or a reason to hide the terminals they were opened beside.
-  if (tab.kind === "file") return mode === "instances" || mode === "souls";
-  if (mode === "instances") return tab.kind === "terminal";
-  if (mode === "souls") return tab.kind === "brain" || tab.kind === "file";
-  return false;
+  return canActivateTab(tab, ws);
 }
 
 export function canActivateTab(tab, ws) {

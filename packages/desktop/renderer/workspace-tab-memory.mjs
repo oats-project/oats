@@ -34,7 +34,7 @@ export function createWorkspaceTabMemory() {
       // Closed/foreign tabs must not be resurrected by stale layout memory.
       for (const id of saved.split?.groups.flatMap(g => g.tabs) || []) {
         const tab = tabs.get(id);
-        if (tab?.kind !== "terminal" || !canActivateTab(tab, workspace)) split = removeSplitTab(split, id).split;
+        if (!canActivateTab(tab, workspace)) split = removeSplitTab(split, id).split; // any kind (slice 6a: pages too)
       }
       const focused = split?.groups.find(g => g.id === split.focusedGroup);
       const activeTab = canActivateTab(tabs.get(saved.activeTab), workspace) ? saved.activeTab

@@ -21,7 +21,8 @@ import { requestSplit } from "./split-layout.mjs";
 export function splitControlsState(split, activeId, activeKind, tabLayerOn) {
   const emptyFocused = activeId == null && !!split?.groups.some(g =>
     g.id === split.focusedGroup && !g.tabs.length);
-  const visible = !!tabLayerOn && ((activeKind === "terminal" && activeId != null) || emptyFocused);
+  // Slice 6a: every tab kind lives in the groups (a page beside a terminal), so any active tab can split.
+  const visible = !!tabLayerOn && (activeId != null || emptyFocused);
   if (!visible) return { visible: false, splitRow: false, splitCol: false };
   const seed = [activeId]; // flat-state dry-run: any layer containing the active tab
   return {

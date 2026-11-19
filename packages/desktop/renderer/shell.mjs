@@ -1981,7 +1981,7 @@ function splitPane(orientation) {
   // tabs (they stay together — human requirement) and creates a focused
   // empty group; further splits add a group after the focused one.
   const seed = [...tabs]
-    .filter(([, tab]) => tab.kind === "terminal" && tab.workspace === currentWorkspace())
+    .filter(([, tab]) => canActivateTab(tab, currentWorkspace()))
     .map(([id]) => id);
   const r = requestSplit(split, orientation, seed, activeTab);
   split = r.split;
@@ -2103,7 +2103,8 @@ function activateTab(id, { keepGroupFocus = false } = {}) {
   if (!emptyFocused && !canActivateTab(current, currentWorkspace())) return false;
   const before = activeTab; // a stage between two activations clears it (showTabLayer(false))
   activeTab = id;
-  if (current?.kind === "terminal" && split && !keepGroupFocus) {
+  // Slice 6a: every tab kind is a group member (a page, a brain or a file beside a terminal).
+  if (current && split && !keepGroupFocus) {
     // Editor-group semantics: an existing member activation moves its
     // group's active tab + group focus; a NEW terminal tab (any open path
     // — roster, palette, quick-open) joins the FOCUSED group. Either way
@@ -2137,7 +2138,7 @@ function activateTab(id, { keepGroupFocus = false } = {}) {
   // activating a non-terminal tab (file/brain)
   // COVERS it without destroying the group state — the split re-materializes
   // when the user returns to a terminal tab.
-  const splitVisible = !!split && (current?.kind === "terminal" || emptyFocused);
+  const splitVisible = !!split && (current != null || emptyFocused);
   for (const [tid, t] of tabs) {
     const selected = tid === id;
     // Per-group a11y: while the split renders, each .group-tabbar is its
@@ -2258,8 +2259,7 @@ function closeTab(id, restoreFocus = false, { explicit = true, confirmed = false
     if (activeTab === id) activeTab = null;
     return;
   }
-  if (wasSplitMember && tabLayerVisible
-      && (activeTab == null || activeTab === id || tabs.get(activeTab)?.kind === "terminal")) {
+  if (wasSplitMember && tabLayerVisible) {
     const next = activeTab === id ? splitSuccessor : activeTab;
     activateTab(next, { keepGroupFocus: true });
     if (restoreFocus) tabOpenIntents.applyFocus(() => {
@@ -3132,7 +3132,7 @@ function switchTab(id) {
  * strip, which split-dom.mjs keeps in creation order. tabs.next/prev and their second chords,
  * tabs.goto1..9 (the active tab's strip) and the strip's own arrows (the focused trigger's). */
 function walkedTabs(id = activeTab) {
-  const splitShown = tabLayerVisible && !!split && (activeTab == null || tabs.get(activeTab)?.kind === "terminal");
+  const splitShown = tabLayerVisible && !!split;
   const group = !splitShown ? null
     : id == null ? split.groups.find(g => g.id === split.focusedGroup) ?? null : groupOfTab(split, id);
   return group ? group.tabs.map((tid) => [tid, tabs.get(tid)]).filter(([, t]) => t) : visibleTabEntries();
@@ -3708,7 +3708,7 @@ async function restoreHandedLayout(ws, layout) {
   if (composed.split) {
     const placed = new Set(composed.split.groups.flatMap((group) => group.tabs));
     const into = composed.split.groups.find((group) => group.id === composed.split.focusedGroup);
-    for (const [id, t] of tabs) if (t.kind === "terminal" && t.workspace === ws && !placed.has(id)) into.tabs.push(id);
+    for (const [id, t] of tabs) if (canActivateTab(t, ws) && !placed.has(id)) into.tabs.push(id);
   }
   split = composed.split;
   setSidebarMode("instances");
