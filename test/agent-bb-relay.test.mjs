@@ -115,7 +115,7 @@ test("the relay listens on loopback only, caps multiplexed channels at 9 and res
 test("a slow client receives all of an answer whose channel has already ended", async t => {
   const { startRelay } = await import("../container/agent-bb/relay.mjs");
   const fake = fakeSsh(t), bytes = 20 * 1024 * 1024;
-  const relay = startRelay({ ssh: "team-agent", listen: 0, env: { ...fake.env, FAKE_SSH_ANSWER_BYTES: String(bytes) }, say: () => {}, lingerMs: 200 });
+  const relay = startRelay({ ssh: "team-agent", listen: 0, env: { ...fake.env, FAKE_SSH_ANSWER_BYTES: String(bytes) }, say: () => {}, lingerMs: 600 });
   t.after(() => relay.stop());
   await relay.listening;
   const received = await Promise.all([0, 1, 2].map(() => new Promise((resolve, reject) => {
@@ -139,7 +139,7 @@ test("a slow client receives all of an answer whose channel has already ended", 
   const ended = await new Promise(resolve => idle.once("end", () => resolve(Date.now())));
   assert.equal(await connections(), 1, "still held right after the answer");
   await until(async () => await connections() === 0, "the relay to let the idle client go");
-  assert.ok(Date.now() - ended >= 150, "not before the linger");
+  assert.ok(Date.now() - ended >= 500, "not before the linger");
 });
 
 test("the relay command refuses a wider listener and closes its children on TERM", async t => {

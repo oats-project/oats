@@ -664,8 +664,9 @@ ssh team-agent bb plugin disable push-notifications
 
 bb's API has no login. It listens on the container's loopback only: on
 ports 38886 (the server) and 38887 (its host daemon), and on one more
-loopback port that bb picks at each start. The service publishes no port. Inside the container that changes what the trust group
-shares ([One team, one trust group](#one-team-one-trust-group)):
+loopback port that bb picks at each start. The service publishes no port.
+Inside the container that changes what the trust group shares
+([One team, one trust group](#one-team-one-trust-group)):
 
 - Any agent can read and drive every bb thread: read it, send it a message,
   start one, stop one.
