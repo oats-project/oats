@@ -1,0 +1,9 @@
+# Include only for an operator-provisioned directory shared with the trust group.
+services:
+  agent:
+    volumes:
+      - type: bind
+        source: ${TEAM_INPUT_DIR:?Set TEAM_INPUT_DIR}
+        target: /inputs
+        read_only: true
+        bind: { create_host_path: false }

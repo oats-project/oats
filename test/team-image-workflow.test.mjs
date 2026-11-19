@@ -295,3 +295,32 @@ test("PR verification uses the available Skopeo package and records its version"
   assert.match(install.run, /dpkg-query/);
   assert.match(install.run, />> "\$GITHUB_STEP_SUMMARY"/);
 });
+
+
+test("real image acceptance exercises optional inputs and refuses missing host sources", () => {
+  const script = read(".github/scripts/team-image-accept.sh");
+  const base = script.indexOf('container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64');
+  const fragment = script.indexOf("compose.agent.inputs.yaml");
+  const input = script.indexOf('container/agent/accept.sh "oats-agent-$TEAM" --evidence target-amd64', base + 1);
+  assert.ok(base >= 0 && fragment > base && input > fragment, "base is accepted before the input fragment is added and accepted");
+  assert.match(script, /unset TEAM_WORK_DIR TEAM_INPUT_DIR AGENT_CA_FILE AGENT_MIRRORS_DIR/);
+  assert.match(script, /export TEAM_INPUT_DIR="\$fixture\/inputs"/);
+  assert.match(script, /sudo install -d -o 0 -g "\$AGENT_GID" -m 750 "\$TEAM_INPUT_DIR"/);
+  assert.match(script, /printf 'synthetic input\\n' \| sudo tee "\$TEAM_INPUT_DIR\/example.txt"/);
+  assert.match(script, /TEAM_INPUT_DIR="\$fixture\/missing-inputs"/);
+  assert.match(script, /if "\$\{compose\[@\]\}" up -d[^;]*; then/);
+  assert.match(script, /test ! -e "\$TEAM_INPUT_DIR"/);
+  assert.match(script, /test ! -L "\$TEAM_INPUT_DIR"/);
+});
+
+
+test("real image acceptance exercises the setgid outbox and refuses its missing source", () => {
+  const script = read(".github/scripts/team-image-accept.sh");
+  assert.match(script, /export TEAM_OUTBOX_DIR="\$fixture\/outbox" TEAM_OUTBOX_GID=20002/);
+  assert.match(script, /sudo install -d -o "\$AGENT_UID" -g "\$TEAM_OUTBOX_GID" -m 2750 "\$TEAM_OUTBOX_DIR"/);
+  assert.match(script, /compose\+=\(-f container\/agent\/compose.agent.outbox.yaml\)/);
+  assert.match(script, /TEAM_OUTBOX_DIR="\$fixture\/missing-outbox"/);
+  assert.match(script, /mkdirSync\("\/outbox\/private", \{mode: 0o700\}\)/);
+  assert.match(script, /test ! -e "\$TEAM_OUTBOX_DIR"/);
+  assert.match(script, /test ! -L "\$TEAM_OUTBOX_DIR"/);
+});
