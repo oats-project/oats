@@ -744,6 +744,13 @@ test('Machines tab: preselectWorkspaceTab(\'machines\') (stage.hierarchy) before
   await u.tab('teams'); assert.equal(machinesPanel(u).childElementCount, 0);
   assert.equal(spawn.preselectWorkspaceTab('machines'), true); await settle();
   assert.equal(spawn.currentWorkspaceTab(), 'machines'); assert.equal(machinesPanel(u).querySelectorAll(':scope > .hier').length, 1);
+  // A handoff can name the view: the list (Home's Machines row) or the Map (its Graph row, until slice 6).
+  await u.tab('teams');
+  assert.equal(spawn.preselectWorkspaceTab('machines', { machinesView: 'list' }), true); await settle();
+  assert.equal(machinesPanel(u).childElementCount, 0); assert.ok(u.doc.querySelector('.workspace-discovery section.machines'));
+  await u.tab('souls');
+  assert.equal(spawn.preselectWorkspaceTab('machines', { machinesView: 'map' }), true); await settle();
+  assert.equal(machinesPanel(u).hidden, false); assert.equal(machinesPanel(u).querySelectorAll(':scope > .hier').length, 1);
 });
 
 test('Machines tab: the Deployments view\'s "s" (Workspace) turns the page to Souls, not a stage switch to the page already shown', async t => {
