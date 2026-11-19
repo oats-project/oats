@@ -258,7 +258,10 @@ async function readinessDetails(settings,{deployment,env=process.env,retainedSea
     const label=typeof env.OATS_DEFAULT_TEAM==='string'&&env.OATS_DEFAULT_TEAM.trim()?env.OATS_DEFAULT_TEAM.trim():'';
     problems.push({code:'needs-configuration',message:label?unmappedDefaultMessage(label):NO_TEAMS_MESSAGE});
   }
-  if(!retainedSeat && needsMintingRoot(settings) && (!candidate.root || !isAbsolute(candidate.root) || !existsSync(join(resolve(candidate.root),'.aw')))) problems.push({code:'needs-configuration',message:`no messaging root at ${candidate.root?resolve(candidate.root):process.cwd()}: run oats aweb setup there or set ${candidate.key}`});
+  if(!retainedSeat && needsMintingRoot(settings) && (!candidate.root || !isAbsolute(candidate.root) || !existsSync(join(resolve(candidate.root),'.aw')))) {
+    const source=candidate.declared?candidate.key:env.OATS_WORKSPACE||deployment?'the workspace directory':'the current directory';
+    problems.push({code:'needs-configuration',message:`no messaging root at ${candidate.root?resolve(candidate.root):process.cwd()} (from ${source}): run oats aweb setup there or set ${candidate.key}`});
+  }
   return {team,candidate,awVersion:aw.version,warnings,result:checkProblems(problems) || {status:'ready',problems:[]}};
 }
 function runAw(argv,cwd,{timeout=60000,settings={}}={}) {
