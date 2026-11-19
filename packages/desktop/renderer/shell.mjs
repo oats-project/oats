@@ -1105,9 +1105,11 @@ function renderContextRoster(instances) {
   // The relations in words (slice 1, D26: the roster draws no lineage or sibling lines; indentation and the gap
   // between bundles show the tree): "under <parent>" for a row indented under its parent and "sibling of …" for an
   // explicit sibling link, resolved per deployment over its full roster as the command palette's are, said after
-  // the row's lines to assistive technology.
+  // the row's lines to assistive technology. Its siblings are listed pinned first with the feature (instance-pin), as
+  // the palette and the TUI list them.
   const ownRows = isMultiDeployment(contextDeployments) ? splitByDeployment(contextDeployments)(instances) : null;
-  const siblingsOf = new Map(ownRows ? [...ownRows.values()].flatMap((list) => [...instanceSiblings(list)]) : instanceSiblings(instances));
+  const siblingPins = { pins: pinsShown() };
+  const siblingsOf = new Map(ownRows ? [...ownRows.values()].flatMap((list) => [...instanceSiblings(list, siblingPins)]) : instanceSiblings(instances, siblingPins));
   // A child its host reports doing its parent's work (#1577: `sameWork` where the host declares the feature, the
   // flag the drawn line said before D26) says so too: "same work"; a child the host reports not doing it, or one
   // whose host doesn't report the flag, says nothing more.

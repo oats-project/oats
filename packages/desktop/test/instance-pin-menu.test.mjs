@@ -321,6 +321,17 @@ test('sidebar: without the feature on this computer\'s CLI, a row\'s pinned is i
   assert.equal(u.rowEl('solo-pin').querySelector('.ctx-pin'), null);
 });
 
+test('sidebar: a row\'s siblings, said in words, are listed pinned first with the feature, as the palette lists them; without it, by the roster order', t => {
+  const rows = [at('hub', 1), at('new', 19, { siblingInstance: 'hub' }), at('pinned-old', 2, { siblingInstance: 'hub', pinned: true })];
+  const relation = u => u.rowEl('hub').querySelector('.ctx-relation')?.textContent;
+  const on = sidebar(t);
+  on.render(rows);
+  assert.equal(relation(on), ', sibling of pinned-old and new');
+  const off = sidebar(t, { feature: false });
+  off.render(rows);
+  assert.equal(relation(off), ', sibling of new and pinned-old');
+});
+
 test('sidebar: a stray value is no pin', t => {
   const u = sidebar(t);
   u.render([at('newest', 19), at('stray', 1, { pinned: 'true' })]);
