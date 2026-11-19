@@ -1044,8 +1044,16 @@ agent's behalf. Any messaging provider may answer it.
 oats operation run messaging:mail --home <abs> [--arg limit=50] [--arg cursor=<nextCursor>] [--arg conversation=<id>] [--server <id>] --json
 ```
 
-The provider's manifest declares it as `{"kind": "view", "command": "mail",
-"context": "home", "args": [limit, cursor, conversation]}`. Its `result`:
+The provider's manifest declares it as a home view operation with three
+optional args:
+
+```json
+"mail": {"kind": "view", "command": "mail", "context": "home",
+  "description": "Read-only: this instance's mail, received and sent, newest first. Never acknowledges.",
+  "args": [{"name": "limit", "flag": "--limit"}, {"name": "cursor", "flag": "--cursor"}, {"name": "conversation", "flag": "--conversation"}]}
+```
+
+Its `result`:
 
 ```json
 {"documents":[{"label":"Mail","kind":"markdown","text":"…plain rendering…"}],
