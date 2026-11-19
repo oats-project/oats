@@ -30,12 +30,46 @@ With external roles disabled, its field set is:
 }
 ```
 
-`targets` contains exactly those five roles. Origins are exact HTTPS DNS origins
+Without `roles`, `targets` contains exactly those five roles; compilation and
+route order remain unchanged. An optional `roles` array declares a nonempty
+subset of `aweb`, `logs`, `registry`, `secrets` and `signer`. Order does not affect
+route indexes. Missing targets, undeclared targets, unknown/duplicate roles and
+extra policy fields are refused. Do not invent stand-in services.
+
+For example, a messaging-only derived policy is:
+
+```json
+{
+  "roles": ["aweb", "registry"],
+  "frontAddress": "172.30.0.2",
+  "privateIngressAddresses": ["10.20.0.10"],
+  "deniedAddresses": ["10.20.0.11", "10.20.0.12"],
+  "authorityRecords": [
+    {"name": "_awid.team.example.invalid", "text": "awid=v1; controller=did:key:z6MkneMkZqwqRiU5mJzSG3kDwzt9P8C59N4NGTfBLfSGE7c7; registry=https://registry.example.invalid;"}
+  ],
+  "targets": {
+    "aweb": {"origin": "https://aweb.example.invalid", "addresses": ["10.20.0.10"]},
+    "registry": {"origin": "https://registry.example.invalid", "addresses": ["10.20.0.10"]}
+  }
+}
+```
+
+`humanOrigin` is required with signer and refused without signer.
+`authorityRecords` is required with registry and refused without registry,
+independently of signer. The full default keeps both fields. Namespace authority
+is needed for registry discovery and sender verification in messaging-only
+deployments too: this resolver is authoritative for the root and has no
+forwarding fallback for `_awid.<domain>`. A subset without signer uses its
+provisioned registry authorities and needs no invented signer service.
+Adding Secrets requires adding `secrets` to both
+`roles` and `targets`, with its actual origin and pinned address.
+
+Origins are exact HTTPS DNS origins
 on port 443. Addresses are pinned IPv4 literals resolved and checked before the
 proxy starts. Private ingress addresses need explicit exceptions; loopback,
 metadata and reserved addresses remain denied. `deniedAddresses` lists protected
 backend addresses, including PostgreSQL and Redis, and overrides exceptions.
-These five upstreams never use live DNS. The agent-facing DNS is authoritative,
+Declared upstreams never use live DNS. The agent-facing DNS is authoritative,
 not a general recursive resolver.
 
 ### Optional external source and model roles
@@ -146,10 +180,13 @@ contains no login, seat or model request and removes its own resources. Set
 plain-versus-isolated gateway regression. Neither fixture proves a model turn,
 verified wake, the actual deployment boundary or Kubernetes enforcement.
 
-The wrapper derives `authorityRecords` only from the signer's validated
-`namespace_authorities` and `registry_origin`, using the existing AWID TXT
-encoding and parser. It checks the profile against `team.registryUrl` and the
-configured signer origins. Enabling agents requires that signer profile. Each
+When registry is declared, the wrapper supplies `authorityRecords` from the
+existing provisioned public namespace authorities, using the existing AWID TXT
+encoding/parser and registry-origin/profile binding against `team.registryUrl`.
+These authorities are not a signer dependency. Where a signer profile supplies
+the material, keep its validated `namespace_authorities`, `registry_origin` and
+configured signer-origin checks; reduced sets still require the registry's
+provisioned authority material without inventing a signer profile or service. Each
 `name` is the exact `_awid.<domain>` owner name, without a trailing dot; `text`
 is the complete existing AWID record, without zone-file quotes. This component
 serializes those public records into the authoritative zone. It does not invent
@@ -175,6 +212,67 @@ the isolated mode removes that host bridge address. Only the proxy joins both
 forwarding is disabled. The agent has no other bridge, host networking, elevated
 capability, engine socket, service-key or database mount. Its existing harness
 login stays the dedicated read-only `/etc/agent-login` mount.
+
+### Minimal Compose wrapper and network preflight
+
+[`compose.minimal.yaml`](compose.minimal.yaml) extends the existing agent and
+proxy services and owns both networks' explicit IPAM. It consumes
+`AGENTS_SUBNET`, `AGENTS_GATEWAY`, `AGENT_IP`, `EGRESS_ADDRESS`,
+`SERVICES_SUBNET` and `SERVICES_GATEWAY` together. The agent subnet is internal,
+IPv4-only and uses isolated gateway mode; the proxy alone connects it to
+`services`. The preflight requires private IPv4 network CIDRs with at least
+eight addresses, distinct usable endpoints and disjoint agent/services ranges.
+Do not overlay an extra agent network or replace isolated mode.
+
+On the **Linux Docker engine host**, choose candidate values and run the
+read-only preflight immediately before network creation. These are fictional
+candidate ranges, not defaults or an allocation recommendation:
+
+```sh
+export AGENTS_SUBNET=172.27.90.0/24 AGENTS_GATEWAY=172.27.90.1
+export AGENT_IP=172.27.90.3 EGRESS_ADDRESS=172.27.90.2
+export SERVICES_SUBNET=172.27.91.0/24 SERVICES_GATEWAY=172.27.91.1
+node container/agent/egress/preflight-network.mjs > admitted-network.env
+```
+
+Require exit 0 before consuming that file or creating networks. Failure leaves
+no admitted assignments; never source it after a failed command. The preflight
+prints only those six validated assignments. It inspects the selected local
+Unix-socket Docker context, every listed network and every IPAM entry, all IPv4
+route tables, and all link addresses (`ip -j address show`). It refuses any
+failed command, unreadable/malformed observation, endpoint conflict or CIDR
+overlap, including a second Docker IPAM range or a VPN link. A default route is
+reachability, not an assigned range; every more-specific route remains a veto.
+IPv6 IPAM/link entries are validated but cannot overlap these IPv4 ranges.
+Remote contexts and Docker connection overrides are refused: host observations
+must describe the engine host. No network, route, link or Docker setting is
+changed. This is a point-in-time check, not an allocator or a reservation; rerun
+if host networking changes before creation.
+
+The surrounding deployment wrapper supplies the existing agent-service inputs
+(`TEAM`, pinned `AGENT_IMAGE`, resource limits and absolute state/login/public
+SSH/resolver paths), `AGENTS_NETWORK`, `SERVICES_NETWORK`, pinned `EGRESS_IMAGE`
+and `EGRESS_POLICY_FILE`. Use the admitted `EGRESS_ADDRESS` in both the policy's
+`frontAddress` and the read-only `resolv.conf`. Render with:
+
+```sh
+docker compose --env-file admitted-network.env \
+  -f container/agent/egress/compose.minimal.yaml config --quiet
+```
+
+Before starting a real agent, the deployment wrapper stages the credential-free
+`sleep infinity` probe described below using this same service/network layout,
+then requires the boundary PASS and any applicable ingress admission proof.
+The minimal file provides no application services or provisioning automation;
+the wrapper supplies the declared APIs on `services` and their live controls.
+It must not launch the normal agent entrypoint merely to test networking.
+
+Stage public source checkouts or refresh read-only mirrors **before introducing
+credentials**. There is no codeload, raw-file, release-asset or other source-fetch
+exception to obtain them later. Retain one reviewed source commit for the
+policy compiler/proxy build, this wrapper and the probe, plus the resulting
+proxy and agent image digests and control reports. Do not mix a released proxy
+with an unreviewed wrapper/probe checkout.
 
 Kubernetes uses the same image and derived policy. An enforcing CNI must restrict
 agent egress to proxy TCP/UDP 53 and TCP 443, and proxy egress to the pinned TLS
@@ -255,7 +353,9 @@ that token and exit 0 before enabling the signer route and admitting agents.
 The CLI requires `--policy <derived-policy.json>` and
 `--route-logs <runtime-audit.json>` and `--audit-path <common-path>` together;
 a partial signer-only call or missing audit path fails
-without an admission token. The latter file has exactly the policy's five role
+without an admission token. Signer policies use this additional ingress proof;
+policies without signer do not invoke the signer admission CLI. The latter file
+has exactly the policy's declared role
 keys. Local entries hold `{ "path": "/ready", "log": "/logs/aweb.log" }` for that
 role's harmless 200 endpoint and actual backend log. Use signer `/readyz` and
 registry `/health` where those are the supported routes; `--human-path` and
@@ -268,10 +368,10 @@ the final human control. If supplied, the compatible `--request-log` and
 Only the registry may instead use exactly
 `{ "path": "/health", "external": true }`, without a `log` key. The wrapper
 must declare ownership; the probe never infers an external route from a missing
-log. The four other roles always keep their local log witnesses. Every external
+log. All other declared roles keep their local log witnesses. Every external
 registry address must be disjoint from `--address`, `frontAddress`, private
-ingress and denied addresses, and all local-role addresses. The five pinned
-policy targets and optional external source/model roles are unchanged.
+ingress and denied addresses, and all local-role addresses. Declared pinned
+policy targets and optional external source/model roles retain their separate rules.
 
 An external registry receives exactly one matched 200 control per pinned address
 and protocol, with certificate and service-name verification. Redirects fail and
@@ -327,6 +427,19 @@ networks and a temporary public
 policy file. This catches packaged binaries that cannot execute under the runtime
 capability restrictions.
 
+Team-image CI builds the proxy from the same reviewed checkout as the wrapper
+and probes. It runs the legacy smoke and packaged ingress proof, then
+`python3 test/agent-egress-boundary-image.py PROXY_IMAGE AGENT_IMAGE ROLES`
+for `full` (no declaration), `aweb,registry` and `aweb,registry,secrets`.
+Each run uses the minimal wrapper with explicit preflight-admitted IPAM,
+credential-free state/login and local image content IDs; it requires live
+role HTTPS controls, backend controls, denied unlisted DNS/TLS, denied host
+gateway and direct backend/upstream access, then rejects an alternate-network
+mutant. Only the fixture TLS frontend mounts its disposable key. The fixture
+owns and removes its resources; run Docker qualification in CI, not against an
+operator's daemon. `test/agent-egress-roles.test.mjs` pins all 31 nonempty subsets,
+legacy output bytes, refusal cases and fail-closed network observations.
+
 `python3 test/agent-egress-ingress-image.py IMAGE` exercises the packaged ingress
 CLI against disposable real HTTP/1.1 and HTTP/2 TLS routes with separate backend
 logs. It requires a signer-only call to fail, a complete five-route call to pass,
@@ -366,7 +479,7 @@ The runtime JSON is derived by the deployment wrapper. Its fields are:
 | `approvedProbeMounts` | Expected `{Type,Source,Destination,RW}` entries from reviewed configuration, including the staged public CA and optional `/mirrors` mounts; not copied from inspect. Bind sources must resolve on this engine host. |
 | `protectedSources` | Canonical private service/database directories or key paths, plus the engine socket. |
 | `policy` | The same derived policy object mounted in the live proxy. |
-| `allowedPaths` | Exactly the five roles, with an existing harmless HTTP 200 control path per API; for example `/ready`, signer `/readyz`, registry `/health`. |
+| `allowedPaths` | Exactly the declared roles (all five without a declaration), with an existing harmless HTTP 200 control path per API; for example `/ready`, signer `/readyz`, registry `/health`. |
 | `deniedBackends` | Two `{role,address,port,controlNetwork?}` records, roles `postgres` and `redis`; each address is in `policy.deniedAddresses`. `controlNetwork` selects an existing backend network for its live control, otherwise `servicesNetwork`. |
 | `caFile` | Optional public CA path inside the probe. The supported agent trust fragment uses `/etc/agent-trust/ca.pem` and exactly its two fixed trust settings. An explicit CA at another public probe path remains probe-only evidence. No private key in the file. |
 | `protectedPaths` | Optional additional service-private paths that must not exist inside the probe. Standard secret/socket/custody paths are always checked. |
@@ -392,14 +505,24 @@ a wildcard address. Configure an explicit IPv4 `gateway` in the agents network's
 `ipam.config`: Docker can otherwise omit the gateway in isolated mode, and the
 adapter refuses to infer a probe address from a subnet.
 
-The shared in-container body requires the configured resolver, all five allowed
-HTTPS controls through that resolver and proxy, the exact namespace TXT records,
-negative unknown/human DNS, refusal of human TLS SNI, and denied direct upstream,
+The shared in-container body requires the configured resolver and every declared
+HTTPS control through that resolver and proxy. Registry adds the exact provisioned
+namespace TXT checks, whether or not signer is declared; missing or incorrect
+answers refuse admission. Signer adds negative human DNS and refusal of human TLS SNI. Every declaration
+requires a fresh unlisted DNS name and TLS host to be refused, and denied direct upstream,
 PostgreSQL, Redis and host-canary connections. Secret and engine-socket paths
 must be absent. It reads no service credential. Only after final live controls
 and zero forbidden canary hits does the adapter print exactly
 `OATS_EGRESS_BOUNDARY_PASS` and exit 0. Docker and response values are withheld
-on failure. It removes only its own canary/control containers.
+on failure. On success stderr lists `egress boundary universal:` controls
+separately from `egress boundary declared:` controls. Retain both streams.
+Universal controls always include sole isolated network membership, an explicit
+IPv4 IPAM gateway, live host-gateway refusal, direct upstream/backend refusal,
+unlisted DNS/TLS refusal and absence of protected paths. An alternate bridge or
+host must never be admitted to make a subset pass. The end-to-end TLS proxy does
+not claim to filter encrypted HTTP paths; signer ingress admission separately
+checks the witnessed authority/path combinations above.
+The adapter removes only its own canary/control containers.
 
 Kubernetes uses `probe-runtime.mjs --emit-program <runtime.json>` to emit the
 same in-container body for its adapter's operator connection. That adapter must

@@ -3,6 +3,17 @@ import assert from "node:assert/strict";
 import { readFileSync, statSync } from "node:fs";
 import { isIP } from "node:net";
 
+/** Keep legacy route indexes stable, regardless of declaration order. */
+export function policyRoles(policy) {
+  const names = ["aweb", "secrets", "logs", "signer", "registry"];
+  if (!Object.hasOwn(policy, "roles")) return names;
+  assert.ok(Array.isArray(policy.roles) && policy.roles.length > 0
+    && new Set(policy.roles).size === policy.roles.length
+    && Array.from(policy.roles).every(role => names.includes(role)),
+  "egress policy roles must be a nonempty distinct subset of aweb, logs, registry, secrets, signer");
+  return names.filter(role => policy.roles.includes(role));
+}
+
 export function originHost(value) {
   assert.ok(typeof value === "string" && value.length <= 2048 && !/[\u0000-\u0020\u007f]/.test(value), "egress policy origin is invalid");
   let url;
@@ -51,27 +62,35 @@ function externalRoutes(policy, hosts) {
     assert.ok(target && Object.keys(target).join(",") === "origin" && target.origin === expected[role].origin,
       "egress policy external role origin is fixed");
     const host=originHost(target.origin);
-    assert.ok(!hosts.includes(host) && host !== originHost(policy.humanOrigin),
+    assert.ok(!hosts.includes(host) && (!policy.humanOrigin || host !== originHost(policy.humanOrigin)),
       "egress policy external hostname overlaps deployment origins");
     return {role,host,port:expected[role].port};
   });
 }
 
 export function compilePolicy(policy) {
-  assert.ok(policy && typeof policy === "object" && !Array.isArray(policy)
-    && ["authorityRecords,deniedAddresses,frontAddress,humanOrigin,privateIngressAddresses,targets",
-      "authorityRecords,deniedAddresses,externalResolverAddresses,externalTargets,frontAddress,humanOrigin,privateIngressAddresses,targets"]
-      .includes(Object.keys(policy).sort().join(",")), "egress policy has an invalid field set");
+  assert.ok(policy && typeof policy === "object" && !Array.isArray(policy), "egress policy has an invalid field set");
+  const roles = policyRoles(policy), signer = roles.includes("signer"), registry = roles.includes("registry");
+  const fields = ["deniedAddresses", "frontAddress", "privateIngressAddresses", "targets"];
+  if (signer) fields.push("humanOrigin");
+  if (registry) fields.push("authorityRecords");
+  if (Object.hasOwn(policy, "roles")) fields.push("roles");
+  if (Object.hasOwn(policy,"externalTargets") || Object.hasOwn(policy,"externalResolverAddresses"))
+    fields.push("externalTargets", "externalResolverAddresses");
+  assert.equal(Object.keys(policy).sort().join(","), fields.sort().join(","),
+    "egress policy has an invalid field set; supply authorityRecords with registry and humanOrigin with signer");
   assert.ok(isIP(policy.frontAddress) === 4, "egress policy front address must be IPv4");
-  assert.ok(policy.targets && Object.keys(policy.targets).sort().join(",") === "aweb,logs,registry,secrets,signer", "egress policy requires exactly the five named services");
+  assert.ok(policy.targets && typeof policy.targets === "object" && !Array.isArray(policy.targets)
+    && Object.keys(policy.targets).sort().join(",") === [...roles].sort().join(","),
+  "egress policy targets must match exactly the declared roles (default: five named services)");
   for (const list of [policy.privateIngressAddresses, policy.deniedAddresses]) assert.ok(Array.isArray(list)
     && list.length <= 64 && list.every(ip => isIP(ip) === 4), "egress policy address sets must contain IPv4 literals");
-  const targets = ["aweb", "secrets", "logs", "signer", "registry"].map(name => policy.targets[name]);
+  const targets = roles.map(name => policy.targets[name]);
   for (const target of targets) assert.ok(target && typeof target === "object"
     && Object.keys(target).sort().join(",") === "addresses,origin", "egress policy target has an invalid field set");
   const hosts = targets.map(target => originHost(target.origin));
   assert.ok(new Set(hosts).size === hosts.length, "egress policy service hostnames must be distinct");
-  assert.ok(!hosts.includes(originHost(policy.humanOrigin)), "egress policy cannot route the human login origin");
+  if (signer) assert.ok(!hosts.includes(originHost(policy.humanOrigin)), "egress policy cannot route the human login origin");
   for (const target of targets) assert.ok(Array.isArray(target.addresses) && target.addresses.length > 0 && target.addresses.length <= 8
     && target.addresses.every(ip => isIP(ip) === 4), "egress policy upstream addresses must be pinned IPv4 literals");
   for (const target of targets) for (const ip of target.addresses) {
@@ -79,12 +98,13 @@ export function compilePolicy(policy) {
       && (!inRanges(ip, privateRanges) || policy.privateIngressAddresses.includes(ip)), "egress policy upstream address denied");
   }
   const external=externalRoutes(policy,hosts);
-  // Records have already passed the existing AWID parser and profile binding in
-  // the wrapper. Here only their DNS owner/data envelope is serialized.
-  assert.ok(Array.isArray(policy.authorityRecords) && policy.authorityRecords.length > 0
+  // Registry discovery needs these records even without signer. The wrapper
+  // applies the existing AWID parser and registry binding before serialization;
+  // here only the DNS owner/data envelope is checked.
+  if (registry) assert.ok(Array.isArray(policy.authorityRecords) && policy.authorityRecords.length > 0
     && policy.authorityRecords.length <= 64, "egress policy requires provisioned namespace authority records");
   const recordNames = new Set();
-  for (const record of policy.authorityRecords) {
+  for (const record of policy.authorityRecords ?? []) {
     assert.ok(record && Object.keys(record).sort().join(",") === "name,text"
       && typeof record.name === "string" && record.name.length <= 253
       && record.name.startsWith("_awid.") && record.name.slice(6).split(".").every(label =>
@@ -101,7 +121,7 @@ export function compilePolicy(policy) {
     `. 30 IN NS ${hosts[0]}.`,
     ...hosts.map(host => `${host}. 30 IN A ${policy.frontAddress}`),
     ...external.map(({host})=>`${host}. 30 IN A ${policy.frontAddress}`),
-    ...policy.authorityRecords.map(record => `${record.name}. 30 IN TXT ${record.text.match(/.{1,240}/g).map(part => JSON.stringify(part)).join(" ")}`), "",
+    ...(policy.authorityRecords ?? []).map(record => `${record.name}. 30 IN TXT ${record.text.match(/.{1,240}/g).map(part => JSON.stringify(part)).join(" ")}`), "",
   ].join("\n");
   const nginx = [
     "load_module /usr/lib/nginx/modules/ngx_stream_module.so;",

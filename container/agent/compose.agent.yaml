@@ -1,4 +1,6 @@
 # Include after the bundle's compose.yaml. The installer creates agents.
+# egress/compose.minimal.yaml owns explicit isolated IPAM for a minimal wrapper;
+# its read-only network preflight admits AGENT_IP and EGRESS_ADDRESS together.
 services:
   agent:
     image: ${AGENT_IMAGE:?Set AGENT_IMAGE}

@@ -1,4 +1,6 @@
 # Extend this service from the deployment's top-level Compose. It owns networks.
+# compose.minimal.yaml is the explicit-IPAM example; keep wrapper, probe and
+# image at one reviewed source commit, then select the built image by digest.
 services:
   egress:
     image: ${EGRESS_IMAGE:?Set EGRESS_IMAGE to a pinned image digest}

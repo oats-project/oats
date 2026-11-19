@@ -2,6 +2,30 @@
  * prove firewall/CNI enforcement; the shared journey also probes the boundary. */
 import assert from "node:assert/strict";
 import { posix } from "node:path";
+import { isIP } from "node:net";
+import { compilePolicy, policyRoles } from "./policy.mjs";
+
+export function ipv4Gateway(network, label) {
+  const gateway = network.IPAM?.Config?.find(item => isIP(item.Gateway) === 4)?.Gateway;
+  assert.ok(gateway, `${label} network needs an explicit IPv4 IPAM gateway; configure ipam.config gateway before probing`);
+  return gateway;
+}
+
+export function boundaryControls(plan) {
+  compilePolicy(plan.policy);
+  const roles = policyRoles(plan.policy);
+  assert.ok(plan.allowedPaths && typeof plan.allowedPaths === "object" && !Array.isArray(plan.allowedPaths)
+    && Object.keys(plan.allowedPaths).sort().join(",") === [...roles].sort().join(","),
+  "control paths must match declared roles exactly");
+  return {
+    universal: ["unlisted DNS name refused", "unlisted TLS host refused", "sole isolated agents network",
+      "IPv4 IPAM gateway required", "host gateway denied with live canary", "direct upstream access denied",
+      "PostgreSQL and Redis denied with live controls", "secret and socket paths absent"],
+    declared: roles.map(role => `${role}: proxy DNS and verified HTTPS 200`)
+      .concat(roles.includes("registry") ? ["registry: exact namespace authority TXT"] : [])
+      .concat(roles.includes("signer") ? ["signer: human DNS/TLS refusal; separate ingress admission required"] : []),
+  };
+}
 
 export function assertComposeBoundary({ agent, egress, agentsNetwork, servicesNetwork, approvedAgentMounts, protectedSources }) {
   assert.equal(egress.Config?.User,"10001:10001","proxy must use the approved non-root UID/GID");

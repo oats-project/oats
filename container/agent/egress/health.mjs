@@ -3,7 +3,7 @@ import { Resolver } from "node:dns/promises";
 import { createConnection } from "node:net";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { compilePolicy, loadPolicy } from "./policy.mjs";
+import { compilePolicy, loadPolicy, policyRoles } from "./policy.mjs";
 
 function connectTlsPort() {
   return new Promise((resolve,reject) => {
@@ -21,7 +21,7 @@ export async function probeProxy({policy = loadPolicy(),resolve4,connect = conne
     resolver.setServers(["127.0.0.1"]);
     resolve4 = name => resolver.resolve4(name);
   }
-  const answers = await resolve4(new URL(policy.targets.aweb.origin).hostname);
+  const answers = await resolve4(new URL(policy.targets[policyRoles(policy)[0]].origin).hostname);
   assert.ok(answers.length === 1 && answers[0] === policy.frontAddress,"egress DNS address differs from policy");
   let refused = false;
   try { await resolve4(`denied-${randomUUID()}.invalid`); }

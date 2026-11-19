@@ -35,9 +35,17 @@ export async function probeRuntime(plan, io = {}) {
   const fs = io.fs || await import("node:fs");
   const net = await import("node:net");
   const expect = (ok, label) => { if (!ok) { const error = new Error(label); error.name = "BoundaryFailure"; throw error; } };
-  const roles = ["aweb","secrets","logs","signer","registry"];
   const {policy,allowedPaths,deniedBackends,gateway,caFile} = plan;
-  expect(policy && roles.every(role => policy.targets?.[role]) && net.isIP(policy.frontAddress) === 4, "runtime policy is incomplete");
+  const names = ["aweb","secrets","logs","signer","registry"], roles = policy && Object.hasOwn(policy,"roles") ? policy.roles : names;
+  expect(policy && Array.isArray(roles) && roles.length > 0 && new Set(roles).size === roles.length
+    && Array.from(roles).every(role => names.includes(role) && policy.targets?.[role])
+    && Object.keys(policy.targets).sort().join(",") === [...roles].sort().join(",")
+    && net.isIP(policy.frontAddress) === 4, "runtime policy is incomplete");
+  expect(allowedPaths && typeof allowedPaths === "object" && !Array.isArray(allowedPaths)
+    && Object.keys(allowedPaths).sort().join(",") === [...roles].sort().join(","), "control paths must match declared roles exactly");
+  expect(roles.includes("registry")
+    ? Array.isArray(policy.authorityRecords) && policy.authorityRecords.length > 0 && policy.authorityRecords.length <= 64
+    : !Object.hasOwn(policy,"authorityRecords"), "namespace authority records are required with registry and refused without it");
   const identity = io.identity ? io.identity() : { uid:process.getuid(), gid:process.getgid() };
   expect(plan.uid > 0 && plan.gid > 0 && identity.uid === plan.uid && identity.gid === plan.gid, "probe identity differs from configured non-root user");
   const status = fs.readFileSync("/proc/self/status","utf8");
@@ -95,22 +103,24 @@ export async function probeRuntime(plan, io = {}) {
     try {code=await getStatus({host,path:"/",timeoutMs:7000,headersOnly:true});} catch {expect(false,"external origin request failed");}
     expect(code>=200 && code<500,"external origin did not answer with a verified TLS control");
   }
-  for (const record of policy.authorityRecords) {
+  for (const record of policy.authorityRecords ?? []) {
     let answers;
     try { answers=await resolver.resolveTxt(record.name); } catch { expect(false,"namespace authority lookup failed"); }
     expect(answers.length === 1 && answers[0].join("") === record.text,"namespace authority differs from provisioned profile");
   }
-  const humanHost=new URL(policy.humanOrigin).hostname;
   const {randomUUID}=await import("node:crypto");
-  for (const host of [humanHost,"denied-"+randomUUID()+".invalid"]) {
+  const unlistedHost="denied-"+randomUUID()+".invalid";
+  const humanHost=policy.humanOrigin ? new URL(policy.humanOrigin).hostname : undefined;
+  const deniedHosts = humanHost ? [humanHost,unlistedHost] : [unlistedHost];
+  for (const host of deniedHosts) {
     let denied=false;
     try { await resolver.resolve4(host); } catch (error) { denied=error.code === "ENOTFOUND"; }
     expect(denied,"unlisted DNS name was not refused");
   }
-  const tlsReachable=io.tlsReachable || (async () => {
+  const tlsReachable=io.tlsReachable || (async ({host}) => {
     const tls=await import("node:tls");
     return new Promise((resolve,reject)=>{
-      const socket=tls.connect({host:policy.frontAddress,port:443,servername:humanHost,ca,rejectUnauthorized:true});
+      const socket=tls.connect({host:policy.frontAddress,port:443,servername:host,ca,rejectUnauthorized:true});
       socket.setTimeout(2000,()=>{socket.destroy();reject(new Error("human TLS denial timeout"))});
       socket.once("secureConnect",()=>{socket.destroy();resolve(true)});
       socket.once("error",error=>{
@@ -119,9 +129,11 @@ export async function probeRuntime(plan, io = {}) {
       });
     });
   });
-  let humanReachable;
-  try { humanReachable=await tlsReachable(); } catch { expect(false,"human TLS refusal was not established"); }
-  expect(!humanReachable,"human TLS origin is reachable");
+  for (const host of deniedHosts) {
+    let reachable;
+    try { reachable=await tlsReachable({host}); } catch { expect(false,"unlisted TLS refusal was not established"); }
+    expect(!reachable,host === humanHost ? "human TLS origin is reachable" : "unlisted TLS origin is reachable");
+  }
   expect(Array.isArray(deniedBackends) && deniedBackends.length === 2
     && deniedBackends.map(item=>item.role).sort().join(",") === "postgres,redis", "live backend control inventory is incomplete");
   const endpoints=[];
