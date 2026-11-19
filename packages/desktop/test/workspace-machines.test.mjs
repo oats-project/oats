@@ -35,24 +35,21 @@ function setup(t, routes, options = {}) {
 }
 
 // The Desktop UI rework, slice 3b: the Machines section lists the computers this workspace runs on — this computer, then
-// each registered machine — reachable or not, your agents on each, the OATS version; Enter opens one with Check and Remove.
+// each registered machine — reachable or not and the OATS version; Enter opens one with Check and Remove. The agents per
+// machine are cut from this slice (the effort's lead): no count is shown.
 test('slice3b machines section lists servers', async t => {
-  const instances = [{ instance: 'a' }, { instance: 'b' }, { instance: 'c', server: 'devbox-aweb' }, { instance: 'd', server: 'devbox-aweb' }, { instance: 'e', server: 'devbox-aweb' }];
   const u = setup(t, {
     '/api/servers': () => answer([machine('devbox-aweb', { check: { reachable: true, version: '0.69.20', error: null } }), machine('laptop-aweb', { check: { reachable: false, version: null, error: 'ssh to laptop failed: timeout' } })]),
-  }, { instances: () => instances, cli: () => ({ version: '0.69.21' }),
-    // The panel's deployments, by registration id: devbox read now; laptop not reached.
-    observed: m => ({ 'devbox-aweb': { server: 'devbox-aweb', reachable: true }, 'laptop-aweb': { server: 'laptop-aweb', reachable: false } })[m.id] ?? null });
+  }, { cli: () => ({ version: '0.69.21' }) });
   await settle();
   assert.equal(u.q('.machines-title').textContent, 'Machines');
-  assert.equal(u.q('.machines-lead').textContent, 'The computers this workspace runs on, and how many of your agents run on each, as this Desktop reads them.');
+  assert.equal(u.q('.machines-lead').textContent, 'The computers this workspace runs on.');
   assert.deepEqual(u.qa('[data-machine]').map(li => li.dataset.machine), [THIS_COMPUTER, 'devbox-aweb', 'laptop-aweb']);
-  // name | reachable | your agents | OATS version.
-  assert.deepEqual(u.cells(THIS_COMPUTER), ['This computer', 'reachable', '2 agents', 'oats 0.69.21']);
-  assert.deepEqual(u.cells('devbox-aweb'), ['devbox-aweb', 'reachable', '3 agents', 'oats 0.69.20']);
-  // Not reached and no agents read from it: no claim about its agents.
-  assert.deepEqual(u.cells('laptop-aweb'), ['laptop-aweb', 'not reachable', '—', '']);
-  assert.equal(u.row('laptop-aweb').querySelector('.agents').getAttribute('aria-label'), 'agents unknown');
+  // name | reachable | OATS version; no agent count anywhere.
+  assert.deepEqual(u.cells(THIS_COMPUTER), ['This computer', 'reachable', 'oats 0.69.21']);
+  assert.deepEqual(u.cells('devbox-aweb'), ['devbox-aweb', 'reachable', 'oats 0.69.20']);
+  assert.deepEqual(u.cells('laptop-aweb'), ['laptop-aweb', 'not reachable', '']);
+  assert.equal(u.q('.agents'), null); assert.doesNotMatch(u.ui.element.textContent, /\bagents?\b/);
   // This computer is not a registration: nothing to open, check or remove.
   assert.equal(u.row(THIS_COMPUTER).querySelector('button'), null);
   // A registered machine's row is one button: Enter opens it (native activation), with its facts, Check and Remove.
@@ -64,46 +61,61 @@ test('slice3b machines section lists servers', async t => {
   const facts = Object.fromEntries([...u.row('devbox-aweb').querySelectorAll('.machine-facts dt')].map(dt => [dt.textContent, dt.nextElementSibling.textContent]));
   assert.deepEqual(facts, { Name: 'devbox', 'ssh host': 'devbox', Folder: '/home/alex/devbox-aweb' });
   assert.deepEqual([...u.row('devbox-aweb').querySelectorAll('.machine-acts button')].map(b => b.textContent), ['Check', 'Remove']);
-  // The roster moves: the counts follow (sync), the open machine stays open.
-  instances.pop(); u.ui.sync();
-  assert.equal(u.cells('devbox-aweb')[2], '2 agents');
+  // A repaint keeps the open machine open.
+  u.ui.sync();
   assert.ok(u.row('devbox-aweb').querySelector('.machine-check'));
   // "Add a machine" is today's dialog.
   assert.equal(u.q('.machines-add').textContent, 'Add a machine to this workspace…');
-  // A view with no deployment on this computer (a remote-only one): no "This computer"; its machine's deployment, from
-  // the panel's facts, with your agents there and no version claimed; one not reached makes no claim about its agents.
+  // A view with no deployment on this computer (a remote-only one): no "This computer"; its machines' deployments, from
+  // the panel's facts, with no version claimed.
   const remote = setup(t, { '/api/servers': () => ({ servers: [], filtered: true, key: null, deployment: null, aweb: false, reason: 'No deployment of this workspace on this computer.' }) },
     { here: () => false, elsewhere: () => [{ id: 'r1', machine: 'devbox', path: '/srv/team', local: false, reachable: true }, { id: 'r2', machine: 'lab', local: false, reachable: false }],
-      instances: () => [{ instance: 'x', deployment: { id: 'r1' } }], cli: () => ({ version: '0.69.21' }) });
+      cli: () => ({ version: '0.69.21' }) });
   await settle();
   assert.deepEqual(remote.qa('[data-machine]').map(li => [...li.querySelectorAll('.machine-row > .machine-cell')].map(c => c.textContent)),
-    [['devbox', 'reachable', '1 agent', ''], ['lab', 'not reachable', '—', '']]);
+    [['devbox', 'reachable', ''], ['lab', 'not reachable', '']]);
   assert.equal(remote.row(THIS_COMPUTER), null);
   assert.equal(remote.q('.machines-reason').textContent, 'No deployment of this workspace on this computer.');
   assert.equal(remote.q('.machines-add'), null);
 });
 
-// Review round 3: agents are counted only from a settled good roster read of that machine's deployment; a machine check
-// is not one. Pending, failed or stale reads make no claim (or say "as last read"), and this computer's unread
-// deployment says why.
-test('agent counts need a settled roster read of each deployment: pending, failed, unread and stale say so', async t => {
-  const state = { roster: 'pending', local: { status: 'pending' }, deployment: { machine: 'devbox', reachable: true } };
-  const u = setup(t, { '/api/servers': () => answer([machine('devbox-aweb', { check: { reachable: true, version: '0.69.20', error: null } })]) },
-    { instances: () => [], rosterState: () => state.roster, localObservation: () => state.local, observed: () => state.deployment, cli: () => ({ version: '0.69.21' }) });
+// This computer's deployment, read or not: pending reads, unreadable says why in the observation's own words.
+test('this computer says whether its deployment was read: reading, not read with why, reachable', async t => {
+  const state = { local: { status: 'pending' } };
+  const u = setup(t, { '/api/servers': () => answer([]) }, { localObservation: () => state.local, cli: () => ({ version: '0.69.21' }) });
   await settle();
-  assert.deepEqual(u.cells(THIS_COMPUTER), ['This computer', 'reading…', '—', 'oats 0.69.21'], 'pending: no zero');
-  assert.deepEqual(u.cells('devbox-aweb').slice(1, 3), ['reachable', '—'], 'a reachable check is not a roster read');
-  state.roster = 'failed'; state.local = { status: 'unavailable', text: 'E_CLI_FAILED: roster command failed' }; u.ui.sync();
-  assert.deepEqual(u.cells(THIS_COMPUTER).slice(1, 3), ['not read', '—']);
-  assert.equal(u.row(THIS_COMPUTER).querySelector('.agents').title, 'Unavailable: roster is not current');
+  assert.deepEqual(u.cells(THIS_COMPUTER), ['This computer', 'reading…', 'oats 0.69.21']);
+  state.local = { status: 'unavailable', text: 'E_CLI_FAILED: roster command failed' }; u.ui.sync();
+  assert.deepEqual(u.cells(THIS_COMPUTER).slice(1, 2), ['not read']);
+  assert.equal(u.row(THIS_COMPUTER).querySelector('.machine-state').title, 'E_CLI_FAILED: roster command failed');
   assert.equal(u.q('.machines-notes .machines-reason').textContent, 'E_CLI_FAILED: roster command failed', 'why, in the observation\'s words');
-  state.roster = 'ready'; state.local = { status: 'observed' }; u.ui.sync();
-  assert.deepEqual(u.cells(THIS_COMPUTER).slice(1, 3), ['reachable', '0 agents']);
-  assert.deepEqual(u.cells('devbox-aweb').slice(1, 3), ['reachable', '0 agents'], 'its deployment read now');
-  state.deployment = { machine: 'devbox', reachable: true, stale: true }; u.ui.sync();
-  assert.equal(u.row('devbox-aweb').querySelector('.agents').title, 'as last read: the latest read did not reach it');
-  state.deployment = { machine: 'devbox', reachable: false, reason: 'devbox not reached' }; u.ui.sync();
-  assert.equal(u.cells('devbox-aweb')[2], '—'); assert.equal(u.row('devbox-aweb').querySelector('.agents').title, 'devbox not reached');
+  state.local = { status: 'observed' }; u.ui.sync();
+  assert.deepEqual(u.cells(THIS_COMPUTER).slice(1, 2), ['reachable']);
+  assert.equal(u.q('.machines-notes .machines-reason'), null);
+});
+
+// Whole-surface review: the first list read has a loading state; a failed one keeps focus on its Retry across repaints.
+test('the first list read says it is reading; a failed read keeps focus on Retry across a repaint', async t => {
+  let release, fail = false;
+  const u = setup(t, { '/api/servers': () => fail ? { httpStatus: 500, body: { error: 'boom' } } : new Promise(r => { release = () => r(answer([machine('devbox-aweb')])); }) });
+  await settle();
+  const loading = u.q('.machines-loading');
+  assert.equal(loading.textContent, 'Reading the machines of this workspace…'); assert.equal(loading.getAttribute('role'), 'status');
+  assert.equal(u.q('.machines-list').getAttribute('aria-busy'), 'true');
+  assert.deepEqual(u.qa('[data-machine]').map(li => li.dataset.machine), [THIS_COMPUTER], 'this computer stands meanwhile');
+  release(); await settle();
+  assert.equal(u.q('.machines-loading'), null); assert.equal(u.q('.machines-list').getAttribute('aria-busy'), null);
+  assert.ok(u.row('devbox-aweb'));
+  // A failed read: its Retry keeps focus while the failure stands, across a repaint.
+  const f = setup(t, { '/api/servers': () => ({ httpStatus: 500, body: { error: 'boom' } }) });
+  await settle();
+  f.q('.machines-retry').focus(); f.ui.sync();
+  assert.equal(f.doc.activeElement, f.q('.machines-retry'));
+  // Retry pressed: the read runs again (reading), and focus never falls to <body>.
+  f.q('.machines-retry').click();
+  assert.notEqual(f.doc.activeElement, f.doc.body);
+  await settle();
+  assert.equal(f.doc.activeElement, f.q('.machines-retry'), 'failed again: back on Retry');
 });
 
 test('lists this workspace\'s machines and checks each unchecked one once in the background', async t => {
@@ -115,15 +127,14 @@ test('lists this workspace\'s machines and checks each unchecked one once in the
   });
   await settle();
   assert.deepEqual(u.calls.map(c => c.path), [`/api/servers?ws=${encodeURIComponent(WS)}`, `/api/server-check?ws=${encodeURIComponent(WS)}`]);
-  assert.deepEqual(u.cells('devbox-aweb'), ['devbox-aweb', 'checking…', '—', '']);
-  assert.deepEqual(u.cells('laptop-aweb'), ['laptop-aweb', 'not reachable', '—', ''], 'a held check is shown, not re-run');
+  assert.deepEqual(u.cells('devbox-aweb'), ['devbox-aweb', 'checking…', '']);
+  assert.deepEqual(u.cells('laptop-aweb'), ['laptop-aweb', 'not reachable', ''], 'a held check is shown, not re-run');
   assert.equal(u.row('laptop-aweb').querySelector('.machine-state').title, 'ssh to laptop failed: timeout');
   assert.equal(u.row('laptop-aweb').querySelector('.machine-state').dataset.reachable, 'false', 'the warn chip');
   // The row's title keeps the facts a narrow row hides.
   assert.equal(u.row('laptop-aweb').querySelector('.machine-row').title, 'laptop-aweb · laptop · laptop · /home/alex/laptop-aweb');
   released(); await settle();
-  assert.deepEqual(u.cells('devbox-aweb'), ['devbox-aweb', 'reachable', '—', 'oats 0.39.0'], 'its check reached it, but no roster read did: no claim');
-  assert.equal(u.row('devbox-aweb').querySelector('.agents').title, 'Not read yet: no roster read of this machine so far');
+  assert.deepEqual(u.cells('devbox-aweb'), ['devbox-aweb', 'reachable', 'oats 0.39.0']);
   assert.ok(u.row('devbox-aweb').querySelector('.machine-state[data-reachable=true] svg'), 'reachable: a check and a muted word');
   u.ui.refresh(); await settle();
   assert.equal(u.calls.filter(c => c.path.startsWith('/api/server-check')).length, 1, 'once per machine per run');

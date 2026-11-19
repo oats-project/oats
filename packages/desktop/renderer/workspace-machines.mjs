@@ -1,30 +1,29 @@
 /** Workspace › Machines (#517; the Desktop UI rework, slice 3b, guide tour step 38): the computers this workspace
- * runs on, as one list. This computer first, then each registration whose workspace key is this window's
- * (`/api/servers?ws=<view>`, server/machines.mjs). A row says whether the computer is reachable (its last check),
- * how many of your agents run on it (the roster's rows: this computer's have no server, another machine's carry
- * its registration id as `server`) and its OATS version. Enter opens a registered machine's row: its ssh host and
- * folder, Check and Remove. "Add a machine to this workspace…" is the dialog (renderer/add-machine-dialog.mjs).
+ * runs on, as one list. This computer first (where the view has a deployment here), then each registration whose
+ * workspace key is this window's (`/api/servers?ws=<view>`, server/machines.mjs). A row says whether the computer is
+ * reachable (this computer: whether its deployment was read; a registration: its last check) and its OATS version.
+ * Enter opens a registered machine's row: its ssh host and folder, Check and Remove. "Add a machine to this
+ * workspace…" is the dialog (renderer/add-machine-dialog.mjs). The guide's agents per machine are not shown in this
+ * slice (the effort's lead, after a third review major on binding roster observations to machines): the Map and the
+ * roster show where agents run.
  *
  * - A machine with no check this run is checked once in the background (`/api/server-check`), at most
  *   two at a time; the facts the server holds (its backfill, an earlier Check) are shown as they are.
  * - Remove asks first, in the row, then runs `oats server remove` (`/api/server-remove`); a refusal is
  *   said in the row in the CLI's words.
- * - Without the gates (`gated: false`) nothing is read: this computer's row alone, and no Add.
+ * - The first list read says it is reading; a failed read says why with Retry. Without the gates (`gated: false`) nothing
+ *   is read: this computer's row alone, and no Add.
  * - `here()` false (a remote-only view, or one with no deployment on this computer): no "This computer" row; the view's
- *   other deployments (`elsewhere()`, the panel's #482 `deployments`) are listed instead, from the facts the panel holds,
- *   with no version claimed. Without a workspace key the list says why (the route's reason) and offers nothing.
- * - The section owns its state: the Machines tab mounts it once per workspace and keeps it across re-renders.
- *   Every read carries this section's latest-intent ticket; nothing lands after dispose().
- * - The agent counts are what this Desktop reads (team-instance-lists-state-their-observation-scope): your agents,
- *   on this computer and the machines registered here. A machine whose last check did not reach it, or that has
- *   not been checked, makes no claim about its agents when the roster has none from it. */
+ *   other deployments (`elsewhere()`, the panel's #482 `deployments`) are listed instead (their machine, whether reached).
+ * - The section owns its state: the Machines tab mounts it once per workspace and keeps it across re-renders, and a
+ *   repaint keeps focus on the same control (a row's, or the section's Retry and Add). Every read carries this section's
+ *   latest-intent ticket; nothing lands after dispose(). */
 import { apiJson, postJson } from './views/common.mjs';
 import { iconElement } from './shell-icons.mjs';
 import { openAddMachineDialog } from './add-machine-dialog.mjs';
 import { followBackfill, BACKFILL_POLL_MS } from '../../client/machine-contract.mjs';
 import { cliHeldBack, onCliChange } from './views/cli-status.mjs';
 import { DESKTOP_NOUNS } from './desktop-terms.mjs';
-import { ROSTER_STALE_TITLE } from './loading.mjs';
 
 /** Above the tested bound (#1879) a machine's Check, Remove and Add are held back (packages/client/above-tested.mjs):
  * the notice for one, or null. */
@@ -32,16 +31,11 @@ const machineHeld = verb => cliHeldBack(`POST /api/server-${verb}`);
 
 export const MACHINES_COPY = Object.freeze({
   title: 'Machines',
-  lead: agents => `The computers this workspace runs on, and how many of your ${agents} run on each, as this Desktop reads them.`,
+  lead: 'The computers this workspace runs on.',
   thisComputer: 'This computer',
   add: 'Add a machine to this workspace…',
   none: 'No other machine runs this workspace yet.',
-  agents: (n, nouns) => `${n} ${n === 1 ? nouns.instance : nouns.instances}`,
-  unknownAgents: 'agents unknown',
-  unknownAgentsTitle: 'Not reached: this Desktop has not read its agents',
-  readingAgentsTitle: 'Still reading its agents',
-  notReadAgentsTitle: 'Not read yet: no roster read of this machine so far',
-  staleAgentsTitle: 'as last read: the latest read did not reach it',
+  reading: 'Reading the machines of this workspace…',
 });
 
 export const machinesCSS = `
@@ -53,8 +47,8 @@ export const machinesCSS = `
 .machines-list { display:flex; flex-direction:column; margin:0; padding:0; list-style:none; background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
 .machines-list > li { display:flex; flex-direction:column; min-width:0; }
 .machines-list > li + li { border-top:1px solid var(--tag-bg); }
-/* A row: name | reachable | agents | OATS version | a chevron when it opens. One grid, so the columns line up. */
-.oats-view button.machine-row, .machine-row { appearance:none; -webkit-appearance:none; display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,.8fr) minmax(0,.8fr) 16px; column-gap:16px; align-items:center; width:100%; height:auto; min-height:48px; margin:0; padding:8px 16px; border:0; border-radius:0; background:var(--surface); color:var(--fg); font:inherit; font-family:var(--ui-font,system-ui); text-align:left; box-sizing:border-box; }
+/* A row: name | reachable | OATS version | a chevron when it opens. One grid, so the columns line up. */
+.oats-view button.machine-row, .machine-row { appearance:none; -webkit-appearance:none; display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) minmax(0,.8fr) 16px; column-gap:16px; align-items:center; width:100%; height:auto; min-height:48px; margin:0; padding:8px 16px; border:0; border-radius:0; background:var(--surface); color:var(--fg); font:inherit; font-family:var(--ui-font,system-ui); text-align:left; box-sizing:border-box; }
 .oats-view button.machine-row { cursor:pointer; }
 .oats-view button.machine-row:hover { background:var(--surface-2); }
 .oats-view button.machine-row:focus-visible { background:var(--sel); }
@@ -92,11 +86,10 @@ export const machinesCSS = `
 .machine-error { color:var(--danger); font-size:12px; }
 .machines-reason { margin:0; padding:12px 16px; color:var(--muted); font-size:12px; display:flex; gap:12px; align-items:baseline; }
 .machines-empty { margin:0; padding:12px 16px; color:var(--muted); font-size:12px; }
-/* Narrow: name and state on the first line, agents and version under them. */
+/* Narrow: name and state on the first line, the version under them. */
 @container (max-width: 640px) {
  .oats-view button.machine-row, .machine-row { grid-template-columns:minmax(0,1fr) auto 16px; row-gap:2px; }
- .machine-row > .agents { grid-row:2; grid-column:1; }
- .machine-row > .version { grid-row:2; grid-column:2; }
+ .machine-row > .version { grid-row:2; grid-column:1; }
  .machine-row > .machine-chevron { grid-row:1; grid-column:3; }
 }
 `;
@@ -112,21 +105,21 @@ const list = value => Array.isArray(value) ? value : [];
 export const THIS_COMPUTER = ':here';
 
 /** `owns()` is the owner's latest intent (its workspace generation): once false, no answer renders, takes
- * focus or starts the next step, and the owner disposes the section. `instances()`: the roster's rows the
- * agent counts are read from; `cli()`: the CLI probe (this computer's OATS version). `sync()` repaints them. */
-export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backfillDelay = BACKFILL_POLL_MS, instances = () => [], cli = () => null, gated = true, here = () => true, elsewhere = () => [],
-  rosterState = () => 'ready', localObservation = () => ({ status: 'observed' }), observed = () => null }) {
+ * focus or starts the next step, and the owner disposes the section. `cli()`: the CLI probe
+ * (this computer's OATS version); `localObservation()`: this computer's deployment, read or not. `sync()` repaints. */
+export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backfillDelay = BACKFILL_POLL_MS, cli = () => null, gated = true, here = () => true, elsewhere = () => [], localObservation = () => ({ status: 'observed' }) }) {
   const el = (tag, value, cls) => { const n = doc.createElement(tag); if (value !== undefined && value !== null) n.textContent = value; if (cls) n.className = cls; return n; };
   const query = () => `?ws=${encodeURIComponent(ws)}`;
   const element = el('section', undefined, 'machines'); element.dataset.section = 'machines';
   const head = el('div', undefined, 'machines-head'), titles = el('div', undefined, 'machines-titles');
-  const title = el('h2', MACHINES_COPY.title, 'machines-title'); title.id = `machines-title-${++sections}`;
-  titles.append(title, el('p', MACHINES_COPY.lead(DESKTOP_NOUNS.instances), 'machines-lead'));
+  const title = el('h2', MACHINES_COPY.title, 'machines-title'); title.id = `machines-title-${++sections}`; title.tabIndex = -1;
+  titles.append(title, el('p', MACHINES_COPY.lead, 'machines-lead'));
   head.append(titles); element.setAttribute('aria-labelledby', title.id);
   const body = el('ul', undefined, 'machines-list'); body.setAttribute('aria-labelledby', title.id);
   const notes = el('div', undefined, 'machines-notes');
   element.append(head, body, notes);
-  let alive = true, ticket = 0, answer = null, failure = null, confirming = null, stopFollow = null, open = null;
+  // `reading`: the list read is in flight with nothing settled yet (the first read, or a Retry after a failure).
+  let alive = true, ticket = 0, answer = null, failure = null, confirming = null, stopFollow = null, open = null, reading = false;
   const checking = new Set(), rowErrors = new Map(), dialog = { current: null };
   const live = () => alive && owns();
   const rowOf = id => [...body.children].find(li => li.dataset.machine === id) || null;
@@ -156,29 +149,6 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
     if (!m.check) return { text: 'not checked', reachable: null, title: '' };
     return { text: m.check.reachable ? 'reachable' : 'not reachable', reachable: m.check.reachable, title: m.check.error || '' };
   }
-  const unknown = title => ({ text: '—', title, aria: MACHINES_COPY.unknownAgents });
-  const counted = (rows, title = '') => ({ text: MACHINES_COPY.agents(rows.length, DESKTOP_NOUNS), title, ...(title ? { aria: `${MACHINES_COPY.agents(rows.length, DESKTOP_NOUNS)}, ${title}` } : {}) });
-  /** Your agents on a machine (null: this computer), only from a settled good roster read of that machine's deployment:
-   * the roster read (`rosterState`), this computer's observation (`localObservation`), and another machine's deployment
-   * as the panel reports it (`observed(m)`: #482's entry bound by the registration's id; reached, or kept from an earlier
-   * read: stale). A machine check is not a roster read: a registration with no deployment of its own makes no claim. */
-  function agentsText(m) {
-    const roster = rosterState();
-    if (roster !== 'ready' && roster !== 'empty') return unknown(roster === 'pending' ? MACHINES_COPY.readingAgentsTitle : ROSTER_STALE_TITLE);
-    const rows = list(instances()).filter(i => m ? i?.server === m.id : !i?.server);
-    if (!m) { const o = localObservation(); return o?.status === 'observed' ? counted(rows) : unknown(o?.status === 'pending' ? MACHINES_COPY.readingAgentsTitle : text(o?.text) ? o.text : MACHINES_COPY.unknownAgentsTitle); }
-    // No deployment of its own in the panel (none, or two claiming it; a machine added since the last roster read):
-    // nothing was read of it, whatever its check says. No claim.
-    const d = observed(m);
-    return d ? deploymentAgents(d, rows) : unknown(MACHINES_COPY.notReadAgentsTitle);
-  }
-  /** Your agents on a deployment the panel reports: counted when it was read now (reachable, not stale), counted as last
-   * read when it is stale, else no claim. */
-  function deploymentAgents(d, rows) {
-    if (d.reachable === true && d.stale !== true) return counted(rows);
-    if (d.reachable === true) return counted(rows, MACHINES_COPY.staleAgentsTitle);
-    return unknown(text(d.reason) ? d.reason : MACHINES_COPY.unknownAgentsTitle);
-  }
   function badge(state) {
     const span = el('span', undefined, 'machine-cell machine-state');
     if (state.reachable === true) span.append(iconElement(doc, 'check', { size: 13 }));
@@ -187,10 +157,9 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
     if (state.title) span.title = state.title;
     return span;
   }
-  function cells(row, { name, state, agents, version, chevron }) {
+  function cells(row, { name, state, version, chevron }) {
     const n = el('span', name, 'machine-cell name'); n.title = name;
-    const a = el('span', agents.text, 'machine-cell muted agents'); if (agents.title) { a.title = agents.title; a.setAttribute('aria-label', agents.aria); }
-    row.append(n, badge(state), a, el('span', version, 'machine-cell muted version'));
+    row.append(n, badge(state), el('span', version, 'machine-cell muted version'));
     row.append(chevron ? iconElement(doc, 'chevronRight', { size: 14, className: 'shell-icon machine-chevron' }) : el('span'));
   }
   function hereRow() {
@@ -202,19 +171,16 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
     const state = o?.status === 'observed' ? { text: 'reachable', reachable: true, title: '' }
       : o?.status === 'pending' ? { text: 'reading…', reachable: null, title: '' }
       : { text: 'not read', reachable: false, title: text(o?.text) ? o.text : '' };
-    cells(row, { name: MACHINES_COPY.thisComputer, state, agents: agentsText(null), version, chevron: false });
+    cells(row, { name: MACHINES_COPY.thisComputer, state, version, chevron: false });
     li.append(row); return li;
   }
-  /** Another machine's deployment of a remote-only view (#482 `deployments`: its machine, whether it was reached), with
-   * your agents there (the roster rows of that deployment). Not a registration: nothing to check or remove here. */
+  /** Another machine's deployment of a remote-only view (#482 `deployments`: its machine, whether it was reached). Not a
+   * registration: nothing to check or remove here. */
   function deploymentRow(d) {
     const li = el('li'); li.dataset.machine = `deployment:${d.id}`;
     const row = el('div', undefined, 'machine-row');
     const reached = d.reachable === true ? true : d.reachable === false ? false : null;
-    const rows = list(instances()).filter(i => i?.deployment?.id === d.id);
-    const roster = rosterState();
-    const agents = roster !== 'ready' && roster !== 'empty' ? unknown(roster === 'pending' ? MACHINES_COPY.readingAgentsTitle : ROSTER_STALE_TITLE) : deploymentAgents(d, rows);
-    cells(row, { name: text(d.machine) ? d.machine : text(d.label) ? d.label : d.id, state: { text: reached === true ? 'reachable' : reached === false ? 'not reachable' : 'not checked', reachable: reached, title: text(d.reason) ? d.reason : '' }, agents, version: '', chevron: false });
+    cells(row, { name: text(d.machine) ? d.machine : text(d.label) ? d.label : d.id, state: { text: reached === true ? 'reachable' : reached === false ? 'not reachable' : 'not checked', reachable: reached, title: text(d.reason) ? d.reason : '' }, version: '', chevron: false });
     row.title = [d.machine, d.path].filter(text).join(' · ');
     li.append(row); return li;
   }
@@ -222,6 +188,7 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
     const focused = doc.activeElement && element.contains(doc.activeElement) ? doc.activeElement : null;
     const focusedId = focused?.closest?.('[data-machine]')?.dataset.machine;
     const focusedKey = focused?.dataset?.focusKey;
+    const focusedRetry = !!focused?.classList?.contains('machines-retry');
     body.replaceChildren(); notes.replaceChildren();
     // This computer only where the view has a deployment here; a remote-only view lists its machines' deployments.
     const local = here();
@@ -236,6 +203,11 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
     else add?.remove();
     // Held back or not as the CLI is now: the button is kept across renders, and a reprobe renders again.
     if (add) { const held = machineHeld('connect'); add.disabled = !!held; add.title = held ?? ''; }
+    if (reading && !answer && !failure) {
+      const wait = el('p', MACHINES_COPY.reading, 'machines-reason machines-loading'); wait.setAttribute('role', 'status');
+      notes.append(wait); body.setAttribute('aria-busy', 'true'); return restore();
+    }
+    body.removeAttribute('aria-busy');
     if (failure || answer?.error) {
       const why = answer?.error?.message || failure;
       const line = el('p', `The machines of this workspace could not be read${typeof why === 'string' && why ? `: ${why}` : '.'}`, 'machines-reason');
@@ -251,7 +223,7 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
       const row = el('button', undefined, 'machine-row'); row.type = 'button'; row.dataset.focusKey = 'row';
       row.setAttribute('aria-expanded', String(expanded));
       const version = text(m.check?.version) ? `oats ${m.check.version}` : '';
-      cells(row, { name: m.id, state: stateText(m), agents: agentsText(m), version, chevron: true });
+      cells(row, { name: m.id, state: stateText(m), version, chevron: true });
       row.title = [m.id, m.label && m.label !== m.id ? m.label : null, m.sshHost, m.workspace, version].filter(text).join(' · ');
       row.addEventListener('click', () => { open = expanded ? null : m.id; if (open !== m.id) confirming = null; render(); rowOf(m.id)?.querySelector('.machine-row')?.focus(); });
       li.append(row);
@@ -260,8 +232,11 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
     }
     restore();
     function restore() {
-      // A repaint keeps focus on the same control of the same machine.
-      if (!focusedId || !focusedKey || (focused?.isConnected && element.contains(focused))) return;
+      if (focused?.isConnected && element.contains(focused)) return;
+      // A repaint keeps focus on the section's Retry while the failure stands, else on the list's head; on the same
+      // control of the same machine.
+      if (focusedRetry) { (notes.querySelector('.machines-retry') || add || title).focus(); return; }
+      if (!focusedId || !focusedKey) return;
       rowOf(focusedId)?.querySelector(`[data-focus-key="${focusedKey}"]`)?.focus();
     }
   }
@@ -306,15 +281,19 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
   async function load({ focus = null } = {}) {
     const t = ++ticket, since = intent;
     stopFollow?.(); stopFollow = null;
+    // The first read (or a Retry over a failure) says it is reading; a refresh over a held list keeps it on screen.
+    if (!answer) { reading = true; failure = null; render(); }
     try {
       const d = await apiJson(ctx, `/api/servers${query()}`);
       if (!current(t)) return;
+      reading = false;
       if (!take(d)) { render(); return; }
       // The server is still learning unknown keys: read again until it is done (machine-contract.mjs).
       if (d.backfilling === true) stopFollow = followBackfill({ read: () => apiJson(ctx, `/api/servers${query()}`), owns: () => current(t), delay: backfillDelay,
         use: next => { if (take(next)) { render(); backgroundChecks(); } if (next?.backfilling !== true) stopFollow = null; } });
     } catch (error) {
       if (!current(t)) return;
+      reading = false;
       failure = error?.message || true;
     }
     render();

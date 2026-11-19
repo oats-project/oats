@@ -2135,7 +2135,7 @@ for (const [name] of palettes) test(`${name}: Add a machine and the Machines lis
   measure([
     ['.machines-title', '.oats-view', 'fg', 'bg'], ['.machines-lead', '.oats-view', 'muted', 'bg'], ['.machines-add', '.oats-view', 'accent', 'bg'],
     ['[data-machine="up"] .machine-cell.name', '[data-machine="up"] .machine-row', 'fg', 'surface'],
-    ['[data-machine="up"] .machine-cell.agents', '[data-machine="up"] .machine-row', 'muted', 'surface'], ['[data-machine="up"] .machine-cell.version', '[data-machine="up"] .machine-row', 'muted', 'surface'],
+    ['[data-machine="up"] .machine-cell.version', '[data-machine="up"] .machine-row', 'muted', 'surface'],
     ['[data-machine="up"] .machine-state', '[data-machine="up"] .machine-row', 'muted', 'surface'], ['[data-machine="up"] .machine-state .shell-icon', '[data-machine="up"] .machine-row', 'ok', 'surface'],
     ['[data-machine="down"] .machine-state', '[data-machine="down"] .machine-state', 'warn', 'attn-bg'],
     ['[data-machine="up"] .machine-facts dt', '.machines-list', 'muted', 'surface'], ['[data-machine="up"] .machine-facts dd', '.machines-list', 'fg', 'surface'],

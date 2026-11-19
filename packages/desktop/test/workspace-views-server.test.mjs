@@ -17,7 +17,7 @@ test('one workspace on three deployments: one view, the union of rows each tagge
   assert.deepEqual(p.deployments, [
     { ...tag(A, 'This Mac', A), label: '~/Agents/oats', local: true, reachable: true, identityFrom: 'reported', primary: true },
     { ...tag(B, 'This Mac', B), label: '~/example/oats-qa', local: true, reachable: true, identityFrom: 'reported', primary: false },
-    { ...tag(R, 'devbox', '/home/alex/oats'), label: '~/oats', local: false, server: 'devbox', reachable: true, identityFrom: 'reported', primary: false },
+    { ...tag(R, 'devbox', '/home/alex/oats'), label: '~/oats', local: false, reachable: true, identityFrom: 'reported', primary: false },
   ]);
   // Header, stamps and error are the PRIMARY deployment's; running counts the union; refreshing is any.
   const a = observed(A);
@@ -94,7 +94,7 @@ test('remembered identity: an unreached remote keeps its view, marked remembered
   const { views } = alex({ remoteGroups: [down], remoteIdentities: store });
   const p = views.panelData(V_OATS);
   assert.deepEqual(p.deployments.map(d => d.id), [A, B, R], 'still in its view');
-  assert.deepEqual(p.deployments[2], { ...tag(R, 'devbox', '/home/alex/oats'), label: '~/oats', local: false, server: 'devbox', reachable: false, identityFrom: 'remembered',
+  assert.deepEqual(p.deployments[2], { ...tag(R, 'devbox', '/home/alex/oats'), label: '~/oats', local: false, reachable: false, identityFrom: 'remembered',
     primary: false, reason: 'devbox needs ssh to connect without a prompt; run `ssh devbox.lan` once in a terminal.', short: 'ssh needs a prompt',
     fix: ['Run `ssh devbox.lan` once in a terminal and answer its prompt (a host key or a password).', 'Desktop tries again on its next read.'] });
   assert.equal(p.instances.find(i => i.instance === 'far-a').running, null, 'its last-known rows, state unknown');
@@ -114,7 +114,7 @@ test('a fresh report with another identity moves the remote to that view, with t
   assert.deepEqual(views.panelData(V_OATS).deployments.map(d => d.id), [A, B]);
   const web = views.panelData(V_WEB);
   assert.equal(web.workspace.name, 'web');
-  assert.deepEqual(web.deployments, [{ ...tag(R, 'devbox', '/home/alex/oats'), label: '~/oats', local: false, server: 'devbox', reachable: true, identityFrom: 'reported',
+  assert.deepEqual(web.deployments, [{ ...tag(R, 'devbox', '/home/alex/oats'), label: '~/oats', local: false, reachable: true, identityFrom: 'reported',
     primary: true, note: 'devbox now reports workspace web.' }]);
   assert.equal(views.panelData(R).workspace.id, V_WEB, 'its deployment id now answers the new view');
 });
@@ -153,7 +153,7 @@ test('before any roster answer, remembered groups are not-reached deployments wi
   const old = alex({ remoteGroups: [], remoteIdentities: store, rosterAnswered: false, cliState: { ...CLI, remote: [] } }).views;
   const p = old.panelData(V_OATS);
   assert.deepEqual(p.deployments.map(d => d.id), [A, B, R]);
-  assert.deepEqual(p.deployments[2], { ...tag(R, 'devbox', '/home/alex/oats'), label: '~/oats', local: false, server: 'devbox', reachable: false, identityFrom: 'remembered',
+  assert.deepEqual(p.deployments[2], { ...tag(R, 'devbox', '/home/alex/oats'), label: '~/oats', local: false, reachable: false, identityFrom: 'remembered',
     primary: false, reason: 'This computer\'s OATS can\'t read other machines; update OATS here.', short: 'OATS here can\'t read other machines',
     fix: ['Update OATS on this computer.'] });
   assert.deepEqual(p.instances.filter(i => i.deployment.id === R), [], 'no rows');

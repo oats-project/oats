@@ -1629,10 +1629,10 @@ workspace is observed through its server and never synced from here.
 - **Machines** opens on the list of the computers the workspace runs on
   (`workspace-machines.mjs`, `../docs/desktop-machines.md`): this computer, then,
   with `servers-per-workspace` and `server-connect`, this workspace's machines,
-  each with reachable, your agents on it (the roster rows' `server`) and its OATS
-  version; Enter opens one with Check and Remove; Add a machine at its head.
-  Mounted once per workspace, kept across repaints, `sync()` on each roster
-  poll. Its header's **List | Map** (`machinesView`, `setMachinesView`;
+  each with reachable and its OATS version (no agent counts in this slice);
+  Enter opens one with Check and Remove; Add a machine at its head. Mounted once
+  per workspace and kept mounted across the page's repaints (focus stays on its
+  controls), `sync()` on each roster poll. Its header's **List | Map** (`machinesView`, `setMachinesView`;
   `onMachinesView` tells `views/spawn.mjs`) swaps it for the Deployments view
   (`views/hierarchy.mjs`, mounted in `.workspace-machines-panel` only while the
   Map is shown), until slice 6 makes that the Graph. A handoff may name the view

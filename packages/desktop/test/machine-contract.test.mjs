@@ -128,17 +128,3 @@ test('followBackfill: a failed read is retried; five in a row stop it', async ()
   for (let i = 0; i < 10; i++) await t2.run();
   assert.equal(n, 5);
 });
-
-// Slice 3b, review round 4: a registration's deployment is found by its identity (the roster group's server), never by
-// a display label two registrations may share; none or two: no observation.
-test('machineDeployment binds a registration to its one deployment by server id', async () => {
-  const { machineDeployment } = await import('../../client/machine-contract.mjs');
-  const deployments = [{ id: '/w', local: true }, { id: 'remote:east:1', machine: 'build', server: 'east-team', reachable: true },
-    { id: 'remote:west:1', machine: 'build', server: 'west-team', reachable: false }];
-  assert.equal(machineDeployment(deployments, 'east-team').id, 'remote:east:1');
-  assert.equal(machineDeployment(deployments, 'west-team').id, 'remote:west:1');
-  assert.equal(machineDeployment([...deployments].reverse(), 'west-team').id, 'remote:west:1', 'order does not matter');
-  assert.equal(machineDeployment(deployments, 'build'), null, 'a label is not an identity');
-  assert.equal(machineDeployment([...deployments, { id: 'remote:east:2', server: 'east-team' }], 'east-team'), null, 'two claim it: none');
-  assert.equal(machineDeployment(deployments, null), null);
-});

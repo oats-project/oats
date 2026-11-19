@@ -48,8 +48,8 @@ any checked-in icon's pixels stop matching what the source derives.
 The shell has three navigation contexts:
 
 - **Workspace › Machines** — a tab of the Workspace page, before Setup (⌘1 / Ctrl+1).
-  It opens on the list of the computers the workspace runs on (reachable, your agents
-  on each, the OATS version; Enter opens one with Check and Remove). Its **Map** (the
+  It opens on the list of the computers the workspace runs on (reachable, the OATS
+  version; Enter opens one with Check and Remove). Its **Map** (the
   Active overview, then the Deployments page, before 2026-10-26) is a fitted, zoomable
   tidy tree of running and idle instances with `parentInstance` spawn relationships,
   one tab per deployment. Agent boxes can be repositioned freely; edges follow live.

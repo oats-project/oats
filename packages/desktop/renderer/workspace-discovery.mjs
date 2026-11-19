@@ -13,7 +13,7 @@ import { deploymentUnavailableText } from '../../client/deployment-facts.mjs';
 import { DESKTOP_TERMS } from './desktop-terms.mjs';
 import { setupCSS, renderSetup, teamsBox } from './workspace-setup.mjs';
 import { createWorkspaceMachines, machinesCSS } from './workspace-machines.mjs';
-import { machinesGated, machineDeployment } from '../../client/machine-contract.mjs';
+import { machinesGated } from '../../client/machine-contract.mjs';
 import { computerTeamsCSS, createComputerTeams, teamsAnswer } from './computer-teams.mjs';
 import { catalogCSS, renderCapabilityList, deploymentNotes } from './workspace-catalog.mjs';
 import { soulsComposition } from '../../client/capability-rows.mjs';
@@ -227,19 +227,14 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
     machines?.dispose(); machinesFor = key;
     const gen = workspaceGeneration();
     machines = createWorkspaceMachines(doc, { ctx, ws: workspace.id, owns: () => alive && workspaceGeneration() === gen,
-      instances: () => instances, cli: () => cliStatus(), gated: machinesGated(cliStatus()),
+      cli: () => cliStatus(), gated: machinesGated(cliStatus()),
       // This computer runs the workspace only when the view has a deployment here: not a remote view, and (where the
       // panel lists the view's deployments, #482) one of them local. A remote-only view lists its other machines'
-      // deployments from the same panel facts instead (their machine, whether reached, your agents there).
+      // deployments from the same panel facts instead (their machine, whether reached).
       here: () => !(workspace?.remote || workspace?.server) && (!deployments.length || deployments.some(d => d?.local === true)),
       elsewhere: () => deployments.filter(d => d && d.local !== true),
-      // Agents are counted only from a settled good roster read (the souls list and roster, one read), of this
-      // computer's observed deployment, and of another machine's deployment as the panel reports it (#482).
-      rosterState: () => rosterState(),
-      localObservation: () => ({ status: deployment?.status ?? 'pending', text: deployment && deployment.status !== 'observed' && deployment.status !== 'pending' ? deploymentUnavailableText(deployment, DESKTOP_TERMS) : '' }),
-      // A registration's deployment by its identity (the roster group's server), never by its display label; none or
-      // two: no observation is borrowed (packages/client/machine-contract.mjs machineDeployment).
-      observed: m => machineDeployment(deployments, m.id) });
+      // This computer's deployment: read, still reading, or not read (with the observation's own words).
+      localObservation: () => ({ status: deployment?.status ?? 'pending', text: deployment && deployment.status !== 'observed' && deployment.status !== 'pending' ? deploymentUnavailableText(deployment, DESKTOP_TERMS) : '' }) });
     return machines.element;
   }
   /** Whether `name`'s panel is the view's own right now (Souls; Machines while its Map is shown). */
@@ -523,7 +518,7 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
     instances = list(panelAnswer.instances);
     updateCounts(agents.length); render();
     computerTeams?.syncRoster(); // the Teams page's members follow the roster poll
-    machines?.sync(); // the Machines list's agent counts too
+    machines?.sync(); // the Machines list's facts (this computer's observation, the view's deployments) too
     // Read once per roster generation on any tab: the tab bar counts it.
     if (!catalog && !loading && !failure) void load();
     // The catalog's age line (when the observation is old) follows the roster poll.
