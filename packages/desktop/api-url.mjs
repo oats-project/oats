@@ -32,10 +32,11 @@ export function classifyApiRoute(pathname) {
       case '/api/instance-lifecycle': return 'lifecycle';
       case '/api/instance-events': return 'instance-events';
       case '/api/instance-git': return 'instance-git';
-      // An instance's colour (#1421 §2) and its background flag (#1579): a routed one waits on ssh and the host (45 s),
-      // past the default deadline (server/instance-record.mjs).
+      // An instance's colour (#1421 §2), its background flag (#1579) and its pin: a routed one waits on ssh and the
+      // host (45 s), past the default deadline (server/instance-record.mjs).
       case '/api/instance-color': return 'instance-color';
       case '/api/instance-background': return 'instance-background';
+      case '/api/instance-pin': return 'instance-pin';
       case '/api/schedules': return 'schedules';
       case '/api/automations': return 'automations';
       case '/api/forge-connections':

@@ -1,5 +1,6 @@
 /** The boundary every kernel verb that writes one field of an instance's own record goes through: `oats instance
- * color` (instance-color.mjs, #1421 §2) and `oats instance background` (instance-background.mjs, #1579). The
+ * color` (instance-color.mjs, #1421 §2), `oats instance background` (instance-background.mjs, #1579) and `oats
+ * instance pin` (instance-pin.mjs, feature instance-pin). The
  * kernel is the only writer of that record; this module validates the request against the row the backend holds,
  * gates it on the feature, runs the verb (argv only; cli-adapter.mjs) and decodes its answer. It is the teams
  * boundary's pattern (teams.mjs), but it also routes: a remote row's record is written on its host, with
@@ -75,7 +76,7 @@ function requestOf(verb, r) {
 }
 
 /** The boundary for one verb. `verb`:
- *   field        the request's and the answer's field ('color', 'background')
+ *   field        the request's and the answer's field ('color', 'background', 'pinned')
  *   valid(v)     the field's values
  *   feature      the kernel feature that gates it, here and on a remote row's host
  *   unavailable  the not-run code without it (E_INSTANCE_<VERB>_UNAVAILABLE)

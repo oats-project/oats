@@ -86,6 +86,7 @@ import { createSpawnPreview } from '../../client/spawn-preview.mjs';
 import { teamsRequest, soulTeamsRequest, teamsFailure } from './teams.mjs';
 import { instanceColorRequest, instanceColorNotRun } from './instance-color.mjs';
 import { instanceBackgroundRequest, instanceBackgroundNotRun } from './instance-background.mjs';
+import { instancePinRequest, instancePinNotRun } from './instance-pin.mjs';
 import { rereadsRoster } from './instance-record.mjs';
 import { instanceEventsRequest } from './instance-events.mjs';
 import { eventsFailure } from '../../client/instance-events-contract.mjs';
@@ -1398,15 +1399,17 @@ const server = createServer(async (req, res) => {
       } catch { return send(res, 400, teamsFailure('E_BAD_ARGS')); }
     }
     // A field of an instance's own record (instance-record.mjs): its colour (feature instance-color, #1421 §2:
-    // `oats instance color`) and whether it runs in the background (feature instance-background, #1579: `oats
-    // instance background`), local or routed to the row's host. POST, so the Origin guard above covers them. A change,
+    // `oats instance color`), whether it runs in the background (feature instance-background, #1579: `oats
+    // instance background`) and whether it is pinned (feature instance-pin: `oats instance pin`), local or routed
+    // to the row's host. POST, so the Origin guard above covers them. A change,
     // or an outcome not known, re-reads the roster at once, so every dot and section follows.
     // Each route its boundary and its "nothing ran" answer, for a request that is not even a request. Resolved here, in
     // the handler, by path: the handler is the unit tests evaluate (workspace-views-fixture.mjs HANDLER), and only the
     // route asked names its boundary.
     const instanceRecord = req.method !== 'POST' ? undefined
       : path === '/api/instance-color' ? { request: instanceColorRequest, notRun: instanceColorNotRun }
-      : path === '/api/instance-background' ? { request: instanceBackgroundRequest, notRun: instanceBackgroundNotRun } : undefined;
+      : path === '/api/instance-background' ? { request: instanceBackgroundRequest, notRun: instanceBackgroundNotRun }
+      : path === '/api/instance-pin' ? { request: instancePinRequest, notRun: instancePinNotRun } : undefined;
     if (instanceRecord) {
       try {
         if (url.searchParams.getAll('ws').length !== 1 || !url.searchParams.get('ws') || [...url.searchParams.keys()].some(k => k !== 'ws')) throw new Error('bad query');
