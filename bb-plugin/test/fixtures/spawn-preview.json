@@ -1,0 +1,308 @@
+{
+ "schemaVersion": 1,
+ "ok": true,
+ "result": {
+  "modules": [
+   {
+    "name": "oats.aweb",
+    "from": {
+     "kind": "package",
+     "package": "oats.aweb",
+     "version": "1.43.0",
+     "commit": "00f60a241cfb5bc5aa6acbf1ebcb111756ee8fa0",
+     "integrity": "sha256-1d82c0637cdb54d1012efb17f99e61b047e8344b79a79620ffeb359caa0e9d92",
+     "repoKey": "github.com/awebai/oats-aweb"
+    },
+    "layer": "messaging",
+    "private": false,
+    "declares": [
+     "claudeChannelMode",
+     "delivery",
+     "health",
+     "identity",
+     "join",
+     "registry",
+     "residents",
+     "root",
+     "roots"
+    ],
+    "changedSince": false,
+    "composedFrom": "workspace"
+   },
+   {
+    "name": "oats.build",
+    "from": {
+     "kind": "member",
+     "repoKey": "github.com/awebai/oats",
+     "commit": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422"
+    },
+    "layer": null,
+    "private": false,
+    "declares": [],
+    "changedSince": {
+     "instance": "bb-plugin-frontend-developer",
+     "was": "0bde89b67e93ea1d665b1638c88d466291cbe8d2"
+    },
+    "composedFrom": "soul"
+   },
+   {
+    "name": "oats.core",
+    "from": {
+     "kind": "package",
+     "package": "oats.framework",
+     "version": "1.26.0",
+     "commit": "41d862390e8053a84d6ea61426fe635f5b224105",
+     "integrity": "sha256-31c2e826c3afea507469afdbdc63cc24ea3f5a539b57acd52b551ab78f3a09e7",
+     "repoKey": "github.com/awebai/oats"
+    },
+    "layer": null,
+    "private": false,
+    "declares": [],
+    "changedSince": false,
+    "composedFrom": "workspace"
+   },
+   {
+    "name": "oats.developer",
+    "from": {
+     "kind": "member",
+     "repoKey": "github.com/awebai/oats",
+     "commit": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422"
+    },
+    "layer": null,
+    "private": false,
+    "declares": [],
+    "changedSince": {
+     "instance": "bb-plugin-frontend-developer",
+     "was": "0bde89b67e93ea1d665b1638c88d466291cbe8d2"
+    },
+    "composedFrom": "soul"
+   },
+   {
+    "name": "oats.landing-rules",
+    "from": {
+     "kind": "member",
+     "repoKey": "github.com/awebai/oats",
+     "commit": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422"
+    },
+    "layer": null,
+    "private": false,
+    "declares": [],
+    "changedSince": {
+     "instance": "bb-plugin-frontend-developer",
+     "was": "0bde89b67e93ea1d665b1638c88d466291cbe8d2"
+    },
+    "composedFrom": "soul"
+   }
+  ],
+  "teams": [
+   {
+    "label": "oats",
+    "team": "default:oats.aweb.ai",
+    "default": true,
+    "from": "shared",
+    "via": [
+     "default",
+     "workspace"
+    ]
+   }
+  ],
+  "defaultTeam": {
+   "label": "oats",
+   "team": "default:oats.aweb.ai",
+   "from": "deployment"
+  },
+  "resolution": "370495ec8a708df4d543f7aa",
+  "declRevision": "b349f1e6d504b082fa046271",
+  "payloadRevision": "8bfa63ff1c5fb06cf05b1ab6",
+  "workspace": "github.com/awebai/oats",
+  "standalone": false,
+  "providers": {},
+  "settings": {
+   "oats.aweb": {},
+   "oats.build": {},
+   "oats.core": {},
+   "oats.developer": {},
+   "oats.landing-rules": {}
+  },
+  "settingsOrigins": {
+   "oats.aweb": {},
+   "oats.build": {},
+   "oats.core": {},
+   "oats.developer": {},
+   "oats.landing-rules": {}
+  },
+  "spawnPreviewApi": 2,
+  "preview": true,
+  "agent": "oats-developer",
+  "kind": "persistent",
+  "instance": "flaky-ci-2-developer",
+  "home": "/abs/deployment/agents/oats-developer/instances/flaky-ci-2-developer",
+  "repo": "/abs/clones/oats",
+  "work": "worktree",
+  "subject": {
+   "soul": "oats-developer",
+   "agentsRoot": null,
+   "dir": "/abs/deployment"
+  },
+  "decision": {
+   "instance": "flaky-ci-2-developer",
+   "home": "/abs/deployment/agents/oats-developer/instances/flaky-ci-2-developer",
+   "branch": "agents/flaky-ci-2-developer",
+   "base": {
+    "ref": "github.com/awebai/oats",
+    "oid": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422"
+   },
+   "effective": {
+    "repo": "/abs/clones/oats",
+    "work": "worktree",
+    "harness": "pi",
+    "model": "github-copilot/claude-fable-5.1",
+    "launchConfig": null,
+    "yolo": null,
+    "backend": "bb",
+    "childSpawns": true,
+    "relation": null,
+    "providers": {
+     "oats.aweb": {},
+     "oats.build": {},
+     "oats.core": {},
+     "oats.developer": {},
+     "oats.landing-rules": {}
+    }
+   },
+   "resolution": "370495ec8a708df4d543f7aa",
+   "revision": "f48a98cea8a3a34508aab024"
+  },
+  "preflight": {
+   "status": "complete",
+   "budgetMs": 20000,
+   "elapsedMs": 224
+  },
+  "backendStatus": {
+   "name": "bb",
+   "installed": true,
+   "started": false
+  },
+  "harness": "pi",
+  "model": "github-copilot/claude-fable-5.1",
+  "modelSource": "local-default preference",
+  "launchConfig": null,
+  "launchConfigSource": null,
+  "launchConfigDefault": false,
+  "backend": "bb",
+  "background": false,
+  "launch": {
+   "declared": {
+    "harness": "claude",
+    "model": "claude-opus-5-5"
+   },
+   "effective": {
+    "harness": "pi",
+    "model": "github-copilot/claude-fable-5.1",
+    "launchConfig": null
+   },
+   "from": "local-default",
+   "at": "oats-local.yaml#/souls/launch/*",
+   "problem": null
+  },
+  "branch": "agents/flaky-ci-2-developer",
+  "base": {
+   "ref": "github.com/awebai/oats",
+   "oid": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422"
+  },
+  "worktree": "/abs/deployment/agents/oats-developer/instances/flaky-ci-2-developer/work",
+  "worktreeHooks": [],
+  "relation": null,
+  "parentInstance": null,
+  "policy": {
+   "childSpawns": {
+    "allowed": true,
+    "origin": {
+     "kind": "default",
+     "detail": "no spawn option: children allowed"
+    }
+   }
+  },
+  "executable": "/usr/local/bin/pi",
+  "capabilities": [
+   {
+    "name": "oats.aweb",
+    "origin": "package:oats.aweb@1.43.0"
+   },
+   {
+    "name": "oats.build",
+    "origin": "member:github.com/awebai/oats@e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422"
+   },
+   {
+    "name": "oats.core",
+    "origin": "package:oats.framework@1.26.0"
+   },
+   {
+    "name": "oats.developer",
+    "origin": "member:github.com/awebai/oats@e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422"
+   },
+   {
+    "name": "oats.landing-rules",
+    "origin": "member:github.com/awebai/oats@e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422"
+   }
+  ],
+  "skills": [
+   "aweb-trust-mismatch",
+   "crossed-mail-freeze-discipline",
+   "stale-verification-loop",
+   {
+    "name": "aweb-identity",
+    "source": "module:oats.aweb"
+   },
+   {
+    "name": "aweb-messaging",
+    "source": "module:oats.aweb"
+   },
+   {
+    "name": "aweb-team-membership",
+    "source": "module:oats.aweb"
+   },
+   {
+    "name": "oats-aweb",
+    "source": "module:oats.aweb"
+   },
+   {
+    "name": "build-in-the-repository",
+    "source": "module:oats.build"
+   },
+   {
+    "name": "run-the-review-loop",
+    "source": "module:oats.build"
+   },
+   {
+    "name": "work-the-reviews",
+    "source": "module:oats.build"
+   },
+   {
+    "name": "oats-operate",
+    "source": "module:oats.core"
+   },
+   {
+    "name": "oats-souls",
+    "source": "module:oats.core"
+   },
+   {
+    "name": "oats-token-saving",
+    "source": "module:oats.core"
+   },
+   {
+    "name": "landing-rules-detail",
+    "source": "module:oats.landing-rules"
+   },
+   {
+    "name": "wait-and-retire",
+    "source": "module:oats.landing-rules"
+   }
+  ],
+  "task": "Fix the flaky CI job.\n",
+  "soulFetched": true,
+  "warnings": [
+   "the bb server at http://127.0.0.1:38886 runs bb-app 0.50.1; the capability was tested up to 0.50.1"
+  ]
+ }
+}

@@ -2,6 +2,7 @@
   "name": "bb-plugin-oats",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "engines": {
     "bb": ">=0.50.1 <0.51",
@@ -10,11 +11,15 @@
   "bb": {
     "name": "OATS [Experimental]",
     "description": "Your OATS agents in bb: who each one is, which need you, and the workspace they come from.",
-    "branding": { "icon": "Bot" },
+    "branding": {
+      "icon": "Bot"
+    },
     "server": "./server.ts",
     "host": "./host.ts",
     "app": "./app.tsx",
-    "skills": ["skills"]
+    "skills": [
+      "skills"
+    ]
   },
   "scripts": {
     "build": "bb plugin build",
@@ -28,10 +33,14 @@
     "@get-bb/plugin-sdk": "0.6.157",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
+    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "bb-app": "0.50.1",
+    "better-sqlite3": "^12.0.0",
+    "cron-parser": "^5.5.0",
+    "hono": "^4.11.9",
     "jsdom": "^31.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

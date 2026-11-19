@@ -1,0 +1,27 @@
+{
+ "retired": "weekly-digest-helper",
+ "agent": "oats-expert",
+ "retention": {
+  "worktree": "retained",
+  "movedTo": "/abs/deployment/.agents/worktrees/oats/agents-weekly-digest-helper",
+  "branch": "agents/weekly-digest-helper",
+  "detachedAt": null,
+  "recordedBranch": "agents/weekly-digest-helper"
+ },
+ "worktreeRemoved": false,
+ "branchDeleted": false,
+ "removedDir": true,
+ "workRecovery": null,
+ "childrenStopped": [
+  {
+   "instance": "digest-links-helper",
+   "home": "/abs/deployment/agents/oats-expert/instances/digest-links-helper",
+   "ok": true,
+   "stopped": false,
+   "alreadyIdle": true
+  }
+ ],
+ "planRevision": "4e5f6a7b8c9d0e1f2a3b4c5d",
+ "idempotencyKey": "retire-2b9d4e6f8a1c",
+ "replayed": false
+}

@@ -1,69 +1,63 @@
 ---
 name: oats-in-bb
-description: "How OATS agents appear in bb with the OATS plugin, and how to stop, start, restart, retire or spawn one so OATS and bb agree. Use when the person asks about an OATS agent shown in bb, when a thread is an OATS agent, or before stopping, archiving or deleting such a thread."
+description: Use when working with OATS agents shown in bb by the OATS plugin - stopping, starting, restarting or retiring an OATS agent from bb, spawning one from a soul's page, reading the sidebar tree and the "needs you" list, or when the plugin shows "No OATS deployment found", "oats was not found" or "choose a machine".
 ---
 
 # OATS agents in bb
 
-The OATS plugin shows this machine's OATS deployment inside bb. It draws and asks; it owns
-nothing. Agents, their homes, their identities and their mail stay OATS's and aweb's. Every OATS
-fact on screen comes from the `oats` CLI's `--json` answers, every bb fact from bb.
+The OATS plugin (plugin id `oats`) shows this machine's OATS agents in bb. Each agent is one bb
+thread; the plugin adds who it is and lets a person act on it through OATS. It owns nothing: the
+agents, their homes, identities and mail are OATS's and aweb's.
 
-## What is on screen
+## Rules
 
-- **The sidebar's thread list.** At the top, the workspace line (`<workspace> · <machine> ·
-  N agents`), four rows (Souls, Capabilities, Teams, Machines) and "N need you". Then **Agents**:
-  the deployment's agents that run in bb, as a tree, children under their parents. A row is the
-  thread's title, the soul under it, and a dot: amber needs you, green working, hollow idle, grey
-  stopped, red error or unreachable. `?` at the end means it waits on the person, `new` that the
-  thread is unread. Then **Other threads**: every bb thread that is not an OATS agent, as usual.
-- **Under an agent's thread header**, one line of chips: soul, instance, aweb alias, parent
-  (a link when the parent runs in bb), number of children, home, and `OATS`, which opens the home.
-- **The OATS home** (the Bot entry in bb's navigation, with a count when agents need the person;
-  the same view is a tab in a thread's side panel): Needs you, Working, and Finished, not looked
-  at. "Idle" is never "finished": bb cannot tell a settled agent from one that is waiting, so the
-  plugin only reports what OATS reports.
-- **Souls, Capabilities, Teams, Machines**: what `oats souls`, `oats capabilities`, `oats teams`
-  and `oats server list` answer for this deployment.
+- **Stop an OATS agent with "Stop agent (OATS)"** in the thread's menu, never with bb's own Stop,
+  Archive or Delete. Only the OATS stop records the agent as stopped, so it stays stopped; bb's own
+  buttons leave OATS thinking the agent should run.
+- **Start, Restart and Retire** are in the same menu. Stop and Retire show the kernel's plan and
+  ask once. Retire removes the agent's home; its work tree and branch are kept unless the plan says
+  otherwise.
+- **A thread archived or deleted in bb** takes the agent out of the tree. Nothing is retired: the
+  agent shows on its soul's page as "thread missing", with Start and Retire.
+- **Spawn** from a soul's page (Souls, pick a soul, name, task, Preview, Spawn in bb). The name is
+  lower-case letters, digits and dashes. The new agent opens in its own thread.
+- **Answer an agent in bb**: in its thread, or on the OATS home's "Needs you" cards. The plugin
+  never types into an agent for you.
+- A kernel refusal is shown with the kernel's code and message (`E_…`), unchanged: act on what it
+  says.
 
-A thread with no OATS agent behind it is an ordinary bb thread. An agent that runs on tmux is
-listed on its soul's page, not in the tree.
+## Where things are
 
-## Stop, start, restart, retire: through OATS
+- Sidebar: the workspace line, Souls, Capabilities, Teams, Machines, "N need you", then the agents
+  as a tree (children under parents), then bb's other threads.
+- Under an agent's thread header, one line of chips: soul, instance, aweb alias, parent (a link
+  when the parent runs in bb), number of children, home, and `OATS`, which opens the home.
+- OATS home (the Bot entry in bb's navigation, with a count when agents need you; the same view is
+  a tab in a thread's side panel): Needs you, Working, Finished and not looked at. On the page, a
+  reply box sends a message to the agent you pick, through bb's own send.
+- A row's end: `?` when the agent waits on you, `new` when its thread is unread.
+- An agent that runs on tmux is listed on its soul's page, not in the tree.
+- Dots: amber needs you; green working; hollow grey idle; grey stopped; red error or unreachable.
+  "Idle" means the kernel does not say the agent is working: it may be waiting or done.
 
-Use the thread menu's **Stop agent (OATS)**, **Start agent (OATS)**, **Restart agent (OATS)**
-and **Retire agent (OATS)**, or the `oats` CLI. They go through OATS, so a stopped agent stays
-stopped and a retired one releases its home and identity. Stop and Retire show OATS's plan first
-and ask once.
+## When the plugin shows one line instead of the tree
 
-bb's own controls cannot be hidden, and they do not tell OATS:
+| Line starts with | Do |
+|---|---|
+| No OATS deployment found | open a bb project inside the deployment, or set the directory: `bb plugin config oats set deployment <dir with oats-local.yaml>` |
+| oats was not found | install OATS on that machine, or `bb plugin config oats set oatsBin <absolute path to oats>` |
+| This bb server has N machines | `bb plugin config oats set host <machine name or id>` |
+| an `E_…` code | the kernel refused `oats status`: run `oats status` in the deployment and fix what it says |
 
-- **bb's composer Stop** interrupts the turn only: OATS does not record the agent as stopped.
-- **Archive and Delete** remove the thread from bb only. The agent's home stays; the agent leaves
-  the tree and shows on its soul's page as "thread missing", with Start and Retire. Nothing is
-  retired by deleting a thread.
+bb itself keeps working in every one of these cases: its threads are listed as usual.
 
-So: to stop an OATS agent, use "Stop agent (OATS)". To remove one, use "Retire agent (OATS)".
+## Commands
 
-## Spawning
-
-A soul's page has the form: a name (lower-case letters, digits and dashes), a task, **Preview**
-(what `oats spawn --preview` would do: modules, teams, launch, warnings, problems) and **Spawn in
-bb** (`oats spawn --backend bb`), which opens the new agent's thread. A soul that cannot be
-spawned shows OATS's reason instead of the form.
-
-## Answering an agent
-
-Answer in the agent's thread, as in any bb thread, or from the OATS home: a card under "Needs you"
-shows the question, and the reply box at the bottom of the home page sends a message to the agent
-you pick. That is bb's own send, as the person at the screen.
-
-## When something is missing
-
-If OATS cannot be read (no deployment found, `oats` not installed or failing, several machines and
-none chosen), the sidebar shows one line saying what is missing, with Retry, and lists every bb
-thread as usual. bb stays fully usable. The plugin's settings (Settings → Plugins → OATS) hold
-the deployment directory, the path to `oats`, and the machine that holds the homes.
-
-A refusal from OATS is shown with OATS's own code and message (`E_…`), unchanged: read it, it
-names what to do.
+```sh
+bb plugin list                        # is "oats" running?
+bb plugin config oats                 # its settings: deployment, oatsBin, host
+bb plugin logs oats -n 50             # what it logged
+bb plugin reload oats                 # reload it (any oats it was running is stopped)
+bb plugin rpc call oats snapshot      # what it reads: the deployment and its agents, or the failure
+bb settings ui set sidebar.threadListProvider oats/agents    # when another plugin took the sidebar
+```

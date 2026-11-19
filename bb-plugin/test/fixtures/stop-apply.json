@@ -1,0 +1,47 @@
+{
+ "schemaVersion": 1,
+ "ok": true,
+ "result": {
+  "lifecycleApi": 1,
+  "action": "stop",
+  "instance": "redesign-ui-lead",
+  "home": "/abs/deployment/agents/oats-product-expert/instances/redesign-ui-lead",
+  "idempotencyKey": "stop-7f3a9c2e41b8",
+  "planRevision": "9c1f2e3d4b5a69788796a5b4",
+  "at": "2026-11-19T12:30:05.000Z",
+  "ok": true,
+  "results": [
+   {
+    "instance": "desktop-mockups-developer",
+    "home": "/abs/deployment/agents/oats-desktop-developer/instances/desktop-mockups-developer",
+    "ok": true,
+    "stopped": true,
+    "alreadyIdle": false,
+    "state": "stopped"
+   },
+   {
+    "instance": "harvest-knowledge-helper",
+    "home": "/abs/deployment/agents/knowledge-harvester/instances/harvest-knowledge-helper",
+    "ok": true,
+    "stopped": true,
+    "alreadyIdle": false,
+    "state": "stopped"
+   },
+   {
+    "instance": "redesign-ui-lead",
+    "home": "/abs/deployment/agents/oats-product-expert/instances/redesign-ui-lead",
+    "ok": true,
+    "stopped": true,
+    "alreadyIdle": false,
+    "state": "stopped"
+   }
+  ],
+  "retained": [
+   "home",
+   "work",
+   "transcript",
+   "launch"
+  ],
+  "replayed": false
+ }
+}

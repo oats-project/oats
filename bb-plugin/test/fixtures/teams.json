@@ -1,0 +1,50 @@
+{
+ "schemaVersion": 1,
+ "ok": true,
+ "result": {
+  "teamsApi": 2,
+  "deployment": "/abs/deployment",
+  "localTeams": true,
+  "defaultTeam": {
+   "label": "oats",
+   "team": "default:oats.aweb.ai",
+   "from": "deployment"
+  },
+  "teams": [
+   {
+    "label": "oats",
+    "team": "default:oats.aweb.ai",
+    "description": "The OATS framework team",
+    "from": "shared",
+    "default": true,
+    "at": "github.com/awebai/oats:oats-workspace.yaml#/teams/oats"
+   },
+   {
+    "label": "docs",
+    "team": null,
+    "description": null,
+    "from": "shared",
+    "default": false,
+    "at": "github.com/awebai/oats:oats-workspace.yaml#/teams/docs"
+   }
+  ],
+  "souls": {
+   "*": {
+    "teams": [
+     "oats"
+    ]
+   }
+  },
+  "problems": [
+   {
+    "code": "team-unmapped",
+    "label": "docs",
+    "default": false,
+    "severity": "warning",
+    "at": "github.com/awebai/oats:oats-workspace.yaml#/teams/docs",
+    "message": "shared team docs has no provider id yet",
+    "fix": "its owner runs `oats aweb setup`, then commits the id"
+   }
+  ]
+ }
+}

@@ -1,0 +1,27 @@
+# The plugin's CI job. This file is not active here: the staging copy lives on a branch of the oats
+# repository, whose workflows are not this plugin's. In the bb package repository, move it to
+# .github/workflows/plugin.yml and set `working-directory` to the plugin's directory there.
+name: plugin
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: plugin
+    steps:
+      - uses: actions/checkout@v4
+      # Typecheck, unit tests (A1 to A12), build, then bb-app with the plugin installed and a fake
+      # oats (A13 to A15), all inside one container: container/ci.sh.
+      - run: container/ci.sh all
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: plugin-live
+          path: plugin/container/out/

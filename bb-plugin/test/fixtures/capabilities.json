@@ -1,0 +1,354 @@
+{
+ "schemaVersion": 1,
+ "ok": true,
+ "result": {
+  "capabilitiesApi": 1,
+  "workspace": {
+   "name": "oats",
+   "key": "github.com/awebai/oats",
+   "commit": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422"
+  },
+  "capabilities": [
+   {
+    "name": "oats.aweb",
+    "origin": "package oats.aweb v1.43.0",
+    "kind": "package",
+    "package": "oats.aweb",
+    "version": "1.43.0",
+    "commit": "00f60a241cfb5bc5aa6acbf1ebcb111756ee8fa0",
+    "private": false,
+    "layer": "messaging",
+    "description": "Messaging layer via aweb: per-instance team identities, explicit joined teams with live receive, native aw mail/chat skills and the cross-machine team roster.",
+    "skills": [
+     "aweb-identity",
+     "aweb-messaging",
+     "aweb-team-membership",
+     "oats-aweb"
+    ],
+    "commands": [
+     "binding-bind",
+     "binding-check",
+     "binding-normalize",
+     "connect",
+     "health",
+     "invite",
+     "join",
+     "leave",
+     "probe",
+     "resident",
+     "roster",
+     "setup",
+     "teams",
+     "wake"
+    ],
+    "hooks": [
+     "launch",
+     "retire",
+     "spawn",
+     "upgrade"
+    ],
+    "file": {
+     "path": "oats-package/capabilities/oats-aweb/oats.json",
+     "url": "https://github.com/awebai/oats-aweb/blob/00f60a241cfb5bc5aa6acbf1ebcb111756ee8fa0/oats-package/capabilities/oats-aweb/oats.json"
+    },
+    "tree": null
+   },
+   {
+    "name": "oats.build",
+    "origin": "member github.com/awebai/oats @ e5b6c5ac",
+    "kind": "member",
+    "repoKey": "github.com/awebai/oats",
+    "commit": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422",
+    "private": false,
+    "path": "capabilities/oats-build",
+    "layer": null,
+    "version": "4.0.2",
+    "description": "What the team adds to building a change, for whoever builds it: a developer, or a lead or a specialist that builds its own spec. Skills only, with no inject: the builder's role says when to use them. Three skills: build-in-the-repository (the repository's own rules win, extra worktrees made from the remote, one author for a change and its tests, a harness workflow only on the person's opt-in, three failed fixes then ask, proof by the repository's own gate with the evidence named), run-the-review-loop (a fresh code-reviewer each round, on a model at or above the floor and different from the author's, until a round finds nothing to fix; the cap of 4 rounds; the hand-back) and work-the-reviews (the PR from its verified head to merge: every finding answered, the review each new head needs, the hand-back at a ready head). General engineering practice a current model follows unprompted is not restated. Copied from the engineering template, template-v4.0.2.",
+    "skills": [
+     "build-in-the-repository",
+     "run-the-review-loop",
+     "work-the-reviews"
+    ],
+    "commands": [],
+    "hooks": [],
+    "file": {
+     "path": "capabilities/oats-build/oats.json",
+     "url": "https://github.com/awebai/oats/blob/e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422/capabilities/oats-build/oats.json"
+    },
+    "tree": "77eab4a76e0739a7db6f51d8664e33534ecbc66c"
+   },
+   {
+    "name": "oats.code-review",
+    "origin": "member github.com/awebai/oats @ e5b6c5ac",
+    "kind": "member",
+    "repoKey": "github.com/awebai/oats",
+    "commit": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422",
+    "private": false,
+    "path": "capabilities/oats-code-review",
+    "layer": null,
+    "version": "4.0.2",
+    "description": "The adversarial code reviewer's role and method: review one author's piece of work (a developer's, or a lead's or a specialist's own spec) in its worktree, try to break it, prove each finding, cover security and simplification, keep the noise out, and list in every report what it checked: one fresh round of the author's review loop at one head, one report, and then it retires itself. It also reads a minor fix's delta against the findings it answers, and, sent by an expert as a probe, gives an adversarial read of a named piece of code that is not under review (a spike, a design written as code) at its exact version. The forge's review bot can be the reviewer too; the author that built the change answers it. Assigned to the code-reviewer soul. Copied from the engineering template, template-v4.0.2.",
+    "skills": [
+     "adversarial-review",
+     "review-dev-docs",
+     "security-review",
+     "simplification-review"
+    ],
+    "commands": [],
+    "hooks": [],
+    "file": {
+     "path": "capabilities/oats-code-review/oats.json",
+     "url": "https://github.com/awebai/oats/blob/e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422/capabilities/oats-code-review/oats.json"
+    },
+    "tree": "bcdd70e0c7cf727cb9ebf6681798cb3b4a4f4be6"
+   },
+   {
+    "name": "oats.core",
+    "origin": "package oats.framework v1.26.0",
+    "kind": "package",
+    "package": "oats.framework",
+    "version": "1.26.0",
+    "commit": "41d862390e8053a84d6ea61426fe635f5b224105",
+    "private": false,
+    "layer": null,
+    "description": "Day-to-day OATS operation from inside an instance: home and work, modules, status and drift, spawn preview and apply (harness, relations, teams to join), soul discovery, being spawned by a trigger, retiring instances you spawned, asking for a human's attention, and saving tokens when instances message each other (who a message is for, whether to send it, how long it is); for Claude Code instances, reports when the session waits on a permission prompt or a question, or a turn ended in an API error. No layer. Workspace setup and config is oats.setup.",
+    "skills": [
+     "oats-operate",
+     "oats-souls",
+     "oats-token-saving"
+    ],
+    "commands": [],
+    "hooks": [
+     "launch",
+     "spawn",
+     "upgrade"
+    ],
+    "file": {
+     "path": "oats-package/capabilities/oats-core/oats.json",
+     "url": "https://github.com/awebai/oats/blob/41d862390e8053a84d6ea61426fe635f5b224105/oats-package/capabilities/oats-core/oats.json"
+    },
+    "tree": null
+   },
+   {
+    "name": "oats.desktop-ui",
+    "origin": "member github.com/awebai/oats @ e5b6c5ac",
+    "kind": "member",
+    "repoKey": "github.com/awebai/oats",
+    "commit": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422",
+    "private": true,
+    "path": "capabilities/oats-desktop-ui",
+    "layer": null,
+    "version": "1.0.0",
+    "description": "How OATS Desktop's interactions are designed, built and proven: accessible tabs, keyboard actions, async dialogs, focus and pickers, and live Electron verification of what DOM tests cannot prove. One source for the Desktop souls that design and build the app (oats-desktop-expert, oats-desktop-developer).",
+    "skills": [
+     "accessible-desktop-interactions",
+     "electron-live-verification"
+    ],
+    "commands": [],
+    "hooks": [],
+    "file": {
+     "path": "capabilities/oats-desktop-ui/oats.json",
+     "url": "https://github.com/awebai/oats/blob/e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422/capabilities/oats-desktop-ui/oats.json"
+    },
+    "tree": "fd6a2dc0a10aff3219176e83f6538363d25340f3"
+   },
+   {
+    "name": "oats.developer",
+    "origin": "member github.com/awebai/oats @ e5b6c5ac",
+    "kind": "member",
+    "repoKey": "github.com/awebai/oats",
+    "commit": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422",
+    "private": false,
+    "path": "capabilities/oats-developer",
+    "layer": null,
+    "version": "4.0.2",
+    "description": "The developer's role, with no skills of its own: it builds one spec for the expert that gave it (the effort's lead, or the specialist of its area), proves it the way the repository runs it, iterates with a fresh reviewer each round until a round finds nothing to fix, hands the branch back, opens the PR on VERIFIED at the head and works its reviews until it merges, then sends its done line and retires itself. The briefing holds the flow, the rules that aren't obvious (the spec's acceptance tests go in unchanged, no PR before VERIFIED, the quality floor, stay in the spec) and which build skill to open at which step. Copied from the engineering template, template-v4.0.2.",
+    "skills": [],
+    "commands": [],
+    "hooks": [],
+    "file": {
+     "path": "capabilities/oats-developer/oats.json",
+     "url": "https://github.com/awebai/oats/blob/e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422/capabilities/oats-developer/oats.json"
+    },
+    "tree": "aa0ecf91167969799d51b0a1bfbb2bdc4dd4f488"
+   },
+   {
+    "name": "oats.engineering-expert",
+    "origin": "member github.com/awebai/oats @ e5b6c5ac",
+    "kind": "member",
+    "repoKey": "github.com/awebai/oats",
+    "commit": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422",
+    "private": false,
+    "path": "capabilities/oats-engineering-expert",
+    "layer": null,
+    "version": "4.0.2",
+    "description": "The expert, as an orchestrator: owns one effort from plan to merge on a fresh instance. One agent is the default; a child earns its place by protecting context, parallel work or specialisation, named in its brief, and the tree is sized to the work (alone where it is simple; alone with short-lived probes and helpers where it is complex but not large; one long-lived specialist per area where it is large or crosses areas). The briefing says how to behave in each seat (root lead, specialist, helper or probe), and every expert's task names its seat. Five skills: plan-and-spec (the plan, the specs, who builds each), orchestrate-agents (whether a child is worth it, which kind, the relation, the brief, what comes back), coordinate-developers (launching developers and the one verification of what they hand back, ending in VERIFIED at the head), hand-off-and-ask (hand-offs by message at exact references, handing a whole effort over, the decision card for a person, findings, blocks, other people's paths) and land-on-agreement (the agreements at a PR's exact head, a lane maintainer's green light where the landing rules ask for one, the merge by whoever they name, releases). Copied from the engineering template, template-v4.0.2.",
+    "skills": [
+     "coordinate-developers",
+     "hand-off-and-ask",
+     "land-on-agreement",
+     "orchestrate-agents",
+     "plan-and-spec"
+    ],
+    "commands": [],
+    "hooks": [],
+    "file": {
+     "path": "capabilities/oats-engineering-expert/oats.json",
+     "url": "https://github.com/awebai/oats/blob/e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422/capabilities/oats-engineering-expert/oats.json"
+    },
+    "tree": "417ae769e9f636ff0ef7d9d30aaab95db7de1d95"
+   },
+   {
+    "name": "oats.landing-rules",
+    "origin": "member github.com/awebai/oats @ e5b6c5ac",
+    "kind": "member",
+    "repoKey": "github.com/awebai/oats",
+    "commit": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422",
+    "private": false,
+    "path": "capabilities/oats-landing-rules",
+    "layer": null,
+    "version": "4.0.2",
+    "description": "This organisation's landing rules and ownership record, in one place for every coordinating role (dispatcher, experts, developers, maintainers): the lanes and their owners, the agreements that merge a change at one head (CI green, a review, VERIFIED from whoever specified a developer's work) and who merges, where a lane asks for its maintainer's green light, the one-way doors kept for people, who owns which paths, where effort records and holds are kept, and the house rules (instance names, the model floor for children, the hosts). Two skills hold what the briefing leaves out: landing-rules-detail (the definitions: CI green, what opens a PR, what carries to a new head, the green light, the model floor, the review loop's cap, the docs fix, a PR with no lead, records) and wait-and-retire (the checkpoint that bounds a wait on an instance, and retiring a finished one). The template's rules are defaults: an organisation answers the adapt markers with its own. Copied from the engineering template, template-v4.0.2.",
+    "skills": [
+     "landing-rules-detail",
+     "wait-and-retire"
+    ],
+    "commands": [],
+    "hooks": [],
+    "file": {
+     "path": "capabilities/oats-landing-rules/oats.json",
+     "url": "https://github.com/awebai/oats/blob/e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422/capabilities/oats-landing-rules/oats.json"
+    },
+    "tree": "667e2470d224085d6f5c5d3f9bd2146309016ebe"
+   },
+   {
+    "name": "oats.maintainer",
+    "origin": "member github.com/awebai/oats @ e5b6c5ac",
+    "kind": "member",
+    "repoKey": "github.com/awebai/oats",
+    "commit": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422",
+    "private": false,
+    "path": "capabilities/oats-maintainer",
+    "layer": null,
+    "version": "4.0.2",
+    "description": "The maintainer's role: it holds one lane for its person - the lane's direction across parallel efforts, the calls the lane's landing rules give it (its green light on a PR at an exact head, as GREEN LIGHT, RETURN or ESCALATE, on direction, roadmap and product fit, contracts, coherence, scope and evidence, with, in OATS, its own read of the whole diff but no review rounds of its own; a merge kept for it), PRs with no lead, releases and, in OATS, the release lane's sign-off by the four gates where it holds the release lane, and the lane's stewardship (holds, cleanliness, the roadmap). It is called, never a station, launches one lead expert per effort its person asks of it, and is never in the build loop. In OATS a maintainer is found by its entry on the lane map. Skills: keep-the-lane (intake, the roadmap, cleanliness, seats, peers and holds), pr-review, direction-gate, launch-work and plan-and-ship-release. Copied from the engineering template, template-v4.0.2.",
+    "skills": [
+     "direction-gate",
+     "keep-the-lane",
+     "launch-work",
+     "plan-and-ship-release",
+     "pr-review"
+    ],
+    "commands": [],
+    "hooks": [],
+    "file": {
+     "path": "capabilities/oats-maintainer/oats.json",
+     "url": "https://github.com/awebai/oats/blob/e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422/capabilities/oats-maintainer/oats.json"
+    },
+    "tree": "66d51741c5f7dfcd51efe73383f111549849c882"
+   },
+   {
+    "name": "oats.okf",
+    "origin": "package oats.okf v6.2.0",
+    "kind": "package",
+    "package": "oats.okf",
+    "version": "6.2.0",
+    "commit": "92c630606db81f55c3e31002cb51d0e603dc7902",
+    "private": false,
+    "layer": "knowledge",
+    "description": "The OKF knowledge slot for working souls: consult the soul's accepted OKF bases remotely (no per-instance copy), keep instance knowledge with judgment, and at important checkpoints propose durable knowledge yourself as a reviewed PR on the owned nodes (`oats okf propose`: plan, check, apply); the knowledge maintainer gates every merge.",
+    "skills": [
+     "knowledge-theory",
+     "okf-authoring",
+     "okf-consultation",
+     "okf-instance-knowledge",
+     "okf-propose"
+    ],
+    "commands": [
+     "bases",
+     "binding-bind",
+     "binding-check",
+     "binding-normalize",
+     "cat",
+     "claims",
+     "complete",
+     "harvest",
+     "harvest-status",
+     "index",
+     "init",
+     "inspect",
+     "links",
+     "ls",
+     "migrate",
+     "propose",
+     "read",
+     "refresh",
+     "retry",
+     "run-source",
+     "search",
+     "setup",
+     "status",
+     "subject",
+     "subjects",
+     "unlock",
+     "verdicts"
+    ],
+    "hooks": [
+     "soul-scaffold",
+     "spawn",
+     "upgrade"
+    ],
+    "file": {
+     "path": "oats-package/capabilities/oats-okf/oats.json",
+     "url": "https://github.com/awebai/oats-okf/blob/92c630606db81f55c3e31002cb51d0e603dc7902/oats-package/capabilities/oats-okf/oats.json"
+    },
+    "tree": null
+   },
+   {
+    "name": "oats.okf-harvest",
+    "origin": "package oats.okf v6.2.0",
+    "kind": "package",
+    "package": "oats.okf",
+    "version": "6.2.0",
+    "commit": "92c630606db81f55c3e31002cb51d0e603dc7902",
+    "private": false,
+    "layer": null,
+    "description": "Removed in oats.okf 6.0: a stub that keeps the knowledge harvester's name answering until 7.0. Its one required spawn hook always refuses with E_REMOVED, naming the fix (the instance proposes itself with `oats okf propose`) and what to delete from a deployment's configuration; its commands answer E_REMOVED. It has no skills, scripts or instructions.",
+    "skills": [],
+    "commands": [
+     "complete",
+     "harvest-status"
+    ],
+    "hooks": [
+     "spawn"
+    ],
+    "file": {
+     "path": "oats-package/capabilities/oats-okf-harvest/oats.json",
+     "url": "https://github.com/awebai/oats-okf/blob/92c630606db81f55c3e31002cb51d0e603dc7902/oats-package/capabilities/oats-okf-harvest/oats.json"
+    },
+    "tree": null
+   },
+   {
+    "name": "oats.workspace-experts",
+    "origin": "member github.com/awebai/oats @ e5b6c5ac",
+    "kind": "member",
+    "repoKey": "github.com/awebai/oats",
+    "commit": "e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422",
+    "private": true,
+    "path": "capabilities/oats-workspace-experts",
+    "layer": null,
+    "version": "1.3.1",
+    "description": "The OATS framework repository's part of the expert role: which developer soul owns each surface, what an expert's own worktrees are for (reading, verifying, a probe's scratch work and the specs it builds itself), and how changes land here (PRs merged by the maintainer, oats-maintainer; every engineering effort led by oats-engineering-expert). Assigned to this workspace's expert souls, beside oats.engineering-expert.",
+    "skills": [],
+    "commands": [],
+    "hooks": [],
+    "file": {
+     "path": "capabilities/oats-workspace-experts/oats.json",
+     "url": "https://github.com/awebai/oats/blob/e5b6c5ac4f3eabbb73990d9c2a4c0c3ca14ca422/capabilities/oats-workspace-experts/oats.json"
+    },
+    "tree": "db726daeb99dda6db0a61e592027eafdf1c92244"
+   }
+  ],
+  "problems": []
+ }
+}

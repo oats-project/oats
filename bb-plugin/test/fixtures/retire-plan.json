@@ -1,0 +1,72 @@
+{
+ "schemaVersion": 1,
+ "ok": true,
+ "result": {
+  "lifecycleApi": 1,
+  "action": "retire",
+  "instance": "weekly-digest-helper",
+  "home": "/abs/deployment/agents/oats-expert/instances/weekly-digest-helper",
+  "at": "2026-11-19T12:50:00.000Z",
+  "facts": {
+   "session": {
+    "state": "stopped",
+    "present": false,
+    "backend": "bb",
+    "established": true
+   },
+   "work": {
+    "observed": true,
+    "revision": "46c20668d4e2a1b7c3f09e5d8a6b7c1d2e3f4a5b",
+    "branch": "agents/weekly-digest-helper",
+    "detached": false,
+    "drift": false,
+    "changed": 0,
+    "untracked": 1,
+    "upstream": {
+     "ref": null,
+     "ahead": null,
+     "behind": null
+    },
+    "base": {
+     "ref": "origin/main",
+     "ahead": 2,
+     "behind": 0
+    },
+    "remote": {
+     "host": "github.com",
+     "path": "awebai/oats"
+    }
+   },
+   "workMode": "worktree",
+   "ownWorktree": true,
+   "repo": "/abs/clones/oats",
+   "recordedBranch": "agents/weekly-digest-helper",
+   "children": [
+    {
+     "instance": "digest-links-helper",
+     "agent": "oats-expert",
+     "home": "/abs/deployment/agents/oats-expert/instances/digest-links-helper",
+     "session": {
+      "state": "shell",
+      "present": true,
+      "backend": "bb",
+      "established": true
+     }
+    }
+   ],
+   "ambiguous": [],
+   "pullRequest": "unknown",
+   "extraWorktrees": []
+  },
+  "defaults": {
+   "retainWorktree": true,
+   "deleteBranch": false,
+   "stopChildren": true,
+   "retainChildren": true
+  },
+  "planRevision": "4e5f6a7b8c9d0e1f2a3b4c5d",
+  "notes": [
+   "1 untracked file in the work tree is copied to the recovery directory before the home is removed"
+  ]
+ }
+}

@@ -14,9 +14,10 @@ export type Agent = {
   address: string | null;
   /** "bb" | "tmux" | another session provider's name */
   backend: string;
-  /** session.endpoint, null on a tmux row */
+  /** null from status: the kernel names them only on a local `oats session inspect` and in a spawn's answer */
   server: string | null;
   projectId: string | null;
+  /** the row's session.threadId, null on a tmux row */
   threadId: string | null;
   /** The kernel's word. Never inferred. */
   running: true | false | null;
@@ -62,4 +63,59 @@ export type View = {
   working: Node[];
   /** state idle and the thread unread */
   finished: Node[];
+};
+
+// ---- The rows of the four pages and of the spawn preview (contract.ts holds their schemas). ----
+
+/** One soul of `oats souls`. */
+export type Soul = {
+  /** the soul key: what `oats spawn` takes (`<package>/<soul>` for a package soul) */
+  name: string;
+  /** the roster agent name of this soul's instances: equal to their `Agent.soul` */
+  agent: string;
+  description: string;
+  /** display text, as the kernel words it */
+  origin: string;
+  /** names of the capabilities the soul composes; empty when the kernel cannot say */
+  capabilities: string[];
+  spawnable: boolean;
+  /** "<code>: <message>", the kernel's, when the soul cannot be spawned */
+  problem: string | null;
+};
+
+/** One capability of `oats capabilities`. */
+export type Capability = {
+  id: string;
+  description: string;
+  origin: string;
+  /** how many of this deployment's souls compose it */
+  souls: number;
+};
+
+/** One team of `oats teams`. */
+export type Team = {
+  label: string;
+  /** the provider's team id; null for a shared team that is not mapped yet */
+  team: string | null;
+  isDefault: boolean;
+};
+
+/** This machine, or one registered server of `oats server list`. */
+export type Machine = {
+  id: string;
+  /** the ssh alias the kernel recorded; null for this machine */
+  route: string | null;
+  isThisMachine: boolean;
+  /** what the kernel last recorded about it */
+  note: string | null;
+};
+
+/** What `oats spawn --preview` would do, as the form draws it. */
+export type SpawnSummary = {
+  modules: string[];
+  teams: string[];
+  /** harness and model, with where the model comes from */
+  launch: string | null;
+  warnings: string[];
+  problems: string[];
 };
