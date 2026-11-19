@@ -167,9 +167,10 @@ function ownsSelection(s, ref) {
 }
 /** The shell's navigation to a Workspace tab (⌘1 on Machines, app.chooseSoul's chord on Souls, the leader's 3
  * on Capabilities, the palette's) is an inspection intent, never a launch. */
-export function preselectWorkspaceTab(name) {
+export function preselectWorkspaceTab(name, { machinesView = null } = {}) {
   if (!workspaceTabs.includes(name)) return false;
-  pendingWorkspaceTab = { name, ...nextSelectionIntent() };
+  // `machinesView` ('list' | 'map'): the Machines tab's view to land on (slice 3b); none keeps the one last chosen.
+  pendingWorkspaceTab = { name, ...(name === "machines" && machinesView ? { machinesView } : {}), ...nextSelectionIntent() };
   if (state?.alive) applyWorkspaceTab(state);
   return true;
 }
@@ -184,7 +185,7 @@ function applyWorkspaceTab(s) {
   // The handoff's own tab change is not a newer choice: minting one here would supersede the soul or home
   // this same handoff carries (Go to soul from the Machines tab turned the page and opened nothing).
   s.handoffTab = true;
-  try { s.discovery?.setTab(intent.name); } finally { s.handoffTab = false; }
+  try { if (intent.machinesView) s.discovery?.setMachinesView(intent.machinesView); s.discovery?.setTab(intent.name); } finally { s.handoffTab = false; }
 }
 export function preselectHome(instance) {
   const intent = nextSelectionIntent();

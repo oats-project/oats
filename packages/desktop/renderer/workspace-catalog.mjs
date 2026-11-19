@@ -73,7 +73,7 @@ export function entryTags(doc, entry) {
 }
 
 /** Arrow keys move along the rows (the list keeps one tab stop: the row last focused). */
-function roveRows(listEl) {
+export function roveRows(listEl) {
   const rows = () => [...listEl.querySelectorAll('button.cap-row')];
   listEl.addEventListener('focusin', event => { const at = event.target.closest?.('button.cap-row'); if (at) for (const row of rows()) row.tabIndex = row === at ? 0 : -1; });
   listEl.addEventListener('keydown', event => {
@@ -85,6 +85,28 @@ function roveRows(listEl) {
     event.preventDefault();
     all[Math.max(0, Math.min(all.length - 1, next))].focus();
   });
+}
+
+/** One capability row, the list's and any page's that lists capabilities the same way (the soul page, slice 3a):
+ * `entry` is a capabilityList entry ({ row, core, default, origin }; packages/client/capability-list.mjs). A button that
+ * opens `onOpen(row)` (Enter and Space are its own), or a plain div with no opener. `tabStop`: whether it takes the
+ * list's one tab stop (the list moves it with the arrows: roveRows). Its CSS is catalogCSS. */
+export function capabilityRowElement(doc, entry, { onOpen = null, tabStop = true } = {}) {
+  const { row, origin } = entry, opens = typeof onOpen === 'function';
+  const el = node(doc, opens ? 'button' : 'div', null, 'cap-row');
+  el.dataset.capability = row.name; el.dataset.kind = row.kind;
+  const line = node(doc, 'span', null, 'cap-row-line');
+  const name = node(doc, 'span', row.name, 'cap-row-name'); name.title = row.name;
+  line.append(name, ...entryTags(doc, entry), originElement(doc, origin));
+  el.append(line);
+  // Kernel #217: the manifest's description, one line; the page carries the whole text.
+  if (text(row.description)) { const desc = node(doc, 'span', row.description, 'cap-row-desc'); desc.title = row.description; el.append(desc); }
+  if (opens) {
+    el.type = 'button'; el.tabIndex = tabStop ? 0 : -1;
+    el.dataset.focusKey = `cap:${row.kind}:${row.kind === 'package' ? row.package ?? '' : row.repoKey ?? ''}:${row.name}`;
+    el.addEventListener('click', () => onOpen(row)); // the native button turns Enter and Space into this click
+  }
+  return el;
 }
 
 /** The Capabilities tab: the defaults sentence (when the kernel reports defaults), then the one list.
@@ -104,20 +126,7 @@ export function renderCapabilityList(host, { rows, status, query = '', onOpen = 
   const listEl = node(doc, 'ul', null, 'cap-list'); listEl.setAttribute('aria-label', label);
   let first = true;
   for (const entry of entries) {
-    const { row, origin } = entry, opens = typeof onOpen === 'function';
-    const el = node(doc, opens ? 'button' : 'div', null, 'cap-row');
-    el.dataset.capability = row.name; el.dataset.kind = row.kind;
-    const line = node(doc, 'span', null, 'cap-row-line');
-    const name = node(doc, 'span', row.name, 'cap-row-name'); name.title = row.name;
-    line.append(name, ...entryTags(doc, entry), originElement(doc, origin));
-    el.append(line);
-    // Kernel #217: the manifest's description, one line; the page carries the whole text.
-    if (text(row.description)) { const desc = node(doc, 'span', row.description, 'cap-row-desc'); desc.title = row.description; el.append(desc); }
-    if (opens) {
-      el.type = 'button'; el.tabIndex = first ? 0 : -1; first = false;
-      el.dataset.focusKey = `cap:${row.kind}:${row.kind === 'package' ? row.package ?? '' : row.repoKey ?? ''}:${row.name}`;
-      el.addEventListener('click', () => onOpen(row)); // the native button turns Enter and Space into this click
-    }
+    const el = capabilityRowElement(doc, entry, { onOpen, tabStop: first }); first = false;
     const item = node(doc, 'li'); item.append(el); listEl.append(item);
   }
   if (typeof onOpen === 'function') roveRows(listEl);

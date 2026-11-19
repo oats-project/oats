@@ -1635,7 +1635,9 @@ workspace is observed through its server and never synced from here.
   poll. Its header's **List | Map** (`machinesView`, `setMachinesView`;
   `onMachinesView` tells `views/spawn.mjs`) swaps it for the Deployments view
   (`views/hierarchy.mjs`, mounted in `.workspace-machines-panel` only while the
-  Map is shown), until slice 6 makes that the Graph.
+  Map is shown), until slice 6 makes that the Graph. A handoff may name the view
+  (`preselectWorkspaceTab('machines', { machinesView: 'list' | 'map' })`); without it
+  the tab opens on the view last chosen.
 - **Notes** keep the F1 guards visible: an unreachable workspace (module drift
   not current), withheld instance rows, unsynced/stale declarations and
   workspace problems, each in the kernel's own terms.
