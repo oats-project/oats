@@ -214,8 +214,11 @@ test("tree connectors (non-layout): lines leave the dots; a parent's chevron sit
   assert.equal(u.rule(".ctx-tree-row").paddingLeft, "calc(var(--depth) * var(--tree-step))");
   // The product owner, 2026-11-19, replacing Redesign v3's "no disclosure arrows" (#137): a row with children wears
   // the disclosure first on its name line (roster-disclosure.mjs), and the guides stay as they were.
-  assert.deepEqual(u.rows.map(row => !!row.querySelector(".ctx-name-line > .ctx-disclosure:first-child")), [true, true, false, true, false, false],
-    "the rows with children, and only they");
+  assert.deepEqual(u.rows.map(row => row.querySelectorAll(".ctx-disclosure").length), [1, 1, 0, 1, 0, 0],
+    "one on each row with children, none on a row without");
+  for (const row of u.rows.filter(r => r.querySelector(".ctx-disclosure"))) {
+    assert.ok(row.querySelector(".ctx-name-line > .ctx-disclosure:first-child"), "first on the name line");
+  }
   assert.deepEqual(u.rows.map(row => row.style.getPropertyValue("--depth")), ["0", "1", "2", "1", "2", "0"]);
   assert.deepEqual(u.rows.map(row => [...row.querySelectorAll(".ctx-guide")].map(g => `${g.className.replace("ctx-guide ", "")}@${g.style.getPropertyValue("--guide-level")}`)), [
     ["down@0"], ["elbow@0", "line@0", "down@1"], ["line@0", "elbow@1"], ["elbow@0", "down@1"], ["elbow@1"], [],
