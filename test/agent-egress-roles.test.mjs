@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { compilePolicy } from "../container/agent/egress/policy.mjs";
+import { compilePolicy, policyRoles } from "../container/agent/egress/policy.mjs";
+import { spawnSync } from "node:child_process";
 import { probeProxy } from "../container/agent/egress/health.mjs";
 import { probeRuntime, runtimeProgram } from "../container/agent/egress/probe-runtime.mjs";
 
@@ -98,6 +99,48 @@ function runtime(policy = subset()) {
   };
   return { plan, io, calls };
 }
+
+test("ingress names the signer requirement before sending any controls", async () => {
+  const {probeIngress}=await import("../container/agent/egress/probe-ingress.mjs");
+  let sent=0;
+  await assert.rejects(probeIngress({
+    address:"10.20.0.10",requestOrigin:full().targets.signer.origin,humanOrigin:full().humanOrigin,
+    policy:subset(),routeLogs:{},exchange:async()=>{sent++;throw new Error("no control may be sent");},
+  }),{code:"ERR_ASSERTION",message:/^ingress admission requires the signer role/});
+  assert.equal(sent,0);
+});
+
+test("runtime follows the compiler's canonical role order for reversed declarations", async () => {
+  for (const roles of [["registry","aweb"],Object.keys(full().targets).reverse()]) {
+    const {plan,io,calls}=runtime(subset(roles));
+    assert.equal(await probeRuntime(plan,io),true);
+    assert.deepEqual(calls.https.map(options=>options.host),
+      policyRoles(plan.policy).map(role=>new URL(plan.policy.targets[role].origin).hostname));
+  }
+});
+
+test("emitted runtime executes the shared role helper before its real identity guard", () => {
+  const {plan}=runtime(subset(["registry","aweb"]));
+  // Fail before any filesystem/network probes on this host. A missing emitted
+  // dependency would produce the generic runtime error instead of this guard.
+  plan.uid=process.getuid()===20001?20002:20001;
+  const result=spawnSync(process.execPath,["--input-type=module","-"],{
+    input:runtimeProgram(plan),encoding:"utf8",timeout:5000,
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status,1);
+  assert.equal(result.stdout,"");
+  assert.equal(result.stderr,"egress boundary: probe identity differs from configured non-root user\n");
+});
+
+test("shared runtime role validation still refuses malformed declarations before probing", async () => {
+  const {plan,io}=runtime();
+  const sparse=["aweb"];sparse.length=2;
+  for (const roles of [null,"aweb",["unknown"],["aweb","aweb"],sparse])
+    await assert.rejects(probeRuntime({...plan,policy:{...plan.policy,roles}},io),{
+      name:"BoundaryFailure",message:"runtime policy is incomplete",
+    });
+});
 
 test("runtime derives role controls but always probes unlisted TLS/DNS, backends and gateway", async () => {
   for (const roles of [["aweb"], ["signer"], ["aweb", "registry"], ["aweb", "registry", "secrets"], ["registry"], Object.keys(full().targets)]) {
