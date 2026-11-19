@@ -428,11 +428,13 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     showCanvas(true);
     staleOf = (row) => data.stale?.(row) === true;
     graph = instanceGraph(data.rows, data.deployments, DESKTOP_TERMS, { mode, here: data.here });
+    const before = hadFocus && place ? place.at.get(hadFocus) ?? null : null; // where the focused node was drawn
     place = layoutGraph(graph);
     rowsById = new Map(data.rows.map((r) => [instanceId(r), r])); deployments = data.deployments || [];
     labels = graph.labels;
-    // An open menu survives the repaint: reopened on the same agent, on the item it was on (the roster menu's rule).
-    const kept = menu ? { id: menu.id, action: menu.element.contains(doc.activeElement) ? doc.activeElement?.dataset?.action ?? null : null } : null;
+    // An open menu that has the focus survives the repaint: reopened on the same agent, on the item it was on (the
+    // roster menu's rule). One the focus has left goes: a repaint never takes the focus back from where it was moved.
+    const kept = menu && menu.element.contains(doc.activeElement) ? { id: menu.id, action: doc.activeElement?.dataset?.action ?? null } : null;
     draw(data);
     // The events dialog follows the roster: gone with its agent, and re-checked against its current facts (a newer
     // incarnation at the same address revokes a read the old one asked for: instance-events-view.mjs owns it).
@@ -444,16 +446,32 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     const stops = graphStops(graph).flat();
     let target = focusId && nodeEls.has(focusId) ? focusId : null;
     // A deployment the switcher asked to show (its "Not matched" entries, deployment-tabs.mjs, held there for a Graph
-    // not loaded yet): its column's first agent takes the focus, once.
+    // not loaded yet), taken once its column is drawn: its first agent takes the focus; a column with none is brought
+    // into view, and its heading's "How to fix" above the canvas takes the focus where it has one.
+    let askedColumn = null;
     if (mode === "columns") {
       const stopsOf = (tab) => graphStops(graph)[graph.columns.findIndex((c) => c.key === tab)]?.[0] ?? null;
-      const asked = takeDeploymentRequest(currentWorkspace(), (tab) => !!stopsOf(tab));
-      if (asked) { target = stopsOf(asked).id; focusAfter = true; }
+      const asked = takeDeploymentRequest(currentWorkspace(), (tab) => graph.columns.some((c) => c.key === tab));
+      if (asked && stopsOf(asked)) { target = stopsOf(asked).id; focusAfter = true; }
+      else if (asked) askedColumn = asked;
     }
     focusId = target ?? stops[0]?.id ?? null;
     for (const [id, e] of nodeEls) e.tabIndex = id === focusId ? 0 : -1;
     if (!fitted) fit(); else applyTransform();
-    if (!menu && (hadFocus || keepFocus || focusAfter) && focusId) focusNode(focusId, { reveal: focusAfter });
+    if (askedColumn) { showColumn(askedColumn); return; }
+    // Restoring the focus on a node keeps it on screen: brought into view when the focus moved to another node, or
+    // the node it was on moved (rows came or went above it); left where it is otherwise (the operator may have panned).
+    const now = focusId ? place.at.get(focusId) : null;
+    const moved = !before || !now || before.x !== now.x || before.y !== now.y;
+    if (!menu && (hadFocus || keepFocus || focusAfter) && focusId) focusNode(focusId, { reveal: focusAfter || focusId !== hadFocus || moved });
+  }
+
+  /** A column the switcher asked for that has no agents: panned into view, and its "How to fix" focused if it has one. */
+  function showColumn(key) {
+    const box = place?.boxes.find((b) => b.key === key), rect = canvas.getBoundingClientRect?.();
+    if (box && rect?.width) { fitted = true; tx = G.PAD - box.x * z; applyTransform(); }
+    const block = [...notes.querySelectorAll("[data-deployment]")].find((b) => b.dataset.deployment === key);
+    block?.querySelector("summary")?.focus();
   }
 
   /** Each deployment with something to say (not live, not matched, or a note): its heading's words above the canvas. */
@@ -611,6 +629,8 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
       const next = e.key === "Home" ? 0 : e.key === "End" ? enabled.length - 1 : (i + (e.key === "ArrowDown" ? 1 : -1) + enabled.length) % enabled.length;
       enabled[next]?.focus();
     });
+    // The focus leaving the menu (F6 to another region, a click elsewhere) closes it, leaving the focus where it went.
+    m.addEventListener("focusout", (e) => { if (menu?.element === m && !m.contains(e.relatedTarget)) closeMenu(); });
     m.addEventListener("toggle", (e) => { if (e.newState === "closed" && menu?.element === m) { menu = null; m.remove(); } });
     root.append(m);
     menu = { id, element: m };

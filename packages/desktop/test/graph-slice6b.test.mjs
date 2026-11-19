@@ -504,3 +504,49 @@ test("slice6b removing the agent of a focused events dialog leaves the focus on 
   assert.equal(u.el.querySelector('[role="dialog"]'), null);
   assert.equal(u.focused(), "b", "a surviving node, never <body>");
 });
+
+test("slice6b a repaint that moves or replaces the focused node keeps it on screen", (t) => {
+  const solos = (n) => Array.from({ length: n }, (_, i) => row(`agent-${String(i).padStart(2, "0")}`, { createdAt: `2026-11-01T${String(Math.floor(i / 60)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}:00.000Z` }));
+  const u = fixture(t, { rows: solos(61) });
+  const canvas = u.el.querySelector(".graph-canvas");
+  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 600 });
+  const screenY = (name) => {
+    const [, tx, ty, z] = u.el.querySelector(".graph-stage").style.transform.match(/translate\(([-\d.]+)px, ([-\d.]+)px\) scale\(([\d.]+)\)/).map(Number);
+    void tx; return Number(u.nodeOf(name).style.top.replace("px", "")) * z + ty;
+  };
+  const onScreen = (name) => { const y = screenY(name); return y >= 0 && y <= 600; };
+  u.graph.focus(); u.key(u.doc.activeElement, "End");
+  const last = u.focused(); assert.ok(onScreen(last), "End brings the last agent into view");
+  // Its agent removed: the focus falls back to another node, brought into view.
+  u.set({ rows: solos(61).filter((r) => r.instance !== last) });
+  assert.ok(u.focused() && u.focused() !== last); assert.ok(onScreen(u.focused()), `${u.focused()} is on screen`);
+  // Rows added above the focused one push it down: still on screen.
+  u.key(u.doc.activeElement, "End"); const bottom = u.focused();
+  u.set({ rows: [...solos(61).filter((r) => r.instance !== last), ...Array.from({ length: 30 }, (_, i) => row(`newer-${i}`, { createdAt: `2026-12-0${1 + (i % 9)}T00:00:${String(i).padStart(2, "0")}.000Z` }))] });
+  assert.equal(u.focused(), bottom); assert.ok(onScreen(bottom), "moved by the repaint, brought back into view");
+});
+
+test("slice6b a repaint never takes the focus back from where the operator moved it", (t) => {
+  const u = fixture(t, { rows: [row("a"), row("b")] });
+  const outside = u.doc.createElement("button"); outside.textContent = "Sidebar"; u.doc.body.append(outside);
+  u.nodeOf("a").focus();
+  u.doc.activeElement.dispatchEvent(new u.dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+  assert.ok(u.el.querySelector('[role="menu"]').contains(u.doc.activeElement));
+  outside.focus(); // F6 to another region
+  assert.equal(u.el.querySelector('[role="menu"]'), null, "the menu closes when the focus leaves it");
+  u.set({ rows: [row("a"), row("b"), row("c")] });
+  assert.equal(u.doc.activeElement, outside, "the roster's repaint leaves the focus where it was moved");
+});
+
+test("slice6b a request for a deployment with no agents is taken, and its How to fix gets the focus", (t) => {
+  const was = currentWorkspace(); setWorkspace("ws"); t.after(() => setWorkspace(was));
+  const deps = [DEPLOYMENTS[0], { ...DEPLOYMENTS[1], reachable: false, reason: "SSH timed out", short: "ssh timed out", fix: ["Check `polaris`"] }];
+  const u = fixture(t, { rows: [row("lead")], deployments: deps });
+  requestDeploymentTab("ws", "polaris:/w", null);
+  const summary = u.el.querySelector('.graph-notes [data-deployment="polaris:/w"] summary');
+  assert.ok(summary); assert.equal(u.doc.activeElement, summary, "its How to fix");
+  // Taken: a later roster where polaris gains an agent doesn't pull the focus there.
+  u.nodeOf("lead").focus();
+  u.set({ rows: [row("lead"), row("far", { server: "polaris" })] });
+  assert.equal(u.focused(), "lead");
+});
