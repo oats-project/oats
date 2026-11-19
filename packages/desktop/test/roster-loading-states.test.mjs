@@ -953,7 +953,7 @@ test('this window\'s retire reads Retiring… from its send, before any read; a 
   // The apply starts: Retiring… at once, with no read; Retire stays the menu's only act, secondary.
   let own = c.retires.begin(target);
   assert.equal(reads('alpha'), 'Retiring…'); assert.equal(s.requests.length, 1, 'no read was needed');
-  assert.equal(button('alpha').getAttribute('aria-disabled'), 'true'); assert.deepEqual(menu('alpha'), ['retire']);
+  assert.equal(button('alpha').getAttribute('aria-disabled'), 'true'); assert.deepEqual(menu('alpha'), ['details', 'retire']); // slice 6a: Details on every row
   for (const other of ['beta', 'gamma']) assert.notEqual(reads(other), 'Retiring…', `${other}: as the roster says`);
   // Refused (or stale): it ran nothing, so the row reads again as the roster says, at once.
   own.settle('refused');

@@ -244,7 +244,7 @@ test("roster DOM contract: named group separators, identity, active state, hidde
     assert.equal(menu.getAttribute("role"), "menu");
     assert.equal(menu.dataset.instanceMenuOpen, undefined, "closed until asked");
     assert.deepEqual([...menu.querySelectorAll("[role=menuitem]")].map(item => item.dataset.action),
-      button.getAttribute('aria-disabled') === 'true' ? ['open-split', 'open-pr', "inspect", "stop", "retire"] : ['open-split', 'open-pr', "inspect", "restart", "stop", "retire"]);
+      button.getAttribute('aria-disabled') === 'true' ? ['details', 'open-split', 'open-pr', "inspect", "stop", "retire"] : ['details', 'open-split', 'open-pr', "inspect", "restart", "stop", "retire"]); // Details first (slice 6a)
   }
   assertTools(u);
   const active = u.doc.querySelector(".ctx-inst.active");

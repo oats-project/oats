@@ -127,8 +127,9 @@ test("slice2 overview counts and enter opens section, esc returns", async (t) =>
   u.openButton("souls").click(); u.openButton("teams").click(); u.openButton("machines").click(); u.openButton("graph").click();
   assert.deepEqual(u.tabs, ["souls", "teams", ["machines", "list"], ["machines", "map"]]);
   // Esc on the Workspace page comes back to Home (shell.mjs): only an Esc nothing on the page took, from no field.
-  assert.match(shell, /if \(e\.key !== "Escape" \|\| e\.defaultPrevented \|\| e\.altKey \|\| e\.ctrlKey \|\| e\.metaKey \|\| e\.shiftKey \|\| stage\?\.name !== "spawn"\) return;/);
-  assert.match(shell, /e\.preventDefault\(\);\n  void showStageFocused\("home"\);/);
+  // (Slice 6a: the Workspace page is a tab, so the listener is the tab host's and asks which page its tab shows.)
+  assert.match(shell, /if \(e\.key !== "Escape" \|\| e\.defaultPrevented \|\| e\.altKey \|\| e\.ctrlKey \|\| e\.metaKey \|\| e\.shiftKey \|\| currentPage\(\) !== "spawn"\) return;/);
+  assert.match(shell, /e\.preventDefault\(\);\n  \/\/ Back to Home in this pane/);
   // Agents opens Home › Agents here, and Esc returns to the board with focus on Agents.
   u.openButton("agents").click();
   assert.equal(u.home.view, "agents");
@@ -239,24 +240,31 @@ test("slice2 Teams waits for the CLI's probe, and a refused Teams read fails Tea
 });
 
 test("slice2 Enter on a section lands focus on its Workspace tab, so Esc goes straight back to Home", async () => {
-  // The shipped handoff and the shipped Esc listener, run on a stage host whose Workspace page mounts its tabs.
-  const dom = new JSDOM('<!doctype html><body><div id="stagehost"><div class="home"><button id="from">Souls</button></div></div></body>');
-  const document = dom.window.document, stageHost = document.getElementById("stagehost"), went = [];
-  const c = { document, stageHost, stage: { name: "home" }, stageOp: 0, tabLayerVisible: false,
-    isShown: (el) => el.isConnected, focusRegions: { focusRegion: (name) => went.push(`region:${name}`) },
+  // The shipped handoff and the shipped Esc listener (slice 6a: pages are tabs, the listener is the tab host's): the
+  // Workspace page's tab mounts its tab control; Esc goes back to this pane's Home, on the section that opened it.
+  const dom = new JSDOM('<!doctype html><body><div id="tabhost"><div class="tab-pane" id="home-pane"><div class="home"><button id="from" data-home-return>Souls</button></div></div></div></body>');
+  const document = dom.window.document, host = document.getElementById("tabhost"), went = [];
+  const homeTrigger = document.createElement("button"); document.body.append(homeTrigger);
+  const tabs = new Map([[1, { kind: "page", page: "home", paneEl: document.getElementById("home-pane"), triggerEl: homeTrigger }]]);
+  const c = { document, tabs, activeTab: 1, page: "home", isShown: (el) => el.isConnected,
+    tabOpenIntents: { watch: () => () => true }, currentPage: () => c.page,
+    focusRegions: { focusRegion: (name) => went.push(`region:${name}`) },
     openWorkspaceSouls: async (tab) => {
-      c.stageOp += 1; stageHost.innerHTML = `<div role="tablist"><button id="workspace-tab-${tab}" role="tab">tab</button></div>`; c.stage = { name: "spawn" };
+      const pane = document.createElement("div"); pane.className = "tab-pane"; pane.innerHTML = `<div role="tablist"><button id="workspace-tab-${tab}" role="tab">tab</button></div>`;
+      host.append(pane); tabs.set(2, { kind: "page", page: "spawn", paneEl: pane, triggerEl: document.createElement("button") }); c.activeTab = 2; c.page = "spawn";
     },
-    showStageFocused: async (name) => went.push(name) };
+    showStage: async (name) => { went.push(name); c.page = name; c.activeTab = 1; } };
   const handoff = shell.match(/async function openWorkspaceTabFocused\(tab, options\) \{[^]*?\n\}/)[0];
-  const esc = shell.match(/stageHost\.addEventListener\("keydown", \(e\) => \{[^]*?\n\}\);/)[0];
+  const esc = shell.match(/document\.getElementById\("tabhost"\)\.addEventListener\("keydown", \(e\) => \{[^]*?\n\}\);/)[0];
   const { runInNewContext } = await import("node:vm");
   const run = runInNewContext(`${handoff}\n${esc}\n({ openWorkspaceTabFocused })`, Object.assign(c, { Element: dom.window.Element }));
   document.getElementById("from").focus();
   await run.openWorkspaceTabFocused.call(c, "souls");
   assert.equal(document.activeElement.id, "workspace-tab-souls", "the page's tab control, not <body>");
   document.activeElement.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  await new Promise((r) => setTimeout(r, 0));
   assert.deepEqual(went, ["home"], "the first Esc goes back to Home");
+  assert.equal(document.activeElement.id, "from", "on the section that opened the Workspace page");
   dom.window.close();
 });
 

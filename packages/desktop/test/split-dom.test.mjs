@@ -212,9 +212,9 @@ test("projection preserves keyboard focus on the focused tab trigger across regr
 
 // ── clickable controls share the actions' gating ─────────────────────────
 
-test("splitControlsState mirrors the split actions' gating (terminal-only, cap, empty group)", () => {
+test("splitControlsState mirrors the split actions' gating (any tab kind since slice 6a, cap, empty group)", () => {
   assert.equal(splitControlsState(null, 1, "terminal", false).visible, false);
-  assert.equal(splitControlsState(null, 1, "file", true).visible, false);
+  assert.equal(splitControlsState(null, 1, "file", true).visible, true, "a file (a page, a brain) can split: every tab kind lives in the groups");
   assert.equal(splitControlsState(null, null, null, true).visible, false);
   // flat: both splits enabled
   assert.deepEqual(splitControlsState(null, 1, "terminal", true),

@@ -420,7 +420,7 @@ function pageModule(name) {
  * (NAV_TABS: Machines) opens the Workspace page on that tab. Returns once the tab is open. */
 async function showStage(name) {
   // A window with no workspace shows only its choice (#481): no view may read with no workspace.
-  if (windowState() === "choosing") { void showChooser(); return; }
+  if (typeof windowState === "function" && windowState() === "choosing") { void showChooser(); return; }
   const asTab = navTab(name);
   if (asTab) return openWorkspaceSouls(asTab.tab);
   const v = NAV.find((x) => x.name === name);
@@ -1726,7 +1726,7 @@ function showTerminalContext() {
   if (other) { activateTab(other[0]); return; }
   showTabLayer(false);
   setNavActive(null);
-  showEmptyState();
+  if (typeof showEmptyState === "function") showEmptyState();
 }
 
 // ── tabs ──────────────────────────────────────────────────────────────────
@@ -2404,7 +2404,7 @@ function closeTab(id, restoreFocus = false, { explicit = true, confirmed = false
       showTabLayer(false);
       // The last tab closed (slice 6a: no stage behind the tabs): the empty state, its Open Home the way back.
       setNavActive(null);
-      showEmptyState();
+      if (typeof showEmptyState === "function") showEmptyState();
       if (restoreFocus) focusAfterLastTab("artifact", {
         stageEntry: stageHost.querySelector(".tabs-empty button") || navEl.querySelector(".nav-item"),
       });

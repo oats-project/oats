@@ -104,23 +104,22 @@ test("shipped workspace transition restores independent layouts, active/focused 
   for (const tab of s.tabs.values()) assert.ok(tab.paneEl.isConnected && tab.tabEl.isConnected);
 });
 
-test("files and brains hide with their workspace; covered splits retain proportions and empty-group focus", t => {
+test("files and brains join the focused group beside the terminals, and hide with their workspace (slice 6a)", t => {
   const s = shell(t), c = s.context;
   c.split = resizeSplitGroups(requestSplit(null, "row", [1, 2], 1).split, [{ id: 1, weight: .6 }, { id: 2, weight: 1.4 }]);
   s.activateTab(1, { keepGroupFocus: true });
+  s.activateTab(5); // a file opens into the focused (empty) group, beside the terminal: no tab kind covers another
+  assert.deepEqual(visible(s.tabs), [1, 5]);
+  assert.deepEqual(c.split.groups.map(g => g.tabs), [[1, 2], [5]]);
   const layoutA = structuredClone(c.split);
-  s.activateTab(5); // file covers the terminal layer
-  assert.deepEqual(visible(s.tabs), [5]);
   s.switchTo("B");
   assert.deepEqual(visible(s.tabs), []);
   assert.equal(s.tabs.get(5).tabEl.hidden, true);
   assert.equal(s.activateTab(5), false);
   s.activateTab(6);
   s.switchTo("A");
-  assert.equal(c.activeTab, 5); assert.deepEqual(visible(s.tabs), [5]);
-  assert.deepEqual(c.split, layoutA);
-  s.activateTab(1, { keepGroupFocus: true });
-  assert.equal(c.split.focusedGroup, 2, "empty target group is remembered");
+  assert.equal(c.activeTab, 5); assert.deepEqual(visible(s.tabs), [1, 5]);
+  assert.deepEqual(c.split, layoutA, "the layout comes back with its file in its group");
   assert.deepEqual([...c.tabhost.querySelectorAll(".group-cell")].map(el => el.style.flexGrow), ["0.6", "1.4"]);
   s.switchTo("B"); assert.equal(c.activeTab, 6); assert.deepEqual(visible(s.tabs), [6]);
 });

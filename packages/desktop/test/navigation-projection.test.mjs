@@ -65,17 +65,18 @@ function shell(t, shellSource = source) {
     reserveKey, whenKeyFree, prepareOwnedOpen, projectSplitDom, ...layout, ...workspaceTabs,
     loadStageView(name) { const gate = { ...deferred(), name }; loads.push(gate); return gate.promise; },
     // These fixtures mount inert views; panel ownership is tested separately.
-    syncContextPanel() {}, contextPanel: {},
+    syncContextPanel() {}, contextPanel: {}, retitleTab() {},
     createPanelOwner: () => ({ dispose() {} }),
     ctx: { notify: message => assert.fail(`unexpected notice: ${message}`) },
   };
-  const names = ["closeStage", "showStage", "setNavActive", "showTabLayer", "updateActiveContexts", "setSidebarMode", "updateContextTabs",
+  const names = ["currentPage", "pageModule", "showEmptyState", "hideEmptyState", "takePageTabs", "closePageTabs", "reopenPageTabs", "closeStage", "showStage", "setNavActive", "showTabLayer", "updateActiveContexts", "setSidebarMode", "updateContextTabs",
     "addTab", "selectTab", "activateTab", "revealActiveRosterRow", "closeTab", "tabStrips", "revealActiveTabs", "observeTabStrips", "onTabKeydown", "walkedTabs", "visibleTabEntries", "renderSplit", "selectEmptyGroup", "restoreWorkspaceTabs", "showTerminalContext", "openViewTab", "openWorkspaceSouls", "showStageFocused"];
   const functions = names.map(name => {
     const match = shellSource.match(new RegExp(`(?:async )?function ${name}\\([^]*?\\n\\}`));
     assert.ok(match, `execute shipped ${name}`); return match[0];
   }).join("\n").replace('import(`./views/${name}.mjs`)', "loadStageView(name)").replace('import("./views/spawn.mjs")', "loadSpawnView()");
-  const setup = [/const tabOpenIntents = [^\n]+/, /const WORKSPACE_TAB_NAMES = [^\n]+/].map(re => shellSource.match(re)[0]).join("\n");
+  const setup = [/const tabOpenIntents = [^\n]+/, /const WORKSPACE_TAB_NAMES = [^\n]+/].map(re => shellSource.match(re)[0]).join("\n")
+    + "\nconst pageOpens = new Map(); const workspacePages = new Map();";
   const s = runInNewContext(`${setup}\n${functions}\n({ ${names.join(", ")}, tabOpenIntents });`, withShellWindowGlobals(c));
   // Trace actual class writes, not a fake setNavActive implementation. Useful
   // when a synchronous focus restoration re-enters the shell during projection.
@@ -95,14 +96,16 @@ function shell(t, shellSource = source) {
       const input = document.createElement("textarea"); made.paneEl.append(input);
       return { ...made, input };
     },
+    // Slice 6a: a page is a tab (kind "page"); its module loads once per open, and an open page tab is focused.
     async stage(name) {
-      const done = s.showStage(name); await tick();
-      if (!c.stage || c.stage.name !== name) {
+      const before = loads.length, done = s.showStage(name); await tick(); await tick();
+      if (loads.length > before) {
         assert.equal(loads.at(-1).name, name);
         loads.at(-1).resolve({ mount(el) { el.textContent = name; return () => {}; } });
       }
-      await done;
+      await done; await tick();
     },
+    page: () => { const t = c.tabs.get(c.activeTab); return c.tabLayerVisible && t?.kind === "page" ? t.page : null; },
     switchTo(workspace) { c.workspace = workspace; c.generation++; s.restoreWorkspaceTabs(); },
     snapshot() { return structuredClone({ split: c.split, activeTab: c.activeTab, sidebarMode: c.sidebarMode,
       tabLayerVisible: c.tabLayerVisible, nav: this.nav(), contexts,
@@ -169,8 +172,9 @@ test("brain restoration keeps Souls navigation; returning to a stage reflects th
   s.switchTo("B"); await s.stage("automations"); s.switchTo("A");
   assert.equal(s.c.activeTab, brain.id); assert.deepEqual(s.nav(), ["home"]);
   await s.stage("automations");
-  assert.equal(s.c.tabLayerVisible, false); assert.deepEqual(s.nav(), ["automations"]);
-  assert.deepEqual(s.contexts, ["stage:automations"]);
+  // Slice 6a: the page is a tab, so the tab layer shows it.
+  assert.equal(s.c.tabLayerVisible, true); assert.equal(s.page(), "automations"); assert.deepEqual(s.nav(), ["automations"]);
+  assert.deepEqual(s.contexts, ["tabs"]);
 });
 
 for (const boundary of ["load", "mount"]) for (const outcome of ["resolve", "reject"]) {
@@ -202,9 +206,9 @@ for (const boundary of ["load", "mount"]) for (const outcome of ["resolve", "rej
     else gate.reject(new Error("superseded stage failure"));
     await old; await tick();
     assert.equal(s.loads.at(-1).name, "spawn");
-    s.loads.at(-1).resolve({ mount() {} }); await newer;
-    assert.deepEqual(s.nav(), ["home"]); assert.deepEqual(s.contexts, ["stage:spawn"]);
-    assert.equal(s.c.tabLayerVisible, false);
+    s.loads.at(-1).resolve({ mount() {} }); await newer; await tick();
+    assert.deepEqual(s.nav(), ["home"]); assert.deepEqual(s.contexts, ["tabs"]);
+    assert.equal(s.page(), "spawn", "the newer page's tab is the one shown");
   });
 }
 
@@ -262,20 +266,20 @@ test("the sidebar's views: Home, the Workspace page (no row of its own: Home's) 
 for (const start of [null, "automations"]) test(`stage.hierarchy from ${start ?? "no stage"}: the Workspace page, its Machines tab preselected`, async t => {
   const s = await machinesFrom(t, start);
   assert.deepEqual(s.preselected, ["machines"], "the tab is chosen before the page shows");
-  assert.equal(s.c.stage.name, "spawn");
+  assert.equal(s.page(), "spawn", "the Workspace page's tab (slice 6a: pages are tabs)");
   assert.ok(!s.loads.some(load => load.name === "hierarchy"), "Machines is no page of its own");
   assert.deepEqual(s.nav(), ["home"], "Home's row is the current one: Home opens the Workspace page (slice 2)");
-  assert.equal(s.c.sidebarMode, "souls"); assert.deepEqual(s.contexts, ["stage:spawn"]);
-  // showStageFocused compares the stage on screen with the PAGE (spawn), so a keyboard open keeps focus on a control.
-  assert.deepEqual(s.regionCalls, ["main"], "focus was on <body>: the stage's first control");
+  assert.equal(s.c.sidebarMode, "souls"); assert.deepEqual(s.contexts, ["tabs"]);
+  // showStageFocused compares the page tab shown with the PAGE (spawn), so a keyboard open keeps focus on a control.
+  assert.equal(s.document.activeElement, s.c.tabs.get(s.c.activeTab).triggerEl, "focus was on <body>: the page tab's trigger");
 });
 
 test("stage.hierarchy while the Workspace page is on screen switches its tab, without reloading the page", async t => {
   const s = await machinesFrom(t, "spawn");
   assert.deepEqual(s.preselected, ["machines"]);
   assert.equal(s.loads.length, 1, "the page already on screen stays mounted");
-  assert.equal(s.c.stage.name, "spawn"); assert.deepEqual(s.nav(), ["home"]);
-  assert.deepEqual(s.regionCalls, ["main"]);
+  assert.equal(s.page(), "spawn"); assert.deepEqual(s.nav(), ["home"]);
+  assert.equal(s.document.activeElement, s.c.tabs.get(s.c.activeTab).triggerEl);
 });
 
 test("stage.automations loads the Automations page itself: no tab of the Workspace page is preselected", async t => {
@@ -284,16 +288,16 @@ test("stage.automations loads the Automations page itself: no tab of the Workspa
   assert.equal(s.loads.at(-1).name, "automations", "its own page loads");
   s.loads.at(-1).resolve({ mount(el) { el.textContent = "automations"; return () => {}; } }); await done;
   assert.deepEqual(s.preselected, []);
-  assert.equal(s.c.stage.name, "automations"); assert.deepEqual(s.nav(), ["automations"]);
-  assert.equal(s.c.sidebarMode, "overview"); assert.deepEqual(s.contexts, ["stage:automations"]);
+  assert.equal(s.page(), "automations"); assert.deepEqual(s.nav(), ["automations"]);
+  assert.equal(s.c.sidebarMode, "overview"); assert.deepEqual(s.contexts, ["tabs"]);
 });
 
 test("mutation: showStageFocused must compare the stage with the NAV_TABS page, not the name", async t => {
   const page = "page = navTab(name)?.page ?? name;";
   assert.ok(source.includes(page));
   const s = await machinesFrom(t, "automations", source.replace(page, "page = name;"));
-  assert.equal(s.c.stage.name, "spawn");
-  assert.deepEqual(s.regionCalls, [], "comparing against \"hierarchy\" leaves focus on <body>");
+  assert.equal(s.page(), "spawn");
+  assert.notEqual(s.document.activeElement, s.c.tabs.get(s.c.activeTab).triggerEl, "comparing against \"hierarchy\" leaves focus on <body>");
 });
 
 test("mutation: showStage must route a NAV_TABS name to its page", async t => {
@@ -301,6 +305,6 @@ test("mutation: showStage must route a NAV_TABS name to its page", async t => {
   assert.ok(source.includes(route));
   const s = shell(t, source.replace(route, ""));
   void s.showStage("hierarchy"); await tick();
-  assert.equal(s.loads.at(-1).name, "hierarchy", "without the route it would load a page the sidebar no longer has");
+  assert.equal(s.loads.length, 0, "without the route nothing opens: no page tab is named hierarchy");
   assert.deepEqual(s.preselected, []);
 });

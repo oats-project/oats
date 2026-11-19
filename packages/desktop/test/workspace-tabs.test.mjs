@@ -16,8 +16,10 @@ test("terminal tabs: same-named A/B instances remain workspace-scoped", () => {
   assert.equal(tabVisibleInContext(tabs.get(1), "instances", "wsB"), false,
     "workspace A terminal must be hidden beside workspace B roster");
   assert.equal(tabVisibleInContext(tabs.get(2), "instances", "wsB"), true);
-  assert.equal(tabVisibleInContext(tabs.get(3), "instances", "wsB"), false);
+  // Slice 6a: every tab of the workspace shows in its strip, whatever the sidebar's mode (pages beside terminals).
+  assert.equal(tabVisibleInContext(tabs.get(3), "instances", "wsB"), true);
   assert.equal(tabVisibleInContext(tabs.get(3), "souls", "wsB"), true);
+  assert.equal(tabVisibleInContext(tabs.get(3), "souls", "wsA"), false, "never another workspace's");
 });
 
 test("every artifact kind requires the exact workspace for visibility and activation", () => {

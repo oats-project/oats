@@ -175,9 +175,12 @@ test("the landing surface is Home: at start, after a choice, and as the nav's fa
   assert.deepEqual(topLevel, ['showStage("home");'], "the shell's one start-up stage is Home");
   assert.ok(src.lastIndexOf('showStage("home");') > src.indexOf("// The landing surface:"), "under its comment");
   assert.doesNotMatch(src, /showStage\("hierarchy"\)/, "Machines is never shown as a page of its own");
-  const fallbacks = src.match(/setNavActive\(stage\?\.name \|\| "[a-z]+"\)/g);
-  assert.deepEqual(fallbacks, ['setNavActive(stage?.name || "home")', 'setNavActive(stage?.name || "home")'],
-    "the last terminal closing, and a workspace switch that restores no tab, mark Home");
+  // Slice 6a: no stage behind the tabs. The last terminal closing with no other tab shows the empty state (Open Home),
+  // and a workspace switch that restores no tab reopens its page tabs, or lands on Home.
+  const terminal = src.match(/function showTerminalContext\(\) \{[^]*?\n\}/)[0];
+  assert.match(terminal, /if \(typeof showEmptyState === "function"\) showEmptyState\(\);/, "the last tab closing: the empty state, its Open Home");
+  assert.match(src, /if \(!pages\?\.length\) \{\n    if \(still\(\) && !\[\.\.\.tabs\.values\(\)\]\.some\(\(t\) => canActivateTab\(t, ws\)\)\) await showStage\("home"\);/,
+    "a workspace with no tab lands on Home");
   // After a choice (or an adoption) the window leaves the chooser for the home surface: run the shipped handler.
   const handler = src.match(/^onWindowState\(\(state\) => \{[^]*?\n\}\);$/m)?.[0];
   assert.ok(handler, "exercise the shipped onWindowState handler");

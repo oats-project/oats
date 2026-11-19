@@ -206,7 +206,7 @@ for (const [flag, state, hint, hold] of [["rollbackIncomplete", "Spawn didn't fi
     assert.equal(button.getAttribute("aria-disabled"), "true"); assert.match(button.getAttribute("aria-description"), new RegExp(hint));
     button.click(); assert.deepEqual(u.opened, [], "activation starts nothing");
     assert.equal(u.wrap("dev-q").querySelector(".ctx-start"), null, "no Start…");
-    assert.deepEqual(u.menu("dev-q"), ["retire"], "no Inspect, Start, Stop or split");
+    assert.deepEqual(u.menu("dev-q"), ["details", "retire"], "Details (slice 6a: every row's) and Retire: no Inspect, Start, Stop or split");
     assert.equal(u.wrap("dev-q").querySelector("[data-action=retire]").textContent, "Retire instance…");
     noTools(u, "dev-q");
     u.contextMenu("dev-q");
@@ -219,7 +219,7 @@ for (const [flag, state, hint, hold] of [["rollbackIncomplete", "Spawn didn't fi
     // A running quarantined home offers no Stop or split either.
     const v = fixture(t, () => []);
     v.render([...roster, instance("dev-q", "root", { running: true, ...hold })]);
-    assert.deepEqual(v.menu("dev-q"), ["retire"]);
+    assert.deepEqual(v.menu("dev-q"), ["details", "retire"]);
   });
 }
 
@@ -232,7 +232,7 @@ test("both spawnInProgress and rollbackIncomplete: rollbackIncomplete wins, even
     assert.equal(u.row("dev-new").querySelector(".ctx-spawn-state").textContent, "Spawn didn't finish");
     assert.equal(u.row("dev-new").querySelector(".ctx-spawn-spinner"), null);
     assert.equal(u.row("dev-new").querySelector(".ctx-spawn-since"), null);
-    assert.deepEqual(u.menu("dev-new"), ["retire"]);
+    assert.deepEqual(u.menu("dev-new"), ["details", "retire"]);
   }
 });
 
@@ -262,7 +262,7 @@ test("instanceActions: a spawning home has no actions (its context menu opens no
     const heldRow = rowFor();
     const held = instanceActions(doc, instance("q", undefined, { running: true, ...hold }), { row: heldRow, extra, say: line => said.push(line) });
     heldRow.after(held);
-    assert.deepEqual([...held.querySelectorAll("[role=menuitem]")].map(item => item.dataset.action), ["retire"], JSON.stringify(hold));
+    assert.deepEqual([...held.querySelectorAll("[role=menuitem]")].map(item => item.dataset.action), ["details", "retire"], JSON.stringify(hold));
     contextMenu(heldRow);
     assert.equal(held.dataset.instanceMenuOpen, "true", `limited, not held: its menu opens (${JSON.stringify(hold)})`);
     held.hidePopover();
@@ -334,7 +334,7 @@ for (const [name, hold] of Object.entries(RETIRING)) {
     assert.doesNotMatch(button.textContent, /fail|didn't finish/i, "never read as a failure");
     button.click(); assert.deepEqual(u.opened, [], "activation opens and starts nothing");
     assert.equal(u.wrap("dev-r").querySelector(".ctx-start"), null, "no Start…");
-    assert.deepEqual(u.menu("dev-r"), ["retire"], "no Inspect, Start, Stop, Restart or split");
+    assert.deepEqual(u.menu("dev-r"), ["details", "retire"], "Details and Retire: no Inspect, Start, Stop, Restart or split");
     const retireItem = u.wrap("dev-r").querySelector("[data-action=retire]");
     assert.equal(retireItem.disabled, false); assert.equal(retireItem.dataset.secondary, "true"); assert.equal(retireItem.autofocus, false);
     // No terminal tab is open (the fixture's tabs are empty): the row's context menu, from a key (Shift+F10, the Menu key)
@@ -403,7 +403,7 @@ test("a failed retire with the kernel's message: “Retire failed”, its hint, 
   assert.equal(button.querySelector(".ctx-spawn-state").textContent, "Retire failed");
   assert.equal(button.querySelector(".ctx-held-hint").textContent, "Retire it again to finish");
   assert.equal(button.getAttribute("aria-description"), "OATS says: the pre-retire hook exited 1 (E_RETIRE_HOOK)");
-  assert.deepEqual(u.menu("dev-f"), ["retire"]);
+  assert.deepEqual(u.menu("dev-f"), ["details", "retire"]);
   const retireItem = u.wrap("dev-f").querySelector("[data-action=retire]");
   assert.equal(retireItem.dataset.secondary, undefined); assert.equal(retireItem.autofocus, true, "Retire is the way on: the default");
   // A control character withholds the message whole; an over-long one is one bounded line.
