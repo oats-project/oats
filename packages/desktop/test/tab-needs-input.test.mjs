@@ -11,6 +11,8 @@ import { terminalKey } from "../renderer/instance-tree-view.mjs";
 import { tabShowsRow } from "../renderer/retired-tabs.mjs";
 import { iconElement } from "../renderer/shell-icons.mjs";
 import { syncWaitingRow } from "../renderer/waiting-row.mjs";
+import { createTabBoards } from "../renderer/agent-board-tabs.mjs";
+import { BOARD_FEATURE, boardData } from "../../client/instance-board.mjs";
 import { waitingClaim, waitingDetail, waitingClock } from "../../client/waiting-on-you.mjs";
 import { rowStale } from "../../client/roster-sections.mjs";
 import { remotePanel, unavailableGroups } from "../../client/remote-roster.mjs";
@@ -28,12 +30,15 @@ const claim = (extra = {}) => ({ since: SINCE, producer: "agent", reason: "atten
 const row = (name, extra = {}) => ({ instance: name, agent: "dev", home: `/ws/agents/dev/instances/${name}`, agentsRoot: "/ws/agents",
   running: true, runtimeState: "running", ...extra });
 
-function fixture(t, { stale = false } = {}) {
+function fixture(t, { stale = false, boards = null } = {}) {
   const dom = new JSDOM("<!doctype html><body><div class='strip-a'></div><div class='strip-b'></div></body>", { pretendToBeVisual: true });
   t.after(() => dom.window.close());
-  const doc = dom.window.document, tabs = new Map();
+  const doc = dom.window.document, tabs = new Map(), boardCalls = [];
   const context = { document: doc, tabs, terminalKey, tabShowsRow, waitingClaim, waitingDetail, waitingClock, syncWaitingRow, iconElement, rowStale, paintDotColor, setTabTitle,
-    contextDeployments: [], rosterStale: stale, tabNeedsInputRoster: { instances: [], workspace: null } };
+    contextDeployments: [], rosterStale: stale, tabNeedsInputRoster: { instances: [], workspace: null },
+    // The agent view's link (agent-board-tabs.mjs, its own suite agent-view.test.mjs): these rows carry no board, so it
+    // never takes the waiting row's claim; `boardCalls` shows each tab's row and claim reach it.
+    tabBoards: boards ?? { sync: (tab, row, claim) => { boardCalls.push({ tab: tab.key, row: row?.instance ?? null, claim: claim?.message ?? null }); return false; } } };
   Object.defineProperty(context, "Date", { get: () => Date, enumerable: true }); // the test realm's (mockable) clock
   const sync = runInNewContext(`${source}\nsyncTabNeedsInput`, context);
   let id = 0;
@@ -206,4 +211,22 @@ test("each terminal pane carries its own waiting row (#1502): a split with one w
   assert.equal(waitingRow(a), null, "nor for a row that is not running");
   u.sync([row("dev-a"), row("dev-b", { waitingOnYou: claim() })], "A");
   assert.equal(waitingRow(a), null, "cleared"); assert.ok(waitingRow(b));
+});
+
+// The agent view (S2-D): on a row with a board, the board's own claim shows in the question zone and the waiting row
+// gives way; another producer's claim keeps today's waiting row. Without the feature the tab is as it was.
+test("the agent view: the board's claim moves from the waiting row to the question zone; any other claim stays in the row", t => {
+  const boards = createTabBoards({ features: () => [BOARD_FEATURE], post: () => new Promise(() => {}), openLink: () => {},
+    hidden: { get: () => new Map(), hide() {}, showAll() {} } });
+  const u = fixture(t, { boards }), tab = u.open(row("dev-a"));
+  const board = boardData({ facts: [], questions: [{ id: "q1", question: "Pick one?", options: ["A", "B"], hasContext: false, since: SINCE }] });
+  u.sync([row("dev-a", { board, waitingOnYou: claim({ producer: "oats.board" }) })], "A");
+  assert.equal(waitingRow(tab), null, "no waiting row for the board's own question");
+  assert.ok(tab.paneEl.querySelector(":scope > .agent-questions"), "the question zone shows it");
+  assert.ok(cue(tab), "the tab's needs-input mark stays");
+  u.sync([row("dev-a", { board, waitingOnYou: claim({ producer: "agent" }) })], "A");
+  assert.ok(waitingRow(tab), "another producer's claim keeps the waiting row");
+  u.sync([row("dev-a", { waitingOnYou: claim({ producer: "oats.board" }) })], "A");
+  assert.ok(waitingRow(tab), "a row without the field (an older kernel): today's waiting row");
+  assert.equal(tab.paneEl.querySelector(":scope > .agent-questions"), null);
 });

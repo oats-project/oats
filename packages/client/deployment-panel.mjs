@@ -157,6 +157,8 @@ export function panelInstance(i) {
     ...(i.background === true ? { background: true } : {}),
     // Feature instance-pin: exactly true, else absent (instance-tree.mjs rowPinned).
     ...(i.pinned === true ? { pinned: true } : {}),
+    // Feature instance-board: the board deployment-data.mjs validated (instance-board.mjs), or null; absent stays absent.
+    ...(i.board !== undefined ? { board: i.board } : {}),
     team: i.team || null,
   };
 }
