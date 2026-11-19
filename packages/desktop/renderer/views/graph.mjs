@@ -66,10 +66,10 @@ export const graphCSS = `
 .graph-tools { display:flex; align-items:center; gap:6px; }
 .graph-mode { color:var(--muted); font-size:12px; white-space:nowrap; }
 .graph-mode kbd, .graph-hint kbd { font:inherit; font-weight:600; color:var(--fg); }
-.oats-view .graph button.graph-tool { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:28px; min-height:28px; min-width:28px; padding:0 8px;
+.graph.oats-view button.graph-tool { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:28px; min-height:28px; min-width:28px; padding:0 8px;
   border:1px solid var(--border); border-radius:6px; background:var(--surface); color:var(--fg); font:inherit; font-size:12px; font-weight:600; cursor:pointer; }
-.oats-view .graph button.graph-tool:hover { background:var(--surface-2); }
-.oats-view .graph button.graph-tool:focus-visible { background:var(--sel); }
+.graph.oats-view button.graph-tool:hover { background:var(--surface-2); }
+.graph.oats-view button.graph-tool:focus-visible { background:var(--sel); }
 .graph-state { flex:none; margin:0; padding:16px 20px; color:var(--muted); font-size:13px; display:flex; align-items:center; gap:12px; }
 .graph-state.failed { color:var(--fg); }
 .graph-state[hidden] { display:none; }
@@ -252,6 +252,11 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
     tx = px - (px - tx) * k; ty = py - (py - ty) * k; z = nz;
     applyTransform();
   }
+  /** A zoom key: about the focused node, which stays where it was on screen. */
+  function zoomKey(factor) {
+    const e = focusId ? nodeEls.get(focusId) : null, box = e?.getBoundingClientRect?.();
+    if (box?.width) zoomBy(factor, box.left + box.width / 2, box.top + box.height / 2); else zoomBy(factor);
+  }
   /** Keep a focused node on screen: pan (never zoom) just enough. */
   function reveal(id) {
     const p = place?.at.get(id), rect = canvas.getBoundingClientRect?.();
@@ -289,9 +294,9 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
   /* The rebindable keys (the shortcuts editor lists them; they fire only from the Graph, view-keys.mjs). */
   const viewActions = [
     { id: "graph.toggleField", defaultChord: "M", label: "Graph: machines as columns or one field", run: () => toggleMode() },
-    { id: "graph.zoomIn", defaultChord: "=", label: "Graph: zoom in", run: () => zoomBy(Z_STEP) },
-    { id: "graph.zoomInPlus", defaultChord: "Shift+=", label: "Graph: zoom in (+)", run: () => zoomBy(Z_STEP) },
-    { id: "graph.zoomOut", defaultChord: "-", label: "Graph: zoom out", run: () => zoomBy(1 / Z_STEP) },
+    { id: "graph.zoomIn", defaultChord: "=", label: "Graph: zoom in", run: () => zoomKey(Z_STEP) },
+    { id: "graph.zoomInPlus", defaultChord: "Shift+=", label: "Graph: zoom in (+)", run: () => zoomKey(Z_STEP) },
+    { id: "graph.zoomOut", defaultChord: "-", label: "Graph: zoom out", run: () => zoomKey(1 / Z_STEP) },
     { id: "graph.fit", defaultChord: "0", label: "Graph: fit to screen", run: () => fit() },
   ];
   const disposers = viewActions.map((a) => register({ id: a.id, label: a.label, context: "view:graph", run: a.run, defaultChord: a.defaultChord }));
@@ -443,7 +448,9 @@ export function createGraph(el, ctx, { doc = el.ownerDocument, generation = work
       if (e.sameWork) path.dataset.sameWork = "true";
       svg.append(path);
     }
-    tree.replaceChildren(svg, ...parts);
+    // The columns' backgrounds first, then the edges over them, then the nodes over the edges.
+    const backs = parts.filter((p) => p.classList.contains("graph-col"));
+    tree.replaceChildren(...backs, svg, ...parts.filter((p) => !backs.includes(p)));
   }
 
   function focusNode(id, { reveal: show = true } = {}) {

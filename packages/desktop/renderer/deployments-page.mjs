@@ -9,7 +9,7 @@
  * label's tooltip only. */
 import { deploymentState } from '../../client/roster-sections.mjs';
 import { deploymentLabel, deploymentLabelParts } from '../../client/deployment-label.mjs';
-import { DESKTOP_TERMS } from './desktop-terms.mjs';
+import { DESKTOP_TERMS, DESKTOP_NOUNS } from './desktop-terms.mjs';
 import { runtimeCounts } from '../../client/instance-presentation.mjs';
 
 export const deploymentsPageCSS = `
@@ -42,10 +42,10 @@ const el = (doc, tag, text, cls) => {
   return node;
 };
 
-/** A section's counts in words: "3 running", "1 running · 2 stopped", "no instances". */
+/** A section's counts in words: "3 running", "1 running · 2 stopped", "no agents" (DESKTOP_NOUNS). */
 export function deploymentCounts(rows) {
   const list = Array.isArray(rows) ? rows : [];
-  if (!list.length) return 'no instances';
+  if (!list.length) return `no ${DESKTOP_NOUNS.instances}`;
   const { running, stopped, unknown } = runtimeCounts(list);
   return [`${running} running`, stopped ? `${stopped} stopped` : '', unknown ? `${unknown} unknown` : ''].filter(Boolean).join(' · ');
 }
@@ -84,9 +84,10 @@ export function deploymentHead(doc, { deployment, rows, open = false, onToggle }
     if (deployment.short) line.append(el(doc, 'span', deployment.short, 'cct hier-dshort'));
   }
   head.append(line);
-  // What the tree under it is (the Machines tab, 2026-10-26): the instances on that machine, said under its name.
+  // What the tree under it is (the Machines tab, 2026-10-26): the agents on that machine, said under its name.
   const here = !(typeof deployment?.machine === 'string' && deployment.machine);
-  head.append(el(doc, 'div', here ? 'Instances on this machine' : `Instances on ${parts.machine}`, 'hier-dsub'));
+  const agents = DESKTOP_NOUNS.instances[0].toUpperCase() + DESKTOP_NOUNS.instances.slice(1);
+  head.append(el(doc, 'div', here ? `${agents} on this machine` : `${agents} on ${parts.machine}`, 'hier-dsub'));
   // With steps to follow, the steps are the explanation (the short reason above already names the
   // cause; the full sentence would repeat step 1): only a remembered deployment's "Last report" lead
   // stays. Without steps, the full sentence says what happens.
