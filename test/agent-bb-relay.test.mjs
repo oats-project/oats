@@ -26,7 +26,16 @@ if (master) fs.writeFileSync(argv[argv.indexOf("-S") + 1], "");
 fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ pid: process.pid, master, argv }) + "\\n");
 process.on("SIGTERM", () => process.exit(0));
 if (master) setInterval(() => {}, 1000);
-else { process.stdin.pipe(process.stdout); process.stdin.on("end", () => process.exit(0)); }
+else if (process.env.FAKE_SSH_ANSWER_BYTES) {
+  // bb answers and closes: the channel writes its answer and exits without reading.
+  const chunk = Buffer.alloc(65536, 120);
+  let left = Number(process.env.FAKE_SSH_ANSWER_BYTES);
+  const write = () => {
+    while (left > 0) { const size = Math.min(left, chunk.length); left -= size; if (!process.stdout.write(chunk.subarray(0, size))) return process.stdout.once("drain", write); }
+    process.exit(0);
+  };
+  write();
+} else { process.stdin.pipe(process.stdout); process.stdin.on("end", () => process.exit(0)); }
 `);
   chmodSync(join(dir, "ssh"), 0o755);
   const calls = () => readFileSync(log, "utf8").split("\n").filter(Boolean).map(line => JSON.parse(line));
@@ -101,6 +110,36 @@ test("the relay listens on loopback only, caps multiplexed channels at 9 and res
   assert.deepEqual(fake.calls().filter(call => alive(call.pid)), [], "stopping leaves no ssh child");
   assert.equal(relay.server.listening, false);
   assert.equal(existsSync(control), false, "the private control directory is removed");
+});
+
+test("a slow client receives all of an answer whose channel has already ended", async t => {
+  const { startRelay } = await import("../container/agent-bb/relay.mjs");
+  const fake = fakeSsh(t), bytes = 20 * 1024 * 1024;
+  const relay = startRelay({ ssh: "team-agent", listen: 0, env: { ...fake.env, FAKE_SSH_ANSWER_BYTES: String(bytes) }, say: () => {}, lingerMs: 200 });
+  t.after(() => relay.stop());
+  await relay.listening;
+  const received = await Promise.all([0, 1, 2].map(() => new Promise((resolve, reject) => {
+    const socket = connect(relay.server.address().port, "127.0.0.1");
+    let total = 0;
+    // A reader slower than the channel: it pauses after every chunk.
+    socket.on("data", chunk => { total += chunk.length; socket.pause(); setTimeout(() => socket.resume(), 2); });
+    socket.once("error", reject);
+    socket.once("end", () => { socket.end(); resolve(total); });
+  })));
+  assert.deepEqual(received, [bytes, bytes, bytes]);
+  await until(() => fake.calls().filter(call => !call.master).every(call => !alive(call.pid)), "the channels to end");
+
+  // A client that reads its answer and never closes its side is let go after the linger.
+  const connections = () => new Promise((resolve, reject) => relay.server.getConnections((error, count) => error ? reject(error) : resolve(count)));
+  await until(async () => await connections() === 0, "the three clients to close");
+  const idle = connect({ port: relay.server.address().port, host: "127.0.0.1", allowHalfOpen: true });
+  t.after(() => idle.destroy());
+  idle.on("error", () => {});
+  idle.resume();
+  const ended = await new Promise(resolve => idle.once("end", () => resolve(Date.now())));
+  assert.equal(await connections(), 1, "still held right after the answer");
+  await until(async () => await connections() === 0, "the relay to let the idle client go");
+  assert.ok(Date.now() - ended >= 150, "not before the linger");
 });
 
 test("the relay command refuses a wider listener and closes its children on TERM", async t => {

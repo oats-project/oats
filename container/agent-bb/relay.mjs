@@ -43,13 +43,13 @@ export function parseArgs(argv) {
 }
 
 /** Starts the relay. `env` is the environment its ssh children get. */
-export function startRelay({ ssh, listen, port = 38886, env = process.env, say = (line) => process.stderr.write(`bb-relay: ${line}\n`), masterRetryMs = 1_000, masterRetryMaxMs = 30_000, stopMs = 3_000 }) {
+export function startRelay({ ssh, listen, port = 38886, env = process.env, say = (line) => process.stderr.write(`bb-relay: ${line}\n`), masterRetryMs = 1_000, masterRetryMaxMs = 30_000, stopMs = 3_000, lingerMs = 30_000 }) {
   // A private directory keeps the control socket away from other users and from
   // any ControlPath of the operator's own configuration.
   const dir = mkdtempSync(join(tmpdir(), "bb-relay-")), control = join(dir, "m");
   const remote = `node -e 'const s=require("node:net").connect(${port},"127.0.0.1");process.stdin.pipe(s);s.pipe(process.stdout);s.on("error",()=>process.exit(1));'`;
   const common = ["-o", "BatchMode=yes", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3"];
-  const channels = new Set();
+  const channels = new Set(), sockets = new Set();
   let master, masterTimer, retryMs = masterRetryMs, multiplexed = 0, stopping = false;
 
   const startMaster = () => {
@@ -78,21 +78,32 @@ export function startRelay({ ssh, listen, port = 38886, env = process.env, say =
     const child = spawn("ssh", ["-T", "-o", "ControlMaster=no", ...(mux ? ["-S", control] : ["-o", "ControlPath=none"]), ...common, ssh, remote], { env, stdio: ["pipe", "pipe", "inherit"] });
     if (mux) multiplexed += 1;
     channels.add(child);
+    sockets.add(socket);
     let open = true;
-    const close = () => {
-      if (!open) return;
+    const ended = () => {
+      if (!open) return false;
       open = false;
       if (mux) multiplexed -= 1;
       channels.delete(child);
-      socket.destroy();
+      return true;
     };
     socket.pipe(child.stdin);
-    child.stdout.pipe(socket);
-    child.stdin.on("error", () => {}); // the channel ended first: `exit` closes the socket
+    child.stdout.pipe(socket); // ends the socket after the channel's last byte
+    child.stdin.on("error", () => {}); // the channel ended first
     socket.on("error", () => child.kill());
-    socket.on("close", () => child.kill());
-    child.once("error", (error) => { say(`ssh could not start (${error.code || "error"})`); close(); });
-    child.once("exit", close);
+    socket.on("close", () => { sockets.delete(socket); child.kill(); });
+    child.once("error", (error) => {
+      if (ended()) { say(`ssh could not start (${error.code || "error"})`); socket.destroy(); }
+    });
+    // The channel may end before a slow client has read its answer: never
+    // destroy the socket here. Discard what the client still sends, and give
+    // up on a client that neither reads nor closes.
+    child.once("exit", () => {
+      if (!ended()) return;
+      socket.unpipe(child.stdin);
+      socket.resume();
+      socket.setTimeout(lingerMs, () => socket.destroy());
+    });
   });
 
   const listening = new Promise((resolve, reject) => {
@@ -115,6 +126,7 @@ export function startRelay({ ssh, listen, port = 38886, env = process.env, say =
       const done = () => { clearTimeout(escalation); rmSync(dir, { recursive: true, force: true }); resolve(); };
       clearTimeout(masterTimer);
       server.close();
+      for (const socket of sockets) socket.destroy();
       if (!left) { done(); return; }
       for (const child of children) {
         let counted = false;

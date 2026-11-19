@@ -662,9 +662,9 @@ ssh team-agent bb plugin disable push-notifications
 
 ### Trust
 
-bb's API has no login. It listens on the container's loopback only, on
-ports 38886 (the server) and 38887 (its host daemon), and the service
-publishes no port. Inside the container that changes what the trust group
+bb's API has no login. It listens on the container's loopback only: on
+ports 38886 (the server) and 38887 (its host daemon), and on one more
+loopback port that bb picks at each start. The service publishes no port. Inside the container that changes what the trust group
 shares ([One team, one trust group](#one-team-one-trust-group)):
 
 - Any agent can read and drive every bb thread: read it, send it a message,
@@ -743,7 +743,10 @@ bb counts toward the container's limits. Add to `AGENT_MEMORY` and
   seconds, and from 1 second again once a bb has stayed up five minutes.
   sshd, the broker, host run and the agents keep running. A thread's
   process ends with its bb, and the thread itself is kept: the next bb lists
-  it idle, and a message to it (`bb thread tell`) starts a new turn.
+  it idle, and a message to it (`bb thread tell`) starts a new turn. bb's
+  own lookups of provider versions (`npm view`) are the one thing seen to
+  outlive a killed bb, until their own lookup fails or times out; they hold no
+  port.
 - **Stopping.** Host run goes first, as without bb, and bb keeps running
   while it stops the agents. Then sshd, the broker and bb are stopped side by
   side; bb gets SIGTERM and eight seconds before SIGKILL. A bb that had to be
@@ -755,7 +758,8 @@ bb counts toward the container's limits. Add to `AGENT_MEMORY` and
 
 Run on amd64, in the real image under the Compose flags: the build, bb ready
 at start, a bb restart after `kill` and after `kill -9`, each followed by a
-new turn in a thread made before it (on a mock model), the ordered stop,
+new turn in a thread made before it (on a mock model; after the `kill -9`
+the thread's Claude process was gone within a second), the ordered stop,
 acceptance with the fragment, and the relay with the real `ssh` (the bb web
 page and API through it). **NOT RUN:** arm64; a real Claude token or a real
 model; Tailscale Serve; the desktop and phone apps; push notifications.
