@@ -1,52 +1,46 @@
-/** The soul page's Instructions section (spec D): what the soul tells its instances, in the Contents card's
- * grammar (contents-reader.mjs: a navigation tree left, the file right). It shows the soul's own AGENTS.md
- * from the inspection the page already read (`souls[0].instructions` = { file, text, truncated }) and, when
- * the inspection carries it (feature soul-composed-instructions, `inspect --soul --instructions`), the
- * composed AGENTS.md a new instance here would get (`souls[0].composedInstructions`): no request of its own.
- * The path shown is the file's place in its repository (the soul row's `path`, the soul's directory there),
- * never the host cache path in `file`.
+/** The soul page's two prompts and its skills (the Desktop UI rework, slice 3a), from the inspection the page already
+ * read: no request of its own.
  *
- * The composed document is read as one continuous text made of its parts in the kernel's order: the soul's
- * own body ("From this soul") then each injected block ("Injected by …"), its `<!-- oats:… -->` marker lines
- * dropped (the part headers stand for them). The kernel's ranges are trusted only when they tile the text
- * exactly as its contract says; an answer that does not is not shown.
+ * Two tabs, one roving tab stop (Left/Right, Home and End switch; Tab moves into the shown panel):
+ * - **Soul instructions**: the soul's own AGENTS.md (`souls[0].instructions` = { file, text, truncated }), under its
+ *   place in its repository (the soul row's `path`, the soul's directory there), never the host cache path in `file`.
+ * - **Composed instructions**: the AGENTS.md a new agent here would get, when the inspection carries it (feature
+ *   soul-composed-instructions, `inspect --soul --instructions`: `souls[0].composedInstructions`): one readable
+ *   document made of its parts in the kernel's order, the soul's own body ("From this soul") then each injected block
+ *   ("Injected by …"), its `<!-- oats:… -->` marker lines dropped (the part headers stand for them). The kernel's
+ *   ranges are trusted only when they tile the text exactly as its contract says; an answer that does not is not shown.
+ * Each tab is a reader at a readable measure, with a list of its sections on its left when the pane is wide: the
+ * own file's headings, the composed document's parts.
  *
- * The soul's own skills (feature soul-skills, `inspect --soul --skills`: `souls[0].skills`) are a Skills group, in
- * the Contents card's skill grammar (contents-reader.mjs `skillTreeItem`): each skill expands to its files, and a
- * file opens in the reader under its repository path. The kernel's answer carries every file's text, so nothing
- * more is read. A group that can't list anything is its label and one note, never a guess.
+ * **Skills**, folded under a native disclosure below the tabs (the soul-skills-opt-in-inspection decision keeps them
+ * reachable): a tree of two sections, the soul's own skills (feature soul-skills, `inspect --soul --skills`:
+ * `souls[0].skills`) and every skill an agent gets (feature soul-composed-skills: `souls[0].composedSkills`, each row
+ * saying where it comes from; without it the soul's own again, and a note that a newer OATS lists the rest), in the
+ * Contents card's skill grammar (contents-reader.mjs `skillTreeItem`), and a reader for the chosen file. The kernel's
+ * answer carries every file's text, so nothing more is read. A group that can't list anything is its label and one
+ * note, never a guess. A link from either document, or from a skill file, to a listed skill file opens it there.
  *
- * The tree has two sections, a rule between them: "Defined in this soul" (its AGENTS.md, its Skills) and "Composed
- * for an instance" (the composed AGENTS.md, and Skills: every skill an instance gets, each row saying where it comes
- * from). Each section is a top-level group of the one tree, named by its heading, so assistive technology meets
- * the boundary too; the tree stays one tab stop and the arrows cross it. When the kernel lists every skill a spawn
- * gives the instance (feature soul-composed-skills, `inspect --soul --composed-skills`: `souls[0].composedSkills`),
- * the composed Skills are that list: a soul's skill says "From this soul", a capability's (`module:<id>`) "From <id>"
- * (skillSource), and its files open in the reader with Open capability in its head, as a composed part does in its
- * header. Without it, they are the soul's own, each "From this soul", then one note saying a newer OATS lists the
- * rest. A composed skill row is its own copy with its own keys: selecting a file there selects that row, not the one
- * above.
- *
- * Links resolve by repository path across the card: a link to a listed skill file opens it in place, from a skill
- * file or from an AGENTS.md, in the section the reader is showing.
- *
- * One controller per soul page subject (the inspector creates it with the frame and disposes it with the
- * subject), its element re-appended by every repaint of the page: an unchanged inspection never rebuilds its
- * tree or reader, and `hold()` carries focus and both scroll offsets across the re-append. Every text is
- * untrusted repository content, rendered by the shared reader's strict profile. */
+ * One controller per soul page subject (the inspector creates it with the frame and disposes it with the subject),
+ * its element re-appended by every repaint of the page: an unchanged inspection repaints nothing, and `hold()` carries
+ * focus and every scroll offset across the re-append. Every text is untrusted repository content, rendered by the
+ * shared reader's strict profile. */
 import { createContentsTree, createContentsReader, skillTreeItem, sizeText, SKILL_COPY } from './contents-reader.mjs';
 import { createHeadingSlugger } from './views/markdown.mjs';
+import { DESKTOP_NOUNS } from './desktop-terms.mjs';
 
 export const SOUL_INSTRUCTIONS_COPY = Object.freeze({
   title: 'Instructions',
-  lead: 'what its instances are told',
+  ownTab: 'Soul instructions',
+  composedTab: 'Composed instructions',
+  ownLead: 'The soul’s own AGENTS.md: what it defines itself.',
+  composedLead: `What its ${DESKTOP_NOUNS.instances} are told: the soul’s instructions, then every capability’s injected section, in order.`,
+  sections: 'Sections',
   soulSection: 'Defined in this soul',
-  composedSection: 'Composed for an instance',
+  composedSection: `Every skill an ${DESKTOP_NOUNS.instance} gets`,
   file: 'AGENTS.md',
   unreadable: "This soul's AGENTS.md could not be read.",
   // The kernel caps a file it reports at 200,000 characters (instance-inspect.mjs readTextCapped, soul-composition.mjs).
   truncated: 'Truncated at 200,000 characters',
-  composedNote: 'after spawn, with injects',
   composed: 'Composed AGENTS.md',
   parts: n => `${n} part${n === 1 ? '' : 's'}`,
   soulPart: 'This soul',
@@ -60,26 +54,48 @@ export const SOUL_INSTRUCTIONS_COPY = Object.freeze({
   copyFailed: 'Copy failed',
   cannotCompose: "Can't be composed here: see the problem above.",
   cannotRead: "This OATS answered composed instructions this Desktop can't read.",
+  composeAbsent: "This OATS doesn't compose a soul's instructions: OATS 0.46.0 and later do.",
   skillsGroup: 'Skills',
   skillsAbsent: "This OATS doesn't report a soul's skills.",
   noSkills: 'No skills of its own.',
   skillsUnlistable: "Its skills can't be listed: see the problem above.",
   skillsUnreadable: "This OATS answered skills this Desktop can't read.",
+  skillsPick: 'Choose a skill’s file to read it.',
   omitted: 'Not shown: past the size limit of this answer.',
   fromCapability: id => `From ${id}`,
   capabilitySkills: 'Skills that capabilities add are listed by a newer OATS.',
   noComposedSkills: 'No skills from this soul or its capabilities.',
-  composedSkillsUnlistable: "The skills an instance gets can't be listed: see the problem above.",
+  composedSkillsUnlistable: `The skills an ${DESKTOP_NOUNS.instance} gets can't be listed: see the problem above.`,
   composedSkillsUnreadable: "This OATS answered composed skills this Desktop can't read.",
 });
 /** When the page asks for the composed AGENTS.md: composed-gate.mjs (shared with the server). */
 export { COMPOSED_FEATURE, composedSupported } from '../../client/composed-gate.mjs';
 
 export const soulInstructionsCSS = `
-/* A part's file and nav labels: the soul's parts are prose labels, a capability's its id (monospace). */
-.soul-instructions .cap-tree [role=treeitem] [role=group] .cap-node { font-family:inherit; font-size:12px; }
-.soul-instructions .cap-tree [role=treeitem] [role=group] .cap-node-name.mono { font-family:var(--mono,monospace); font-size:11.5px; }
+.soul-instructions { display:flex; flex-direction:column; gap:10px; min-width:0; }
+/* The two tabs: one roving tab stop; the shown one underlined (its text says which, not the colour alone). */
+.soul-tabs { display:flex; gap:4px; min-width:0; border-bottom:1px solid var(--border); }
+.oats-view .soul-tabs button.soul-tab { height:auto; min-height:32px; margin:0 0 -1px; padding:6px 12px; border:0; border-bottom:2px solid transparent; border-radius:0;
+  background:none; color:var(--muted); font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
+.oats-view .soul-tabs button.soul-tab[aria-selected=true] { color:var(--fg); border-bottom-color:var(--accent); }
+.oats-view .soul-tabs button.soul-tab:hover { color:var(--fg); }
+.soul-tab-lead { margin:0; color:var(--muted); font-size:12px; }
+.soul-tabpanel { display:flex; flex-direction:column; gap:8px; min-width:0; }
+/* A tab's document: its sections on the left when the pane is wide, the text at a readable measure. */
+.soul-doc { display:grid; grid-template-columns:200px minmax(0,1fr); height:min(75vh, 820px); min-width:0; background:var(--bg); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+.soul-doc-nav { min-height:0; overflow:auto; padding:10px 8px 12px; border-right:1px solid var(--border); box-sizing:border-box; font-size:12px; }
+.soul-doc-nav[hidden] { display:none; }
+.soul-doc:has(> .soul-doc-nav[hidden]) { grid-template-columns:minmax(0,1fr); }
+.soul-doc-nav ul { list-style:none; margin:0; padding:0; }
+.oats-view .soul-doc-nav button.soul-doc-link { display:block; width:100%; height:auto; min-height:0; margin:0; padding:4px 6px; border:0; border-radius:6px; background:none; color:var(--fg);
+  font:inherit; font-size:12px; font-weight:400; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+.oats-view .soul-doc-nav button.soul-doc-link:hover { background:var(--surface-2); }
+.oats-view .soul-doc-nav button.soul-doc-link:focus-visible { background:var(--sel); }
+.soul-doc-nav li[data-depth="1"] button.soul-doc-link { padding-left:18px; color:var(--muted); }
+.soul-doc .cap-reader-body > * { max-width:72ch; }
+@container (max-width: 760px) { .soul-doc { grid-template-columns:minmax(0,1fr); } .soul-doc-nav { display:none; } }
 .oats-view .soul-instructions button.soul-copy, .oats-view .soul-instructions button.soul-file-open { height:24px; min-height:24px; margin-left:auto; padding:0 8px; font-size:11.5px; }
+.soul-panel-note { margin:0; padding:14px 16px; color:var(--muted); font-size:12.5px; border:1px solid var(--border); border-radius:10px; }
 .soul-part + .soul-part { margin-top:22px; }
 .soul-part-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 10px; margin:0 0 8px; font-size:11.5px; }
 .soul-part-title { color:var(--fg); font-size:12.5px; font-weight:650; }
@@ -87,23 +103,26 @@ export const soulInstructionsCSS = `
 .soul-part-size { color:var(--muted); }
 .soul-part-flag { color:var(--warn); font-weight:600; }
 .oats-view .soul-instructions button.soul-part-open { height:22px; min-height:22px; margin-left:auto; padding:0 8px; font-size:11.5px; }
-/* The two sections of the tree: a heading each, a rule above the second. */
-.soul-instructions .soul-section-title { margin:4px 6px 6px; color:var(--fg); font-size:11.5px; font-weight:650; }
-.soul-instructions .soul-section + .soul-section { margin-top:12px; padding-top:10px; border-top:1px solid var(--border); }
-.soul-instructions .soul-subgroup > .cap-contents-group-label { margin-top:12px; }
 /* The rules are secondary: the header text says where a part comes from (WCAG 1.4.1). */
 .soul-part-body { padding-left:12px; border-left:3px solid var(--border); }
 .soul-part[data-source=soul] > .soul-part-body { border-left-color:var(--accent); }
+/* Skills: folded under the tabs; open, the Contents card's tree and reader. */
+.soul-skills > summary { cursor:pointer; color:var(--fg); font-size:13.5px; font-weight:650; }
+.soul-skills > summary .soul-skills-count { color:var(--muted); font-size:12px; font-weight:400; }
+.soul-skills[open] > summary { margin-bottom:10px; }
+.soul-instructions .cap-tree [role=treeitem] [role=group] .cap-node { font-family:inherit; font-size:12px; }
+.soul-instructions .cap-tree [role=treeitem] [role=group] .cap-node-name.mono { font-family:var(--mono,monospace); font-size:11.5px; }
+.soul-instructions .soul-section-title { margin:4px 6px 6px; color:var(--fg); font-size:11.5px; font-weight:650; }
+.soul-instructions .soul-section + .soul-section { margin-top:12px; padding-top:10px; border-top:1px solid var(--border); }
+.soul-instructions .soul-subgroup > .cap-contents-group-label { margin-top:12px; }
 `;
 
-/** Selection keys: the soul's own AGENTS.md, the composed document, a part of it (by its index), and a skill file: in
- * "Defined in this soul" by its soul-relative path (unique in the answer: a soul's skills never nest); in the composed
- * Skills by its skill's path and its path in the skill, `//` between them (never in a plain path), since a
- * capability's skills may nest and list one file each. A skill item is expanded, never selected: its key names it in
- * `expanded`. */
+/** The two tabs (OWN, the soul's own AGENTS.md; COMPOSED, the composed one), and a skill file's key: in "Defined in
+ * this soul" by its soul-relative path (unique in the answer: a soul's skills never nest); in "Every skill …" by its
+ * skill's path and its path in the skill, `//` between them (never in a plain path), since a capability's skills may
+ * nest and list one file each. A skill item is expanded, never selected: its key names it in `expanded`. */
 export const OWN = 'own';
 export const COMPOSED = 'composed';
-const partKey = i => `part:${i}`;
 const skillKey = (path, composed = false) => `${composed ? 'composed-' : ''}skill:${path}`;
 const fileKey = (skill, path, composed = false) => composed ? `composed-file:${skill.path}//${path.slice(skill.path.length + 1)}` : `file:${path}`;
 /** Where a composed skill comes from, in the vocabulary of instance.json and the spawn preview (#1421 §1): the soul
@@ -231,6 +250,7 @@ function skillRows(v, sourced) {
   return out;
 }
 
+
 /**
  * @param {Document} doc
  * @param {object} [o]
@@ -240,43 +260,87 @@ function skillRows(v, sourced) {
  */
 export function createSoulInstructions(doc, { openExternal = null, canOpenCapability = () => false, openCapability = null } = {}) {
   const node = (tag, cls, text) => { const el = doc.createElement(tag); if (cls) el.className = cls; if (text !== undefined && text !== null) el.textContent = text; return el; };
-  const element = node('section', 'page-section cap-contents-section soul-instructions'); element.dataset.section = 'Instructions';
-  const heading = node('h3', 'page-section-title'); heading.append(node('span', null, SOUL_INSTRUCTIONS_COPY.title), node('span', 'page-section-lead', SOUL_INSTRUCTIONS_COPY.lead));
+  const uid = `soul-instructions-${++instances}`;
+  const element = node('section', 'page-section soul-instructions'); element.dataset.section = 'Instructions';
+  element.setAttribute('aria-label', SOUL_INSTRUCTIONS_COPY.title);
+
+  /* ── the two tabs ─────────────────────────────────────────────────────── */
+  const TABS = [OWN, COMPOSED];
+  const tablist = node('div', 'soul-tabs'); tablist.setAttribute('role', 'tablist'); tablist.setAttribute('aria-label', SOUL_INSTRUCTIONS_COPY.title);
+  const tabs = new Map(), panels = new Map(), docs = new Map();
+  for (const name of TABS) {
+    const tab = node('button', 'soul-tab', name === OWN ? SOUL_INSTRUCTIONS_COPY.ownTab : SOUL_INSTRUCTIONS_COPY.composedTab);
+    tab.type = 'button'; tab.id = `${uid}-tab-${name}`; tab.dataset.tab = name; tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-controls', `${uid}-panel-${name}`); tab.dataset.focusKey = `instructions:tab:${name}`;
+    tab.addEventListener('click', () => setTab(name));
+    tab.addEventListener('keydown', event => {
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
+      const at = TABS.indexOf(name), n = TABS.length;
+      const index = event.key === 'Home' ? 0 : event.key === 'End' ? n - 1 : event.key === 'ArrowRight' ? (at + 1) % n : event.key === 'ArrowLeft' ? (at + n - 1) % n : -1;
+      if (index < 0) return;
+      event.preventDefault(); setTab(TABS[index], { focus: true });
+    });
+    tabs.set(name, tab); tablist.append(tab);
+    const panel = node('div', 'soul-tabpanel'); panel.id = `${uid}-panel-${name}`; panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', tab.id);
+    panel.dataset.tab = name;
+    panel.append(node('p', 'soul-tab-lead', name === OWN ? SOUL_INSTRUCTIONS_COPY.ownLead : SOUL_INSTRUCTIONS_COPY.composedLead));
+    const note = node('p', 'soul-panel-note'); note.hidden = true;
+    const box = node('div', 'soul-doc');
+    const nav = node('nav', 'soul-doc-nav'); nav.setAttribute('aria-label', `${SOUL_INSTRUCTIONS_COPY.sections}: ${tab.textContent}`); nav.hidden = true;
+    const reader = node('div', 'cap-contents-reader'); reader.setAttribute('role', 'region'); reader.tabIndex = 0;
+    const head = node('div', 'cap-reader-head'); head.hidden = true;
+    const body = node('div', 'cap-reader-body');
+    reader.append(head, body); box.append(nav, reader); panel.append(note, box);
+    const fileReader = createContentsReader(doc, { reader, head, body, alive: () => alive, openExternal,
+      isLocal: path => local.has(path), openLocal: path => openSkillFile(localKey(path, name === COMPOSED)) });
+    docs.set(name, { nav, reader, head, body, note, box, fileReader });
+    panels.set(name, panel);
+  }
+  let tab = OWN;
+  /** Show a tab (its panel; the other hidden), and with `focus` move focus to it. */
+  function setTab(name, { focus = false } = {}) {
+    if (!alive || !TABS.includes(name)) return;
+    tab = name;
+    for (const [key, control] of tabs) { const on = key === name; control.setAttribute('aria-selected', String(on)); control.tabIndex = on ? 0 : -1; panels.get(key).hidden = !on; }
+    if (focus) tabs.get(name).focus({ preventScroll: true });
+  }
+
+  /* ── skills ───────────────────────────────────────────────────────────── */
+  const skillsBox = node('details', 'soul-skills');
+  const skillsSummary = node('summary'); skillsSummary.dataset.focusKey = 'instructions:skills';
+  const skillsCount = node('span', 'soul-skills-count');
+  skillsSummary.append(node('span', null, SOUL_INSTRUCTIONS_COPY.skillsGroup), ' ', skillsCount);
   const card = node('div', 'cap-contents');
-  const nav = node('nav', 'cap-contents-nav'); nav.setAttribute('aria-label', SOUL_INSTRUCTIONS_COPY.title);
+  const nav = node('nav', 'cap-contents-nav'); nav.setAttribute('aria-label', SOUL_INSTRUCTIONS_COPY.skillsGroup);
   const navBody = node('div', 'cap-contents-nav-body');
   const reader = node('div', 'cap-contents-reader'); reader.setAttribute('role', 'region'); reader.tabIndex = 0;
   const head = node('div', 'cap-reader-head'); head.hidden = true;
   const body = node('div', 'cap-reader-body');
   nav.append(navBody); reader.append(head, body); card.append(nav, reader);
-  element.append(heading, card);
+  skillsBox.append(skillsSummary, card);
+  element.append(tablist, ...panels.values(), skillsBox);
 
-  // `shown`: what the reader holds ('own' | 'composed' | a skill file's key); a part is a place in the composed document.
   // `files`: each listed skill file by its key ({ skill, file, path: its repository path, or a capability's home path,
-  // composed: in the composed Skills, capability: the one it comes from or null }); `local`: the keys by that path,
+  // composed: in "Every skill …", capability: the one it comes from or null }); `local`: the keys by that path,
   // { own, composed: [each composed copy] }, either absent when the file is listed in one section only.
   let alive = true, name = null, own = null, composed, skills, composedSkills, files = new Map(), local = new Map();
-  let navSignature = null, ownSignature = null, composedSignature = null, fileSignature = null, localSignature = null, shown = null, selected = OWN;
-  const expanded = new Set(); // the composed item's key and each expanded skill's skillKey
-  const uid = `soul-instructions-${++instances}`;
+  let navSignature = null, ownSignature = null, composedSignature = null, fileSignature = null, localSignature = null, shown = null, selected = null;
+  const expanded = new Set(); // each expanded skill's skillKey
   const timers = new Set();
-  // A skill item toggles (Enter/Space, as in Contents); any other item opens what it names.
-  // An expandable item's key is its focus key's (the composed item's, or a skill's in either section).
+  setTab(OWN);
+  // A skill item toggles (Enter/Space, as in Contents); a file item opens it.
   const keys = createContentsTree(nav, { selected: () => selected,
-    activate: item => { if (item.dataset.skill !== undefined) keys.toggle(item); else if (item.dataset.path) open(item.dataset.path); },
+    activate: item => { if (item.dataset.skill !== undefined) keys.toggle(item); else if (item.dataset.path) openSkillFile(item.dataset.path); },
     onExpand: (item, value) => { const key = item.dataset.focusKey.slice('instructions:'.length); if (value) expanded.add(key); else expanded.delete(key); } });
-  // A link opens the file in the section the reader shows: from the composed document or a composed skill file, its composed copy.
-  const inComposed = () => shown === 'composed' || !!files.get(shown)?.composed;
-  const fileReader = createContentsReader(doc, { reader, head, body, alive: () => alive, openExternal,
-    isLocal: path => local.has(path), openLocal: path => open(localKey(path)) });
-  /** A link's target: in the section the reader shows (a composed copy in the skill being read first, as nested
-   * skills list one file each), else the one listed. */
-  function localKey(path) {
+  const skillReader = createContentsReader(doc, { reader, head, body, alive: () => alive, openExternal,
+    isLocal: path => local.has(path), openLocal: path => openSkillFile(localKey(path, !!files.get(shown)?.composed)) });
+  /** A link's target: in the section it is read from (`composedSide`: the composed document or a composed skill file),
+   * a composed copy in the skill being read first, as nested skills list one file each; else the one listed. */
+  function localKey(path, composedSide) {
     const { own: mine, composed: copies = [] } = local.get(path) || {};
     const reading = files.get(shown)?.skill, copy = copies.find(key => files.get(key).skill === reading) ?? copies[0];
-    return (inComposed() ? copy : mine) ?? mine ?? copy;
+    return (composedSide ? copy : mine) ?? mine ?? copy;
   }
-  const hasKey = key => key === OWN || files.has(key) || (!!composed && (key === COMPOSED || composed.parts.some((_, i) => partKey(i) === key)));
   // Found by its key as data, never through a selector: a key holds the soul's own paths.
   const itemFor = focusKey => [...nav.querySelectorAll('[role=treeitem]')].find(item => item.dataset.focusKey === focusKey) || null;
   const fileSig = key => { const entry = files.get(key); return JSON.stringify(entry ? [entry.path, entry.file, entry.capability] : null); };
@@ -292,7 +356,7 @@ export function createSoulInstructions(doc, { openExternal = null, canOpenCapabi
     files = new Map(); local = new Map();
     const list = (rows, composedCopy) => {
       for (const skill of Array.isArray(rows) ? rows : []) {
-        // A soul's skill is shown under its repository path; a capability's under its place in the instance home.
+        // A soul's skill is shown under its repository path; a capability's under its place in the agent's home.
         const { capability } = composedCopy ? skillSource(skill.source ?? 'soul') : { capability: null };
         const ownFile = !composedCopy || skill.source === undefined || skill.source === 'soul';
         for (const file of skill.files || []) {
@@ -304,172 +368,62 @@ export function createSoulInstructions(doc, { openExternal = null, canOpenCapabi
         }
       }
     };
-    // The composed Skills: the kernel's composed list when it answered one, else the soul's own again.
+    // "Every skill an agent gets": the kernel's composed list when it answered one, else the soul's own again.
     list(skills, false); list(composedSkills === undefined ? skills : composedSkills, true);
-    reader.setAttribute('aria-label', `Instructions of ${name || 'this soul'}`);
-    if (!hasKey(selected)) selected = OWN;
+    for (const d of docs.values()) d.reader.setAttribute('aria-label', `${name || 'This soul'}: ${d === docs.get(OWN) ? SOUL_INSTRUCTIONS_COPY.ownTab : SOUL_INSTRUCTIONS_COPY.composedTab}`);
+    reader.setAttribute('aria-label', `${name || 'This soul'}: ${SOUL_INSTRUCTIONS_COPY.skillsGroup}`);
+    if (selected !== null && !files.has(selected)) selected = null;
     const rows = list => Array.isArray(list) ? list.map(s => [s.name, s.source ?? null, s.path, s.description, s.filesTruncated, s.files && s.files.map(f => f.path)]) : String(list);
-    const signature = JSON.stringify([name, own.path, composed && composed.parts.map(p => [p.nav, p.capability ?? null]), composed === null ? 'null' : composed === false ? 'false' : composed === undefined ? 'absent' : 'parts', rows(skills), rows(composedSkills)]);
+    const signature = JSON.stringify([name, rows(skills), rows(composedSkills)]);
     if (signature !== navSignature) { navSignature = signature; paintNav(); }
-    // What the reader's links resolve to is part of what it shows: another set of listed files repaints it.
-    const ownNow = JSON.stringify(own), composedNow = JSON.stringify(composed ?? null), localNow = JSON.stringify([...local.keys()]);
+    // What a reader's links resolve to is part of what it shows: another set of listed files repaints them.
+    const ownNow = JSON.stringify(own), composedNow = JSON.stringify(composed ?? String(composed)), localNow = JSON.stringify([...local.keys()]);
     const linksChanged = localNow !== localSignature;
-    const ownChanged = ownNow !== ownSignature || linksChanged, composedChanged = composedNow !== composedSignature || linksChanged;
+    if (ownNow !== ownSignature || linksChanged) paintOwn();
+    if (composedNow !== composedSignature || linksChanged) paintComposed();
     ownSignature = ownNow; composedSignature = composedNow; localSignature = localNow;
     // A repaint of what is shown keeps the reader's offset (the host's hold()); the browser clamps it.
-    if (selected === OWN) { if (shown !== 'own' || ownChanged) paintOwn(); }
-    else if (files.has(selected)) { if (shown !== selected || linksChanged || fileSig(selected) !== fileSignature) paintFile(selected); }
-    else if (shown !== 'composed' || composedChanged) paintComposed();
+    if (selected !== null) { if (shown !== selected || linksChanged || fileSig(selected) !== fileSignature) paintFile(selected); }
+    else if (shown !== null || !body.childElementCount) { shown = null; skillReader.clear(); body.append(skillReader.line(SOUL_INSTRUCTIONS_COPY.skillsPick)); }
   }
 
-  /* ── navigation ──────────────────────────────────────────────────────── */
-  function paintNav() {
-    const focused = nav.contains(doc.activeElement) ? doc.activeElement.closest('[role=treeitem]') : null;
-    const focusKey = focused?.dataset.focusKey, parentKey = focused?.parentElement.closest('[role=treeitem]')?.dataset.focusKey;
-    navBody.replaceChildren();
-    // One tree of two labelled sections, each holding its labelled groups (one tab stop; the arrows cross every boundary).
-    const tree = node('ul', 'cap-tree'); tree.setAttribute('role', 'tree'); tree.setAttribute('aria-label', `Instructions of ${name || 'this soul'}`);
-    tree.addEventListener('keydown', keys.onKey);
-    /** A labelled group in `parent`: its wrapper row (role none) holds the title and the group, which it returns. */
-    const group = (parent, id, title, cls) => {
-      const wrap = node('li', cls); wrap.setAttribute('role', 'none');
-      title.id = id;
-      const items = node('ul'); items.setAttribute('role', 'group'); items.setAttribute('aria-labelledby', id);
-      wrap.append(title, items); parent.append(wrap); return items;
-    };
-    /** A row that is not a tree item: a group's label and its note in place of the group, or a note alone. */
-    const noteRow = (parent, label, ...notes) => {
-      const row = node('li', label ? 'soul-subgroup' : null); row.setAttribute('role', 'none');
-      if (label) row.append(node('div', 'cap-contents-group-label', label));
-      row.append(...notes.map(text => node('p', 'cap-contents-note', text)));
-      parent.append(row); return row;
-    };
-    const listed = Array.isArray(skills) && skills.length > 0;
-    // Defined in this soul: its AGENTS.md, then its Skills.
-    const soulItems = group(tree, `${uid}-soul`, node('div', 'soul-section-title', SOUL_INSTRUCTIONS_COPY.soulSection), 'soul-section');
-    const shownPath = own.path !== SOUL_INSTRUCTIONS_COPY.file ? own.path : null;
-    soulItems.append(leaf(OWN, [node('span', 'cap-node-name', SOUL_INSTRUCTIONS_COPY.file), ...(shownPath ? [node('span', 'cap-node-file', shownPath)] : [])],
-      { level: 1, label: shownPath ? `${SOUL_INSTRUCTIONS_COPY.file}, ${shownPath}` : SOUL_INSTRUCTIONS_COPY.file }));
-    if (listed) {
-      const items = group(soulItems, `${uid}-skills`, node('div', 'cap-contents-group-label', SOUL_INSTRUCTIONS_COPY.skillsGroup), 'soul-subgroup');
-      for (const skill of skills) items.append(skillItem(skill));
-    } else noteRow(soulItems, SOUL_INSTRUCTIONS_COPY.skillsGroup, skillsNote());
-    // Composed for an instance: the composed AGENTS.md (or why there is none; nothing when this OATS doesn't compose), then Skills.
-    const composedItems = group(tree, `${uid}-composed`, node('div', 'soul-section-title', SOUL_INSTRUCTIONS_COPY.composedSection), 'soul-section');
-    if (composed) composedItems.append(composedNode());
-    else if (composed === null || composed === false) noteRow(composedItems, null, composed === null ? SOUL_INSTRUCTIONS_COPY.cannotCompose : SOUL_INSTRUCTIONS_COPY.cannotRead);
-    const composedGroup = () => group(composedItems, `${uid}-composed-skills`, node('div', 'cap-contents-group-label', SOUL_INSTRUCTIONS_COPY.skillsGroup), 'soul-subgroup');
-    if (composedSkills !== undefined) {
-      // The kernel's list (feature soul-composed-skills): every skill an instance gets, each saying where it comes from.
-      if (Array.isArray(composedSkills) && composedSkills.length) {
-        const items = composedGroup();
-        for (const skill of composedSkills) items.append(skillItem(skill, skillSource(skill.source)));
-      } else noteRow(composedItems, SOUL_INSTRUCTIONS_COPY.skillsGroup, composedSkills === null ? SOUL_INSTRUCTIONS_COPY.composedSkillsUnlistable
-        : composedSkills === false ? SOUL_INSTRUCTIONS_COPY.composedSkillsUnreadable : SOUL_INSTRUCTIONS_COPY.noComposedSkills);
-    } else if (listed) {
-      const items = composedGroup();
-      for (const skill of skills) items.append(skillItem(skill, skillSource('soul')));
-      items.parentElement.append(node('p', 'cap-contents-note', SOUL_INSTRUCTIONS_COPY.capabilitySkills));
-    } else if (Array.isArray(skills)) noteRow(composedItems, SOUL_INSTRUCTIONS_COPY.skillsGroup, skillsNote(), SOUL_INSTRUCTIONS_COPY.capabilitySkills);
-    else noteRow(composedItems, SOUL_INSTRUCTIONS_COPY.skillsGroup, skillsNote());
-    navBody.append(tree);
-    keys.syncRoving();
-    // The tree item that held focus is found again by its key, else its parent's (a part's composed item, a file's skill).
-    if (focusKey) (itemFor(focusKey) || (parentKey && itemFor(parentKey)) || nav.querySelector('[role=treeitem]'))?.focus({ preventScroll: true });
-  }
-  /** A skill's item: in "Defined in this soul", or (with `source`, skillSource's) its copy in the composed Skills, its own
-   * keys and the source's label as its second line. */
-  function skillItem(skill, source = null) {
-    const composedCopy = !!source;
-    return skillTreeItem(doc, skill, { open: expanded.has(skillKey(skill.path, composedCopy)), focusKey: `instructions:${skillKey(skill.path, composedCopy)}`, keys,
-      source: source?.label ?? null,
-      fileItem: (file, shown) => leaf(fileKey(skill, file.path, composedCopy), [node('span', 'cap-node-name mono', shown)], { level: 2, label: shown }) });
-  }
-  const skillsNote = () => skills === undefined ? SOUL_INSTRUCTIONS_COPY.skillsAbsent : skills === null ? SOUL_INSTRUCTIONS_COPY.skillsUnlistable
-    : skills === false ? SOUL_INSTRUCTIONS_COPY.skillsUnreadable : SOUL_INSTRUCTIONS_COPY.noSkills;
-  function leaf(key, content, { level, label }) {
-    const item = treeItem(key, content, { level, label });
-    item.querySelector(':scope > .cap-node').addEventListener('click', () => { keys.focusItem(item); open(key); });
-    return item;
-  }
-  function treeItem(key, content, { level, label }) {
-    const item = node('li'); item.setAttribute('role', 'treeitem'); item.setAttribute('aria-level', String(level));
-    item.setAttribute('aria-selected', String(key === selected)); item.setAttribute('aria-label', label);
-    item.dataset.path = key; item.dataset.focusKey = `instructions:${key}`; item.tabIndex = -1;
-    const row = node('div', 'cap-node'); const twisty = node('span', 'cap-node-twisty'); twisty.setAttribute('aria-hidden', 'true');
-    const copy = node('span', 'cap-node-copy'); copy.append(...content); row.append(twisty, copy); item.append(row);
-    return item;
-  }
-  /** "Composed for an instance"'s "AGENTS.md" (parallel to the soul's), "after spawn, with injects" on its second line (the
-   * description style, `cap-node-desc`, as a skill's description in Contents; not the path's mono): selectable (the composed document at its top) and
-   * expandable (its parts, in order). The reader's head names it "Composed AGENTS.md". */
-  function composedNode() {
-    const open_ = expanded.has(COMPOSED), count = SOUL_INSTRUCTIONS_COPY.parts(composed.parts.length);
-    const item = treeItem(COMPOSED, [node('span', 'cap-node-name', SOUL_INSTRUCTIONS_COPY.file), node('span', 'cap-node-desc', SOUL_INSTRUCTIONS_COPY.composedNote)],
-      { level: 1, label: `${SOUL_INSTRUCTIONS_COPY.file}, ${SOUL_INSTRUCTIONS_COPY.composedNote}` });
-    item.setAttribute('aria-expanded', String(open_)); item.setAttribute('aria-description', count);
-    const twisty = item.querySelector('.cap-node-twisty'); twisty.textContent = open_ ? '▾' : '▸';
-    const children = node('ul'); children.setAttribute('role', 'group'); children.hidden = !open_;
-    composed.parts.forEach((part, i) => children.append(leaf(partKey(i), [node('span', `cap-node-name${part.capability ? ' mono' : ''}`, part.nav)], { level: 2, label: part.nav })));
-    item.append(children);
-    // A click on the twisty only folds; anywhere else on the row opens the document (and shows its parts).
-    item.querySelector(':scope > .cap-node').addEventListener('click', event => {
-      keys.focusItem(item);
-      if (event.target === twisty) { keys.toggle(item); return; }
-      open(COMPOSED);
+  /* ── the documents ───────────────────────────────────────────────────── */
+  /** A tab's section list: one button per entry, `[label, target, depth]`; none hides the list. */
+  function paintSections(d, entries) {
+    d.nav.replaceChildren();
+    d.nav.hidden = entries.length < 2;
+    const list = node('ul');
+    entries.forEach(([label, target, depth = 0], i) => {
+      const item = node('li'); item.dataset.depth = String(depth);
+      const link = node('button', 'soul-doc-link', label); link.type = 'button'; link.title = label; link.dataset.focusKey = `instructions:${d === docs.get(OWN) ? OWN : COMPOSED}:section:${i}`;
+      link.addEventListener('click', () => { if (alive && target.isConnected) d.fileReader.scrollTo(target); });
+      item.append(link); list.append(item);
     });
-    return item;
+    d.nav.append(list);
   }
-
-  /* ── reader ──────────────────────────────────────────────────────────── */
-  /** Open an item: the own file, a skill file (its skill expanded, as a link to it may come from elsewhere), the
-   * composed document at its top, or the composed document at a part. */
-  function open(key) {
-    if (!alive || !hasKey(key)) return;
-    selected = key; keys.markSelected();
-    if (key === OWN) { if (shown !== 'own') { paintOwn(); reader.scrollTop = 0; } return; }
-    const entry = files.get(key);
-    if (entry) {
-      const item = itemFor(`instructions:${skillKey(entry.skill.path, entry.composed)}`);
-      if (item?.getAttribute('aria-expanded') === 'false') keys.setExpanded(item, true);
-      if (shown !== key) { paintFile(key); reader.scrollTop = 0; }
-      return;
-    }
-    if (shown !== 'composed') paintComposed();
-    if (key === COMPOSED) {
-      const item = nav.querySelector(`[data-path="${COMPOSED}"]`);
-      if (item?.getAttribute('aria-expanded') === 'false') keys.setExpanded(item, true);
-      reader.scrollTop = 0; return;
-    }
-    const part = body.querySelector(`.soul-part[data-part="${key.slice(5)}"]`);
-    if (part) fileReader.scrollTo(part);
-  }
-  /** The own file into the reader. A changed file (a refresh after an edit) repaints in place: the host's hold()
-   * keeps the reader's offset, which the browser clamps to the new length. */
+  /** The own file: its path, size and cut in the head; the text through the strict reader; its headings as sections. */
   function paintOwn() {
-    shown = 'own';
-    fileReader.paintHead(own.path, { bytes: own.text !== null && !own.truncated ? utf8Bytes(own.text) : null, flag: own.truncated ? SOUL_INSTRUCTIONS_COPY.truncated : null });
-    fileReader.paintFile({ path: own.path, text: own.text, binary: false }, { missing: SOUL_INSTRUCTIONS_COPY.unreadable, binary: null });
+    const d = docs.get(OWN);
+    d.fileReader.paintHead(own.path, { bytes: own.text !== null && !own.truncated ? utf8Bytes(own.text) : null, flag: own.truncated ? SOUL_INSTRUCTIONS_COPY.truncated : null });
+    d.fileReader.paintFile({ path: own.path, text: own.text, binary: false }, { missing: SOUL_INSTRUCTIONS_COPY.unreadable, binary: null });
+    const headings = [...d.body.querySelectorAll('h1, h2, h3')];
+    const top = Math.min(...headings.map(h => Number(h.tagName[1])));
+    paintSections(d, headings.map(h => [h.textContent, h, Number(h.tagName[1]) > top ? 1 : 0]));
   }
-  /** A skill file into the reader, under its repository path (a capability's: its path in the instance home): its full
-   * size, the kernel's cut, and its text through the strict reader; a binary file and a file past the answer's text
-   * budget are a line each. A capability's file offers Open capability in the head, when the page can open it. */
-  function paintFile(key) {
-    const { file, path, capability } = files.get(key);
-    shown = key; fileSignature = fileSig(key);
-    fileReader.paintHead(path, { bytes: file.bytes, flag: file.truncated ? SKILL_COPY.truncated : null,
-      actions: capability ? [openCapabilityButton(capability, 'act soul-file-open')].filter(Boolean) : [] });
-    fileReader.paintFile({ path, text: file.text, binary: file.binary }, { missing: SOUL_INSTRUCTIONS_COPY.omitted, binary: SKILL_COPY.binary });
-  }
-  /** The composed document: one section per part, its header saying where the part comes from. */
+  /** The composed document: one section per part, its header saying where the part comes from; or why there is none. */
   function paintComposed() {
-    shown = 'composed';
-    fileReader.paintHead(SOUL_INSTRUCTIONS_COPY.composed, { bytes: composed.truncated ? null : utf8Bytes(composed.text),
+    const d = docs.get(COMPOSED);
+    const reason = composed === undefined ? SOUL_INSTRUCTIONS_COPY.composeAbsent : composed === null ? SOUL_INSTRUCTIONS_COPY.cannotCompose
+      : composed === false ? SOUL_INSTRUCTIONS_COPY.cannotRead : null;
+    d.note.textContent = reason ?? ''; d.note.hidden = !reason; d.box.hidden = !!reason;
+    if (reason) { d.fileReader.clear(); d.nav.replaceChildren(); d.nav.hidden = true; return; }
+    d.fileReader.paintHead(SOUL_INSTRUCTIONS_COPY.composed, { bytes: composed.truncated ? null : utf8Bytes(composed.text),
       flag: composed.truncated ? SOUL_INSTRUCTIONS_COPY.truncated : null, actions: [copyButton(composed.text)] });
-    body.replaceChildren(...composed.parts.map(partSection));
-    uniqueIds([...body.querySelectorAll(':scope > .soul-part')]);
+    d.body.replaceChildren(...composed.parts.map(partSection(d.fileReader)));
+    uniqueIds([...d.body.querySelectorAll(':scope > .soul-part')]);
+    paintSections(d, [...d.body.querySelectorAll(':scope > .soul-part')].map((section, i) => [composed.parts[i].nav, section]));
   }
-  function partSection(part, i) {
+  const partSection = fileReader => (part, i) => {
     const section = node('section', 'soul-part'); section.dataset.part = String(i); section.dataset.source = part.source;
     const title = node('span', 'soul-part-title', part.header); title.id = `${uid}-part-${i}`;
     section.setAttribute('aria-labelledby', title.id);
@@ -483,6 +437,85 @@ export function createSoulInstructions(doc, { openExternal = null, canOpenCapabi
     content.append(part.past ? fileReader.line(SOUL_INSTRUCTIONS_COPY.pastCap) : fileReader.fileView({ path: part.file || SOUL_INSTRUCTIONS_COPY.file, text: part.text }, { markdown: true }));
     section.append(headRow, content);
     return section;
+  };
+
+  /* ── the skills tree ─────────────────────────────────────────────────── */
+  function paintNav() {
+    const focused = nav.contains(doc.activeElement) ? doc.activeElement.closest('[role=treeitem]') : null;
+    const focusKey = focused?.dataset.focusKey, parentKey = focused?.parentElement.closest('[role=treeitem]')?.dataset.focusKey;
+    navBody.replaceChildren();
+    const count = Array.isArray(composedSkills) ? composedSkills.length : Array.isArray(skills) ? skills.length : null;
+    skillsCount.textContent = count === null ? '' : `· ${count}`;
+    // One tree of two labelled sections (one tab stop; the arrows cross every boundary).
+    const tree = node('ul', 'cap-tree'); tree.setAttribute('role', 'tree'); tree.setAttribute('aria-label', `${SOUL_INSTRUCTIONS_COPY.skillsGroup} of ${name || 'this soul'}`);
+    tree.addEventListener('keydown', keys.onKey);
+    const group = (parent, id, title, cls) => {
+      const wrap = node('li', cls); wrap.setAttribute('role', 'none');
+      title.id = id;
+      const items = node('ul'); items.setAttribute('role', 'group'); items.setAttribute('aria-labelledby', id);
+      wrap.append(title, items); parent.append(wrap); return items;
+    };
+    const section = (id, title) => {
+      const wrap = node('li', 'soul-section'); wrap.setAttribute('role', 'none');
+      const heading = node('div', 'soul-section-title', title); heading.id = id; wrap.append(heading); tree.append(wrap); return wrap;
+    };
+    const noteRow = (parent, ...notes) => { parent.append(...notes.map(text => node('p', 'cap-contents-note', text))); };
+    const listed = Array.isArray(skills) && skills.length > 0;
+    const mine = section(`${uid}-soul`, SOUL_INSTRUCTIONS_COPY.soulSection);
+    if (listed) { const items = group(mine, `${uid}-skills`, node('div', 'cap-contents-group-label', SOUL_INSTRUCTIONS_COPY.skillsGroup), 'soul-subgroup'); for (const skill of skills) items.append(skillItem(skill)); }
+    else noteRow(mine, skillsNote());
+    const theirs = section(`${uid}-composed`, SOUL_INSTRUCTIONS_COPY.composedSection);
+    const composedGroup = () => group(theirs, `${uid}-composed-skills`, node('div', 'cap-contents-group-label', SOUL_INSTRUCTIONS_COPY.skillsGroup), 'soul-subgroup');
+    if (composedSkills !== undefined) {
+      if (Array.isArray(composedSkills) && composedSkills.length) { const items = composedGroup(); for (const skill of composedSkills) items.append(skillItem(skill, skillSource(skill.source))); }
+      else noteRow(theirs, composedSkills === null ? SOUL_INSTRUCTIONS_COPY.composedSkillsUnlistable
+        : composedSkills === false ? SOUL_INSTRUCTIONS_COPY.composedSkillsUnreadable : SOUL_INSTRUCTIONS_COPY.noComposedSkills);
+    } else if (listed) {
+      const items = composedGroup();
+      for (const skill of skills) items.append(skillItem(skill, skillSource('soul')));
+      noteRow(theirs, SOUL_INSTRUCTIONS_COPY.capabilitySkills);
+    } else if (Array.isArray(skills)) noteRow(theirs, skillsNote(), SOUL_INSTRUCTIONS_COPY.capabilitySkills);
+    else noteRow(theirs, skillsNote());
+    navBody.append(tree);
+    keys.syncRoving();
+    if (focusKey) (itemFor(focusKey) || (parentKey && itemFor(parentKey)) || nav.querySelector('[role=treeitem]'))?.focus({ preventScroll: true });
+  }
+  function skillItem(skill, source = null) {
+    const composedCopy = !!source;
+    return skillTreeItem(doc, skill, { open: expanded.has(skillKey(skill.path, composedCopy)), focusKey: `instructions:${skillKey(skill.path, composedCopy)}`, keys,
+      source: source?.label ?? null,
+      fileItem: (file, shownPath) => leaf(fileKey(skill, file.path, composedCopy), [node('span', 'cap-node-name mono', shownPath)], { level: 2, label: shownPath }) });
+  }
+  const skillsNote = () => skills === undefined ? SOUL_INSTRUCTIONS_COPY.skillsAbsent : skills === null ? SOUL_INSTRUCTIONS_COPY.skillsUnlistable
+    : skills === false ? SOUL_INSTRUCTIONS_COPY.skillsUnreadable : SOUL_INSTRUCTIONS_COPY.noSkills;
+  function leaf(key, content, { level, label }) {
+    const item = node('li'); item.setAttribute('role', 'treeitem'); item.setAttribute('aria-level', String(level));
+    item.setAttribute('aria-selected', String(key === selected)); item.setAttribute('aria-label', label);
+    item.dataset.path = key; item.dataset.focusKey = `instructions:${key}`; item.tabIndex = -1;
+    const row = node('div', 'cap-node'); const twisty = node('span', 'cap-node-twisty'); twisty.setAttribute('aria-hidden', 'true');
+    const copy = node('span', 'cap-node-copy'); copy.append(...content); row.append(twisty, copy); item.append(row);
+    row.addEventListener('click', () => { keys.focusItem(item); openSkillFile(key); });
+    return item;
+  }
+  /** Open a skill file in the Skills reader: the disclosure opens, its skill expands (a link may come from a document). */
+  function openSkillFile(key) {
+    if (!alive || !files.has(key)) return;
+    skillsBox.open = true;
+    selected = key; keys.markSelected();
+    const entry = files.get(key);
+    const item = itemFor(`instructions:${skillKey(entry.skill.path, entry.composed)}`);
+    if (item?.getAttribute('aria-expanded') === 'false') keys.setExpanded(item, true);
+    if (shown !== key) { paintFile(key); reader.scrollTop = 0; }
+  }
+  /** A skill file into the reader, under its repository path (a capability's: its path in the agent's home): its full
+   * size, the kernel's cut, and its text through the strict reader; a binary file and a file past the answer's text
+   * budget are a line each. A capability's file offers Open capability in the head, when the page can open it. */
+  function paintFile(key) {
+    const { file, path, capability } = files.get(key);
+    shown = key; fileSignature = fileSig(key);
+    skillReader.paintHead(path, { bytes: file.bytes, flag: file.truncated ? SKILL_COPY.truncated : null,
+      actions: capability ? [openCapabilityButton(capability, 'act soul-file-open')].filter(Boolean) : [] });
+    skillReader.paintFile({ path, text: file.text, binary: file.binary }, { missing: SOUL_INSTRUCTIONS_COPY.omitted, binary: SKILL_COPY.binary });
   }
   /** "Open capability" for `id`, or null when the page can't open its page. */
   function openCapabilityButton(id, cls) {
@@ -511,7 +544,7 @@ export function createSoulInstructions(doc, { openExternal = null, canOpenCapabi
       }
     }
   }
-  /** Copies the kernel's exact text (markers included): what a new instance's AGENTS.md would hold. */
+  /** Copies the kernel's exact text (markers included): what a new agent's AGENTS.md would hold. */
   function copyButton(text) {
     const button = node('button', 'act soul-copy', SOUL_INSTRUCTIONS_COPY.copy); button.type = 'button'; button.dataset.focusKey = 'instructions:copy';
     const say = label => {
@@ -525,20 +558,24 @@ export function createSoulInstructions(doc, { openExternal = null, canOpenCapabi
     return button;
   }
 
+  const scrollers = () => [...[...docs.values()].flatMap(d => [d.nav, d.reader]), nav, reader];
   return {
-    element, update,
-    /** Before the host moves `element` (a page repaint re-appends it): detaching drops focus and the panes'
-     * scroll offsets, so take them now and put them back once it is in the document again. */
+    element, update, setTab,
+    /** Before the host moves `element` (a page repaint re-appends it): detaching drops focus and every pane's scroll
+     * offset, so take them now and put them back once it is in the document again. */
     hold() {
-      const active = element.contains(doc.activeElement) ? doc.activeElement : null, navTop = nav.scrollTop, readerTop = reader.scrollTop;
+      const active = element.contains(doc.activeElement) ? doc.activeElement : null, tops = scrollers().map(el => el.scrollTop);
       return () => {
         if (!alive || !element.isConnected) return;
-        nav.scrollTop = navTop; reader.scrollTop = readerTop;
+        scrollers().forEach((el, i) => { el.scrollTop = tops[i]; });
         if (active?.isConnected && doc.activeElement !== active) active.focus({ preventScroll: true });
       };
     },
+    /** The tab shown: OWN or COMPOSED. */
+    get tab() { return tab; },
+    /** The skill file open in the Skills reader (its key), or null. */
     get selected() { return selected; },
-    dispose() { alive = false; for (const timer of timers) clearTimeout(timer); timers.clear(); fileReader.dispose(); },
+    dispose() { alive = false; for (const timer of timers) clearTimeout(timer); timers.clear(); for (const d of docs.values()) d.fileReader.dispose(); skillReader.dispose(); },
   };
 }
-let instances = 0; // ids for the group labels, unique per document
+let instances = 0; // ids for the tabs, panels and group labels, unique per document
