@@ -281,11 +281,12 @@ parent or opening the Background section to show it), and at its right
 **New agent**, which opens Quick Open (⌘P / Alt+P, named in its tooltip) to
 pick a soul and then the spawn dialog, and **?**, which opens the keyboard
 shortcuts. The foot has no mark, no Hide sidebar button and no settings menu:
-⌘B / Ctrl+Shift+B and the palette's **Sidebar: toggle (hide/show)** hide the
-sidebar, and the palette's **Theme: choose…**, **Font: choose…** and
+⌘B / Ctrl+Shift+B collapses the sidebar to a narrow
+rail and expands it again, and the palette's **Sidebar: hide** hides it
+(see [Tabs, panes and the rail](#tabs-panes-and-the-rail)); the palette's **Theme: choose…**, **Font: choose…** and
 **Shortcuts: edit keyboard shortcuts…** open the theme, the font and the
-shortcuts. A window opens on **Home**: at launch, and after you choose a
-workspace for it. Connections is in the
+shortcuts. A window opens on **Home**, as a tab: at launch, and after you
+choose a workspace for it. Connections is in the
 command palette (**Settings: Connections…**), and the palette opens with its
 shortcut or Ctrl+X then `k`.
 **Home** answers two questions on one page: what needs you, and what you
@@ -477,6 +478,41 @@ Only the terminals and the split move with the workspace: this window opens
 the same terminal tabs in the same split, each with a fresh viewer, and the
 agents keep running. File, brain and view tabs do not move: they close in the
 other window.
+
+## Tabs, panes and the rail
+
+Every page opens as a tab, as terminals do: **Home**, the **Workspace** page
+(its tab is titled by the section it shows, Souls, Capabilities, Teams,
+Machines or Setup, or the capability it shows), **Automations**, an agent's
+**Details**, a soul's brain and a file. The tabs live in panes: split right
+(⌥⌘E / Alt+E) or down (⌥⇧⌘E / Alt+Shift+E) from any tab, or the leader's
+`|` and `-` from a terminal, and the new pane opens **Home** as its first tab, so you pick
+what goes there; Home can sit beside a terminal, or Details beside Home.
+Home opens one tab per pane; the Workspace page and Automations are one tab
+each, which a pinned row focuses where it is, and opens in the focused pane
+when it isn't open. With no tab at all, the main area says so and offers
+**Open Home**. Each workspace keeps its own tabs: its page tabs close when
+another workspace shows, and come back, each in its pane, when it shows
+again.
+
+**Details** is an agent's facts, for any agent, running or stopped: `i` on
+its row in the sidebar, ⌘I / Ctrl+Shift+I, **Details** in the row's menu, or
+the palette's **Agent: Details**. It is the instance panel's content in a
+tab: the Instance page (its work, paths, session, lineage, messaging and
+teams, and Needs input while it waits on you), the Soul page and the
+Developer page (its Git state and pull request), with Start, Stop and Retire
+at the foot. One Details tab per workspace follows the agent you asked for,
+and is titled by its name. A terminal tab no longer opens a panel beside it:
+its agent's Details is `i` or ⌘I / Ctrl+Shift+I away. A row's tooltip still
+gives its repository, branch, harness and model to the mouse; the keyboard
+reads them in Details.
+
+**The rail.** ⌘B / Ctrl+Shift+B collapses the sidebar to a rail about 48 px
+wide: the pinned destinations as icons, then one dot per agent in the
+roster's order, each with its needs-input mark, and at the foot the "need
+you" count. Each is a button named by the agent's name and state; its
+tooltip is the name, and Enter or a click opens it as its row does. The
+same key brings the sidebar back.
 
 ## Capabilities and spawning
 
