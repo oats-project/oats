@@ -106,7 +106,9 @@ the UID-only form proves startup and SSH support, not token access.
 | Container path | Host ownership and mode | Access |
 | --- | --- | --- |
 | `/state` | Runtime UID:GID, 0700 | Read/write; persistent |
+| `/outbox` (optional) | Runtime UID:dedicated outbox-GID, 2750 (setgid); operator-owned parent | Read/write export queue shared with every agent |
 | `/work` (optional) | Runtime UID:GID, 0700 | Read/write |
+| `/inputs` (optional) | Operator-provisioned directory, readable by runtime UID:GID | Read-only; shared with every agent in the trust group |
 | `/etc/agent-login` | root:runtime-GID, 0750; `claude-token` root:runtime-GID, 0440 | Read-only |
 | `/etc/agent-ssh/authorized_keys` | root-owned regular file, 0644 | Read-only |
 | `/etc/resolv.conf` | Operator-provided resolver file | Read-only |
@@ -139,6 +141,9 @@ Supply these plain variables to the bundle's env file:
 | `AGENT_UID`, `AGENT_GID` | Runtime IDs; both default to 20001. |
 | `TEAM_STATE_DIR` | Absolute host directory for `/state`. |
 | `TEAM_WORK_DIR` | Optional absolute host directory for `/work`. |
+| `TEAM_INPUT_DIR` | Optional absolute host directory for `/inputs`; selects `compose.agent.inputs.yaml`. |
+| `TEAM_OUTBOX_DIR` | Optional absolute host export-queue directory for `/outbox`; selects `compose.agent.outbox.yaml`. |
+| `TEAM_OUTBOX_GID` | Dedicated non-root numeric supplementary group for `/outbox`, distinct from `AGENT_GID`; required with `TEAM_OUTBOX_DIR`. |
 | `TEAM_LOGIN_DIR` | Absolute host directory containing `claude-token`. |
 | `AUTHORIZED_KEYS_FILE` | Absolute host public-key file. |
 | `RESOLV_CONF_FILE` | Absolute host resolver file; always required. |
@@ -179,7 +184,7 @@ real broker trusts it; prove that through the deployment's HTTPS registry.
 Include `compose.agent.mirrors.yaml` only when `agents.mirrorsDir` is configured.
 The operator provisions and refreshes the bare mirrors outside the container,
 with no repository credentials, and the fragment mounts them read-only at
-`/mirrors`. Keep both optional input sources outside every agent-writable bind
+`/mirrors`. Keep all optional input sources outside every agent-writable bind
 source, including symlink aliases: run acceptance on the Docker engine host so
 it can resolve the actual sources. A CA file with multiple hardlinks is refused,
 since a read-only bind cannot protect another writable link to the same file.
@@ -212,6 +217,71 @@ When `TEAM_WORK_DIR` is set, append
 the override: the base has no `/work` mount. With multiple Compose files,
 paths resolve relative to the first file; use absolute host paths. Container
 down/upgrade preserves `/state`; the operator owns provisioning and rollback.
+
+For provider input folders, provision one readable host directory outside every
+agent-writable bind source, including symlink aliases. Set `TEAM_INPUT_DIR`
+and append `-f container/agent/compose.agent.inputs.yaml` to both Compose
+commands above. For example, with the bundle's other plain variables supplied:
+
+```sh
+TEAM_INPUT_DIR=/srv/example-team/inputs docker compose -p "oats-team-${TEAM}" \
+  --env-file <plain-env-file> -f compose.yaml \
+  -f container/agent/compose.agent.yaml \
+  -f container/agent/compose.agent.inputs.yaml up -d
+```
+
+The operator creates and populates the directory first; a missing source fails
+startup without creating a host directory. The fragment adds only a read-only
+bind at `/inputs`. Omit the fragment and unset `TEAM_INPUT_DIR` to run the base
+without `/inputs`; pass the same reviewed variables to `accept.sh`.
+Acceptance checks the running container's exact approved mounts, its environment
+against the reviewed image, directory readability and a refused write. It also
+checks that the base has no `/inputs`. Team-image CI exercises both forms and
+checks missing-source startup failure without host-path creation, using a
+synthetic input directory readable by the agent group and a private outbox
+subdirectory, with no publisher credentials. Credential scans cover these trees
+as the agent, since root without DAC capabilities cannot read their private
+subdirectories.
+
+The input folder is ambient to the container's trust group: every agent in the
+container can read everything in it. If only one agent may read an input, that
+agent needs its own container. Publication happens at a connector or job boundary
+outside the agent container. Publisher credentials stay outside it too. This fragment
+provides a generic bind only; provider authorization and publication are separate
+integration concerns.
+
+For an export queue, `deploy-team` provisions `TEAM_OUTBOX_DIR` under an
+operator-owned parent, with ownership `AGENT_UID:TEAM_OUTBOX_GID` and mode
+2750 (setgid). Keep its resolved source separate from `/state`, optional
+`/work`, and all read-only input sources. Supply a dedicated non-root numeric
+`TEAM_OUTBOX_GID` distinct from `AGENT_GID` and append
+`-f container/agent/compose.agent.outbox.yaml` to both Compose commands.
+For example, with both optional folders:
+
+```sh
+TEAM_INPUT_DIR=/srv/example-team/inputs \
+TEAM_OUTBOX_DIR=/srv/example-team/outbox TEAM_OUTBOX_GID=20002 \
+  docker compose -p "oats-team-${TEAM}" --env-file <plain-env-file> \
+  -f compose.yaml -f container/agent/compose.agent.yaml \
+  -f container/agent/compose.agent.inputs.yaml \
+  -f container/agent/compose.agent.outbox.yaml up -d
+```
+
+The outbox fragment adds only a read/write `/outbox` bind and its numeric
+supplementary group; it does not alter `/state` or the entrypoint's umask
+077. Files inherit the directory's outbox group. The integrations submit
+helper makes reports and manifests 0640; OATS does not set publication modes.
+Acceptance creates and removes its own probe, checks its group, and checks
+that `/state` remains 0700. CI also checks that the base has no `/outbox`
+and that a missing source fails startup without creating a host directory.
+Omit the fragment and unset both outbox variables when no queue is needed.
+
+The outbox is an export queue, not an isolation boundary: every agent in the
+container can write and read it. Durable work stays in `/state`. The publisher
+reads the outbox read-only in its own namespace; the publisher and its ledger
+are outside OATS. No publisher mount or credentials are added to the agent
+container. The exact approved writable binds are `/state`, optional `/work`
+and optional `/outbox`.
 
 The image account and the runtime NSS entry use `/bin/bash` as the login shell.
 This lets OATS capture a fresh login environment rather than inheriting the tmux
