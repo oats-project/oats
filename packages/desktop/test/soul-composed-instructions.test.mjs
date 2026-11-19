@@ -1,6 +1,6 @@
 // Spec D (B2): the soul page's composed AGENTS.md — `inspect --soul --instructions` (kernel feature
 // soul-composed-instructions, awebai/oats#751) through the server's one optional `instructions` key, and the
-// Instructions section's "Composed for an instance" section (its AGENTS.md "after spawn, with injects"): parts in order, their headers, scroll to a part, Open capability, Copy.
+// Composed instructions tab (slice 3a): parts in order, their headers, a section list that scrolls to a part, Open capability, Copy.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -116,31 +116,29 @@ function setup(t, options = {}) {
   t.after(() => { section.dispose(); dom.window.close(); });
   const $ = s => host.querySelector(s), $$ = s => [...host.querySelectorAll(s)];
   const key = (el, k) => el.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
-  const item = path => $(`[role=treeitem][data-path="${path}"]`);
-  return { dom, doc, host, section, opened, $, $$, key, item };
+  const panel = name => $(`[role=tabpanel][data-tab="${name}"]`);
+  const c = sel => panel(COMPOSED).querySelector(sel), cs = sel => [...panel(COMPOSED).querySelectorAll(sel)];
+  const showComposed = () => $(`[role=tab][data-tab="${COMPOSED}"]`).click();
+  return { dom, doc, host, section, opened, $, $$, key, panel, c, cs, showComposed };
 }
 function scrollable(el) { let top = 0; Object.defineProperty(el, 'scrollTop', { configurable: true, get: () => top, set: v => { top = Math.max(0, Number(v) || 0); } }); return el; }
 
-test('navigation: "Defined in this soul" then "Composed for an instance", its AGENTS.md "after spawn, with injects" collapsed; the own file stays the default', t => {
+test('the tabs: Composed instructions beside Soul instructions; the own file stays the default; the parts are its sections', t => {
   const u = setup(t); u.section.update(row());
-  const sections = u.$$('[role=tree] > li[role=none] > ul[role=group]');
-  assert.deepEqual(sections.map(g => u.doc.getElementById(g.getAttribute('aria-labelledby')).textContent), ['Defined in this soul', 'Composed for an instance']);
-  const composed = u.item(COMPOSED);
-  assert.equal(composed.parentElement, sections[1], 'the second section\'s first item');
-  assert.equal(composed.getAttribute('aria-label'), 'AGENTS.md, after spawn, with injects', 'the section\'s top item, parallel to the soul\'s');
-  assert.deepEqual([...composed.querySelectorAll(':scope > .cap-node .cap-node-name, :scope > .cap-node .cap-node-desc')].map(n => n.textContent), ['AGENTS.md', 'after spawn, with injects']);
-  assert.equal(composed.getAttribute('aria-expanded'), 'false'); assert.equal(composed.getAttribute('aria-description'), '4 parts');
-  assert.deepEqual([...composed.querySelectorAll('[role=treeitem]')].map(i => i.getAttribute('aria-label')), ['This soul', 'Instance boundary · OATS', 'Work mode · worktree', 'oats.core']);
-  assert.equal(u.section.selected, OWN); assert.equal(u.$('.cap-reader-path').textContent, 'souls/release-manager/AGENTS.md');
-  assert.equal(u.$('.soul-part'), null);
+  assert.deepEqual(u.$$('[role=tab]').map(x => x.textContent), ['Soul instructions', 'Composed instructions']);
+  assert.equal(u.section.tab, OWN); assert.equal(u.panel(COMPOSED).hidden, true);
+  assert.equal(u.panel(OWN).querySelector('.cap-reader-path').textContent, 'souls/release-manager/AGENTS.md');
+  u.showComposed();
+  assert.equal(u.section.tab, COMPOSED); assert.equal(u.panel(COMPOSED).hidden, false); assert.equal(u.panel(OWN).hidden, true);
+  assert.equal(u.c('.soul-tab-lead').textContent, SOUL_INSTRUCTIONS_COPY.composedLead);
+  assert.deepEqual(u.cs('.soul-doc-link').map(l => l.textContent), ['This soul', 'Instance boundary · OATS', 'Work mode · worktree', 'oats.core'], 'one section per part');
+  assert.equal(u.c('.soul-panel-note').hidden, true);
 });
 
 test('the composed document: one continuous reader, every part a labelled section, "From this soul" / "Injected by …"', t => {
-  const u = setup(t); u.section.update(row());
-  u.item(COMPOSED).querySelector('.cap-node-name').click();
-  assert.equal(u.section.selected, COMPOSED); assert.equal(u.item(COMPOSED).getAttribute('aria-expanded'), 'true', 'opening it shows its parts');
-  assert.equal(u.$('.cap-reader-path').textContent, 'Composed AGENTS.md');
-  const parts = u.$$('.cap-reader-body > section.soul-part');
+  const u = setup(t); u.section.update(row()); u.showComposed();
+  assert.equal(u.c('.cap-reader-path').textContent, 'Composed AGENTS.md');
+  const parts = u.cs('.cap-reader-body > section.soul-part');
   assert.deepEqual(parts.map(p => u.doc.getElementById(p.getAttribute('aria-labelledby')).textContent),
     ['From this soul', 'Injected by OATS · instance boundary', 'Injected by OATS · work mode worktree', 'Injected by oats.core']);
   assert.deepEqual(parts.map(p => p.dataset.source), ['soul', 'kernel:instance-boundary', 'work-mode:worktree', 'capability:oats.core']);
@@ -148,82 +146,56 @@ test('the composed document: one continuous reader, every part a labelled sectio
   assert.equal(parts[3].querySelector('.soul-part-file').textContent, '.oats/modules/oats.core/inject.md');
   assert.equal(parts[0].querySelector('.soul-part-size'), null); assert.ok(parts[3].querySelector('.soul-part-size').textContent.endsWith(' B'));
   assert.equal(parts[1].querySelector('.soul-part-file'), null, "the kernel's own blocks report no file");
-  assert.doesNotMatch(u.$('.cap-reader-body').textContent, /<!--|oats:|src=/, 'no marker is shown');
+  assert.doesNotMatch(u.c('.cap-reader-body').textContent, /<!--|oats:|src=/, 'no marker is shown');
   assert.equal(parts[3].querySelector('.mdv h2').textContent, 'You run on OATS', 'each part renders through the strict reader');
+  assert.equal(u.panel(OWN).querySelector('.soul-part'), null, 'the own tab is the soul\'s file alone');
 });
 
 test('Open capability opens that capability; only a capability part the page can open carries it', t => {
   const u = setup(t); u.section.update(row({ composedInstructions: composedAnswer({ blocks: [['capability:oats.core', null, 'a'], ['capability:acme.gone', null, 'b']] }) }));
-  u.item(COMPOSED).querySelector('.cap-node-name').click();
-  const buttons = u.$$('.soul-part-open');
+  const buttons = u.cs('.soul-part-open');
   assert.equal(buttons.length, 1); assert.equal(buttons[0].textContent, 'Open capability'); assert.equal(buttons[0].closest('.soul-part').dataset.source, 'capability:oats.core');
   buttons[0].click(); assert.deepEqual(u.opened, [['capability', 'oats.core']]);
 });
 
-test('a part: selecting it scrolls the reader to its header below the sticky head; "This soul" is the soul part, not the own file', t => {
-  const u = setup(t); u.section.update(row());
-  const reader = scrollable(u.$('.cap-contents-reader'));
-  u.item(COMPOSED).querySelector('.cap-node-name').click();
-  const parts = u.$$('.soul-part');
+test('a section link scrolls the reader to its part below the sticky head; "This soul" is the soul part', t => {
+  const u = setup(t); u.section.update(row()); u.showComposed();
+  const reader = scrollable(u.c('.cap-contents-reader'));
+  const parts = u.cs('.soul-part');
   parts.forEach((p, i) => Object.defineProperty(p, 'offsetTop', { configurable: true, get: () => 100 + i * 400 }));
-  Object.defineProperty(u.$('.cap-reader-head'), 'offsetHeight', { configurable: true, get: () => 32 });
-  u.item('part:2').querySelector('.cap-node').click();
-  assert.equal(reader.scrollTop, 100 + 2 * 400 - 32 - 8); assert.equal(u.section.selected, 'part:2');
-  assert.equal(u.$$('.soul-part')[0], parts[0], 'the same document: a part is a place in it');
-  u.item('part:0').querySelector('.cap-node').click();
-  assert.equal(reader.scrollTop, 100 - 32 - 8); assert.equal(u.$('.cap-reader-path').textContent, 'Composed AGENTS.md');
-  u.item(COMPOSED).querySelector('.cap-node-name').click(); assert.equal(reader.scrollTop, 0, 'the composed item opens the top');
-  u.item(OWN).querySelector('.cap-node').click(); assert.equal(u.$('.cap-reader-path').textContent, 'souls/release-manager/AGENTS.md');
-  assert.equal(u.$('.soul-part'), null);
-});
-
-test('keyboard: one tree across both sections; Right/Left expand and climb; Enter opens', t => {
-  const u = setup(t); u.section.update(row());
-  const own = u.item(OWN), composed = u.item(COMPOSED);
-  own.focus(); u.key(own, 'ArrowDown'); assert.equal(u.doc.activeElement, composed, 'the arrows cross the section boundary');
-  u.key(composed, 'ArrowRight'); assert.equal(composed.getAttribute('aria-expanded'), 'true');
-  u.key(composed, 'ArrowRight'); assert.equal(u.doc.activeElement, u.item('part:0'), 'into its first part');
-  u.key(u.item('part:0'), 'End'); assert.equal(u.doc.activeElement, u.item('part:3'));
-  u.key(u.item('part:3'), 'Enter'); assert.equal(u.section.selected, 'part:3'); assert.ok(u.$('.soul-part'), 'the composed document is open');
-  u.key(u.item('part:3'), 'ArrowLeft'); assert.equal(u.doc.activeElement, composed, 'Left climbs to the composed item');
-  u.key(composed, 'ArrowLeft'); assert.equal(composed.getAttribute('aria-expanded'), 'false');
-  assert.equal(u.$$('[role=treeitem][tabindex="0"]').length, 1, 'one tab stop');
-  u.key(composed, 'Enter'); assert.equal(u.section.selected, COMPOSED); assert.equal(composed.getAttribute('aria-expanded'), 'true');
-  composed.querySelector('.cap-node-twisty').click(); assert.equal(composed.getAttribute('aria-expanded'), 'false', 'the twisty only folds');
-  assert.equal(u.section.selected, COMPOSED);
+  Object.defineProperty(u.c('.cap-reader-head'), 'offsetHeight', { configurable: true, get: () => 32 });
+  const links = u.cs('.soul-doc-link');
+  links[2].click(); assert.equal(reader.scrollTop, 100 + 2 * 400 - 32 - 8);
+  assert.equal(u.cs('.soul-part')[0], parts[0], 'the same document: a part is a place in it');
+  links[0].click(); assert.equal(reader.scrollTop, 100 - 32 - 8);
 });
 
 test('Copy copies the kernel’s exact text, markers included', async t => {
   const u = setup(t); const answer = composedAnswer(); u.section.update(row({ composedInstructions: answer }));
   const copied = [];
   Object.defineProperty(u.dom.window.navigator, 'clipboard', { configurable: true, value: { writeText: v => { copied.push(v); return Promise.resolve(); } } });
-  u.item(COMPOSED).querySelector('.cap-node-name').click();
-  const button = u.$('.cap-reader-head button.soul-copy');
+  const button = u.c('.cap-reader-head button.soul-copy');
   assert.equal(button.textContent, 'Copy composed AGENTS.md');
   button.click(); await flush();
   assert.deepEqual(copied, [answer.text]); assert.equal(button.textContent, 'Copied');
   Object.defineProperty(u.dom.window.navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('denied')) } });
   button.click(); await flush(); assert.equal(button.textContent, 'Copy failed');
-  u.item(OWN).querySelector('.cap-node').click(); assert.equal(u.$('.soul-copy'), null, 'the own file has no Copy');
+  assert.equal(u.panel(OWN).querySelector('.soul-copy'), null, 'the own file has no Copy');
 });
 
-test('without the feature no composed AGENTS.md and no note; a null answer is a note pointing at the problem; a broken one says it cannot be read', t => {
+test('without the feature the tab says so; a null answer is a note pointing at the problem; a broken one says it cannot be read', t => {
   const u = setup(t);
-  u.section.update(row({ composedInstructions: undefined }));
   const { composedInstructions, ...without } = row(); void composedInstructions;
   u.section.update(without);
-  const composedSection = () => u.$$('[role=tree] > li[role=none] > ul[role=group]')[1];
-  // Without the feature the section holds only its Skills row (soul-skills.test.mjs): today's silence for the composed file.
-  assert.equal(u.item(COMPOSED), null); assert.doesNotMatch(u.host.textContent, /after spawn/);
-  assert.deepEqual([...composedSection().children].map(c => c.querySelector('.cap-contents-group-label')?.textContent), ['Skills']);
+  const note = () => u.c('.soul-panel-note');
+  assert.equal(note().hidden, false); assert.equal(note().textContent, SOUL_INSTRUCTIONS_COPY.composeAbsent);
+  assert.equal(u.c('.soul-doc').hidden, true, 'no empty reader'); assert.equal(u.c('.soul-part'), null);
   u.section.update(row({ composedInstructions: null }));
-  assert.equal(u.item(COMPOSED), null);
-  // The note stands where the composed AGENTS.md would, first in its section (the Skills row follows it).
-  const noteOf = () => composedSection().children[0];
-  assert.deepEqual([...noteOf().children].map(c => [c.className, c.textContent]), [['cap-contents-note', SOUL_INSTRUCTIONS_COPY.cannotCompose]]);
-  assert.equal(noteOf().getAttribute('role'), 'none');
+  assert.equal(note().textContent, SOUL_INSTRUCTIONS_COPY.cannotCompose);
   u.section.update(row({ composedInstructions: { text: 'x' } }));
-  assert.equal(noteOf().textContent, SOUL_INSTRUCTIONS_COPY.cannotRead);
+  assert.equal(note().textContent, SOUL_INSTRUCTIONS_COPY.cannotRead);
+  u.section.update(row());
+  assert.equal(note().hidden, true); assert.equal(u.c('.soul-doc').hidden, false); assert.ok(u.c('.soul-part'));
 });
 
 test('a part past the size limit says so in its section; a cut part is flagged in its header', t => {
@@ -231,36 +203,33 @@ test('a part past the size limit says so in its section; a cut part is flagged i
   const c = composedAnswer(), cap = c.sources[1].start + 30, text = c.text.slice(0, cap);
   const clamp = s => ({ ...s, start: Math.min(s.start, cap), end: Math.min(s.end, cap), truncated: s.end > cap });
   u.section.update(row({ composedInstructions: { ...c, text, truncated: true, sources: c.sources.map(clamp) } }));
-  u.item(COMPOSED).querySelector('.cap-node-name').click();
-  const parts = u.$$('.soul-part');
-  assert.equal(u.$('.cap-reader-flag').textContent, 'Truncated at 200,000 characters');
+  const parts = u.cs('.soul-part');
+  assert.equal(u.c('.cap-reader-flag').textContent, 'Truncated at 200,000 characters');
   assert.equal(parts[2].querySelector('.soul-part-flag').textContent, 'Truncated');
   assert.equal(parts[3].querySelector('.cap-reader-line').textContent, 'Not included: past the size limit.');
   assert.equal(parts[3].querySelector('.soul-part-flag'), null);
 });
 
-test('repaint stability: an unchanged answer rebuilds nothing; selection, expansion and focus survive; a gone part falls back', t => {
-  const u = setup(t); u.section.update(row());
-  u.item(COMPOSED).querySelector('.cap-node-name').click(); u.item('part:3').querySelector('.cap-node').click();
-  const view = u.$('.cap-reader-body .soul-part'), part = u.item('part:3'); part.focus();
+test('repaint stability: an unchanged answer rebuilds nothing; the tab and focus survive; a changed answer repaints in place', t => {
+  const u = setup(t); u.section.update(row()); u.showComposed();
+  const view = u.c('.cap-reader-body .soul-part'), link = u.cs('.soul-doc-link')[3]; link.focus();
   u.section.update(structuredClone(row()));
-  assert.equal(u.$('.cap-reader-body .soul-part'), view); assert.equal(u.item('part:3'), part); assert.equal(u.doc.activeElement, part);
-  // One block fewer (a capability left the soul): the tree is rebuilt, focus found again by key or on its composed item.
+  assert.equal(u.c('.cap-reader-body .soul-part'), view); assert.equal(u.cs('.soul-doc-link')[3], link); assert.equal(u.doc.activeElement, link);
+  // One block fewer (a capability left the soul): the document and its sections are repainted; the tab stays.
   u.section.update(row({ composedInstructions: composedAnswer({ blocks: [['kernel:instance-boundary', null, 'a']] }) }));
-  assert.equal(u.section.selected, OWN, 'the part is gone: back to the own file');
-  assert.equal(u.doc.activeElement, u.item(COMPOSED)); assert.equal(u.item(COMPOSED).getAttribute('aria-expanded'), 'true', 'expansion kept');
-  // The CLI lost the feature: the group goes, the own file stays.
+  assert.equal(u.section.tab, COMPOSED); assert.deepEqual(u.cs('.soul-doc-link').map(l => l.textContent), ['This soul', 'Instance boundary · OATS']);
+  // The CLI lost the feature: the tab says so, the own file stays.
   const { composedInstructions, ...without } = row(); void composedInstructions;
-  u.section.update(without); assert.equal(u.item(COMPOSED), null); assert.equal(u.section.selected, OWN);
+  u.section.update(without); assert.equal(u.c('.soul-part'), null); assert.equal(u.c('.soul-panel-note').textContent, SOUL_INSTRUCTIONS_COPY.composeAbsent);
+  assert.equal(u.panel(OWN).querySelector('.cap-reader-path').textContent, 'souls/release-manager/AGENTS.md');
 });
 
 test('untrusted content in a part: no raw HTML, scripts or images; links settle as in the own file', t => {
   const u = setup(t);
   u.section.update(row({ composedInstructions: composedAnswer({ blocks: [['capability:oats.core', null, '<script>alert(1)</script><img src="https://evil.example/x.png">\n\n[out](https://example.com) [rel](skills/x.md)']] }) }));
-  u.item(COMPOSED).querySelector('.cap-node-name').click();
-  assert.equal(u.$('.cap-reader-body script, .cap-reader-body img'), null);
-  assert.deepEqual(u.$$('.soul-part a').map(a => a.getAttribute('href')), ['https://example.com']);
-  u.$('.soul-part a').click(); assert.deepEqual(u.opened, [['external', 'https://example.com']]);
+  assert.equal(u.c('.cap-reader-body script, .cap-reader-body img'), null);
+  assert.deepEqual(u.cs('.soul-part a').map(a => a.getAttribute('href')), ['https://example.com']);
+  u.c('.soul-part a').click(); assert.deepEqual(u.opened, [['external', 'https://example.com']]);
 });
 
 /* ── on the soul page: the request ───────────────────────────────────── */
@@ -302,7 +271,7 @@ test('on the page: the composed group from the inspection, and Open capability t
   const answer = () => { const v = structuredClone(fixture); v.souls[0].composedInstructions = composedAnswer({ blocks: [['capability:oats.aweb', null, '## Messaging']] }); return v; };
   const u = await page(t, { answer });
   const section = u.el.querySelector('.soul-instructions');
-  section.querySelector('[data-path="composed"] .cap-node-name').click();
+  section.querySelector('[role=tab][data-tab="composed"]').click();
   const open = section.querySelector('.soul-part-open'); assert.ok(open, 'oats.aweb is one of the soul’s capabilities');
   open.click(); assert.deepEqual(u.opened, [['oats.aweb', 'release-manager', true]]);
 });
@@ -314,22 +283,22 @@ test('repeated headings across parts: ids stay unique, a part’s own fragment g
     ['capability:acme.ops', '.oats/modules/acme.ops/inject.md', '## Usage\n\nSecond: see [usage](#usage) and [the next one](#usage-1).\n\n## Usage\n\nAgain.'],
     ['capability:acme.more', null, 'Elsewhere: [the third Usage](#usage-2).'],
   ] }) }));
-  const reader = scrollable(u.$('.cap-contents-reader'));
-  u.item(COMPOSED).querySelector('.cap-node-name').click();
-  const ids = u.$$('.cap-reader-body [id]').map(el => el.id);
+  const reader = scrollable(u.c('.cap-contents-reader'));
+  u.showComposed();
+  const ids = u.cs('.cap-reader-body [id]').map(el => el.id);
   assert.equal(new Set(ids).size, ids.length, `unique: ${ids}`);
-  const [first, second, third] = u.$$('.soul-part-body h2');
+  const [first, second, third] = u.cs('.soul-part-body h2');
   assert.deepEqual([first.id, second.id, third.id], ['usage', 'usage-1', 'usage-2'], 'the ids the whole document would give');
   assert.equal(second.closest('.soul-part').dataset.source, 'capability:acme.ops');
-  const [own, next] = u.$$('.soul-part[data-source="capability:acme.ops"] a');
+  const [own, next] = u.cs('.soul-part[data-source="capability:acme.ops"] a');
   assert.equal(own.getAttribute('href'), '#usage-1', 'the part’s own #usage follows its renamed heading');
   assert.equal(next.getAttribute('href'), '#usage-2', 'and its own #usage-1 (its second Usage) too');
-  assert.equal(u.$('.soul-part[data-source="capability:acme.more"] a').getAttribute('href'), '#usage-2', 'a part with no headings keeps whole-document lookup');
-  Object.defineProperty(u.$('.cap-reader-head'), 'offsetHeight', { configurable: true, get: () => 32 });
+  assert.equal(u.c('.soul-part[data-source="capability:acme.more"] a').getAttribute('href'), '#usage-2', 'a part with no headings keeps whole-document lookup');
+  Object.defineProperty(u.c('.cap-reader-head'), 'offsetHeight', { configurable: true, get: () => 32 });
   [first, second, third].forEach((h, i) => Object.defineProperty(h, 'offsetTop', { configurable: true, get: () => 60 + i * 500 }));
   own.click(); assert.equal(reader.scrollTop, 560 - 32 - 8, 'it scrolls to the second part’s heading, not the first');
-  // The soul's own file (a single document) keeps the reader's ids as they were.
-  u.item(OWN).querySelector('.cap-node').click(); assert.equal(u.$('.soul-part'), null);
+  // The soul's own file (a single document, its own tab) has no parts.
+  assert.equal(u.panel(OWN).querySelector('.soul-part'), null);
 });
 
 test('a generated suffix never takes an id a later heading needs: every id is unique, and each part’s link stays in its part', t => {
@@ -338,13 +307,13 @@ test('a generated suffix never takes an id a later heading needs: every id is un
     ['capability:oats.core', null, '## Usage\n\nOne.\n\n## Usage\n\nTwo.'],
     ['capability:acme.ops', null, '## Usage 1\n\n[Return](#usage-1).'],
   ] }) }));
-  const reader = scrollable(u.$('.cap-contents-reader'));
-  u.item(COMPOSED).querySelector('.cap-node-name').click();
-  const heads = u.$$('.soul-part-body h2');
+  const reader = scrollable(u.c('.cap-contents-reader'));
+  u.showComposed();
+  const heads = u.cs('.soul-part-body h2');
   assert.deepEqual(heads.map(h => h.id), ['usage', 'usage-1', 'usage-1-1']);
-  const link = u.$('.soul-part[data-source="capability:acme.ops"] a');
+  const link = u.c('.soul-part[data-source="capability:acme.ops"] a');
   assert.equal(link.getAttribute('href'), '#usage-1-1', 'B’s #usage-1 is its own "Usage 1"');
-  Object.defineProperty(u.$('.cap-reader-head'), 'offsetHeight', { configurable: true, get: () => 32 });
+  Object.defineProperty(u.c('.cap-reader-head'), 'offsetHeight', { configurable: true, get: () => 32 });
   heads.forEach((h, i) => Object.defineProperty(h, 'offsetTop', { configurable: true, get: () => 60 + i * 500 }));
   link.click(); assert.equal(reader.scrollTop, 1060 - 32 - 8, 'it scrolls to B’s heading, not A’s second Usage');
 });
@@ -352,8 +321,7 @@ test('a generated suffix never takes an id a later heading needs: every id is un
 test('a part is Markdown whatever its source file is called (an inject.txt is still a slice of AGENTS.md)', t => {
   const u = setup(t);
   u.section.update(row({ composedInstructions: composedAnswer({ blocks: [['capability:acme.ops', '.oats/modules/acme.ops/inject.txt', '## Important instructions\n\nDo **this**.']] }) }));
-  u.item(COMPOSED).querySelector('.cap-node-name').click();
-  const part = u.$('.soul-part[data-source="capability:acme.ops"]');
+  const part = u.c('.soul-part[data-source="capability:acme.ops"]');
   assert.equal(part.querySelector('.soul-part-file').textContent, '.oats/modules/acme.ops/inject.txt', 'the reported file stays as provenance');
   assert.equal(part.querySelector('h2')?.textContent, 'Important instructions'); assert.equal(part.querySelector('pre'), null);
   assert.equal(part.querySelector('strong')?.textContent, 'this');
