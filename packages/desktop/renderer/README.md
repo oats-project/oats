@@ -14,8 +14,10 @@ No frameworks, no dependencies; data comes from the bundled backend HTTP API.
   `hierarchy.mjs`, the Deployments page of before, only while its tab is shown (chosen, or
   preselected by `stage.hierarchy`) and unmounts it on
   leaving (`syncMachines`), and that view's "Workspace" (`s`, Go to soul's page) is the Souls tab
-  here. Since 2026-10-26 `shell-nav.mjs` NAV is Workspace overview (`spawn`) and Automations
-  (`automations`, a page of its own again, as before 2026-10-23), and its NAV_TABS route
+  here. `shell-nav.mjs` NAV is Home (`home`, the Desktop UI rework's slice 2), Workspace overview
+  (`spawn`, since slice 2 without a pinned row of its own: `PINNED` is Home and Automations, and
+  `pinnedRowFor("spawn")` is Home's row, which opens it) and Automations (`automations`, a page of its
+  own again, as before 2026-10-23), and its NAV_TABS route
   `stage.hierarchy` (⌘1 / Ctrl+1), the palette's **View: Workspace › Machines** (the entry's label
   names its page, as the shortcuts editor's row does) and every
   `showStage("hierarchy")` / `ctx.openView("hierarchy")` to this page on the Machines tab.
@@ -183,7 +185,7 @@ also carries `.theme-picker-overlay` or `.font-picker-overlay`.
   `fontFallsBack()` is true and the picker's Omarchy row reads
   `FONT_FALLBACK_NOTE`; the stored choice stays.
 - **Layout.** A monospace UI is wider: the nav's labels, one under the other
-  (Workspace overview, Automations), fit whole in the 264px sidebar either way.
+  (Home, Automations), fit whole in the 264px sidebar either way.
   Names that already ellipsize (instances, workspaces) ellipsize sooner, and
   nothing in the sidebar wraps or leaves the right-hand column. A terminal tab
   shows a name of up to 26 characters whole before its 280px cap; a longer one
@@ -534,8 +536,8 @@ split into sections) is `packages/client/roster-sections.mjs`.
   down, as in the 48px bar, so the first row sits close under it; no line under it): the heading `#ws-heading`
   "Workspace" (13.5px 700 `--fg`; it labels the list), then **Add local workspace…** (`#ws-add-open`), a 28px
   `.side-icon-button` box; the list (`#ws-list`, a 1.5px `--border` line under it, a little bolder than the 1px one
-  before the instances; rows `.ws-option`, 4px 8px 4px 10px, at least 24px tall); the pinned rows (`#nav`, NAV:
-  Workspace overview, Automations; 8px above the first and below the last, 4px on the left as the roster's list; a
+  before the instances; rows `.ws-option`, 4px 8px 4px 10px, at least 24px tall); the pinned rows (`#nav`, PINNED:
+  Home, Automations; 8px above the first and below the last, 4px on the left as the roster's list; a
   column of 32px `.nav-item`s in the roster rows' style: the icon on the roster's dot column, 18px in, the name in
   the roster's name type, 12.5px 600 `--fg`, the current one 650 on `--sel`; Automations carries `.nav-failed`, an
   8px `--danger` dot in the right-hand column, 25px from the right, and the sr-only ", a run failed", while
@@ -1103,7 +1105,7 @@ real card size), the failed block in the grid and the stale line in
 none), an unobserved deployment defers with the deployment's own copy, and
 `refreshing: true` with no souls keeps the skeleton. So does an empty list
 with no `catalog` beside a panel that says the deployment is observed: the two
-reads run side by side, and at launch (the Workspace page is the home surface)
+reads run side by side, and when the Workspace page opens with no read held yet
 `/api/agents` can be answered before the server's first observation and
 `/api/panel` just after it; that answer is no read of the souls, so the grid
 keeps loading until the next poll, never "No souls are materialized". A remote
@@ -2415,3 +2417,29 @@ node packages/desktop/server/oats-web.mjs start --socket "$dir/s" --token-file "
 node packages/desktop/renderer/harness-server.mjs --port 4899 --api-socket "$dir/s" --token-file "$dir/token"
 # open the URL it prints: http://127.0.0.1:4899/harness.html#t=<its token>
 ```
+
+## Home (`views/home.mjs`, the Desktop UI rework's slice 2)
+
+The landing surface: `showStage("home")` at start and when a window is bound again (`onWindowState`), and the
+nav's fallback when no stage shows (`setNavActive(stage?.name || "home")`). A stage view on the `mount(el, ctx)`
+contract (its mount returns its disposer), so a later slice can put it in a tab. It reads nothing the shell
+doesn't read already:
+
+- **The roster** through `ctx.homeRoster()` (the rows the sidebar shows, held retires included, its deployments, the
+  read's `phase`: loading, failed or ready, the held-stale rule, this machine's name and Retry) and
+  `ctx.subscribeHomeRoster(fn)`, run after each paint of the roster (and after a first read fails with nothing
+  shown). The board's groups are the shared `packages/client/home-board.mjs` (`homeBoard`: Needs you by the one
+  claim gate, newest claim first; Running, newest spawn first; `homeAgents`; `startedBy`), so the TUI can draw the
+  same Home. Nothing reorders the roster.
+- **Counts**: Souls from `GET /api/agents`, Capabilities from `POST /api/workspace-sync {action:"read"}`, Teams from
+  `POST /api/workspace-teams {action:"list"}` (only where the CLI has a team model), Machines from the roster's
+  deployments (a workspace with no deployment list is this machine's: one). One read serial per mount, checked with
+  the workspace generation on each answer and each failure.
+- **Opening**: an agent row runs `ctx.openAgent(row)`, the shell's `openRosterInstance`, the roster row's own
+  activation and gates (held, unknown or unaddressable, stopped on a stale roster: refused). An overview row runs
+  `ctx.openWorkspaceTab(tab)` (`openWorkspaceSouls`); the Workspace page's unclaimed Esc (no field, dialog, menu or
+  list took it) goes back to Home (`stageHost`'s keydown in shell.mjs), and Home focuses the row that opened it.
+  Agents opens Home › Agents in place; its Esc, or Back to Home, returns to the board.
+- **First run** (the roster is ready and empty): two lines, three keys (`ctx.chordText`: New agent's and the
+  palette's bound keys; Home's is its palette command until it has a key), then the overview.
+

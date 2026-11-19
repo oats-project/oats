@@ -15,25 +15,27 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import { JSDOM } from "jsdom";
-import { NAV, NAV_TABS, navTab, stageSidebarMode, loadStageView } from "../renderer/shell-nav.mjs";
+import { NAV, NAV_TABS, PINNED, pinnedRowFor, navTab, stageSidebarMode, loadStageView } from "../renderer/shell-nav.mjs";
 import { shellIcon } from "../renderer/shell-icons.mjs";
 import { workspaceTabs } from "../renderer/workspace-discovery.mjs";
 
 const PKG = join(dirname(fileURLToPath(import.meta.url)), "..");
 const shellSource = () => readFileSync(join(PKG, "renderer", "shell.mjs"), "utf8");
 
-// The sidebar as before 2026-10-23 (the product owner, 2026-10-26): the nav under the list of workspaces is a
-// column of two views, Workspace overview then Automations (Schedules | Triggers), a page of its own again;
-// Deployments became the Workspace page's Machines tab.
-test("NAV is exactly Workspace overview and Automations, in that order, and keeps the instance roster in the sidebar", () => {
-  assert.deepEqual(NAV.map((v) => v.name), ["spawn", "automations"],
-    "page destinations are Workspace and Automations; Machines (formerly Deployments, formerly Active overview) is a tab of Workspace");
-  assert.deepEqual(NAV.map((v) => v.label), ["Workspace overview", "Automations"],
+// The sidebar's pages (the Desktop UI rework, slice 2; before it, the product owner, 2026-10-26): Home, the
+// Workspace page (Workspace overview, no row of its own: Home opens it) and Automations (Schedules | Triggers);
+// Deployments became the Workspace page's Machines tab. The pinned rows: Home, then Automations.
+test("NAV is exactly Home, Workspace overview and Automations, in that order; Home and Automations are pinned", () => {
+  assert.deepEqual(NAV.map((v) => v.name), ["home", "spawn", "automations"],
+    "page destinations are Home, Workspace and Automations; Machines (formerly Deployments, formerly Active overview) is a tab of Workspace");
+  assert.deepEqual(NAV.map((v) => v.label), ["Home", "Workspace overview", "Automations"],
     "Knowledge/Tasks remain deferred; Workspace keeps the internal spawn route");
   for (const v of NAV) {
     assert.ok(v.label && v.icon && v.title, `${v.name} entry carries full rail chrome`);
   }
-  assert.deepEqual(NAV.map((v) => v.title), ["Workspace overview", "Automations"]);
+  assert.deepEqual(NAV.map((v) => v.title), ["Home", "Workspace overview", "Automations"]);
+  assert.deepEqual(PINNED.map((v) => v.name), ["home", "automations"]);
+  assert.equal(pinnedRowFor("spawn"), "home");
 });
 
 // A destination that is a tab of a page keeps its name (stage.hierarchy, ⌘1 / Ctrl+1) and says which page and tab
@@ -95,7 +97,7 @@ test("shell.mjs registers stage.<name> for every NAV page and NAV_TABS entry, ea
 // test/navigation-projection.test.mjs runs the shipped showStage / showStageFocused for it.
 test("showStage routes a NAV_TABS name to openWorkspaceSouls(tab); showStageFocused compares against the page", () => {
   const src = shellSource();
-  assert.match(src, /import \{ NAV, NAV_TABS, navTab, stageSidebarMode, loadStageView \} from "\.\/shell-nav\.mjs";/);
+  assert.match(src, /import \{ NAV, NAV_TABS, PINNED, pinnedRowFor, navTab, stageSidebarMode, loadStageView \} from "\.\/shell-nav\.mjs";/);
   const showStage = src.match(/async function showStage\(name\) \{[^]*?\n\}/)[0];
   const route = showStage.indexOf("const asTab = navTab(name);\n  if (asTab) return openWorkspaceSouls(asTab.tab);");
   assert.ok(route > 0, "showStage asks navTab first");
@@ -127,7 +129,7 @@ test("a nav button runs its stage action once; New agent and ? run their own onc
   assert.ok(!src.includes("#sidebar-tools"), "the tools row is gone");
   const dom = new JSDOM(readFileSync(join(PKG, "renderer", "index.html"), "utf8"));
   const document = dom.window.document, ran = [];
-  runInNewContext(block, { document, NAV, shellIcon, runAction: (id) => ran.push(id),
+  runInNewContext(block, { document, NAV, PINNED, shellIcon, runAction: (id) => ran.push(id),
     getBinding: () => null, formatChord: String, isMac: false });
   const nav = document.getElementById("nav");
   assert.equal(nav.parentElement.id, "sidebar", "the nav is the sidebar's own child");
@@ -136,7 +138,7 @@ test("a nav button runs its stage action once; New agent and ? run their own onc
   assert.equal(document.getElementById("nav-foot").contains(nav), false, "not in the foot");
   const buttons = [...nav.querySelectorAll("button")];
   assert.deepEqual(buttons.map((b) => [b.dataset.view, b.dataset.action, b.querySelector(".label").textContent, b.title]),
-    [["spawn", "stage.spawn", "Workspace overview", "Workspace overview"], ["automations", "stage.automations", "Automations", "Automations"]]);
+    [["home", "stage.home", "Home", "Home"], ["automations", "stage.automations", "Automations", "Automations"]]);
   for (const b of buttons) {
     ran.length = 0; b.click();
     assert.deepEqual(ran, [b.dataset.action], `${b.dataset.view}: one run per click`);
@@ -163,18 +165,18 @@ test("inventory: the Instances stage view is gone and nothing references it", ()
   }
 });
 
-// The home surface (the product owner, 2026-10-23, kept 2026-10-26): the Workspace page (on Souls), when no instance is open: at
-// start, after choosing a workspace, and as the nav's fallback when the last terminal closes or a workspace switch
-// restores no stage.
-test("the home surface is the Workspace page: at start, after a choice, and as the nav's fallback", async () => {
+// The landing surface (the Desktop UI rework, slice 2; before it, the Workspace page, 2026-10-23): Home, when no
+// instance is open: at start, after choosing a workspace, and as the nav's fallback when the last terminal closes or
+// a workspace switch restores no stage.
+test("the landing surface is Home: at start, after a choice, and as the nav's fallback", async () => {
   const src = shellSource();
   const topLevel = src.match(/^showStage\("[a-z]+"\);$/gm);
-  assert.deepEqual(topLevel, ['showStage("spawn");'], "the shell's one start-up stage is Workspace");
-  assert.ok(src.lastIndexOf('showStage("spawn");') > src.indexOf("// Home surface:"), "under its comment");
+  assert.deepEqual(topLevel, ['showStage("home");'], "the shell's one start-up stage is Home");
+  assert.ok(src.lastIndexOf('showStage("home");') > src.indexOf("// The landing surface:"), "under its comment");
   assert.doesNotMatch(src, /showStage\("hierarchy"\)/, "Machines is never shown as a page of its own");
   const fallbacks = src.match(/setNavActive\(stage\?\.name \|\| "[a-z]+"\)/g);
-  assert.deepEqual(fallbacks, ['setNavActive(stage?.name || "spawn")', 'setNavActive(stage?.name || "spawn")'],
-    "the last terminal closing, and a workspace switch that restores no tab, mark Workspace");
+  assert.deepEqual(fallbacks, ['setNavActive(stage?.name || "home")', 'setNavActive(stage?.name || "home")'],
+    "the last terminal closing, and a workspace switch that restores no tab, mark Home");
   // After a choice (or an adoption) the window leaves the chooser for the home surface: run the shipped handler.
   const handler = src.match(/^onWindowState\(\(state\) => \{[^]*?\n\}\);$/m)?.[0];
   assert.ok(handler, "exercise the shipped onWindowState handler");
@@ -185,8 +187,8 @@ test("the home surface is the Workspace page: at start, after a choice, and as t
   callback("choosing");
   assert.deepEqual(shown, ["chooser"]);
   roster.hidden = true; callback("bound");
-  assert.deepEqual(shown, ["chooser", "spawn"], "bound again: the Workspace page");
+  assert.deepEqual(shown, ["chooser", "home"], "bound again: Home");
   assert.equal(roster.hidden, false, "and the roster comes back");
   callback("bound");
-  assert.deepEqual(shown, ["chooser", "spawn"], "already bound: the shown stage is kept");
+  assert.deepEqual(shown, ["chooser", "home"], "already bound: the shown stage is kept");
 });

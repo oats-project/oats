@@ -22,7 +22,6 @@ export const LINUX_SIZES = [16, 32, 48, 64, 128, 256, 512];
 // ICNS PNG-payload types (macOS 10.7+). Retina types reuse the doubled size.
 export const ICNS_TYPES = [['icp4', 16], ['icp5', 32], ['icp6', 64], ['ic07', 128], ['ic08', 256], ['ic09', 512], ['ic10', 1024],
   ['ic11', 32], ['ic12', 64], ['ic13', 256], ['ic14', 512]];
-export const SIDEBAR_SIZE = 48; // the sidebar mark (drawn at 20px in the bottom bar) at 2x and more
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -184,13 +183,13 @@ export const pixelDigest = image => sha256(Buffer.concat([Buffer.from(`${image.w
 /** Derive the full icon set (file → bytes) and its manifest from the source bytes. */
 export function deriveIconSet(sourceBytes) {
   const source = decodePNG(sourceBytes);
-  const sizes = [...new Set([...LINUX_SIZES, ...ICNS_TYPES.map(([, s]) => s), SIDEBAR_SIZE])].sort((a, b) => a - b);
+  // No sidebar mark since the Desktop UI rework (slice 1 took it from the foot, slice 2 stopped generating it).
+  const sizes = [...new Set([...LINUX_SIZES, ...ICNS_TYPES.map(([, s]) => s)])].sort((a, b) => a - b);
   const images = new Map(sizes.map(size => [size, resize(source, size)]));
   const pngs = new Map([...images].map(([size, image]) => [size, encodePNG(image)]));
   const files = new Map();
   for (const size of LINUX_SIZES) files.set(`linux/${size}x${size}.png`, pngs.get(size));
   files.set('oats.icns', encodeICNS(ICNS_TYPES.map(([type, size]) => [type, pngs.get(size)])));
-  files.set(`sidebar-${SIDEBAR_SIZE}.png`, pngs.get(SIDEBAR_SIZE));
   const manifest = {
     regenerate: 'cd packages/desktop && npm run icons',
     source: { path: SOURCE, sha256: sha256(sourceBytes), width: source.width, height: source.height },

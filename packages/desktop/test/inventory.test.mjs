@@ -216,7 +216,7 @@ function outsideApp(target) {
 
 test("inventory: the builder's patterns ship the app and not its tests or tools", () => {
   // The reader of the patterns is this file's own: check it against what the comments in the config promise.
-  for (const path of ["main.mjs", "preload.cjs", "package.json", "server/oats-web.mjs", "renderer/index.html", "renderer/views/common.mjs", "renderer/vendor/highlight.mjs", "assets/brand/generated/sidebar-48.png"])
+  for (const path of ["main.mjs", "preload.cjs", "package.json", "server/oats-web.mjs", "renderer/index.html", "renderer/views/common.mjs", "renderer/vendor/highlight.mjs"])
     assert.ok(shippedBy(path), `${path} ships`);
   for (const path of ["renderer/harness.html", "renderer/harness-server.mjs", "test/inventory.test.mjs", "build-vendor.mjs", "electron-builder.config.cjs", "scripts/dist-smoke.mjs", "assets/brand/oats-logo.png", "README.md", "renderer/.DS_Store", "renderer/x.test.mjs"])
     assert.ok(!shippedBy(path), `${path} does not ship`);

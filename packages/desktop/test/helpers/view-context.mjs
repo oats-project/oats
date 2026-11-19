@@ -27,6 +27,7 @@ import { siblingText } from "../../../client/instance-presentation.mjs";
 import { backgroundHeading } from "../../renderer/background-heading.mjs";
 import { DESKTOP_TERMS, DESKTOP_NOUNS } from "../../renderer/desktop-terms.mjs";
 import { rosterRowFacts } from "../../../client/roster-row-facts.mjs";
+import { PINNED, pinnedRowFor } from "../../renderer/shell-nav.mjs";
 import { emptyRosterText } from "../../renderer/sidebar-foot.mjs";
 import { rowFactsTitle } from "../../renderer/row-facts-title.mjs";
 import { deploymentHeading, notePanel, panelDeployments } from "../../renderer/view-deployments.mjs";
@@ -46,6 +47,7 @@ import { sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen, a
 class AllOpen extends Set { has() { return true; } }
 
 export const viewContext = () => ({
+  pinnedRowFor, PINNED,
   contextDeployments: [], rosterSections, DESKTOP_TERMS, deploymentHeading, notePanel, panelDeployments, rowStale, deploymentState,
   rehomeMap, viewMembership: createViewMembership(), rehomeWorkspaceState() {},
   waitingClaim, waitingRollup, waitingSentence, waitingDetail, waitingClock, splitByDeployment,

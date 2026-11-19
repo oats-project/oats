@@ -9,9 +9,14 @@
  * shell's permanent sidebar roster (below the rail), not a rail destination
  * (scope correction of PR #29 — the human rejected the extra tab/sidebar). */
 export const NAV = [
-  // The sidebar's two views (the product owner, 2026-10-26): the Workspace page, which opens on Souls, and
-  // Automations, a page of its own again. ⌘2 / Ctrl+2 and ⌘3 / Ctrl+3 stay theirs (bound by id).
-  { name: "spawn", label: "Workspace overview", icon: "workspace", title: "Workspace overview" },
+  // Home (the Desktop UI rework, slice 2): what needs you, what you have, and the overview whose rows open the
+  // Workspace page on a tab. A workspace lands on it. It has no key of its own yet (slice 4's table decides one):
+  // its palette command, View: Home, opens it.
+  { name: "home", label: "Home", icon: "workspace", title: "Home" },
+  // The Workspace page (Workspace overview), which opens on Souls: no pinned row of its own since slice 2 (Home's
+  // overview opens it on a tab, and its row stays Home's while it shows). ⌘2 / Ctrl+2 and ⌘3 / Ctrl+3 stay theirs
+  // (bound by id), and so does its palette command, View: Workspace overview.
+  { name: "spawn", label: "Workspace overview", icon: "workspace", title: "Workspace overview", pinned: false },
   // Schedules and Triggers are one destination with two subtabs (human, 2026-09-28).
   { name: "automations", label: "Automations", icon: "automations", title: "Automations" },
 ];
@@ -28,6 +33,14 @@ export const NAV_TABS = [
 /** The NAV_TABS entry `name` opens, or null for a page of its own (or nothing). */
 export function navTab(name) {
   return NAV_TABS.find((entry) => entry.name === name) ?? null;
+}
+
+/** The NAV entries the sidebar pins as rows (Home, then Automations): every one not marked `pinned: false`. */
+export const PINNED = NAV.filter((v) => v.pinned !== false);
+
+/** The pinned row that stands for a stage: its own, else Home's for the Workspace page, which Home opens. */
+export function pinnedRowFor(name) {
+  return name === "spawn" ? "home" : name;
 }
 
 /** Sidebar mode a stage view pairs with (spawn shows the souls context). */

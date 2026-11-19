@@ -71,7 +71,7 @@ import { revealInStrip } from "./reveal-in-scrollport.mjs";
 import { createIntentGate, prepareOwnedOpen, runOpenFlow } from "./open-intent.mjs";
 import { createSelectionOwnership, wirePaneSelection } from "./selection-ownership.mjs";
 import { createWorkspaceSwitcher } from "./workspace-switcher.mjs";
-import { NAV, NAV_TABS, navTab, stageSidebarMode, loadStageView } from "./shell-nav.mjs";
+import { NAV, NAV_TABS, PINNED, pinnedRowFor, navTab, stageSidebarMode, loadStageView } from "./shell-nav.mjs";
 import { shellIcon, mountShellIcons, iconElement } from "./shell-icons.mjs";
 import { createSidebarFoot, emptyRosterText } from "./sidebar-foot.mjs";
 import { createAutomationsFailure, FAILED_RUN_TEXT } from "./automations-failure.mjs";
@@ -249,6 +249,14 @@ const ctx = {
   // #1247: this window's own retires in flight. A view that reads its own roster draws its rows through
   // `retiringRows` and draws them again when `subscribeRetires` says the held set changed.
   retiringRows: (rows) => shownRows(rows),
+  // Home (slice 2): the roster as the sidebar shows it, a subscription to its paints, a row's activation, and a
+  // Workspace tab by its id (Souls, Capabilities, Teams, Machines, Setup), which Esc leaves back to Home.
+  homeRoster: () => homeRoster(),
+  subscribeHomeRoster: (fn) => { homeRosterListeners.add(fn); return () => homeRosterListeners.delete(fn); },
+  openAgent: (row) => openRosterInstance(row),
+  openWorkspaceTab: (tab) => openWorkspaceSouls(tab),
+  // A bound action's key as the keyboard reference writes it ("Ctrl+K"), or "" when it has none.
+  chordText: (id) => { const b = getBinding(id, navigator.platform.includes("Mac")); return b ? formatChord(b, navigator.platform.includes("Mac")) : ""; },
   subscribeRetires: (fn) => { retireListeners.add(fn); return () => retireListeners.delete(fn); },
 };
 const openInstanceStart = createInstanceStarter(document, ctx);
@@ -360,6 +368,14 @@ window.addEventListener('pagehide', () => spawnJobs.dispose(), { once: true });
 // you accumulate and close, not places you navigate. Selecting a nav item
 // hides the tab layer; activating a tab covers the stage.
 const stageHost = document.getElementById("stagehost");
+// Esc on the Workspace page goes back to Home, which opens it (slice 2): only an Esc nothing on the page took
+// (a field, a list, a menu or a dialog handles its own, and marks it), from no text field.
+stageHost.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || stage?.name !== "spawn") return;
+  if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable="true"], dialog, [role="dialog"], [role="menu"], [role="listbox"]')) return;
+  e.preventDefault();
+  void showStageFocused("home");
+});
 let stage = null;           // { name, life, el, mod }
 let stageOp = 0;            // switch generation — a slow mount must not paint over a newer switch
 
@@ -454,7 +470,7 @@ onWindowState((state) => {
   // Bound again (a choice, or an adoption): leaving the choice shows the home surface.
   if (!contextRosterEl?.hidden) return;
   contextRosterEl.hidden = false;
-  void showStage("spawn"); // the home surface: Workspace (2026-10-23)
+  void showStage("home"); // the landing surface: Home (slice 2)
 });
 
 /** A stage switch from the keyboard (a chord, the palette, a nav button) keeps focus on a
@@ -473,8 +489,9 @@ async function showStageFocused(name) {
 onDeploymentTabRequest(() => { void showStageFocused("hierarchy"); });
 
 function setNavActive(name) {
+  const row = pinnedRowFor(name);
   for (const b of navEl.querySelectorAll(".nav-item")) {
-    const active = b.dataset.view === name;
+    const active = b.dataset.view === row;
     b.classList.toggle("active", active);
     if (active) b.setAttribute("aria-current", "page");
     else b.removeAttribute("aria-current");
@@ -519,6 +536,30 @@ let contextRosterGen = 0;
 let shownRoster = null;
 let contextRosterEl = null;
 let contextInstances = [];
+/** Home (slice 2) reads the roster the sidebar shows: its listeners run after each paint of it, and after a first
+ * read fails with nothing shown. */
+const homeRosterListeners = new Set();
+function homeRosterChanged() { for (const fn of homeRosterListeners) { try { fn(); } catch (e) { console.error(e); } } }
+/** Open a roster row as its activation (click, Enter) does, on the roster or on Home: a running row's terminal, a
+ * stopped row's Start. Refused, opening nothing, for a held home, a row whose state isn't known or whose remote
+ * can't be addressed, and a stopped row of a stale roster (its last read failed: it may be running by now). The
+ * same gates the row's own markup states (its title and description). Returns whether it opened. */
+function openRosterInstance(i) {
+  const ws = contextWorkspace || currentWorkspace();
+  if (!i || heldHome(i) || i.running == null || !canAddressRemote(i)) return false;
+  if ((rosterStale || rowStale(i, contextDeployments)) && !i.running) return false;
+  spawnJobs.seen?.(ws, i);
+  if (i.running) openTerminalTab(i); else openInstanceStart(i);
+  return true;
+}
+/** Home's view of the roster: the rows the sidebar shows (held retires included), its deployments, the read's
+ * phase ("loading" before a first answer, "failed" when that failed, else "ready"), the stale rule, and this
+ * machine's name. */
+function homeRoster() {
+  const phase = rosterState?.hasData ? "ready" : rosterState?.state === "failed" ? "failed" : contextInstances.length ? "ready" : rosterState?.settled === "empty" ? "ready" : "loading";
+  return { rows: shownRows(contextInstances), deployments: contextDeployments, phase, stale: (row) => rosterStale || rowStale(row, contextDeployments), here: thisHostName,
+    retry: () => { void refreshContextRoster({ user: true }); } };
+}
 let contextWorkspace = "";
 // #1237: the dispatch order of every /api/panel read (the roster's and an open's), and the newest roster answer the
 // retired-tab rule ran on ({ read, workspace, panel }): an open whose own read is older than it checks it before its tab.
@@ -661,6 +702,11 @@ document.addEventListener("focusout", () => queueMicrotask(() => updateActiveCon
 
 function initContextRoster() {
   contextRosterEl = document.getElementById("instance-roster");
+  // Its heading and name from DESKTOP_NOUNS ("Agents", slice 2), as the markup's own words say before this runs.
+  const rosterTitle = DESKTOP_NOUNS.instances[0].toUpperCase() + DESKTOP_NOUNS.instances.slice(1);
+  contextRosterEl.setAttribute("aria-label", rosterTitle);
+  const rosterHeading = contextRosterEl.querySelector(".ctx-head > span:first-child");
+  if (rosterHeading) rosterHeading.textContent = rosterTitle;
   rosterState = createRosterLoading(document, contextRosterEl, { onRetry: () => { void refreshContextRoster({ user: true }); } });
   renderRosterCount(contextRosterEl.querySelector(".ctx-count"), [], { pending: true });
   // Native pointer/keyboard entry is a newer UI intent, even if no command
@@ -799,7 +845,7 @@ async function refreshContextRoster({ user = false } = {}) {
       // The rows are rebuilt once, to disable their actions; a repeat failure keeps them. Without
       // data, the count's pill stops (nothing is loading): the reserved box, empty and still.
       if (rosterState?.hasData && !rosterStale) { rosterStale = true; renderContextRoster(contextInstances); }
-      else if (rosterState && !rosterState.hasData) { renderRosterCount(contextRosterEl.querySelector(".ctx-count"), [], { failed: true }); applyRosterPlace(); }
+      else if (rosterState && !rosterState.hasData) { renderRosterCount(contextRosterEl.querySelector(".ctx-count"), [], { failed: true }); applyRosterPlace(); homeRosterChanged(); }
       refreshPanelInstance([], ws);
     }
     return;
@@ -974,6 +1020,7 @@ function emptyRosterLine() {
 
 function renderContextRoster(instances) {
   instances = shownRows(instances);
+  queueMicrotask(homeRosterChanged); // Home reads the roster this paint shows (slice 2), once the paint is done
   const listEl = contextRosterEl.querySelector(".ctx-list");
   const restoreTreeState = captureTreeRenderState(listEl);
   // #1579: what had focus in the list, for the Background heading (no instance identity: it keeps its own focus)
@@ -1619,7 +1666,7 @@ function showTerminalContext() {
   // terminal restores the prior stage surface.
   setSidebarMode(stageSidebarMode(stage?.name));
   showTabLayer(false);
-  setNavActive(stage?.name || "spawn");
+  setNavActive(stage?.name || "home");
 }
 
 // ── tabs ──────────────────────────────────────────────────────────────────
@@ -2514,11 +2561,11 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
 // prove every entry resolves to a real mount-exporting view. The permanent
 // instance tree in the sidebar is the instances surface itself — selecting
 // an instance opens its terminal; there is no separate Instances stage.
-// The pinned destinations (the Desktop UI rework, slice 1): Workspace overview and Automations, rows under the
+// The pinned destinations (the Desktop UI rework, slices 1 and 2): Home and Automations, rows under the
 // switcher in the roster rows' style. Automations carries a --danger dot while a run failed (automations-failure.mjs,
 // paintAutomationsFailed), its words after the name, so the row's name says it ("Automations, a run failed").
 const navEl = document.getElementById("nav");
-for (const v of NAV) {
+for (const v of PINNED) {
   const b = document.createElement("button");
   b.type = "button";
   b.className = "nav-item";
@@ -3659,7 +3706,7 @@ function restoreWorkspaceTabs() {
     activateTab(restored.activeTab, { keepGroupFocus: true });
   } else {
     setSidebarMode(stageSidebarMode(stage?.name));
-    setNavActive(stage?.name || "spawn");
+    setNavActive(stage?.name || "home");
   }
   updateContextTabs();
   focusArrival(restored.place ?? null);
@@ -3724,5 +3771,5 @@ import("./views/cli-status.mjs").then(({ refreshCli, reprobeCli }) => {
   desk.onAppFocus?.(() => reprobeCli(ctx));
 });
 
-// Home surface: the Workspace page (Workspace overview), on Souls, when no instance is open (the product owner, 2026-10-23).
-showStage("spawn");
+// The landing surface: Home (the Desktop UI rework, slice 2; before it, the Workspace page, 2026-10-23).
+showStage("home");

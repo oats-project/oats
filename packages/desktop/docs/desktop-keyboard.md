@@ -327,6 +327,7 @@ The three Linux / Windows columns are [the chord families](#the-chord-families):
 | Split down (`split.horizontal`) | ⌘⇧\ | Alt+Shift+E | Ctrl+Alt+Shift+E | Ctrl+Shift+D | yes |
 | Focus the previous / next editor group (`split.focusPrevGroup`, `split.focusNextGroup`; the leader's Shift+Tab, Tab) | ⌥⇧← / ⌥⇧→ | Alt+Shift+← / Alt+Shift+→ | Ctrl+Alt+Shift+A / Ctrl+Alt+A | Ctrl+Alt+Shift+A / Ctrl+Alt+A | yes (in the Alt family, a named exception, principle 2) |
 | Close the split (`split.close`; no button since spec F) | ⌥⌘W | Ctrl+Shift+Alt+W | the same | the same | yes |
+| Home (`stage.home`, the palette's **View: Home**; its key comes with a later slice) | none | none | none | none | no |
 | Workspace › Machines / Workspace overview / Automations (`stage.hierarchy`: the Workspace page on its Machines tab, the palette's **View: Workspace › Machines**; `stage.spawn`, `stage.automations`) | ⌘1 / ⌘2 / ⌘3 | Ctrl+1 / Ctrl+2 / Ctrl+3 | the same | the same | yes (Ctrl+3 is ESC, which Esc still sends) |
 | Focus next / previous region (`focus.nextRegion`, `focus.prevRegion`) | F6 / ⇧F6 | F6 / Shift+F6 | the same | the same | no (mc, htop, nano) |
 | Leave the terminal for the next region (`focus.leaveTerminal`) | ⇧⌘F6 | Ctrl+Shift+F6 | the same | the same | yes |
@@ -962,8 +963,9 @@ F6 moves focus to the next region, Shift+F6 to the previous one, in this order:
 1. **Workspaces**: the list's one tab stop (the row last focused, else the
       current one), else the heading's **Add local workspace…** (Shift+Tab from
    the list reaches it).
-2. **Views**: the current view's nav button (Workspace overview or
-   Automations, `aria-current`), else the first; the nav sits under the list.
+2. **Views**: the current view's nav button (Home, also for the Workspace
+   page Home opens, or Automations, `aria-current`), else the first; the nav
+   sits under the list.
 3. **Instance roster**: its one tab stop, the selected row (the one whose
    terminal is the active tab), else the first row; with no rows, a control it
       shows (Retry), else the foot's **New agent**, its one action. It has
@@ -1195,7 +1197,8 @@ the rig). "Fixed" marks a gap this change closed.
 | A row's context menu (`role="menu"`, one item: **Open in new window**) | Shift+F10 or the Menu key on a row, or a right-click; focus on its item | Enter/Space open the workspace in its own window (or bring that window to the front), back on the row; Esc or Tab close it, back on the row |
 | Add local workspace… (the **+** at the end of the sidebar's Workspace heading) | Tab (first stop of the sidebar) | Enter/Space open the Add / onboard dialog |
 | Add / onboard workspace dialog | From the header's Add, or the chooser's button; opened by itself in a window with no workspace when the Desktop serves none | Each found deployment is a button, then each row of this computer's list that can't be opened (`aria-disabled`, its state in words); one Tab stop among them, Up/Down/Home/End move: Enter/Space on a found one adds it and opens it here; Right Arrow on a row that can't be opened reaches its **Remove**, Left Arrow or Esc go back; Esc elsewhere closes; trapped; returns to what opened it, or to the list after an add |
-| Pinned rows, under the list of workspaces (Workspace overview, Automations; one under the other, in the roster rows' style; Automations' name says "a run failed" while its red dot shows) | F6 (current item, the second region); Tab; ⌘2/⌘3 (⌘1: Workspace overview on its Machines tab) | Enter/Space |
+| Pinned rows, under the list of workspaces (Home, Automations; one under the other, in the roster rows' style; Automations' name says "a run failed" while its red dot shows) | F6 (current item, the second region); Tab; ⌘2 (the Workspace page, under Home's row)/⌘3 (⌘1: Workspace overview on its Machines tab) | Enter/Space |
+| Home (the board, the overview, Home › Agents) | Tab through its rows | Enter/Space opens a row (an agent as the roster does; a section on its Workspace tab, whose Esc comes back to Home); in Home › Agents, Esc or **Back to Home** returns to the board |
 | Roster rows | One roving stop, the selected row, else the first; F6; ⌘F / Alt+F (`sidebar.focusFilter`) and the sidebar's `/` land on it; the leader then Esc; Up/Down/Home/End (and the TUI's `k` `j` `g` `G`), PageUp/PageDown by the rows that fit; Right (`l`) expands, Left (`h`) collapses or goes to the parent; the sidebar keys (see "Sidebar keys"). A collapse never moves a row to another group: a root collapsed over its whole group stays under that group's name, and the selected row stays where it is. The list shows no scrollbar (the wheel and the touchpad scroll it): a row that takes keyboard focus (these keys, ⌘F / Alt+F, F6) is revealed whole by scrolling the list alone, never an ancestor | Enter/Space open the terminal (running) or Start (stopped); an arrow chord the keymap binds is the keymap's, so Alt+Shift+↑/↓ (⌥⌘↑/↓) open the terminal of the row above / below, as from anywhere |
 | Rows whose state is unknown or that the kernel does not report addressable | **Focusable, `aria-disabled` with the reason as a description (fixed: were `disabled`, which hid their tools from the keyboard)** | Activation does nothing; their context menu works |
 | A row's context menu (Open in split, Open pull request…, Knowledge & capabilities…, Start…, Restart with…, Stop…, Retire instance…; Forget… alone on a row its server no longer lists). The row has no ⋯ button | Shift+F10 or the ContextMenu key on the focused row (it opens on the row); a right-click (where you click, once the button is released; the row is not activated) | Focus on its first act; arrows, Home/End move; Enter/Space choose; Esc or Tab close it, back on the row. While it is held (a stale roster, one of its acts still running, a row that can't be used from here) it opens nothing, the focus stays on the row and the line at the bottom of the main area says why |
