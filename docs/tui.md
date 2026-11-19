@@ -176,12 +176,12 @@ while a terminal is open); under 80 columns it has the whole width.
   kernel reported that were withheld (a home outside its soul's directory,
   or one reported twice), `2 withheld`, when there are any.
 - **The list** is the roster the Desktop draws: the same groups in the same
-  order, from the same code. It is in name order, by each group's top
-  instance, so starting or stopping an instance moves nothing. An instance
+  order, from the same code. It is in spawn order, newest first, by each
+  group's top instance, so starting or stopping an instance moves nothing. An instance
   that others were spawned from has them indented under it, and keeps its
   place when it gains or loses one. Under one parent, the instances that do
   its work (the kernel's `sameWork`, from an OATS with `instance-same-work`)
-  come first, then the others, each part in name order, as the Desktop lists
+  come first, then the others, each part newest first, as the Desktop lists
   them. An empty row stands between each run
   of instances related to no other and the group before or after it. The
   indent alone says which instance is under which: no mark is drawn for
@@ -974,7 +974,7 @@ selected.
 ```
   acme-platform                       │   dev
   acme-billing ●                      │   soul     dev
-  lfx                                 │   state    running
+  lab                                 │   state    running
   garnet                              │   harness  claude, claude-opus-5-5 (so…
   +2                                  │   work     worktree, agents/dev
                                       │   team     eng
@@ -983,7 +983,7 @@ selected.
 
 The sidebar's first rows list the workspaces this run can show, one row a
 workspace, whatever machines it is on, in [the switcher](#the-switcher)'s
-order: `lfx` is one row however many machines hold it, and a machine the
+order: `lab` is one row however many machines hold it, and a machine the
 rules shared with the Desktop matched to no workspace is a row by its own
 name, in the same flat list. A row is one line: the name. With one
 workspace the list is its row.
@@ -1028,7 +1028,7 @@ workspace the list is its row.
   that list fills the sidebar, which then has no such row, does the line
   take a row, the list giving up its last. With the list's focus (`w`) the
   focus stays there, the cursor where it was. A workspace with a deployment of this
-  machine not opened yet (lfx, with `~/Work/lfx` on this computer's list)
+  machine not opened yet (lab, with `~/Work/lab` on this computer's list)
   opens it first, as the switcher's `Enter` does. What the workspace left
   had open is kept for it, as for a switch from the
   switcher ([Tabs](#tabs)), and from a terminal's focus the focus is kept
@@ -1068,9 +1068,9 @@ switcher covers the whole screen.
  workspaces                                     │ > * acme-platform
                                                 │       This machine
  Instances                                    1 │       garnet
- Souls                                        2 │     lfx
+ Souls                                        2 │     lab
  Capabilities                                 3 │       This machine · not opened
-────────────────────────────────────────────────│       athenea (lfx)
+────────────────────────────────────────────────│       builder (lab)
  Ctrl+X   commands                              │   Not matched to a workspace
  Ctrl+K   palette                               │     basalt                ssh needs a prompt
  Enter    open                                  │   On this machine, not opened
@@ -1296,7 +1296,7 @@ The exit status never depends on it.
 - An `oats tui` started again knows nothing of the acts an earlier one
   sent: `Check again` there answers that the plan expired, the list shows
   what the kernel reports, and against an earlier one's start still running
-  the kernel's start lock is the only guard.
+  the home's lifecycle claim is the only guard.
 - An agent on a machine whose OATS is older than 0.52.0: a stop interrupted
   there can leave `.oats-stop-pending.json` in the agent's home, and then
   the agent can be started but not stopped while that file exists.

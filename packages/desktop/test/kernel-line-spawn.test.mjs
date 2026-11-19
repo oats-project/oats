@@ -61,7 +61,7 @@ test('an accepted kernel without packages-no-approval never reaches the Spawn di
   const s = await startLoadPathServer({ probe: own => { current = own; return lacking(own); } });
   const refusedProbe = lacking(current);
   assert.equal(current.features.includes(GATE), true, 'the helper’s own probe has the word'); assert.equal(refusedProbe.features.includes(GATE), false);
-  assert.equal(acceptProbe(refusedProbe).ok, true, 'inside the accepted band');
+  assert.equal(acceptProbe(refusedProbe, '0.69.17').ok, true, 'inside the accepted band');
   let mounted = null;
   try {
     const reads = () => s.calls().filter(call => !['version', 'server'].includes(call.verb)).map(call => call.verb);

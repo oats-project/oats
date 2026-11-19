@@ -12,7 +12,7 @@ export const SWEEP_DEPLOYMENT = '/home/ana/agents';
 /** An accepted probe with the sweep's feature. */
 export const RESUME_PROBE = Object.freeze({ ok: true, bin: '/usr/local/bin/oats', features: Object.freeze([SESSION_RESUME_FEATURE]) });
 /** A `refused` row's reasons: no client module reads them; the kernel's lib/session-resume-contract.mjs ROW_REASON owns them. */
-export const REFUSAL_REASONS = Object.freeze(['start-refused', 'refused-this-boot', 'keeps-getting-lost']);
+export const REFUSAL_REASONS = Object.freeze(['start-refused', 'start-refused-retrying', 'keeps-getting-lost']);
 
 /** An instance's home in a deployment. */
 export const sweepHome = (instance, deployment = SWEEP_DEPLOYMENT) => `${deployment}/agents/x/instances/${instance}`;
@@ -37,7 +37,7 @@ export const deploymentTag = (id, machine = 'This computer', path = id) => ({ id
 /** The local deployment ids of a read (the trigger's `localDeploymentIds`): SWEEP_DEPLOYMENT alone. */
 export const SWEEP_LOCAL = Object.freeze([SWEEP_DEPLOYMENT]);
 /** A remote deployment's tag, as panelData gives a server's rows. */
-export const REMOTE_TAG = Object.freeze(deploymentTag('remote:altair:a1', 'altair', '/home/juan/oats'));
+export const REMOTE_TAG = Object.freeze(deploymentTag('remote:devbox:a1', 'devbox', '/home/alex/oats'));
 /** A roster instance row (as /api/panel serves one) of SWEEP_DEPLOYMENT whose session was lost and is not
  * running; `more` over it. */
 export const lostInstance = (instance, more = {}) =>

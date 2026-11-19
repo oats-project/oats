@@ -156,7 +156,7 @@ export function renderRepoPills(host, { repos, value = null, total, shown = tota
     const pressed = (choice.key ?? null) === value;
     button.setAttribute('aria-pressed', String(pressed)); button.tabIndex = pressed ? 0 : -1;
     if (choice.title) button.title = choice.title;
-    // The space keeps the name and count apart in the accessible name ("lfx-agents 3"); the flex gap draws it.
+    // The space keeps the name and count apart in the accessible name ("lab-agents 3"); the flex gap draws it.
     button.append(node(doc, 'span', choice.label, `catalog-pill-name${choice.mono ? '' : ' plain'}`), ' ', node(doc, 'span', String(count), 'capability-nav-count'));
     button.addEventListener('click', () => { if (!pressed) onChange(choice.key ?? null); });
     return button;

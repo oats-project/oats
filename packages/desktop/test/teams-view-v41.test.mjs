@@ -27,7 +27,7 @@ function document() {
   d.teams.find(t => t.label === 'engineering').team = 'engineering:northwind.aweb.ai'; d.problems = d.problems.filter(p => p.label !== 'engineering');
   return d;
 }
-const roster = [{ instance: 'rm-1', agent: 'release-manager', agentsRoot: '/a', identity: { team: 'mine:juan.aweb.ai' }, running: true },
+const roster = [{ instance: 'rm-1', agent: 'release-manager', agentsRoot: '/a', identity: { team: 'mine:alex.aweb.ai' }, running: true },
   { instance: 'e-1', agent: 'engineer', agentsRoot: '/a', identity: { team: 'engineering:northwind.aweb.ai' }, running: true }];
 
 async function mount(t, theme, { onOpenTeam = null, elsewhere = false } = {}) {

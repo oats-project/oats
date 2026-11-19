@@ -145,7 +145,7 @@ export function deploymentReason(d, terms) {
   return deploymentReasonParts(d, terms)?.detail ?? null;
 }
 
-/** The last segment of a canonical key: github.com/GreaterSkies/tsm → tsm. */
+/** The last segment of a canonical key: github.com/example/app → app. */
 const keyTail = key => String(key).split('/').filter(Boolean).pop() || String(key);
 
 /** Build the views from the served deployments, in their served order (locals first, as given).

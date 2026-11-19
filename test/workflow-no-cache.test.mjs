@@ -59,7 +59,8 @@ const RELEASE_FILES = ["release.yml", "build-installers.yml"];
  *  (2026-10-27). The workflows outside them keep tags, and that is the decision, not an
  *  oversight: nothing is published from them, and an id there is upkeep nobody decided to take
  *  on. `usesUnreadAction` holds both halves. */
-const BY_ID = [...RELEASE_FILES, "tui-macos.yml"];
+// Team image verification also requires immutable action references.
+const BY_ID = [...RELEASE_FILES, "tui-macos.yml", "team-image.yml"];
 /** Names said as a person lists them: `a and b`, `a, b and c`. */
 const listed = (names) => (names.length < 3 ? names.join(" and ") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`);
 const FULL_ID = /^[0-9a-f]{40}$/;
@@ -235,7 +236,7 @@ test("a workflow uses only what the table of actions that were read holds: no ot
   assert.ok(steps.some(({ file, step }) => !BY_ID.includes(file) && step.uses !== undefined), "and against a workflow that keeps tags");
 });
 
-test("release.yml, build-installers.yml and tui-macos.yml name every action by a full commit id of the table, one id an action, its version beside it", () => {
+test("SHA-pinned workflows name every action by a full commit id of the table, one id an action, its version beside it", () => {
   const { steps } = workflowSteps();
   const pair = steps.filter(({ file, step }) => BY_ID.includes(file) && step.uses !== undefined);
   // Every `uses:` of those files is a row's id: 40 lower-case hexadecimal characters, read.
@@ -403,9 +404,9 @@ test("the rule: which actions a step may use and at which ref, and what a job ma
     [{ uses: "actions/attest-build-provenance@v4" }, /holds actions\/attest-build-provenance at v1/],
     [{ uses: "actions/checkout@v1" }, /holds actions\/checkout at v4/],
     // A commit id, a row's or not, in either case of its digits: these workflows keep tags.
-    [{ uses: `actions/checkout@${CHECKOUT}` }, /only release\.yml, build-installers\.yml and tui-macos\.yml name an action by commit id, and every other workflow keeps the tag of a major that was read \(actions\/checkout@v4\)$/],
-    [{ uses: `actions/checkout@${UNREAD}` }, /only release\.yml, build-installers\.yml and tui-macos\.yml name an action by commit id/],
-    [{ uses: "actions/setup-node@ABCDEF0123456789ABCDEF0123456789ABCDEF01" }, /only release\.yml, build-installers\.yml and tui-macos\.yml name an action by commit id/],
+    [{ uses: `actions/checkout@${CHECKOUT}` }, /only release\.yml, build-installers\.yml, tui-macos\.yml and team-image\.yml name an action by commit id, and every other workflow keeps the tag of a major that was read \(actions\/checkout@v4\)$/],
+    [{ uses: `actions/checkout@${UNREAD}` }, /only release\.yml, build-installers\.yml, tui-macos\.yml and team-image\.yml name an action by commit id/],
+    [{ uses: "actions/setup-node@ABCDEF0123456789ABCDEF0123456789ABCDEF01" }, /only release\.yml, build-installers\.yml, tui-macos\.yml and team-image\.yml name an action by commit id/],
   ];
   for (const [step, why] of onTags) assert.match(String(unread(step)), why, JSON.stringify(step));
   assert.match(unread({ uses: "actions/checkout@v5" }), how);
@@ -421,10 +422,10 @@ test("the rule: which actions a step may use and at which ref, and what a job ma
   for (const step of acceptedOnTags) assert.equal(unread(step), null, JSON.stringify(step));
 
   // One of the files of BY_ID: a listed action at a row's commit id, exactly.
-  const byFullId = /release\.yml, build-installers\.yml and tui-macos\.yml name every action by a full commit id, 40 lower-case hexadecimal characters, and the table of actions that were read holds/;
+  const byFullId = /release\.yml, build-installers\.yml, tui-macos\.yml and team-image\.yml name every action by a full commit id, 40 lower-case hexadecimal characters, and the table of actions that were read holds/;
   const inThePair = [
     // A tag, the major's or the version's; a branch; a shortened id; no ref.
-    [{ uses: "actions/checkout@v4" }, /actions\/checkout@v4: release\.yml, build-installers\.yml and tui-macos\.yml name every action by a full commit id, 40 lower-case hexadecimal characters, and the table of actions that were read holds actions\/checkout at 1{40} \(v4\.4\.0\)$/],
+    [{ uses: "actions/checkout@v4" }, /actions\/checkout@v4: release\.yml, build-installers\.yml, tui-macos\.yml and team-image\.yml name every action by a full commit id, 40 lower-case hexadecimal characters, and the table of actions that were read holds actions\/checkout at 1{40} \(v4\.4\.0\)$/],
     [{ uses: "actions/checkout@v4.4.0" }, byFullId],
     [{ uses: "actions/checkout@main" }, byFullId],
     [{ uses: "actions/checkout@1111111" }, byFullId],

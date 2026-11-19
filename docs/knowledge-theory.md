@@ -64,7 +64,7 @@ The reference model accepts:
 - **Review and process patterns:** verified judgment that code alone does not communicate.
 - **Maintained slow state:** a dated interpretation of an area that orients future work.
 
-Human-accepted decisions pass the promotion bar by construction: preserve their meaning, scope and acceptance evidence rather than having a harvester re-judge the person. Confidentiality, provenance and duplication checks still apply.
+Human-accepted decisions pass the promotion bar by construction: preserve their meaning, scope and acceptance evidence rather than having anyone re-judge the person. Confidentiality, provenance and duplication checks still apply.
 
 ### Keep the larger picture, not a second issue tracker
 
@@ -84,7 +84,7 @@ It needs a clear scope, a responsible maintenance process, an as-of date and an 
 | Current investigation, provisional reasoning and next action | Instance context and state |
 | Raw records and notes awaiting judgment | Evidence, not accepted knowledge |
 
-A bare sequence of commands belongs in a skill; if an insight already has an authoritative home, point to it. Exclude secrets, improperly disclosed private material, personal data about people outside the team (clients, correspondents, any other third party), wholesale copies of third-party messages, tool noise and ordinary task residue; for the full rule and what enforces it, see [What a harvest leaves out](knowledge.md#what-a-harvest-leaves-out). If code, a test or a clearer contract can eliminate a recurring problem, fix it instead of writing it down.
+A bare sequence of commands belongs in a skill; if an insight already has an authoritative home, point to it. Exclude secrets, improperly disclosed private material, personal data about people outside the team (clients, correspondents, any other third party), wholesale copies of third-party messages, tool noise and ordinary task residue; for the full rule and what enforces it, see [What a proposal leaves out](knowledge.md#what-a-proposal-leaves-out). If code, a test or a clearer contract can eliminate a recurring problem, fix it instead of writing it down.
 
 "Invariant across incarnations" means useful beyond its author, not true forever. Date and scope contingent claims, and supersede changed decisions explicitly rather than leaving contradictory truths or erasing their history.
 
@@ -102,12 +102,12 @@ A team's chosen knowledge base
 The layout is illustrative, not a kernel schema.
 
 - Instances of a soul consult its accepted expertise and relevant shared material.
-- Their harvests have explicit destinations; task context is not published wholesale.
+- Their proposals have explicit destinations; task context is not published wholesale.
 - A claim has one canonical home; other readers use references rather than copies.
 - A public soul's publisher does not become the default recipient of an adopter's private learning.
 - Knowledge identity and lifetime do not depend on one instance or on a changeable display name.
 
-In the reference model, **owns is harvest routing**, not authorship, an access right or a duty to keep the base honest. **Reads is context selection**, not an access list; repository or service access still governs what can be read. Centralization simplifies where a harvest goes; it does not remove the need for judgment, deduplication, freshness or acceptance.
+In the reference model, **owns is proposal routing**, not authorship, an access right or a duty to keep the base honest. **Reads is context selection**, not an access list; repository or service access still governs what can be read. Centralization simplifies where a proposal goes; it does not remove the need for judgment, deduplication, freshness or acceptance.
 
 ## Per-soul knowledge can evolve
 
@@ -146,22 +146,22 @@ A kernel decision may first land with the overall expert because that instance i
 
 > Would we deliberately want future instances to start with this narrower charter, skill set and reading context?
 
-A busy two weeks or a large set of notes is not enough; widening or keeping the existing soul may be right. Harvesters supply evidence and maintenance can propose changes, but a person accepts structural change: souls do not split themselves. Drafting a new soul is a skill used in a maintenance proposal, not a separate agent's job.
+A busy two weeks or a large set of notes is not enough; widening or keeping the existing soul may be right. Proposals supply evidence and maintenance can propose changes, but a person accepts structural change: souls do not split themselves. Drafting a new soul is a skill used in a maintenance proposal, not a separate agent's job.
 
 ### Maintenance is a responsibility, not a compulsory background agent
 
 | Responsibility | Focus |
 |---|---|
-| Harvesting | What an instance's evidence contributes to accepted knowledge |
+| Proposing | What an instance's evidence contributes to accepted knowledge |
 | Maintenance | Consistency, freshness, structure, ownership and declarations across the base |
 
-In the default capability, the `knowledge-harvester` package soul harvests and the `knowledge-maintainer` package soul maintains a base by reviewing the harvester's proposals. A human can perform maintenance instead; automation is optional, not a prerequisite for per-soul knowledge. A maintainer never silently accepts its own structural proposal or supersedes a human-accepted decision.
+In the default capability, each working instance with a duty to propose proposes its own knowledge, and the `knowledge-maintainer` package soul maintains a base by reviewing those proposals. A human can perform maintenance instead; automation is optional, not a prerequisite for per-soul knowledge. A maintainer never silently accepts its own structural proposal or supersedes a human-accepted decision.
 
 Evidence of what instances actually used, such as their purpose, skills and knowledge consulted, can inform these proposals. It is operational evidence, not knowledge or a copy of private transcripts.
 
 ### Changing structure must preserve running work
 
-A knowledge move or soul split must account for references, pending harvests and existing instances:
+A knowledge move or soul split must account for references, pending proposals and existing instances:
 
 - Update ownership and reading declarations in the same reviewed change.
 - Preserve a single canonical home and the provenance of claims.
@@ -210,27 +210,29 @@ The kernel supplies the common boundary; it must not hide one mandatory knowledg
 | Source, soul and instance identity | Knowledge organization and destination semantics |
 | Configuration resolution and declared requirements | Storage, retrieval and reading context |
 | Selected resources, exactly locked | Capture conventions and evidence selection |
-| Lifecycle and invocation context, and provenance | Judgment, harvesting and maintenance where used |
+| Lifecycle and invocation context, and provenance | Judgment, proposing and maintenance where used |
 | Safe helper and job execution when required | Proposals, delivery, acceptance and recovery policies |
 | Resource integrity and truthful outcomes | Its complete runtime instructions, skills and tools |
 
-A knowledge capability is more than a storage adapter under a kernel-owned judge. The kernel does not require OKF, a node taxonomy, particular memory filenames, Git publication, a harvester or a maintainer. Alternative models must not weaken framework safety, repository governance, secret handling or declared authority, and a capability rejects incompatible requirements rather than quietly substituting another provider or destination. Messaging and tasks follow the same principle: common contracts, independently chosen implementations.
+A knowledge capability is more than a storage adapter under a kernel-owned judge. The kernel does not require OKF, a node taxonomy, particular memory filenames, Git publication, a proposal flow or a maintainer. Alternative models must not weaken framework safety, repository governance, secret handling or declared authority, and a capability rejects incompatible requirements rather than quietly substituting another provider or destination. Messaging and tasks follow the same principle: common contracts, independently chosen implementations.
 
 ## How the default OKF capability works
 
-`oats.okf` keeps accepted expertise as Markdown concepts with metadata, indexes and history in external knowledge bases. Its runtime owns bindings, consultation, evidence custody, harvest execution and delivery.
+`oats.okf` keeps accepted expertise as Markdown concepts with metadata, indexes and history in external knowledge bases. Its runtime owns bindings, consultation, the checks on a proposal and its delivery.
 
 1. A working instance consults the accepted state of its soul's bases remotely with `oats okf bases`, `index`, `cat`, `ls`, `links` and `search`; no knowledge is copied into its home. It captures observations in its own instance knowledge without self-censoring against the promotion bar.
-2. A `knowledge-harvester` instance receives frozen evidence with provenance. It does not borrow the source's worktree or identity, and the source may already be retired.
-3. The harvester judges additions, merges, supersessions and exclusions by the reference doctrine and delivers only through the capability: a pull request on a Git base.
+2. At each knowledge checkpoint, an instance with a duty to propose judges its own durable, non-duplicate claims (additions, merges, supersessions and exclusions) by the reference doctrine, and proposes them with `oats okf propose`. No worker is spawned and nobody waits for the proposal.
+3. The capability checks the proposal's ownership, scope and screening before anything leaves the host, and delivers it only as a pull request on a Git base, with its provenance.
 4. A `knowledge-maintainer` instance reviews that pull request and merges, amends, requests changes, closes, or escalates to a human.
 5. Accepted learning becomes available to later consultation; it is not automatically in every instance's active context.
+
+The reference doctrine's independent harvester ([judgment](knowledge-reference/harvester.md)) remains a pattern a capability may choose. `oats.okf` 6 chose differently: the instance proposes its own claims, and the maintainer's review of each pull request is where independence lives.
 
 Directory bases use their own recoverable publication mechanism. Receipts state what actually happened: capture, judgment, delivery and acceptance are different facts, and directory publication does not prove human review. The [operational guide](knowledge.md) describes commands and constraints.
 
 ## Reusing working understanding: context handoffs and cloning
 
-Harvesting preserves individual lessons, not the combined working picture that makes a long-running instance effective. A handoff or clone carries selected references, verified observations and labeled provisional reasoning; that is not a knowledge store, and copying it promotes nothing.
+Proposing knowledge preserves individual lessons, not the combined working picture that makes a long-running instance effective. A handoff or clone carries selected references, verified observations and labeled provisional reasoning; that is not a knowledge store, and copying it promotes nothing.
 
 Cloning exists as the official `oats.cloning` package ([souls and instances](souls-and-instances.md#cloning-an-instance)). A clone is a new instance of the source's soul with its own identity, credentials and ownership. What it carries is a curated brief written by a short-lived cloner for the new goal: what was re-verified, with its evidence; decisions and their reasons; working understanding marked provisional; open threads and who owns them; and where to look, with transcript turn ids as citations. The cloner leaves secrets out of the brief, a pattern-based redaction pass catches the common forms that slip through, and the brief is attached to the clone as a 0600 file, never placed in its task text. A clone does not carry the raw transcript, the source's `notes/`, the content of its work tree or its uncommitted changes (a worktree clone starts from the source's committed branch, the soul's default or a requested ref), or its commitments: those stay with the source unless the brief says they were handed over. Inherited material is not new evidence; the clone records it in its own notes only after re-verifying it.
 
@@ -238,7 +240,7 @@ Cloning exists as the official `oats.cloning` package ([souls and instances](sou
 
 The model's settled positions are those above: short- and long-running instances are both legitimate; the default is centralized, per-soul knowledge open to reviewed structural evolution; capabilities own their model and runtime behavior; the doctrine preserves expertise, not code descriptions or task residue; and structural change preserves provenance and running work. These are not CLI flags or configuration schemas.
 
-The default OKF capability implements consultation, capture, independent harvest and maintainer review; it does not provide automatic per-soul provisioning, a co-located profile, automatic speciation, redirects or context cloning. Context cloning is a separate package, `oats.cloning`, not part of the knowledge capability. Proving the kernel's flexibility needs a genuinely different organization and learning model, not only Git and directory storage within OKF. Updating this document does not migrate existing deployments.
+The default OKF capability implements consultation, capture, the instance's own proposal and maintainer review; it does not provide automatic per-soul provisioning, a co-located profile, automatic speciation, redirects or context cloning. Context cloning is a separate package, `oats.cloning`, not part of the knowledge capability. Proving the kernel's flexibility needs a genuinely different organization and learning model, not only Git and directory storage within OKF. Updating this document does not migrate existing deployments.
 
 ## Related documentation
 

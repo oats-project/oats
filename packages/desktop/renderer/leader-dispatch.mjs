@@ -24,7 +24,7 @@
 
    Nothing fails silently: every "nothing runs" says why in one line (`say`). */
 
-import { instanceActs } from "../../client/instance-acts.mjs";
+import { desktopActs } from "./desktop-acts.mjs";
 import { reasonLine } from "./speaker-line.mjs";
 
 export const NO_TARGET = "No instance is focused or selected.";
@@ -46,7 +46,7 @@ const ACT_WORDS = Object.freeze({ stop: "stopped", restart: "restarted", start: 
  * one line. `menuReason`: the menu is held (a stale roster, an act pending), and why. */
 export function actAvailability(instance, verb, menuReason = null) {
   const name = instance?.instance || "This instance";
-  const offer = instanceActs(instance);
+  const offer = desktopActs(instance);
   if (offer.blocked) return { reason: reasonLine(offer.blocked) || `${name} can't be ${ACT_WORDS[verb]} from here.` };
   if (menuReason) return { reason: menuReason };
   const act = offer.acts.find((each) => each.verb === verb);

@@ -56,7 +56,7 @@ export function inspect(source) {
   const path=join(source.home,'knowledge');let legacy=null;
   try {const stat=fs.lstatSync(path);legacy={status:'legacy-local-view',path,ignored:true,...(stat.isSymbolicLink()?{symlink:true}:{}),note:'okf 3.0.0 ignores this okf 2.x snapshot and reads knowledge remotely; it is safe to delete by hand'};} catch(e) {if(!missing(e)) throw e;}
   return {
-    summary:`OKF: owns ${source.decl.owns.join(', ') || 'none'}; ${documents.length} working-memory documents${legacy?'; legacy-local-view ./knowledge/ (ignored, safe to delete)':''}`,
-    owns:source.decl.owns,reads:source.decl.reads,bases:source.bindings.bases,legacyLocalView:legacy,liveMemory:{available:true,reason:'live',observedAt},documents
+    summary:`OKF: ${source.decl.version===2?`subjects ${source.decl.subjects.join(', ')}`:`owns ${source.decl.owns.join(', ') || 'none'}`}; ${documents.length} working-memory documents${legacy?'; legacy-local-view ./knowledge/ (ignored, safe to delete)':''}`,
+    owns:source.decl.owns,reads:source.decl.reads,...(source.decl.version===2?{subjects:source.decl.subjects}:{}),bases:source.bindings.bases,legacyLocalView:legacy,liveMemory:{available:true,reason:'live',observedAt},documents
   };
 }

@@ -62,11 +62,11 @@ frame, a shared one a solid frame.
 
 **The audience** (team model 3) is two labelled rows, each shown only when it has entries:
 
-- **Default for**: whose default the team is, e.g. "all souls of **lfx-ai-engineering**",
+- **Default for**: whose default the team is, e.g. "all souls of **lab-ai-engineering**",
   "**writer** (acme-agents)", or, for the document's `defaultTeam`, "every soul without its own
   default" (with "(this deployment's choice)" when it is the deployment's).
 - **May join**: who else may join it without it being their default, e.g. "souls of
-  **lfx-agents** · **ai-reviewer** (lfx-ai-engineering)", or "every soul (local team)" for a local
+  **lab-agents** · **ai-reviewer** (lab-ai-engineering)", or "every soul (local team)" for a local
   team where local teams are allowed.
 
 A card with neither says "No soul may join it yet". Repo and soul names are bold, each titled with
@@ -75,8 +75,8 @@ the `souls:` key it comes from.
 `teamAudience(document, label)` computes both from the committed `souls:` map alone, with the
 kernel's resolution (`lib/teams.mjs`): a soul's teams come from its most specific key outright, its
 default from the most specific key that sets one, and `any` is every shared team. So an entry a
-broader key already implies is never repeated (`lfx-ai-engineering/ai-reviewer` defaulting to the
-same team as `lfx-ai-engineering/*`). A pattern lists as `except` the more specific keys under it that
+broader key already implies is never repeated (`lab-ai-engineering/ai-reviewer` defaulting to the
+same team as `lab-ai-engineering/*`). A pattern lists as `except` the more specific keys under it that
 fall outside, as in "all souls of p except x". Where `"*"` sets a default, no soul falls back to the
 `defaultTeam`, and its row says so quietly. Before team model 3 the function answers null, and the
 card keeps the team model 2 **Address** and **Who may join** rows, from `whoMayJoin`.
@@ -191,7 +191,7 @@ The teams configuration is one deployment's: a view id is read as the view's pri
 two or more deployments the configuration says which under its heading ("On This Mac ·
 ~/acme"). A remote primary is `unsupported-remote-operation`: teams are edited on the
 computer that runs the deployment.
-They sit behind the server-wide Host and Origin guards (loopback only; a foreign, `null` or
+They sit behind the server-wide credential check and Host and Origin guards (loopback only; a foreign, `null` or
 malformed `Origin` is 403 before any process), so a cross-origin page cannot rewrite the file.
 The renderer reaches them through the generic guarded proxy (sender-frame guard, `ws` pinned to
 the connected server's view and deployment ids, 20 s deadline; the verbs run with a 15 s timeout).
@@ -250,7 +250,7 @@ The shape is the lead's (0.30 D2 review):
   never another workspace's groups. Any view is answered, a view with no local deployment
   included.
 - **Held observations only.** It runs no command and adds no ssh: remote groups are read as the
-  remote roster loop's one `oats server roster` read left them. The server-wide Host guard applies,
+  remote roster loop's one `oats server roster` read left them. The server-wide credential check and Host guard apply,
   and the proxy pins `ws` to an advertised view or deployment id.
 - A missing or repeated `ws` is `E_BAD_ARGS`; one that names no view is `E_WORKSPACE_UNKNOWN`.
 

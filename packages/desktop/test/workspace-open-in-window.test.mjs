@@ -12,8 +12,8 @@ import { takePickerFocusReturn } from '../renderer/overlay-picker.mjs';
 
 const html = readFileSync(new URL('../renderer/index.html', import.meta.url), 'utf8');
 const A = { id: 'ws:aaaaaaaaaaaaaaaaaaaa', name: 'oats' };
-const B = { id: 'ws:bbbbbbbbbbbbbbbbbbbb', name: 'tsm' };
-const LOOSE = { id: 'remote:rigel:/x', name: 'rigel', unattached: true, deployments: ['remote:rigel:/x'] };
+const B = { id: 'ws:bbbbbbbbbbbbbbbbbbbb', name: 'web' };
+const LOOSE = { id: 'remote:build:/x', name: 'build', unattached: true, deployments: ['remote:build:/x'] };
 
 function setup({ mac = true, openInNewWindow = true } = {}) {
   const dom = new JSDOM(html, { url: 'file:///renderer/index.html' });
@@ -45,7 +45,7 @@ const menu = (document) => document.querySelector('.ws-row-menu');
 test('no per-row button: a row is its circle and its name', () => {
   const { document } = setup();
   assert.equal(document.querySelector('.ws-open-window'), null);
-  for (const [choice, label] of [[A, 'oats'], [B, 'tsm'], [LOOSE, 'rigel']]) {
+  for (const [choice, label] of [[A, 'oats'], [B, 'web'], [LOOSE, 'build']]) {
     const row = option(document, choice.id);
     assert.deepEqual([...row.children].map((child) => child.className), [choice === A ? 'ctx-dot on' : 'ctx-dot off', 'ws-option-name'], choice.id);
     assert.equal(row.textContent, label);
@@ -97,7 +97,7 @@ test('the row\'s context menu: the native one is prevented, the page\'s opens wi
     option(document, B.id).focus();
     assert.equal(contextmenu(option(document, B.id)), true, 'default prevented: no native Copy/Paste menu for a row');
     assert.deepEqual(popovers, [['show', rowMenu]]);
-    assert.equal(rowMenu.getAttribute('aria-label'), 'tsm', 'labelled with the row\'s name');
+    assert.equal(rowMenu.getAttribute('aria-label'), 'web', 'labelled with the row\'s name');
     const items = [...rowMenu.querySelectorAll('[role="menuitem"]')];
     assert.equal(items.length, 1);
     assert.equal(items[0].dataset.action, 'open-in-new-window');
@@ -106,7 +106,7 @@ test('the row\'s context menu: the native one is prevented, the page\'s opens wi
     assert.equal(items[0].querySelector('kbd').textContent, chord);
     assert.equal(document.activeElement, items[0], 'focus on its item');
     contextmenu(option(document, LOOSE.id));
-    assert.equal(rowMenu.getAttribute('aria-label'), 'rigel', 'another row\'s menu is for that row');
+    assert.equal(rowMenu.getAttribute('aria-label'), 'build', 'another row\'s menu is for that row');
   }
 });
 
@@ -148,8 +148,8 @@ test('a row another window shows behaves like any row: same line, a pick takes i
   const { document, controller, selected, opened, contextmenu, key } = setup();
   controller.begin()(A, [A, { ...B, shown: true }, LOOSE]);
   const row = option(document, B.id);
-  assert.equal(row.textContent, 'tsm', 'no "In another window"');
-  assert.equal(row.title, 'tsm');
+  assert.equal(row.textContent, 'web', 'no "In another window"');
+  assert.equal(row.title, 'web');
   assert.equal(row.hasAttribute('aria-disabled'), false);
   contextmenu(row); document.activeElement.click();
   assert.deepEqual(opened, [B.id], 'main focuses the window that has it');
@@ -291,7 +291,7 @@ test('a right-click held down opens the row\'s menu once released, and a cancell
   assert.deepEqual(popovers, [], 'nothing opens while the button is down');
   end('pointerup'); assert.deepEqual(popovers, [], 'not in the release itself (its light dismiss runs there)');
   await task();
-  assert.deepEqual(popovers, [['show', menu(document)]]); assert.equal(menu(document).getAttribute('aria-label'), 'tsm');
+  assert.deepEqual(popovers, [['show', menu(document)]]); assert.equal(menu(document).getAttribute('aria-label'), 'web');
   assert.equal(document.activeElement, menu(document).querySelector('[role="menuitem"]'));
   popovers.length = 0;
   press(option(document, LOOSE.id)); end('pointercancel'); end('pointerup'); await task();

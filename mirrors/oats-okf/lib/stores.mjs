@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { fs, join, dirname, safePath, readJSON, atomic, tree, materialize, digest, hash, withLock, exec, cleanEnv, fail, relPath, overlaps, resolve, within, redactUrls, displayRepo } from './io.mjs';
 import { metadata, noGit, gitTimeoutMs } from './config.mjs';
+import { isBridgedMeta, subjectOfPath } from './okf-reindex.mjs';
+import { gitCredentialEnv, ghEnv, refuseBadTokenFile, refuseHostRoutes } from './credential.mjs';
 const validator = fileURLToPath(new URL('./okf-validate.mjs', import.meta.url));
 // Never let local replace refs reinterpret frozen OIDs, including inside Git's
 // transport subprocesses. Override even an explicitly supplied command env.
@@ -11,7 +13,10 @@ const validator = fileURLToPath(new URL('./okf-validate.mjs', import.meta.url));
 // grafts (info/grafts) or commit-graph file could otherwise rewrite parents,
 // and so ancestry, without changing a single object. The graft file is a path
 // that cannot exist: an existing one, even empty, makes Git print a warning.
-export const gitEnv = (env = cleanEnv()) => ({...env,GIT_NO_REPLACE_OBJECTS:'1',GIT_GRAFT_FILE:'/dev/null/no-grafts'});
+// With github-token-file (6.2) the same environment carries the one credential source.
+export const gitEnv = (env = cleanEnv()) => gitCredentialEnv({...env,GIT_NO_REPLACE_OBJECTS:'1',GIT_GRAFT_FILE:'/dev/null/no-grafts'});
+/** Every gh child of the library: the deployment's credential, or the user's own login. */
+export const ghChildEnv = (env = cleanEnv()) => ghEnv(env);
 export const git = (cwd,args,opts={}) => exec('git',['--no-replace-objects','-c','core.hooksPath=/dev/null','-c','protocol.ext.allow=never','-c','core.commitGraph=false','-C',cwd,...args],{cwd,...opts,env:gitEnv(opts.env)});
 function baseError(code,message,base,alias,step,reason) {throw Object.assign(new Error(redactUrls(message)),{code,base:alias,repository:displayRepo(base.repository),step,reason});}
 function baseRemedy(alias) {return `fix the binding for base alias "${alias}" in the bindings file, or remove the base from the bindings`;}
@@ -23,8 +28,10 @@ function classifyGitFailure(error) {
   if(/could not resolve host|failed to connect|connection refused|network is unreachable|no route to host|proxy/i.test(text)) return 'network';
   return 'unknown';
 }
-export function unavailable(base,alias,step,error) {
-  const reason=classifyGitFailure(error),detail=reason==='unknown'?`; original Git failure: ${redactUrls(String(error?.message || 'unknown failure'))}`:'';
+export function unavailable(base,alias,step,error,{detail:withDetail=true}={}) {
+  // withDetail false (oats okf propose): a fixed classification only, never the tool's own bytes.
+  const reason=classifyGitFailure(error); if(reason==='auth') refuseBadTokenFile();
+  const detail=reason==='unknown'&&withDetail?`; original Git failure: ${redactUrls(String(error?.message || 'unknown failure'))}`:'';
   const message=`Git base "${alias}" repository "${displayRepo(base.repository)}" is required by the deployment's bindings, but ${step} failed (reason: ${reason}${detail}); ${baseRemedy(alias)}`;
   baseError('E_BASE_UNAVAILABLE',message,base,alias,step,reason);
 }
@@ -32,22 +39,70 @@ export function requireNotShallow(base,alias,cwd) {
   const shallow=git(cwd,['rev-parse','--is-shallow-repository']);
   if(shallow==='true') baseError('E_BASE_SHALLOW',`Git base "${alias}" repository "${displayRepo(base.repository)}" is required by the deployment's bindings, but the repository is shallow; oats.okf requires full accepted history before staging; ${baseRemedy(alias)}`,base,alias,'clone','shallow');
 }
-export function preflightLocalRepository(base,alias) {
+export function preflightLocalRepository(base,alias,opts) {
   if(!base.repository.startsWith('/')) return;
-  if(!fs.existsSync(base.repository)) unavailable(base,alias,'clone',Object.assign(new Error('repository not found'),{code:'ENOENT'}));
+  if(!fs.existsSync(base.repository)) unavailable(base,alias,'clone',Object.assign(new Error('repository not found'),{code:'ENOENT'}),opts);
   try { requireNotShallow(base,alias,base.repository); }
-  catch(e) { if(e.code==='E_BASE_SHALLOW') throw e; unavailable(base,alias,'clone',e); }
+  catch(e) { if(e.code==='E_BASE_SHALLOW') throw e; unavailable(base,alias,'clone',e,opts); }
 }
 export const baseLock = b => `${b.path}.okf-lock`;
 // okf consult readers hold a directory base's lock briefly; staging and
 // publication queue behind them for a bounded time instead of failing.
 const CONSULT_READER_WAIT_MS = 10000;
 export const journalPath = b => `${b.path}.okf-publication.json`;
-export function validateBase(root, base) {
+// okf 6.0: on a base with the subject layout, a READER (`reader: true`:
+// consult's validation, spawn, readiness) tolerates the two maintainer-upkeep
+// warnings: a stale (missing, orphaned) generated index and an old-node
+// concept awaiting its id; it reads the committed indexes as they are and
+// warns (W_INDEX_STALE). okf 6.0.2 (#138): it also tolerates one error, a
+// claims/ concept merged without the maintainer's id stamp, and warns
+// (W_ID_MISSING). Every writer (propose, migration, publication) keeps the
+// default, strict: what it writes is refused until regenerated or stamped;
+// propose alone lets through, by its `allow`, the missing ids of its own claims
+// and (6.0.2) of accepted claims/ concepts it leaves untouched, as a warning;
+// from 6.0.3 (#140) also of accepted old-node concepts it leaves untouched.
+const INDEX_WARNING=/: generated index is (stale|missing|orphan); run okf-reindex\.mjs$/;
+/** The validator's finding for any concept without `id`: an error under
+ *  claims/, a strict warning in an old node. */
+export const ID_WARNING=/: missing 'id' \(stamped by the maintainer at acceptance\)$/;
+/** The validator's error for a claims/ concept without `id` (one claim each). */
+export const UNSTAMPED_ERROR=/^claims\/.+\.md: missing 'id' \(stamped by the maintainer at acceptance\)$/;
+/** `allow(findings)` (okf 6.0, propose only) returns the findings that still
+ *  refuse: a proposed claim may wait for the maintainer's id. → {..., stale:
+ *  the number of generated files a reader found stale, unstamped: the number
+ *  of claims/ concepts a reader found without id (both 0 unless `reader`)}. */
+export function validateBase(root, base, { allow = findings => findings, reader = false } = {}) {
   const files=tree(root,{git:base.kind==='git' && base.root==='.'}); const meta=metadata(files,base);
   const result=JSON.parse(exec(process.execPath,[validator,root,'--strict','--json'],{acceptedStatus:[0,1]}));
-  if(result.errors.length || result.warnings.length) fail('E_VALIDATION', [...result.errors,...result.warnings].join('; '));
-  return {files,meta,digest:digest(files)};
+  const subjectLayout=reader && result.layout==='subjects';
+  const tolerated=subjectLayout ? result.warnings.filter(w=>INDEX_WARNING.test(w) || ID_WARNING.test(w)) : [];
+  const unstamped=subjectLayout ? result.errors.filter(e=>UNSTAMPED_ERROR.test(e)) : [];
+  const findings=allow([...result.errors.filter(e=>!unstamped.includes(e)),...result.warnings.filter(w=>!tolerated.includes(w))]);
+  if(findings.length) throw Object.assign(new Error(findings.join('; ')),{code:'E_VALIDATION',findings});
+  return {files,meta,digest:digest(files),subjects:subjectsOf(files,meta),stale:tolerated.filter(w=>INDEX_WARNING.test(w)).length,unstamped:unstamped.length};
+}
+/** The reader's warning for a base whose generated indexes are stale. */
+export const staleWarning=(n,at)=>`W_INDEX_STALE: ${n} generated file${n===1?'':'s'} stale at ${at}; the maintainer regenerates (okf-reindex.mjs)`;
+/** The reader's warning for a base holding claims/ concepts merged without id. */
+export const unstampedWarning=(n,at)=>`W_ID_MISSING: ${n} claim${n===1?' lacks':'s lack'} an id at ${at}; the maintainer stamps ${n===1?'it':'them'} (knowledge-review)`;
+/** okf 6.0.3 (#140): the subject verbs' warning for a base that fails
+ *  validation for a reason no reader tolerates. They still answer from the
+ *  committed indexes; the spawn and `bases` refuse it. `v` is an invalid
+ *  verdict ({error: {message}, first?, count?}; a code other than
+ *  E_VALIDATION has only the message). The finding is committed, untrusted
+ *  text (paths, frontmatter values): control characters go, and it is cut. */
+export const invalidWarning=(v,at)=>{
+  const cut=t=>{ const line=String(t ?? '').replace(/[\u0000-\u001f\u007f-\u009f]+/g,' ').replace(/\s+/g,' ').trim(); return line.length>200?`${line.slice(0,200)}…`:line; };
+  const more=(v?.count ?? 1)-1;
+  return `W_BASE_INVALID: ${at} fails validation: ${cut(v?.first ?? v?.error?.message)}${more>0?` (and ${more} more)`:''}; answers come from the committed indexes as they are; the maintainer repairs the base (\`oats okf bases\`)`;
+};
+/** Every reader warning for a validated base, in a fixed order. */
+export const readerWarnings=({stale=0,unstamped=0},at)=>[...(stale>0?[staleWarning(stale,at)]:[]),...(unstamped>0?[unstampedWarning(unstamped,at)]:[])];
+/** okf 6.0: the subject refs of a base with the subject layout (its subject
+ *  files, subjects/<kind>/<slug>.md), or null for a plain base. */
+export function subjectsOf(files,meta) {
+  if(!isBridgedMeta(meta)) return null;
+  return Object.keys(files).map(p=>subjectOfPath(p)?.ref).filter(Boolean).sort();
 }
 /** Git must never fetch a missing blob on its own, one round trip per object:
  *  a read of a blob the stage lacks fails instead (git 2.45+; an older git
@@ -319,11 +374,11 @@ function prRows(base,branch,cwd,{identity,allBases=false}={}) {
   // head/base filter. A missing/inaccessible identity is an error, not absence.
   if(identity) {
     if(!Number.isInteger(identity.number) || identity.number<1 || !/^https:\/\//.test(identity.url)) fail('E_RECOVERY','invalid recorded PR identity');
-    const pr=JSON.parse(exec('gh',['pr','view',String(identity.number),'--repo',base.pr.repository,'--json',fields],{cwd,env:gitEnv()}));
+    const pr=JSON.parse(exec('gh',['pr','view',String(identity.number),'--repo',base.pr.repository,'--json',fields],{cwd,env:ghChildEnv()}));
     if(!pr || Array.isArray(pr) || typeof pr!=='object') fail('E_RECOVERY','known PR missing; reconcile custody before rejudging');
     return [pr];
   }
-  const raw=exec('gh',['pr','list','--repo',base.pr.repository,'--head',branch,...(allBases?[]:['--base',base.acceptedBranch]),'--state','all','--json',fields],{cwd,env:gitEnv()});
+  const raw=exec('gh',['pr','list','--repo',base.pr.repository,'--head',branch,...(allBases?[]:['--base',base.acceptedBranch]),'--state','all','--json',fields],{cwd,env:ghChildEnv()});
   const rows=JSON.parse(raw); if(!Array.isArray(rows)) fail('E_PR','invalid gh PR list'); return rows;
 }
 // Git terminates each record it prints; a URL's own whitespace is kept, since
@@ -432,7 +487,7 @@ const MERGE_VERDICTS=['merge','amend+merge'],REVIEWER_ASSOCIATIONS=['OWNER','MEM
  *  token's comments carry no member association): a merge verdict, or null
  *  when there is none or it is not a merge. */
 function mergeVerdict(base,pr,cwd) {
-  const {comments,mergedBy}=JSON.parse(exec('gh',['pr','view',String(pr.number),'--repo',base.pr.repository,'--json','comments,mergedBy'],{cwd,env:gitEnv()}));
+  const {comments,mergedBy}=JSON.parse(exec('gh',['pr','view',String(pr.number),'--repo',base.pr.repository,'--json','comments,mergedBy'],{cwd,env:ghChildEnv()}));
   // gh prints an App merger as app/<name> but its comments' author as <name>;
   // a login cannot contain '/', so stripping the prefix is safe for users.
   const merger=typeof mergedBy?.login==='string' && mergedBy.login?mergedBy.login.replace(/^app\//,''):null;
@@ -473,6 +528,9 @@ function carriesDelivered(cwd,branch,commit,head) {
   catch(e) {if(e.status===1) return false;throw e;}
 }
 export function gitPublish(base, stage, proposal, receipt, persist, {beforePublish=()=>{},prIdentity=receipt.pr,pr:presentation}={}) {
+  // 6.2: with github-token-file, nothing of a delivery starts (no fetch, no
+  // push intent, no push, no PR) while the host can answer GitHub in its place.
+  refuseHostRoutes();
   const cwd=stage.checkout, branch=`okf/${proposal.attempt || proposal.run}-${base.id}`;
   verifyRemote(base,cwd);
   const baseline=immutableCommit(cwd,stage.head);
@@ -559,10 +617,10 @@ export function gitPublish(base, stage, proposal, receipt, persist, {beforePubli
     receipt.status='pr-intent'; persist();
     const title=presentation?.title || `okf-harvest: ${proposal.run}`,body=presentation?.body || `Knowledge-only proposal from durable OKF run ${proposal.run}. Review provenance and promotion judgment.`;
     const label=presentation?.label;
-    // The label is what the harvest-review trigger watches: make sure the
+    // The label is what the review trigger watches: make sure the
     // repository has it (idempotent), then open the PR carrying it.
-    if(label) try {exec('gh',['label','create',label,'--repo',base.pr.repository,'--force','--color','0E8A16','--description','OKF harvest PR (oats.okf)'],{cwd,env:gitEnv()});} catch { /* may exist already or be unmanageable; pr create reports a real problem */ }
-    try { exec('gh',['pr','create','--repo',base.pr.repository,'--head',branch,'--base',base.acceptedBranch,'--title',title,'--body',body,...(label?['--label',label]:[])],{cwd,env:gitEnv()}); }
+    if(label) try {exec('gh',['label','create',label,'--repo',base.pr.repository,'--force','--color','0E8A16','--description','OKF harvest PR (oats.okf)'],{cwd,env:ghChildEnv()});} catch { /* may exist already or be unmanageable; pr create reports a real problem */ }
+    try { exec('gh',['pr','create','--repo',base.pr.repository,'--head',branch,'--base',base.acceptedBranch,'--title',title,'--body',body,...(label?['--label',label]:[])],{cwd,env:ghChildEnv()}); }
     catch(e) {receipt.status='pr-unknown';receipt.error=e.message;persist();throw e;}
     rows=prRows(base,branch,cwd);
   }

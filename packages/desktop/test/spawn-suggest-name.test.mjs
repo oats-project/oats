@@ -228,7 +228,7 @@ const lastPreview = u => u.previews().filter(b => b.action === 'preview').at(-1)
 test('untouched and empty: the help says the instance is named from its task; nothing is asked before typing', async t => {
   const k = namingKernel(), u = await dialog(t, k);
   assert.equal(u.text('.spawn-name-result'), 'Left empty, the instance is named from its task.');
-  assert.equal(u.q('.fpurpose').placeholder, 'e.g. desktop-improvements');
+  assert.equal(u.q('.fpurpose').placeholder, 'e.g. pricing-page-lead');
   assert.match(u.text('.spawn-preview'), /named from its task/, 'the preview\'s Name says so too');
   assert.doesNotMatch(u.text('.spawn-preview'), new RegExp(`${DEFAULT.instance}\\b`), 'nor the numbered name\'s home or branch, which Spawn would not create');
   await pause(); assert.equal(k.asked.length, 0, 'nothing runs before the person types, nor on a timer');
@@ -259,7 +259,7 @@ test('seven words while typing: one call for the burst, the suggested name alone
   assert.match(u.text('.spawn-preview'), /release-notes-manager/);
   // Another text: the suggestion no longer speaks for it, at once.
   const el = u.q('.ftask'); el.value = 'Write the release notes for the next version again'; el.dispatchEvent(new u.dom.window.Event('input', { bubbles: true }));
-  assert.equal(u.q('.fpurpose').placeholder, 'e.g. desktop-improvements');
+  assert.equal(u.q('.fpurpose').placeholder, 'e.g. pricing-page-lead');
   assert.equal(u.text('.spawn-name-result'), 'Left empty, the instance is named from its task.');
   await pause(); assert.equal(k.asked.length, 2); assert.equal(u.q('.fpurpose').placeholder, 'release-notes-again-manager');
   // Back to the first text: the answer is remembered, no second call for it.
@@ -328,7 +328,7 @@ test('Spawn while the live call for the same text is in the air joins it: one ca
 test('numbered: it spawns the numbered name and says why, in the Desktop\'s words', async t => {
   const k = namingKernel({ suggest: () => ({ source: 'numbered', reason: 'timeout' }) }), u = await dialog(t, k);
   await u.type('.ftask', NOTES); await pause();
-  assert.equal(k.asked.length, 1); assert.equal(u.q('.fpurpose').placeholder, 'e.g. desktop-improvements');
+  assert.equal(k.asked.length, 1); assert.equal(u.q('.fpurpose').placeholder, 'e.g. pricing-page-lead');
   await u.spawn(); await settle(30);
   assert.equal(k.asked.length, 2, 'a numbered answer does not short-cut Spawn: one more call');
   assert.equal(Object.hasOwn(u.applied.at(-1).choices, 'name'), false);
@@ -352,7 +352,7 @@ test('a suggested name taken since: forgotten, and Spawn names again (the kernel
   // Taken between the suggestion and its --name preview: the preview refuses it.
   taken.add('release-notes-manager');
   await u.type('.ftask', NOTES); await pause(); await settle();
-  assert.equal(u.q('.fpurpose').placeholder, 'e.g. desktop-improvements', 'forgotten');
+  assert.equal(u.q('.fpurpose').placeholder, 'e.g. pricing-page-lead', 'forgotten');
   assert.equal(u.q('.spawn-name-result').classList.contains('err'), false, 'never said as a refusal of a name the person typed');
   await u.spawn(); await settle(40);
   assert.equal(k.asked.length, 2, 'one more call');
@@ -410,7 +410,7 @@ test('a name taken at prepare (after the handoff): refused with Reopen, and the 
   const offer = u.notices.find(x => x.options?.buttons?.some(b => b.label === 'Reopen spawn'));
   assert.ok(offer, JSON.stringify(u.notices.map(x => x.message)));
   await offer.options.buttons[0].activate(); await settle(30);
-  assert.equal(u.q('.fpurpose').placeholder, 'e.g. desktop-improvements', 'the reopened dialog forgot the taken name');
+  assert.equal(u.q('.fpurpose').placeholder, 'e.g. pricing-page-lead', 'the reopened dialog forgot the taken name');
   await u.spawn(); await settle(40);
   assert.equal(k.asked.length, 2, 'one fresh naming call');
   assert.equal(u.applied.at(-1).choices.name, 'release-notes-manager-2');

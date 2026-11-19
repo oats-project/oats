@@ -9,7 +9,7 @@ retires and schedules agents.
 ## Install
 
 Download the installer for your platform from the
-[GitHub Release](https://github.com/awebai/oats/releases) assets:
+[GitHub Release](https://github.com/oats-project/oats/releases) assets:
 
 | Platform | Artifacts | Notes |
 | --- | --- | --- |
@@ -25,8 +25,21 @@ the app was tested on.
 Windows and Linux arm64 are not supported.
 
 Verify downloads against the release's `SHA256SUMS.txt`. GitHub
-build-provenance attestations are published for every asset
-(`gh attestation verify <file> --repo awebai/oats`).
+build-provenance attestations are published for every asset. Where they live
+depends on where the release was built:
+
+- **Releases after 0.69.12**, built in `oats-project/oats`:
+  `gh attestation verify <file> --repo oats-project/oats --signer-workflow oats-project/oats/.github/workflows/release.yml --source-ref refs/tags/v<version>`.
+- **Releases up to 0.69.12**, built in `awebai/oats` before the repository
+  moved. Their attestations stayed with the `awebai` organisation, so
+  `--repo` finds none (`HTTP 404`):
+  `gh attestation verify <file> --owner awebai --signer-workflow awebai/oats/.github/workflows/release.yml --source-ref refs/tags/v<version>`.
+  Use it only for these versions. For a later release it would trust the old
+  organisation in place of the new one.
+
+Both forms accept only that repository's release workflow, run for the
+release's tag. They accept no other workflow of the owner and no run from a
+branch.
 
 ### macOS: ad-hoc signed build
 
@@ -73,9 +86,13 @@ the one with **this Desktop's own version** — the app's degradation card
 shows that exact `npm install -g @awebai/oats@<version>` command, and
 copying it from the card is the reliable route.
 
-Each Desktop accepts a band of released CLI versions around its own
-(prereleases never), and a feature may need a higher floor; the app states
-both, so this guide does not repeat the numbers. The contract is
+Each Desktop accepts released CLI versions from a floor up (prereleases
+never), and a feature may need a higher floor; the app states both, so this
+guide does not repeat the numbers. A CLI newer than the Desktop's own minor
+version is accepted with only reads, terminals, Spawn, Start, Restart, the
+colour and the background on: one line in the card's place says that every
+other change is off until you install the OATS Desktop of that CLI's version,
+and links its release. A Desktop of 0.69.17 or older refuses such a CLI. The contract is
 [desktop-cli-api.md](desktop-cli-api.md). The app discovers the CLI automatically
 (your PATH, the npm global prefix, a login shell) and re-probes on launch,
 app focus, and Retry. Until a compatible CLI is verified, the Soul roster's
@@ -153,19 +170,25 @@ recently added workspaces there, once.
 opened, or your home directory when there is none (never ~/Downloads);
 **Choose oats…** opens in the directory of the chosen or discovered CLI.
 
-Launch flags for scripted use: `--dir <workspace>`, `--instance <name>` and
-`OATS_DESKTOP_PORT`.
+Launch flags for scripted use: `--dir <workspace>` and `--instance <name>`.
+The app always starts its own backend server, on a private socket (below); it
+never uses a server it did not start.
 
 ### Opening on an instance
 
 `--instance <name>` beside `--dir <deployment>` opens the deployment's window
 with that instance selected in the roster, as **Show in roster** selects it:
 its row is revealed (a collapsed parent or the Background section opens) and
-takes the keyboard focus. Press Enter to open its terminal. On a first launch
-and on a launch while Desktop runs, it behaves the same way.
+takes the keyboard focus. If the row is running, its terminal tab opens in
+the main area through the same path as a click. Keyboard focus stays on the
+roster row: no key reaches the terminal until you click into it or use
+**Terminal: focus the active terminal input**. First and repeated launches
+behave the same way.
 
-- **It only selects.** Nothing starts, attaches or is written, and Desktop
-  reads nothing for it beyond the roster reads it makes anyway.
+- **Only a running local row opens.** Stopped, never-launched, unknown, held,
+  unavailable or stale rows stay selected only, with no Start dialog. Nothing
+  starts, stops, is written or receives input. The only kernel calls are the
+  roster reads and the viewer attach a click makes.
 - **The name must be an instance name**, the one `oats spawn --name` takes. Any
   other value is ignored, and the window says the instance named at launch
   isn't a valid instance name, without repeating the value.
@@ -173,7 +196,9 @@ and on a launch while Desktop runs, it behaves the same way.
   other workspaces never match. A name that isn't there yet (a spawn still
   finishing) is waited for, over the roster's next reads, for about 30
   seconds; then the window says "No instance <name> in this workspace". A name
-  two of its instances share selects nothing, and the window says so.
+  two of its instances share selects nothing, and the window says so. A row
+  first observed running opens; one first observed stopped stays selected
+  only even if it later starts.
 - **Your choice wins.** Selecting anything, typing or clicking while it waits
   drops it. A later launch's `--instance` replaces it.
 - Without `--dir`, with a `--dir` that isn't a deployment, or from a folder
@@ -534,12 +559,11 @@ scroll down with the fields to read it.
 
 The dialog's last field before **Developer settings** is **Name · optional**.
 Left empty, the kernel numbers the new instance (`<soul>-<n>`). A name you type
-is used in lowercase and gets the soul's role, the last word of the soul's
-name, as its suffix:
-`desktop-improvements` for `oats-desktop-expert` becomes
-`desktop-improvements-expert`. A name that already ends in the role, or is
-the role, stays as typed. The line under the field shows the final name, and a
-name that is too long, invalid or already taken is explained there. A spawn
+is used in lowercase, as typed: nothing is appended to it, and the soul is
+shown beside the instance. What to name it is
+[oats.core's naming rule](../oats-package/capabilities/oats-core/skills/oats-souls/SKILL.md#name-the-instance)
+(oats-souls, "Name the instance"). The line under the field shows the name,
+and a name that is too long, invalid or already taken is explained there. A spawn
 on a server takes the exact name the same way when that machine's OATS can
 take one (feature `spawn-name`, read from its last roster answer), and its
 name is explained there too when that machine refuses it. With an OATS older
@@ -551,8 +575,9 @@ instance is named `<soul>-<purpose>`, and the field shows that prefix.
 `spawn-suggest-name`), the help under an empty Name reads "Left empty, the
 instance is named from its task." Once the Opening instruction holds at
 least seven words, the Desktop asks OATS for a name as you type. The soul's
-own harness reads the instruction and replies with a short name for the work,
-and the role is added as its suffix. The name shows as the field's
+own harness reads the instruction and replies with a short name: a few words
+for the work, then the instance's role as the instruction gives it. The name
+shows as the field's
 placeholder ("release-notes-manager"), on the line under the field ("(from
 the task)") and in **What will be created**. It belongs to the instruction it
 was made for: when you change the instruction it goes, and the Desktop asks
@@ -661,10 +686,10 @@ feature (OATS 0.36.0); without it each deployment has its own entry.
   One sentence above them says what a machine is: "Each machine runs this
   workspace in a folder of its own. The instances under a machine run on
   that machine." **All** stacks one section per deployment, each headed by
-  its machine and folder ("This Mac · ~/acme", "altair · ~/northwind"),
-  with "Instances on this machine" or "Instances on altair" under it. Then
-  each deployment has a tab of its own, named by its machine ("altair";
-  "This Mac · oats-v2" when this Mac holds two). A workspace with one
+  its machine and folder ("This Mac · ~/acme", "devbox · ~/northwind"),
+  with "Instances on this machine" or "Instances on devbox" under it. Then
+  each deployment has a tab of its own, named by its machine ("devbox";
+  "This Mac · acme-2" when this Mac holds two). A workspace with one
   deployment shows just that deployment's tab, its tree under the same
 heading. The tab you chose is
   remembered per workspace. With two or more deployments, the sidebar's
@@ -687,7 +712,7 @@ heading. The tab you chose is
   can't read other machines. A server that can't be reached stays under the
   workspace it last reported, marked "remembered".
 - **The list of workspaces.** Each workspace names its machines on one line ("This Mac ·
-  altair"), with a mark when one of them isn't live.
+  devbox"), with a mark when one of them isn't live.
 - **Not matched to a workspace.** A deployment that can't be matched is
   listed on its own under that heading in the list, with its machine and
   a short reason; choosing it opens its tab on the Machines tab. When this
@@ -715,7 +740,7 @@ deployment. Details are in
 
 Open **Automations › Schedules** in the selected workspace (the sidebar's
 **Automations**, or ⌘3 / Ctrl+3) to launch a new agent on a cron,
-wake an existing agent with a message, or harvest its knowledge. **Schedule…**
+wake an existing agent with a message, or run a provider operation on it. **Schedule…**
 on a Soul roster card preselects that soul. Choose the task or message, repeat
 pattern and time zone; new agent jobs also offer harness, model, permissions
 and session backend. The list shows the next run, last observed outcome and
@@ -948,13 +973,20 @@ right of its parent, and related instances are grouped together. Siblings are
 joined by a dotted line through their dots. A parent's line to its children
 runs just to the right of the dotted line, so the two never merge.
 
+The newest instance is on top: the tree is in spawn order, newest first, at
+every level. A group of related instances sits where its first instance's
+spawn time puts it, so spawning a child doesn't move the group, and starting
+or stopping an instance moves nothing. Instances spawned at the same moment
+are in name order, and an instance whose spawn time can't be read comes after
+every one whose time can.
+
 A parent's line joins only the children that do its work. When the instances'
 OATS has the `instance-same-work` feature, a child the kernel reports as doing
 its parent's work (`sameWork: true` in its row, set with `oats spawn …
 --same-work` or `oats instance same-work <instance> on`) is joined to its
 parent, and any other child keeps its place and its indent with no line to its
 parent. Under one parent the joined children are listed first, then the others,
-each part in name order, so the parent's line ends at its last joined child and
+each part newest first, so the parent's line ends at its last joined child and
 never passes one it doesn't join. Nothing else marks the flag: no label, no
 tag, and nothing for a screen reader, which still hears each child "under" its
 parent in the command palette. The command palette draws the same lines, in
@@ -1069,6 +1101,22 @@ computer, and for an instance on a server, on that server too; until then the
 buttons are disabled and the dialog says which is missing. An instance whose
 home is being spawned or retired can't be given a colour meanwhile.
 
+## An instance's owning human
+
+Where the messaging capability attributes an instance's messaging identity to
+a human, the instance panel's Lineage section shows that human first, as
+**Owning human**, above the instance's parent and sibling. It is the
+`attributedHuman` of the instance's row in `oats status --json`, and of a
+server's row for an instance on a server
+([Attributed human](desktop-cli-api.md#attributed-human)), shown as OATS
+reports it. The instance is still named by its own name everywhere: the
+sidebar, its terminal tab, the command palette and the panel's header.
+
+An instance with no human attributed shows no such field, and nothing says
+one is missing: that is the usual case, on a deployment whose messaging
+capability supplies no human identities and for an older OATS that doesn't
+report it. A label OATS would not show as one line of text reads the same way.
+
 ## Identity marks and harness badges
 
 Souls, capabilities and workspaces carry a coloured two-letter mark beside
@@ -1076,7 +1124,7 @@ their name. It is decorative: the name beside it is authoritative. The letters
 come from the name without its package qualifier (what follows the last `/`
 or `--`), and from three words or more without its first (a namespace word like
 `oats`): the initials of the first two words, or a one-word name's first two
-letters. So `oats-desktop-expert` is DE, `oats-okf--knowledge-harvester` KH and
+letters. So `oats-desktop-expert` is DE, `oats-okf--knowledge-maintainer` KM and
 `oats.aweb` OA. Two names can share a mark (`oats-expert` and
 `oats-operator-expert` are both OE); the name and the colour tell them apart.
 
@@ -1092,9 +1140,24 @@ unknown or unreported harness shows "?". Sources and licences are in
 
 ## Security posture
 
-- The bundled backend binds **127.0.0.1 only** and guards against DNS
-  rebinding (loopback Host on every request, loopback Origin on POSTs).
-  Do not expose it: it can type into your agent terminals.
+- The bundled backend listens on a **private socket only the app's main
+  process can reach**: a Unix domain socket in a directory of its own, owned
+  by you and closed to group and others (under `$XDG_RUNTIME_DIR` on Linux
+  when it is private, else the system temporary directory). It opens no TCP
+  port. The renderer reaches it only through main.
+- **Every request carries the per-launch credential** main hands its server
+  over a private pipe when it starts it: 32 random bytes, fresh for each
+  server, never on a command line, in an environment, a URL, a log or the
+  renderer. A request without it is refused (401) before anything else
+  happens, and no reply carries it: a reply that would (a file, a skill or
+  a Git diff holding it) is refused (403) with no content. The Host guard (a loopback Host on every request) and the Origin
+  guard (a loopback Origin on POSTs) stay. Main only ever talks to the
+  server it started, and discards a reply from a server it has since
+  replaced. Do not expose the socket: the server can type into your agent
+  terminals.
+- **The CLI binary is chosen only through the app's own file dialog**
+  (**Choose oats…**): main saves the pick, and the server reads it at each
+  probe. No request to the server names a binary.
 - The app never imports framework code from a checkout and accepts no
   framework-root environment override; deployments are read with an
   app-owned read-only reader. Lifecycle actions run the installed `oats` CLI
@@ -1102,7 +1165,7 @@ unknown or unreported harness shows "?". Sources and licences are in
   stop, retire or start as a process in its own session.
 - Task text for spawns travels via an owner-only (0600) tempfile, never
   argv. A local start or restart launches only in the server-verified
-  instance home. A provider operation on an instance (its harvest included)
+  instance home. A provider operation on an instance
   is addressed with `--home` to a home the server's roster reports, and one
   on a soul to a soul and agents root the server lists, never a path the
   caller names.
@@ -1115,16 +1178,26 @@ unknown or unreported harness shows "?". Sources and licences are in
 | Symptom | Cause / fix |
 | --- | --- |
 | "Compatible oats CLI required" card | No CLI, or a version outside the range the card itself states. Copy the card's install command, or **Choose oats…** to point at the right binary; **Retry** re-probes. Spawn is disabled until a compatible CLI is verified. |
-| "This Desktop is older than the installed oats CLI" card | The CLI found is a released version above the range this Desktop works with, usually because the CLI was updated first. Install OATS Desktop of the version the card names; the card offers no npm command, since installing the CLI this Desktop pins would downgrade it. Reads and terminals keep working meanwhile; **Choose oats…** points at another, compatible CLI and **Retry** re-probes. |
+| "This Desktop was tested with oats CLIs up to …" line, and most changes off | The CLI is of a later minor or major version than this Desktop, usually because the CLI was updated first. Reads, terminals, Spawn, Start, Restart, the colour and the background keep working; every other change is off until you install OATS Desktop of the version the line names, from the release it links. There is no npm command, since installing the CLI this Desktop pins would downgrade it; **Choose oats…** points at another CLI and **Retry** re-probes. |
+| "This Desktop is older than the installed oats CLI" card | The CLI found speaks a newer desktop API than this Desktop. Install OATS Desktop of the version the card names; the card offers no npm command. Reads and terminals keep working meanwhile; **Choose oats…** points at another, compatible CLI and **Retry** re-probes. |
 | Spawn disabled, no card | The probe hasn't settled yet (transient, resolves in ms). If it persists, the backend is unreachable — restart the app. |
 | Terminals fail to open ("could not attach") | tmux missing, or no live session for that instance. Install tmux (`tmux -V`); check `tmux -L oats ls` (the OATS tmux server, where instances run) and `tmux ls` (your default server, where an instance started by an earlier kernel may still be). |
 | Can't select/copy text in a terminal tab | A plain drag selects, and copying is a separate step: ⌘C / Edit › Copy (macOS), Ctrl+Shift+C (Linux/Windows) or right-click › Copy ([Copy from a terminal](#copy-from-a-terminal)). A drag selects only what is on screen: scroll back first (wheel up, Shift+PgUp or Ctrl+B then `[`) for older output. In `oats session attach` in your own terminal, hold **Option** (iTerm2, Ghostty, Terminal.app) or **Shift** while dragging. |
 | macOS "app is damaged / can't be opened" | Ad-hoc-signed (not notarized) build + quarantine. Right-click → Open, or clear the quarantine attribute (above). If it persists, verify the bundle: `codesign --verify --deep --strict --verbose=2 "/Applications/OATS Desktop.app"` — a non-zero exit means a broken artifact, report it. |
-| Log says `server on 4820 — this app's server at version X (this app is Y), not started by this app — left running — starting a dedicated one on 4821` | Another OATS Desktop server holds the default port: another installed version or a dev checkout that is running, or one an earlier Desktop left running. The app serves from the port it names and never stops a server it did not start. From 0.49.0 a server the app starts exits when the app ends, however it ends (quit, crash or kill). A server left by an earlier Desktop (seen on Linux, where it outlived the app in its own `app-…scope`) must be stopped once by hand: find it with `ss -ltnp 'sport = :4820'` (or `lsof -iTCP:4820 -sTCP:LISTEN` on macOS) and stop that pid, or its scope (`systemctl --user stop <scope>`), then restart the app. |
+| Log says `the backend server's socket path is N bytes, over the limit of 103` | The directory for the server's private socket is too deep for a Unix socket path. On Linux it is `$XDG_RUNTIME_DIR` when that is a private directory of yours, else `$TMPDIR` (on macOS always `$TMPDIR`). Start the app with that variable set to a shorter directory of your own, or on Linux with `XDG_RUNTIME_DIR` unset and a short `TMPDIR`. The app never falls back to a TCP port. |
+| A backend server of an earlier Desktop is still running | From 0.49.0 a server the app starts exits when the app ends, however it ends (quit, crash or kill), and the app never uses a server it did not start. A server left by a Desktop older than 0.49.0 (seen on Linux, where it outlived the app in its own `app-…scope`) is harmless to a newer app but may be stopped once by hand: find it with `ss -ltnp 'sport = :4820'` (or `lsof -iTCP:4820 -sTCP:LISTEN` on macOS) and stop that pid, or its scope (`systemctl --user stop <scope>`). |
 | Roster empty | The opened directory isn't an OATS deployment (it needs `oats-local.yaml` and `agents/`). Use **Add local workspace…** (the **+** at the top of the sidebar) to select the right folder. |
 
 For bugs, attach the terminal output of the app (`OATS Desktop` prints
 server and CLI-discovery logs to stdout) and your platform/arch.
+On Linux, a launch from a terminal writes to that terminal; redirect stdout
+and stderr to a file to capture it. A launch through a systemd user unit
+(including `systemd-run --user`) normally goes to that unit's journal:
+`journalctl --user -u <unit>`. Desktop does not maintain a separate log file.
+A launch carrying `--instance` prints one disposition line: `selecting it in
+<dir>` when main sends the selection request, or `not selected (<reason>)`
+when it cannot. This records the request, not whether the renderer has found
+the instance yet.
 
 ## Building from source
 
@@ -1141,8 +1214,26 @@ the bundled backend, of its liveness collector and of every module main
 imports, from `app.asar` and the `client/` directory beside it, no GUI
 launch). The Linux leg then runs the
 smoke once more with its launch phase, under a virtual display; no macOS leg
-launches the window. A local interactive run may also exercise the launch
-phase. The headless run starts the backend as the app does, checks that it
-answers and that it exits when its stdin closes, and runs the collector once;
+launches the window. The GUI phase retains the empty-directory picker launch
+and adds fresh AppImage probes with `--dir <fixture> --instance smoke-probe`,
+asserting main's selection-request diagnostic. Repeated launches of the same
+arguments reach the running app. Both launches of the running fixture must
+open its terminal tab in the main area while keeping keyboard focus on its
+roster row. Before the repeated running launch, the smoke switches to Workspace
+overview, then requires that launch to reactivate the retained tab with exactly
+one viewer and no terminal focus event. CDP sends a key to the window;
+independent tmux pane/output reads prove no input reached the inert harness. The stopped fixture stays selected
+only, with no tab or Start dialog, on Workspace overview. The smoke also
+asserts that viewer cleanup restores its private tmux baseline. The fixture's
+workspace/member source, soul definition and inert harness executable are authored by the test-only
+[`launch-fixture.mjs`](../packages/desktop/test/helpers/launch-fixture.mjs).
+The checkout's CLI creates the deployment and lock through `onboard`, creates
+the stopped fixture through `spawn --no-launch` and the running fixture
+through an ordinary spawn using the inert harness, and checks their status.
+Each fresh app uses private home,
+OATS, tmux and profile directories. The AppImage runtime extracts and runs
+without requiring FUSE, retaining its private extraction until both launches
+are reaped. The headless run starts the backend as the app does,
+checks that it answers and that it exits when its stdin closes, and runs the collector once;
 it does not exercise the GUI or, on Linux, the AppImage's launcher and
 runtime (the glibc floor runs the runtime only to unpack the AppImage).

@@ -463,6 +463,15 @@ test("0.30 launch-hook warnings: session start and restart answer them (JSON `wa
   assert.doesNotMatch(r.stderr, /WARNING/);
   assert.ok(await waitFor(() => runningPid(home) !== null));
   assert.equal(warningEvents().length, 3, "no event for a hook without warnings");
+  // #1749: the row stores the warning made safe and bounded (a newline, an ESC and a bidi override
+  // replaced with U+FFFD, cut to 2048 UTF-16 code units ending in `…`); the answer keeps it as the hook said it.
+  const dirty = `renew\nnow \u001b[2J \u202Eevil ${"x".repeat(3000)}`;
+  hook({ warning: dirty });
+  r = run("restart"); out = JSON.parse(r.stdout.trim());
+  assert.equal(out.ok, true, r.stdout + r.stderr);
+  assert.deepEqual(out.result.warnings, [dirty], "the answer keeps the original");
+  assert.ok(await waitFor(() => runningPid(home) !== null));
+  assert.deepEqual(warningEvents().at(-1).data, { message: `${"renew\uFFFDnow \uFFFD[2J \uFFFDevil " + "x".repeat(3000)}`.slice(0, 2047) + "…" });
 });
 
 test("package module drift appears on start and restart in JSON and text without moving frozen modules", async (t) => {
@@ -509,12 +518,16 @@ test("package module drift appears on start and restart in JSON and text without
     let run = deployment.cli(["session", "restart", "--home", homes[0].home, "--json"], { env: { PATH: process.env.PATH } });
     assert.equal(run.status, 0, run.stdout + run.stderr);
     assert.deepEqual(JSON.parse(run.stdout).result.drift, [{ ...expected[0], locked: { version: "1.0.0", commit: next } }]);
-    // A removed package is kept, rather than being offered as an upgrade.
+    // A removed package is kept, rather than being offered as an upgrade: no drift, and one warning
+    // naming the respawn (an upgrade cannot move it), in the answer and as the text's WARNING line.
     delete locked.packages["acme.pkg"];
     write(lockPath, JSON.stringify(locked));
+    const respawn = "1 package module(s) cannot move in place (acme-tool: package acme.pkg is no longer locked); an upgrade keeps them as they are, so respawn this instance to move it onto the lock";
     run = deployment.cli(["session", "restart", "--home", homes[0].home], { env: { PATH: process.env.PATH } });
     assert.equal(run.status, 0, run.stdout + run.stderr);
     assert.equal(Object.hasOwn(JSON.parse(run.stdout), "drift"), false, "no drift preserves the existing start answer shape");
+    assert.deepEqual(JSON.parse(run.stdout).warnings.filter((w) => /cannot move in place/.test(w)), [respawn]);
+    assert.match(run.stderr, new RegExp(`^ {2}WARNING: ${respawn.replace(/[()]/g, "\\$&")}$`, "m"));
     assert.doesNotMatch(run.stderr, /package module\(s\) behind/);
   } finally {
     for (const f of homes) { try { tmux("kill-window", "-t", `=${session}:=${f.name}`); } catch { /* absent */ } }

@@ -42,16 +42,19 @@ is not shown here, read `oats help`; never invent one.
   notes, whatever your knowledge capability keeps. OATS operational commands
   run here.
 - **`work/` is where repository work happens**: reading, editing, building,
-  testing, Git. In `worktree` and `checkout` mode, so do the extra trees
-  (`.work-<purpose>` in the home) that `oats worktree add` makes (below).
+  testing, Git. In `worktree`, `checkout`, `workspace` and `directory` mode,
+  so do the extra trees (`.work-<purpose>` in the home) that
+  `oats worktree add` makes (below).
   Never run Git from the home root or from the operator's own checkout.
 - **A change to a soul is repository work**: an ordinary, reviewed change to
   the member repository that defines it, made in a work tree.
 
 Work modes (from the soul's `work:`): `worktree` — your own branch in a Git
 worktree of the soul's repository; `checkout` — a shared checkout;
-`directory` — an owned directory, no repository; `workspace` — `work/` is the
-deployment directory itself, read-only across members, for coordination.
+`directory` — an owned directory, no repository; work that needs a branch
+goes in an extra tree, named with `--repo`; `workspace` — `work/` is the
+deployment directory itself, read-only across members; work that needs a
+member's branch goes in an extra tree, named with `--repo`.
 `attached` is chosen only at spawn (`--work attached --work-dir <owner work>`):
 the new instance shares its owner's work tree and is always its child.
 
@@ -241,10 +244,11 @@ overrides its start point. When the clone is of the soul's repository, the
 default is the commit observed by spawn, even when the local clone is behind.
 A `--repo` that is not a clone of the soul's repository starts at its `HEAD`.
 
-**Naming.** Name an instance for its work, with the soul's role last:
-`--name <descriptive>-<role>`, for example `--name desktop-improvements-expert`
-for an `oats-desktop-expert`. `/oats-souls` has the rules, and when spawn's
-`--purpose` fits instead.
+**Naming.** Name an instance for its work, with its role in your coordination
+last: `--name <descriptive>-<role>`, for example
+`--name desktop-improvements-developer` for the developer of the Desktop
+improvements. `/oats-souls` has the rules, and when spawn's `--purpose` fits
+instead.
 
 **Teams to join.** The preview's `teams` lists the teams the soul may join
 (`default` first, each with `via`: why), and `defaultTeam` the one its
@@ -324,6 +328,18 @@ runs every module's retire hook (identities, scheduled jobs) and retains a
 worktree with work in it unless told to discard. An extra tree in the home is
 removed when it is clean and retained when it holds work; discarding does not
 apply to it.
+A home whose recorded retire hooks cannot run refuses with
+`E_UNIDENTIFIED_INSTANCE_HOME` before stopping anything, children included;
+`--plan` and Desktop Remove refuse the same way. This affects homes spawned
+before `capabilityRuntime` and captured homes from before 0.26, unless their
+record positively proves no cleanup hook is owed (a captured home must prove
+no capability's spawn hook ran). Read the named capabilities, inspect the
+home and clean up external identities/memberships with the provider's own
+tooling. Then `oats retire <instance> --force` removes the home while warning
+that skipped hooks did not revoke that state. For your own instance, keep
+`--self`: its deferred completion carries the force choice. Missing information
+never proves there is nothing to undo.
+
 From OATS 0.48.0, retiring an instance stops its recorded children first and keeps them; if one
 will not stop, retire refuses with `E_CHILDREN_RUNNING` and retires nothing
 (`--force` does not bypass it), including your own `--self` retirement.

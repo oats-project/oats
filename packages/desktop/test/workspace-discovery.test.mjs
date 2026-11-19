@@ -351,12 +351,12 @@ test('Souls group by primary team or repository, and unconfirmed members explain
 // #517: the Setup tab lists the workspace's machines when the CLI connects machines to a workspace.
 test('Setup: the Registered machines box follows the gates; it is read for this window and kept across repaints', async t => {
   const gated = { ...CLI, features: [...CLI.features, 'servers-per-workspace', 'server-connect'] };
-  const machine = { id: 'altair-team', label: 'altair', sshHost: 'altair', workspace: '/home/j/team', workspaceKey: 'github.com/acme/team', check: { reachable: true, version: '0.39.0', error: null } };
+  const machine = { id: 'devbox-team', label: 'devbox', sshHost: 'devbox', workspace: '/home/alex/team', workspaceKey: 'github.com/acme/team', check: { reachable: true, version: '0.39.0', error: null } };
   const u = await setup(t, { cli: gated, servers: () => ({ servers: [machine], filtered: true, key: 'github.com/acme/team', deployment: '/team', aweb: false }) });
   u.tab('sources'); for (let i = 0; i < 6; i++) await tick();
   const box = u.doc.querySelector('.setup .setup-machines');
   assert.ok(box, 'the Registered machines box');
-  assert.deepEqual([...box.querySelectorAll('[data-machine]')].map(r => r.dataset.machine), ['altair-team']);
+  assert.deepEqual([...box.querySelectorAll('[data-machine]')].map(r => r.dataset.machine), ['devbox-team']);
   assert.ok(u.calls.some(c => c.path === `/api/servers?ws=${encodeURIComponent('/team')}`));
   assert.equal(box.querySelector('.machines-add').textContent, 'Add a machine to this workspace…');
   u.click('Graph'); await tick();

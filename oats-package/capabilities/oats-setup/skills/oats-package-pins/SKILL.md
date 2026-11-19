@@ -76,6 +76,12 @@ request). Once it is on the default branch, run `oats sync` on each
 deployment. A bump affects only new spawns; running instances keep what they
 were given (`oats status` shows them as moved).
 
+After removing or renaming a pin, or any soul it provided, run `oats doctor`
+on each deployment and fix what it reports. Check `souls.disabled` in
+`oats-local.yaml` by hand too: a doctor before OATS 0.69.13 doesn't report it. An
+entry that names a soul that no longer exists fails open: it disables nothing,
+so the soul it was meant to keep off spawns again under its new name.
+
 ## Sync and the lock
 
 ```bash
@@ -104,6 +110,14 @@ oats sync --json                                 # the same, as the machine-read
   `oats soul launch set <key> --harness <its harness> --plan`, then without
   `--plan`. A declared harness that isn't installed here stays under `'*'`,
   so the soul can run; tell the person.
+  Check a new reviewer soul by its model too, since `'*'` replaces the
+  model as well as the harness: where it declares the same harness as `'*'`
+  but another model, give it its own entry the same way, with
+  `--harness <its harness> --model <its model>`. Then its
+  `oats spawn <key> --preview --json` must show a `launch.effective` model
+  from a family other than the developers'. Where its declared model can't
+  run here, set one that can, from another family; with none, tell the
+  person its reviews share the developers' model.
 
 ## Diagnose
 

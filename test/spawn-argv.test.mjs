@@ -6,6 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { COMMAND_FLAGS } from "../lib/command-flags.mjs";
 import { v2Deployment } from "./helpers/v2-deployment.mjs";
 
 const fail = (r) => { const j = r.json(); assert.equal(j.ok, false, r.stdout + r.stderr); assert.notEqual(r.status, 0); return j.error; };
@@ -45,10 +46,11 @@ function documentedSpawnForms(dir) {
   for (const form of forms) {
     const words = [];
     // `[--flag]` is optional and kept; `[the flags of a real spawn]` describes, and drops.
-    for (const m of form.replace(/\[([^\]]*)\]/g, (_, inner) => (inner.trim().startsWith("--") ? ` ${inner} ` : " ")).matchAll(/"[^"]*"|'[^']*'|\S+/g)) {
+    // A placeholder is one word, spaces and all (`<your soul>`).
+    for (const m of form.replace(/<[^>]*>/g, "x").replace(/\[([^\]]*)\]/g, (_, inner) => (inner.trim().startsWith("--") ? ` ${inner} ` : " ")).matchAll(/"[^"]*"|'[^']*'|\S+/g)) {
       const w = m[0];
       if (w === "…" || w === "...") continue;
-      words.push(/^["']/.test(w) ? w.slice(1, -1) : w.replace(/<[^>]*>/g, "x"));
+      words.push(/^["']/.test(w) ? w.slice(1, -1) : w);
     }
     if (!words.length || words[0].startsWith("--")) continue; // a flag named in prose, not a form
     words[0] = "dev";
@@ -80,29 +82,24 @@ test("the flags spawn accepts are exactly the flags its code path reads", () => 
   const src = readFileSync(new URL("../bin/oats.mjs", import.meta.url), "utf8");
   // spawnCmd and the readers it calls; `--json` is read once, globally (JSON_MODE), and `--max-age`
   // once, at dispatch (maxAgeRefusal, then maxAgeGiven: the preview's read session and observation block).
-  const path = ["spawnCmd", "dirFlag", "harnessFlag", "yoloFlag"].map((f) => functionSource(src, f)).join("\n")
+  const path = ["spawnCmd", "dirFlag", "harnessFlag", "yoloFlag", "herdrSpawnFlag"].map((f) => functionSource(src, f)).join("\n")
     .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, ""); // code only: comments name readers too
-  const read = new Set(["json", "max-age"]);
+  // `--server` once, at dispatch too: a spawn given it is sent to that server (serverRouteCmd).
+  const read = new Set(["json", "max-age", "server"]);
   for (const [, name] of path.matchAll(/\b(?:flag|valueFlag|get)\("([a-z][a-z-]*)"\)/g)) read.add(name);
   for (const [, name] of path.matchAll(/args\.includes\("--([a-z][a-z-]*)"\)/g)) read.add(name);
   for (const [, name] of path.matchAll(/args\[i\] === "--([a-z][a-z-]*)"/g)) read.add(name);
-  // A reader given anything but a literal would hide a flag from this scan; the one exception
-  // is the loop over retired flags, whose literal list is read here.
-  const retiredLoop = /for \(const removed of \[([^\]]*)\]\) if \(flag\(removed\)/.exec(path);
-  assert.ok(retiredLoop, "the retired-flag loop is where this scan expects it");
-  const retired = [...retiredLoop[1].matchAll(/"([a-z-]+)"/g)].map((m) => m[1]);
+  // A reader given anything but a literal would hide a flag from this scan.
   for (const call of path.matchAll(/\b(?:flag|valueFlag|get)\(([^)]*)\)/g)) {
-    if (/^"[a-z][a-z-]*"$/.test(call[1]) || call[1] === "removed" || call[1] === "name") continue;
+    if (/^"[a-z][a-z-]*"$/.test(call[1]) || call[1] === "name") continue;
     assert.fail(`spawn reads a flag through ${call[0]}: this scan cannot see it`);
   }
-  for (const r of retired) read.add(r);
-  // Flags spawn reads only to refuse them with their replacement, before the argument check.
-  const refusedBefore = new Set([...retired, "ephemeral"]);
-  const valueFlags = /const SPAWN_VALUE_FLAGS = new Set\(\[([^\]]*)\]\)/.exec(src), switches = /const SPAWN_SWITCHES = new Set\(\[([^\]]*)\]\)/.exec(src);
-  assert.ok(valueFlags && switches, "bin/oats.mjs declares SPAWN_VALUE_FLAGS and SPAWN_SWITCHES");
-  const accepted = new Set([...valueFlags[1].matchAll(/"([a-z-]+)"/g), ...switches[1].matchAll(/"([a-z-]+)"/g)].map((m) => m[1]));
-  accepted.add("provider"); // two words, handled on its own in spawnArgvProblem
-  for (const name of read) if (!refusedBefore.has(name)) assert.ok(accepted.has(name), `spawn reads --${name}, but the argument check would refuse it: add it to SPAWN_VALUE_FLAGS or SPAWN_SWITCHES`);
+  // The argument check's own list (lib/command-flags.mjs): the flags it accepts, and those it refuses
+  // with their replacement, which nothing on the spawn path reads.
+  const spawn = COMMAND_FLAGS.find((c) => c.command === "spawn");
+  const accepted = new Set([...spawn.values, ...spawn.switches].map((f) => f.slice(2)));
+  const refusedBefore = new Set(Object.keys(spawn.refused).map((f) => f.slice(2)));
+  for (const name of read) assert.ok(accepted.has(name), `spawn reads --${name}, but the argument check would refuse it: add it to the spawn row of lib/command-flags.mjs`);
   for (const name of accepted) assert.ok(read.has(name), `--${name} is accepted but nothing on the spawn path reads it`);
-  for (const name of refusedBefore) assert.ok(!accepted.has(name), `--${name} is refused before the argument check; it is not an accepted flag`);
+  for (const name of refusedBefore) assert.ok(!accepted.has(name) && !read.has(name), `--${name} is refused before the argument check; it is not an accepted flag`);
 });

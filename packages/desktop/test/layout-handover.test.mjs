@@ -9,7 +9,7 @@ import { MAX_SPLIT_GROUPS } from '../renderer/split-layout.mjs';
 const A = 'ws:aaaaaaaaaaaaaaaaaaaa';
 const ref = (instance, extra = {}) => ({ instance, home: `/d/agents/${instance}`, ...extra });
 const good = () => ({
-  terminals: [ref('a'), ref('b', { server: 'rigel', agentsRoot: '/d/agents' }), ref('c')],
+  terminals: [ref('a'), ref('b', { server: 'build', agentsRoot: '/d/agents' }), ref('c')],
   split: { orientation: 'row', focused: 1, groups: [{ tabs: [0, 2], active: 2, weight: 2 }, { tabs: [1], active: 1 }] },
   active: 1,
 });
@@ -66,13 +66,13 @@ test('describe: the workspace\'s terminal tabs only, in strip order, with their 
     [1, { kind: 'terminal', workspace: A, instanceRef: { instance: 'a', home: '/d/agents/a', running: true } }],
     [2, { kind: 'file', workspace: A }],
     [3, { kind: 'terminal', workspace: 'ws:other0000000000000', instanceRef: { instance: 'z' } }],
-    [4, { kind: 'terminal', workspace: A, instanceRef: { instance: 'b', home: '/d/agents/b', server: 'rigel' } }],
+    [4, { kind: 'terminal', workspace: A, instanceRef: { instance: 'b', home: '/d/agents/b', server: 'build' } }],
     [5, { kind: 'brain', workspace: A }],
   ]);
   const split = { orientation: 'col', nextId: 4, focusedGroup: 3, groups: [{ id: 1, tabs: [1], activeTab: 1, weight: 3 }, { id: 3, tabs: [4], activeTab: 4 }] };
   const layout = describeLayout(tabs, split, 4, A);
   assert.deepEqual(layout, {
-    terminals: [{ instance: 'a', home: '/d/agents/a' }, { instance: 'b', home: '/d/agents/b', server: 'rigel' }],
+    terminals: [{ instance: 'a', home: '/d/agents/a' }, { instance: 'b', home: '/d/agents/b', server: 'build' }],
     split: { orientation: 'col', focused: 1, groups: [{ tabs: [0], active: 0, weight: 3 }, { tabs: [1], active: 1 }] },
     active: 1,
   });

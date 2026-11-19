@@ -14,7 +14,7 @@ trial invocation establishes support: older `retire` ignores unknown `--plan`
 and retires. Missing/malformed advertisement means unavailable, zero invocation.
 
 **POST `/api/instance-lifecycle?ws=<id>`** is the only Desktop K3 route. It uses
-loopback Host / POST Origin guards, exactly one advertised workspace and no
+the server-wide credential check, loopback Host / POST Origin guards, exactly one advertised workspace and no
 extra query arguments. The privileged proxy pins the entire body-addressed
 instance family. Bodies are strict JSON objects up to64 KiB:
 
@@ -365,15 +365,35 @@ from whether the plan observed `work/` (`facts.work.observed`):
 - `E_UNIDENTIFIED_INSTANCE_HOME` (a home the kernel cannot work from: its
   record is there and cannot be read
   ([desktop-cli-api.md](../../../docs/desktop-cli-api.md#unreadable-record)),
-  its rollback marker cannot drive a retry, or it has neither a record nor a
-  cleanup descriptor) is a **refusal** with its own fixed sentence: "OATS
-  couldn't find or read what it needs in this instance's home folder, so
-  nothing was done." The kernel answers it only before any effect, so it is in
+  its rollback marker cannot drive a retry, it has neither a record nor a
+  cleanup descriptor, its `capabilityRuntime` is missing or malformed, it
+  names no repository for recorded retire hooks, or it is a captured home
+  whose record does not prove that no capability's spawn hook ran) is a
+  **refusal**. Remove's sentence, selected by its explicit `retire` operation,
+  is "OATS can't tell what this home's capabilities created, or can't run
+  their cleanup, so nothing was removed. Details says what may be left and
+  how to finish." The error code has no structured field that distinguishes
+  these causes, so the headline is the same for every Remove refusal under
+  this code, local or routed. The client never parses the kernel's message
+  to choose a remedy or adds a force command to the headline.
+  Stop keeps "OATS couldn't find or read what it needs in this instance's home folder,
+  so nothing was done." The boundary and confirmation view both use the
+  operation they own; no new envelope field is read. The kernel answers the
+  code only before any effect, so it is in
   `BEFORE_EFFECT_CODES`: a plan read and an apply answered with it both read
   as refused, never as an unknown outcome. The kernel's message (it names the
   file or the folder, and the remedy where there is one) is in Details, for a
-  local answer and a routed one. Where that message offers `--force`, it is
-  the kernel's own word: Desktop offers none and adds nothing about it.
+  local answer and a routed one. Details governs the remedy: an unreadable
+  record must be restored before OATS can remove the home, and `--force`
+  cannot bypass that refusal. Where the kernel offers `--force`, manual
+  cleanup comes first; force removes the home without revoking state whose
+  retire hooks cannot run. Desktop offers no force control.
+- `E_USAGE` (a stop or a retire missing its argument, which the kernel
+  answers only before any effect, a routed one before it is sent) is a
+  **refusal** with the sentence of `E_BAD_ARGS`, "Invalid lifecycle
+  request.", and the kernel's usage line in Details. It is in
+  `BEFORE_EFFECT_CODES`: an apply answered with it reads as refused, never as
+  an unknown outcome.
 - Malformed receipts and timeouts are closed local messages.
   An error envelope's `message` renders only through the display filter
   (`packages/client/display-text.mjs`; see

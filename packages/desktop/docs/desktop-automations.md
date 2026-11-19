@@ -10,7 +10,7 @@ placement, or re-derives where something runs: `runsHere`, `reason`,
 ## Boundary
 
 `POST /api/automations?ws=<id>` with `{ kind, action, key? }` (body ≤ 4 KiB,
-exactly one `ws`, the server-wide loopback Origin guard):
+exactly one `ws`, behind the server-wide credential check and loopback Origin guard):
 
 | kind | actions | key |
 |---|---|---|

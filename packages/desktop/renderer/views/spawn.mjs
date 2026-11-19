@@ -35,7 +35,7 @@ import {
 } from "./common.mjs";
 import { registerAction, getBinding, formatChord, onKeymapChange, keymapTakes } from "../keybindings.mjs";
 import { resolveViewKey } from "../view-keys.mjs";
-import { cliAvailable, cliKnownUnavailable, cliStatus, refreshCli, onCliChange, cliCard } from "./cli-status.mjs";
+import { cliAvailable, cliKnownUnavailable, cliStatus, refreshCli, onCliChange, cliCard, cliAboveTested, aboveTestedCard } from "./cli-status.mjs";
 import { preselectSchedule } from "./schedules.mjs";
 import { preselectAutomationsTab } from "./automations.mjs";
 import { mount as mountMachines, unmount as unmountMachines } from "./hierarchy.mjs";
@@ -775,6 +775,7 @@ export function unmount() {
   if (state.unsubWs) state.unsubWs();
   if (state.unsubCli) state.unsubCli();
   if (state.cliCardHandle) { state.cliCardHandle.dispose(); state.cliCardHandle = null; }
+  if (state.noticeHandle) { state.noticeHandle.dispose(); state.noticeHandle = null; }
   closeSpawnModal(state);
   state.el.innerHTML = "";
   state = null;
@@ -919,7 +920,7 @@ function renderGrid(s, { restoreFocus = true } = {}) {
   if (s.cliCardHandle && !cliKnownUnavailable()) {
     s.cliCardHandle.dispose(); s.cliCardHandle.el.remove(); s.cliCardHandle = null;
   }
-  if (recovery) recovery.hidden = !cliKnownUnavailable();
+  if (recovery) recovery.hidden = !cliKnownUnavailable() && !cliAboveTested();
   const list = s.souls.agents.filter((a) => matches(s, a));
   s.q("souls-sum").classList?.add("workspace-sr-only");
   s.q("souls-sum").textContent = `${list.length} of ${s.souls.agents.length} souls${cliProbePending() ? " · Checking CLI…" : ""}`;
@@ -933,6 +934,14 @@ function renderGrid(s, { restoreFocus = true } = {}) {
   if (state && s === state && cliKnownUnavailable() && recovery) {
     if (!s.cliCardHandle) s.cliCardHandle = cliCard(grid.ownerDocument, s.ctx);
     if (s.cliCardHandle.el.parentNode !== recovery) recovery.append(s.cliCardHandle.el);
+  }
+  // Above the tested bound (#1879) the CLI is accepted: the notice takes the card's place, one line, and the soul
+  // cards stay usable (Spawn is allowed). It renders itself on every CLI change, and empty once the CLI is back
+  // within the bound.
+  if (s.noticeHandle && !cliAboveTested()) { s.noticeHandle.dispose(); s.noticeHandle.el.remove(); s.noticeHandle = null; }
+  if (state && s === state && cliAboveTested() && recovery) {
+    if (!s.noticeHandle) s.noticeHandle = aboveTestedCard(grid.ownerDocument, s.ctx);
+    if (s.noticeHandle.el.parentNode !== recovery) recovery.append(s.noticeHandle.el);
   }
   // No data yet (desktop/loading-states): the grid is the loading controller's — its skeleton, its failed
   // block — and never an empty message. The one exception is a deployment that is not observed: that

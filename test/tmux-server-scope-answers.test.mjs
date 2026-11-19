@@ -141,9 +141,12 @@ test("the probe runs with the bus values the launch's command sets, literal or r
   assert.deepEqual(agentWarnings(unreachable), [agentScopeWarning("`systemd-run --user --scope` could not start a scope in the pane's environment: Failed to connect to bus: No such file or directory")]);
   assert.doesNotMatch(paneStartCommand(unreachable.home), /systemd-run/, "so the launch is unwrapped");
   const referenced = answer(fx.cli(["spawn", "dev", "--launch-config", "referenced", "--json"], { env: { OATS_TEST_SYSTEM_TOOL_DIRS: dir, SCOPE_TEST_RUNTIME: "/run/referenced" } }));
-  assert.equal(probes().at(-1).split("|")[1], "/run/referenced", "a reference's value, which the pane gets with -e");
+  assert.equal(probes().at(-1).split("|")[1], "/run/referenced", "a reference's value, which the pane gets through the private handoff");
   assert.deepEqual(agentWarnings(referenced), []);
-  assert.match(paneStartCommand(referenced.home), /systemd-run' '--user' '--scope'/);
+  const unitPrefix = agentScopeUnit({ home: referenced.home }).slice(0, 23);
+  const scopedCall = () => calls(dir).find((call) => call[4] === "--unit" && call[5]?.startsWith(unitPrefix));
+  await waitUntil(() => scopedCall(), "the referenced launch runs in its own scope through the handoff");
+  assert.deepEqual(scopedCall().slice(0, 5), ["--user", "--scope", "--collect", "--quiet", "--unit"], "the actual execution keeps the agent scope, independent of wrapper quoting");
   // A start of the same home probes with the same values.
   const meta = JSON.parse(readFileSync(join(unreachable.home, "instance.json"), "utf8"));
   execFileSync("tmux", ["-S", meta.tmux.socket, "kill-window", "-t", `=${meta.tmux.session}:=${meta.tmux.window}`]);

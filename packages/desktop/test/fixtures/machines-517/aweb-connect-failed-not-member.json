@@ -3,7 +3,7 @@
  "ok": false,
  "error": {
   "code": "E_TEAM_NOT_MEMBER",
-  "message": "this deployment is not a member of joined:example.invalid (its root /private/var/folders/n3/7j3g9hm10sbd4j8hccsvr4wh0000gn/T/oats-aweb-120-pN4MoG holds no membership), so it cannot invite altair-aweb",
+  "message": "this deployment is not a member of joined:example.invalid (its root /private/var/folders/x4/2k8d0q5m7tbw1c9fgh3pzr6y0000gn/T/oats-aweb-120-pN4MoG holds no membership), so it cannot invite devbox-aweb",
   "details": {
    "steps": [
     {
@@ -15,8 +15,8 @@
      "step": "invite",
      "status": "failed",
      "code": "E_TEAM_NOT_MEMBER",
-     "detail": "this deployment is not a member of joined:example.invalid (its root /private/var/folders/n3/7j3g9hm10sbd4j8hccsvr4wh0000gn/T/oats-aweb-120-pN4MoG holds no membership), so it cannot invite altair-aweb",
-     "remedy": "join joined here first (`oats aweb setup --join joined --invite-stdin --soul dev`, with an invite from a member on stdin), or ask a member to connect altair-aweb"
+     "detail": "this deployment is not a member of joined:example.invalid (its root /private/var/folders/x4/2k8d0q5m7tbw1c9fgh3pzr6y0000gn/T/oats-aweb-120-pN4MoG holds no membership), so it cannot invite devbox-aweb",
+     "remedy": "join joined here first (`oats aweb setup --join joined --invite-stdin --soul dev`, with an invite from a member on stdin), or ask a member to connect devbox-aweb"
     }
    ]
   }

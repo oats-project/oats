@@ -1739,17 +1739,17 @@ for (const [name] of palettes) test(`${name}: team model v2 cards, left entries,
 
 // Spec A (Teams says whose default it is): team model 3's card rows (Default for, May join, a quiet fallback),
 // the address, the nobody line, the openable card's label and foot, the closed local teams' sentence and the
-// souls: table, on a teamsApi 2 document shaped like the lfx rig.
+// souls: table, on a teamsApi 2 document shaped like the lab rig.
 for (const [name] of palettes) test(`${name}: team model 3 card facts, address, foot and souls table meet computed AA`, async t => {
   const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><div class="oats-view"></div></body></html>`, { pretendToBeVisual: true });
   const doc = dom.window.document;
   for (const source of [css, computerTeamsCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
-  const team = (label, extra = {}) => ({ label, team: `${label}:lfx.aweb.ai`, description: null, from: 'shared', default: false, at: 'x', ...extra });
+  const team = (label, extra = {}) => ({ label, team: `${label}:lab.aweb.ai`, description: null, from: 'shared', default: false, at: 'x', ...extra });
   const document = { teamsApi: 2, deployment: '/d', localTeams: false, problems: [],
-    defaultTeam: { label: 'lfx-all', team: null, from: 'workspace' },
-    teams: [team('lfx-all', { team: null, default: true }), team('lfx-ai-team'), team('idle'), team('lone')],
-    souls: { '*': { default: 'idle', teams: [] }, 'lfx-ai-engineering/*': { default: 'lfx-ai-team', teams: ['lfx-all'] } } };
-  const TEAM = 'lfx-ai-team:lfx.aweb.ai';
+    defaultTeam: { label: 'lab-all', team: null, from: 'workspace' },
+    teams: [team('lab-all', { team: null, default: true }), team('lab-ai-team'), team('idle'), team('lone')],
+    souls: { '*': { default: 'idle', teams: [] }, 'lab-ai-engineering/*': { default: 'lab-ai-team', teams: ['lab-all'] } } };
+  const TEAM = 'lab-ai-team:lab.aweb.ai';
   const page = createComputerTeams(doc, { request: async () => structuredClone(document), readMembers: async () => ({ members: [{ workspace: '/d', server: null, serverLabel: null,
     instance: 'ai-reviewer', agent: 'ai-reviewer', agentsRoot: '/d/agents', home: '/d/agents/ai-reviewer/instances/ai-reviewer', team: TEAM, running: true, addressable: true, missingRemotely: false, reason: null }], servers: [], notReached: [] }),
     onOpenTeam: () => {} });
@@ -1758,18 +1758,18 @@ for (const [name] of palettes) test(`${name}: team model 3 card facts, address, 
   for (let i = 0; i < 6; i++) await new Promise(resolve => setImmediate(resolve));
   const root = dom.window.getComputedStyle(doc.documentElement);
   for (const [selector, painted, fg, bg] of [
-    ['[data-team="lfx-ai-team"] .ct-fact dt', '.ct-card', 'muted', 'surface'],
-    ['[data-team="lfx-ai-team"] .ct-fact[data-fact=default] dd', '.ct-card', 'fg', 'surface'],
-    ['[data-team="lfx-ai-team"] .ct-fact[data-fact=default] .ct-name', '.ct-card', 'fg', 'surface'],
-    ['[data-team="lfx-all"] .ct-fact[data-fact=join] dd', '.ct-card', 'muted', 'surface'],
-    ['[data-team="lfx-all"] .ct-fact[data-fact=join] .ct-name', '.ct-card', 'muted', 'surface'],
-    ['[data-team="lfx-all"] .ct-quiet', '.ct-card', 'muted', 'surface'],
-    ['[data-team="lfx-ai-team"] dd.ct-address', '.ct-card', 'muted', 'surface'], ['dd.ct-address.none', '.ct-card', 'warn', 'surface'],
+    ['[data-team="lab-ai-team"] .ct-fact dt', '.ct-card', 'muted', 'surface'],
+    ['[data-team="lab-ai-team"] .ct-fact[data-fact=default] dd', '.ct-card', 'fg', 'surface'],
+    ['[data-team="lab-ai-team"] .ct-fact[data-fact=default] .ct-name', '.ct-card', 'fg', 'surface'],
+    ['[data-team="lab-all"] .ct-fact[data-fact=join] dd', '.ct-card', 'muted', 'surface'],
+    ['[data-team="lab-all"] .ct-fact[data-fact=join] .ct-name', '.ct-card', 'muted', 'surface'],
+    ['[data-team="lab-all"] .ct-quiet', '.ct-card', 'muted', 'surface'],
+    ['[data-team="lab-ai-team"] dd.ct-address', '.ct-card', 'muted', 'surface'], ['dd.ct-address.none', '.ct-card', 'warn', 'surface'],
     ['[data-team="lone"] .ct-fact[data-fact=join] dd.none', '.ct-card', 'muted', 'surface'],
     // The workspace's default: its tag in the brand tint, and where it is set.
-    ['[data-team="lfx-all"] .ct-tag', '[data-team="lfx-all"] .ct-tag', 'accent', 'sel'], ['[data-team="lfx-all"] .ct-from', '.ct-card', 'muted', 'surface'],
+    ['[data-team="lab-all"] .ct-tag', '[data-team="lab-all"] .ct-tag', 'accent', 'sel'], ['[data-team="lab-all"] .ct-from', '.ct-card', 'muted', 'surface'],
     // The card opens its team's page: the label's button, the foot's count, "None of your instances" and the cue.
-    ['.ct-name-h button.ct-open', '.ct-card', 'fg', 'surface'], ['[data-team="lfx-ai-team"] .ct-sum-count', '.ct-card', 'fg', 'surface'],
+    ['.ct-name-h button.ct-open', '.ct-card', 'fg', 'surface'], ['[data-team="lab-ai-team"] .ct-sum-count', '.ct-card', 'fg', 'surface'],
     ['[data-team="idle"] .ct-sum-more', '.ct-card', 'muted', 'surface'], ['.ct-go', '.ct-card', 'muted', 'surface'],
     // The souls: table in its card: the headers, the pattern (its folder muted, "* every soul"), the team chips and "none".
     ['.ct-souls th', '.ct-souls-card', 'muted', 'surface'], ['.ct-pattern', '.ct-souls-card', 'fg', 'surface'],
@@ -2150,13 +2150,13 @@ for (const [name] of palettes) test(`${name}: Add a machine and the Registered m
     { step: 'deployment', status: 'failed', code: 'E_DEPLOYMENT', detail: 'failed' }, { step: 'register', status: 'skipped', detail: 'waits for git' }];
   const machine = (id, check) => ({ id, label: id, sshHost: id, workspace: `/srv/${id}`, workspaceKey: 'k', check });
   const ctx = { api: async path => ({ ok: true, status: 200, json: async () => path.startsWith('/api/servers')
-    ? { servers: [machine('up', { reachable: true, version: '0.39.0', error: null }), machine('down', { reachable: false, version: null, error: 'ssh failed' })], filtered: true, key: 'k', deployment: '/Users/j/Agents/k', aweb: false }
-    : { schemaVersion: 1, ok: true, result: { id: 'altair-k', ready: false, steps } } }) };
+    ? { servers: [machine('up', { reachable: true, version: '0.39.0', error: null }), machine('down', { reachable: false, version: null, error: 'ssh failed' })], filtered: true, key: 'k', deployment: '/Users/alex/Agents/k', aweb: false }
+    : { schemaVersion: 1, ok: true, result: { id: 'devbox-k', ready: false, steps } } }) };
   resetMachineChecks();
   const box = createWorkspaceMachines(doc, { ctx, ws: 'ws:x' }); doc.getElementById('setup').append(box.element);
-  const dialog = openAddMachineDialog(doc, { ctx, ws: 'ws:x', deployment: '/Users/j/Agents/k' });
+  const dialog = openAddMachineDialog(doc, { ctx, ws: 'ws:x', deployment: '/Users/alex/Agents/k' });
   t.after(() => { dialog.close(); box.dispose(); dom.window.close(); });
-  const host = doc.querySelector('.machine-host'); host.value = 'altair'; host.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  const host = doc.querySelector('.machine-host'); host.value = 'devbox'; host.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   const folder = doc.querySelector('.machine-folder'); folder.value = '~/k'; folder.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   doc.querySelector('.machine-primary').click();
   for (let i = 0; i < 10; i++) await new Promise(resolve => setImmediate(resolve));

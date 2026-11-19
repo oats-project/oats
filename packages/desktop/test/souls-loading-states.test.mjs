@@ -134,7 +134,7 @@ test('launch: an empty souls answer from before the first observation, beside an
   await v.resolve(0, { agents: [], catalog: { reason: null, ambiguous: [] }, refreshing: false });
   assert.equal(v.text(), 'No souls are materialized in this deployment yet.');
   const remote = await setup(t, { panel: { deployment: undefined, workspace: { id: '/team', remote: true } } });
-  await remote.resolve(0, { workspace: { id: '/team', server: 'altair' }, agents: [], observedAt: null, refreshing: false });
+  await remote.resolve(0, { workspace: { id: '/team', server: 'devbox' }, agents: [], observedAt: null, refreshing: false });
   assert.equal(remote.text(), 'No souls are materialized in this deployment yet.');
 });
 

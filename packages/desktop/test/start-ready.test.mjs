@@ -17,7 +17,7 @@ const fast = { tries: 3, delayMs: 0, sleep: async () => {} };
 test("a roster row (its deployment an object) is matched by its deployment's id once it is running with a tmux session", async () => {
   assert.equal(await waitForInstanceInPanel(panelOf(row(READY)), row({ running: false }), () => true, fast), true);
   assert.equal(await waitForInstanceInPanel(panelOf(row(READY)), { ...row(), deployment: D.id }, () => true, fast), true, "an id ref still matches");
-  const elsewhere = { ...D, id: "/Users/me/Agents/tsm" };
+  const elsewhere = { ...D, id: "/Users/me/Agents/web" };
   assert.equal(await waitForInstanceInPanel(panelOf(row({ ...READY, deployment: elsewhere })), row(), () => true, fast), false,
     "another deployment's same-named row never matches");
   assert.equal(await waitForInstanceInPanel(panelOf(row({ running: true })), row(), () => true, fast), false, "no tmux session: not ready");

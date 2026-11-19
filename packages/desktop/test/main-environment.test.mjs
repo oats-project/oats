@@ -12,7 +12,7 @@ import { resolveLoginPath } from "../login-path.mjs";
 import { forgeEnvironment } from "../forge-cli.mjs";
 import { cliWorkspace } from "../../client/workspace-cli.mjs";
 import { NO_STATUS_LINE_FEATURE } from "../../client/session-attach.mjs";
-import { serverSpawnSpec } from "../server-host.mjs";
+import { serverSpawnSpec, launchServerChild } from "../server-host.mjs";
 import { desktopEnvironment, assertUserEnvironment, USER_PATH } from "./helpers/desktop-environment.mjs";
 import { DESKTOP_TERMS } from "../renderer/desktop-terms.mjs";
 
@@ -31,8 +31,8 @@ const control = { current: () => true };
 function recordedIo(env, served = cli) {
   const sync = [], ptys = [], runs = [];
   const io = createTerminalIo({
-    base: () => "http://127.0.0.1:1111", context: () => "epoch", attachmentDirectory: () => "/memory/files", env,
-    fetch: async () => new Response(JSON.stringify(served)),
+    context: () => "epoch", attachmentDirectory: () => "/memory/files", env,
+    fetch: async (path) => { assert.equal(path, "/api/cli", "main's backendFetch is handed the CLI read's path"); return new Response(JSON.stringify(served)); },
     fs: { stat: async () => ({ isFile: () => true, size: 1 }), mkdir: async () => {}, writeFile: async () => {} },
     execFileSync: (bin, args, options) => { sync.push({ bin, args, options }); return args.includes("new-session") ? "@99\n" : ""; },
     spawnPty: (bin, args, options) => { ptys.push({ bin, args, options }); return {}; },
@@ -156,17 +156,22 @@ test("`oats workspace` verbs start from the cleaned environment and still lose t
 // ── main.mjs itself, from its source ────────────────────────────────────────
 
 test("main starts the backend with its whole environment and the Node-mode flag: the one child that is not cleaned", () => {
-  const start = main.indexOf("spawnChild: (dirs, onPort) => {"), end = main.indexOf("return child;", start);
+  const start = main.indexOf("spawnChild: (dirs) => {"), end = main.indexOf("return spawned;", start);
   assert.ok(start >= 0 && end > start, "main.mjs defines spawnChild");
   const block = main.slice(start, end);
   assert.ok(block.includes("serverSpawnSpec({ execPath: process.execPath, bin, "), "the backend is started by the executable's absolute path");
-  assert.ok(block.includes("env: process.env });"), "with main's whole environment");
-  assert.ok(block.includes("spawn(spec.command, spec.args, spec.options)"), "exactly as the spec says");
+  assert.ok(block.includes("home: homedir(), env: process.env }) });"), "with main's whole environment");
+  assert.ok(block.includes("launchServerChild({ spawn, socketBase: socketBase(),\n      spec: (socketPath) => serverSpawnSpec("), "through launchServerChild, with the spec");
   const env = desktopEnvironment();
-  const spec = serverSpawnSpec({ execPath: "/opt/OATS/oats-desktop", bin: "/opt/OATS/server/oats-web.mjs", dirs: [], port: 4820,
+  const spec = serverSpawnSpec({ execPath: "/opt/OATS/oats-desktop", bin: "/opt/OATS/server/oats-web.mjs", dirs: [], socketPath: "/fixture/run/backend.sock",
     pathSource: "login-shell", remoteIdentityFile: "/fixture/remote.json", home: "/home/fixture", env });
   assert.equal(spec.command, "/opt/OATS/oats-desktop");
   assert.deepEqual(spec.options.env, { ...env, ELECTRON_RUN_AS_NODE: "1" }, "whole, plus the Node-mode flag");
+  // launchServerChild spawns exactly as the spec says.
+  const spawned = [];
+  launchServerChild({ socketBase: "/fixture/run", makeDir: () => ({ socketPath: "/fixture/run/backend.sock", remove() {} }), spec: () => spec,
+    spawn: (...args) => { spawned.push(args); return { stdio: [] }; } });
+  assert.deepEqual(spawned, [[spec.command, spec.args, spec.options]], "exactly as the spec says");
 });
 
 test("main's own tmux calls (the orphan-viewer sweep) pass the cleaned environment, computed at the call", () => {

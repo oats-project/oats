@@ -91,11 +91,13 @@ test('a start: the gate and the home check run first and call nothing; the CLI g
   assert.equal((await run(CLI, there(), {}, { verifyHome: () => assert.fail('a server\'s row has no local home') })).ok, true);
 });
 
-test('a failed start: refused only for the kernel\'s two codes; anything else, the end of the wait included, is uncertain', async () => {
-  assert.deepEqual(STARTED_NOTHING_CODES, ['E_SESSION_START_BUSY', 'E_SESSION_RUNNING']); assert.equal(Object.isFrozen(STARTED_NOTHING_CODES), true);
+test('a failed start: refused only for the kernel\'s three codes; anything else, the end of the wait included, is uncertain', async () => {
+  assert.deepEqual(STARTED_NOTHING_CODES, ['E_SESSION_START_BUSY', 'E_SESSION_START_LOCK_STUCK', 'E_SESSION_RUNNING']); assert.equal(Object.isFrozen(STARTED_NOTHING_CODES), true);
   const answering = error => startInstance(CLI, row(), {}, { verifyHome: x => x.home, start: async () => ({ schemaVersion: 1, ok: false, ...(error ? { error } : {}) }), terms });
   for (const [error, outcome, sentence] of [
     [{ code: 'E_SESSION_START_BUSY', message: 'session start busy: the home\'s start lock is held' }, 'refused', 'OATS refused this start as busy. Nothing was started.'],
+    [{ code: 'E_SESSION_START_LOCK_STUCK', message: '/w/agents/dev/instances/dev-1/.oats-start.lock is the start lock directory of an earlier OATS; nothing was stopped or started. Once no earlier oats is running, remove that directory and retry' },
+      'refused', 'Something in this instance\'s home blocks starting, usually a start lock an earlier OATS left; OATS\'s message names it. Nothing was started. Remove it once no earlier OATS is running: waiting will not clear it.'],
     [{ code: 'E_SESSION_RUNNING', message: 'session already running in tmux window =agents:=dev-1' }, 'refused', 'This instance is already running. Nothing was started.'],
     [{ code: 'E_START_UNCONFIRMED' }, 'uncertain', null],
     [{ code: 'E_LAUNCH_CONFIG_AMBIGUOUS', message: 'two configurations for codex' }, 'uncertain', null],

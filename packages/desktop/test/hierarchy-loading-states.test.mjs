@@ -128,10 +128,10 @@ test('a failed poll with data goes stale: content kept, the view notice with Ret
 test('Retry on a remote window reads its servers again first (#1117): the refresh route, and only once it answered the panel; a local window\'s Retry asks no server', async t => {
   const REFRESH = '/api/remote-roster/refresh';
   const remote = (instances, extra = {}) => panel(instances, currentWorkspace(), { workspace: { id: currentWorkspace(), remote: true }, ...extra });
-  const paths = []; let answer = () => remote([], { error: 'ssh to nactiva-host timed out: no answer within 20 s' });
+  const paths = []; let answer = () => remote([], { error: 'ssh to garnet-host timed out: no answer within 20 s' });
   const refreshed = deferred();
   const u = await setup(t, { api: path => { paths.push(path); return path === REFRESH ? refreshed.promise : answer(); } }); await tick();
-  assert.match(u.notice(), /^Roster unavailable: ssh to nactiva-host timed out/, 'the window\'s one server was not reached');
+  assert.match(u.notice(), /^Roster unavailable: ssh to garnet-host timed out/, 'the window\'s one server was not reached');
   answer = () => remote([instance('a')]);
   paths.length = 0; u.retry(); await tick();
   assert.deepEqual(paths, [REFRESH], 'the servers are read again before the roster is');
@@ -520,7 +520,7 @@ test('the shipped poll across a connection change with a read unresolved: a read
 });
 
 test('an empty deployment\'s observed answer, as the server sends it, is the empty overview (never "Reading the deployment…"); refresh still works', async t => {
-  const empty = panel([], currentWorkspace(), { deployment: { status: 'observed', root: '/team/agents', workspace: { name: 'tsm', key: 'k' }, reachable: { reachable: true }, withheld: [],
+  const empty = panel([], currentWorkspace(), { deployment: { status: 'observed', root: '/team/agents', workspace: { name: 'web', key: 'k' }, reachable: { reachable: true }, withheld: [],
     catalog: { souls: [], ambiguous: [], reason: null, observedAt: null, refreshing: false } }, observedAt: '2026-10-02T00:00:00.000Z', refreshing: false, running: 0 });
   const u = await setup(t, { api: () => empty }); await tick();
   assert.ok(u.one('.empty'), 'the empty copy'); assert.equal(u.notice(), '');

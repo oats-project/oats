@@ -65,7 +65,7 @@ self-censor a real decision because it might not be promoted.
   derived from correspondence. Keep the lesson and leave the person out.
   Naming the author of a published source you cite is fine. That covers the
   names you choose as well: a note's file name, a task ref and an instance's
-  name are published as provenance when knowledge is harvested.
+  name are published as provenance when knowledge is proposed.
 - What the tracker or the docs already hold: link to it instead.
 
 ## The form of a note
@@ -96,26 +96,24 @@ Relates to: oats/expert/decisions/retries.md@5b6a9cab (refines it).
   lost its why.
 - **Before compaction** and **before a task boundary**: update STATE.md and
   log.md, and write the notes you have been meaning to write.
-- **At a harvest checkpoint** (a PR handed over, a task finished, and in a
+- **At a knowledge checkpoint** (a PR handed over, a task finished, and in a
   long-lived role a feature ready, a release or deploy shipped, or a
   direction decision taken with your human): first update STATE.md, log.md
-  and the relevant notes, then follow the capability's harvest procedure. A
-  decision you make while working is captured, not harvested: the next
-  checkpoint carries it.
+  and the relevant notes, then follow `okf-propose`. A decision you make
+  while working is captured, not proposed: the next checkpoint carries it.
 - **Consult first**: before writing a note, check notes/ and `oats okf search`
   so you refine or cite rather than duplicate.
 
 ## Proposing knowledge
 
-Soul knowledge changes only through a reviewed PR; you never write it.
-The duty to propose comes from the `oats.okf` capability, not a task briefing.
-Follow its harvest instructions: one proposal per harvest checkpoint (a PR
-handed over, a task finished, a feature ready, a release or deploy shipped, a
-direction decision taken with your human),
-only for durable, non-duplicate claims in nodes your soul owns, and a line
-in log.md for every checkpoint, including one with nothing to propose. A soul with `knowledge: { harvest: off }`
-has no harvest duty: keep consulting and capturing for your own work, but do
-not propose or spawn a harvester.
+Soul knowledge changes only through a reviewed PR that the knowledge
+maintainer merges. The duty to propose comes from the `oats.okf` capability,
+not a task briefing: follow the `okf-propose` skill (`oats okf propose`), one
+proposal per knowledge checkpoint, only for durable, non-duplicate claims in
+nodes your soul owns, and a line in log.md for every checkpoint, including
+one with nothing to propose. A soul with `knowledge: { harvest: off }` (or
+`publish: off`) has no duty to propose: keep consulting and capturing for
+your own work, but do not propose.
 
 ## The theory, briefly
 

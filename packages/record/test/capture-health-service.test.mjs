@@ -249,7 +249,7 @@ test("unfinished overdeadline is a warning, not a guessed kill/timeout cause or 
 test("early death requires unchanged matching local registration and both processes dead", t => {
   const f = fixture(t), saved = unfinished(f), owner = lock(f, saved), path = join(f.root, ".capture.lock/owner.json");
   f.hook();
-  const observed = [], liveness = pid => { observed.push(pid); return "dead"; };
+  const observed = [], liveness = ({ pid }) => { observed.push(pid); return "dead"; };
   assert.deepEqual(codes(f.health({ liveness })), ["capture-pass-failed"]); assert.deepEqual(observed, [123, 321]);
   for (const mutate of [o => o.host = "off-host", o => delete o.host, o => o.worker.host = "off-host",
     o => o.worker.pid++, o => o.startedAt = at(1), o => o.worker.nonce = "", o => o.worker.startedAt = at(-1)]) {
@@ -258,7 +258,7 @@ test("early death requires unchanged matching local registration and both proces
   }
   write(path, JSON.stringify(owner));
   for (const live of ["alive", "unknown"]) assert.deepEqual(codes(f.health({ liveness: () => live })), []);
-  assert.deepEqual(codes(f.health({ liveness: pid => pid === owner.pid ? "dead" : "alive" })), []);
+  assert.deepEqual(codes(f.health({ liveness: ({ pid }) => pid === owner.pid ? "dead" : "alive" })), []);
   assert.deepEqual(codes(f.health({ liveness: pid => { write(path, JSON.stringify({ ...owner, nonce: "replacement" })); return "dead"; } })), []);
   fs.rmSync(join(f.root, ".capture.lock"), { recursive: true }); assert.deepEqual(codes(f.health()), []);
   assert.deepEqual(JSON.parse(fs.readFileSync(join(f.root, "capture-status.json"))), saved);
@@ -313,4 +313,23 @@ test("doctor remedies change authored commands only, retaining literal paths/his
   assert.equal(validCaptureHealthEnvelope(future, { now }), false);
   const malformed = structuredClone(doctor); malformed.backlog.setAside[0].private = "must not pass";
   assert.equal(validCaptureHealthEnvelope(malformed, { now }), false);
+});
+
+test('mixed sealed and oversized set-asides keep both remedies and truncated sealed guidance', t => {
+  const f = fixture(t); f.save(status(60)); f.hook();
+  const state = new DerivedState(f.root);
+  state.set('set-aside', 'a-big', { source: 'aw', path: '/fixture/a-big', offset: 0, reason: 'record-too-large' });
+  state.set('set-aside', 'b-sealed', { source: 'aw', path: '/fixture/b-sealed', offset: 0, reason: 'sealed, not readable by this recorder' });
+  state.close();
+  const message = () => f.health().rows.find(row => row.code === 'capture-input-set-aside').message;
+  assert.match(message(), /1 listed as record-too-large: Edit the source so no record exceeds 8 MiB/);
+  assert.match(message(), /1 listed as sealed, not readable by this recorder: supply a readable source/);
+  assert.match(message(), /retry cannot decrypt ciphertext/);
+  const more = new DerivedState(f.root);
+  more.delete('set-aside', 'b-sealed');
+  for (let n = 0; n < 101; n++) more.set('set-aside', `c-${n}`, { source: 'aw', path: `/fixture/c-${String(n).padStart(3, '0')}`, offset: 0, reason: 'captured-prefix-changed' });
+  more.set('set-aside', 'z-sealed', { source: 'aw', path: '/fixture/z-sealed', offset: 0, reason: 'sealed, not readable by this recorder' });
+  more.close();
+  assert.match(message(), /Unlisted entries:.*sealed.*supply a readable source/);
+  assert.match(message(), /record-too-large.*Edit the source so no record exceeds 8 MiB/);
 });

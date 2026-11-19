@@ -675,7 +675,7 @@
           "teams": [
             {
               "label": "mine",
-              "team": "mine:juan.aweb.ai",
+              "team": "mine:alex.aweb.ai",
               "default": false,
               "from": "local"
             }

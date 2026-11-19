@@ -204,6 +204,26 @@ test("two starts answer E_SESSION_START_BUSY as they did at the start lock: a st
   } finally { await late?.finish(); }
 });
 
+test("a start excludes another through the home's claim alone: held past the point where it begins its work, it has made nothing at .oats-start.lock, and a second start is refused at the claim", TMUX, async (t) => {
+  const f = fixture(t);
+  const i = await f.lostHome("n1");
+  const startLock = join(i.home, ".oats-start.lock");
+  // Held where the start reads the home's quarantine marker: after every check it makes before
+  // it observes or launches anything.
+  const gate = { name: "working", fn: "existsSync", path: join(i.home, ".oats-rollback-incomplete.json") };
+  const start = await held(f, i, ["session", "start", "--home", i.home, "--json"], "start", gate);
+  try {
+    assert.equal(existsSync(startLock), false, "a start makes nothing at .oats-start.lock");
+    const answer = f.start(i.home);
+    assert.deepEqual([answer.ok, answer.error?.code], [false, "E_SESSION_START_BUSY"], JSON.stringify(answer));
+    assert.match(answer.error.message, new RegExp(`^another start of n1 is in progress \\(pid ${start.child.pid}, since [^)]+\\); nothing was started — `));
+    assert.equal(f.launches(i.name).length, 1, "nothing was started beside the held start");
+    assert.equal((await finished(start, "working")).ok, true);
+  } finally { await start.finish(); }
+  await waitUntil(() => f.launches(i.name).length === 2, "the held start's harness to run", 30000);
+  assert.equal(existsSync(startLock), false, "nothing is left at .oats-start.lock");
+});
+
 test("a start whose launch fails releases its claim: the claim names the start while it launches and nothing afterwards, and a later start and a retire both proceed", TMUX, async (t) => {
   const f = fixture(t);
   const i = await f.lostHome("f1");

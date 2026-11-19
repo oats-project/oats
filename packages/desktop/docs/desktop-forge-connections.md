@@ -46,7 +46,7 @@ without persisting a connection-fact cache.
 
 ## Read-only HTTP boundaries
 
-Both new routes are POSTs behind the existing loopback Host and POST Origin
+Both new routes are POSTs behind the server-wide credential check and the loopback Host and POST Origin
 guards. Neither command execution nor auth mutation is exposed through GET.
 Requests are JSON objects bounded to 64 KiB. Unknown fields refuse.
 

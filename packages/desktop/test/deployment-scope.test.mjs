@@ -1,7 +1,7 @@
 // Addressing (#482): every INSTANCE-addressed request resolves only by exact deployment id. A workspace
 // view id (`ws:…`) there never reaches a row and runs nothing; the row's own deployment id resolves inside
 // that deployment only (a home of another deployment of the same view is not admitted). The shipped HTTP
-// handler runs over the real views (test/helpers/workspace-views-fixture.mjs) with Juan's view:
+// handler runs over the real views (test/helpers/workspace-views-fixture.mjs) with Alex's view:
 // two local deployments (A, B) and a remote (R) of one workspace.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,12 +19,12 @@ import { FORGE_EPOCH_HEADER, validForgeEpoch } from '../forge-proxy.mjs';
 import { canAddressRemote, unaddressableSentence } from '../../client/remote-address.mjs';
 import { apiUrl, servedSelectors } from '../api-url.mjs';
 import { startInstance } from '../../client/session-start.mjs';
-import { loadServer, juanState, A, B, L, R, V, V_OATS, V_LAB } from './helpers/workspace-views-fixture.mjs';
+import { loadServer, alexState, A, B, L, R, V, V_OATS, V_LAB } from './helpers/workspace-views-fixture.mjs';
 
 const CLI = { ok: true, bin: '/oats', version: '0.36.0', features: ['workspace-identity', 'session-start', 'session-restart', 'launch-config', 'schedule',
   'readiness', 'instance-events-2', 'instance-git', 'lifecycle-plans'], remote: ['roster', 'operations', 'launch-config', 'schedule'],
   operationsApi: 2, scheduleApi: 1, readinessApi: 2, eventsApi: 2, instanceGitApi: 1, lifecycleApi: 1 };
-const HOME = { A: `${A}/agents/dev/instances/dev-a`, B: `${B}/agents/dev/instances/dev-b`, R: '/home/juan/oats/agents/dev/instances/far-a' };
+const HOME = { A: `${A}/agents/dev/instances/dev-a`, B: `${B}/agents/dev/instances/dev-b`, R: '/home/alex/oats/agents/dev/instances/far-a' };
 const enc = encodeURIComponent;
 
 /** The handler with every effect recorded: `effects` (what ran: CLI invocations) and `contexts`
@@ -37,7 +37,7 @@ async function harness() {
   const lifecycle = createLifecycleBoundary({ terms: DESKTOP_TERMS, invoke: record('lifecycle') });
   const events = createInstanceEventsBoundary({ invoke: record('events') });
   const git = createInstanceGitBoundary({ invoke: record('git') });
-  const { state } = juanState({ cliState: CLI });
+  const { state } = alexState({ cliState: CLI });
   // A start or restart decides by the row's state (session-start.mjs startGate): B's dev-b is a stopped row here.
   state.snapshot.byWs.get(B).instances[0].running = false;
   const extra = {
@@ -195,23 +195,22 @@ test('served selectors are view ids and deployment ids; a deployment id survives
   const panel = h.views.panelData();
   const served = servedSelectors(panel.workspaces);
   assert.deepEqual([...served].sort(), [V_OATS, V_LAB, L, A, B, R, V].sort());
-  const base = 'http://127.0.0.1:4820';
   for (const id of [A, B, R, V]) {
     for (const path of ['/api/brain/dev', '/api/instance-lifecycle', '/api/workspace-readiness', '/api/instance-git', '/api/instance-events']) {
-      assert.equal(apiUrl(`${path}?ws=${enc(id)}`, base, V_OATS, served).searchParams.get('ws'), id, `${path} ${id}`);
+      assert.equal(apiUrl(`${path}?ws=${enc(id)}`, V_OATS, served).searchParams.get('ws'), id, `${path} ${id}`);
     }
   }
-  assert.equal(apiUrl(`/api/instance-lifecycle?ws=${enc('/elsewhere')}`, base, V_OATS, served).searchParams.get('ws'), V_OATS, 'an unlisted id is rewritten');
+  assert.equal(apiUrl(`/api/instance-lifecycle?ws=${enc('/elsewhere')}`, V_OATS, served).searchParams.get('ws'), V_OATS, 'an unlisted id is rewritten');
   // The view id is in the set, so the proxy keeps it — and the server still refuses it on every instance route.
-  const kept = apiUrl(`/api/instance-lifecycle?ws=${enc(V_OATS)}`, base, B, served);
+  const kept = apiUrl(`/api/instance-lifecycle?ws=${enc(V_OATS)}`, B, served);
   assert.equal(kept.searchParams.get('ws'), V_OATS);
   h.reset();
   await h.request({ url: `${kept.pathname}${kept.search}`, method: 'POST', body: bodies[0][1] });
   assert.deepEqual(h.contexts.map(c => c.workspace), [null]);
   // Through the proxy, a view id addressed by path to the agent's brain is kept as it is on the body-addressed families.
-  assert.equal(apiUrl(`/api/brain/dev?ws=${enc(V_OATS)}`, base, B, served).searchParams.get('ws'), V_OATS);
+  assert.equal(apiUrl(`/api/brain/dev?ws=${enc(V_OATS)}`, B, served).searchParams.get('ws'), V_OATS);
   // A path-addressed instance route: the server refuses the view id at instance resolution and runs nothing.
-  const start = apiUrl(`/api/start/dev-b?ws=${enc(V_OATS)}&home=${enc(HOME.B)}`, base, B, served);
+  const start = apiUrl(`/api/start/dev-b?ws=${enc(V_OATS)}&home=${enc(HOME.B)}`, B, served);
   assert.equal(start.searchParams.get('ws'), V_OATS);
   const refused = await h.request({ url: `${start.pathname}${start.search}`, method: 'POST', body: {} });
   assert.equal(refused.status, 404);

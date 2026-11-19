@@ -3,7 +3,7 @@ import { iconElement } from './shell-icons.mjs';
 import { ageText } from './age-text.mjs';
 import { createSoulMark, createRuntimeBadge, harnessName } from './identity-marks.mjs';
 import { reasonLine, unsupportedLine } from './speaker-line.mjs';
-import { instanceActs } from '../../client/instance-acts.mjs';
+import { desktopActs } from './desktop-acts.mjs';
 import { needsInputReportingGap } from '../../client/needs-input-reporting-gap.mjs';
 import { rowReason, serverLabel, shownLabel, unaddressableSentence } from '../../client/remote-address.mjs';
 let workNotes = 0;
@@ -80,6 +80,8 @@ export const contextPanelCSS = `
 #context-panel .context-panel-paths[open] > summary { margin-bottom:8px; }
 /* Facts: a label column (64px, muted) and a value column; Paths and Lineage share it. */
 #context-panel .context-panel-facts { display:grid; grid-template-columns:64px minmax(0,1fr); gap:7px 10px; align-items:center; margin:0; min-width:0; font-size:12px; line-height:1.45; }
+/* Lineage's label column grows to fit "Owning human" on one line, and only while that row is shown. */
+#context-panel .context-panel-facts.is-lineage { grid-template-columns:minmax(64px, max-content) minmax(0,1fr); }
 #context-panel .context-panel-fact { display:contents; }
 #context-panel .context-panel-facts dt { color:var(--muted); }
 #context-panel .context-panel-facts dd { margin:0; min-width:0; color:var(--fg); overflow-wrap:anywhere; }
@@ -469,7 +471,9 @@ export function createContextPanel({
   const teamsSection = typeof createTeamsSection === 'function' ? createTeamsSection(teamsHost, { tools: teamsTools,
     onPresence(present) { if (!disposed) teamsHost.hidden = !present; } }) : null;
   const lineage = section('instance', 'Lineage');
-  facts(lineage, [['parentInstance', 'Parent'], ['siblingInstance', 'Sibling']]);
+  // Owning human (feature spawn-attribution): the kernel's attributedHuman, the label of the human the instance's
+  // messaging identity is attributed to. Shown only when set; null or absent hides the row, like any unreported fact.
+  facts(lineage, [['attributedHuman', 'Owning human'], ['parentInstance', 'Parent'], ['siblingInstance', 'Sibling']]).classList.add('is-lineage');
   const soulHead = identityHeader('soul');
   const soulSub = field('div', 'context-panel-identity-sub', 'description');
   soulHead.copy.append(field('div', 'context-panel-identity-name', 'agent'), soulSub);
@@ -656,8 +660,11 @@ export function createContextPanel({
       if (id === 'createdAt') el.title = value === 'Not reported' ? '' : value;
       else if (id === 'startedAt') el.title = value === 'Not reported' ? '' : [value, reported(instance.createdAt) !== 'Not reported' ? `created ${instance.createdAt}` : null].filter(Boolean).join(' · ');
       else if (el.closest('.context-panel-path')) el.closest('.context-panel-path').title = value === 'Not reported' ? '' : value;
-      el.toggleAttribute('data-unreported', value === 'Not reported');
-      const row = rows.get(id); if (row) row.hidden = value === 'Not reported';
+      // The owning human is a label (attributed-human.mjs validated it), so its presence is the value's, never its
+      // text: a label that reads "Not reported" is still a human.
+      const unreported = id === 'attributedHuman' ? !(typeof instance.attributedHuman === 'string' && instance.attributedHuman) : value === 'Not reported';
+      el.toggleAttribute('data-unreported', unreported);
+      const row = rows.get(id); if (row) row.hidden = unreported;
       else if (['model', 'modelFrom'].includes(id)) el.hidden = value === 'Not reported';
       if (id === 'identity' || id === 'instance') el.title = value === 'Not reported' ? '' : value;
       if (id === 'model' || id === 'modelFrom') modelLine.title = [fields.get('model')?.textContent, fields.get('modelFrom')?.textContent].filter(t => t && t !== 'Not reported').join(' · ');
@@ -674,7 +681,7 @@ export function createContextPanel({
     // control; a limited one (#802: a spawn or a retire left it half cleaned) Retire alone. A listed act that is not
     // enabled (Start on a Herdr-recorded row) stays visible, disabled, its reason as its title, said as the row says it.
     // A secondary act (#1247: Retire on a home being retired) gets no control here: the roster menu keeps it.
-    const { blocked, limited, acts } = instanceActs(instance), offered = new Map(acts.filter(act => !act.secondary).map(act => [act.verb, act]));
+    const { blocked, limited, acts } = desktopActs(instance), offered = new Map(acts.filter(act => !act.secondary).map(act => [act.verb, act]));
     for (const [verb, b] of [['restart', restartControl], ['start', startControl], ['stop', stopControl], ['retire', retireControl]]) {
       const act = offered.get(verb);
       b.hidden = !act; b.disabled = !act?.enabled;

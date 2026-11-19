@@ -153,7 +153,7 @@ test("package module upgrade partial receipts block start and restart before any
   }
 });
 
-test("package module upgrade file mutex refuses starts while active and after owner exit, naming the same-key retry", async () => {
+test("package module upgrade file mutex refuses starts while active and after owner exit, naming the same-key retry; an earlier OATS's start lock directory is refused, named and left", async () => {
   const f = await makeHome("upgradefilemutex", { launched: false });
   const lock = join(f.home, ".oats-start.lock");
   const owner = { action: "upgrade", instance: f.meta.instance, home: f.home, planRevision: "file-mutex-revision", idempotencyKey: "file-mutex-key", undo: true };
@@ -183,8 +183,18 @@ setInterval(() => {}, 1000);`, lock, JSON.stringify(owner)], { cwd: f.home });
       && e.message.includes("--plan-revision") && e.message.includes("original") && e.message.includes("--idempotency-key") && !e.message.includes("remove that directory"));
     assert.equal(readFileSync(lock, "utf8"), "", "an empty crashed write is retained too");
     rmSync(lock);
+    // A directory there is only ever an earlier OATS's start lock: refused, named, and left as it is.
     mkdirSync(lock);
-    assert.throws(() => startInstanceSession(f.home, { io }), (e) => e.code === "E_SESSION_START_BUSY" && e.message.includes("another start") && e.message.includes("remove that directory"));
+    writeFileSync(join(lock, "keep.txt"), "earlier start");
+    // A person must act on it: its own code, never the busy one an unattended caller waits out.
+    assert.throws(() => startInstanceSession(f.home, { io }), (e) => e.code === "E_SESSION_START_LOCK_STUCK"
+      && e.message === `${lock} is the start lock directory of an earlier OATS; nothing was stopped or started. Once no earlier oats is running, remove that directory and retry`);
+    assert.equal(effects, 0);
+    assert.equal(readFileSync(join(lock, "keep.txt"), "utf8"), "earlier start", "the directory is left byte for byte");
+    rmSync(lock, { recursive: true });
+    symlinkSync(join(f.home, "instance.json"), lock);
+    assert.throws(() => startInstanceSession(f.home, { io }), (e) => e.code === "E_SESSION_START_LOCK_STUCK"
+      && e.message === `${lock} is neither a package upgrade's file nor an earlier OATS's start lock directory; nothing was stopped or started. Remove it and retry`);
   } finally {
     child.kill("SIGTERM");
     await exited;
@@ -277,7 +287,7 @@ test("refusals happen before any mutation", async () => {
   assert.throws(() => startInstanceSession(f.home), (e) => e.code === "E_INSTANCE_RETIRING" && /retire-pending/.test(e.message));
   rmSync(join(dirname(f.home), ".oats-retire-pending-refuse.json"));
   mkdirSync(join(f.home, ".oats-start.lock"));
-  assert.throws(() => startInstanceSession(f.home), (e) => e.code === "E_SESSION_START_BUSY");
+  assert.throws(() => startInstanceSession(f.home), (e) => e.code === "E_SESSION_START_LOCK_STUCK");
   rmSync(join(f.home, ".oats-start.lock"), { recursive: true });
   assert.throws(() => startInstanceSession(f.home, { model: "openai/gpt-x" }), (e) => e.code === "E_MODEL_UNKNOWN", "a preference claude cannot use is an error, not a silent default");
   const unsupported = await makeHome("unsupported");

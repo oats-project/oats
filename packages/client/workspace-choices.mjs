@@ -15,7 +15,7 @@ const short = (value, max = 256) => typeof value === "string" && value.length > 
 
 const machinesOf = (choice) => Array.isArray(choice?.machines) ? choice.machines.filter((m) => short(m)) : [];
 
-/** The machines a choice's deployments are on, as one line (UI spec, #482): "This Mac · altair", from
+/** The machines a choice's deployments are on, as one line (UI spec, #482): "This Mac · builder", from
  * the server's `machines`. Never a path or an id: without `machines` (an older server), nothing. */
 export function workspaceChoicePlace(choice) {
   return machinesOf(choice).join(" · ");

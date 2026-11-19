@@ -1,9 +1,10 @@
 // Two orders. The panel's list (awebai/oats#1083): running (`running === true`), then unknown (`null`, or anything
 // not a boolean), then stopped (`false`); by name within each. One comparison, `byRuntimeState`
 // (packages/client/instance-presentation.mjs), read by `panelInstances` (deployment-panel.mjs) and
-// `rosterRank("status")` (instance-tree.mjs). The roster (#1262, Pepe's decision, comment 6196531154): by name,
-// ties broken by instanceId, whatever runs; `clusterInstances` ranks clusters (by their first root) and children
-// that way, so a start or a stop moves nothing. Each is fed a row of each state in every input order.
+// `rosterRank("status")` (instance-tree.mjs). The roster (Pepe, 2026-11-13, replacing #1262's name order): by spawn
+// time (`createdAt`), newest first; a row without one after every row with one; then by name, ties broken by
+// instanceId, whatever runs. `clusterInstances` ranks clusters (by their first root) and children that way, so a
+// start or a stop moves nothing. Each is fed a row of each state in every input order.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { byRuntimeState } from '../../client/instance-presentation.mjs';
@@ -37,10 +38,10 @@ for (const [what, order] of [['panelInstances', panelOrder], ['rosterRank("statu
   });
 }
 
-/** The same rows by name: what the roster draws, whatever runs. */
+/** The same rows by name: what the roster draws for rows with no spawn time, whatever runs. */
 const byName = rows => [...rows].map(([instance]) => instance).sort((a, b) => a.localeCompare(b));
 for (const [what, order] of [['clusterInstances: clusters', clusterOrder], ['clusterInstances: children of one root', childOrder]]) {
-  test(`${what}: by name, whatever runs and whatever the input order (#1262)`, () => {
+  test(`${what}: rows with no spawn time by name, whatever runs and whatever the input order`, () => {
     const one = permutations(ONE);
     for (const input of one) assert.deepEqual(order(input.map(row)), byName(ONE), JSON.stringify(input));
     const two = permutations(TWO);
@@ -81,4 +82,45 @@ test('byRuntimeState is a total order whatever `running` holds: anything not a b
   assert.deepEqual(sorted.slice(0, 2).map(r => r.running), [true, true]);
   assert.deepEqual(sorted.slice(-2).map(r => r.running), [false, false]);
   assert.ok(sorted.slice(2, -2).every(r => typeof r.running !== 'boolean'), 'every non-boolean stands between them');
+});
+
+/** Rows spawned at the given minutes of one day, named so that the name order is the reverse of the spawn order
+ * and running against it: only `createdAt` can give the expected order. */
+const at = minute => `2026-11-13T10:${String(minute).padStart(2, '0')}:00.000Z`;
+const SPAWNED = [['a-old', false, at(1)], ['m-mid', null, at(5)], ['z-new', true, at(9)]];
+const spawned = ([instance, running, createdAt]) => ({ instance, agentsRoot: '/d/agents', running, createdAt });
+const NEWEST_FIRST = ['z-new', 'm-mid', 'a-old'];
+
+for (const [what, order] of [['clusterInstances: clusters', clusterOrder], ['clusterInstances: children of one root', childOrder]]) {
+  test(`${what}: by spawn time, newest first, whatever runs and whatever the input order`, () => {
+    for (const input of permutations(SPAWNED)) assert.deepEqual(order(input.map(spawned)), NEWEST_FIRST, JSON.stringify(input));
+  });
+}
+
+test('the roster puts rows with no readable spawn time after every row with one, those by name', () => {
+  const rows = [...SPAWNED.map(spawned), ...[['b-none', undefined], ['c-bad', 'not a time'], ['a-null', null], ['d-number', 5]]
+    .map(([instance, createdAt]) => ({ instance, agentsRoot: '/d/agents', running: true, createdAt }))];
+  for (const input of permutations(rows.slice(1))) {
+    assert.deepEqual(clusterOrder([rows[0], ...input]), [...NEWEST_FIRST, 'a-null', 'b-none', 'c-bad', 'd-number'], JSON.stringify(input.map(r => r.instance)));
+  }
+});
+
+test('the roster orders rows spawned at the same time by name, then by identity', () => {
+  const same = at(3);
+  const rows = [['zulu', '/a/agents'], ['dev', '/b/agents'], ['dev', '/a/agents'], ['alpha', '/a/agents']]
+    .map(([instance, agentsRoot]) => ({ instance, agentsRoot, home: `${agentsRoot}/${instance}`, createdAt: same }));
+  const roots = list => clusterInstances(list).map(c => `${c.instances[0].instance}@${c.instances[0].agentsRoot}`);
+  for (const input of permutations(rows)) assert.deepEqual(roots(input), ['alpha@/a/agents', 'dev@/a/agents', 'dev@/b/agents', 'zulu@/a/agents']);
+});
+
+test('a bundle sits by its root\'s spawn time: a newer child does not move it, and the child is listed newest first', () => {
+  const rows = [
+    { instance: 'lead', createdAt: at(1) },
+    { instance: 'solo', createdAt: at(4) },
+    { instance: 'helper-a', parentInstance: 'lead', createdAt: at(2) },
+    { instance: 'helper-z', parentInstance: 'lead', createdAt: at(8) },
+  ].map(r => ({ ...r, agentsRoot: '/d/agents' }));
+  for (const input of permutations(rows)) {
+    assert.deepEqual(clusterInstances(input).map(c => c.instances.map(i => i.instance)), [['solo'], ['lead', 'helper-z', 'helper-a']], JSON.stringify(input.map(r => r.instance)));
+  }
 });

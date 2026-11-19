@@ -8,7 +8,7 @@
  * package approval. Souls stay the host view's own grid. */
 import { teamModelOf } from '../../client/team-rows.mjs';
 import { apiJson, postJson, wsQuery, workspaceGeneration } from './views/common.mjs';
-import { cliStatus, cliKnownUnavailable } from './views/cli-status.mjs';
+import { cliStatus, cliKnownUnavailable, cliHeldBack } from './views/cli-status.mjs';
 import { deploymentUnavailableText } from '../../client/deployment-facts.mjs';
 import { DESKTOP_TERMS } from './desktop-terms.mjs';
 import { setupCSS, renderSetup, teamsBox } from './workspace-setup.mjs';
@@ -347,7 +347,8 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
   }
   function syncHeader() {
     const s = observed();
-    sync.update({ status: s, canSync: !gate(workspace, deployment) && !!s });
+    // Above the tested bound (#1879) a sync, which writes the lock, is held back (packages/client/above-tested.mjs).
+    sync.update({ status: s, canSync: !gate(workspace, deployment) && !!s && cliHeldBack('POST /api/workspace-sync sync') === null });
   }
   function setTab(name) {
     if (!workspaceTabs.includes(name) || !alive) return false;

@@ -1,13 +1,13 @@
 /** Normalized spawn IPC, including ordinary legacy requests: frame/epoch custody
  * cannot be bypassed by an alias or by omitting the transaction discriminator. */
-import { apiUrl, apiInit } from './api-url.mjs';
+import { apiUrl, apiInit, requestPath } from './api-url.mjs';
 import { trustedForgeFrame } from './forge-proxy.mjs';
 import { record, absolute, NAMING_TIMEOUT_MS } from '../client/spawn-preview-contract.mjs';
 import { spawnPrepareInput, spawnRefInput, spawnApplyView, spawnApplyFailure } from '../client/spawn-apply-contract.mjs';
-export async function proxySpawnApply(event, pathname, opts, { rendererURL, connection, fetch: fetcher = globalThis.fetch } = {}) {
+export async function proxySpawnApply(event, pathname, opts, { rendererURL, connection, fetch: fetcher } = {}) {
   let frame, start, dispatched = false, mutation = false, legacy = false, input;
   const owns = () => { try { return trustedForgeFrame(event, rendererURL) && event.sender.mainFrame === frame; } catch { return false; } };
-  const current = () => { try { const c = connection(); return !c.transition && c.epoch === start?.epoch && c.base === start?.base; } catch { return false; } };
+  const current = () => { try { const c = connection(); return !c.transition && c.epoch === start?.epoch; } catch { return false; } };
   const fail = (code, status = 503) => {
     const unknown = mutation && dispatched;
     const body = spawnApplyFailure(unknown ? 'E_OUTCOME_UNKNOWN' : code, { spawnRef: input?.spawnRef, status: unknown ? 'unknown' : 'unavailable' });
@@ -25,14 +25,14 @@ export async function proxySpawnApply(event, pathname, opts, { rendererURL, conn
     if (!legacy && !(input.action === 'prepare' ? spawnPrepareInput(input) : spawnRefInput(input))) return fail('E_BAD_ARGS', 400);
     mutation = legacy || input.action === 'apply';
     start = { ...connection() }; if (start.transition) return fail('E_PLAN_CHANGED');
-    const url = apiUrl(pathname, start.base, start.wsId, start.allowedWs, { bound: start.bound === true });
+    const url = apiUrl(pathname, start.wsId, start.allowedWs, { bound: start.bound === true });
     if (url.pathname !== '/api/spawn' || url.searchParams.getAll('ws').length > 1
       || [...url.searchParams.keys()].some(k => k !== 'ws') || !legacy && !url.searchParams.get('ws')) return fail('E_BAD_ARGS', 400);
     // A remote spawn the host names from its task (suggestName, #1490 §3) runs the kernel's naming call first: the CLI's
     // deadline grows by NAMING_TIMEOUT_MS (cli-adapter.mjs cliSpawn), and this one keeps its margin above it.
     const timeout = mutation ? 65000 + (legacy && input.suggestName === true ? NAMING_TIMEOUT_MS : 0) : input.action === 'prepare' ? 35000 : 10000;
     dispatched = true;
-    const response = await fetcher(url, { ...init, signal: AbortSignal.timeout(timeout) });
+    const response = await fetcher(requestPath(url), { ...init, signal: AbortSignal.timeout(timeout) });
     const raw = await response.text();
     if (!owns()) return fail('E_FORBIDDEN_FRAME', 403);
     if (!current()) return fail('E_PLAN_CHANGED');

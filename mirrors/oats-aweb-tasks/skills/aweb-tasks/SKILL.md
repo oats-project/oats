@@ -145,6 +145,11 @@ evaluated again by the shell. Never paste prose into a shell argument or use
 eval. Assignees, task refs, labels, status and type are structured identifiers
 or enum values rather than prose.
 
+Make each of these files new and private with `mktemp` (it prints a fresh,
+owner-only path), never a fixed or shared `/tmp` path: other agents and users
+on the host share `/tmp`, so a fixed name lets another agent overwrite your
+file and your task carries its text. `/path/...` below stands for such a path.
+
 ```bash
 aw task create --title "$(cat /path/title.txt)" --description-file /path/description.md --notes-file /path/notes.md --type task --assignee <alias> --labels <label>
 aw task update <ref> --title "$(cat /path/title.txt)" --description-file /path/description.md --notes-file /path/notes.md

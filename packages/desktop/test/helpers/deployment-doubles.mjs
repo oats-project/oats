@@ -10,9 +10,12 @@
  * - `isServed(held, id, terms)`: the id is a listed deployment.
  * Each refuses a call that does not pass `held()` first, and the Desktop's terms where the real function
  * takes terms: a route that forgot either fails here, not only where the real function runs.
- * Tests that need real views use test/helpers/workspace-views-fixture.mjs instead. */
+ * Tests that need real views use test/helpers/workspace-views-fixture.mjs instead.
+ * Beside them, the real gate every POST asks (packages/client/above-tested.mjs, #1879): it holds nothing back
+ * for a CLI within the tested bound, which is what these tests run with. */
 import assert from 'node:assert/strict';
 import { DESKTOP_TERMS } from '../../renderer/desktop-terms.mjs';
+import { aboveTestedRefusal, postOperation, postRouteClassified } from '../../../client/above-tested.mjs';
 
 export function deploymentDoubles(deployments) {
   const HELD = Object.freeze({});
@@ -23,6 +26,7 @@ export function deploymentDoubles(deployments) {
   return {
     held: () => HELD,
     DESKTOP_TERMS,
+    aboveTestedRefusal, postOperation, postRouteClassified,
     deployments: held => { passed(held, passed); return deployments(); },
     deploymentFor: (held, id, terms) => { passed(held, terms); return first(id); },
     surfaceDeployment: (held, id, request, terms) => { passed(held, terms); return namesInstance(request) ? exact(id) : first(id); },

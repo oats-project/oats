@@ -9,7 +9,7 @@ import { withShellWindowGlobals } from "./helpers/shell-window-globals.mjs";
 
 const source = readFileSync(new URL("../renderer/shell.mjs", import.meta.url), "utf8");
 const fn = (name) => { const found = source.match(new RegExp(`(?:async )?function ${name}\\([^]*?\\n\\}`)); assert.ok(found, name); return found[0]; };
-const REMOTE = [{ id: "ws:aaaaaaaaaaaaaaaaaaaa", name: "tsm", remote: true }];
+const REMOTE = [{ id: "ws:aaaaaaaaaaaaaaaaaaaa", name: "web", remote: true }];
 
 function shell({ state = "choosing", choices = async () => REMOTE } = {}) {
   const c = {

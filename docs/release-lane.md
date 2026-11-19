@@ -132,13 +132,18 @@ Everything after `build` reads `MANIFEST.json` and the files already staged:
   so no checks run on it by themselves; close and reopen it to run them, and
   do not read missing checks as green. Open the PR by hand if the workflow
   does not run.
-- **The accepted range also decides which kernel `oats tui` accepts.**
-  `ACCEPT_RANGE` (`packages/client/cli-locator.mjs`) is read by the Desktop
-  and by the terminal client, which runs the kernel it ships with: a bump
-  that leaves the new version outside the range ships an `oats tui` that
-  stops at its start with `E_TUI_KERNEL`. The test "the accepted band admits
-  the kernel version this Desktop ships with"
-  (`packages/desktop/test/cli-locator.test.mjs`) fails for such a bump.
+- **No bump moves an accepted range.** The Desktop's tested bound is the
+  minor of its own version (`packages/desktop/package.json`), read at run
+  time (`testedBound`, `packages/client/cli-locator.mjs`); `ACCEPT_RANGE`
+  holds only the floor. A newer CLI is accepted with only the operations
+  `packages/client/above-tested.mjs` allows on. `oats tui` judges the kernel
+  it ships with against that kernel's own `package.json`, so it never finds
+  it above. The version-bump PR moves the two manifests together; should they
+  differ, the Desktop's own wins (it is the installed app's version), and
+  `checkReleaseVersions` refuses the checkout. The test "the tested bound is
+  the minor of the version the release manifests carry, from one source, and
+  no file spells an upper bound" (`test/release-packaging.test.mjs`) holds
+  this.
 - **Legs for hosts you do not have.** The Linux AppImage/DEB need a Linux
   host; the lane says so and `stage` lists what is missing.
 - **The packaged window launch.** `release.yml` launches the packaged window
@@ -175,21 +180,23 @@ runs the same installer steps, so it names the same commits. So does
 lane's call of 2026-10-27: it runs a branch's code on the release's own
 actions, and its run is that pull request's macOS evidence, so it names them
 at the commits that were read
-([Implementation](implementation.md#the-tuis-tests-on-macos)). Every other
+([Implementation](implementation.md#the-tuis-tests-on-macos)).
+`team-image.yml` also names these commits for
+[image acceptance](container.md#image-ci-and-publication). Every other
 workflow keeps tags (`actions/checkout@v4`): nothing is published from them.
 
 `test/workflow-no-cache.test.mjs` holds this. Its table of the actions that
-were read has a row for each action: `action`, `id`, `version`. In the three
+were read has a row for each action: `action`, `id`, `version`. In these four
 files every `uses:` is a row's id, the same action is the same id in all of
 them, and the comment beside an id is the row's version. In every other
 workflow a `uses:` is the major of a row's version.
 
 **An id is moved by a pull request, reviewed like any change to that
-workflow.** It changes these together, and nothing else in the three workflow
+workflow.** It changes these together, and nothing else in these four workflow
 files:
 
 - the id and the version comment, on every `uses:` line of that action in
-  `release.yml`, `build-installers.yml` and `tui-macos.yml`;
+  `release.yml`, `build-installers.yml`, `tui-macos.yml` and `team-image.yml`;
 - the action's row in the table.
 
 **The id is read from an exact version tag of the action's own repository**
@@ -355,29 +362,29 @@ node scripts/assemble-release-notes.mjs --tag v0.54.0
   entries merged since, which go after the earlier ones.
 - **The Upgrade section opens with the order of the Desktop and the CLI.**
   The tag owner writes it in the release-prep pull request, for every
-  release, from `ACCEPT_RANGE` in `packages/client/cli-locator.mjs`:
-  - when the release moves the range's upper bound (a new minor), the first
-    Upgrade line says to install the Desktop first and the CLI second,
-    because the previous Desktop refuses this CLI ([Upgrading](upgrading.md));
-  - when the range already admits the new version (a patch), it says that
-    either order works.
+  release: either order works ([Upgrading](upgrading.md#either-order-works)).
+  For a new minor or major it adds what the previous Desktop holds back with
+  this CLI until it is updated, and that a Desktop of 0.69.17 or older
+  (`LAST_HARD_CEILING_DESKTOP`, `lib/pi-bridge.mjs`) refuses it: install the
+  Desktop first there.
 
   No entry file writes this line: only the tag owner knows the release's
   version when the notes are assembled.
 - **The same pull request updates "Upgrading to the latest version"**, the
   section [Upgrading](upgrading.md) opens with: the version being tagged in
   each place the section names it (the latest version, its notes, the
-  Desktop and the CLI install), and the CLIs that version's Desktop accepts,
-  up to its next minor (`ACCEPT_RANGE` in `packages/client/cli-locator.mjs`
-  once the release plan has moved it). The page
-  states only this band; the earlier ones stay in their notes. When the
+  Desktop and the CLI install), and the CLIs that version's Desktop accepts:
+  up to 0.69.17, its band (`>=0.26.0 <0.70.0`); after it, `The <version>
+  Desktop accepts OATS CLIs \`>=<floor>\`, tested through <X.Y>`, with the
+  Desktop and the CLI `in either order`. The page
+  states only this version's; the earlier ones stay in their notes. When the
   release's Upgrade section asks for more than the page's steps, the order
   of the Desktop and the CLI and an optional package pin, the pull request
   also adds the release's entry at the top of "Coming from an older
   version", one line that links its notes.
   `test/release-packaging.test.mjs` checks that the section names the
-  version the manifests carry and no other, and that the page's only band
-  is that version's Desktop's. The oats.setup skill `oats-upgrade` reads
+  version the manifests carry and no other, and states that version's
+  Desktop's accepted CLIs in the form above. The oats.setup skill `oats-upgrade` reads
   this page at the release's tag, so what the tag carries is what an upgrade
   follows.
 - **A tag is refused while anything is under `docs/release-notes/next/`:** by
@@ -480,7 +487,8 @@ always records `release.status: pending`.
 ## Releasing `oats.framework`
 
 The distribution package in `oats-package/` (`oats.core`, `oats.setup`,
-`oats.onboarding`, `oats.support`, `oats.knowledge-theory`) is not published
+`oats.onboarding`, `oats.coordination-setup`, `oats.support`,
+`oats.knowledge-theory`) is not published
 by `release.yml` or by this lane. A deployment takes it from this repository at the tag
 `oats-framework/v<version>`, through the catalog ref or its workspace pin. A
 skill changed under `oats-package/` therefore reaches deployments only when

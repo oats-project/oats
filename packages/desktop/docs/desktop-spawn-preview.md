@@ -33,8 +33,8 @@ catalog (`oats souls --json`); a catalog that could not be read, or a name it
 reports twice, refuses rather than falling back to the roster.
 Choices include purpose **or** name (exclusive; the kernel owns naming rules and
 refuses with `E_INSTANCE_NAME_INVALID`/`E_INSTANCE_NAME_TAKEN`). The spawn
-dialog sends a typed name as `name`, with the soul's role as its suffix
-(`nameWithRole`, `packages/client/instance-name.mjs`), when the CLI advertises
+dialog sends a typed name as `name`, lowercased and with nothing appended
+(`finalName` in `renderer/spawn-dialog.mjs`), when the CLI advertises
 `spawn-name` and, for a spawn on a server (`/api/spawn` with `serverId`), so
 does that host: the CLI relays host features (`server-probe-features`) and the
 server's registered roster group (`/api/team-members` `servers[].features`)

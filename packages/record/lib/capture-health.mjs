@@ -1,18 +1,21 @@
 // Package-owned offline diagnosis. No writable DB/store, lock acquisition,
 // manager, repair or capture; warnings never publish new run evidence.
+import { SEALED_AW_LOG_REASON } from "./capture-aw.mjs";
 import { homedir, hostname, platform as hostPlatform } from "node:os";
 import { join } from "node:path";
 import { readCaptureStatus } from "./capture-status.mjs";
 import { readCurrentIssueBacklog } from "./capture-issues.mjs";
 import { emptyFailureBacklog } from "./capture-failures.mjs";
 import { captureInstallation } from "./capture-health-installation.mjs";
-import { holderLiveness, readCaptureLockOwner, shellQuote } from "./capture-lock.mjs";
+import { readCaptureLockOwner, shellQuote } from "./capture-lock.mjs";
+import { holderLiveness } from "./lock-holder.mjs";
 
 const setAsideRemedy = (command, root) => `Restore the captured prefix and run ${command} capture --retry-set-aside; or add the source to ${root}/ignore (later turns from that session will not be captured). Retry revalidates; it never authorizes a changed prefix.`;
 export const SET_ASIDE_REMEDY = setAsideRemedy("turn-record", "<root>");
 // Retry re-reads an unchanged oversized record and sets it aside again: only an
 // edited source or an ignore of the whole input moves past it.
 const oversizedRemedy = (command, root) => `Edit the source so no record exceeds 8 MiB, leaving its captured prefix unchanged, then run ${command} capture --retry-set-aside; or add the whole input to ${root}/ignore, which discards the whole input, its records after the oversized one included, and later turns from that session.`;
+const sealedRemedy = (command, root) => `supply a readable source and run ${command} capture --retry-set-aside, or add the source to ${join(root, "ignore")}; retry cannot decrypt ciphertext.`;
 // The one rule for remedy wording: the kernel's own entry points say `oats`,
 // the standalone package says `turn-record`. Each entry point states which it is.
 export const captureRemedyCommand = viaKernel => viaKernel ? "oats" : "turn-record";
@@ -23,15 +26,16 @@ const time = value => typeof value === "string" ? Date.parse(value) : NaN;
 function deadExecution(root, run, host, liveness, now) {
   // A receipt has no host field. Never signal-probe its PID without matching
   // local registration. Both owner and worker must be dead: a live supervisor
-  // can still replace a child and finish this same pass. Reused/unknown PIDs
-  // and changed/foreign/hostless lock records supply no death evidence.
+  // can still replace a child and finish this same pass. A process that runs or
+  // cannot be read (holderLiveness judges each record), and changed/foreign/hostless
+  // lock records, supply no death evidence.
   const owner = readCaptureLockOwner(root), worker = owner?.worker;
   if (owner?.host !== host || worker?.host !== host || worker.pid !== run.pid ||
       !Number.isInteger(owner.pid) || owner.pid <= 0 || owner.pid === worker.pid ||
       typeof owner.nonce !== "string" || !owner.nonce || typeof worker.nonce !== "string" || !worker.nonce ||
       !(time(owner.startedAt) <= time(run.startedAt)) || !(time(worker.startedAt) >= time(owner.startedAt)) ||
       !(time(worker.startedAt) <= now)) return false;
-  if (liveness(owner.pid) !== "dead" || liveness(worker.pid) !== "dead") return false;
+  if (liveness(owner) !== "dead" || liveness(worker) !== "dead") return false;
   return JSON.stringify(readCaptureLockOwner(root)) === JSON.stringify(owner) &&
     JSON.stringify(readCaptureStatus(root, { now })?.lastRun) === JSON.stringify(run);
 }
@@ -75,11 +79,20 @@ function diagnose(root, { home = homedir(), platform = hostPlatform(), now = Dat
     // Remedies follow each listed entry's reason. Reasons beyond the bounded
     // sample are unknown here, so a truncated list says so rather than guess.
     const oversized = backlog.setAside.filter(entry => entry.reason === "record-too-large").length;
-    const others = backlog.setAsideCount - oversized, general = setAsideRemedy(command, root);
-    const message = !oversized ? general + (backlog.truncated ? ` Unlisted entries: see each entry's reason; record-too-large entries need: ${oversizedRemedy(command, root)}` : "") :
-      `${oversized} listed as record-too-large: ${oversizedRemedy(command, root)}` + (!others ? "" : backlog.truncated ?
-        ` The other ${others}, including unlisted entries: see each entry's reason; record-too-large entries need the edit-or-ignore remedy above. Otherwise: ${general}` :
-        ` The other ${others}: ${general}`);
+    const sealed = backlog.setAside.filter(entry => entry.reason === SEALED_AW_LOG_REASON).length;
+    const others = backlog.setAsideCount - oversized - sealed;
+    const general = setAsideRemedy(command, root), parts = [];
+    if (oversized) parts.push(`${oversized} listed as record-too-large: ${oversizedRemedy(command, root)}`);
+    if (sealed) parts.push(`${sealed} listed as ${SEALED_AW_LOG_REASON}: ${sealedRemedy(command, root)}`);
+    if (!parts.length) parts.push(general);
+    else if (others) {
+      if (backlog.truncated) {
+        const oversizedNote = oversized ? "record-too-large entries need the edit-or-ignore remedy above. " : "";
+        parts.push(`The other ${others}, including unlisted entries: see each entry's reason; ${oversizedNote}Otherwise: ${general}`);
+      } else parts.push(`The other ${others}: ${general}`);
+    }
+    if (backlog.truncated) parts.push(`Unlisted entries: see each entry's reason; record-too-large entries need: ${oversizedRemedy(command, root)} Sealed entries (${SEALED_AW_LOG_REASON}) need: ${sealedRemedy(command, root)}`);
+    const message = parts.join(" ");
     rows.push({ code: "capture-input-set-aside", message: `${backlog.setAsideCount} capture inputs set aside. ${message}` });
   }
 

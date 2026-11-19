@@ -1,7 +1,8 @@
 ---
 name: okf-authoring
 description: >-
-  Open Knowledge Format (OKF) authoring craft for knowledge-operations souls:
+  Open Knowledge Format (OKF) authoring craft for proposing instances and the
+  knowledge maintainer:
   how to write, edit, move and validate concepts in an OKF bundle (markdown
   concepts with YAML frontmatter, per Google Cloud's OKF v0.1 spec), keep
   index.md and log.md honest, supersede instead of silently rewriting, and run
@@ -107,6 +108,43 @@ node <skill-dir>/scripts/okf-validate.mjs <bundle-dir> --strict   # + producer l
 
 Lints in a bundle you're *consuming* are noise — read on regardless.
 
+## The subject layout (bridged bases, oats.okf 6.0)
+
+A base whose `okf-base.json` lists the reserved nodes `claims`, `subjects`
+and `verdicts` (each at its own path, owned by the sentinel
+`00000000-0000-0000-0000-000000000000`) is read by subject. There, in
+addition:
+
+- **Every claim and document carries `about: [<kind>/<slug>, ...]`**, one or
+  more subjects that have a file `subjects/<kind>/<slug>.md`; `kind:` where
+  its type has kinds (`Lesson` → `lesson`, `Conclusion` → `finding`,
+  `Limitation` → `constraint`, `Roadmap` → `direction`); and a stable
+  `id:`. Ids are stamped by the knowledge maintainer at acceptance, never by
+  a proposer; a claim under `claims/` without one does not validate, an
+  old-node claim without one is a `--strict` warning. A claim that proposes
+  again what a verdict rejected says so with `reconsiders: <id>`.
+- **Subjects** are `subjects/<system|workstream|project>/<slug>.md` with
+  `type: System | Workstream | Project`; `legacy-nodes: [...]` names the old
+  per-soul nodes a subject absorbs. Workstreams are structure and change only
+  on a person's cited acceptance.
+- **Verdicts** are `verdicts/<id>.md`, `type: Verdict`, written only by the
+  maintainer (fields in the README's "The subject layout").
+- Frontmatter stays flat: scalars and flow lists `[a, "b"]`.
+- **The indexes under `subjects/`, `verdicts/index.md` and the root
+  `index.md`'s `## Subjects` section are generated.** Never edit them by
+  hand: run the regenerator after any change, and commit what it writes.
+
+```bash
+node <skill-dir>/scripts/okf-reindex.mjs <bundle-dir>           # write the generated indexes
+node <skill-dir>/scripts/okf-reindex.mjs <bundle-dir> --check   # exit 1 when stale
+```
+
+On such a base the validator also refuses a missing, empty or unknown
+`about`, a misplaced or mistyped subject or verdict, a duplicate `id`, and
+(with `--strict`) a generated index that differs from the regenerator's
+output. A base on the accepted branch with a `--strict` warning is invalid for
+every 6.0 reader, so regenerate and validate the whole base before a merge.
+
 ## Screening and publication
 
 Structural validation is not a content screen. Before publishing, read
@@ -122,7 +160,7 @@ v1 removals close/delete the branch and route remaining exposure privately.
 
 When the portable binding interface is active (planned OATS >=0.24.0; not yet a
 published provider baseline), treat the source declaration as policy and the
-captured ProviderBinding as execution authority:
+bound ProviderBinding as execution authority:
 
 - In `oats.okf.locations@1`, `fixed` is source-owned, `default` is rebindable,
   and `inherit` requires an external binding such as `write.default`.
@@ -138,21 +176,23 @@ captured ProviderBinding as execution authority:
 - Provider codecs run only after exact retained executable approval. Their
   populated binding is not proof of readiness, enrollment, credentials, privacy
   or publication authority. Respect typed non-ready results.
-- oats.okf 5.0 keeps no source descriptors, captured custody or harvest
-  workers: knowledge is proposed at checkpoints and a harvester opens a
-  reviewed PR. No source gets a scheduler job.
-- Captured `setup`, `init`, `migrate`, and `unlock` are deliberate refusals.
-  Provisioning/migration remains a separate explicit operator path.
+- oats.okf 6 keeps no source descriptors, captured custody or harvest
+  workers, and no harvest soul: the instance proposes its knowledge at checkpoints with
+  `oats okf propose`, which opens a reviewed PR. No source gets a scheduler
+  job.
+- Provisioning and migration (`setup`, `init`, `migrate`, `unlock`) remain a
+  separate explicit operator path.
 
 The broker-owned `binding-normalize`, `binding-bind`, and `binding-check`
 manifest commands are not manual recipes. Do not invoke them from a working
-agent or copy a transient `OATS_BINDING_FILE` path. That private mode-0600
-file exists only for one synchronous invocation.
+agent. oats.okf reads no captured binding: a set `OATS_BINDING_FILE` is
+ignored, with a warning naming it.
 
 ## External bases and native tools
 
-A harvester edits only the owned nodes in its own clone of the accepted
-base. A maintainer amends a PR branch in its own checkout. Either way,
+A proposing instance edits only its owned nodes and the base root
+`index.md`, in the clone `oats okf propose --plan` made of the accepted base.
+A maintainer amends a PR branch in its own checkout. Either way,
 validate the WHOLE base with `--strict`, not an isolated node: absolute
 Markdown links can cross node boundaries. Publish nothing that has errors or
 producer warnings.

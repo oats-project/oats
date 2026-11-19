@@ -7,6 +7,7 @@ import { mountSpawn, settle, deferred, kernel, checkoutSoul, catalogAgents, ROOT
 import { cli as CLI } from './helpers/spawn-preview-fixture.mjs';
 import { creation } from './helpers/spawn-apply-fixture.mjs';
 import { defaultSpawnChoices } from '../../client/spawn-preview-contract.mjs';
+import * as spawn from '../renderer/views/spawn.mjs';
 
 const last = u => u.previews().at(-1)?.choices;
 const created = (name = 'preview-worktree-purpose') => kernel(name).result;
@@ -305,18 +306,30 @@ const RELAYING = { ...structuredClone(CLI), features: [...CLI.features, 'server-
 test('a spawn on a server whose host advertises spawn-name is named as a local one: no prefix, the final name, sent as name alone', async t => {
   const remote = [];
   const u = await mountSpawn(t, { spawnName: true, cli: RELAYING, servers: [HOST], teamMembers: hostFacts(['spawn-preview-2', 'spawn-name']),
-    remote: body => { remote.push(body); return { instance: 'api-v2-manager', server: 'build' }; } });
+    remote: body => { remote.push(body); return { instance: 'api-v2', server: 'build' }; } });
   await u.open(); u.q('.spawn-advanced').open = true;
   await u.change('.fserver', 'build'); const before = u.previews().length;
   assert.ok(u.q('.spawn-name-input').classList.contains('unprefixed'), 'no <soul>- prefix');
-  assert.equal(u.q('.fpurpose').placeholder, 'e.g. desktop-improvements');
+  assert.equal(u.q('.fpurpose').placeholder, 'e.g. pricing-page-lead');
   assert.equal(u.text('.spawn-name-result'), 'Named by build when it spawns.', 'neither this CLI nor the host names it from its task');
   await u.type('.fpurpose', 'API-v2');
-  assert.equal(u.text('.spawn-name-result'), 'Instance name: api-v2-manager', 'lowercased, with the soul\'s role once');
+  assert.equal(u.text('.spawn-name-result'), 'Instance name: api-v2', 'lowercased, nothing appended');
   assert.equal(u.previews().length, before, 'still decided on the host: no local preview');
   await u.spawn();
   assert.equal(remote.length, 1); assert.equal(remote[0].serverId, 'build');
-  assert.equal(remote[0].name, 'api-v2-manager'); assert.equal(Object.hasOwn(remote[0], 'purpose'), false, 'never a purpose beside the name');
+  assert.equal(remote[0].name, 'api-v2'); assert.equal(Object.hasOwn(remote[0], 'purpose'), false, 'never a purpose beside the name');
+});
+
+test('a remote spawn with typed pricing-page-lead sends name: "pricing-page-lead"', async t => {
+  const remote = [];
+  const u = await mountSpawn(t, { spawnName: true, cli: RELAYING, servers: [HOST], teamMembers: hostFacts(['spawn-preview-2', 'spawn-name']),
+    remote: body => { remote.push(body); return { instance: body.name, server: 'build' }; } });
+  await u.open(); u.q('.spawn-advanced').open = true;
+  await u.change('.fserver', 'build');
+  await u.type('.fpurpose', 'pricing-page-lead');
+  assert.equal(u.text('.spawn-name-result'), 'Instance name: pricing-page-lead');
+  await u.spawn();
+  assert.equal(remote.length, 1); assert.equal(remote[0].name, 'pricing-page-lead');
 });
 
 test('a spawn on a server is a purpose with its prefix, as before, unless both sides are known to take an exact name', async t => {
@@ -343,18 +356,18 @@ test('a soul listed from a server finds its host the same way: a host with spawn
   const remote = [];
   const agents = [{ name: 'builder', description: 'Builds on the host', kind: 'persistent', work: 'worktree', agentsRoot: '/srv/team/agents', server: 'build', repoName: 'team' }];
   const u = await mountSpawn(t, { agents, spawnName: true, cli: RELAYING, teamMembers: hostFacts(['spawn-name']),
-    remote: body => { remote.push(body); return { instance: 'nightly-builder', server: 'build' }; } });
+    remote: body => { remote.push(body); return { instance: 'nightly', server: 'build' }; } });
   await u.open('builder'); await settle(20);
   assert.ok(u.q('.spawn-name-input').classList.contains('unprefixed'));
   await u.type('.fpurpose', 'nightly');
-  assert.equal(u.text('.spawn-name-result'), 'Instance name: nightly-builder');
+  assert.equal(u.text('.spawn-name-result'), 'Instance name: nightly');
   await u.spawn();
-  assert.equal(remote[0].name, 'nightly-builder'); assert.equal(Object.hasOwn(remote[0], 'purpose'), false);
+  assert.equal(remote[0].name, 'nightly'); assert.equal(Object.hasOwn(remote[0], 'purpose'), false);
   assert.equal(u.previews().length, 0, 'still no local preview for a remote soul');
 });
 
 test('the host\'s name refusal is said next to the Name field, as a local one is; nothing is created and an edit clears it', async t => {
-  const message = 'instance name "api-v2-manager" is taken';
+  const message = 'instance name "api-v2" is taken';
   const u = await mountSpawn(t, { spawnName: true, cli: RELAYING, servers: [HOST], teamMembers: hostFacts(['spawn-name']),
     remote: () => { throw Object.assign(new Error(message), { code: 'E_INSTANCE_NAME_TAKEN' }); } });
   await u.open(); u.q('.spawn-advanced').open = true;
@@ -365,7 +378,7 @@ test('the host\'s name refusal is said next to the Name field, as a local one is
   assert.equal(u.text('.fstatus'), `Couldn’t spawn on build: ${message}`); assert.equal(u.q('.fstatus').dataset.code, 'E_INSTANCE_NAME_TAKEN');
   assert.equal(u.q('.fspawn').textContent, 'Spawn', 'nothing was created: Spawn is offered again');
   await u.type('.fpurpose', 'api-v3');
-  assert.equal(u.q('.spawn-name-result').classList.contains('err'), false); assert.equal(u.text('.spawn-name-result'), 'Instance name: api-v3-manager');
+  assert.equal(u.q('.spawn-name-result').classList.contains('err'), false); assert.equal(u.text('.spawn-name-result'), 'Instance name: api-v3');
 });
 
 test('a host\'s late name refusal speaks only for the name it refused: a name edited meanwhile is not marked taken', async t => {
@@ -375,9 +388,9 @@ test('a host\'s late name refusal speaks only for the name it refused: a name ed
   await u.change('.fserver', 'build'); await u.type('.fpurpose', 'api-v2');
   const pressed = u.spawn();
   await u.type('.fpurpose', 'api-v3');
-  reply.reject(Object.assign(new Error('instance name "api-v2-manager" is taken'), { code: 'E_INSTANCE_NAME_TAKEN' })); await pressed; await settle();
+  reply.reject(Object.assign(new Error('instance name "api-v2" is taken'), { code: 'E_INSTANCE_NAME_TAKEN' })); await pressed; await settle();
   assert.equal(u.q('.fstatus').dataset.code, 'E_INSTANCE_NAME_TAKEN', 'the footer reports the refusal');
-  assert.equal(u.q('.spawn-name-result').classList.contains('err'), false); assert.equal(u.text('.spawn-name-result'), 'Instance name: api-v3-manager');
+  assert.equal(u.q('.spawn-name-result').classList.contains('err'), false); assert.equal(u.text('.spawn-name-result'), 'Instance name: api-v3');
   await u.type('.fpurpose', 'api-v2');
   assert.equal(u.q('.spawn-name-result').classList.contains('err'), false, 'an edit clears it, as for a local refusal');
 });
@@ -462,7 +475,7 @@ test('choosing another soul keeps the typed name and instruction', async t => {
 });
 
 // The name (decided 2026-10-20): optional and the form's last field (the Opening instruction is its first); with spawn-name a typed name goes as
-// --name <typed>-<role> (packages/client/instance-name.mjs); an older kernel keeps --purpose with the prefix shown.
+// --name exactly as typed, lowercased, nothing appended (decided 2026-11-12); an older kernel keeps --purpose with the prefix shown.
 test('the name is optional and the last field, before Developer settings, the Opening instruction the first; no prefix switch', async t => {
   const u = await mountSpawn(t, { spawnName: true });
   await u.open();
@@ -475,52 +488,53 @@ test('the name is optional and the last field, before Developer settings, the Op
   assert.equal(label.htmlFor, 'spawn-purpose'); assert.equal(label.firstChild.textContent, 'Name '); assert.equal(label.querySelector('small').textContent, '· optional');
   assert.equal(u.q('.spawn-prefix-toggle'), null); assert.equal(u.q('.fprefix'), null);
   assert.ok(u.q('.spawn-name-input').classList.contains('unprefixed'), 'no <soul>- prefix where the name goes as --name');
-  assert.equal(u.q('.fpurpose').placeholder, 'e.g. desktop-improvements');
+  assert.equal(u.q('.fpurpose').placeholder, 'e.g. pricing-page-lead');
 });
 
-test('with spawn-name: empty is numbered by the kernel; a typed name gets the soul\'s role once and goes as --name', async t => {
-  // release-manager's role is "manager". The kernel answers the f3 --name capture with the name it was asked for.
+test('with spawn-name: empty is numbered by the kernel; a typed name goes as --name exactly as typed (lowercased), with no soul role', async t => {
+  // The kernel answers the f3 --name capture with the name it was asked for.
   const answer = choices => { const k = kernel('preview-name'); if (choices.name) { k.result.instance = choices.name; k.result.decision.instance = choices.name; } return choices.name ? k : kernel('preview-worktree-default'); };
-  const u = await mountSpawn(t, { spawnName: true, kernel: (_c, { choices }) => answer(choices) });
-  await u.open(); await settle(20);
+  const agents = [...catalogAgents(), { ...catalogAgents().find(a => a.name === 'release-manager'), name: 'oats-desktop-expert', description: 'Leads the Desktop.' }];
+  const u = await mountSpawn(t, { spawnName: true, agents, kernel: (_c, { choices }) => answer(choices) });
+  await u.open('oats-desktop-expert'); await settle(20);
   assert.equal(u.text('.spawn-name-result'), 'Left empty, the kernel numbers it.', 'only what is true now, never the preview\'s number');
   assert.deepEqual(last(u), { model: { kind: 'inherit' }, relation: { kind: 'unrelated' } }, 'nothing sent for an empty name');
-  await u.type('.fpurpose', 'api-v2');
-  assert.deepEqual(last(u), { name: 'api-v2-manager', model: { kind: 'inherit' }, relation: { kind: 'unrelated' } });
-  assert.equal(u.text('.spawn-name-result'), 'Instance name: api-v2-manager'); assert.equal(u.q('.spawn-name-result strong').textContent, 'api-v2-manager');
-  for (const typed of ['api-manager', 'manager']) {
-    await u.type('.fpurpose', typed);
-    assert.equal(last(u).name, typed, `${typed}: no double suffix`); assert.equal(u.q('.spawn-name-result strong').textContent, typed);
-  }
-  assert.equal(last(u).purpose, undefined, 'this dialog no longer sends --purpose here');
+  await u.type('.fpurpose', 'desktop-improvements');
+  assert.deepEqual(last(u), { name: 'desktop-improvements', model: { kind: 'inherit' }, relation: { kind: 'unrelated' } });
+  assert.equal(u.text('.spawn-name-result'), 'Instance name: desktop-improvements'); assert.equal(u.q('.spawn-name-result strong').textContent, 'desktop-improvements');
   // --name is used exactly as given (the kernel slugs a purpose, not a name): what is typed is lowercased first.
-  await u.type('.fpurpose', 'Desktop-Improvements');
-  assert.equal(last(u).name, 'desktop-improvements-manager'); assert.equal(u.q('.spawn-name-result strong').textContent, 'desktop-improvements-manager');
-  assert.equal(u.q('.fpurpose').value, 'Desktop-Improvements', 'the field keeps what was typed');
-  await u.type('.fpurpose', 'API-Manager');
-  assert.equal(last(u).name, 'api-manager', 'lowercased before the role check: no double suffix');
+  await u.type('.fpurpose', 'Pricing-Page-Lead');
+  assert.equal(last(u).name, 'pricing-page-lead'); assert.equal(u.q('.spawn-name-result strong').textContent, 'pricing-page-lead');
+  assert.equal(u.q('.fpurpose').value, 'Pricing-Page-Lead', 'the field keeps what was typed');
+  // A name that already ends in the soul's role, or is its role, is as typed too.
+  for (const typed of ['desktop-improvements-expert', 'expert']) { await u.type('.fpurpose', typed); assert.equal(last(u).name, typed); }
+  assert.equal(last(u).purpose, undefined, 'this dialog no longer sends --purpose here');
   await u.type('.fpurpose', ''); await settle(20);
   assert.equal(u.text('.spawn-name-result'), 'Left empty, the kernel numbers it.');
 });
 
-test('with spawn-name the 64-character cap runs on the final name, suffix included; a kernel refusal shows at the field', async t => {
-  const u = await mountSpawn(t, { spawnName: true, kernel: (_c, { choices }) => choices.name === 'api-gateway-manager' ? kernel('preview-name-taken') : kernel('preview-worktree-default') });
+test('with spawn-name the 64-character cap runs on the typed name itself; a kernel refusal shows at the field', async t => {
+  const u = await mountSpawn(t, { spawnName: true, kernel: (_c, { choices }) => choices.name === 'api-gateway' ? kernel('preview-name-taken') : kernel('preview-worktree-default') });
   await u.open(); await settle(20);
-  const before = u.previews().length, room = 64 - '-manager'.length;
-  await u.type('.fpurpose', 'a'.repeat(room + 1)); await settle(20);
+  const before = u.previews().length;
+  await u.type('.fpurpose', 'a'.repeat(65)); await settle(20);
   assert.match(u.text('.spawn-name-result'), /^Instance names are at most 64 characters\. Shorten the name\.$/); assert.equal(u.q('.fspawn').disabled, true);
   assert.equal(u.previews().length, before, 'never sent');
-  await u.type('.fpurpose', 'a'.repeat(room)); await settle(20);
-  assert.equal(last(u).name, `${'a'.repeat(room)}-manager`); assert.equal(last(u).name.length, 64);
-  // A typed name that already ends in the role is capped as typed.
-  await u.type('.fpurpose', `${'b'.repeat(57)}-manager`); await settle(20);
-  assert.match(u.text('.spawn-name-result'), /at most 64 characters/);
+  await u.type('.fpurpose', 'a'.repeat(64)); await settle(20);
+  assert.equal(last(u).name, 'a'.repeat(64), 'room for the whole typed name: nothing is appended');
   // The kernel's own refusal of a name taken in the deployment (the f3 capture's E_INSTANCE_NAME_TAKEN), beside the field.
   await u.type('.fpurpose', 'api-gateway'); await settle(20);
-  assert.deepEqual(last(u), { name: 'api-gateway-manager', model: { kind: 'inherit' }, relation: { kind: 'unrelated' } });
+  assert.deepEqual(last(u), { name: 'api-gateway', model: { kind: 'inherit' }, relation: { kind: 'unrelated' } });
   assert.equal(u.text('.spawn-name-result'), 'An instance with this name already exists. Choose another name.');
   assert.equal(u.text('.fstatus'), '', 'said once, next to the name');
   assert.ok(u.q('.spawn-name-result').classList.contains('err')); assert.equal(u.q('.fspawn').disabled, true);
+});
+
+test('a restored draft of { name: "pricing-page-lead" } puts pricing-page-lead back in the field and sends it unchanged', async t => {
+  const u = await mountSpawn(t, { spawnName: true });
+  spawn.preselectSpawn({ name: 'release-manager', agentsRoot: ROOT, draft: { layout: 'scoped', restore: { choices: { name: 'pricing-page-lead' } } } }); await settle(20);
+  assert.equal(u.q('.fpurpose').value, 'pricing-page-lead');
+  assert.equal(last(u).name, 'pricing-page-lead');
 });
 
 test('an older kernel without spawn-name keeps --purpose, the <soul>- prefix shown and today\'s hint', async t => {

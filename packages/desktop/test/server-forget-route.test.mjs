@@ -12,7 +12,7 @@ import { cliServerForget } from '../../client/cli-adapter.mjs';
 import { createRefreshLoop } from '../../client/refresh-loop.mjs';
 import { remoteRosterState } from '../../client/remote-roster.mjs';
 import { classifyApiRoute } from '../api-url.mjs';
-import { loadServer, juanState, CLI } from './helpers/workspace-views-fixture.mjs';
+import { loadServer, alexState, CLI } from './helpers/workspace-views-fixture.mjs';
 import { shippedMainApi } from './helpers/shipped-main-api.mjs';
 
 const ROUTE = '/api/server-forget';
@@ -45,7 +45,7 @@ async function serve({ answer, cli = CLI, adapter, reader, held = () => HELD } =
   const serverForget = createServerForget({ cli: () => cli, held,
     adapter: adapter ?? { cliServerForget: (bin, args) => cliServerForget(bin, args, { exec: run.exec }) } });
   const reads = reader ?? { after: () => { rereads.push(1); return Promise.resolve(); }, refresh: () => Promise.resolve() };
-  const { request } = await loadServer(juanState().state, { serverForget, forgetNotRun,
+  const { request } = await loadServer(alexState().state, { serverForget, forgetNotRun,
     refreshRemoteSnapshotAfter: reads.after, refreshRemoteSnapshot: reads.refresh });
   const post = (body, extra = {}) => request({ url: ROUTE, method: 'POST', body, ...extra });
   return { post, request, run, rereads };
@@ -231,7 +231,7 @@ test('with the server\'s refresh loop owning a read in flight, the same: one mor
 test('the route keeps the proxy\'s ordinary deadline, which outlasts the forget call', async () => {
   let limit;
   await cliServerForget('/oats', { server: 'build', instance: 'dev-a' }, { exec: (_bin, _argv, opts, done) => { limit = opts.timeout; done(null, JSON.stringify(OK)); } });
-  assert.equal(classifyApiRoute(ROUTE, 'http://127.0.0.1:4999'), null, 'no class of its own');
+  assert.equal(classifyApiRoute(ROUTE), null, 'no class of its own');
   const api = shippedMainApi({ window: '/d/first', advertised: new Set(['/d/first']), served: [{ id: '/d/first' }] });
   const seen = [];
   api.context.AbortSignal = { timeout: ms => { seen.push(ms); return { ms }; } };

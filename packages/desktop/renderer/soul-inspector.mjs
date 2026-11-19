@@ -22,7 +22,7 @@ import { postJson, wsQuery, workspaceGeneration, rowDeployment } from './views/c
 import { runtimeState } from '../../client/instance-presentation.mjs';
 import { createSoulMark, createRuntimeBadge } from './identity-marks.mjs';
 import { createReadinessView, readinessCSS } from './readiness-view.mjs';
-import { cliStatus } from './views/cli-status.mjs';
+import { cliStatus, cliHeldBack } from './views/cli-status.mjs';
 import { iconElement } from './shell-icons.mjs';
 import { inspectData, inspectFacts, originText } from '../../client/inspect-contract.mjs';
 import { createTeamsPanel, teamsOperations, teamsCSS, soulTeams, teamLabels } from './teams-panel.mjs';
@@ -235,7 +235,11 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
     if (typeof run === 'function') b.addEventListener('click', event => { if (b.getAttribute('aria-disabled') !== 'true') run(event); });
     return b;
   };
-  const mutationButton = (text, run) => { const control = button(text, run); control.dataset.mutate = '1'; control.disabled = !available(); return control; };
+  // A provider operation's Run (or View) is a capability run: held back above the tested bound (#1879), with the
+  // notice as its title (packages/client/above-tested.mjs). The backend refuses it too.
+  const runHeld = () => cliHeldBack('POST /api/capabilities run');
+  const holdRun = control => { const held = runHeld(); if (held) { control.disabled = true; control.title = held; } return control; };
+  const mutationButton = (text, run) => { const control = button(text, run); control.dataset.mutate = '1'; control.disabled = !available(); return holdRun(control); };
   // Stale (the last inspection failed, the content kept): mutations that act on the subject wait for a good read —
   // the roster's rule (ROSTER_STALE_TITLE), with an accessible reason; Launch, Schedule and Files come from the roster and stay.
   // `settled`, not `state`: a Retry or Refresh in flight is `refreshing` while the content is still the stale observation.
@@ -906,7 +910,7 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
   function syncAvailability() {
     syncReadiness(); teamsPanel?.sync();
     if (!selection || !content) return;
-    for (const control of content.querySelectorAll('[data-mutate]')) { control.disabled = pendingOperations.has(control) || !available() || selectionGen !== workspaceGeneration(); markStale(control); }
+    for (const control of content.querySelectorAll('[data-mutate]')) { control.disabled = pendingOperations.has(control) || !available() || selectionGen !== workspaceGeneration(); markStale(control); holdRun(control); }
     for (const control of container.querySelectorAll('[data-launch]')) {
       control.disabled = !alive || selectionGen !== workspaceGeneration() || !canLaunch(selection.agent) || selection.agent?.work === 'attached' || !selection.agent?.agentsRoot;
       control.title = selection.agent?.work === 'attached' ? 'Attached only — requires an owning instance.' : control.disabled ? launchReason(selection.agent) : '';

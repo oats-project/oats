@@ -8,32 +8,29 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { createServer, Agent, request } from "node:http";
+import { Agent, request } from "node:http";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { once } from "node:events";
 import { serverSpawnSpec, LIFELINE_FLAG } from "../packages/desktop/server-host.mjs";
+import { backendRequest, backendSecret, privateSocketDir } from "../packages/desktop/test/helpers/backend-server.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DESKTOP = join(ROOT, "packages", "desktop");
 const BIN = join(DESKTOP, "server", "oats-web.mjs");
 const HERMETIC = { OATS_DESKTOP_OATS_BIN: "", PATH: "/nonexistent", SHELL: "/bin/false" };
 
-async function freePort() {
-  const s = createServer(); s.listen(0, "127.0.0.1"); await once(s, "listening");
-  const p = s.address().port; await new Promise((ok) => s.close(ok));
-  return p;
-}
 
 /** A pid that is running: signal 0 reaches it and (on Linux) it is not a zombie awaiting its reaper. */
 function alive(pid) {
   try { process.kill(pid, 0); } catch { return false; }
   try { return !/^\d+ \(.*\) Z/.test(readFileSync(`/proc/${pid}/stat`, "utf8")); } catch { return true; }
 }
-const answers = async (port) => {
-  try { return (await fetch(`http://127.0.0.1:${port}/api/panel`, { signal: AbortSignal.timeout(500) })).ok; } catch { return false; }
+/** Whether the server answers an authorized request on its socket. */
+const answers = async ({ socketPath, secret }) => {
+  try { return (await backendRequest(socketPath, { path: "/api/panel", headers: { host: "localhost", authorization: `Bearer ${secret}` }, signal: AbortSignal.timeout(500) })).ok; } catch { return false; }
 };
 async function until(probe, ms) {
   const end = Date.now() + ms;
@@ -44,27 +41,28 @@ async function until(probe, ms) {
   }
 }
 
-/** The spec main uses, for a hermetic server on `port` serving nothing. */
-function productionSpec(dir, port) {
-  return serverSpawnSpec({ execPath: process.execPath, bin: BIN, dirs: [], port, oatsBin: null,
+/** The spec main uses, for a hermetic server on `socketPath` serving nothing. */
+function productionSpec(dir, socketPath) {
+  return serverSpawnSpec({ execPath: process.execPath, bin: BIN, dirs: [], socketPath, cliChoiceFile: join(dir, "oats-cli-choice.json"),
     pathSource: "inherited", pathError: null, remoteIdentityFile: join(dir, "remote-identity.json"), home: dir,
     env: { ...process.env, ...HERMETIC } });
 }
 
-// The stand-in for main: starts the server exactly as serverSpawnSpec says (and drains its output,
-// as main does), optionally a long-lived plain child and a node-pty child started AFTER the server's
-// pipe exists (the inheritance risk), then reports every pid and stays alive until killed.
+// The stand-in for main: starts the server exactly as main does (launchServerChild over serverSpawnSpec:
+// a private socket and a fresh credential on fd 3, its output drained as main drains it), optionally a
+// long-lived plain child and a node-pty child started AFTER the server's pipes exist (the inheritance
+// risk), then reports every pid, the socket and (to this test only) the credential, and stays alive until killed.
 const PARENT = `
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-const [specUrl, bin, dir, port, extra, desktop] = process.argv.slice(2);
-const { serverSpawnSpec } = await import(specUrl);
-const spec = serverSpawnSpec({ execPath: process.execPath, bin, dirs: [], port: Number(port), oatsBin: null,
-  pathSource: "inherited", pathError: null, remoteIdentityFile: dir + "/remote-identity.json", home: dir, env: process.env });
-const server = spawn(spec.command, spec.args, spec.options);
+const [specUrl, bin, dir, extra, desktop] = process.argv.slice(2);
+const { serverSpawnSpec, launchServerChild } = await import(specUrl);
+const launched = launchServerChild({ spawn, socketBase: dir, spec: (socketPath) => serverSpawnSpec({ execPath: process.execPath, bin, dirs: [], socketPath,
+  cliChoiceFile: dir + "/oats-cli-choice.json", pathSource: "inherited", pathError: null, remoteIdentityFile: dir + "/remote-identity.json", home: dir, env: process.env }) });
+const server = launched.child;
 server.stdin.on("error", () => {});
 server.stdout.resume(); server.stderr.resume();
-const pids = { parent: process.pid, server: server.pid };
+const pids = { parent: process.pid, server: server.pid, socketPath: launched.socketPath, secret: launched.secret };
 if (extra === "1") {
   pids.plain = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" }).pid;
   try {
@@ -82,8 +80,7 @@ async function startParent(t, { extra = false } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "oats-lifeline-"));
   const script = join(dir, "parent.mjs");
   writeFileSync(script, PARENT);
-  const port = await freePort();
-  const parent = spawn(process.execPath, [script, pathToFileURL(join(DESKTOP, "server-host.mjs")).href, BIN, dir, String(port),
+  const parent = spawn(process.execPath, [script, pathToFileURL(join(DESKTOP, "server-host.mjs")).href, BIN, dir,
     extra ? "1" : "0", DESKTOP], { stdio: ["ignore", "pipe", "inherit"], env: { ...process.env, ...HERMETIC } });
   const pids = { parent: parent.pid };
   t.after(() => {
@@ -92,37 +89,41 @@ async function startParent(t, { extra = false } = {}) {
   });
   let line = "";
   for await (const chunk of parent.stdout) { line += chunk; if (line.includes("\n")) break; }
-  Object.assign(pids, JSON.parse(line));
-  return { pids, port, parent };
+  const reported = JSON.parse(line);
+  const server = { socketPath: reported.socketPath, secret: reported.secret };
+  delete reported.socketPath; delete reported.secret;
+  Object.assign(pids, reported);
+  return { pids, server, parent };
 }
 
 test("serverSpawnSpec: main starts the server with the lifeline flag and its stdin as a pipe", () => {
-  const { args, options } = productionSpec("/fixture", 4820);
+  const { args, options } = productionSpec("/fixture", "/fixture/oats-d-x/s");
   assert.ok(args.includes(LIFELINE_FLAG), "the server is told its stdin is the lifeline");
   assert.equal(LIFELINE_FLAG, "--exit-on-stdin-close");
   assert.equal(options.stdio[0], "pipe", "never 'ignore': /dev/null is EOF at once");
+  assert.equal(options.stdio[3], "pipe", "fd 3 carries the credential");
   assert.equal(options.detached, undefined, "not detached");
-  assert.deepEqual(args.slice(0, 4), [BIN, "start", "--port", "4820"]);
+  assert.deepEqual(args.slice(0, 6), [BIN, "start", "--socket", "/fixture/oats-d-x/s", "--token-fd", "3"]);
 });
 
 test("REAL server started through the production spec exits within 5 s when its parent is SIGKILLed", async (t) => {
-  const { pids, port, parent } = await startParent(t);
-  assert.equal(await until(() => answers(port), 10000), true, "the server answers before the kill");
+  const { pids, server, parent } = await startParent(t);
+  assert.equal(await until(() => answers(server), 10000), true, "the server answers before the kill");
   assert.equal(alive(pids.server), true);
   process.kill(pids.parent, "SIGKILL");
   await once(parent, "exit");
   assert.equal(await until(() => !alive(pids.server), 5000), true, "server pid gone within 5 s");
-  assert.equal(await answers(port), false, "port closed");
+  assert.equal(await answers(server), false, "socket closed");
 });
 
 test("…and still exits while long-lived children of the parent (plain and node-pty) are alive", async (t) => {
-  const { pids, port, parent } = await startParent(t, { extra: true });
+  const { pids, server, parent } = await startParent(t, { extra: true });
   if (pids.ptyError) t.diagnostic(`node-pty unavailable, plain child only: ${pids.ptyError}`);
-  assert.equal(await until(() => answers(port), 10000), true, "the server answers before the kill");
+  assert.equal(await until(() => answers(server), 10000), true, "the server answers before the kill");
   process.kill(pids.parent, "SIGKILL");
   await once(parent, "exit");
   assert.equal(await until(() => !alive(pids.server), 5000), true, "server pid gone within 5 s");
-  assert.equal(await answers(port), false, "port closed");
+  assert.equal(await answers(server), false, "socket closed");
   assert.equal(alive(pids.plain), true, "the plain child still runs: it did not hold the lifeline open");
   if (pids.pty) assert.equal(alive(pids.pty), true, "the pty child still runs: it did not hold the lifeline open");
 });
@@ -130,34 +131,37 @@ test("…and still exits while long-lived children of the parent (plain and node
 /** The server started directly by this test, so its stdin is in the test's hands. */
 async function startDirect(t, { args, stdin }) {
   const dir = mkdtempSync(join(tmpdir(), "oats-lifeline-"));
-  const port = await freePort();
-  const spec = productionSpec(dir, port);
-  const child = spawn(spec.command, args(spec.args), { ...spec.options, stdio: [stdin, "pipe", "pipe"] });
+  const socket = privateSocketDir(), secret = backendSecret();
+  const spec = productionSpec(dir, socket.socketPath);
+  const child = spawn(spec.command, args(spec.args), { ...spec.options, stdio: [stdin, "pipe", "pipe", "pipe"] });
+  child.stdio[3].on("error", () => {}); child.stdio[3].end(secret);
+  const server = { socketPath: socket.socketPath, secret };
   let out = "";
   child.stdout.on("data", (d) => { out += d; }); child.stderr.on("data", (d) => { out += d; });
   t.after(() => {
     if (child.exitCode === null && child.signalCode === null) { try { child.kill("SIGKILL"); } catch { /* gone */ } }
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true }); socket.remove();
   });
-  assert.equal(await until(() => answers(port), 10000), true, "the server answers");
-  return { child, port, output: () => out };
+  assert.equal(await until(() => answers(server), 10000), true, "the server answers");
+  return { child, server, output: () => out };
 }
 
 for (const stdin of ["ignore", "pipe"]) {
   test(`without the flag (a server started by hand), stdin at EOF changes nothing: stdin ${stdin}`, async (t) => {
-    const { child, port } = await startDirect(t, { args: (a) => a.filter((x) => x !== LIFELINE_FLAG), stdin });
+    const { child, server } = await startDirect(t, { args: (a) => a.filter((x) => x !== LIFELINE_FLAG), stdin });
     if (stdin === "pipe") child.stdin.end();
     await new Promise((ok) => setTimeout(ok, 1500));
     assert.equal(child.exitCode, null, "still running");
-    assert.equal(await answers(port), true, "still answering");
+    assert.equal(await answers(server), true, "still answering");
   });
 }
 
 test("with the flag, EOF on stdin exits with code 0 and one log line, even with a keep-alive socket open", async (t) => {
-  const { child, port, output } = await startDirect(t, { args: (a) => a, stdin: "pipe" });
+  const { child, server, output } = await startDirect(t, { args: (a) => a, stdin: "pipe" });
   const agent = new Agent({ keepAlive: true });
   t.after(() => agent.destroy());
-  await new Promise((ok, bad) => request({ host: "127.0.0.1", port, path: "/api/version", agent }, (res) => { res.resume(); res.on("end", ok); }).on("error", bad).end());
+  await new Promise((ok, bad) => request({ socketPath: server.socketPath, path: "/api/version", agent,
+    headers: { host: "localhost", authorization: `Bearer ${server.secret}` } }, (res) => { res.resume(); res.on("end", ok); }).on("error", bad).end());
   const exited = once(child, "exit");
   child.stdin.end();
   const [code, signal] = await Promise.race([exited, new Promise((_, bad) => setTimeout(() => bad(new Error("no exit within 5 s")), 5000))]);

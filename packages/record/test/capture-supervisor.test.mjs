@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { superviseCapture, captureWorkerEnvironment, captureWorkerMessage, validWorkerResult } from '../lib/capture-supervisor.mjs';
-import { acquireCaptureLock, captureLockPath, holderLiveness, readCaptureLockOwner } from '../lib/capture-lock.mjs';
+import { acquireCaptureLock, captureLockPath, readCaptureLockOwner } from '../lib/capture-lock.mjs';
+import { holderLiveness } from '../lib/lock-holder.mjs';
 import { CAPTURE_POLICY } from '../lib/capture-budget.mjs';
 const workerURL = new URL('../lib/capture-worker.mjs', import.meta.url).href;
 const lockURL = new URL('../lib/capture-lock.mjs', import.meta.url).href;
@@ -40,7 +41,7 @@ test('worker starts after durable identity publication, with fixed heap and no i
   const seen = JSON.parse(readFileSync(join(f.root,'observed.json')));
   assert.equal(seen.owner.pid, process.pid); assert.ok(seen.owner.worker.pid > 0);
   assert.ok(seen.args.includes('--max-old-space-size=256')); assert.equal(seen.injected,null); assert.equal(seen.custom,null);
-  assert.equal(holderLiveness(seen.owner.worker.pid),'dead');
+  assert.equal(holderLiveness({pid:seen.owner.worker.pid}),'dead');
   assert.equal(existsSync(captureLockPath(f.root)),false);
   assert.equal(existsSync(join(f.root,'capture-status.json')),false,'supervisor never manufactures run evidence');
   assert.deepEqual(captureWorkerEnvironment({HOME:'fixture',NODE_OPTIONS:'evil'}),{HOME:'fixture'});
@@ -66,12 +67,12 @@ await runCaptureWorker(({root,budget})=>{
   let result = await superviseCapture(f.root,{}, {workerPath:f.workerPath,policy:shortPolicy,drainSeconds:0.3});
   assert.equal(result.outcome,'partial');assert.equal(result.reason,'deadline');assert.equal(result.exitCode,0);
   assert.ok(Number(readFileSync(join(f.root,'remaining'))) < 500,'250ms startup is deducted from the 700ms drain budget');
-  const pid = Number(readFileSync(join(f.root,'pid')));assert.equal(holderLiveness(pid),'dead');
+  const pid = Number(readFileSync(join(f.root,'pid')));assert.equal(holderLiveness({pid}),'dead');
   writeFileSync(f.workerPath,`import {runCaptureWorker} from ${JSON.stringify(workerURL)};import {writeFileSync} from 'node:fs';
 await runCaptureWorker(({root})=>{writeFileSync(root+'/pid',String(process.pid));while(true){} });`);
   result = await superviseCapture(f.root,{}, {workerPath:f.workerPath,policy:shortPolicy,drainSeconds:0.3});
   assert.deepEqual(result,{outcome:'failed',reason:'deadline',exitCode:1});
-  assert.equal(holderLiveness(Number(readFileSync(join(f.root,'pid')))),'dead');
+  assert.equal(holderLiveness({pid:Number(readFileSync(join(f.root,'pid')))}),'dead');
   assert.equal(existsSync(captureLockPath(f.root)),false);
 });
 
@@ -106,7 +107,7 @@ test('spawn and registration failures cannot start work and reap the paused chil
     }};
   }});
   assert.equal(result.outcome,'failed');assert.equal(result.reason,'io');
-  assert.equal(existsSync(join(f.root,'started')),false);assert.equal(holderLiveness(childPid),'dead');
+  assert.equal(existsSync(join(f.root,'started')),false);assert.equal(holderLiveness({pid:childPid}),'dead');
   assert.equal(existsSync(captureLockPath(f.root)),false);
 });
 
@@ -131,18 +132,18 @@ await superviseCapture(${JSON.stringify(f.root)}, {}, {workerPath:${JSON.stringi
     await until(()=>existsSync(join(f.root,'started')));
     workerPid=Number(readFileSync(join(f.root,'started')));
     parent.kill('SIGKILL');await ended;
-    assert.equal(holderLiveness(workerPid),'alive');
+    assert.equal(holderLiveness({pid:workerPid}),'alive');
     const held=acquireCaptureLock(f.root);assert.equal(held.release,undefined);
     await until(()=>existsSync(join(f.root,'orphan')));
     assert.equal(readFileSync(join(f.root,'orphan'),'utf8'),'interrupted');
-    await until(()=>holderLiveness(workerPid)==='dead');
+    await until(()=>holderLiveness({pid:workerPid})==='dead');
     const recovered=acquireCaptureLock(f.root);assert.equal(recovered.reclaimed.pid,parent.pid);
     assert.equal(recovered.release().released,true);
   } finally {
     if(parent.exitCode===null&&parent.signalCode===null){parent.kill('SIGKILL');await ended;}
     // The worker has its own bounded unit and exits on orphan detection; never
     // signal a persisted/reused PID to clean up this fixture.
-    if(workerPid)await until(()=>holderLiveness(workerPid)==='dead');
+    if(workerPid)await until(()=>holderLiveness({pid:workerPid})==='dead');
   }
 });
 

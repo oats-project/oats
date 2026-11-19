@@ -54,8 +54,8 @@ const d = ["--dir", dep, "--json"];
 
 // oats teams: the Desktop's argv (cliTeams).
 run("teams-initial", ["teams", ...d]);
-run("teams-add", ["teams", "add", "mine", "--team=mine:juan.aweb.ai", "--description=My own team", ...d]);
-run("teams-add-exists", ["teams", "add", "mine", "--team=mine:juan.aweb.ai", ...d], { expect: null });
+run("teams-add", ["teams", "add", "mine", "--team=mine:alex.aweb.ai", "--description=My own team", ...d]);
+run("teams-add-exists", ["teams", "add", "mine", "--team=mine:alex.aweb.ai", ...d], { expect: null });
 run("teams-add-shared", ["teams", "add", "engineering", "--team=eng:northwind.aweb.ai", ...d], { expect: null });
 run("teams-default", ["teams", "default", "mine", ...d]);
 // oats soul teams: the Desktop's argv (cliSoulTeams).

@@ -1,0 +1,14 @@
+{
+  "capability": "oats.build",
+  "version": "4.0.2",
+  "compatibility": {
+    "oats": ">=0.69.7"
+  },
+  "description": "What the team adds to building a change, for whoever builds it: a developer, or a lead or a specialist that builds its own spec. Skills only, with no inject: the builder's role says when to use them. Three skills: build-in-the-repository (the repository's own rules win, extra worktrees made from the remote, one author for a change and its tests, a harness workflow only on the person's opt-in, three failed fixes then ask, proof by the repository's own gate with the evidence named), run-the-review-loop (a fresh code-reviewer each round, on a model at or above the floor and different from the author's, until a round finds nothing to fix; the cap of 4 rounds; the hand-back) and work-the-reviews (the PR from its verified head to merge: every finding answered, the review each new head needs, the hand-back at a ready head). General engineering practice a current model follows unprompted is not restated. Copied from the engineering template, template-v4.0.2.",
+  "requires": [],
+  "skills": [
+    "skills/build-in-the-repository",
+    "skills/run-the-review-loop",
+    "skills/work-the-reviews"
+  ]
+}

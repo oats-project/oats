@@ -2,6 +2,7 @@
 // close/workspace functions and terminal lifecycle. Only IPC, xterm and module
 // loading are synthetic. No Electron, processes, sockets or operator sessions.
 import test from "node:test";
+import { createLaunchFocus } from "../renderer/launch-focus.mjs";
 import { createInstanceRecency, recencyIdFromTerminalKey } from "../renderer/instance-recency.mjs";
 import { viewContext } from "./helpers/view-context.mjs";
 import assert from "node:assert/strict";
@@ -105,7 +106,7 @@ function shell(t, { shellSource = source, ownership = createSelectionOwnership, 
     // Keep identity resolution out of this test; keys/targets remain distinct.
     resolveTerminalOpen: (instances, ref, ws) => ({ inst: { instance: ref, running: true, tmux: { session: "synthetic", window: ref } }, key: `${ws}:${ref}` }),
     ctx: {}, reserveKey, whenKeyFree, createViewLifecycle, createTabChrome, tabKeyAction, focusAfterLastTab, tabNameTailStart, setTabTitle,
-    createSelectionOwnership: ownership, wirePaneSelection, terminalOptions, wireTerminalSelection: () => () => {}, fitTerminal, createGlyphRenderer,
+    createLaunchFocus, createSelectionOwnership: ownership, wirePaneSelection, terminalOptions, wireTerminalSelection: () => () => {}, fitTerminal, createGlyphRenderer,
     ...workspaceTabs, ...layout, projectSplitDom, splitControlsState,
     // tabs.close also goes into the real keymap: the strip's close chord is the keymap's, not tab-a11y's.
     registerAction: action => { actions.set(action.id, action.run); if (action.id === "tabs.close") t.after(keymap.registerAction(action)); },
@@ -839,4 +840,46 @@ test("the leader's ← / → in a split: an empty or one-tab focused group says 
   s.c.said.length = 0; press("ArrowRight");
   assert.deepEqual(s.c.said, []);
   assert.equal(s.c.activeTab, C, "two tabs in the focused group: → moves within it");
+});
+
+
+test('launch opens a new or retained terminal without keyboard focus, including after attachment', async t => {
+  for (const retained of [false, true]) {
+    const s = shell(t, { leader: true });
+    const row = { instance: 'launch-probe', agent: 'dev', home: '/fixture/agents/dev/instances/launch-probe',
+      agentsRoot: '/fixture/agents', deployment: { id: '/fixture' }, running: true,
+      tmux: { session: 'synthetic', window: 'launch-probe' } };
+    s.c.contextInstances = [row];
+    s.renderContextRoster([row]);
+    if (retained) {
+      const opened = s.c.openTerminalTab(row);
+      s.requests.at(-1).resolve({ instances: [row] }); await flush();
+      s.attachments.at(-1).resolve({ id: 201 }); await opened;
+    }
+    s.c.tabOpenIntents = s.tabOpenIntents;
+    s.c.heldHome = instanceTree.heldHome;
+    s.c.showInRoster = s.showInRoster;
+    s.c.operator = { input: () => 0, pointer: () => 0 };
+    s.c.notifications = { notify: message => assert.fail(message) };
+    s.c.shownRoster = { gen: 0, ws: 'A', instances: [row], read: 1 };
+    s.c.openTerminalTab = (ref, opts) => s.openTerminalTabFlow(ref, message => assert.fail(message), opts);
+    s.c.alert = message => assert.fail(message);
+    const creation = source.slice(source.indexOf("// A launch's --instance (launch-focus.mjs): its row is selected"),
+      source.indexOf('// Persistent recursive instance tree'));
+    const focus = runInNewContext(`${creation}\nlaunchFocus`, s.c);
+    t.after(() => focus.dispose());
+    focus.request({ deployment: '/fixture', name: 'launch-probe' });
+    focus.observe([row]); await flush();
+    const input = s.terms.at(-1).input;
+    assert.equal(s.c.tabs.size, 1);
+    assert.equal(s.c.tabs.get(s.c.activeTab).instanceRef.instance, row.instance);
+    assert.equal(s.document.activeElement.dataset.treeInstance, s.c.instanceId(row));
+    assert.equal(input.contains(s.document.activeElement), false);
+    if (!retained) { s.attachments.at(-1).resolve({ id: 202 }); await flush(); }
+    assert.equal(s.document.activeElement.dataset.treeInstance, s.c.instanceId(row), 'readiness keeps focus on the row');
+    assert.equal(s.attachments.length, 1, 'retained opens attach once');
+    assert.equal(s.terms.at(-1).focuses, retained ? 1 : 0, 'launch adds no input focus');
+    s.focusActiveTerminal();
+    assert.equal(s.document.activeElement, input, 'the existing explicit focus action still enters the terminal');
+  }
 });

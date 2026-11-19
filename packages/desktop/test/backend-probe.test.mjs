@@ -3,7 +3,7 @@
 // executable, server/oats-web.mjs for the asar's entry and ../client/liveness-main.mjs for the
 // collector beside it (the shared home, packages/client). The
 // backend is started through the real serverSpawnSpec, with no CLI discoverable. Failure paths
-// use tiny fixture servers started through the same spec (they read --port from its argv), or
+// use tiny fixture servers started through the same spec (they listen on the --socket in its argv and print the ready line), or
 // the real server with the lifeline flag dropped from the spec. Every process goes through a
 // real reaper; each test checks, by exact pid, that the probe left none running.
 import { test } from "node:test";
@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createReaper } from "../scripts/proc-reaper.mjs";
-import { runBackendProbe, runMainImportsProbe, relativeImportsOf, sharedHomeInventory, packagedNode, NO_CLI_ENV } from "../scripts/smoke-probes.mjs";
+import { runBackendProbe, runMainImportsProbe, relativeImportsOf, sharedHomeInventory, packagedNode, unexpectedTcpListeners, NO_CLI_ENV } from "../scripts/smoke-probes.mjs";
 import { serverSpawnSpec, LIFELINE_FLAG } from "../server-host.mjs";
 
 const SERVER = fileURLToPath(new URL("../server/", import.meta.url));
@@ -59,11 +59,11 @@ function fixtures(t, files) {
   for (const [name, source] of Object.entries(files)) writeFileSync(join(dir, name), source);
   return (name) => join(dir, name);
 }
-// A server that answers on the spec's --port and, at EOF on stdin, exits 3.
+// A server that answers on the spec's --socket, says it is ready and, at EOF on stdin, exits 3.
 const EXITS_3 = `
 import { createServer } from "node:http";
-const port = Number(process.argv[process.argv.indexOf("--port") + 1]);
-createServer((req, res) => res.end("{}")).listen(port, "127.0.0.1");
+const socket = process.argv[process.argv.indexOf("--socket") + 1];
+createServer((req, res) => res.end("{}")).listen(socket, () => process.stdout.write("oats-desktop-server ready\\n"));
 process.stdin.on("data", () => {});
 process.stdin.on("end", () => process.exit(3));
 `;
@@ -83,10 +83,12 @@ test("success: the backend answers, exits when its stdin closes, and the collect
   for (const [name, value] of Object.entries(NO_CLI_ENV)) assert.equal(o.env[name], value, `${name}: no CLI discoverable`);
   assert.equal(o.env.HOME, o.home, "a temporary home");
   assert.equal(existsSync(o.home), false, "the temporary home is removed");
-  assert.match(r.lines[0], /^backend: .*oats-web\.mjs started through serverSpawnSpec .* answered GET \/api\/cli \(HTTP \d{3}\)$/);
-  assert.match(r.lines[1], /^lifeline \(#698\): closing the backend's stdin ended it \(exit 0\) and closed port \d+$/);
-  assert.match(r.lines[2], /^collector: .*liveness-main\.mjs .* answered \[\] to \[\]$/);
-  assert.match(r.lines[3], /^not exercised by this phase: the GUI \(phase 5\), nor the AppImage's launcher and runtime \(APPDIR, its PATH and library-path entries\)/,
+  assert.match(r.lines[0], /^backend: .*oats-web\.mjs started through serverSpawnSpec .*\(credential on fd 3, private socket\).* answered GET \/api\/cli through the backend client over the authenticated socket \(HTTP 200\)$/);
+  // The probe is told the target is Linux; it inspects the listeners only where this host has /proc (a macOS runner has none).
+  assert.match(r.lines[1], existsSync('/proc/self/fd') ? /^backend: holds no listening TCP socket \(\/proc\/\d+\)$/ : /^backend: TCP listeners not inspected on linux \(no \/proc\)$/);
+  assert.equal(r.lines[2], "lifeline (#698): closing the backend's stdin ended it (exit 0) and closed its socket");
+  assert.match(r.lines[3], /^collector: .*liveness-main\.mjs .* answered \[\] to \[\]$/);
+  assert.match(r.lines[4], /^not exercised by this phase: the GUI \(phase 5\), nor the AppImage's launcher and runtime \(APPDIR, its PATH and library-path entries\)/,
     "what the phase does not prove is said");
   assertReaped(r, reaper, ["backend", "collector"]);
 });
@@ -133,20 +135,22 @@ test("a server that exits non-zero when its stdin closes: a lifeline failure, no
   assertReaped(r, reaper, ["backend"]);
 });
 
-test("a server whose port stays open after it exits (a child holds the listener): a lifeline failure, the child reaped", async (t) => {
+test("a server whose socket stays open after it exits (a child holds the listener): a lifeline failure, the child reaped", async (t) => {
   const reaper = reaperFor(t);
   // The listener is a child in the server's process group; the server itself exits 0 at EOF.
   const at = fixtures(t, { "leaks.mjs": `
 import { spawn } from "node:child_process";
-const port = process.argv[process.argv.indexOf("--port") + 1];
-const listener = spawn(process.execPath, ["-e", \`require("node:http").createServer((q, s) => s.end("{}")).listen(\${port}, "127.0.0.1")\`], { stdio: "ignore" });
+const socket = process.argv[process.argv.indexOf("--socket") + 1];
+// The listener says the ready line on the server's stdout once it listens on the server's socket.
+const listener = spawn(process.execPath, ["-e", \`require("node:http").createServer((q, s) => s.end("{}")).listen(\${JSON.stringify(socket)}, () => process.stdout.write("oats-desktop-server ready\\\\n"))\`],
+  { stdio: ["ignore", "inherit", "ignore"] });
 process.stdout.write("listener pid " + listener.pid + "\\n");
 process.stdin.on("data", () => {});
 process.stdin.on("end", () => process.exit(0));
 ` });
   const r = await runBackendProbe(reaper, EXE, { bin: at("leaks.mjs"), collector: COLLECTOR, readyMs: 20_000, exitMs: 5000 });
   assert.equal(r.ok, false);
-  assert.match(r.detail, /^lifeline \(#698\): port \d+ still accepts connections after the backend exited/);
+  assert.match(r.detail, /^lifeline \(#698\): the backend's socket still accepts connections after the backend exited/);
   const listener = Number(r.detail.match(/listener pid (\d+)/)?.[1]);
   assert.ok(listener > 0, r.detail);
   // SIGKILLed with the group before the probe returned; an orphan is finished by its new parent, so allow it a moment.
@@ -186,8 +190,9 @@ test("the macOS x64 cross-build runs the backend and the collector through Roset
     readyMs: 20_000, exitMs: 5000, collectorMs: 20_000 });
   assert.equal(r.ok, true, r.detail);
   assert.deepEqual(calls.map((c) => [c.exe, ...c.args.slice(0, 3)]), [["/usr/bin/arch", "-x86_64", EXE, BIN], ["/usr/bin/arch", "-x86_64", EXE, COLLECTOR]]);
-  for (const i of [0, 2]) assert.match(r.lines[i], /under Rosetta x86_64/, "the evidence says it ran under Rosetta");
-  assert.equal(r.lines[3], "not exercised by this phase: the GUI (phase 5)", "no AppImage on macOS");
+  for (const i of [0, 3]) assert.match(r.lines[i], /under Rosetta x86_64/, "the evidence says it ran under Rosetta");
+  assert.equal(r.lines[1], "backend: TCP listeners not inspected on darwin (no /proc)");
+  assert.equal(r.lines[4], "not exercised by this phase: the GUI (phase 5)", "no AppImage on macOS");
   assertReaped(r, real, ["backend", "collector"]);
 });
 
@@ -216,6 +221,12 @@ test("dist-smoke runs the phase after the ABI probe and before the launch skip, 
 });
 
 // ── Phase 4b: what main loads, and phase 1's check of the shared home ────────
+
+test("unexpectedTcpListeners: the remote-debugging port is allowed in main and in a child that inherited it; any other port is not", () => {
+  assert.deepEqual(unexpectedTcpListeners({ main: [43889], backend: [43889] }, 43889), { main: [], backend: [] }, "the backend holding main's inherited CDP listener");
+  assert.deepEqual(unexpectedTcpListeners({ main: [43889, 4820], backend: [] }, 43889), { main: [4820], backend: [] });
+  assert.deepEqual(unexpectedTcpListeners({ main: [43889], backend: [4820, 43889] }, 43889), { main: [], backend: [4820] });
+});
 
 test("relativeImportsOf: each relative import of a source, with the names taken from it", () => {
   const source = [

@@ -326,7 +326,7 @@ test("a launch configuration cannot set the login-shell test seam: it is reserve
 
 // A real bash, started -l -i through the kernel's own capture and emitter: bash 5.3 marks the
 // descriptors it inherits from 3 to 19 close-on-exec in a login interactive shell, so an answer on a
-// descriptor of its own never reached the emitter (polaris, bash 5.3.15). The wrapper is the seam: it
+// descriptor of its own never reached the emitter (seen on a real host, bash 5.3.15). The wrapper is the seam: it
 // gives the real bash --noprofile --norc and the fixture's HOME and directory, so no start-up file is
 // read (the capture seeds HOME and its directory from the password database even under the seam),
 // and exports what the answer must carry back as it is. zsh and fish are not run here.

@@ -712,7 +712,7 @@ test("0.25.4 quarantine retry: a workspace home retained after a required spawn-
     assert.equal(q.cleanup.soulDir, realpathSync(perCommit), "descriptor records the per-commit soul directory");
     assert.equal(q.cleanup.soulId, `${fx.keys.agents}#release-manager`, "descriptor records the stable soul id");
     // retry while the hook still fails: the hook RUNS (its failure is reported), the home stays
-    r = oats(["retire", "release-manager-q", "--dir", dep, "--agents-root", join(dep, "agents"), "--json"], { cwd: dep, env, base });
+    r = oats(["retire", "release-manager-q", "--dir", dep, "--json"], { cwd: dep, env, base });
     assert.equal(r.status, 1, r.stdout);
     const doc1 = JSON.parse(r.stdout);
     const incomplete = doc1.rollbackIncomplete ?? doc1.result?.rollbackIncomplete ?? [];
@@ -724,7 +724,7 @@ test("0.25.4 quarantine retry: a workspace home retained after a required spawn-
     assert.equal(retireEnv.OATS_SOUL_ID, `${fx.keys.agents}#release-manager`, "…and its stable id");
     // the hook can now succeed: the retry completes and removes the home
     rmSync(join(dep, "FAIL"));
-    r = oats(["retire", "release-manager-q", "--dir", dep, "--agents-root", join(dep, "agents"), "--json"], { cwd: dep, env, base });
+    r = oats(["retire", "release-manager-q", "--dir", dep, "--json"], { cwd: dep, env, base });
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.ok(!existsSync(home), "quarantine cleared without --force");
   } finally { rmSync(base, { recursive: true, force: true }); }

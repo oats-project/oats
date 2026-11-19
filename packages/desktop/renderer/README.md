@@ -644,8 +644,9 @@ split into sections) is `packages/client/roster-sections.mjs`.
   the Machines tab (below). With one deployment the roster renders exactly as before; the Machines tab heads
   its one deployment too (`tabContent`), so every machine's tree is under its name.
 - **Agent groups and their order** (`rosterGroups`, `packages/client/instance-tree.mjs`, shared with the
-  palette and the TUI): one sequence by each cluster's first root, in name order (`rosterOrder`: by name,
-  ties by `instanceId`; the product owner's decision on #1262, which replaces #1083's running-first order here). A
+  palette and the TUI): one sequence by each cluster's first root, in spawn order, newest first (`rosterOrder`:
+  by `createdAt`, a row without a readable one last, then by name, ties by `instanceId`; the product owner's
+  2026-11-13 request, which replaces #1262's name order and keeps #1083's running-first order out). A
   multi-member cluster is a group under its name; each run of consecutive single instances is one
   "independent" group, in place. So a bundle keeps its place when its instance gains or loses children, and
   a start or a stop moves no row. Keys: `cluster:<n>:<name>`, `independent:<first member's instanceId>`,
@@ -826,14 +827,14 @@ and **Name · optional**. Below `SPAWN_NARROW` (760px, one column) the preview c
 into the form's scroll area after its last field, above the footer (`placePreview`, a
 `matchMedia` listener): moved in the document, so reading and Tab order stay the order on screen. Name: with `spawn-name` on a local spawn
 (`roleNamed()`), a typed name goes as `--name`, lowercased (the kernel uses a
-name exactly as given) and with the soul's role as its suffix (`finalName` →
-`nameWithRole`, `packages/client/instance-name.mjs`), and
+name exactly as given) and with nothing appended (`finalName`), and
 an empty one reads "Left empty, the kernel numbers it." (with `spawn-suggest-name`
 and a field never typed in: "Left empty, the instance is named from its task.", and the
 task's suggested name is the placeholder and the choices' `name`; the suggest read is in
 `packages/desktop/docs/desktop-spawn-preview.md`); otherwise (an older
 kernel, a remote target, whose `/api/spawn` takes a purpose) it is a purpose
-with the `<soul>-` prefix shown. The 64-character check runs on the final name;
+with the `<soul>-` prefix shown. The 64-character check runs on the final name
+(the typed name itself, or `<soul>-<purpose>`);
 the kernel's name refusals show under the field. **Developer settings** is collapsed: work area (base | branch,
 the worktree path relative to the deployment, *Use a worktree instead* for
 checkout souls), permissions, **messaging identity** (Default / Local /
@@ -868,7 +869,7 @@ deployments (`/api/panel` `deployments`). With two or more, the form shows a
 **Deployment** field first, before Name, in place of *Where to run*: the form's
 segmented control with two or three deployments, the Harness-style dropdown with
 more (never a native select). Options are named by `machineLabels` ("This Mac",
-"altair", "This Mac · oats-v2") with a state tag when not live; the preview
+"devbox", "This Mac · oats-qa") with a state tag when not live; the preview
 column's **Runs on** row gives the chosen one's `deploymentLabel`. With one
 there is no field and the form is unchanged. Rules:
 
@@ -1580,7 +1581,7 @@ workspace is observed through its server and never synced from here.
   from `/api/team-members?ws=<view>` (#482, decision Q5): the view's
   deployments only. A card groups them by deployment (`memberGroups`), each
   heading labelled by `deploymentLabel` ("This Mac · ~/acme · 3",
-  "altair · ~/northwind · not reached"), this Mac's first. A member's
+  "devbox · ~/northwind · not reached"), this Mac's first. A member's
   `workspace` is its deployment id. Its Show and Terminal actions stay in the
   view on screen (`teamMemberAction` never switches workspace). They wait for
   the row of that deployment, and the open is owned by the view
@@ -2297,11 +2298,16 @@ which never carries the value. The push is one-way: no renderer→main call answ
 ask until the shell subscribes (`onLaunchFocus`). `createLaunchFocus` holds the one pending request:
 - Each observed roster read of this computer's rows (`refreshContextRoster`, after the paint) is checked with
   `launchFocusMatch`, which counts only that deployment's local rows (a spawning home included, a remote row never).
-- One match is selected through `showInRoster`, nothing else. Two or more say so. None waits
+- One match observed `running === true` is selected through `showInRoster` then opened by `openTerminalTab`,
+  the row click's path. The opener uses the painted roster (`followed`) and `focusContent: false` for new and
+  retained tabs, including delayed readiness: keyboard focus stays on the row. Held, unavailable or stale rows
+  select only. A match observed not running selects only and consumes the request, even if it later starts.
+  Nothing starts or receives input. Two or more say so. None waits
   `LAUNCH_FOCUS_PENDING_MS`, then says "No instance <name> in this workspace" from a timer, with no read of its own.
 - A person's choice drops the request: the selection-ownership ticket (`tabOpenIntents.watch()`, taken at the first
   roster read so the window's own binding does not count), or input or a pointer press (`watchOperator`).
-- A later ask replaces the request. Rows the window already shows answer an ask at once.
+- A later ask replaces the request, including the validity of an open still awaiting. The shell checks selection
+  ownership across selection and open, on both success and rejection. Rows already shown answer at once.
 
 ## Supporting read-only files
 
@@ -2344,11 +2350,18 @@ chosen destination without a transient return to the old control.
 `harness.html` supplies a stub `ctx` and tab chrome for ALL views — including
 the Markdown tab (it prompts for a file path;
 `ctx.openFile` routes into the markdown view); `harness-server.mjs`
-serves it and proxies `/api/*` to a running backend server (same-origin, so
-GETs and guarded POSTs both work exactly as in the real shell):
+serves it and proxies `/api/*` to a backend server you started by hand, over
+its socket (same-origin, so GETs and guarded POSTs both work exactly as in the
+real shell). The backend's credential stays in the harness: it makes a token of
+its own at start and prints the page's URL with it, and every `/api/` request
+must carry that token (`x-oats-harness-token`, which `harness.html` sends from
+the URL's `#t=`), else 401. The token file must not be inside a directory the
+harness serves (the renderer, `node_modules`, `packages/client`):
 
 ```sh
-node packages/desktop/server/oats-web.mjs start --port 4821 --dir <workspace>
-node packages/desktop/renderer/harness-server.mjs --port 4899 --api http://127.0.0.1:4821
-open "http://127.0.0.1:4899/"
+dir=$(mktemp -d) && chmod 700 "$dir"
+( umask 077; node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64url"))' > "$dir/token" )
+node packages/desktop/server/oats-web.mjs start --socket "$dir/s" --token-file "$dir/token" --dir <workspace>
+node packages/desktop/renderer/harness-server.mjs --port 4899 --api-socket "$dir/s" --token-file "$dir/token"
+# open the URL it prints: http://127.0.0.1:4899/harness.html#t=<its token>
 ```

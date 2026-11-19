@@ -142,6 +142,9 @@ test.before(async () => {
   for (const dir of ["tui", "client"]) cpSync(join(REPOSITORY, "packages", dir), join(SHADOW, "packages", dir), { recursive: true, filter: (from) => !from.includes(`${join("packages", dir, "test")}`) });
   mkdirSync(join(SHADOW, "bin"), { recursive: true });
   writeFileSync(join(SHADOW, "bin", "oats.mjs"), FAKE_KERNEL);
+  // The package's manifest, as the install holds it beside bin/: the TUI judges its kernel against that
+  // version (read.mjs KERNEL_VERSION), and the fake answers `version --json` through the real kernel.
+  cpSync(join(REPOSITORY, "package.json"), join(SHADOW, "package.json"));
   mkdirSync(CONTROL, { recursive: true });
   // Three agents, spawned in the fixture (its inert harnesses first on PATH) and started for real
   // on the fixture's tmux server. alpha and beta run an inert harness, which exits and leaves a

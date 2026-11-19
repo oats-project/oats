@@ -208,11 +208,11 @@ async function page(t, { layout = 'page', agent = {}, features = ['soul-composed
 test('the soul page asks for the composed skills only with the feature; the sidebar never does; a remote soul only with server-probe-features', async t => {
   const selector = { soul: 'release-manager', agentsRoot };
   assert.deepEqual((await page(t)).bodies, [{ action: 'inspect', selector, composedSkills: true }]);
-  for (const agent of [{ remote: true, server: 'hetzner' }, { server: 'hetzner' }])
+  for (const agent of [{ remote: true, server: 'builder' }, { server: 'builder' }])
     assert.deepEqual((await page(t, { agent, features: ['soul-composed-skills', 'server-probe-features'] })).bodies, [{ action: 'inspect', selector, composedSkills: true }], JSON.stringify(agent));
   for (const [label, options] of [['no feature', { features: [] }], ['own skills only', { features: ['soul-skills'] }], ['sidebar', { layout: 'sidebar' }],
-    ['remote soul', { agent: { remote: true, server: 'hetzner' } }],
-    ['remote soul, relays but does not list', { agent: { remote: true, server: 'hetzner' }, features: ['server-probe-features'] }]]) {
+    ['remote soul', { agent: { remote: true, server: 'builder' } }],
+    ['remote soul, relays but does not list', { agent: { remote: true, server: 'builder' }, features: ['server-probe-features'] }]]) {
     const { bodies } = await page(t, options);
     assert.equal(bodies.some(b => Object.hasOwn(b, 'composedSkills')), false, label);
   }

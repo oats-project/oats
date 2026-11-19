@@ -1,7 +1,8 @@
 // The "Extra trees" briefing. The worktree and checkout work-mode injects share one section that
-// tells an agent how to make a tree of its own for another branch or repository. These tests hold
-// that section to two things: it is the same text in both injects (and so in every composed
-// AGENTS.md of those modes), and its commands do what the prose around them says — run verbatim, as
+// tells an agent how to make a tree of its own for another branch or repository; the workspace and
+// directory injects share one with `--repo` always, since their ./work is not a Git tree. These
+// tests hold those sections to two things: each is the same text in the injects that share it (and
+// so in every composed AGENTS.md of those modes), and its commands do what the prose around them says — run verbatim, as
 // the command lines taken from the inject itself (`oats worktree add|remove`, #796), from a real
 // instance home of a scratch deployment whose member clone has a bare origin:
 //   - the tree starts from the remote's current state even when the clone's remote-tracking refs
@@ -27,8 +28,8 @@ const sectionOf = (text) => {
 const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 
 /** The briefing's commands, read from the inject text rather than retyped here. */
-function briefingCommands() {
-  const section = sectionOf(injectText("worktree"));
+function briefingCommands(mode = "worktree") {
+  const section = sectionOf(injectText(mode));
   const create = section.split("\n").filter((line) => line.startsWith("    oats ")).map((line) => line.slice(4));
   const remove = section.match(/`(oats worktree remove [^`]+)`/)?.[1];
   const push = section.match(/`(git push origin HEAD:<remote-branch>)`/)?.[1];
@@ -46,11 +47,13 @@ test.afterEach(() => {
 
 /** A scratch world: a deployment whose member clone (`clone`) has a bare `upstream` as origin, a seed
  *  repo that pushes to it behind the clone's back, and an instance home (checkout mode, no capability). */
-async function world(t) {
-  const fx = v2Deployment({ souls: { dev: { soul: { work: "checkout" } } } });
+async function world(t, { work = "checkout" } = {}) {
+  const fx = v2Deployment({ souls: { dev: { soul: { work } } } });
   cleanups.push(fx.cleanup);
   const hostPath = process.env.PATH; process.env.PATH = fx.env.PATH; t.after(() => { process.env.PATH = hostPath; });
-  const { home } = await fx.spawn("dev", { instance: "inst", work: "checkout" });
+  // A workspace home records the deployment as its repository, as `oats spawn` does (lib/core.mjs);
+  // a directory home records it too, by default (the fixture's spawn, as lib/core.mjs resolveExecutionContext).
+  const { home } = await fx.spawn("dev", { instance: "inst", work, ...(work === "workspace" ? { repo: fx.dep } : {}) });
   const base = realpathSync(mkdtempSync(join(tmpdir(), "oats-extra-trees-")));
   cleanups.push(() => rmSync(base, { recursive: true, force: true }));
   const env = { ...fx.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0",
@@ -102,6 +105,91 @@ test("every composed worktree and checkout golden carries the shared section wit
     }
   }
 });
+
+/** The section's bullets, from its first naming rule to its end: the part every mode shares. */
+const sharedBullets = (section) => section.slice(section.indexOf("- Name `<branch>`"));
+
+test("the workspace inject teaches extra trees: the shared bullets, and a create command that always names --repo", () => {
+  const shared = sectionOf(injectText("worktree"));
+  const workspace = sectionOf(injectText("workspace"));
+  assert.ok(workspace, "work-workspace.md has the Extra trees section");
+  assert.equal(sharedBullets(workspace), sharedBullets(shared), "the naming, timeout, push and remove rules are the shared ones");
+  assert.equal(briefingCommands("workspace").create, `${briefingCommands().create} --repo <repo>`, "the create command is the shared one plus --repo <repo>");
+  assert.equal(briefingCommands("workspace").remove, briefingCommands().remove);
+  assert.equal(briefingCommands("workspace").push, briefingCommands().push);
+});
+
+test("the directory inject teaches the workspace inject's Extra trees section, byte for byte", () => {
+  const directory = sectionOf(injectText("directory"));
+  assert.ok(directory, "work-directory.md has the Extra trees section");
+  assert.equal(directory, sectionOf(injectText("workspace")), "one --repo-always section for the two modes whose ./work is not a Git tree");
+});
+
+test("every composed workspace golden carries the --repo-always Extra trees section verbatim", () => {
+  const section = sectionOf(injectText("workspace")).trim();
+  const cases = readdirSync(join(ROOT, "test", "golden")).filter((name) => /-workspace-/.test(name));
+  assert.ok(cases.length > 0);
+  for (const name of cases) {
+    const agents = readFileSync(join(ROOT, "test", "golden", name, "AGENTS.md"), "utf8");
+    assert.ok(agents.includes(section), `${name}/AGENTS.md contains the workspace Extra trees section verbatim`);
+  }
+});
+
+test("the workspace inject keeps member clones read-only and no longer forbids extra trees", () => {
+  const text = injectText("workspace");
+  const before = text.slice(0, text.indexOf(HEADING));
+  assert.match(before, /never edit or\s+commit there, and NEVER change a member clone's Git state/, "the clones stay read-only");
+  assert.doesNotMatch(before, /stashes or worktrees/, "worktrees are no longer among the forbidden Git operations");
+  assert.match(before, /`git worktree` run by hand/, "only hand-run `git worktree` is, beside the other state changes");
+});
+
+test("the directory inject keeps ./work an owned non-repository and sends repository work to extra trees", () => {
+  const text = injectText("directory");
+  const before = text.slice(0, text.indexOf(HEADING));
+  assert.match(before, /\*\*Never initialize a\s+fake repository\*\*/, "./work never becomes a repository");
+  assert.match(before, /grants no permission to edit the `repo` directory/, "the recorded repo still grants no editing");
+  assert.match(before, /Repository work that needs a branch goes in an extra tree of\s+your own/, "repository work goes in an extra tree");
+});
+
+for (const work of ["workspace", "directory"]) {
+  test(`from a ${work} home, the briefing's create command with --repo starts from the remote's tip and moves no clone ref`, async (t) => {
+    const { create, remove } = briefingCommands(work);
+    const w = await world(t, { work });
+    const tip = w.seedCommit("main");
+    assert.notEqual(w.git("-C", w.clone, "rev-parse", "origin/main").trim(), tip, "the clone is stale");
+    const refsBefore = w.refs(w.clone, "refs/heads", "refs/remotes");
+    const headBefore = w.git("-C", w.clone, "symbolic-ref", "HEAD").trim();
+    const values = { purpose: "x", base: "main", branch: "agents/inst-x", repo: w.clone };
+    w.ok(w.run(create, values));
+
+    const tree = w.tree("x");
+    assert.equal(w.git("-C", tree, "rev-parse", "HEAD").trim(), tip, "the tree is at the upstream tip");
+    const after = lines(w.refs(w.clone, "refs/heads", "refs/remotes"));
+    const added = after.filter((line) => !lines(refsBefore).includes(line));
+    assert.deepEqual(added, [`${tip} commit\trefs/heads/agents/inst-x`], "exactly one new ref: the tree's branch");
+    assert.equal(after.filter((line) => !added.includes(line)).join("\n") + "\n", refsBefore, "every other clone ref is byte-identical");
+    assert.equal(w.git("-C", w.clone, "symbolic-ref", "HEAD").trim(), headBefore, "the clone's checked-out branch did not switch");
+    assert.equal(w.git("-C", w.clone, "status", "--porcelain"), "", "the clone's work tree is untouched");
+
+    w.ok(w.run(remove, values));
+    assert.equal(existsSync(tree), false);
+  });
+
+  test(`from a ${work} home, add without --repo is refused and makes nothing: the home's repository is the deployment`, async (t) => {
+    const w = await world(t, { work });
+    const refused = w.run("oats worktree add --purpose x --branch agents/inst-x --base main", {});
+    assert.notEqual(refused.status, 0);
+    assert.equal(refused.json().error.code, "E_CLONE_MISSING");
+    assert.equal(existsSync(w.tree("x")), false, "nothing was made");
+  });
+
+  test(`a ${work} home's TASK.md sends repository work to the extra trees, not ./work`, async (t) => {
+    const w = await world(t, { work });
+    const task = readFileSync(join(w.home, "TASK.md"), "utf8");
+    assert.match(task, /do repository work only in your extra trees\./);
+    assert.doesNotMatch(task, /Do all repository work inside \.\/work/);
+  });
+}
 
 test("a fresh extra tree starts from the remote's tip, not the clone's stale origin/main, and moves no clone ref", async (t) => {
   const { create, remove } = briefingCommands();

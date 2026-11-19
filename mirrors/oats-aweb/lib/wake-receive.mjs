@@ -14,6 +14,7 @@ import {lstatSync, readFileSync, realpathSync, statSync} from 'node:fs';
 import {basename, dirname, isAbsolute, join, resolve} from 'node:path';
 import {approvedChannelPolicyWarning} from './claude-managed-policy.mjs';
 import { parseVersion, versionAtLeast } from './aw-floor.mjs';
+import { sameAwebTeamId } from "./aweb-team-id.mjs";
 
 const JOINED_EVENT_CLASSES = ['mail', 'chat'];
 // Observation age is advisory; readiness does not certify recent observation.
@@ -290,7 +291,9 @@ export function expectedReceive(home, {delivery = 'channel', policy} = {}) {
   try { state = JSON.parse(readFileSync(join(home, '.oats-aweb', 'teams.json'), 'utf8')); }
   catch (error) {
     if (!absentFile(join(home, '.oats-aweb', 'teams.json'), error)) return fail('retained joined-team state is unreadable or malformed');
-    if (meta.identity?.mode === 'global' && (grant || meta.retained === true) &&
+    // A grant seat, and a retained seat (local since awebai/oats-aweb#226, global
+    // before it), record no joined-team file until they join a team.
+    if ((meta.retained === true || (meta.identity?.mode === 'global' && grant)) &&
         (meta.joinedTeams === undefined || (Array.isArray(meta.joinedTeams) && meta.joinedTeams.length === 0))) state = {joinedTeams: []};
     else if (incomplete) {
       state = {joinedTeams: meta.joinedTeams === undefined ? [] : meta.joinedTeams};
@@ -340,6 +343,33 @@ export function parseTimestamp(value) {
   return Date.parse(value);
 }
 
+/** Whether `aw wake status --json` confirms a running host wake daemon. A
+ *  status that could not be read confirms nothing. */
+export function wakeDaemonRunning(status) {
+  return object(status) && status.daemon_running === true;
+}
+
+/** How long a start waits before it reads the wake status a second time: the
+ *  wake unit is restarted by every `oats aweb wake install`. */
+export const WAKE_BROKER_RECHECK_MS = 3000;
+
+/** Why a start that the host wake broker delivers to must not proceed, or
+ *  undefined when a broker runs. `aw wake register` stores a registration and
+ *  exits 0 with no broker running, and the home is then never woken.
+ *  `readStatus` answers the parsed `aw wake status --json`, or undefined; it
+ *  is read again once after `wait(WAKE_BROKER_RECHECK_MS)`. `serviceManager`
+ *  says whether this host can run the broker as a unit. The text starts with
+ *  the code readiness reports and fits the hook's 300 characters. */
+export function wakeBrokerRefusal({readStatus, wait, serviceManager}) {
+  if (wakeDaemonRunning(readStatus())) return undefined;
+  wait(WAKE_BROKER_RECHECK_MS);
+  if (wakeDaemonRunning(readStatus())) return undefined;
+  const start = serviceManager
+    ? 'start it with `oats aweb wake install`, which also restarts an installed unit'
+    : 'this host has no service manager, so run `aw wake run` as a supervised process';
+  return `wake-daemon-not-running: the host wake broker delivers to this home and is not running, so nothing would wake it; ${start}, then retry`;
+}
+
 /** The host wake daemon alone, from `aw wake status --json`: running, with a
  *  reported version. Home scope reads it after the status's instances list;
  *  soul scope, which has no target row, reads only this. */
@@ -347,7 +377,7 @@ export function wakeDaemonAssessment(status, {minimumVersion}) {
   const warnings = [];
   const fail = (code, message) => ({problems: [problem(code, message)], warnings});
   if (!object(status)) return fail('wake-status-unavailable', 'aw wake status is unavailable or malformed');
-  if (status.daemon_running !== true) return fail('wake-daemon-not-running', 'host wake daemon is not confirmed running');
+  if (!wakeDaemonRunning(status)) return fail('wake-daemon-not-running', 'host wake daemon is not confirmed running');
   if (status.daemon_version_state !== 'reported' || typeof status.daemon_version !== 'string' || !parseVersion(status.daemon_version)) return fail('wake-daemon-version-unknown', 'host wake daemon compatibility is unproven');
   // A daemon below the floor still receives; the floor exists for replies to
   // senders outside the roster, so it is reported as a warning, and every
@@ -356,10 +386,12 @@ export function wakeDaemonAssessment(status, {minimumVersion}) {
   return {problems: [], warnings};
 }
 
-// aw v1.36.37 wake/stream.go's complete StreamPhase vocabulary. Unknown phases
-// must not be treated as reconnects. Phase determines grant-stream readiness:
+// aw v1.36.37 wake/stream.go's complete StreamPhase vocabulary, and `refused`,
+// which replaces `quarantined` from aw 1.36.58 (cli/go/wake/stream.go:40 at
+// aw-v1.36.58); the floor still reports `quarantined`. Unknown phases must
+// not be treated as reconnects. Phase determines grant-stream readiness:
 // stream.go:269-279,326 gives retrying its recoverable error text.
-const STREAM_PHASES = ['starting', 'streaming', 'retrying', 'quarantined', 'stopped'];
+const STREAM_PHASES = ['starting', 'streaming', 'retrying', 'quarantined', 'refused', 'stopped'];
 const TRANSIENT_STREAM_PHASES = ['starting', 'retrying'];
 const GRANT_BROKER_REMEDY = 'restart the seat to re-register the broker with the current grant home';
 
@@ -375,6 +407,22 @@ function grantStreamSummary(hit) {
   const network = /\b(?:dial tcp: )?(?:network is unreachable|connection refused|connection reset by peer|context deadline exceeded|i\/o timeout|no such host|TLS handshake timeout|unexpected EOF|EOF)\b/.exec(hit.stream_error || '')?.[0];
   const remedy = TRANSIENT_STREAM_PHASES.includes(hit.stream_phase) && hit.stream_admitted === true ? 'the broker reconnects automatically' : GRANT_BROKER_REMEDY;
   return `broker receive stream is ${phase}${match ? ` (HTTP ${match[1]}${safeDetail})` : network ? ` (${network})` : hit.stream_error ? ' (stream error reported)' : ''}${hit.stream_admitted !== true ? '; stream admission is not confirmed' : ''}; ${remedy}`;
+}
+
+/** Why a target that aw 1.36.58 or later reports as not admitted is so, when
+ *  a stream of it was refused by the server: the phase, the cause aw names (an
+ *  HTTP status, a terminal event's name or "silence"), the next attempt and
+ *  the remedy. Only values in aw's own shape are named; the error text never
+ *  is. Undefined when no stream of the row is refused. */
+function refusedStreamMessage(row) {
+  const refused = Array.isArray(row.receive_identities) ? row.receive_identities.filter(r => object(r) && r.stream_phase === 'refused') : [];
+  if (!refused.length) return undefined;
+  const [stream] = refused;
+  const who = typeof stream.team_id === 'string' && /^[A-Za-z0-9._-]{1,64}:[A-Za-z0-9.-]{1,253}$/.test(stream.team_id) ? `team ${stream.team_id}` : pathValue(stream.identity_home) ? basename(stream.identity_home) : 'an identity';
+  const cause = typeof stream.stream_cause === 'string' && /^(?:[1-5]\d\d|[a-z][a-z0-9_]{0,63})$/.test(stream.stream_cause) ? ` (cause ${stream.stream_cause})` : '';
+  const next = Number.isFinite(parseTimestamp(stream.stream_next_attempt_at)) ? `, next at ${stream.stream_next_attempt_at}` : '';
+  const more = refused.length > 1 ? ` (and ${refused.length - 1} more refused stream${refused.length > 2 ? 's' : ''})` : '';
+  return `broker receive stream for ${who} is refused by the server${cause}${more}; the broker retries it on its own${next}; fix what the server refused, then restart the home to register it again, which retries at once`;
 }
 
 function receiveStreamAssessment(hit, grantHome, fallback) {
@@ -405,7 +453,7 @@ export function targetReceiveAssessment(status, {home, runtimeDelivery, runtime,
   const row = rows[0];
   if (row.paused !== false) return fail('wake-target-paused', 'broker target is paused or its pause state is unknown');
   if (row.phase !== 'active') return fail('wake-target-inactive', 'broker target is not confirmed active');
-  if (row.stream_admitted !== undefined && row.stream_admitted !== true) return fail('wake-stream-unavailable', 'broker target reports streams not admitted or malformed admission evidence');
+  if (row.stream_admitted !== undefined && row.stream_admitted !== true) return fail('wake-stream-unavailable', refusedStreamMessage(row) ?? 'broker target reports streams not admitted or malformed admission evidence');
   if (row.primary_identity_home !== undefined && (!pathValue(row.primary_identity_home) || (primary && !samePath(row.primary_identity_home, primary)))) return fail('wake-target-binding', 'supplied primary locator is malformed or contradicts the retained locator');
   const actualRuntime = row.runtime_delivery;
   if (!['external-session', 'native-channel', 'native-pi'].includes(actualRuntime) ||
@@ -458,7 +506,7 @@ export function targetReceiveAssessment(status, {home, runtimeDelivery, runtime,
           (actualRuntime !== 'external-session' && (hit.controls === true || samePath(hit.identity_home, row.primary_identity_home))) ||
           (hit.controls === true && primary && !samePath(hit.identity_home, primary))) return fail('wake-target-binding', 'partial broker receive policy contradicts retained or supplied facts');
       if (primary && samePath(hit.identity_home, primary)) {
-        if (hit.team_id !== undefined && primaryTeam !== undefined && hit.team_id !== primaryTeam) return fail('wake-target-binding', 'broker primary team contradicts the retained identity');
+        if (hit.team_id !== undefined && primaryTeam !== undefined && !sameAwebTeamId(hit.team_id, primaryTeam)) return fail('wake-target-binding', 'broker primary team contradicts the retained identity');
         if (capturedDelivery === 'session' && (hit.controls !== true || classes.length)) return fail('wake-target-binding', 'broker primary policy contradicts the retained session route');
       }
       const stream = receiveStreamAssessment(hit, grantSession ? grantHome : undefined, 'supplied receive stream is missing, refused or not connected');
@@ -472,7 +520,7 @@ export function targetReceiveAssessment(status, {home, runtimeDelivery, runtime,
     const hit = hits[0];
     // controls/event_classes/label are omitempty in the released Go wire.
     const classes = hit.event_classes === undefined ? [] : hit.event_classes;
-    if ((hit.label !== undefined && typeof hit.label !== 'string') || (hit.label || undefined) !== expected.label || (hit.team_id !== undefined && hit.team_id !== expected.team) || hit.delivery_owner !== 'session-hints' ||
+    if ((hit.label !== undefined && typeof hit.label !== 'string') || (hit.label || undefined) !== expected.label || (hit.team_id !== undefined && !sameAwebTeamId(hit.team_id, expected.team)) || hit.delivery_owner !== 'session-hints' ||
         (hit.controls !== undefined && typeof hit.controls !== 'boolean') || (hit.controls === true) !== expected.controls ||
         !Array.isArray(classes) || classes.length !== expected.event_classes.length || classes.some(c => typeof c !== 'string') || JSON.stringify([...classes].sort()) !== JSON.stringify([...expected.event_classes].sort())) return fail('wake-target-binding', 'broker receive ownership, label or event policy differs from the captured home');
     const stream = receiveStreamAssessment(hit, grantSession ? grantHome : undefined, 'required receive stream is missing, refused or not connected');

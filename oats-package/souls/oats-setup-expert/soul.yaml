@@ -12,3 +12,4 @@ knowledge: none
 capabilities:
   oats.setup: { from: here }
   oats.onboarding: { from: here }
+  oats.coordination-setup: { from: here }   # how this organisation's agents work together

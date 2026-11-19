@@ -37,7 +37,7 @@ test('the probe: feature harness lists harnesses (no runtimes alias); a released
   assert.equal(harnessList({ ...version, harnesses: undefined, runtimes: ['pi'] }), null, 'with the feature, never the old list');
   // f3 was captured at 0.25.9, below the band's floor; the 0.26 line prints the same `runtimes` and no
   // `harness` (bin/oats.mjs at v0.26.0), so the capture stands for it under that line's first version.
-  for (const v of [version, { ...released, version: '0.26.0' }]) assert.equal(acceptProbe(v).ok, true, v.version);
+  for (const v of [version, { ...released, version: '0.26.0' }]) assert.equal(acceptProbe(v, '0.69.17').ok, true, v.version);
   assert.deepEqual([harnessFlag(cli), harnessKey(cli), harnessFlag(oldCli), harnessKey(oldCli)], ['--harness', 'harness', '--runtime', 'runtime']);
 });
 

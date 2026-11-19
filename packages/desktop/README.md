@@ -13,15 +13,15 @@ package; its dependencies (electron, node-pty, xterm) live here only.
 cd packages/desktop
 npm install          # postinstall bundles renderer/vendor/highlight.mjs (esbuild)
 npm run rebuild      # rebuild node-pty against the Electron ABI (first install / electron upgrade)
-npm start            # launches the app; connects to the backend server on 127.0.0.1:4820 or spawns the bundled one
+npm start            # launches the app; it starts the bundled backend server on a private socket
 ```
 
 Flags/env:
 - `--dir <workspace>` / `OATS_DESKTOP_DIR` — the OATS workspace the panel shows
   (default: this repo's root).
 - `--instance <name>` — beside `--dir`, the instance the window selects in the
-  roster; it only selects ([docs/desktop.md](../../docs/desktop.md#opening-on-an-instance)).
-- `OATS_DESKTOP_PORT` — backend server port (default 4820).
+  roster, opening its terminal when running while keyboard focus stays on the row
+  ([docs/desktop.md](../../docs/desktop.md#opening-on-an-instance)).
 
 ## Brand artwork
 
@@ -58,12 +58,25 @@ The shell has three navigation contexts:
   **View brain** actions. Brain and markdown artifacts are scoped to this
   context; the markdown reader is the flagship file surface.
 
-- `main.mjs` — Electron main: server management (connect-or-spawn the bundled server),
-  IPC `api` proxy, node-pty terminals (`tmux attach-session -t <target>`).
+- `main.mjs` — Electron main: server management (always starts the bundled server,
+  never uses one it did not start), IPC `api` proxy, node-pty terminals
+  (`tmux attach-session -t <target>`).
+- `backend-client.mjs` — main's only way to the server: one lease per server
+  generation (`{ generation, child, socketPath, secret, ready }`, ready on the
+  child's own `oats-desktop-server ready` line, revoked on its exit or error,
+  on stop and when a replacement starts) and `backendFetch(path, init)`, which
+  sends over the lease's socket with `authorization: Bearer <secret>` set last,
+  reads the whole reply (bounded), and discards it if the lease was revoked
+  meanwhile. The proxies, `terminal-io.mjs`, the forge reads, the activity and
+  views notifiers and the add executor's readiness checks all take it.
+  `backend-socket.mjs` chooses the private socket directory (one per
+  generation, `oats-d-*`, 0700, the path at most 103 bytes) and sweeps ones a
+  crashed Desktop left; `server-host.mjs` `launchServerChild` makes it and the
+  credential and writes that to the child's fd 3.
   Closing a terminal tab kills the pty ONLY — tmux sessions are the durable
   hosts and always survive.
-- `server/oats-web.mjs` — the bundled zero-dependency backend: a loopback-only
-  `node:http` server exposing the `/api/*` surface (roster, spawn, brain,
+- `server/oats-web.mjs` — the bundled zero-dependency backend: a `node:http`
+  server on a private Unix domain socket exposing the `/api/*` surface (roster, spawn, brain,
   session capture, keys, file). The deployment model is the installed kernel's
   JSON: `oats status --json` (roster) and `oats workspace status --json`
   (workspace header), read by `packages/client/deployment-observer.mjs` — the app reads
@@ -72,11 +85,32 @@ The shell has three navigation contexts:
   [docs/desktop-deployment-model.md](docs/desktop-deployment-model.md); when
   the kernel is asked and what the server holds between asks is
   [docs/desktop-load-path.md](docs/desktop-load-path.md).
-  Binds 127.0.0.1 only — it can type into your terminals. A server the app
+  It can type into your terminals, so it listens only on `--socket <path>`
+  (whose directory must be a real directory owned by you with no group/other
+  bits; `--port` is refused) and answers only requests carrying `Authorization:
+  Bearer <secret>`, else 401 `E_UNAUTHORIZED` before anything else; the Host and
+  POST Origin guards stay (`server/request-checks.mjs`). The secret is 43
+  base64url characters (32 bytes): main hands a fresh one to each server over
+  its fd 3 (`--token-fd 3`); a server started by hand reads it from a file of
+  your own (`--token-file <path>`, a regular 0600 file you own, never a link;
+  the server never serves that file). Once listening it prints
+  `oats-desktop-server ready`. A server the app
   starts ends with the app, however main ends: its stdin is a pipe only main
   holds, and with `--exit-on-stdin-close` the server exits at its EOF
   (`server-host.mjs`, `serverSpawnSpec`). A server started by hand has no such
-  tie. What the programs it
+  tie. To start one by hand (for the view harness, or a test against a real
+  deployment):
+
+  ```bash
+  dir=$(mktemp -d) && chmod 700 "$dir"
+  ( umask 077; node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64url"))' > "$dir/token" )
+  node packages/desktop/server/oats-web.mjs start --socket "$dir/s" --token-file "$dir/token" --dir <deployment>
+  curl --unix-socket "$dir/s" -H "authorization: Bearer $(cat "$dir/token")" http://localhost/api/cli
+  ```
+
+  The CLI binary the app's server probes first is the one chosen in the app's
+  own file dialog (main passes the file it saves as `--cli-choice`); a server
+  started by hand may take `--oats-bin <path>` instead. What the programs it
   starts receive is [below](#the-environment-of-the-programs-desktop-starts).
 - `preload.cjs` — contextBridge surface (`window.oatsDesktop`); renderer runs
   with contextIsolation on, nodeIntegration off. Its one constant, `isOmarchy`,
@@ -107,7 +141,9 @@ The shell has three navigation contexts:
   detached and file-backed (`packages/client/session-resume-cli.mjs`), so
   quitting never cancels it; nothing in `shutdown()` touches it. The Desktop
   shows nothing of a sweep: a `failed` reading is one log line with its code,
-  and every other reading is dropped. No window hears of it
+  and every other reading is dropped. With the CLI above the tested bound the
+  sweep is held back, and skipped with one log line naming `cli-above-tested`
+  (below, "Above the tested bound"). No window hears of it
   ([When Desktop opens](../../docs/desktop-instance-start.md#when-desktop-opens)).
 - `renderer/shell.mjs` — contextual single sidebar, stage host, artifact-tab
   host, command palette, recursive instance roster, and integrated terminals.
@@ -145,6 +181,23 @@ alone, with no document to draw in: the roster as a tree
 which acts a row offers and why, and whether its terminal can be opened
 (`instance-acts.mjs`), and whether a directory is a deployment
 (`workspace-admission.mjs`).
+
+It also holds what stays on when the accepted CLI is above the Desktop's
+tested bound, the minor of its own version (`aboveTested`, `cli-locator.mjs`).
+`above-tested.mjs` names every operation by (route, action), or `main <what>`
+outside HTTP, as a read, allowed or held, and every module that runs the CLI;
+anything it does not name is held. Its `aboveTestedRefusal(cli, operation)` is
+the one gate: every POST handler of `server/oats-web.mjs` calls it (as
+`heldBack(route, action)`) once the body is read and before anything runs, as
+do main's deployments-list writes and onboard (`mainRefusal`) and the resume
+sweep (`session-resume-launch.mjs`). Before any handler, a POST to a route the
+table does not name is refused the same way (`postRouteClassified`), so a
+handler added without its classification is held back too. The renderer asks the same table
+(`cliHeldBack` in `renderer/views/cli-status.mjs`; `renderer/desktop-acts.mjs`
+for a row's acts) only to disable what the backend would refuse.
+`above-tested-notice.mjs` builds the one sentence every refusal and the notice
+carry. A new route, action or CLI-running module fails
+`test/above-tested-inventory.test.mjs` until it is classified.
 
 It holds how an agent's terminal is opened with the kernel's own viewer,
 `oats session attach` (`session-attach.mjs`): the viewer's arguments for this

@@ -1,7 +1,8 @@
 // A home an earlier (0.25) kernel spawned records no `modules` (lead decision c3 Q2):
 // session start, restart and capability-command dispatch refuse it with
 // E_UNSUPPORTED_MODE ("re-spawn it from the deployment") and change nothing;
-// retire still works on it, and says that no retire hook ran.
+// retire of a home also lacking capabilityRuntime requires explicit --force and
+// says that no retire hook ran. Lacking modules alone does not imply this debt.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -24,8 +25,8 @@ function treeDigest(dir) {
   return h.digest("hex");
 }
 
-/** A home written the way a 0.25 kernel wrote one: instance.json without `modules`
- *  (nor capabilityRuntime: no capability hooks were recorded), and its independent
+/** A pre-workspace fixture whose instance.json also lacks capabilityRuntime:
+ *  neither modules nor capability hooks were recorded. Its independent
  *  session receipt (the retirement baseline) beside the instances. */
 function preWorkspaceHome(fx, name) {
   const home = join(fx.root, "dev", "instances", name);
@@ -68,11 +69,26 @@ test("a pre-workspace home: session start, session restart and capability dispat
   } finally { fx.cleanup(); }
 });
 
-test("a pre-workspace home still retires cleanly, and the result says no retire hook ran", () => {
+test("a pre-workspace home also lacking capabilityRuntime refuses before effects; explicit force removes it with the no-hook warning", () => {
   const fx = v2Deployment();
   try {
     const home = preWorkspaceHome(fx, "old-2");
-    const r = fx.cli(["retire", "old-2", "--json"]);
+    const meta = JSON.parse(readFileSync(join(home, "instance.json"), "utf8"));
+    assert.equal(Object.hasOwn(meta, "modules"), false, "fixture premise: a pre-workspace home");
+    assert.equal(Object.hasOwn(meta, "capabilityRuntime"), false, "fixture premise: no recorded hook bindings, not just no workspace modules");
+    const before = treeDigest(home);
+    for (const flags of [["--plan"], []]) {
+      const refused = fx.cli(["retire", "old-2", "--json", ...flags]);
+      assert.equal(refused.status, 1, refused.stdout + refused.stderr);
+      const doc = refused.json();
+      assert.equal(doc.ok, false);
+      assert.equal(doc.error.code, "E_UNIDENTIFIED_INSTANCE_HOME", doc.error.message);
+      assert.match(doc.error.message, /does not record capabilityRuntime/);
+      assert.match(doc.error.message, /Nothing was stopped, run or removed, including children/);
+      assert.match(doc.error.message, /oats retire old-2 --force/);
+      assert.equal(treeDigest(home), before, "refusal leaves the whole home unchanged");
+    }
+    const r = fx.cli(["retire", "old-2", "--force", "--json"]);
     assert.equal(r.status, 0, r.stdout + r.stderr);
     const result = JSON.parse(r.stdout); // retire --json prints its result document
     assert.equal(result.retired, "old-2");

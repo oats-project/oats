@@ -5,6 +5,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
+import YAML from "yaml";
 import {
   KERNEL_HOME_RECEIPTS, capabilityManifest, completeDeferredRetirement, composeInstanceAgentsMd, deferredRetireResultPath, findAgent, findInstanceHomes, retirePendingMarkerPath,
   FAILED_SPAWN_BRANCH_LEFT, listInstances, RETIRE_DELETE_BRANCH_REFUSED, retireInstance, runLifecycleHooks, spawnInstanceAsync,
@@ -48,7 +49,11 @@ function write(path, content) { mkdirSync(dirname(path), { recursive: true }); w
  *  queues behind it): the hook would then take its version-floor path, not the path under test. One
  *  untimed exec here takes that cost. */
 function fakeAw(bin, script) {
-  write(join(bin, "aw"), script);
+  // Every fake is a host whose wake broker runs: oats.aweb refuses a start the broker delivers to
+  // without one, before the step a test here is about.
+  const shebang = "#!/bin/sh\n";
+  assert.ok(script.startsWith(shebang), "a fake aw here is a /bin/sh script");
+  write(join(bin, "aw"), `${shebang}if [ "$1 $2" = "wake status" ]; then echo '{"daemon_running":true,"daemon_version_state":"reported","daemon_version":"1.36.58","instances":[]}'; exit 0; fi\n${script.slice(shebang.length)}`);
   execFileSync("chmod", ["+x", join(bin, "aw")]);
   execFileSync(join(bin, "aw"), ["version"]);
 }
@@ -1324,7 +1329,9 @@ test("rollback detects a still-registered canonical worktree through a symlinked
   // Git wrapper delegates normally, but can force selected cleanup/probe operations to fail.
   const bin = join(base, "bin"); mkdirSync(bin, { recursive: true });
   const realGit = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
-  write(join(bin, "git"), `#!/bin/sh\nif [ "$GIT_FAKE_VANISH_AFTER_ADD" = "1" ] && [ "$3" = "worktree" ] && [ "$4" = "add" ]; then ${realGit} "$@"; s=$?; if [ $s -eq 0 ]; then /bin/rm -rf "$5"; fi; exit $s; fi\nif [ "$GIT_FAKE_FAIL_REMOVE" = "1" ] && [ "$3" = "worktree" ] && [ "$4" = "remove" ]; then echo forced-remove-failure >&2; exit 7; fi\nif [ "$GIT_FAKE_FAIL_PRUNE" = "1" ] && [ "$3" = "worktree" ] && [ "$4" = "prune" ]; then echo forced-prune-failure >&2; exit 6; fi\nif [ "$GIT_FAKE_FAIL_LIST" = "1" ] && [ "$3" = "worktree" ] && [ "$4" = "list" ]; then echo forced-list-failure >&2; exit 8; fi\nif [ "$GIT_FAKE_FAIL_REVP" = "1" ] && [ "$3" = "rev-parse" ] && [ "$4" = "--verify" ]; then echo forced-rev-parse-failure >&2; exit 9; fi\nexec ${realGit} "$@"\n`);
+  // The command's words are read after any leading `-c name=value` pairs: c3, c4 and c5 are the third,
+  // fourth and fifth words of `git -C <repo> <command> <verb> <path>`.
+  write(join(bin, "git"), `#!/bin/sh\ni=0; lead=1; skip=0; c3=; c4=; c5=\nfor a in "$@"; do\n  if [ $skip = 1 ]; then skip=0; continue; fi\n  if [ $lead = 1 ] && [ "$a" = "-c" ]; then skip=1; continue; fi\n  lead=0; i=$((i+1))\n  if [ $i = 3 ]; then c3=$a; fi; if [ $i = 4 ]; then c4=$a; fi; if [ $i = 5 ]; then c5=$a; fi\ndone\nif [ "$GIT_FAKE_VANISH_AFTER_ADD" = "1" ] && [ "$c3" = "worktree" ] && [ "$c4" = "add" ]; then ${realGit} "$@"; s=$?; if [ $s -eq 0 ]; then /bin/rm -rf "$c5"; fi; exit $s; fi\nif [ "$GIT_FAKE_FAIL_REMOVE" = "1" ] && [ "$c3" = "worktree" ] && [ "$c4" = "remove" ]; then echo forced-remove-failure >&2; exit 7; fi\nif [ "$GIT_FAKE_FAIL_PRUNE" = "1" ] && [ "$c3" = "worktree" ] && [ "$c4" = "prune" ]; then echo forced-prune-failure >&2; exit 6; fi\nif [ "$GIT_FAKE_FAIL_LIST" = "1" ] && [ "$c3" = "worktree" ] && [ "$c4" = "list" ]; then echo forced-list-failure >&2; exit 8; fi\nif [ "$GIT_FAKE_FAIL_REVP" = "1" ] && [ "$c3" = "rev-parse" ] && [ "$c4" = "--verify" ]; then echo forced-rev-parse-failure >&2; exit 9; fi\nexec ${realGit} "$@"\n`);
   for (const t of ["pi", "claude"]) write(join(bin, t), "#!/bin/sh\nexit 0\n");
   execFileSync("chmod", ["-R", "+x", bin]);
   const oldPath = process.env.PATH;
@@ -1512,31 +1519,42 @@ test("traversal names are rejected: --parent and retire cannot reach outside ins
   assert.ok(!existsSync(real.home));
 });
 
-test("OKF service agents stay memory-less: the harvester package soul composes its own capability only and is never a knowledge source", async t => {
-  // 5.0 requires an actual recorded source proposal even though the harvester
-  // itself is knowledge:none. Generic kernel relation choices do not alter composition.
+test("OKF service agents stay memory-less: the maintainer package soul composes its own capability only and is never a knowledge source; the removed harvester keeps no home", async t => {
+  // The knowledge maintainer is knowledge:none and reviews one PR per instance.
+  // Generic kernel relation choices do not alter composition. oats.okf 6.0
+  // removed the harvester: its stub soul's required spawn hook refuses every spawn.
   const f = okfFixture(t), proposal = f.proposal({ file: join(f.base, "proposal.md") });
   const sources = () => existsSync(join(f.base, "state", "sources"));
   assert.equal(sources(), false);
+  const task = "Review knowledge-base PR https://github.com/fixture/knowledge/pull/1 at 0123456789abcdef0123456789abcdef01234567. Load the knowledge-review skill first.";
   const check = (worker, how) => {
     for (const p of ["STATE.md", "notes", ".okf-source.json"]) assert.equal(existsSync(join(worker.home, p)), false, `${how}: no ${p}`);
     assert.doesNotMatch(readFileSync(join(worker.home, "AGENTS.md"), "utf8"), /Knowledge: OKF|oats:capability:oats\.okf -->/, `${how}: no memory protocol`);
     const meta = instanceMeta(worker.home);
-    assert.deepEqual(Object.keys(meta.modules), ["oats.okf-harvest"], `${how}: its own capability and nothing else`);
-    assert.equal(meta.agent, "oats-okf--knowledge-harvester");
-    assert.ok(existsSync(join(worker.home, ".oats", "modules", "oats.okf-harvest", "oats.json")), `${how}: the module is materialized`);
+    assert.deepEqual(Object.keys(meta.modules), ["oats.okf-maintenance"], `${how}: its own capability and nothing else`);
+    assert.equal(meta.agent, "oats-okf--knowledge-maintainer");
+    assert.ok(existsSync(join(worker.home, ".oats", "modules", "oats.okf-maintenance", "oats.json")), `${how}: the module is materialized`);
     assert.equal(existsSync(join(worker.home, ".aw")), false, `${how}: no messaging identity`);
     assert.equal(sources(), false, `${how}: never registered as a knowledge source`);
   };
-  const withParent = f.cli(["spawn", "oats.okf/knowledge-harvester", "--task-file", proposal, "--name", "okf-harvester-anchored", "--parent", f.source.instance, "--harness", "pi", "--no-launch", "--json"]);
+  const withParent = f.cli(["spawn", "oats.okf/knowledge-maintainer", "--task", task, "--name", "okf-maintainer-anchored", "--parent", f.source.instance, "--harness", "pi", "--no-launch", "--json"]);
   check(withParent, "with a parent");
   f.retire(withParent.instance);
-  const orphan = f.cli(["spawn", "oats.okf/knowledge-harvester", "--task-file", proposal, "--name", "okf-harvester-orphan", "--relation", "unrelated", "--harness", "pi", "--no-launch", "--json"]);
+  const orphan = f.cli(["spawn", "oats.okf/knowledge-maintainer", "--task", task, "--name", "okf-maintainer-orphan", "--relation", "unrelated", "--harness", "pi", "--no-launch", "--json"]);
   check(orphan, "no parent");
-  f.retire(orphan.instance); f.retire(f.source.instance);
-  const gone = f.raw(["spawn", "oats.okf/knowledge-harvester", "--task-file", proposal, "--name", "okf-harvester-gone", "--relation", "unrelated", "--no-launch", "--json"]);
-  assert.equal(gone.status, 1); assert.match(gone.stdout + gone.stderr, /E_SOURCE/);
-  assert.equal(existsSync(join(f.context, "agents/oats-okf--knowledge-harvester/instances/okf-harvester-gone")), false, "a gone source cannot admit a new harvester");
+  f.retire(orphan.instance);
+  const harvesters = join(f.context, "agents/oats-okf--knowledge-harvester/instances");
+  for (const [name, relation] of [["okf-harvester-anchored", ["--parent", f.source.instance]], ["okf-harvester-orphan", ["--relation", "unrelated"]]]) {
+    const r = f.raw(["spawn", "oats.okf/knowledge-harvester", "--task-file", proposal, "--name", name, ...relation, "--harness", "pi", "--no-launch", "--json"]);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.error.code, "E_REQUIRED_HOOK_FAILED");
+    assert.deepEqual(out.error.details, { hooks: [{ capability: "oats.okf-harvest", ok: false, required: true, log: null }] });
+    assert.match(out.error.message, /oats-okf-harvest E_REMOVED: oats\.okf 6\.0 removed the knowledge harvester/);
+    assert.equal(existsSync(join(harvesters, name)), false, `${name}: the refused spawn keeps no home`);
+  }
+  assert.equal(sources(), false, "a refused harvester registers no knowledge source");
+  f.retire(f.source.instance);
 });
 
 // ---------- canonical deployment root (instance homes never in a linked worktree) ----------
@@ -2333,9 +2351,11 @@ test("the SHIPPED aweb spawn hook exits nonzero when it cannot mint an identity"
   // check whatever aw the host has (1.16's no-root and no-aw refusals shared one phrase; 1.17's differ).
   const bin = join(base, "bin"); mkdirSync(bin, { recursive: true });
   fakeAw(bin, `#!/bin/sh\nif [ "$1" = "version" ]; then ${AW_VERSION_SHELL}; exit 0; fi\necho "unexpected aw $*" 1>&2; exit 2\n`);
+  // The home exists, as at any spawn: the hook asks the wake broker from there before it looks for the root.
+  const home = join(base, "home"); mkdirSync(home);
   const r = spawnSync(process.execPath, [hook, "spawn"], {
     encoding: "utf8",
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, OATS_EVENT: "spawn", OATS_INSTANCE: "probe", OATS_HOME: join(base, "no-such-home"), OATS_WORKSPACE: base, OATS_CONTEXT: base, OATS_TEAM_SCOPE: base, ...AWEB_V2_ENV },
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, OATS_EVENT: "spawn", OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: base, OATS_CONTEXT: base, OATS_TEAM_SCOPE: base, ...AWEB_V2_ENV },
   });
   assert.notEqual(r.status, 0, `no aweb root must be fatal, got exit ${r.status}: ${r.stdout}`);
   assert.match(r.stdout, /no messaging root at .*could not mint this instance/);
@@ -3113,7 +3133,7 @@ test("the boundary does not contradict a read-only workspace instance (reviewer-
   const fx = v2(t);
   const text = await composedFor(fx, "workspace");
   // Workspace `work` is the deployment scope, not a repo, and it is read-only.
-  assert.ok(text.includes("never edit or commit inside them"), "the mode's read-only rule survives");
+  assert.ok(text.includes(flat("never edit or commit there, and NEVER change a member clone's Git state")), "the mode's read-only rule survives");
   assert.ok(text.includes(flat("`<instance-home>/work` is your repository or workspace view")),
     "and the boundary calls it a repository OR WORKSPACE view, not simply the repository");
   assert.doesNotMatch(text, /work` is the repository\b/, "no unqualified 'work is the repository' claim");
@@ -3206,29 +3226,27 @@ test("with the knowledge layer active, ONE block owns the protocol (reviewer-foc
     "assigned soul-maintenance work is distinguished from promotion of learnings");
 });
 
-test("capability instructions and package skills give an independent harvester the proposal, not completion custody", t => {
+test("capability instructions and package skills give the instance the proposal procedure itself, not a harvester or completion custody", t => {
   const f = okfFixture(t);
   write(join(f.home, "notes/lesson.md"), "A durable source observation.\n");
   assert.doesNotMatch(readFileSync(join(f.home, "TASK.md"), "utf8"), /harvest|propos|okf-propose/i);
   const instructions = readFileSync(join(f.home, "AGENTS.md"), "utf8");
   assert.match(instructions, /IMPORTANT/);
   assert.match(instructions, /\*\*okf-propose\*\* skill is \*\*compulsory\*\*/);
-  assert.deepEqual(f.cli(["okf", "status", "--json"], f.as(f.source)), { harvest: "on", reason: "default" });
-  assert.match(readFileSync(join(f.home, ".agents/skills/okf-propose/SKILL.md"), "utf8"), /oats spawn oats\.okf\/knowledge-harvester --name <harvester-name> --task-file <proposal> --relation unrelated/);
-  const file = f.proposal(), run = f.propose({ file });
-  assert.equal(lstatSync(join(run.home, "work")).isSymbolicLink(), false);
-  assert.ok(readFileSync(join(run.home, "TASK.md"), "utf8").includes(readFileSync(file, "utf8").trim()));
-  const skill = readFileSync(join(run.home, ".agents/skills/knowledge-harvest/SKILL.md"), "utf8");
-  assert.match(skill, /okf-publication\.mjs' commit/);
-  assert.match(skill, /okf-publication\.mjs' create/);
-  assert.match(skill, /okf-publication\.mjs' screen-text/);
-  const publisher = readFileSync(join(run.home, ".agents/skills/okf-authoring/scripts/okf-publication.mjs"), "utf8");
+  assert.match(instructions, /oats okf propose --plan --slug <slug>/, "the instance proposes itself");
+  assert.doesNotMatch(instructions, /knowledge-harvester/, "no harvester to launch");
+  // 6.0 repeats the duty under its new name, publish.
+  assert.deepEqual(f.cli(["okf", "status", "--json"], f.as(f.source)), { harvest: "on", reason: "default", publish: "on" });
+  const skill = readFileSync(join(f.home, ".agents/skills/okf-propose/SKILL.md"), "utf8");
+  assert.match(skill, /oats okf propose --plan --slug <slug>/);
+  assert.match(skill, /oats okf propose --check --slug <slug>/);
+  assert.match(skill, /oats okf propose --apply --slug <slug> --digest <digest>/);
+  assert.doesNotMatch(skill, /oats spawn oats\.okf\/knowledge-harvester/, "no harvester to spawn");
+  // The proposer's own copy of the publication gate, which --apply runs.
+  const publisher = readFileSync(join(f.home, ".agents/skills/okf-authoring/scripts/okf-publication.mjs"), "utf8");
   assert.match(publisher, /'--title', 'OKF knowledge proposal'/, "the publication gate retains the fixed PR title");
-  assert.match(skill, /retire/);
-  assert.equal(existsSync(join(run.home, "work/input.json")), false);
-  assert.equal(existsSync(join(run.home, "work/staging.json")), false);
-  f.retire(run.instance);
-  assert.equal(readFileSync(join(f.home, "notes/lesson.md"), "utf8"), "A durable source observation.\n", "harvester lifecycle never deletes source notes");
+  for (const p of ["work/input.json", "work/staging.json"]) assert.equal(existsSync(join(f.home, p)), false, `no completion custody: ${p}`);
+  assert.equal(readFileSync(join(f.home, "notes/lesson.md"), "utf8"), "A durable source observation.\n", "reading the duty never touches source notes");
   f.retire(f.source.instance);
 });
 
@@ -3291,7 +3309,6 @@ test("the package mirrors carry the versions package-catalog.json pins", () => {
   // each capability; a capability a package exports under another identity is
   // mapped, not assumed.
   const expected = { "oats-okf": "oats.okf", "oats-aweb": "oats.aweb", "oats-aweb-tasks": "oats.aweb", "oats-jira": "oats.jira", "oats-linear": "oats.linear", "oats-authoring": "oats.authoring",
-    "oats-engineering-expert": "oats.engineering", "oats-developer": "oats.engineering", "oats-code-review": "oats.engineering", "oats-maintainer": "oats.engineering",
     "oats-folio": "oats.apps", "oats-library": "oats.apps" };
   for (const [slug, pkg] of Object.entries(expected)) {
     const ref = catalog.packages[pkg]?.ref;
@@ -3299,15 +3316,16 @@ test("the package mirrors carry the versions package-catalog.json pins", () => {
     const manifest = JSON.parse(readFileSync(join(pkgRoot, "mirrors", slug, "oats.json"), "utf8"));
     assert.equal(manifest.version, String(ref).replace(/^v/, ""), `mirrors/${slug} must carry the version ${pkg} is pinned at`);
   }
-  // oats.engineering exports four capabilities under their own ids; the
-  // catalog aliases each to the package, and the reviewer is a package soul.
-  for (const [slug, id] of [["oats-engineering-expert", "oats.engineering-expert"], ["oats-developer", "oats.developer"], ["oats-code-review", "oats.code-review"], ["oats-maintainer", "oats.maintainer"]]) {
-    const manifest = JSON.parse(readFileSync(join(pkgRoot, "mirrors", slug, "oats.json"), "utf8"));
-    assert.equal(manifest.capability, id);
-    assert.equal(catalog.capabilities[id], "oats.engineering", `${id} is supplied by the oats.engineering package`);
-    assert.equal(Object.hasOwn(manifest, "agents"), false, `${id} declares no capability agent: the code-reviewer is oats.engineering's package soul`);
-  }
+  // oats.engineering is frozen at v1.18.0: its entry and its four aliases stay, so
+  // existing pins resolve. This workspace doesn't pin it (its souls compose the
+  // member copy of the engineering template), so it has no mirror here (as oats.cloning).
   assert.equal(catalog.packages["oats.engineering"].ref, "v1.18.0");
+  const workspacePackages = YAML.parse(readFileSync(join(pkgRoot, "oats-workspace.yaml"), "utf8")).packages;
+  assert.equal(Object.hasOwn(workspacePackages, "oats.engineering"), false, "this workspace no longer pins oats.engineering");
+  for (const [slug, id] of [["oats-engineering-expert", "oats.engineering-expert"], ["oats-developer", "oats.developer"], ["oats-code-review", "oats.code-review"], ["oats-maintainer", "oats.maintainer"]]) {
+    assert.equal(catalog.capabilities[id], "oats.engineering", `${id} is still aliased to the frozen oats.engineering package`);
+    assert.equal(existsSync(join(pkgRoot, "mirrors", slug)), false, `mirrors/${slug}: no mirror of an unpinned package`);
+  }
   // oats.cloning exports one capability under the package's own id: no alias; the cloner is a package soul.
   // This workspace does not pin it, so it has no mirror here (as oats.machine).
   assert.equal(catalog.packages["oats.cloning"].ref, "v1.1.0");
@@ -3350,15 +3368,15 @@ test("no shipped instructional surface teaches settling in the work tree (mainta
   }
 });
 
-test("the independently targetable oats.engineering capabilities assume no knowledge or messaging layer", () => {
+test("the independently targetable coordination capabilities (the member copy of the engineering template) assume no knowledge or messaging layer", () => {
   // Each may be composed into a deployment that has replaced or disabled either
   // layer — `requires` is for host commands and harness packages, never
   // capability dependencies (maintainer ruling). These are BOUNDED, observable
   // properties. Provider neutrality as a whole is not machine-decidable from
   // prose: when these surfaces change, it needs semantic review by the
   // maintainer, which the PR process already provides.
-  for (const slug of ["oats-engineering-expert", "oats-developer", "oats-code-review", "oats-maintainer"]) {
-    const dir = resolve(new URL(`../mirrors/${slug}`, import.meta.url).pathname);
+  for (const slug of ["oats-engineering-expert", "oats-developer", "oats-code-review", "oats-maintainer", "oats-landing-rules", "oats-dispatcher"]) {
+    const dir = resolve(new URL(`../capabilities/${slug}`, import.meta.url).pathname);
     const manifest = JSON.parse(readFileSync(join(dir, "oats.json"), "utf8"));
     for (const r of manifest.requires || []) {
       assert.ok(!r.capability && !r.layer, `${slug}: requires must not carry layer dependencies: ${JSON.stringify(r)}`);
@@ -3374,7 +3392,7 @@ test("the independently targetable oats.engineering capabilities assume no knowl
   }
   // The reviewer's report states the no-layer delivery: what an instance needs
   // to behave correctly with, and without, a messaging layer.
-  const reviewer = readFileSync(resolve(new URL("../mirrors/oats-code-review/injects/reviewer.md", import.meta.url).pathname), "utf8");
+  const reviewer = readFileSync(resolve(new URL("../capabilities/oats-code-review/injects/reviewer.md", import.meta.url).pathname), "utf8");
   assert.match(reviewer, /messaging layer if one is active[\s\S]*otherwise print it as your final message/, "the reviewer's report falls back to its own session");
 });
 
@@ -3780,7 +3798,8 @@ console.log(JSON.stringify({ meta: { retired: true } }));`,
     // The completion is an ORDINARY retirement: the hook runs, reports it did
     // not finish, and the home is retained under quarantine with an explicit
     // failed outcome beside it — never a silent success.
-    assert.equal(completeDeferredRetirement(retirePendingMarkerPath(home), { delaySec: 0 }), false);
+    // Not retried: what a retry does is test/retire-hook-retry.test.mjs's.
+    assert.equal(completeDeferredRetirement(retirePendingMarkerPath(home), { delaySec: 0, retryDelaysMs: [] }), false);
     assert.equal(existsSync(retireRan), true, "the retire hook ran in the completion");
     assert.equal(existsSync(home), true, "an incomplete hook retains the home");
     assert.equal(JSON.parse(readFileSync(r.resultPath, "utf8")).result?.workRecovery, undefined, "the caller changed no home bytes, so nothing was needlessly preserved");

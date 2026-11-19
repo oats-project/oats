@@ -12,9 +12,9 @@ import { parseWindowRecords, resolveView, restorePlan, clampBounds, windowTitle,
 
 const A = 'ws:aaaaaaaaaaaaaaaaaaaa', B = 'ws:bbbbbbbbbbbbbbbbbbbb';
 const SERVED = [
-  { id: A, name: 'oats', deployments: ['/d/oats', 'remote:altair:/srv/oats'], machines: ['This Mac', 'altair'] },
-  { id: B, name: 'tsm', deployments: ['/d/tsm'], machines: ['This Mac'] },
-  { id: 'remote:rigel:/srv/x', name: 'x', deployments: ['remote:rigel:/srv/x'], machines: ['rigel'], server: 'rigel', remote: true },
+  { id: A, name: 'oats', deployments: ['/d/oats', 'remote:devbox:/srv/oats'], machines: ['This Mac', 'devbox'] },
+  { id: B, name: 'web', deployments: ['/d/web'], machines: ['This Mac'] },
+  { id: 'remote:build:/srv/x', name: 'x', deployments: ['remote:build:/srv/x'], machines: ['build'], server: 'build', remote: true },
 ];
 const record = (workspace, x = 10, extra = {}) => ({ workspace, bounds: { x, y: 20, width: 800, height: 600 }, maximized: false, ...extra });
 const DISPLAYS = [{ workArea: { x: 0, y: 25, width: 1440, height: 875 } }, { workArea: { x: 1440, y: 0, width: 1920, height: 1080 } }];
@@ -34,7 +34,7 @@ test('parse: valid records kept in order, malformed ones and junk refused', () =
 test('resolve: a view id as itself; a deployment id as the view that holds it (viewFor); else null', () => {
   assert.equal(resolveView(A, SERVED), A);
   assert.equal(resolveView('/d/oats', SERVED), A, 'a deployment recorded before it matched a workspace');
-  assert.equal(resolveView('remote:altair:/srv/oats', SERVED), A);
+  assert.equal(resolveView('remote:devbox:/srv/oats', SERVED), A);
   assert.equal(resolveView('/d/gone', SERVED), null);
   assert.equal(resolveView(A, null), null);
 });
@@ -71,7 +71,7 @@ test('clamp: bounds on a display are kept; off-screen bounds come back onto a vi
 
 test('titles: the workspace\'s name; a remote workspace\'s name with its server; never an id', () => {
   assert.equal(windowTitle(A, SERVED), 'oats');
-  assert.equal(windowTitle('remote:rigel:/srv/x', SERVED), 'x — rigel');
+  assert.equal(windowTitle('remote:build:/srv/x', SERVED), 'x — build');
   assert.equal(windowTitle('remote:none', [{ id: 'remote:none', name: 'y', remote: true, server: 'srv-1' }]), 'y — srv-1', 'no machine label: the server id');
   assert.equal(windowTitle('/d/gone', SERVED), 'OATS Desktop', 'not served: the app\'s name');
   assert.equal(windowTitle(null, SERVED), 'OATS Desktop', 'unbound');
@@ -123,11 +123,11 @@ test('records: a write that fails keeps the records and the previous file', () =
 });
 
 /* ── a record's deployments: restore before observation ───────────────────── */
-const UNOBSERVED = [{ id: '/d/oats', name: 'oats', deployments: ['/d/oats'], unattached: true }, { id: B, name: 'tsm', deployments: ['/d/tsm'] }];
+const UNOBSERVED = [{ id: '/d/oats', name: 'oats', deployments: ['/d/oats'], unattached: true }, { id: B, name: 'web', deployments: ['/d/web'] }];
 
 test('parse: a record keeps its deployments (valid ids only); a record without them still parses', () => {
-  const text = JSON.stringify([{ ...record(A), deployments: ['/d/oats', 'remote:altair:/srv/oats', 'bad\nid', 3] }, record(B)]);
-  assert.deepEqual(parseWindowRecords(text), [{ ...record(A), deployments: ['/d/oats', 'remote:altair:/srv/oats'] }, record(B)]);
+  const text = JSON.stringify([{ ...record(A), deployments: ['/d/oats', 'remote:devbox:/srv/oats', 'bad\nid', 3] }, record(B)]);
+  assert.deepEqual(parseWindowRecords(text), [{ ...record(A), deployments: ['/d/oats', 'remote:devbox:/srv/oats'] }, record(B)]);
 });
 
 test('restore before observation: a view id not served yet resolves through its deployments to the view holding one now', () => {
@@ -142,7 +142,7 @@ test('records: binding keeps the view\'s deployments from the served list; an un
   const store = createWindowRecords({ file, initial: [], timers: t });
   const win = {};
   store.bind(win, A, { bounds: record(A).bounds, maximized: false }, SERVED);
-  assert.deepEqual(store.records()[0].deployments, ['/d/oats', 'remote:altair:/srv/oats']);
+  assert.deepEqual(store.records()[0].deployments, ['/d/oats', 'remote:devbox:/srv/oats']);
   store.bind(win, '/d/oats', undefined, UNOBSERVED);
   assert.deepEqual(store.records()[0].deployments, ['/d/oats']);
   store.bind(win, 'ws:cccccccccccccccccccc', undefined, UNOBSERVED);
@@ -154,12 +154,12 @@ test('records: a record naming only folders that exist but are not deployments i
   // '/' and '/Users/me' exist without an oats-local.yaml; '/Volumes/off/oats' is missing (a volume not mounted, #472).
   const folders = new Set(['/', '/Users/me']);
   const initial = [record('/', 10, { deployments: ['/'] }), record(A, 20, { deployments: ['/d/oats'] }), record('/Volumes/off/oats'),
-    record('/Users/me'), record('/', 30, { deployments: ['/', '/d/tsm'] }), record('remote:rigel:/srv/x')];
+    record('/Users/me'), record('/', 30, { deployments: ['/', '/d/web'] }), record('remote:build:/srv/x')];
   const store = createWindowRecords({ file, initial, timers: t });
   store.forgetNonDeployments((path) => folders.has(path));
-  assert.deepEqual(store.records().map((r) => r.bounds.x === 30 ? '/+tsm' : r.workspace), [A, '/Volumes/off/oats', '/+tsm', 'remote:rigel:/srv/x']);
+  assert.deepEqual(store.records().map((r) => r.bounds.x === 30 ? '/+web' : r.workspace), [A, '/Volumes/off/oats', '/+web', 'remote:build:/srv/x']);
   t.run();
-  assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).map((r) => r.workspace), [A, '/Volumes/off/oats', '/', 'remote:rigel:/srv/x'], 'the cleaned records are written');
+  assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).map((r) => r.workspace), [A, '/Volumes/off/oats', '/', 'remote:build:/srv/x'], 'the cleaned records are written');
   const quiet = timers();
   const clean = createWindowRecords({ file: join(dir, 'clean.json'), initial: [record(A)], timers: quiet });
   clean.forgetNonDeployments(() => true);

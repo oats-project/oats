@@ -4,11 +4,12 @@ import { fixtureEnv } from "./fixture-env.mjs";
 
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { hostname, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { processStartToken, thisBoot } from "../lib/process-identity.mjs";
 
 const PKG = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -51,6 +52,21 @@ test("npm pack tarball installs and runs in a clean room", { timeout: 120_000 },
   assert.equal(dry.status, 0, dry.stderr);
   assert.match(dry.stdout, /dry run: no first capture pass/);
   assert.doesNotMatch(dry.stdout + dry.stderr, /SKIP .*settings\.json/, "no settings corrupted");
+
+  // --- the capture lock, judged as inside an oats install ------------------
+
+  // A lock taken in another boot is its holder's no longer, though its pid (this test's) is alive
+  // with the recorded start: the pass reclaims it and runs.
+  const captureLock = join(room, "record", ".capture.lock");
+  mkdirSync(captureLock, { recursive: true });
+  mkdirSync(join(room, ".claude", "projects"), { recursive: true });
+  writeFileSync(join(captureLock, "owner.json"), JSON.stringify({ pid: process.pid, nonce: "another-run", startedAt: "2026-10-01T00:00:00.000Z",
+    host: hostname(), bootId: `another-boot-than-${thisBoot()}`, processStart: processStartToken(process.pid) }));
+  const pass = run(["capture", "--sessions-only", "--owner", "cleanroom"]);
+  assert.equal(pass.status, 0, pass.stderr + pass.stdout);
+  assert.match(pass.stderr, new RegExp(`capture: reclaimed .*\\.capture\\.lock from pid ${process.pid}, which died`));
+  assert.doesNotMatch(pass.stdout + pass.stderr, /another pass holds/);
+  assert.equal(existsSync(captureLock), false, "the pass ran and released");
 
   // --- setup hardening, against an isolated $HOME -------------------------
 

@@ -25,12 +25,14 @@ import { requireTerms } from './client-terms.mjs';
 /** The gate is page-safe and lives apart (start-gate.mjs); a client takes it from here, with the rest of the rule. */
 export { startGate };
 
-/** The kernel's codes for a start that started nothing: the home's start lock is held, or an earlier start's
- * pane is still a shell without its completion marker (E_SESSION_START_BUSY); the instance was seen running,
- * or its window appeared during the start (E_SESSION_RUNNING). Some places that raise E_SESSION_RUNNING come
+/** The kernel's codes for a start that started nothing: another start holds the home, an upgrade has not
+ * finished, or an earlier start's pane is still a shell without its completion marker (E_SESSION_START_BUSY);
+ * an earlier kernel's start lock, or anything else that is no upgrade's file, is at the home's
+ * `.oats-start.lock` (E_SESSION_START_LOCK_STUCK); the instance was seen running, or its window appeared
+ * during the start (E_SESSION_RUNNING). Some places that raise E_SESSION_RUNNING come
  * after the kernel has written the start's pending receipt, or after a restart's stop: nothing was started,
  * not nothing happened. A code joins only when every place the kernel raises it in a start launches nothing. */
-export const STARTED_NOTHING_CODES = Object.freeze(['E_SESSION_START_BUSY', 'E_SESSION_RUNNING']);
+export const STARTED_NOTHING_CODES = Object.freeze(['E_SESSION_START_BUSY', 'E_SESSION_START_LOCK_STUCK', 'E_SESSION_RUNNING']);
 
 /** The kernel feature from which a start or a restart holds the home's lifecycle claim (#1602). */
 const CLAIM_START_FEATURE = 'lifecycle-claim-start';
@@ -42,11 +44,12 @@ const CLAIM_START_FEATURE = 'lifecycle-claim-start';
  * (lifecycle-contract.mjs answeringFeatures), never this computer's for a server's row. */
 export const CLAIM_STARTED_NOTHING_CODES = Object.freeze(['E_LIFECYCLE_BUSY', 'E_INSTANCE_RETIRING']);
 
-/** The two kernel codes' own sentences, for a client that words by code. The kernel's message is the
- * answer's `detail`, through the display filter. E_SESSION_START_BUSY says no more than busy: the kernel answers
- * it for a start lock that is there, which a start that ended without removing it leaves behind too. */
+/** The kernel codes' own sentences, for a client that words by code. The kernel's message is the answer's
+ * `detail`, through the display filter. E_SESSION_START_BUSY says no more than busy. E_SESSION_START_LOCK_STUCK
+ * is what only a person ends: the kernel's message names the path to remove. */
 const STARTED_NOTHING = Object.freeze({
   E_SESSION_START_BUSY: 'OATS refused this start as busy. Nothing was started.',
+  E_SESSION_START_LOCK_STUCK: 'Something in this instance\'s home blocks starting, usually a start lock an earlier OATS left; OATS\'s message names it. Nothing was started. Remove it once no earlier OATS is running: waiting will not clear it.',
   E_SESSION_RUNNING: 'This instance is already running. Nothing was started.',
 });
 /** A CLAIM_STARTED_NOTHING_CODES refusal's sentence. E_LIFECYCLE_BUSY reads by who holds the claim (`holder`,
@@ -83,6 +86,27 @@ export function verifiedLocalHome(row, deployments, realpath) {
   return null;
 }
 
+/** How a start came by its session, as the kernel's receipt says (`reused`): a new window, a retained pane, or the
+ * adopted launch of an earlier start whose record was not written. */
+const START_REUSED = Object.freeze(['new', 'pane', 'adopted']);
+
+/** Whether `v` is the receipt of a completed start or restart of `row`, as the kernel answers one
+ * (docs/desktop-cli-api.md, `oats session start`: `{instance, agent, home, harness, backend, model, launchConfig,
+ * yolo, target, startedAt, restartCount, reused, warnings}`): the row's instance, in the row's home (the kernel
+ * answers with its real path: `canonical`, the verified local home), on the one backend there is, tmux, with its
+ * target (`{backend, session, window, socket}`, more keys allowed) and the other fields a start always carries.
+ * Read where the CLI is newer than this client was tested with, so a format it does not know is not taken for one. */
+function startReceipt(v, row, canonical) {
+  const record = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
+  const text = (x) => typeof x === 'string' && x.length > 0;
+  return record(v) && v.instance === row.instance && text(v.home) && (v.home === row.home || (canonical !== null && v.home === canonical))
+    && text(v.agent) && text(v.harness) && v.backend === 'tmux' && text(v.startedAt)
+    && record(v.target) && v.target.backend === 'tmux' && text(v.target.session) && text(v.target.window)
+    && text(v.target.socket) && v.target.socket.startsWith('/')
+    && Number.isSafeInteger(v.restartCount) && v.restartCount >= 0 && START_REUSED.includes(v.reused)
+    && Array.isArray(v.warnings) && v.warnings.every((w) => typeof w === 'string');
+}
+
 /** Start or restart one row.
  *   choices   { model, launchConfig, harness, yolo }: the launch choices, each one argv value
  *   restart   a restart (the kernel's one call, never a stop then a start)
@@ -106,8 +130,8 @@ export async function startInstance(cli, row, choices = {}, { restart = false, d
   const gate = startGate(cli, row, { restart, choices }, terms);
   if (gate) return refused(gate.code, gate.sentence, gate.detail ? { detail: gate.detail } : {});
   const local = !row.server;
-  if (local && !(verifyHome ? verifyHome(row) : verifiedLocalHome(row, deployments, realpath)))
-    return refused('E_HOME_UNVERIFIED', 'Instance home is outside the workspace instances layout');
+  const canonical = local ? (verifyHome ? verifyHome(row) : verifiedLocalHome(row, deployments, realpath)) : null;
+  if (local && !canonical) return refused('E_HOME_UNVERIFIED', 'Instance home is outside the workspace instances layout');
   let envelope;
   // A call that could not be made, or failed on its way (an exec that throws, a rejected call), is uncertain like
   // any answer this cannot read: the CLI may have begun the start. Its words are the rule's; the exception's text
@@ -116,7 +140,14 @@ export async function startInstance(cli, row, choices = {}, { restart = false, d
     harnessFlag: harnessFlag(cli), yolo: choices.yolo, restart, workspaceDir: local ? dirname(row.agentsRoot) : localCwd, server: row.server },
   { ...(exec ? { exec } : {}), ...(after ? { after } : {}), ...(wait !== undefined ? { wait } : {}) }); }
   catch { return { ok: false, outcome: 'uncertain', code: 'E_CLI_FAILED', sentence: CLI_FAILED, detail: null, ran: true }; }
-  if (envelope?.ok === true) return { ok: true, result: envelope.result };
+  if (envelope?.ok === true) {
+    // Above the client's tested bound (#1879, cli-locator.mjs aboveTested) a start is reported started only on the
+    // receipt it knows (startReceipt): any other answer is an outcome not known, never a start, and nothing more
+    // is run. Within the bound the answer is taken as before.
+    if (cli?.aboveTested === true && !startReceipt(envelope.result, row, canonical))
+      return { ok: false, outcome: 'uncertain', code: 'E_CLI_PROTOCOL', sentence: null, detail: null, ran: true };
+    return { ok: true, result: envelope.result };
+  }
   const code = typeof envelope?.error?.code === 'string' ? envelope.error.code : 'E_CLI_PROTOCOL';
   const detail = displayLine(envelope?.error?.message);
   if (CLAIM_STARTED_NOTHING_CODES.includes(code)) {

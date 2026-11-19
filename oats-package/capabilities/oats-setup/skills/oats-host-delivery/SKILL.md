@@ -166,9 +166,9 @@ installed.
    `delivery: channel` for the whole host, or per spawn with
    `--provider oats.aweb delivery=channel`. With channel delivery, pi uses its
    `@awebai/pi` extension and Codex always uses the host broker.
-5. **pi seats**: the setup expert runs `pi install npm:@awebai/pi`, then makes
-   its entry in the pi folder's `settings.json` (`PI_CODING_AGENT_DIR`, else
-   `~/.pi/agent`) `{"source": "npm:@awebai/pi", "skills": []}`: no bundled skills.
+5. **pi seats**: the setup expert runs `pi install npm:@awebai/pi`; below 0.5.0, which bundles skills, it also makes the
+   entry in the pi folder's `settings.json` (`PI_CODING_AGENT_DIR`, else `~/.pi/agent`) `{"source": "npm:@awebai/pi", "skills": []}`.
+   Never install `@awebai/claude-skills` in a pi folder OATS homes use: a home's skills come from its capabilities.
 
 **Effects:** a machine-wide Claude policy file and host settings; no home
 changes. **Existing homes** keep the delivery and channel mode recorded at
@@ -249,8 +249,8 @@ input`, which drive `tmux`). For each registration it also runs a delivery
 child on Node.
 
 Homes register themselves at spawn and launch, so there is nothing to do per
-home. A registration made while the broker is down is written to its state
-directory, and it takes effect when the broker starts. That directory is
+home. From oats.aweb 1.40.0, oats.aweb refuses to spawn or start a home the broker delivers to
+while no broker runs. The broker's state directory is
 `~/.config/aw/wake`, or `AW_WAKE_STATE_DIR` when that is set; the hooks and
 the service must then see the same value.
 
@@ -265,7 +265,7 @@ revisit it whenever the host gains its first such home: a team join
   the problem `wake-daemon-not-running`;
 - each of its joined teams also gets the warning `joined-team-poll-only`, and
   is reached only by polling its inbox;
-- a Codex or `delivery: session` home is never woken.
+- a Codex or `delivery: session` home is refused at spawn and at each start (from oats.aweb 1.40.0; before it, it is never woken).
 
 **Who installs it.** The operator does, in their own terminal, as the user
 who runs the instances, outside every instance home. Install it once aw

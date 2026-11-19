@@ -173,11 +173,11 @@ test('a soul with no team it has access to (all unmapped) shows no row: there is
 // (docs/desktop-cli-api.md "Team model v2", feat/030-team-model 8dd82158), shown here on the
 // captured preview with K1's example rows until the 0.30 captures exist: the default first
 // (fixed), then the others by label (unchecked boxes); a shared team with no id is shown, disabled.
-const V2_ROWS = [{ label: 'antares-oats', team: 'antares-oats:juan.aweb.ai', default: true, from: 'local' },
+const V2_ROWS = [{ label: 'builder-oats', team: 'builder-oats:alex.aweb.ai', default: true, from: 'local' },
   { label: 'oats', team: 'oats:oats.aweb.ai', default: false, from: 'shared' }, { label: 'reviewers', team: null, default: false, from: 'shared' }];
 const v2 = (envelope, join = null) => {
   const v = declared(envelope); v.result.teams = structuredClone(V2_ROWS);
-  v.result.defaultTeam = { label: 'antares-oats', team: 'antares-oats:juan.aweb.ai', from: 'deployment' };
+  v.result.defaultTeam = { label: 'builder-oats', team: 'builder-oats:alex.aweb.ai', from: 'deployment' };
   delete v.result.team;
   // The bound join (decision.effective.providers) and its settings echo move together, as the kernel sends them.
   for (const at of [v.result.settings?.['oats.aweb'], v.result.decision?.effective?.providers?.['oats.aweb']]) if (at) { if (join) at.join = join; else delete at.join; }
@@ -188,12 +188,12 @@ test('v2: the default team is fixed by its name, each other team is an unchecked
   const u = await dialog(t, { kernel: choices => v2(f7(previewFor(choices)), choices.join ? choices.join.labels.join(',') : null) });
   assert.equal(u.q('.spawn-teams').hidden, false);
   assert.deepEqual(rows(u), [
-    ['antares-oats · default', "The default team (antares-oats:juan.aweb.ai): every instance of release-manager is in it and can't leave it.", true, true],
+    ['builder-oats · default', "The default team (builder-oats:alex.aweb.ai): every instance of release-manager is in it and can't leave it.", true, true],
     ['oats', 'Join oats (oats:oats.aweb.ai)', false, false],
     ['reviewers', 'reviewers has no provider id yet: its owner runs oats aweb setup, then commits the id.', false, true]]);
-  assert.equal(u.text('.spawn-teams-hint'), 'It joins its default team, antares-oats. Tick any other team it should also join.');
+  assert.equal(u.text('.spawn-teams-hint'), 'It joins its default team, builder-oats. Tick any other team it should also join.');
   assert.doesNotMatch(u.q('.spawn-teams').textContent, /primary|personal/i);
-  assert.equal(u.q('.fteam[value="antares-oats"]'), null, 'the default is never a choice, so never sent');
+  assert.equal(u.q('.fteam[value="builder-oats"]'), null, 'the default is never a choice, so never sent');
   assert.ok(u.previews().every(p => !Object.hasOwn(p.choices, 'join')), 'unchecked by default: only the default team is joined');
   await u.change('.fteam[value="oats"]', true); await settle();
   assert.deepEqual(u.previews().at(-1).choices.join, { provider: 'oats.aweb', labels: ['oats'] }, 'the ticked team goes as join=oats');
@@ -203,16 +203,16 @@ test('v2: the default team is fixed by its name, each other team is an unchecked
 test('v2: a soul with only its default team shows it, with nothing to tick', async t => {
   const only = envelope => { const v = v2(envelope); v.result.teams = [structuredClone(V2_ROWS[0])]; return v; };
   const u = await dialog(t, { kernel: choices => only(f7(previewFor(choices))) });
-  assert.deepEqual(rows(u).map(r => r[0]), ['antares-oats · default']);
-  assert.equal(u.text('.spawn-teams-hint'), 'It joins its default team, antares-oats. No other team is open to release-manager on this computer.');
+  assert.deepEqual(rows(u).map(r => r[0]), ['builder-oats · default']);
+  assert.equal(u.text('.spawn-teams-hint'), 'It joins its default team, builder-oats. No other team is open to release-manager on this computer.');
 });
 
 test('v2: an unmapped default team blocks the spawn: the dialog says why and what to do, and Spawn is off (the lead\'s ruling)', async t => {
   const blocked = envelope => { const v = v2(envelope); v.result.teams[0].team = null; v.result.defaultTeam.team = null; return v; };
   const u = await dialog(t, { kernel: choices => blocked(f7(previewFor(choices))) });
-  const home = u.q('.spawn-team[data-team="antares-oats"]');
-  assert.ok(home.classList.contains('spawn-team-blocked')); assert.equal(home.title, 'The default team antares-oats has no provider id yet.');
-  assert.equal(u.text('.spawn-teams-hint'), "The default team antares-oats has no provider id yet, so release-manager can't be spawned here. Its owner runs oats aweb setup, then commits the id; or choose another default in Workspace › Teams.");
+  const home = u.q('.spawn-team[data-team="builder-oats"]');
+  assert.ok(home.classList.contains('spawn-team-blocked')); assert.equal(home.title, 'The default team builder-oats has no provider id yet.');
+  assert.equal(u.text('.spawn-teams-hint'), "The default team builder-oats has no provider id yet, so release-manager can't be spawned here. Its owner runs oats aweb setup, then commits the id; or choose another default in Workspace › Teams.");
   assert.ok(u.q('.spawn-teams-hint').classList.contains('err'));
   assert.equal(u.q('.fspawn').disabled, true, 'nothing to spawn into');
   assert.doesNotMatch(u.q('.spawn-teams').textContent, /Always on|primary|personal/i);

@@ -1,12 +1,12 @@
 {
   "capability": "oats.okf",
   "command": "okf",
-  "version": "5.8.0",
+  "version": "6.2.0",
   "compatibility": {
     "oats": ">=0.69.2"
   },
   "layer": "knowledge",
-  "description": "The OKF knowledge slot for working souls: consult the soul's accepted OKF bases remotely (no per-instance copy), keep instance knowledge with judgment, and at important checkpoints propose durable knowledge by spawning the oats.okf/knowledge-harvester package soul with a short, self-contained proposal.",
+  "description": "The OKF knowledge slot for working souls: consult the soul's accepted OKF bases remotely (no per-instance copy), keep instance knowledge with judgment, and at important checkpoints propose durable knowledge yourself as a reviewed PR on the owned nodes (`oats okf propose`: plan, check, apply); the knowledge maintainer gates every merge.",
   "requires": [],
   "settings": {
     "bindings-file": {
@@ -20,6 +20,13 @@
     },
     "consult-max-age": {
       "description": "Seconds a Git base's host-cached accepted commit may age before an `oats okf` consult read refetches the accepted branch; default 300, 0 fetches on every read. `--fresh` always refetches."
+    },
+    "github-token-file": {
+      "hostOnly": true,
+      "description": "Optional (6.2), host-only. Absolute host path of a file holding one GitHub token, the deployment's proposer credential (write role only on the knowledge repository). When set, every remote git call and every gh call of oats.okf is given that token, read at each call (the host's own netrc and Git configuration are not isolated: keep no github.com credential or rewrite there); a Git base must be bound by its https://github.com/ URL; a missing or malformed file refuses with E_CREDENTIAL. Absent: the user's own git and gh login, as before."
+    },
+    "screen-terms-file": {
+      "description": "Optional absolute host path of a text file, one term per line: `oats okf propose` refuses any outgoing content (diff, file name, commit text, PR body, branch) containing a term, case-insensitively (rule host-term, location only). Absent: the fixed content-screen rules only."
     }
   },
   "skills": [
@@ -27,6 +34,7 @@
   ],
   "commands": {
     "harvest": "bin/oats-okf.mjs harvest",
+    "propose": "bin/oats-okf.mjs propose",
     "status": "bin/oats-okf.mjs status",
     "inspect": "bin/oats-okf.mjs inspect",
     "setup": "bin/oats-okf.mjs setup",
@@ -39,6 +47,10 @@
     "ls": "bin/oats-okf.mjs ls",
     "links": "bin/oats-okf.mjs links",
     "search": "bin/oats-okf.mjs search",
+    "subjects": "bin/oats-okf.mjs subjects",
+    "subject": "bin/oats-okf.mjs subject",
+    "claims": "bin/oats-okf.mjs claims",
+    "verdicts": "bin/oats-okf.mjs verdicts",
     "read": "bin/oats-okf.mjs read",
     "refresh": "bin/oats-okf.mjs refresh",
     "init": "bin/oats-okf.mjs init",
@@ -62,8 +74,7 @@
       "check action is not an admitted knowledge operation",
       "OKF settings missing bindings-file: set settings.oats.okf bindings-file, or deactivate oats.okf",
       "OKF soul declaration missing: create okf.json for this soul, or deactivate oats.okf",
-      "E_REMOVED: OKF binding payloadVersion 1 (harvest runtime/model) was removed in oats.okf 5.0; respawn to bind with oats.okf 5 (the harvester uses the kernel's own harness and model)",
-      "OKF binding missing or invalid: provision soul OKF declaration and bindings file, or deactivate oats.okf",
+      "captured bindings are not supported since oats.okf 6.1.0; readiness takes a workspace context (oats readiness)",
       "OKF bindings file missing or invalid: repair configured bindings file, or deactivate oats.okf",
       "more than 64 git knowledge bases declared",
       "declared knowledge base could not be staged from its git source",
@@ -105,7 +116,7 @@
       "kind": "action",
       "command": "harvest",
       "context": "home",
-      "description": "Removed in oats.okf 5.0: refuses with E_REMOVED and the new way (a proposal and a direct oats.okf/knowledge-harvester spawn). Kept declared so an old caller gets that answer, not an unknown operation."
+      "description": "Removed in oats.okf 5.0: refuses with E_REMOVED and the new way (`oats okf propose` from the instance home). Kept declared so an old caller gets that answer, not an unknown operation."
     }
   }
 }

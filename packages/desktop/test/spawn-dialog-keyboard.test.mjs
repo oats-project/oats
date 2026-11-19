@@ -185,7 +185,7 @@ test('Spec E: Reopen spawn (a restored draft) lands on the instruction, caret at
   const u = await mountSpawn(t, { spawnName: true }); asMac(u);
   spawn.preselectSpawn({ name: 'release-manager', agentsRoot: ROOT, draft: { layout: 'scoped', task: 'Cut 3.2', restore: { choices: { name: 'api-v2-manager' } } } }); await settle();
   const purpose = u.q('.fpurpose'), task = u.q('.ftask');
-  assert.equal(u.dialog().dataset.layout, 'scoped'); assert.equal(purpose.value, 'api-v2-manager', 'the name as sent, which the role rule leaves as it is');
+  assert.equal(u.dialog().dataset.layout, 'scoped'); assert.equal(purpose.value, 'api-v2-manager', 'the name as sent');
   assert.equal(u.doc.activeElement, task);
   assert.deepEqual([task.value, task.selectionStart, task.selectionEnd], ['Cut 3.2', 7, 7], 'the caret after the restored instruction, no select-all');
   key(u, task, '6', { metaKey: true });

@@ -13,7 +13,7 @@
    those that draw their parent line before the rest (#1577, packages/client
    same-work.mjs), and recency orders each part. This supersedes Spec C's flat Recent
    group; the record is still instance-recency.mjs, and the sidebar keeps its
-   stable name order. The order is decided on the full roster: a query decides
+   stable spawn order, newest first. The order is decided on the full roster: a query decides
    only which rows show, each match with its non-matching ancestors as disabled
    context rows. Each row carries the sidebar row's connectors (treeConnectors,
    instance-tree-view.mjs) and state; an instance at either end of an explicit

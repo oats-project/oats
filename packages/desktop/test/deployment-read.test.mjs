@@ -215,7 +215,7 @@ test('an agent key is a soul key or null: a string still decodes, any other type
 test('the locator carries only an integer workspaceApi 2 from the probe into the accepted CLI state', async () => {
   const { discover } = await import('../../client/cli-locator.mjs');
   // The capture's kernel printed 0.25.9, below the band's floor; served as 0.26.0 so the locator accepts it.
-  const run = async payload => discover({ persisted: () => '/fixture/bin/oats', env: {}, isExecutableFile: () => true },
+  const run = async payload => discover({ testedVersion: '0.69.17', persisted: () => '/fixture/bin/oats', env: {}, isExecutableFile: () => true },
     async () => ({ stdout: JSON.stringify({ ...payload, version: '0.26.0' }) }));
   assert.equal((await run(probe)).workspaceApi, 2, 'the captured probe advertises workspaceApi 2');
   for (const value of [1, '2', 3, undefined]) {

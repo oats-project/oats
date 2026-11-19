@@ -6,9 +6,9 @@ import { tmpdir } from "node:os";
 import { DEV_CHANNEL_ENTRIES, FLAG_IGNORED_ENTRIES, validateDevChannelEntries, normalizeScreen, matchDevChannelEntry, matchFlagIgnoredEntry,
   devChannelDifference, claudeVersionOf, launchPromptEngages } from "../lib/launch-prompt-fixtures.mjs";
 import { raw296, raw289, linux296, flagIgnored, flagIgnoredHidden, edit } from "./helpers/dev-channel-screens.mjs";
+import { CLAUDE_CHANNEL_ARGUMENTS } from "../mirrors/oats-aweb/lib/wake-receive.mjs";
 
-const PLUGIN = "plugin:aweb-channel@awebai-marketplace";
-const DEV = "--dangerously-load-development-channels";
+const [DEV, PLUGIN] = CLAUDE_CHANNEL_ARGUMENTS.development.split(" ");
 const provenance = JSON.parse(readFileSync(new URL("./fixtures/launch-prompts/dev-channel-provenance.json", import.meta.url), "utf8"));
 
 test("normalization drops box rules, collapses whitespace and nothing else", () => {
@@ -98,6 +98,12 @@ test("differed picks the entry with the longest common prefix", () => {
     id: "other", text: DEV_CHANNEL_ENTRIES[0].text.replace("WARNING: Loading", "WARNING: Opening") }]);
   assert.equal(devChannelDifference(edit(raw296, "Loading", "Opening") + "x\n", entries).nearest, "other");
   assert.equal(devChannelDifference(raw296 + "x\n", entries).nearest, DEV_CHANNEL_ENTRIES[0].id);
+});
+
+test("engagement agrees with the provider's channel arguments", () => {
+  for (const [mode, argument] of Object.entries(CLAUDE_CHANNEL_ARGUMENTS)) {
+    assert.equal(launchPromptEngages({ harness: "claude", argv: argument.split(" ") }), mode === "development", mode);
+  }
 });
 
 test("engagement is exactly claude with the single development-channel aweb argument", () => {

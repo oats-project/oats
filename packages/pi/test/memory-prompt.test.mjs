@@ -110,7 +110,7 @@ test("a file last written before the home was created is skipped unread", (t) =>
 test("pi's own SessionManager: a session holding nothing is not filed, one with a turn counts on restart", async (t) => {
   let SessionManager;
   try { ({ SessionManager } = await import("@earendil-works/pi-coding-agent")); }
-  catch { return t.skip("pi SDK not installed (npm ci installs it as a peer of @awebai/pi)"); }
+  catch { return t.skip("pi SDK not installed (npm ci installs the root development dependency)"); }
   const h = home(t, OKF_SEED);
   const sm = SessionManager.create(h.dir, h.sessions);
   assert.deepEqual(start(h, { current: sm.getSessionFile() }), []);

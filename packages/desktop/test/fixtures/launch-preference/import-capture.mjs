@@ -13,7 +13,7 @@ if (typeof source !== 'string' || !source.startsWith('/')) throw new Error('One 
 const target = fileURLToPath(new URL('.', import.meta.url));
 const documents = ['version', 'souls', 'souls-unavailable', 'inspect-soul-dev', 'inspect-soul-reviewer', 'preview-dev', 'preview-dev-flag',
   'preview-dev-unavailable', 'inspect-home', 'inspect-home-drift', 'readiness-home-drift', 'status',
-  // #292's review (Antares): the reverse drift (host, at null) and default-team-changed (DefaultTeam recorded/current).
+  // #292's review: the reverse drift (host, at null) and default-team-changed (DefaultTeam recorded/current).
   'inspect-home-reverse-drift', 'readiness-home-reverse-drift', 'inspect-home-default-team-changed', 'readiness-home-default-team-changed'];
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const captured = JSON.parse(readFileSync(join(source, 'provenance.json'), 'utf8'));

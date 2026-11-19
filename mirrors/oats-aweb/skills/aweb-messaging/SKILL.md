@@ -111,7 +111,7 @@ Real-time push events arrive through an aweb channel integration. Use the channe
 
 Harness support differs:
 
-- **Pi**: OATS installs the `@awebai/pi` extension with its bundled skills filtered out: its entry in the pi folder's `settings.json` is `{"source": "npm:@awebai/pi", "skills": []}`. A home's skills come from OATS.
+- **Pi**: OATS installs the `@awebai/pi` extension; below 0.5.0, its entry in the pi folder's `settings.json` carries `"skills": []`, as `{"source": "npm:@awebai/pi", "skills": []}`. A home's skills come from OATS: don't install `@awebai/claude-skills` in a pi folder that OATS homes use.
 - **Claude Code**: install the `aweb-channel` plugin from the `awebai/claude-plugins` marketplace. See <https://github.com/awebai/aweb/blob/main/docs/channel.md>.
 - **Codex**: no always-on channel install in v1. Check mail and chat at regular points in your work, or use `aw run codex` for a session-bound runner.
 

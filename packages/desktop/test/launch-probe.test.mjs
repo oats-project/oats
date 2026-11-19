@@ -14,7 +14,16 @@ test("WATCHDOG_MS exceeds the sum of phase budgets (finding 1 \u2014 no prematur
   assert.equal(PHASE_BUDGET_SUM, Object.values(PHASE_BUDGET_MS).reduce((a, b) => a + b, 0));
   assert.ok(WATCHDOG_MS > PHASE_BUDGET_SUM, `watchdog ${WATCHDOG_MS} must exceed summed budgets ${PHASE_BUDGET_SUM}`);
   // and the launch pole (readiness + evaluate) alone must fit under it
-  assert.ok(WATCHDOG_MS > PHASE_BUDGET_MS.launchReady + PHASE_BUDGET_MS.cdpEvaluate);
+  assert.ok(WATCHDOG_MS > PHASE_BUDGET_MS.launchFixture + PHASE_BUDGET_MS.launchReady
+    + PHASE_BUDGET_MS.cdpEvaluate + PHASE_BUDGET_MS.instanceLaunchReady + PHASE_BUDGET_MS.instanceCdpEvaluate,
+  "both independent GUI launches and fixture setup fit the watchdog");
+  assert.equal(PHASE_BUDGET_MS.stoppedLaunches, ["launchFixture", "instanceLaunchReady", "instanceCdpEvaluate", "instanceObservation",
+    "repeatedLaunch", "repeatedObservation", "instanceLaunchCleanup"].reduce((sum, key) => sum + PHASE_BUDGET_MS[key], 0),
+  "the stopped fixture has a separate full first and repeated launch budget");
+  assert.ok(PHASE_BUDGET_MS.fixtureStop >= 10000 + 10000 + 2000, "fixture stop plan/apply and server close fit the watchdog");
+  for (const key of ["launchCleanup", "instanceLaunchCleanup"]) {
+    assert.ok(PHASE_BUDGET_MS[key] >= 5000 + 5000 + 2000 + 10 * (500 + 5000), `${key} includes bounded quit, viewer checks and close drain`);
+  }
 });
 
 test("boundedTail keeps only the last `max` bytes; memory cannot balloon", () => {

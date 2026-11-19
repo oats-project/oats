@@ -10,8 +10,8 @@ const RUNTIME_ORDER = Object.freeze({ running: 0, unknown: 1, stopped: 2 });
 /** The panel's runtime order, a comparator for `sort`: running, then unknown (`running` null or anything not
  * a boolean: it may be running, so it stands above the rows nobody needs to watch), then stopped; by name
  * within each. Each row's place depends on that row alone, so it is a total order whatever `running` holds.
- * Read by `panelInstances` (deployment-panel.mjs). The sidebar's roster orders by name (instance-tree.mjs
- * `rosterOrder`, #1262). */
+ * Read by `panelInstances` (deployment-panel.mjs). The sidebar's roster orders by spawn time, newest first
+ * (instance-tree.mjs `rosterOrder`). */
 export function byRuntimeState(a, b) {
   return RUNTIME_ORDER[runtimeState(a)] - RUNTIME_ORDER[runtimeState(b)] || String(a.instance).localeCompare(String(b.instance));
 }

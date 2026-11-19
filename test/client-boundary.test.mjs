@@ -53,7 +53,7 @@ const HOME = "packages/client", TUI = "packages/tui", DESKTOP = "packages/deskto
 const SURFACE = Object.freeze({
   // Firm: the frame and the Instances view.
   "display-text.mjs": ["displayLine", "cleanLine", "DETAIL_WITHHELD", "MAX_DISPLAY_LINE", "NOT_NOTE_TEXT", "UNSAFE"],
-  "cli-locator.mjs": ["ACCEPT_RANGE", "ACCEPT_RANGE_TEXT", "PROBE_NAME", "parseSemver", "parseProbeStdout", "acceptProbe", "cliRecord"],
+  "cli-locator.mjs": ["ACCEPT_RANGE", "acceptRangeText", "PROBE_NAME", "parseSemver", "parseProbeStdout", "acceptProbe", "cliRecord"],
   "cli-probe-contract.mjs": ["probeSignature", "probeChanged"],
   "deployment-contract.mjs": ["DEPLOYMENT_FEATURES", "deploymentRecord", "deploymentReadGate", "deploymentFailure", "OBSERVE_MAX_AGE_FEATURE", "validMaxAge", "maxAgeArgv"],
   "deployment-read-cli.mjs": ["cliDeploymentRead", "DEPLOYMENT_READ_TIMEOUT", "DEPLOYMENT_READ_MAX_BUFFER"],

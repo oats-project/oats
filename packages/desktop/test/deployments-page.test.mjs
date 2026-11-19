@@ -19,18 +19,18 @@ const ORIGINAL = { window: globalThis.window, document: globalThis.document, set
 
 const LOCAL = { id: "/Users/op/Agents/oats", machine: "This Mac", path: "/Users/op/Agents/oats", label: "~/Agents/oats", local: true,
   reachable: true, identityFrom: "reported", primary: true };
-const ALTAIR = { id: "remote:altair:5d1e0c9b8a7f", machine: "altair", path: "/home/op/Agents/tsm", label: "~/Agents/tsm", local: false,
-  reachable: false, identityFrom: "remembered", primary: false, reason: "altair timed out; it is tried again on the next read.",
-  short: "timed out", note: "altair now reports workspace tsm." };
-const VEGA = { id: "remote:vega:9f2c1a7b3e4d", machine: "vega", path: "/home/op/Agents/lab", label: "~/Agents/lab", local: false,
-  reachable: false, identityFrom: null, primary: false, reason: "ssh to vega asks for a password, and Desktop never answers a prompt.",
-  short: "ssh needs a prompt", fix: ["Run `ssh vega` once in a terminal and answer its prompt (a host key or a password).", "Desktop tries again on its next read."] };
+const DEVBOX = { id: "remote:devbox:5d1e0c9b8a7f", machine: "devbox", path: "/home/op/Agents/web", label: "~/Agents/web", local: false,
+  reachable: false, identityFrom: "remembered", primary: false, reason: "devbox timed out; it is tried again on the next read.",
+  short: "timed out", note: "devbox now reports workspace web." };
+const LAPTOP = { id: "remote:laptop:9f2c1a7b3e4d", machine: "laptop", path: "/home/op/Agents/lab", label: "~/Agents/lab", local: false,
+  reachable: false, identityFrom: null, primary: false, reason: "ssh to laptop asks for a password, and Desktop never answers a prompt.",
+  short: "ssh needs a prompt", fix: ["Run `ssh laptop` once in a terminal and answer its prompt (a host key or a password).", "Desktop tries again on its next read."] };
 const tag = (d) => ({ id: d.id, machine: d.machine, path: d.path });
 const row = (name, d, fields = {}) => ({ instance: name, agent: "soul", agentsRoot: `${d.path}/agents`, home: `${d.path}/agents/soul/instances/${name}`,
   repoName: "repo", running: true, deployment: tag(d), ...(d.local ? {} : { server: d.machine, addressable: true }), ...fields });
 const view = { id: "ws:view", name: "oats" };
 const panel = (deployments, instances) => ({ instances, workspace: view, workspaces: [{ ...view, deployments: deployments.map((d) => d.id) }], deployments });
-const THREE = () => panel([LOCAL, ALTAIR, VEGA], [row("lead", LOCAL), row("dev", LOCAL, { parentInstance: "lead" }), row("far", ALTAIR), row("near", LOCAL)]);
+const THREE = () => panel([LOCAL, DEVBOX, LAPTOP], [row("lead", LOCAL), row("dev", LOCAL, { parentInstance: "lead" }), row("far", DEVBOX), row("near", LOCAL)]);
 
 /* Mount the page on `data`; `before(window)` runs first (to seed the remembered tab). */
 async function page(t, data, { before } = {}) {
@@ -72,10 +72,10 @@ test("one deployment: only its own tab, no All, and its tree under its machine's
 });
 
 test("one deployment that is not live: its tab carries the mark and the canvas keeps its heading, so the reason is never hidden", async (t) => {
-  const u = await page(t, panel([VEGA], [row("lab", VEGA)]));
-  assert.deepEqual(u.tabs().map((b) => b.firstChild.textContent), ["vega"]);
+  const u = await page(t, panel([LAPTOP], [row("lab", LAPTOP)]));
+  assert.deepEqual(u.tabs().map((b) => b.firstChild.textContent), ["laptop"]);
   assert.equal(u.tabs()[0].querySelector(".deployment-mark").getAttribute("aria-label"), "not reached");
-  assert.deepEqual(u.all(".hier-dname").map((n) => n.textContent), ["vega · ~/Agents/lab"]);
+  assert.deepEqual(u.all(".hier-dname").map((n) => n.textContent), ["laptop · ~/Agents/lab"]);
   assert.equal(u.one(".hier-dstate").textContent, "not reached"); assert.equal(u.one(".hier-dfix > summary").textContent, "How to fix");
   assert.deepEqual(u.names(u.one(".hier-deployment")), ["lab"]);
 });
@@ -92,7 +92,7 @@ test("tabs: All then each deployment in served order, the Workspace tab pattern,
   const list = u.one('[role="tablist"]');
   assert.ok(list.classList.contains("hier-tabs")); assert.equal(list.getAttribute("aria-label"), "Deployments"); assert.equal(list.hidden, false);
   assert.ok(u.one(".hier-bar").contains(list), "the tabs lead the page header");
-  assert.deepEqual(u.tabs().map((b) => b.firstChild.textContent), ["All", "This Mac", "altair", "vega"]);
+  assert.deepEqual(u.tabs().map((b) => b.firstChild.textContent), ["All", "This Mac", "devbox", "laptop"]);
   const selected = () => u.tabs().filter((b) => b.getAttribute("aria-selected") === "true").map((b) => b.firstChild.textContent);
   const tabbable = () => u.tabs().filter((b) => b.tabIndex === 0).map((b) => b.firstChild.textContent);
   assert.deepEqual(selected(), ["All"]); assert.deepEqual(tabbable(), ["All"]);
@@ -101,39 +101,39 @@ test("tabs: All then each deployment in served order, the Workspace tab pattern,
   assert.equal(u.one(".hier-panel").getAttribute("aria-labelledby"), u.tab("All").id);
   // A deployment that is not live: the shared status mark, its state in words (never the mark alone).
   assert.equal(u.tab("This Mac").querySelector(".deployment-mark"), null);
-  assert.equal(u.tab("altair").querySelector(".deployment-mark").getAttribute("aria-label"), "remembered");
-  assert.equal(u.tab("vega").querySelector(".deployment-mark").getAttribute("aria-label"), "not reached");
-  assert.equal(u.tab("vega").title, "/home/op/Agents/lab — not reached", "the full path only as a tooltip");
+  assert.equal(u.tab("devbox").querySelector(".deployment-mark").getAttribute("aria-label"), "remembered");
+  assert.equal(u.tab("laptop").querySelector(".deployment-mark").getAttribute("aria-label"), "not reached");
+  assert.equal(u.tab("laptop").title, "/home/op/Agents/lab — not reached", "the full path only as a tooltip");
   u.tab("All").focus();
   u.key(u.tab("All"), "ArrowRight");
   assert.deepEqual(selected(), ["This Mac"]); assert.deepEqual(tabbable(), ["This Mac"]); assert.equal(u.doc.activeElement, u.tab("This Mac"));
   assert.equal(u.one(".hier-panel").getAttribute("aria-labelledby"), u.tab("This Mac").id);
-  u.key(u.tab("This Mac"), "End"); assert.deepEqual(selected(), ["vega"]); assert.equal(u.doc.activeElement, u.tab("vega"));
-  u.key(u.tab("vega"), "ArrowRight"); assert.deepEqual(selected(), ["All"], "ArrowRight wraps to the first");
-  u.key(u.tab("All"), "ArrowLeft"); assert.deepEqual(selected(), ["vega"], "ArrowLeft wraps to the last");
-  u.key(u.tab("vega"), "Home"); assert.deepEqual(selected(), ["All"]); assert.equal(u.doc.activeElement, u.tab("All"));
-  u.tab("altair").click(); assert.deepEqual(selected(), ["altair"]);
+  u.key(u.tab("This Mac"), "End"); assert.deepEqual(selected(), ["laptop"]); assert.equal(u.doc.activeElement, u.tab("laptop"));
+  u.key(u.tab("laptop"), "ArrowRight"); assert.deepEqual(selected(), ["All"], "ArrowRight wraps to the first");
+  u.key(u.tab("All"), "ArrowLeft"); assert.deepEqual(selected(), ["laptop"], "ArrowLeft wraps to the last");
+  u.key(u.tab("laptop"), "Home"); assert.deepEqual(selected(), ["All"]); assert.equal(u.doc.activeElement, u.tab("All"));
+  u.tab("devbox").click(); assert.deepEqual(selected(), ["devbox"]);
 });
 
 test("All: one section per deployment, stacked, under the group-label heading with counts; no primary chip", async (t) => {
   const u = await page(t, THREE());
   const sections = u.all(".hier-deployment");
   assert.deepEqual(sections.map((s) => s.getAttribute("aria-label")), ["This Mac · ~/Agents/oats, 3 running",
-    "altair · ~/Agents/tsm, 1 running, remembered, timed out", "vega · ~/Agents/lab, no instances, not reached, ssh needs a prompt"]);
+    "devbox · ~/Agents/web, 1 running, remembered, timed out", "laptop · ~/Agents/lab, no instances, not reached, ssh needs a prompt"]);
   assert.deepEqual(sections.map((s) => s.getAttribute("role")), ["group", "group", "group"]);
   const heads = u.all(".hier-dhead");
-  assert.deepEqual(heads.map((h) => h.querySelector(".hier-dname").textContent), ["This Mac · ~/Agents/oats", "altair · ~/Agents/tsm", "vega · ~/Agents/lab"]);
+  assert.deepEqual(heads.map((h) => h.querySelector(".hier-dname").textContent), ["This Mac · ~/Agents/oats", "devbox · ~/Agents/web", "laptop · ~/Agents/lab"]);
   assert.ok(heads.every((h) => h.querySelector(".hier-dmachine").classList.contains("cnm")), "the machine: the overview's group-label style");
   // A path is case-sensitive: never uppercased (or letter-spaced) with the machine label.
   const style = (el) => u.dom.window.getComputedStyle(el);
-  assert.deepEqual(heads.map((h) => h.querySelector(".hier-dmachine").textContent), ["This Mac", "altair", "vega"]);
-  assert.deepEqual(heads.map((h) => h.querySelector(".hier-dpath").textContent), ["· ~/Agents/oats", "· ~/Agents/tsm", "· ~/Agents/lab"]);
+  assert.deepEqual(heads.map((h) => h.querySelector(".hier-dmachine").textContent), ["This Mac", "devbox", "laptop"]);
+  assert.deepEqual(heads.map((h) => h.querySelector(".hier-dpath").textContent), ["· ~/Agents/oats", "· ~/Agents/web", "· ~/Agents/lab"]);
   for (const h of heads) {
     assert.equal(style(h.querySelector(".hier-dmachine")).textTransform, "uppercase");
     assert.equal(style(h.querySelector(".hier-dpath")).textTransform, "none", "the path keeps its case");
     assert.ok(h.querySelector(".hier-dpath").classList.contains("cct"), "in the muted secondary style, like the counts");
   }
-  assert.deepEqual(heads.map((h) => h.querySelector(".hier-dname").title), [LOCAL.path, ALTAIR.path, VEGA.path], "the full path is the tooltip");
+  assert.deepEqual(heads.map((h) => h.querySelector(".hier-dname").title), [LOCAL.path, DEVBOX.path, LAPTOP.path], "the full path is the tooltip");
   assert.deepEqual(heads.map((h) => h.querySelector(".hier-dcount").textContent), ["3 running", "1 running", "no instances"]);
   assert.doesNotMatch(u.host.textContent, /primary/); assert.equal(u.all(".hier-dtag").length, 0);
   assert.ok(sections.every((s) => !/primary/.test(s.getAttribute("aria-label"))));
@@ -148,33 +148,33 @@ test("All: one section per deployment, stacked, under the group-label heading wi
   assert.equal(fix.open, false); assert.equal(fix.querySelector("summary").textContent, "How to fix");
   // With steps, the steps are the explanation: the full sentence would repeat step 1 (live check, #482).
   assert.equal(fix.querySelector(".hier-dfix-reason"), null);
-  assert.deepEqual([...fix.querySelectorAll("ol.hier-dfix-steps > li")].map((li) => li.textContent), VEGA.fix.map((step) => step.replaceAll("`", "")));
+  assert.deepEqual([...fix.querySelectorAll("ol.hier-dfix-steps > li")].map((li) => li.textContent), LAPTOP.fix.map((step) => step.replaceAll("`", "")));
   // A command the server quotes in backticks is set as code, never shown with its backticks.
   const code = fix.querySelector("ol.hier-dfix-steps code.hier-dfix-code");
   assert.ok(code, "the quoted command is code"); assert.doesNotMatch(fix.textContent, /`/);
   // Remembered without steps: the sentence and the note, under Details (no fix to follow).
   const details = heads[1].querySelector("details.hier-dfix");
   assert.equal(details.querySelector("summary").textContent, "Details");
-  assert.equal(details.querySelector(".hier-dfix-reason").textContent, `Last report, not live now. ${ALTAIR.reason}`);
-  assert.equal(details.querySelector(".hier-dfix-note").textContent, ALTAIR.note);
+  assert.equal(details.querySelector(".hier-dfix-reason").textContent, `Last report, not live now. ${DEVBOX.reason}`);
+  assert.equal(details.querySelector(".hier-dfix-note").textContent, DEVBOX.note);
   assert.equal(heads[1].querySelector(".hier-dline").getAttribute("aria-hidden"), "true", "the group's name says the line");
   // Stacked in the panel's order, each with its own tree (relations never cross sections).
   assert.ok(parseFloat(heads[1].style.top) > parseFloat(heads[0].style.top)); assert.ok(parseFloat(heads[2].style.top) > parseFloat(heads[1].style.top));
   assert.deepEqual(u.names(sections[0]), ["dev", "lead", "near"]); assert.deepEqual(u.names(sections[1]), ["far"]); assert.deepEqual(u.names(sections[2]), []);
-  assert.deepEqual(u.all(".hier-solo").map((g) => g.dataset.ws), [`Independent:${LOCAL.id}`, `Independent:${ALTAIR.id}`]);
+  assert.deepEqual(u.all(".hier-solo").map((g) => g.dataset.ws), [`Independent:${LOCAL.id}`, `Independent:${DEVBOX.id}`]);
   assert.equal(u.all(".hier-stage").length, 1, "one canvas: pan, zoom and fit work over every section");
   assert.match(u.one(".hier-sum").textContent, /^4 running · 0 stopped · 1 group · 2 independent$/);
-  const layout = hierarchy.layoutByDeployment(THREE().instances, [LOCAL, ALTAIR, VEGA]);
+  const layout = hierarchy.layoutByDeployment(THREE().instances, [LOCAL, DEVBOX, LAPTOP]);
   const [a, b] = layout.sections;
   assert.ok(b.y >= a.y + a.height, "the second section starts below the first");
   assert.ok(a.placed.every((p) => p.y >= a.y), "blocks are in stage coordinates under their heading");
 });
 
 test("a deployment's tab: its heading and only its rows; the count line counts that tab", async (t) => {
-  const u = await page(t, panel([LOCAL, ALTAIR], [row("lead", LOCAL), row("dev", LOCAL, { parentInstance: "lead" }), row("far", ALTAIR, { running: false })]));
-  u.tab("altair").click();
+  const u = await page(t, panel([LOCAL, DEVBOX], [row("lead", LOCAL), row("dev", LOCAL, { parentInstance: "lead" }), row("far", DEVBOX, { running: false })]));
+  u.tab("devbox").click();
   assert.deepEqual(u.all(".hnode").map((n) => n.dataset.name), ["far"]);
-  assert.deepEqual(u.all(".hier-dname").map((n) => n.textContent), ["altair · ~/Agents/tsm"]);
+  assert.deepEqual(u.all(".hier-dname").map((n) => n.textContent), ["devbox · ~/Agents/web"]);
   assert.equal(u.one(".hier-dcount").textContent, "0 running · 1 stopped"); assert.equal(u.one(".hier-dstate").textContent, "remembered");
   assert.match(u.one(".hier-sum").textContent, /^0 running · 1 stopped · 0 groups · 1 independent$/);
   u.tab("This Mac").click();
@@ -185,46 +185,46 @@ test("a deployment's tab: its heading and only its rows; the count line counts t
 
 test("a deployment that is not reached and has no rows: its tab shows why and how to fix it, never a silent empty", async (t) => {
   const u = await page(t, THREE());
-  u.tab("vega").click();
+  u.tab("laptop").click();
   assert.equal(u.all(".hnode").length, 0); assert.equal(u.one(".empty"), null, "not the 'no instances' message");
   const block = u.one(".hier-empty-wrap .hier-dreason");
   assert.ok(block); assert.equal(block.getAttribute("role"), "group");
-  assert.equal(block.getAttribute("aria-label"), "vega · ~/Agents/lab, no instances, not reached, ssh needs a prompt");
+  assert.equal(block.getAttribute("aria-label"), "laptop · ~/Agents/lab, no instances, not reached, ssh needs a prompt");
   assert.equal(block.querySelector(".hier-dstate.chip").textContent, "not reached");
   assert.equal(block.querySelector(".hier-dshort").textContent, "ssh needs a prompt");
   assert.equal(block.querySelector(".hier-dfix > summary").textContent, "How to fix");
-  assert.deepEqual([...block.querySelectorAll(".hier-dfix-steps li")].map((li) => li.textContent), VEGA.fix.map((step) => step.replaceAll("`", "")));
+  assert.deepEqual([...block.querySelectorAll(".hier-dfix-steps li")].map((li) => li.textContent), LAPTOP.fix.map((step) => step.replaceAll("`", "")));
   assert.match(u.one(".hier-sum").textContent, /^0 running · 0 stopped · 0 groups$/);
   // A live deployment with no rows keeps the overview's empty message.
-  const v = await page(t, panel([LOCAL, VEGA], [row("far", VEGA)]));
+  const v = await page(t, panel([LOCAL, LAPTOP], [row("far", LAPTOP)]));
   v.tab("This Mac").click();
   assert.ok(v.one(".empty")); assert.equal(v.one(".hier-dreason"), null);
 });
 
 test("the selected tab is remembered per view and is where the page starts", async (t) => {
   const u = await page(t, THREE());
-  u.tab("altair").click();
-  assert.equal(rememberedDeploymentTab("ws:view", u.dom.window.localStorage), ALTAIR.id);
-  const v = await page(t, THREE(), { before: (win) => rememberDeploymentTab("ws:view", VEGA.id, win.localStorage) });
-  assert.equal(v.tab("vega").getAttribute("aria-selected"), "true", "starts from the view's remembered tab");
-  const w = await page(t, THREE(), { before: (win) => rememberDeploymentTab("ws:other", VEGA.id, win.localStorage) });
+  u.tab("devbox").click();
+  assert.equal(rememberedDeploymentTab("ws:view", u.dom.window.localStorage), DEVBOX.id);
+  const v = await page(t, THREE(), { before: (win) => rememberDeploymentTab("ws:view", LAPTOP.id, win.localStorage) });
+  assert.equal(v.tab("laptop").getAttribute("aria-selected"), "true", "starts from the view's remembered tab");
+  const w = await page(t, THREE(), { before: (win) => rememberDeploymentTab("ws:other", LAPTOP.id, win.localStorage) });
   assert.equal(w.tab("All").getAttribute("aria-selected"), "true", "another view's choice does not apply");
-  const gone = await page(t, panel([LOCAL, ALTAIR], [row("lead", LOCAL)]), { before: (win) => rememberDeploymentTab("ws:view", VEGA.id, win.localStorage) });
+  const gone = await page(t, panel([LOCAL, DEVBOX], [row("lead", LOCAL)]), { before: (win) => rememberDeploymentTab("ws:view", LAPTOP.id, win.localStorage) });
   assert.equal(gone.tab("All").getAttribute("aria-selected"), "true", "a remembered deployment the view no longer has falls back to the first tab");
 });
 
 test("another surface's tab request switches the shown view's tab; a request for another view does not", async (t) => {
   const u = await page(t, THREE());
-  requestDeploymentTab("ws:other", ALTAIR.id, u.dom.window.localStorage);
+  requestDeploymentTab("ws:other", DEVBOX.id, u.dom.window.localStorage);
   assert.equal(u.tab("All").getAttribute("aria-selected"), "true");
-  requestDeploymentTab("ws:view", VEGA.id, u.dom.window.localStorage);
-  assert.equal(u.tab("vega").getAttribute("aria-selected"), "true"); assert.ok(u.one(".hier-dreason"));
+  requestDeploymentTab("ws:view", LAPTOP.id, u.dom.window.localStorage);
+  assert.equal(u.tab("laptop").getAttribute("aria-selected"), "true"); assert.ok(u.one(".hier-dreason"));
   requestDeploymentTab("ws:view", "remote:nowhere:000000000000", u.dom.window.localStorage);
-  assert.equal(u.tab("vega").getAttribute("aria-selected"), "true", "a tab the view does not have changes nothing");
+  assert.equal(u.tab("laptop").getAttribute("aria-selected"), "true", "a tab the view does not have changes nothing");
 });
 
 test("How to fix: an open disclosure pushes the sections below it down, and stays open across a refresh", async (t) => {
-  const u = await page(t, panel([VEGA, LOCAL], [row("lab", VEGA), row("lead", LOCAL)]));
+  const u = await page(t, panel([LAPTOP, LOCAL], [row("lab", LAPTOP), row("lead", LOCAL)]));
   // jsdom lays nothing out: a heading measures 40px closed and 160px with its disclosure open.
   Object.defineProperty(u.dom.window.HTMLElement.prototype, "offsetHeight", { configurable: true,
     get() { return this.classList?.contains("hier-dhead") ? (this.querySelector("details[open]") ? 160 : 40) : 0; } });
@@ -235,7 +235,7 @@ test("How to fix: an open disclosure pushes the sections below it down, and stay
   const after = tops();
   assert.ok(after.every((top, i) => top > before[i]), `clusters moved down: ${before} → ${after}`);
   assert.ok(headTop() > head, "the next heading moved down too");
-  await u.poll(panel([VEGA, LOCAL], [row("lab", VEGA), row("lead", LOCAL), row("new", LOCAL)]));
+  await u.poll(panel([LAPTOP, LOCAL], [row("lab", LAPTOP), row("lead", LOCAL), row("new", LOCAL)]));
   assert.equal(u.one(".hier-dfix").open, true, "open across a repaint");
   assert.ok(u.all(".hnode").some((n) => n.dataset.name === "new"));
 });
@@ -243,7 +243,7 @@ test("How to fix: an open disclosure pushes the sections below it down, and stay
 test("no raw deployment id or view id in any text, tooltip or accessible name", async (t) => {
   const u = await page(t, THREE());
   const shown = (u) => [u.host.textContent, ...u.all("[title]").map((e) => e.title), ...u.all("[aria-label]").map((e) => e.getAttribute("aria-label"))].join("\n");
-  for (const label of ["All", "This Mac", "altair", "vega"]) {
+  for (const label of ["All", "This Mac", "devbox", "laptop"]) {
     u.tab(label).click();
     assert.doesNotMatch(shown(u), /remote:|5d1e0c9b8a7f|9f2c1a7b3e4d|ws:view/, `${label} tab`);
   }
@@ -259,7 +259,7 @@ for (const name of ["light", "solarized", "dark"]) test(`${name}: the tabs, depl
   const u = await page(t, THREE());
   u.doc.documentElement.dataset.theme = name;
   for (const fix of u.all(".hier-dfix")) fix.open = true;
-  const empty = await page(t, THREE(), { before: (win) => rememberDeploymentTab("ws:view", VEGA.id, win.localStorage) });
+  const empty = await page(t, THREE(), { before: (win) => rememberDeploymentTab("ws:view", LAPTOP.id, win.localStorage) });
   empty.doc.documentElement.dataset.theme = name;
   const checks = [
     [u, '.hier-tabs [aria-selected="true"]', "fg"], [u, '.hier-tabs [aria-selected="false"]', "nav-fg"],
@@ -280,11 +280,11 @@ for (const name of ["light", "solarized", "dark"]) test(`${name}: the tabs, depl
 });
 
 test("a reached deployment that is not matched says why on its tab (the switcher's Not matched entries open here)", async (t) => {
-  const RIGEL = { id: "remote:rigel:cccccccccccc", machine: "rigel", path: "/srv/fixture", label: "/srv/fixture", local: false, reachable: true,
-    identityFrom: null, primary: true, reason: "rigel's OATS is too old to report its workspace; update OATS there.",
-    short: "OATS too old to report its workspace", fix: ["Update OATS on rigel."] };
-  const u = await page(t, panel([RIGEL], []));
-  assert.deepEqual(u.all(".hier-tabs [role=tab]").map((b) => b.textContent), ["rigel"]);
+  const BUILD = { id: "remote:build:cccccccccccc", machine: "build", path: "/srv/fixture", label: "/srv/fixture", local: false, reachable: true,
+    identityFrom: null, primary: true, reason: "build's OATS is too old to report its workspace; update OATS there.",
+    short: "OATS too old to report its workspace", fix: ["Update OATS on build."] };
+  const u = await page(t, panel([BUILD], []));
+  assert.deepEqual(u.all(".hier-tabs [role=tab]").map((b) => b.textContent), ["build"]);
   assert.equal(u.all(".hier-tabs [role=tab] .deployment-mark").length, 1, "its tab carries the mark");
   assert.equal(u.one(".empty"), null, "never the plain 'no instances' message");
   const block = u.one(".hier-empty-wrap .hier-dreason");
@@ -292,20 +292,20 @@ test("a reached deployment that is not matched says why on its tab (the switcher
   assert.equal(block.querySelector(".hier-dstate.chip").textContent, "not matched");
   assert.equal(block.querySelector(".hier-dshort").textContent, "OATS too old to report its workspace");
   assert.equal(block.querySelector(".hier-dfix > summary").textContent, "How to fix");
-  assert.deepEqual([...block.querySelectorAll(".hier-dfix-steps li")].map((li) => li.textContent), ["Update OATS on rigel."]);
+  assert.deepEqual([...block.querySelectorAll(".hier-dfix-steps li")].map((li) => li.textContent), ["Update OATS on build."]);
   // A reached, matched deployment alone is headed with its machine and no chip (the Machines tab, 2026-10-26).
   const quiet = await page(t, panel([LOCAL], [row("lead", LOCAL)]));
   assert.equal(quiet.all(".hier-dhead").length, 1); assert.equal(quiet.one(".hier-dstate"), null);
 });
 
 test("a live deployment's note (information, not a failure) is said under Details, with no chip and no mark, even when it is alone", async (t) => {
-  const MOVED = { ...ALTAIR, reachable: true, identityFrom: "reported", reason: undefined, short: undefined, primary: true };
+  const MOVED = { ...DEVBOX, reachable: true, identityFrom: "reported", reason: undefined, short: undefined, primary: true };
   const u = await page(t, panel([MOVED], [row("far", MOVED)]));
   assert.equal(u.all(".hier-tabs [role=tab] .deployment-mark").length, 0, "no mark: it is live");
-  assert.deepEqual(u.all(".hier-dname").map((n) => n.textContent), ["altair · ~/Agents/tsm"], "alone, it keeps its heading for the note");
+  assert.deepEqual(u.all(".hier-dname").map((n) => n.textContent), ["devbox · ~/Agents/web"], "alone, it keeps its heading for the note");
   assert.equal(u.one(".hier-dstate"), null, "no chip: a matched live deployment is never 'not matched'");
   assert.equal(u.one(".hier-dfix > summary").textContent, "Details");
-  assert.equal(u.one(".hier-dfix-note").textContent, "altair now reports workspace tsm.");
+  assert.equal(u.one(".hier-dfix-note").textContent, "devbox now reports workspace web.");
   assert.deepEqual(u.names(u.one(".hier-deployment")), ["far"]);
   // A standalone host with no rows: the note heads its empty tab, above the usual message.
   const STANDALONE = { ...LOCAL, note: "Teams are local only on this host (standalone)." };
@@ -316,25 +316,25 @@ test("a live deployment's note (information, not a failure) is said under Detail
   // All, every deployment live and none with rows: the notes still head the empty state.
   const bare = await page(t, panel([LOCAL, { ...MOVED, primary: false }], []));
   assert.equal(bare.tabs().find((b) => b.getAttribute("aria-selected") === "true").firstChild.textContent, "All");
-  assert.deepEqual(bare.all(".hier-empty-wrap .hier-dfix-note").map((n) => n.textContent), ["altair now reports workspace tsm."]);
+  assert.deepEqual(bare.all(".hier-empty-wrap .hier-dfix-note").map((n) => n.textContent), ["devbox now reports workspace web."]);
   assert.ok(bare.one(".hier-empty-wrap > .empty"), "then the usual empty message");
   // In All, beside other deployments: the same Details line on its section.
   const all = await page(t, panel([LOCAL, { ...MOVED, primary: false }], [row("lead", LOCAL), row("far", MOVED)]));
-  const section = all.all(".hier-deployment").find((s) => s.querySelector(".hier-dname").textContent.startsWith("altair"));
+  const section = all.all(".hier-deployment").find((s) => s.querySelector(".hier-dname").textContent.startsWith("devbox"));
   assert.equal(section.querySelector(".hier-dstate"), null);
-  assert.equal(section.querySelector(".hier-dfix-note").textContent, "altair now reports workspace tsm.");
+  assert.equal(section.querySelector(".hier-dfix-note").textContent, "devbox now reports workspace web.");
 });
 
 test("a stale local deployment (its last re-read failed): a 'stale' chip with the kernel's message, and its held rows wait for a current read", async (t) => {
-  const OTHER = { id: "/Users/op/awebai/oats-v2", machine: "This Mac", path: "/Users/op/awebai/oats-v2", label: "~/awebai/oats-v2", local: true,
+  const OTHER = { id: "/Users/op/example/oats-qa", machine: "This Mac", path: "/Users/op/example/oats-qa", label: "~/example/oats-qa", local: true,
     reachable: true, identityFrom: "reported", primary: false, stale: true, short: "Last read failed",
     reason: "This deployment's last read failed: the cache is locked. It shows what was last observed." };
   const u = await page(t, panel([LOCAL, OTHER], [row("lead", LOCAL), row("held", OTHER)]));
-  const section = u.all(".hier-deployment").find((s) => s.querySelector(".hier-dname").textContent.endsWith("oats-v2"));
+  const section = u.all(".hier-deployment").find((s) => s.querySelector(".hier-dname").textContent.endsWith("oats-qa"));
   assert.equal(section.querySelector(".hier-dstate").textContent, "stale");
   assert.equal(section.querySelector(".hier-dshort").textContent, "Last read failed");
   assert.equal(section.querySelector(".hier-dfix-reason").textContent, OTHER.reason);
-  assert.equal(u.tabs().find((b) => b.firstChild.textContent.endsWith("oats-v2")).querySelector(".deployment-mark").getAttribute("aria-label"), "stale");
+  assert.equal(u.tabs().find((b) => b.firstChild.textContent.endsWith("oats-qa")).querySelector(".deployment-mark").getAttribute("aria-label"), "stale");
   const click = (name) => u.one(`.hnode[data-name="${name}"]`).dispatchEvent(new u.dom.window.MouseEvent("click", { bubbles: true, button: 0 }));
   click("held");
   assert.equal(u.one(".pterm").disabled, true, "a held row's actions wait");
@@ -375,7 +375,7 @@ test('the intro: one plain sentence right under the bar, on every tab and with n
   assert.equal(u.one(".hier-tabs").nextElementSibling?.classList.contains("ws-info-button") ?? false, false);
   assert.deepEqual(u.all(".hier-bar button:not([role=tab])"), [], "the bar holds the tabs only");
   assert.doesNotMatch(hierarchy.hierarchyCSS, /ws-info-button|about-dialog/, "no rule left for the \"i\" or its dialog");
-  for (const label of ["This Mac", "altair", "vega", "All"]) {
+  for (const label of ["This Mac", "devbox", "laptop", "All"]) {
     u.tab(label).click();
     assert.deepEqual(u.all(".hier-intro").map((p) => p.textContent), [INTRO], `${label}: the same sentence`);
   }
@@ -390,15 +390,15 @@ test('the intro: one plain sentence right under the bar, on every tab and with n
 test('each machine\'s heading says the tree under it: "Instances on <machine>", or "Instances on this machine" when it names none', async (t) => {
   const u = await page(t, THREE());
   const subs = () => u.all(".hier-dhead").map((h) => h.querySelector(".hier-dsub")?.textContent ?? null);
-  assert.deepEqual(subs(), ["Instances on This Mac", "Instances on altair", "Instances on vega"], "one line per heading, the machine named");
+  assert.deepEqual(subs(), ["Instances on This Mac", "Instances on devbox", "Instances on laptop"], "one line per heading, the machine named");
   for (const head of u.all(".hier-dhead")) {
     assert.equal(head.querySelectorAll(".hier-dsub").length, 1);
     assert.equal(head.querySelector(".hier-dsub").previousElementSibling, head.querySelector(".hier-dline"), "right under the machine's name and counts");
     assert.equal(head.querySelector(".hier-dline").contains(head.querySelector(".hier-dsub")), false, "its own line, not the aria-hidden one");
   }
   // A deployment's tab: its own heading's line; an empty, not reached one says it in its reason block.
-  u.tab("altair").click(); assert.deepEqual(subs(), ["Instances on altair"]);
-  u.tab("vega").click(); assert.equal(u.one(".hier-dreason .hier-dsub").textContent, "Instances on vega");
+  u.tab("devbox").click(); assert.deepEqual(subs(), ["Instances on devbox"]);
+  u.tab("laptop").click(); assert.equal(u.one(".hier-dreason .hier-dsub").textContent, "Instances on laptop");
   // A deployment that names no machine: "this machine", never an id or a path (deploymentHead, deployments-page.mjs).
   const HERE = { id: "/Users/op/Agents/here", path: "/Users/op/Agents/here", label: "~/Agents/here", local: true, reachable: true, identityFrom: "reported", primary: true };
   for (const machine of [undefined, ""]) {
@@ -406,10 +406,10 @@ test('each machine\'s heading says the tree under it: "Instances on <machine>", 
     assert.equal(head.querySelector(".hier-dsub").textContent, "Instances on this machine", `machine ${JSON.stringify(machine)}`);
     assert.equal(head.querySelector(".hier-dmachine").textContent, "This Mac", "the heading keeps this machine's word");
   }
-  assert.equal(deploymentHead(u.doc, { deployment: VEGA, rows: [] }).element.querySelector(".hier-dsub").textContent, "Instances on vega");
+  assert.equal(deploymentHead(u.doc, { deployment: LAPTOP, rows: [] }).element.querySelector(".hier-dsub").textContent, "Instances on laptop");
   // Through the page, a local deployment the panel names no machine for is this machine's word (view-deployments.mjs).
-  const v = await page(t, panel([HERE, ALTAIR], [row("near", HERE), row("far", ALTAIR)]));
-  assert.deepEqual(v.all(".hier-dhead .hier-dsub").map((d) => d.textContent), ["Instances on This Mac", "Instances on altair"]);
+  const v = await page(t, panel([HERE, DEVBOX], [row("near", HERE), row("far", DEVBOX)]));
+  assert.deepEqual(v.all(".hier-dhead .hier-dsub").map((d) => d.textContent), ["Instances on This Mac", "Instances on devbox"]);
   // One deployment is headed too, with its line.
   const one = await page(t, panel([LOCAL], [row("lead", LOCAL)]));
   assert.deepEqual(one.all(".hier-dhead .hier-dsub").map((d) => d.textContent), ["Instances on This Mac"]);
@@ -421,7 +421,7 @@ test('each machine\'s heading says the tree under it: "Instances on <machine>", 
 for (const name of ["light", "solarized", "dark"]) test(`${name}: the intro sentence and each heading's "Instances on …" line meet computed AA`, async (t) => {
   const u = await page(t, THREE());
   u.doc.documentElement.dataset.theme = name;
-  const empty = await page(t, THREE(), { before: (win) => rememberDeploymentTab("ws:view", VEGA.id, win.localStorage) });
+  const empty = await page(t, THREE(), { before: (win) => rememberDeploymentTab("ws:view", LAPTOP.id, win.localStorage) });
   empty.doc.documentElement.dataset.theme = name;
   for (const [p, selector, fg] of [[u, ".hier-intro", "muted"], [u, ".hier-dhead .hier-dsub", "muted"], [empty, ".hier-dreason .hier-dsub", "muted"]]) {
     const win = p.dom.window, el = p.one(selector); assert.ok(el, selector);

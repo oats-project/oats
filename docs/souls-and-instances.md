@@ -107,7 +107,9 @@ souls, and keeping its messages to other instances few and short:
 `oats.core: off`. **`oats.setup`** (same package) carries the whole-architecture
 knowledge an onboarding expert needs, **`oats.onboarding`** (same package)
 is how the package soul `oats-setup-expert` tailors a new workspace to its use
-case, and **`oats.support`** (same package)
+case, **`oats.coordination-setup`** (same package) is how it shapes OATS's
+coordination practices to that organisation, and **`oats.support`** (same
+package)
 is the support desk role: a publicly reachable soul that tickets requests and
 hands them to a support maintainer. None of them is kernel magic; the kernel still
 composes its own instance-boundary and work-mode briefings, and the "You run
@@ -170,7 +172,7 @@ For current settings and the respawn/cleanup sequence, see [knowledge.md](knowle
     }
   },
   "providers": {
-    "oats.okf": { "bindings-file": "/Users/ana/.oats/okf-bindings.json", "state-dir": "/Users/ana/.oats/okf", "harvest-runtime": "claude" },
+    "oats.okf": { "bindings-file": "/Users/ana/.oats/okf-bindings.json", "state-dir": "/Users/ana/.oats/okf" },
     "acme-release-tooling": {}
   },
   "workspace": {
@@ -326,23 +328,25 @@ oats spawn release-manager --provider oats.aweb identity.source=/abs/path/to/ret
 ```
 
 An instance is named exactly `--name <slug>`, or `<soul>-<purpose>` with
-`--purpose`; with neither, the kernel numbers it. The convention for a name a
-person or an agent chooses is `<descriptive>-<role>` through `--name`: a few
-words for the instance's work, then the soul's role, the last word of the
-soul's name after any package qualifier (`--name desktop-improvements-expert`
-for an `oats-desktop-expert`). `--purpose` derives the name from the soul, for
+`--purpose`; with neither, the kernel numbers it. A typed `--name` is used
+exactly as given. How a person or an agent chooses one is the oats.core
+skill oats-souls, "Name the instance"
+([its rule](../oats-package/capabilities/oats-core/skills/oats-souls/SKILL.md#name-the-instance)).
+`--purpose` derives the name from the soul, for
 automations and scripts that know only the soul and a purpose.
 Names are unique per deployment (a workspace-model deployment has one agents
 root): a derived name in use gets `-2`, `-3`…; an explicit `--name` in use is
-refused (`E_INSTANCE_NAME_TAKEN`). The Desktop's spawn dialog adds the role to
-a typed name.
+refused (`E_INSTANCE_NAME_TAKEN`). The Desktop's spawn dialog sends a typed
+name as typed, lowercased.
 `oats spawn <soul> --preview --suggest-name --task-file <f>` asks the soul's
-own harness for the descriptive words, from the task, in one call that starts
+own harness for the whole name, `<work>-<role>` with the role as the task
+gives it, from the task, in one call that starts
 none of the user's MCP servers, hooks, plugins or extensions. Claude Code's
 built-in plugins, the host's managed-policy hooks and pi's credential commands
 are the stated exceptions; a claude login through `apiKeyHelper` is not read,
 so that user's name stays numbered (`harness-failed`). The preview then answers for
-`--name <descriptive>-<role>`, de-duplicated the same way. On claude and pi
+`--name <that name>`, de-duplicated the same way; nothing appends the soul's
+role. On claude and pi
 only; any other harness, and any failure of the call, leaves the name numbered
 and says why
 ([The suggested name](desktop-cli-api.md#the-suggested-name-feature-spawn-suggest-name)).
@@ -353,16 +357,16 @@ at spawn (`.oats-background.json`), so a later soul edit moves no existing
 instance; `oats instance background <instance> on|off` does. Both flags
 together are `E_BAD_ARGS`.
 An apply takes `--suggest-name` too (without `--name` or `--purpose`): the
-machine that spawns makes the same call, names the instance
-`<descriptive>-<role>`, de-duplicated the same way, and numbers it on any
+machine that spawns makes the same call, names the instance with the reply's
+name, de-duplicated the same way, and numbers it on any
 failure; the result's `naming` says which, and the apply may take up to 20 s
 longer ([On an apply](desktop-cli-api.md#on-an-apply-feature-spawn-apply-suggest-name)).
 Without the flag an apply is numbered, as before.
-`oats instance suggest-name --soul <soul> --task-file <f>` asks for the same
-words on this machine for a spawn that will land on another (the Desktop's
-dialog, spawning through `--server`): the soul only gives the role and needn't
-exist here, nothing is written or reserved, and the name is not made unique,
-which the landing host does
+`oats instance suggest-name --task-file <f>` asks for the same name on this
+machine for a spawn that will land on another (the Desktop's dialog, spawning
+through `--server`): nothing is written or reserved, and the name is not made
+unique, which the landing host does. `--soul <soul>` is optional: when given it
+is checked as a soul name's shape and does not change the name
 ([A name for a spawn elsewhere](desktop-cli-api.md#a-name-for-a-spawn-elsewhere-oats-instance-suggest-name)).
 
 From a deployment (where `oats-local.yaml` is), a spawn: reads the local file →
@@ -401,8 +405,7 @@ setting given without `--provider <capability>`). The full DTOs are in
 Examples of spawn hooks:
 
 - `oats.okf` validates the soul's declaration and the bindings, and creates the
-  instance knowledge files. With harvest on, it also registers a durable source
-  and its harvest schedule; with harvest off (the default) it registers nothing.
+  instance knowledge files. It registers no source, worker or schedule.
   Missing knowledge configuration is an error, never permission to bootstrap an
   empty substitute.
 - `oats.aweb` mints a messaging identity or, with
@@ -417,9 +420,10 @@ current, appends milestones to `log.md`, and captures non-obvious insights in
 
 It consults accepted knowledge remotely, at its accepted state, with
 `oats okf index`, `cat` and `search` (the `okf-consultation` skill), and never
-writes accepted knowledge; this is instruction, not an OS sandbox. With harvest
-on, an independent harvester judges the instance's notes and session record and
-proposes promotions by pull request. See [knowledge](knowledge.md).
+writes accepted knowledge; this is instruction, not an OS sandbox. At each
+knowledge checkpoint, an instance with a duty to propose judges its own notes
+and proposes durable claims as one pull request (`oats okf propose`). See
+[knowledge](knowledge.md).
 
 ### Spawning and coordinating with other agents
 
@@ -526,10 +530,35 @@ says what a clone carries and what it does not.
 ### Retire
 
 Retirement runs active capability retire hooks in reverse spawn order before the home disappears. The aweb
-integration deletes the instance identity here. With harvest on, `oats.okf`
-takes a final capture of notes and the session record into durable custody; an
-incomplete capture keeps the home for a retry. Retirement never waits for a
-model or GitHub: processing continues after the home is gone.
+integration deletes the instance identity here. `oats.okf` captures nothing
+at retirement: an instance proposes before it finishes, and for one that
+retired without proposing, the operator proposes from its retirement recovery
+copy ([the flow](knowledge.md#the-flow)). Retirement never waits for a model
+or GitHub.
+
+A spawn that is killed after its spawn hooks started and before it wrote the
+home's record (SIGKILL, a container stop, a dropped connection) leaves a home
+`oats retire` still cleans up: the spawn records, before its first spawn hook,
+which retire hooks a retire must run, and the retire runs them before it
+removes the home. A home whose record does not say which retire hooks to run,
+and that has no such marker, is refused with `E_UNIDENTIFIED_INSTANCE_HOME`
+and kept; `--force` removes it without running a hook, once what its
+capabilities registered is cleaned up by hand
+([A spawn in progress](capabilities.md#manifest)).
+
+A retire hook's warning, such as an action someone must still take, is in the
+retire's `warnings` and stays readable after the home is gone: each one is a
+`retire-warning` event in the instance's workspace log, read with
+`oats instance events <instance>` ([Events](desktop-cli-api.md#events)).
+
+`oats retire <instance>` reads these flags: `--plan`, `--plan-revision <rev>`
+with `--idempotency-key <key>`, `--home <path>`, `--dir <d>`, `--server <id>`,
+`--self`, `--discard-worktree`, `--keep-dir`, `--force` and `--json`. Any
+other flag, and any argument after the instance, is refused with `E_BAD_ARGS`
+before anything happens: before a plan is read, a child is stopped, a hook
+runs, or a routed retire is sent to its server. The refusal names the flag
+(`oats retire: unknown flag --keep-dirs`) and prints the usage, so a mistyped
+`--keep-dir` never removes the home.
 
 One retire of an instance runs at a time. A retire holds the instance's claim
 from the moment it has resolved the home until it ends: the file
@@ -700,9 +729,64 @@ them, and without them a status can read differently (a global
 `core.excludesFile`, `core.autocrlf`, a filter), which would add a copy
 attempt to every existing instance's retire. They are the operator's own;
 what the retire guards against is configuration the retired agent could
-write. One limit remains: a filter driver that the repository's own
-configuration names and its `.gitattributes` select can still run during
-`git status`. Turning it off would change what status reports.
+write.
+
+<a id="retire-filter-drivers"></a>
+**Filter drivers of the repository are not run.** Git runs a
+`filter.<name>.clean` or `.process` command when a status compares a
+work-tree file that carries the `filter` attribute (`.gitattributes`, or
+`info/attributes` in the Git directory), and it has no switch that turns
+filters off. Before each `git status` of the worktree, of a repository under
+it and of a recovery, and before a recovery's `git checkout`, the retire
+reads the repository's own configuration (`git config --list`, which runs
+nothing and follows `include.path` and `includeIf`) and overrides every
+filter driver it defines to no command (`clean`, `smudge`, `process`) and
+not required. The status the spawn baseline is taken from is read the same
+way.
+
+- A file such a filter applies to is compared as its bytes are in the work
+  tree, not as the filter would store them. An untouched file still reads as
+  unchanged, by the size and times the index recorded for it. One that was
+  rewritten, or whose times Git cannot tell from the index's, reads as
+  changed even when its filtered form is what is stored: it is work to
+  preserve, the retire copies it, and a worktree holding it is not removed
+  as a clean one.
+- A driver whose name cannot be passed on Git's command line (it holds `=`
+  or is not UTF-8) cannot be overridden. Git is not run, and the status has
+  failed: the retire refuses with `E_WORK_INSPECTION_FAILED` at its first
+  inspection, as for any [status that fails](#retire-status-fails), with
+  `--discard-worktree` and `--force` too. A spawn into a worktree of such a
+  repository is refused with the same code before its checkout and rolled
+  back ([a checkout runs no filter driver](#checkout-filter-drivers)). Remove
+  or rename the driver in the repository's configuration, then retry.
+- A driver that the operator's global or system configuration defines is
+  the operator's own and runs with the operator's command, in the worktree
+  and in the recovery alike. That holds when the repository's configuration
+  defines a driver of the same name too (`git lfs install --local` beside
+  `git lfs install`): the repository's values for it are replaced by the
+  operator's, so a command the repository gives that name never runs. The
+  operator's configuration is the human's; the repository's is the agent's
+  to write. One case runs neither: the repository defines `process` for that
+  name and the operator's configuration does not. Git has no way to unset a
+  variable on its command line, and a `process` set to nothing turns the
+  driver's `clean` and `smudge` off with it, so the file is read unfiltered.
+- The recovery has no local configuration, so it has none of the
+  repository's drivers. Its status must still be the worktree's, and for a
+  file such a filter applies to it can differ: the worktree reads an
+  untouched file as unchanged by the size and times its index recorded,
+  while the copy, whose files are written anew, compares its bytes with the
+  stored form. The copy then cannot be verified: the retire refuses with
+  `E_WORK_PRESERVATION_FAILED` and removes nothing. This is so only for a
+  driver the repository alone defines.
+- Not covered: a driver written into the configuration between that read
+  and the Git command that follows it, and a filter a **submodule's own**
+  configuration defines. Git runs inside each populated submodule to learn
+  whether it is dirty, and the overrides name the repository's drivers, not
+  the submodule's. Where the agent and whoever retires it are one system
+  user, which is the usual arrangement, such a filter runs nothing the agent
+  could not run itself. Where they are separate users, it runs the agent's
+  command as the retiring user: do not retire a worktree with populated
+  submodules across users.
 
 **A worktree whose top level is another directory.** A worktree's
 per-worktree configuration can set `core.worktree` to a directory other
@@ -961,6 +1045,7 @@ That changes no digest and no error, and it is bounded: at most four files
 are read at once, each through a 1 MiB buffer, and never more than 64 MiB or
 4096 files ahead of the digest.
 
+<a id="retire-status-fails"></a>
 A worktree whose `git status` fails refuses the retire with
 `E_WORK_INSPECTION_FAILED` at the first inspection: no recovery was written,
 nothing was deleted, and the retire has not stopped the instance's session.
@@ -1235,9 +1320,12 @@ leaves what happened on disk (OATS 0.53.0):
 - **Its pending marker, only when the home is owed a retire:** when a retire
   hook was started or the removal of the home began. The usual quarantine
   marker is there too when hooks reported incomplete cleanup. The instance
-  then reads as retiring: `oats instance stop --apply` and `oats session
-  start` answer `E_INSTANCE_RETIRING`, and `oats retire <instance>`
-  continues. In every other case the completion removes its marker.
+  is then owed a retire: `oats session start` answers
+  `E_INSTANCE_RETIRING`, and `oats retire <instance>` continues. `oats
+  instance stop --apply` is not refused: the completion has ended, so
+  nothing holds the home against a stop
+  ([a completion that was killed](#self-retire-interrupted)). In every
+  other case the completion removes its marker.
   Nothing of the home was changed, so the instance is a stopped or a
   running instance like any other: a start works, and a wake schedule may
   start it. A session or a child that the completion stopped on its way
@@ -1245,9 +1333,71 @@ leaves what happened on disk (OATS 0.53.0):
 - **One event,** `retire-refused`, which says which of the two it was
   ([Events](desktop-cli-api.md#retire-refused-event)).
 
-Nothing retries by itself: `oats retire <instance>` does. A completion
-removes only the marker of its own scheduling, so the marker of a later
-`--self` is left for that one's completion.
+<a id="self-retire-interrupted"></a>**A completion that was killed** (a
+`SIGKILL`, a container that stopped, a reboot) leaves no outcome, and its
+pending marker stays. The marker names the completion by its pid, its start
+and its boot, and the rule is: a pending marker holds its home only while
+the completion it names can still act; once that completion is gone,
+`oats retire <instance>` takes the retire over and completes it,
+`oats session start` is refused with that command in its message, and a
+stop is not refused: `oats instance stop --apply`, the stop a retire makes
+of a recorded child, and the stop `oats host run` makes of every running
+home when the host stops all stop a session that still runs there, and the
+marker stays. A
+completion is gone when its process has ended, when its pid runs with
+another start, and when the marker was written in another boot, whatever
+its pid reads as there. `oats status` shows the row's `retire` as
+`interrupted`, and `oats doctor` lists the home. A start answers
+`E_INSTANCE_RETIRING`, `<instance> is owed a retire (its retire was
+interrupted): finish it with` and the retire to run, because the home is
+never started again: the completion may have run retire hooks before it
+was killed, and a start would bring back an instance whose identity is
+gone. A marker that names no completion (one an OATS before 0.51.0 wrote)
+refuses a start and a stop as before, since whether its retire runs cannot
+be told, and `oats retire <instance>` completes it.
+
+<a id="self-retire-hook-retry"></a>**A completion retries a cleanup that only
+retire hooks left incomplete** (oats-project/oats#1747), because a provider's
+failure is often transient. When the retire ends with the home quarantined,
+and what it owes is retire hooks and nothing else, the completion runs the
+same retire again: up to three times, about 1, 5 and 15 minutes after each
+failed attempt. Every attempt is an ordinary retire of the home, under its
+claim. Its quarantine retry clears only once the owed hooks are shown to have
+run.
+
+- **A retry whose hooks pass ends as a first success does.** The home is
+  removed and nothing is left beside it.
+- **After the last failed attempt** the completion leaves what it leaves
+  today: the outcome, the pending marker, the quarantine and one
+  `retire-refused` event. The outcome adds `attempts`, the number of attempts
+  that ran.
+- **Every attempt has its own `retired` event** with its `hooks` list, so
+  `oats instance events <instance>` shows each one and how its hooks ended.
+- **What is never retried.** A quarantine that also owes a Git step,
+  directory preservation or an orphaned work directory, or whose descriptor
+  could not be stored in the home. A capability that declares no retire
+  hook, or hooks that cannot be rerun. The retries also stop at an attempt
+  that answers an error, and at one whose debt is no longer hooks alone. No
+  retry starts once the home is gone or the pending marker is no longer this
+  completion's: the retry checks that after its wait and again under the
+  home's claim, and leaves a later scheduling's marker as it is.
+- **While the completion waits**, `oats status` reads the retire as
+  `running`. Any other retire of the home is refused with `E_LIFECYCLE_BUSY`,
+  for up to about 21 minutes after a hook failure. The refusal names the next
+  attempt and the earliest time the last one starts. The time is only a lower
+  bound: how long each attempt runs cannot be known in advance. The completion
+  keeps this in a file of its own beside the home,
+  `.oats-retire-retry-<instance>.json`, kernel-internal. It is removed on
+  every way out, and by any retire that removes the home.
+- **A completion killed while it waits** leaves the instance `interrupted`,
+  as before.
+
+After that, nothing retries by itself: `oats retire <instance>` does, and
+`oats doctor` lists every retirement left open as a `retire-incomplete`
+problem, with that command and the capability whose hook failed last
+([doctor](desktop-cli-api.md)). A completion removes only the marker of its
+own scheduling, so the marker of a later `--self` is left for that one's
+completion. Plain retires are not retried: their caller gets the answer.
 
 A completion does not start its retire while its scheduling still holds
 the home's claim (OATS 0.53.0). A scheduling that the host holds up
@@ -1691,14 +1841,15 @@ after the capability injects (`injects/instance-boundary.md`):
   target another one deliberately).
 - `<instance-home>/work` — the repository or workspace view — is where
   repository reading, editing, building, testing, git and commits happen, to the
-  extent the mode below permits. In `worktree` and `checkout` mode, the
-  instance's [extra trees](#extra-trees) in the home serve the same purpose.
+  extent the mode below permits. In `worktree`, `checkout`, `workspace` and
+  `directory` mode, the instance's [extra trees](#extra-trees) in the home
+  serve the same purpose.
 - The home has no soul link: the composed `AGENTS.md` already carries the
   soul's instructions, and `instance.json` `soulDir` records the (read-only,
   per-commit) soul directory every hook and dispatched command receives as
   `OATS_SOUL`. Durable soul edits go through tracked paths under `work/` under
-  the applicable review rules. The knowledge harvester proposes changes to the
-  external knowledge base, never to soul files or skills.
+  the applicable review rules. A knowledge proposal changes the external
+  knowledge base, never soul files or skills.
 
 Agents move between the two as the task needs; the boundary is what each
 directory is for, not a place to settle in.
@@ -1728,6 +1879,41 @@ is then the way on. `--base <ref>` names another start point in the clone;
 a `--repo` that is not a clone of the soul's repository starts at its `HEAD`.
 The spawn result and `instance.json` record the start point as
 `base: {ref, oid}`.
+
+<a id="checkout-filter-drivers"></a>
+**A checkout runs no filter driver of the repository.** Every Git command
+OATS runs that writes a tree's files (the spawn's `git worktree add` here,
+and the `git worktree add` and `git switch` of
+[`oats worktree add`](#extra-trees)) runs with every filter driver the
+repository's own configuration defines overridden to no command, so a
+`filter.<name>.smudge` or `.process` command that configuration names is
+never run and a file carrying the `filter` attribute is written as its
+committed bytes. The read of the configuration, the override and their
+limits are [a retire's](#retire-filter-drivers).
+
+- A driver that the operator's global or system configuration defines is
+  the operator's own and runs. Git LFS set up with `git lfs install` is one:
+  its files are checked out as before. A driver of that name in the
+  repository's configuration is replaced by the operator's values.
+- A driver only the repository's configuration defines does not run. With
+  Git LFS set up by `git lfs install --local` alone, a tree OATS checks out
+  holds the pointer files, not their content: run `git lfs install` for the
+  operator, or `git lfs pull` in the tree.
+- A driver whose name cannot be passed on Git's command line (it holds `=`
+  or is not UTF-8) cannot be overridden, so Git is not run: the spawn is
+  refused with `E_WORK_INSPECTION_FAILED` and rolled back, and
+  `oats worktree add` with `E_GIT_FAILED`, its tree removed.
+
+<a id="no-file-monitor"></a>
+**No file monitor.** Every Git command OATS runs that reads or writes a work
+tree's files or its index runs with `core.fsmonitor=false`, so a file
+monitor command the repository's configuration names is never run: these
+checkouts and the fetch of `oats worktree add` between its two,
+`oats worktree remove`, a retire and its recovery copy, the status a spawn's
+baseline is taken from, the reads of `oats instance git` and
+`oats instance diff`, and the check `oats package add|remove` makes that
+`oats-workspace.yaml` is tracked in the checkout that holds it. The clone's Git hooks (`post-checkout` among them) are not part of
+this: they run in a checkout as they do for the operator's own Git.
 
 After the spawn hooks succeed, the spawn fires the
 [`worktree` event](capabilities.md#the-worktree-event) for `work/`: the
@@ -1829,6 +2015,14 @@ without Git. `repo` (or `--repo`) supplies context only and may be an ordinary
 directory; without it, the deployment directory (where `oats-local.yaml` is) is
 used. No implicit fallback changes the other modes.
 
+Repository work that needs a branch — a change the instance's role and task
+call for, or a repository at the remote's current state — goes in an
+[extra tree](#extra-trees) of the instance's own, never in `work/` (which
+never becomes a repository) and never in the `repo` directory. An extra tree
+always names its repository (`--repo`): the recorded `repo` is context only,
+the deployment directory by default, so `oats worktree add` without `--repo`
+is refused when it is not a clone (`E_CLONE_MISSING`).
+
 `--work-dir` and `--branch` are rejected. Canonical instructions, skill
 composition, provider trust and harness preflight still apply. Retirement preserves nonempty work in verified recovery storage beside the
 home (`workRecovery.path/work`) before deleting it, including files created by
@@ -1863,21 +2057,34 @@ where it works are decoupled.
 
 Rules:
 
-- Read freely across member repos; **never edit or commit inside them** —
-  route changes to the owning repo's agents or the human.
-- No git state operations in any member repo.
+- Read freely across member repos through `work/`; **never edit or commit
+  inside the member clones** — others use them.
+- No Git state operations in any member clone (no branch switches, resets,
+  pulls, stashes, or `git worktree` run by hand).
+- Work that needs a branch of a member — a change the instance's role and
+  task call for, or a member at the remote's current state — goes in an
+  [extra tree](#extra-trees) of the instance's own, which `oats worktree add`
+  makes without moving any of the clone's refs. Otherwise route the change to
+  the owning repo's agents or the human. The mode says where work happens;
+  what work the instance takes on is its role's and its task's call.
 - Knowledge promotion follows the knowledge capability's own protocol, never
   direct edits through the workspace view.
 
-The instance records no branch: the workspace is not a Git tree.
+The instance records no branch: the workspace is not a Git tree. For the same
+reason an extra tree always names its repository (`--repo`): the instance's
+recorded repository is the deployment directory.
 
 ### Extra trees
 
-An instance in `worktree` or `checkout` mode can create extra trees: linked
-Git worktrees in its home, beside `work/`. It does so when the work needs
-another branch, or another repository of the deployment (one task that
-touches several repositories). The `worktree` and `checkout` briefings teach
-it; the `workspace`, `directory` and `attached` briefings do not.
+An instance in `worktree`, `checkout`, `workspace` or `directory` mode can
+create extra trees: linked Git worktrees in its home, beside `work/`. It does
+so when the work needs another branch, or another repository of the deployment
+(one task that touches several repositories); in `workspace` mode, whenever
+work needs a branch of a member, since `work/` is read-only; in `directory`
+mode, whenever work needs a branch at all, since `work/` is not a Git tree.
+The `worktree`, `checkout`, `workspace` and `directory` briefings teach it
+(the `workspace` and `directory` ones with `--repo` always, in one shared
+section); the `attached` briefing does not.
 
 ```text
 oats worktree add --purpose <p> --branch <b> --base <remote-branch>
@@ -1904,10 +2111,17 @@ option.
   rework an existing one).
 - `--repo`: the instance's repository by default. A member key is looked up
   as a spawn looks up a clone (`oats-local.yaml` `clones:`, then
-  `<deployment>/<member name>`; `E_CLONE_MISSING` when there is none). A path
-  (absolute, or starting with `.` or `~`) is used as given. It must be a
-  clone, not a linked worktree (`E_CLONE_MISMATCH`), and have an `origin`
-  remote (`E_CLONE_MISMATCH`). Not a Git repository: `E_CLONE_MISSING`.
+  `<deployment>/<member name>`; `E_CLONE_MISSING` when there is none). A name
+  that isn't a repository key (`oats`, `awebai/oats`, `oats.git`) names no
+  member and is refused as before: `E_CLONE_MISMATCH` when a clone is at its
+  convention path or `clones:` names one for it, `E_CLONE_MISSING` when there
+  is none. When that clone has a remote of that name (its key is the name or ends
+  in `/<name>`), the refusal names the key to pass, `--repo <key>`, and the
+  clone's path as the other spelling that works. It never suggests repointing
+  the clone. A path (absolute, or starting with `.` or `~`) is used as given.
+  It must be a clone, not a linked worktree (`E_CLONE_MISMATCH`), and have an
+  `origin` remote (`E_CLONE_MISMATCH`). Not a Git repository:
+  `E_CLONE_MISSING`.
 
 **What `add` does.** It writes a record, `<home>/.oats/trees/<p>.json`, in
 state `creating`, with its own pid and start time. Then it runs, as argument
@@ -1919,6 +2133,10 @@ git -C <home>/.work-<p> fetch --refmap= origin <base>
 git -C <home>/.work-<p> switch -c <branch> <the fetched commit>
 ```
 
+- Neither checkout (`worktree add`, `switch`) runs a filter driver the
+  repository's configuration defines: the files are written as their
+  committed bytes ([a checkout runs no filter
+  driver](#checkout-filter-drivers)).
 - The tree starts from the remote's current state, never from a local branch
   of the clone, which may be stale. A fetch that fails is
   `E_REMOTE_UNREADABLE`; a HEAD that is not the fetched commit is
@@ -2005,6 +2223,22 @@ output. This never changes the clone's index. Cleanup grants directories
 owner read, write and search access, and keeps `.git` until all other entries
 are deleted, so a failed deletion can be retried.
 An unreadable branch or a failed inspection keeps the tree and record.
+
+`remove` runs no file monitor the repository's configuration names
+([no file monitor](#no-file-monitor)), and no filter driver it defines
+(`filter.<name>.clean`, `.process`): its own status of the tree, the clean
+check inside `git worktree remove` and the comparison of an unregistered
+tree's surviving files are each preceded by one read of that configuration,
+and every driver it defines is overridden to no command, [as a retire does
+it](#retire-filter-drivers). A file such a filter applies to is compared as
+its bytes are in the tree, so one that was rewritten is uncommitted work
+(`E_WORKTREE_DIRTY`)
+even when its filtered form is what the branch stores. A driver whose name
+cannot be passed on Git's command line (it holds `=` or is not UTF-8)
+refuses the removal with `E_WORK_PRESERVATION_FAILED` before Git is run on
+the tree: no files were removed, and the record is kept. The same limits
+hold: a driver written between that read and the Git command, and a
+submodule's own configuration.
 Failures after Git started removing files say that removal may be partial
 and name the retry. If Git already removed `.git` too, automatic comparison
 is refused: save any work and remove the directory by hand, then run
@@ -2114,5 +2348,7 @@ member repository's `souls/<name>` (`soul.yaml` + `AGENTS.md`) and run
 
 Homes left by mechanisms earlier releases removed are reported once by
 `oats status` and `oats doctor`: `legacy-local-agents` (a `local-agents/`
-directory) and `legacy-captured-home`. Retire such instances and re-spawn the
-soul from the deployment.
+directory) and `legacy-captured-home`. Follow the reported cleanup remedy,
+then re-spawn the soul from the deployment. For captured homes, inspect and
+clean up external state first; without positive proof that no spawn hook
+ran, retirement needs `oats retire <instance> --force`.

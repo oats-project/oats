@@ -32,7 +32,7 @@ const { createGrantModel, serializeGrant } = require(${JSON.stringify(resolve(ne
 const grants = createGrantModel(${JSON.stringify(base)});
 const val = (flag) => { const eq = args.find((x) => x.startsWith(flag + "=")); if (eq) return eq.slice(flag.length + 1); const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : undefined; };
 fs.appendFileSync(log, a + " @" + process.cwd() + "\\n");
-if (a.startsWith("wake ")) { if (process.env.FAKE_NO_WAKE) { console.error("aw: unknown command wake"); process.exit(2); } if (a.startsWith("wake status")) console.log(JSON.stringify({ instances: [] })); process.exit(0); }
+if (a.startsWith("wake ")) { if (process.env.FAKE_WAKE_REGISTER_FAIL && a.startsWith("wake register")) { console.error("aw wake register: the broker refused the registration"); process.exit(5); } if (a.startsWith("wake status")) console.log(JSON.stringify({ daemon_running: true, daemon_version_state: "reported", daemon_version: "1.36.58", instances: [] })); process.exit(0); }
 if (a.startsWith("team list")) { console.log(JSON.stringify({ active_team: "t:example.test", memberships: [{ team_id: "t:example.test" }] })); process.exit(0); }
 if (a.startsWith("team invite")) { console.log(JSON.stringify({ token: "TOK-secret" })); process.exit(0); }
 if (a.startsWith("team join")) {
@@ -50,7 +50,18 @@ if (a.startsWith("init --join-from") || (a.startsWith("init ") && args.some((x) 
   // mints an invite from the root, accepts it into the cwd and connects it, in one process.
   const aw = p.join(process.cwd(), ".aw");
   for (const f of ["signing.key", "identity.yaml", "team-certs", "workspace.yaml"]) if (fs.existsSync(p.join(aw, f))) { console.error("Error: refusing to overwrite existing " + p.join(aw, f)); process.exit(2); }
-  if (${JSON.stringify(joinMode)} === "conflict") { console.error("aweb: http 422: alias already holds an active certificate for this team (invite TOK-secret)"); process.exit(1); }
+  if (${JSON.stringify(joinMode)} === "conflict") {
+    // aw 1.36.58 (aw-v1.36.58): the registry refuses the certificate with 409
+    // {"detail":{"code":"alias_active","message":"Alias already active in team"}}
+    // (awid routes/teams.py). aw prints the refusal on stderr and, under --json, its
+    // error envelope on stdout (cmd/aw/root.go reportCLIError), where
+    // awid.DescribeError names an alias_active refusal alias_conflict. The hook trusts
+    // only that code (oats-aweb #248). TOK-secret is a canary: it must reach no log.
+    const message = "accept hosted team invite: Alias already active in team (invite TOK-secret)";
+    console.error(message);
+    console.log(JSON.stringify({ error: { code: "alias_conflict", message, http_status: 409, detail: "Alias already active in team", reason: "alias_active" } }));
+    process.exit(1);
+  }
   const bind = () => { fs.mkdirSync(p.join(aw, "team-certs"), { recursive: true }); fs.writeFileSync(p.join(aw, "signing.key"), "k"); fs.writeFileSync(p.join(aw, "workspace.yaml"), "memberships:\\n    - team_id: t:example.test\\n      alias: " + (val("--name") || "probe") + "\\n      workspace_id: 00000000-0000-4000-8000-000000000001\\n"); };
   if (process.env.FAKE_JOIN_LATE) {
     // The mint completes server-side (and binds the home) but the CLI hangs past the hook's timeout.
@@ -225,11 +236,11 @@ test("spawn with delivery=session: AWEB_DELIVERY in the launch env, no Claude ch
     assert.equal(session.doc.launch, undefined, "no channel flag in session mode");
     assert.match(session.doc.brief, /Notification delivery: external \(AWEB_DELIVERY=session\)/);
     assert.match(readFileSync(join(base, "aw.log"), "utf8"), new RegExp(`^wake register --home ${home.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")} --identity-home .*/.aw --delivery session`, "m"), "registered with the broker");
-    // Without an aw that has the wake CLI, session mode refuses instead of going silently poll-only.
+    // When the registration with the broker fails, session mode refuses instead of going silently poll-only.
     mkdirSync(join(root, "agents", "dev", "instances", "probe-nw"), { recursive: true });
-    const noWake = runHook(base, bin, "spawn", { ...env, OATS_INSTANCE: "probe-nw", OATS_HOME: join(root, "agents", "dev", "instances", "probe-nw"), OATS_SETTINGS: JSON.stringify({ delivery: "session" }), FAKE_NO_WAKE: "1" });
-    assert.notEqual(noWake.status, 0);
-    assert.match(noWake.stdout, /needs an aw with the wake broker CLI/);
+    const registerFails = runHook(base, bin, "spawn", { ...env, OATS_INSTANCE: "probe-nw", OATS_HOME: join(root, "agents", "dev", "instances", "probe-nw"), OATS_SETTINGS: JSON.stringify({ delivery: "session" }), FAKE_WAKE_REGISTER_FAIL: "1" });
+    assert.notEqual(registerFails.status, 0);
+    assert.match(registerFails.stdout, /needs an aw with the wake broker CLI/);
     // Retire in session mode deregisters.
     mkdirSync(join(home, ".aw"), { recursive: true });
     const ret = runHook(base, bin, "retire", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_META: JSON.stringify(session.doc.meta) });
@@ -334,6 +345,10 @@ test("spawn: a join refused because the alias still holds a certificate is fatal
     const r = runHook(base, bin, "spawn", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_RUNTIME: "pi", OATS_SETTINGS: "{}" });
     assert.notEqual(r.status, 0);
     assert.match(r.stdout, /alias \\"probe\\" already holds a certificate on this team, so no identity could be minted: another machine's instance has that name, or a retired one still holds it; spawn with a different --name\. Team: t:example\.test/);
+    // oats.aweb 1.42.0 (#248): a refusal aw confirms by its code registered nothing,
+    // so the write-ahead mint record goes and no pending mint is left for retire.
+    assert.equal(r.doc.meta?.pendingMint, undefined, "a confirmed refusal leaves no pending mint");
+    assert.equal(existsSync(join(home, ".oats-aweb", "pending-mint.json")), false, "the write-ahead mint record is dropped");
     assert.equal(r.stdout.includes("TOK-secret"), false, "the invite token never reaches the log");
   } finally { rmSync(base, { recursive: true, force: true }); }
 });
@@ -379,7 +394,7 @@ test("retained identity: authority files copied exactly, coordination reconnecte
     const r = runHook(base, bin, "spawn", env);
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.equal(r.doc.meta.retained, true); assert.equal(r.doc.meta.alias, "merlin"); assert.equal(r.doc.meta.team, "t:example.test");
-    assert.deepEqual(r.doc.meta.identity, { mode: "global", alias: "merlin", team: "t:example.test", address: "cjr.aweb.ai/merlin", resident: null });
+    assert.deepEqual(r.doc.meta.identity, { mode: "local", alias: "merlin", team: "t:example.test", address: "cjr.aweb.ai/merlin", resident: null });
     assert.match(r.doc.brief, /retained seat of the existing aweb identity "merlin" on team t:example.test/);
     const dest = join(home, ".aw");
     for (const f of ["signing.key", "identity.yaml", "teams.yaml", "team-certs/t-example.test.pem", "encryption.yaml", "encryption-keys/x25519.key"]) assert.equal(existsSync(join(dest, f)), true, `${f} copied`);
@@ -457,7 +472,7 @@ test("retained identity retire releases the lock before global identity dispatch
     const bin = fakeAw(base); const { root, home } = deployment(base); const { src } = legacySeat(base);
     const spawn = runHook(base, bin, "spawn", { OATS_INSTANCE: "merlin-seat", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_RUNTIME: "pi", OATS_TEAM_ID: "t:example.test", OATS_SETTINGS: JSON.stringify({ identity: { source: src } }) });
     assert.equal(spawn.status, 0, spawn.stdout + spawn.stderr);
-    assert.equal(spawn.doc.meta.identity.mode, "global");
+    assert.equal(spawn.doc.meta.identity.mode, "local");
     assert.equal(spawn.doc.meta.identity.grant, undefined);
     const ret = runHook(base, bin, "retire", { OATS_INSTANCE: "merlin-seat", OATS_HOME: home, OATS_META: JSON.stringify(spawn.doc.meta) });
     assert.equal(ret.status, 0, ret.stdout + ret.stderr);
@@ -470,7 +485,7 @@ test("retained identity in session mode: an aw without the wake CLI fails the se
   const base = mkdtempSync(join(tmpdir(), "oats-aweb-110-"));
   try {
     const bin = fakeAw(base); const { root, home } = deployment(base); const { src } = legacySeat(base);
-    const r = runHook(base, bin, "spawn", { OATS_INSTANCE: "merlin-seat", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_RUNTIME: "pi", OATS_TEAM_ID: "t:example.test", OATS_SETTINGS: JSON.stringify({ identity: { source: src }, delivery: "session" }), FAKE_NO_WAKE: "1" });
+    const r = runHook(base, bin, "spawn", { OATS_INSTANCE: "merlin-seat", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_RUNTIME: "pi", OATS_TEAM_ID: "t:example.test", OATS_SETTINGS: JSON.stringify({ identity: { source: src }, delivery: "session" }), FAKE_WAKE_REGISTER_FAIL: "1" });
     assert.notEqual(r.status, 0);
     assert.match(r.stdout, /could not be seated .*wake broker CLI/);
     const connects = readFileSync(join(base, "aw.log"), "utf8").split("\n").filter((l) => l.startsWith("workspace connect"));

@@ -38,10 +38,10 @@ const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 const LOCAL = { id: "/Users/op/Agents/oats", machine: "This Mac", path: "/Users/op/Agents/oats", label: "~/Agents/oats", local: true,
   reachable: true, identityFrom: "reported", primary: true };
-const ALTAIR = { id: "remote:altair:tsm", machine: "altair", path: "/home/op/Agents/tsm", label: "~/Agents/tsm", local: false,
-  reachable: false, identityFrom: "remembered", primary: false, reason: "altair timed out; it is tried again on the next read.",
-  note: "altair now reports workspace tsm." };
-const LOCAL2 = { id: "/Users/op/awebai/oats-v2", machine: "This Mac", path: "/Users/op/awebai/oats-v2", label: "~/awebai/oats-v2", local: true,
+const DEVBOX = { id: "remote:devbox:web", machine: "devbox", path: "/home/op/Agents/web", label: "~/Agents/web", local: false,
+  reachable: false, identityFrom: "remembered", primary: false, reason: "devbox timed out; it is tried again on the next read.",
+  note: "devbox now reports workspace web." };
+const LOCAL2 = { id: "/Users/op/example/oats-qa", machine: "This Mac", path: "/Users/op/example/oats-qa", label: "~/example/oats-qa", local: true,
   reachable: true, identityFrom: "reported", primary: false };
 const tag = (d) => ({ id: d.id, machine: d.machine, path: d.path });
 const row = (name, d, fields = {}) => ({ instance: name, agent: "soul", agentsRoot: `${d.path}/agents`, home: `${d.path}/agents/soul/instances/${name}`,
@@ -50,8 +50,8 @@ const row = (name, d, fields = {}) => ({ instance: name, agent: "soul", agentsRo
 /* ── deployment states, and no deployments block in the sidebar ── */
 test("deploymentState says live, remembered, not reached and not observed in words", () => {
   assert.deepEqual(vd.deploymentState(LOCAL), { key: "live", text: "live", detail: "" });
-  assert.deepEqual(vd.deploymentState(ALTAIR), { key: "remembered", text: "remembered", detail: `Last report, not live now. ${ALTAIR.reason}` });
-  assert.deepEqual(vd.deploymentState({ ...ALTAIR, identityFrom: null }), { key: "unreached", text: "not reached", detail: ALTAIR.reason });
+  assert.deepEqual(vd.deploymentState(DEVBOX), { key: "remembered", text: "remembered", detail: `Last report, not live now. ${DEVBOX.reason}` });
+  assert.deepEqual(vd.deploymentState({ ...DEVBOX, identityFrom: null }), { key: "unreached", text: "not reached", detail: DEVBOX.reason });
   assert.deepEqual(vd.deploymentState({ ...LOCAL, reachable: false, reason: "Reading the deployment…" }), { key: "unobserved", text: "not observed", detail: "Reading the deployment…" });
 });
 
@@ -122,24 +122,24 @@ test("roster, one deployment: no deployment heading, and exactly the list a wind
 });
 
 test("roster, two deployments: a heading per deployment, by machine, in order, its own agent groups under it; host kept on remote rows", (t) => {
-  const rows = [row("lead", LOCAL), row("dev", LOCAL, { parentInstance: "lead" }), row("far", ALTAIR), row("near", LOCAL)];
-  const list = roster(t, rows, [LOCAL, ALTAIR]);
+  const rows = [row("lead", LOCAL), row("dev", LOCAL, { parentInstance: "lead" }), row("far", DEVBOX), row("near", LOCAL)];
+  const list = roster(t, rows, [LOCAL, DEVBOX]);
   const heads = [...list.querySelectorAll(".ctx-deployment")];
-  assert.deepEqual(heads.map((h) => h.querySelector(".ctx-deployment-label").textContent), ["This Mac", "altair"], "the machine, no path");
-  assert.deepEqual(heads.map((h) => h.querySelector(".ctx-deployment-label").title), [LOCAL.path, ALTAIR.path], "the full path only as the tooltip");
+  assert.deepEqual(heads.map((h) => h.querySelector(".ctx-deployment-label").textContent), ["This Mac", "devbox"], "the machine, no path");
+  assert.deepEqual(heads.map((h) => h.querySelector(".ctx-deployment-label").title), [LOCAL.path, DEVBOX.path], "the full path only as the tooltip");
   assert.equal(heads[0].getAttribute("role"), "heading"); assert.equal(heads[0].getAttribute("aria-level"), "3");
   assert.equal(heads[0].querySelector(".deployment-mark"), null, "a live deployment carries no mark");
   const mark = heads[1].querySelector(".deployment-mark");
   assert.equal(mark.getAttribute("role"), "img"); assert.equal(mark.getAttribute("aria-label"), "remembered"); assert.equal(mark.title, "remembered");
   assert.ok(mark.querySelector("svg[aria-hidden=true]"), "the warning shape, decorative under its words");
   assert.equal(heads[0].getAttribute("aria-label"), "This Mac, 3 instances");
-  assert.equal(heads[1].getAttribute("aria-label"), "altair, remembered, 1 instance");
+  assert.equal(heads[1].getAttribute("aria-label"), "devbox, remembered, 1 instance");
   assert.doesNotMatch(list.textContent, /primary/, "no primary tag");
-  assert.equal(heads[1].textContent, "altair", "one short line: no reason or note in the sidebar");
+  assert.equal(heads[1].textContent, "devbox", "one short line: no reason or note in the sidebar");
   // Order: heading, its groups and rows, then the next heading.
   const sequence = [...list.children].map((el) => el.classList.contains("ctx-deployment") ? `#${el.dataset.deployment}`
     : el.classList.contains("ctx-group") ? `group:${el.dataset.group}` : el.querySelector(".ctx-name")?.dataset.name);
-  assert.deepEqual(sequence, [`#${LOCAL.id}`, "group:lead", "lead", "dev", "group:independent", "near", `#${ALTAIR.id}`, "group:independent", "far"]);
+  assert.deepEqual(sequence, [`#${LOCAL.id}`, "group:lead", "lead", "dev", "group:independent", "near", `#${DEVBOX.id}`, "group:independent", "far"]);
   assert.equal(list.textContent.includes("oats ·"), false, "rows never repeat the workspace name");
   const far = [...list.querySelectorAll(".ctx-tree-row")].find((r) => r.querySelector(".ctx-name").dataset.name === "far");
   // The identity line (the product owner, 2026-10-26): the soul, then the repository; the host is the heading's.
@@ -149,16 +149,16 @@ test("roster, two deployments: a heading per deployment, by machine, in order, i
 });
 
 test("roster headings: one machine holding two deployments adds the path tail; not reached is marked in words", (t) => {
-  const unreached = { ...ALTAIR, identityFrom: null };
+  const unreached = { ...DEVBOX, identityFrom: null };
   const list = roster(t, [row("a", LOCAL), row("b", LOCAL2), row("c", unreached)], [LOCAL, LOCAL2, unreached]);
   const heads = [...list.querySelectorAll(".ctx-deployment")];
-  assert.deepEqual(heads.map((h) => h.querySelector(".ctx-deployment-label").textContent), ["This Mac · oats", "This Mac · oats-v2", "altair"]);
+  assert.deepEqual(heads.map((h) => h.querySelector(".ctx-deployment-label").textContent), ["This Mac · oats", "This Mac · oats-qa", "devbox"]);
   assert.deepEqual(heads.map((h) => h.querySelector(".deployment-mark")?.getAttribute("aria-label") ?? null), [null, null, "not reached"]);
-  assert.equal(heads[2].getAttribute("aria-label"), "altair, not reached, 1 instance");
+  assert.equal(heads[2].getAttribute("aria-label"), "devbox, not reached, 1 instance");
   // The machine is uppercased with the group label; a path tail is case-sensitive and keeps its case.
   const doc = list.ownerDocument, style = doc.createElement("style"); style.textContent = css; doc.head.append(style);
   const win = doc.defaultView;
-  assert.deepEqual(heads.map((h) => h.querySelector(".ctx-deployment-path")?.textContent ?? null), ["oats", "oats-v2", null]);
+  assert.deepEqual(heads.map((h) => h.querySelector(".ctx-deployment-path")?.textContent ?? null), ["oats", "oats-qa", null]);
   assert.equal(win.getComputedStyle(heads[1]).textTransform, "uppercase");
   assert.equal(win.getComputedStyle(heads[1].querySelector(".ctx-deployment-path")).textTransform, "none");
   assert.equal(win.getComputedStyle(heads[1].querySelector(".ctx-deployment-path")).letterSpacing, "normal");
@@ -185,13 +185,13 @@ test("roster: a stale deployment (its last re-read failed) is marked in words, a
 });
 
 test("roster headings: a deployment with no instances has no heading", (t) => {
-  const list = roster(t, [row("a", LOCAL), row("b", LOCAL)], [LOCAL, ALTAIR]);
+  const list = roster(t, [row("a", LOCAL), row("b", LOCAL)], [LOCAL, DEVBOX]);
   assert.deepEqual([...list.querySelectorAll(".ctx-deployment")].map((h) => h.dataset.deployment), [LOCAL.id]);
 });
 
 test("rosterSections: a pending spawn without a deployment joins the primary; empty deployments are left out", () => {
   const rows = [row("a", LOCAL), { instance: "spawning", agent: "soul", home: "/x/spawning", pendingSpawn: {} }];
-  const sections = vd.rosterSections(rows, rows, [LOCAL, ALTAIR], DESKTOP_TERMS);
+  const sections = vd.rosterSections(rows, rows, [LOCAL, DEVBOX], DESKTOP_TERMS);
   assert.deepEqual(sections.map((s) => s.deployment.id), [LOCAL.id]);
   assert.deepEqual(sections[0].groups.flatMap((g) => g.clusters.flatMap((c) => c.instances.map((i) => i.instance))), ["a", "spawning"]);
   assert.equal(vd.rosterSections(rows, rows, [LOCAL], DESKTOP_TERMS).length, 1); assert.equal(vd.rosterSections(rows, rows, [LOCAL], DESKTOP_TERMS)[0].deployment, null);
@@ -210,16 +210,16 @@ function switcher(t) {
 }
 const SHORT = "OATS too old to report its workspace";
 const views = [
-  { id: "ws:aaaaaaaaaaaaaaaaaaaa", name: "oats", team: null, key: "github.com/org/oats", deployments: [LOCAL.id, ALTAIR.id],
-    deploymentLabels: ["This Mac · ~/Agents/oats", "altair · ~/Agents/tsm"], machines: ["This Mac", "altair"], notLive: 1 },
+  { id: "ws:aaaaaaaaaaaaaaaaaaaa", name: "oats", team: null, key: "github.com/org/oats", deployments: [LOCAL.id, DEVBOX.id],
+    deploymentLabels: ["This Mac · ~/Agents/oats", "devbox · ~/Agents/web"], machines: ["This Mac", "devbox"], notLive: 1 },
   { id: "/Users/op/Agents/loose", name: "loose", team: null, deployments: ["/Users/op/Agents/loose"], unattached: true, ref: "github.com/org/loose@main",
     reason: "This deployment's workspace reference names a member whose workspace isn't known yet; run oats sync there.", short: SHORT,
     deploymentLabels: ["This Mac · ~/Agents/loose"], machines: ["This Mac"], notLive: 0 },
-  { id: "ws:bbbbbbbbbbbbbbbbbbbb", name: "tsm", team: null, key: "github.com/org/tsm", deployments: ["remote:vega:t1"], server: "vega", remote: true,
-    deploymentLabels: ["vega · /srv/tsm"], machines: ["vega"], notLive: 0 },
+  { id: "ws:bbbbbbbbbbbbbbbbbbbb", name: "web", team: null, key: "github.com/org/web", deployments: ["remote:laptop:t1"], server: "laptop", remote: true,
+    deploymentLabels: ["laptop · /srv/web"], machines: ["laptop"], notLive: 0 },
 ];
 // Nothing of where a workspace is deployed or how it is: its own pages say that (pr3-simplify).
-const RAW = /ws:|remote:|\/Users\/|~\/|\/srv|Server:|Reports |run oats sync|github\.com\/org\/loose|This Mac|altair|vega|not live|OATS too old/;
+const RAW = /ws:|remote:|\/Users\/|~\/|\/srv|Server:|Reports |run oats sync|github\.com\/org\/loose|This Mac|devbox|laptop|not live|OATS too old/;
 
 test("switcher entries: one line, the roster's circle and the name; no machine, place, other mark or state, and the tooltip is the name alone", (t) => {
   const s = switcher(t);
@@ -227,7 +227,7 @@ test("switcher entries: one line, the roster's circle and the name; no machine, 
   assert.equal(s.document.getElementById("ws-list").getAttribute("aria-description"), "Current workspace: oats", "the list never names a ws: id");
   const listbox = s.document.getElementById("ws-options");
   assert.deepEqual(s.options().map((o) => o.dataset.workspaceId), [views[0].id, views[2].id, views[1].id], "matched views first, then the unmatched one");
-  assert.deepEqual(s.options().map((o) => o.textContent), ["oats", "tsm", "loose"]);
+  assert.deepEqual(s.options().map((o) => o.textContent), ["oats", "web", "loose"]);
   for (const option of s.options()) {
     assert.deepEqual([...option.children].map((c) => c.className), [option.dataset.workspaceId === views[0].id ? "ctx-dot on" : "ctx-dot off", "ws-option-name"], `${option.dataset.workspaceId}: the circle, the name and nothing else`);
     assert.equal(option.title, option.textContent, "the tooltip is the whole name: never a path or machine");
@@ -242,8 +242,8 @@ test("switcher entries: one line, the roster's circle and the name; no machine, 
 
 test("switcher entries from an older server (no machines): the name only, never a path or id", (t) => {
   const s = switcher(t);
-  const old = [{ id: "ws:cccccccccccccccccccc", name: "old", team: null, deployments: ["remote:vega:t1", "/Users/op/x"] },
-    { id: "remote:vega:t2", name: "far", team: null, deployments: ["remote:vega:t2"] }];
+  const old = [{ id: "ws:cccccccccccccccccccc", name: "old", team: null, deployments: ["remote:laptop:t1", "/Users/op/x"] },
+    { id: "remote:laptop:t2", name: "far", team: null, deployments: ["remote:laptop:t2"] }];
   s.sw.begin()(old[0], old);
   assert.deepEqual(s.options().map((o) => [o.textContent, o.title]), [["old", "old"], ["far", "far"]]);
   s.sw.begin()(old[1], old);
@@ -266,11 +266,11 @@ test("Not matched: a row by its name in the same flat list, no heading; selectin
   assert.deepEqual(s.selected, [views[1].id], "selected as before");
   assert.deepEqual(s.tabRequests, [{ view: views[1].id, tab: views[1].deployments[0] }], "then its deployment's tab is requested");
   // A remote group is named by its server: its row is that name.
-  const rigel = { id: "remote:rigel:cccccccccccc", name: "rigel", team: null, deployments: ["remote:rigel:cccccccccccc"], machines: ["rigel"], notLive: 0,
-    unattached: true, short: SHORT, server: "rigel", remote: true };
+  const build = { id: "remote:build:cccccccccccc", name: "build", team: null, deployments: ["remote:build:cccccccccccc"], machines: ["build"], notLive: 0,
+    unattached: true, short: SHORT, server: "build", remote: true };
   const r = switcher(t);
-  r.sw.begin()(views[0], [views[0], rigel]);
-  assert.deepEqual(r.options().map((o) => o.textContent), ["oats", "rigel"]);
+  r.sw.begin()(views[0], [views[0], build]);
+  assert.deepEqual(r.options().map((o) => o.textContent), ["oats", "build"]);
 });
 
 test("workspace list: Arrow/Home/End walk every row, unmatched ones included; the list has no filter field", (t) => {
@@ -286,20 +286,20 @@ test("workspace list: Arrow/Home/End walk every row, unmatched ones included; th
 });
 
 test("switcher labels: two choices of one name are told apart by keys, folder tails or machines, never by ids or full paths", () => {
-  const twins = [{ id: "ws:1", name: "tsm", key: "github.com/a/tsm", deployments: [] }, { id: "ws:2", name: "tsm", key: "github.com/b/tsm", deployments: [] }];
-  assert.deepEqual(workspaceChoiceLabels(twins), ["tsm — github.com/a/tsm", "tsm — github.com/b/tsm"]);
-  assert.deepEqual(workspaceChoiceLabels([{ id: "/a/x/oats", name: "oats" }, { id: "remote:vega:oats", name: "oats", machines: ["vega"] }, { id: "remote:vega:o2", name: "oats" }]),
-    ["oats — x/oats", "oats — vega", "oats"]);
-  assert.deepEqual(workspaceChoiceLabels([{ id: "remote:vega:t1" }]), ["Workspace"], "a remote id is never a name");
+  const twins = [{ id: "ws:1", name: "web", key: "github.com/a/web", deployments: [] }, { id: "ws:2", name: "web", key: "github.com/b/web", deployments: [] }];
+  assert.deepEqual(workspaceChoiceLabels(twins), ["web — github.com/a/web", "web — github.com/b/web"]);
+  assert.deepEqual(workspaceChoiceLabels([{ id: "/a/x/oats", name: "oats" }, { id: "remote:laptop:oats", name: "oats", machines: ["laptop"] }, { id: "remote:laptop:o2", name: "oats" }]),
+    ["oats — x/oats", "oats — laptop", "oats"]);
+  assert.deepEqual(workspaceChoiceLabels([{ id: "remote:laptop:t1" }]), ["Workspace"], "a remote id is never a name");
   assert.equal(workspaceChoicePlace({ id: "/a/b", deployments: ["/a/b"] }), "", "no machines: nothing, never the id");
-  assert.equal(workspaceChoicePlace({ id: "ws:1", machines: ["This Mac", "altair", "", 7] }), "This Mac · altair");
+  assert.equal(workspaceChoicePlace({ id: "ws:1", machines: ["This Mac", "devbox", "", 7] }), "This Mac · devbox");
 });
 
 /* ── the "On <deployment>" line ── */
 test("deploymentScopeLabel: the primary's label with two or more deployments, null with one", () => {
   assert.equal(deploymentScopeLabel({ deployments: [LOCAL] }), null);
-  assert.equal(deploymentScopeLabel({ deployments: [ALTAIR, { ...LOCAL, primary: true }] }), "This Mac · ~/Agents/oats");
-  assert.equal(deploymentScopeLabel([{ ...ALTAIR, primary: true }, { ...LOCAL, primary: false }]), "altair · ~/Agents/tsm");
+  assert.equal(deploymentScopeLabel({ deployments: [DEVBOX, { ...LOCAL, primary: true }] }), "This Mac · ~/Agents/oats");
+  assert.equal(deploymentScopeLabel([{ ...DEVBOX, primary: true }, { ...LOCAL, primary: false }]), "devbox · ~/Agents/web");
   assert.equal(deploymentScopeLabel({}), null);
 });
 
@@ -307,17 +307,17 @@ test("a deployment-level surface shows 'On <primary>' only in a view of two or m
   const dom = new JSDOM("<body></body>"); t.after(() => dom.window.close());
   const doc = dom.window.document;
   vd.notePanel({ workspace: { id: "ws:one" }, deployments: [LOCAL] });
-  vd.notePanel({ workspace: { id: "ws:two" }, deployments: [LOCAL, ALTAIR] });
+  vd.notePanel({ workspace: { id: "ws:two" }, deployments: [LOCAL, DEVBOX] });
   const one = createDeploymentScopeLine(doc, { workspace: "ws:one" }), two = createDeploymentScopeLine(doc, { workspace: "ws:two" });
   doc.body.append(one.element, two.element);
   assert.equal(one.element.hidden, true); assert.equal(one.element.textContent, "");
   assert.equal(two.element.hidden, false); assert.equal(two.element.textContent, "On This Mac · ~/Agents/oats");
   assert.ok(doc.head.querySelector("style[data-deployment-scope]"), "its style is in the document once");
-  vd.notePanel({ workspace: { id: "ws:one" }, deployments: [LOCAL, ALTAIR] });
+  vd.notePanel({ workspace: { id: "ws:one" }, deployments: [LOCAL, DEVBOX] });
   assert.equal(one.element.textContent, "On This Mac · ~/Agents/oats", "a view that gains a deployment gains the line");
   vd.notePanel({ workspace: { id: "ws:two" }, deployments: [LOCAL] });
   assert.equal(two.element.hidden, true);
-  const byDeployment = createDeploymentScopeLine(doc, { workspace: ALTAIR.id });
+  const byDeployment = createDeploymentScopeLine(doc, { workspace: DEVBOX.id });
   assert.equal(byDeployment.element.textContent, "On This Mac · ~/Agents/oats", "a deployment id reads the view that holds it");
   one.dispose(); two.dispose(); byDeployment.dispose();
 });
@@ -328,7 +328,7 @@ test("Automations (and Schedules, the same view) carry no 'On <deployment>' line
   const doc = dom.window.document;
   const was = currentWorkspace(); t.after(() => setWorkspace(was));
   setWorkspace("ws:auto");
-  vd.notePanel({ workspace: { id: "ws:auto" }, deployments: [LOCAL, ALTAIR] });
+  vd.notePanel({ workspace: { id: "ws:auto" }, deployments: [LOCAL, DEVBOX] });
   const v = createAutomationsView(doc.getElementById("host"), { kind: "schedule", read: async () => ({ rows: [] }) });
   t.after(() => v.dispose());
   const header = doc.querySelector(".auto-header");
@@ -349,7 +349,7 @@ for (const name of ["light", "solarized", "dark"]) test(`${name}: roster heading
   const doc = dom.window.document, win = dom.window; doc.documentElement.dataset.theme = name; mountShellIcons(doc);
   for (const source of [theme, css, deploymentScopeCSS, inspectorCSS]) { const style = doc.createElement("style"); style.textContent = source; doc.head.append(style); }
   const list = doc.querySelector("#instance-roster .ctx-list");
-  list.append(vd.deploymentHeading(doc, { deployment: LOCAL, label: "This Mac", count: 1 }), vd.deploymentHeading(doc, { deployment: ALTAIR, label: "altair", count: 1 }));
+  list.append(vd.deploymentHeading(doc, { deployment: LOCAL, label: "This Mac", count: 1 }), vd.deploymentHeading(doc, { deployment: DEVBOX, label: "devbox", count: 1 }));
   const sw = createWorkspaceSwitcher({ document: doc, selectWorkspace() {}, discoverSuggestions: async () => [], addWorkspace: async () => ({}), pickWorkspace: async () => ({}) });
   t.after(() => sw.dispose());
   // The current entry (bold over an accent edge, no fill of its own since b761a2a27: --sel is the nav's current view)
@@ -358,7 +358,7 @@ for (const name of ["light", "solarized", "dark"]) test(`${name}: roster heading
   sw.begin()(marked[0], marked);
   // The scope line where it shows: the side panel's soul inspector, on its --surface.
   const section = doc.createElement("aside"); section.className = "soul-inspector"; doc.body.append(section);
-  vd.notePanel({ workspace: { id: "ws:contrast" }, deployments: [LOCAL, ALTAIR] });
+  vd.notePanel({ workspace: { id: "ws:contrast" }, deployments: [LOCAL, DEVBOX] });
   const line = createDeploymentScopeLine(doc, { workspace: "ws:contrast" }); section.append(line.element);
   const root = win.getComputedStyle(doc.documentElement);
   const active = '.ws-option[aria-current="true"]', inactive = `.ws-option[data-workspace-id="${marked[2].id}"]`;

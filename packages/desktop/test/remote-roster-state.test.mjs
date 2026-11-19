@@ -12,8 +12,8 @@ import { cliRemoteRoster } from '../../client/cli-adapter.mjs';
 import { group, identity, remoteRow, LAB } from './helpers/workspace-views-fixture.mjs';
 
 const AT = '2026-10-11T12:00:00.000Z';
-const altair = () => group('altair:a1', 'altair', '/home/juan/oats', identity(), [remoteRow('far-a', '/home/juan/oats')]);
-const vega = () => group('vega:v1', 'vega', '/srv/lab', identity(LAB, 'aweb:lab'), [remoteRow('lab-a', '/srv/lab', { running: false })]);
+const devbox = () => group('devbox:a1', 'devbox', '/home/alex/oats', identity(), [remoteRow('far-a', '/home/alex/oats')]);
+const laptop = () => group('laptop:v1', 'laptop', '/srv/lab', identity(LAB, 'aweb:lab'), [remoteRow('lab-a', '/srv/lab', { running: false })]);
 const ok = (groups) => ({ schemaVersion: 1, ok: true, result: { groups } });
 const refused = (error) => ({ schemaVersion: 1, ok: false, ...(error === undefined ? {} : { error }) });
 const NONE = { remoteGroups: [], rosterAnswered: false, rosterFailure: null };
@@ -27,7 +27,7 @@ const frozen = (value) => {
 };
 
 test('an ok envelope with groups: those groups, answered, no failure, and the groups reported', () => {
-  const groups = [altair(), vega()];
+  const groups = [devbox(), laptop()];
   const next = remoteRosterState(NONE, { envelope: ok(groups) }, AT);
   assert.deepEqual(next, { remoteGroups: groups, rosterAnswered: true, rosterFailure: null, reported: groups });
   assert.equal(next.remoteGroups, groups, 'the answer\'s own groups, not a copy');
@@ -41,16 +41,16 @@ test('an ok envelope with groups: those groups, answered, no failure, and the gr
 test('gated: no groups and not answered, the failure sentence as it was, nothing reported', () => {
   assert.deepEqual(remoteRosterState(NONE, { gated: true }, AT), { remoteGroups: [], rosterAnswered: false, rosterFailure: null, reported: null });
   // After a good answer: the groups go, and the roster is no longer answered.
-  const answered = kept(remoteRosterState(NONE, { envelope: ok([altair(), vega()]) }, AT));
+  const answered = kept(remoteRosterState(NONE, { envelope: ok([devbox(), laptop()]) }, AT));
   assert.deepEqual(remoteRosterState(answered, { gated: true }, AT), { remoteGroups: [], rosterAnswered: false, rosterFailure: null, reported: null });
   // The sentence is not this outcome's to clear (the Desktop clears it where it accepts another CLI).
-  assert.deepEqual(remoteRosterState({ remoteGroups: [altair()], rosterAnswered: false, rosterFailure: 'ssh: no route' }, { gated: true }, AT),
+  assert.deepEqual(remoteRosterState({ remoteGroups: [devbox()], rosterAnswered: false, rosterFailure: 'ssh: no route' }, { gated: true }, AT),
     { remoteGroups: [], rosterAnswered: false, rosterFailure: 'ssh: no route', reported: null });
 });
 
 test('an envelope that is not ok: the groups held, marked with its error; the sentence only while no answer has ever arrived', () => {
   const error = { code: 'E_SERVERS_UNREADABLE', message: 'the server registry is not valid JSON' };
-  const held = [altair(), vega()];
+  const held = [devbox(), laptop()];
   // Before any answer: the sentence is the error's message.
   const first = remoteRosterState({ ...NONE, remoteGroups: held }, { envelope: refused(error) }, AT);
   assert.deepEqual(first, { remoteGroups: unavailableGroups(held, error), rosterAnswered: false, rosterFailure: 'the server registry is not valid JSON', reported: null });
@@ -69,8 +69,8 @@ test('an envelope that is not ok: the groups held, marked with its error; the se
 });
 
 test('an ok envelope without a groups array: the groups held, marked, yet answered, with no sentence, and the marked groups reported', () => {
-  const held = [altair(), vega()];
-  for (const result of [{}, { groups: null }, { groups: 'altair' }, { groups: { 0: altair() } }]) {
+  const held = [devbox(), laptop()];
+  for (const result of [{}, { groups: null }, { groups: 'devbox' }, { groups: { 0: devbox() } }]) {
     const next = remoteRosterState({ remoteGroups: held, rosterAnswered: false, rosterFailure: 'ssh: no route' }, { envelope: { schemaVersion: 1, ok: true, result } }, AT);
     const marked = unavailableGroups(held, ROSTER('Remote roster unavailable'));
     assert.deepEqual(next, { remoteGroups: marked, rosterAnswered: true, rosterFailure: null, reported: marked }, JSON.stringify(result));
@@ -82,7 +82,7 @@ test('an ok envelope without a groups array: the groups held, marked, yet answer
 });
 
 test('thrown: the groups held, marked with the sentence that carries the message; the sentence kept only while no answer has ever arrived', () => {
-  const held = [altair()], sentence = 'Remote roster unavailable: spawn oats ENOENT';
+  const held = [devbox()], sentence = 'Remote roster unavailable: spawn oats ENOENT';
   assert.deepEqual(remoteRosterState({ ...NONE, remoteGroups: held }, { thrown: 'spawn oats ENOENT' }, AT),
     { remoteGroups: unavailableGroups(held, ROSTER(sentence)), rosterAnswered: false, rosterFailure: sentence, reported: null });
   assert.deepEqual(remoteRosterState({ remoteGroups: held, rosterAnswered: true, rosterFailure: null }, { thrown: 'spawn oats ENOENT' }, AT),
@@ -94,13 +94,13 @@ test('thrown: the groups held, marked with the sentence that carries the message
 });
 
 test('a group that cannot be projected makes the whole answer a thrown one: the last readable roster is never replaced by an unreadable one', () => {
-  const held = [altair(), vega()], answered = { remoteGroups: held, rosterAnswered: true, rosterFailure: null };
-  for (const bad of [null, {}, { id: 'rigel:r1', server: 'rigel' }, { ...altair(), probe: undefined }, { ...altair(), target: null }, { ...altair(), instances: [null] }]) {
+  const held = [devbox(), laptop()], answered = { remoteGroups: held, rosterAnswered: true, rosterFailure: null };
+  for (const bad of [null, {}, { id: 'build:r1', server: 'build' }, { ...devbox(), probe: undefined }, { ...devbox(), target: null }, { ...devbox(), instances: [null] }]) {
     let message; try { remotePanel(bad, AT); } catch (e) { message = e.message; }
     assert.equal(typeof message, 'string', 'remotePanel throws on it');
     const sentence = `Remote roster unavailable: ${message}`;
     // One unreadable group among readable ones, in any place.
-    for (const groups of [[bad], [altair(), bad], [bad, vega()]]) {
+    for (const groups of [[bad], [devbox(), bad], [bad, laptop()]]) {
       assert.deepEqual(remoteRosterState(answered, { envelope: ok(groups) }, AT),
         { remoteGroups: unavailableGroups(held, ROSTER(sentence)), rosterAnswered: true, rosterFailure: null, reported: null }, JSON.stringify(bad));
       assert.equal(remoteRosterState({ ...answered, rosterAnswered: false }, { envelope: ok(groups) }, AT).rosterFailure, sentence);
@@ -120,11 +120,11 @@ test('a failed first answer, then a good one, then a failed one: the sentence is
   const take = (outcome) => { const next = remoteRosterState(state, outcome, AT); state = kept(next); return next; };
   assert.deepEqual(take({ thrown: 'timeout' }), { remoteGroups: [], rosterAnswered: false, rosterFailure: 'Remote roster unavailable: timeout', reported: null });
   assert.deepEqual(take({ envelope: refused({ code: 'E_SSH', message: 'ssh: no route' }) }), { remoteGroups: [], rosterAnswered: false, rosterFailure: 'ssh: no route', reported: null });
-  const groups = [altair(), vega()];
+  const groups = [devbox(), laptop()];
   assert.deepEqual(take({ envelope: ok(groups) }), { remoteGroups: groups, rosterAnswered: true, rosterFailure: null, reported: groups });
   const failed = take({ thrown: 'timeout' });
   assert.deepEqual(failed, { remoteGroups: unavailableGroups(groups, ROSTER('Remote roster unavailable: timeout')), rosterAnswered: true, rosterFailure: null, reported: null });
-  assert.deepEqual(failed.remoteGroups.map(g => g.id), ['altair:a1', 'vega:v1'], 'the groups are kept');
+  assert.deepEqual(failed.remoteGroups.map(g => g.id), ['devbox:a1', 'laptop:v1'], 'the groups are kept');
   // A second failure marks the same groups again, with the newer error; then the roster is back.
   assert.deepEqual(take({ envelope: refused({ code: 'E_SSH', message: 'ssh: no route' }) }).remoteGroups.map(g => g.probe.error.code), ['E_SSH', 'E_SSH']);
   const back = take({ envelope: ok(groups) });
@@ -133,7 +133,7 @@ test('a failed first answer, then a good one, then a failed one: the sentence is
 
 test('the time is required, and it is the caller\'s: no outcome is answered without one, and nothing reads the clock', (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2031-03-04T05:06:07.000Z') });
-  for (const outcome of [{ gated: true }, { thrown: 'x' }, { envelope: ok([altair()]) }, { envelope: refused() }]) {
+  for (const outcome of [{ gated: true }, { thrown: 'x' }, { envelope: ok([devbox()]) }, { envelope: refused() }]) {
     for (const at of [undefined, null, '', 0, new Date(0)]) {
       assert.throws(() => remoteRosterState(NONE, outcome, at), (e) => e instanceof TypeError && e.message === 'remoteRosterState: at must be the time of the call, a non-empty string');
     }
@@ -143,14 +143,14 @@ test('the time is required, and it is the caller\'s: no outcome is answered with
     assert.throws(() => remotePanelEntries([], at), (e) => e instanceof TypeError && e.message === 'remotePanelEntries: at must be the time of the call, a non-empty string');
   }
   // A missing time is the caller's mistake, never a roster that "could not be read".
-  assert.throws(() => remoteRosterState(NONE, { envelope: ok([altair()]) }), TypeError);
+  assert.throws(() => remoteRosterState(NONE, { envelope: ok([devbox()]) }), TypeError);
 });
 
 test('remotePanelEntries: each group\'s panel under the key the snapshot gives it, in the roster\'s order, all made at the one time', (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2031-03-04T05:06:07.000Z') });
-  const groups = [vega(), altair(), ...unavailableGroups([group('rigel:r1', 'rigel', '/home/juan/tsm', null, [remoteRow('tsm-a', '/home/juan/tsm')])], { code: 'E_SSH', message: 'Connection refused' })];
+  const groups = [laptop(), devbox(), ...unavailableGroups([group('build:r1', 'build', '/home/alex/web', null, [remoteRow('web-a', '/home/alex/web')])], { code: 'E_SSH', message: 'Connection refused' })];
   const entries = remotePanelEntries(groups, AT);
-  assert.deepEqual(entries.map(([id]) => id), ['remote:vega:v1', 'remote:altair:a1', 'remote:rigel:r1']);
+  assert.deepEqual(entries.map(([id]) => id), ['remote:laptop:v1', 'remote:devbox:a1', 'remote:build:r1']);
   assert.deepEqual(entries, groups.map(g => [`remote:${g.id}`, remotePanel(g, AT)]));
   for (const [id, panel] of entries) { assert.equal(panel.workspace.id, id); assert.equal(panel.generatedAt, AT); }
   assert.equal(entries[2][1].error, 'Connection refused');
@@ -171,8 +171,8 @@ test('cliReadsRemotes: an accepted CLI whose `remote` lists roster, and nothing 
 });
 
 test('nothing given is changed: every outcome over a frozen previous, a frozen outcome and frozen groups', () => {
-  const held = () => frozen([altair(), vega()]);
-  const outcomes = () => [{ gated: true }, { thrown: 'timeout' }, { envelope: ok([altair(), vega()]) }, { envelope: ok([]) }, { envelope: ok([null]) },
+  const held = () => frozen([devbox(), laptop()]);
+  const outcomes = () => [{ gated: true }, { thrown: 'timeout' }, { envelope: ok([devbox(), laptop()]) }, { envelope: ok([]) }, { envelope: ok([null]) },
     { envelope: { schemaVersion: 1, ok: true, result: {} } }, { envelope: refused({ code: 'E_SSH', message: 'ssh: no route' }) }, { envelope: refused() }];
   for (const answered of [false, true]) {
     outcomes().forEach((outcome, n) => {
@@ -202,11 +202,11 @@ test('the speaker of a not-reached row through a client\'s whole path: read, hel
   const take = (outcome) => { const next = remoteRosterState(state, outcome, AT); state = kept(next); return speakers(next.remoteGroups); };
 
   // A roster the kernel answered: one server reached, one not, with the kernel's own error for it.
-  const down = { ...vega(), probe: { ok: false, error: { code: 'E_SSH', message: 'ssh: connect to host vega: No route to host' } } };
-  assert.deepEqual(take({ envelope: await read(printing(ok([altair(), down]))) }),
-    [[[undefined, undefined]], [['ssh: connect to host vega: No route to host', 'kernel']]]);
+  const down = { ...laptop(), probe: { ok: false, error: { code: 'E_SSH', message: 'ssh: connect to host laptop: No route to host' } } };
+  assert.deepEqual(take({ envelope: await read(printing(ok([devbox(), down]))) }),
+    [[[undefined, undefined]], [['ssh: connect to host laptop: No route to host', 'kernel']]]);
   // Held, and projected again later from the same objects: still the kernel's.
-  assert.deepEqual(speakers(state.remoteGroups)[1], [['ssh: connect to host vega: No route to host', 'kernel']]);
+  assert.deepEqual(speakers(state.remoteGroups)[1], [['ssh: connect to host laptop: No route to host', 'kernel']]);
 
   // The next read threw: the groups are kept, and each row's text is now the read's own sentence.
   const thrown = 'Remote roster unavailable: spawn oats ENOENT';
@@ -227,7 +227,7 @@ test('the speaker of a not-reached row through a client\'s whole path: read, hel
   // An answer that cannot be kept: no groups array, or a group that cannot be projected. The read's own sentence.
   assert.deepEqual(take({ envelope: await read(printing({ schemaVersion: 1, ok: true, result: {} })) }),
     [[['Remote roster unavailable', 'roster-read']], [['Remote roster unavailable', 'roster-read']]]);
-  const [[[unreadable, origin]]] = take({ envelope: await read(printing(ok([altair(), { id: 'rigel:r1', server: 'rigel' }]))) });
+  const [[[unreadable, origin]]] = take({ envelope: await read(printing(ok([devbox(), { id: 'build:r1', server: 'build' }]))) });
   assert.match(unreadable, /^Remote roster unavailable: /); assert.equal(origin, 'roster-read');
 
   // An envelope made by hand (not parsed from the CLI) carries no mark, whatever it says of itself.
@@ -235,7 +235,7 @@ test('the speaker of a not-reached row through a client\'s whole path: read, hel
     [[['ssh: no route', 'roster-read']], [['ssh: no route', 'roster-read']]]);
 
   // And the roster is back: the reached server's rows have no text and no key.
-  assert.deepEqual(take({ envelope: await read(printing(ok([altair(), vega()]))) }), [[[undefined, undefined]], [[undefined, undefined]]]);
+  assert.deepEqual(take({ envelope: await read(printing(ok([devbox(), laptop()]))) }), [[[undefined, undefined]], [[undefined, undefined]]]);
 });
 
 test('the Desktop\'s server hands the roster\'s answer on as it was read: the same objects reach remoteRosterState, so the kernel\'s mark is kept', () => {

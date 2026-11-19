@@ -3,7 +3,7 @@
  * checked against effects rather than a mocked composer or lifecycle implementation. */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync, rmSync, renameSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync, rmSync, renameSync, symlinkSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { killAndReap, oatsSocket } from "./helpers/host-fixture.mjs";
 import { join } from "node:path";
@@ -721,19 +721,48 @@ for (const checkpoint of ["empty-mutex", "first-receipt"]) {
   });
 }
 
-test("package upgrade acceptance: a start's directory mutex excludes upgrade and is never reclaimed", async t => {
+test("package upgrade acceptance: an earlier OATS's start lock directory excludes upgrade, is named, and is never reclaimed", async t => {
   const f = await fixture(t); const { home } = f;
   const plan = await f.plan(), before = composed(home), mutex = join(home, ".oats-start.lock");
   mkdirSync(mutex);
   try {
-    await assert.rejects(f.apply({ planRevision: plan.planRevision, idempotencyKey: "start-holds" }), e => e.code === "E_SESSION_RUNNING");
-    assert.equal(lstatSync(mutex).isDirectory(), true, "only the start which made this directory may remove it");
+    await assert.rejects(f.apply({ planRevision: plan.planRevision, idempotencyKey: "start-holds" }), e => e.code === "E_SESSION_RUNNING"
+      && e.message === `seat: ${mutex} is a start lock left by an earlier OATS; upgrade never removes it. Once no earlier oats is running, remove that directory and retry`);
+    assert.equal(lstatSync(mutex).isDirectory(), true, "the directory is left as it is");
     assert.deepEqual(composed(home), before);
     assert.ok(!existsSync(join(home, "adopt-acme.one")));
     noStaging(home);
   } finally {
     rmSync(mutex, { recursive: true });
   }
+});
+
+test("package upgrade acceptance: an entry at .oats-start.lock that is neither an upgrade's file nor a directory is named and never reclaimed", async t => {
+  const f = await fixture(t); const { home } = f;
+  const plan = await f.plan(), before = composed(home), mutex = join(home, ".oats-start.lock");
+  symlinkSync(join(home, "instance.json"), mutex);
+  try {
+    await assert.rejects(f.apply({ planRevision: plan.planRevision, idempotencyKey: "start-link" }), e => e.code === "E_SESSION_RUNNING"
+      && e.message === `seat: ${mutex} is neither an upgrade's file nor a start lock left by an earlier OATS; upgrade never removes it. Remove it and retry`);
+    assert.equal(lstatSync(mutex).isSymbolicLink(), true, "the link is left as it is");
+    assert.deepEqual(composed(home), before);
+  } finally {
+    rmSync(mutex);
+  }
+});
+
+test("package upgrade acceptance: a start lock that appears after the upgrade checked the path is named for what it can be", async t => {
+  const f = await fixture(t); const { fx, home } = f;
+  const plan = await f.plan(), before = composed(home), mutex = join(home, ".oats-start.lock");
+  const args = [CLI, "instance", "upgrade", "seat", "--plan-revision", plan.planRevision, "--idempotency-key", "appeared", "--json"];
+  // The path is there when the upgrade creates its file, as an earlier OATS's start or another
+  // writer could make it between the upgrade's check and its create.
+  const failed = runFaulted(args, { cwd: fx.dep, env: fx.env, gateDir: join(fx.base, "faults-appeared"), gates: [{ name: "appeared", fn: "openSync", path: mutex, throws: "EEXIST" }] });
+  assert.deepEqual(failed.fired, ["appeared"], "the upgrade's create met an existing entry");
+  assert.notEqual(failed.status, 0, failed.stdout + failed.stderr);
+  const error = failed.json().error;
+  assert.deepEqual([error.code, error.message], ["E_SESSION_RUNNING", `seat: ${mutex} appeared after the upgrade checked it: a start lock left by an earlier OATS, or a file made there between the check and the create. Once no earlier oats is running, remove it and retry`]);
+  assert.deepEqual(composed(home), before);
 });
 
 test("package upgrade acceptance: a leftover regular upgrade mutex remains changed home bytes at retirement", async t => {

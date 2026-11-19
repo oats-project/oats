@@ -5,7 +5,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { createServerHost, createServerAdapter } from "../packages/desktop/server-host.mjs";
+import { createServerHost } from "../packages/desktop/server-host.mjs";
+import { createBackendClient } from "../packages/desktop/backend-client.mjs";
 
 function fakeChild() {
   const c = new EventEmitter();
@@ -16,9 +17,10 @@ function fakeChild() {
 }
 
 function makeHost(over = {}) {
-  const state = { spawned: [], invalidations: 0 };
+  const state = { spawned: [], invalidations: 0, removed: 0 };
   const host = createServerHost({
-    spawnChild: (dirs, port) => { const c = fakeChild(); c.dirs = dirs; c.port = port; state.spawned.push(c); return c; },
+    client: createBackendClient({ request: () => { throw new Error("no request in these tests"); } }),
+    spawnChild: (dirs) => { const c = fakeChild(); c.dirs = dirs; state.spawned.push(c); return { child: c, socketPath: `/run/oats-d-${state.spawned.length}/s`, secret: "s".repeat(43), remove: () => { state.removed++; } }; },
     onInvalidate: () => { state.invalidations++; },
     forceKillMs: 50,
     ...over,
@@ -86,43 +88,14 @@ test("stop() kills and clears; owned() false afterwards", () => {
   assert.ok(c.killed.length >= 1);
 });
 
-test("occupied-port branch through the PRODUCTION adapter: selected port reaches the child", async () => {
-  // review wsadd5: a test-local spawnServer wrapper pinned nothing — this
-  // composes the REAL createServerAdapter (the module main.mjs uses) with
-  // the real ensureServerOnPort and createServerHost. Deleting setPort from
-  // the adapter, or the port param from host.start, fails here.
-  const { ensureServerOnPort } = await import("../packages/desktop/server-compat.mjs");
-  let modulePort = 4820;
+test("each generation's socket directory is removed when it ends, and at stop()", async () => {
   const { state, host } = makeHost();
-  const adapter = createServerAdapter({
-    host,
-    getPort: () => modulePort,
-    setPort: (p) => { modulePort = p; },
-  });
-  const r = await ensureServerOnPort({
-    panelWorkspaces: async () => [{ id: "/w/base", name: "base" }],
-    matchWorkspace: () => "/w/base",
-    probeVersion: async () => ({ ok: false, status: 404, body: null }), // incompatible occupant
-    local: { capability: "@awebai/oats-desktop", version: "1" },
-    port: modulePort,
-    freePort: async (from) => from + 3, // picks 4824
-    spawnServer: (p) => adapter.spawnServer(p, ["/w/base"]),
-    log: () => {},
-  });
-  assert.equal(r.spawned, true);
-  assert.equal(r.port, 4824, "selection reported the new port");
-  assert.equal(state.spawned[0].port, 4824, "child launched on the NEW port via the production adapter");
-  assert.equal(modulePort, 4824, "port committed before spawn — probes and proxy agree");
-});
-
-test("replacement through the PRODUCTION adapter forwards the CURRENT port", async () => {
-  let modulePort = 4820;
-  const { state, host } = makeHost();
-  const adapter = createServerAdapter({ host, getPort: () => modulePort, setPort: (p) => { modulePort = p; } });
-  adapter.spawnServer(4824, ["/w/base"]);         // startup committed 4824
-  const replacing = adapter.replaceServer(["/w/base", "/w/new"]);
-  state.spawned[0].exitNow();
+  const first = host.start(["/w/base"]);
+  const replacing = host.replace(["/w/x"]);
+  first.exitNow();
   await replacing;
-  assert.equal(state.spawned[1].port, 4824, "replacement child inherits the committed port");
-  assert.deepEqual(state.spawned[1].dirs, ["/w/base", "/w/new"]);
+  assert.equal(state.removed >= 1, true, "the outgoing generation's directory is gone");
+  const before = state.removed;
+  host.stop();
+  assert.equal(state.removed, before + 1, "stop() removes the current one");
 });

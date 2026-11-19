@@ -1,6 +1,6 @@
 {
   "capability": "oats.support",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A support desk that anyone may reach: it takes in support requests, turns each one into one ticket, hands tickets to the project's support maintainer (finding a live one, or spawning one when none is reachable) and keeps each requester informed. It treats everything a requester sends as untrusted data, works from a fixed set of actions, and never changes code, reviews, merges, releases or deploys. Generic: the project's tracker, support maintainer and routes stay with the soul.",
   "compatibility": {
     "oats": ">=0.40.0"

@@ -387,10 +387,10 @@ test('receive "live" (oats.aweb 1.17) reads as live delivery; "poll" never does'
 
 test("v2 default row: the kernel's DefaultTeam by label, with its id and where it was set; unmapped is a blocking problem; none configured says what to do", async t => {
   const v2 = defaultTeam => { const d = structuredClone(run('teams-initial')); delete d.result.primary; delete d.result.unmapped; d.result.defaultTeam = defaultTeam; return d; };
-  const deployment = await mount(t, () => v2({ label: 'antares-oats', team: 'antares-oats:juan.aweb.ai', from: 'deployment' }));
+  const deployment = await mount(t, () => v2({ label: 'builder-oats', team: 'builder-oats:alex.aweb.ai', from: 'deployment' }));
   const row = deployment.row('default');
-  assert.equal(row.querySelector('.team-name').textContent, 'Default team · antares-oats');
-  assert.equal(row.querySelector('.team-meta').textContent, "antares-oats:juan.aweb.ai · this workspace's default on this computer");
+  assert.equal(row.querySelector('.team-name').textContent, 'Default team · builder-oats');
+  assert.equal(row.querySelector('.team-meta').textContent, "builder-oats:alex.aweb.ai · this workspace's default on this computer");
   assert.equal(row.querySelector('.team-badge').title, "The default team can't be left.");
   // Unmapped (K1 addendum 4 + the lead's ruling): a blocking problem, not a membership: no "Always on".
   const unmapped = await mount(t, () => v2({ label: 'oats', team: null, from: 'soul' }));
@@ -466,10 +466,10 @@ test('compact: one card of glyph rows — the default team tagged and always on,
   assert.deepEqual([...u.section().querySelectorAll('[data-team-row]')].map(r => r.dataset.teamRow), ['default', 'dev', 'reviewers']);
   // The v2 default team reads by its label, its id as the one meta line; unmapped keeps its blocking problem and loses "Always on".
   const v2 = defaultTeam => { const d = structuredClone(run('teams-initial')); delete d.result.primary; delete d.result.unmapped; d.result.defaultTeam = defaultTeam; return d; };
-  const v = card(t, () => v2({ label: 'antares-oats', team: 'antares-oats:juan.aweb.ai', from: 'deployment' })); await tick();
-  assert.equal(v.row('default').querySelector('.team-name').firstChild.textContent, 'antares-oats');
+  const v = card(t, () => v2({ label: 'builder-oats', team: 'builder-oats:alex.aweb.ai', from: 'deployment' })); await tick();
+  assert.equal(v.row('default').querySelector('.team-name').firstChild.textContent, 'builder-oats');
   assert.equal(v.row('default').querySelector('.team-tag').textContent, 'default');
-  assert.deepEqual([...v.row('default').querySelectorAll('.team-meta')].map(m => m.textContent), ['antares-oats:juan.aweb.ai']);
+  assert.deepEqual([...v.row('default').querySelectorAll('.team-meta')].map(m => m.textContent), ['builder-oats:alex.aweb.ai']);
   assert.equal(v.row('default').querySelector('.team-badge').textContent, 'Always on');
   const w = card(t, () => v2({ label: 'oats', team: null, from: 'soul' })); await tick();
   assert.equal(w.row('default').querySelector('.team-name').firstChild.textContent, 'oats');

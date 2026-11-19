@@ -43,31 +43,46 @@
  * kernel feeds it to the retire hook to compensate partial state, and an
  * identity joined moments before the failure must still be deletable.
  */
+// The captured-execution path was removed (awebai/oats-aweb#242): no command reads the
+// variables that selected it. Each one present is named, never its value or its file, and
+// never fails anything: a hook event puts it in its JSON warning (below, once outNotes exists);
+// every other command writes it to stderr here, before the commands dispatched first.
+// CAPTURED_UNSUPPORTED is bound by the import from binding-wire below (imports are hoisted).
+const CAPTURED_PRESENT = ["OATS_BINDING_FILE", "OATS_INVOCATION_CONTEXT_FILE", "OATS_SOURCE_RECEIPT_FILE"].filter((name) => Object.hasOwn(process.env, name));
+const CAPTURED_IN_HOOK = ["spawn", "retire", "launch", "upgrade"].includes(process.env.OATS_EVENT || process.argv[2]);
+if (!CAPTURED_IN_HOOK) for (const name of CAPTURED_PRESENT) process.stderr.write(`oats-aweb: ${name} is ignored: ${CAPTURED_UNSUPPORTED}\n`);
 import { inviteMain } from '../lib/invite.mjs';
 if ((process.env.OATS_EVENT || process.argv[2]) === 'invite') process.exit(inviteMain(process.argv.slice(3)));
 import { residentMain } from '../lib/resident.mjs';
 if ((process.env.OATS_EVENT || process.argv[2]) === 'resident') process.exit(await residentMain(process.argv.slice(3)));
 import { wakeMain } from '../lib/wake-service.mjs';
+import { unitManager } from '../lib/custody-unit.mjs';
 if ((process.env.OATS_EVENT || process.argv[2]) === 'wake') process.exit(await wakeMain(process.argv.slice(3)));
 // Loaded only for `health`: the publisher is opt-in, and no other command or
 // hook depends on its modules.
 if ((process.env.OATS_EVENT || process.argv[2]) === 'health') process.exit(await (await import('../lib/health.mjs')).healthMain(process.argv.slice(3)));
 
 import { execFileSync, spawn } from "node:child_process";
-import { appendFileSync, chmodSync, closeSync, constants, cpSync, copyFileSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
+import { appendFileSync, chmodSync, closeSync, constants, cpSync, copyFileSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { hostname } from "node:os";
 import { join, dirname, resolve, delimiter, isAbsolute, relative } from "node:path";
-import { loadCapturedAwebExecution, requireCapturedAwebAction } from "../lib/captured-execution.mjs";
-import { assessCapturedSessionReadiness, querySelectedKernel } from "../lib/session-readiness.mjs";
 import { selectedDeployment, currentJoinRootChoice, normalizeAwebTeamName } from "../lib/team-roots.mjs";
-import { awErrorCode, leadingJsonObject, withheldFailureCause } from "../lib/aw-failure-cause.mjs";
-import { runCapturedNative } from "../lib/captured-native.mjs";
+import { controllerCleanupCommand, controllerCleanupProblem, readRetiredRecord, recordRetiredCertificates } from "../lib/retired-certificates.mjs";
+import { sameAwebTeamId, teamCertificateRelativePath, teamKeyIn, validAwebTeamId } from "../lib/aweb-team-id.mjs";
+import { didKeyOfSigningKey } from "../lib/member-key.mjs";
+import { isSeatLockLeftovers, isSeatLockRefusal, lockField, readSeatLockGuarded, sameSeatLock, seatLockHolderText, swapSeatLock } from "../lib/seat-lock.mjs";
+import { plainServiceUrl, registryOriginUrl } from "../lib/plain-service.mjs";
+import { awebUrlVariableSet, retainedSeatCheck } from "../lib/retained-seat-service.mjs";
+import { identityBooleans } from "../lib/boolean-setting.mjs";
+import { canonicalTeamServerURL } from "../lib/team-server-url.mjs";
+import { AW_BYOT_CREATE, byotCreateAwRefusal } from "../lib/byot-create.mjs";
+import { NAMESPACE_CONTROLLER_KEY_MISSING, SERVICE_REFUSED, TEAM_KEY_MISSING, awAliasRefusal, awErrorCode, leadingJsonObject, normalizeAwDomain, serviceDetailCode, teamNameTaken, teamServerRecordMissing, withheldFailureCause } from "../lib/aw-failure-cause.mjs";
 import { prepareJoinConfiguration, readJoinedLocalMembership } from "../lib/setup-join-default.mjs";
 import { AW_INVITE_INSPECT, OPTIONAL_INSPECT_TIMEOUT_MS, checkInviteLabel, checkInviteService, inspectInvite, requireInviteInspect } from "../lib/setup-invite.mjs";
 import { selectedTeamKernel, setupUsernameDefault } from '../lib/setup-team-default.mjs';
 import { assertAwebSettingRecordable, atomicWrite, recordAwebSetting } from "../lib/local-settings.mjs";
 import { AW_TESTED, versionAtLeast } from "../lib/aw-floor.mjs";
-import { AW_MIN, NO_TEAMS_MESSAGE, awFloorMessage, awFloorObservation, awTestedWarning, grantYamlCustodySocket, parseBindingJson, readAwVersion, unmappedDefaultMessage } from "../lib/binding-wire.mjs";
+import { AW_MIN, CAPTURED_UNSUPPORTED, NO_TEAMS_MESSAGE, awFloorMessage, awFloorObservation, awTestedWarning, grantYamlCustodySocket, readAwVersion, unmappedDefaultMessage } from "../lib/binding-wire.mjs";
 import { grantAppInventory, grantInventoryAdvisory, INVENTORY_ERROR } from "../lib/grant-app-inventory.mjs";
 import { renewalGrantTTL, resolveGrantTTL } from "../lib/grant-duration.mjs";
 import { mintedExpiryProblem } from "../lib/grant-expiry.mjs";
@@ -76,7 +91,7 @@ import { newSeatId, seatGrantLabel, sweepSeatGrants, unrevokedGrant } from "../l
 import { custodyPreflight } from "../lib/grant-custody.mjs";
 import { residentRegistryEnv } from "../lib/resident-registry.mjs";
 import { channelCacheNote, clearChannelFailure, recordedClaudeConfigDir } from "../lib/claude-channel.mjs";
-import { selectClaudeChannel, launchChannelWarning, brokerDelivers, joinedTeamsPolled, recordedRuntime, recordedStart, statusListsHome, wakeRegistration } from "../lib/wake-receive.mjs";
+import { selectClaudeChannel, launchChannelWarning, brokerDelivers, joinedTeamsPolled, recordedRuntime, recordedStart, statusListsHome, wakeBrokerRefusal, wakeRegistration } from "../lib/wake-receive.mjs";
 
 /** Run a command as ARGV — never a shell string. Team ids, aliases, instance
  * names and invite tokens all flow through here; quoting them correctly is a
@@ -99,23 +114,53 @@ const childEnvFor = ({ env: extraEnv, unsetEnv = [] } = {}) => {
  *  phrase with every token-shaped value redacted: what a withheld failure may
  *  still say (awebai/oats-aweb#149). aw reports a server refusal as
  *  `aweb: http <status> (<headers>): <body>`; only a string `detail` of a JSON
- *  body is taken, never the headers or any other text. */
+ *  body is taken, or the `code` of an object `detail` through its fixed
+ *  vocabulary (serviceDetailCode, #202), never the headers or any other text. */
 const TOKEN_SHAPED_RE = /[A-Za-z0-9_\-.~+/=]{20,}/g;
 function failureClass(e) {
   const text = `${e?.stderr ?? ""}\n${e?.stdout ?? ""}`;
   const http = /\bhttp (\d{3})\b/.exec(text);
   // Without an HTTP status, still a cause from a fixed vocabulary (awebai/oats-aweb#52).
   if (!http) return withheldFailureCause({ stderr: e?.stderr, stdout: e?.stdout });
-  let detail;
+  let detail, code;
   const body = text.indexOf("{", http.index);
-  if (body >= 0) { try { const doc = leadingJsonObject(text.slice(body)); if (typeof doc?.detail === "string") detail = doc.detail; } catch { /* no JSON body */ } }
+  if (body >= 0) {
+    try {
+      const doc = leadingJsonObject(text.slice(body));
+      if (typeof doc?.detail === "string") detail = doc.detail;
+      else if (doc?.detail && typeof doc.detail === "object" && !Array.isArray(doc.detail) && Object.hasOwn(doc.detail, "code")) code = serviceDetailCode(doc.detail.code);
+    } catch { /* no JSON body */ }
+  }
+  if (code === SERVICE_REFUSED) return `http ${http[1]}, ${SERVICE_REFUSED}`;
+  if (code) return `http ${http[1]}, detail.code: ${code}`;
   const redacted = detail === undefined ? undefined : detail.replace(TOKEN_SHAPED_RE, "<redacted>").replace(/\s+/g, " ").trim().slice(0, 200);
   return `http ${http[1]}${redacted ? `, detail: ${JSON.stringify(redacted)}` : ""}`;
 }
-const run = (argv, cwd, timeout = 45000, { secrets = [], secretSafe = false, failureDetail = false, env: extraEnv, unsetEnv = [], input } = {}) => {
+// The kernel kills a lifecycle hook (spawn, launch, retire) at 120 s (the
+// kernel's lifecycle-hook runner). Every aw call such a hook makes ends by one
+// deadline below that, HOOK_BUDGET_MS after the hook started, whatever its own
+// timeout, so the hook outlives its last call and reports what it confirmed (a
+// mint that completed late, a grant to revoke) instead of being killed with the
+// call still running (awebai/oats-aweb#229). A call the deadline leaves no time
+// for is not started. A call the deadline cuts is ended with SIGKILL, not
+// SIGTERM, which a child may catch and outlive the deadline.
+// Elapsed time on the monotonic clock, as the kernel's timeout and a child's
+// are measured: a wall-clock step would move the deadline.
+const HOOK_STARTED_AT = performance.now();
+// OATS_AWEB_HOOK_BUDGET_MS shortens it, for tests; nothing lengthens it past the default.
+const HOOK_BUDGET_MS = Math.min(100000, Number(process.env.OATS_AWEB_HOOK_BUDGET_MS) > 0 ? Number(process.env.OATS_AWEB_HOOK_BUDGET_MS) : 100000);
+const boundedByHook = ["spawn", "launch", "retire"].includes(process.env.OATS_EVENT || process.argv[2]);
+/** The timeout an aw call of this hook gets: what it asks for, cut to what is
+ *  left before the deadline in a lifecycle hook. At or below 0 the call is not
+ *  started. Every aw child of the hook takes its timeout from here. */
+const hookTimeout = (requested) => boundedByHook ? Math.min(requested, Math.floor(HOOK_STARTED_AT + HOOK_BUDGET_MS - performance.now())) : requested;
+const timeoutSignal = boundedByHook ? "SIGKILL" : "SIGTERM";
+const run = (argv, cwd, requested = 45000, { secrets = [], secretSafe = false, failureDetail = false, withhold, env: extraEnv, unsetEnv = [], input } = {}) => {
+  const timeout = hookTimeout(requested);
   try {
+    if (timeout <= 0) throw Object.assign(new Error("hook deadline"), { code: "E_HOOK_DEADLINE" });
     const childEnv = childEnvFor({ env: extraEnv, unsetEnv });
-    return execFileSync(argv[0], argv.slice(1), { cwd, encoding: "utf8", stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], ...(input === undefined ? {} : { input }), timeout, env: childEnv }).trim();
+    return execFileSync(argv[0], argv.slice(1), { cwd, encoding: "utf8", stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"], ...(input === undefined ? {} : { input }), timeout, killSignal: timeoutSignal, env: childEnv }).trim();
   } catch (e) {
     // execFileSync puts the WHOLE ARGV in e.message ("Command failed: aw team
     // join <token> …"). This hook's failures are reported by the kernel and land
@@ -133,11 +178,12 @@ const run = (argv, cwd, timeout = 45000, { secrets = [], secretSafe = false, fai
     const where = [argv[0], argv[1], argv[2]].filter((a) => a && !secrets.includes(a) && !a.startsWith("-")).join(" ");
     // The outcome says how the child ended (a timeout or signal included), which
     // is not its output, so even a secretSafe command reports it.
-    const outcome = childOutcome(e, timeout);
-    const output = secretSafe ? "" : scrub(e.stderr).trim();
+    const outcome = e.code === "E_HOOK_DEADLINE" ? `not started: the hook's ${Math.round(HOOK_BUDGET_MS / 1000)} s deadline had passed` : childOutcome(e, timeout);
+    // withhold: the output may hold a value that is never printed; the string says why.
+    const output = secretSafe || withhold ? "" : scrub(e.stderr).trim();
     // failureDetail: a secretSafe command may still name its sanitized class.
     const cls = secretSafe && failureDetail ? failureClass({ stderr: scrub(e.stderr), stdout: scrub(e.stdout) }) : "";
-    const err = new Error(`${where} ${outcome}${output ? `: ${output}` : ""}${secretSafe ? ` (output withheld: this command handles credentials${cls ? `; ${cls}` : ""})` : ""}`);
+    const err = new Error(`${where} ${outcome}${output ? `: ${output}` : ""}${secretSafe ? ` (output withheld: this command handles credentials${cls ? `; ${cls}` : ""})` : withhold ? ` (output withheld: ${withhold})` : ""}`);
     err.outcome = outcome;
     err.status = e.status;
     err.stdout = scrub(e.stdout).trim();
@@ -147,6 +193,9 @@ const run = (argv, cwd, timeout = 45000, { secrets = [], secretSafe = false, fai
     // credential-handling command reaching a log.
     // self_custody_reinit_unproven: AWID's refusal when another agent that holds its own key has the alias.
     err.aliasConflict = /already|exists|conflict|422|active certificate|self_custody_reinit_unproven/i.test(String(e.stderr ?? "") + String(e.stdout ?? ""));
+    // `aw init --join-from` adds this to a failure to create the root's invite, before
+    // it writes or registers anything (aw cmd/aw/init.go runInitJoinFrom).
+    err.inviteNotCreated = /; alternatively use --admission-team-id /.test(String(e.stderr ?? ""));
     err.awErrorCode = awErrorCode(e.stdout);
     throw err;
   }
@@ -285,33 +334,12 @@ function upgrade() {
   out({ meta: deliveryRuntimeMeta(meta, configuredDelivery(settings), runtime), ...(warnings.length ? { warning: warnings.join(" | ") } : {}) });
 }
 
-// Upgrade adopts only recorded metadata, even when captured execution markers
-// are present. It must run before any settings gate or aw availability check.
-if ((process.env.OATS_EVENT || process.argv[2]) === "upgrade") upgrade();
+// A hook event's warning for each captured-execution variable present (see the top of this file).
+if (CAPTURED_IN_HOOK) for (const name of CAPTURED_PRESENT) outNotes.push(`${name} is ignored: ${CAPTURED_UNSUPPORTED}`);
 
-// Any selected snapshot enters the captured consumer BEFORE legacy settings,
-// root discovery or identity handling. Invalid-present never falls back.
-try {
-  const loaded = loadCapturedAwebExecution();
-  if (loaded.kind === "captured") {
-    const event = process.argv[2] || process.env.OATS_EVENT;
-    if ((process.env.OATS_EVENT && process.env.OATS_EVENT !== event) || process.argv.slice(3).some(arg => arg !== "--json")) throw new Error("captured entrypoint arguments differ from the selected action");
-    const manifest = JSON.parse(readFileSync(new URL("../oats.json", import.meta.url), "utf8"));
-    const selected = requireCapturedAwebAction(loaded, event, manifest);
-    const settings = parseBindingJson(Buffer.from(process.env.OATS_SETTINGS || "{}"));
-    if (!settings || typeof settings !== "object" || Array.isArray(settings) || Object.keys(settings).some(k => !["delivery", "claudeChannelMode", "root", "roots"].includes(k))) throw new Error("captured settings support delivery/root readiness only; no identity copying or ambient fallback");
-    try { selectClaudeChannel(settings.claudeChannelMode); }
-    catch (error) { out({status:'needs-configuration',problems:[{code:'needs-configuration',message:error.message}],warning:`oats-aweb: ${error.message}`},1); }
-    const checked = assessCapturedSessionReadiness({ binding: selected.binding, invocation: selected.context, settings }, {
-      query(args, options) { selected.assertCurrent(); const result = querySelectedKernel(args, options); selected.assertCurrent(); return result; },
-    });
-    if (checked.status !== "ready") out({ ...checked, warning: `oats-aweb: ${checked.problems[0].message}` }, 1);
-    const result = runCapturedNative({ selected, event, settings, run });
-    out(result.output, result.exitCode);
-  }
-} catch (error) {
-  out({ status: "needs-configuration", problems: [{ code: "invalid-binding", message: "invalid or changed captured aweb execution input" }], warning: "oats-aweb: invalid or changed captured aweb execution input; no legacy fallback was used" }, 1);
-}
+// Upgrade adopts only recorded metadata. It must run before any settings gate or
+// aw availability check.
+if ((process.env.OATS_EVENT || process.argv[2]) === "upgrade") upgrade();
 
 const event = process.env.OATS_EVENT || process.argv[2];
 const instance = process.env.OATS_INSTANCE;
@@ -348,6 +376,20 @@ if (["spawn", "launch"].includes(event)) {
 }
 const identitySettings = settings.identity && typeof settings.identity === "object" && !Array.isArray(settings.identity) ? settings.identity : {};
 const identityMode = identitySettings.mode === undefined || identitySettings.mode === null || identitySettings.mode === "" ? "local" : String(identitySettings.mode);
+/** identity.source, the setting that makes a local home a retained seat: spawn takes
+ *  the retained route on it (and refuses one that is not an absolute path before the
+ *  lock), and retire classifies a home on the very same setting. */
+const retainedSourceSetting = identityMode === "local" && identitySettings.source ? identitySettings.source : undefined;
+/** identity.e2ee and identity.takeOver, read once through the boolean-setting helper.
+ *  Spawn and start refuse a value that is neither a boolean nor its string before any
+ *  effect, on every route, as readiness reports it; retire reads neither. */
+let identityFlags = { e2ee: true, takeOver: false };
+if (["spawn", "launch"].includes(event)) {
+  try { identityFlags = identityBooleans(identitySettings); }
+  catch (error) { out({ warning: `oats-aweb: ${error.message}` }, 1); }
+}
+/** Whether two paths name the same place, by their real paths where both exist. */
+const samePath = (a, b) => { try { return realpathSync(a) === realpathSync(b); } catch { return resolve(a) === resolve(b); } };
 if (isClassicEnvironment() && ["spawn", "setup"].includes(event)) {
   if (event === "setup") { console.error(CLASSIC_REFUSAL); process.exit(1); }
   fatal(CLASSIC_REFUSAL);
@@ -365,7 +407,8 @@ const identityMeta = ({ mode = "local", alias, team, address = null, resident = 
 const teamConfigRemedy = () => defaultTeamLabel() && !defaultTeamId() ? unmappedDefaultMessage(defaultTeamLabel()) : NO_TEAMS_MESSAGE;
 function declaredRootCandidate(team = defaultTeamId()) {
   const roots = settings.roots && typeof settings.roots === "object" && !Array.isArray(settings.roots) ? settings.roots : {};
-  if (team && typeof roots[team] === "string" && roots[team].trim()) return { root: roots[team].trim(), key: `settings.oats.aweb.roots[${JSON.stringify(team)}]`, declared: true };
+  const key = team ? teamKeyIn(roots, team) : undefined;
+  if (key !== undefined && typeof roots[key] === "string" && roots[key].trim()) return { root: roots[key].trim(), key: `settings.oats.aweb.roots[${JSON.stringify(key)}]`, declared: true };
   if (typeof settings.root === "string" && settings.root.trim()) return { root: settings.root.trim(), key: "settings.oats.aweb.root", declared: true };
   return undefined;
 }
@@ -406,8 +449,6 @@ function awebRoot() { return resolveAwebRoot(); }
 const teamMemberships = (listed) => listed?.memberships || listed?.teams || [];
 const teamIdsOf = (listed) => teamMemberships(listed).map((m) => m.team_id || m.id || m);
 const AWEB_TEAM_ID_MESSAGE = "aweb team ids must have shape <name>:<namespace> (name matches ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$; namespace is a hostname)";
-function validHostname(value) { const s = String(value || ""); return s.length <= 253 && s.split(".").every((label) => /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(label)); }
-function validAwebTeamId(value) { const m = /^([A-Za-z0-9][A-Za-z0-9._-]{0,127}):([^:]+)$/.exec(String(value || "")); return !!m && validHostname(m[2]); }
 function invalidAwebTeamId(env = process.env) {
   const id = defaultTeamId();
   if (id && !validAwebTeamId(id)) return id;
@@ -418,8 +459,12 @@ const flagEq = (name, value) => `${name}=${String(value)}`;
 function assertNotFlag(value, what) {
   if (String(value || "").startsWith("-")) throw new Error(`${what} must not start with '-'`);
 }
-const assertAwebRootSettingRecordable = (team, rootDir, options) => assertAwebSettingRecordable("roots", team, rootDir, options);
-const recordAwebRootSetting = (team, rootDir, options) => recordAwebSetting("roots", team, rootDir, options);
+// A team's root is recorded under the roots key aw already reads as that team, in the
+// spelling it was written with; only a team with no such key gets a new one. A second
+// key for one team would make every roots lookup (teamKeyIn) find none.
+const rootsKeyFor = (team) => teamKeyIn(settings.roots, team) ?? team;
+const assertAwebRootSettingRecordable = (team, rootDir, options) => assertAwebSettingRecordable("roots", rootsKeyFor(team), rootDir, options);
+const recordAwebRootSetting = (team, rootDir, options) => recordAwebSetting("roots", rootsKeyFor(team), rootDir, options);
 function perTeamRoot(base, label) { return join(resolve(base), ".aweb-roots", normalizeAwebTeamName(label)); }
 
 /** What `npm install -g @awebai/aw@<spec>` may be given: an exact version, or a ^/~ range. */
@@ -470,7 +515,7 @@ if (!onPath("aw") && !setupHandlesAw) {
 // The aw version spawn read for the floor, reused for the tested-range warning.
 let spawnAwVersion;
 if ((isCommand && !setupHandlesAw) || event === "spawn") {
-  const floor = await awFloorObservation();
+  const floor = await awFloorObservation({ timeout: hookTimeout(10000) });
   const floorProblem = floor.message;
   spawnAwVersion = floor.version;
   if (floorProblem) {
@@ -531,10 +576,15 @@ const brokerDeliveredTo = (meta = {}) => !!meta.delivery && brokerDelivers({ del
 // Throws, never exits: both callers run it inside a try whose catch performs
 // the rollback (the seat path restores the binding; the mint path hands the
 // minted identity to compensation).
-function wakeRegister(instanceHome, identityHome) {
+/** run for a retained seat's aw calls: the seat's service is never printed, and aw's
+ *  diagnostics may name it (a network error does), so they show none of aw's output. */
+const seatRun = (argv, cwd, timeout) => run(argv, cwd, timeout, { withhold: "aw's output may name the seat's service, which is never printed" });
+/** Registers `instanceHome` with the host wake broker. `runner` runs the aw call: run, or a
+ *  retained seat's seatRun, which withholds aw's output because it may name the seat's service. */
+function wakeRegister(instanceHome, identityHome, runner = run) {
   const backend = process.env.OATS_BACKEND;
   try {
-    run(["aw", "wake", "register", "--home", instanceHome, "--identity-home", identityHome, "--delivery", "session", ...(backend ? ["--backend", backend] : [])], instanceHome, 60000);
+    runner(["aw", "wake", "register", "--home", instanceHome, "--identity-home", identityHome, "--delivery", "session", ...(backend ? ["--backend", backend] : [])], instanceHome, 60000);
   } catch (e) {
     throw new Error(`the host wake broker delivers to this home (delivery: session, or a runtime with no aweb channel) and needs an aw with the wake broker CLI (aw wake register), which failed (${e.message || e}); install the aweb release that ships aw wake`);
   }
@@ -548,12 +598,18 @@ function wakeDeregister(instanceHome) {
  *  are idempotent, so this needs no record of the previous start. Either one
  *  failing refuses the start: a home on two paths gets every wake twice, a
  *  home on none hears nothing. Joined teams are registered after it
- *  (syncWakeReceive), replacing this one-identity registration. */
-function syncPrimaryDelivery(identityHome) {
+ *  (syncWakeReceive), replacing this one-identity registration. A retained seat's
+ *  registration withholds aw's output (seatRun), since it may name the seat's service, and
+ *  its refusal is not cut at fatal's 300 characters, so the remedy stays whole. Joined teams'
+ *  identity homes are their own, and hold no seat service. */
+function syncPrimaryDelivery(identityHome, { retained = false } = {}) {
   try {
-    if (deliveryFor().broker) wakeRegister(home, identityHome);
+    if (deliveryFor().broker) wakeRegister(home, identityHome, retained ? seatRun : run);
     else if (!wakeDeregister(home) || wakeStillRegistered(home)) throw new Error(`could not remove this home from the host wake broker, so it would deliver beside the ${process.env.OATS_RUNTIME} channel; run \`aw wake deregister --home ${home}\`, check \`aw wake status\` no longer lists it, and start again`);
-  } catch (e) { fatal(e.message || e); }
+  } catch (e) {
+    if (retained) out({ warning: `oats-aweb: ${e.message || e}` }, 1);
+    fatal(e.message || e);
+  }
 }
 /** Whether `aw wake status` still lists the home. Deregister exits 0 when it
  *  falls back to deleting the state files (a daemon that did not answer in
@@ -562,9 +618,23 @@ function syncPrimaryDelivery(identityHome) {
  *  has finished: aw drops the home from the broker's map before its runner
  *  stops (aweb-abna). An unreadable status counts as still registered. */
 function wakeStillRegistered(instanceHome) {
-  let status;
-  try { status = JSON.parse(String(run(["aw", "wake", "status", "--json"], instanceHome, 60000))); } catch { return true; }
-  return statusListsHome(status, instanceHome);
+  const status = wakeStatusOf(instanceHome);
+  return status === undefined || statusListsHome(status, instanceHome);
+}
+/** `aw wake status --json`, parsed; undefined when it cannot be read. */
+function wakeStatusOf(instanceHome) {
+  try { return JSON.parse(String(run(["aw", "wake", "status", "--json"], instanceHome, 60000))); } catch { return undefined; }
+}
+/** Refuse a start the host wake broker delivers to while no broker runs,
+ *  before the start changes anything. */
+function requireWakeBroker() {
+  if (!deliveryFor().broker) return;
+  const refusal = wakeBrokerRefusal({
+    readStatus: () => wakeStatusOf(home),
+    wait: (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms),
+    serviceManager: unitManager(process.platform) !== null,
+  });
+  if (refusal) fatal(refusal);
 }
 /** The meta a start records: the delivery setting it ran under and its runtime. */
 const startedMeta = (meta = {}) => {
@@ -576,12 +646,19 @@ const startedMeta = (meta = {}) => {
  *  overlaps it with the self-delete). Settles to whether it succeeded. */
 function wakeDeregisterStarted(instanceHome) {
   return new Promise((settle) => {
+    const timeout = hookTimeout(60000);
+    if (timeout <= 0) { settle(false); return; } // the hook's deadline has passed: not started
     let child;
     try { child = spawn("aw", ["wake", "deregister", "--home", instanceHome], { cwd: instanceHome, env: childEnvFor(), stdio: "ignore" }); }
     catch { settle(false); return; }
-    const timer = setTimeout(() => child.kill("SIGTERM"), 60000);
-    child.on("error", () => { clearTimeout(timer); settle(false); });
-    child.on("exit", (code) => { clearTimeout(timer); settle(code === 0); });
+    const timer = setTimeout(() => child.kill(timeoutSignal), timeout);
+    // A way out of the hook that does not await it (a refusal, a fatal, a
+    // throw) ends it too: no child outlives the hook and its deadline.
+    const endWithHook = () => { try { child.kill("SIGKILL"); } catch { /* already gone */ } };
+    process.once("exit", endWithHook);
+    const done = () => { clearTimeout(timer); process.removeListener("exit", endWithHook); };
+    child.on("error", () => { done(); settle(false); });
+    child.on("exit", (code) => { done(); settle(code === 0); });
   });
 }
 const NORMAL_GRANT_SCOPES = ["mail.read", "mail.send", "chat.read", "chat.send", "events.read", "coord.read", "coord.write", "presence.write", "contacts.read", "contacts.write"];
@@ -595,7 +672,7 @@ function grantScopes() {
   if (profile === "reviewer") return [...REVIEWER_GRANT_SCOPES];
   fatal(`identity.profile must be one of "normal" or "reviewer" (got ${JSON.stringify(identitySettings.profile)})`);
 }
-const grantE2eeRequired = () => identitySettings.e2ee !== false;
+const grantE2eeRequired = () => identityFlags.e2ee;
 const grantRenewMode = () => identitySettings.renew === undefined || identitySettings.renew === null || identitySettings.renew === "" ? "launch" : String(identitySettings.renew);
 function resolveResidentCustody(name) {
   if (!name) fatal(`identity.mode "global" requires identity.resident; set ${residentKeyHint("<name>")} to the absolute custody directory for that resident identity`);
@@ -664,7 +741,7 @@ function verifyGrantCustodyAttachment({ grantHome, custodySocket, alias, team })
   if (String(status.status || "") !== "running") throw new Error(`grant custody status is ${status.status || "unknown"}, not running`);
   if (status.socket_path !== custodySocket) throw new Error(`grant custody status socket_path ${status.socket_path || "<missing>"} differs from preflight ${custodySocket}`);
   if (status.resident?.alias !== alias) throw new Error(`grant custody resident alias ${status.resident?.alias || "<missing>"} differs from ${alias}`);
-  const teamRow = (Array.isArray(status.teams) ? status.teams : []).find((t) => t && (t.team_id || t.id) === team);
+  const teamRow = (Array.isArray(status.teams) ? status.teams : []).find((t) => t && sameAwebTeamId(t.team_id || t.id, team));
   if (!teamRow || teamRow.ready !== true) throw new Error(`grant custody team ${team} is not ready`);
   return status;
 }
@@ -698,6 +775,14 @@ const localIdentityHome = () => join(home, ".aw");
 function seatRegistryEnv(resident) {
   const custody = settings.residents && typeof settings.residents === "object" ? settings.residents[resident] : undefined;
   return typeof custody === "string" && isAbsolute(custody) ? residentRegistryEnv(custody).env : {};
+}
+/** A retained seat holds its identity in the home's .aw: a local identity. Providers
+ *  before awebai/oats-aweb#226 recorded it as mode "global" with no grant, which no
+ *  start answered an identity home for. Only that recorded shape changes, and only its
+ *  mode; any other meta is returned as it is. */
+function retainedSeatAsLocal(meta) {
+  if (meta.retained !== true || meta.identity?.mode !== "global" || meta.identity.grant) return meta;
+  return { ...meta, identity: { ...meta.identity, mode: "local" } };
 }
 function retainedLaunchOutput(meta = {}, identityHome = priorGrantHome(meta)) {
   const { env: deliveryEnv, launch } = deliveryFor();
@@ -843,7 +928,7 @@ function globalGrantRenew(oldMeta) {
   const alias = recovered.subjectAlias || mintedAlias || oldMeta.identity.alias || resident;
   const newMeta = { ...oldMeta, identity: identityMeta({ mode: "global", alias, team: mintedTeam, address: address || oldMeta.identity.address || null, resident, seat, grant: { id: grantId, expiresAt, ttl, renew: "launch", scopes, home: grantHome, ...grantAppInventory(parsed.minted) } }) };
   const newGrant = newMeta.identity.grant;
-  if (mintedTeam !== team) keepPrevious(`renewal minted grant team ${mintedTeam} differs from ${team}`, revokeOrNote(custody, newGrant));
+  if (!sameAwebTeamId(mintedTeam, team)) keepPrevious(`renewal minted grant team ${mintedTeam} differs from ${team}`, revokeOrNote(custody, newGrant));
   try { verifyGrantCustodyAttachment({ grantHome, custodySocket, alias: newMeta.identity.alias, team: mintedTeam }); }
   catch (e) { keepPrevious(`renewal grant ${grantId} custody attachment failed (${e.message || e})`, revokeOrNote(custody, newGrant)); }
   // The start already registered the previous grant home; the new one replaces it.
@@ -907,7 +992,7 @@ function globalGrantSpawn() {
     const recovered = recoverGrantHome(grantHome);
     const alias = recovered.subjectAlias || mintedAlias || resident;
     meta = startedMeta({ defaultTeam: { label: defaultTeamLabel(), team: mintedTeam, from: defaultTeamFromEnv() }, identity: identityMeta({ mode: "global", alias, team: mintedTeam, address, resident, seat, grant: { id: grantId, expiresAt, ttl, ...recordedRenew(), scopes, home: grantHome, ...grantAppInventory(minted) } }) });
-    if (mintedTeam !== team) {
+    if (!sameAwebTeamId(mintedTeam, team)) {
       try { revokeGrant(custody, grantId); failAfterMint(`minted grant team ${mintedTeam} differs from ${team}; the grant was revoked and nothing was kept`); }
       catch (e) { failAfterMint(`minted grant team ${mintedTeam} differs from ${team}`, unrevokedNote(custody, meta.identity.grant, e)); }
     }
@@ -985,6 +1070,12 @@ const WORKSPACE_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
 function workspaceIdOf(homeDir, team, alias) {
   let text;
   try { text = readFileSync(join(homeDir, ".aw", "workspace.yaml"), "utf8"); } catch { return undefined; }
+  const hit = membershipRows(text).find((r) => sameAwebTeamId(r.team_id, team) && r.alias === alias);
+  return hit && WORKSPACE_ID_RE.test(hit.workspace_id || "") ? hit.workspace_id : undefined;
+}
+/** The flat mappings of a `memberships:` list in a .aw YAML file (workspace.yaml,
+ *  teams.yaml), as aw writes them: only each item's own keys, as strings. */
+function membershipRows(text) {
   const rows = [];
   let inList = false, row, keyIndent;
   for (const line of text.split(/\r?\n/)) {
@@ -998,8 +1089,43 @@ function workspaceIdOf(homeDir, team, alias) {
     const quoted = /^(["'])(.*?)\1\s*(?:#.*)?$/.exec(m[4].trim());
     row[m[3]] = quoted ? quoted[2] : m[4].replace(/\s+#.*$/, "").trim();
   }
-  const hit = rows.find((r) => r.team_id === team && r.alias === alias);
-  return hit && WORKSPACE_ID_RE.test(hit.workspace_id || "") ? hit.workspace_id : undefined;
+  return rows;
+}
+/** The registry retire names for `team`'s certificates at `root`: only one the root
+ *  records. Retire never decides a registry aw would decide differently: it passes the
+ *  registry_url of the team's membership in the root's .aw/teams.yaml (aw
+ *  awconfig/team_state.go) when that is a plain origin, or none, and aw then resolves
+ *  the registry itself, as for any read from that root (cmd/aw/id_team.go:1643-1656,
+ *  which discovers it from the membership's aweb_url). There is no copy of aw's
+ *  discovery here.
+ *  → `{ registry }`, or `{ registry: null, registryError }`: the fixed text that says the
+ *  registry is not recorded here and what the controller adds. */
+function mintRegistryForTeam(root, team) {
+  const teamsFile = join(root, ".aw", "teams.yaml");
+  const found = membershipRegistry(teamsFile, team, "the root's service");
+  if (found.kind === "unreadable") return { registry: null, registryError: `the team's registry is not recorded here (${teamsFile} could not be read); the command omits --registry` };
+  if (found.kind === "no-membership") return { registry: null, registryError: `the team's registry is not recorded here (${teamsFile} has no membership of ${team}); the command omits --registry` };
+  if (found.kind === "none") return { registry: null, registryError: "the team's registry is not recorded here (the root records no registry and no service for the team); the command omits --registry" };
+  return found.registry ? { registry: found.registry } : { registry: null, registryError: found.registryError };
+}
+/** What the membership of `team` in an aw `teams.yaml` says about the registry aw uses
+ *  for it (cmd/aw/id_team.go:1643-1656): its registry_url, else discovery from its
+ *  aweb_url, else aw's default. Team ids are matched as aw spells them.
+ *  → `{ kind: "registry", registry }`, `{ kind: "not-plain" | "discovered", registry:
+ *  null, registryError }` (the fixed text; `service` names the service when its URL is not
+ *  plain), or `{ kind: "none" | "no-membership" | "unreadable" }`, where the caller says
+ *  what it knows. */
+function membershipRegistry(teamsFile, team, service) {
+  let text;
+  try { text = readFileSync(teamsFile, "utf8"); } catch { return { kind: "unreadable" }; }
+  const row = membershipRows(text).find((r) => sameAwebTeamId(r.team_id, team));
+  if (!row) return { kind: "no-membership" };
+  if (row.registry_url) {
+    const registry = registryOrigin(row.registry_url);
+    return registry ? { kind: "registry", registry } : { kind: "not-plain", registry: null, registryError: `the registry ${teamsFile} records for the team is not a plain origin, so the command omits --registry: the controller adds --registry with the registry_url of the team's membership there` };
+  }
+  if (row.aweb_url) return { kind: "discovered", registry: null, registryError: `the team's registry is not recorded here; aw discovers it from ${plainServiceUrl(row.aweb_url.trim()) || service}: the controller adds --registry <that registry> if it is not aw's default` };
+  return { kind: "none" };
 }
 /** A join that the CLI reported as failed (or that this hook killed on
  *  timeout) may still have completed server-side: the home then holds a
@@ -1019,56 +1145,201 @@ function activeTeamAt(root) {
     return yamlScalar(text, "active_team") || yamlScalar(text, "active");
   } catch { return undefined; }
 }
+/** The service, role and team a retained seat's identity is bound with, as spawn binds it
+ *  and as every command that names the seat's server prints it, and the spawn's pre-effect
+ *  `refusal`. The service, team and refusal come from lib/retained-seat-service.mjs
+ *  retainedSeatCheck, the one predicate soul readiness calls too (the service from the seat's own
+ *  record only; the team the default team, else the source's active team). A value that cannot
+ *  be determined is undefined. */
+function retainedSeatTarget(source) {
+  let srcWorkspace = "";
+  try { srcWorkspace = readFileSync(join(source, "workspace.yaml"), "utf8"); } catch { /* no record */ }
+  return { ...retainedSeatCheck(source, process.env), role: yamlScalar(srcWorkspace, "role_name") };
+}
+/** The refusal for a retained seat's lock whose holder home is not on this host
+ *  (`held`, the parsed lock) or that cannot be read (`held` undefined). The lock is
+ *  written by whoever runs as this user, so each field it names is bounded and
+ *  printable only. The remedy comes first; the text is not cut at fatal's 300
+ *  characters, so the lock path and the holder are always named in full. */
+function refuseUnheldLock(lockPath, held) {
+  const release = `once that is confirmed, spawn with identity.takeOver: true (\`--provider oats.aweb identity.takeOver=true\`), which clears the lock with a warning, or remove ${lockPath}`;
+  const text = held
+    ? `the retained identity's lock is held by a seat whose home is not on this host, and a lock is never released by age or automatically: confirm that seat is gone (retired, or its host or container removed); ${release}. Holder: ${["instance " + (lockField(held.instance) || "(not recorded)"), "host " + (lockField(held.host) || "(not recorded)"), "since " + (lockField(held.takenAt) || "(not recorded)"), "home " + (lockField(held.home) || "(not printable)")].join(", ")}`
+    : `the retained identity's lock ${lockPath} cannot be read, so its holder is unknown, and a lock is never released by age or automatically: confirm that no seat holds this identity; ${release}`;
+  out({ warning: `oats-aweb: ${text}` }, 1);
+}
 function retainedSeatSpawn(source, takeOver) {
-  if (typeof source !== "string" || !source.startsWith("/")) fatal("identity.source must be the absolute path of the legacy .aw directory to retain");
-  if (!existsSync(join(source, "signing.key"))) fatal(`identity.source ${source} holds no signing.key, so there is no identity to retain`);
+  // Every refusal the settings and the source decide, before the lock or any copy, as soul
+  // readiness reports it. The remedies are named in full, so the text is not cut at fatal's 300
+  // characters. The lock is checked after: it is live state, not configuration.
+  const { refusal, service, role, team } = retainedSeatTarget(source);
+  if (refusal) out({ warning: `oats-aweb: ${refusal}` }, 1);
   const lockPath = seatLockPath(source);
-  let takenOver;
-  if (existsSync(lockPath)) {
-    let held; try { held = JSON.parse(readFileSync(lockPath, "utf8")); } catch { held = {}; }
-    const holderHome = held.home;
+  let takenOver, takeOverNote = "";
+  // What this spawn decides on: the lock as it is now, read under its guard (lstat, not
+  // exists: a dangling symlink at the lock path is a lock that cannot be read). A guard
+  // or a moved-aside lock that a killed change left is reported before anything else,
+  // whatever the lock says. A lock that cannot even be checked is one whose holder is
+  // unknown. The lock is changed below only if it is still exactly this one
+  // (lib/seat-lock.mjs).
+  let seen;
+  try { seen = readSeatLockGuarded(lockPath, { who: { op: "spawn", instance, home } }); }
+  catch (e) {
+    // A read that left anything stops the spawn: nothing runs after it.
+    if (isSeatLockRefusal(e) || isSeatLockLeftovers(e)) out({ warning: `oats-aweb: identity at ${source} was not seated, and nothing was copied: ${isSeatLockLeftovers(e) && e.code ? `its lock could not be read (${e.code}); ` : ""}${e.message}` }, 1);
+    // The guard could not be taken (and was removed): nothing is known of the lock's
+    // holder, and no change of it can be made from here.
+    if (e?.stage === "guard") out({ warning: `oats-aweb: identity at ${source} was not seated, and nothing was copied: the guard ${lockPath}.guard could not be taken (${/^E[A-Z]+$/.test(String(e?.code)) ? e.code : "error"}), so the lock was not read; check that ${dirname(lockPath)} is writable and has room, then retry` }, 1);
+    seen = { present: true, ino: undefined, text: null, doc: undefined };
+  }
+  if (seen.present) {
+    const held = seen.doc;
+    const holderHome = typeof held?.home === "string" && held.home ? held.home : undefined;
     // Held means the holder's home still exists: retire removes both the lock
     // and the home, so a home that is there is a seat that was never retired.
     // No process liveness is inferred (the spawner's pid says nothing about the
     // runtime). The only escape is the explicit, warned take-over for a seat
     // whose runtime is known to be dead.
     if (holderHome && existsSync(holderHome)) {
-      if (takeOver !== true) fatal(`identity at ${source} is already held by ${holderHome} (${lockPath}); a seat is never taken from a holder whose home exists — retire that instance first, or set identity.takeOver: true only if you know its runtime is dead`);
-      takenOver = holderHome;
+      if (takeOver !== true) fatal(`identity at ${source} is already held by ${lockField(holderHome) || "a holder home that is not printable"} (${lockPath}); a seat is never taken from a holder whose home exists — retire that instance first, or set identity.takeOver: true only if you know its runtime is dead`);
+      takenOver = lockField(holderHome) || "a holder home that is not printable";
+    } else {
+      // A home that is not on this host may be on another one: the source can sit
+      // on state several hosts or containers share, so "gone" is never judged
+      // here, by age or otherwise (awebai/oats-aweb#227). The operator who has
+      // confirmed it says so with identity.takeOver: true.
+      if (takeOver !== true) refuseUnheldLock(lockPath, holderHome ? held : undefined);
+      takenOver = holderHome ? lockField(holderHome) || "a holder home that is not printable" : "an unreadable lock";
+      takeOverNote = holderHome ? " (its home is not on this host)" : "";
     }
   }
-  const srcWorkspace = existsSync(join(source, "workspace.yaml")) ? readFileSync(join(source, "workspace.yaml"), "utf8") : "";
-  const service = process.env.OATS_AWEB_URL || yamlScalar(srcWorkspace, "aweb_url");
-  if (!service) fatal(`cannot determine the aweb service for ${source} (no aweb_url in its workspace.yaml)`);
-  const role = yamlScalar(srcWorkspace, "role_name");
-  let team = defaultTeamId();
-  if (!team && existsSync(join(source, "teams.yaml"))) team = yamlScalar(readFileSync(join(source, "teams.yaml"), "utf8"), "active_team") || yamlScalar(readFileSync(join(source, "teams.yaml"), "utf8"), "active");
-  if (!team || !team.includes(":")) fatal(`cannot determine the team for the retained identity (${teamConfigRemedy()}, or keep an active team in ${join(source, "teams.yaml")})`);
   const dest = join(home, ".aw");
   const legacyHome = dirname(source);
   // The lock is taken FIRST: a concurrent second spawn must see it before any
-  // byte of the identity is copied.
-  // Exclusive creation (wx): two concurrent spawns cannot both pass the
-  // existence check and overwrite each other; the loser fails here having
-  // copied nothing. A take-over replaces the stale lock first, deliberately.
-  if (takenOver) { try { rmSync(lockPath, { force: true }); } catch { /* replaced below */ } }
-  try {
-    writeFileSync(lockPath, JSON.stringify({ home, instance, team, takenAt: new Date().toISOString(), host: hostname(), ...(takenOver ? { tookOverFrom: takenOver } : {}) }, null, 2) + "\n", { mode: 0o600, flag: "wx" });
-  } catch (e) {
-    fatal(`identity at ${source} was taken by another spawn a moment ago (${lockPath} exists); nothing copied`);
+  // byte of the identity is copied. One guarded step (lib/seat-lock.mjs) takes it
+  // only if it is still what this spawn decided on: absent for a plain spawn, so
+  // of two concurrent spawns the loser fails here having copied nothing; the very
+  // lock it read for a take-over, so of two take-overs of one lock only one wins.
+  const takenAt = new Date().toISOString();
+  const lockDoc = (extra = {}) => JSON.stringify({ home, instance, ...extra, team, takenAt, host: hostname(), ...(takenOver ? { tookOverFrom: takenOver } : {}) }, null, 2) + "\n";
+  const ownLock = (c) => !!c.present && typeof c.doc?.home === "string" && samePath(c.doc.home, home) && c.doc.takenAt === takenAt;
+  const seatOp = (op) => ({ op, instance, home });
+  // What a lock step left, each file with its whole fix (lib/seat-lock.mjs).
+  const lockRecovery = (e) => isSeatLockLeftovers(e) ? `; ${e.recovery}` : "";
+  /** A lock step's failure: a refusal's or leftovers' whole text, else its code. */
+  const lockFailure = (e) => isSeatLockRefusal(e) ? e.message : isSeatLockLeftovers(e) ? `${e.code ? `${e.code}; ` : ""}${e.recovery}` : `${lockPath} could not be read (${/^E[A-Z]+$/.test(String(e?.code)) ? e.code : "error"})`;
+  // Set once a lock step left anything: from then on this spawn makes no lock step and
+  // no aw call, and briefs no seat (lib/seat-lock.mjs, the protocol's last clause).
+  // `stuck` is that step's whole text, which the exit carries once; STUCK refers to it.
+  let stuck;
+  const STUCK = "a lock step of this spawn left files it could not clean, named in this failure";
+  // Every exit below is uncut: a lock step's text is its whole fix.
+  let taken, takeLeft = "";
+  try { taken = swapSeatLock(lockPath, { who: seatOp(takenOver ? "take-over" : "spawn"), expect: (c) => seen.present ? sameSeatLock(c, seen) : !c.present, next: lockDoc() }); }
+  catch (e) {
+    if (isSeatLockRefusal(e)) out({ warning: `oats-aweb: identity at ${source} was not seated, and nothing was copied: ${e.message}` }, 1);
+    if (!isSeatLockLeftovers(e) || !e.result) out({ warning: `oats-aweb: the retained identity's lock ${lockPath} could not be taken${e?.code ? ` (${/^E[A-Z]+$/.test(String(e?.code)) ? e.code : "error"})` : ""}; nothing copied${lockRecovery(e)}` }, 1);
+    taken = e.result; takeLeft = `; ${e.recovery}`;
   }
+  if (taken.done && takeLeft) out({ warning: `oats-aweb: the retained identity's lock ${lockPath} was taken for this spawn, but that step left files it could not clean, so nothing was copied${takeLeft}; then remove ${lockPath} if it still names ${home}` }, 1);
+  if (!taken.done) {
+    const kept = takeLeft;
+    // Uncut: what the step left carries its whole fix.
+    if (!seen.present) out({ warning: `oats-aweb: identity at ${source} was taken by another spawn a moment ago (${lockPath} exists); nothing copied${kept}` }, 1);
+    if (!taken.captured.present) out({ warning: `oats-aweb: the retained identity's lock ${lockPath} was removed after this spawn read it, so nothing was taken over or copied${kept}; spawn again: with no lock, the spawn takes the seat` }, 1);
+    out({ warning: `oats-aweb: the retained identity's lock ${lockPath} changed after this spawn read it, so nothing was taken over or copied: it is now held by ${taken.captured.text === null ? `a lock that could not be read (${taken.captured.readError || "error"})` : seatLockHolderText(taken.captured.doc)}${kept}. A seat is never taken from a holder this spawn did not see: retire that seat first, or spawn again with identity.takeOver: true once you know its runtime is dead` }, 1);
+  }
+  /** Remove this spawn's own lock; any other is left. What its guarded step saw is the
+   *  rollback's last read of the lock (lastSeen). → a note for the failure, or "". */
+  const releaseOwnLock = () => {
+    if (stuck) { lastSeen = { kind: "unknown", unknown: STUCK }; return ""; }
+    try {
+      const r = swapSeatLock(lockPath, { who: seatOp("rollback"), expect: ownLock, next: null });
+      lastSeen = r.done ? { kind: "none" } : describeHolder(r.captured);
+      return r.done || !r.captured.present ? "" : lastSeen.kind === "unknown" ? `; the lock ${lockPath} was left in place: ${lastSeen.unknown}` : `; the lock ${lockPath} names another seat now (${lastSeen.text}), so it was left in place`;
+    } catch (e) {
+      if (isSeatLockLeftovers(e)) {
+        stuck = stuck || lockFailure(e);
+        if (e.result?.done) { lastSeen = { kind: "none" }; return `; the lock ${lockPath} was removed, but that step left files it could not clean`; }
+        lastSeen = { kind: "unknown", unknown: STUCK };
+        return `; the lock ${lockPath} was left in place: ${STUCK}`;
+      }
+      lastSeen = { kind: "unknown", unknown: lockFailure(e) };
+      return `; the lock ${lockPath} was left in place: ${isSeatLockRefusal(e) || isSeatLockLeftovers(e) ? lockFailure(e) : `it could not be removed (${/^E[A-Z]+$/.test(String(e?.code)) ? e.code : "error"})`}`;
+    }
+  };
+  let lockNote = "";
   let connected = false;
+  // The lock's guard covers file operations only, never an aw call, so a take-over
+  // can land while this spawn's `aw workspace connect`, or its rollback's reconnect,
+  // runs. Each exit after a connect re-reads the lock: when another seat holds it,
+  // the binding may point here or at the legacy home, and the exit names the connect
+  // to run from that seat's home. The command holds only values that pass their shapes.
+  const plainRole = typeof role === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(role) ? role : undefined;
+  const connectCommand = plainServiceUrl(service) && validAwebTeamId(team) && (!role || plainRole)
+    ? `\`aw workspace connect --service=${service} --team=${team}${plainRole ? ` --role=${plainRole}` : ""}\``
+    : `\`aw workspace connect\` with the service, team and role in ${join(source, "workspace.yaml")}`;
+  /** A lock as read under its guard: `{ kind: "none" }` (absent), `{ kind: "ours" }`, or
+   *  `{ kind: "other", text, fix }` naming the seat and the connect to run from its home. */
+  const describeHolder = (c) => {
+    if (!c.present) return { kind: "none" };
+    // Bytes that can't be read name no holder: unknown, never another seat.
+    if (c.text === null) return { kind: "unknown", unknown: `${lockPath} could not be read (${c.readError || "error"})` };
+    if (ownLock(c)) return { kind: "ours" };
+    const at = typeof c.doc?.home === "string" && /^\/[A-Za-z0-9_.@+\/-]{0,511}$/.test(c.doc.home) ? c.doc.home : undefined;
+    return { kind: "other", text: c.doc ? seatLockHolderText(c.doc) : "a lock that cannot be read", fix: `run ${connectCommand} from ${at || "the home of the seat that holds it (its lock names none that can be shown)"}` };
+  };
+  // The rollback's last guarded read of the lock: the exit names this holder, and only
+  // this one (a take-over after it is not reported: README, "The retained seat's lock").
+  let lastSeen;
+  // What a read that left files did see under its guard (describeHolder), for the exit
+  // only: nothing is decided on it, since nothing runs after that step.
+  let stuckSeen;
+  /** Who holds the lock now, read under its guard, as describeHolder answers, or
+   *  `{ kind: "unknown", unknown }` when it can't be read under the guard, which is never
+   *  taken for "no other holder". Recorded as lastSeen. */
+  const holderNow = () => {
+    if (stuck) return lastSeen = { kind: "unknown", unknown: STUCK };
+    try { return lastSeen = describeHolder(readSeatLockGuarded(lockPath, { who: seatOp("check") })); }
+    catch (e) {
+      if (isSeatLockLeftovers(e)) { stuck = stuck || lockFailure(e); if (e.result) stuckSeen = describeHolder(e.result); return lastSeen = { kind: "unknown", unknown: STUCK }; }
+      return lastSeen = { kind: "unknown", unknown: lockFailure(e) };
+    }
+  };
+  // What the rollback did with the binding: "unknown" (holder unknown at its first read:
+  // nothing done), "successor" (another seat held it: not reconnected), "restored" or
+  // "failed" (the legacy home's reconnect), or undefined (nothing was connected).
+  let rolledBack;
+  const unknownFix = `once the lock can be read, run ${connectCommand} from the home of the seat that holds it, or from ${legacyHome} if none does`;
+  let wakeRegistering = false, wakeNote = "";
   const rollback = () => {
-    // After `aw workspace connect` the server binding points at the new home;
+    // A registration with the host wake broker made for this seat goes with it, as at retire.
+    // Not after a lock step that left anything: no aw call runs then.
+    if (wakeRegistering && stuck) wakeNote = `; this home's registration with the host wake broker was left, since no aw call runs after that: once those files are cleaned, run \`aw wake deregister --home ${home}\``;
+    else if (wakeRegistering && !wakeDeregister(home)) wakeNote = `; this home could not be removed from the host wake broker: run \`aw wake deregister --home ${home}\``;
+    // Once `aw workspace connect` has started, the server binding may point at the
+    // new home (aw binds on the service before it writes locally, so a connect
+    // that failed may still have bound it);
     // deleting the copy alone would leave the identity bound to nothing. Put
     // the binding back where it was, from the legacy home, then remove the
     // copy; if the restore fails, KEEP the copy so the seat stays recoverable.
-    let restored = !connected;
-    if (connected) {
-      try { run(["aw", "workspace", "connect", flagEq("--service", service), flagEq("--team", team), ...(role ? [flagEq("--role", role)] : [])], legacyHome, 60000); restored = true; }
+    // A seat that took the lock over meanwhile owns the identity now: its binding
+    // is never taken back to the legacy home, and only this seat's copy goes.
+    const first = connected ? holderNow() : undefined;
+    // Ownership unknown: nothing is reconnected or removed, and the copy stays.
+    if (first?.kind === "unknown") { rolledBack = "unknown"; return false; }
+    let restored = !connected || first.kind === "other";
+    if (connected) rolledBack = "successor";
+    if (connected && first.kind !== "other") {
+      try { seatRun(["aw", "workspace", "connect", flagEq("--service", service), flagEq("--team", team), ...(role ? [flagEq("--role", role)] : [])], legacyHome, 60000); restored = true; }
       catch { restored = false; }
+      rolledBack = restored ? "restored" : "failed";
+      // Read after every attempt: a reconnect that failed may still have bound the legacy home.
+      holderNow();
+      // A read that left anything ends the rollback here: the copy and the lock stay.
+      if (stuck) { if (restored) rolledBack = "restored-kept"; return false; }
     }
-    if (restored) { try { rmSync(dest, { recursive: true, force: true }); } catch { /* best effort */ } try { rmSync(lockPath, { force: true }); } catch { /* best effort */ } }
+    if (restored) { try { rmSync(dest, { recursive: true, force: true }); } catch { /* best effort */ } lockNote = releaseOwnLock(); }
     return restored;
   };
   try {
@@ -1086,11 +1357,11 @@ function retainedSeatSpawn(source, takeOver) {
     for (const forbidden of ["workspace.yaml", "context", "interaction-log.jsonl", "channel-delivered-ids.json", "chat-delivered-ids.json"]) {
       if (existsSync(join(dest, forbidden))) rmSync(join(dest, forbidden), { recursive: true, force: true });
     }
-    run(["aw", "workspace", "connect", flagEq("--service", service), flagEq("--team", team), ...(role ? [flagEq("--role", role)] : [])], home, 60000);
-    connected = true;
-    run(["aw", "check", "--online"], home, 60000);
-    run(["aw", "heartbeat"], home, 60000);
-    const status = run(["aw", "workspace", "status", "--json"], home, 60000);
+    connected = true; // set before the call: a connect that fails may still have bound
+    seatRun(["aw", "workspace", "connect", flagEq("--service", service), flagEq("--team", team), ...(role ? [flagEq("--role", role)] : [])], home, 60000);
+    seatRun(["aw", "check", "--online"], home, 60000);
+    seatRun(["aw", "heartbeat"], home, 60000);
+    const status = seatRun(["aw", "workspace", "status", "--json"], home, 60000);
     // Thrown, not fatal: the catch below rolls the copy and the lock back first.
     // Verified by parsing: the workspace row's path must be this home. The
     // hostname the row records is whatever the binding stored (on hosted
@@ -1098,8 +1369,7 @@ function retainedSeatSpawn(source, takeOver) {
     let st; try { st = JSON.parse(String(status)); } catch { throw new Error(`aw workspace status from ${home} answered no JSON, so the seat is not connected; nothing is briefed`); }
     const ws = st.workspace && typeof st.workspace === "object" ? st.workspace : st;
     const shownPath = String(ws.workspace_path || ws.path || "");
-    const same = (a, b) => { try { return realpathSync(a) === realpathSync(b); } catch { return resolve(a) === resolve(b); } };
-    if (!shownPath || !same(shownPath, home)) throw new Error(`aw workspace status from ${home} shows workspace_path ${JSON.stringify(shownPath)} not this home, so the seat is not connected; nothing is briefed`);
+    if (!shownPath || !samePath(shownPath, home)) throw new Error(`aw workspace status from ${home} shows workspace_path ${JSON.stringify(shownPath)} not this home, so the seat is not connected; nothing is briefed`);
     const hostNote = ws.hostname && ws.hostname !== hostname() && ws.hostname.split(".")[0] !== hostname().split(".")[0] ? ` (workspace row hostname ${ws.hostname}, this host ${hostname()})` : "";
     const identityText = readFileSync(join(dest, "identity.yaml"), "utf8");
     const expectedDid = yamlScalar(identityText, "did");
@@ -1107,7 +1377,9 @@ function retainedSeatSpawn(source, takeOver) {
     // The same-identity check the contract is for: `aw whoami --json` from the
     // new home reports the did and address the CLI now acts as (workspace
     // status carries no did); both must equal the copied identity.yaml.
-    let who; try { who = JSON.parse(String(run(["aw", "whoami", "--json"], home, 60000))); } catch (e) { throw new Error(`aw whoami from ${home} answered no JSON (${e.message || e}); the seat is not verified`); }
+    // A failed call's message is already withheld; a parse error would quote aw's output, so neither is shown.
+    let whoText; try { whoText = String(seatRun(["aw", "whoami", "--json"], home, 60000)); } catch (e) { throw new Error(`aw whoami from ${home} failed (${e.message || e}); the seat is not verified`); }
+    let who; try { who = JSON.parse(whoText); } catch { throw new Error(`aw whoami from ${home} answered no JSON; the seat is not verified`); }
     const shownDid = who.did || who.identity?.did;
     const shownAddress = who.address || who.identity?.address;
     if (expectedDid && shownDid !== expectedDid) throw new Error(`aw whoami shows did ${shownDid || "(none)"}, not the retained identity's ${expectedDid}; the seat is not the same identity`);
@@ -1116,15 +1388,36 @@ function retainedSeatSpawn(source, takeOver) {
     if (!AWEB_ALIAS_RE.test(aliasRaw)) throw new Error(`aw workspace status reports an alias that is not a plausible alias; the seat is not briefed`);
     const alias = aliasRaw;
     if (expectedAddress && !expectedAddress.endsWith(`/${alias}`)) throw new Error(`aw workspace status shows alias ${alias}, not the retained identity's address ${expectedAddress}; the seat is not the same identity`);
-    writeFileSync(lockPath, JSON.stringify({ home, instance, alias, team, takenAt: new Date().toISOString(), host: hostname(), ...(takenOver ? { tookOverFrom: takenOver } : {}) }, null, 2) + "\n", { mode: 0o600 });
+    // The seated lock names the alias. Rewritten only while it is still this spawn's:
+    // a take-over that replaced it meanwhile wins, and this seat is not briefed.
+    let seated;
+    try { seated = swapSeatLock(lockPath, { who: seatOp("spawn"), expect: ownLock, next: lockDoc({ alias }) }); }
+    catch (e) {
+      if (isSeatLockRefusal(e)) throw e;
+      if (isSeatLockLeftovers(e)) { stuck = lockFailure(e); throw new Error(`the step that rewrote the retained identity's lock ${lockPath} with the alias left files it could not clean; the seat is not briefed`); }
+      throw new Error(`the retained identity's lock ${lockPath} could not be rewritten with the alias (${/^E[A-Z]+$/.test(String(e?.code)) ? e.code : "error"}); the seat is not briefed`);
+    }
+    // Holder-neutral: the exit names only the holder of the rollback's last guarded read.
+    if (!seated.done) throw new Error(`the retained identity's lock ${lockPath} ${!seated.captured.present ? "was removed" : seated.captured.text === null ? `could not be read (${seated.captured.readError || "error"})` : "was taken by another seat"} during this spawn; the seat is not briefed`);
     const { broker, env: deliveryEnv, launch, brief: deliveryBrief } = deliveryFor();
     const env = { ...deliveryEnv, AWEB_IDENTITY_HOME: localIdentityHome() };
-    if (broker) wakeRegister(home, dest);
+    if (broker) { wakeRegistering = true; wakeRegister(home, dest, seatRun); }
+    // The last aw call is done: a take-over that landed while it ran wins, and this
+    // seat is not briefed.
+    // Read under the guard; the seat is briefed only while the lock is still its own.
+    let after;
+    try { after = readSeatLockGuarded(lockPath, { who: seatOp("check") }); }
+    catch (e) {
+      if (isSeatLockLeftovers(e)) stuck = lockFailure(e);
+      throw new Error(`who holds the retained identity's lock ${lockPath} is unknown after this spawn's last aw call (${isSeatLockLeftovers(e) ? STUCK : isSeatLockRefusal(e) ? lockFailure(e) : /^E[A-Z]+$/.test(String(e?.code)) ? e.code : "error"}); the seat is not briefed`);
+    }
+    if (!ownLock(after)) throw new Error(`the retained identity's lock ${lockPath} ${!after.present ? "was removed" : after.text === null ? `could not be read (${after.readError || "error"})` : "was taken by another seat"} during this spawn; the seat is not briefed`);
     const warnings = [];
-    if (takenOver) warnings.push(`oats-aweb: took over the retained identity from ${takenOver} on identity.takeOver: true; if that runtime was still alive there are now two seats with one key — stop the old one`);
+    if (takenOver) warnings.push(`oats-aweb: took over the retained identity from ${takenOver}${takeOverNote} on identity.takeOver: true; if that runtime was still alive there are now two seats with one key — stop the old one`);
     if (hostNote) warnings.push(`oats-aweb: seated${hostNote}`);
+    if (awebUrlVariableSet()) warnings.push(`oats-aweb: OATS_AWEB_URL is set, but it is ignored for a retained seat: the service comes only from ${join(source, "workspace.yaml")}`);
     out({
-      meta: startedMeta({ team, alias, retained: true, source, lock: lockPath, identity: identityMeta({ mode: "global", alias, team, address: shownAddress || expectedAddress || null }), ...(takenOver ? { tookOverFrom: takenOver } : {}) }),
+      meta: startedMeta({ team, alias, retained: true, source, lock: lockPath, identity: identityMeta({ mode: "local", alias, team, address: shownAddress || expectedAddress || null }), ...(takenOver ? { tookOverFrom: takenOver } : {}) }),
       env,
       brief: `Comms: you are the retained seat of the existing aweb identity "${alias}" on team ${team} (same did and address as the seat you replace; its contacts, routes and conversations are yours).${deliveryBrief} Use \`aw mail\`/\`aw chat\` for messaging (see the aweb-messaging skill).`,
       ...(launch ? { launch } : {}),
@@ -1132,7 +1425,32 @@ function retainedSeatSpawn(source, takeOver) {
     });
   } catch (e) {
     const restored = rollback();
-    fatal(`retained identity could not be seated from ${source}: ${e.message || e}${connected ? (restored ? " (the server binding was restored to the legacy home and the copy removed)" : ` (the server binding still points at ${home} and the copy was KEPT there so the seat is recoverable: run aw workspace connect from ${legacyHome} to restore it, or retry the spawn)`) : ""}`);
+    // Every holder named here is the rollback's last guarded read (lastSeen).
+    const fin = lastSeen || {};
+    const named = fin.kind === "other" ? `; the lock names ${fin.text}` : "";
+    const binding = rolledBack === "unknown"
+      ? ` (whether another seat took the identity over is unknown: ${fin.unknown}; so the server binding was left as it is and this seat's copy was kept at ${dest}: ${unknownFix})`
+      : rolledBack === "successor"
+      ? ` (another seat took the identity over during this spawn, so the server binding was not restored to the legacy home and this seat's copy was removed; the binding may point at this home, if this spawn's connect ran after that seat's: ${fin.kind === "other" ? `${fin.fix}${named}` : fin.kind === "unknown" ? `who holds the lock now is unknown (${fin.unknown}): ${unknownFix}` : `the lock names no seat now, so run ${connectCommand} from ${legacyHome} to give it back to the source`})`
+      : rolledBack === "restored"
+      ? (fin.kind === "other" ? ` (the server binding was restored to the legacy home and the copy removed, but another seat took the identity over while that ran (${fin.text}), so the binding may point at the legacy home, not at that seat: ${fin.fix})`
+        : fin.kind === "unknown" ? ` (the server binding was restored to the legacy home and the copy removed, but whether another seat took the identity over while that ran is unknown: ${fin.unknown}; if one holds the lock, run ${connectCommand} from its home)`
+        : " (the server binding was restored to the legacy home and the copy removed)")
+      : rolledBack === "restored-kept"
+      ? ` (the server binding was restored to the legacy home, but the lock's read after that left files it could not clean, so this seat's copy was kept at ${dest} and the lock was left in place${stuckSeen?.kind === "other"
+        ? `; that read found another seat holding the lock (${stuckSeen.text}), so the binding may point at the legacy home, not at that seat: once those files are cleaned, ${stuckSeen.fix}, and remove ${dest}`
+        : stuckSeen?.kind === "ours" || stuckSeen?.kind === "none"
+        ? `: once those files are cleaned, remove ${dest}, and ${lockPath} if it still names ${home}`
+        : `; whether another seat took the identity over while that ran is unknown${stuckSeen?.unknown ? ` (${stuckSeen.unknown})` : ""}: once those files are cleaned, run ${connectCommand} from the home of the seat that holds the lock, if one does, then remove ${dest}, and ${lockPath} if it still names ${home}`})`
+      : rolledBack === "failed"
+      ? (fin.kind === "other" ? ` (the reconnect of the legacy home failed, and another seat took the identity over while it ran (${fin.text}), so the binding may point at the legacy home or at this home, not at that seat; this seat's copy was kept at ${dest}: ${fin.fix})`
+        : fin.kind === "unknown" ? ` (the reconnect of the legacy home failed, and whether another seat took the identity over while it ran is unknown: ${fin.unknown}; this seat's copy was kept at ${dest}: ${unknownFix})`
+        : ` (the server binding still points at ${home} and the copy was KEPT there so the seat is recoverable: run aw workspace connect from ${legacyHome} to restore it, or retry the spawn)`)
+      : "";
+    const text = `retained identity could not be seated from ${source}: ${e.message || e}${binding}${lockNote}${wakeNote}${stuck && !String(e.message || e).includes(stuck) ? `; ${stuck}` : ""}`;
+    // Not fatal's 300 characters: a lock step's text and the recovery step at the end
+    // carry their whole fix.
+    out({ warning: `oats-aweb: ${text}` }, 1);
   }
 }
 
@@ -1171,10 +1489,50 @@ function validateJoinLabels(labels, { action = "join" } = {}) {
   return labels.map((label) => byLabel.get(label));
 }
 const joinedTeamsOf = (meta = {}) => Array.isArray(meta.joinedTeams) ? meta.joinedTeams.filter((j) => j && typeof j === "object" && j.label && j.team && j.identityHome) : [];
+/** Joins written ahead of their accept (awebai/oats-aweb#217): each is
+ *  dropped in the one write that records its joined team, so one that
+ *  remains is a join killed or failed after that write. */
+const pendingJoinsOf = (meta = {}) => Array.isArray(meta.pendingJoins) ? meta.pendingJoins.filter((p) => p && typeof p === "object" && p.label && p.team && p.identityHome) : [];
+const withoutPendingJoin = (meta, label) => {
+  const { pendingJoins: _all, ...rest } = meta;
+  const kept = pendingJoinsOf(meta).filter((p) => p.label !== label);
+  return kept.length ? { ...rest, pendingJoins: kept } : rest;
+};
 const leftTeamsOf = (meta = {}) => Array.isArray(meta.left) ? meta.left.filter((j) => j && typeof j === "object" && j.label && j.team && j.at && j.reason).slice(-20) : [];
 const providerStateDir = () => join(home, ".oats-aweb");
 const providerTeamsFile = () => join(providerStateDir(), "teams.json");
 const defaultRetireMarkerFile = () => join(providerStateDir(), "default-retire.json");
+/** The mint a non-retained spawn is about to run (awebai/oats-aweb#240): written
+ *  before `aw init --join-from`, removed once the minted identity is in the spawn's
+ *  answer or the mint is confirmed refused. One that remains is a mint killed or
+ *  failed after aw may have registered the identity, which retire settles. A file of
+ *  its own: writeProviderTeamsState rewrites teams.json with only its known fields. */
+const pendingMintFile = () => join(providerStateDir(), "pending-mint.json");
+const pendingMintOf = (doc) => doc && typeof doc === "object" && typeof doc.team === "string" && validAwebTeamId(doc.team) && typeof doc.alias === "string" && AWEB_ALIAS_RE.test(doc.alias)
+  ? { team: doc.team, alias: doc.alias, root: typeof doc.root === "string" && isAbsolute(doc.root) ? doc.root : null, at: typeof doc.at === "string" ? doc.at : null }
+  : undefined;
+/** `{ intent }`, `{}` when there is none, or `{ problem }` when the file is there and is not one. */
+function readPendingMint() {
+  let text;
+  try { text = readFileSync(pendingMintFile(), "utf8"); }
+  catch (e) { return e?.code === "ENOENT" ? {} : { problem: `it cannot be read (${/^E[A-Z]+$/.test(String(e?.code)) ? e.code : "error"})` }; }
+  let intent; try { intent = pendingMintOf(JSON.parse(text)); } catch { intent = undefined; }
+  return intent ? { intent } : { problem: "it does not name a valid team and alias" };
+}
+function writePendingMint(intent) {
+  mkdirSync(providerStateDir(), { recursive: true, mode: 0o700 });
+  atomicWrite(pendingMintFile(), JSON.stringify({ schemaVersion: 1, ...intent }, null, 2) + "\n");
+  return intent;
+}
+const dropPendingMint = () => rmSync(pendingMintFile(), { force: true });
+/** True when this host's retired-certificates record names a certificate a retire
+ *  left for `alias` in `team`. False when the deployment or its record cannot be read:
+ *  the caller's refusal stands without the pointer. */
+function hasRetiredCertificateFor(team, alias) {
+  let record;
+  try { record = readRetiredRecord(selectedDeployment(process.env)); } catch { return false; }
+  return record.entries.some((e) => sameAwebTeamId(e.team, team) && e.alias === alias);
+}
 function readDefaultRetireMarker() {
   try {
     const doc = JSON.parse(readFileSync(defaultRetireMarkerFile(), "utf8"));
@@ -1201,14 +1559,19 @@ function writeDefaultRetireMarker({ meta, workspaceId, aliasReusable, aliasReaso
 function readProviderTeamsState(meta = {}) {
   try {
     const doc = JSON.parse(readFileSync(providerTeamsFile(), "utf8"));
-    return { joinedTeams: joinedTeamsOf(doc), wakeJoined: doc.wakeJoined === true, left: leftTeamsOf(doc) };
-  } catch { return { joinedTeams: joinedTeamsOf(meta), wakeJoined: meta.wakeJoined === true, left: leftTeamsOf(meta) }; }
+    return { joinedTeams: joinedTeamsOf(doc), wakeJoined: doc.wakeJoined === true, left: leftTeamsOf(doc), pendingJoins: pendingJoinsOf(doc) };
+  } catch { return { joinedTeams: joinedTeamsOf(meta), wakeJoined: meta.wakeJoined === true, left: leftTeamsOf(meta), pendingJoins: pendingJoinsOf(meta) }; }
 }
 function writeProviderTeamsState(meta) {
   mkdirSync(providerStateDir(), { recursive: true, mode: 0o700 });
-  writeFileSync(providerTeamsFile(), JSON.stringify({ joinedTeams: joinedTeamsOf(meta), wakeJoined: meta.wakeJoined === true, left: leftTeamsOf(meta) }, null, 2) + "\n", { mode: 0o600 });
+  const pendingJoins = pendingJoinsOf(meta);
+  atomicWrite(providerTeamsFile(), JSON.stringify({ joinedTeams: joinedTeamsOf(meta), wakeJoined: meta.wakeJoined === true, left: leftTeamsOf(meta), ...(pendingJoins.length ? { pendingJoins } : {}) }, null, 2) + "\n");
 }
-function withProviderTeams(meta = {}) { const state = readProviderTeamsState(meta); return { ...meta, joinedTeams: state.joinedTeams, wakeJoined: state.wakeJoined, left: state.left }; }
+function withProviderTeams(meta = {}) {
+  const state = readProviderTeamsState(meta);
+  const { pendingJoins: _mirror, ...rest } = meta;
+  return { ...rest, joinedTeams: state.joinedTeams, wakeJoined: state.wakeJoined, left: state.left, ...(state.pendingJoins.length ? { pendingJoins: state.pendingJoins } : {}) };
+}
 function identityHomeForLabel(label) { return join(home, `.aweb-identity-${label}`); }
 function awWithIdentity(identityHome, args) { return ["aw", "--identity-home", identityHome, ...args]; }
 function commandOutput(e) { return [e?.stdout, e?.stderr, e?.message].filter(Boolean).join("\n"); }
@@ -1268,15 +1631,22 @@ function cleanupJoinedIdentity(entry, fallbackAlias, cwd = home) {
 function acceptedTeamMembership(identityHome, expectedTeam) {
   const listed = parseAwJson(run(awWithIdentity(identityHome, ["id", "team", "list", "--json"]), dirname(identityHome), 60000), "aw id team list");
   const ids = teamIdsOf(listed).map(String);
-  if (expectedTeam) return ids.includes(expectedTeam) ? expectedTeam : undefined;
+  if (expectedTeam) return ids.some((id) => sameAwebTeamId(id, expectedTeam)) ? expectedTeam : undefined;
   return ids.length === 1 ? ids[0] : undefined;
 }
 function connectExistingJoinedTeam({ label, identityHome, expectedTeam, root, cwd = home, serviceDocs = [], resumeCommand }) {
   const team = acceptedTeamMembership(identityHome, expectedTeam);
   if (!team) throw new Error(`team root ${dirname(identityHome)} already holds an aweb identity, but aw id team list does not show ${expectedTeam || "exactly one team membership"}; choose a different label or remove the stale root deliberately`);
+  return connectJoinedWorkspace({ label, team, identityHome, root, cwd, serviceDocs, resumeCommand });
+}
+/** The joined record of an identity home that holds `team`'s membership,
+ *  connecting its workspace first when it has none. `root` is the root's path,
+ *  or a function that returns it, called only when the service must come from
+ *  the root. */
+function connectJoinedWorkspace({ label, team, identityHome, root, cwd = home, serviceDocs = [], resumeCommand }) {
   try {
     if (!joinedWorkspacePresent(identityHome)) {
-      const service = serviceForJoinedTeam(root, label, {}, ...serviceDocs);
+      const service = serviceForJoinedTeam(typeof root === "function" ? root() : root, label, {}, ...serviceDocs);
       run(awWithIdentity(identityHome, ["workspace", "connect", flagEq("--service", service), flagEq("--team", team), "--json"]), cwd, 60000, { secretSafe: true });
     }
     if (!joinedWorkspacePresent(identityHome)) throw new Error(`workspace connect did not write ${join(identityHome, "workspace.yaml")}`);
@@ -1284,6 +1654,59 @@ function connectExistingJoinedTeam({ label, identityHome, expectedTeam, root, cw
     throw new Error(`joined team ${label} resume failed: ${e.message || e}; kept ${identityHome} for retry${resumeCommand ? `; resume with: ${resumeCommand}` : ""}`);
   }
   return { label, team, identityHome, receive: "poll", since: new Date().toISOString() };
+}
+/** The file aw keeps beside a hosted accept's signing key until its certificate is stored. */
+const HOSTED_ACCEPT_PENDING_MARKER = "pending-hosted-accept";
+/** Whether aw wrote an identity into this home: any of the files that make one. */
+const holdsIdentity = (identityHome) => IDENTITY_AUTHORITY.some((name) => existsSync(join(identityHome, name)));
+const unfinishedJoinFix = (label) => `run oats aweb join --labels ${label} to finish it or oats aweb leave --labels ${label} to release it`;
+/** What a pending join left in its identity home (awebai/oats-aweb#217):
+ *  `root` returns the root to take the service from when the intent's own
+ *  root is gone. `{ absent: true }` once it is confirmed to hold no membership of the
+ *  recorded team (no identity, an empty directory removed; or a team list that
+ *  does not show the team and no interrupted hosted accept, the home removed),
+ *  else `{ joined }`, adopted for the recorded team with its workspace
+ *  connected. Throws, removing nothing, when aw cannot say (its team list
+ *  fails, or a hosted accept was cut short) or the connect fails. */
+function settlePendingJoin(pending, { root, resumeCommand }) {
+  const { label, team, identityHome } = pending;
+  if (!holdsIdentity(identityHome)) {
+    // ENOENT (never created) or ENOTEMPTY (what is there is not an identity, and the next accept decides): both leave nothing to release.
+    try { rmdirSync(identityHome); } catch { /* see above */ }
+    return { absent: true };
+  }
+  let member;
+  try { member = acceptedTeamMembership(identityHome, team); }
+  catch (e) {
+    throw new Error(`the unfinished join of ${label} (${team}) could not be checked: aw id team list failed in ${identityHome} (${String(e.message || e).slice(0, 200)}); kept it and its identity home; rerun ${resumeCommand} once aw answers`);
+  }
+  if (!member) {
+    // aw's hosted accept saves the key and this marker before its server call
+    // and removes the marker only once the certificate is stored (aw
+    // cli/go/cmd/aw/id_team.go, from aw 1.36.33): with it, an empty team list
+    // means the accept was cut short, not that the server holds no membership.
+    // The whole remedy comes first, the label once: retire keeps 300
+    // characters of it, which hold it for a label of 64.
+    if (existsSync(join(identityHome, HOSTED_ACCEPT_PENDING_MARKER))) throw new Error(`hosted accept interrupted: the server may hold the membership; rerun the same aw id team accept-invite with the original invite, or have the team controller remove the member and delete the marker; then oats aweb leave --labels ${label}. Team ${team}: kept ${identityHome}, its key, its ${HOSTED_ACCEPT_PENDING_MARKER} and the pending join`);
+    rmSync(identityHome, { recursive: true, force: true });
+    return { absent: true };
+  }
+  // The root the join minted from comes first: it names the service that join
+  // used, and the home's captured settings may never have named it (a root
+  // recorded in the live settings after the spawn).
+  const recordedRoot = typeof pending.root === "string" && isAbsolute(pending.root) && existsSync(join(pending.root, ".aw")) ? pending.root : undefined;
+  const joined = connectJoinedWorkspace({ label, team, identityHome, root: () => recordedRoot ?? root(), cwd: home, resumeCommand });
+  return { joined: pending.alias ? { ...joined, alias: pending.alias } : joined };
+}
+/** Release a pending join through the one release path: adopt it, then
+ *  cleanupJoinedIdentity (remote first, the key last). Answers the meta
+ *  without it; throws, keeping it and its identity home, on any failure. */
+function releasePendingJoin(pending, meta, { resumeCommand = `oats aweb leave --labels ${pending.label}` } = {}) {
+  const settled = settlePendingJoin(pending, { root: () => awebRootForTeam(pending.team), resumeCommand });
+  const next = withoutPendingJoin(meta, pending.label);
+  if (settled.absent) return { meta: next, changed: true };
+  const { released, receipt } = cleanupJoinedIdentity(settled.joined, meta.alias || instance, home);
+  return { meta: next, changed: true, released, receipt };
 }
 function acceptConnectVerifyJoinedTeam({ label, token, identityHome, alias: requestedAlias, expectedTeam, root, cwd = home, serviceDocs = [], cleanupOnFailure = true, resumeCommand, useAcceptedService = true }) {
   if (!token || typeof token !== "string") throw new Error(`aw id team accept-invite received no invite token for ${label}`);
@@ -1293,7 +1716,7 @@ function acceptConnectVerifyJoinedTeam({ label, token, identityHome, alias: requ
   const alias = typeof raw.alias === "string" && AWEB_ALIAS_RE.test(raw.alias) ? raw.alias : requestedAlias;
   const team = typeof raw.team_id === "string" && raw.team_id ? raw.team_id : expectedTeam;
   if (!team || !validAwebTeamId(team)) throw new Error(`aw id team accept-invite returned no valid team_id for joined team ${label}`);
-  if (expectedTeam && team !== expectedTeam) throw new Error(`joined team differs from requested ${expectedTeam}`);
+  if (expectedTeam && !sameAwebTeamId(team, expectedTeam)) throw new Error(`joined team differs from requested ${expectedTeam}`);
   const joined = { label, team, identityHome, receive: "poll", since: new Date().toISOString(), alias };
   try {
     if (!joinedWorkspacePresent(identityHome)) {
@@ -1337,7 +1760,23 @@ function mintJoinedTeam(row, meta, { current = false } = {}) {
   const existing = joinedTeamsOf(meta).find((j) => j.label === row.label);
   if (existing) return { meta, joined: existing, changed: false };
   const identityHome = identityHomeForLabel(row.label);
-  const { root, source } = current ? currentJoinRootChoice(row.team, home, { membership: rootListsTeam, label: row.label }) : { root: awebRootForTeam(row.team), source: rootSourceOf(row.team) };
+  const chooseRoot = () => current ? currentJoinRootChoice(row.team, home, { membership: rootListsTeam, label: row.label }) : { root: awebRootForTeam(row.team), source: rootSourceOf(row.team) };
+  const resumeCommand = `oats aweb join --labels ${row.label}`;
+  // A join killed or failed after its accept: adopt what it accepted, or
+  // drop it once confirmed absent. One recorded for another team (the label's
+  // team id changed) is released for that team, never adopted into this one.
+  const pending = pendingJoinsOf(meta).find((p) => p.label === row.label);
+  if (pending) {
+    if (sameAwebTeamId(pending.team, row.team)) {
+      const settled = settlePendingJoin(pending, { root: () => chooseRoot().root, resumeCommand });
+      if (settled.joined) return { meta: { ...withoutPendingJoin(meta, row.label), joinedTeams: [...joinedTeamsOf(meta), settled.joined] }, joined: settled.joined, changed: true };
+      meta = withoutPendingJoin(meta, row.label);
+    } else {
+      meta = releasePendingJoin(pending, meta, { resumeCommand }).meta;
+    }
+    writeProviderTeamsState(meta);
+  }
+  const { root, source } = chooseRoot();
   if (!root) throw new Error(joinedTeamRootRefusal(row.team, row.label));
   let minted;
   try { minted = run(["aw", "team", "invite", flagEq("--team-id", row.team), "--json"], root, 45000, { secretSafe: true, failureDetail: true }); }
@@ -1349,11 +1788,27 @@ function mintJoinedTeam(row, meta, { current = false } = {}) {
   }
   const inv = parseSecretJson(minted, "aw team invite");
   if (!inv?.token || typeof inv.token !== "string") throw new Error(`aw team invite returned no usable token for ${row.label}`);
-  const { joined } = acceptConnectVerifyJoinedTeam({ label: row.label, token: inv.token, identityHome, alias: instance || meta.alias, expectedTeam: row.team, root, cwd: home, serviceDocs: [inv] });
-  const next = { ...meta, joinedTeams: [...joinedTeamsOf(meta), joined] };
-  return { meta: next, joined, changed: true };
+  const alias = instance || meta.alias;
+  // Write-ahead: the intended join is on disk before aw accepts it, so a hook
+  // killed after the accept leaves it for the next join, leave or retire.
+  // An identity already in the home is not this join's (aw refuses to
+  // overwrite it), so it is never recorded as one to settle.
+  const preexisting = holdsIdentity(identityHome);
+  const hadState = existsSync(providerTeamsFile());
+  if (!preexisting) writeProviderTeamsState({ ...meta, pendingJoins: [...pendingJoinsOf(meta), { label: row.label, team: row.team, identityHome, alias, root, at: new Date().toISOString() }] });
+  let joined;
+  try { ({ joined } = acceptConnectVerifyJoinedTeam({ label: row.label, token: inv.token, identityHome, alias, expectedTeam: row.team, root, cwd: home, serviceDocs: [inv] })); }
+  catch (e) {
+    if (preexisting) throw e;
+    if (holdsIdentity(identityHome)) throw new Error(`${e.message || e}; the join of ${row.label} stays recorded as unfinished: ${unfinishedJoinFix(row.label)}`);
+    // Confirmed: aw left no identity, so nothing was joined and nothing needs releasing.
+    try { rmdirSync(identityHome); } catch { /* never created, or holds what is not an identity */ }
+    if (hadState) writeProviderTeamsState(meta); else rmSync(providerTeamsFile(), { force: true });
+    throw e;
+  }
+  return { meta: { ...meta, joinedTeams: [...joinedTeamsOf(meta), joined] }, joined, changed: true };
 }
-const rootListsTeam = (root, team) => teamIdsOf(readTeamsAt(root)).includes(team);
+const rootListsTeam = (root, team) => teamIdsOf(readTeamsAt(root)).some((id) => sameAwebTeamId(String(id), team));
 /** `join --plan`: the root each label's join would mint from, chosen exactly as
  *  the join chooses it, with no invite, identity or state written. */
 function joinPlan(rows, meta) {
@@ -1374,13 +1829,16 @@ function outputJoinPlan(plan, json) {
 function leaveJoinedTeam(label, meta) {
   const joined = joinedTeamsOf(meta);
   const entry = joined.find((j) => j.label === label);
-  if (!entry) return { meta, changed: false };
+  if (!entry) {
+    const pending = pendingJoinsOf(meta).find((p) => p.label === label);
+    return pending ? releasePendingJoin(pending, meta) : { meta, changed: false };
+  }
   const { released, receipt } = cleanupJoinedIdentity(entry, meta.alias || instance, home);
   return { meta: { ...meta, joinedTeams: joined.filter((j) => j.label !== label) }, changed: true, released, receipt };
 }
 function awebRootForTeam(team) {
   const declared = declaredRootCandidate(team);
-  if (team && team !== defaultTeamId()) return joinedTeamRootProblem(team, declared) ? undefined : resolve(declared.root);
+  if (team && !sameAwebTeamId(team, defaultTeamId())) return joinedTeamRootProblem(team, declared) ? undefined : resolve(declared.root);
   if (declared && isAbsolute(declared.root) && existsSync(join(resolve(declared.root), ".aw"))) return resolve(declared.root);
   if (declared?.declared) return undefined;
   const candidate = rootSettingCandidate(team);
@@ -1402,7 +1860,7 @@ function joinedTeamRootProblem(team, declared = declaredRootCandidate(team)) {
   const canonical = (path) => { try { return realpathSync(path); } catch { return resolve(path); } };
   if (canonical(root) === canonical(home) || (existsSync(join(home, ".aw")) && canonical(join(root, ".aw")) === canonical(join(home, ".aw")))) return tried("the instance home's own identity");
   if (!existsSync(join(root, ".aw"))) return tried("no .aw");
-  if (!teamIdsOf(readTeamsAt(root)).map(String).includes(team)) return tried(`aw team list there: not a member of ${team}`);
+  if (!teamIdsOf(readTeamsAt(root)).map(String).some((id) => sameAwebTeamId(id, team))) return tried(`aw team list there: not a member of ${team}`);
   return undefined;
 }
 function joinedTeamRootRefusal(team, label) {
@@ -1439,7 +1897,26 @@ function rosterKind({ scope, workspace, rootPaths }) {
   if (/\/agents\/[^/]+\/instances\/[^/]+\/?$/.test(path)) return { kind: "instance", kindFrom: "workspace path" };
   return { kind: "unknown", kindFrom: null };
 }
-function rosterDocument({ team, certificates, presence, problems, root }) {
+/** What a text line says about a member's retired entry beyond its JSON (the reason it shows
+ *  no command, or that its command has no --registry), keyed by the entry's JSON object. */
+const retiredLineNotes = new WeakMap();
+/** A recorded certificate as the roster shows it. The command is rebuilt from the entry's
+ *  validated team, certificate id and registry, never its stored `command` (any agent on the
+ *  host can write the record); an entry it cannot be built from shows none, and says why in
+ *  `problems`. The record is a claim, not proof: a member whose workspace presence reads
+ *  active is shown as a conflict (`conflict: "workspace-active"`) with no command, so the
+ *  controller checks before removing a live member. Only an active workspace makes the
+ *  conflict: an offline one, none, or presence that could not be read keeps the mark. */
+function retiredProjection(leftover, alias, problems, workspace) {
+  const problem = controllerCleanupProblem(leftover);
+  const conflict = workspace?.status === "active" ? "workspace-active" : undefined;
+  const projection = { at: leftover.retiredAt ?? null, instance: leftover.instance ?? null, command: problem || conflict ? null : controllerCleanupCommand(leftover), ...(conflict ? { conflict } : {}) };
+  if (problem) problems.push({ source: "retired-record", message: `the record entry for ${alias}'s certificate is malformed (${problem}); no command to remove it is shown` });
+  if (conflict) problems.push({ source: "retired-record", message: `the record entry for ${alias}'s certificate marks it retired, but its workspace is active: check before removing; no command to remove it is shown` });
+  retiredLineNotes.set(projection, conflict ? { conflict } : problem ? { problem } : { registryRecorded: leftover.registry != null });
+  return projection;
+}
+function rosterDocument({ team, certificates, presence, problems, root, retired = [] }) {
   const certificatesComplete = !!certificates;
   const presenceComplete = !!presence && presence.team_has_more !== true && (presence.team || []).length < ROSTER_PRESENCE_LIMIT;
   if (presence && !presenceComplete) problems.push({ source: "presence", message: `aw workspace status reports more than ${ROSTER_PRESENCE_LIMIT} workspaces; only the first ${ROSTER_PRESENCE_LIMIT} were read` });
@@ -1458,7 +1935,11 @@ function rosterDocument({ team, certificates, presence, problems, root }) {
     const better = !e.workspace || (w.status === "active" && e.workspace.status !== "active") || (w.status === e.workspace.status && String(w.last_seen || "") > String(e.workspace.last_seen || ""));
     if (better) { e.workspace = w; e.self = w === self; }
   }
+  // A certificate this host's retires recorded, matched on team and certificate id, never on
+  // alias alone: aliases are reused.
+  const retiredByCertificate = new Map(retired.filter((r) => sameAwebTeamId(r.team, team)).map((r) => [r.certificateId, r]));
   const members = [...entries.values()].map(({ alias, certificate, workspace, self: isSelf }) => {
+    const leftover = typeof certificate?.certificate_id === "string" ? retiredByCertificate.get(certificate.certificate_id) : undefined;
     const scopes = [certificate?.identity_scope, workspace?.agent_identity_scope].filter(Boolean);
     const identityScope = scopes.includes("global") ? "global" : scopes[0] || null;
     return {
@@ -1470,6 +1951,7 @@ function rosterDocument({ team, certificates, presence, problems, root }) {
       status: workspace ? (workspace.status === "active" ? "active" : "offline") : presenceComplete ? "no-workspace-record" : "presence-unknown",
       sources: [certificate ? "certificate" : null, workspace ? "presence" : null].filter(Boolean),
       presence: workspace ? { status: workspace.status || null, hostname: workspace.hostname || null, lastSeen: workspace.last_seen || null } : null,
+      ...(leftover ? { retired: retiredProjection(leftover, alias, problems, workspace) } : {}),
     };
   });
   members.sort((a, b) => ROSTER_KINDS.indexOf(a.kind) - ROSTER_KINDS.indexOf(b.kind) || a.alias.localeCompare(b.alias));
@@ -1487,6 +1969,15 @@ function rosterLine(m) {
   const since = m.presence?.lastSeen ? sinceText(m.presence.lastSeen) : undefined;
   const status = m.status === "active" ? "active" : m.status === "offline" ? (since ? `seen ${since}` : "offline") : ROSTER_STATUS_TEXT[m.status];
   const kind = ROSTER_KIND_FROM_TEXT[m.kindFrom] ? `${m.kind} (${ROSTER_KIND_FROM_TEXT[m.kindFrom]})` : m.kind;
+  const notes = m.retired ? retiredLineNotes.get(m.retired) : undefined;
+  if (notes?.conflict) return `${rosterLineHead(m, status, kind)}; recorded as retired, but its workspace is active: check before removing`;
+  const cleanup = !notes ? ""
+    : notes.problem ? `; its record entry is malformed (${notes.problem}), so no command to remove it is shown`
+      : `; the team controller removes it with: ${m.retired.command}${notes.registryRecorded ? "" : " (the registry was not recorded; the command omits --registry)"}`;
+  const retired = m.retired ? `; retired by OATS on this host${typeof m.retired.at === "string" && /^\d{4}-\d{2}-\d{2}/.test(m.retired.at) ? ` ${m.retired.at.slice(0, 10)}` : ""}${cleanup}` : "";
+  return `${rosterLineHead(m, status, kind)}${retired}`;
+}
+function rosterLineHead(m, status, kind) {
   return `${[`${m.alias} — ${kind}`, status, m.presence?.hostname, m.address, m.role ? `role ${m.role}` : null].filter(Boolean).join(", ")} [${m.sources.join(", ")}]`;
 }
 /** The root this deployment already holds `team` in, before an invite is redeemed (#56):
@@ -1494,7 +1985,8 @@ function rosterLine(m) {
  *  read with a reader that throws: membership that cannot be read is never "not a member". */
 function deploymentMemberRoot(team) {
   const roots = settings.roots && typeof settings.roots === "object" && !Array.isArray(settings.roots) ? settings.roots : {};
-  const candidates = [roots[team], settings.root, team === defaultTeamId() ? rootSettingCandidate(team)?.root : undefined]
+  const key = teamKeyIn(roots, team);
+  const candidates = [key !== undefined ? roots[key] : undefined, settings.root, sameAwebTeamId(team, defaultTeamId()) ? rootSettingCandidate(team)?.root : undefined]
     .filter((root) => typeof root === "string" && root.trim() && isAbsolute(root.trim())).map((root) => resolve(root.trim()));
   for (const root of [...new Set(candidates)]) {
     if (!existsSync(join(root, ".aw"))) continue;
@@ -1504,7 +1996,7 @@ function deploymentMemberRoot(team) {
     if (!Array.isArray(listed?.memberships || listed?.teams)) {
       throw Object.assign(new Error(`membership at ${root} could not be read; nothing redeemed`), { code: "E_SETUP_MEMBERSHIP" });
     }
-    if (teamIdsOf(listed).map(String).includes(team)) return root;
+    if (teamIdsOf(listed).map(String).some((id) => sameAwebTeamId(id, team))) return root;
   }
   return undefined;
 }
@@ -1550,29 +2042,30 @@ function outputTeamsDocument(doc, json) {
   for (const warning of doc.warnings || []) console.log(`warning: ${warning}`);
 }
 const actionWarning = (warning) => String(warning || "").slice(0, 300);
-const registryOrigin = (value) => typeof value === "string" && /^https?:\/\//i.test(value.trim()) ? value.trim() : undefined;
+/** A registry origin read from a home's state: a plain origin (scheme, host, port), else
+ *  undefined, so an invalid one is "could not be determined" exactly as a missing one is. */
+const registryOrigin = (value) => typeof value === "string" ? registryOriginUrl(value.trim()) : undefined;
 function registryOriginFromJoinedState(row, match, listed) {
   const fromJson = registryOrigin(match?.registry_origin || match?.registry_url || match?.registry || match?.awid_registry_url || listed?.registry_origin || listed?.registry_url || listed?.registry || listed?.awid_registry_url);
   if (fromJson) return { registry: fromJson };
-  for (const file of ["identity.yaml", "teams.yaml", "workspace.yaml", "registry.yaml", "config.yaml"]) {
-    try {
-      const text = readFileSync(join(row.identityHome, file), "utf8");
-      for (const key of ["awid_registry_url", "registry_origin", "registry_url", "registry"]) {
-        const found = registryOrigin(yamlScalar(text, key));
-        if (found) return { registry: found };
-      }
-    } catch { /* keep looking */ }
-  }
+  // Then aw's order (see membershipRegistry): the membership's own registry_url, else
+  // discovery from its aweb_url, else aw's default, which AWID_REGISTRY_URL sets. A
+  // registry anywhere else in the home is one aw does not use for this team.
+  const membership = membershipRegistry(join(row.identityHome, "teams.yaml"), row.team, "the membership's service");
+  if (membership.kind === "registry") return { registry: membership.registry };
+  if (membership.kind === "not-plain" || membership.kind === "discovered") return { registry: null, registryError: membership.registryError };
   const fromEnv = registryOrigin(process.env.AWID_REGISTRY_URL);
   if (fromEnv) return { registry: fromEnv };
   return { registry: null, registryError: "registry origin could not be determined from the joined identity; command omits --registry and aw will use its default" };
 }
 function certificateIdFromJoinedCertificateFile(row) {
-  const certFile = join(row.identityHome, "team-certs", `${String(row.team || "").replace(/:/g, "__")}.pem`);
+  const relative = teamCertificateRelativePath(row.team);
+  if (!relative) return { found: false };
+  const certFile = join(row.identityHome, relative);
   if (!existsSync(certFile)) return { found: false };
   try {
     const cert = JSON.parse(readFileSync(certFile, "utf8"));
-    if (cert?.team_id !== row.team) return { found: false, error: `certificate file ${certFile} is for ${cert?.team_id || "unknown team"}, not ${row.team}` };
+    if (!sameAwebTeamId(cert?.team_id, row.team)) return { found: false, error: `certificate file ${certFile} is for ${cert?.team_id || "unknown team"}, not ${row.team}` };
     const certificateId = typeof cert?.certificate_id === "string" ? cert.certificate_id.trim() : "";
     if (!certificateId) return { found: false, error: `certificate file ${certFile} did not contain a certificate_id for ${row.team}` };
     return { found: true, certificateId };
@@ -1586,7 +2079,7 @@ function certificateIdForJoinedTeam(row) {
   try {
     listed = parseAwJson(run(awWithIdentity(row.identityHome, ["id", "team", "list", "--json"]), home, 60000), "aw id team list");
     const memberships = teamMemberships(listed);
-    match = memberships.find((m) => String(m?.team_id || m?.id || m?.team || m) === row.team);
+    match = memberships.find((m) => sameAwebTeamId(String(m?.team_id || m?.id || m?.team || m), row.team));
   } catch (e) {
     listError = actionWarning(e.message || e);
   }
@@ -1607,14 +2100,15 @@ function failedLeaveDisposition(row, error) {
   const notHosted = typeof error === "string" ? error === "team_not_hosted" : error?.nativeReason === "team_not_hosted";
   const reason = notHosted ? "team_not_hosted" : actionWarning(text);
   const data = { label: row.label, team: row.team, alias: row.alias || instance || null, ...certificateIdForJoinedTeam(row), at: new Date().toISOString(), reason, ...(reason === "team_not_hosted" ? { cleanup: "controller" } : {}) };
-  const teamName = String(row.team || "").split(":")[0] || row.team;
-  const namespace = String(row.team || "").includes(":") ? String(row.team).split(":").slice(1).join(":") : "<namespace>";
-  const registryArg = data.registry ? ` --registry ${data.registry}` : "";
-  const command = reason === "team_not_hosted" && data.certificateId ? `aw id team remove-member --namespace ${namespace} --team ${teamName} --cert-id ${data.certificateId}${registryArg} --json` : undefined;
+  // Built from validated values only (lib/retired-certificates.mjs), as the roster rebuilds it.
+  const cleanup = { team: row.team, certificateId: data.certificateId, registry: data.registry };
+  const command = reason === "team_not_hosted" && data.certificateId ? controllerCleanupCommand(cleanup) : undefined;
   const ownerCommand = command
     ? `; controller cleanup: ${command}${data.registryError ? ` (${data.registryError})` : ""}`
     : reason === "team_not_hosted"
-      ? `; controller cleanup needs the certificate id, but ${data.certificateIdError || "it could not be read"}${data.registryError ? ` (${data.registryError})` : ""}`
+      ? data.certificateId
+        ? `; controller cleanup has no command: the certificate read for it is unusable (${controllerCleanupProblem(cleanup)})`
+        : `; controller cleanup needs the certificate id, but ${data.certificateIdError || "it could not be read"}${data.registryError ? ` (${data.registryError})` : ""}`
       : "";
   return { data: { ...data, ...(command ? { command } : {}) }, warning: `joined team ${row.label} cleanup failed: ${data.reason}${ownerCommand}` };
 }
@@ -1652,6 +2146,9 @@ function runTeamsCommand(kind) {
       // What already happened travels with the failure, so a caller can
       // reconcile (the operation envelope carries it as error.details).
       e.partial = { actions };
+      // A failed row may have written state of its own (a pending join kept
+      // or dropped): what is on disk is what the final write keeps.
+      meta = withProviderTeams(meta);
       throw e;
     } finally {
       const synced = syncWakeReceive(meta);
@@ -1726,7 +2223,7 @@ if (event === "launch") {
   // The delivery path is decided afresh at every start: the runtime may have
   // changed since the last one (OATS_PREVIOUS_RUNTIME), and the setting wins
   // over what the meta recorded.
-  const started = startedMeta(JSON.parse(process.env.OATS_META || "{}"));
+  const started = retainedSeatAsLocal(startedMeta(JSON.parse(process.env.OATS_META || "{}")));
   // Only GLOBAL grants get the new default; ordinary LOCAL launch/join sync
   // must not enter the renewal helper's retained-grant early return.
   const globalLaunch = identityMode === "global" || started.identity?.mode === "global";
@@ -1748,7 +2245,11 @@ if (event === "launch") {
     const note = channelCacheNote(configDir && clearChannelFailure(configDir), "this start's Claude config dir is not known (the home's recorded CLAUDE_CONFIG_DIR is not a literal path)");
     if (note) outNotes.push(note);
   }
-  syncPrimaryDelivery(primaryIdentityHomeOf(started));
+  // A pending join is settled only by an explicit join or leave: a start
+  // changes nothing remote for it and names both (awebai/oats-aweb#217).
+  for (const p of pendingJoinsOf(withProviderTeams(started))) outNotes.push(`unfinished join of team ${p.label} (${p.team}) since ${p.at || "an earlier run"}: its membership may exist in ${p.identityHome} but this home has not recorded it; ${unfinishedJoinFix(p.label)}`);
+  requireWakeBroker();
+  syncPrimaryDelivery(primaryIdentityHomeOf(started), { retained: started.retained === true });
   if (globalLaunch) globalGrantRenew(started);
   let oldMeta = withProviderTeams(started);
   const joined = joinedTeamsOf(oldMeta);
@@ -1759,7 +2260,7 @@ if (event === "launch") {
       // A joined team that is now the live default stays joined: the primary
       // identity is still in the team it was spawned in, and a home moves only
       // when it is respawned.
-      if (row.label === defaultTeamLabel() && row.team === defaultTeamId()) {
+      if (row.label === defaultTeamLabel() && sameAwebTeamId(row.team, defaultTeamId())) {
         warnings.push(`kept joined team ${row.label}: it is now the default team, and this home's primary identity is still in ${defaultTeamObject(oldMeta)?.label || "its spawn team"}; respawn to move it`);
         continue;
       }
@@ -1801,8 +2302,10 @@ if (event === "launch") {
   if (untested) outNotes.push(`aw-newer-than-tested — ${untested}`);
   if (identityMode === "global" && identitySettings.source) fatal('identity.mode "global" cannot be combined with identity.source; use identity.mode "local" with identity.source for a retained seat, or identity.mode "global" with identity.resident for a resident grant');
   if (identityMode === "global" && requestedJoinLabels().length) fatal('settings.oats.aweb.join is supported only with local per-team identities; identity.mode "global" is explicit resident-grant mode');
+  if (identityMode === "global") checkedGrantTTL(); // a setting that cannot be used refuses before the broker is asked
+  requireWakeBroker();
   if (identityMode === "global") globalGrantSpawn();
-  if (identityMode === "local" && settings.identity && typeof settings.identity === "object" && settings.identity.source) retainedSeatSpawn(String(settings.identity.source), settings.identity.takeOver === true);
+  if (retainedSourceSetting !== undefined) retainedSeatSpawn(retainedSourceSetting, identityFlags.takeOver);
   let joinRows;
   try { joinRows = validateJoinLabels(requestedJoinLabels()); }
   catch (e) { fatal(e.message || e); }
@@ -1817,6 +2320,15 @@ if (event === "launch") {
     const primary = resolvePrimaryTeam();
     const { team, root } = primary;
     const warnings = [...primary.warnings];
+    // Write-ahead (awebai/oats-aweb#240): aw registers the identity before it
+    // writes the binding, and the hook (or aw) can be killed between the two, so
+    // the intended mint is on disk before aw starts. Retire finds it there when
+    // this hook never answers, and in the failure's meta when it does. A home that
+    // already holds identity material gets none: aw refuses it before it does
+    // anything (cmd/aw/connect.go ensureConnectTargetClean), and what is there is
+    // not this mint's.
+    const preexisting = ["signing.key", "identity.yaml", "team-certs", "workspace.yaml"].some((name) => existsSync(join(home, ".aw", name)));
+    const intent = preexisting ? undefined : writePendingMint({ team, alias: instance, root, at: new Date().toISOString() });
     let raw;
     try {
       // ONE aw process mints the identity: it creates an invite from the root
@@ -1836,6 +2348,7 @@ if (event === "launch") {
       if (joinedLate(home)) {
         const late = workspaceAliasOf(home);
         minted = { team, alias: late };
+        dropPendingMint(); // the identity is in this answer's meta, and its binding in the home
         fatal(`aw init --join-from was reported failed (${e.message || e}) but the home now holds a bound identity "${late}" on ${team}; reported for compensation so it is retired, not orphaned`, minted);
       }
       // Another agent holds the alias in this team: an instance of that name
@@ -1843,17 +2356,35 @@ if (event === "launch") {
       // that, and the remedy, instead of relaying a bare join error.
       // aw's --json error envelope names the refusal by a fixed code; only
       // codes on AW_ERROR_CODES are read, and never its message.
+      // A refusal aw confirms registered nothing, and only then does its intent go:
+      // the server's refusal by its code in aw's --json envelope (an unknown invite,
+      // an alias another member holds), or a failure to create the root's invite,
+      // which aw reports before it writes the member's key. The broad aliasConflict
+      // match below chooses the text only: it also matches a path or a disk error.
+      const refused = e.awErrorCode === "unknown_or_invalid" || awAliasRefusal(e.stdout) || (e.inviteNotCreated && !existsSync(join(home, ".aw", "signing.key")));
+      if (refused) dropPendingMint();
       if (e.awErrorCode === "unknown_or_invalid") {
         // The fixed diagnosis first: fatal keeps 300 characters, and a team id can be long.
         fatal(`the invite aw made was refused (unknown_or_invalid), most likely because the host's aw is newer than its server; the server's aweb needs upgrading, or the host's aw pinned to ${AW_TESTED} (\`npm i -g @awebai/aw@${AW_TESTED}\`) if no deployment on this host needs a newer one. Team: ${team}`);
       }
+      // An alias refusal aw did not confirm by its code may be another failure whose
+      // text only looks like one, after the registration: say so, and answer the
+      // intent for retire to settle.
+      if (e.aliasConflict && !refused && intent) fatal(`aw init --join-from failed with what may be a refusal of alias "${instance}" that aw did not confirm by its code, so whether it registered an identity is unknown and retire settles the recorded mint; spawn with a different --name. Team: ${team}`, { pendingMint: intent });
       if (e.aliasConflict) {
+        const refusal = `alias "${instance}" already holds a certificate on this team, so no identity could be minted: another machine's instance has that name, or a retired one still holds it; spawn with a different --name. Team: ${team}`;
+        // A certificate a retire on this host recorded for this alias and team
+        // (lib/retired-certificates.mjs): a pointer to the roster, never a command.
+        // The roster is the one place that decides whether the controller's command
+        // is shown, after it checks the member's presence (a record is a claim).
         // The fixed text first: fatal keeps 300 characters, and a team id can be long.
-        fatal(`alias "${instance}" already holds a certificate on this team, so no identity could be minted: another machine's instance has that name, or a retired one still holds it; spawn with a different --name. Team: ${team}`);
+        if (!hasRetiredCertificateFor(team, instance)) fatal(refusal);
+        out({ warning: `oats-aweb: ${refusal}; this host's record names a certificate a retire left for that alias and team: see \`oats aweb roster\`, which shows the team controller's command to remove it only after checking the member's presence` }, 1);
       }
       throw e;
     }
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) fatal("aw init --join-from returned no usable result, so no identity could be minted", minted);
+    // aw exited 0, so it may have written the binding: the intent stays for retire.
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) fatal("aw init --join-from returned no usable result, so no identity could be minted", intent ? { pendingMint: intent } : undefined);
     // The RESPONSE is not a safe place to take strings from: whatever is copied
     // into meta and the briefing is printed on exit 0 (reviewer-a6aa1c5). Accept
     // a field only if it is a plausible value of its own kind; otherwise fall
@@ -1874,8 +2405,11 @@ if (event === "launch") {
     // External state now exists. Record it immediately so any later failure can
     // still report it for compensation.
     minted = { team: joined.team_id, alias: joined.alias };
+    // Every answer from here carries it in its meta; a hook killed before it answers
+    // leaves the binding aw wrote, which retire finds by itself.
+    dropPendingMint();
     const alias = joined.alias;
-    const mismatch = joined.team_id !== team
+    const mismatch = !sameAwebTeamId(joined.team_id, team)
       ? ` [WARNING: joined ${joined.team_id}, expected ${team}]` : "";
     // Runtime integration: for Claude Code sessions the aweb-channel plugin
     // carries real-time push events. This hook does NOT install it. The plugin
@@ -1902,13 +2436,16 @@ if (event === "launch") {
       env,
       brief: `Comms: you have an aweb identity — alias "${alias}" on team ${joined.team_id}, ${defaultTeamBrief}.${mismatch}${deliveryBrief}${joinedBrief} Load the oats-aweb skill before messaging: \`oats aweb teams --json\` shows your teams, \`oats aweb roster\` the team's members and workspaces, each labelled.`,
       ...(launch ? { launch } : {}),
-      ...(joined.team_id !== team ? { warning: `oats-aweb: team mismatch — joined ${joined.team_id}, expected ${team}` } : warnings.length ? { warning: warnings.join(" | ") } : {}),
+      ...(!sameAwebTeamId(joined.team_id, team) ? { warning: `oats-aweb: team mismatch — joined ${joined.team_id}, expected ${team}` } : warnings.length ? { warning: warnings.join(" | ") } : {}),
     });
   } catch (e) {
     // A join may already have created a REMOTE identity before the failure.
     // Hand it back as meta so the kernel's compensation can delete it — losing
     // it here would strand a roster entry no one owns.
-    fatal(`identity minting failed: ${e.message || e}`, minted && joinedTeamsOf(spawnMeta).length ? { ...minted, joinedTeams: joinedTeamsOf(spawnMeta) } : minted);
+    const pendingJoins = minted ? readProviderTeamsState().pendingJoins : [];
+    // No identity recorded: the mint's intent, while it stands, is what retire acts on.
+    const pendingMint = minted ? undefined : readPendingMint().intent;
+    fatal(`identity minting failed: ${e.message || e}`, minted && (joinedTeamsOf(spawnMeta).length || pendingJoins.length) ? { ...minted, ...(joinedTeamsOf(spawnMeta).length ? { joinedTeams: joinedTeamsOf(spawnMeta) } : {}), ...(pendingJoins.length ? { pendingJoins } : {}) } : minted || (pendingMint ? { pendingMint } : undefined));
   }
 } else if (event === "retire") {
   let meta = withProviderTeams(JSON.parse(process.env.OATS_META || "{}"));
@@ -1924,8 +2461,13 @@ if (event === "launch") {
     }
   } catch { retireWarnings.push('oats.aweb attention claim could not be cleared'); }
   const pendingControllerCleanup = [];
+  // The registry each cleanup's command was built with, recorded beside it but kept out of the meta.
+  const cleanupRegistries = new Map();
   const rememberControllerCleanup = (data) => {
-    if (data?.cleanup === "controller") pendingControllerCleanup.push({ label: data.label, team: data.team, alias: data.alias, certificateId: data.certificateId, ...(data.command ? { command: data.command } : {}) });
+    if (data?.cleanup !== "controller") return;
+    const cleanup = { label: data.label, team: data.team, alias: data.alias, certificateId: data.certificateId, ...(data.command ? { command: data.command } : {}) };
+    pendingControllerCleanup.push(cleanup);
+    cleanupRegistries.set(cleanup, data.registry ?? null);
   };
   // A joined team whose leave failed for any reason but team_not_hosted (whose
   // controller cleanup needs no member key) can only be left with the key in
@@ -1936,8 +2478,27 @@ if (event === "launch") {
   // teams.json still lists the team, and its default-retire marker stops a
   // second self-delete of the default identity.
   const failedLeaves = [];
-  const retiredMeta = (fields = {}) => ({ ...fields, ...(pendingControllerCleanup.length ? { pendingControllerCleanup } : {}) });
+  const retiredMeta = (fields = {}) => ({ ...fields, ...(pendingControllerCleanup.length ? { pendingControllerCleanup } : {}), ...(pendingJoinsOf(meta).length ? { pendingJoins: pendingJoinsOf(meta) } : {}) });
+  // Each controller cleanup is also recorded at the deployment, for `oats aweb roster` on
+  // this host (lib/retired-certificates.mjs). Best effort: a failure is one more warning,
+  // never another exit code or meta.
+  const recordControllerCleanup = () => {
+    const entries = pendingControllerCleanup.filter((c) => c.certificateId && c.command);
+    if (!entries.length) return;
+    let deployment;
+    try { deployment = selectedDeployment(process.env); }
+    catch { outNotes.push("could not record the controller cleanup on this host: the deployment could not be resolved"); return; }
+    const retiredAt = new Date().toISOString();
+    const { cause } = recordRetiredCertificates(deployment, entries.map((c) => ({ team: c.team, certificateId: c.certificateId, registry: cleanupRegistries.get(c) ?? null, alias: c.alias, instance: instance || null, retiredAt })));
+    if (cause) outNotes.push(`could not record the controller cleanup on this host: ${cause}`);
+  };
   if (hasStaleTeamSetting) retireWarnings.push(TEAM_SETTING_MESSAGE);
+  // A retained seat's spawn that did not answer (killed, or failed after the
+  // connect) leaves no meta, but the home's captured settings still name its
+  // identity.source: the very setting spawn took the retained route on. Such a
+  // home is retired as a retained seat, never through the self-delete (#228).
+  const retainedSource = retainedSourceSetting === undefined ? undefined : String(retainedSourceSetting);
+  if (!meta.retained && retainedSource) meta = { ...meta, retained: true, source: retainedSource, lock: seatLockPath(retainedSource), alias: meta.alias || workspaceAliasOf(home), spawnUnanswered: true };
   // A retained seat: release the lock and leave the identity alone. Never
   // aw workspace delete (it would soft-delete the standing identity's row)
   // and never team retire; the source .aw stays until a human removes it.
@@ -1946,7 +2507,11 @@ if (event === "launch") {
   // way out of this branch awaits it through finish().
   const deregistration = brokerDeliveredTo(meta) && (meta.retained || meta.identity?.mode !== "global") ? wakeDeregisterStarted(home) : undefined;
   const finish = async (o, code) => {
+    // The deregistration is awaited first: its kill at the hook's deadline is a
+    // timer, which the record's synchronous lock wait below would hold off.
     if (deregistration && !(await deregistration)) process.stderr.write("oats-aweb: aw wake deregister failed; the broker treats a retired home as inactive on its own\n");
+    try { recordControllerCleanup(); }
+    catch { outNotes.push("could not record the controller cleanup on this host: the record could not be written"); }
     if (failedLeaves.length) {
       const incomplete = o.meta.retired === false && o.meta.reason !== "nothing-to-delete";
       o = { ...o, meta: { ...o.meta, ...(incomplete ? {} : { retired: false, reason: "joined-team-leave-failed" }), failedLeaves } };
@@ -1962,7 +2527,7 @@ if (event === "launch") {
     catch (e) {
       const why = String(e.message || e).slice(0, 200);
       // With no seat in the meta either, nothing names this seat's grants.
-      if (!meta.identity?.seat) out({ meta: { retired: false, reason: "seat-record-unreadable", ...(meta.identity ? { identity: meta.identity } : {}) }, warning: `oats-aweb: could not check for orphaned grants: the seat record is unreadable (${why}); this seat may hold grants that stay valid` }, 1);
+      if (!meta.identity?.seat) await finish({ meta: { retired: false, reason: "seat-record-unreadable", ...(meta.identity ? { identity: meta.identity } : {}) }, warning: `oats-aweb: could not check for orphaned grants: the seat record is unreadable (${why}); this seat may hold grants that stay valid` }, 1);
       outNotes.push(`the seat record is unreadable (${why}); retired from the seat in the meta`);
     }
     if (meta.identity?.mode === "global" || seatRecord) globalGrantRetire(withRecordedSeat(meta, seatRecord));
@@ -1971,14 +2536,102 @@ if (event === "launch") {
     try { meta = leaveJoinedTeam(joined.label, meta).meta; }
     catch (e) { const failed = failedLeaveDisposition(joined, e); retireWarnings.push(failed.warning); rememberControllerCleanup(failed.data); if (failed.data.cleanup !== "controller") failedLeaves.push(joined.label); }
   }
+  // A join killed or failed after its accept is released the same way
+  // (adopted, then left), with the same rule for keeping the key.
+  for (const pending of pendingJoinsOf(meta)) {
+    try { meta = releasePendingJoin(pending, meta).meta; }
+    catch (e) { const failed = failedLeaveDisposition(pending, e); retireWarnings.push(failed.warning); rememberControllerCleanup(failed.data); if (failed.data.cleanup !== "controller") failedLeaves.push(pending.label); }
+  }
   // A native (channel/pi) home registered with the broker only for its joined
   // teams; a broker home was deregistered above.
   if (meta.wakeJoined && !brokerDeliveredTo(meta)) { if (!wakeDeregister(home)) retireWarnings.push("aw wake deregister failed; the broker treats a retired home as inactive on its own"); }
   meta = { ...meta, wakeJoined: false };
   writeProviderTeamsState(meta);
   if (meta.retained) {
-    if (meta.lock) { try { rmSync(meta.lock, { force: true }); } catch { /* the lock may already be gone */ } }
-    const retainedWarning = `released the retained identity "${meta.alias}" (lock ${meta.lock || "?"} removed); the identity itself and ${meta.source || "its source"} are untouched${meta.tookOverFrom ? `; this seat had taken over from ${meta.tookOverFrom}` : ""}`;
+    // The lock is released only when it names this home: one another seat has
+    // taken over, or that cannot be read, is never removed here.
+    // heldHere: true when the lock names this home, false when it does not, undefined when unknown.
+    // goneAfterRead: the lock named this home at retire's read and was gone at its removal,
+    // so this home held the seat until a moment ago (the rebind below still applies).
+    let lockText = `lock ${meta.lock || "?"} removed`, heldHere = false, lockLeft = "", goneAfterRead = false;
+    if (meta.lock) {
+      // A guard or a moved-aside lock that a killed change left is reported first,
+      // whatever is at the lock's name now (lib/seat-lock.mjs). A check that fails any
+      // other way (a directory that can't be read or written) is reported below.
+      // Read under the guard (lib/seat-lock.mjs). Absent only on ENOENT: a lock that
+      // cannot be checked may still be there.
+      let leftover, unchecked, now;
+      try { now = readSeatLockGuarded(meta.lock, { who: { op: "retire", instance, home } }); }
+      catch (e) {
+        const code = /^E[A-Z]+$/.test(String(e?.code)) ? e.code : "error";
+        // The guard can't be created: no change of the lock can be made from here.
+        // A read that left anything: nothing more is done with the lock.
+        if (isSeatLockRefusal(e)) leftover = e.message;
+        else if (isSeatLockLeftovers(e)) leftover = `${e.code ? `it could not be checked (${e.code}); ` : ""}${e.recovery}`;
+        else if (e?.stage === "guard") leftover = `it could not be removed (${code})`; else unchecked = code;
+      }
+      const present = !!now?.present;
+      const holder = typeof now?.doc?.home === "string" && now.doc.home ? now.doc.home : undefined;
+      const ours = !!holder && samePath(holder, home);
+      if (leftover) { lockText = `lock ${meta.lock} left in place: ${leftover}`; heldHere = undefined; }
+      else if (unchecked) { lockText = `lock ${meta.lock} left in place: it cannot be checked (${unchecked})`; heldHere = undefined; }
+      else if (!present) lockText = `lock ${meta.lock} already gone`;
+      // Bytes that can't be read name no holder: whether this home holds it is unknown.
+      else if (now.text === null) { lockText = `lock ${meta.lock} left in place: it could not be read (${now.readError || "error"}), so whether this home holds it is unknown`; heldHere = undefined; }
+      else if (ours) {
+        heldHere = true;
+        // Removed only if it still names this home at the moment it is removed: one
+        // guarded step moves it aside, checks it and removes it, or puts back a lock
+        // another seat took over meanwhile (lib/seat-lock.mjs).
+        // A step that left anything answers its result and the leftovers: the exit
+        // status is the result's, and the warning adds them.
+        let r, left = "";
+        try { r = swapSeatLock(meta.lock, { who: { op: "retire", instance, home }, expect: (c) => c.present && typeof c.doc?.home === "string" && samePath(c.doc.home, home), next: null }); }
+        catch (e) {
+          if (isSeatLockLeftovers(e) && e.result) { r = e.result; left = `; that step left files it could not clean: ${e.recovery}`; }
+          else {
+            const code = /^E[A-Z]+$/.test(String(e?.code)) ? e.code : "error";
+            // Only a removal that failed after the step saw this home's lock (stage
+            // "remove") leaves this home holding it; any other failure came before the
+            // step checked the lock, so whether this home holds it is unknown.
+            const checked = !isSeatLockRefusal(e) && !isSeatLockLeftovers(e) && e?.stage === "remove";
+            lockText = isSeatLockRefusal(e) ? `lock ${meta.lock} left in place: ${e.message}`
+              : checked ? `lock ${meta.lock} left in place: it could not be removed (${code})`
+              : `lock ${meta.lock} left in place: it could not be checked when retire went to remove it (${code}), so whether this home holds it is unknown${isSeatLockLeftovers(e) ? `; ${e.recovery}` : ""}`;
+            if (!checked) heldHere = undefined;
+          }
+        }
+        if (r && !r.done && !r.captured.present) { lockText = `lock ${meta.lock} already gone`; heldHere = false; goneAfterRead = true; }
+        else if (r && !r.done && r.captured.text === null) { heldHere = undefined; lockText = `lock ${meta.lock} left in place: it could not be read (${r.captured.readError || "error"}) when retire went to remove it, so whether this home holds it is unknown`; }
+        else if (r && !r.done) {
+          heldHere = false;
+          lockText = `lock ${meta.lock} left in place: this seat no longer owns it (${typeof r.captured.doc?.home === "string" ? "another seat took it over" : "it cannot be read now"}), so retire did not remove it`;
+        }
+        lockLeft = left;
+      }
+      else lockText = `lock ${meta.lock} left in place: ${holder ? "it is held by another seat" : "it cannot be read"}`;
+    }
+    // A spawn that took the seat (this home held the lock) or bound it here, and
+    // did not answer, may have left the binding pointing here: aw binds on the
+    // service before it writes the local workspace.yaml, so a missing file proves
+    // nothing. Name the way back to the source. The command is printed for a
+    // person, so it holds only values that pass their own shapes.
+    let rebind = "";
+    if (meta.spawnUnanswered && (heldHere !== false || goneAfterRead || existsSync(join(home, ".aw", "workspace.yaml")))) {
+      const target = retainedSeatTarget(meta.source);
+      const plainRole = typeof target.role === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(target.role) ? target.role : undefined;
+      // Any accepted service is bound, but only a plain service URL is printed in a command.
+      const connect = plainServiceUrl(target.service) && validAwebTeamId(target.team) && (!target.role || plainRole)
+        ? `\`aw workspace connect --service=${target.service} --team=${target.team}${plainRole ? ` --role=${plainRole}` : ""}\``
+        : "`aw workspace connect` with the service, team and role in its workspace.yaml";
+      rebind = `; this seat's spawn did not finish after taking the seat, so the identity's binding may point here (if its \`aw workspace connect\` reached the service): run ${connect} from ${dirname(meta.source)} to bind it back to its source, or spawn the seat again`;
+    }
+    // A spawn that did not answer and does not hold the lock never took the seat:
+    // the lock is taken before anything is copied.
+    const released = meta.spawnUnanswered && lockText !== `lock ${meta.lock} removed`
+      ? `released nothing: ${heldHere === undefined ? "whether this home holds the retained identity's lock is unknown" : heldHere ? "the retained identity's lock is still in place" : "this home does not hold the retained identity's lock"} (${lockText}${lockLeft})`
+      : `released the retained identity "${meta.alias || "(alias not recorded)"}" (${lockText}${lockLeft})`;
+    const retainedWarning = `${released}; the identity itself and ${meta.source || "its source"} are untouched${meta.tookOverFrom ? `; this seat had taken over from ${meta.tookOverFrom}` : ""}${rebind}`;
     await finish({ meta: retiredMeta({ retired: true, retained: true, identityReleased: true, joinedTeams: joinedTeamsOf(meta), ...(meta.tookOverFrom ? { tookOverFrom: meta.tookOverFrom } : {}) }), warning: `oats-aweb: ${[...retireWarnings, retainedWarning].join(" | ")}` });
   }
   // No alias means the spawn hook never reported an identity: nothing exists to
@@ -1992,6 +2645,67 @@ if (event === "launch") {
   const completedDefaultRetire = readDefaultRetireMarker();
   if (completedDefaultRetire && (!meta.alias || completedDefaultRetire.alias === meta.alias)) {
     await finish({ meta: retiredMeta({ retired: true, aliasReusable: completedDefaultRetire.aliasReusable === true, aliasReason: completedDefaultRetire.aliasReason || "previously-retired", joinedTeams: joinedTeamsOf(meta) }), ...(retireWarnings.length ? { warning: `oats-aweb: ${retireWarnings.join(" | ")}` } : completedDefaultRetire.aliasReusable === true ? {} : { warning: `oats-aweb: workspace "${completedDefaultRetire.alias || meta.alias}" was already deleted but its alias was not released (${completedDefaultRetire.aliasReason || "previously-retired"}); ${ALIAS_UNRELEASED_REMEDY}` }) });
+  }
+  // A mint killed or failed after aw may have registered the identity, with no bound
+  // identity in the home (awebai/oats-aweb#240). aw writes the member's key before it
+  // registers and the binding last, so such a home holds the key, or nothing, and no
+  // binding: `aw workspace delete` cannot run from it. Retire never runs `aw workspace
+  // connect` to finish a half-done mint (that would re-prepare a pending operation and
+  // add a remote effect): it reads the team's members from the root the spawn minted
+  // from, and a certificate is this mint's only when its member_did_key is the home
+  // key's did:key.
+  // The read a person runs at the root: aw there resolves the same registry the hook passed.
+  const membersRead = (team) => `\`aw id team members --team-id=${team} --json\``;
+  const retirePendingMint = async ({ team, alias, root: intendedRoot }) => {
+    const said = (text) => `oats-aweb: ${[...retireWarnings, text].join(" | ")}`;
+    const root = intendedRoot && existsSync(join(intendedRoot, ".aw")) ? intendedRoot : awebRootForTeam(team);
+    const where = root ? ` in ${lockField(root) || "the team's root"}` : " in a root that is a member of the team";
+    let doc, why, registry = null, registryError;
+    if (!root) why = "no root that holds the team is on this host";
+    else ({ registry = null, registryError } = mintRegistryForTeam(root, team));
+    if (root) {
+      try {
+        doc = parseAwJson(run(["aw", "id", "team", "members", flagEq("--team-id", team), ...(registry ? [flagEq("--registry", registry)] : []), "--json"], root, 60000), "aw id team members");
+        if (!Array.isArray(doc?.members)) { doc = undefined; why = "aw id team members returned JSON without a members list"; }
+      } catch (e) { why = String(e.message || e).replace(/\s+/g, " ").trim().slice(0, 200); }
+    }
+    // Unknown: the home, its key and the intent stay for the retry.
+    if (!doc) await finish({ meta: retiredMeta({ retired: false, reason: "mint-outcome-unknown", pendingMint: { team, alias, root: intendedRoot } }), warning: said(`whether the interrupted mint registered alias "${alias}" in team ${team} is unknown: the team's members could not be read (${why}); run ${membersRead(team)}${where} to see whether "${alias}" holds a certificate there, then retire again; this home and its record of the mint are kept`) }, 1);
+    const held = doc.members.filter((m) => m && typeof m === "object" && m.alias === alias && !m.revoked_at && (m.team_id === undefined || sameAwebTeamId(m.team_id, team)));
+    let key; try { key = readFileSync(join(home, ".aw", "signing.key"), "utf8"); } catch { key = undefined; }
+    const did = key === undefined ? undefined : didKeyOfSigningKey(key);
+    const nothing = (because) => { dropPendingMint(); return finish({ meta: retiredMeta({ retired: false, reason: "nothing-to-delete" }), warning: said(`nothing was registered by the interrupted mint of alias "${alias}" in team ${team}: ${because}`) }); };
+    if (!held.length) await nothing("the team's members show no certificate for that alias");
+    const ours = did ? held.find((m) => m.member_did_key === did) : undefined;
+    if (did && !ours) await nothing("the alias's certificate is held by another key, not this home's");
+    const cert = ours || held[0];
+    const cleanup = { team, certificateId: cert.certificate_id, registry };
+    const problem = controllerCleanupProblem(cleanup);
+    const command = problem ? undefined : controllerCleanupCommand(cleanup);
+    const named = problem ? "" : ` (certificate ${cert.certificate_id})`;
+    const removal = command ? `the team's controller removes it with: ${command}${registryError ? ` (${registryError})` : ""}` : `the team's controller removes it, but no command is shown: the certificate read for it is unusable (${problem})`;
+    // The intent stays: a retire killed before this answer, or before the record below
+    // is written, leaves the home and its intent, and the next retire hands the
+    // certificate over again. The answer exits 0, so the kernel removes the home with it.
+    if (ours) {
+      // The home's own registration, which only the controller can now remove.
+      rememberControllerCleanup({ cleanup: "controller", label: "default", team, alias, certificateId: cert.certificate_id, ...(command ? { command } : {}), registry });
+      await finish({ meta: retiredMeta({ retired: true, aliasReusable: false, aliasReason: "mint-interrupted" }), warning: said(`the interrupted mint registered alias "${alias}" in team ${team}${named} but could not be released: this home holds its key and no workspace binding, and retire never finishes a half-done mint; ${removal}`) });
+    }
+    // No key to compare. aw writes the key before it registers, so the certificate is most
+    // likely another instance's, and the alias comes from the home's own intent: no
+    // removal command is shown, and nothing is recorded (the record marks a member as
+    // retired by OATS). The person checks the member, as for a later spawn's refusal.
+    await finish({ meta: retiredMeta({ retired: true, aliasReusable: false, aliasReason: "mint-interrupted" }), warning: said(`the interrupted mint may have registered alias "${alias}" in team ${team}, and it was not released: the alias holds a certificate${named}, but this home holds no key it can read, so the certificate is most likely another instance's (aw writes the key before it registers) and no command to remove it is shown; check it with \`oats aweb roster\` and ${membersRead(team)}${where}`) });
+  };
+  if (!meta.alias) {
+    const onDisk = readPendingMint();
+    const pending = onDisk.intent || pendingMintOf(meta.pendingMint);
+    if (pending) await retirePendingMint(pending);
+    if (onDisk.problem) {
+      const team = defaultTeamId();
+      await finish({ meta: retiredMeta({ retired: false, reason: "mint-outcome-unknown" }), warning: `oats-aweb: ${[...retireWarnings, `this home's record of an interrupted mint, ${pendingMintFile()}, is unusable (${onDisk.problem}), so whether alias "${instance}" was registered is unknown: run ${membersRead(team && validAwebTeamId(team) ? team : "<team>")} in the team's root to see whether it holds a certificate there, then remove that file and retire again`].join(" | ")}` }, 1);
+    }
   }
   if (!meta.alias) await finish({ meta: retiredMeta({ retired: false, reason: "nothing-to-delete" }) });
   if (!existsSync(join(home, ".aw"))) {
@@ -2069,8 +2783,16 @@ if (event === "launch") {
   };
   const certificates = read("certificates", ["aw", "id", "team", "members", ...teamFlag, "--json"], "aw id team members", (d) => Array.isArray(d?.members));
   let presence = read("presence", ["aw", "workspace", "status", flagEq("--limit", ROSTER_PRESENCE_LIMIT), "--json"], "aw workspace status", (d) => Array.isArray(d?.team));
-  if (presence?.selected_team && presence.selected_team !== team) { problems.push({ source: "presence", message: `aw workspace status at ${root} describes ${presence.selected_team}, not ${team}` }); presence = undefined; }
-  const roster = rosterDocument({ team: certificates?.team_id || team, certificates, presence, problems, root });
+  if (presence?.selected_team && !sameAwebTeamId(presence.selected_team, team)) { problems.push({ source: "presence", message: `aw workspace status at ${root} describes ${presence.selected_team}, not ${team}` }); presence = undefined; }
+  // The certificates this host's retires left for the team's controller (read-only here).
+  // No resolvable deployment, or no record, means nothing to show.
+  let retired = [];
+  try {
+    const record = readRetiredRecord(selectedDeployment(process.env));
+    if (record.problem) problems.push({ source: "retired-record", message: record.problem });
+    retired = record.entries;
+  } catch { /* no deployment: no record to read */ }
+  const roster = rosterDocument({ team: certificates?.team_id || team, certificates, presence, problems, root, retired });
   // One synchronous write: a large roster piped to a reader must not lose its tail at exit.
   if (argv.includes("--json")) { writeSync(1, `${JSON.stringify(roster, null, 2)}\n`); process.exit(0); }
   const lines = [`aweb team ${roster.team} — ${roster.members.length} entries (membership certificates and workspaces):`];
@@ -2078,6 +2800,8 @@ if (event === "launch") {
   for (const m of roster.members) lines.push(`  ${rosterLine(m)}`);
   lines.push("");
   for (const problem of roster.problems) lines.push(`Incomplete: ${problem.source}: ${problem.message}.`);
+  const leftovers = roster.members.filter((m) => m.retired && !m.retired.conflict).length;
+  if (leftovers) lines.push(leftovers === 1 ? "1 certificate belongs to an instance OATS retired on this host; only the team's controller can remove it." : `${leftovers} certificates belong to instances OATS retired on this host; only the team's controller can remove them.`);
   lines.push("aw does not mark the team's coordinator (a workspace's role is its own setting): look among the global identities and ask your expert or coordinator which one coordinates.");
   lines.push("Certificates come from `aw id team members`; `aw workspace status` is the presence view.");
   lines.push(`Message an entry with \`aw mail send --to <alias> --subject "..." --body-file <file>\`${label ? ` as this team: \`aw --identity-home <identityHome> mail send ...\` (identityHome from \`oats aweb teams --json\`)` : ""}.`);
@@ -2187,7 +2911,7 @@ if (event === "launch") {
   }
 
   const localRoot = awebRootForTeam(team.team);
-  if (!localRoot || !teamIdsOf(readTeamsAt(localRoot)).map(String).includes(team.team)) {
+  if (!localRoot || !teamIdsOf(readTeamsAt(localRoot)).map(String).some((id) => sameAwebTeamId(id, team.team))) {
     fail("invite", "E_TEAM_NOT_MEMBER", `this deployment is not a member of ${team.team}${localRoot ? ` (its root ${localRoot} holds no membership)` : " (it has no root for that team)"}, so it cannot invite ${serverId}`,
       `join ${team.label} here first (${remedyCommand(["setup", "--join", team.label, "--invite-stdin"])}, with an invite from a member on stdin), or ask a member to connect ${serverId}`);
   }
@@ -2231,7 +2955,7 @@ if (event === "launch") {
   // existing aw primitive when the operator supplies the needed authority.
   const json = process.argv.includes("--json");
   const args = stripForwardedSoul(process.argv.slice(3)).filter((arg) => arg !== "--json");
-  const usage = "usage: oats aweb setup [--install-aw [--aw-version <v>]] [--check-only | --username <hosted-user> --name <alias> [--label <label>] [--plan] | --create <label> [--namespace <domain>] | --join <label> [--invite <token> | --invite-stdin] [--service <url>] [--name <alias>] | --invite <token> | --invite-stdin [--name <alias>] [--service <url>]]";
+  const usage = "usage: oats aweb setup [--install-aw [--aw-version <v>]] [--check-only | --username <hosted-user> --name <alias> [--label <label>] [--plan] | --create <label> [--namespace <domain>] [--name <alias>] | --join <label> [--invite <token> | --invite-stdin] [--service <url>] [--name <alias>] | --invite <token> | --invite-stdin [--name <alias>] [--service <url>]]";
   let setupDir, setupLabel, setupPlan = false;
   let username, invite, inviteStdin = false, createLabel, createNamespace, joinLabel, joinService, joinName, installAw = false, awVersion, checkOnly = false;
   for (let i = 0; i < args.length; i++) {
@@ -2254,8 +2978,8 @@ if (event === "launch") {
     if (arg.startsWith("--join=") && arg.length > "--join=".length) { joinLabel = arg.slice("--join=".length); continue; }
     if (arg === "--create" && args[i + 1]) { createLabel = args[++i]; continue; }
     if (arg.startsWith("--create=") && arg.length > "--create=".length) { createLabel = arg.slice("--create=".length); continue; }
-    if (arg === "--namespace" && args[i + 1]) { createNamespace = args[++i]; continue; }
-    if (arg.startsWith("--namespace=") && arg.length > "--namespace=".length) { createNamespace = arg.slice("--namespace=".length); continue; }
+    if (arg === "--namespace" && args[i + 1]) { createNamespace = normalizeAwDomain(args[++i]); continue; }
+    if (arg.startsWith("--namespace=") && arg.length > "--namespace=".length) { createNamespace = normalizeAwDomain(arg.slice("--namespace=".length)); continue; }
     if (arg === "--service" && args[i + 1]) { joinService = args[++i]; continue; }
     if (arg.startsWith("--service=") && arg.length > "--service=".length) { joinService = arg.slice("--service=".length); continue; }
     if (arg === "--name" && args[i + 1]) { joinName = args[++i]; continue; }
@@ -2276,13 +3000,15 @@ if (event === "launch") {
     try { invite = readFileSync(0, "utf8").split(/\r?\n/)[0].trim(); } catch { invite = ""; }
     if (!invite) { console.error("oats aweb setup: --invite-stdin read no invite token from stdin"); process.exit(1); }
   }
-  if ((joinService || (joinName && !username)) && !joinLabel && !inviteForm) { console.error(`oats aweb setup: --service/--name require --join <label> or an invite\n${usage}`); process.exit(2); }
+  if ((joinService || (joinName && !username && !createLabel)) && !joinLabel && !inviteForm) { console.error(`oats aweb setup: --service/--name require --join <label> or an invite\n${usage}`); process.exit(2); }
   // New hosted accounts have no recorded root alias to reuse. Require the
   // operator's explicit name before installation, directory creation or init.
   if (username && (!joinName || !AWEB_ALIAS_RE.test(joinName))) {
     console.error(`oats aweb setup: --username requires --name <alias>; ${AWEB_ALIAS_RULE}`);
     process.exit(2);
   }
+  // --create names its team root's identity with --name when there is no root identity to reuse.
+  if (createLabel && joinName && !AWEB_ALIAS_RE.test(joinName)) { console.error(`oats aweb setup: --name ${joinName}: ${AWEB_ALIAS_RULE}`); process.exit(2); }
   const apiKey = !!process.env.AWEB_API_KEY;
   const actions = [username ? "--username" : null, joinLabel || inviteForm ? "--join" : null, createLabel ? "--create" : null, apiKey && !createLabel ? "AWEB_API_KEY" : null].filter(Boolean);
   if (actions.length > 1) { console.error(`oats aweb setup: choose exactly one onboarding authority (${actions.join(", ")})\n${usage}`); process.exit(2); }
@@ -2334,14 +3060,14 @@ if (event === "launch") {
         const kernelTeamsDoc = () => { try { return selectedTeamKernel(selected).read(); } catch { return undefined; } };
         const kernelTeams = () => kernelTeamsDoc()?.teams;
         // A resume names the label a row already maps to the team, as the success path uses it.
-        const resumeCommand = (team, service) => setupResumeCommand(kernelTeams()?.find((row) => row.team === team)?.label || labelOf(team), service);
+        const resumeCommand = (team, service) => setupResumeCommand(kernelTeams()?.find((row) => sameAwebTeamId(row.team, team))?.label || labelOf(team), service);
         inviteEnvelope = inspectInvite(invite, selected, { run, validTeam: validAwebTeamId, resumeCommand });
         // A deployment already in the team keeps its root: nothing is redeemed, roots[team] is never re-pointed.
         const memberRoot = deploymentMemberRoot(inviteEnvelope.team);
         if (memberRoot) {
           const team = inviteEnvelope.team, doc = kernelTeamsDoc(), rows = doc?.teams;
           let remedy = "";
-          if (rows && !rows.some((row) => row.team === team)) {
+          if (rows && !rows.some((row) => sameAwebTeamId(row.team, team))) {
             // No kernel row maps the team: a root an earlier run left at the label's per-team root
             // finishes with the tokenless resume; any other root needs only the mapping, added with
             // --no-default (teams-conditional-default) so a workspace default is never overridden, or,
@@ -2381,14 +3107,16 @@ ${JSON.stringify(problem.details || {})}`);
   }
 
   if ((installAw && !awEnsured) || checkOnly) {
-    const aw = await ensureAw({ install: installAw, version: awVersion });
+    // --create --namespace installs aw-compat's tested aw and holds it to the route's floor.
+    const byotCreate = !!(createLabel && createNamespace);
+    const aw = await ensureAw({ install: installAw, version: awVersion || (byotCreate ? AW_TESTED : undefined), min: byotCreate ? AW_BYOT_CREATE : undefined });
     if (checkOnly) {
       // The host's answer to `oats aweb connect`: aw, the default team, and whether the root
       // minting for that team is a member of it (null when aw cannot be asked).
       const team = defaultTeamId() || null, label = defaultTeamLabel() || null;
       const awUsable = aw.status === "ok" || aw.status === "done";
       const teamRoot = awUsable && team ? awebRootForTeam(team) || null : null;
-      const member = awUsable ? !!teamRoot && teamIdsOf(readTeamsAt(teamRoot)).map(String).includes(team) : null;
+      const member = awUsable ? !!teamRoot && teamIdsOf(readTeamsAt(teamRoot)).map(String).some((id) => sameAwebTeamId(id, team)) : null;
       console.log(JSON.stringify({ aw, defaultTeam: label || team ? { label, team } : null, member, root: teamRoot }));
       process.exit(aw.status === "failed" ? 1 : 0);
     }
@@ -2408,12 +3136,13 @@ ${JSON.stringify(problem.details || {})}`);
 
   const want = teamId || teamName;
   const readTeams = () => readTeamsAt(scope);
-  const matchingTeam = (teams) => want ? teamIdsOf(teams).find((tid) => String(tid) === want || String(tid).startsWith(`${want}:`)) : undefined;
+  const matchingTeam = (teams) => want ? teamIdsOf(teams).find((tid) => sameAwebTeamId(String(tid), want) || String(tid).toLowerCase().startsWith(`${String(want).trim().toLowerCase()}:`)) : undefined;
   const rootAlias = () => {
     try { const who = JSON.parse(run(["aw", "whoami", "--json"], scope)); return who.alias || who.name; } catch { return undefined; }
   };
+  let resolvedAlias;
   const setupAlias = () => {
-    const alias = joinName || rootAlias();
+    const alias = resolvedAlias ??= joinName || rootAlias();
     if (!alias || !AWEB_ALIAS_RE.test(alias)) throw new Error(`--name <alias> is required when no root identity is available; aliases must match the aweb 1-64 character rule`);
     return alias;
   };
@@ -2435,16 +3164,21 @@ ${JSON.stringify(problem.details || {})}`);
   };
   const hostedCreateUnavailable = () => "provider setup --create without --namespace is not supported; native aw 1.36.24 supports id team create --hosted (not available in aw 1.36.23). Follow the version-matched native owner procedure, keeping invite/private output out of logs and messages, then use provider setup --join <label> --invite-stdin with the appropriate invite; use --namespace <domain> for the existing controller-owned route";
   const candidateTeamId = (name) => `${name}:${createNamespace}`;
-  const teamExistsError = (e) => e?.status === 409 || /\b409\b|\bconflict\b|\balready exists\b|\bexists\b/i.test(commandOutput(e));
   const configuredTeamForLabel = (label) => parseOatsTeams().find((t) => t.label === label && t.team)?.team || (label === defaultTeamLabel() ? defaultTeamId() : undefined);
-  const acceptIntoTeamRoot = (label, token, expectedTeam, ...serviceDocs) => {
+  /** The root a team accepts into: its recorded root, else the label's per-team root. */
+  const teamRootFor = (label, expectedTeam) => {
     const configured = joinConfiguration ? expectedTeam : expectedTeam || configuredTeamForLabel(label);
-    const recorded = configured && settings.roots && Object.hasOwn(settings.roots, configured) ? settings.roots[configured] : undefined;
+    const recordedKey = configured ? teamKeyIn(settings.roots, configured) : undefined;
+    const recorded = recordedKey !== undefined ? settings.roots[recordedKey] : undefined;
     if (recorded !== undefined && (typeof recorded !== "string" || !isAbsolute(recorded))) throw new Error(`configured root for ${label} must be an absolute directory`);
-    const teamRoot = recorded !== undefined ? resolve(recorded) : perTeamRoot(deployment, label);
+    return { configured, teamRoot: recorded !== undefined ? resolve(recorded) : perTeamRoot(deployment, label) };
+  };
+  const acceptIntoTeamRoot = (label, token, expectedTeam, ...serviceDocs) => {
+    const { configured, teamRoot } = teamRootFor(label, expectedTeam);
     const idHome = join(teamRoot, ".aw");
     const resumeCommand = setupResumeCommand(label);
-    const docs = [...setupServiceDocs(teamRoot), ...serviceDocs];
+    // The caller's own service (create's canonical one) comes before setup's general sources.
+    const docs = [...serviceDocs, ...setupServiceDocs(teamRoot)];
     const recordTeam = expectedTeam || configuredTeamForLabel(label) || `<team for ${label}>`;
     assertAwebRootSettingRecordable(recordTeam, teamRoot, { start: deployment });
     let joined;
@@ -2482,27 +3216,91 @@ ${JSON.stringify(problem.details || {})}`);
     recordAwebRootSetting(joined.team, teamRoot, { start: deployment });
     return { team: joined.team, teamRoot };
   };
-  const createTeam = (label) => {
+  /** The aweb service a BYOT create registers its team with and connects to: AWEB_URL, then the
+   *  target root's own workspace.yaml (a partial create left it connected to its service), then the
+   *  other roots' (setupServiceDocs skips the target, so it is read here), or undefined. */
+  const createService = (label) => {
+    const { teamRoot } = teamRootFor(label, candidateTeamId(normalizeAwebTeamName(label)));
+    let own;
+    try { own = yamlScalar(readFileSync(join(teamRoot, ".aw", "workspace.yaml"), "utf8"), "aweb_url"); } catch { /* not connected yet */ }
+    return process.env.AWEB_URL || own || setupServiceDocs(teamRoot).map((d) => d.aweb_url).find(Boolean);
+  };
+  const noCreateService = (label) => `--create ${label} --namespace ${createNamespace} needs the aweb service to register the new team with, and none is known: set AWEB_URL to the server's public URL (hosted aweb is https://app.aweb.ai/api) and re-run; nothing was created`;
+  /** aw prints no invite token for a BYOT create (awebai/oats-aweb#202). The team key create just
+   *  wrote does the rest: register the team with the service, mint a local invite, accept it. Each
+   *  step is safe to re-run, so a re-run of the same command resumes a partial create. A name already
+   *  held in the namespace under another team key stops: setup never picks another name (#208). */
+  const createTeam = (label, service) => {
     if (!createNamespace) throw new Error(hostedCreateUnavailable());
-    const base = normalizeAwebTeamName(label);
-    for (let n = 1; n <= 20; n++) {
-      const name = n === 1 ? base : `${base}-${n}`;
-      const expectedTeam = candidateTeamId(name);
-      const createArgs = ["aw", "id", "team", "create", flagEq("--name", name), flagEq("--namespace", createNamespace), "--json"];
-      try {
-        const created = parseSecretJson(run(createArgs, scope, 120000, { secretSafe: true }), "aw id team create");
-        if (!created?.team_id || typeof created.team_id !== "string") throw new Error("aw id team create returned no team_id");
-        const team = created.team_id;
-        const token = created.invite_token || created.invite || created.token;
-        if (!token || typeof token !== "string") throw new Error("aw id team create returned no invite token");
-        return acceptIntoTeamRoot(label, token, team, created);
-      } catch (e) {
-        if (!teamExistsError(e)) throw e;
-        const teams = readTeams();
-        if (teamIdsOf(teams).some((tid) => String(tid) === expectedTeam)) { recordAwebRootSetting(expectedTeam, scope, { start: deployment }); return { team: expectedTeam, teamRoot: scope, reused: true }; }
-        if (n === 20) throw new Error(`could not create a unique aweb team for ${JSON.stringify(label)} after suffixing through -20`);
-      }
+    const name = normalizeAwebTeamName(label);
+    // The alias the team root will accept under, settled before create writes a team key.
+    if (!existsSync(join(teamRootFor(label, candidateTeamId(name)).teamRoot, ".aw", "identity.yaml"))) {
+      try { setupAlias(); } catch (e) { throw new Error(`${e.message}; nothing was created`); }
     }
+    const createArgs = ["aw", "id", "team", "create", flagEq("--name", name), flagEq("--namespace", createNamespace), "--json"];
+    let created;
+    try {
+      created = parseSecretJson(run(createArgs, scope, 120000, { secretSafe: true, failureDetail: true }), "aw id team create");
+    } catch (e) {
+      if (withheldFailureCause(e) === NAMESPACE_CONTROLLER_KEY_MISSING) throw new Error(`${e.message}; run \`aw id namespace prepare-controller --domain ${createNamespace}\` as this user, or create the team where that key is, then re-run; nothing was created`);
+      if (teamNameTaken(e.stdout, createNamespace, name)) throw new Error(`team ${candidateTeamId(name)} already exists in the registry, and its team key is not on this machine; choose another label (--create <label>), or run setup as the user whose ~/.awid/team-keys/${createNamespace}/ holds its key; nothing was created`);
+      throw e;
+    }
+    if (!created?.team_id || typeof created.team_id !== "string") throw new Error("aw id team create returned no team_id");
+    const team = created.team_id;
+    const resume = `team ${team} exists and its key is kept on this machine; re-run the same command to resume`;
+    const after = (e) => withheldFailureCause(e) === TEAM_KEY_MISSING
+      ? `; team ${team} exists: run setup as the user whose ~/.awid/team-keys/${createNamespace}/ holds its key, then re-run the same command to resume`
+      : `; ${resume}`;
+    // The AWID team-server record binds the team to its aweb service. aw's set-server always signs a
+    // newer record, so it is read first: a record setup finds naming another URL is not replaced.
+    const serverTarget = [flagEq("--team", name), flagEq("--namespace", createNamespace)];
+    const readServerRecord = () => {
+      try { return parseSecretJson(run(["aw", "id", "team", "show-server", ...serverTarget, "--json"], scope, 120000, { secretSafe: true, failureDetail: true }), "aw id team show-server"); }
+      catch (e) {
+        if (teamServerRecordMissing(e.stdout, team)) return undefined;
+        throw new Error(`reading the AWID team-server record for ${team} failed: ${e.message}${after(e)}`);
+      }
+    };
+    // show-server verifies the record against the team's current key at the registry; that key must
+    // also be the one create reported, when it reported one.
+    const recordVerifies = (record) => record?.status === "verified" && sameAwebTeamId(record.team_id, team) && record.server_url === service && (typeof created.team_did_key !== "string" || record.team_did_key === created.team_did_key);
+    const notVerified = `the AWID team-server record for ${team} did not verify as ${service} under the team key create reported; ${resume}`;
+    /** The published record, refused when it names another URL or does not verify; undefined when none is published. */
+    const checkedServerRecord = () => {
+      const record = readServerRecord();
+      if (record && record.server_url !== service) {
+        const other = typeof record.server_url === "string" && /^https?:\/\/[\x21-\x7e]+$/.test(record.server_url) ? record.server_url : "another URL";
+        throw new Error(`team ${team}'s AWID team-server record names ${other}, not ${service}, the aweb service this setup uses; setup does not replace a record it finds. If the team has moved to ${service}, its owner republishes the record with \`aw id team set-server --team ${name} --namespace ${createNamespace} --url ${service}\` and re-runs setup; otherwise set AWEB_URL to ${other} and re-run`);
+      }
+      if (record && !recordVerifies(record)) throw new Error(notVerified);
+      return record;
+    };
+    // Read before register, so a record for another URL stops setup before the service is touched,
+    // and again just before publishing, so one published while register ran is not replaced. aw has
+    // no publish-if-absent: a record published between that read and set-server is replaced, and the
+    // verify after it, which reads setup's own record, does not notice.
+    const published = checkedServerRecord();
+    try { run(["aw", "id", "team", "register", flagEq("--service", service), flagEq("--team", team), "--json"], scope, 120000, { secretSafe: true, failureDetail: true }); }
+    catch (e) { throw new Error(`registering ${team} with the aweb service at ${service} failed: ${e.message}${after(e)}`); }
+    const publishedNow = !published && !checkedServerRecord();
+    if (publishedNow) {
+      try { run(["aw", "id", "team", "set-server", ...serverTarget, flagEq("--url", service), "--json"], scope, 120000, { secretSafe: true, failureDetail: true }); }
+      catch (e) { throw new Error(`publishing the AWID team-server record for ${team} (${service}) failed: ${e.message}${after(e)}`); }
+      if (!recordVerifies(readServerRecord())) throw new Error(notVerified);
+    }
+    // A future aw may print a token itself; an accepted identity in the root needs none.
+    let token = [created.invite_token, created.invite, created.token].find((v) => typeof v === "string" && v);
+    if (!token && !existsSync(join(teamRootFor(label, team).teamRoot, ".aw", "identity.yaml"))) {
+      let minted;
+      try { minted = parseSecretJson(run(["aw", "id", "team", "invite", flagEq("--team", name), flagEq("--namespace", createNamespace), "--json"], scope, 45000, { secretSafe: true, failureDetail: true }), "aw id team invite"); }
+      catch (e) { throw new Error(`minting a local invite for ${team} failed: ${e.message}${after(e)}`); }
+      token = minted?.token;
+      if (!token || typeof token !== "string") throw new Error(`aw id team invite returned no invite token for ${team}; ${resume}`);
+    }
+    // Where aw keeps the team key: a locator, never the key (#208).
+    const teamKeyPath = typeof created.team_key_path === "string" && isAbsolute(created.team_key_path) && !/[\u0000-\u001f\u007f]/.test(created.team_key_path) ? created.team_key_path : undefined;
+    return { ...acceptIntoTeamRoot(label, token, team, { aweb_url: service }), ...(teamKeyPath ? { teamKeyPath } : {}), teamServer: { url: service, publishedNow } };
   };
   const recordLocalTeam = (label, team) => {
     const cli = process.env.OATS_CLI_BIN;
@@ -2543,8 +3341,8 @@ ${JSON.stringify(problem.details || {})}`);
     if (t.from !== "shared" || !t.label || !t.team) return false;
     const teamRoot = awebRootForTeam(t.team);
     if (!teamRoot) return true;
-    const ids = new Set(teamIdsOf(readTeamsAt(teamRoot)).map(String));
-    return !ids.has(t.team);
+    const ids = teamIdsOf(readTeamsAt(teamRoot)).map(String);
+    return !ids.some((id) => sameAwebTeamId(id, t.team));
   });
   const printSharedMissing = (rows) => {
     for (const row of rows) console.log(`team ${row.label} (${row.team}) is shared: ask its owner for an appropriate invite, then run \`${setupInviteCommand(row.label)}\``);
@@ -2554,7 +3352,7 @@ ${JSON.stringify(problem.details || {})}`);
     if (match) {
       console.log(`readiness: ready`);
       console.log(`✓ aweb workspace initialized and member of ${match}.`);
-      if (teams.active_team && teams.active_team !== match) console.log(`  Note: active team is ${teams.active_team}; instances join ${match} explicitly, but consider \`aw team switch ${match}\`.`);
+      if (teams.active_team && !sameAwebTeamId(teams.active_team, match)) console.log(`  Note: active team is ${teams.active_team}; instances join ${match} explicitly, but consider \`aw team switch ${match}\`.`);
       console.log("  Done — spawned instances will join this team automatically (alias = instance name).");
       console.log("  Roster: `oats aweb roster`  ·  local: `oats status` (in the deployment)");
       return;
@@ -2598,16 +3396,23 @@ ${JSON.stringify(problem.details || {})}`);
     if (createLabel) {
       const label = createLabel;
       if (!createNamespace) throw new Error(hostedCreateUnavailable());
+      // Before the kernel or any aw call that writes: below this floor setup would fail half-way.
+      const tooOld = byotCreateAwRefusal(await readAwVersion());
+      if (tooOld) throw new Error(tooOld);
       // Asked before anything is created, so a workspace that refuses local teams never leaves a team
       // created here and its recording refused half-way.
       let localTeams;
       try { localTeams = readLocalTeams(); }
       catch (e) { throw new Error(`could not tell whether this workspace allows local teams (oats teams --json: ${String(e.message || e).replace(/\s+/g, " ").trim()}); nothing was created`); }
+      const resolvedService = createService(label);
+      if (!resolvedService) throw new Error(noCreateService(label));
+      const { url: service, reason } = canonicalTeamServerURL(resolvedService);
+      if (!service) throw new Error(`the aweb service URL cannot be published as the team's AWID server: server_url ${reason}; set AWEB_URL to the server's public URL and re-run; nothing was created`);
       mkdirSync(scope, { recursive: true });
-      console.log(`Creating aweb team ${label} in namespace ${createNamespace} for a new per-team root.`);
-      const created = createTeam(label);
+      console.log(`Creating aweb team ${label} in namespace ${createNamespace} for a new per-team root, registered with ${service}.`);
+      const created = createTeam(label, service);
       teams = readTeams();
-      const done = `✓ created ${created.team}, ${created.reused ? `reused existing member root ${created.teamRoot}` : `accepted it into ${created.teamRoot}`}, recorded roots[${created.team}]`;
+      const done = `✓ created ${created.team}, accepted it into ${created.teamRoot}, recorded roots[${created.team}]`;
       if (localTeams.closed) {
         console.log(`${done}.`);
         printWorkspaceTeam(label, created.team, localTeams);
@@ -2615,6 +3420,8 @@ ${JSON.stringify(problem.details || {})}`);
         recordLocalTeam(label, created.team);
         console.log(`${done}, and recorded local team ${label} with \`oats teams add ${label} --team ${created.team}\`.`);
       }
+      if (created.teamKeyPath) console.log(`  team key: ${created.teamKeyPath} (user-wide: every process this user runs can read it; never share it)`);
+      console.log(`  team server: ${created.teamServer.url} (${created.teamServer.publishedNow ? "published at AWID and verified" : "already published at AWID; verified"} against the team key)`);
       printVerdict(teams);
       process.exit(0);
     }

@@ -81,6 +81,20 @@ For a conflicting native prefix, either:
    input from active set-aside entries. Removing the ignore rule later does not
    authorize the conflict.
 
+**Sealed aw logs.** Capture stops before a sealed client-log envelope (`v`,
+`key_id`, `enc`, `ct`, optional `tag`) and leaves its cursor at the line's
+start. It reports a distinct `sealed` count, and command capture sets the input
+aside with reason `sealed, not readable by this recorder`. Later lines wait.
+The owner can export readable JSONL with `aw log read <file>... --json`,
+using the keychain and passphrase where the sealing key was created. The
+recorder has no unattended decryption authority or passphrase transport. The
+native reader may emit a readable prefix before failing, so partial stdout
+does not prove the whole source was read.
+
+Supply a readable source and run `capture --retry-set-aside`, or ignore the
+source; retry and cursor reset cannot decrypt ciphertext. Readable projection
+errors retain their existing consume-and-count behaviour.
+
 **Oversized records.** The 8 MiB raw-record limit applies to capture beyond
 the captured prefix. The supervised worker never allocates, captures or
 modifies a new raw source record larger than 8 MiB. It appends and checkpoints
@@ -275,8 +289,9 @@ A failure newer than success and current unresolved stream failures produce
 beyond its recorded deadline also warns, without inventing its termination cause.
 Before that deadline, death evidence requires an unchanged local lock registration
 whose worker PID matches the receipt and whose acquisition predates the run,
-with both supervisor and worker positively dead. Missing/off-host/hostless,
-changed or uncertain registration and live/reused PIDs supply no death proof.
+with both supervisor and worker positively dead (each judged by the boot and
+process start its record names). Missing/off-host/hostless,
+changed or uncertain registration and live PIDs supply no death proof.
 The receipt is reread before accepting that observation; health never repairs,
 reclaims, signals termination, writes counters or invents a finished receipt.
 Owned legacy watcher definitions additionally produce `capture-setup-required`,
@@ -810,12 +825,14 @@ transaction, and identical state values do not produce redundant row updates.
 
 The private supervisor transport admits one child at a time under the root lock. The child
 announces its nonce and stays idle until the supervisor durably publishes its
-identity in that lock and sends permission to start. A live, reused or unknown
-worker PID prevents reclamation after supervisor death. Release occurs only
+identity in that lock, with the boot and the child's process start, and sends
+permission to start. A worker that runs, or whose liveness is unknown,
+prevents reclamation after supervisor death; one whose PID is gone or runs with
+another start, or whose record is of another boot, does not. Release occurs only
 after the owned child exits; signals target the spawned child handle, never a
 PID inferred from an abandoned lock or a process group. Continuation retains the
 same root lock: it replaces only the exact previously registered worker identity
-after positive death proof. Reused or uncertain PIDs prevent replacement.
+after positive death proof. A worker of uncertain liveness prevents replacement.
 Workers check their parent and lock identity between work units; the same read
 carries the supervisor's cooperative stop request, which the supervisor
 publishes into that owner record exactly as it publishes a worker. The supervisor never writes status

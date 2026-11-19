@@ -8,7 +8,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fakeBin } from "./helpers/fake-ssh.mjs";
 import { redactArgv, routeCapability, serverFlagOf } from "../lib/servers.mjs";
@@ -65,15 +65,15 @@ test("argv minus --server, run in the registered deployment, stdin byte for byte
     assert.deepEqual(seen.stdin, bytes, "stdin byte for byte");
     assert.equal(readFileSync(s.log, "utf8").includes("tok"), false, "stdin never reaches a log");
 
-    // --server=<id> and an inline --invite=<v> form: the argv as typed, minus the routing flag.
-    const r2 = s.oats(["aweb", "setup", "--server=box", "--invite=abc=def", "--check-only"]);
+    // --server=<id> forwards ordinary provider options.
+    const r2 = s.oats(["aweb", "setup", "--server=box", "--check-only"]);
     assert.equal(r2.status, 7);
-    assert.deepEqual(s.seen().argv, ["aweb", "setup", "--invite=abc=def", "--check-only"]);
+    assert.deepEqual(s.seen().argv, ["aweb", "setup", "--check-only"]);
     assert.deepEqual(s.seen().stdin, Buffer.alloc(0));
   } finally { s.cleanup(); }
 });
 
-test("--json: the host's envelope is relayed verbatim; an ssh failure is one envelope with the invite redacted", () => {
+test("--json: the host's envelope is relayed verbatim; ssh failure is one envelope", () => {
   const s = setup();
   try {
     let r = s.oats(["aweb", "setup", "--check-only", "--json", "--soul", "dev", "--server", "box"]);
@@ -82,20 +82,17 @@ test("--json: the host's envelope is relayed verbatim; an ssh failure is one env
     assert.deepEqual(s.seen().argv, ["aweb", "setup", "--check-only", "--json", "--soul", "dev"]);
 
     writeFileSync(join(s.bin, "ssh"), "#!/bin/sh\necho 'ssh: connect to host box-host port 22: Connection refused' >&2\nexit 255\n");
-    r = s.oats(["aweb", "setup", "--join", "aweb", "--invite", "SECRET-1", "--invite=SECRET-2", "--json", "--server", "box"]);
+    r = s.oats(["aweb", "setup", "--join", "aweb", "--invite-stdin", "--json", "--server", "box"]);
     assert.equal(r.status, 1);
     const env = JSON.parse(r.stdout.toString());
     assert.equal(env.ok, false);
     assert.equal(env.error.code, "E_SSH");
-    assert.match(env.error.message, /oats aweb setup --join aweb --invite <redacted> --invite=<redacted> --json/);
-    const all = r.stdout.toString() + r.stderr.toString();
-    assert.equal(all.includes("SECRET-1") || all.includes("SECRET-2"), false, "no invite value is printed anywhere");
+    assert.match(env.error.message, /oats aweb setup --join aweb --invite-stdin --json/);
 
-    // Text mode: the same redacted line on stderr, ssh's exit status relayed.
-    r = s.oats(["aweb", "setup", "--invite", "SECRET-3", "--server", "box"]);
+    // Text mode: ssh diagnostics go to stderr and its exit status is relayed.
+    r = s.oats(["aweb", "setup", "--invite-stdin", "--server", "box"]);
     assert.equal(r.status, 255);
-    assert.match(r.stderr.toString(), /--invite <redacted>/);
-    assert.equal(r.stderr.toString().includes("SECRET-3"), false);
+    assert.match(r.stderr.toString(), /--invite-stdin/);
   } finally { s.cleanup(); }
 });
 
@@ -146,4 +143,20 @@ test("end to end: the host's own kernel dispatches the capability command from t
     assert.equal(out.soul, true, "dispatched as the deployment's soul dev");
     assert.equal(out.input, "piped through\n");
   } finally { s.cleanup(); fx.cleanup(); }
+});
+
+
+test("routed invite argv refuses both forms before ssh and directs the caller to stdin", () => {
+  const s = setup();
+  try {
+    for (const secret of [["--invite", "SECRET-ARGV"], ["--invite=SECRET-ARGV"]]) {
+      const r = s.oats(["aweb", "setup", ...secret, "--server", "box", "--json"]);
+      assert.equal(r.status, 1);
+      const answer = JSON.parse(r.stdout.toString());
+      assert.equal(answer.error.code, "E_BAD_ARGS");
+      assert.match(answer.error.message, /--invite-stdin/);
+      assert.equal((r.stdout.toString() + r.stderr.toString()).includes("SECRET-ARGV"), false);
+      assert.equal(existsSync(s.log), false, "ssh never ran");
+    }
+  } finally { s.cleanup(); }
 });

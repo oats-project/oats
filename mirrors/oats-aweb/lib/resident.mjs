@@ -17,6 +17,7 @@ import { awFloorMessage, onPath } from "./binding-wire.mjs";
 import { parseAwJson } from "./grant-custody.mjs";
 import { assertAwebSettingRecordable, recordAwebSetting } from "./local-settings.mjs";
 import { querySelectedKernel } from "./session-readiness.mjs";
+import { sameAwebTeamId } from "./aweb-team-id.mjs";
 import { selectedTeamKernel } from "./setup-team-default.mjs";
 import { normalizeAwebTeamName, selectedDeployment } from "./team-roots.mjs";
 import { conflictMessage, custodyLabel, ensureCustodyUnit, foreignUnitMessage, handStep, lingerProblem, ownUnitServes, residentUnits, retireUnitStep, samePath, unitManager, unitPath, waitForCustody } from "./custody-unit.mjs";
@@ -279,7 +280,7 @@ function recordTeam(deployment, env, opts, team, { root, custody, localYaml }) {
   const kernel = teamKernel(deployment, env, "record");
   let doc = kernel.read();
   const row = doc.teams.find((r) => r.label === label);
-  if (row && row.team !== team) {
+  if (row && !sameAwebTeamId(row.team, team)) {
     if (derived) throw refuse(`the team label ${label}, derived from the name of team ${team}, already maps to ${row.team ?? "no team"}`);
     throw failure("E_RESIDENT_TEAM_LABEL", "record", `team label ${label} already maps to ${row.team ?? "no team"}, not ${team}; choose another --team-label`);
   }
@@ -293,7 +294,7 @@ function recordTeam(deployment, env, opts, team, { root, custody, localYaml }) {
   if (!row) {
     kernel.addMapping(label, team);
     doc = kernel.read();
-    if (doc.teams.find((r) => r.label === label)?.team !== team) throw failure("E_RESIDENT_TEAM_LABEL", "record", `oats teams add ${label} did not read back as ${team}`);
+    if (!sameAwebTeamId(doc.teams.find((r) => r.label === label)?.team, team)) throw failure("E_RESIDENT_TEAM_LABEL", "record", `oats teams add ${label} did not read back as ${team}`);
   }
   if (doc.defaultTeam?.label === label) return { teamLabel: { ...result, default: "already" } };
   if (!doc.defaultTeam) {
@@ -452,7 +453,7 @@ export async function createResident(opts, { env, stdin, stderr, platform }) {
 
     // ---- verify, with the key absent
     const doctor = identityDoctor(readJson(["doctor", "identity", "--offline", "--json"], "aw doctor identity --offline"), name);
-    if (identity.team && identity.team !== doctor.team) throw failure("E_RESIDENT_VERIFY", "verify", `aw init answered team ${identity.team}, but the identity on disk is in ${doctor.team}`);
+    if (identity.team && !sameAwebTeamId(identity.team, doctor.team)) throw failure("E_RESIDENT_VERIFY", "verify", `aw init answered team ${identity.team}, but the identity on disk is in ${doctor.team}`);
     const team = doctor.team;
     const warnings = registryWarnings(read);
 

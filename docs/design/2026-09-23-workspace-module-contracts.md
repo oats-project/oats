@@ -294,6 +294,8 @@ Each entry's manifests, souls and integrity are read at the observed commit →
 `{ lock, changes: [{ id, from, to, commit }] }` (`to: null`: no longer declared).
 
 - A branch is `E_PACKAGE_INTEGRITY { why: "branch" }`.
+- A manifest whose `package` is not the entry's key is `E_PACKAGE_INTEGRITY { why: "package-id" }`,
+  fresh or already locked.
 - An unchanged version, source and path is re-verified: a moved commit or different integrity,
   capabilities or souls is `E_PACKAGE_INTEGRITY`.
 - A malformed package is `E_PACKAGE_MANIFEST`.
@@ -303,8 +305,14 @@ Each entry's manifests, souls and integrity are read at the observed commit →
 ### 4.3 Trust and removed APIs
 
 There is no approval step or record: declaring a package in `packages:` is the trust decision, and the
-lock pins commit and integrity. `oats sync --approve` is `E_BAD_ARGS`. Pre-workspace exports remain as
-shims that throw `E_REMOVED { name, contract }`, pointing at this record.
+lock pins commit and integrity. `oats sync --approve` is `E_BAD_ARGS`.
+
+Pre-workspace package-install, requirement, OAS-migration and config-merge APIs are not
+exported from `lib/packages.mjs`. Named imports fail at module loading; namespace imports do not
+contain those names. Use workspace `packages:`
+plus `oats sync`; capability requirements and configuration belong to their provider, not the
+removed package-install/config-merge APIs. The live `lockedPackageCapabilities` in `lib/resolve.mjs`
+and `packageSpecIdentity` in `lib/core.mjs` are separate APIs and remain available.
 
 ---
 

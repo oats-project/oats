@@ -5,6 +5,7 @@ import { closeSync, constants, fstatSync, lstatSync, mkdirSync, mkdtempSync, ope
 import { randomBytes } from "node:crypto";
 import { hostname } from "node:os";
 import { join } from "node:path";
+import { makePrivateDir } from "./private-files.mjs";
 
 const sameObject = (a, b) => a.dev === b.dev && a.ino === b.ino;
 const sameFile = (a, b) => sameObject(a, b) && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
@@ -15,7 +16,7 @@ function directory(path) {
 }
 function privateRoot(root, create) {
   const path = join(root, ".capture-tmp");
-  if (create) { mkdirSync(root, { recursive: true }); try { mkdirSync(path, { mode: 0o700 }); } catch (e) { if (e.code !== "EEXIST") throw e; } }
+  if (create) { makePrivateDir(root); try { mkdirSync(path, { mode: 0o700 }); } catch (e) { if (e.code !== "EEXIST") throw e; } }
   const stat = directory(path);
   if (stat.dev !== statSync(root, { bigint: true }).dev) throw new Error(`capture scratch must be on the record root volume: ${path}`);
   if ((stat.mode & 0o077n) !== 0n || (process.getuid && stat.uid !== BigInt(process.getuid()))) throw new Error(`capture scratch directory must be private and owned by this user: ${path}`);

@@ -100,7 +100,7 @@ test('cold cycle, held catalogs, coalescing and the focus no-op (kernel without 
     assert.equal((await s.agents()).agents.length, 9);
     // The window-state body is strict.
     for (const body of [{}, { focused: 'yes' }, null, [], { focused: true, extra: 1 }]) assert.equal((await s.post('/api/window-state', body)).code, 'E_BAD_ARGS', JSON.stringify(body));
-    assert.equal((await fetch(`${s.base}/api/window-state`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: 'not json' })).status, 400);
+    assert.equal((await s.request(`/api/window-state`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: 'not json' })).status, 400);
     assert.deepEqual(await s.post('/api/window-state', { focused: false }), { focused: false });
   } finally { await s.stop(); }
 });
@@ -170,7 +170,7 @@ test('with observe-max-age declared: admission and refresh observe live (0), the
     assert.equal(homeReads(), 1, 'the repeat is a hit');
     const statusCount = of(s.calls(), 'status').length;
     assert.equal(panel.instances[0].running, false, 'the seat is observed stopped');
-    const started = await fetch(`${s.base}/api/start/${panel.instances[0].instance}${s.ws}&home=${encodeURIComponent(home)}`,
+    const started = await s.request(`/api/start/${panel.instances[0].instance}${s.ws}&home=${encodeURIComponent(home)}`,
       { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
     assert.deepEqual([started.status, await started.json()], [200, { launched: true }], 'the start reached the kernel and worked: a refusal is no start');
     await s.until(() => ended(s.calls(), 'status').length > statusCount);

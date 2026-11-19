@@ -16,9 +16,8 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createServer } from "node:net";
 import { createReaper } from "../scripts/proc-reaper.mjs";
-import { serverSpawnSpec } from "../server-host.mjs";
+import { launchServerChild, serverSpawnSpec } from "../server-host.mjs";
 
 const BIN = fileURLToPath(new URL("../server/oats-web.mjs", import.meta.url));
 
@@ -34,14 +33,6 @@ async function until(probe, ms) {
     if (Date.now() > end) return false;
     await new Promise((ok) => setTimeout(ok, 20));
   }
-}
-
-async function freePort() {
-  const s = createServer();
-  await new Promise((ok, bad) => { s.once("error", bad); s.listen(0, "127.0.0.1", ok); });
-  const { port } = s.address();
-  await new Promise((ok) => s.close(ok));
-  return port;
 }
 
 /** The backend, started through the spec with the fixture as its CLI; answers once the fixture runs. */
@@ -64,9 +55,10 @@ fs.writeFileSync(${JSON.stringify(files.pid)}, String(process.pid));
 setInterval(() => {}, 1000);
 `);
   chmodSync(cli, 0o755);
-  const s = serverSpawnSpec({ execPath: process.execPath, bin: BIN, dirs: [], port: await freePort(), oatsBin: null, pathSource: "inherited", pathError: null,
-    remoteIdentityFile: join(dir, "remote-identity.json"), home: dir, env: { ...process.env, OATS_DESKTOP_OATS_BIN: cli, PATH: "/nonexistent", SHELL: "/bin/false", HOME: dir } });
-  const backend = reaper.spawnTracked(s.command, s.args, s.options);
+  // As main starts it: a private socket directory under the test's own and a fresh credential on fd 3.
+  const backend = launchServerChild({ spawn: (command, args, options) => reaper.spawnTracked(command, args, options), socketBase: dir,
+    spec: (socketPath) => serverSpawnSpec({ execPath: process.execPath, bin: BIN, dirs: [], socketPath, cliChoiceFile: null, pathSource: "inherited", pathError: null,
+      remoteIdentityFile: join(dir, "remote-identity.json"), home: dir, env: { ...process.env, OATS_DESKTOP_OATS_BIN: cli, PATH: "/nonexistent", SHELL: "/bin/false", HOME: dir } }) }).child;
   let tail = "";
   backend.stdout.on("data", (d) => { tail = (tail + d).slice(-2000); });
   backend.stderr.on("data", (d) => { tail = (tail + d).slice(-2000); });

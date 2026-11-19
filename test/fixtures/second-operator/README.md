@@ -2,7 +2,9 @@
 
 These are supplied captures from OATS 0.24.1 (macOS, Node 26.8.2), **not expected
 post-fix outputs**. Only the original absolute host prefix was replaced with
-`/fixture/second-operator`. Tests replace that prefix with an owned temporary
+`/fixture/second-operator`, and the operator's names (its document id, and the
+narrative file's name) with invented ones of the same length; the captures are
+otherwise as supplied. Tests replace that prefix with an owned temporary
 fixture root and explicitly map source/workspace/member to their inert Git
 transport. No test here contacts the captured public repositories.
 
@@ -16,7 +18,7 @@ transport. No test here contacts the captured public repositories.
   each SHA256 `684ec4340a04d74ef5edcfb707df7cd761efa8f04a1e9c07f927b6f66a87bb79`.
 - `trust-dir-*` / `lock-v3-keys.json`: classic trust rejected the prepared v3 lock.
   The key inventory is evidence, **not a valid lock to install or synthesize**.
-- `antares-raw-artifacts.md`: original narrative and absent-deployment repro note;
+- `builder-raw-artifacts.md`: original narrative and absent-deployment repro note;
   preserve historical claims as supplied, not as proof of causation.
 
 ## Important scope correction

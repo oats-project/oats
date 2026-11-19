@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "subjects": [
+    "system/oats-kernel",
+    "system/oats-desktop",
+    "workstream/provider-integration",
+    "workstream/operations",
+    "workstream/coordination"
+  ]
+}

@@ -5,14 +5,26 @@ import { workspaceScoped } from "./renderer/workspace-routes.mjs";
 
 export { workspaceScoped };
 
+/** The origin request paths are resolved against: a reserved name (RFC 6761 `.invalid`), never an
+ * address. The backend is reached only over main's socket (backend-client.mjs); a path that resolves
+ * to any other origin is refused. */
+const ORIGIN = "http://oats-backend.invalid";
+const resolveOnOrigin = (pathname) => {
+  const url = new URL(pathname, ORIGIN);
+  return url.origin === ORIGIN ? url : null;
+};
+
+/** The request path (pathname and search) backendFetch sends for a URL apiUrl returned. */
+export const requestPath = (url) => `${url.pathname}${url.search}`;
+
 /** Classify specialized behavior from the pathname the backend will see.
  * This is NOT authorization: apiUrl must still enforce input/origin/workspace
  * constraints. In particular, even off-origin aliases need the same typed
  * refusal path and must never fall through a weaker raw-prefix guard. */
-export function classifyApiRoute(pathname, base) {
+export function classifyApiRoute(pathname) {
   if (typeof pathname !== 'string') return null;
   try {
-    const path = new URL(pathname, base).pathname;
+    const path = new URL(pathname, ORIGIN).pathname;
     switch (path) {
       case '/api/workspace-readiness': return 'readiness';
       case '/api/workspace-spawn-preview': return 'spawn-preview';
@@ -58,32 +70,30 @@ export function classifyApiRoute(pathname, base) {
  * nothing advertised before) nothing is refused: the request passes unrewritten and the server's own
  * refusal applies. Off-origin or malformed input is left to apiUrl, which throws.
  * @param {string} pathname
- * @param {string} base
  * @param {string|null|undefined} window
  * @param {Set<string>|null|undefined} advertised
  * @returns {string|null}
  */
-export function windowRefusal(pathname, base, window, advertised) {
+export function windowRefusal(pathname, window, advertised) {
   if (typeof window !== 'string' || !(advertised instanceof Set) || !advertised.size || typeof pathname !== 'string' || !pathname.startsWith('/')) return null;
   let url;
-  try { url = new URL(pathname, base); } catch { return null; }
-  if (url.origin !== new URL(base).origin || !workspaceScoped(url.pathname)) return null;
+  try { url = resolveOnOrigin(pathname); } catch { return null; }
+  if (!url || !workspaceScoped(url.pathname)) return null;
   const asked = url.searchParams.getAll('ws');
   return (asked.length ? asked : [window]).find((id) => !advertised.has(id)) ?? null;
 }
 
 /**
- * Build the URL the main process will fetch for a renderer api() call.
+ * Build the request a renderer api() call becomes: a URL on a fixed origin whose path and search
+ * (requestPath) main sends to its own server over its socket (backend-client.mjs).
  *
- * SECURITY: the renderer (or anything that reaches the preload bridge) must
- * never be able to steer the privileged fetch off the loopback backend
- * origin. `new URL("//host/x", base)` — and the backslash variant
- * "/\\host/x", which WHATWG URL normalizes the same way — would resolve to a
- * DIFFERENT origin, so the resolved origin is checked, not just the input
- * shape.
+ * SECURITY: the renderer (or anything that reaches the preload bridge) never
+ * names where the privileged request goes. `new URL("//host/x", origin)` — and
+ * the backslash variant "/\\host/x", which WHATWG URL normalizes the same
+ * way — would resolve to a DIFFERENT origin, so the resolved origin is
+ * checked, not just the input shape, and such input is refused.
  *
- * @param {string} pathname  must start with "/" and stay on `base`'s origin
- * @param {string} base      the backend server origin, e.g. http://127.0.0.1:4820
+ * @param {string} pathname  must start with "/" and stay a path
  * @param {string|null} wsId verified workspace id — pinned onto
  *                           workspace-scoped endpoints unless the caller
  *                           selects a workspace the server itself advertises
@@ -98,13 +108,12 @@ export function windowRefusal(pathname, base, window, advertised) {
  * @returns {URL}
  * @throws  on off-origin or malformed input
  */
-export function apiUrl(pathname, base, wsId = null, allowedWs = undefined, { bound = false } = {}) {
+export function apiUrl(pathname, wsId = null, allowedWs = undefined, { bound = false } = {}) {
   if (typeof pathname !== "string" || !pathname.startsWith("/")) {
     throw new Error("api: pathname must start with /");
   }
-  const baseUrl = new URL(base);
-  const url = new URL(pathname, baseUrl);
-  if (url.origin !== baseUrl.origin) {
+  const url = resolveOnOrigin(pathname);
+  if (!url) {
     throw new Error("api: pathname resolved off-origin");
   }
   // Pinning here makes an omitted ?ws= fail SAFE (the verified workspace, or
@@ -174,15 +183,14 @@ export function apiInit(opts) {
  * Desktop itself knows (`known`, checked before anything touches the filesystem). An unknown id
  * keeps today's rewrite to the verified workspace, which the renderer adopts.
  * @param {string} pathname
- * @param {string} base
  * @param {{ allowedWs: Set<string>, known: (path: string) => boolean }} state
  * @returns {string|null}
  */
-export function unservedWorkspace(pathname, base, { allowedWs, known }) {
+export function unservedWorkspace(pathname, { allowedWs, known }) {
   if (!(allowedWs instanceof Set) || !allowedWs.size || typeof pathname !== 'string') return null;
   let url;
-  try { url = new URL(pathname, base); } catch { return null; }
-  if (url.origin !== new URL(base).origin || !['/api/panel', '/api/agents'].includes(url.pathname)) return null;
+  try { url = resolveOnOrigin(pathname); } catch { return null; }
+  if (!url || !['/api/panel', '/api/agents'].includes(url.pathname)) return null;
   const asked = url.searchParams.getAll('ws');
   if (asked.length !== 1 || !asked[0].startsWith('/') || allowedWs.has(asked[0])) return null;
   try { return known(asked[0]) === true ? asked[0] : null; } catch { return null; }
@@ -192,12 +200,12 @@ export function unservedWorkspace(pathname, base, { allowedWs, known }) {
  * The proxy's refusal for an unserved deployment, as main wires it: `state()` reads the live
  * connection facts at call time. Returns the `{ ok, status, body }` the api channel resolves
  * with (404 E_WORKSPACE_NOT_SERVED, `body(workspace)`), or null to proxy as usual.
- * @param {{ base: () => string, state: () => { allowedWs: Set<string>, known: (path: string) => boolean },
+ * @param {{ state: () => { allowedWs: Set<string>, known: (path: string) => boolean },
  *           body: (workspace: string) => object }} io
  */
-export function createUnservedRefusal({ base, state, body }) {
+export function createUnservedRefusal({ state, body }) {
   return (pathname) => {
-    const workspace = unservedWorkspace(pathname, base(), state());
+    const workspace = unservedWorkspace(pathname, state());
     return workspace ? { ok: false, status: 404, body: body(workspace) } : null;
   };
 }
