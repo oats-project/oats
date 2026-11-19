@@ -483,6 +483,17 @@ instance with the flag on carries `sameWork: true` on its `oats status
 remote relay are in
 [desktop-cli-api.md](desktop-cli-api.md#same-work-as-the-parent-oats-instance-same-work).
 
+`oats instance pin <instance> on|off` (feature `instance-pin`) pins an
+instance at the top of its machine's list, or removes the pin, addressed as
+`oats instance background` addresses it and routed with `--server`. The pin
+is the home's own file, `.oats-pinned.json`, so it is shared: every client of
+that machine (the Desktop, the TUI, another machine's routed view) reads it
+from the `pinned: true` on the instance's row and lists it first. It survives
+a restart, a stop and a start, a resume and `oats instance upgrade`, and a
+retire removes it with the home. No spawn flag or `soul.yaml` key sets it.
+The answer and the errors are in
+[desktop-cli-api.md](desktop-cli-api.md#pinned-instances-oats-instance-pin).
+
 `spawnOrigin` records the caller independently of these links. For new spawns
 from OATS 0.64.0, it is `instance` when the caller's `OATS_INSTANCE` and/or
 `OATS_INSTANCE_HOME` resolve consistently to an extant home in this deployment;

@@ -180,7 +180,7 @@ test("server roster: instance rows carry the remote status facts, null where the
     startedAt: "2026-09-29T10:00:00.000Z", createdAt: "2026-09-29T09:00:00.000Z", model: "opus", runtimeState: "working",
     parentInstance: "boss", siblingInstance: "dev-b", relation: "child", relativeTo: "boss", spawnOrigin: "instance",
     // #675: the host's work record and its own drift observation, relayed as it answered them.
-    work: "worktree", repo: "/srv/ws/repo", branch: "agents/dev-a", modelFrom: "soul", color: "sage", background: true, sameWork: true, attributedHuman: "Ada Lovelace",
+    work: "worktree", repo: "/srv/ws/repo", branch: "agents/dev-a", modelFrom: "soul", color: "sage", background: true, pinned: true, sameWork: true, attributedHuman: "Ada Lovelace",
     spawnedBy: { instance: "boss", home: "/srv/ws/agents/dev/instances/boss" },
     soul: { repoKey: "github.com/acme/agents", commit: "1111111111111111111111111111111111111111", current: "2222222222222222222222222222222222222222", status: "moved" },
     modules: [
@@ -192,8 +192,10 @@ test("server roster: instance rows carry the remote status facts, null where the
   // Feature instance-color: a colour outside the palette is relayed as none.
   // Feature instance-background: only `true` is relayed; anything else is absent, never false.
   // Feature instance-same-work: anything but `sameWork: true` is relayed as absent.
-  const odd = { instance: "dev-c", home: "/srv/ws/agents/dev/instances/dev-c", running: false, color: "teal", background: "yes", sameWork: "true" };
-  const status = { root: "/srv/ws/agents", agents: [{ name: "dev", harness: "claude", instances: [full, bare, odd] }] };
+  // Feature instance-pin: only exactly `true` is relayed; `"true"` and `1` are absent, never false.
+  const odd = { instance: "dev-c", home: "/srv/ws/agents/dev/instances/dev-c", running: false, color: "teal", background: "yes", pinned: "true", sameWork: "true" };
+  const oddPin = { instance: "dev-d", home: "/srv/ws/agents/dev/instances/dev-d", running: false, pinned: 1 };
+  const status = { root: "/srv/ws/agents", agents: [{ name: "dev", harness: "claude", instances: [full, bare, odd, oddPin] }] };
   const { exec } = countingExec(() => JSON.stringify(status));
   const out = await rosterGroups({ io: { execFileAsync: async (...call) => exec(...call) } });
   const rows = out.groups[0].instances;
@@ -204,6 +206,8 @@ test("server roster: instance rows carry the remote status facts, null where the
   assert.equal(rows.find((r) => r.instance === "dev-a").background, true, "background is relayed");
   for (const n of ["dev-b", "dev-c", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === n), "background"), false, `${n}: no background key`);
   assert.equal(a.sameWork, true, "sameWork: true is relayed as the host reported it");
+  assert.equal(a.pinned, true, "pinned: true is relayed");
+  for (const n of ["dev-b", "dev-c", "dev-d", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === n), "pinned"), false, `${n}: no pinned key, never false or null`);
   for (const name of ["dev-b", "dev-c", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === name), "sameWork"), false, `${name}: no sameWork, never false or null`);
   for (const k of FIELDS) assert.deepEqual(a[k], full[k], k);
   assert.equal(a.savedRoute, false);
@@ -497,7 +501,7 @@ test("a remote without the session commands: the fallback hint names the instanc
 // ---- item 4: the Desktop's reads and lifecycle plans, routed ----
 
 const SURFACE_PROBE = { ...FULL_PROBE, remote: [...FULL_PROBE.remote, "readiness", "instance-events", "instance-git", "lifecycle-plans"],
-  features: [...FULL_PROBE.features, "readiness", "instance-events-2", "instance-git", "lifecycle-plans", "retire-retention", "instance-color", "instance-background", "instance-same-work"],
+  features: [...FULL_PROBE.features, "readiness", "instance-events-2", "instance-git", "lifecycle-plans", "retire-retention", "instance-color", "instance-background", "instance-pin", "instance-same-work"],
   readinessApi: 2, eventsApi: 2, instanceGitApi: 1, lifecycleApi: 1 };
 const HOME_A = homeOf("dev", "dev-a");
 const ENVELOPES = {
@@ -511,6 +515,7 @@ const ENVELOPES = {
   color: { schemaVersion: 1, ok: true, result: { instanceColorApi: 1, instance: "dev-a", home: HOME_A, color: "sage", changed: true } },
   background: { schemaVersion: 1, ok: true, result: { instanceBackgroundApi: 1, instance: "dev-a", home: HOME_A, background: true, changed: true } },
   sameWork: { schemaVersion: 1, ok: true, result: { instance: "dev-a", sameWork: true } },
+  pin: { schemaVersion: 1, ok: true, result: { instancePinApi: 1, instance: "dev-a", home: HOME_A, pinned: true, changed: true } },
   // `facts.ownWorktree` (awebai/oats#988): the host's plan crosses with its facts as the host answered them.
   retirePlan: { schemaVersion: 1, ok: true, result: { planRevision: "r2", home: HOME_A, facts: { workMode: "worktree", ownWorktree: true }, defaults: { retainWorktree: true }, notes: [] } },
 };
@@ -531,6 +536,7 @@ function surfaceSetup(name, probe = SURFACE_PROBE) {
     [`instance color dev-a sage --home ${HOME_A} --dir ${WS} --json`]: answer(ENVELOPES.color),
     [`instance background dev-a on --home ${HOME_A} --dir ${WS} --json`]: answer(ENVELOPES.background),
     [`instance same-work dev-a on --home ${HOME_A} --dir ${WS} --json`]: answer(ENVELOPES.sameWork),
+    [`instance pin dev-a on --home ${HOME_A} --dir ${WS} --json`]: answer(ENVELOPES.pin),
     [`instance events dev-a --home /srv/elsewhere/dev-a --dir ${WS} --json`]: { stdout: JSON.stringify({ schemaVersion: 1, ok: false, error: { code: "E_HOME_MISMATCH", message: "not a home of dev-a under /srv/ws" } }), exit: 1 },
   } });
   const env = cliEnv(dir, host);
@@ -554,6 +560,8 @@ const SURFACE_CALLS = [
   ["instance-background", ["instance", "background", "dev-a", "on", "--server", "build", "--json"], ENVELOPES.background],
   // Feature instance-same-work: the feature alone, as instance color.
   ["instance-same-work", ["instance", "same-work", "dev-a", "on", "--server", "build", "--json"], ENVELOPES.sameWork],
+  // Feature instance-pin: the feature alone, as instance background.
+  ["instance-pin", ["instance", "pin", "dev-a", "on", "--server", "build", "--json"], ENVELOPES.pin],
 ];
 
 test("routed readiness, instance events, git, diff, stop and retire plans: run on the host, their envelope relayed unchanged", () => {
