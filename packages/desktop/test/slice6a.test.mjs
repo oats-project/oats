@@ -207,16 +207,26 @@ test("slice6a tab memory restores page tabs", async () => {
     currentWorkspace: () => c.ws, tabOpenIntents: { watch: () => () => true },
     closeTab: (id) => { c.closed.push(id); tabs.delete(id); },
     showStage: async () => {},
-    openViewTab: async (name, title, extra, key, kind) => { const id = 10 + c.reopened.length; c.reopened.push([name, c.split.focusedGroup]); tabs.set(id, { kind, page: name, workspace: c.ws }); },
-    selectTab: (id) => { c.selected.push(id); return true; } };
+    openViewTab: async (name, title, extra, key, kind) => {
+      const id = 10 + c.reopened.length; c.reopened.push([name, c.split.focusedGroup]); tabs.set(id, { kind, page: name, workspace: c.ws });
+      // as activation would: the new tab joins the focused group, its active one
+      c.split = { ...c.split, groups: c.split.groups.map((g) => g.id === c.split.focusedGroup ? { ...g, tabs: [...g.tabs, id], activeTab: id } : g) };
+    },
+    selectTab: (id) => { c.selected.push(id); return true; }, activateTab() {} };
   const run = runInNewContext(`const workspacePages = new Map();\n${fn("takePageTabs")}\n${fn("closePageTabs")}\n${fn("reopenPageTabs")}\n({ takePageTabs, closePageTabs, reopenPageTabs })`, c);
   const leaving = run.takePageTabs("A");
   assert.deepEqual(JSON.parse(JSON.stringify(leaving.map((p) => [p.page, p.group, p.active]))), [["home", 1, false], ["spawn", 2, true]]);
   run.closePageTabs("A", leaving);
   assert.deepEqual(c.closed, [2, 3], "its page tabs close (they read the current workspace)");
+  // (the remembered split, as recall hands it back: the closed page tabs gone from their groups)
+  c.split = { ...c.split, groups: [{ id: 1, tabs: [1], activeTab: 1 }, { id: 2, tabs: [], activeTab: null }], focusedGroup: 2 };
   c.ws = "A"; await run.reopenPageTabs("A");
   assert.deepEqual(c.reopened, [["home", 1], ["spawn", 2]], "each page reopens in its group");
   assert.deepEqual(c.selected, [11], "the active page is active again");
+  // Every pane as it was: group 1's strip order (terminal, then its Home) and its active member (its Home), and the
+  // focused group (2).
+  assert.deepEqual(JSON.parse(JSON.stringify(c.split.groups.map((g) => [g.tabs, g.activeTab]))), [[[1, 10], 10], [[11], 11]]);
+  assert.equal(c.split.focusedGroup, 2);
   assert.match(fn("restoreWorkspaceTabs"), /closePageTabs\(leaving, leavingPages\);/);
   assert.match(fn("restoreWorkspaceTabs"), /void reopenPageTabs\(tabWorkspace\);/);
 });

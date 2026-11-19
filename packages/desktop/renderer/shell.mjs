@@ -2867,7 +2867,13 @@ const palette = createPalette({
     { label: "Sidebar: collapse to the rail / expand", detail: chordDetail("sidebar.toggle"), run: () => toggleSidebar() },
     { label: "Sidebar: hide", run: () => { setSidebarRail(false); setSidebarHidden(true); } },
     { label: "Sidebar: reset width", detail: chordDetail("sidebar.resetWidth"), run: () => runAction("sidebar.resetWidth") },
-    { label: "Agent: Details", detail: chordDetail("panel.toggle"), run: () => runAction("panel.toggle") },
+    // Details for the instance the palette was opened on (paletteTargetId: the focused roster row, else the active
+    // terminal's), as the name, colour and pin commands do: the palette's dismissal has moved focus off the row.
+    { label: "Agent: Details", detail: chordDetail("panel.toggle"), run: () => {
+      takePickerFocusReturn(document)?.restore();
+      const row = paletteTargetId ? shownRows(contextInstances).find((r) => instanceId(r) === paletteTargetId) : null;
+      if (row) openDetailsTab(row); else runAction("panel.toggle");
+    } },
     { label: "Focus mode: toggle", detail: chordDetail("app.focusMode"), run: () => runAction("app.focusMode") },
     { label: "Split: terminal right (side by side)", detail: chordDetail("split.vertical"), run: () => splitPane("row") },
     { label: "Split: terminal down (stacked)", detail: chordDetail("split.horizontal"), run: () => splitPane("col") },
@@ -3512,7 +3518,9 @@ function cycleRegion(delta) {
   focusRegions.cycle(delta);
 }
 const surfaceReturn = createSurfaceReturn({ doc: document, currentWorkspace, workspaceGeneration,
-  surface: () => ({ stage: currentPage(), tab: activeTab, tabLayerVisible,
+  // Slice 6a: the page tab shown plays the stage's part for the return (surface-return.mjs): a page tab is "the
+  // stage", any other tab is "a tab over it".
+  surface: () => ({ stage: currentPage(), tab: currentPage() ? null : activeTab, tabLayerVisible: tabLayerVisible && currentPage() == null,
     workspaceTab: currentPage() === "spawn" ? pageModule("spawn")?.currentWorkspaceTab?.() ?? null : null }),
   tabPane: id => { const t = tabs.get(id); return t && canActivateTab(t, currentWorkspace()) ? t.paneEl : null; },
   showStage, selectTab: (id, opts) => selectTab(id, opts), focusRegion: name => focusRegions.focusRegion(name),
@@ -3973,8 +3981,8 @@ function restoreWorkspaceTabs() {
   refreshContextRoster();
   if (typeof reopenPageTabs === "function") void reopenPageTabs(tabWorkspace);
 }
-/** Page tabs a workspace keeps while another shows (slice 6a: tab memory remembers page tabs): its pages, each with
- * its group and whether it was the active tab. */
+/** Page tabs a workspace keeps while another shows (slice 6a: tab memory remembers page tabs): each page with its
+ * group, and every group's strip order and active member, so coming back restores each pane as it was. */
 const workspacePages = new Map();
 function takePageTabs(ws) {
   return [...tabs].filter(([, t]) => t.kind === "page" && t.workspace === ws)
@@ -3982,32 +3990,49 @@ function takePageTabs(ws) {
 }
 function closePageTabs(ws, pages) {
   if (!ws) return;
-  workspacePages.set(ws, pages.map(({ page, group, active }) => ({ page, group, active })));
+  const groups = split ? split.groups.map((g) => ({ id: g.id, tabs: [...g.tabs], active: g.activeTab })) : null;
+  workspacePages.set(ws, { pages: pages.map(({ id, page, group, active }) => ({ id, page, group, active })), groups,
+    focused: split?.focusedGroup ?? null, active: activeTab });
   for (const { id } of pages) closeTab(id, false, { explicit: false, passive: true });
 }
-/** Reopen the page tabs a workspace had, each in its group, the active one active again; a workspace that had none
- * and has no tab at all lands on Home. */
+/** Reopen the page tabs a workspace had, each in its group; then every group's strip order and active member, the
+ * focused group and the active tab, as they were. A workspace that had none and has no tab at all lands on Home. */
 async function reopenPageTabs(ws) {
-  const pages = workspacePages.get(ws) ?? null;
+  const saved = workspacePages.get(ws) ?? null;
   workspacePages.delete(ws);
   const owns = tabOpenIntents.watch();
   const still = () => owns() && currentWorkspace() === ws;
-  if (!pages?.length) {
+  if (!saved?.pages?.length) {
     if (still() && ![...tabs.values()].some((t) => canActivateTab(t, ws))) await showStage("home");
     return;
   }
-  const wasActive = activeTab;
-  let activePage = null;
-  for (const p of pages) {
+  const opened = new Map(); // old page tab id -> its reopened id
+  for (const p of saved.pages) {
     if (!still()) return;
     if (split && p.group != null && split.groups.some((g) => g.id === p.group)) split = { ...split, focusedGroup: p.group };
+    const before = new Set(tabs.keys());
     const title = NAV.find((v) => v.name === p.page)?.title ?? p.page;
     await openViewTab(p.page, title, {}, p.page === "home" ? `page:home:${nextTabId}` : `page:${p.page}`, "page", () => true, owns);
-    if (p.active) activePage = [...tabs].filter(([, t]) => t.kind === "page" && t.page === p.page && t.workspace === ws).at(-1)?.[0] ?? null;
+    const made = [...tabs.keys()].find((id) => !before.has(id));
+    if (made != null) opened.set(p.id, made);
   }
   if (!still()) return;
-  const back = activePage ?? (wasActive != null && tabs.has(wasActive) ? wasActive : null);
-  if (back != null) selectTab(back, { intent: owns });
+  const now = (id) => (opened.has(id) ? opened.get(id) : id);
+  if (split && saved.groups) {
+    split = { ...split, groups: split.groups.map((g) => {
+      const was = saved.groups.find((s) => s.id === g.id);
+      if (!was) return g;
+      const order = was.tabs.map(now).filter((id) => g.tabs.includes(id));
+      const tabsInOrder = [...order, ...g.tabs.filter((id) => !order.includes(id))];
+      const active = now(was.active);
+      return { ...g, tabs: tabsInOrder, activeTab: tabsInOrder.includes(active) ? active : g.activeTab };
+    }), focusedGroup: saved.focused != null && split.groups.some((g) => g.id === saved.focused) ? saved.focused : split.focusedGroup };
+  }
+  const back = now(saved.active);
+  if (back != null && tabs.has(back)) {
+    if (split) activateTab(back, { keepGroupFocus: true }); // the projection of every group, as restored above
+    selectTab(back, { intent: owns });
+  }
 }
 /** Workspace views (#482): per-workspace state saved under a deployment id — a selection from before
  * views, an unattached deployment that has matched a workspace since — or under a view id the server
