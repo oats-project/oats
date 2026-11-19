@@ -456,9 +456,10 @@ test('About capabilities: leaving the tab or the workspace closes it without mov
   assert.equal(u.overlay(), null); assert.equal(u.doc.activeElement, field);
 });
 
-test('About souls: the same dialog with its own button and copy', t => {
-  const u = mount(t);
-  const souls = createAboutDialog(u.doc, { copy: ABOUT_COPY.souls, id: 'workspace-souls-about' });
+test('About souls is gone (the Desktop UI rework, slice 3a): one copy object, the capabilities\' only', () => {
+  assert.deepEqual(Object.keys(ABOUT_COPY), ['capabilities']);
+  assert.ok(Object.isFrozen(ABOUT_COPY) && Object.isFrozen(ABOUT_COPY.capabilities), 'one frozen copy object');
+});
   t.after(() => souls.dispose());
   u.$('.lead').append(souls.button);
   assert.equal(souls.button.getAttribute('aria-label'), 'About souls');

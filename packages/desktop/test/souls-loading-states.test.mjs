@@ -83,8 +83,8 @@ test('pending: no empty message, no "Loading souls…" block; card skeletons at 
   u.timers.advance(1);
   const sk = u.skeleton(); assert.ok(sk, 'the skeleton after 150ms'); assert.equal(sk.getAttribute('aria-hidden'), 'true');
   assert.ok(sk.classList.contains('souls-group'), 'shaped like a group'); assert.ok(sk.querySelector('.souls-group-cards'));
-  const cardBones = sk.querySelectorAll('.soul-tile > .soul-card'); assert.ok(cardBones.length >= 2, 'one row plus one (jsdom: one column)');
-  for (const card of cardBones) { assert.ok(card.querySelector('.sbody .sname .glyph.skeleton')); assert.ok(card.querySelector('.sbody .sdesc')); assert.ok(card.querySelector('.sfoot .skeleton')); }
+  const cardBones = sk.querySelectorAll('.skeleton-soul-card > .soul-card'); assert.ok(cardBones.length >= 2, 'one row plus one (jsdom: one column)');
+  for (const card of cardBones) { assert.ok(card.querySelector(':scope > .stitle.skeleton')); assert.ok(card.querySelector(':scope > .sdesc')); assert.ok(card.querySelector('.sfoot .skeleton')); }
   assert.equal(sk.textContent, '', 'no text in a skeleton');
   assert.equal(u.cards().length, 0);
   await u.resolve(0, { agents: ROSTER, catalog: { reason: null, ambiguous: [] } });

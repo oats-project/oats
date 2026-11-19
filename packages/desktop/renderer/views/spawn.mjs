@@ -66,6 +66,8 @@ const CSS = `
 .souls-sum { color:var(--muted); font-size:12px; }
 /* The grid's stale line (desktop/loading-states) sits between the toolbar and the scroller; nothing when empty. */
 .souls-notice { flex:none; padding:0 20px; }
+.souls-lede { flex:none; margin:0 0 12px; padding:0 20px; max-width:80ch; color:var(--muted); font-size:12.5px; line-height:1.45; }
+.souls-lede[hidden] { display:none; }
 .souls-notice:empty, .souls-notice[hidden] { display:none; }
 .souls-notice .loading-notice { margin:0 0 10px; }
 .souls-bar .loading-refreshing { margin-left:auto; }
@@ -135,6 +137,10 @@ ${groupHeadingCSS}
 `;
 
 let state = null;
+
+/** The Souls page's first line: what a soul is, and how the page is ordered (it replaces "About souls"). */
+export const SOULS_LEDE = `A soul is what an ${DESKTOP_NOUNS.instance} is made of: its instructions, its skills and capabilities, and the knowledge it keeps. `
+  + "Grouped by where each comes from; maintainers first, then experts, developers and operations.";
 
 /* Quick Open selects a soul for inspection; launch remains explicit. */
 let pendingPreselect = null;
@@ -334,6 +340,7 @@ function showPage(s, mode) {
   s.q("souls-grid").hidden = !!mode || !souls;
   s.q("souls-bar").hidden = !!mode || !souls;
   s.q("souls-notice").hidden = !!mode || !souls; // the grid's stale line belongs to the grid
+  s.q("souls-lede").hidden = !!mode || !souls;
   const machines = s.discovery?.tab === "machines";
   s.q("workspace-machines-panel").hidden = !!mode || !machines;
   s.q("workspace-discovery").hidden = !!mode || souls || machines;
@@ -552,6 +559,7 @@ ${spawnDialogCSS}</style>
               <div class="ws-segmented souls-view" role="group" aria-label="Show souls as"><button type="button" data-view="grid" aria-pressed="true" aria-keyshortcuts="V" title="Grid (V)">Grid</button><button type="button" data-view="table" aria-pressed="false" aria-keyshortcuts="V" title="Table (V)">Table</button></div>
               <span class="souls-sum workspace-sr-only" role="status"></span>
             </div>
+            <p class="souls-lede">${SOULS_LEDE}</p>
             <div class="souls-notice"></div>
             <div class="souls-grid"></div>
             <div class="workspace-machines-panel" hidden></div>
@@ -637,7 +645,7 @@ ${spawnDialogCSS}</style>
     onOpenTeam: label => openTeam(s, label),
     onTab: tab => {
       s.spawnOp++; closeSpawnModal(s); s.inspector.close(); closeCapability(s); closeTeam(s); s.page.close();
-      s.q("souls-bar").hidden = tab !== "souls"; s.q("souls-notice").hidden = tab !== "souls";
+      s.q("souls-bar").hidden = tab !== "souls"; s.q("souls-notice").hidden = tab !== "souls"; s.q("souls-lede").hidden = tab !== "souls";
       syncMachines(s);
     },
   });
@@ -656,7 +664,7 @@ ${spawnDialogCSS}</style>
   applyWorkspaceTab(s);
   // The page opens on Souls unless a handoff chose another tab: then the Souls bar and its notice wait for Souls, and
   // on Machines its view mounts (onTab runs on changes only).
-  if (s.discovery.tab !== "souls") { s.q("souls-bar").hidden = true; s.q("souls-notice").hidden = true; }
+  if (s.discovery.tab !== "souls") { s.q("souls-bar").hidden = true; s.q("souls-notice").hidden = true; s.q("souls-lede").hidden = true; }
   syncMachines(s);
   applyCapability(s); // a handoff made before the mount: its tab now, its page when the catalog lands
   s.q("filter").addEventListener("input", (e) => { s.filterText = e.target.value; renderGrid(s); });
@@ -876,16 +884,17 @@ function settleGridState(s, souls) {
   if (!agents.length && !souls.catalog && s.deployment?.status === "observed") { load.defer({ keepSkeleton: true }); return; }
   load.succeed({ observedAt, empty: !agents.length });
 }
-/** Pending: one group's worth of card skeletons at the real card size — one row plus one. */
+/** Pending: one group's worth of card skeletons at the real card size — one row plus one; in the table, its rows. */
 function gridSkeleton(s) {
   const grid = s.q("souls-grid"), doc = grid.ownerDocument;
-  const width = grid.clientWidth || 0, columns = Math.max(1, Math.floor((width - 40 + 14) / (240 + 14)));
+  const width = grid.clientWidth || 0, columns = Math.max(1, Math.floor((width - 40 + 12) / (240 + 12)));
   const section = doc.createElement("section"); section.className = "souls-group skeleton-souls-group";
   const title = doc.createElement("div"); title.className = "souls-group-title";
   const bone = doc.createElement("span"); bone.className = "skeleton skeleton-line skeleton-group-title"; title.append(bone);
-  const cards = doc.createElement("div"); cards.className = "souls-group-cards";
-  for (let i = 0; i < columns + 1; i++) cards.append(skeleton(doc, "soul-card"));
-  section.append(title, cards); section.setAttribute("aria-hidden", "true"); section.dataset.skeleton = "soul-cards";
+  const table = s.view === "table";
+  const items = doc.createElement("div"); items.className = table ? "souls-table-skeleton" : "souls-group-cards";
+  for (let i = 0; i < (table ? 6 : columns + 1); i++) items.append(table ? skeleton(doc, "table-row", { columns: SOULS_TABLE_COLUMNS.length }) : skeleton(doc, "soul-card"));
+  section.append(title, items); section.setAttribute("aria-hidden", "true"); section.dataset.skeleton = table ? "soul-rows" : "soul-cards";
   return section;
 }
 
@@ -1244,7 +1253,10 @@ function soulCard(s, a) {
   else foot.append(span("sactivity" + (running ? " running" : ""), agentsText(running, instances.length)));
   foot.append(span("skind", `· ${SOUL_KIND_WORDS[soulKind(a)]}`));
   card.append(foot);
-  card.title = [a.name, a.description, refusal ? cantSpawnLine(refusal) : agentsText(running, instances.length)].filter(Boolean).join("\n");
+  // Its name names it; what it does, its agents and its kind describe it.
+  card.setAttribute("aria-label", a.name);
+  card.setAttribute("aria-description", [a.description, refusal ? cantSpawnLine(refusal) : agentsText(running, instances.length), `${SOUL_KIND_WORDS[soulKind(a)]} soul`].filter(Boolean).join(". "));
+  card.title = [a.name, a.description].filter(Boolean).join("\n");
   return card;
 }
 

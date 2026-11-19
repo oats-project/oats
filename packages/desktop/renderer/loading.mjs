@@ -96,18 +96,13 @@ export function skeleton(doc, shape, { columns = 4, width } = {}) {
       break;
     }
     case 'soul-card': {
-      // Wears the real card classes (.soul-tile > .soul-card > .sbody (.sname .glyph / .stitle / .scontext, .sdesc, .schips
-      // .schip) + .sfoot) so the Souls grid's own CSS (views/spawn.mjs) gives it the card's height, padding and gaps.
-      el = element(doc, 'div', 'skeleton-item skeleton-soul-card soul-tile');
+      // Wears the real card classes (.soul-card > .stitle, .sdesc, .sfoot) so the Souls grid's own CSS (views/spawn.mjs)
+      // gives it the card's height, padding and gaps.
+      el = element(doc, 'div', 'skeleton-item skeleton-soul-card');
       const card = element(doc, 'div', 'soul-card skeleton-card');
-      const body = element(doc, 'span', 'sbody'), name = element(doc, 'span', 'sname'), identity = element(doc, 'span', 'sidentity');
-      identity.append(bone(doc, 'skeleton-line skeleton-name stitle'), bone(doc, 'skeleton-line skeleton-context scontext'));
-      name.append(bone(doc, 'skeleton-mark glyph'), identity);
       const desc = element(doc, 'span', 'sdesc skeleton-desc'); desc.append(bone(doc, 'skeleton-line skeleton-text'), bone(doc, 'skeleton-line skeleton-text short'));
-      const chips = element(doc, 'span', 'schips'); chips.append(bone(doc, 'schip skeleton-chip'), bone(doc, 'schip skeleton-chip short'));
-      body.append(name, desc, chips);
-      const foot = element(doc, 'span', 'sfoot'); foot.append(bone(doc, 'skeleton-line skeleton-activity sactivity'), bone(doc, 'skeleton-button'));
-      card.append(body, foot); el.append(card);
+      const foot = element(doc, 'span', 'sfoot'); foot.append(bone(doc, 'skeleton-line skeleton-activity sactivity'));
+      card.append(bone(doc, 'skeleton-line skeleton-name stitle'), desc, foot); el.append(card);
       break;
     }
     case 'table-row': {
