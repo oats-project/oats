@@ -14,9 +14,10 @@ export type Agent = {
   address: string | null;
   /** "bb" | "tmux" | another session provider's name */
   backend: string;
-  /** session.endpoint, null on a tmux row */
+  /** null from status: the kernel names them only on a local `oats session inspect` and in a spawn's answer */
   server: string | null;
   projectId: string | null;
+  /** the row's session.threadId, null on a tmux row */
   threadId: string | null;
   /** The kernel's word. Never inferred. */
   running: true | false | null;
