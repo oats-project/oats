@@ -4,8 +4,9 @@
  *
  *  - a **package** capability is official when `oats workspace status` reports its package pinned from the
  *    catalog (`packages[].source` is `catalog:<id>`): only the reviewed official catalog makes a package
- *    pinnable by id (docs/packages.md, docs/official-catalog.md). `OATS_PACKAGE_CATALOG` can point a kernel at
- *    another catalog file and status does not say which one was read: then "catalog" means the configured one.
+ *    pinnable by id (docs/packages.md, docs/official-catalog.md). Caveat: `OATS_PACKAGE_CATALOG` can point a kernel
+ *    at another catalog file, and status does not say which one was read. An operator who points it elsewhere gets the
+ *    ✓ for that catalog's packages: their choice (the effort's lead, 2026-11-19).
  *    A package pinned by `git:<repo>@<ref>` is "by <repo>", whatever its id;
  *  - a **member** capability is official when its repository is the OATS repository itself
  *    (github.com/oats-project/oats, or its old key github.com/awebai/oats: repo-moves.mjs);
