@@ -78,6 +78,7 @@ test("the shipped table: each changed default resolves per platform and per chor
     "workspace.previous": ["Alt+↑", "Alt+↑", null, null], "workspace.next": ["Alt+↓", "Alt+↓", null, null],
     "terminal.focusMode": ["Mod+Alt+Z", "Alt+Z", "Ctrl+Alt+Z", "Ctrl+Shift+M"],
     "instance.edit": ["Mod+Alt+R", "Alt+R", "Ctrl+Alt+R", "Ctrl+Alt+R"],
+    "agent.viewFocus": ["Mod+Alt+T", "Alt+T", "Ctrl+Alt+T", "Ctrl+Alt+T"],
     "tabs.close": ["Mod+W", "Alt+W", "Ctrl+Alt+W", "Ctrl+Shift+W"],
     "tabs.next": ["Ctrl+Tab", "Ctrl+Tab"], "tabs.prev": ["Ctrl+Shift+Tab", "Ctrl+Shift+Tab"],
     "tabs.nextPage": ["Alt+→", "Alt+→", "Alt+Shift+→", "Alt+Shift+→"], "tabs.prevPage": ["Alt+←", "Alt+←", "Alt+Shift+←", "Alt+Shift+←"],
@@ -144,7 +145,7 @@ test("nothing binds Super/Meta on Linux/Windows: Mod is Ctrl there", () => {
 
 test("the terminal allowlist is exactly the actions that must work in a terminal", () => {
   assert.deepEqual([...TERMINAL_ALLOWLIST].sort(), [
-    "app.chooseSoul", "app.leader", "app.palette", "app.quickOpenSouls", "app.shortcuts", "app.themePicker", "app.workspaces", "focus.leaveTerminal",
+    "agent.viewFocus", "app.chooseSoul", "app.leader", "app.palette", "app.quickOpenSouls", "app.shortcuts", "app.themePicker", "app.workspaces", "focus.leaveTerminal",
     "instance.edit", "panel.toggle", "roster.openNext", "roster.openPrevious", "sidebar.focusFilter", "sidebar.toggle",
     "split.close", "split.focusNextGroup", "split.focusPrevGroup", "split.horizontal", "split.vertical",
     "stage.automations", "stage.hierarchy", "stage.spawn",

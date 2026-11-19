@@ -942,6 +942,54 @@ starts, ends or its text changes, never as the age ticks over. In a split,
 each group's row follows its own tab. The row goes as soon as the wait ends,
 and it never shows for a stopped instance or a roster that is out of date.
 
+## The agent view: facts and questions
+
+With an OATS that reports the agent's board (feature `instance-board`; the
+agent writes it with `oats instance board set` and `oats instance board ask`,
+[docs/desktop-cli-api.md](desktop-cli-api.md)), an agent's terminal tab is its
+**agent view**. Top to bottom:
+
+1. **Facts**: what the agent keeps in your view, one compact row each,
+   `label · value unit`, with "updated 4 min ago". At most three show; **N
+   more** unfolds the rest. While the view is open the Desktop reads each
+   fact's history once, and a number that changed draws a small sparkline.
+   A link shows as its full address, attributed (`dev-a says: https://…`, the
+   host in bold), and opens in your browser only when you press it. **×**, or
+   **u** on a focused fact, hides it on this computer only: the agent's board
+   is unchanged, and the fact shows again when its value changes. **N hidden ·
+   show** brings them all back.
+2. **The agent's own terminal**, unchanged: the same viewer, the same cell
+   geometry, the only part that scrolls. It gives up exactly the rows the
+   facts and the questions take.
+3. **Questions**: one at a time, under the terminal, so they sit right by the
+   agent's input line at the bottom of its screen. "question 2 of 3", ‹ › and
+   the dots turn them, and so do Tab / Shift+Tab and ← / → while the questions
+   have the focus. A question with context has a **Context** fold, attributed
+   to the agent, as plain text. With no open question there is no zone.
+
+**Answering.** **Alt+T** (Ctrl+Alt+T in the Ctrl+Alt and Ctrl+Shift families,
+⌘⌥T on macOS) moves the focus from the terminal to the questions, then to the
+facts, then back; Esc goes back to the terminal. A number, or a press on an
+option, puts `<id>: <option>` on the agent's input line, for example
+`q2: Yes, one clean commit`, and gives the terminal the focus. Nothing is sent:
+your Enter in the terminal sends it, as if you had typed it, so you see what
+goes. No bare digit is ever typed. The card hides once you press Enter; the
+agent removes the question for real once it has read the answer.
+
+**While a dialog is open** (the agent has a live `permission` or `question`
+claim, from its harness or any other producer), the numbers are disabled and
+the zone says "The agent's terminal is showing a prompt: answer it there
+first." The Desktop reads the agent's claims for this when the view opens and
+when they change, because the roster row shows only the newest one.
+
+The board's own question is the agent's needs-input claim (reason
+`attention`), so the sidebar mark, the tab's mark and Home's "needs you" read
+it as before. In the agent view it shows in the question zone, not in the
+waiting row. Any other claim keeps the waiting row described above. Without
+the feature (an older OATS), the tab is the terminal and its waiting row, as
+before. A tab on another machine shows the board when that machine's OATS has
+the feature.
+
 ## Copy from a terminal
 
 Drag over an agent's output to select it, as in any terminal. The selection

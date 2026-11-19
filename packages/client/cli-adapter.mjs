@@ -697,7 +697,7 @@ export async function cliInstancePin(bin, args, io = {}) {
 
 /** `maxAge` (feature observe-max-age) is inspect's alone; `features` is the probe's list and
  * gates the flags (also `instructions`, `skills` and `composedSkills`), so an undeclared kernel gets the flagless argv even when a value is given. */
-export async function cliCapability(bin, { action, context, server, soul, agentsRoot, home, operation, args, localCwd, maxAge, instructions = false, skills = false, composedSkills = false, features }, io = {}) {
+export async function cliCapability(bin, { action, context, server, soul, agentsRoot, home, operation, args, localCwd, maxAge, instructions = false, skills = false, composedSkills = false, board = false, features }, io = {}) {
   const bad = message => { throw Object.assign(new Error(message), { code: 'E_BAD_ARGS' }); };
   const value = (v, label) => {
     if (typeof v !== 'string' || !v || v.startsWith('-') || v.includes('\0')) bad(`Invalid ${label}`);
@@ -735,7 +735,11 @@ export async function cliCapability(bin, { action, context, server, soul, agents
   // inspect --soul only, gated the same way; routed, only for a host whose roster row names it (hostComposesSkills).
   if (composedSkills && (action !== 'inspect' || !soul || home)) bad('Composed skills belong to a soul inspection');
   const composedSkillsArgv = composedSkills && Array.isArray(features) && features.includes('soul-composed-skills') ? ['--composed-skills'] : [];
-  return await runJson(bin, [...argv, ...target, ...composed, ...skillsArgv, ...composedSkillsArgv, ...maxAgeArgv(features, maxAge), '--json'], {
+  // --board (feature instance-board) adds the agent's board with each fact's history and each question's context:
+  // inspect --home only, gated the same way; routed, only for a host whose roster row names it (inspect-boundary.mjs).
+  if (board && (action !== 'inspect' || !home || soul)) bad('The board belongs to a home inspection');
+  const boardArgv = board && Array.isArray(features) && features.includes('instance-board') ? ['--board'] : [];
+  return await runJson(bin, [...argv, ...target, ...composed, ...skillsArgv, ...composedSkillsArgv, ...boardArgv, ...maxAgeArgv(features, maxAge), '--json'], {
     cwd: localCwd, exec: io.exec, timeout: io.timeout ?? (action === 'run' ? 300_000 : ENVELOPE_TIMEOUT_MS),
     // The skills' text makes the answer larger than any other read: an allowance of its own, still bounded.
     maxBuffer: skillsArgv.length || composedSkillsArgv.length ? SKILLS_INSPECT_MAX_BUFFER : ENVELOPE_MAX_BUFFER,

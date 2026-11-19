@@ -11,6 +11,7 @@ import { waitingOnYouData } from './waiting-on-you.mjs';
 import { attributedHumanData } from './attributed-human.mjs';
 import { retireData } from './retire-state.mjs';
 import { instanceColor } from './instance-presentation.mjs';
+import { boardData } from './instance-board.mjs';
 const text = value => typeof value === 'string' && value.length <= 8192 && !value.includes('\0');
 const absolute = value => text(value) && isAbsolute(value) && resolve(value) === value;
 const own = (value, key) => Object.hasOwn(value, key);
@@ -239,6 +240,9 @@ export function deploymentStatusData(document, deployment) {
       // #1577 (feature instance-same-work): the child does its parent's work, so its parent line is drawn
       // (same-work.mjs). Boolean true only; any other value is dropped, never checked: the row reads unflagged.
       if (own(instance, 'sameWork') && instance.sameWork === true) row.sameWork = true;
+      // Feature instance-board: the agent's facts and questions (instance-board.mjs). Validated, never check()ed: a
+      // malformed board reads as none (null), its malformed entries are left out. Absent stays absent.
+      if (own(instance, 'board')) row.board = boardData(instance.board);
       if (own(instance, 'modules')) row.modules = modules(instance.modules);
       if (own(instance, 'soul')) row.soul = soulSource(instance.soul);
       if (own(instance, 'workspace')) row.workspace = recordedWorkspace(instance.workspace);

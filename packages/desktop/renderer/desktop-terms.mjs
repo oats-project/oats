@@ -19,3 +19,7 @@ export const DESKTOP_TERMS = clientTerms({
  * one line. Not a client term: client-terms.mjs is the shared five-key contract with the Terminal UI, and this word is
  * the Desktop's own. */
 export const DESKTOP_NOUNS = Object.freeze({ instance: 'agent', instances: 'agents' });
+
+/** The board's words on the Desktop (the agent view, S2-D; contract D30 v4): Joan's "Facts" for what an agent keeps
+ * in a person's view, never "pins" (`oats instance pin` is pin to top). The CLI's verb stays `board set`. */
+export const DESKTOP_BOARD_WORDS = Object.freeze({ facts: 'Facts' });

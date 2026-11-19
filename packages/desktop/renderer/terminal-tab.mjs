@@ -190,7 +190,7 @@ export function holdTerminalResizes() {
 }
 
 export function createTerminalTab({ desk, term, tmux, remote, serverLabel, wrap, isActive, ownsFocus = () => false,
-  focusInput = () => term.focus(), fit, observe, interceptKey, onError = () => {},
+  focusInput = () => term.focus(), fit, observe, interceptKey, onError = () => {}, onInput = () => {},
   clock = { now: () => Date.now(), setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: t => clearTimeout(t) } }) {
   let offData, offExit, unobserve, detachAttachments, bannerEl, stripEl, liveEl;
   // The current lease's output gate (terminal-sync.mjs): a synchronized redraw reaches xterm whole.
@@ -341,7 +341,7 @@ export function createTerminalTab({ desk, term, tmux, remote, serverLabel, wrap,
     offExit = desk.onTermExit(h, result => exited(h, result, leaseGate));
     if (!wired) {
       wired = true;
-      subscriptions.push(term.onData(data => write(data)));
+      subscriptions.push(term.onData(data => { write(data); try { onInput(data); } catch { /* the board's observer only */ } }));
       term.attachCustomKeyEventHandler?.(event => {
         // While the reconnect strip shows, input is inert: Tab moves focus on to Reconnect now.
         if (stripEl && event.key === 'Tab' && !event.ctrlKey && !event.altKey && !event.metaKey) return false;
@@ -386,6 +386,16 @@ export function createTerminalTab({ desk, term, tmux, remote, serverLabel, wrap,
     focus();
   }
   return {
+    /** The agent view's answer (agent-board.mjs): `text` on the input line through this tab's current lease, exactly
+     * where the person's typing goes, never with a line end. False when no lease is ready to take it. */
+    type(text) {
+      if (typeof text !== 'string' || !text || /[\x00-\x1f\x7f]/.test(text)) return false;
+      const h = life.ptyId();
+      if (!ready || closed || ended || !h) return false;
+      const result = desk.termWrite(h, text);
+      if (result?.ok === false) { banner(terminalFailure(result.code).message); return false; }
+      return true;
+    },
     start: () => life.start(connect, error => banner(`could not attach: ${terminalMessage(error?.code, server)}`)),
     focus,
     async close() {
