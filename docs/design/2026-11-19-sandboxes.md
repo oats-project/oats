@@ -12,8 +12,14 @@ codes. Both sides decided those, with two precisions from Juan's side, and decid
 `forge` egress role for the GitHub API. **Revised again after review round 2** (marked
 "(r2)"): every real agent bind is checked, `status` mutates nothing, the routed
 spawn's exact sequence and seat binding, the seat's service descriptor, provider state
-scoped per deployment, a team not yet created, and the seat option's key. The r2
-additions go back to both sides for their answer on what changed. A later change to a contract goes back to
+scoped per deployment, a team not yet created, and the seat option's key. Both sides
+decided the r2 additions, with `sandbox-state-orphaned`. **Revised after review round
+3** (marked "(r3)"): the apply is bound to the preview's `decision.revision`; the seat
+plan needs only the spawn key; the spawn hook learns the apply's key; the kernel keeps
+the full routed request for replay; mint recovery; hardlinked credentials; the
+resolvers are host infrastructure; the protected-sources input shape; and the `forge`
+role's Host guarantee corrected to what a TLS pass-through can enforce. Contract
+changes among them go back to both sides; each is marked "contract" below. A later change to a contract goes back to
 both sides (the lane map's "Contract changes" line). When this record and a reference
 page disagree after it is built, the reference page wins.
 
@@ -142,45 +148,54 @@ operator's account, and never enter the container.
    then runs `aw id team remove-member` on the host, where the controller key is,
    instead of printing it.
 
-The exact order of a routed spawn, with the revision each step binds (r2):
+The exact order of a routed spawn, with the value each step binds (r2, r3):
 
-1. The kernel makes the spawn's idempotency key and asks the provider for a seat plan
-   (`plan`, target `seat`, with `instance: {name, soul, spawnKey}`). The plan is
-   read-only and answers the seat ID, its path and the `spawnProvider` options.
-2. The kernel runs the remote preview **with those options**: the final preview, whose
-   resolution revision `R` binds the apply, as #1912 requires. The in-sandbox kernel
-   admits a preview that carries a seat option without reading the seat; only an
-   apply needs it (Lifecycle, below).
-3. The kernel runs `seat` with the plan's revision, `spawnKey` and `R`. The provider
-   writes the ledger entry (`minting`, with `spawnKey`, `R` and the seat ID) before it
-   mints, mints, delivers, and moves the entry to `delivered`.
-4. The kernel runs the remote apply bound to `R`, keyed by `spawnKey`, with the same
-   provider options as the preview. No provider input changes between 2 and 4.
-5. The kernel passes the apply's own answer to the provider (`bind`, C4). A success
+1. The kernel makes the spawn's idempotency key (`spawnKey`) and asks the provider for
+   a seat plan (`plan`, target `seat`, with `instance: {soul, spawnKey}`). The plan is
+   read-only and needs no instance name: it answers the seat ID (derived from
+   `spawnKey`), its path and the `spawnProvider` options. Its `planRevision` fences
+   only the sandbox's provider state and `spawnKey`.
+2. The kernel runs the remote preview **with those options**. The preview chooses the
+   instance name when the caller gave none (a schedule passes `--purpose`, not
+   `--name`), and answers `decision.revision`, `D`, the hash of the whole decision
+   that the apply's `--expect-decision` must match, as #1912 requires. The in-sandbox
+   kernel admits a preview that carries a seat option without reading the seat; only
+   an apply needs it.
+3. **Before anything is minted, the kernel keeps the whole routed request** (r3,
+   contract): server, `spawnKey`, `D`, the exact argv and provider options, and the
+   task text, in `~/.oats/remote/<server>/pending/<spawnKey>.json` (0600, under the
+   operator account, beside today's remote snapshots). It is deleted once the apply's
+   outcome is settled.
+4. The kernel runs `seat` with the plan's revision, `spawnKey` and
+   `instance: {name, soul, decision: D}`. The name and `D` are inputs to the mint, not
+   part of the plan's revision. The provider writes the ledger entry (`minting`, with
+   `spawnKey`, `D`, the alias it will mint and the seat ID) before it mints, mints,
+   records the certificate ID, delivers, and moves the entry to `delivered`.
+5. The kernel runs the remote apply with `--expect-decision D` and
+   `--idempotency-key spawnKey`, from the kept request, with the same provider options
+   as the preview. No provider input changes between 2 and 5.
+6. The kernel passes the apply's own answer to the provider (`bind`, C4). A success
    whose home reports the delivered seat ID and certificate ID moves the entry to
-   `active`. A terminal refusal that reports the seat unconsumed releases it (reason
-   `spawn-failed`). Anything else leaves it `delivered`.
-6. A `delivered` seat is settled only by the keyed replay of the same apply (`spawnKey`,
-   `R`), which the provider's `reconcile` act asks for: its success or terminal refusal
-   is handled as in 5. Absence of the instance's name, or an unused seat directory, is
-   never evidence: the apply may still be running. A seat no replay can settle stays
-   `delivered`, and readiness reports `sandbox-seat-unsettled` for the operator.
+   `active`. A terminal refusal (a decision mismatch included) that reports the seat
+   unconsumed releases it (reason `spawn-failed`). Anything else leaves it
+   `delivered`.
+7. **The kernel settles a `delivered` seat** (r3): `oats sandbox reconcile`, and so
+   sync, first replays each kept request of that sandbox, unchanged, keyed by its
+   `spawnKey`, and passes each answer to `bind` as in 6. A replay of an apply that was
+   never sent is that apply, with its task, and a stale `D` refuses it terminally. The
+   provider never builds or replays a spawn itself. Absence of the instance's name, or
+   an unused seat directory, is never evidence. A `delivered` seat with no kept request
+   stays `delivered`, and readiness reports `sandbox-seat-unsettled`.
 
-A controller key held by the same OS user as host-side agents can be read by those
-agents. So a deployment that lists a sandbox runs no host-side agents (C10), and this
-holds for homes that existed before the sandbox was listed (r1):
-
-- A host-placed spawn there is refused with `E_SANDBOX_HOST_AGENT`.
-- Starting, restarting or resuming a host-placed home there is refused the same way,
-  by `oats session start` (with or without `--resume`) and by the resume sweep, which
-  records the home as `skipped` with that code and the same remedy as session start,
-  naming the home, so an operator who reboots after listing a sandbox sees why each
-  home did not come back.
-- A sandbox's start (by `oats sandbox start` or sync) is refused with
-  `E_SANDBOX_HOST_AGENT` while any host-placed home of the deployment is running or its
-  session cannot be read. Its remedy names each home: stop or retire it, or move that
-  work to another deployment under another OS user. OATS never stops, retires or moves
-  existing work itself.
+**A mint whose outcome is uncertain (r3, contract).** An entry found in `minting` was
+interrupted, and the registry may hold an identity whose result was never recorded. The
+next mutating act reads the certificate ID from the staging copy, if one is there,
+into the entry before it deletes that copy, and moves the entry to `mint-uncertain`.
+With a certificate ID, it releases it (reason `spawn-failed`): nothing was delivered,
+so no spawn can hold it. Without one, the entry stays `mint-uncertain`, readiness
+reports `sandbox-seat-unsettled` naming the alias, and the operator checks the team's
+members. A replay of that `seat` key answers `unknown` and never mints again. A test
+pins a kill after registration and before the receipt.
 
 ### Lifecycle calls made inside a sandbox (r1)
 
@@ -212,8 +227,9 @@ place a sandboxed instance is spawned from, and the host finishes every retire:
   provider's `release` act (C4) for that seat at once (reason `retired`).
 - **The ledger** lives in the provider's state on the host, scoped to the deployment
   (C7): `~/.oats/sandboxes/<deployment-key>/<sandbox>/seats.json`, one entry per seat:
-  seat ID, `spawnKey`, `R`, instance, alias, certificate ID, team, state (`minting`,
-  `delivered`, `active`, `removing`, `released`, `removal-uncertain`), and the receipt
+  seat ID, `spawnKey`, `D`, instance, alias, certificate ID, team, state (`minting`,
+  `mint-uncertain`, `delivered`, `active`, `removing`, `released`,
+  `removal-uncertain`), and the receipt
   of each step. It outlives the remote home, and is the only evidence
   `remove-member` acts on.
 - **Removal is written before it runs (r2).** The provider moves an entry to
@@ -222,7 +238,7 @@ place a sandboxed instance is spawned from, and the host finishes every retire:
   it becomes `removal-uncertain`, and is never removed again automatically (C6).
 - **Compensation.** If the mint succeeds but delivery fails, the provider releases
   the seat at once (reason `spawn-failed`) and deletes any delivered copy. After
-  delivery, only step 5 or 6 above settles the seat.
+  delivery, only step 6 or 7 above settles the seat.
 
 ### Credentials (v1)
 
@@ -237,7 +253,12 @@ sandbox.
 **No other mount may expose them (r1, r2).** A credential source is a regular file,
 read through its real path; a symlink is resolved, and one that leads to anything but
 a regular file is refused (`E_SANDBOX_CREDENTIAL`, reason `not-a-file`). The bind
-source is the resolved path.
+source is the resolved path. A credential source with more than one hard link is
+refused too (reason `hardlinked`, r3, contract): a second link could sit inside another
+sandbox's work directory, where no path check sees it. This applies to every source in
+the host's `credentials`, used or not, at every sandbox's start; the container's own
+acceptance already refuses a public CA with more than one link. A pinned test puts a
+hard link of one sandbox's credential in another sandbox's work directory.
 
 The provider derives a protected inventory, in two parts:
 
@@ -257,7 +278,11 @@ the rendered configuration (the state, work and mirror directories, the harness 
 directory from `agents.secrets`, the authorized-keys file, and the credential binds),
 then the container's own mount acceptance checks the started agent's actual mounts
 against the same inventory before any seat is admitted (C8). Today's boundary probe
-substitutes an empty login directory, so it cannot stand in for this check. A failing
+substitutes an empty login directory, so it cannot stand in for this check. The
+started-agent check reads the agent container by its exact identity (the container ID
+teamctl's start returned, or an ownership label as in #1958), never by name alone: a
+same-named container that is not this sandbox's refuses admission (a pinned negative
+in S2 and S3). A failing
 bind refuses the start (`E_SANDBOX_MOUNT`, reason `overlap`, naming both paths), and so
 do two sandboxes sharing any such directory. Pinned negative tests: a work or mirror
 directory containing an unused credential; one containing a delisted sandbox's
@@ -272,9 +297,17 @@ it:
   other external roles, needs `egress.external.resolvers`. Its wrapper input is
   `egress.external.forge` (teamctl's schema), its policy entry
   `externalTargets.forge.origin`, and the component checks the exact origin again.
-- The SNI/Host mismatch refusal applies to it, and the probe tests it: SNI
-  `api.github.com` with another Host, the reverse, and `api.github.com` through another
-  admitted origin's connection are all refused.
+- **What it guarantees (r3, contract: corrects a decided item).** External roles are
+  TLS pass-through: the proxy routes on the SNI and never sees the encrypted
+  Host/`:authority` (egress README, "Optional external source and model roles").
+  So `forge`'s guarantee is the external roles' own: exact SNI `api.github.com` and a
+  validated public destination. The probe tests what the proxy enforces: an
+  unlisted SNI is refused, and `api.github.com` resolves only to the proxy. A Host
+  that differs from the SNI inside the encrypted stream, on a `forge` or another
+  admitted connection, is not refused by this component; whether GitHub serves it is
+  GitHub's. Refusing it would need TLS interception, which this record does not
+  propose. The decided "SNI/Host mismatch" item is replaced by this statement, for both
+  sides to confirm.
 - The external-egress image test and the boundary probe name the hosts that stay
   refused: `uploads.github.com`, `codeload.github.com`, `raw.githubusercontent.com`,
   `objects.githubusercontent.com` and `gist.github.com`.
@@ -297,7 +330,12 @@ reconciles each sandbox the local file lists:
 
 - not built, or built from other inputs: build and start it;
 - stopped: start it;
-- running with the same inputs: nothing.
+- running with the same inputs: no infrastructure change (`action: "none"`).
+
+Whatever the action, sync then reconciles each listed, running sandbox's seats
+(`oats sandbox reconcile`'s work: the kept requests, then the provider's `reconcile`
+act), so a self-retire is completed by the next sync even when nothing else changed
+(r3). A pinned test: a self-retire, then an otherwise no-op sync, removes the member.
 
 A sandbox declared in the workspace but not listed locally is never started. A sandbox
 listed earlier and now delisted is stopped, never destroyed. The provider keeps the
@@ -413,9 +451,15 @@ settings:
   declared credential has no source here refuses its start, naming the credential.
 - The teamctl file holds infrastructure only (images, network, ports, state directory,
   limits). The provider refuses a file that sets a boundary field the workspace owns
-  (`team.id`, `egress.external`, `aweb.federationOutbound`): boundaries are declared
-  once. The refusal is `E_SANDBOX_DEPLOYMENT`, reason `boundary-field`, naming the
-  field (r1).
+  (`team.id`, the role booleans `egress.external.source`, `.model` and `.forge`,
+  `aweb.federationOutbound`): boundaries are declared once. The refusal is
+  `E_SANDBOX_DEPLOYMENT`, reason `boundary-field`, naming the field (r1). The
+  resolvers the external roles need, `egress.external.resolvers`, are host
+  infrastructure and stay in the teamctl file; a sandbox whose workspace egress names
+  an external role and whose file gives no resolvers refuses its start (reason
+  `resolvers-required`) (r3, contract). The provider writes the role booleans from
+  the workspace. Example: `egress: { external: { resolvers: [1.1.1.1, 9.9.9.9] } }`
+  in the teamctl file, with C1's `egress: [model, source, forge]`.
 - **A private registry.** oats.aweb refuses an ambient `AWID_REGISTRY_URL`
   (awebai/oats-aweb#284), so where the sandbox team's registry is private the setting
   is written twice: `settings.oats.aweb.registry` on the host deployment, for the mint
@@ -450,7 +494,7 @@ settings are its manifest defaults, then the workspace defaults, then the host's
 `settings.<capability>` in `oats-local.yaml`, merged as for a spawn.
 
 **The call.** The kernel runs the hook with `OATS_SANDBOX_ACT` set to `plan`, `start`,
-`stop`, `status`, `seat` or `release`, one JSON request on stdin, and reads one JSON
+`stop`, `status`, `reconcile`, `seat`, `bind` or `release`, one JSON request on stdin, and reads one JSON
 answer on stdout. The kernel holds a per-sandbox lock around every act but `plan` and
 `status`, so two mutating acts on one sandbox never run at once (a second gets
 `E_LIFECYCLE_BUSY`). The lock, the plan revisions and the idempotency keys are all
@@ -472,10 +516,10 @@ and by act:
 
 | Act | Extra request fields | Answer fields beyond the envelope |
 | --- | --- | --- |
-| `plan` | `target`: `start`, `stop`, `reconcile`, `seat`, `bind` or `release`; for the seat targets, the `instance` fields of that act | `planRevision`, `actions: [{step, detail}]`; for target `seat` also `seat: {id, path}` and `spawnProvider: {capability, options: {<key>: <value>}}` |
+| `plan` | `target`: `start`, `stop`, `reconcile`, `seat`, `bind` or `release`; for target `seat`, `instance: {soul, spawnKey}`; for `bind` and `release`, the `instance` fields of that act | `planRevision`, `actions: [{step, detail}]`; for target `seat` also `seat: {id, path}` and `spawnProvider: {capability, options: {<key>: <value>}}` |
 | `start`, `stop`, `reconcile` | `planRevision`, `idempotencyKey` | `server`; for `reconcile`, `seats` as in `status` |
 | `status` | none | `server`, `seats: [{seatId, instance, alias, certificateId, state}]` |
-| `seat` | `planRevision`, `idempotencyKey`, `instance: {name, soul, spawnKey, resolution}` (`resolution` is `R`, the final remote preview's revision) | `seat: {id, path, alias, certificateId, team}` |
+| `seat` | `planRevision`, `idempotencyKey`, `instance: {name, soul, spawnKey, decision}` (`decision` is `D`, the remote preview's `decision.revision`) | `seat: {id, path, alias, certificateId, team}` |
 | `bind` | `planRevision`, `idempotencyKey`, `instance: {name, spawnKey}`, `apply`: the routed apply's answer as the kernel received it | `seat: {id, certificateId, state}` |
 | `release` | `planRevision`, `idempotencyKey`, `instance: {name, seatId}`, `reason`: `retired` or `spawn-failed` | `seat: {id, certificateId, state}` |
 
@@ -505,8 +549,9 @@ and by act:
   answers `{capability: "oats.aweb", options: {"identity.seat": "<path>"}}`, which sets
   its `identity.seat` (C6) (r2).
 - `bind` and `reconcile` settle seats as the Identities and Lifecycle sections say:
-  `bind` from the routed apply's own answer, `reconcile` from its keyed replay (for
-  `delivered` seats) and from the sandbox's untrusted report (for `active` seats). The
+  `bind` from the routed apply's answer or the kernel's keyed replay of it (for
+  `delivered` seats), `reconcile` from the sandbox's untrusted report (for `active`
+  seats) and the interrupted-mint rule. The provider runs no spawn. The
   staging sweep for a killed hook runs in the mutating acts only: under the lock no
   `seat` can be running, so any staging copy found is a leftover.
 - An act whose outcome is uncertain answers `unknown`, never `ready`.
@@ -526,7 +571,8 @@ and by act:
   one; `seatId` is the seat its home took (r2).
 - `oats sandbox status --json`'s entries also carry `seats` (as C4's `status`), and
   `oats sandbox reconcile <name> (--plan | --plan-revision <r> --idempotency-key <k>)`
-  runs the `reconcile` act on its own (r2).
+  runs on its own what sync runs for each sandbox: the kept requests' replays, then
+  the `reconcile` act (r2, r3).
 - **That these are additive must be shown, not assumed.** The readers of sync's answer
   are `packages/desktop/server/workspace-sync.mjs`,
   `packages/desktop/renderer/workspace-sync-view.mjs`,
@@ -552,7 +598,12 @@ and by act:
   The spawn reads its service from that descriptor only, never from `OATS_AWEB_URL` or
   a copied coordination workspace, and checks it: `team` equals the team the spawn
   resolved, `alias` equals the instance name, `spawnKey` equals the apply's key, and
-  `service` is a plain https origin. A missing, malformed or contradictory descriptor
+  `service` is a plain https origin. The apply's key reaches the spawn hook through a
+  new, generic hook variable, `OATS_SPAWN_IDEMPOTENCY_KEY`, set by the kernel on a
+  keyed apply and absent otherwise (r3, contract: the hook environment; S1 sets it and
+  pins it, S2 consumes it). An unkeyed apply with `identity.seat` is refused (reason
+  `seat-binding`, field `spawnKey`); the provider never takes the expected key from
+  the descriptor it validates. A missing, malformed or contradictory descriptor
   refuses the spawn (reason `seat-binding`, naming the field). The host's registry pin
   is a separate setting (C3), never the service.
 - Retire, for an identity minted by the host for a sandbox: the host runs
@@ -605,6 +656,11 @@ existing Docker-context SSH relay from container.md.
   never reused, stopped or overwritten: this deployment's start refuses
   (`E_SANDBOX_SERVER`, reason `server-owned-elsewhere`, naming the other deployment
   directory). The public name stays `sandbox-<name>`.
+- **A moved deployment.** Moving or renaming the deployment directory changes its key
+  and orphans its sandboxes' ledger, lock and receipts. Readiness reports
+  `sandbox-state-orphaned` when provider state under another key holds a sandbox this
+  deployment lists, naming the old key. It is never adopted automatically; the remedy
+  names moving the directory back, or the manual adoption step S2 specifies.
 
 ### C8. teamctl and the container (Juan's side)
 
@@ -615,14 +671,20 @@ existing Docker-context SSH relay from container.md.
 - **Probe:** the boundary probe asserts that each credential mount is read-only, that
   it lies only under `/run/oats-credentials`, and that no undeclared credential path is
   mounted. Its receipt joins the probe's `--json` receipts (#1958).
-- **Protected sources (r1, r2):** the container's mount acceptance takes the provider's
-  `protectedSources` (the two parts of the Credentials section) and, on the started
+- **Protected sources (r1, r2, r3):** the provider writes one JSON file per start,
+  `{"protectedSourcesApi":1, "hardDenied":[<path>], "credentialSources":[<path>],
+  "declaredBinds":[{"source":<path>,"target":"/run/oats-credentials/<name>"}]}`, with
+  real paths, and gives it to teamctl as a new input, `agents.protectedSourcesFile`
+  (contract: teamctl's schema, Juan's side). teamctl passes it to the container's
+  mount acceptance, which takes those three parts and, on the started
   agent's actual mounts, asserts that no bind equals, contains or lies inside a
   protected path, the declared credential binds being the only exception to the
   credential-source part. It runs before any seat is admitted.
 - **Optional, later:** a slimmer profile without Secrets and Logs. v1 runs with
   teamctl's four base routes.
-- No other teamctl change is needed. OATS reads its exit codes as they are.
+- teamctl's changes are these three inputs: `agents.credentials`,
+  `agents.protectedSourcesFile` and `egress.external.forge`. OATS reads its exit codes
+  as they are.
 
 ### C9. Broker contracts (designed now, built against the first real provider)
 
@@ -668,7 +730,10 @@ egress routes only.
   running or stopped;
 - `sandbox-provider-missing`;
 - `sandbox-ssh-include-missing`;
-- `sandbox-seat-unsettled`: a `delivered` seat no keyed replay could settle (r2).
+- `sandbox-seat-unsettled`: a `delivered` seat with no kept request, or a
+  `mint-uncertain` seat without a certificate ID (r2, r3);
+- `sandbox-state-orphaned`: provider state under another deployment key for a
+  sandbox this deployment lists (r2).
 
 The refusals belong to the acts:
 
@@ -683,6 +748,9 @@ The refusals belong to the acts:
 | A teamctl file that sets a boundary field (r1) | `oats sandbox start`, sync's start | `E_SANDBOX_DEPLOYMENT`, `boundary-field` |
 | A mount that overlaps a protected path, or shared sandbox state (r1) | `oats sandbox start`, sync's start | `E_SANDBOX_MOUNT`, `overlap` |
 | A credential source that is not a regular file (r1) | `oats sandbox start`, sync's start | `E_SANDBOX_CREDENTIAL`, `not-a-file` |
+| A credential source with more than one hard link (r3) | `oats sandbox start`, sync's start | `E_SANDBOX_CREDENTIAL`, `hardlinked` |
+| An external egress role with no resolvers in the teamctl file (r3) | `oats sandbox start`, sync's start | `E_SANDBOX_DEPLOYMENT`, `resolvers-required` |
+| An unkeyed apply carrying `identity.seat` (r3) | the in-sandbox apply | `seat-binding` (oats.aweb), field `spawnKey` |
 | `sandbox-<name>` registered by someone else (r1) | `oats sandbox start`, sync's start | `E_SANDBOX_SERVER`, `server-taken` |
 | `sandbox-<name>` owned by another deployment (r2) | `oats sandbox start`, sync's start | `E_SANDBOX_SERVER`, `server-owned-elsewhere` |
 | The sandbox's team has no provider id yet (r2) | `oats sandbox start`, sync's start, a routed spawn | `E_SANDBOX_TEAM`, `team-not-created` |
