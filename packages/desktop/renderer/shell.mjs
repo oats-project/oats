@@ -105,6 +105,7 @@ import { retiredTabs, tabShowsRow, otherIncarnation, terminalOrigin } from "./re
 import { notePanel, panelDeployments, deploymentHeading } from "./view-deployments.mjs";
 import { deploymentState, rowStale, rosterSectionKey, sidebarSections } from "../../client/roster-sections.mjs";
 import { backgroundHeading } from "./background-heading.mjs";
+import { sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen } from "./roster-disclosure.mjs";
 import { cliStatus, onCliChange, cliHeldBack } from "./views/cli-status.mjs";
 import { DESKTOP_TERMS } from "./desktop-terms.mjs";
 import { onDeploymentTabRequest } from "./deployment-tabs.mjs";
@@ -530,6 +531,9 @@ function menuState(value, element) {
   updateActiveContexts();
 }
 const collapsedInstances = new Set();
+// The roots of the roster opened by hand (roster-disclosure.mjs): a root with children starts collapsed in every
+// window, and stays open once opened, in memory per workspace as a collapse is (rehomeWorkspaceState).
+const expandedInstances = new Set();
 // #1579: the workspaces whose Background section this window draws open. Closed by default in every new window,
 // kept in memory per workspace as a collapse is, and re-homed with the collapsed rows (rehomeWorkspaceState).
 const backgroundOpen = new Set();
@@ -997,14 +1001,24 @@ function renderContextRoster(instances) {
   // (rosterSectionKey). A collapse hides, and rolls up, only rows of its own section, so nothing hides or rolls
   // up across the main tree and the Background section.
   const rowSection = rosterSectionKey(contextDeployments, placement);
+  // A row's disclosure counts only children of its own section: a main row whose children are all in the
+  // Background section has nothing to collapse here. A root of its section with children starts collapsed
+  // (roster-disclosure.mjs): the rows drawn collapsed are the ones closed by hand and the roots not opened by hand.
+  // A row drawn as a pending row, or as a held home (its state takes its meta line), is always drawn open, with no
+  // disclosure (`canCollapse`, below): neither row has room for the roll-up, so a collapse would hide a waiting child.
+  // A choice made by hand stays in the sets and applies again once its lifecycle is over.
+  const childrenHere = sectionChildren(instances, rowSection);
+  const lifecycleRows = new Set(instances.filter((i) => i.pendingSpawn || heldHome(i)).map(instanceId));
+  const collapsedNow = collapsedRows(ws, { collapsed: collapsedInstances, expanded: expandedInstances, children: childrenHere,
+    staysOpen: (id) => lifecycleRows.has(id) });
   const visible = instances.filter((i) => instanceVisibleInTree(
-    i, instances, collapsedInstances, ws, false, { section: rowSection },
+    i, instances, collapsedNow, ws, false, { section: rowSection },
   ));
   // A row the roster holds stale (the last read failed, or its deployment's re-read did) carries last-known facts.
   const rowHeldStale = (row) => rosterStale || rowStale(row, contextDeployments);
   // Needs input (Spec D): waiting rows a collapse hides, on their nearest visible ancestor. Derived on every
   // paint over the full roster, so expanding the parent drops it and the children show their own marks.
-  const waitingBelow = waitingRollup(instances, collapsedInstances, ws, { stale: rowHeldStale, section: rowSection });
+  const waitingBelow = waitingRollup(instances, collapsedNow, ws, { stale: rowHeldStale, section: rowSection });
   // The main tree's sections, then the Background section (sidebarSections): null when no row is in it, else its
   // heading's count and wait, and its own tree while it is open. Every row in it may be: then the main tree is
   // empty and the heading is the list.
@@ -1040,13 +1054,6 @@ function renderContextRoster(instances) {
   // one part's: no stem, elbow or sibling link reaches a row of the other part.
   const partGroups = (sections, level) => sections.flatMap((section) => section.groups.map((group, at) => ({ ...group, heading: at === 0 && section.deployment ? section : null, level })));
   const groups = [...partGroups(main, 3), ...(background ? [{ background }, ...partGroups(background.sections, 4)] : [])];
-  // A row's disclosure counts only children of its own section: a main row whose children are all in the
-  // Background section has nothing to collapse here.
-  const parentsHere = new Set();
-  for (const child of instances) {
-    const pid = rosterParentId(instances, instanceId(child)), parent = pid ? instances.find((r) => instanceId(r) === pid) : null;
-    if (parent && rowSection(parent) === rowSection(child)) parentsHere.add(pid);
-  }
   for (const group of groups) {
     if (group.background) {
       const head = backgroundHeading(document, group.background), toggle = head.querySelector(".ctx-background-toggle");
@@ -1077,8 +1084,9 @@ function renderContextRoster(instances) {
         // same-named instances from different agents roots collapse and
         // focus independently (review 46f3fdc).
         const key = collapseKey(ws, instanceId(i));
-        const hasChildren = parentsHere.has(instanceId(i));
-        const collapsed = collapsedInstances.has(key);
+        // A held home's row is drawn here too (a pending row drew above): it stays open and offers no collapse.
+        const hasChildren = childrenHere.has(instanceId(i)) && !lifecycleRows.has(instanceId(i));
+        const collapsed = collapsedNow.has(key);
 
         // Design connectors drawn from the dots: rounded solid elbows into
         // children, solid stems/pass-throughs, dotted sibling links.
@@ -1164,11 +1172,21 @@ function renderContextRoster(instances) {
         if (isActive) spawnJobs.seen?.(ws, i);
         if (attn) { meta.className = "ctx-meta ctx-attn-line"; meta.replaceChildren(attn); }
         const isNew = !!spawnJobs.isNew?.(ws, i);
-        if (isNew) {
+        // The disclosure (the product owner, 2026-11-19): a row with children here wears a chevron and the count
+        // of the rows under it before its name, clear of the row tools at its end; a click on it opens or closes the
+        // row (below). Its words follow the name.
+        const told = hasChildren ? rowDisclosure(document, { count: rowsUnder(childrenHere, instanceId(i)) }) : null;
+        const disclosure = told?.mark ?? null;
+        if (isNew || disclosure) {
           const line = document.createElement("span"); line.className = "ctx-name-line";
-          const mark = document.createElement("span"); mark.className = "ctx-new";
-          const markDot = document.createElement("span"); markDot.className = "ctx-new-dot"; markDot.setAttribute("aria-hidden", "true");
-          mark.append(markDot, "New"); line.append(name, mark);
+          if (disclosure) line.append(disclosure);
+          line.append(name);
+          if (told) line.append(told.spoken);
+          if (isNew) {
+            const mark = document.createElement("span"); mark.className = "ctx-new";
+            const markDot = document.createElement("span"); markDot.className = "ctx-new-dot"; markDot.setAttribute("aria-hidden", "true");
+            mark.append(markDot, "New"); line.append(mark);
+          }
           copy.append(line, ...[spoken].filter(Boolean), meta, ...heldLines);
         } else copy.append(name, ...[spoken].filter(Boolean), meta, ...heldLines);
         row.append(dot, copy);
@@ -1185,7 +1203,19 @@ function renderContextRoster(instances) {
         // A row of a stale deployment (#482: its last re-read failed) is held the same way.
         const staleStart = heldStale && !i.running;
         if (staleStart) { row.title = ROSTER_STALE_TITLE; row.setAttribute("aria-description", ROSTER_STALE_TITLE); }
-        row.addEventListener("click", () => { if (staleStart || unavailable || held) return; spawnJobs.seen?.(ws, i); i.running ? openTerminalTab(i) : openInstanceStart(i); });
+        row.addEventListener("click", (e) => {
+          // A click on the disclosure opens or closes the row, whatever the row's state, and opens nothing; the
+          // focus stays on the row, as the tree keys leave it.
+          if (disclosure?.contains(e.target)) {
+            tabOpenIntents.invalidate();
+            setRowOpen({ collapsed: collapsedInstances, expanded: expandedInstances }, key, collapsed);
+            renderContextRoster(contextInstances);
+            const again = [...listEl.querySelectorAll(".ctx-inst")].find((r) => r.dataset.treeInstance === instanceId(i));
+            if (again) setRovingRow(listEl, again);
+            return;
+          }
+          if (staleStart || unavailable || held) return; spawnJobs.seen?.(ws, i); i.running ? openTerminalTab(i) : openInstanceStart(i);
+        });
         // full keyboard tree operability (roving tabindex; policy in
         // roster-keys.mjs). Enter is the button's native activation.
         row.dataset.rosterChildren = hasChildren ? "1" : "0";
@@ -1413,8 +1443,7 @@ function onRosterRowKey(e) {
   };
   if (action.type === "expand" || action.type === "collapse") {
     if (btn.dataset.rosterBackground === "1") { setBackgroundOpen(ws, action.type === "expand"); return; }
-    const key = collapseKey(ws, id);
-    if (action.type === "expand") collapsedInstances.delete(key); else collapsedInstances.add(key);
+    setRowOpen({ collapsed: collapsedInstances, expanded: expandedInstances }, collapseKey(ws, id), action.type === "expand");
     renderContextRoster(contextInstances);
     focusInstance(id);
     return;
@@ -1467,7 +1496,7 @@ async function showInRoster(instance, { read = true } = {}) {
   if (!row || ws !== currentWorkspace() || !contextRosterEl) return false;
   const placed = backgroundPlacement(contextInstances, backgroundShown()), inBackground = placed.has(instanceId(row));
   for (let id = rosterParentId(contextInstances, instanceId(row)), seen = new Set(); id && !seen.has(id) && placed.has(id) === inBackground; id = rosterParentId(contextInstances, id)) {
-    seen.add(id); collapsedInstances.delete(collapseKey(ws, id));
+    seen.add(id); setRowOpen({ collapsed: collapsedInstances, expanded: expandedInstances }, collapseKey(ws, id), true);
   }
   if (inBackground) backgroundOpen.add(ws);
   renderContextRoster(contextInstances);
@@ -1502,7 +1531,7 @@ function revealPendingSpawn(id) {
   const self = all.at(-1);
   const placed = backgroundPlacement(all, backgroundShown()), inBackground = placed.has(instanceId(self));
   for (let pid = rosterParentId(all, instanceId(self)), seen = new Set(); pid && !seen.has(pid) && placed.has(pid) === inBackground; pid = rosterParentId(all, pid)) {
-    seen.add(pid); collapsedInstances.delete(collapseKey(ws, pid));
+    seen.add(pid); setRowOpen({ collapsed: collapsedInstances, expanded: expandedInstances }, collapseKey(ws, pid), true);
   }
   if (inBackground) backgroundOpen.add(ws);
   spawnJobs.reveal(id);
@@ -3532,6 +3561,7 @@ function rehomeWorkspaceState(workspaces) {
   workspaceTabMemory.rehome(map);
   focusPlaces.rehome(map);
   rehomeCollapsed(collapsedInstances, map);
+  rehomeCollapsed(expandedInstances, map);
   // #1579: an open Background section follows its view, as its collapsed rows do.
   const openMoved = [...backgroundOpen].filter((id) => map.has(id));
   for (const id of openMoved) backgroundOpen.delete(id);

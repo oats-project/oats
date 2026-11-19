@@ -388,7 +388,8 @@ test("a waiting, collapsed parent: its dot is the mark and its meta line the rol
   u.render(rows);
   assert.deepEqual(u.marks("root").map(m => [m.className, m.textContent]), [["ctx-dot waiting", ""], ["ctx-attn rollup", "1 below need input"]]);
   assert.equal(u.rollup("root").parentElement.className, "ctx-meta ctx-attn-line");
-  assert.equal(spokenText(u.row("root")), "root Needs input1 below need input", "both, each said once");
+  // The disclosure's ", 1 below" (the rows under it, the product owner, 2026-11-19) follows the name, then the wait.
+  assert.equal(spokenText(u.row("root")), "root, 1 below Needs input1 below need input", "both, each said once");
   assert.ok(u.fact("root", "Waiting"));
   assert.equal(u.fact("root", "Below"), "1 needs input: dev-a");
 });

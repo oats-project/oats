@@ -206,7 +206,10 @@ validates the field and never synthesizes it.
   resolves to a collapsed instance in another section stays painted and shows its
   own mark. The card's `Below` fact names up to three of
   them. The roll-up is derived on every paint, so it goes as soon as the parent
-  is expanded. Filtering collapses nothing, so it shows no roll-up.
+  is expanded. Filtering collapses nothing, so it shows no roll-up. A root of
+  its section with children starts collapsed (`collapsedRows` in
+  `packages/desktop/renderer/roster-disclosure.mjs`), and its hidden waiting
+  rows roll up onto it the same way.
 - **The terminal tab.** An open terminal tab of that instance, in any editor
   group, follows every roster paint (`syncTabNeedsInput`, through the same
   gate and held-stale rule): an alert glyph in `--warn` takes the dot's slot

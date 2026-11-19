@@ -161,7 +161,9 @@ test("roster typography (non-layout): valid control family and supplied sidebar 
   assert.equal(u.rule(".ctx-meta-repo").fontFamily, "var(--mono)", "the repository is reference metadata, mono like the design (the shared token: Inconsolata first)");
   for (const row of u.rows) {
     const name = row.querySelector(".ctx-name"), meta = row.querySelector(".ctx-meta");
-    assert.equal(name.nextElementSibling, meta, "both lines remain in the same vertical stack");
+    // A parent's name sits on its name line after the disclosure (the product owner, 2026-11-19).
+    const first = row.querySelector(".ctx-disclosure") ? name.parentElement : name;
+    assert.equal(first.nextElementSibling, meta, "both lines remain in the same vertical stack");
     assert.equal(meta.className, "ctx-meta ctx-soul-repo");
     const soul = meta.querySelector(".ctx-meta-soul"), repo = meta.querySelector(".ctx-meta-repo");
     assert.deepEqual([...meta.children], [soul, repo], "the soul, then the repository");
@@ -205,12 +207,18 @@ function assertConnectors(u) {
     "the dot's ring hides the line under it, in the row's own solid colour");
 }
 
-test("tree connectors (non-layout): lines leave the dots, no disclosure arrows", t => {
+test("tree connectors (non-layout): lines leave the dots; a parent's chevron sits on its name line, never on the lines", t => {
   const u = fixture(t);
   assertConnectors(u);
   assert.equal(u.rule(".ctx-tree-row").getPropertyValue("--tree-step"), "18px");
   assert.equal(u.rule(".ctx-tree-row").paddingLeft, "calc(var(--depth) * var(--tree-step))");
-  assert.equal(u.doc.querySelector(".ctx-disclosure"), null, "no disclosure arrows on rows");
+  // The product owner, 2026-11-19, replacing Redesign v3's "no disclosure arrows" (#137): a row with children wears
+  // the disclosure first on its name line (roster-disclosure.mjs), and the guides stay as they were.
+  assert.deepEqual(u.rows.map(row => row.querySelectorAll(".ctx-disclosure").length), [1, 1, 0, 1, 0, 0],
+    "one on each row with children, none on a row without");
+  for (const row of u.rows.filter(r => r.querySelector(".ctx-disclosure"))) {
+    assert.ok(row.querySelector(".ctx-name-line > .ctx-disclosure:first-child"), "first on the name line");
+  }
   assert.deepEqual(u.rows.map(row => row.style.getPropertyValue("--depth")), ["0", "1", "2", "1", "2", "0"]);
   assert.deepEqual(u.rows.map(row => [...row.querySelectorAll(".ctx-guide")].map(g => `${g.className.replace("ctx-guide ", "")}@${g.style.getPropertyValue("--guide-level")}`)), [
     ["down@0"], ["elbow@0", "line@0", "down@1"], ["line@0", "elbow@1"], ["elbow@0", "down@1"], ["elbow@1"], [],

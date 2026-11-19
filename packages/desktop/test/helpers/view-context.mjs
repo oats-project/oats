@@ -11,6 +11,9 @@
 // #1579: the Background section's placement, section key and heading are pure and shared the same way; a suite
 // about other behaviour runs without the kernel's feature (`backgroundShown`), so nothing moves, and its sections
 // are closed (`backgroundOpen`). background-sidebar.test.mjs turns the feature on.
+// The disclosure (roster-disclosure.mjs, 2026-11-19) is pure and shared the same way. A suite about other behaviour
+// draws every root open, as the roster did before roots started collapsed (`expandedInstances` holds every key), and
+// its own `collapsedInstances` still closes rows; roster-disclosure-shell.test.mjs runs the default with a plain Set.
 import { deploymentState, rosterSections, rowStale, splitByDeployment, rosterSectionKey, sidebarSections } from "../../../client/roster-sections.mjs";
 import { backgroundHeading } from "../../renderer/background-heading.mjs";
 import { DESKTOP_TERMS } from "../../renderer/desktop-terms.mjs";
@@ -23,6 +26,10 @@ import { keptFailure } from "../../../client/deployment-facts.mjs";
 import { retiredTabs, tabShowsRow, otherIncarnation, terminalOrigin } from "../../renderer/retired-tabs.mjs";
 import { dotColor, paintDotColor } from "../../renderer/instance-dot.mjs";
 import { syncWaitingRow } from "../../renderer/waiting-row.mjs";
+import { sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen } from "../../renderer/roster-disclosure.mjs";
+
+/** Every root opened by hand: the roster as it was drawn before roots started collapsed. */
+class AllOpen extends Set { has() { return true; } }
 
 export const viewContext = () => ({
   contextDeployments: [], rosterSections, DESKTOP_TERMS, deploymentHeading, notePanel, panelDeployments, rowStale, deploymentState,
@@ -49,6 +56,7 @@ export const viewContext = () => ({
   focusPlaces: { take: () => null, note() {}, forget() {}, rehome() {} }, focusArrival() {}, applyRosterPlace() {},
   backgroundPlacement, rosterSectionKey, sidebarSections, backgroundHeading, backgroundShown: () => false, backgroundOpen: new Set(),
   setBackgroundOpen() {},
+  sectionChildren, collapsedRows, rowsUnder, rowDisclosure, setRowOpen, expandedInstances: new AllOpen(),
   // The row menu's Move to background / out of it (instance-background-menu.mjs) offers nothing here: its gate is the
   // route's check, which a suite about other behaviour never answers. instance-background.test.mjs drives the shipped one.
   backgroundMenu: { items: () => [], handles: () => false, run: async () => {} },

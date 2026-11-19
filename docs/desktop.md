@@ -973,6 +973,21 @@ right of its parent, and related instances are grouped together. Siblings are
 joined by a dotted line through their dots. A parent's line to its children
 runs just to the right of the dotted line, so the two never merge.
 
+The sidebar shows the top-level instances only until you open one. An
+instance with children has a chevron before its name, with the number of
+instances under it at every depth. Click the chevron to show its group as
+it was drawn before, and click it again to hide the group. A click anywhere
+else on the row still opens its terminal. From the keyboard, Right opens the
+focused row and Left closes it. Every instance at the top of the tree, the
+[Background section](#background-instances)'s included, starts collapsed in
+each new window, except one still being set up or retired, or whose retire
+failed: while its row shows that state, it has no chevron and its group
+stays open, so an instance under it that needs input is never hidden. An instance inside a group starts open, and each one with
+children has its own chevron. What you open or close stays as you left it
+until the window closes. **Show in roster**, `--instance` and a spawn from
+the Desktop open the rows above the instance they show. The TUI's list still
+shows every instance open.
+
 The newest instance is on top: the tree is in spawn order, newest first, at
 every level. A group of related instances sits where its first instance's
 spawn time puts it, so spawning a child doesn't move the group, and starting
