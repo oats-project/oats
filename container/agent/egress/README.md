@@ -541,7 +541,10 @@ A failed observation refuses, with the exact leftover or unverified name.
 Every attempt has a receipt `{name,image,network,created,absentVerified}`.
 `created` means creation was confirmed by a successful run or matching ownership
 inspection, never assumed after a timeout; `absentVerified` means the exact-name
-absence check succeeded. Both success and refusal write `egress boundary receipt:`
+absence check succeeded at the time it ran. After a timed-out run the daemon can
+still complete the create later, so a container with that name can appear after a
+receipt reports `created:false, absentVerified:true`; that run has already
+refused, and a caller-chosen `namePrefix` finds it. Both success and refusal write `egress boundary receipt:`
 JSON lines to stderr. If absence could not be verified, confirmed creations use
 `egress boundary leftover:` when ownership inspection has not refused them.
 Collisions, replaced names and failed ownership observations use
