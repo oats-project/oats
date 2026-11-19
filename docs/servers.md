@@ -478,6 +478,7 @@ schedule's spec still travel as arguments.
 | `instance stop --plan\|--apply`, `retire --plan`, `retire --plan-revision … --idempotency-key …` | the instance's home | `lifecycle-plans` (`lifecycleApi: 1`) |
 | `instance color` | the instance's home | `instance-color` |
 | `instance background` | the instance's home | `instance-background` |
+| `instance pin` | the instance's home | `instance-pin` |
 | `instance same-work` | the instance's home | `instance-same-work` |
 
 `instance suggest-name` and `instance upgrade` are never routed: `--server` is
@@ -648,7 +649,10 @@ way, through the kernel's own read of it, and a value that read refuses is
 dropped ([`retire`](desktop-cli-api.md#row-retire)). `sameWork` (feature
 `instance-same-work`, the instance does the same work as its parent) is
 relayed only when the host's row has `sameWork: true`, and is absent
-otherwise ([`sameWork`](desktop-cli-api.md#row-same-work)). A removed or edited registration keeps
+otherwise ([`sameWork`](desktop-cli-api.md#row-same-work)). `pinned` (feature
+`instance-pin`, the instance is pinned at the top of its machine's list) is
+relayed only when the host's row has exactly `pinned: true`, and is absent
+otherwise ([`pinned`](desktop-cli-api.md#row-pinned)). A removed or edited registration keeps
 its group from the saved routes. State is pulled on every call, from every
 group at once: each probe has its own deadline, `--per-target` (default 20 s)
 capped by `--budget` (default 45 s, the deadline of the whole answer), and a

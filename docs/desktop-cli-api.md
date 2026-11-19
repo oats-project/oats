@@ -173,6 +173,7 @@ see the [official catalog](official-catalog.md) for current pins.
 | `instance-suggest-name` | `oats instance suggest-name [--soul <soul>] (--task <t> \| --task-file <f>) [--harness claude\|pi] [--model <m>] [--launch-config <n>] --json`: the name a `--suggest-name` spawn would get, chosen on this machine for a spawn that may land on another, not made unique ([A name for a spawn elsewhere](#a-name-for-a-spawn-elsewhere-oats-instance-suggest-name)). Local only: `--server` is `E_BAD_ARGS`. Gate on the local probe; without it, the spawn goes unnamed (numbered, or named where it lands) | |
 | `spawn-apply-suggest-name` | `--suggest-name` on a spawn apply, without `--preview`: the apply names the instance as a preview's `--suggest-name` would, on the machine that spawns, and its result carries `naming` ([On an apply](#on-an-apply-feature-spawn-apply-suggest-name)). Routed, the host needs the feature (`E_REMOTE_INCOMPATIBLE`, nothing sent): gate on the host's `probe.features` and don't send the flag to a host without it | |
 | `instance-background` | background instances (awebai/oats#1579): `soul.yaml` `background:`; `oats spawn … --background\|--no-background`, whose preview and result carry `background` and `backgroundFrom`; `oats instance background <instance> on\|off`, local and `--server`; `background: true` on `oats status --json` instance rows, `oats server roster --json` rows, `oats inspect --home` `instance` and `oats souls --json` soul rows, absent otherwise ([Background instances](#background-instances-oats-instance-background)). Gate on the probe, locally or in the host's `probe.features`: an older kernel refuses the flags and the verb, and its rows have no `background`. A routed spawn with either flag needs the host's feature (`E_REMOTE_INCOMPATIBLE`, nothing sent) | `instanceBackgroundApi: 1` (payload only) |
+| `instance-pin` | pinned instances: `oats instance pin <instance> on\|off`, local and `--server`; `pinned: true` on `oats status --json` instance rows, `oats server roster --json` rows and `oats inspect --home` `instance`, absent otherwise ([Pinned instances](#pinned-instances-oats-instance-pin)). The pin is the home's, so it is shared by every client of that machine. Gate on the probe, locally or in the host's `probe.features`: an older kernel refuses the verb, and its rows have no `pinned` | `instancePinApi: 1` (payload only) |
 | `session-resume` | sessions come back after a shutdown, OATS 0.69 (#1559): `sessionEnd` on `oats status --json` instance rows ([`sessionEnd`](#row-session-end)); `oats session start --resume --home <abs>` and its `resume` answer ([Resume a lost session](#resume-a-lost-session---resume)); the machine sweep `oats session resume [--deployment <dir>] [--plan] --json` ([`oats session resume`](#the-machine-sweep-oats-session-resume)); `E_RESUME_BUSY`, `E_RESUME_NOT_LOST`. Local only: `--server` is `E_BAD_ARGS`. Gate a client's resume-on-open on the probe: a kernel without it has no `session resume` | |
 | `warm-reader` | `oats reader --stdio`, the warm reader: a child process a client starts, which answers `oats status --json` and `oats workspace status --json` on its stdin and stdout, many times, with the CLI's own answers ([The warm reader](#the-warm-reader)). Gate on the probe, never by trying: a kernel without it has no `oats reader` | `readerApi: 1` |
 | `status-liveness` | the local liveness on `oats status --json` instance rows is complete: `running` and `runtimeState` are read live at every call, from the row's recorded tmux server under the pane and shell-descendant rule, with `false` for a shell only on positive evidence and `null` when the reading is inconclusive ([The roster](#the-roster-oats-status---json)). A client needs no liveness probe of its own beside the roster where the probe lists it, whether the read goes through the warm reader or the CLI. Independent of `warm-reader` | |
@@ -327,6 +328,7 @@ for `--no-recursive`) is never ignored.
 | `oats instance upgrade` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir` | `--undo`, `--plan`, `--json` | `--server` | none |
 | `oats instance color` | `<instance>` `[<color>]` | `--home`, `--dir`, `--server` | `--clear`, `--json` | none | none |
 | `oats instance background` | `<instance>` `<state>` | `--home`, `--dir`, `--server` | `--json` | none | none |
+| `oats instance pin` | `<instance>` `<state>` | `--home`, `--dir`, `--server` | `--json` | none | none |
 | `oats instance same-work` | `<instance>` `<state>` | `--home`, `--dir`, `--server` | `--json` | none | none |
 | `oats instance waiting set` | none | `--producer`, `--reason`, `--message`, `--home`, `--dir` | `--json` | none | none |
 | `oats instance waiting clear` | none | `--producer`, `--reason`, `--message`, `--home`, `--dir` | `--json` | none | none |
@@ -3762,6 +3764,10 @@ its absence.
   holds a valid background record ([Background instances](#background-instances-oats-instance-background)),
   absent otherwise; never `false`. A `background` in `instance.json` never
   stands in for it. The text rows mark it: `• <instance> [background]`.
+- <a id="row-pinned"></a>**`pinned`** (feature `instance-pin`): `true` while
+  the home holds a valid pin ([Pinned instances](#pinned-instances-oats-instance-pin)),
+  absent otherwise; never `false`. A `pinned` in `instance.json` never
+  stands in for it. Clients list a pinned row first in its machine's list.
 - <a id="row-same-work"></a>**`sameWork`** (feature `instance-same-work`):
   `true` when the home's same-work flag
   ([Same work as the parent](#same-work-as-the-parent-oats-instance-same-work))
@@ -4040,6 +4046,10 @@ route target:
   host's row has exactly `background: true`; any other value, a host whose
   kernel predates the feature and a saved route the host did not list carry
   none.
+- **`pinned`** (feature `instance-pin`) is on a row only when the host's row
+  has exactly `pinned: true`; any other value (`"true"`, `1`), a host whose
+  kernel predates the feature and a saved route the host did not list carry
+  none ([`pinned`](#row-pinned)).
 - **`sameWork`** (feature `instance-same-work`) is on a row only when the
   host's row has `sameWork: true`, and is then `true`. Any other value, a host
   whose kernel predates the feature, and a saved route the host did not list
@@ -4288,6 +4298,7 @@ instance's own machine: the local command, with `--server <id>` added.
 | `oats retire <name> --server <id> --plan`, and the guarded apply (`--plan-revision`, `--idempotency-key`) | `lifecycle-plans` | `lifecycle-plans`, `lifecycleApi: 1` |
 | `oats instance color <name> (<color> \| --clear) --server <id>` | none | `instance-color` |
 | `oats instance background <name> on\|off --server <id>` | none | `instance-background` |
+| `oats instance pin <name> on\|off --server <id>` | none | `instance-pin` |
 | `oats instance same-work <name> on\|off --server <id>` | none | `instance-same-work` |
 
 - The flags are the local command's. The instance is addressed like every
@@ -6839,6 +6850,68 @@ on [remote roster rows](#the-remote-roster-oats-server-roster---json), on
 `oats inspect --home` as `instance.background`, and on the soul rows of
 [`oats souls`](#oats-capabilities-and-oats-souls) for a soul that declares
 it. Each is absent when not background.
+
+## Pinned instances (`oats instance pin`)
+
+Feature `instance-pin`.
+
+```text
+oats instance pin <instance> on|off [--home <abs>] [--dir <d>] [--json]
+```
+
+A pinned instance is listed first in its machine's list, by every client of
+that machine: the Desktop, the TUI, and another machine's routed view. That
+is all it changes. Like the colour and background, it is presentation, never
+identity or policy, and anyone may change it at any time, a stopped
+instance's included. Several pinned instances keep the list's own order among
+themselves; there is no manual ranking.
+
+- **Shared.** The pin is recorded in the instance's home, so everyone who
+  views that machine sees the same pins. There is no per-viewer pin.
+- **No default.** An instance is not pinned when it is spawned: there is no
+  spawn flag and no `soul.yaml` key. This command is the only way to pin.
+- **The record** is `<home>/.oats-pinned.json`, `{"pinnedApi": 1,
+  "at": "<ISO time>"}`, mode 0600, written atomically. Present means
+  pinned; `off` removes it. It lasts as long as the home, through start,
+  restart, stop, resume and `oats instance upgrade`, and a retire removes
+  it with the home. It is a kernel-owned home file: a capability cannot
+  declare it as its own, and it is no change to the home at retire.
+- **A reader** takes a regular file only, without following a link, of at
+  most 4 KiB, holding a JSON object with `pinnedApi: 1`. Anything else (a
+  link, a directory, an oversize or invalid file, another `pinnedApi`) reads
+  as not pinned, never as an error; `off` removes it, and `on` replaces it
+  with a valid record.
+- **The instance** is addressed and refused exactly as `oats instance
+  background` addresses and refuses it ([Background instances](#background-instances-oats-instance-background)),
+  with "the pin was not changed" where its refusals say the background.
+
+The answer names the home it resolved, as `oats instance background`'s does,
+so a routed or `--home` pin says which home it pinned:
+
+```json
+{"instancePinApi":1,"instance":"dev-a","home":"/w/agents/dev/instances/dev-a","pinned":true,"changed":true}
+```
+
+`on` for a pinned instance and `off` for one that is not answer
+`changed: false` and write nothing (`off` still removes an invalid file).
+The text answer is `<instance>: pinned` or `<instance>: not pinned`, with
+` (unchanged)` when nothing changed.
+
+| Code | When |
+|---|---|
+| `E_BAD_ARGS` | Not exactly one of `on` or `off`, or an argument after it: the usage line |
+| *(as `oats instance background`)* | Instance resolution (`E_SESSION_UNKNOWN`, `E_AMBIGUOUS_INSTANCE`, `E_HOME_MISMATCH`), `E_INSTANCE_RETIRING`, `E_LIFECYCLE_BUSY` |
+
+Routed with `--server <id>`, the command runs on the host
+([Routed reads and plans](#routed-reads-and-plans)); a host whose probe does
+not advertise `instance-pin` is refused with `E_REMOTE_INCOMPATIBLE`, and
+nothing is sent.
+
+Where it is read: `pinned: true` on [status rows](#row-pinned), on
+[remote roster rows](#the-remote-roster-oats-server-roster---json) (only
+when the host's row says exactly `true`), and on `oats inspect --home` as
+`instance.pinned`. Each is absent when not pinned. A client reads `pinned`
+only where the probe lists `instance-pin`.
 
 ## Same work as the parent (`oats instance same-work`)
 
