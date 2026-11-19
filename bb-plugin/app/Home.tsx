@@ -42,7 +42,7 @@ function useOpenThread(): (thread: PluginSidebarThread) => { href: string; onCli
 }
 
 /** One agent that needs the person: the question, and where bb lists choices, the answer in place. */
-function NeedsYouCard({ node, thread, soul }: { node: Node; thread: PluginSidebarThread; soul: string }) {
+function NeedsYouCard({ node, thread, soul, now }: { node: Node; thread: PluginSidebarThread; soul: string; now: number }) {
   const sdk = useSdk();
   const open = useOpenThread()(thread);
   const [asked, setAsked] = useState<Question | null>(null);
@@ -95,8 +95,7 @@ function NeedsYouCard({ node, thread, soul }: { node: Node; thread: PluginSideba
     );
   };
 
-  // The view is drawn again with every snapshot, so the age follows the clock.
-  const since = age(node.agent.waiting?.since ?? null, Date.now());
+  const since = age(node.agent.waiting?.since ?? null, now);
   const text = node.agent.waiting?.message ?? asked?.title ?? "needs your input";
   // What an in-place answer is about, when the line above is the kernel's claim and not bb's title.
   const detail = asked !== null && asked.choices.length > 0 && asked.title !== null && asked.title !== text ? asked.title : null;
@@ -279,7 +278,21 @@ function Workspace({ oats, visible }: { oats: Ready; visible: boolean }) {
   );
 }
 
+/**
+ * The clock, read again every half minute while the view is open: an agent that waits while
+ * nothing else changes in OATS causes no new snapshot, and its age must still grow.
+ */
+function useNow(everyMs = 30_000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), everyMs);
+    return () => clearInterval(timer);
+  }, [everyMs]);
+  return now;
+}
+
 function Sections({ oats, where, visible }: { oats: Oats; where: "page" | "tab"; visible: boolean }) {
+  const now = useNow();
   if (oats.phase === "loading") return <Note>Reading OATS…</Note>;
   if (oats.phase === "failed") return <ErrorLine onRetry={oats.retry}>{clean(failureLine(oats))}</ErrorLine>;
   const { view } = oats;
@@ -293,7 +306,7 @@ function Sections({ oats, where, visible }: { oats: Oats; where: "page" | "tab";
           <ul className="flex flex-col gap-2">
             {view.needsYou.flatMap((node) => {
               const thread = oats.threadById.get(node.thread.id);
-              return thread === undefined ? [] : [<NeedsYouCard key={thread.id} node={node} thread={thread} soul={oats.soulOf(node.agent)} />];
+              return thread === undefined ? [] : [<NeedsYouCard key={thread.id} node={node} thread={thread} soul={oats.soulOf(node.agent)} now={now} />];
             })}
           </ul>
         )}

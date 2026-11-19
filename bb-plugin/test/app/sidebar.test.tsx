@@ -175,7 +175,8 @@ test("when the plugin's server does not answer at all, the threads are listed wi
       throw new Error("plugin oats is not running");
     },
   });
-  await waitFor(() => expect(slot.getByTestId("oats-status-line").textContent).toContain("plugin oats is not running"));
+  // the message as it is: no code before it, since nothing here is the kernel's word
+  await waitFor(() => expect(slot.getByTestId("oats-status-line").textContent).toBe("plugin oats is not runningRetry"));
   expect(slot.getAllByTestId("oats-other-row")).toHaveLength(8);
   expect(slot.getByRole("button", { name: "Retry" })).toBeTruthy();
 });

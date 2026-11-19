@@ -273,3 +273,24 @@ test("a Start that succeeds after the person opened a plan dialog leaves their s
   expect(slot.getByRole("dialog").textContent).toContain("Retire weekly-digest-helper?");
   expect(slot.inspection.navigateCalls).toEqual([]);
 });
+
+test("while an apply is in flight the dialog cannot be closed, and its refusal is shown", async () => {
+  let refuse!: (cause: Error) => void;
+  const { slot, pick } = await menu("thr_digest", {
+    retirePlan: () => ({ revision: "rev-r", lines: ["Removes the home"] }),
+    retireApply: () => new Promise<never>((_resolve, reject) => (refuse = reject)),
+  });
+  await pick("retire");
+  await waitFor(() => expect((slot.getByTestId("oats-plan-confirm") as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(slot.getByTestId("oats-plan-confirm"));
+  await waitFor(() => expect(slot.getByTestId("oats-plan-confirm").textContent).toBe("Working…"));
+  expect((slot.getByTestId("oats-plan-cancel") as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(slot.getByTestId("oats-plan-cancel"));
+  fireEvent.keyDown(slot.getByRole("dialog"), { key: "Escape" });
+  fireEvent.mouseDown(slot.getByTestId("oats-modal"));
+  expect(slot.getByRole("dialog")).toBeTruthy();
+  refuse(new Error("E_RETIRE_REFUSED: the work tree holds uncommitted work"));
+  expect((await slot.findByRole("alert")).textContent).toBe("E_RETIRE_REFUSED: the work tree holds uncommitted work");
+  fireEvent.click(slot.getByTestId("oats-plan-cancel")); // and now it closes
+  expect(slot.queryByRole("dialog")).toBeNull();
+});

@@ -246,12 +246,13 @@ async function a13(browser, viewport, threads) {
     check(others.some((text) => text.includes("Plain bb thread")), `${at} the thread that is no agent is under Other threads`, JSON.stringify(others));
     await page.shot(`a13-${viewport.name}-sidebar`);
 
-    // the home's badge, in bb's navigation (the rail on desktop, the drawer on a phone)
+    // the home's badge: bb's own navigation entry for the home (the rail on desktop, the drawer on a
+    // phone), never the plugin's own "3 need you" line, carries the label and draws the count
     const badge = await page.until(
-      `[...document.querySelectorAll("[aria-label], [title]")].some((e) => /3 agents need you/.test((e.getAttribute("aria-label") ?? "") + (e.getAttribute("title") ?? "")))`,
+      `(() => { const own = document.querySelector(${JSON.stringify(testId("oats-sidebar"))}); const entry = [...document.querySelectorAll("[aria-label]")].find((e) => !own?.contains(e) && /^OATS\\b.*3 agents need you/.test(e.getAttribute("aria-label"))); if (!entry) return ""; const r = entry.getBoundingClientRect(); const drawn = [...entry.querySelectorAll("*")].some((e) => e.children.length === 0 && e.textContent.trim() === "3"); return r.width > 0 && drawn ? entry.getAttribute("aria-label") : ""; })()`,
       15,
     );
-    check(Boolean(badge), `${at} the home's navigation entry carries the badge "3 agents need you"`);
+    check(Boolean(badge), `${at} bb's navigation entry for the home shows the badge 3 (${badge ?? "not found"})`, await page.evaluate(`JSON.stringify([...document.querySelectorAll("[aria-label]")].map((e) => e.getAttribute("aria-label")).filter((l) => /OATS/.test(l)))`));
 
     // an agent's thread with its header row
     const mockups = threads.get("thr_mockups");

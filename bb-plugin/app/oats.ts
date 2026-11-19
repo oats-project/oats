@@ -8,6 +8,12 @@ import type { Agent, Node, View } from "../model/types";
 import { flatten, view } from "../model/view";
 import { useRead } from "./store";
 
+/**
+ * The app's own code for a snapshot call that did not answer at all. Like the plugin's other
+ * codes it does not start with `E_`, so it is never taken, or printed, as a kernel refusal.
+ */
+export const RPC_FAILED = "PLUGIN_RPC_FAILED";
+
 export type Deployment = { root: string; workspace: string; machine: string };
 
 export type Oats = {
@@ -22,7 +28,7 @@ export type Oats = {
   soulOf(agent: Agent): string;
 } & (
   | { phase: "loading" }
-  /** No snapshot: `code` is the server's, or "E_PLUGIN_RPC" when the call itself failed. */
+  /** No snapshot: `code` is the server's, or RPC_FAILED when the call itself failed. */
   | { phase: "failed"; code: string; message: string }
   | {
       phase: "ready";
@@ -59,7 +65,7 @@ export function useOats(): Oats {
   const soulOf = (agent: Agent) => soulNames.get(agent.soul) ?? agent.soul;
   const base = { threads, threadById, retry: read.retry, soulOf };
   if (read.status === "loading") return { ...base, phase: "loading" };
-  if (read.status === "error") return { ...base, phase: "failed", code: "E_PLUGIN_RPC", message: read.error };
+  if (read.status === "error") return { ...base, phase: "failed", code: RPC_FAILED, message: read.error };
   if (!read.data.ok) return { ...base, phase: "failed", code: read.data.code, message: read.data.message };
   if (joined === null) return { ...base, phase: "loading" };
   return { ...base, phase: "ready", deployment: read.data.deployment, agents: read.data.agents, ...joined };

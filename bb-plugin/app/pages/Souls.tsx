@@ -4,7 +4,8 @@ import { useRef, useState } from "react";
 import { ThreadTitle, useBbNavigate, useRpc } from "@get-bb/plugin-sdk/app";
 import type { PluginNavPanelProps } from "@get-bb/plugin-sdk/app";
 import { askPlan, newKey, run } from "../acts";
-import { INSTANCE_NAME, clean, count } from "../format";
+import { instanceName } from "../../contract";
+import { clean, count } from "../format";
 import { failureLine, useOats } from "../oats";
 import type { Oats } from "../oats";
 import { errorMessage, useRead } from "../store";
@@ -70,7 +71,7 @@ function SpawnForm({ soul }: { soul: Soul }) {
   const [error, setError] = useState<string | null>(null);
   const intent = useRef<{ of: string; key: string } | null>(null);
 
-  const nameOk = INSTANCE_NAME.test(name);
+  const nameOk = instanceName.safeParse(name).success; // the contract's own rule
   const ready = nameOk && task.trim() !== "" && busy === null;
   const input = { soul: soul.name, name, task };
 

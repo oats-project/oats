@@ -51,6 +51,3 @@ export function needsYouLabel(n: number): string {
   if (n === 0) return "nothing needs you";
   return n === 1 ? "1 agent needs you" : `${n} agents need you`;
 }
-
-/** The kernel's instance-name rule, as contract.ts pins it (test/app/format.test.ts keeps them equal). */
-export const INSTANCE_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;

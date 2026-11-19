@@ -115,7 +115,12 @@ function PlanDialog({ request }: { request: Extract<Request, { kind: "plan" }> }
     };
   }, [rpc, words.plan, request.instance, attempt]);
 
-  const cancel = () => set(null);
+  // Once Confirm is pressed the act is on its way: the dialog stays until OATS answers, so its
+  // refusal has a place to show and a closed dialog never reads as "cancelled".
+  const applying = state.phase === "ready" && state.applying;
+  const cancel = () => {
+    if (!applying) set(null);
+  };
   const confirm = () => {
     if (state.phase !== "ready" || state.applying) return;
     const { revision, key } = state;
@@ -136,7 +141,7 @@ function PlanDialog({ request }: { request: Extract<Request, { kind: "plan" }> }
       onCancel={cancel}
       footer={
         <>
-          <Button data-testid="oats-plan-cancel" onClick={cancel}>
+          <Button data-testid="oats-plan-cancel" disabled={applying} onClick={cancel}>
             Cancel
           </Button>
           {state.phase === "ready" && state.error !== null ? (
@@ -150,7 +155,7 @@ function PlanDialog({ request }: { request: Extract<Request, { kind: "plan" }> }
             disabled={state.phase !== "ready" || state.applying}
             onClick={confirm}
           >
-            {state.phase === "ready" && state.applying ? "Working…" : words.confirm}
+            {applying ? "Working…" : words.confirm}
           </Button>
         </>
       }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // A10: the OATS home (navPanel `home`, and the fixed thread tab) and its badge.
 import { afterEach, expect, test, vi } from "vitest";
-import { fireEvent, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, waitFor, within } from "@testing-library/react";
 import { renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { RenderSlotOptions } from "@get-bb/plugin-sdk/testing/app";
 import type { ComponentType } from "react";
@@ -332,15 +332,18 @@ test("when the reply's target leaves the tree, the box falls back to an agent th
   await waitFor(() => expect(select.value).toBe("thr_ci"));
 });
 
-test("a claim's age follows the clock while the view stays open", async () => {
-  vi.useFakeTimers({ toFake: ["Date"], now: Date.parse("2026-11-19T12:22:30.000Z") });
+test("a claim's age follows the clock while the view stays open and nothing changes in OATS", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"], now: Date.parse("2026-11-19T12:22:30.000Z") });
   try {
     const slot = await homePage();
     const card = (await slot.findAllByTestId("oats-needs-card"))[0]!;
     expect(card.textContent).toContain("just now");
-    vi.setSystemTime(Date.parse("2026-11-19T12:40:00.000Z"));
-    await slot.behavior.emitRealtime("oats/changed", { at: "2026-11-19T12:40:00.000Z" });
-    await waitFor(() => expect(slot.getAllByTestId("oats-needs-card")[0]!.textContent).toContain("18 min ago"));
+    const before = slot.inspection.rpcCalls.length;
+    await act(async () => {
+      vi.advanceTimersByTime(18 * 60_000);
+    });
+    expect(slot.getAllByTestId("oats-needs-card")[0]!.textContent).toContain("18 min ago");
+    expect(slot.inspection.rpcCalls.length).toBe(before); // the clock alone: no reread
   } finally {
     vi.useRealTimers();
   }

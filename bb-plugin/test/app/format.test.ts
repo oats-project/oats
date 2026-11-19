@@ -1,18 +1,9 @@
 // The helpers the slots print with, and the pure reading of bb's pending interactions.
 import { describe, expect, test } from "vitest";
-import { REALTIME_CHANGED, instanceName } from "../../contract";
-import { INSTANCE_NAME, age, clean, count, homeTail, needsYouLabel } from "../../app/format";
+import { age, clean, count, homeTail, needsYouLabel } from "../../app/format";
 import { question } from "../../app/interactions";
 
 describe("format", () => {
-  test("the form's name rule is the contract's", () => {
-    for (const name of ["a", "dev-1", "0abc", "a".repeat(63), "", "-a", "A", "a b", "a/b", "a_b", "a".repeat(64), "é"]) {
-      expect(INSTANCE_NAME.test(name), name).toBe(instanceName.safeParse(name).success);
-    }
-  });
-  test("the channel the app listens on is the contract's", () => {
-    expect(REALTIME_CHANGED).toBe("oats/changed");
-  });
   test("clean drops control characters and bidi overrides, and keeps newlines, tabs and markup as text", () => {
     expect(clean("a\u001b[31mred\u0007\u0000b")).toBe("a[31mredb");
     expect(clean("line 1\n\tline 2")).toBe("line 1\n\tline 2");
