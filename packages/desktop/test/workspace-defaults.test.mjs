@@ -460,19 +460,3 @@ test('About souls is gone (the Desktop UI rework, slice 3a): one copy object, th
   assert.deepEqual(Object.keys(ABOUT_COPY), ['capabilities']);
   assert.ok(Object.isFrozen(ABOUT_COPY) && Object.isFrozen(ABOUT_COPY.capabilities), 'one frozen copy object');
 });
-  t.after(() => souls.dispose());
-  u.$('.lead').append(souls.button);
-  assert.equal(souls.button.getAttribute('aria-label'), 'About souls');
-  souls.button.focus(); souls.button.click();
-  const dialog = u.$('.about-dialog');
-  assert.equal(u.doc.getElementById(dialog.getAttribute('aria-labelledby')).textContent, ABOUT_COPY.souls.title);
-  assert.equal(u.doc.activeElement, dialog.querySelector('.lifecycle-close'));
-  assert.equal(ABOUT_COPY.souls.title, 'What a soul is');
-  assert.deepEqual([...dialog.querySelectorAll(':scope > p')].map(p => p.textContent), [
-    'A soul defines a kind of agent: the work it specialises in, and the capabilities it gets to do that work.',
-    'A team organises its specialist agents as souls, and souls can also organise knowledge: what each one is responsible for knowing, and what it reads to get started. Each running agent is an instance of a soul. Every instance gets the workspace’s default capabilities first, then the soul’s own choices: a soul can add capabilities, turn a default off, or leave a core capability (knowledge, messaging or tasks) empty.',
-  ]);
-  assert.equal(dialog.querySelector('dl'), null, 'no term list');
-  assert.ok(Object.isFrozen(ABOUT_COPY) && Object.isFrozen(ABOUT_COPY.souls) && Object.isFrozen(ABOUT_COPY.capabilities), 'one frozen copy object');
-  u.key(u.doc.activeElement, 'Escape'); assert.equal(u.doc.activeElement, souls.button);
-});
