@@ -71,6 +71,11 @@ function SpawnForm({ soul }: { soul: Soul }) {
   const [error, setError] = useState<string | null>(null);
   const intent = useRef<{ of: string; key: string } | null>(null);
 
+  // A preview answers for the input it was asked with: once that changes it is taken down.
+  const edit = (setValue: (value: string) => void, value: string) => {
+    setValue(value);
+    setSummary(null);
+  };
   const nameOk = instanceName.safeParse(name).success; // the contract's own rule
   const ready = nameOk && task.trim() !== "" && busy === null;
   const input = { soul: soul.name, name, task };
@@ -130,7 +135,7 @@ function SpawnForm({ soul }: { soul: Soul }) {
           spellCheck={false}
           placeholder="task-role, for example ranker-v3-probe"
           aria-invalid={name !== "" && !nameOk}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => edit(setName, event.target.value)}
         />
         {name !== "" && !nameOk ? (
           <span className="text-destructive">
@@ -146,7 +151,7 @@ function SpawnForm({ soul }: { soul: Soul }) {
           className="rounded-md border border-border bg-background p-2 text-sm text-foreground"
           value={task}
           placeholder="What this agent is for."
-          onChange={(event) => setTask(event.target.value)}
+          onChange={(event) => edit(setTask, event.target.value)}
         />
       </label>
       <div className="flex flex-wrap gap-2">

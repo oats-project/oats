@@ -76,6 +76,7 @@ describe("question(): bb's pending interactions as the home draws them", () => {
     });
     expect(question([approval({ reason: null, subject: { kind: "tool_use", tool: "WebFetch" } })])).toEqual({ interactionId: "a", title: "Use WebFetch", choices: [] });
     expect(question([approval({ reason: null })])!.title).toBeNull();
+    expect(question([approval({ reason: null, title: "Approve the plan" })])!.title).toBe("Approve the plan");
   });
   const asks = (questions: object[]) => ({ id: "q", status: "pending", payload: { kind: "user_question", questions } });
   const options = [{ label: "Depth 6", value: "6" }, { value: "7" }];

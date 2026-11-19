@@ -14,6 +14,9 @@ import { useRead } from "./store";
  */
 export const RPC_FAILED = "PLUGIN_RPC_FAILED";
 
+/** The app's own code for bb's thread list failing: the join has nothing to join to. */
+export const THREADS_FAILED = "BB_THREADS_FAILED";
+
 export type Deployment = { root: string; workspace: string; machine: string };
 
 export type Oats = {
@@ -67,7 +70,12 @@ export function useOats(): Oats {
   if (read.status === "loading") return { ...base, phase: "loading" };
   if (read.status === "error") return { ...base, phase: "failed", code: RPC_FAILED, message: read.error };
   if (!read.data.ok) return { ...base, phase: "failed", code: read.data.code, message: read.data.message };
-  if (joined === null) return { ...base, phase: "loading" };
+  // Until bb has listed its threads nothing can be joined: an empty list would make every agent
+  // look like one whose thread is missing.
+  if (sidebar.status === "error") {
+    return { ...base, phase: "failed", code: THREADS_FAILED, message: "bb could not list its threads, so the OATS agents cannot be matched to them." };
+  }
+  if (sidebar.status !== "ready" || joined === null) return { ...base, phase: "loading" };
   return { ...base, phase: "ready", deployment: read.data.deployment, agents: read.data.agents, ...joined };
 }
 

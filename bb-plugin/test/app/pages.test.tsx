@@ -63,10 +63,9 @@ test("Machines: this machine with its agents in bb and elsewhere, then what the 
     }),
   });
   const rows = await slot.findAllByTestId("oats-machine-row");
-  expect(rows.map((row) => row.textContent)).toEqual([
-    "falconthis machine",
-    "kestrelssh://kestrel.tailnetlast checked 2026-11-18: reachable, oats 0.69.20",
-  ]);
+  // this machine has its own block: the list below holds the other servers only
+  expect(rows.map((row) => row.textContent)).toEqual(["kestrelssh://kestrel.tailnetlast checked 2026-11-18: reachable, oats 0.69.20"]);
+  expect(slot.getByText("Servers OATS knows").parentElement!.textContent).toBe("Servers OATS knows1");
   await slot.findByText("7 agents in bb · 1 agent elsewhere");
   expect(slot.getByTestId("oats-this-machine").textContent).toContain("falcon");
   expect(slot.inspection.rpcCalls.map((call) => call.method).sort()).toEqual(["machines", "snapshot", "souls"]);
@@ -89,4 +88,10 @@ test("a failed read shows the message unchanged, and Retry rereads", async () =>
   failing = false;
   fireEvent.click(slot.getByRole("button", { name: "Retry" }));
   expect(await slot.findAllByTestId("oats-team-row")).toHaveLength(1);
+});
+
+test("Machines with no other server says so in one line", async () => {
+  const slot = await page("machines"); // the default answer holds this machine only
+  expect((await slot.findByText("OATS has no other server recorded.")).tagName).toBe("P");
+  expect(slot.queryAllByTestId("oats-machine-row")).toEqual([]);
 });

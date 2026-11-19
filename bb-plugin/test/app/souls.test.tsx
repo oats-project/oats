@@ -203,3 +203,28 @@ test("a soul key with characters bb percent-encodes is decoded segment by segmen
   });
   expect((await slot.findByTestId("oats-soul-detail")).textContent).toContain("my pkg/soul/x");
 });
+
+test("while bb is still listing its threads a soul's agents are not shown as missing", async () => {
+  const app = await loadApp();
+  const panel = app.navPanels.find((candidate) => candidate.id === "souls")!;
+  const slot = renderSlot<{ subPath: string }, Contract>(panel, { subPath: "oats-developer" }, { rpc: handlers(), sidebarThreads: { status: "loading", threads: [] } });
+  await slot.findByTestId("oats-soul-detail");
+  await waitFor(() => expect(slot.inspection.rpcCalls.map((call) => call.method)).toContain("snapshot"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(slot.queryByTestId("oats-soul-agent-detached")).toBeNull();
+  expect(slot.queryByText("thread missing")).toBeNull();
+});
+
+test("a preview is taken down when the name or the task it answered for changes", async () => {
+  const slot = await souls("oats-developer", {
+    spawnPreview: () => ({ summary: { modules: ["oats.core 2.6.0"], teams: [], launch: null, warnings: [], problems: [] } }),
+  });
+  await slot.findByTestId("oats-spawn-form");
+  for (const change of ["oats-spawn-name", "oats-spawn-task"]) {
+    fill(slot, "a-one", "Task.");
+    fireEvent.click(slot.getByTestId("oats-spawn-preview"));
+    await slot.findByTestId("oats-preview");
+    fireEvent.change(slot.getByTestId(change), { target: { value: "b-two" } });
+    expect(slot.queryByTestId("oats-preview")).toBeNull();
+  }
+});

@@ -27,6 +27,14 @@ export function errorMessage(cause: unknown): string {
 }
 
 /**
+ * A call made from inside a promise, so a client that throws at the call itself is a rejection
+ * like any other failure.
+ */
+export function attempt<T>(call: () => Promise<T>): Promise<T> {
+  return Promise.resolve().then(call);
+}
+
+/**
  * The invalidation each read last acted on. Every mounted slot hears the same `oats/changed`
  * event; the first to hear it rereads the shared copy, the others find it already asked for.
  */
@@ -77,9 +85,7 @@ export function useRead<Method extends ReadMethod>(
   const retry = () => {
     // Retry asks the server to reread OATS now, then reads what it has.
     const reread = () => void refetch.current();
-    Promise.resolve()
-      .then(() => rpc.call("refresh", null))
-      .then(reread, reread);
+    attempt(() => rpc.call("refresh", null)).then(reread, reread);
   };
   if (query.error !== null) return { status: "error", data, error: errorMessage(query.error), retry };
   if (data === undefined) return { status: "loading", data: undefined, error: null, retry };

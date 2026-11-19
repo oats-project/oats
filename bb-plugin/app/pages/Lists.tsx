@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { clean, count } from "../format";
 import { failureLine, useOats } from "../oats";
 import { useRead } from "../store";
-import type { Read } from "../store";
+import type { Read, Result } from "../store";
 import { Chip, ErrorLine, Heading, Note, Page } from "../ui";
 
 /** A page that is one read: its loading line, its error with Retry, then its rows. */
@@ -85,6 +85,25 @@ export function TeamsPage() {
   );
 }
 
+/** What `oats server list` holds beside this machine, which has its own block above. */
+function Servers({ machines }: { machines: readonly Result<"machines">["machines"][number][] }) {
+  return (
+    <section className="flex flex-col gap-1">
+      <Heading n={machines.length}>Servers OATS knows</Heading>
+      {machines.length === 0 ? <Note>OATS has no other server recorded.</Note> : null}
+      <ul className="flex flex-col">
+        {machines.map((machine) => (
+          <li key={machine.id} data-testid="oats-machine-row" className={ROW}>
+            <span className="min-w-0 break-words font-semibold">{clean(machine.id)}</span>
+            {machine.route === null ? null : <p className="break-all text-xs text-muted-foreground">{clean(machine.route)}</p>}
+            {machine.note === null ? null : <p className="whitespace-pre-wrap break-words text-xs">{clean(machine.note)}</p>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function MachinesPage() {
   const read = useRead("machines");
   const oats = useOats();
@@ -111,22 +130,7 @@ export function MachinesPage() {
               <ErrorLine onRetry={oats.retry}>{clean(failureLine(oats))}</ErrorLine>
             )}
           </section>
-          <section className="flex flex-col gap-1">
-            <Heading n={machines.length}>Servers OATS knows</Heading>
-            {machines.length === 0 ? <Note>OATS has no other server recorded.</Note> : null}
-            <ul className="flex flex-col">
-              {machines.map((machine) => (
-                <li key={machine.id} data-testid="oats-machine-row" className={ROW}>
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="min-w-0 break-words font-semibold">{clean(machine.id)}</span>
-                    {machine.isThisMachine ? <Chip>this machine</Chip> : null}
-                  </div>
-                  {machine.route === null ? null : <p className="break-all text-xs text-muted-foreground">{clean(machine.route)}</p>}
-                  {machine.note === null ? null : <p className="whitespace-pre-wrap break-words text-xs">{clean(machine.note)}</p>}
-                </li>
-              ))}
-            </ul>
-          </section>
+          <Servers machines={machines.filter((machine) => !machine.isThisMachine)} />
         </>
       )}
     </ReadPage>

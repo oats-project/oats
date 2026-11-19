@@ -103,11 +103,11 @@ export function question(interactions: readonly Interaction[]): Question | null 
     title = text(data.fullTitle) ?? title ?? text(data.message);
     choices = piChoices(payload.data);
   } else if (payload.kind === "approval") {
-    title = approvalTitle(payload);
+    title = approvalTitle(payload) ?? title;
     choices = approvalChoices(payload);
   } else if (payload.kind === "user_question" && Array.isArray(payload.questions)) {
     const questions = payload.questions as AskedQuestion[];
-    title = text(questions[0]?.prompt);
+    title = text(questions[0]?.prompt) ?? title;
     choices = questionChoices(questions);
   }
   return { interactionId: pending.id, title, choices };

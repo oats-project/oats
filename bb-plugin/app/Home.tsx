@@ -17,7 +17,7 @@ import type { Choice, Interaction, Question } from "./interactions";
 import { failureLine, useOats } from "./oats";
 import type { Oats } from "./oats";
 import { PAGES } from "./Sidebar";
-import { errorMessage, useRead } from "./store";
+import { attempt, errorMessage, useRead } from "./store";
 import { Button, Dot, ErrorLine, Heading, Note, Page, plainClick } from "./ui";
 
 /** The home's navigation badge: how many agents need the person. */
@@ -56,10 +56,7 @@ function NeedsYouCard({ node, thread, soul, now }: { node: Node; thread: PluginS
       return;
     }
     const controller = new AbortController();
-    // From inside a promise, so a client that throws at the call is a failed list like any other.
-    Promise.resolve()
-      .then(() => sdk.threads.interactions.list({ threadId: thread.id, signal: controller.signal }))
-      .then(
+    attempt(() => sdk.threads.interactions.list({ threadId: thread.id, signal: controller.signal })).then(
       (list) => {
         if (!controller.signal.aborted) setAsked(question(list as readonly Interaction[]));
       },
@@ -77,13 +74,11 @@ function NeedsYouCard({ node, thread, soul, now }: { node: Node; thread: PluginS
     setError(null);
     const target = { threadId: thread.id, interactionId: asked.interactionId };
     const { answer: how } = choice;
-    Promise.resolve()
-      .then(() =>
-        how.via === "respond"
-          ? sdk.threads.interactions.respond({ ...target, value: how.value })
-          : sdk.threads.interactions.resolve({ ...target, resolution: how.resolution }),
-      )
-      .then(
+    attempt(() =>
+      how.via === "respond"
+        ? sdk.threads.interactions.respond({ ...target, value: how.value })
+        : sdk.threads.interactions.resolve({ ...target, resolution: how.resolution }),
+    ).then(
       () => {
         setAnswering(false);
         setAsked(null);
@@ -118,8 +113,8 @@ function NeedsYouCard({ node, thread, soul, now }: { node: Node; thread: PluginS
         </p>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        {(asked?.choices ?? []).map((choice) => (
-          <Button key={choice.label} data-testid="oats-needs-choice" disabled={answering} onClick={() => answer(choice)}>
+        {(asked?.choices ?? []).map((choice, index) => (
+          <Button key={index} data-testid="oats-needs-choice" disabled={answering} onClick={() => answer(choice)}>
             {clean(choice.label)}
           </Button>
         ))}
@@ -183,9 +178,7 @@ function ReplyBox({ oats }: { oats: Ready }) {
     setSending(true);
     setError(null);
     setSent(null);
-    Promise.resolve()
-      .then(() => sdk.threads.send({ threadId, mode: "auto", input: [{ type: "text", text: body, mentions: [] }] }))
-      .then(
+    attempt(() => sdk.threads.send({ threadId, mode: "auto", input: [{ type: "text", text: body, mentions: [] }] })).then(
       () => {
         setSending(false);
         setText("");
@@ -213,6 +206,7 @@ function ReplyBox({ oats }: { oats: Ready }) {
           data-testid="oats-reply-agent"
           className="min-h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground"
           value={threadId}
+          disabled={sending}
           onChange={(event) => setPicked(event.target.value)}
         >
           {nodes.map((node) => (
@@ -229,6 +223,7 @@ function ReplyBox({ oats }: { oats: Ready }) {
         className="rounded-md border border-border bg-background p-2 text-sm text-foreground"
         placeholder="Write to the agent…"
         value={text}
+        disabled={sending} // what is typed during a send would be cleared with it
         onChange={(event) => setText(event.target.value)}
       />
       <div className="flex items-center justify-end gap-2">

@@ -233,3 +233,30 @@ test("a kernel refusal of oats status shows the kernel's code and the first line
   });
   await waitFor(() => expect(slot.getByTestId("oats-status-line").textContent).toBe("E_WORKSPACE_INVALID: oats-workspace.yaml: unknown key `foo`Retry"));
 });
+
+test("while bb is still listing its threads nothing is joined: no agent is said to be missing or quiet", async () => {
+  const app = await loadApp();
+  const slot = renderSlot<PluginThreadListProps, Contract>(
+    app.threadLists[0]!,
+    { activeThreadId: null, activeProjectId: null, isCompactViewport: false, onNavigate: () => {}, searchQuery: "" },
+    { rpc: handlers(), sidebarThreads: { status: "loading", threads: [] } },
+  );
+  await waitFor(() => expect(slot.inspection.rpcCalls.map((call) => call.method)).toContain("snapshot"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(slot.getByTestId("oats-status-line").textContent).toBe("Reading OATS…");
+  expect(slot.queryByTestId("oats-needs-line")).toBeNull();
+  expect(slot.queryByText("No OATS agents run in bb yet.")).toBeNull();
+});
+
+test("when bb cannot list its threads the line says so, with Retry", async () => {
+  const app = await loadApp();
+  const slot = renderSlot<PluginThreadListProps, Contract>(
+    app.threadLists[0]!,
+    { activeThreadId: null, activeProjectId: null, isCompactViewport: false, onNavigate: () => {}, searchQuery: "" },
+    { rpc: handlers(), sidebarThreads: { status: "error", threads: [] } },
+  );
+  await waitFor(() =>
+    expect(slot.getByTestId("oats-status-line").textContent).toBe("bb could not list its threads, so the OATS agents cannot be matched to them.Retry"),
+  );
+  expect(slot.queryByTestId("oats-tree")).toBeNull();
+});

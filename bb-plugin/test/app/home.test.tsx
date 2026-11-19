@@ -355,3 +355,51 @@ test("a kernel refusal of the snapshot keeps the kernel's code before its messag
   });
   expect((await slot.findByRole("alert")).textContent).toBe("E_WORKSPACE_INVALID: oats-workspace.yaml: unknown key `foo`Retry");
 });
+
+test("while a message is being sent the box cannot be edited, so nothing typed meanwhile is lost", async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const slot = await homePage({ sdk: { threads: { ...NO_INTERACTIONS.threads, send: async () => (await held, { ok: true }) as never } } });
+  const text = (await slot.findByTestId("oats-reply-text")) as HTMLTextAreaElement;
+  const select = slot.getByTestId("oats-reply-agent") as HTMLSelectElement;
+  fireEvent.change(text, { target: { value: "first" } });
+  fireEvent.click(slot.getByTestId("oats-reply-send"));
+  await waitFor(() => expect(slot.getByTestId("oats-reply-send").textContent).toBe("Sending…"));
+  expect([text.disabled, select.disabled]).toEqual([true, true]);
+  release();
+  await waitFor(() => expect(text.disabled).toBe(false));
+  expect(text.value).toBe("");
+});
+
+test("an approval or a question with nothing else to say shows the interaction's own title", async () => {
+  const agents = fixtureAgents().map((agent) => (agent.instance === "flaky-ci-developer" ? { ...agent, waiting: null } : agent));
+  const slot = await homePage({
+    rpc: handlers({}, agents),
+    sdk: { threads: { interactions: { list: async () => [{ id: "p", threadId: "thr_ci", status: "pending", payload: { kind: "approval", title: "Approve the plan", reason: null } }] as never } } },
+  });
+  const card = (await slot.findAllByTestId("oats-needs-card")).find((candidate) => candidate.textContent!.includes("Fix flaky CI test"))!;
+  await waitFor(() => expect(within(card).getByTestId("oats-needs-question").textContent).toBe("Approve the plan"));
+});
+
+test("two choices with one label are both drawn and answer with their own values", async () => {
+  const agents = fixtureAgents().map((agent) => (agent.instance === "flaky-ci-developer" ? { ...agent, waiting: null } : agent));
+  const slot = await homePage({
+    rpc: handlers({}, agents),
+    sdk: {
+      threads: {
+        interactions: {
+          list: async () =>
+            [{ id: "p", threadId: "thr_ci", status: "pending", payload: { kind: "user_question", questions: [{ id: "q", prompt: "Which?", options: [{ label: "Same", value: "a" }, { label: "Same", value: "b" }] }] } }] as never,
+          resolve: async () => ({}) as never,
+        },
+      },
+    },
+  });
+  const card = (await slot.findAllByTestId("oats-needs-card")).find((candidate) => candidate.textContent!.includes("Fix flaky CI test"))!;
+  await waitFor(() => expect(within(card).getAllByTestId("oats-needs-choice")).toHaveLength(2));
+  fireEvent.click(within(card).getAllByTestId("oats-needs-choice")[1]!);
+  await waitFor(() => expect(slot.inspection.sdkCalls.some((call) => call.method === "threads.interactions.resolve")).toBe(true));
+  expect(slot.inspection.sdkCalls.find((call) => call.method === "threads.interactions.resolve")!.args).toEqual([
+    { threadId: "thr_ci", interactionId: "p", resolution: { kind: "user_answer", answers: { q: { selected: ["b"] } } } },
+  ]);
+});
