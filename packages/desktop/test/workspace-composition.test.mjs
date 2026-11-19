@@ -381,7 +381,10 @@ test('slice 3a: a soul page lists its capabilities as one list of rows, core fir
   for (const row of rows) {
     const core = coreIds.includes(row.dataset.capability);
     assert.equal(row.querySelector('.cap-line-tag')?.textContent ?? null, core ? 'core' : null, `${row.dataset.capability}: the core tag on core rows only`);
-    assert.match(row.querySelector('.cap-line-by').textContent, /^by \S/, 'where it comes from');
+    // Until 3b's official rule: the workspace's own repository (agents.git, the host) goes unsaid, any other source is named.
+    const cap = inspection.capabilities.find(c => c.id === row.dataset.capability);
+    if (cap.from?.kind === 'member' && cap.from.repoKey === 'local//fixture/base/fx/remotes/agents.git') assert.equal(row.querySelector('.cap-line-by'), null, `${cap.id}: the host repository`);
+    else assert.match(row.querySelector('.cap-line-by').textContent, /^by \S/, `${cap.id}: where it comes from`);
   }
   const first = others[0], line = rows.find(r => r.dataset.capability === first);
   const listed = described.filter(r => r.name === first);

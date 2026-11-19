@@ -320,14 +320,16 @@ function applyCapability(s) {
 }
 
 /** What a soul page's capability row says besides its name: "by <source>" (the source chip's words: a package, a
- * member repository by its name) and the one line of the catalog's row of that name, when exactly one is listed. No
- * row is "official" yet (slice 3b's rule), so every row says where it comes from. */
+ * member repository by its name; nothing for the workspace's own repository) and the one line of the catalog's row of
+ * that name, when exactly one is listed. */
 function soulCapabilityFacts(s, cap) {
   const { catalog, status } = s.discovery?.context() ?? {};
   const row = capabilityRow(cap);
   const listed = Array.isArray(catalog) ? catalog.filter(r => r?.name === row.name) : [];
   const description = listed.length === 1 && typeof listed[0].description === "string" && listed[0].description ? listed[0].description : null;
-  return { by: sourceText(row, memberNames(status)).name || null, description };
+  // Until a rule establishes "official" (slice 3b), the workspace's own repository goes unsaid and every other source is named.
+  const own = row.kind === "member" && !!row.repoKey && sameRepo(row.repoKey, hostKey(s));
+  return { by: own ? null : sourceText(row, memberNames(status)).name || null, description };
 }
 
 /** A page (a soul's, a capability's or a team's) replaces the list it was opened from
