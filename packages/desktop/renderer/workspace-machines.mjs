@@ -235,10 +235,15 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
       if (focused?.isConnected && element.contains(focused)) return;
       // A repaint keeps focus on the section's Retry while the failure stands, else on the list's head; on the same
       // control of the same machine.
-      if (focusedRetry) { (notes.querySelector('.machines-retry') || add || title).focus(); return; }
+      if (focusedRetry) { focusFirst(notes.querySelector('.machines-retry'), add); return; }
       if (!focusedId || !focusedKey) return;
       rowOf(focusedId)?.querySelector(`[data-focus-key="${focusedKey}"]`)?.focus();
     }
+  }
+  /** Focus the first of `candidates` that is in the section and enabled, else the section's heading (never <body>). */
+  function focusFirst(...candidates) {
+    const target = candidates.find(c => c?.isConnected && element.contains(c) && !c.disabled) || title;
+    target.focus({ preventScroll: false });
   }
   function detail(m) {
     const box = el('div', undefined, 'machine-detail'); box.dataset.detail = m.id;
@@ -298,8 +303,8 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
     }
     render();
     if (focus && mayFocus(since)) {
-      if (focus === 'add') add?.focus();
-      if (focus === 'retry') (notes.querySelector('.machines-retry') || add || body.querySelector('button'))?.focus();
+      if (focus === 'add') focusFirst(add);
+      if (focus === 'retry') focusFirst(notes.querySelector('.machines-retry'), add, body.querySelector('button'));
     }
     backgroundChecks();
   }
@@ -350,7 +355,8 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
     element,
     /** Read the list again (a machine added or removed elsewhere). */
     refresh() { if (live() && gated) void load(); },
-    /** The roster or the CLI probe moved: the agent counts and this computer's version follow. */
+    /** The roster or the CLI probe moved: this computer's observation, the view's deployments and this computer's
+     * version follow. */
     sync() { if (live()) render(); },
     dispose() { alive = false; ticket++; offCli(); stopFollow?.(); dialog.current?.close({ restoreFocus: false }); element.remove(); },
   };

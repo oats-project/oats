@@ -118,6 +118,30 @@ test('the first list read says it is reading; a failed read keeps focus on Retry
   assert.equal(f.doc.activeElement, f.q('.machines-retry'), 'failed again: back on Retry');
 });
 
+// Delta review: Retry's focus goes to a control that is in the section and enabled, else to the heading, never <body>:
+// a Retry that succeeds without Add (no deployment here), and one whose Add is held back above the tested bound.
+test('a Retry that succeeds lands focus on an enabled control in the section, else the heading', async t => {
+  let mode = 'list';
+  const u = setup(t, { '/api/servers': () => mode === 'error' ? { httpStatus: 500, body: { error: 'boom' } }
+    : mode === 'nodeploy' ? { servers: [], filtered: true, key: null, deployment: null, aweb: false, reason: 'No deployment here.' } : answer([]) });
+  await settle();
+  assert.ok(u.q('.machines-add'), 'Add offered');
+  mode = 'error'; u.ui.refresh(); await settle();
+  mode = 'nodeploy'; u.q('.machines-retry').focus(); u.q('.machines-retry').click(); await settle();
+  assert.equal(u.q('.machines-add'), null);
+  assert.equal(u.doc.activeElement, u.q('.machines-title'), 'no Add any more: the heading, not <body>');
+  // Above the tested bound Add is held back (disabled): a successful Retry lands on the heading too.
+  const cs = await import('../renderer/views/cli-status.mjs');
+  await cs.refreshCli({ api: async () => ({ ok: true, bin: '/oats', version: '0.70.1', source: 'path', required: { desktopApi: 1, range: '>=0.26.0, tested through 0.69' }, tried: [], features: [], aboveTested: true, testedThrough: '0.69' }) });
+  t.after(() => cs.resetCliStateForTests());
+  let fail = true;
+  const v = setup(t, { '/api/servers': () => fail ? { httpStatus: 500, body: { error: 'boom' } } : answer([]) });
+  await settle();
+  fail = false; v.q('.machines-retry').focus(); v.q('.machines-retry').click(); await settle();
+  assert.equal(v.q('.machines-add').disabled, true);
+  assert.equal(v.doc.activeElement, v.q('.machines-title'));
+});
+
 test('lists this workspace\'s machines and checks each unchecked one once in the background', async t => {
   let released;
   const gate = new Promise(r => { released = r; });
