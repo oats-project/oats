@@ -13,6 +13,14 @@ const DOT: Record<AgentState, string> = {
   unreachable: "bg-destructive",
 };
 
+/**
+ * A click the plugin should handle itself. A modified click (new tab, new window) is left to the
+ * anchor's own behaviour.
+ */
+export function plainClick(event: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; button: number }): boolean {
+  return !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0);
+}
+
 /** The status dot. Its accessible name is the state's word. */
 export function Dot({ state }: { state: AgentState }) {
   return (

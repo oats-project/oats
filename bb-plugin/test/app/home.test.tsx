@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 // A10: the OATS home (navPanel `home`, and the fixed thread tab) and its badge.
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { fireEvent, waitFor, within } from "@testing-library/react";
 import { renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { RenderSlotOptions } from "@get-bb/plugin-sdk/testing/app";
 import type { ComponentType } from "react";
 import type { ExperimentalBadge, ExperimentalThreadTabProps } from "@get-bb/plugin-sdk/app";
-import { fixtureAgents } from "../helpers/fixtures";
+import { fixtureAgents, fixtureSnapshot } from "../helpers/fixtures";
 import { handlers, loadApp, resetApp, sidebarThreads } from "../helpers/render";
 import type { Contract } from "../helpers/render";
 import type { Agent } from "../../model/types";
@@ -102,7 +102,7 @@ test("the badge hook returns null at 0", async () => {
 
 test("the badge hook returns null while OATS cannot be read", async () => {
   const latest = await badge({
-    rpc: handlers({ snapshot: () => ({ ok: false, at: "t", code: "E_PLUGIN_OATS_MISSING", message: "oats: not found" }) }),
+    rpc: handlers({ snapshot: () => ({ ok: false, at: "t", code: "OATS_NOT_FOUND", message: "oats: not found" }) }),
   });
   expect(latest()).toBeNull();
 });
@@ -256,7 +256,7 @@ test("a failed send says why and keeps the text", async () => {
 
 test("with a failed snapshot the page shows the error's first line and Retry", async () => {
   const slot = await homePage({
-    rpc: handlers({ snapshot: () => ({ ok: false, at: "t", code: "E_PLUGIN_OATS_MISSING", message: "oats: not found on the host's PATH\nmore" }) }),
+    rpc: handlers({ snapshot: () => ({ ok: false, at: "t", code: "OATS_NOT_FOUND", message: "oats: not found on the host's PATH\nmore" }) }),
   });
   expect((await slot.findByRole("alert")).textContent).toBe("oats: not found on the host's PATHRetry");
   expect(slot.queryByTestId("oats-home-needs")).toBeNull();
@@ -301,4 +301,54 @@ test("when bb cannot list a thread's interactions, the card keeps the claim and 
   const card = cards.find((candidate) => candidate.textContent!.includes("Fix flaky CI test"))!;
   expect(within(card).getByTestId("oats-needs-question").textContent).toBe("needs your permission to use Bash");
   expect(within(card).getByTestId("oats-needs-open")).toBeTruthy();
+});
+
+test("the reply's target does not move under a message being typed when the order changes", async () => {
+  let agents = fixtureAgents().map((agent) => (agent.instance === "release-070-maintainer" ? { ...agent, waiting: null } : agent));
+  const slot = await homePage({
+    rpc: handlers({ snapshot: () => fixtureSnapshot(agents) }),
+    sdk: { threads: { ...NO_INTERACTIONS.threads, send: async () => ({ ok: true }) as never } },
+  });
+  const select = (await slot.findByTestId("oats-reply-agent")) as HTMLSelectElement;
+  expect(select.value).toBe("thr_ci"); // the first that needs the person
+  fireEvent.change(slot.getByTestId("oats-reply-text"), { target: { value: "yes, force-push it" } });
+  // another agent now waits, and sorts first
+  agents = fixtureAgents();
+  await slot.behavior.emitRealtime("oats/changed", { at: "2026-11-19T12:45:00.000Z" });
+  await waitFor(() => expect(slot.getAllByTestId("oats-needs-card")[0]!.textContent).toContain("Release 0.70"));
+  expect(select.value).toBe("thr_ci");
+  fireEvent.click(slot.getByTestId("oats-reply-send"));
+  await waitFor(() => expect(slot.inspection.sdkCalls.filter((call) => call.method === "threads.send")).toHaveLength(1));
+  expect((slot.inspection.sdkCalls.find((call) => call.method === "threads.send")!.args[0] as { threadId: string }).threadId).toBe("thr_ci");
+});
+
+test("when the reply's target leaves the tree, the box falls back to an agent that is there", async () => {
+  let agents = fixtureAgents();
+  const slot = await homePage({ rpc: handlers({ snapshot: () => fixtureSnapshot(agents) }) });
+  const select = (await slot.findByTestId("oats-reply-agent")) as HTMLSelectElement;
+  expect(select.value).toBe("thr_release");
+  agents = agents.filter((agent) => agent.instance !== "release-070-maintainer");
+  await slot.behavior.emitRealtime("oats/changed", { at: "2026-11-19T12:46:00.000Z" });
+  await waitFor(() => expect(select.value).toBe("thr_ci"));
+});
+
+test("a claim's age follows the clock while the view stays open", async () => {
+  vi.useFakeTimers({ toFake: ["Date"], now: Date.parse("2026-11-19T12:22:30.000Z") });
+  try {
+    const slot = await homePage();
+    const card = (await slot.findAllByTestId("oats-needs-card"))[0]!;
+    expect(card.textContent).toContain("just now");
+    vi.setSystemTime(Date.parse("2026-11-19T12:40:00.000Z"));
+    await slot.behavior.emitRealtime("oats/changed", { at: "2026-11-19T12:40:00.000Z" });
+    await waitFor(() => expect(slot.getAllByTestId("oats-needs-card")[0]!.textContent).toContain("18 min ago"));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a kernel refusal of the snapshot keeps the kernel's code before its message", async () => {
+  const slot = await homePage({
+    rpc: handlers({ snapshot: () => ({ ok: false, at: "t", code: "E_WORKSPACE_INVALID", message: "oats-workspace.yaml: unknown key `foo`\nsee docs" }) }),
+  });
+  expect((await slot.findByRole("alert")).textContent).toBe("E_WORKSPACE_INVALID: oats-workspace.yaml: unknown key `foo`Retry");
 });

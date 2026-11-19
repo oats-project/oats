@@ -5,24 +5,32 @@ import { ThreadTitle, useBbNavigate, useRpc } from "@get-bb/plugin-sdk/app";
 import type { PluginNavPanelProps } from "@get-bb/plugin-sdk/app";
 import { askPlan, newKey, run } from "../acts";
 import { INSTANCE_NAME, clean, count } from "../format";
-import { firstLine, useOats } from "../oats";
+import { failureLine, useOats } from "../oats";
 import type { Oats } from "../oats";
 import { errorMessage, useRead } from "../store";
 import type { Contract, Result } from "../store";
-import { Button, Chip, Dot, ErrorLine, Heading, Note, Page } from "../ui";
+import { Button, Chip, Dot, ErrorLine, Heading, Note, Page, plainClick } from "../ui";
 
 type Soul = Result<"souls">["souls"][number];
 type Summary = Result<"spawnPreview">["summary"];
 type Ready = Extract<Oats, { phase: "ready" }>;
 
+/**
+ * The soul the URL names: the whole remainder of the route. A package soul's key is
+ * `<package>/<soul>`, which bb carries as two segments, each percent-encoded.
+ */
 function decode(subPath: string): string | null {
-  const segment = subPath.split("/")[0] ?? "";
-  if (segment === "") return null;
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment; // not a valid escape: no soul has that name, and the page says so
-  }
+  if (subPath === "") return null;
+  return subPath
+    .split("/")
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment; // not a valid escape: no soul has that name, and the page says so
+      }
+    })
+    .join("/");
 }
 
 function SummaryView({ summary }: { summary: Summary }) {
@@ -174,7 +182,7 @@ function SoulAgents({ soul, oats }: { soul: Soul; oats: Ready }) {
                 href={thread.href}
                 className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
                 onClick={(event) => {
-                  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                  if (!plainClick(event)) return;
                   event.preventDefault();
                   navigate.toThread(thread.id);
                 }}
@@ -240,7 +248,7 @@ function SoulDetail({ soul, oats }: { soul: Soul; oats: Oats }) {
         ) : oats.phase === "loading" ? (
           <Note>Reading OATS…</Note>
         ) : (
-          <ErrorLine onRetry={oats.retry}>{clean(firstLine(oats.message))}</ErrorLine>
+          <ErrorLine onRetry={oats.retry}>{clean(failureLine(oats))}</ErrorLine>
         )}
       </section>
       <section className="flex flex-col gap-2">

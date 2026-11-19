@@ -18,10 +18,13 @@ type Request =
   | { kind: "failed"; verb: RunVerb; instance: string; message: string };
 
 let current: Request | null = null;
+/** A failure that arrived while another request was on screen: shown when that one closes. */
+let deferred: Request | null = null;
 let sequence = 0;
 const listeners = new Set<() => void>();
 function set(next: Request | null): void {
-  current = next;
+  current = next ?? deferred;
+  if (next === null) deferred = null;
   for (const listener of [...listeners]) listener();
 }
 const subscribe = (listener: () => void) => {
@@ -33,6 +36,7 @@ const get = () => current;
 /** For tests: a new app window starts with nothing asked. */
 export function resetActs(): void {
   current = null;
+  deferred = null;
   listeners.clear();
 }
 
@@ -58,11 +62,16 @@ export async function run(verb: RunVerb, instance: string, rpc: Rpc, navigate: B
   set(mine);
   try {
     const { threadId } = await rpc.call(verb, { instance });
-    if (current === mine) set(null);
+    // The person may have moved on to another request meanwhile: their screen is left as it is.
+    if (current !== mine) return;
+    set(null);
     navigate.toThread(threadId);
   } catch (cause) {
-    // The thread menu contains and hides a thrown error: say it here instead.
-    set({ kind: "failed", verb, instance, message: errorMessage(cause) });
+    // The thread menu contains and hides a thrown error: say it here instead, without replacing
+    // a dialog the person opened meanwhile.
+    const failed: Request = { kind: "failed", verb, instance, message: errorMessage(cause) };
+    if (current === mine || current === null) set(failed);
+    else deferred = failed;
   }
 }
 
@@ -174,7 +183,10 @@ function PlanDialog({ request }: { request: Extract<Request, { kind: "plan" }> }
 
 const RUN = { start: { doing: "Starting", failed: "Start" }, restart: { doing: "Restarting", failed: "Restart" } } as const;
 
-/** The plugin's one overlay (experimental_appOverlay): nothing until something is asked. */
+/**
+ * The plugin's one overlay (experimental_appOverlay): nothing until something is asked. It draws
+ * the plan dialogs of Stop and Retire, the running line of Start and Restart, and their failure.
+ */
 export function ActsOverlay() {
   const request = useSyncExternalStore(subscribe, get, get);
   const rpc = useRpc<Contract>();

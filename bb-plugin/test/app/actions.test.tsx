@@ -94,7 +94,7 @@ test("each action shows only in the states it applies to", async () => {
 });
 
 test("no action shows while OATS cannot be read", async () => {
-  const { shown } = await menu("thr_redesign", { snapshot: () => ({ ok: false, at: "t", code: "E_PLUGIN_OATS_MISSING", message: "oats: not found" }) });
+  const { shown } = await menu("thr_redesign", { snapshot: () => ({ ok: false, at: "t", code: "OATS_NOT_FOUND", message: "oats: not found" }) });
   expect(shown()).toEqual([]);
 });
 
@@ -237,4 +237,39 @@ test("Restart goes through OATS, and a refusal is shown with the kernel's code a
   expect(slot.inspection.navigateCalls).toEqual([]);
   fireEvent.click(slot.getByTestId("oats-act-close"));
   expect(slot.queryByRole("dialog")).toBeNull();
+});
+
+test("a Start that fails while a plan dialog is open does not replace it: the failure shows when the dialog closes", async () => {
+  let fail!: (cause: Error) => void;
+  const { slot, pick } = await menu("thr_digest", {
+    start: () => new Promise<never>((_resolve, reject) => (fail = reject)),
+    retirePlan: () => ({ revision: "rev-r", lines: ["Removes the home"] }),
+  });
+  const starting = pick("start");
+  await slot.findByTestId("oats-act-running");
+  await pick("retire"); // the person moves on before Start answers
+  await waitFor(() => expect(slot.getByTestId("oats-plan").textContent).toBe("Removes the home"));
+  fail(new Error("E_SESSION_START_FAILED: the harness did not come up"));
+  await starting;
+  expect(slot.getByRole("dialog").textContent).toContain("Retire weekly-digest-helper?"); // still the plan
+  expect(slot.queryByRole("alert")).toBeNull();
+  fireEvent.click(slot.getByTestId("oats-plan-cancel"));
+  expect((await slot.findByRole("alert")).textContent).toBe("E_SESSION_START_FAILED: the harness did not come up");
+  expect(slot.inspection.navigateCalls).toEqual([]);
+});
+
+test("a Start that succeeds after the person opened a plan dialog leaves their screen alone", async () => {
+  let done!: (answer: { threadId: string }) => void;
+  const { slot, pick } = await menu("thr_digest", {
+    start: () => new Promise<{ threadId: string }>((resolve) => (done = resolve)),
+    retirePlan: () => ({ revision: "rev-r", lines: ["Removes the home"] }),
+  });
+  const starting = pick("start");
+  await slot.findByTestId("oats-act-running");
+  await pick("retire");
+  await slot.findByRole("dialog");
+  done({ threadId: "thr_digest_2" });
+  await starting;
+  expect(slot.getByRole("dialog").textContent).toContain("Retire weekly-digest-helper?");
+  expect(slot.inspection.navigateCalls).toEqual([]);
 });

@@ -120,6 +120,7 @@ export default definePluginApp((app) => {
     lifecycle("retire", 3, "Retire agent (OATS)", ICON.retire, () => true, (instance) => askPlan("retire", instance), "destructive"),
   );
 
-  // Draws the plan dialogs of Stop and Retire, wherever they were asked from.
+  // Draws the plan dialogs of Stop and Retire and the progress and failure of Start and Restart,
+  // wherever they were asked from.
   app.slots.experimental_appOverlay({ id: "acts", component: ActsOverlay });
 });

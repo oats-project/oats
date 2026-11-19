@@ -150,7 +150,7 @@ test("with a failed snapshot: every thread is listed, the error's first line sho
   const { slot, navigated } = await sidebar({
     snapshot: () =>
       failing
-        ? { ok: false, at: "2026-11-19T12:30:00.000Z", code: "E_PLUGIN_NO_DEPLOYMENT", message: "No OATS deployment found.\nSet one in the plugin's settings." }
+        ? { ok: false, at: "2026-11-19T12:30:00.000Z", code: "NO_DEPLOYMENT", message: "No OATS deployment found.\nSet one in the plugin's settings." }
         : handlers().snapshot(null),
   });
   await waitFor(() => expect(slot.getByTestId("oats-status-line").textContent).toContain("No OATS deployment found."));
@@ -224,4 +224,11 @@ test("several machines and none chosen: the line links to the plugin's settings"
   });
   const link = await slot.findByRole("link", { name: "Choose a machine" });
   expect(link.getAttribute("href")).toBe("/settings/plugins/test-plugin");
+});
+
+test("a kernel refusal of oats status shows the kernel's code and the first line of its message", async () => {
+  const { slot } = await sidebar({
+    snapshot: () => ({ ok: false, at: "t", code: "E_WORKSPACE_INVALID", message: "oats-workspace.yaml: unknown key `foo`\nsee docs/workspace.md" }),
+  });
+  await waitFor(() => expect(slot.getByTestId("oats-status-line").textContent).toBe("E_WORKSPACE_INVALID: oats-workspace.yaml: unknown key `foo`Retry"));
 });

@@ -1,7 +1,7 @@
 // The OATS home: Needs you, Working, Finished-not-looked-at. A full page (navPanel `home`, the
 // phone's page and the target of "N need you") and, on desktop, the same view in a thread's fixed
 // tab. Answering is the person's act through bb's SDK; the plugin never types into a session.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ThreadTitle,
   experimental_useTabVisible as useTabVisible,
@@ -14,11 +14,11 @@ import { flatten } from "../model/view";
 import { age, clean, needsYouLabel } from "./format";
 import { question } from "./interactions";
 import type { Choice, Interaction, Question } from "./interactions";
-import { firstLine, useOats } from "./oats";
+import { failureLine, useOats } from "./oats";
 import type { Oats } from "./oats";
 import { PAGES } from "./Sidebar";
 import { errorMessage, useRead } from "./store";
-import { Button, Dot, ErrorLine, Heading, Note, Page } from "./ui";
+import { Button, Dot, ErrorLine, Heading, Note, Page, plainClick } from "./ui";
 
 /** The home's navigation badge: how many agents need the person. */
 export function useHomeBadge(): ExperimentalBadge | null {
@@ -34,7 +34,7 @@ function useOpenThread(): (thread: PluginSidebarThread) => { href: string; onCli
   return (thread) => ({
     href: thread.href,
     onClick: (event) => {
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+      if (!plainClick(event)) return;
       event.preventDefault();
       navigate.toThread(thread.id);
     },
@@ -48,7 +48,6 @@ function NeedsYouCard({ node, thread, soul }: { node: Node; thread: PluginSideba
   const [asked, setAsked] = useState<Question | null>(null);
   const [answering, setAnswering] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [now] = useState(() => Date.now());
   const pending = thread.hasPendingInteraction;
 
   useEffect(() => {
@@ -96,7 +95,8 @@ function NeedsYouCard({ node, thread, soul }: { node: Node; thread: PluginSideba
     );
   };
 
-  const since = age(node.agent.waiting?.since ?? null, now);
+  // The view is drawn again with every snapshot, so the age follows the clock.
+  const since = age(node.agent.waiting?.since ?? null, Date.now());
   const text = node.agent.waiting?.message ?? asked?.title ?? "needs your input";
   // What an in-place answer is about, when the line above is the kernel's claim and not bb's title.
   const detail = asked !== null && asked.choices.length > 0 && asked.title !== null && asked.title !== text ? asked.title : null;
@@ -165,15 +165,18 @@ function ReplyBox({ oats }: { oats: Ready }) {
   const sdk = useSdk();
   const nodes = flatten(oats.view.roots);
   const [picked, setPicked] = useState<string>("");
+  const target = useRef<string | null>(null);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(null);
   if (nodes.length === 0) return null;
-  // The agent picked, while it is still in the tree; else the first that needs the person.
-  const threadId = nodes.some((node) => node.thread.id === picked)
-    ? picked
-    : (oats.view.needsYou[0] ?? nodes[0]!).thread.id;
+  // The agent picked. Until the person picks, the first that needs them, chosen once: the target
+  // must not move under a message being typed when the order changes. It changes only when its
+  // thread leaves the tree.
+  const inTree = (id: string | null) => id !== null && nodes.some((node) => node.thread.id === id);
+  if (!inTree(target.current)) target.current = (oats.view.needsYou[0] ?? nodes[0]!).thread.id;
+  const threadId = inTree(picked) ? picked : target.current!;
 
   const send = () => {
     const body = text.trim();
@@ -278,7 +281,7 @@ function Workspace({ oats, visible }: { oats: Ready; visible: boolean }) {
 
 function Sections({ oats, where, visible }: { oats: Oats; where: "page" | "tab"; visible: boolean }) {
   if (oats.phase === "loading") return <Note>Reading OATS…</Note>;
-  if (oats.phase === "failed") return <ErrorLine onRetry={oats.retry}>{clean(firstLine(oats.message))}</ErrorLine>;
+  if (oats.phase === "failed") return <ErrorLine onRetry={oats.retry}>{clean(failureLine(oats))}</ErrorLine>;
   const { view } = oats;
   return (
     <>

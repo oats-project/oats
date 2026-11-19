@@ -2,7 +2,7 @@
 // answer for this deployment. Lists only: nothing here acts, and the Machines page runs no check.
 import type { ReactNode } from "react";
 import { clean, count } from "../format";
-import { firstLine, useOats } from "../oats";
+import { failureLine, useOats } from "../oats";
 import { useRead } from "../store";
 import type { Read } from "../store";
 import { Chip, ErrorLine, Heading, Note, Page } from "../ui";
@@ -108,7 +108,7 @@ export function MachinesPage() {
             ) : oats.phase === "loading" ? (
               <Note>Reading OATS…</Note>
             ) : (
-              <ErrorLine onRetry={oats.retry}>{clean(firstLine(oats.message))}</ErrorLine>
+              <ErrorLine onRetry={oats.retry}>{clean(failureLine(oats))}</ErrorLine>
             )}
           </section>
           <section className="flex flex-col gap-1">

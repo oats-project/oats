@@ -299,6 +299,14 @@ async function a13(browser, viewport, threads) {
     check(Boolean(await page.until(visible(testId("oats-soul-detail")), 30)), `${at} a soul's page renders, with the spawn form`, await page.evaluate(textOf(testId("oats-souls-page"))));
     check((await page.evaluate(visible(testId("oats-soul-row")))) === !viewport.mobile, `${at} ${viewport.mobile ? "the list gives way to the soul, with Back" : "the list stays beside the soul"}`);
     await page.shot(`a13-${viewport.name}-soul`);
+    // a package soul's key has a slash: its row opens its own page too
+    await page.goto("/plugins/oats/souls");
+    await page.until(visible(testId("oats-soul-row")), 30);
+    const key = await page.evaluate(
+      `(() => { const row = [...document.querySelectorAll(${JSON.stringify(testId("oats-soul-row"))})].find((e) => e.innerText.includes("/")); row?.click(); return row?.querySelector("span")?.innerText ?? null; })()`,
+    );
+    const heading = key === null ? "" : await page.until(`(() => { const t = ${textOf(`${testId("oats-soul-detail")} h2`)}; return t === ${JSON.stringify(key)} ? t : ""; })()`, 15);
+    check(key !== null && heading === key, `${at} a package soul's row opens its page (${key})`, await page.evaluate("location.pathname + ' | ' + document.body.innerText.slice(0, 200)"));
   } finally {
     await page.close();
   }

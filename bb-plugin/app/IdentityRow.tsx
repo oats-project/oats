@@ -7,7 +7,7 @@ import {
 import type { ExperimentalThreadHeaderRowProps } from "@get-bb/plugin-sdk/app";
 import { clean, count, homeTail } from "./format";
 import { useOats } from "./oats";
-import { Chip } from "./ui";
+import { Chip, plainClick } from "./ui";
 
 /** The fixed thread tab that shows the OATS home on desktop. */
 export const HOME_TAB = { id: "home", context: { kind: "thread" }, availability: "fixed" } as const;
@@ -66,7 +66,7 @@ export function IdentityRow({ threadId }: ExperimentalThreadHeaderRowProps) {
               href={parentThread.href}
               className="underline"
               onClick={(event) => {
-                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+                if (!plainClick(event)) return;
                 event.preventDefault();
                 navigate.toThread(parentThread.id);
               }}

@@ -128,7 +128,8 @@ Backend tests: `experimental_createHostEntryHarness` (`experimental_call`,
 
 App, slots: `experimental_threadList`, `experimental_threadHeaderRow`, `experimental_tab` (a fixed
 thread tab), `experimental_threadAction`, `experimental_appOverlay` (draws the plan dialogs of Stop
-and Retire, which a thread action has no place to draw), and on `navPanel`:
+and Retire and the progress and failure of Start and Restart, which a thread action has no place
+to draw), and on `navPanel`:
 `experimental_useBadge`, `experimental_hideFromNavigation`.
 
 App, hooks and components: `experimental_useSidebarThreads`, `experimental_useRpcQuery` (the

@@ -19,8 +19,8 @@ import type {
 import { codes } from "../kernel/result";
 import type { Node } from "../model/types";
 import { clean, count, needsYouLabel } from "./format";
-import { firstLine, useOats } from "./oats";
-import { Button, Dot } from "./ui";
+import { failureLine, useOats } from "./oats";
+import { Button, Dot, plainClick } from "./ui";
 
 
 export const PAGES = [
@@ -60,8 +60,7 @@ export function Sidebar({ activeThreadId, onNavigate }: PluginThreadListProps) {
   const rowStatuses = useSidebarThreadRowStatuses();
 
   const openThread = (event: MouseEvent, threadId: string) => {
-    // A modified click keeps the anchor's own behaviour (new tab, new window).
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    if (!plainClick(event)) return;
     event.preventDefault();
     navigate.toThread(threadId);
     onNavigate();
@@ -158,7 +157,7 @@ export function Sidebar({ activeThreadId, onNavigate }: PluginThreadListProps) {
           </p>
         ) : (
           <div data-testid="oats-status-line" role="alert" className="flex flex-col items-start gap-1 px-2 py-1.5 text-xs">
-            <span className="break-words text-muted-foreground">{clean(firstLine(oats.message))}</span>
+            <span className="break-words text-muted-foreground">{clean(failureLine(oats))}</span>
             <span className="flex flex-wrap items-center gap-2">
               <Button onClick={oats.retry}>Retry</Button>
               {oats.code === codes.chooseHost ? (
