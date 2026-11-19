@@ -254,7 +254,7 @@ const ctx = {
   homeRoster: () => homeRoster(),
   subscribeHomeRoster: (fn) => subscribeHomeRoster(fn),
   openAgent: (row) => openRosterInstance(row),
-  openWorkspaceTab: (tab, options) => openWorkspaceSouls(tab, options),
+  openWorkspaceTab: (tab, options) => openWorkspaceTabFocused(tab, options),
   // A bound action's key as the keyboard reference writes it ("Ctrl+K"), or "" when it has none.
   chordText: (id) => { const b = getBinding(id, navigator.platform.includes("Mac")); return b ? formatChord(b, navigator.platform.includes("Mac")) : ""; },
   subscribeRetires: (fn) => { retireListeners.add(fn); return () => retireListeners.delete(fn); },
@@ -2624,6 +2624,21 @@ for (const button of document.querySelectorAll("#nav-foot [data-action]")) {
 // workspace visit + selection before import, and contain stale rejections too.
 // The leader's 3 opens the same way on Capabilities (`tab`), and stage.hierarchy on Machines.
 const WORKSPACE_TAB_NAMES = { machines: "Machines", souls: "Souls", capabilities: "Capabilities" };
+/** Home's overview opens a Workspace tab from the keyboard (slice 2): the page, on that tab, and the focus on its
+ * tab control, where it was a Home button the switch removed; so Esc, the page's way back to Home, is heard at once
+ * (stageHost's listener). Only while the page that open showed is still the stage, and only when focus has no place
+ * (on <body> or a hidden control): a choice made meanwhile keeps its own focus. */
+async function openWorkspaceTabFocused(tab, options) {
+  const op = stageOp;
+  await openWorkspaceSouls(tab, options);
+  if (stage?.name !== "spawn" || tabLayerVisible || (stageOp !== op && stageOp !== op + 1)) return;
+  const active = document.activeElement;
+  if (active && active !== document.body && isShown(active)) return;
+  const control = document.getElementById(`workspace-tab-${tab}`);
+  if (control && isShown(control)) control.focus();
+  else focusRegions.focusRegion("main");
+}
+
 async function openWorkspaceSouls(tab = "souls", options = undefined) {
   const selectionOwns = tabOpenIntents.begin();
   const owns = () => selectionOwns() && ![...document.querySelectorAll('[aria-modal="true"]')]

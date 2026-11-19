@@ -14,8 +14,8 @@
    - First run (no agents): OATS in two lines, three keys, then the overview.
    Every row is a button: Enter (or a click) opens it as Enter does in the roster (ctx.openAgent). Each read carries
    a latest-intent token, checked on its answer and on its failure. Copy reads its nouns from DESKTOP_NOUNS. */
-import { apiJson, postJson, wsQuery, workspaceGeneration } from "./common.mjs";
-import { cliStatus } from "./cli-status.mjs";
+import { apiJson, postJson, wsQuery, workspaceGeneration, onWorkspaceChange } from "./common.mjs";
+import { cliStatus, onCliChange } from "./cli-status.mjs";
 import { DESKTOP_NOUNS, DESKTOP_TERMS } from "../desktop-terms.mjs";
 import { homeBoard, homeAgents, startedBy } from "../../../client/home-board.mjs";
 import { rosterRowFacts } from "../../../client/roster-row-facts.mjs";
@@ -101,16 +101,17 @@ export const homeCSS = `
 
 let returnTo = null; // the overview key Home last opened, focused again when Home mounts (per workspace generation)
 
-export function createHome(el, ctx, { doc = el.ownerDocument, now = () => Date.now() } = {}) {
+export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, subscribeCli = onCliChange, subscribeWorkspace = onWorkspaceChange,
+  generation = workspaceGeneration } = {}) {
   const nouns = DESKTOP_NOUNS;
   const style = doc.createElement("style"); style.dataset.home = ""; style.textContent = homeCSS;
   const root = doc.createElement("div"); root.className = "home";
   const inner = doc.createElement("div"); inner.className = "home-inner";
   root.append(style, inner);
   el.replaceChildren(root);
-  let view = "board", alive = true, serial = 0;
-  const counts = { souls: "loading", capabilities: "loading", teams: null };
-  const gen = workspaceGeneration();
+  let view = "board", alive = true;
+  const counts = { souls: "loading", capabilities: "loading", teams: "loading" };
+  let gen = generation();
   const chord = (id) => (typeof ctx.chordText === "function" ? ctx.chordText(id) : "") || "";
 
   const roster = () => (typeof ctx.homeRoster === "function" ? ctx.homeRoster() : { rows: [], deployments: [], phase: "loading", stale: () => false, here: null });
@@ -255,24 +256,49 @@ export function createHome(el, ctx, { doc = el.ownerDocument, now = () => Date.n
     else if (had && !root.contains(doc.activeElement)) inner.querySelector("button")?.focus();
   }
 
-  async function readCounts() {
-    const mine = ++serial;
-    const owns = () => alive && mine === serial && workspaceGeneration() === gen;
-    const soulsRead = apiJson(ctx, `/api/agents${wsQuery()}`).then((d) => (Array.isArray(d?.agents) ? d.agents.length : "failed"), () => "failed");
-    const capsRead = postJson(ctx, `/api/workspace-sync${wsQuery()}`, { action: "read" })
-      .then((r) => (r?.status === "ok" && Array.isArray(r.capabilities?.capabilities) ? r.capabilities.capabilities.length : "failed"), () => "failed");
-    const teamsOn = !!teamModelOf(cliStatus()?.features);
-    if (teamsOn) counts.teams = "loading";
-    const teamsRead = teamsOn ? postJson(ctx, `/api/workspace-teams${wsQuery()}`, { action: "list" })
-      .then((a) => { const doc = teamsAnswer(a, "teams", ""); return Array.isArray(doc.teams) ? doc.teams.length : "failed"; }, () => "failed") : Promise.resolve(null);
-    if (owns()) paint();
-    const [souls, capabilities, teams] = await Promise.all([soulsRead, capsRead, teamsRead]);
-    if (!owns()) return;
-    Object.assign(counts, { souls, capabilities, teams });
+  /** Teams has a count only where the CLI has a team model: unknown while its probe is pending ("loading"), none
+   * (null) where it has none. */
+  const teamsState = () => { const status = cli(); return status == null ? "loading" : teamModelOf(status.features) ? "read" : null; };
+  // Each count is its own read, owned by the workspace generation it was asked in: a late answer, or a failure, for
+  // a workspace since left is dropped. A read never rejects: a refused or malformed answer is that count's "failed".
+  const own = (asked) => alive && asked === gen && generation() === asked;
+  function readCount(key, read) {
+    const asked = gen;
+    counts[key] = "loading";
+    Promise.resolve().then(read).catch(() => "failed").then((value) => { if (!own(asked)) return; counts[key] = value; paint(); });
+  }
+  let teamsReadIn = null; // the generation a Teams read was asked in: a CLI answer then asks no second one
+  function readTeams() {
+    const state = teamsState();
+    if (state !== "read") { counts.teams = state; teamsReadIn = null; return; }
+    if (teamsReadIn === gen) return;
+    teamsReadIn = gen;
+    readCount("teams", async () => {
+      const doc = teamsAnswer(await postJson(ctx, `/api/workspace-teams${wsQuery()}`, { action: "list" }), "teams", "");
+      return Array.isArray(doc.teams) ? doc.teams.length : "failed";
+    });
+  }
+  function readCounts() {
+    readCount("souls", async () => { const d = await apiJson(ctx, `/api/agents${wsQuery()}`); return Array.isArray(d?.agents) ? d.agents.length : "failed"; });
+    readCount("capabilities", async () => {
+      const r = await postJson(ctx, `/api/workspace-sync${wsQuery()}`, { action: "read" });
+      return r?.status === "ok" && Array.isArray(r.capabilities?.capabilities) ? r.capabilities.capabilities.length : "failed";
+    });
+    readTeams();
     paint();
+  }
+  /** Another workspace: Home shows its board again and counts that workspace's (the stage stays mounted across a
+   * switch, so Home follows it itself). */
+  function workspaceChanged() {
+    if (!alive || generation() === gen) return;
+    gen = generation(); view = "board"; returnTo = null;
+    readCounts();
   }
 
   const unsubscribe = typeof ctx.subscribeHomeRoster === "function" ? ctx.subscribeHomeRoster(() => paint()) : () => {};
+  const unsubscribeWorkspace = subscribeWorkspace(() => workspaceChanged());
+  // The CLI's probe answering (or its features changing) settles whether Teams has a count.
+  const unsubscribeCli = subscribeCli(() => { if (!alive) return; readTeams(); paint(); });
   const onKey = (e) => {
     if (e.key !== "Escape" || e.defaultPrevented || view !== "agents") return;
     e.preventDefault(); backToBoard();
@@ -281,12 +307,12 @@ export function createHome(el, ctx, { doc = el.ownerDocument, now = () => Date.n
   paint();
   if (returnTo && returnTo.gen === gen) find("homeOpen", returnTo.key)?.focus();
   returnTo = null;
-  void readCounts();
+  readCounts();
 
   return {
     get view() { return view; },
     refresh: () => paint(),
-    dispose() { alive = false; serial++; unsubscribe(); root.removeEventListener("keydown", onKey); },
+    dispose() { alive = false; unsubscribe(); unsubscribeWorkspace(); unsubscribeCli(); root.removeEventListener("keydown", onKey); },
   };
 }
 

@@ -2432,13 +2432,17 @@ doesn't read already:
   claim gate, newest claim first; Running, newest spawn first; `homeAgents`; `startedBy`), so the TUI can draw the
   same Home. Nothing reorders the roster.
 - **Counts**: Souls from `GET /api/agents`, Capabilities from `POST /api/workspace-sync {action:"read"}`, Teams from
-  `POST /api/workspace-teams {action:"list"}` (only where the CLI has a team model), Machines from the roster's
-  deployments (a workspace with no deployment list is this machine's: one). One read serial per mount, checked with
-  the workspace generation on each answer and each failure.
+  `POST /api/workspace-teams {action:"list"}` (only where the CLI has a team model: "Counting…" while its probe is
+  pending, no line where it has none; `onCliChange` settles it), Machines from the roster's deployments (a workspace
+  with no deployment list is this machine's: one). Each count is its own read, owned by the workspace generation it
+  was asked in (a late answer or failure for a workspace since left is dropped), and never rejects: a refused or
+  malformed answer is that count's "Couldn't count them", the others stand. The stage stays mounted across a
+  workspace switch, so Home follows `onWorkspaceChange` itself: its board again, and the new workspace's counts.
 - **Opening**: an agent row runs `ctx.openAgent(row)`, the shell's `openRosterInstance`, which activates the
   roster's own row (showing it first if a collapsed parent or the closed Background section hides it), so its gates
   are the row's (held, unknown or unaddressable, stopped on a stale roster: refused) and can't drift. An overview row runs
-  `ctx.openWorkspaceTab(tab)` (`openWorkspaceSouls`); the Workspace page's unclaimed Esc (no field, dialog, menu or
+  `ctx.openWorkspaceTab(tab, options)` (`openWorkspaceTabFocused`: `openWorkspaceSouls`, then the focus on the
+  page's tab control where the Home button it left is gone, so the first Esc is heard); the Workspace page's unclaimed Esc (no field, dialog, menu or
   list took it) goes back to Home (`stageHost`'s keydown in shell.mjs), and Home focuses the row that opened it.
   Agents opens Home › Agents in place; its Esc, or Back to Home, returns to the board.
 - **First run** (the roster is ready and empty): two lines, three keys (`ctx.chordText`: New agent's and the

@@ -12,7 +12,8 @@ const shell = readFileSync(new URL("../renderer/shell.mjs", import.meta.url), "u
 const claim = (message = "Pick the copy", since = "2026-11-19T10:00:00.000Z") => ({ since, producer: "agent", reason: "attention", message });
 const row = (instance, extra = {}) => ({ instance, agent: "oats-expert", running: true, runtimeState: "running", createdAt: "2026-11-01T00:00:00.000Z", ...extra });
 
-function fixture(t, { rows = [], phase = "ready", deployments = [], api = async () => ({ agents: [1, 2, 3] }), post = async () => ({ status: "ok", capabilities: { capabilities: [1, 2] } }) } = {}) {
+function fixture(t, { rows = [], phase = "ready", deployments = [], api = async () => ({ agents: [1, 2, 3] }), post = async () => ({ status: "ok", capabilities: { capabilities: [1, 2] } }),
+  cli = () => ({ features: [] }) } = {}) {
   const dom = new JSDOM('<!doctype html><body><main></main></body>', { pretendToBeVisual: true });
   const doc = dom.window.document, el = doc.querySelector("main");
   const listeners = new Set(), opened = [], tabs = [];
@@ -25,11 +26,16 @@ function fixture(t, { rows = [], phase = "ready", deployments = [], api = async 
     openWorkspaceTab: (tab, options) => { tabs.push(options ? [tab, options.machinesView] : tab); },
     chordText: (id) => ({ "app.quickOpenSouls": "Ctrl+N", "app.palette": "Ctrl+K" })[id] ?? "",
   };
-  const home = createHome(el, ctx, { doc });
+  // The window's workspace and the CLI's probe, as Home reads them, driven by the test.
+  const ws = { gen: 1, listeners: new Set() }, cliListeners = new Set();
+  const home = createHome(el, ctx, { doc, cli: () => cli(), subscribeCli: (fn) => { cliListeners.add(fn); return () => cliListeners.delete(fn); },
+    subscribeWorkspace: (fn) => { ws.listeners.add(fn); return () => ws.listeners.delete(fn); }, generation: () => ws.gen });
   t.after(() => { home.dispose(); dom.window.close(); });
   const buttons = () => [...el.querySelectorAll("button")];
   return {
     doc, el, home, opened, tabs, ctx,
+    switchWorkspace() { ws.gen++; for (const fn of ws.listeners) fn(); },
+    cliAnswered() { for (const fn of cliListeners) fn(); },
     set(next) { state = { ...state, ...next }; for (const fn of listeners) fn(); },
     groups: () => [...el.querySelectorAll(".home-group")].map((g) => [g.querySelector("h3").textContent, [...g.querySelectorAll("[data-home-agent]")].map((b) => b.dataset.homeAgent)]),
     agentButton: (name) => buttons().find((b) => b.dataset.homeAgent === name),
@@ -173,4 +179,69 @@ test("slice2 roster order unchanged by board", () => {
   assert.deepEqual(order(), rosterBefore, "the roster's order is the same with the board drawn");
   assert.deepEqual(rosterBefore, ["new", "waits", "old"], "newest spawn first, a waiting row where it stands");
   assert.doesNotMatch(shell, /home-board\.mjs/, "the shell's roster never reads the board's grouping");
+});
+
+// Review round 1 (slice 2): the counts follow the window's workspace, the CLI's probe, and a refused Teams read.
+test("slice2 counts follow a workspace switch; a late answer for the one left is dropped", async (t) => {
+  let souls = 3; const pending = [];
+  const u = fixture(t, { rows: [row("a")], api: async () => { const n = souls; return new Promise((resolve) => pending.push(() => resolve({ agents: Array(n).fill(0) }))); } });
+  await u.settle();
+  assert.match(u.openButton("souls").textContent, /Counting…/);
+  souls = 1; u.switchWorkspace(); await u.settle();
+  pending[0](); await u.settle(); await u.settle();
+  assert.match(u.openButton("souls").textContent, /Counting…/, "A's late answer is not B's count");
+  pending[1](); await u.settle(); await u.settle();
+  assert.match(u.openButton("souls").textContent, /You have 1 soul$/, "B's own count");
+  // Home › Agents was A's place: a switch shows B's board.
+  u.openButton("agents").click(); assert.equal(u.home.view, "agents");
+  u.switchWorkspace(); assert.equal(u.home.view, "board");
+});
+
+test("slice2 Teams waits for the CLI's probe, and a refused Teams read fails Teams alone", async (t) => {
+  let status = null; const asked = [];
+  const post = async (path, body) => {
+    asked.push(path.split("?")[0]);
+    if (path.startsWith("/api/workspace-teams")) return { status: "refused", reason: { code: "E_UNREACHABLE", message: "Cannot reach deployment" } };
+    return { status: "ok", capabilities: { capabilities: [1] } };
+  };
+  const rejections = []; const onRejection = (e) => rejections.push(e); process.on("unhandledRejection", onRejection);
+  t.after(() => process.off("unhandledRejection", onRejection));
+  const u = fixture(t, { rows: [row("a")], post, cli: () => status });
+  await u.settle(); await u.settle();
+  assert.match(u.openButton("teams").textContent, /Counting…/, "the probe is pending: not 'no teams'");
+  assert.equal(asked.includes("/api/workspace-teams"), false);
+  status = { features: ["team-model-3"] }; u.cliAnswered();
+  await u.settle(); await u.settle(); await u.settle();
+  assert.equal(asked.filter((p) => p === "/api/workspace-teams").length, 1, "one Teams read once the CLI says it has teams");
+  assert.match(u.openButton("teams").textContent, /Couldn't count them/, "a refusal is Teams' failure");
+  assert.match(u.openButton("souls").textContent, /You have 3 souls/, "the other counts stand");
+  assert.match(u.openButton("capabilities").textContent, /You have 1 capability/);
+  u.cliAnswered(); await u.settle();
+  assert.equal(asked.filter((p) => p === "/api/workspace-teams").length, 1, "a second CLI answer asks nothing again");
+  assert.deepEqual(rejections, [], "no read rejects unhandled");
+  // A CLI with no team model: Teams has no count line.
+  const v = fixture(t, { rows: [row("a")], cli: () => ({ features: [] }) });
+  assert.equal(v.openButton("teams").textContent, "Teams");
+});
+
+test("slice2 Enter on a section lands focus on its Workspace tab, so Esc goes straight back to Home", async () => {
+  // The shipped handoff and the shipped Esc listener, run on a stage host whose Workspace page mounts its tabs.
+  const dom = new JSDOM('<!doctype html><body><div id="stagehost"><div class="home"><button id="from">Souls</button></div></div></body>');
+  const document = dom.window.document, stageHost = document.getElementById("stagehost"), went = [];
+  const c = { document, stageHost, stage: { name: "home" }, stageOp: 0, tabLayerVisible: false,
+    isShown: (el) => el.isConnected, focusRegions: { focusRegion: (name) => went.push(`region:${name}`) },
+    openWorkspaceSouls: async (tab) => {
+      c.stageOp += 1; stageHost.innerHTML = `<div role="tablist"><button id="workspace-tab-${tab}" role="tab">tab</button></div>`; c.stage = { name: "spawn" };
+    },
+    showStageFocused: async (name) => went.push(name) };
+  const handoff = shell.match(/async function openWorkspaceTabFocused\(tab, options\) \{[^]*?\n\}/)[0];
+  const esc = shell.match(/stageHost\.addEventListener\("keydown", \(e\) => \{[^]*?\n\}\);/)[0];
+  const { runInNewContext } = await import("node:vm");
+  const run = runInNewContext(`${handoff}\n${esc}\n({ openWorkspaceTabFocused })`, Object.assign(c, { Element: dom.window.Element }));
+  document.getElementById("from").focus();
+  await run.openWorkspaceTabFocused.call(c, "souls");
+  assert.equal(document.activeElement.id, "workspace-tab-souls", "the page's tab control, not <body>");
+  document.activeElement.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  assert.deepEqual(went, ["home"], "the first Esc goes back to Home");
+  dom.window.close();
 });
