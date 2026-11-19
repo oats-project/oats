@@ -140,8 +140,8 @@ and a count is shown only after a settled good roster read of that machine's dep
 unreadable: "not read", "—", and the observation's own words under the list), and another machine's deployment as
 the panel's #482 `deployments` reports it, bound by the registration's id (each remote entry's `server`,
 `machine-contract.mjs` `machineDeployment`; a display label is not unique, and none or two matches make no claim; read
-now: a count; kept from an earlier read: the count "as last read"; not reached: "—" with the reason). A successful machine check is not a roster read. With no panel entry for the machine
-(an older panel that names no machine's deployment), a machine its check reached counts. The
+now: a count; kept from an earlier read: the count "as last read"; not reached: "—" with the reason). A successful machine check is not a roster read: a registration with no deployment of its
+own in the panel (a machine added since the last roster read) shows "—", "not read yet", until a roster read reaches it. The
 section says so in its one line.
 
 A registered machine's row is one button: Enter (or a click) opens it under its row, with its name,

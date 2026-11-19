@@ -239,8 +239,7 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
       localObservation: () => ({ status: deployment?.status ?? 'pending', text: deployment && deployment.status !== 'observed' && deployment.status !== 'pending' ? deploymentUnavailableText(deployment, DESKTOP_TERMS) : '' }),
       // A registration's deployment by its identity (the roster group's server), never by its display label; none or
       // two: no observation is borrowed (packages/client/machine-contract.mjs machineDeployment).
-      observed: m => machineDeployment(deployments, m.id),
-      observedKnown: () => deployments.some(d => d && d.local !== true && typeof d.server === 'string') });
+      observed: m => machineDeployment(deployments, m.id) });
     return machines.element;
   }
   /** Whether `name`'s panel is the view's own right now (Souls; Machines while its Map is shown). */
