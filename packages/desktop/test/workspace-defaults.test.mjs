@@ -457,6 +457,6 @@ test('About capabilities: leaving the tab or the workspace closes it without mov
 });
 
 test('About souls is gone (the Desktop UI rework, slice 3a): one copy object, the capabilities\' only', () => {
-  assert.deepEqual(Object.keys(ABOUT_COPY), ['capabilities']);
+  assert.deepEqual(Object.keys(ABOUT_COPY), ['close', 'capabilities'], 'the shared Close word and the capabilities\' copy: no souls entry');
   assert.ok(Object.isFrozen(ABOUT_COPY) && Object.isFrozen(ABOUT_COPY.capabilities), 'one frozen copy object');
 });
