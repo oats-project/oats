@@ -22,6 +22,7 @@ const TEXTS = [
   ['.agent-fact-label', '.agent-facts', 'surface'], ['.agent-fact-value', '.agent-facts', 'surface'], ['.agent-fact-updated', '.agent-facts', 'surface'],
   ['.agent-fact-link', '.agent-fact-link', 'surface'], ['.agent-fact-says', '.agent-fact-link', 'surface'], ['.agent-fact-host', '.agent-fact-link', 'surface'],
   ['.agent-fact-hide', '.agent-fact-hide', 'surface'], ['.agent-facts-fold', '.agent-facts-fold', 'surface'],
+  ['.agent-fact-url-text', '.agent-facts', 'surface'], ['.agent-fact-url-open', '.agent-fact-url-open', 'surface'],
   ['.agent-q-tag', '.agent-questions', 'attn-bg'], ['.agent-q-age', '.agent-questions', 'attn-bg'], ['.agent-q-text', '.agent-questions', 'attn-bg'],
   ['.agent-q-option:not(:disabled)', '.agent-q-option:not(:disabled)', 'surface'], ['.agent-q-option:not(:disabled) .agent-q-num', '.agent-q-option:not(:disabled) .agent-q-num', 'surface-2'],
   ['.agent-q-option:disabled', '.agent-q-option:disabled', 'surface'], ['.agent-q-option:disabled .agent-q-num', '.agent-q-option:disabled .agent-q-num', 'surface-2'],
@@ -43,6 +44,7 @@ for (const name of ['light', 'solarized', 'dark']) test(`${name}: the agent view
   many.questions[0].hasContext = true;
   view.update(boardData(many));
   view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'one\ntwo' }]]) });
+  doc.querySelector('li[data-key="pr"] .agent-fact-link').click();
   const root = win.getComputedStyle(doc.documentElement), value = t => channels(root.getPropertyValue(`--${t}`).trim());
   for (const [selector, surface, bg] of TEXTS) {
     const el = doc.querySelector(selector), under = doc.querySelector(surface);
@@ -80,8 +82,9 @@ test('the agent view layout: no scrolling zone, the context fold\'s text the one
     assert.ok(!['auto', 'scroll'].includes(css.overflowY) && !['auto', 'scroll'].includes(css.overflow), `${selector} does not scroll`);
   }
   assert.equal(win.getComputedStyle(doc.querySelector('.agent-q-context-text')).overflowY, 'auto', 'a long context scrolls in its open fold');
-  const link = doc.querySelector('.agent-fact-link'), css = win.getComputedStyle(link);
-  assert.ok(link.textContent.endsWith(long), 'the whole address is the text');
+  doc.querySelector('.agent-fact-link').click();
+  const shown = doc.querySelector('.agent-fact-url-text'), css = win.getComputedStyle(shown);
+  assert.equal(shown.textContent, long, 'the whole address is the text, before it opens');
   assert.notEqual(css.textOverflow, 'ellipsis'); assert.notEqual(css.whiteSpace, 'nowrap'); assert.notEqual(css.overflow, 'hidden');
   dom.window.close();
 });
