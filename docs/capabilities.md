@@ -2230,8 +2230,12 @@ the feature.
   within one boot), refuses at the cap with `E_SESSION_NOT_RUNNING` without
   calling you, and first waits (a resume) or refuses (an input) while a
   process still works in the home. So an `inspect` precedes every `input`.
-  A notice you refuse (`E_SESSION_PROMPT_OPEN`, `E_SESSION_INPUT_QUEUED`) is
-  not counted.
+  An input you refuse (`ok: false`: nothing was sent) is not counted. One
+  whose call fails or answers outside the rules stays counted: you may have
+  restarted the session on it.
+- **`stop` is idempotent.** An operator's stop of a home that is already
+  stopped calls it again, which is how a stop you did not confirm is
+  finished. Answer `stopped: true` for a session that is already stopped.
 - **Nothing of your endpoint leaves the host.** A status row carries the
   capability and, on its own host only, the endpoint's `threadId` when it
   is a string; the endpoint is on local inspect, spawn and start answers.

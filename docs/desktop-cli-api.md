@@ -7529,7 +7529,7 @@ open) and `E_SESSION_INPUT_QUEUED`.
 
 **Stop and retire.** The stop's row is `{ok: true, stopped, alreadyIdle,
 state: "stopped"}`; `E_SESSION_STOP_FAILED` when the provider does not confirm
-(the home stays recorded as stopped). A retire whose provider cannot confirm
+(the home stays recorded as stopped; a second stop asks the provider again). A retire whose provider cannot confirm
 the stop goes on only when no process works in the home, with a warning;
 otherwise `E_RUNTIME_QUIESCE_FAILED`.
 

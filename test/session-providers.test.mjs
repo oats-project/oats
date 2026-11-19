@@ -1,5 +1,6 @@
-// Session providers: the kernel's contract with a session backend a capability supplies (spec K1;
-// docs/capabilities.md "Session providers", docs/execution-targets.md "Backends"). Every home here
+// Session providers: the kernel's contract with a session backend a capability supplies
+// (docs/capabilities.md "Session providers", docs/execution-targets.md "Session providers"). The
+// tests named T1 to T12 are the change's pinned acceptance tests, by their numbers. Every home here
 // is a real spawn through the kernel; the provider is a real script the kernel runs
 // (test/helpers/session-provider-fixture.mjs: `acme.fake`, backend `fake`, no bb), told what to
 // answer and recording each call. T10, the older-kernel guarantee, is its own file
@@ -224,9 +225,13 @@ test("T4: after oats instance stop, inspect answers stopped and input is refused
   assert.equal(await codeOf(() => fx.inEnv(() => attachInstanceSession(home))), "E_SESSION_NO_TERMINAL");
   assert.deepEqual(fx.verbs(), [], "the provider was not called for any of it");
 
-  // A second stop is idle; a start clears the stop and launches a new session.
+  // A second stop is idle, and asks the provider once more (its stop is idempotent); the host's
+  // shutdown changes nothing of a home that is stopped. A start clears the stop and launches anew.
   assert.deepEqual(await fx.inEnv(() => stopInstanceSession(home, {})), { home, backend: "fake", stopped: false, alreadyIdle: true, state: "stopped", receipt: null });
-  assert.deepEqual(fx.verbs(), []);
+  assert.deepEqual(fx.verbs().map((c) => c.verb), ["stop"]);
+  assert.equal(hostStop(fx, home).alreadyIdle, true);
+  assert.deepEqual(fx.verbs().map((c) => c.verb), ["stop"], "no second call for the host's stop");
+  assert.equal(stopReceiptOf(home).resume, undefined, "and it asks for no resume of a home an operator stopped");
   await fx.inEnv(() => startInstanceSession(home, {}));
   assert.deepEqual(runtimeOf(home), { launched: true, backend: "fake", provider: FAKE_CAPABILITY, endpoint: endpointOf("halted", 2), stoppedAt: null });
   assert.equal((await fx.inEnv(() => inputInstanceSession(home, "hello again"))).submitted, true);
@@ -238,6 +243,12 @@ test("T4: a stop the provider does not confirm leaves the home recorded as stopp
   fx.control({ stop: { exit: 1 } });
   await assert.rejects(fx.inEnv(() => stopInstanceSession(home, {})), (e) => e.code === "E_SESSION_STOP_FAILED" && /is recorded as stopped by OATS/.test(e.message));
   assert.equal(Number.isFinite(Date.parse(runtimeOf(home).stoppedAt)), true);
+  // Another stop finishes it: the provider is asked again, and refused the same way until it confirms.
+  await assert.rejects(fx.inEnv(() => stopInstanceSession(home, {})), (e) => e.code === "E_SESSION_STOP_FAILED");
+  fx.control({});
+  fx.clearCalls();
+  assert.equal((await fx.inEnv(() => stopInstanceSession(home, {}))).alreadyIdle, true);
+  assert.deepEqual(fx.verbs().map((c) => [c.verb, c.request.input.endpoint]), [["stop", endpointOf("stuck", 1)]]);
   fx.clearCalls();
   assert.equal(await codeOf(() => fx.inEnv(() => inputInstanceSession(home, "hello"))), "E_SESSION_NOT_RUNNING");
   // A wake is its session's input: refused for a home OATS stopped, which a wake never starts.
@@ -323,6 +334,12 @@ test("T6: a stop with the host is resumed by the sweep; an operator's stop is no
   fx.clearCalls();
   assert.deepEqual(sweep(fx).result.rows.map((r) => [r.instance, r.outcome]), [["hosted", "already-running"]]);
   assert.deepEqual(fx.verbs("input"), []);
+  // Every session that is there has a row, whatever its state word: it is the row `oats host run`
+  // stops at shutdown, so that its input is refused while the host goes down.
+  for (const observed of [{ present: true, state: "unknown", running: null }, { present: true, state: "shell", running: false }, { present: true, state: "shell", running: null }, { present: true, state: "unknown", running: false }]) {
+    fx.control({ hosted: { inspect: { result: observed } } });
+    assert.deepEqual(sweep(fx, "--plan").result.rows.map((r) => [r.instance, r.outcome, r.backend]), [["hosted", "already-running", "fake"]], JSON.stringify(observed));
+  }
 });
 
 test("T6: an operator's stop after the host's withdraws the resume; a notice that is not sent leaves the home to resume", async (t) => {
@@ -394,6 +411,33 @@ test("T7: a session in error, reported lost, is resumed by the sweep with one in
   // A session that is there needs no resume: its input is not counted, cap or not.
   fx.control({});
   assert.equal(input().ok, true);
+});
+
+test("T7: an input to a lost session whose call fails stays counted: a failing provider lets no input past the cap", async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("flaky");
+  const { providerResumes } = await import("../lib/provider-resume.mjs");
+  // The provider may have restarted the session on an input whose answer was lost (a non-zero
+  // exit, a timeout, a malformed answer): whether it was sent is not known, so it is a resume.
+  for (const [what, failing] of [["a failing command", { exit: 1 }], ["a malformed answer", { raw: "not json" }], ["a result outside the rules", { result: { submitted: false, verified: false } }]]) {
+    fx.control({ flaky: { inspect: { result: LOST }, input: failing } });
+    fx.clearCalls();
+    const codes = [];
+    for (let i = 0; i < RESUME_LIMIT + 2; i++) codes.push(await codeOf(() => fx.inEnv(() => inputInstanceSession(home, "mail"))));
+    assert.deepEqual(codes, [...Array(RESUME_LIMIT).fill("E_SESSION_INPUT_FAILED"), "E_SESSION_NOT_RUNNING", "E_SESSION_NOT_RUNNING"], what);
+    assert.equal(fx.verbs("input").length, RESUME_LIMIT, `${what}: the provider's input is called up to the cap, never past it`);
+    assert.equal((await fx.inEnv(() => providerResumes(home))).count, RESUME_LIMIT);
+    // (a new home's worth of count for the next case)
+    rmSync(join(fx.env.OATS_HOME_DIR, "session-resume", "provider-resumes"), { recursive: true, force: true });
+  }
+  // The provider's own refusal says nothing was sent: not counted, however often.
+  fx.control({ flaky: { inspect: { result: LOST }, input: { error: { code: "E_BACKEND_NOT_READY", message: "down" } } } });
+  for (let i = 0; i < RESUME_LIMIT + 2; i++) assert.equal(await codeOf(() => fx.inEnv(() => inputInstanceSession(home, "mail"))), "E_SESSION_INPUT_FAILED");
+  assert.equal((await fx.inEnv(() => providerResumes(home))).count, 0);
+  // The resume notice follows the same rule.
+  fx.control({ flaky: { inspect: { result: LOST }, input: { exit: 1 } } });
+  for (let i = 0; i < RESUME_LIMIT; i++) await assert.rejects(fx.inEnv(() => startInstanceSession(home, { resume: true })), (e) => e.code === "E_SESSION_INPUT_FAILED");
+  await assert.rejects(fx.inEnv(() => startInstanceSession(home, { resume: true })), (e) => e.code === "E_SESSION_NOT_RUNNING");
 });
 
 test("T7: a resume is not counted when its notice is not sent, and waits for the last run's processes to leave the home", async (t) => {
@@ -842,6 +886,36 @@ test("a requires row applies to the backends it names: without `backends`, to ev
     assert.match(bad.error.message, /acme\.bad: a requirement's `backends` must be a list of tmux and session-provider/);
   }
   assert.deepEqual(fx.verbs(), [], "nothing was launched");
+});
+
+test("a requires row with `backends` and `when` applies only where both hold, also for the gate on a configuration's arguments", async (t) => {
+  // The probe cannot carry a launch configuration's arguments, so a launch with arguments is
+  // refused (E_LAUNCH_PROBE_UNSUPPORTED) when a requirement applies to it, and only then.
+  const { applicableRequirements } = await import("../lib/core.mjs");
+  const row = (backends) => ({ harness: "claude", package: "needed@acme-market", why: "the fixture's package", backends, when: { delivery: "channel" } });
+  const pkg = (backends) => ({ manifest: { settings: { delivery: { description: "how mail arrives", default: "channel", values: ["channel", "session"] } }, requires: [row(backends)] }, files: {} });
+  const fx = providerDeployment(t, {
+    capabilities: { "acme.tmux": pkg(["tmux"]), "acme.provided": pkg(["session-provider"]) },
+    souls: Object.fromEntries(["tmux", "provided"].map((name) => [`needs-${name}`, { soul: { capabilities: { [FAKE_CAPABILITY]: { from: "here" }, [`acme.${name}`]: { from: "here" } } } }])),
+    local: { "launch-configs": { claude: { harness: "claude" }, "with-args": { harness: "claude", args: ["--permission-mode", "auto"] } } },
+  });
+  const cap = (backends, delivery) => ({ id: "x", settings: { delivery }, manifest: { requires: [row(backends)] } });
+  assert.deepEqual(applicableRequirements("claude", [cap(["tmux"], "channel")], "tmux"), [{ capability: "x", package: "needed@acme-market" }]);
+  assert.deepEqual(applicableRequirements("claude", [cap(["tmux"], "channel")], "fake"), [], "its `when` holds, and it is still not a provider launch's");
+  assert.deepEqual(applicableRequirements("claude", [cap(["session-provider"], "channel")], "tmux"), [], "nor is a provider's row a tmux launch's");
+  assert.deepEqual(applicableRequirements("claude", [cap(["session-provider"], "channel")], "fake"), [{ capability: "x", package: "needed@acme-market" }]);
+  assert.deepEqual(applicableRequirements("claude", [cap(["tmux"], "session")], "tmux"), [], "a `when` that does not hold");
+  const preview = (soul, config, ...backend) => { const a = fx.cli(["spawn", soul, ...backend, "--launch-config", config, "--preview", "--json"]).json(); return a.ok ? "ok" : a.error.code; };
+  const onProvider = ["--backend", "fake"];
+  // With arguments: refused only where the row is a requirement of that backend.
+  assert.deepEqual([preview("needs-tmux", "with-args"), preview("needs-tmux", "with-args", ...onProvider)], ["E_LAUNCH_PROBE_UNSUPPORTED", "ok"]);
+  assert.deepEqual([preview("needs-provided", "with-args"), preview("needs-provided", "with-args", ...onProvider)], ["ok", "E_LAUNCH_PROBE_UNSUPPORTED"]);
+  // Without: probed there, and nowhere else.
+  assert.deepEqual([preview("needs-tmux", "claude"), preview("needs-tmux", "claude", ...onProvider)], ["E_HARNESS_RESOURCE_MISSING", "ok"]);
+  assert.deepEqual([preview("needs-provided", "claude"), preview("needs-provided", "claude", ...onProvider)], ["ok", "E_HARNESS_RESOURCE_MISSING"]);
+  // A provider launch with a configuration's arguments carries them to the provider.
+  await fx.launch("argued", { launchConfig: "with-args" });
+  assert.deepEqual(fx.verbs("launch")[0].request.input.args, ["--permission-mode", "auto"]);
 });
 
 test("E_BACKEND_AMBIGUOUS at a start: a home whose modules now hold two capabilities declaring its backend's name", async (t) => {

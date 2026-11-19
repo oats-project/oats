@@ -983,7 +983,7 @@ otherwise, whose `details.fields` are `backend`, `session.provider` and
 |---|---|
 | `session inspect` | the provider's `present`, `state` and `running`, with `backend`, `session` and `open` (`{label, url}` or `null`: what to show instead of a terminal); no `paneId`, no `size`. A provider that fails, is slow or answers outside the contract is `E_SESSION_UNAVAILABLE`, never "stopped" |
 | `session input` | the provider sends the text. `submitted: true` only when it was dispatched; `E_SESSION_PROMPT_OPEN` (a prompt is open in the session: nothing was sent) and `E_SESSION_INPUT_QUEUED` (the provider queued it and withdrew it) are the provider's refusals; anything else is `E_SESSION_INPUT_FAILED`. An input to a lost session is a resume ([below](#provider-homes-lost-sessions)) |
-| `instance stop` | records the stop, then asks the provider to stop the session (`E_SESSION_STOP_FAILED` when it does not confirm; the home stays recorded as stopped) |
+| `instance stop` | records the stop, then asks the provider to stop the session (`E_SESSION_STOP_FAILED` when it does not confirm; the home stays recorded as stopped). A stop of a home that is already stopped asks the provider once more: run it again to finish a stop the provider did not confirm |
 | `session start` | launches a new session, a fresh conversation on `TASK.md`, and records its endpoint. Refused when a session is there that OATS did not stop: `E_SESSION_RUNNING` when it reads `running: true`, else `E_SESSION_UNKNOWN` |
 | `session restart` | stop, then start, under one lifecycle claim |
 | `session start --resume` | sends the resume notice through the provider's input; nothing is launched ([below](#provider-homes-lost-sessions)) |
@@ -1045,7 +1045,9 @@ stopped. The rules of that resume:
   provider would restart the session on it. At the cap the resume and the
   input are refused `E_SESSION_NOT_RUNNING`, nothing is sent, a mail stays
   unread, and the sweep's row is `refused`, `keeps-getting-lost`. A stop with
-  the host is no crash and is not counted.
+  the host is no crash and is not counted. A resume the provider itself
+  refuses is not counted either (nothing was sent); one whose call fails is,
+  since the provider may have restarted the session.
 - **The last run's processes.** A resume of a lost session waits until no
   process works in the home (a harness can outlive its server's crash), for
   at most 150 s. Past that it refuses `E_SESSION_UNKNOWN`, names the
