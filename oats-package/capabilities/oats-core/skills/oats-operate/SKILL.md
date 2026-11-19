@@ -5,7 +5,7 @@ description: >-
   directories, extra trees (`oats worktree add|remove`), what a module is, reading `oats status` (modules, soul source,
   drift), spawning with preview then apply, relations, upgrading stopped homes' package modules, stopping or retiring
   instances you spawned, setting needs-input whenever you need anything
-  from a human (`oats instance attention`), being spawned by a trigger, lifecycle events
+  from a human (`oats instance attention`), asking a decision with options and keeping facts in view on your board (`oats instance board`), being spawned by a trigger, lifecycle events
   and doctor. oats.core is day-to-day OATS operation, working with OATS from
   inside an instance; which souls exist is `/oats-souls`, and the setup and
   config of an OATS workspace is oats.setup.
@@ -386,6 +386,51 @@ oats instance attention --clear                                  # once you have
   itself, naming the child (`<child> asks: …`), and relays the answer back.
   Clear it once relayed. Each instance's claim is its own: never set one for
   another home.
+
+### Your board: questions with options, and facts in view
+
+From OATS 0.69.22 (feature `instance-board`), your instance has a board: what
+your person sees around your terminal when they open you. Run its commands
+from your home, like `attention`. If `oats instance board` is refused (an
+older OATS), use `oats instance attention --message` instead.
+
+**A decision between 2 and 4 options:** ask it on the board, in the request
+shape. Write it so someone who hasn't followed your work can decide. Run it
+as one command, so the context file is made and removed outside your home:
+
+```bash
+ctx=$(mktemp) && cat > "$ctx" <<'TXT' && oats instance board ask "<the question, one sentence>" \
+  --option "<choice>: <what happens if they pick it>" \
+  --option "<choice>: <what happens>" --context-file "$ctx"; rm -f "$ctx"
+<summary, one line>
+<context, 2-4 lines: what you did so far and what you found>
+<what happens next: what you will do with the answer>
+<links: the PR, the branch, files>
+TXT
+```
+
+- Up to 4 `--option`s. The question is one line, at most 200 characters;
+  each option one line, at most 60; the context at most 2000 characters, with
+  newlines. The command answers the question's id (`q1`, `q2`…, or your own
+  `--id`).
+- It sets needs-input for you while the question is open (producer
+  `oats.board`): don't also set `attention` for it. End your turn.
+- **The answer arrives typed in your terminal as `<id>: <text>`**, for
+  example `q2: Squash: one clean commit`. It may be one of your options or
+  free text. Read it by its id, act on it, then close the question:
+  `oats instance board ask --clear <id>`. The last `--clear` clears the
+  needs-input.
+- A question belongs to the session it was asked in: after a restart, ask it
+  again if you still need the answer.
+- Anything else you need from a person (a credential, an approval with no
+  options, an open question) stays `attention`.
+
+**Facts in view:** `oats instance board set <key> --label <text> --value
+<text> [--unit <text>] [--link <https-url>]`, and `oats instance board unset
+<key>` when it no longer matters. Set only what your person must keep in view
+while you work: the PR, the one number that matters, the branch. At most 12.
+Update a fact by setting its key again (the board keeps its last values). Never
+put a secret in a fact, a question or a context.
 
 The Claude Code emitter is separate and automatic. In a Claude instance,
 oats.core's hooks report a pending permission prompt or question themselves
