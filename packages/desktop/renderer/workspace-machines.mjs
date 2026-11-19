@@ -9,7 +9,10 @@
  *   two at a time; the facts the server holds (its backfill, an earlier Check) are shown as they are.
  * - Remove asks first, in the row, then runs `oats server remove` (`/api/server-remove`); a refusal is
  *   said in the row in the CLI's words.
- * - Without the gates (`gated: false`) nothing is read: this computer's row alone, and no Add. Without a workspace key the list says why (the route's reason) and offers nothing.
+ * - Without the gates (`gated: false`) nothing is read: this computer's row alone, and no Add.
+ * - `here()` false (a remote-only view, or one with no deployment on this computer): no "This computer" row; the view's
+ *   other deployments (`elsewhere()`, the panel's #482 `deployments`) are listed instead, from the facts the panel holds,
+ *   with no version claimed. Without a workspace key the list says why (the route's reason) and offers nothing.
  * - The section owns its state: the Machines tab mounts it once per workspace and keeps it across re-renders.
  *   Every read carries this section's latest-intent ticket; nothing lands after dispose().
  * - The agent counts are what this Desktop reads (team-instance-lists-state-their-observation-scope): your agents,
@@ -107,7 +110,7 @@ export const THIS_COMPUTER = ':here';
 /** `owns()` is the owner's latest intent (its workspace generation): once false, no answer renders, takes
  * focus or starts the next step, and the owner disposes the section. `instances()`: the roster's rows the
  * agent counts are read from; `cli()`: the CLI probe (this computer's OATS version). `sync()` repaints them. */
-export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backfillDelay = BACKFILL_POLL_MS, instances = () => [], cli = () => null, gated = true }) {
+export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backfillDelay = BACKFILL_POLL_MS, instances = () => [], cli = () => null, gated = true, here = () => true, elsewhere = () => [] }) {
   const el = (tag, value, cls) => { const n = doc.createElement(tag); if (value !== undefined && value !== null) n.textContent = value; if (cls) n.className = cls; return n; };
   const query = () => `?ws=${encodeURIComponent(ws)}`;
   const element = el('section', undefined, 'machines'); element.dataset.section = 'machines';
@@ -175,12 +178,27 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
     cells(row, { name: MACHINES_COPY.thisComputer, state: { text: 'reachable', reachable: true, title: '' }, agents: agentsText(null), version, chevron: false });
     li.append(row); return li;
   }
+  /** Another machine's deployment of a remote-only view (#482 `deployments`: its machine, whether it was reached), with
+   * your agents there (the roster rows of that deployment). Not a registration: nothing to check or remove here. */
+  function deploymentRow(d) {
+    const li = el('li'); li.dataset.machine = `deployment:${d.id}`;
+    const row = el('div', undefined, 'machine-row');
+    const reached = d.reachable === true ? true : d.reachable === false ? false : null;
+    const rows = list(instances()).filter(i => i?.deployment?.id === d.id);
+    const agents = !rows.length && reached !== true ? { text: '—', title: MACHINES_COPY.unknownAgentsTitle, aria: MACHINES_COPY.unknownAgents } : { text: MACHINES_COPY.agents(rows.length, DESKTOP_NOUNS), title: '' };
+    cells(row, { name: text(d.machine) ? d.machine : text(d.label) ? d.label : d.id, state: { text: reached === true ? 'reachable' : reached === false ? 'not reachable' : 'not checked', reachable: reached, title: text(d.reason) ? d.reason : '' }, agents, version: '', chevron: false });
+    row.title = [d.machine, d.path].filter(text).join(' · ');
+    li.append(row); return li;
+  }
   function render() {
     const focused = doc.activeElement && element.contains(doc.activeElement) ? doc.activeElement : null;
     const focusedId = focused?.closest?.('[data-machine]')?.dataset.machine;
     const focusedKey = focused?.dataset?.focusKey;
     body.replaceChildren(); notes.replaceChildren();
-    body.append(hereRow());
+    // This computer only where the view has a deployment here; a remote-only view lists its machines' deployments.
+    const local = here();
+    if (local) body.append(hereRow());
+    else for (const d of list(elsewhere())) body.append(deploymentRow(d));
     if (answer?.deployment) { if (!add?.isConnected) head.append(addButton()); }
     else add?.remove();
     // Held back or not as the CLI is now: the button is kept across renders, and a reprobe renders again.
@@ -193,7 +211,7 @@ export function createWorkspaceMachines(doc, { ctx, ws, owns = () => true, backf
     }
     if (!answer) return restore();
     if (!answer.deployment) { notes.append(el('p', answer.reason || '', 'machines-reason')); return restore(); }
-    if (!answer.servers.length) { notes.append(el('p', MACHINES_COPY.none, 'machines-empty')); return restore(); }
+    if (!answer.servers.length) { if (local || !body.childElementCount) notes.append(el('p', MACHINES_COPY.none, 'machines-empty')); return restore(); }
     for (const m of answer.servers) {
       const li = el('li'); li.dataset.machine = m.id;
       const expanded = open === m.id;

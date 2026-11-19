@@ -146,7 +146,11 @@ its control only when no newer press or key in the section came since and focus 
 **Add a machine to this workspace…** sits at the section's head (the dialog above). The section is
 mounted once per workspace and kept across the tab's re-renders (`sync()` repaints the counts when
 the roster moves). A workspace change disposes it (and its dialog). Without the machine gates the
-route answers no filtered list: the section shows this computer only and offers no Add.
+route answers no filtered list: the section shows this computer only and offers no Add. A view with no
+deployment on this computer (a remote-only view, or a view whose deployments are all elsewhere) has no "This
+computer" row: it lists the view's other deployments from the panel's #482 `deployments` (their machine, whether
+reached, your agents there; no version is claimed). The list stays mounted while the Workspace page repaints, so a
+roster poll never moves focus off a row or a machine's control.
 
 ## Fixtures
 

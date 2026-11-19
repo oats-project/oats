@@ -68,6 +68,17 @@ test('slice3b machines section lists servers', async t => {
   assert.ok(u.row('devbox-aweb').querySelector('.machine-check'));
   // "Add a machine" is today's dialog.
   assert.equal(u.q('.machines-add').textContent, 'Add a machine to this workspace…');
+  // A view with no deployment on this computer (a remote-only one): no "This computer"; its machine's deployment, from
+  // the panel's facts, with your agents there and no version claimed; one not reached makes no claim about its agents.
+  const remote = setup(t, { '/api/servers': () => ({ servers: [], filtered: true, key: null, deployment: null, aweb: false, reason: 'No deployment of this workspace on this computer.' }) },
+    { here: () => false, elsewhere: () => [{ id: 'r1', machine: 'devbox', path: '/srv/team', local: false, reachable: true }, { id: 'r2', machine: 'lab', local: false, reachable: false }],
+      instances: () => [{ instance: 'x', deployment: { id: 'r1' } }], cli: () => ({ version: '0.69.21' }) });
+  await settle();
+  assert.deepEqual(remote.qa('[data-machine]').map(li => [...li.querySelectorAll('.machine-row > .machine-cell')].map(c => c.textContent)),
+    [['devbox', 'reachable', '1 agent', ''], ['lab', 'not reachable', '—', '']]);
+  assert.equal(remote.row(THIS_COMPUTER), null);
+  assert.equal(remote.q('.machines-reason').textContent, 'No deployment of this workspace on this computer.');
+  assert.equal(remote.q('.machines-add'), null);
 });
 
 test('lists this workspace\'s machines and checks each unchecked one once in the background', async t => {

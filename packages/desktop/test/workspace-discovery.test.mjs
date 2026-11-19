@@ -366,6 +366,41 @@ test('Machines: the list follows the gates; it is read for this window and kept 
   assert.equal(u.doc.querySelector('.setup section.machines, .setup .setup-machines'), null, 'not in Setup');
 });
 
+// Review round 1: the list stays mounted across the page's repaints, so a roster poll never drops focus from a row or a
+// machine's control; and a view with no deployment on this computer never lists "This computer".
+test('Machines: a roster change keeps focus on the focused machine\'s row and on its open controls', async t => {
+  const gated = { ...CLI, features: [...CLI.features, 'servers-per-workspace', 'server-connect'] };
+  const machine = { id: 'devbox-team', label: 'devbox', sshHost: 'devbox', workspace: '/home/alex/team', workspaceKey: 'github.com/acme/team', check: { reachable: true, version: '0.39.0', error: null } };
+  let instances = [];
+  const u = await setup(t, { cli: gated, servers: () => ({ servers: [machine], filtered: true, key: 'github.com/acme/team', deployment: '/team', aweb: false }) });
+  u.setLoaders(null, () => ({ ...u.panel(), instances }));
+  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
+  const rowButton = () => u.doc.querySelector('[data-machine="devbox-team"] button.machine-row');
+  rowButton().focus();
+  instances = [{ instance: 'dev-1', agent: 'dev', agentsRoot: '/team/one/agents', server: 'devbox-team', running: true }];
+  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
+  assert.equal(u.doc.querySelector('[data-machine="devbox-team"] .agents').textContent, '1 agent', 'the poll reached the list');
+  assert.equal(u.doc.activeElement, rowButton(), 'focus stays on the row');
+  rowButton().click();
+  const check = () => u.doc.querySelector('[data-machine="devbox-team"] .machine-check');
+  check().focus();
+  instances = [...instances, { instance: 'dev-2', agent: 'dev', agentsRoot: '/team/one/agents', server: 'devbox-team', running: false }];
+  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
+  assert.equal(u.doc.querySelector('[data-machine="devbox-team"] .agents').textContent, '2 agents');
+  assert.equal(u.doc.activeElement, check(), 'and on the open machine\'s Check');
+});
+
+test('Machines: a remote-only view lists its machine\'s deployment, never "This computer"', async t => {
+  const u = await setup(t, { workspace: { remote: true, server: 'devbox' }, instances: [{ instance: 'dev-1', agent: 'dev', server: 'devbox', deployment: { id: 'remote:devbox:/srv/team' } }] });
+  u.setLoaders(null, () => ({ ...u.panel(), deployments: [{ id: 'remote:devbox:/srv/team', machine: 'devbox', path: '/srv/team', local: false, reachable: true }] }));
+  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
+  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
+  const rows = [...u.doc.querySelectorAll('.workspace-discovery section.machines [data-machine]')];
+  assert.deepEqual(rows.map(r => [...r.querySelectorAll('.machine-row > .machine-cell')].map(c => c.textContent)), [['devbox', 'reachable', '1 agent', '']], 'no version is claimed for it');
+  assert.equal(u.doc.querySelector('[data-machine=":here"]'), null);
+  assert.equal(u.doc.querySelector('.machines-empty'), null, 'it is not "no other machine"');
+});
+
 test('Machines: without servers-per-workspace and server-connect the list is this computer alone, with no Add a machine', async t => {
   const u = await setup(t);
   u.tab('machines'); for (let i = 0; i < 6; i++) await tick();

@@ -395,8 +395,6 @@ function sharedSection(doc, { status, selected, onSelect, openExternal }) {
       holder.append(memberPanel(doc, member, { status, onClose: () => onSelect(null), openExternal }));
       memberRows.append(holder);
     }
-    continue;
-    memberRows.append(row);
   }
   // External souls: listed by the workspace from a repository it does not take as a member.
   const external = list(status?.external);
