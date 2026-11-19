@@ -566,12 +566,17 @@ const backgroundOpen = new Set();
 // nothing moves, whatever a row carries. A probe that changes the answer repaints the roster.
 const backgroundShown = () => { const features = cliStatus()?.features; return Array.isArray(features) && features.includes(BACKGROUND_FEATURE); };
 // Pinned first (feature instance-pin): a row's `pinned` orders the roster and draws its mark only while this computer's
-// CLI lists the feature (which relays a remote row's pin only from a host that lists it); without it, it is ignored.
+// CLI lists the feature (a remote row keeps its pin only from a host that lists it too: remote-roster.mjs remotePanel);
+// without it, it is ignored.
 const pinsShown = () => { const features = cliStatus()?.features; return Array.isArray(features) && features.includes(PIN_FEATURE); };
-let backgroundFeature = backgroundShown();
+// The features that change how the held roster is painted, Background's and the pin's: a probe that changes either
+// repaints it (the rows are the same, so a roster poll's signature would not).
+const rosterFeatures = () => `${backgroundShown()}|${pinsShown()}`;
+let paintedFeatures = rosterFeatures();
 onCliChange(() => {
-  if (backgroundShown() === backgroundFeature) return;
-  backgroundFeature = !backgroundFeature;
+  const now = rosterFeatures();
+  if (now === paintedFeatures) return;
+  paintedFeatures = now;
   if (contextRosterEl && rosterState?.hasData) renderContextRoster(contextInstances);
 });
 // Collapsed agent groups (sidebar group headers), keyed like instances.

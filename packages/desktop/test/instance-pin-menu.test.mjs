@@ -336,3 +336,22 @@ test('pinnedMark: an image named Pinned around the pin icon', () => {
   assert.equal(mark.textContent, '', 'no text that reads twice');
   dom.window.close();
 });
+
+test("a change of this computer's CLI that turns instance-pin on or off repaints the held roster, as Background's does; a probe that changes neither paints nothing", () => {
+  // The shipped block (shell.mjs: the two features and the CLI subscriber), run as it is over a held roster.
+  const source = readFileSync(new URL('../renderer/shell.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf('const backgroundShown = '), end = source.indexOf('\n});\n', source.indexOf('onCliChange(() => {', start)) + 4;
+  assert.ok(start > 0 && end > start, 'the features and their subscriber are found in shell.mjs');
+  let status = { ok: true, features: [] }, listener = null, paints = 0;
+  runInNewContext(source.slice(start, end), {
+    cliStatus: () => status, BACKGROUND_FEATURE: 'instance-background', PIN_FEATURE: 'instance-pin',
+    onCliChange: fn => { listener = fn; }, contextRosterEl: {}, rosterState: { hasData: true }, contextInstances: [],
+    renderContextRoster: () => { paints += 1; },
+  });
+  const probe = features => { status = { ok: true, features }; listener(status); return paints; };
+  assert.equal(probe(['instance-pin']), 1, 'pin on: the same rows painted pinned first, with their marks');
+  assert.equal(probe(['instance-pin', 'workspace-v2']), 1, 'another feature: nothing');
+  assert.equal(probe([]), 2, 'pin off: painted in the roster order, no marks');
+  assert.equal(probe(['instance-background']), 3, "Background's own change still repaints");
+  assert.equal(probe(['instance-background']), 3);
+});

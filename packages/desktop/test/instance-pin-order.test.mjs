@@ -208,3 +208,14 @@ test("a remote row pins only when its own host lists instance-pin: an older host
   }
   assert.deepEqual(read(remote([PIN_FEATURE])), { order: ["old", "new"], pinned: ["old"] }, "a host that lists it: its pin leads");
 });
+
+test("two pinned clusters keep the existing rule between them: a cluster ranks by its first root without pins, whichever root holds the pin", () => {
+  // A's roots: a-new (newest, unpinned) and a-old (pinned, sibling-linked); B: one pinned root between them in time.
+  const row = (instance, day, extra = {}) => ({ instance, home: `/w/${instance}`, agentsRoot: "/w", createdAt: `2026-11-${String(day).padStart(2, "0")}T10:00:00Z`, ...extra });
+  const rows = [row("a-new", 19), row("a-old", 1, { siblingInstance: "a-new", pinned: true }), row("b", 10, { pinned: true }), row("c", 20)];
+  const order = (pins) => clusterInstances(rows, { pins }).map((c) => c.instances.map((i) => i.instance));
+  // Without pins: A by a-new (19), then B (10)... and c (20) first.
+  assert.deepEqual(order(false), [["c"], ["a-new", "a-old"], ["b"]]);
+  // With them: both pinned clusters lead, A still before B (a-new's 19 over b's 10), the pinned root first inside A.
+  assert.deepEqual(order(true), [["a-old", "a-new"], ["b"], ["c"]]);
+});

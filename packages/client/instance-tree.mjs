@@ -216,6 +216,10 @@ export function clusterInstances(instances, { links = instanceLinks, roster = in
       const pid = parentIdOf.get(instanceId(i));
       return !pid || !memberIds.has(pid);
     });
+    // The cluster's rank among the others is its head's as it was without pins: its first root by the roster's
+    // order (with no root, its first member). A pin decides only whether the cluster leads (`pinned`); among
+    // clusters that do, and among those that don't, the existing rule stands (done-when 2), whichever root is pinned.
+    const head = [...(roots.length ? roots : members)].sort(rank)[0];
     roots.sort(order);
     const ordered = [];
     const placed = new Set();
@@ -232,9 +236,10 @@ export function clusterInstances(instances, { links = instanceLinks, roster = in
     // when a different member starts/stops running (review f921f7d nit).
     // `order` (pinned first, then rosterOrder: by spawn time, newest first) governs display ORDER within the cluster.
     const rootNames = (roots.length ? roots : members).map((i) => i.instance).sort();
-    clusters.push({ key: rootNames[0], instances: ordered, head: roots[0] ?? [...members].sort(order)[0], pinned: lifted.size > 0 });
+    clusters.push({ key: rootNames[0], instances: ordered, head, pinned: lifted.size > 0 });
   }
-  // Pinned clusters first, then by head. Stable: clusters whose heads rank equal keep the order they were found in.
+  // Pinned clusters first, then by head (its rank without pins). Stable: clusters whose heads rank equal keep the
+  // order they were found in.
   const clusterFirst = pinnedFirst((c) => c.pinned);
   return clusters.sort((a, b) => clusterFirst(a, b) || rank(a.head, b.head)).map(({ head: _head, pinned: _pinned, ...c }) => c);
 }

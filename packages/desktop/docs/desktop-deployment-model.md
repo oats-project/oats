@@ -538,7 +538,11 @@ answers the view that holds it; no `?ws=` answers the first view.
   root, siblings the same way; a row with no readable `createdAt` after every
   row with one; equal times by name, then by `instanceId`
   (`instance-tree.mjs` `rosterOrder`). A spawn time never changes, so a start
-  or a stop moves no row, and a new child never moves its cluster. The panel's own list (`panelInstances`) still
+  or a stop moves no row, and a new child never moves its cluster. Pinned rows
+  come first at every level (feature `instance-pin`): a pin, or a pinned
+  descendant, moves its cluster to the top of its deployment's list, and the
+  path down to it among its siblings ([Pinned instances](../../../docs/desktop.md#pinned-instances)).
+  The panel's own list (`panelInstances`) still
   stands running, then unknown (`running` not a boolean), then stopped, by
   name within each: `byRuntimeState`
   (`packages/client/instance-presentation.mjs`).
