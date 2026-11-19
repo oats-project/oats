@@ -8,10 +8,12 @@
 
    A root of its section (a row with no parent in that section) starts collapsed in every window: by default the
    sidebar shows the top-level rows only. A row under a root starts open, so opening a root shows its group as it
-   was drawn before. A root whose row is taken by its lifecycle (a spawn in flight, or a home held while it is
-   spawning, retiring or left half done: shell.mjs draws its state there) starts open: that row carries no
-   disclosure and no roll-up, so collapsing it would hide its children, and any of them that waits, with no way
-   to see or open them. What the operator opens or closes is kept in memory per workspace, as a collapse always was:
+   was drawn before. A row whose lifecycle takes it (a spawn in flight, or a home held while it is spawning,
+   retiring or left half done: shell.mjs draws its state there) is always drawn open, whatever was chosen for it:
+   its lines have no room for the needs-input roll-up, so a collapse there would hide a waiting child with no mark.
+   It wears no disclosure and the tree keys do not collapse it; a choice made by hand before is kept, and applies
+   again once its lifecycle is over. What the operator opens or closes is kept in memory per workspace, as a
+   collapse always was:
    `collapsed` holds the rows closed by hand, `expanded` the roots opened by hand. A waiting row a default
    collapse hides rolls up onto its root ("! N below") as any collapse's does (waitingRollup; decision
    needs-input-preserves-liveness-and-recognition). */
@@ -35,14 +37,15 @@ export function sectionChildren(instances, section) {
 }
 
 /** The collapse keys the roster draws collapsed (instanceVisibleInTree, waitingRollup): the rows closed by hand,
- * and every root of its section that has children there and was not opened by hand, unless `startsOpen(id)` says
- * its row is taken by its lifecycle. `children`: sectionChildren. */
-export function collapsedRows(workspace, { collapsed, expanded, children, startsOpen = () => false }) {
+ * and every root of its section that has children there and was not opened by hand; never a row `staysOpen(id)`
+ * says its lifecycle takes, closed by hand or not. `children`: sectionChildren. */
+export function collapsedRows(workspace, { collapsed, expanded, children, staysOpen = () => false }) {
   const out = new Set(collapsed);
   const under = new Set([...children.values()].flat());
   for (const id of children.keys()) {
     const key = collapseKey(workspace, id);
-    if (!under.has(id) && !expanded.has(key) && !startsOpen(id)) out.add(key);
+    if (staysOpen(id)) out.delete(key);
+    else if (!under.has(id) && !expanded.has(key)) out.add(key);
   }
   return out;
 }

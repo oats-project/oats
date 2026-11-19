@@ -163,8 +163,9 @@ test("a root collapsed by default rolls up its hidden waiting row: the needs-inp
   assert.ok(u.row("tip").querySelector(".ctx-dot.waiting"), "and the waiting row shows its own mark");
 });
 
-// A root whose row its lifecycle takes (a pending row, or a held home's state on its meta line) has no room for the
-// disclosure or the roll-up: it starts open, so a waiting child stays drawn with its own mark (review round 1).
+// A row its lifecycle takes (a pending row, or a held home's state on its meta line) has no room for the roll-up: it
+// is always drawn open and offers no collapse, so a waiting child stays drawn with its own mark (review rounds 1, 2).
+// A collapse chosen by hand before is kept, and applies again once the lifecycle is over.
 const CLAIM = { since: "2026-10-03T09:00:00.000Z", producer: "claude-hooks", reason: "permission", message: null };
 for (const [what, lead, extra] of [
   ["a reported row whose spawn is still being checked", instance("lead"),
@@ -173,15 +174,33 @@ for (const [what, lead, extra] of [
   ["a home whose retire failed", instance("lead", undefined, { running: false, runtimeState: "stopped",
     retire: { state: "failed", since: "2026-11-19T10:00:00Z", self: true, code: "E_CHILDREN_RUNNING", message: "A child could not be stopped." } }), {}],
 ]) {
-  test(`a root drawn as ${what} starts open: its waiting child stays drawn, with its own mark`, t => {
+  test(`a root drawn as ${what} is drawn open and offers no collapse: its waiting child stays drawn, with its own mark`, t => {
     const rows = [lead, instance("tip", "lead", { waitingOnYou: CLAIM })];
     const u = fixture(t, rows, extra);
     assert.deepEqual(u.drawn(), ["lead", "tip"], "nothing is hidden behind the root");
     assert.ok(u.row("tip").querySelector(".ctx-dot.waiting"), "the waiting child shows its own needs-input mark");
+    assert.equal(u.mark("lead"), null, "no disclosure to close it with");
+    assert.equal(u.row("lead").hasAttribute("aria-expanded"), false);
+    assert.equal(u.row("lead").dataset.rosterChildren, "0", "the tree keys have nothing to collapse");
+    u.row("lead").focus();
+    u.key("lead", "ArrowLeft");
+    assert.deepEqual(u.drawn(), ["lead", "tip"], "Left hides nothing");
     // The same rows once the root's lifecycle is over: the default collapse applies, and the wait rolls up.
     u.context.spawnJobs = { rows: () => [], announce: () => false, check() {} };
     u.s.render([instance("lead"), rows[1]]);
     assert.deepEqual(u.drawn(), ["lead"]);
+    assert.equal(u.row("lead").querySelector(".ctx-attn")?.textContent, "1 below need input");
+  });
+
+  test(`a root closed by hand, then drawn as ${what}, is drawn open; once its lifecycle is over it is closed again`, t => {
+    const rows = [lead, instance("tip", "lead", { waitingOnYou: CLAIM })];
+    const u = fixture(t, rows, { ...extra, expandedInstances: new Set(), collapsedInstances: new Set([tree.collapseKey("A", "/synthetic/lead")]) });
+    assert.deepEqual(u.drawn(), ["lead", "tip"], "the hand collapse does not hide the waiting child");
+    assert.ok(u.row("tip").querySelector(".ctx-dot.waiting"));
+    u.context.spawnJobs = { rows: () => [], announce: () => false, check() {} };
+    u.s.render([instance("lead"), rows[1]]);
+    assert.deepEqual(u.drawn(), ["lead"], "the choice made by hand applies again");
+    assert.ok(u.mark("lead"), "with its disclosure back");
     assert.equal(u.row("lead").querySelector(".ctx-attn")?.textContent, "1 below need input");
   });
 }

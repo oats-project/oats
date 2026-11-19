@@ -661,8 +661,9 @@ split into sections) is `packages/client/roster-sections.mjs`.
   opens or closes the row when the click lands on the mark (no terminal opens; the focus and the roving stop stay
   on the row), and the tree keys do the same (`onRosterRowKey`). The rows drawn collapsed are `collapsedRows`: the
   shell's `collapsedInstances` (closed by hand) and every root of its section with children that is not in
-  `expandedInstances` (opened by hand), except a root drawn as a pending row or a held home (`startsOpen`: its
-  lifecycle takes the row, which has no room for the mark or the roll-up); both are in memory per workspace and re-homed together
+  `expandedInstances` (opened by hand). A row drawn as a pending row or a held home is never drawn collapsed
+  (`staysOpen`: its lifecycle takes the row, which has no room for the roll-up) and wears no mark, so the keys have
+  nothing to collapse there; a choice made by hand stays in the sets and applies again afterwards. Both are in memory per workspace and re-homed together
   (`rehomeWorkspaceState`), and `setRowOpen` is the one place both change (the row keys, the mark, `showInRoster`
   and `revealPendingSpawn`). Tests of other behaviour draw every root open (test/helpers/view-context.mjs
   `expandedInstances`); `roster-disclosure-shell.test.mjs` runs the default.

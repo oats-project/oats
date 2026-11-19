@@ -981,8 +981,8 @@ else on the row still opens its terminal. From the keyboard, Right opens the
 focused row and Left closes it. Every instance at the top of the tree, the
 [Background section](#background-instances)'s included, starts collapsed in
 each new window, except one still being set up or retired, or whose retire
-failed: its row shows that state instead of the chevron, so its group stays
-open. An instance inside a group starts open, and each one with
+failed: while its row shows that state, it has no chevron and its group
+stays open, so an instance under it that needs input is never hidden. An instance inside a group starts open, and each one with
 children has its own chevron. What you open or close stays as you left it
 until the window closes. **Show in roster**, `--instance` and a spawn from
 the Desktop open the rows above the instance they show. The TUI's list still

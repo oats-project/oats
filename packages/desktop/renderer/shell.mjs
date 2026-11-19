@@ -1004,12 +1004,13 @@ function renderContextRoster(instances) {
   // A row's disclosure counts only children of its own section: a main row whose children are all in the
   // Background section has nothing to collapse here. A root of its section with children starts collapsed
   // (roster-disclosure.mjs): the rows drawn collapsed are the ones closed by hand and the roots not opened by hand.
-  // A root drawn as a pending row, or as a held home (its state takes its meta line), starts open: neither row has
-  // room for the disclosure or the roll-up, so a default collapse would hide a waiting child behind it.
+  // A row drawn as a pending row, or as a held home (its state takes its meta line), is always drawn open, with no
+  // disclosure (`canCollapse`, below): neither row has room for the roll-up, so a collapse would hide a waiting child.
+  // A choice made by hand stays in the sets and applies again once its lifecycle is over.
   const childrenHere = sectionChildren(instances, rowSection);
   const lifecycleRows = new Set(instances.filter((i) => i.pendingSpawn || heldHome(i)).map(instanceId));
   const collapsedNow = collapsedRows(ws, { collapsed: collapsedInstances, expanded: expandedInstances, children: childrenHere,
-    startsOpen: (id) => lifecycleRows.has(id) });
+    staysOpen: (id) => lifecycleRows.has(id) });
   const visible = instances.filter((i) => instanceVisibleInTree(
     i, instances, collapsedNow, ws, false, { section: rowSection },
   ));
@@ -1083,7 +1084,8 @@ function renderContextRoster(instances) {
         // same-named instances from different agents roots collapse and
         // focus independently (review 46f3fdc).
         const key = collapseKey(ws, instanceId(i));
-        const hasChildren = childrenHere.has(instanceId(i));
+        // A held home's row is drawn here too (a pending row drew above): it stays open and offers no collapse.
+        const hasChildren = childrenHere.has(instanceId(i)) && !lifecycleRows.has(instanceId(i));
         const collapsed = collapsedNow.has(key);
 
         // Design connectors drawn from the dots: rounded solid elbows into

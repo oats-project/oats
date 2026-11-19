@@ -41,11 +41,13 @@ test("collapsedRows: a root opened by hand is open; a row closed by hand is clos
   assert.deepEqual(collapsedRows("A", { collapsed: new Set(), expanded: new Set([collapseKey("B", id("lead"))]), children }), keys("lead"));
 });
 
-test("collapsedRows: a root its lifecycle takes (startsOpen) starts open; closed by hand, it is closed", () => {
+test("collapsedRows: a row its lifecycle takes (staysOpen) is never drawn collapsed, closed by hand or not", () => {
   const children = sectionChildren(ROWS, one);
-  const startsOpen = rowId => rowId === id("lead");
-  assert.deepEqual(collapsedRows("A", { collapsed: new Set(), expanded: new Set(), children, startsOpen }), new Set());
-  assert.deepEqual(collapsedRows("A", { collapsed: keys("lead"), expanded: new Set(), children, startsOpen }), keys("lead"));
+  const staysOpen = rowId => rowId === id("lead") || rowId === id("mid");
+  assert.deepEqual(collapsedRows("A", { collapsed: new Set(), expanded: new Set(), children, staysOpen }), new Set());
+  const collapsed = keys("lead", "mid");
+  assert.deepEqual(collapsedRows("A", { collapsed, expanded: new Set(), children, staysOpen }), new Set());
+  assert.deepEqual(collapsed, keys("lead", "mid"), "the choices made by hand are kept for later");
 });
 
 test("collapsedRows: a root of the Background section starts collapsed too", () => {
