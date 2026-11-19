@@ -913,10 +913,11 @@ registration reports the same workspace key as the window's deployment on this
 computer (OATS CLI with `servers-per-workspace` and `server-connect`). The
 spawn dialog's **Where to run** lists "This computer" and those machines; the
 Workspace › **Machines** tab lists the computers the workspace runs on: this
-computer first, then each of those machines, with whether it can be reached,
-how many of your agents run on it and its OATS version. A machine that was not
-reached, and from which no agent was read, shows "—" for its agents rather
-than a count. Enter on a machine opens it: its name, ssh host and folder,
+computer first (where the view has a deployment here: "reading…" or "not read"
+until it is read), then each of those machines, with whether it can be reached
+and its OATS version. A remote-only view lists its machines' deployments
+instead. The Map and the roster show where agents run; the list counts none.
+Enter on a machine opens it: its name, ssh host and folder,
 **Check** and **Remove**. Registrations whose key is not known yet are checked
 once in the background after the Desktop starts.
 

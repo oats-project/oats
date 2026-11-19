@@ -127,22 +127,16 @@ and is not selected.
 ## The Machines list (`renderer/workspace-machines.mjs`)
 
 The Workspace page's **Machines** section (the Desktop UI rework, slice 3b; until then the Setup tab's
-Registered machines box): the computers this workspace runs on, one row each. **This computer** first
-(reachable once its deployment is read, the CLI probe's OATS version, nothing to check or remove), then each registered machine:
-its name, reachable or not from its last check this run (reachable: the check reached its deployment,
-and `workspaceReadable` is not `false`; the kernel's `workspaceReadError` or error message is the
-state's title), how many of **your agents** run on it, and its OATS version. The agents are the
-roster's rows: this computer's carry no `server`, another machine's carry its registration id as
-`server` (`packages/client/remote-roster.mjs`). They count what this Desktop reads (your agents, on
-this computer and the machines registered here; team-instance-lists-state-their-observation-scope),
-and a count is shown only after a settled good roster read of that machine's deployment: the roster read itself
-(pending, failed or stale: "—" with the reason as its title), this computer's observed deployment (pending: "reading…";
-unreadable: "not read", "—", and the observation's own words under the list), and another machine's deployment as
-the panel's #482 `deployments` reports it, bound by the registration's id (each remote entry's `server`,
-`machine-contract.mjs` `machineDeployment`; a display label is not unique, and none or two matches make no claim; read
-now: a count; kept from an earlier read: the count "as last read"; not reached: "—" with the reason). A successful machine check is not a roster read: a registration with no deployment of its
-own in the panel (a machine added since the last roster read) shows "—", "not read yet", until a roster read reaches it. The
-section says so in its one line.
+Registered machines box): the computers this workspace runs on, one row each, and its OATS version. **This computer**
+first, where the view has a deployment here: "reachable" once that deployment is read, "reading…" while it is read,
+"not read" when it can't be (the observation's own words under the list); the CLI probe's OATS version; nothing to
+check or remove. Then each registered machine: its name, reachable or not from its last check this run (reachable: the
+check reached its deployment, and `workspaceReadable` is not `false`; the kernel's `workspaceReadError` or error
+message is the state's title), and the version that check reported.
+
+The guide also asks for the agents on each machine. They are cut from this slice (the effort's lead, after a third
+review major on binding a machine to its roster observation): a count must come from a settled good roster read of that
+machine's own deployment, and the panel did not bind one soundly. The Map and the roster show where agents run.
 
 A registered machine's row is one button: Enter (or a click) opens it under its row, with its name,
 ssh host and folder, then **Check** and **Remove**; the row's title gives the same facts. A machine
@@ -150,14 +144,15 @@ not checked yet this run is checked once in the background (two at a time). Remo
 opened machine ("Remove <id>? Agents started there keep running and can still be retired from
 here."), and a refusal is said there in the CLI's words. A late Check or Remove moves focus back to
 its control only when no newer press or key in the section came since and focus is not elsewhere.
-**Add a machine to this workspace…** sits at the section's head (the dialog above). The section is
-mounted once per workspace and kept across the tab's re-renders (`sync()` repaints the counts when
-the roster moves). A workspace change disposes it (and its dialog). Without the machine gates the
-route answers no filtered list: the section shows this computer only and offers no Add. A view with no
-deployment on this computer (a remote-only view, or a view whose deployments are all elsewhere) has no "This
-computer" row: it lists the view's other deployments from the panel's #482 `deployments` (their machine, whether
-reached, your agents there; no version is claimed). The list stays mounted while the Workspace page repaints, so a
-roster poll never moves focus off a row or a machine's control.
+**Add a machine to this workspace…** sits at the section's head (the dialog above).
+
+The first list read says "Reading the machines of this workspace…" (a status line; the list is `aria-busy`); a failed
+read says why, with Retry, and a repaint keeps focus on Retry while the failure stands. The section is mounted once per
+workspace and stays mounted while the Workspace page repaints (`sync()` repaints it in place on each roster poll), so a
+poll never moves focus off a row, a machine's control or Retry. A workspace change disposes it (and its dialog). Without
+the machine gates nothing is read: the section shows this computer only and offers no Add. A view with no deployment on
+this computer (a remote-only view, or a view whose deployments are all elsewhere) has no "This computer" row: it lists
+the view's other deployments from the panel's #482 `deployments` (their machine, whether reached; no version claimed).
 
 ## Fixtures
 

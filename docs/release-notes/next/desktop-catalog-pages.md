@@ -15,7 +15,7 @@
     in this computer's `oats-local.yaml`). Each says what it holds in one sentence, and its lists
     count your agents.
   - **Machines** opens on the list of the computers the workspace runs on. Each row says whether
-    the computer is reachable, how many of your agents run on it, and its OATS version. Enter opens
+    the computer is reachable and its OATS version. Enter opens
     a machine, with Check and Remove. Its **Map** is the earlier Machines view.
   - **Setup** is its list only; its graph is gone. A member's **Details** (or **Why?**) opens its
     membership under its row.

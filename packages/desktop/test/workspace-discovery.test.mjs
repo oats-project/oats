@@ -368,26 +368,25 @@ test('Machines: the list follows the gates; it is read for this window and kept 
 
 // Review round 1: the list stays mounted across the page's repaints, so a roster poll never drops focus from a row or a
 // machine's control; and a view with no deployment on this computer never lists "This computer".
-test('Machines: a roster change keeps focus on the focused machine\'s row and on its open controls', async t => {
+test('Machines: a roster poll keeps focus on the focused machine\'s row and on its open controls', async t => {
   const gated = { ...CLI, features: [...CLI.features, 'servers-per-workspace', 'server-connect'] };
   const machine = { id: 'devbox-team', label: 'devbox', sshHost: 'devbox', workspace: '/home/alex/team', workspaceKey: 'github.com/acme/team', check: { reachable: true, version: '0.39.0', error: null } };
   let instances = [];
   const u = await setup(t, { cli: gated, servers: () => ({ servers: [machine], filtered: true, key: 'github.com/acme/team', deployment: '/team', aweb: false }) });
-  u.setLoaders(null, () => ({ ...u.panel(), instances, deployments: [{ id: '/team', local: true, reachable: true }, { id: 'remote:devbox-team:1', machine: 'devbox', server: 'devbox-team', local: false, reachable: true }] }));
+  u.setLoaders(null, () => ({ ...u.panel(), instances }));
   for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
   u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
   const rowButton = () => u.doc.querySelector('[data-machine="devbox-team"] button.machine-row');
   rowButton().focus();
   instances = [{ instance: 'dev-1', agent: 'dev', agentsRoot: '/team/one/agents', server: 'devbox-team', running: true }];
   for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
-  assert.equal(u.doc.querySelector('[data-machine="devbox-team"] .agents').textContent, '1 agent', 'the poll reached the list');
+  assert.equal(u.calls.filter(c => c.path.startsWith('/api/panel')).length > 1, true, 'the poll ran');
   assert.equal(u.doc.activeElement, rowButton(), 'focus stays on the row');
   rowButton().click();
   const check = () => u.doc.querySelector('[data-machine="devbox-team"] .machine-check');
   check().focus();
   instances = [...instances, { instance: 'dev-2', agent: 'dev', agentsRoot: '/team/one/agents', server: 'devbox-team', running: false }];
   for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
-  assert.equal(u.doc.querySelector('[data-machine="devbox-team"] .agents').textContent, '2 agents');
   assert.equal(u.doc.activeElement, check(), 'and on the open machine\'s Check');
 });
 
@@ -397,53 +396,22 @@ test('Machines: a remote-only view lists its machine\'s deployment, never "This 
   for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
   u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
   const rows = [...u.doc.querySelectorAll('.workspace-discovery section.machines [data-machine]')];
-  assert.deepEqual(rows.map(r => [...r.querySelectorAll('.machine-row > .machine-cell')].map(c => c.textContent)), [['devbox', 'reachable', '1 agent', '']], 'no version is claimed for it');
+  assert.deepEqual(rows.map(r => [...r.querySelectorAll('.machine-row > .machine-cell')].map(c => c.textContent)), [['devbox', 'reachable', '']], 'no version is claimed for it');
   assert.equal(u.doc.querySelector('[data-machine=":here"]'), null);
   assert.equal(u.doc.querySelector('.machines-empty'), null, 'it is not "no other machine"');
 });
 
-test('Machines: an unread deployment here makes no agent claim and says why; a good read counts', async t => {
+test('Machines: an unread deployment here says so and why; a good read clears it', async t => {
   let failing = true;
   const u = await setup(t, { deployment: () => failing ? { status: 'unavailable', reason: { code: 'E_CLI_FAILED', message: 'roster command failed' } } : observed() });
   u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
   const here = () => [...u.doc.querySelectorAll('[data-machine=":here"] .machine-row > .machine-cell')].map(c => c.textContent);
-  assert.deepEqual(here().slice(0, 3), ['This computer', 'not read', '—']);
+  assert.deepEqual(here().slice(0, 2), ['This computer', 'not read']);
   assert.match(u.doc.querySelector('.workspace-discovery section.machines .machines-reason').textContent, /E_CLI_FAILED: roster command failed/);
   failing = false;
   for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
-  assert.deepEqual(here().slice(0, 3), ['This computer', 'reachable', '0 agents']);
+  assert.deepEqual(here().slice(0, 2), ['This computer', 'reachable']);
   assert.equal(u.doc.querySelector('.workspace-discovery section.machines .machines-reason'), null);
-});
-
-// Review round 4: two registrations sharing a display label; each count comes from its own deployment (by server id),
-// whatever the panel's order: the unreached one makes no claim, the reached one counts.
-for (const order of ['as listed', 'reversed']) test(`Machines: registrations with the same label each read their own deployment (${order})`, async t => {
-  const gated = { ...CLI, features: [...CLI.features, 'servers-per-workspace', 'server-connect'] };
-  const reg = (id, sshHost, reachable) => ({ id, label: 'build', sshHost, workspace: '/srv/team', workspaceKey: 'github.com/acme/team', check: { reachable, version: reachable ? '0.69.20' : null, error: reachable ? null : 'ssh timed out' } });
-  const remote = [{ id: 'remote:east-team:1', machine: 'build', server: 'east-team', path: '/srv/team', local: false, reachable: true },
-    { id: 'remote:west-team:1', machine: 'build', server: 'west-team', path: '/srv/team', local: false, reachable: false, reason: 'west ssh timed out' }];
-  const deployments = [{ id: '/team', machine: 'This Mac', path: '/team', local: true, reachable: true }, ...(order === 'reversed' ? [...remote].reverse() : remote)];
-  const u = await setup(t, { cli: gated, servers: () => ({ servers: [reg('east-team', 'east', true), reg('west-team', 'west', false)], filtered: true, key: 'github.com/acme/team', deployment: '/team', aweb: false }) });
-  u.setLoaders(null, () => ({ ...u.panel(), deployments }));
-  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
-  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
-  const agents = id => u.doc.querySelector(`[data-machine="${id}"] .agents`);
-  assert.equal(agents('east-team').textContent, '0 agents');
-  assert.equal(agents('west-team').textContent, '—'); assert.equal(agents('west-team').title, 'west ssh timed out');
-});
-
-// Delta review of round 4: a registration with no deployment of its own in a current panel (only this computer's here:
-// a machine just added and checked, not yet read by the roster) fails closed: "—", "not read yet", never "0 agents".
-test('Machines: a reachable registration the roster has not read yet makes no agent claim', async t => {
-  const gated = { ...CLI, features: [...CLI.features, 'servers-per-workspace', 'server-connect'] };
-  const east = { id: 'east-team', label: 'build', sshHost: 'east', workspace: '/srv/team', workspaceKey: 'github.com/acme/team', check: { reachable: true, version: '0.69.20', error: null } };
-  const u = await setup(t, { cli: gated, servers: () => ({ servers: [east], filtered: true, key: 'github.com/acme/team', deployment: '/team', aweb: false }) });
-  u.setLoaders(null, () => ({ ...u.panel(), deployments: [{ id: '/team', machine: 'This Mac', path: '/team', local: true, reachable: true }] }));
-  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
-  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
-  const agents = u.doc.querySelector('[data-machine="east-team"] .agents');
-  assert.equal(agents.textContent, '—');
-  assert.equal(agents.title, 'Not read yet: no roster read of this machine so far');
 });
 
 test('Machines: without servers-per-workspace and server-connect the list is this computer alone, with no Add a machine', async t => {

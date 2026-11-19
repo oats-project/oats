@@ -127,7 +127,7 @@ export function deploymentInfo(held, d, terms) {
     ref: identity?.ref, cliReadsRemotes: cliReadsRemotes(held.cli), rosterError: g.remembered ? held.rosterFailure : null }, terms));
   const moved = held.remembered.note(g.id);
   const standalone = attach.note === "standalone" ? deploymentReason({ local: false, attach: { unattached: "standalone" } }, terms) : null;
-  return { id: d.id, local: false, machine, ...(typeof g.server === "string" && g.server ? { server: g.server } : {}), path: g.target?.workspace || "", label: shortPath(g.target?.workspace || ""), name: d.name,
+  return { id: d.id, local: false, machine, path: g.target?.workspace || "", label: shortPath(g.target?.workspace || ""), name: d.name,
     live: reached && !kept, reachable: reached, ...(kept ? { stale: true } : {}), identityFrom, identity, attach, teamLabel: identity?.defaultTeam?.label ?? null,
     ...reason, note: [moved, standalone].filter(Boolean).join(" ") || null };
 }
@@ -305,9 +305,6 @@ export const deploymentTag = (info) => ({ id: info.id, machine: info.machine, pa
 /** A deployment's entry in the panel's `deployments` list (roster-sections.mjs `deploymentState` reads one). */
 export function deploymentEntry(info, primary) {
   return { ...deploymentTag(info), label: info.label, local: info.local, reachable: info.reachable,
-    // Another machine's deployment names its registration (the roster group's `server`), the identity a machine list
-    // binds its observation by (machine-contract.mjs machineDeployment); a display label is not unique.
-    ...(info.server ? { server: info.server } : {}),
     identityFrom: info.identityFrom, primary: info.id === primary, ...(info.stale ? { stale: true } : {}),
     ...(info.reason ? { reason: info.reason } : {}), ...(info.short ? { short: info.short } : {}),
     ...(info.reason && info.fix?.length ? { fix: [...info.fix] } : {}), ...(info.note ? { note: info.note } : {}) };
