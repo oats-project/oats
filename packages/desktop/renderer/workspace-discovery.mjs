@@ -232,7 +232,12 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
       // panel lists the view's deployments, #482) one of them local. A remote-only view lists its other machines'
       // deployments from the same panel facts instead (their machine, whether reached, your agents there).
       here: () => !(workspace?.remote || workspace?.server) && (!deployments.length || deployments.some(d => d?.local === true)),
-      elsewhere: () => deployments.filter(d => d && d.local !== true) });
+      elsewhere: () => deployments.filter(d => d && d.local !== true),
+      // Agents are counted only from a settled good roster read (the souls list and roster, one read), of this
+      // computer's observed deployment, and of another machine's deployment as the panel reports it (#482).
+      rosterState: () => rosterState(),
+      localObservation: () => ({ status: deployment?.status ?? 'pending', text: deployment && deployment.status !== 'observed' && deployment.status !== 'pending' ? deploymentUnavailableText(deployment, DESKTOP_TERMS) : '' }),
+      observed: m => deployments.find(d => d && d.local !== true && (d.machine === m.id || (m.label && d.machine === m.label))) ?? null });
     return machines.element;
   }
   /** Whether `name`'s panel is the view's own right now (Souls; Machines while its Map is shown). */
@@ -435,7 +440,7 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
     // The status's observation stamp moves on every poll and nothing here paints it: it is left out.
     const stableStatus = s && { ...s, workspace: s.workspace && { ...s.workspace, observedAt: undefined } };
     // The souls' composition (souls-capabilities) and marks feed "Used by".
-    const key = JSON.stringify([tab, machinesView, deployments, setupMember, souls.map(a => [a?.team ?? null, a?.name, a?.key, a?.color, a?.agentsRoot, a?.capabilities]), soulsComposition(cliStatus()), query, unavailable, catalog, stableStatus, rosterState(), deployment?.withheld, deployment?.reachable, instances.map(i => [i.agent, i.agentsRoot, i.modules, i.running])]);
+    const key = JSON.stringify([tab, machinesView, deployments, deployment?.status, setupMember, souls.map(a => [a?.team ?? null, a?.name, a?.key, a?.color, a?.agentsRoot, a?.capabilities]), soulsComposition(cliStatus()), query, unavailable, catalog, stableStatus, rosterState(), deployment?.withheld, deployment?.reachable, instances.map(i => [i.agent, i.agentsRoot, i.modules, i.running])]);
     if (key === rendered) return;
     rendered = key;
     const restoreNotes = captureFocusState(notes, { scroller: null }); // a warning's Details or Open capability (by its focus key)

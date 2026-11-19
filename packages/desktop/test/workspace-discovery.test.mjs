@@ -401,6 +401,19 @@ test('Machines: a remote-only view lists its machine\'s deployment, never "This 
   assert.equal(u.doc.querySelector('.machines-empty'), null, 'it is not "no other machine"');
 });
 
+test('Machines: an unread deployment here makes no agent claim and says why; a good read counts', async t => {
+  let failing = true;
+  const u = await setup(t, { deployment: () => failing ? { status: 'unavailable', reason: { code: 'E_CLI_FAILED', message: 'roster command failed' } } : observed() });
+  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
+  const here = () => [...u.doc.querySelectorAll('[data-machine=":here"] .machine-row > .machine-cell')].map(c => c.textContent);
+  assert.deepEqual(here().slice(0, 3), ['This computer', 'not read', '—']);
+  assert.match(u.doc.querySelector('.workspace-discovery section.machines .machines-reason').textContent, /E_CLI_FAILED: roster command failed/);
+  failing = false;
+  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
+  assert.deepEqual(here().slice(0, 3), ['This computer', 'reachable', '0 agents']);
+  assert.equal(u.doc.querySelector('.workspace-discovery section.machines .machines-reason'), null);
+});
+
 test('Machines: without servers-per-workspace and server-connect the list is this computer alone, with no Add a machine', async t => {
   const u = await setup(t);
   u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
