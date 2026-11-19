@@ -41,6 +41,7 @@ const atLeast = (v, min) => {
 
 test("step 1 asks hosted or own server, with the three non-secret inputs and the prerequisites", () => {
   assert.ok(flat.includes("**Hosted aweb, or their own aweb server?** The line says \"on aweb's hosted service, unless you run your own aweb server\"; hosted is the default."));
+  assert.ok(flat.includes("Keep its second half in your own words too: it is how a person with their own server learns this branch exists."), "the own-server option survives a paraphrase of the line");
   for (const input of ["the namespace domain `ND` they control", "the server's public address `U`", "whether their server uses the public AWID registry"]) assert.ok(flat.includes(input), input);
   // A private registry stops the branch before anything is written: it needs oats.aweb's --registry setting (awebai/oats-aweb#284).
   assert.ok(flat.includes("When it uses a private registry, the own-server branch stops here, before anything is written: tell the person in one sentence that a private registry needs oats.aweb with `oats aweb setup --registry`, and that this skill stops here."));

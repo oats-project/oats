@@ -240,8 +240,10 @@ the final values in one short message before you go on. The rules:
     now, they sign in to it in their browser in step 5 instead.
   - **Hosted aweb, or their own aweb server?** The line says "on aweb's
     hosted service, unless you run your own aweb server"; hosted is the
-    default. With their own server, the same round asks three things, none
-    of them secret: the namespace domain `ND` they control (for example
+    default. Keep its second half in your own words too: it is how a
+    person with their own server learns this branch exists. With their own
+    server, the same round asks three things, none of them secret: the
+    namespace domain `ND` they control (for example
     `agents.acme.com`, written in lowercase), the server's public address
     `U` (`https://…`, the API URL their server gives its users), and whether
     their server uses the public AWID registry. Answers given in the prompt
