@@ -99,6 +99,7 @@ export const capabilityPageCSS = `
 .cap-page-origin .cap-origin { margin:0; padding:0; font-size:12.5px; }
 .cap-origin-words { color:var(--fg); }
 .cap-page-sep { white-space:pre; }
+.cap-page-where { color:var(--muted); }
 .capability-page .cap-page-what { color:var(--fg); font-size:14px; line-height:1.55; max-width:72ch; }
 /* A fold: a native disclosure, its summary a row with a turning chevron. */
 .cap-fold { min-width:0; border-top:1px solid var(--border); }
@@ -342,7 +343,7 @@ export function renderCapabilityPage(host, { row, status, instances, souls = [],
   const staleTitle = composition ? SOULS_STALE_TITLE : ROSTER_STALE_TITLE;
   // "Used by" derives from the souls list and the roster (one read): with none, the claim needs a settled good read.
   const rosterGood = rosterState === 'ready' || rosterState === 'empty';
-  const used = fold('used-by', CAPABILITY_COPY.usedBy, users.length || rosterGood ? users.length : null);
+  const used = fold('used-by', CAPABILITY_COPY.usedBy, users.length || rosterGood ? CAPABILITY_COPY.souls(users.length) : null);
   const table = node('div', undefined, 'page-table'); table.setAttribute('role', 'table'); table.setAttribute('aria-label', `Souls using ${row.name}`);
   const thead = node('div', undefined, 'page-table-row head used-row'); thead.setAttribute('role', 'row');
   for (const label of ['Soul', capitalized(DESKTOP_NOUNS.instances)]) { const cell = node('span', label); cell.setAttribute('role', 'columnheader'); thead.append(cell); }

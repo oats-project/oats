@@ -346,14 +346,15 @@ function showPage(s, mode) {
   s.q("souls-bar").hidden = !!mode || !souls;
   s.q("souls-notice").hidden = !!mode || !souls; // the grid's stale line belongs to the grid
   s.q("souls-lede").hidden = !!mode || !souls;
-  const machines = s.discovery?.tab === "machines";
+  // Machines' Map is the Deployments view's panel; its List is the discovery's (slice 3b).
+  const machines = s.discovery?.tab === "machines" && s.discovery?.machinesView === "map";
   s.q("workspace-machines-panel").hidden = !!mode || !machines;
   s.q("workspace-discovery").hidden = !!mode || souls || machines;
 }
-/** The Machines tab's view (views/hierarchy.mjs, the Deployments page of before): mounted while the tab is shown and
- * unmounted when another tab is chosen or the view leaves, so it reads nothing in the background. */
+/** The Machines tab's view (views/hierarchy.mjs, the Deployments page of before): mounted while the tab's Map is shown and
+ * unmounted when its List or another tab is chosen or the view leaves, so it reads nothing in the background. */
 function syncMachines(s) {
-  const shown = s.alive && s.discovery?.tab === "machines";
+  const shown = s.alive && s.discovery?.tab === "machines" && s.discovery?.machinesView === "map";
   // Its "Workspace" (s, Go to soul's page) is this page: the Souls tab, not a stage switch to the page already shown.
   // Already on Souls (Go to soul's handoff turned the page and opened the soul), it does nothing: setTab would show
   // the grid again under the soul's page.
@@ -654,6 +655,7 @@ ${spawnDialogCSS}</style>
     onOpenCapability: row => openCapability(s, row, null),
     onTeamMember: (action, member) => void teamMemberAction(s, action, member),
     onOpenTeam: label => openTeam(s, label),
+    onMachinesView: () => syncMachines(s), // Map mounts the Deployments view, List unmounts it (it reads no more)
     onTab: tab => {
       s.spawnOp++; closeSpawnModal(s); s.inspector.close(); closeCapability(s); closeTeam(s); s.page.close();
       s.q("souls-bar").hidden = tab !== "souls"; s.q("souls-notice").hidden = tab !== "souls"; s.q("souls-lede").hidden = tab !== "souls";

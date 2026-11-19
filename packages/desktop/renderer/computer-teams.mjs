@@ -884,9 +884,9 @@ export function createComputerTeams(doc, { request, onDocument = null, readMembe
     const running = group.members.filter(m => stateKind(m) === 'run').length;
     head.append(iconElement(doc, group.reached ? 'computer' : 'warning', { size: 15 }), el(doc, 'span', group.machine, 'ct-machine'));
     if (path) { const at = el(doc, 'span', path, 'ct-path'); at.title = group.path; head.append(at); }
-    head.append(el(doc, 'span', group.reached ? `${plural(group.members.length, 'instance')}, ${running} running` : 'not reached', 'ct-mcard-count'));
+    head.append(el(doc, 'span', group.reached ? `${group.members.length} ${group.members.length === 1 ? DESKTOP_NOUNS.instance : DESKTOP_NOUNS.instances}, ${running} running` : 'not reached', 'ct-mcard-count'));
     if (!group.reached && group.error) head.title = group.error;
-    const table = el(doc, 'div', null, 'ct-ilist'); table.setAttribute('role', 'table'); table.setAttribute('aria-label', `Your instances on ${team.label} on ${named}`);
+    const table = el(doc, 'div', null, 'ct-ilist'); table.setAttribute('role', 'table'); table.setAttribute('aria-label', `Your ${DESKTOP_NOUNS.instances} on ${team.label} on ${named}`);
     const columns = el(doc, 'div', null, 'ct-irow ct-ihead'); columns.setAttribute('role', 'row');
     for (const caption of ['Instance', 'Soul', 'State', 'Created', 'Terminal']) {
       const th = el(doc, 'span', caption === 'Terminal' ? null : caption); th.setAttribute('role', 'columnheader');

@@ -55,16 +55,13 @@ const opaqueBg = () => {
   }
 };
 
-test('Capabilities: the search is one sticky block, flush at the top on the opaque page background; the section pills scroll with All capabilities', async t => {
+test('Capabilities: the search is one sticky block, flush at the top on the opaque page background; the list scrolls under it', async t => {
   const u = await mountWorkspace(t);
   u.get('#workspace-tab-capabilities').click(); await tick(); await tick();
   const panel = u.get('.workspace-discovery'), block = u.get('.workspace-discovery > .ws-toolbar');
   assert.equal(panel.dataset.tab, 'capabilities');
   assert.ok(block.classList.contains('ws-sticky'));
-  // The section pills are All capabilities' own (the product owner, 2026-10-23): under its title, scrolling with it.
-  assert.equal(block.querySelector('.capability-nav'), null, 'the section pills are not pinned');
-  assert.equal(u.get('.capability-nav').closest('.ws-sticky'), null);
-  assert.equal(u.get('.capability-nav').previousElementSibling, u.get('#capability-part-all'), 'under All capabilities\' title');
+  assert.equal(u.get('.cap-list').closest('.ws-sticky'), null, 'the list is not pinned');
   assert.ok(block.querySelector('.ws-search input'), 'and the search');
   assert.equal(panel.firstElementChild, block, 'the block opens the scroller');
   const style = u.css(block);
@@ -79,23 +76,14 @@ test('Capabilities: the search is one sticky block, flush at the top on the opaq
   assert.equal(style.paddingBottom, '8px'); assert.equal(style.marginBottom, '7px', 'still 16px to the content below, edge included');
   block.classList.add('is-stuck');
   assert.equal(u.css(block).borderBottomColor, 'var(--border)');
-  // Filter by stays in the Workspace owned header (it filters only that section): it scrolls with it.
-  const filters = u.get('.catalog-filters');
-  if (filters) assert.equal(filters.closest('.ws-sticky'), null, 'Filter by is not pinned');
-  assert.equal(u.get('.capability-section-head').closest('.ws-sticky'), null, 'section headers scroll normally');
 });
 
-test('Capabilities: jump targets and rows keep clear of the pinned block (scroll-margin-top = its height)', async t => {
+test('Capabilities: rows keep clear of the pinned block (scroll-margin-top = its height)', async t => {
   const u = await mountWorkspace(t);
   u.get('#workspace-tab-capabilities').click(); await tick(); await tick();
-  const targets = [...u.doc.querySelectorAll('.capability-section-title, .catalog-row, .catalog-group')];
-  assert.ok(targets.length >= 3, 'section heads and rows rendered');
+  const targets = [...u.doc.querySelectorAll('.cap-row')];
+  assert.ok(targets.length >= 3, 'rows rendered');
   for (const target of targets) assert.equal(u.css(target).scrollMarginTop, 'var(--ws-sticky-h, 60px)', target.className);
-  // The jump pills scroll their section head into view with block:start, so the margin applies.
-  const head = u.get('#capability-section-packages'); let scrolled = null;
-  head.scrollIntoView = options => { scrolled = options; };
-  u.get('[data-jump="packages"]').click();
-  assert.equal(scrolled?.block, 'start'); assert.equal(u.doc.activeElement, head);
 });
 
 test('sticky-top: .is-stuck appears only once content has scrolled under the block, and --ws-sticky-h follows its height', () => {
@@ -139,7 +127,7 @@ test('Souls: the bar sits outside the one scroller; the grid gets its top edge o
   assert.equal(other.classList.contains('is-scrolled'), true); edge.dispose();
 });
 
-test('Teams: the page head ("Teams" + Add a local team) is the pinned block; its sections scroll', async t => {
+test('Teams: the page head ("Teams" + Add a team on this computer) is the pinned block; its sections scroll', async t => {
   const capture = JSON.parse(read('./fixtures/team-model-v2/teams-after.json'));
   const dom = new JSDOM('<!doctype html><body><main class="oats-view"><section class="workspace-discovery" data-tab="teams"><div></div></section></main></body>');
   const doc = dom.window.document;
@@ -150,7 +138,7 @@ test('Teams: the page head ("Teams" + Add a local team) is the pinned block; its
   for (let i = 0; i < 6; i++) await tick();
   const head = doc.querySelector('.ct-page-head'), style = dom.window.getComputedStyle(head);
   assert.ok(head.classList.contains('ws-sticky'));
-  assert.ok([...head.querySelectorAll('button')].some(b => b.textContent.includes('Add a local team')));
+  assert.ok([...head.querySelectorAll('button')].some(b => b.textContent.includes('Add a team on this computer')));
   assert.equal(style.position, 'sticky'); assert.equal(style.top, 'calc(-1 * var(--ws-pad-top))');
   assert.match(style.background, /var\(--bg\)/);
   assert.equal(style.paddingBottom, '8px'); assert.equal(style.marginBottom, '-9px', 'the page keeps its 18px gap below the head');

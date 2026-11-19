@@ -1,7 +1,8 @@
 // Capabilities "Used by" from each soul's composition (kernel feature souls-capabilities, OATS 0.45.0): the
 // souls whose `oats souls` row lists the capability by name, kind and origin, not only the souls whose live
 // instances recorded it. The parse (deployment-data.mjs soulCapabilitiesOf), the /api/agents projection,
-// the join (workspace-catalog.mjs composes/soulsUsing), the list's cells and the capability page's section.
+// the join (workspace-catalog.mjs composes/soulsUsing), and the capability page's "Used by" fold (the list's
+// "Used by" column went in the Desktop UI rework, slice 3b: rows say who made a capability, the page who uses it).
 // Fixture: workspace-v2/souls-capabilities, a REAL capture from the kernel PR (awebai/oats#745 @ 0ee79761,
 // provenance.json): member souls dev and keeper, the package soul acme.pkg/keeper (the member's bare name),
 // a private capability, workspace defaults (scribe takes only those), the disabled soul off (capabilities null)
@@ -14,8 +15,8 @@ import { JSDOM } from 'jsdom';
 import { soulsData, capabilitiesData, soulCapabilitiesOf } from '../../client/deployment-data.mjs';
 import * as remote from '../../client/remote-roster.mjs';
 import { soulRows } from '../../client/soul-rows.mjs';
-import { catalogCSS, renderCapabilities, renderCapabilitySections } from '../renderer/workspace-catalog.mjs';
-import { capabilitySections, composes, soulsUsing, rosterAgentName, soulsComposition, SOULS_CAPABILITIES_FEATURE } from '../../client/capability-rows.mjs';
+import { catalogCSS } from '../renderer/workspace-catalog.mjs';
+import { composes, soulsUsing, rosterAgentName, soulsComposition, SOULS_CAPABILITIES_FEATURE } from '../../client/capability-rows.mjs';
 import { renderCapabilityPage } from '../renderer/capability-page.mjs';
 import { SOULS_STALE_TITLE, ROSTER_STALE_TITLE } from '../renderer/loading.mjs';
 
@@ -145,67 +146,19 @@ const INSTANCES = [
   { agent: 'keeper', agentsRoot: ROOT, modules: [{ name: 'acme.own' }] }, // the member soul's: it never recorded acme-tool
   { agent: 'dev', agentsRoot: '/elsewhere/agents', modules: [{ name: 'acme-tool' }] }, // another deployment's agents root
 ];
-const count = (u, name) => u.$(`.catalog-row[data-capability="${name}"] .catalog-used-count`);
 
-test('the list\'s "Used by" with the feature: the souls whose composition includes it, marks and count; "Not used" only on a good read', t => {
-  const u = mount(t);
-  renderCapabilities(u.$('.caps'), { rows: CATALOG, status: null, instances: INSTANCES, souls: SOULS, composition: true, onOpen() {} });
-  assert.equal(count(u, 'acme.own').textContent, '2 souls'); assert.equal(count(u, 'acme.own').title, 'Used by dev, keeper');
-  assert.equal(u.$$('.catalog-row[data-capability="acme.own"] .catalog-used-marks .identity-mark').length, 2);
-  // Four souls compose acme-tool: the count and title name all four, the marks stop at three.
-  assert.equal(count(u, 'acme-tool').textContent, '4 souls'); assert.equal(count(u, 'acme-tool').title, 'Used by dev, keeper, acme.pkg/keeper, scribe', 'a package soul by its key');
-  assert.equal(u.$$('.catalog-row[data-capability="acme-tool"] .catalog-used-marks .identity-mark').length, 3, 'up to three marks');
-  assert.equal(count(u, 'acme.ws').textContent, '4 souls', 'no live instance needed');
-  // Without dev, what only dev composes is used by nobody.
-  renderCapabilities(u.$('.caps'), { rows: CATALOG, status: null, instances: INSTANCES, souls: SOULS.filter(s => s.key !== 'dev'), composition: true, onOpen() {} });
-  assert.equal(count(u, 'acme_z').textContent, 'Not used', 'dev\'s live instance recorded it, but no listed soul composes it');
-  assert.equal(count(u, 'acme_z').title, 'No soul here includes it');
-});
-
-test('the list keeps "Every soul" for a workspace default, and "—" with the souls-list reason while the read is not settled-good', t => {
-  const u = mount(t);
-  const status = { defaults: { capabilities: [{ name: 'acme.ws', from: 'here', off: false }] } };
-  const souls = SOULS.filter(s => s.key !== 'dev');
-  renderCapabilities(u.$('.caps'), { rows: CATALOG, status, instances: [], souls, composition: true, rosterState: 'stale', onOpen() {} });
-  assert.equal(count(u, 'acme.ws').textContent, 'Every soul');
-  assert.equal(count(u, 'acme.own').textContent, '1 soul', 'what the held list shows stays');
-  assert.equal(count(u, 'acme_z').textContent, '—'); assert.equal(count(u, 'acme_z').title, SOULS_STALE_TITLE);
-  assert.equal(count(u, 'acme_z').getAttribute('aria-description'), 'Unavailable: the souls list is not current');
-  assert.equal(count(u, 'acme_z').dataset.rosterState, 'stale');
-  for (const state of ['pending', 'failed']) {
-    renderCapabilities(u.$('.caps'), { rows: CATALOG, status: null, instances: [], souls, composition: true, rosterState: state, onOpen() {} });
-    assert.equal(count(u, 'acme_z').textContent, '—', state);
-  }
-});
-
-test('without the feature: today\'s instance-derived "Used by", even when soul rows carry a composition', t => {
-  const u = mount(t);
-  renderCapabilities(u.$('.caps'), { rows: CATALOG, status: null, instances: INSTANCES, souls: SOULS, composition: false, onOpen() {} });
-  assert.equal(count(u, 'acme.ws').textContent, 'Not used'); assert.equal(count(u, 'acme.ws').title, 'No instance carries it yet');
-  assert.equal(count(u, 'acme-tool').textContent, '2 souls', 'the roster\'s agents: dev and acme-pkg--keeper');
-  renderCapabilities(u.$('.caps'), { rows: CATALOG, status: null, instances: [], souls: SOULS, rosterState: 'failed', onOpen() {} });
-  assert.equal(count(u, 'acme.ws').title, ROSTER_STALE_TITLE, 'the roster\'s reason');
-});
-
-test('every section passes the composition through (Repo owned and Packages too)', t => {
-  const u = mount(t);
-  const sections = capabilitySections(CATALOG);
-  assert.deepEqual([sections.repo.map(r => r.name), sections.packages.map(r => r.name)], [['acme.private'], ['acme-tool']]);
-  renderCapabilitySections(u.$('.caps'), { sections, shown: sections.workspace, filterHost: null, privateListed: true, status: null, instances: [], souls: SOULS, composition: true });
-  assert.deepEqual([count(u, 'acme.own').textContent, count(u, 'acme.private').textContent, count(u, 'acme-tool').textContent], ['2 souls', '1 soul', '4 souls']);
-});
 
 const page = (t, opts) => {
   const u = mount(t), opened = [];
   renderCapabilityPage(u.$('.caps'), { status: null, instances: INSTANCES, souls: SOULS, composition: true, root: '/d', onBack() {}, openSoul: s => opened.push(s), ...opts });
-  const section = u.$('.page-section[data-section="Used by"]');
+  const section = u.$('details.cap-fold[data-fold="used-by"]');
   const lines = () => [...section.querySelectorAll('.used-row:not(.head)')];
   return { u, opened, section, lines, rows: () => lines().map(r => [r.querySelector('.used-name').textContent, r.querySelector('.used-meta').textContent]) };
 };
 
 test('the page\'s "Used by": one row per soul whose composition includes it, with that soul\'s live instances carrying it', t => {
   const { section, rows, lines, opened } = page(t, { row: cap('acme-tool') });
-  assert.match(section.querySelector('.page-section-title').textContent, /4 souls/);
+  assert.match(section.querySelector('summary').textContent, /4 souls/);
   // dev: two here (one on an older version; the one under another agents root is not this deployment's). The member
   // keeper's instance never recorded acme-tool: 0. The package keeper's instance is acme-pkg--keeper: 1. scribe runs none.
   assert.deepEqual(rows(), [['dev', '2 · 1 on an older version'], ['keeper', '0'], ['keeper', '1'], ['scribe', '0']]);
@@ -219,7 +172,7 @@ test('the page counts "0" instances for a soul that composes it with none runnin
   assert.deepEqual(page(t, { row: cap('notes') }).rows(), [['keeper', '0'], ['keeper', '0'], ['scribe', '0']]);
   const souls = SOULS.filter(s => s.key !== 'dev');
   const none = page(t, { row: cap('acme_z'), souls });
-  assert.equal(none.rows().length, 0); assert.match(none.section.textContent, /No soul here includes it\./); assert.match(none.section.querySelector('.page-section-title').textContent, /0 souls/);
+  assert.equal(none.rows().length, 0); assert.match(none.section.textContent, /No soul here includes it\./); assert.match(none.section.querySelector('summary').textContent, /0 souls/);
   const stale = page(t, { row: cap('acme_z'), souls, rosterState: 'failed' });
   const dash = stale.section.querySelector('.used-unknown');
   assert.equal(dash.textContent, '—'); assert.equal(dash.getAttribute('aria-description'), SOULS_STALE_TITLE); assert.equal(dash.title, SOULS_STALE_TITLE);

@@ -40,7 +40,7 @@ test('the board card opens its page: its name is the one control that does, name
   const u = await mount(t);
   const card = u.board('[data-team="eng"]'), open = card.querySelector('h4.ct-name-h > button.ct-open');
   assert.equal(open.textContent, 'eng'); assert.equal(open.type, 'button');
-  assert.equal(open.getAttribute('aria-description'), "Opens the team's page with your instances on it");
+  assert.equal(open.getAttribute('aria-description'), "Opens the team's page with your agents on it");
   assert.ok(card.classList.contains('ct-openable'));
   open.click(); assert.deepEqual(u.opened, ['eng']);
   card.querySelector('.ct-head .ct-actions button').click(); await tick();
@@ -134,7 +134,7 @@ test('the page\'s card keeps its actions: Make default asks first, Cancel return
   assert.deepEqual(u.calls, [{ action: 'list' }], 'nothing sent');
   // Remove spare from its page: the page waits for the answer, then says its team is gone.
   u.teams.hideTeam(); u.show('spare');
-  assert.equal(u.p('.ct-team-page [data-section=yours] .ct-dashed').textContent, 'This team has no provider id yet, so no instance can be on it.');
+  assert.equal(u.p('.ct-team-page [data-section=yours] .ct-dashed').textContent, 'This team has no provider id yet, so no agent can be on it.');
   [...u.pall('.ct-page-card .ct-head .ct-actions button')].find(b => b.textContent === 'Remove').click();
   assert.deepEqual(u.events, [], 'not before the answer');
   await tick();
@@ -146,9 +146,9 @@ test('the page\'s empty states, and a team that leaves the document or a dispose
   const u = await mount(t, { members: [] });
   assert.equal(u.show('nope'), false, 'no such team: nothing shown');
   assert.equal(u.show('home'), true);
-  assert.equal(u.p('[data-section=yours] .ct-dashed').textContent, 'None of your instances is on home.');
+  assert.equal(u.p('[data-section=yours] .ct-dashed').textContent, 'None of your agents is on home.');
   assert.equal(u.p('[data-section=yours] .ct-dashed').tagName, 'P', 'a sentence, not a card');
-  assert.equal(u.board('[data-team="home"] .ct-sum').textContent, 'None of your instances');
+  assert.equal(u.board('[data-team="home"] .ct-sum').textContent, 'None of your agents');
   u.p('.page-back').click(); assert.deepEqual(u.events, ['back']);
   u.teams.dispose();
   assert.deepEqual(u.events, ['back', 'gone'], 'the page\'s owner went away');
@@ -175,7 +175,7 @@ test('a failed read shows on the open page, in its card, as the board says it; t
   // The add form's own error is the board's alone.
   u.teams.hideTeam(); u.board('.ct-add').click(); await tick();
   u.board('.ct-form').dispatchEvent(new u.dom.window.Event('submit', { cancelable: true })); await tick();
-  assert.equal(u.board('[data-section=local] .ct-error p').textContent, 'A local team needs a label and its provider team id.');
+  assert.equal(u.board('[data-section=local] .ct-error p').textContent, 'A team of this computer needs a label and its provider team id.');
   u.show('eng');
   assert.equal(u.p('.ct-error'), null);
 });
@@ -188,7 +188,7 @@ test('closing the page ends a Make default confirmation opened on it, and the bo
   u.teams.hideTeam();
   assert.equal(u.board('.ct-confirm'), null, 'off the board\'s card');
   await u.roster({ members: [member('release-manager-1')], servers: [], notReached: [] });
-  assert.equal(u.board('[data-team="eng"] .ct-sum').textContent, '1 of your instances', 'the barrier is released: the roster change redraws the board');
+  assert.equal(u.board('[data-team="eng"] .ct-sum').textContent, '1 of your agents', 'the barrier is released: the roster change redraws the board');
   // Its team leaving the document closes the page the same way.
   let gone = false;
   const v = await mount(t, { answer: () => { const d = document(); if (gone) d.teams = d.teams.filter(x => x.label !== 'eng'); return d; } });
@@ -197,7 +197,7 @@ test('closing the page ends a Make default confirmation opened on it, and the bo
   gone = true; await v.teams.refresh();
   assert.deepEqual(v.events, ['gone']); assert.equal(v.board('.ct-confirm'), null);
   await v.roster({ members: [member('release-manager-1', { team: 'home:acme.aweb.ai' })], servers: [], notReached: [] });
-  assert.equal(v.board('[data-team="home"] .ct-sum').textContent, '1 of your instances', 'the board redraws');
+  assert.equal(v.board('[data-team="home"] .ct-sum').textContent, '1 of your agents', 'the board redraws');
 });
 
 test('a board card\'s problem boxes sit above its stretched name: their text is selected, not a click that opens', async t => {

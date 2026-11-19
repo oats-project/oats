@@ -348,28 +348,31 @@ test('Souls group by repository, and unconfirmed members explain their hidden so
   assert.equal(u.doc.querySelectorAll('.souls-table .soul-row-open[tabindex="0"]').length, 1, 'one roving row');
 });
 
-// #517: the Setup tab lists the workspace's machines when the CLI connects machines to a workspace.
-test('Setup: the Registered machines box follows the gates; it is read for this window and kept across repaints', async t => {
+// #517 and the Desktop UI rework's slice 3b: the Machines tab lists the workspace's computers; with the CLI's machine
+// gates, the machines registered to this workspace too.
+test('Machines: the list follows the gates; it is read for this window and kept across repaints; Setup holds no machines', async t => {
   const gated = { ...CLI, features: [...CLI.features, 'servers-per-workspace', 'server-connect'] };
   const machine = { id: 'devbox-team', label: 'devbox', sshHost: 'devbox', workspace: '/home/alex/team', workspaceKey: 'github.com/acme/team', check: { reachable: true, version: '0.39.0', error: null } };
   const u = await setup(t, { cli: gated, servers: () => ({ servers: [machine], filtered: true, key: 'github.com/acme/team', deployment: '/team', aweb: false }) });
-  u.tab('sources'); for (let i = 0; i < 6; i++) await tick();
-  const box = u.doc.querySelector('.setup .setup-machines');
-  assert.ok(box, 'the Registered machines box');
-  assert.deepEqual([...box.querySelectorAll('[data-machine]')].map(r => r.dataset.machine), ['devbox-team']);
+  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
+  const list = u.doc.querySelector('.workspace-discovery section.machines');
+  assert.ok(list, 'the Machines list');
+  assert.deepEqual([...list.querySelectorAll('[data-machine]')].map(r => r.dataset.machine), [':here', 'devbox-team']);
   assert.ok(u.calls.some(c => c.path === `/api/servers?ws=${encodeURIComponent('/team')}`));
-  assert.equal(box.querySelector('.machines-add').textContent, 'Add a machine to this workspace…');
-  u.click('Graph'); await tick();
-  assert.equal(u.doc.querySelector('.setup .setup-machines'), box, 'the same box, in either view');
+  assert.equal(list.querySelector('.machines-add').textContent, 'Add a machine to this workspace…');
+  u.tab('souls'); await tick(); u.tab('machines'); await tick();
+  assert.equal(u.doc.querySelector('.workspace-discovery section.machines'), list, 'the same list across repaints');
+  u.tab('sources'); for (let i = 0; i < 6; i++) await tick();
+  assert.equal(u.doc.querySelector('.setup section.machines, .setup .setup-machines'), null, 'not in Setup');
 });
 
-test('Setup: without servers-per-workspace and server-connect there is no Registered machines box and no Add a machine', async t => {
+test('Machines: without servers-per-workspace and server-connect the list is this computer alone, with no Add a machine', async t => {
   const u = await setup(t);
-  u.tab('sources'); for (let i = 0; i < 6; i++) await tick();
-  assert.ok(u.doc.querySelector('.setup'));
-  assert.equal(u.doc.querySelector('.setup-machines'), null);
+  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
+  const list = u.doc.querySelector('.workspace-discovery section.machines');
+  assert.deepEqual([...list.querySelectorAll('[data-machine]')].map(r => r.dataset.machine), [':here']);
   assert.equal([...u.doc.querySelectorAll('button')].some(b => b.textContent === 'Add a machine to this workspace…'), false);
-  assert.equal(u.calls.some(c => c.path.startsWith('/api/servers?')), false);
+  assert.equal(u.calls.some(c => c.path.startsWith('/api/servers?')), false, 'nothing to read');
 });
 
 // Review round 2: the soul page follows its roster row across polls: a refusal that appears or clears changes its

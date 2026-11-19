@@ -47,11 +47,12 @@ any checked-in icon's pixels stop matching what the source derives.
 
 The shell has three navigation contexts:
 
-- **Workspace › Machines** (the Active overview, then the Deployments page,
-  before 2026-10-26) — a tab of the Workspace page, before Setup (⌘1 / Ctrl+1): a
-  fitted, zoomable tidy tree of running and idle instances with
-  `parentInstance` spawn relationships, one tab per deployment. Agent boxes can
-  be repositioned freely; edges follow live.
+- **Workspace › Machines** — a tab of the Workspace page, before Setup (⌘1 / Ctrl+1).
+  It opens on the list of the computers the workspace runs on (reachable, your agents
+  on each, the OATS version; Enter opens one with Check and Remove). Its **Map** (the
+  Active overview, then the Deployments page, before 2026-10-26) is a fitted, zoomable
+  tidy tree of running and idle instances with `parentInstance` spawn relationships,
+  one tab per deployment. Agent boxes can be repositioned freely; edges follow live.
 - **Instances** — the shell's single sidebar becomes a compact, recursively
   nested roster. Selecting a running instance opens its direct tmux-attach
   xterm terminal in the main area. Terminal tabs are scoped to this context.
@@ -347,8 +348,11 @@ same holding rules: a factory made with the client's terms and an optional
 capability row's rules (`capability-rows.mjs`: its source and group, the
 sections and the search, and who uses it, `capabilityUsers`), and its facts as
 the capability page shows them (`capability-facts.mjs` `capabilityFacts`, with
-the page's own words in `CAPABILITY_COPY`). The backend makes the table and owns
-it; the page loads the other two. And it holds the house fuzzy matcher
+the page's own words in `CAPABILITY_COPY`). The Capabilities list's order and tags
+(`capability-list.mjs`: core first, the workspace's defaults) and who made a
+capability (`capability-origin.mjs` `capabilityOrigin`: official from the catalog pin or
+the OATS repository, else "by <source>") are there too. The backend makes the table and owns
+it; the page loads the others. And it holds the house fuzzy matcher
 (`subsequence-score.mjs` `subsequenceScore`), one copy for the Desktop's palette
 and Quick Open and the TUI's palette and switcher.
 
