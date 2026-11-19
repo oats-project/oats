@@ -106,7 +106,8 @@ test('Capabilities is the kernel catalog: one flat list, who made each, no appro
 // The defaults sentence is never narrowed by the search; the "i" is built once, sits in the toolbar's lead and survives
 // every repaint; leaving the tab closes its dialog without moving focus. Souls has its own "i".
 test('Capabilities: the defaults sentence above the list, the "i" in the toolbar across repaints, its dialog closes with the tab', async t => {
-  const defaults = { slots: { knowledge: { name: 'oats.okf', from: 'package' }, messaging: 'none', tasks: null }, capabilities: [] };
+  // This capture's rows carry no layer: oats.okf is a named default here, not a slot's.
+  const defaults = { slots: { knowledge: null, messaging: 'none', tasks: null }, capabilities: [{ name: 'oats.okf', from: 'package', off: false }] };
   const u = await setup(t, { status: { ...statusOf('workspace-status'), defaults } });
   await u.tab('capabilities');
   const lead = u.doc.querySelector('.ws-toolbar[data-tools=capabilities] .ws-toolbar-lead');
@@ -173,8 +174,8 @@ test('core capabilities first with their tag; a repo-owned one in the same list,
   const u = await setup(t, { cli: withFeature, status: 'f7/workspace-status', sync: () => catalog('f7/capabilities') });
   await u.tab('capabilities');
   const tags = el => [...el.querySelectorAll('.cap-tag')].map(tag => tag.textContent);
-  assert.deepEqual(u.rows().slice(0, 3).map(el => [el.dataset.capability, tags(el)]), [['oats.okf', ['core']], ['nw.chat', ['core']], ['oats.aweb', ['core']]],
-    'knowledge, then messaging (by name)');
+  assert.deepEqual(u.rows().slice(0, 3).map(el => [el.dataset.capability, tags(el)[0]]), [['oats.okf', 'core'], ['nw.chat', 'core'], ['oats.aweb', 'core']],
+    'knowledge, then messaging (by name), each tagged core first');
   const runbook = u.rows().find(el => el.dataset.capability === 'nw-platform-runbook');
   assert.deepEqual(tags(runbook), ['repo only']);
   assert.equal(runbook.querySelector('.cap-origin').textContent, 'by platform');
@@ -386,7 +387,7 @@ async function catalogOwnership(t, create, outcome) {
   setWorkspace('/other'); view.updateRoster([], panel());
   if (outcome === 'success') gate.resolve(catalog('capabilities')); else gate.resolve(Promise.reject(new Error('OLD catalog failure')));
   await settle();
-  return { rows: host.querySelectorAll('.cap-list button.cap-row').length, text: host.textContent };
+  return { rows: host.querySelectorAll('.cap-list .cap-row').length, text: host.textContent };
 }
 for (const outcome of ['success', 'rejection']) test(`catalog ${outcome} for a previous workspace never renders (mutation-verified)`, async t => {
   const { createWorkspaceDiscovery } = await import('../renderer/workspace-discovery.mjs');

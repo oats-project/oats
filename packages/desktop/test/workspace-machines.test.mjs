@@ -43,7 +43,7 @@ test('slice3b machines section lists servers', async t => {
   }, { instances: () => instances, cli: () => ({ version: '0.69.21' }) });
   await settle();
   assert.equal(u.q('.machines-title').textContent, 'Machines');
-  assert.equal(u.q('.machines-lead').textContent, 'The computers this workspace runs on. The agents counts are your agents, on this computer and the machines registered here.');
+  assert.equal(u.q('.machines-lead').textContent, 'The computers this workspace runs on, and how many of your agents run on each, as this Desktop reads them.');
   assert.deepEqual(u.qa('[data-machine]').map(li => li.dataset.machine), [THIS_COMPUTER, 'devbox-aweb', 'laptop-aweb']);
   // name | reachable | your agents | OATS version.
   assert.deepEqual(u.cells(THIS_COMPUTER), ['This computer', 'reachable', '2 agents', 'oats 0.69.21']);

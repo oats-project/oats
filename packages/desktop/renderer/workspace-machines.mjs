@@ -28,7 +28,7 @@ const machineHeld = verb => cliHeldBack(`POST /api/server-${verb}`);
 
 export const MACHINES_COPY = Object.freeze({
   title: 'Machines',
-  lead: agents => `The computers this workspace runs on. The ${agents} counts are your ${agents}, on this computer and the machines registered here.`,
+  lead: agents => `The computers this workspace runs on, and how many of your ${agents} run on each, as this Desktop reads them.`,
   thisComputer: 'This computer',
   add: 'Add a machine to this workspace…',
   none: 'No other machine runs this workspace yet.',
