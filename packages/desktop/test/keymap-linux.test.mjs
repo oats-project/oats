@@ -151,7 +151,7 @@ test("the terminal allowlist is exactly the actions that must work in a terminal
     "tabs.close", "tabs.next", "tabs.nextPage", "tabs.prev", "tabs.prevPage",
     ...Array.from({ length: 9 }, (_, i) => `tabs.goto${i + 1}`),
     "terminal.copySelection", "terminal.fontBigger", "terminal.fontReset", "terminal.fontSmaller", "terminal.focusMode",
-    "workspace.next", "workspace.previous", "workspaces.currentOnly",
+    "workspace.next", "workspace.previous",
   ].sort());
   // Every shared chord works in a terminal (CHORDS_READ): the leader's keys are reachable from every focus.
   for (const { id } of CHORDS_READ) assert.ok(TERMINAL_ALLOWLIST.includes(id), `${id} is allowlisted`);
@@ -209,8 +209,6 @@ const FAMILY_PRESSES = {
 const SHARED_PRESSES = [
   [linux("N", { shiftKey: true }), "app.chooseSoul"], [linux("Tab"), "tabs.next"], [linux("Tab", { shiftKey: true }), "tabs.prev"],
   [linux("W", { shiftKey: true, altKey: true }), "split.close"], [linux("x"), "app.leader"],
-  // Show only the current workspace: Ctrl+Alt+Shift+O in every family.
-  [linux("O", { shiftKey: true, altKey: true }), "workspaces.currentOnly"],
   // The Alt+Shift arrows (no Ctrl) ↑ / ↓: the previous / next instance.
   [ev("ArrowUp", { altKey: true, shiftKey: true }), "roster.openPrevious"], [ev("ArrowDown", { altKey: true, shiftKey: true }), "roster.openNext"],
   [linux("F6", { shiftKey: true }), "focus.leaveTerminal"], [linux("C", { shiftKey: true }), "terminal.copySelection"],
@@ -824,31 +822,21 @@ test("the leader is inert under a shown modal: the chord goes where it goes toda
   assert.equal(ctrlX.defaultPrevented, false, "the program gets it");
 });
 
-// Show only the current workspace (2026-10-23): ⌥⇧⌘O on macOS, Ctrl+Alt+Shift+O elsewhere, the same in every family.
-// The chord is free: checked against the keymap's own defaults, every action on both platforms in every family,
-// in every context (it is global); and it works from a terminal (allowlisted), claimed before the pty.
-test("workspaces.currentOnly: ⌥⇧⌘O / Ctrl+Alt+Shift+O in every family, free of every other default, and fires from a terminal", t => {
+// Show only the current workspace (2026-10-23) left in slice 1 of the Desktop UI rework: its chord, ⌥⇧⌘O on macOS and
+// Ctrl+Alt+Shift+O elsewhere, is bound to nothing in any family, so a terminal's program gets it; without Shift it is
+// still the workspace switcher's key.
+test("⌥⇧⌘O / Ctrl+Alt+Shift+O are free again in every family: a terminal's program gets them", t => {
   registerAll(t);
   inFamily(t, DEFAULT_CHORD_FAMILY);
-  assert.ok(TERMINAL_ALLOWLIST.includes("workspaces.currentOnly"), "allowlisted");
+  assert.equal(TERMINAL_ALLOWLIST.includes("workspaces.currentOnly"), false);
   for (const family of CHORD_FAMILIES) {
     setChordFamily(family);
-    for (const isMac of [false, true]) {
-      const chord = getBinding("workspaces.currentOnly", isMac);
-      assert.equal(chord, isMac ? "Mod+Alt+Shift+O" : "Ctrl+Alt+Shift+O", `mac=${isMac}, ${family}`);
-      assert.equal(defaultBinding("workspaces.currentOnly", isMac, family), chord);
-      assert.equal(findConflict(chord, "global", "workspaces.currentOnly", isMac), null, `mac=${isMac}, ${family}`);
-      for (const id of IDS) if (id !== "workspaces.currentOnly") assert.notEqual(getBinding(id, isMac), chord, `${id}, mac=${isMac}, ${family}`);
-      assert.deepEqual(keymapConflicts(isMac), [], `mac=${isMac}, ${family}`);
-      assert.equal(terminalAllows("workspaces.currentOnly", chord, isMac), true, `mac=${isMac}, ${family}`);
-    }
-    // From a terminal, by the real keydowns: Linux/Windows sends the upper-case letter with Shift; a Mac's ⌥⇧O types Ø.
+    for (const isMac of [false, true]) assert.equal(defaultBinding("workspaces.currentOnly", isMac, family) ?? null, null, `no default, mac=${isMac}, ${family}`);
     const linuxPress = pressOf("Ctrl+Alt+Shift+O"), macPress = ev("Ø", { code: "KeyO", metaKey: true, altKey: true, shiftKey: true });
     for (const [press, isMac] of [[linuxPress, false], [macPress, true]]) {
-      assert.equal(matchEvent(press, { isMac, insideTerminal: true }), "workspaces.currentOnly", `mac=${isMac}, ${family}`);
-      assert.equal(handleKeydown(press, { isMac, insideTerminal: true }), true); assert.equal(press.defaultPrevented, true, `claimed before the pty, mac=${isMac}, ${family}`);
+      assert.equal(matchEvent(press, { isMac, insideTerminal: true }), null, `mac=${isMac}, ${family}`);
+      assert.equal(handleKeydown(press, { isMac, insideTerminal: true }), false); assert.equal(press.defaultPrevented, false, `the program's, mac=${isMac}, ${family}`);
     }
-    // Without Shift it is still the workspace switcher's key, as before.
     assert.equal(matchEvent(ev("ø", { code: "KeyO", metaKey: true, altKey: true }), { isMac: true, insideTerminal: true }), "app.workspaces");
   }
 });

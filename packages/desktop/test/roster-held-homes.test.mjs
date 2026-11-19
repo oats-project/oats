@@ -21,8 +21,6 @@ import { instanceActionTarget, sameInstanceActionTarget } from "../renderer/inst
 import { instanceSplitPlan } from "../renderer/instance-split.mjs";
 import { runtimeState, unsupportedSession } from "../../client/instance-presentation.mjs";
 import { canAddressRemote, rowReason } from "../../client/remote-address.mjs";
-import { createRuntimeBadge } from "../renderer/identity-marks.mjs";
-import { rosterTipFacts } from "../renderer/roster-tip.mjs";
 import { waitingClock } from "../../client/waiting-on-you.mjs";
 import { projectActivePanel } from "../renderer/active-observation.mjs";
 import { deploymentStatusData } from "../../client/deployment-data.mjs";
@@ -54,17 +52,15 @@ function fixture(t, rows, extra = {}) {
     };
   }
   const doc = dom.window.document;
-  const announced = new Set(), lifecycle = [], forgets = [], said = [], opened = [], tips = new Map();
+  const announced = new Set(), lifecycle = [], forgets = [], said = [], opened = [];
   let painted = [];
   const context = {
-    ...tree, document: doc, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason, createRuntimeBadge,
+    ...tree, document: doc, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason,
     instanceActionTarget, instanceSplitPlan, connectionGeneration: 0, menuState() {}, runAction: assert.fail, sayInHint: line => said.push(line),
     applyChordTitles() {}, updateActiveContexts() {}, getBinding: () => null, formatChord: c => c, isMac: true,
     contextRosterEl: doc.querySelector("#instance-roster"), contextWorkspace: "A",
     rosterState: { hasData: true, state: "ready" }, rosterStale: false, contextDeploymentNote: null, ...viewContext(),
     currentWorkspace: () => "A", workspaceGeneration: () => 0, collapsedInstances: new Set(),
-    rosterTip: { bind(row, facts) { tips.set(row.dataset.treeInstance, facts); }, hide() {}, sync() {} }, rosterTipFacts,
-    rosterPrs: { get: () => null, refresh() {} },
     spawnJobs: { rows: ws => ws === "A" ? rows() : [], announce: id => !announced.has(id) && !!announced.add(id), check() {} },
     tabs: new Map(), activeTab: null, tabOpenIntents: { applyFocus: f => f() },
     // A held row opens and starts nothing (recorded: a throw inside a jsdom listener would not fail the test).
@@ -81,12 +77,11 @@ function fixture(t, rows, extra = {}) {
   const list = doc.querySelector(".ctx-list");
   const row = name => [...list.querySelectorAll(".ctx-inst")].find(b => b.querySelector(".ctx-name")?.dataset.name === name);
   const wrap = name => row(name).closest(".ctx-tree-row");
-  const status = name => tips.get(row(name).dataset.treeInstance)?.().rows.find(([key]) => key === "Status")?.[1];
   const menu = name => [...wrap(name).querySelectorAll("[role=menuitem]")].map(item => item.dataset.action);
   // The row's context menu: a right-click at the pointer, or a key's (Shift+F10, the Menu key: clientX = clientY = 0).
   const contextMenu = (name, { x = 0, y = 0 } = {}) => row(name).dispatchEvent(new dom.window.MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y }));
   const key = (el, key) => el.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
-  return { doc, render, list, row, wrap, status, menu, contextMenu, key, lifecycle, forgets, said, opened, live: () => doc.querySelector("#instance-roster > .ctx-spawn-live") };
+  return { doc, render, list, row, wrap, menu, contextMenu, key, lifecycle, forgets, said, opened, live: () => doc.querySelector("#instance-roster > .ctx-spawn-live") };
 }
 
 // No Start…, no PR link, no Check result: nothing overlays the row (and no row has a ⋯ trigger, #1559).
@@ -140,7 +135,6 @@ test("a row the roster reports setting up its worktree (a spawn made anywhere): 
   assert.equal(button.querySelector(".ctx-spawn-since"), null, "no job here knows its start");
   noTools(u, "dev-new");
   button.click(); assert.deepEqual(u.opened, [], "activation opens and starts nothing");
-  assert.equal(u.status("dev-new"), "Spawning (setting up worktree)", "its hover card");
   assert.equal(u.live(), null, "no job of this window: nothing is announced");
   // Alone in the roster it is the row the keyboard enters.
   const v = fixture(t, () => []);
@@ -187,10 +181,8 @@ test("the pending row turns into “Setting up worktree…” in place, never fl
   const settingUp = step([...roster, instance("dev-new", "root", { running: false, spawnInProgress: true })], "Setting up worktree…");
   assert.ok(settingUp.querySelector(".ctx-spawn-spinner"));
   assert.equal(settingUp.querySelector(".ctx-spawn-since").textContent, `since ${waitingClock(STARTED)}`);
-  assert.equal(u.status("dev-new"), "Spawning (setting up worktree)");
   // The roster reports it without the flag while the job is still spawning: still the pending row, never "stopped".
   step([...roster, instance("dev-new", "root", { running: false })], "Spawning…");
-  assert.equal(u.status("dev-new"), "Spawning", "the card says spawning, whatever liveness the row reports meanwhile");
   // Checking a result is in flight too.
   rows = [job({ pending: "checking", startedAt: STARTED })];
   step([...roster, instance("dev-new", "root", { running: false, spawnInProgress: true })], "Setting up worktree…");
@@ -216,7 +208,6 @@ for (const [flag, state, hint, hold] of [["rollbackIncomplete", "Spawn didn't fi
     assert.equal(u.wrap("dev-q").querySelector(".ctx-start"), null, "no Start…");
     assert.deepEqual(u.menu("dev-q"), ["retire"], "no Inspect, Start, Stop or split");
     assert.equal(u.wrap("dev-q").querySelector("[data-action=retire]").textContent, "Retire instance…");
-    assert.equal(u.status("dev-q"), state);
     noTools(u, "dev-q");
     u.contextMenu("dev-q");
     assert.equal(u.wrap("dev-q").querySelector(".ctx-instance-menu").dataset.instanceMenuOpen, "true", "its context menu opens");
@@ -242,20 +233,7 @@ test("both spawnInProgress and rollbackIncomplete: rollbackIncomplete wins, even
     assert.equal(u.row("dev-new").querySelector(".ctx-spawn-spinner"), null);
     assert.equal(u.row("dev-new").querySelector(".ctx-spawn-since"), null);
     assert.deepEqual(u.menu("dev-new"), ["retire"]);
-    assert.equal(u.status("dev-new"), "Spawn didn't finish");
   }
-});
-
-test("the hover card's Status names a held home; an ordinary row keeps its liveness", () => {
-  const status = row => rosterTipFacts(row).rows.find(([key]) => key === "Status")[1];
-  assert.equal(status(instance("a", undefined, { running: false, spawnInProgress: true })), "Spawning (setting up worktree)");
-  assert.equal(status(instance("a", undefined, { running: false, rollbackIncomplete: true })), "Spawn didn't finish");
-  assert.equal(status(instance("a", undefined, { running: true, retirePending: true })), "Retiring…");
-  assert.equal(status(instance("a", undefined, { running: true, retire: RETIRE_INTERRUPTED })), "Retire didn't finish");
-  assert.equal(status(instance("a", undefined, { running: false, pendingSpawn: job() })), "Spawning");
-  assert.equal(status(instance("a", undefined, { running: false, spawnInProgress: true, pendingSpawn: job() })), "Spawning (setting up worktree)");
-  assert.equal(status(instance("a", undefined, { running: false, retirePending: true, pendingSpawn: job() })), "Spawning", "as its pending row reads");
-  assert.equal(status(instance("a", undefined, { running: false })), "stopped");
 });
 
 test("instanceActions: a spawning home has no actions (its context menu opens nothing and says why); a quarantined one Retire only, extras included", t => {
@@ -356,7 +334,6 @@ for (const [name, hold] of Object.entries(RETIRING)) {
     assert.doesNotMatch(button.textContent, /fail|didn't finish/i, "never read as a failure");
     button.click(); assert.deepEqual(u.opened, [], "activation opens and starts nothing");
     assert.equal(u.wrap("dev-r").querySelector(".ctx-start"), null, "no Start…");
-    assert.equal(u.status("dev-r"), "Retiring…");
     assert.deepEqual(u.menu("dev-r"), ["retire"], "no Inspect, Start, Stop, Restart or split");
     const retireItem = u.wrap("dev-r").querySelector("[data-action=retire]");
     assert.equal(retireItem.disabled, false); assert.equal(retireItem.dataset.secondary, "true"); assert.equal(retireItem.autofocus, false);
@@ -426,35 +403,33 @@ test("a failed retire with the kernel's message: “Retire failed”, its hint, 
   assert.equal(button.querySelector(".ctx-spawn-state").textContent, "Retire failed");
   assert.equal(button.querySelector(".ctx-held-hint").textContent, "Retire it again to finish");
   assert.equal(button.getAttribute("aria-description"), "OATS says: the pre-retire hook exited 1 (E_RETIRE_HOOK)");
-  assert.equal(u.status("dev-f"), "Retire failed · OATS says: the pre-retire hook exited 1 (E_RETIRE_HOOK)");
   assert.deepEqual(u.menu("dev-f"), ["retire"]);
   const retireItem = u.wrap("dev-f").querySelector("[data-action=retire]");
   assert.equal(retireItem.dataset.secondary, undefined); assert.equal(retireItem.autofocus, true, "Retire is the way on: the default");
   // A control character withholds the message whole; an over-long one is one bounded line.
   u.render([...roster, failed({ message: "wipe \x1b[2J the screen" })]);
   assert.equal(u.row("dev-f").getAttribute("aria-description"), "[withheld]");
-  assert.equal(u.status("dev-f"), "Retire failed · [withheld]");
   u.render([...roster, failed({ message: `${"x".repeat(5000)} end` })]);
   const said = u.row("dev-f").getAttribute("aria-description");
   assert.ok(said.startsWith("OATS says: xxx") && said.length <= "OATS says: ".length + 2048, "bounded"); assert.doesNotMatch(said, /\x1b| end/);
   // Only a code: the kernel's code, under its speaker and through the filter, as its message is.
   u.render([...roster, failed({})]);
   assert.equal(u.row("dev-f").getAttribute("aria-description"), "OATS says: E_RETIRE_HOOK");
-  assert.equal(u.status("dev-f"), "Retire failed · OATS says: E_RETIRE_HOOK");
   assert.equal(heldLine(null), null);
 });
 
 test("the same row reads every state of its retire in turn, and back to an ordinary row when the hold is gone", async t => {
   const u = fixture(t, () => []);
-  const read = hold => { u.render([...roster, instance("dev-r", "root", { running: true, ...hold })]); return [u.row("dev-r").querySelector(".ctx-meta").textContent, u.status("dev-r")]; };
-  assert.deepEqual(read({ retireInFlight: true }), ["Retiring…", "Retiring…"]);
-  assert.deepEqual(read(retire("running")), ["Retiring…", "Retiring…"]);
-  assert.deepEqual(read(retire("unknown")), ["Retiring…", "Retiring…"]);
-  assert.deepEqual(read(retire("failed")), ["Retire failed", "Retire failed"]);
-  assert.deepEqual(read(retire("interrupted")), ["Retire didn't finish", "Retire didn't finish"]);
-  const [meta, status] = read({});
-  assert.equal(status, "running"); assert.doesNotMatch(meta, /Retir/);
-  assert.equal(u.row("dev-r").querySelector(".ctx-meta").className, "ctx-meta ctx-soul-repo", "its own meta line again: the soul and the repository");
-  assert.equal(meta, "devdesktop-repo");
+  const read = hold => { u.render([...roster, instance("dev-r", "root", { running: true, ...hold })]); return u.row("dev-r").querySelector(".ctx-meta").textContent; };
+  assert.equal(read({ retireInFlight: true }), "Retiring…");
+  assert.equal(read(retire("running")), "Retiring…");
+  assert.equal(read(retire("unknown")), "Retiring…");
+  assert.equal(read(retire("failed")), "Retire failed");
+  assert.equal(read(retire("interrupted")), "Retire didn't finish");
+  const meta = read({});
+  assert.doesNotMatch(meta, /Retir/);
+  assert.equal(u.row("dev-r").querySelector(".ctx-meta").className, "ctx-meta ctx-row-detail", "its own second line again: the soul and the machine");
+  assert.equal(meta, "dev · This Mac");
+  assert.ok(u.row("dev-r").querySelector(".ctx-dot.on"), "and its liveness on its dot");
   assert.deepEqual(u.menu("dev-r"), ["open-split", "open-pr", "inspect", "restart", "stop", "retire"]);
 });

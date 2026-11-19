@@ -185,8 +185,7 @@ for (const reject of [false, true]) test(`frame10 owner revokes menu late ${reje
 test('shipped frame10 action registration is menu-focus scoped, mouse/key equivalent and live rebind-aware without default Ctrl chords', async () => {
   const dom = menuDom(), doc = dom.window.document, source = readFileSync(new URL('../renderer/shell.mjs', import.meta.url), 'utf8'), off = [], calls = [];
   const c = { document: doc, activeInstanceMenu: null, tabLayerVisible: false, stage: null, setActiveContexts, getBinding, formatChord,
-    baseTitles: new WeakMap(), isMac: true, registerAction: spec => off.push(registerAction(spec)),
-    settingsMenu: { refresh() {} } }; // applyChordTitles refreshes the settings cog's chords (sidebar-settings.test.mjs)
+    baseTitles: new WeakMap(), isMac: true, registerAction: spec => off.push(registerAction(spec)) };
   const functions = ['updateActiveContexts', 'menuState', 'applyChordTitles'].map(name => source.match(new RegExp(`function ${name}\\([^]*?\\n\\}`))[0]).join('\n');
   const start = source.indexOf('for (const [id, action, label] of'), end = source.indexOf('registerAction({ id: "app.palette"', start);
   const s = runInNewContext(`${functions}\n${source.slice(start, end)}\n({ menuState, updateActiveContexts, applyChordTitles })`, c);

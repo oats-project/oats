@@ -14,9 +14,16 @@
 // The disclosure (roster-disclosure.mjs, 2026-11-19) is pure and shared the same way. A suite about other behaviour
 // draws every root open, as the roster did before roots started collapsed (`expandedInstances` holds every key), and
 // its own `collapsedInstances` still closes rows; roster-disclosure-shell.test.mjs runs the default with a plain Set.
-import { deploymentState, rosterSections, rowStale, splitByDeployment, rosterSectionKey, sidebarSections } from "../../../client/roster-sections.mjs";
+// Slice 1 of the Desktop UI rework: a row's two lines (packages/client roster-row-facts.mjs) are pure and shared the
+// same way; the foot's count is inert (`sidebarFoot`, sidebar-foot-shell.test.mjs drives the shipped one), and the empty
+// roster's line is the shipped words with no chord bound. The relations in words (D26: no drawn lines) are pure too.
+import { deploymentState, rosterSections, rowStale, splitByDeployment, rosterSectionKey, sidebarSections, isMultiDeployment } from "../../../client/roster-sections.mjs";
+import { siblingText } from "../../../client/instance-presentation.mjs";
 import { backgroundHeading } from "../../renderer/background-heading.mjs";
-import { DESKTOP_TERMS } from "../../renderer/desktop-terms.mjs";
+import { DESKTOP_TERMS, DESKTOP_NOUNS } from "../../renderer/desktop-terms.mjs";
+import { rosterRowFacts } from "../../../client/roster-row-facts.mjs";
+import { emptyRosterText } from "../../renderer/sidebar-foot.mjs";
+import { rowFactsTitle } from "../../renderer/row-facts-title.mjs";
 import { deploymentHeading, notePanel, panelDeployments } from "../../renderer/view-deployments.mjs";
 import { createViewMembership, rehomeMap } from "../../renderer/workspace-rehome.mjs";
 import { waitingClaim, waitingSentence, waitingDetail, waitingClock } from "../../../client/waiting-on-you.mjs";
@@ -60,4 +67,8 @@ export const viewContext = () => ({
   // The row menu's Move to background / out of it (instance-background-menu.mjs) offers nothing here: its gate is the
   // route's check, which a suite about other behaviour never answers. instance-background.test.mjs drives the shipped one.
   backgroundMenu: { items: () => [], handles: () => false, run: async () => {} },
+  rosterRowFacts, rowFactsTitle, thisHostName: null, DESKTOP_NOUNS, isMultiDeployment, siblingText, sidebarFoot: { paint() {} }, emptyRosterLine: () => emptyRosterText(DESKTOP_NOUNS),
+  // The pinned Automations row's failure mark (automations-failure.mjs): a roster read asks it; a suite about other
+  // behaviour reads nothing. automations-failure.test.mjs drives the shipped reader.
+  automationsFailure: { refresh: async () => {} },
 });

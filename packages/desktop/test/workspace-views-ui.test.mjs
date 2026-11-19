@@ -16,7 +16,6 @@ import { instanceActionTarget, sameInstanceActionTarget } from "../renderer/inst
 import { instanceSplitPlan } from "../renderer/instance-split.mjs";
 import { runtimeState, unsupportedSession } from "../../client/instance-presentation.mjs";
 import { canAddressRemote, rowReason } from "../../client/remote-address.mjs";
-import { createRuntimeBadge } from "../renderer/identity-marks.mjs";
 import * as vdShared from "../../client/roster-sections.mjs";
 import * as vdView from "../renderer/view-deployments.mjs";
 const vd = { ...vdShared, ...vdView };
@@ -89,12 +88,12 @@ function roster(t, instances, deployments, said = []) {
   const doc = dom.window.document;
   const context = {
     ...tree, ...viewContext(), contextDeployments: deployments, document: doc, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession,
-    canAddressRemote, rowReason, createRuntimeBadge, instanceActionTarget, instanceSplitPlan, connectionGeneration: 0, menuState() {}, runAction: assert.fail, sayInHint: (line) => said.push(line),
+    canAddressRemote, rowReason, instanceActionTarget, instanceSplitPlan, connectionGeneration: 0, menuState() {}, runAction: assert.fail, sayInHint: (line) => said.push(line),
     applyChordTitles() {}, updateActiveContexts() {}, getBinding: () => null, formatChord: (c) => c, isMac: true,
     contextRosterEl: doc.querySelector("#instance-roster"), contextWorkspace: "ws:view",
     rosterState: { hasData: true, state: "ready" }, rosterStale: false, contextDeploymentNote: null,
     contextInstances: instances, currentWorkspace: () => "ws:view", workspaceGeneration: () => 0, collapsedInstances: new Set(),
-    rosterTip: { bind() {}, hide() {}, sync() {} }, rosterTipFacts: () => ({}), rosterPrs: { get: () => null, refresh() {} },
+    
     spawnJobs: { rows: () => [], announce: () => false, observe() {}, settling: () => false, check() {} },
     tabs: new Map(), activeTab: null, tabOpenIntents: { applyFocus: (fn) => fn() },
     openTerminalTab: assert.fail, openInstanceStart: assert.fail, openLifecycleDialog: assert.fail, onRosterRowKey: assert.fail,
@@ -142,10 +141,11 @@ test("roster, two deployments: a heading per deployment, by machine, in order, i
   assert.deepEqual(sequence, [`#${LOCAL.id}`, "group:lead", "lead", "dev", "group:independent", "near", `#${DEVBOX.id}`, "group:independent", "far"]);
   assert.equal(list.textContent.includes("oats ·"), false, "rows never repeat the workspace name");
   const far = [...list.querySelectorAll(".ctx-tree-row")].find((r) => r.querySelector(".ctx-name").dataset.name === "far");
-  // The identity line (the product owner, 2026-10-26): the soul, then the repository; the host is the heading's.
-  const meta = far.querySelector(".ctx-meta.ctx-soul-repo");
-  assert.deepEqual([meta.querySelector(".ctx-meta-soul").textContent, meta.querySelector(".ctx-meta-repo").textContent], ["soul", "repo"], "the identity line: soul, then repository");
-  assert.equal(meta.title, "Soul: soul\nRepository: repo");
+  // The identity line (slice 1 of the Desktop UI rework): the soul, then the row's machine, its deployment's.
+  const meta = far.querySelector(".ctx-meta.ctx-row-detail");
+  assert.equal(meta.textContent, "soul · devbox", "the identity line: soul · machine");
+  const near = [...list.querySelectorAll(".ctx-tree-row")].find((r) => r.querySelector(".ctx-name").dataset.name === "near");
+  assert.equal(near.querySelector(".ctx-meta").textContent, "soul · This Mac", "this computer's deployment: its machine label");
 });
 
 test("roster headings: one machine holding two deployments adds the path tail; not reached is marked in words", (t) => {
@@ -164,19 +164,20 @@ test("roster headings: one machine holding two deployments adds the path tail; n
   assert.equal(win.getComputedStyle(heads[1].querySelector(".ctx-deployment-path")).letterSpacing, "normal");
 });
 
-test("roster: a stale deployment (its last re-read failed) is marked in words, and its held rows' Start and actions wait as on a stale roster", (t) => {
+test("roster: a stale deployment (its last re-read failed) is marked in words, and its held rows' start and actions wait as on a stale roster", (t) => {
   const stale = { ...LOCAL2, stale: true, short: "Last read failed", reason: "This deployment's last read failed: the cache is locked. It shows what was last observed." };
   assert.deepEqual(vd.deploymentState(stale), { key: "stale", text: "stale", detail: stale.reason });
   const said = [];
   const list = roster(t, [row("a", LOCAL, { running: false }), row("b", stale, { running: false })], [LOCAL, stale], said);
   const heads = [...list.querySelectorAll(".ctx-deployment")];
   assert.deepEqual(heads.map((h) => h.querySelector(".deployment-mark")?.getAttribute("aria-label") ?? null), [null, "stale"]);
-  const start = (name) => [...list.querySelectorAll(".ctx-tree-row")].find((r) => r.querySelector(".ctx-name")?.dataset.name === name).querySelector(".ctx-start");
-  assert.equal(start("b").getAttribute("aria-disabled"), "true", "the held row waits");
-  assert.equal(start("a").hasAttribute("aria-disabled"), false, "the live deployment's row acts as before");
+  // Slice 1: no Start… tool; a held stopped row's activation starts nothing and says why (its description).
+  const wrap = (name) => [...list.querySelectorAll(".ctx-tree-row")].find((r) => r.querySelector(".ctx-name")?.dataset.name === name);
+  assert.equal(list.querySelector(".ctx-start, .ctx-row-tools"), null, "no row tools");
+  assert.equal(wrap("b").querySelector(".ctx-inst").getAttribute("aria-description"), tree.ROSTER_STALE_TITLE, "the held row waits");
+  assert.equal(wrap("a").querySelector(".ctx-inst").hasAttribute("aria-description"), false, "the live deployment's row acts as before");
   // Its context menu (#1559: no ⋯ trigger) is held the same: asked, it opens nothing and says why; the live one's opens.
   assert.equal(list.querySelector(".ctx-instance-actions"), null, "no ⋯ trigger");
-  const wrap = (name) => start(name).closest(".ctx-tree-row");
   const ask = (name) => wrap(name).querySelector(".ctx-inst").dispatchEvent(new list.ownerDocument.defaultView.MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
   ask("b");
   assert.deepEqual(said, [tree.ROSTER_STALE_TITLE]); assert.notEqual(wrap("b").querySelector(".ctx-instance-menu").dataset.instanceMenuOpen, "true");

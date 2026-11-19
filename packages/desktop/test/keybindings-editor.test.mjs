@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import {
   registerAction, setBinding, resetAllBindings, getBinding, defaultBinding, keymapConflicts, setChordFamily, activeChordFamily, runAction, listActions,
-  matchEvent, setActiveContexts,
+  matchEvent, setActiveContexts, DEFAULT_KEYMAPS, TERMINAL_ALLOWLIST,
 } from "../renderer/keybindings.mjs";
 import { createKeybindingsEditor, groupActions, shortcutMatches, CHORD_FAMILY_WORDS } from "../renderer/keybindings-editor.mjs";
 import { createChordFamily } from "../renderer/chord-family.mjs";
@@ -343,20 +343,19 @@ test("a stored rebind that clashes with another binding is surfaced, never chang
   assert.equal(doc.querySelector(".kb-clashes").hidden, true);
 });
 
-test("shell wiring: the settings cog and its Keyboard shortcuts… item carry the clash marker, recomputed on keymap change", async () => {
+test("shell wiring: the foot's ? (Keyboard shortcuts) carries the clash marker, recomputed on keymap change", async () => {
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../renderer/shell.mjs", import.meta.url), "utf8");
   const mark = src.match(/function markShortcutClashes\(\) \{[^]*?\n\}/)?.[0];
   assert.ok(mark, "markShortcutClashes");
   assert.match(mark, /keymapConflicts\(isMac\)/);
-  assert.match(mark, /settingsMenu\.items\.find\(el => el\.dataset\.menuAction === "app\.shortcuts"\)/, "the menu's Keyboard shortcuts… item");
-  assert.match(mark, /for \(const button of \[document\.getElementById\("sidebar-settings"\), item\]\) \{[^]*?classList\.toggle\("has-clash"[^]*?aria-description/,
-    "the cog and the item, both");
+  assert.match(mark, /for \(const button of \[document\.getElementById\("sidebar-help"\)\]\) \{[^]*?classList\.toggle\("has-clash"[^]*?aria-description/,
+    "the foot's ? (slice 1: the settings cog and its menu are gone)");
   assert.match(src, /onKeymapChange\(\(\) => \{[^]*?markShortcutClashes\(\)/);
   const css = readFileSync(new URL("../renderer/shell.css", import.meta.url), "utf8");
   // --danger: a key no longer does what it says (yellow means needs input only, 2026-10-26).
-  assert.match(css, /#sidebar-settings\.has-clash::after \{[^}]*background: var\(--danger\)/);
-  assert.match(css, /\.sidebar-settings-menu button\.has-clash > \.sidebar-settings-label::after \{[^}]*background: var\(--danger\)/);
+  assert.match(css, /#sidebar-help\.has-clash::after \{[^}]*background: var\(--danger\)/);
+  assert.doesNotMatch(css, /sidebar-settings/, "no rule is left for the cog");
   assert.doesNotMatch(css, /#sidebar-shortcuts/, "the foot's shortcuts button is gone");
 });
 
@@ -1138,28 +1137,14 @@ test("Most useful follows a rebind, an unbind and a reset in the list below, the
   assert.equal(f.doc.querySelector(".kb-useful").hidden, false);
 });
 
-// Show only the current workspace (2026-10-23): the shell's own registration, run as shipped, is a Global row of the
-// shortcuts list with its label and default chord (⌥⇧⌘O on macOS, Ctrl+Alt+Shift+O elsewhere), found by search, in
-// the palette's list of actions, and running it toggles the list of workspaces (workspaceLabel.toggleCurrentOnly).
-for (const isMac of [true, false]) test(`Show only the current workspace: the shell's registration is a Global row (${isMac ? "macOS" : "Linux/Windows"}), and runs the toggle`, (t) => {
+// Show only the current workspace (2026-10-23) left in slice 1 of the Desktop UI rework: no registration, no default
+// chord (⌥⇧⌘O / Ctrl+Alt+Shift+O is free again), no terminal allowance, no row in the shortcuts list.
+test("Show only the current workspace is gone: no registration, no default chord, no terminal allowance", () => {
   const shell = readFileSync(new URL("../renderer/shell.mjs", import.meta.url), "utf8");
-  const line = shell.match(/^registerAction\(\{ id: "workspaces\.currentOnly",[^\n]*\}\);$/m)?.[0];
-  assert.ok(line, "the shipped registration");
-  assert.match(line, /run: \(\) => workspaceLabel\.toggleCurrentOnly\(\)/);
-  const f = setupLinux(t, { isMac });
-  let toggled = 0;
-  const off = runInNewContext(line, { registerAction, workspaceLabel: { toggleCurrentOnly: () => { toggled++; } } });
-  t.after(off);
-  const action = listActions().find((a) => a.id === "workspaces.currentOnly");
-  assert.deepEqual([action?.label, action?.context], ["Show only the current workspace", "global"], "the palette lists it by this label");
-  f.editor.open();
-  const row = f.rowFor("Show only the current workspace");
-  assert.ok(row, "listed"); assert.equal(row.closest(".kb-group").dataset.label, "Global");
-  assert.equal(row.querySelector(".kb-chord").textContent, isMac ? "⌥⇧⌘O" : "CtrlAltShiftO", "its keycaps");
-  f.type("current workspace"); assert.ok(f.shown().includes("Show only the current workspace"));
-  assert.equal(toggled, 0, "listing it runs nothing");
-  runAction("workspaces.currentOnly"); runAction("workspaces.currentOnly");
-  assert.equal(toggled, 2, "each run toggles once");
+  assert.doesNotMatch(shell, /workspaces\.currentOnly/);
+  for (const keymap of Object.values(DEFAULT_KEYMAPS)) assert.equal(Object.hasOwn(keymap, "workspaces.currentOnly"), false);
+  assert.equal(TERMINAL_ALLOWLIST.includes("workspaces.currentOnly"), false);
+  assert.equal(listActions().some((a) => a.id === "workspaces.currentOnly"), false);
 });
 
 // #1502: the Tabs group's one read-only row says how to scroll back in a terminal: the wheel, Shift+PgUp and

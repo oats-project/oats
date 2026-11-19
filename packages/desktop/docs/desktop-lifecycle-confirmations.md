@@ -470,8 +470,8 @@ The roster says what a home is when it is not an ordinary instance, in text
   **Retire failed**, muted "Retire it again to finish". The kernel's recorded
   message (with its code), or its code alone when it recorded no message, is
   said after "OATS says:" through the display
-  filter (the row's description, the hover card's status, the instance panel's
-  action note, the overview's popover).
+  filter (the row's description, the instance panel's action note, the
+  overview's popover).
 - `retire` state `interrupted` (a scheduled completion is gone with no
   outcome): **Retire didn't finish**, muted "Retire it again to complete".
 
@@ -501,7 +501,7 @@ target `workspace`) is one the read observed live (`deploymentState`), so a
 read of another workspace, or one whose deployment of the row is stale, not
 reached or not observed, releases nothing. A failed read, or one served while a
 newer observation is still running (`refreshing`), releases nothing either. Every surface draws rows through
-`shownRows`, so the roster, the instance panel, the hover card and the overview
+`shownRows`, so the roster, the instance panel and the overview
 (through `ctx.retiringRows` and `ctx.subscribeRetires`) agree, and a change of
 the held set repaints them without a read. An open terminal tab is left alone.
 

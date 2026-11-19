@@ -1,6 +1,7 @@
 // Spec D: "Needs input" on the sidebar roster: a waiting row's dot is the needs-input mark (the product owner,
 // 2026-10-26), and a collapsed parent rolls up the waiting rows it hides. Executes the shipped roster render (shell.mjs
-// renderContextRoster + needsInputMark) and the shipped card (roster-tip.mjs) against a stub store;
+// renderContextRoster + needsInputMark) against a stub store (slice 1 of the Desktop UI rework: no hover card; a row's
+// waiting facts are its description, and the instance panel's Needs input line, context-panel-waiting.test.mjs);
 // no shell startup, HTTP, Electron, CLI or session.
 import test from "node:test";
 import { viewContext } from "./helpers/view-context.mjs";
@@ -17,12 +18,9 @@ import { instanceActionTarget, sameInstanceActionTarget } from "../renderer/inst
 import { instanceSplitPlan } from "../renderer/instance-split.mjs";
 import { runtimeState, unsupportedSession } from "../../client/instance-presentation.mjs";
 import { canAddressRemote, rowReason } from "../../client/remote-address.mjs";
-import { createRuntimeBadge } from "../renderer/identity-marks.mjs";
 import { iconElement } from "../renderer/shell-icons.mjs";
-import { createRosterTip, rosterTipFacts } from "../renderer/roster-tip.mjs";
 import { waitingClock } from "../../client/waiting-on-you.mjs";
 import { createTabChrome, setTabTitle } from "../renderer/tab-a11y.mjs";
-import { prChip, prText } from "../renderer/roster-pr.mjs";
 import { NO_ANSWER_CODE, unservedError } from "../renderer/deployment-header.mjs";
 import { remotePanel, unavailableGroups } from "../../client/remote-roster.mjs";
 import { kernelRemoteRow, kernelRemoteGroup, remoteRows } from "./helpers/kernel-remote-row.mjs";
@@ -46,16 +44,13 @@ function fixture(t, extra = {}) {
   const dom = new JSDOM(html, { pretendToBeVisual: true });
   t.after(() => dom.window.close());
   const doc = dom.window.document;
-  const tips = new Map();
   const context = {
-    ...tree, document: doc, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason, createRuntimeBadge,
+    ...tree, document: doc, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason,
     iconElement, setTabTitle, NO_ANSWER_CODE, unservedError, instanceActionTarget, instanceSplitPlan, connectionGeneration: 0, menuState() {}, sayInHint() {}, runAction: assert.fail,
     applyChordTitles() {}, updateActiveContexts() {}, getBinding: () => null, formatChord: c => c, isMac: true,
     contextRosterEl: doc.querySelector("#instance-roster"), contextWorkspace: "A",
     rosterState: { hasData: true, state: "ready" }, rosterStale: false, contextDeploymentNote: null, ...viewContext(),
     currentWorkspace: () => "A", workspaceGeneration: () => 0, collapsedInstances: new Set(),
-    rosterTip: { bind(el, facts) { tips.set(el.dataset.treeInstance, facts); }, hide() {}, sync() {} }, rosterTipFacts,
-    rosterPrs: { get: () => null, refresh() {} },
     spawnJobs: { rows: () => [], announce: () => false, check() {}, ...(extra.jobs || {}) },
     tabs: new Map(), activeTab: null, tabOpenIntents: { applyFocus: f => f() },
     openTerminalTab() {}, openInstanceStart() {}, openLifecycleDialog: assert.fail, onRosterRowKey() {},
@@ -74,8 +69,8 @@ function fixture(t, extra = {}) {
   const marks = name => [...(row(name)?.querySelectorAll(".ctx-dot.waiting, .ctx-attn") || [])];
   const own = name => row(name)?.querySelector(".ctx-dot.waiting") ?? null;
   const rollup = name => row(name)?.querySelector(".ctx-attn") ?? null;
-  const facts = name => tips.get(row(name)?.dataset.treeInstance)?.();
-  const fact = (name, key) => facts(name)?.rows.find(([k]) => k === key)?.[1];
+  // A row's description: its waiting facts (slice 1: the hover card's, in absolute time), else nothing.
+  const said = name => row(name)?.getAttribute("aria-description") ?? null;
   // A terminal tab as openTerminalTabInner draws it, in workspace "A" unless given.
   const openTab = (inst, workspace = "A") => {
     const id = context.tabs.size + 1, chrome = createTabChrome(doc, id, inst.instance, true, { dot: "on" });
@@ -84,10 +79,10 @@ function fixture(t, extra = {}) {
     context.tabs.set(id, tab);
     return tab;
   };
-  return { doc, dom, context, render, failRosterUnserved, openTab, list, row, marks, own, rollup, facts, fact };
+  return { doc, dom, context, render, failRosterUnserved, openTab, list, row, marks, own, rollup, said };
 }
 
-test("a running, waiting row's dot is the needs-input mark; its meta line stays; “Needs input” stays in the row's accessible name", async t => {
+test("a running, waiting row's dot is the needs-input mark; its second line stays; “Needs input” stays in the row's accessible name", async t => {
   const u = fixture(t);
   u.render([instance("dev-a", undefined, { waitingOnYou: claim(), branch: "feature/x", color: "sage" }), instance("dev-b")]);
   const dot = u.own("dev-a");
@@ -101,28 +96,30 @@ test("a running, waiting row's dot is the needs-input mark; its meta line stays;
   assert.deepEqual([...svg.children].map(el => el.getAttribute("class")), ["attn-disc", "attn-glyph", "attn-glyph"], "a disc with the “!” cut out");
   assert.equal(svg.getAttribute("aria-hidden"), "true", "the words carry the state; the mark is decoration");
   assert.equal(dot.dataset.instanceColor, undefined, "the instance's colour does not apply to it");
-  // No pill: the meta line keeps its soul and repository.
+  // No pill: the second line keeps its soul and machine.
   assert.equal(u.rollup("dev-a"), null, "no Needs input pill");
   const line = u.row("dev-a").querySelector(".ctx-meta");
-  assert.equal(line.className, "ctx-meta ctx-soul-repo");
-  assert.deepEqual([...line.children].map(el => [el.className, el.textContent]), [["ctx-meta-soul", "dev"], ["ctx-meta-repo", "desktop-repo"]]);
-  assert.equal(line.title, "Soul: dev\nRepository: desktop-repo");
+  assert.equal(line.className, "ctx-meta ctx-row-detail");
+  assert.equal(line.textContent, "dev · This Mac");
   // The words, once, right after the name: visually hidden (the name's own sr-only copy is its real name).
-  const said = u.row("dev-a").querySelectorAll(".ctx-copy > .sr-only");
+  const said = u.row("dev-a").querySelectorAll(".ctx-copy > .sr-only:not(.ctx-state, .ctx-relation)");
   assert.equal(said.length, 1);
   assert.equal(said[0].textContent, " Needs input");
   assert.equal(said[0].previousElementSibling.className, "ctx-name");
-  assert.equal(spokenText(u.row("dev-a")), "dev-a Needs inputdevdesktop-repo", "in the row button's name");
+  assert.equal(spokenText(u.row("dev-a")), "dev-a Needs inputdev · This Mac, running", "in the row button's name, its state last");
   assert.match(spokenText(u.row("dev-a")).replace(/dev-a/, ""), /^ Needs input/, "said once, after the name");
   assert.equal(u.row("dev-a").querySelector(".ctx-name-line"), null, "the name line is the name alone");
-  // The repository and branch stay in the hover card.
-  assert.deepEqual([u.fact("dev-a", "Repo"), u.fact("dev-a", "Branch")], ["desktop-repo", "feature/x"]);
+  // No repository and no branch on the row (the instance panel's); its description says the wait, in absolute time.
+  assert.doesNotMatch(u.row("dev-a").textContent, /desktop-repo|feature/);
+  assert.equal(u.said("dev-a"), `Needs input: Waiting for a tool approval since ${waitingClock(SINCE)}`);
   const kept = u.row("dev-b").querySelector(".ctx-meta");
-  assert.equal(kept.className, "ctx-meta ctx-soul-repo", "a row without a mark keeps its meta line");
-  assert.deepEqual([...kept.children].map(el => [el.className, el.textContent]), [["ctx-meta-soul", "dev"], ["ctx-meta-repo", "desktop-repo"]]);
+  assert.equal(kept.className, "ctx-meta ctx-row-detail", "a row without a mark keeps its second line");
+  assert.equal(kept.textContent, "dev · This Mac");
+  assert.equal(u.said("dev-b"), null, "a row with nothing to wait on has no description");
   assert.ok(u.row("dev-b").querySelector(".ctx-dot.on"), "a row that is not waiting keeps its liveness dot");
   assert.equal(u.marks("dev-b").length, 0);
-  assert.equal(u.row("dev-b").querySelector(".ctx-copy > .sr-only"), null);
+  assert.equal(u.row("dev-b").querySelector(".ctx-copy > .sr-only:not(.ctx-state, .ctx-relation)"), null);
+  assert.deepEqual([u.row("dev-a"), u.row("dev-b")].map(r => r.querySelector(".ctx-state").textContent), [", running", ", running"], "each row's state in words");
   assert.equal(u.row("dev-b").querySelector(".ctx-name-line"), null, "a row without marks keeps its plain name");
 });
 
@@ -159,14 +156,14 @@ test("never on a row whose Desktop liveness is not running, whose server was not
   const u = fixture(t);
   u.render(rows);
   for (const r of rows) assert.equal(u.marks(r.instance).length, 0, r.instance);
-  for (const r of rows) assert.equal(u.fact(r.instance, "Waiting"), undefined, `${r.instance}: no card row either`);
+  for (const r of rows) assert.doesNotMatch(u.said(r.instance) ?? "", /Needs input/, `${r.instance}: nor in its description`);
   const stale = fixture(t, { context: { rosterStale: true } });
   stale.render([instance("dev-a", undefined, waiting)]);
   assert.equal(stale.marks("dev-a").length, 0, "a held-stale row's claim is last-known: unknown");
-  assert.equal(stale.fact("dev-a", "Waiting"), undefined);
+  assert.doesNotMatch(stale.said("dev-a") ?? "", /Needs input/);
 });
 
-test("a remote row in the kernel's shape (runtimeState null: not reported) shows the mark, the card and its tab's cue (#582)", async t => {
+test("a remote row in the kernel's shape (runtimeState null: not reported) shows the mark, its description and its tab's cue (#582)", async t => {
   // What the renderer receives for a kernel roster row: every relayed fact null unless the host reported it.
   const [waitingRow, quiet] = remoteRows([kernelRemoteRow("dev-r", { waitingOnYou: claim({ reason: "question", message: "Which branch?" }) }), kernelRemoteRow("dev-q")]);
   assert.deepEqual([waitingRow.running, waitingRow.runtimeState, waitingRow.serverUnreached], [true, null, false]);
@@ -175,8 +172,7 @@ test("a remote row in the kernel's shape (runtimeState null: not reported) shows
   u.render([waitingRow, quiet]);
   assert.equal(u.own("dev-r")?.className, "ctx-dot waiting");
   assert.equal(u.marks("dev-q").length, 0);
-  assert.equal(u.fact("dev-r", "Waiting"), `Asked you a question · 5 min (since ${waitingClock(SINCE)})`);
-  assert.equal(u.fact("dev-r", "Message"), "Which branch?");
+  assert.equal(u.said("dev-r"), `Needs input: Which branch? since ${waitingClock(SINCE)}`);
   assert.ok(tabCue(tab), "its open terminal tab is lit");
   assert.equal(tab.triggerEl.title, `dev-r\nNeeds input: Which branch? since ${waitingClock(SINCE)}`);
   // The same row once its server stops answering: last-known, so nothing is shown.
@@ -204,90 +200,72 @@ test("the mark disappears on the first repaint after the claim clears", async t 
   assert.equal(u.marks("dev-a").length, 0, "absent is unknown, never a mark");
 });
 
-test("with New: New stays on the name line, Needs input is said after it, and the meta line stays", async t => {
+test("with New: New stays on the name line, Needs input is said after it, and the second line stays", async t => {
   const u = fixture(t, { jobs: { isNew: (_ws, i) => i.instance === "dev-a" } });
   u.render([instance("dev-a", undefined, { waitingOnYou: claim() })]);
   const line = u.row("dev-a").querySelector(".ctx-name-line");
   assert.deepEqual([...line.children].map(el => el.className), ["ctx-name", "ctx-new"]);
   assert.deepEqual([line.nextElementSibling.className, line.nextElementSibling.textContent], ["sr-only", " Needs input"]);
-  assert.equal(line.nextElementSibling.nextElementSibling.className, "ctx-meta ctx-soul-repo");
-  assert.equal(spokenText(u.row("dev-a")), "dev-aNew Needs inputdevdesktop-repo");
+  assert.equal(line.nextElementSibling.nextElementSibling.className, "ctx-meta ctx-row-detail");
+  assert.equal(spokenText(u.row("dev-a")), "dev-aNew Needs inputdev · This Mac, running");
   assert.ok(u.own("dev-a"));
 });
 
-test("a waiting row with a pull request: no chip and no branch on the row; the card and the row tools keep the PR", async t => {
-  const pr = { home: "/synthetic/dev-a", number: 317, state: "OPEN", isDraft: false, url: "https://github.com/o/r/pull/317" };
-  const u = fixture(t, { context: { prChip, prText, rosterPrs: { get: home => home === pr.home ? pr : null, refresh() {} } } });
-  u.render([instance("dev-a", undefined, { waitingOnYou: claim(), branch: "feature/x" }), instance("dev-b", undefined, { home: pr.home.replace("dev-a", "dev-b") })]);
+test("a waiting row with a pull request: no chip, no branch and no tool on the row; its context menu opens the pull request", async t => {
+  const u = fixture(t);
+  u.render([instance("dev-a", undefined, { waitingOnYou: claim(), branch: "feature/x" })]);
   assert.equal(u.row("dev-a").querySelector(".ctx-pr"), null, "no chip on the row");
-  assert.equal(u.row("dev-a").querySelector(".ctx-meta").textContent, "devdesktop-repo", "its soul and repository");
+  assert.equal(u.row("dev-a").querySelector(".ctx-meta").textContent, "dev · This Mac", "its soul and machine");
   assert.ok(u.own("dev-a"));
-  assert.equal(u.fact("dev-a", "Pull request"), prText(pr));
-  assert.ok(u.row("dev-a").parentElement.querySelector(".ctx-pr-open"), "its Open pull request tool stays");
+  assert.equal(u.row("dev-a").parentElement.querySelector(".ctx-row-tools, .ctx-pr-open"), null, "no row tools (slice 1)");
+  const menu = u.row("dev-a").parentElement.querySelector(".ctx-instance-menu");
+  assert.ok([...menu.querySelectorAll('[role="menuitem"]')].some(item => item.dataset.action === "open-pr"), "Open pull request… is the menu's");
 });
 
-test("a row with no card (unavailable) whose mark replaced its meta line says the repository and branch in its description; the line keeps its soul and repository title", async t => {
-  // A local root whose state is unknown (unavailable: no card), collapsed over a running, waiting child.
+test("an unavailable row whose mark replaced its second line says its soul and machine in its description", async t => {
+  // A local root whose state is unknown (unavailable), collapsed over a running, waiting child.
   const rows = [instance("root", undefined, { running: null, runtimeState: "unreachable", branch: "feature/root" }), instance("kid", "root", { waitingOnYou: claim() })];
   const u = fixture(t, { context: { collapsedInstances: new Set([tree.collapseKey("A", "/synthetic/root")]) } });
   u.render(rows);
   const root = u.row("root"), said = root.getAttribute("aria-description");
   assert.equal(root.getAttribute("aria-disabled"), "true");
   assert.equal(u.marks("root")[0].textContent, "1 below need input");
-  assert.match(said, / · desktop-repo · feature\/root · 1 below need input: kid$/, "why, then where, then the wait");
-  assert.equal(root.title, said);
-  assert.equal(root.querySelector(".ctx-attn-line").title, "Soul: dev\nRepository: desktop-repo");
+  assert.match(said, / · dev · This Mac · 1 below need input: kid$/, "why, then the line it replaced, then the wait");
+  assert.equal(root.title.split("\n")[0], said);
   // A row whose line is its own (no mark) keeps its description as it was.
   u.render([instance("root", undefined, { running: null, runtimeState: "unreachable", branch: "feature/root" })]);
-  assert.doesNotMatch(u.row("root").getAttribute("aria-description") ?? "", /desktop-repo/);
+  assert.doesNotMatch(u.row("root").getAttribute("aria-description") ?? "", /This Mac/);
+  // An enabled row's roll-up says the same, before the wait.
+  u.render(rows.map(r => r.instance === "root" ? { ...r, running: true, runtimeState: "running" } : r));
+  assert.equal(u.said("root"), "dev · This Mac · 1 below need input: kid");
 });
 
-// The meta line (the product owner, 2026-10-26): the soul at the left, the repository at the right, in two spans; no
-// branch and no pull request chip on it (the hover card keeps both, the row tools the PR's link). Its title names
-// both. A waiting row keeps it (its dot is the mark); the roll-up still replaces the whole line. In CSS the soul is
-// cut first; the repository keeps min(10ch, 100%) of the line.
-test("the meta line: the soul left, the repository right, no branch and no PR chip; its title names both; a waiting row keeps it", async t => {
-  const pr = { home: "/synthetic/dev-a", number: 317, state: "OPEN", isDraft: false, url: "https://github.com/o/r/pull/317" };
-  const u = fixture(t, { context: { prChip, prText, rosterPrs: { get: home => home === pr.home ? pr : null, refresh() {} } } });
-  u.render([instance("dev-a", undefined, { branch: "feature/x", agent: "desktop-dev" }),
+// The second line (slice 1 of the Desktop UI rework): `<soul> · <machine>`, one span, the shared row facts; no
+// repository, branch, pull request or harness (the instance panel's). A row whose state is unknown keeps both (its
+// reason is its description), and a waiting row keeps it (its dot is the mark); the roll-up still replaces it.
+test("the second line: soul · machine only, no repository, branch, PR or harness; an unknown row and a waiting row keep it", async t => {
+  const u = fixture(t);
+  u.render([instance("dev-a", undefined, { branch: "feature/x", agent: "desktop-dev", harness: "claude" }),
     instance("dev-u", undefined, { running: null, runtimeState: "unreachable", branch: "feature/u", repoName: "other-repo" }),
     instance("dev-w", undefined, { waitingOnYou: claim(), branch: "feature/w" })]);
   const meta = u.row("dev-a").querySelector(".ctx-meta");
-  assert.equal(meta.className, "ctx-meta ctx-soul-repo");
+  assert.equal(meta.className, "ctx-meta ctx-row-detail");
   assert.equal(meta.previousElementSibling.className, "ctx-name", "under the name");
-  assert.deepEqual([...meta.childNodes].map(el => [el.className, el.textContent]),
-    [["ctx-meta-soul", "desktop-dev"], ["ctx-meta-repo", "desktop-repo"]], "the soul first (left), then the repository (right), nothing else");
-  assert.equal(meta.title, "Soul: desktop-dev\nRepository: desktop-repo");
-  assert.doesNotMatch(meta.textContent, /feature/, "no branch on the line");
-  assert.equal(meta.querySelector(".ctx-pr, .ctx-meta-lead, .ctx-meta-tail"), null, "no PR chip on the line");
-  assert.equal(u.row("dev-a").querySelector(".ctx-pr"), null, "nor anywhere on the row");
-  assert.doesNotMatch(u.row("dev-a").textContent, /#317|feature/);
-  // The hover card keeps the branch and the pull request; the row tools the PR's link.
-  assert.deepEqual([u.fact("dev-a", "Repo"), u.fact("dev-a", "Branch"), u.fact("dev-a", "Pull request")], ["desktop-repo", "feature/x", prText(pr)]);
-  assert.ok(u.row("dev-a").parentElement.querySelector(".ctx-pr-open"), "its Open pull request tool stays");
-  // A row's reason label follows the soul, on the soul's side; the repository stays on its own.
-  const unknown = u.row("dev-u").querySelector(".ctx-meta");
-  assert.deepEqual([...unknown.childNodes].map(el => [el.className, el.textContent]),
-    [["ctx-meta-soul", "dev · state unknown"], ["ctx-meta-repo", "other-repo"]]);
-  assert.equal(unknown.title, "Soul: dev\nRepository: other-repo");
+  assert.equal(meta.textContent, "desktop-dev · This Mac");
+  assert.equal(meta.children.length, 0, "one line of text");
+  assert.equal(u.row("dev-a").querySelector(".ctx-pr, .runtime-badge, .ctx-runtime"), null, "no chip and no harness badge");
+  assert.doesNotMatch(u.row("dev-a").textContent, /#317|feature|desktop-repo/);
+  // A row whose state is unknown: the same two facts; its reason is its title and description.
+  assert.equal(u.row("dev-u").querySelector(".ctx-meta").textContent, "dev · This Mac");
+  assert.equal(u.said("dev-u"), "dev-u: status unknown", "its reason, as its description");
   // A waiting row's line is the same: its dot carries the mark (the product owner, 2026-10-26).
   const line = u.row("dev-w").querySelector(".ctx-meta");
-  assert.equal(line.className, "ctx-meta ctx-soul-repo");
-  assert.deepEqual([...line.childNodes].map(el => [el.className, el.textContent]), [["ctx-meta-soul", "dev"], ["ctx-meta-repo", "desktop-repo"]]);
-  assert.doesNotMatch(line.textContent, /feature|Needs input/);
-  assert.equal(line.title, "Soul: dev\nRepository: desktop-repo");
-  // CSS: one flex line; the soul takes the left and is cut with an ellipsis (min-width 0), the repository sits at
-  // the right in the mono face and keeps min(10ch, 100%) before it is cut too.
+  assert.equal(line.textContent, "dev · This Mac");
+  // CSS: one line, muted, in the UI face, cut at its end.
   const rule = selector => css.match(new RegExp(`^${selector.replace(/[.]/g, "\\.")} \\{([^}]*)\\}`, "m"))?.[1].replace(/\s+/g, " ");
-  const line_ = rule(".ctx-meta.ctx-soul-repo"), soul = rule(".ctx-meta-soul"), repo = rule(".ctx-meta-repo");
-  assert.ok(line_ && soul && repo, "the three rules are shipped");
-  assert.match(line_, /display: flex;/); assert.match(line_, /width: 100%;/);
-  assert.match(soul, /flex: 1 1000 auto;/, "the soul takes the line's left, and is cut first: its shrink is far above the repository's"); assert.match(soul, /min-width: 0;/, "and can be cut to nothing");
-  assert.match(repo, /flex: 0 1 auto;/); assert.match(repo, /min-width: min\(10ch, 100%\);/, "the repository keeps about 10ch");
-  assert.match(repo, /text-align: right;/); assert.match(repo, /font-family: var\(--mono\);/);
-  for (const r of [soul, repo]) {
-    assert.match(r, /overflow: hidden;/); assert.match(r, /text-overflow: ellipsis;/); assert.match(r, /white-space: nowrap;/);
-  }
+  assert.match(rule(".ctx-meta.ctx-row-detail"), /color: var\(--muted\);/);
+  assert.doesNotMatch(rule(".ctx-meta.ctx-row-detail"), /--mono/);
+  assert.match(rule(".ctx-meta"), /text-overflow: ellipsis;/); assert.match(rule(".ctx-meta"), /white-space: nowrap;/);
 });
 
 test("a held home keeps its state on the meta line; its dot is the mark and its description says the wait", async t => {
@@ -295,7 +273,7 @@ test("a held home keeps its state on the meta line; its dot is the mark and its 
   u.render([instance("dev-a", undefined, { waitingOnYou: claim(), retireInFlight: true })]);
   assert.equal(u.rollup("dev-a"), null, "the held state wins the line");
   assert.ok(u.own("dev-a"), "the dot is the mark whatever the row's state");
-  assert.equal(u.row("dev-a").querySelector(".ctx-copy > .sr-only"), null, "its description says it, so its name does not");
+  assert.equal(u.row("dev-a").querySelector(".ctx-copy > .sr-only:not(.ctx-state, .ctx-relation)"), null, "its description says it, so its name does not");
   assert.equal(u.row("dev-a").querySelector(".ctx-meta").className, "ctx-meta ctx-spawn-state");
   assert.match(u.row("dev-a").getAttribute("aria-description"), /Needs input: Waiting for a tool approval since /);
 });
@@ -310,54 +288,22 @@ test("CSS: the roll-up's pill keeps its size, paints its own opaque surface with
   assert.doesNotMatch(css, /\.ctx-attn[^{]*\{[^}]*animation/);
 });
 
-test("the card shows the reason, the message and the age, computed when shown", async t => {
-  const u = fixture(t);
-  u.render([instance("dev-a", undefined, { waitingOnYou: claim({ message: "Allow Bash(rm -rf build)?" }) }),
-    instance("dev-b", undefined, { waitingOnYou: claim({ reason: "approval" }) })]);
-  t.mock.timers.enable({ apis: ["Date"], now: Date.parse(SINCE) + 3 * 3600e3 + 59 * 60e3 });
-  assert.equal(u.fact("dev-a", "Waiting"), `Waiting for a tool approval · 3 h (since ${waitingClock(SINCE)})`);
-  assert.equal(u.fact("dev-a", "Message"), "Allow Bash(rm -rf build)?");
-  const keys = u.facts("dev-a").rows.map(([k]) => k);
-  assert.equal(keys.indexOf("Waiting"), keys.indexOf("Status") + 1, "after Status");
-  assert.equal(u.fact("dev-b", "Waiting"), `Needs input · 3 h (since ${waitingClock(SINCE)})`, "an unknown reason is never shown raw: the card has no tag, so its Waiting fact says the shared word once");
-  assert.equal(u.fact("dev-b", "Message"), undefined, "no message, no row");
-  t.mock.timers.setTime(Date.parse(SINCE) + 2 * 86400e3 + 5);
-  assert.equal(u.fact("dev-a", "Waiting"), `Waiting for a tool approval · 2 d (since ${waitingClock(SINCE)})`, "not frozen at paint");
-  assert.match(u.fact("dev-a", "Waiting"), /\(since Oct \d{1,2}, \d\d:\d\d\)$/, "two days later the start carries its date (#559)");
-});
-
 // #584 finding 12: the notes eventsUnsafe withholds (a link, a "token: x") read as the reason in words.
 const WITHHELD = [["See https://github.com/awebai/oats/pull/552", "attention", "Asked for your attention"],
   ["Which token: A or B?", "question", "Asked you a question"], ["api key: rotate now?", "approval", "Needs input"]];
 
-test("a withheld note: the card shows the reason in Waiting and no Message row, never “[withheld]” (#584)", async t => {
+test("a withheld note: the row's description says the reason in words, never “[withheld]” (#584)", async t => {
   const u = fixture(t);
   const rows = WITHHELD.map(([message, reason], n) => instance(`dev-${n}`, undefined, { waitingOnYou: claim({ message, reason }) }));
-  t.mock.timers.enable({ apis: ["Date"], now: Date.parse(SINCE) + 5 * 60e3 });
   u.render([...rows, instance("dev-safe", undefined, { waitingOnYou: claim({ message: "Proceed?", reason: "question" }) })]);
   WITHHELD.forEach(([message, , label], n) => {
     assert.ok(u.own(`dev-${n}`), "the claim is kept");
-    assert.equal(u.fact(`dev-${n}`, "Waiting"), `${label} · 5 min (since ${waitingClock(SINCE)})`, message);
-    assert.equal(u.fact(`dev-${n}`, "Message"), undefined, "the Waiting row already says it");
-    assert.doesNotMatch(JSON.stringify(u.facts(`dev-${n}`)), /withheld/i);
+    // A reason with no words of its own (approval) adds none: the shared word is said once.
+    const expected = label === "Needs input" ? `Needs input since ${waitingClock(SINCE)}` : `Needs input: ${label} since ${waitingClock(SINCE)}`;
+    assert.equal(u.said(`dev-${n}`), expected, message);
+    assert.doesNotMatch(u.said(`dev-${n}`), /withheld/i);
   });
-  assert.equal(u.fact("dev-safe", "Message"), "Proceed?", "a safe note still has its row");
-});
-
-test("the card renders the message as text: markup is shown literally, never parsed", async t => {
-  const dom = new JSDOM("<!doctype html><body></body>", { pretendToBeVisual: true });
-  t.after(() => dom.window.close());
-  const doc = dom.window.document, tip = createRosterTip(doc);
-  const row = doc.createElement("button"); row.dataset.treeInstance = "/synthetic/dev-a"; doc.body.append(row);
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  tip.bind(row, () => rosterTipFacts(instance("dev-a", undefined, { waitingOnYou: claim({ message: "<b>bold</b><script>x()</script>" }) }), "Open dev-a terminal"));
-  row.dispatchEvent(new dom.window.Event("mouseenter"));
-  t.mock.timers.tick(400);
-  const card = doc.querySelector(".ctx-tip");
-  assert.equal(card.hidden, false);
-  const message = [...card.querySelectorAll(".ctx-tip-fact")].find(f => f.querySelector("dt").textContent === "Message");
-  assert.equal(message.querySelector("dd").textContent, "<b>bold</b><script>x()</script>");
-  assert.equal(card.querySelector("b, script"), null, "no element created from the message");
+  assert.equal(u.said("dev-safe"), `Needs input: Proceed? since ${waitingClock(SINCE)}`, "a safe note is said");
 });
 
 test("a collapsed parent surfaces waiting rows its collapse hides; expanding it hands the marks back", async t => {
@@ -372,26 +318,24 @@ test("a collapsed parent surfaces waiting rows its collapse hides; expanding it 
   assert.equal(mark.textContent, "2 below need input", "the visible “2 below” plus the visually hidden rest");
   assert.equal(mark.querySelector(".sr-only").textContent, " need input");
   assert.match(u.row("root").textContent, /2 below need input/, "the row's accessible name says it");
-  assert.equal(u.fact("root", "Below"), "2 need input: dev-a, dev-b");
-  assert.equal(u.fact("root", "Waiting"), undefined, "root itself is not waiting");
+  assert.equal(u.said("root"), "dev · This Mac · 2 below need input: dev-a, dev-b", "the line the mark replaced, then the rows it stands for");
   assert.equal(u.marks("solo").length, 0);
   collapsed.clear();
   u.render(rows);
   assert.equal(u.marks("root").length, 0, "the roll-up is derived on every paint");
   assert.deepEqual(["dev-a", "dev-b"].map(n => u.marks(n).map(m => m.className)), [["ctx-dot waiting"], ["ctx-dot waiting"]]);
-  assert.equal(u.fact("root", "Below"), undefined);
+  assert.equal(u.said("root"), null);
 });
 
-test("a waiting, collapsed parent: its dot is the mark and its meta line the roll-up; its card names the rest", async t => {
+test("a waiting, collapsed parent: its dot is the mark and its second line the roll-up; its description names the rest", async t => {
   const rows = [instance("root", undefined, { waitingOnYou: claim() }), instance("dev-a", "root", { waitingOnYou: claim() })];
   const u = fixture(t, { context: { collapsedInstances: new Set([tree.collapseKey("A", "/synthetic/root")]) } });
   u.render(rows);
   assert.deepEqual(u.marks("root").map(m => [m.className, m.textContent]), [["ctx-dot waiting", ""], ["ctx-attn rollup", "1 below need input"]]);
   assert.equal(u.rollup("root").parentElement.className, "ctx-meta ctx-attn-line");
   // The disclosure's ", 1 below" (the rows under it, the product owner, 2026-11-19) follows the name, then the wait.
-  assert.equal(spokenText(u.row("root")), "root, 1 below Needs input1 below need input", "both, each said once");
-  assert.ok(u.fact("root", "Waiting"));
-  assert.equal(u.fact("root", "Below"), "1 needs input: dev-a");
+  assert.equal(spokenText(u.row("root")), "root, 1 below Needs input1 below need input, running", "both, each said once");
+  assert.equal(u.said("root"), `dev · This Mac · Needs input: Waiting for a tool approval since ${waitingClock(SINCE)} · 1 below need input: dev-a`);
 });
 
 test("names up to three, then “and N more”; nested collapses attribute to the nearest visible ancestor", async t => {
@@ -401,7 +345,7 @@ test("names up to three, then “and N more”; nested collapses attribute to th
   u.render(rows);
   assert.equal(u.row("mid"), undefined);
   assert.equal(u.marks("root")[0].textContent, "5 below need input");
-  assert.equal(u.fact("root", "Below"), "5 need input: k1, k2, k3 and 2 more");
+  assert.equal(u.said("root"), "dev · This Mac · 5 below need input: k1, k2, k3 and 2 more");
 });
 
 test("no roll-up from a stale or non-running row", async t => {
@@ -436,7 +380,7 @@ test("an unavailable row (no card) says it in its title and description: message
   const a = u.row("dev-a"), b = u.row("dev-b"), root = u.row("root");
   assert.equal(a.getAttribute("aria-disabled"), "true");
   assert.match(a.getAttribute("aria-description"), new RegExp(` · Needs input: Proceed\\? since ${waitingClock(SINCE)}$`));
-  assert.equal(a.title, a.getAttribute("aria-description"));
+  assert.equal(a.title.split("\n")[0], a.getAttribute("aria-description"));
   assert.match(b.getAttribute("aria-description"), / · Needs input: Asked you a question since \d\d:\d\d$/);
   assert.ok(u.own("dev-a"));
   assert.match(spokenText(a), /^dev-a Needs input/, "its name says it too, as it did with the pill");
@@ -450,7 +394,7 @@ test("an unavailable row (no card) says it in its title and description: message
     // The card's label for an unknown reason is the tag's own word, so the sentence says it once (#1502).
     const detail = label === "Needs input" ? "" : `: ${label}`;
     assert.ok(said.endsWith(` · Needs input${detail} since ${waitingClock(SINCE)}`), `${message}: ${said}`);
-    assert.equal(u.row(`held-${n}`).title, said);
+    assert.equal(u.row(`held-${n}`).title.split("\n")[0], said);
     assert.doesNotMatch(said, /withheld/i);
   });
   // Painted two days later, the sentence carries the start's date (#559), from the paint time.
@@ -481,7 +425,8 @@ test("a collapse hides only rows of its own section: another deployment's child 
     waiting = at("waiting-d2", "/d2", "lead", { waitingOnYou: claim() }), quiet = at("quiet-d2", "/d2", "lead");
   const rows = [lead, own, waiting, quiet], collapsed = new Set();
   const u = fixture(t, { context: { contextDeployments: [deployment("/d1"), deployment("/d2")], collapsedInstances: collapsed } });
-  const guides = name => [...u.row(name).querySelectorAll(".ctx-guide")].map(g => g.className).join("|");
+  // Slice 1 (D26: no drawn lines): the row's place in its tree is its indent and its relation words.
+  const guides = name => [u.row(name).closest(".ctx-tree-row").style.getPropertyValue("--depth"), u.row(name).querySelector(".ctx-relation")?.textContent ?? ""].join("|");
   u.render(rows);
   const open = { waiting: guides("waiting-d2"), quiet: guides("quiet-d2") };
   collapsed.add(tree.collapseKey("A", tree.instanceId(lead)));
@@ -493,7 +438,7 @@ test("a collapse hides only rows of its own section: another deployment's child 
   const [mark] = u.marks("waiting-d2");
   assert.equal(mark.className, "ctx-dot waiting", "it shows its own mark, not a roll-up");
   assert.equal(u.marks("waiting-d2").length, 1);
-  assert.deepEqual({ waiting: guides("waiting-d2"), quiet: guides("quiet-d2") }, open, "its guides are the same as with /d1's lead expanded");
+  assert.deepEqual({ waiting: guides("waiting-d2"), quiet: guides("quiet-d2") }, open, "its place in the tree is the same as with /d1's lead expanded");
 });
 
 const tabCue = tab => tab.triggerEl.querySelector(":scope > .tab-attn");
@@ -550,7 +495,7 @@ test("a row that cannot open says who made its text in its title and description
   u.render(rows.map(([row]) => row));
   for (const [row, line] of rows) {
     const el = u.row(row.instance);
-    assert.equal(el.title, line, row.instance); assert.equal(el.getAttribute("aria-description"), line, row.instance);
+    assert.equal(el.title.split("\n")[0], line, row.instance); assert.equal(el.getAttribute("aria-description"), line, row.instance);
     assert.equal(el.getAttribute("aria-disabled"), "true");
   }
   assert.equal(u.list.querySelector("b, script"), null, "no element is made from a row's text");
@@ -559,39 +504,9 @@ test("a row that cannot open says who made its text in its title and description
 test("another machine's row: the kernel's text reads under OATS, the reader's own under the Desktop's read of other machines", t => {
   const u = fixture(t), remote = (name, extra) => instance(name, undefined, { server: "box", repoName: "box-repo", addressable: true, running: null, runtimeState: "unknown", serverUnreached: true, ...extra });
   u.render([remote("dev-k", { runtimeError: "E_SSH: no route", runtimeErrorOrigin: "kernel" }), remote("dev-r", { runtimeError: "the read did not answer", runtimeErrorOrigin: "roster-read" }), remote("dev-n", {})]);
-  assert.equal(u.row("dev-k").title, "OATS says: E_SSH: no route");
-  assert.equal(u.row("dev-r").title, "Desktop's read of other machines says: the read did not answer");
-  assert.equal(u.row("dev-n").title, "box-repo was not reached.", "a sentence written here has no lead");
-});
-
-test("the hover card's Status says who made the row's text; the card shows it as text", async t => {
-  const text = "the session did not answer";
-  for (const [origin, line] of shown(text)) {
-    const facts = rosterTipFacts(instance("dev-a", undefined, { running: false, runtimeState: "stopped", runtimeError: text, ...(origin ? { runtimeErrorOrigin: origin } : {}) }), "Start dev-a");
-    assert.equal(facts.rows.find(([key]) => key === "Status")[1], `stopped · ${line}`, String(origin));
-  }
-  const status = extra => rosterTipFacts(instance("dev-a", undefined, { running: false, runtimeState: "stopped", ...extra })).rows.find(([key]) => key === "Status")[1];
-  assert.equal(status({ runtimeErrorOrigin: "kernel" }), "stopped", "a mark beside no text shows nothing");
-  assert.equal(status({ runtimeError: CONTROL, runtimeErrorOrigin: "terminal-probe" }), `stopped · ${DETAIL_WITHHELD}`, "an unsafe text is withheld, under no speaker's name");
-  const dom = new JSDOM("<!doctype html><body></body>", { pretendToBeVisual: true });
-  t.after(() => dom.window.close());
-  const doc = dom.window.document, tip = createRosterTip(doc);
-  const row = doc.createElement("button"); row.dataset.treeInstance = "/synthetic/dev-a"; doc.body.append(row);
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  tip.bind(row, () => rosterTipFacts(instance("dev-a", undefined, { running: false, runtimeState: "stopped", runtimeError: MARKUP, runtimeErrorOrigin: "terminal-probe" }), "Start dev-a"));
-  row.dispatchEvent(new dom.window.Event("mouseenter"));
-  t.mock.timers.tick(400);
-  const card = doc.querySelector(".ctx-tip");
-  const fact = [...card.querySelectorAll(".ctx-tip-fact")].find(f => f.querySelector("dt").textContent === "Status");
-  assert.equal(fact.querySelector("dd").textContent, `stopped · ${SPEAKERS["terminal-probe"]} ${MARKUP}`);
-  assert.equal(card.querySelector("b, script"), null, "no element created from the text");
-});
-
-test("a row that still opens carries its text with its speaker into the card's sentence", t => {
-  const u = fixture(t);
-  u.render([instance("dev-a", undefined, { running: false, runtimeState: "stopped", runtimeError: "the last start failed", runtimeErrorOrigin: "kernel" })]);
-  assert.equal(u.facts("dev-a").why, "OATS says: the last start failed");
-  assert.equal(u.fact("dev-a", "Status"), "stopped · OATS says: the last start failed");
+  assert.equal(u.row("dev-k").title.split("\n")[0], "OATS says: E_SSH: no route");
+  assert.equal(u.row("dev-r").title.split("\n")[0], "Desktop's read of other machines says: the read did not answer");
+  assert.equal(u.row("dev-n").title.split("\n")[0], "box-repo was not reached.", "a sentence written here has no lead");
 });
 
 test("Open in split on a Herdr row: the kernel's reason under OATS, the stand-in for an older kernel's row with no lead", t => {

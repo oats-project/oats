@@ -20,12 +20,12 @@ import { createTerminalSettings, settingsTerminalCSS } from '../renderer/setting
 import { createForgePrPanel } from '../renderer/forge-pr.mjs';
 import { instanceGitCSS } from '../renderer/instance-git.mjs';
 import { createContextPanel, contextPanelCSS } from '../renderer/context-panel.mjs';
-import { prChip, rosterPrCSS } from '../renderer/roster-pr.mjs';
 import { createNotificationCenter, notificationCSS } from '../renderer/notifications.mjs';
 import { createWorkspaceSwitcher } from '../renderer/workspace-switcher.mjs';
 import { instanceActions } from '../renderer/instance-actions.mjs';
 import { iconElement } from '../renderer/shell-icons.mjs';
-import { createSettingsMenu } from '../renderer/sidebar-settings.mjs';
+import { createSidebarFoot } from '../renderer/sidebar-foot.mjs';
+import { DESKTOP_NOUNS } from '../renderer/desktop-terms.mjs';
 import { instanceActionTarget } from '../renderer/instance-action-target.mjs';
 import { pullRequest } from '../renderer/forge-contract.mjs';
 import { target as forgeTarget, pr as forgePr } from './helpers/forge-fixture.mjs';
@@ -509,18 +509,6 @@ for (const [name] of palettes) test(`${name}: actual identity/runtime markup win
     const invalid = document.createElement("span"); invalid.dataset.avatarColor = "red; background:url(x)";
     container.append(invalid); check(invalid, "chip");
   }
-  // A stopped instance's provider mark dims: whatever pair the shell paints it
-  // with must be one the inventory lists, so every theme (and a host palette)
-  // holds it at AA. (An unreported harness is not dimmed: it keeps its own pair.)
-  const token = value => value.match(/^var\(--([a-z0-9-]+)\)$/)?.[1];
-  for (const runtime of runtimes) {
-    const stopped = createRuntimeBadge(document, runtime); stopped.classList.add("ctx-runtime");
-    document.querySelector(".ctx-inst.idle").append(stopped);
-    const style = dom.window.getComputedStyle(stopped), fg = token(style.color), bg = token(style.background);
-    assert.ok(pairs.some(pair => pair[0] === fg && pair[1] === bg),
-      `${name} stopped ${runtime} mark: ${style.color} on ${style.background} is not a pair in the contrast inventory`);
-    check(stopped, fg.replace(/-fg$/, ""));
-  }
 });
 
 for (const [name] of palettes) test(`${name}: workspace catalog, sources and sync text use AA tokens on their computed surfaces`, t => {
@@ -793,7 +781,7 @@ for (const [name, palette] of palettes) test(`${name}: the Workspace heading, th
 });
 
 // The sidebar's one visible shortcut hint was the roster filter's ⌘F; it went with the filter. The sidebar paints
-// none (the product owner, 2026-10-26: Spawn instance's chord is in its tooltip), so no hint ink sits on a sidebar
+// none (the product owner, 2026-10-26: New agent's chord is in its tooltip), so no hint ink sits on a sidebar
 // surface (the spawn dialog's hints are held in spawn-dialog.test.mjs).
 for (const [name] of palettes) test(`${name}: the shipped sidebar paints no shortcut hint, and a hidden hint takes no box`, t => {
   const dom = new JSDOM(readFileSync(new URL("index.html", renderer), "utf8"));
@@ -804,16 +792,16 @@ for (const [name] of palettes) test(`${name}: the shipped sidebar paints no shor
   }
   assert.equal(doc.querySelector("#sidebar .shortcut-hint, #sidebar [data-shortcut], #sidebar kbd, .ctx-filter-field, .ctx-filter"), null,
     "no hint and no filter field in the sidebar");
-  // Spawn instance (the bar's words alone) names itself in words; its chord is the tooltip's.
+  // New agent names itself in words (the shell's, from DESKTOP_NOUNS); its chord is the tooltip's.
   const spawn = doc.getElementById("sidebar-spawn");
-  assert.equal(spawn.getAttribute("title"), "Spawn instance"); assert.equal(spawn.getAttribute("data-action"), "app.quickOpenSouls");
+  assert.equal(spawn.getAttribute("data-action"), "app.quickOpenSouls"); assert.equal(spawn.querySelector("kbd"), null);
   const hint = doc.createElement("kbd"); hint.className = "shortcut-hint"; hint.hidden = true; doc.body.append(hint);
   assert.equal(dom.window.getComputedStyle(hint).display, "none");
 });
 
-// The sidebar (the product owner, 2026-10-26): the nav (Workspace overview, Automations) sits under the list of
-// workspaces on the sidebar's --surface (the foot holds the bar: the sidebar toggle, Spawn instance and the
-// settings cog, below). Each one's ink, at rest, hovered, current
+// The sidebar (the product owner, 2026-10-26; slice 1): the pinned rows (Workspace overview, Automations) sit under the
+// list of workspaces on the sidebar's --surface, Automations with its --danger failure mark while a run failed. Each
+// one's ink, at rest, hovered, current
 // and under the keyboard tint, is a token pair the inventory holds to AA (so "This computer" is held too,
 // host-theme.mjs), and meets it here on the effective colours, with no opacity on it or under it.
 for (const [name] of palettes) test(`${name}: the nav's items meet computed AA in every state`, t => {
@@ -827,6 +815,8 @@ for (const [name] of palettes) test(`${name}: the nav's items meet computed AA i
     const b = doc.createElement("button"); b.type = "button"; b.className = `nav-item${current ? " active" : ""}`;
     if (current) b.setAttribute("aria-current", "page");
     b.innerHTML = `<span class="icon"><svg class="shell-icon" aria-hidden="true"></svg></span><span class="label">${label}</span>`;
+    // The failure mark, as paintAutomationsFailed draws it.
+    if (label === "Automations") b.insertAdjacentHTML("beforeend", `<span class="nav-failed"><span class="nav-failed-dot" aria-hidden="true"></span><span class="sr-only">, a run failed</span></span>`);
     doc.getElementById("nav").append(b);
   }
   const root = win.getComputedStyle(doc.documentElement);
@@ -845,7 +835,7 @@ for (const [name] of palettes) test(`${name}: the nav's items meet computed AA i
     assert.ok(!bg || /^(transparent|rgba\(0, 0, 0, 0\))$/.test(bg), `#${id} paints nothing of its own: the sidebar shows under it (${bg})`);
   }
   const controls = [...doc.querySelectorAll("#nav button")];
-  assert.deepEqual(controls.map(b => b.id || b.textContent), ["Workspace overview", "Automations"]);
+  assert.deepEqual(controls.map(b => b.id || b.textContent), ["Workspace overview", "Automations, a run failed"]);
   assert.equal(doc.getElementById("nav-title"), null, "no title over the views");
   for (const control of controls) {
     const what = control.id || control.textContent, current = control.classList.contains("active");
@@ -866,25 +856,28 @@ for (const [name] of palettes) test(`${name}: the nav's items meet computed AA i
   const focus = rule(":is(button, a, summary):focus-visible");
   assert.equal(focus.background, "var(--sel)");
   for (const ink of ["nav-fg", "fg", "accent"]) held(ink, "sel", ink === "accent" ? GRAPHIC_CONTRAST : TEXT_CONTRAST, `focused ${ink}`);
+  // The failure mark: a --danger dot (yellow means needs input only), 3:1 on the row at rest, hovered and focused.
+  const dot = doc.querySelector(".nav-failed-dot");
+  assert.equal(token(win.getComputedStyle(dot).background), "danger");
+  for (const bg of ["surface", token(hover.background), "sel"]) held("danger", bg, GRAPHIC_CONTRAST, `the failure mark on --${bg}`);
+  for (let node = dot; node; node = node.parentElement) assert.equal(win.getComputedStyle(node).opacity, "1", "the failure mark: no opacity");
   // The labels are always shown (a column, as before 2026-10-23): no container rule hides or fades them.
   assert.doesNotMatch(shellCss, /@container/);
   for (const label of doc.querySelectorAll("#nav .label")) assert.notEqual(win.getComputedStyle(label).position, "absolute", label.textContent);
 });
 
-// The sidebar's icon buttons (the product owner, 2026-10-26): the head's Show only the current workspace and Add local
-// workspace…, and the bar's sidebar toggle and settings cog are one control style (.side-icon-button): --muted on the
-// sidebar's --surface at rest, --fg on --surface-2 hovered, --fg on the --sel tint focused. Spawn instance, the bar's
-// words alone, has the same tokens in rules of its own. The cog's menu (the instance actions' popover) holds its items in
-// --fg, their chords in --muted, on its --surface or the --sel of a hovered or focused item. A clash (keymapConflicts)
-// marks the cog and the menu's Keyboard shortcuts… with a --warn dot (WCAG 1.4.11, 3:1 on what it sits on).
-for (const [name] of palettes) test(`${name}: Add local workspace…, the sidebar toggle, the settings cog and its menu, and Spawn instance meet computed AA in every state`, t => {
+// The sidebar's icon buttons (the product owner, 2026-10-26; slice 1): the head's Add local workspace… and the foot's ?
+// are one control style (.side-icon-button): --muted on the sidebar's --surface at rest, --fg on --surface-2 hovered,
+// --fg on the --sel tint focused. New agent and N need you have the same fills in rules of their own: New agent
+// --muted at rest, the count --fg with its needs-input mark. A clash (keymapConflicts) marks ? with a --danger dot
+// (WCAG 1.4.11, 3:1 on what it sits on).
+for (const [name] of palettes) test(`${name}: Add local workspace…, ?, New agent and N need you meet computed AA in every state`, t => {
   const dom = new JSDOM(readFileSync(new URL("index.html", renderer), "utf8"));
   t.after(() => dom.window.close());
   const doc = dom.window.document, win = dom.window; doc.documentElement.dataset.theme = name;
   const shellCss = readFileSync(new URL("shell.css", renderer), "utf8");
   for (const source of [css, shellCss]) { const style = doc.createElement("style"); style.textContent = source; doc.head.append(style); }
-  const settings = createSettingsMenu(doc, doc.getElementById("sidebar-settings"), { run() {}, shortcut: id => id === "app.shortcuts" ? "Ctrl+," : "" });
-  settings.refresh();
+  createSidebarFoot(doc, { nouns: DESKTOP_NOUNS }).paint(3);
   const root = win.getComputedStyle(doc.documentElement);
   const token = value => { const m = /^var\(--([\w-]+)\)$/.exec(value); assert.ok(m, `a token, never a raw colour: ${value}`); return m[1]; };
   const ratio = (fg, bg) => contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim()));
@@ -896,7 +889,7 @@ for (const [name] of palettes) test(`${name}: Add local workspace…, the sideba
   const noOpacity = (el, what) => { for (let node = el; node; node = node.parentElement) assert.equal(win.getComputedStyle(node).opacity, "1", `${what}: no opacity over it`); };
   assert.equal(token(win.getComputedStyle(doc.getElementById("sidebar")).background), "surface");
   // One control style: each is a .side-icon-button, with no colour rule of its own.
-  const buttons = ["ws-current-only", "ws-add-open", "sidebar-toggle", "sidebar-settings"].map(id => doc.getElementById(id));
+  const buttons = ["ws-add-open", "sidebar-help"].map(id => doc.getElementById(id));
   for (const button of buttons) {
     assert.ok(button.classList.contains("side-icon-button"), `${button.id}: the sidebar's icon-button style`);
     const idle = win.getComputedStyle(button);
@@ -904,66 +897,40 @@ for (const [name] of palettes) test(`${name}: Add local workspace…, the sideba
     held(token(idle.color), "surface", TEXT_CONTRAST, `${button.id} at rest`);
     noOpacity(button, button.id);
   }
-  assert.deepEqual([...shellCss.matchAll(/^([^{}]*#sidebar-(?:settings|toggle)[^{}]*)\{([^}]*)\}/gm)].filter(m => /(^|[\s;])(color|background)\s*:/.test(m[2]) && !/has-clash/.test(m[1])).map(m => m[1].trim()), [],
-    "none has a colour of its own: the .side-icon-button tokens are theirs");
-  // Spawn instance (the product owner, 2026-10-26: its words alone, a ground only on hover): --muted on the sidebar at
-  // rest, --fg on --surface-2 hovered, --fg on --sel focused, as the icon buttons; no opacity; disabled, --faint.
-  const spawn = doc.getElementById("sidebar-spawn");
+  assert.deepEqual([...shellCss.matchAll(/^([^{}]*#sidebar-help[^{}]*)\{([^}]*)\}/gm)].filter(m => /(^|[\s;])(color|background)\s*:/.test(m[2]) && !/has-clash/.test(m[1])).map(m => m[1].trim()), [],
+    "? has no colour of its own: the .side-icon-button tokens are its");
+  // New agent (a + and its words, a ground only on hover): --muted on the sidebar at rest, --fg on --surface-2
+  // hovered, --fg on --sel focused; no opacity; disabled, --faint. N need you: --fg at rest, on the same grounds.
+  const spawn = doc.getElementById("sidebar-spawn"), need = doc.getElementById("sidebar-need-you");
   assert.equal(spawn.classList.contains("side-icon-button"), false); assert.equal(spawn.classList.contains("primary"), false);
-  assert.equal(spawn.querySelector("[data-shell-icon], svg"), null, "no icon: words alone");
-  const spawnIdle = win.getComputedStyle(spawn);
-  assert.match(spawnIdle.background, /^(none|transparent|rgba\(0, 0, 0, 0\))?$/, "Spawn instance: no fill at rest");
-  assert.equal(token(spawnIdle.color), "muted");
-  held("muted", "surface", TEXT_CONTRAST, "Spawn instance at rest");
-  for (const [state, selector, bg] of [["hovered", "#sidebar-spawn:hover:not(:disabled)", "surface-2"], ["focused", "#sidebar-spawn:focus-visible", "sel"]]) {
-    const r = rule(selector); assert.ok(r, selector);
-    assert.deepEqual([token(r.color), token(r.background)], ["fg", bg], `Spawn instance ${state}`);
-    held("fg", bg, TEXT_CONTRAST, `Spawn instance ${state}`);
+  for (const [el, ink, what] of [[spawn, "muted", "New agent"], [need, "fg", "N need you"]]) {
+    const idle = win.getComputedStyle(el);
+    assert.match(idle.background, /^(none|transparent|rgba\(0, 0, 0, 0\))?$/, `${what}: no fill at rest`);
+    assert.equal(token(idle.color), ink, what);
+    held(ink, "surface", TEXT_CONTRAST, `${what} at rest`);
+    noOpacity(el, what);
   }
-  noOpacity(spawn, "Spawn instance");
+  for (const [state, selector, bg] of [["hovered", "#sidebar-need-you:hover, #sidebar-spawn:hover:not(:disabled)", "surface-2"], ["focused", "#sidebar-need-you:focus-visible, #sidebar-spawn:focus-visible", "sel"]]) {
+    const r = rule(selector); assert.ok(r, selector);
+    assert.deepEqual([token(r.color), token(r.background)], ["fg", bg], `New agent and N need you ${state}`);
+    held("fg", bg, TEXT_CONTRAST, `New agent and N need you ${state}`);
+    held("warn", bg, GRAPHIC_CONTRAST, `the count's needs-input mark ${state}`);
+  }
+  held("warn", "surface", GRAPHIC_CONTRAST, "the count's needs-input mark at rest");
   spawn.disabled = true;
   assert.equal(token(win.getComputedStyle(spawn).color), "faint", "disabled");
   assert.match(win.getComputedStyle(spawn).background, /^(none|transparent|rgba\(0, 0, 0, 0\))?$/, "disabled: no fill");
   spawn.disabled = false;
   for (const [state, selector] of [["hovered", ".side-icon-button:hover"], ["focused", ".side-icon-button:focus-visible"]]) {
     const r = rule(selector); assert.ok(r, selector);
-    held(token(r.color), token(r.background), TEXT_CONTRAST, `the headings' icon buttons ${state}`);
+    held(token(r.color), token(r.background), TEXT_CONTRAST, `the sidebar's icon buttons ${state}`);
   }
-  // Show only the current workspace, pressed: its icon in --accent (the current nav item's), on the sidebar at rest,
-  // and on the hover and focus fills, which keep it (3:1 for a graphic; the --accent pairs hold 4.5:1 too).
-  const toggle = doc.getElementById("ws-current-only");
-  toggle.setAttribute("aria-pressed", "true");
-  assert.equal(token(win.getComputedStyle(toggle).color), "accent", "pressed: the accent");
-  held("accent", "surface", GRAPHIC_CONTRAST, "the pressed toggle at rest");
-  const pressed = rule('.ws-current-only[aria-pressed="true"], .ws-current-only[aria-pressed="true"]:hover, .ws-current-only[aria-pressed="true"]:focus-visible');
-  assert.ok(pressed, "one rule for the pressed toggle in every state"); assert.equal(token(pressed.color), "accent");
-  for (const [state, selector] of [["hovered", ".side-icon-button:hover"], ["focused", ".side-icon-button:focus-visible"]]) {
-    held("accent", token(rule(selector).background), GRAPHIC_CONTRAST, `the pressed toggle ${state}`);
-  }
-  toggle.setAttribute("aria-pressed", "false");
-  assert.equal(token(win.getComputedStyle(toggle).color), "muted", "not pressed: the icon buttons' --muted");
-  // The menu: its surface, its items' ink and their chords, at rest and on a hovered or focused item.
-  const menu = settings.menu, menuBg = token(rule(".ctx-instance-menu").background);
-  assert.equal(menuBg, "surface");
-  const item = settings.items.find(b => b.dataset.menuAction === "app.shortcuts"), keys = item.querySelector("kbd");
-  assert.equal(keys.hidden, false); assert.equal(keys.textContent, "Ctrl+,");
-  held(token(win.getComputedStyle(item).color), menuBg, TEXT_CONTRAST, "a settings item");
-  held(token(win.getComputedStyle(keys).color), menuBg, TEXT_CONTRAST, "a settings item's chord");
-  const lit = token(rule(".ctx-instance-menu button:hover, .ctx-instance-menu button:focus-visible").background);
-  held(token(win.getComputedStyle(item).color), lit, TEXT_CONTRAST, "a hovered or focused settings item");
-  held(token(win.getComputedStyle(keys).color), lit, TEXT_CONTRAST, "a hovered or focused item's chord");
-  const icon = item.querySelector(".ctx-menu-icon");
-  held(token(win.getComputedStyle(icon).color), menuBg, GRAPHIC_CONTRAST, "a settings item's icon");
-  noOpacity(keys, "a settings item's chord"); noOpacity(icon, "a settings item's icon");
-  assert.ok(menu.contains(item));
-  // The clash dot: --danger (a key no longer does what it says; yellow means needs input only), on the cog's --surface
-  // (the sidebar), hovered (--surface-2) and focused (--sel), and on a menu item at rest and lit.
-  const cogDot = rule("#sidebar-settings.has-clash::after"), itemDot = rule(".sidebar-settings-menu button.has-clash > .sidebar-settings-label::after");
-  assert.ok(cogDot && itemDot, "both clash dots ship");
-  for (const [what, dot, on] of [["the cog's clash dot", cogDot, ["surface", "surface-2", "sel"]], ["the item's clash dot", itemDot, [menuBg, lit]]]) {
-    assert.equal(dot.background, "var(--danger)", what); assert.equal(dot.opacity, "", `${what}: no opacity`);
-    for (const bg of on) held("danger", bg, GRAPHIC_CONTRAST, `${what} on --${bg}`);
-  }
+  // The clash dot: --danger (a key no longer does what it says; yellow means needs input only), on ?'s --surface
+  // (the sidebar), hovered (--surface-2) and focused (--sel).
+  const clashDot = rule("#sidebar-help.has-clash::after");
+  assert.ok(clashDot, "the clash dot ships");
+  assert.equal(clashDot.background, "var(--danger)"); assert.equal(clashDot.opacity, "", "no opacity");
+  for (const bg of ["surface", "surface-2", "sel"]) held("danger", bg, GRAPHIC_CONTRAST, `the clash dot on --${bg}`);
 });
 
 for (const [name] of palettes) test(`${name}: actual Stop/Retire confirmations meet computed AA without text opacity, in every phase`, async t => {
@@ -1183,15 +1150,19 @@ for (const [name] of palettes) test(`${name}: actual Connections and reported PR
 for (const [name] of palettes) test(`${name}: Show sidebar / Show instance panel, disabled menu reasons, workspace rows, explicit Open toast and the Needs input roll-up pill meet computed AA`, async t => {
   const dom = new JSDOM(readFileSync(new URL('index.html', renderer), 'utf8'), { pretendToBeVisual: true }), doc = dom.window.document;
   doc.documentElement.dataset.theme = name;
-  for (const source of [css, readFileSync(new URL('shell.css', renderer), 'utf8'), identityCSS, contextPanelCSS, notificationCSS, rosterPrCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
+  for (const source of [css, readFileSync(new URL('shell.css', renderer), 'utf8'), identityCSS, contextPanelCSS, notificationCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
   const row = { instance: 'dev-1', agent: 'dev', agentsRoot: '/team/agents', home: '/team/agents/dev/instances/dev-1', createdAt: '2026-09-23T00:00:00.000Z' };
-  // forge-roster: a PR chip in each state on a roster row (a draft also on the active row), and the row's open-PR tool.
   const list = doc.querySelector('#instance-roster .ctx-list');
-  for (const [state, extra, active] of [['OPEN', false, false], ['OPEN', true, false], ['MERGED', false, false], ['CLOSED', false, false], ['OPEN', true, true]]) {
+  // Slice 1: a row's second line (soul · machine), on an idle and a selected row.
+  for (const active of [false, true]) {
     const wrap = doc.createElement('div'); wrap.className = `ctx-tree-row${active ? ' active' : ''}`;
-    wrap.append(prChip(doc, { home: '/h', number: 1, state, isDraft: extra, url: null })); list.append(wrap);
+    const button = doc.createElement('button'); button.className = 'ctx-inst';
+    const copy = doc.createElement('span'); copy.className = 'ctx-copy';
+    const detail = doc.createElement('span'); detail.className = 'ctx-meta ctx-row-detail'; detail.textContent = 'dev · This Mac';
+    copy.append(detail); button.append(copy); wrap.append(button); list.append(wrap);
   }
-  const prOpen = doc.createElement('button'); prOpen.className = 'act ctx-pr-open'; list.append(prOpen);
+  // The foot as the shell paints it (sidebar-foot.mjs): New agent's words, and its count while two rows need you.
+  createSidebarFoot(doc, { nouns: DESKTOP_NOUNS }).paint(2);
   // Spec D: the "N below" roll-up pill paints its own surface, on an idle and a selected row (a waiting row's own mark
   // is its dot since 2026-10-26: the test after the workspace rows').
   for (const active of [false, true]) {
@@ -1224,19 +1195,16 @@ for (const [name] of palettes) test(`${name}: Show sidebar / Show instance panel
     ['.ws-option[aria-current="true"] .ws-option-name', '#sidebar', 'fg', 'surface'],
     ['.ws-option:not([aria-current]) .ws-option-name', '#sidebar', 'fg', 'surface'],
     ['#ws-add-open', '#sidebar', 'muted', 'surface'],
-    // The bar's buttons, on the same tokens: the sidebar toggle and the settings cog (.side-icon-button), and Spawn
-    // instance, its words alone with no fill at rest (the product owner, 2026-10-26).
-    ['#sidebar-toggle', '#sidebar', 'muted', 'surface'], ['#sidebar-settings', '#sidebar', 'muted', 'surface'],
-    ['#sidebar-spawn', '#sidebar', 'muted', 'surface'],
+    // The bar's buttons (slice 1), on the same tokens: ? (.side-icon-button) and New agent, no fill at rest; the
+    // count of rows that need you in --fg.
+    ['#sidebar-help', '#sidebar', 'muted', 'surface'], ['#sidebar-spawn', '#sidebar', 'muted', 'surface'],
+    ['#sidebar-need-you', '#sidebar', 'fg', 'surface'],
+    // A row's second line: --muted, on the sidebar and on the selection.
+    ['.ctx-tree-row:not(.active) .ctx-row-detail', '#sidebar', 'muted', 'surface'],
+    ['.ctx-tree-row.active .ctx-row-detail', '.ctx-tree-row.active', 'muted', 'sel'],
     // The headings: the Workspace heading in --fg, the Instances heading in the nav's ink, on the sidebar.
     ['.ws-heading', '#sidebar', 'fg', 'surface'], ['#instance-roster > .ctx-head', '#sidebar', 'nav-fg', 'surface'],
     ['.app-toast-open', '.app-toast-open', 'primary-fg', 'primary-bg'],
-    ['.ctx-pr[data-pr-state=open]', '.ctx-pr[data-pr-state=open]', 'fg', 'tag-bg'],
-    ['.ctx-pr[data-pr-state=merged]', '.ctx-pr[data-pr-state=merged]', 'fg', 'tag-bg'],
-    ['.ctx-pr[data-pr-state=closed]', '.ctx-pr[data-pr-state=closed]', 'muted', 'tag-bg'],
-    ['.ctx-tree-row:not(.active) .ctx-pr[data-pr-state=draft]', '#sidebar', 'muted', 'surface'],
-    ['.ctx-tree-row.active .ctx-pr[data-pr-state=draft]', '.ctx-tree-row.active', 'muted', 'sel'],
-    ['.ctx-pr-open', '.ctx-pr-open', 'accent', 'surface'],
     ['.ctx-tree-row:not(.active) .ctx-attn.rollup', '.ctx-tree-row:not(.active) .ctx-attn.rollup', 'warn', 'attn-bg'],
     ['.ctx-tree-row.active .ctx-attn.rollup', '.ctx-tree-row.active .ctx-attn.rollup', 'warn', 'attn-bg'],
   ]) {
@@ -1353,7 +1321,7 @@ test("yellow means needs input only: no shipped rule paints a dot, disc or fill 
     assert.doesNotMatch(rule(selector), /dashed/, `${selector}: not a dashed ring (stopped's, in slice 2)`);
   }
   // The problem dots.
-  for (const selector of ["#sidebar-settings.has-clash::after", ".sidebar-settings-menu button.has-clash > .sidebar-settings-label::after", ".workspace-attn", ".auto-dot.warn"])
+  for (const selector of ["#sidebar-help.has-clash::after", ".nav-failed-dot", ".workspace-attn", ".auto-dot.warn"])
     assert.match(rule(selector), /background:\s*var\(--danger\);/, selector);
 });
 

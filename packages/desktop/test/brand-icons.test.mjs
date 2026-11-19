@@ -86,17 +86,13 @@ test('electron-builder wires the derived icons per platform; only the sidebar ma
   assert.equal(scripts.icons, 'node build-icons.mjs', 'regenerate from source is one command');
 });
 
-// The sidebar (the product owner, 2026-10-26): the head is the Workspace heading alone; the OATS mark sits at the left
-// end of the foot's one bar, Spawn instance beside it, the generated sidebar-48.png (pinned and packaged above) drawn at 20px, 2x.
-test('the renderer shows the sidebar mark once, in the bottom bar; nothing references a download path', () => {
+// The sidebar (slice 1 of the Desktop UI rework): the brand mark left the foot, so the renderer draws no mark in the
+// sidebar. The generated sidebar-48.png stays pinned and packaged (above) for a later surface; nothing draws it now.
+test('the renderer shows no sidebar mark; nothing references a download path', () => {
   const html = read('renderer/index.html').toString('utf8');
   assert.doesNotMatch(html, /ws-brand-image|ws-brand-mark/, 'the old head mark is gone');
-  assert.doesNotMatch(read('renderer/shell.css').toString('utf8'), /\.ws-brand-(image|mark)\b/, 'no style is left for it');
-  const marks = [...html.matchAll(/sidebar-\d+\.png/g)];
-  assert.equal(marks.length, 1, 'one use of the sidebar mark');
-  assert.match(html, new RegExp(`<div id="sidebar-bar" role="group" aria-label="Sidebar tools">\\s*<span class="sidebar-brand" aria-hidden="true"><img class="sidebar-brand-image" src="\\.\\./${GENERATED.replace(/\./g, '\\.')}/sidebar-${SIDEBAR_SIZE}\\.png" width="20" height="20" alt="" draggable="false"></span>`),
-    'first in the bottom bar, decorative, the generated file');
-  assert.match(html, /<div id="nav-foot">\s*<div id="sidebar-bar"[^>]*>\s*<span class="sidebar-brand"[^]*?<\/span>\s*<button id="sidebar-toggle"/, 'the bar is the foot, the sidebar toggle right after the mark');
+  assert.doesNotMatch(read('renderer/shell.css').toString('utf8'), /\.ws-brand-(image|mark)\b|\.sidebar-brand\b/, 'no style is left for either mark');
+  assert.equal([...html.matchAll(/sidebar-\d+\.png|sidebar-brand/g)].length, 0, 'no sidebar mark in the markup');
   for (const file of ['renderer/index.html', 'electron-builder.config.cjs', 'build-icons.mjs', 'package.json', `${GENERATED}/manifest.json`]) {
     assert.doesNotMatch(read(file).toString('utf8'), /Downloads|\/Users\/|~\//, file);
   }

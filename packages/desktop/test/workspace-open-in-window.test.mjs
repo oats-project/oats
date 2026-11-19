@@ -7,8 +7,6 @@ import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import vm from 'node:vm';
 import { createWorkspaceSwitcher, openInNewWindowHint, OPEN_IN_NEW_WINDOW } from '../renderer/workspace-switcher.mjs';
-import { createPalette } from '../renderer/palette.mjs';
-import { takePickerFocusReturn } from '../renderer/overlay-picker.mjs';
 
 const html = readFileSync(new URL('../renderer/index.html', import.meta.url), 'utf8');
 const A = { id: 'ws:aaaaaaaaaaaaaaaaaaaa', name: 'oats' };
@@ -225,54 +223,21 @@ test('a window with no workspace and nothing served: the stage opens the Add dia
 });
 
 
-// Show only the current workspace turned on (its chord) while another row's context menu has focus: the row goes,
-// its menu closes, and focus lands on the current row, never <body> (review of PR 8).
-test('a row whose menu holds focus, hidden by Show only the current workspace: the menu closes, focus on the current row', () => {
+// A row whose context menu has focus goes from the list (a new answer no longer lists it): its menu closes, and focus
+// lands on the current row, never <body> (review of PR 8, kept when slice 1 dropped Show only the current workspace).
+test('a row whose menu holds focus goes from the list: the menu closes, focus on the current row', () => {
   const { document, controller, contextmenu, popovers } = setup();
   const rowMenu = menu(document);
   option(document, B.id).focus(); contextmenu(option(document, B.id));
   assert.equal(document.activeElement, rowMenu.querySelector('[role="menuitem"]'), 'focus in B\'s menu');
-  controller.toggleCurrentOnly();
-  assert.equal(controller.currentOnly, true);
-  assert.equal(option(document, B.id).hidden, true, 'B is hidden');
+  controller.begin()(A, [A, LOOSE]);
+  assert.equal(option(document, B.id), null, 'B is gone');
   assert.deepEqual(popovers.at(-1), ['hide', rowMenu], 'its menu closed');
   assert.equal(document.activeElement, option(document, A.id), 'focus on the current row');
-  // Focus elsewhere is left where it is: off and on again with focus outside the list and its menu.
-  controller.toggleCurrentOnly();
+  // Focus elsewhere is left where it is.
   document.getElementById('ws-add-open').focus();
-  controller.toggleCurrentOnly();
+  controller.begin()(A, [A]);
   assert.equal(document.activeElement, document.getElementById('ws-add-open'), 'focus outside the list stays put');
-});
-
-// The palette's Show only the current workspace, as shipped (shell.mjs), activated through the real palette: the
-// palette hands focus to its command, which puts it back where the palette was opened before the toggle runs, so
-// a hidden row's focus goes on to the current row and a control elsewhere keeps it (review of PR 8).
-const shellSource = readFileSync(new URL('../renderer/shell.mjs', import.meta.url), 'utf8');
-const paletteEntry = shellSource.match(/^ {4}\{ label: "Workspaces: show only the current workspace \(on \/ off\)"[^]*?\} \},$/m)?.[0];
-async function viaPalette(s, opener) {
-  const entry = vm.runInNewContext(`[${paletteEntry}][0]`, { chordDetail: () => () => '', takePickerFocusReturn, document: s.document,
-    runAction: (id) => { assert.equal(id, 'workspaces.currentOnly'); s.controller.toggleCurrentOnly(); } });
-  const picker = createPalette({ loadInstances: async () => [], openTerminal() {}, commands: [entry], doc: s.document });
-  opener.focus();
-  await picker.open();
-  const input = s.document.querySelector('.palette-input');
-  input.value = '>show only'; input.dispatchEvent(new s.dom.window.Event('input', { bubbles: true }));
-  input.dispatchEvent(new s.dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  return picker;
-}
-test('the palette\'s entry, from a row it hides: focus goes to the current row; from another control: it stays there', async () => {
-  assert.ok(paletteEntry, 'the shipped entry');
-  const s = setup();
-  await viaPalette(s, option(s.document, B.id));
-  assert.equal(s.controller.currentOnly, true); assert.equal(option(s.document, B.id).hidden, true);
-  assert.equal(s.document.querySelector('.palette-input'), null, 'the palette closed');
-  assert.equal(s.document.activeElement, option(s.document, A.id), 'the current row, never <body>');
-  // Off again from a control outside the list (a terminal's stand-in): focus back on it.
-  const outside = s.document.createElement('textarea'); outside.className = 'xterm-helper-textarea'; s.document.getElementById('main').append(outside);
-  await viaPalette(s, outside);
-  assert.equal(s.controller.currentOnly, false);
-  assert.equal(s.document.activeElement, outside, 'where the palette was opened');
 });
 
 // Linux and macOS fire a right-click's contextmenu on the press, with the right button down: opened then, the menu

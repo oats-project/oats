@@ -60,9 +60,9 @@ export const GRAPHIC_PAIRS = Object.freeze([
   Object.freeze(["term-sel", "term-bg"]),
   // A running lifecycle confirmation's spinner arc (lifecycle-dialog.mjs .spinner) on the dialog's --surface.
   Object.freeze(["accent", "surface"]),
-  // A problem dot, in --danger since yellow means needs input only (2026-10-26): the keybinding clash dot on the
-  // settings cog and its menu item, and the Workspace page's Setup and Teams attention dot, on a focused or lit --sel
-  // (--surface and --surface-2 are text pairs already).
+  // A problem dot, in --danger since yellow means needs input only (2026-10-26): the keybinding clash dot on the foot's
+  // ?, the pinned Automations row's failure mark (slice 1), and the Workspace page's Setup and Teams attention dot, on a
+  // focused or lit --sel (--surface and --surface-2 are text pairs already).
   Object.freeze(["danger", "sel"]),
   // An instance's colour (issue 1421; instance-dot.mjs): its dot, filled or a ring, on every fill it is drawn on: the
   // roster's rows (plain, hovered, selected), the tab strip and its active and focused tab, the palette's rows, the

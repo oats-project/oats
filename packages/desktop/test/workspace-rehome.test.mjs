@@ -140,7 +140,7 @@ function shell(t, { tabs = new Map(), memory = new Map(), selection, claim = { o
     chooseWorkspace: async (workspaces) => { c.chose = workspaces; },
     contextRosterEl: document.getElementById("instance-roster"),
     api(path) { const gate = { ...deferred(), path }; requests.push(gate); return gate.promise; },
-    renderContextRoster() {}, refreshPanelInstance() {}, rosterPrs: { get: () => null, refresh() {} }, spawnJobs,
+    renderContextRoster() {}, refreshPanelInstance() {}, spawnJobs,
     workspaceLabel: createWorkspaceSwitcher({ document, selectWorkspace() {}, discoverSuggestions: async () => [], addWorkspace: async () => ({}), pickWorkspace: async () => ({}) }),
     // Re-homing's own state.
     tabs, activeTab: null, split: null, tabLayerVisible: false,

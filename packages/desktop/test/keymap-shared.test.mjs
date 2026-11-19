@@ -416,7 +416,6 @@ const DEFAULTS = [
   ["workspace.next","Alt+↓"],
   ["instance.edit",{"mac":"Mod+Alt+R","other":"Alt+R"}],
   ["app.chooseSoul",{"mac":"Mod+N","other":"Ctrl+Shift+N"}],
-  ["workspaces.currentOnly",{"mac":"Mod+Alt+Shift+O","other":"Ctrl+Alt+Shift+O"}],
   ["app.shortcuts","Mod+,"],
   ["app.themeToggle",null],
   ["app.themePicker",{"mac":"Mod+Shift+Space","other":"Ctrl+Shift+Space"}],

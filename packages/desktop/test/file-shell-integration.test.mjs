@@ -29,7 +29,6 @@ import { instanceActionTarget, sameInstanceActionTarget } from '../renderer/inst
 import { instanceSplitPlan, instanceSplitIdentity } from '../renderer/instance-split.mjs';
 import { runtimeState, unsupportedSession } from "../../client/instance-presentation.mjs";
 import { canAddressRemote, rowReason } from "../../client/remote-address.mjs";
-import { createRuntimeBadge } from "../renderer/identity-marks.mjs";
 import { THEMES } from "../renderer/theme.mjs";
 import { rosterKeyAction, moveTarget } from "../renderer/roster-keys.mjs";
 import * as treeShared from "../../client/instance-tree.mjs";
@@ -90,9 +89,8 @@ function shell(t, shellSource = source, platform = "MacIntel") {
     document, window: dom.window, navigator, console, ...keys, THEMES,
     workspace: "A", generation: 0, tabWorkspace: "A", contextWorkspace: "A", connectionGeneration: 0,
     instanceActionTarget, sameInstanceActionTarget, instanceSplitPlan, instanceSplitIdentity, baseTitles: new WeakMap(), menuState() {}, sayInHint() {},
-    settingsMenu: { refresh() {} }, // applyChordTitles refreshes the settings cog's chords (sidebar-settings.test.mjs covers it)
     tabs: new Map(), nextTabId: 1, activeTab: null, split: null, sidebarMode: "instances", tabLayerVisible: false,
-    contextRosterGen: 0, contextInstances: [], collapsedInstances: new Set(), rosterTip: { bind() {}, hide() {}, sync() {} }, rosterTipFacts: () => ({}), rosterPrs: { get: () => null, refresh() {} }, spawnJobs: { rows: () => [], announce: () => false, observe() {}, settling: () => false, check() {} }, contextRosterEl: null,
+    contextRosterGen: 0, contextInstances: [], collapsedInstances: new Set(), spawnJobs: { rows: () => [], announce: () => false, observe() {}, settling: () => false, check() {} }, contextRosterEl: null,
     rosterState: null, rosterStale: false, contextDeploymentNote: null, ...viewContext(), rosterSignaturePainted: null, // initContextRoster builds the real controller (instance-tree-view createRosterLoading)
     // The palette's last-focus record (Spec C), inert here: the shell code under test writes to it.
     instanceRecency: createInstanceRecency({ storage: null }), recencyIdFromTerminalKey,
@@ -126,7 +124,7 @@ function shell(t, shellSource = source, platform = "MacIntel") {
     createQuickOpen: options => createQuickOpen({ ...options, doc: document }),
     createSelectionOwnership, wirePaneSelection, prepareOwnedOpen, createViewLifecycle,
     createTabChrome, tabKeyAction, focusAfterLastTab, tabNameTailStart, setTabTitle, reserveKey, whenKeyFree, projectSplitDom, splitControlsState,
-    ...tree, ...layout, ...workspaceTabs, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason, createRuntimeBadge, rosterKeyAction, moveTarget,
+    ...tree, ...layout, ...workspaceTabs, instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason, rosterKeyAction, moveTarget,
     terminalOptions, wireTerminalSelection: () => () => {}, fitTerminal, createGlyphRenderer, terminalTypography: () => ({ fontSize: 13, fontFamily: "mono" }), xtermTheme: () => ({}), terminalFontWeight: () => 400,
     onThemeChange: () => () => {}, onTerminalTypographyChange: () => () => {}, requestAnimationFrame: cb => cb(),
     FitAddon: { FitAddon: class { fit() {} } },

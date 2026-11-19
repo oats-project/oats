@@ -24,8 +24,8 @@ labels), `renderer/leader-dispatch.mjs` (what each key does),
 `test/palette-recency.test.mjs` (its recency order, first-row opening and focus record), `test/tab-strip-reveal.test.mjs`,
 `test/roster-scrollport.test.mjs` (a focused roster row is revealed inside the list),
 `test/roster-reveal-row.test.mjs` (an active terminal tab reveals its roster row),
-`test/theme-picker.test.mjs` (the theme picker's keys), `test/font-picker.test.mjs` (the font picker's), `test/sidebar-settings.test.mjs` (the settings
-cog's menu and its keys), `test/shell-design.test.mjs` (Show sidebar,
+`test/theme-picker.test.mjs` (the theme picker's keys), `test/font-picker.test.mjs` (the font picker's), `test/sidebar-slice1.test.mjs` (the
+sidebar's foot, pinned rows and roster rows), `test/shell-design.test.mjs` (Show sidebar,
 Show instance panel and the closed sidebar and panel).
 
 ## Principles
@@ -91,7 +91,6 @@ Show instance panel and the closed sidebar and panel).
    | Ctrl+Tab (next tab) | Tab | Tab |
    | Ctrl+Shift+Tab (previous tab) | ESC [ Z | Shift+Tab |
    | Ctrl+Shift+Alt+W (close the split) | ESC Ctrl+W | Esc, then Ctrl+W |
-   | Ctrl+Alt+Shift+O (show only the current workspace, every family) | ESC Ctrl+O | Esc, then Ctrl+O |
    | Alt+Shift+↑ / ↓ (previous / next instance, every family), Alt+Shift+← / → (previous / next editor group in the Alt family, previous / next tab in the others) | ESC [ 1 ; 4 A / B / D / C | no plainer key: a named exception. No agent, shell or readline binds them (Esc, then Shift+arrow sends something else) |
    | Ctrl+Shift+F6 (leave the terminal) | ESC [ 17 ; 6 ~ | no plainer key: a named exception, because without it F6 cannot get out of a terminal |
 
@@ -166,8 +165,8 @@ Show instance panel and the closed sidebar and panel).
   the platform's effective chord and offers Reset when it differs from the
   platform default. A stored rebind that now shares its chord with another
   binding (a new default, say) is never changed for you: `keymapConflicts`
-  finds it at load and on every keymap change, the sidebar's settings cog and
-  its **Keyboard shortcuts…** item carry a `--danger` dot and a description, and the
+    finds it at load and on every keymap change, the sidebar foot's **?** (Keyboard
+  shortcuts) carries a `--danger` dot and a description, and the
   editor names each clash at the top and on its row until you rebind or reset
   one side.
 - One chord per action. Where the table has two (Ctrl+Tab and Alt+Shift+→; F
@@ -220,8 +219,8 @@ to another chord opens from a field as well. macOS cuts with ⌘X, so ⌃X is th
 leader in a field there. It is inert while a modal dialog or the palette is shown, as F6 and
 the tab switches are: the chord then goes where it goes without the leader.
 The keys after it are listed in the shortcuts editor, which leads with the
-Leader group (the settings cog's **Keyboard shortcuts…**, Ctrl+, / ⌘, or the
-palette); the sidebar has no button of its own for the leader.
+Leader group (the sidebar foot's **?**, Ctrl+, / ⌘, or the palette); the
+sidebar has no button of its own for the leader.
 
 **While it waits** (there is no time limit), the next keydown that is not a
 lone modifier settles it:
@@ -278,7 +277,7 @@ say why in the same line when they cannot act.
 | `1` | Instances: the workspace's terminals again when any is open, else Workspace › Machines |
 | `2` | Workspace › Souls |
 | `3` | Workspace › Capabilities |
-| ↑, ↓ | shows the previous / next workspace of the sidebar's [list of workspaces](#the-list-of-workspaces) in this window, as a click on its row does (`workspace-previous`, `workspace-next`). A row another window shows is not passed over: the move takes it over, and it moves here. The moves wrap: ↓ on the last row shows the first, ↑ on the first shows the last, over the whole list even while Show only the current workspace hides its other rows. With no other workspace to show, nothing moves and the line says "No other workspace to show." With no workspace shown, ↓ goes to the first row and ↑ to the last. The focus then goes back where it was in the workspace shown ([after a switch](#the-list-of-workspaces)); a move made from the list of workspaces leaves it on the list. Also the chords `workspace.previous`, `workspace.next`: Alt+↑ / Alt+↓ on Linux and Windows, ⌥↑ / ⌥↓ on macOS |
+| ↑, ↓ | shows the previous / next workspace of the sidebar's [list of workspaces](#the-list-of-workspaces) in this window, as a click on its row does (`workspace-previous`, `workspace-next`). A row another window shows is not passed over: the move takes it over, and it moves here. The moves wrap: ↓ on the last row shows the first, ↑ on the first shows the last, over the whole list. With no other workspace to show, nothing moves and the line says "No other workspace to show." With no workspace shown, ↓ goes to the first row and ↑ to the last. The focus then goes back where it was in the workspace shown ([after a switch](#the-list-of-workspaces)); a move made from the list of workspaces leaves it on the list. Also the chords `workspace.previous`, `workspace.next`: Alt+↑ / Alt+↓ on Linux and Windows, ⌥↑ / ⌥↓ on macOS |
 | ←, → | previous / next tab of the active tab's strip, in the order drawn: with the tabs split, the focused group's, each press another tab of it; an empty or one-tab group says "There is no other tab." (`tabs.prev`, `tabs.next`; the Desktop's cycling wraps, the TUI's does not) |
 | `z` | focus mode on or off (`app.focusMode`), and the active terminal takes focus. Also `terminal.focusMode` |
 | `w` | closes the active tab (`tabs.close`); the agent keeps running |
@@ -314,9 +313,8 @@ The three Linux / Windows columns are [the chord families](#the-chord-families):
 | Action (id) | macOS | Alt (the default) | Ctrl+Alt | Ctrl+Shift | Works in a terminal |
 |---|---|---|---|---|---|
 | Command palette (`app.palette`) | ⌘K | Alt+K | Ctrl+Alt+K | Ctrl+Shift+K | yes (plain Ctrl+K, kill to the end of the line, stays the program's) |
-| Quick open a soul (`app.quickOpenSouls`; also the sidebar's **Spawn instance**) | ⌘P | Alt+P | Ctrl+Alt+P | Ctrl+Shift+P | yes (plain Ctrl+P, shell history, stays the program's) |
+| Quick open a soul (`app.quickOpenSouls`; also the sidebar's **New agent**) | ⌘P | Alt+P | Ctrl+Alt+P | Ctrl+Shift+P | yes (plain Ctrl+P, shell history, stays the program's) |
 | Focus the list of workspaces (`app.workspaces`; the leader's `o`, the sidebar's `w`, the palette's **Workspace: switch…**) | ⌥⌘O | Alt+O | Ctrl+Alt+O | Ctrl+Shift+S | yes |
-| Show only the current workspace, or every one again (`workspaces.currentOnly`; the toggle in the sidebar's Workspace heading, the palette's **Show only the current workspace**; no leader key) | ⌥⇧⌘O | Ctrl+Alt+Shift+O | the same | the same | yes (ESC Ctrl+O, which Esc, then Ctrl+O still sends) |
 | Open the previous / next instance's terminal (`roster.openPrevious`, `roster.openNext`; no leader key: the leader's ↑ ↓ move between workspaces) | ⌥⌘↑ / ⌥⌘↓ | Alt+Shift+↑ / ↓ | the same | the same | yes (a named exception, principle 2) |
 | Show the previous / next workspace of the list (`workspace.previous`, `workspace.next`; the leader's ↑ ↓; the focus goes back where it was in that workspace, or stays on the list when the move is made from there) | ⌥↑ / ⌥↓ | Alt+↑ / Alt+↓ | none (the leader): Alt+↑ / ↓ are the program's | none (the leader) | yes |
 | Focus mode on or off, in the active terminal (`terminal.focusMode`; the leader's `z`) | ⌥⌘Z | Alt+Z | Ctrl+Alt+Z | Ctrl+Shift+M | yes |
@@ -332,13 +330,13 @@ The three Linux / Windows columns are [the chord families](#the-chord-families):
 | Workspace › Machines / Workspace overview / Automations (`stage.hierarchy`: the Workspace page on its Machines tab, the palette's **View: Workspace › Machines**; `stage.spawn`, `stage.automations`) | ⌘1 / ⌘2 / ⌘3 | Ctrl+1 / Ctrl+2 / Ctrl+3 | the same | the same | yes (Ctrl+3 is ESC, which Esc still sends) |
 | Focus next / previous region (`focus.nextRegion`, `focus.prevRegion`) | F6 / ⇧F6 | F6 / Shift+F6 | the same | the same | no (mc, htop, nano) |
 | Leave the terminal for the next region (`focus.leaveTerminal`) | ⇧⌘F6 | Ctrl+Shift+F6 | the same | the same | yes |
-| Sidebar (`sidebar.toggle`; also the toggle in the sidebar's foot, and Show sidebar while it is hidden) | ⌘B | Ctrl+Shift+B | the same | the same | yes (plain Ctrl+B, the tmux prefix, stays the program's) |
+| Sidebar (`sidebar.toggle`; also the palette's **Sidebar: toggle (hide/show)**, and Show sidebar while it is hidden) | ⌘B | Ctrl+Shift+B | the same | the same | yes (plain Ctrl+B, the tmux prefix, stays the program's) |
 | The sidebar's width back to 288px (`sidebar.resetWidth`; the palette's **Sidebar: reset width**; also Enter or a double-click on the sidebar's width handle) | none | none | none | none | – (the palette keeps it) |
-| Focus the instance roster, on its current row, or, on an empty roster, the foot's Spawn instance (`sidebar.focusFilter`, its id from when the roster had a filter; to find an instance by name, use the command palette) | ⌘F | Alt+F | Ctrl+Alt+F | Ctrl+Alt+F | yes |
+| Focus the instance roster, on its current row, or, on an empty roster, the foot's New agent (`sidebar.focusFilter`, its id from when the roster had a filter; to find an instance by name, use the command palette) | ⌘F | Alt+F | Ctrl+Alt+F | Ctrl+Alt+F | yes |
 | An instance's name and colour, for the leader's target (`instance.edit`; also **Instance: name and colour…**; no leader key) | ⌥⌘R | Alt+R | Ctrl+Alt+R | Ctrl+Alt+R | yes |
 | Instance panel (`panel.toggle`; also Show instance panel while it is closed, and the panel's own close button) | ⌘I | Ctrl+Shift+I | the same | the same | yes (plain Ctrl+I, the Tab byte, stays the program's) |
-| Theme picker (`app.themePicker`; also the settings cog's **Theme…** and **Theme: choose…**) | ⇧⌘Space | Ctrl+Shift+Space | the same | the same | yes |
-| Font picker: Omarchy's font or System font (`app.fontPicker`; also the settings cog's **Font…** and **Font: choose…**) | none | none | none | none | – (the cog and the palette keep it) |
+| Theme picker (`app.themePicker`; also the palette's **Theme: choose…**) | ⇧⌘Space | Ctrl+Shift+Space | the same | the same | yes |
+| Font picker: Omarchy's font or System font (`app.fontPicker`; also the palette's **Font: choose…**) | none | none | none | none | – (the palette keeps it) |
 | Theme cycle: White, Solarized, Dark, This computer (`app.themeToggle`) | none | none | none | none | – (the palette keeps it) |
 | Keyboard shortcuts (`app.shortcuts`) | ⌘, | Ctrl+, | the same | the same | yes |
 | The leader, then one key (`app.leader`; see "The leader") | ⌃X | Ctrl+X | the same | the same | yes (a named exception, principle 2: it sends 0x18, which the leader pressed twice gives the program; on macOS by principle 3's exception; not in a text field on Linux/Windows, where Ctrl+X is Cut) |
@@ -509,11 +507,10 @@ which changes the computer's theme (the one This computer follows), and
 Ctrl+Shift+Space opens Desktop's picker. On Linux the engine ignores Super, so
 where the window manager lets Super+Ctrl+Shift+Space through, it opens
 Desktop's picker as well. A held chord does not open and close the picker over
-and over. The settings cog's **Theme…** opens the picker too; the theme cycle
-stays in the palette.
+and over. The palette's **Theme: choose…** opens the picker too; the theme
+cycle stays in the palette.
 
-The font picker has no default chord: the settings cog's **Font…** and the
-palette's **Font: choose…** open it, and a chord given in the shortcuts editor
+The font picker has no default chord: the palette's **Font: choose…** opens it, and a chord given in the shortcuts editor
 works as the explicit themes' do (in a terminal, only a macOS chord with ⌘).
 On macOS ⌥ with Space types a no-break space, so the engine reads Space from
 the physical key, and a ⌥ chord with Space can be given.
@@ -528,12 +525,12 @@ it, also to a control in a dialog that stays open under the picker (Stop or
 Retire, Connections). The picker is on the palette layer, so it never opens where it
 cannot be seen: while a dialog above that layer is shown (the spawn dialog,
 the workspace dialog, the start dialog), the chord and **Theme: choose…** do
-nothing, and the settings cog is behind that dialog's scrim.
+nothing.
 
 F1 was considered as a second palette chord and left out: in a terminal F1
 belongs to programs such as htop and mc.
 
-Ctrl+Shift+N stays Spawn instance on Linux/Windows: New Window has no default
+Ctrl+Shift+N stays the soul chooser on Linux/Windows: New Window has no default
 chord there, and the app installs no menu there, so it takes no Ctrl
 accelerator from the terminal.
 
@@ -836,8 +833,8 @@ heading's controls, the nav, a roster row, the foot), the TUI's plain keys work 
 context (`sidebar.key.*`, `SIDEBAR_KEYS`), rebindable and unbindable in the
 shortcuts editor's **Sidebar keys** group, and each does what the same key
 does after the leader. They never fire in an editable field (one there would
-type them) or inside a menu open there (an instance row's context menu, the
-settings cog's menu), and never with focus outside the sidebar.
+type them) or inside a menu open there (an instance row's context menu), and
+never with focus outside the sidebar.
 
 | Key | Action id | Does |
 |---|---|---|
@@ -903,14 +900,10 @@ on its rows.
 - **Moving.** Up/Down move between the rows, Home/End go to the first and the
   last; moving focus selects nothing. The list scrolls within about six rows,
   the current row kept in view.
-- **Show only the current workspace.** The toggle before **Add local
-  workspace…** in the heading (`aria-pressed`), ⌥⇧⌘O / Ctrl+Alt+Shift+O
-  (`workspaces.currentOnly`, the same in every family) or the palette's
-  **Show only the current workspace** hides every row but the current one;
-  Up/Down/Home/End then stay on it; the leader's ↑ / ↓ and the workspace
-  moves still go to the previous / next workspace of the list, which then shows
-  alone. A focused row that goes hands focus to the current row. With no
-  current row (a window choosing), every row shows.
+- **Every workspace, always.** The list always shows every workspace (slice 1
+  of the Desktop UI rework dropped Show only the current workspace and its
+  ⌥⇧⌘O / Ctrl+Alt+Shift+O, which reach a terminal's program again). A focused
+  row that goes from the list hands focus to the current row.
 - **Opening.** Enter or Space shows the row's workspace in this window.
 - **Open in new window.** ⌘Enter (macOS) / Ctrl+Enter (Linux/Windows) on a row
   opens its workspace in its own window, or brings that window to the front;
@@ -967,20 +960,19 @@ other window.
 F6 moves focus to the next region, Shift+F6 to the previous one, in this order:
 
 1. **Workspaces**: the list's one tab stop (the row last focused, else the
-   current one), else the heading's **Add local workspace…** (Shift+Tab from
-   the list reaches it, and the heading's **Show only the current workspace**
-   before it, which belongs here too).
+      current one), else the heading's **Add local workspace…** (Shift+Tab from
+   the list reaches it).
 2. **Views**: the current view's nav button (Workspace overview or
    Automations, `aria-current`), else the first; the nav sits under the list.
 3. **Instance roster**: its one tab stop, the selected row (the one whose
    terminal is the active tab), else the first row; with no rows, a control it
-   shows (Retry), else the foot's **Spawn instance**, its one action. It has
+      shows (Retry), else the foot's **New agent**, its one action. It has
    no filter: the command palette finds an instance by name.
-   The sidebar's foot (one bar: the OATS mark, the sidebar toggle,
-   **Spawn instance**, the settings cog) and the sidebar's width handle after
-   it are no region: Tab reaches them after the roster, and F6 from there goes
-   on to Main, Shift+F6 back to the roster. From an empty roster's stop there (Spawn instance),
-   Shift+F6 goes back as from the roster, to the views.
+   The sidebar's foot (one bar: **N need you** while an instance needs input,
+   **New agent** and **?**) and the sidebar's width handle after it are no
+   region: Tab reaches them after the roster, and F6 from there goes on to
+   Main, Shift+F6 back to the roster. From an empty roster's stop there (New
+   instance), Shift+F6 goes back as from the roster, to the views.
 4. **Main**: with tabs open, the active tab's content (a terminal's input,
    through the same selection intent as any explicit terminal focus), else a
    focused empty split group, else the active tab in the strip; on a stage,
@@ -1075,15 +1067,17 @@ control.
   `treeGuides`, `renderer/instance-tree-view.mjs`, and the same `.ctx-guide`
   rules): the dotted line joining the roots of one group (sibling links) on the
   dot column, and the solid parent→child elbows and pass-throughs to its right.
-  As in the sidebar, a solid line joins only a child that draws its parent line
+    As the sidebar's order does (the sidebar itself draws no lines since slice 1
+  of the Desktop UI rework), a solid line joins only a child that draws its parent line
   (`drawsParentLine`, `packages/client/same-work.mjs`, #1577), and those
   children are listed first under their parent, by recency within each part.
   Its dot is the sidebar's state dot: running, stopped or unknown. A context row
   keeps its lines; only its text is dimmed.
 - **Relations in words.** A nested row's option reads "…, under <parent>" and an
   instance at either end of an explicit sibling link reads "…, sibling of
-  <name>", visually hidden and read once with the option; the lines show both,
-  so no relation text is drawn. Only direct links within one deployment count,
+    <name>", visually hidden and read once with the option; the lines show both,
+  so no relation text is drawn. The sidebar's rows say the same words after
+  their two lines. Only direct links within one deployment count,
   and a sibling's name does not match the row.
 - **While the palette is open, its own chord cycles**: ⌘K / Alt+K moves
   the active row down, ⇧⌘K / Alt+Shift+K up, both wrapping past the ends
@@ -1199,20 +1193,18 @@ the rig). "Fixed" marks a gap this change closed.
 |---|---|---|
 | List of workspaces (`#ws-list`: a list of buttons, the current one `aria-current`) | One roving stop, the row last focused, else the current row; Tab from the heading's Add; F6 (the first region); `w` in the sidebar, the leader's `o`, ⌥⌘O / Alt+O and the palette's **Workspace: switch…** focus its current row | Up/Down/Home/End move over every row; Enter/Space show the workspace in this window (one another window shows moves here); ⌘Enter (macOS) / Ctrl+Enter (Linux/Windows) opens it in a new window, as the row's description says; the sidebar keys work on a row. The leader's ↑ / ↓, and Alt+↑ / ↓ on Linux and Windows, show the previous / next row from anywhere |
 | A row's context menu (`role="menu"`, one item: **Open in new window**) | Shift+F10 or the Menu key on a row, or a right-click; focus on its item | Enter/Space open the workspace in its own window (or bring that window to the front), back on the row; Esc or Tab close it, back on the row |
-| Show only the current workspace (the toggle before Add in the sidebar's Workspace heading, `aria-pressed`) | Tab (first stop of the sidebar); ⌥⇧⌘O / Ctrl+Alt+Shift+O and the palette run it from anywhere | Enter/Space hide every row of the list but the current one, or show them all again; the choice is remembered on this computer |
-| Add local workspace… (the **+** at the end of the sidebar's Workspace heading) | Tab, after the toggle | Enter/Space open the Add / onboard dialog |
+| Add local workspace… (the **+** at the end of the sidebar's Workspace heading) | Tab (first stop of the sidebar) | Enter/Space open the Add / onboard dialog |
 | Add / onboard workspace dialog | From the header's Add, or the chooser's button; opened by itself in a window with no workspace when the Desktop serves none | Each found deployment is a button, then each row of this computer's list that can't be opened (`aria-disabled`, its state in words); one Tab stop among them, Up/Down/Home/End move: Enter/Space on a found one adds it and opens it here; Right Arrow on a row that can't be opened reaches its **Remove**, Left Arrow or Esc go back; Esc elsewhere closes; trapped; returns to what opened it, or to the list after an add |
-| Sidebar nav, under the list of workspaces (Workspace overview, Automations; one under the other) | F6 (current item, the second region); Tab; ⌘2/⌘3 (⌘1: Workspace overview on its Machines tab) | Enter/Space |
-| Roster rows | One roving stop, the selected row, else the first; F6; ⌘F / Alt+F (`sidebar.focusFilter`) and the sidebar's `/` land on it; the leader then Esc; Up/Down/Home/End (and the TUI's `k` `j` `g` `G`), PageUp/PageDown by the rows that fit; Right (`l`) expands, Left (`h`) collapses or goes to the parent; the sidebar keys (see "Sidebar keys"). A collapse never moves a row to another group: a root collapsed over its whole group stays under that group's name, and the selected row stays where it is. The list shows no scrollbar (the wheel and the touchpad scroll it): a row that takes keyboard focus (these keys, ⌘F / Alt+F, F6) is revealed whole, its tools included, by scrolling the list alone, never an ancestor | Enter/Space open the terminal (running) or Start (stopped); an arrow chord the keymap binds is the keymap's, so Alt+Shift+↑/↓ (⌥⌘↑/↓) open the terminal of the row above / below, as from anywhere |
-| Rows whose state is unknown or that the kernel does not report addressable | **Focusable, `aria-disabled` with the reason as a description (fixed: were `disabled`, which hid their tools from the keyboard)** | Activation does nothing; their tools work |
-| Row tools: PR link, Start… | Tab from the focused row (shown on focus) | Enter/Space |
+| Pinned rows, under the list of workspaces (Workspace overview, Automations; one under the other, in the roster rows' style; Automations' name says "a run failed" while its red dot shows) | F6 (current item, the second region); Tab; ⌘2/⌘3 (⌘1: Workspace overview on its Machines tab) | Enter/Space |
+| Roster rows | One roving stop, the selected row, else the first; F6; ⌘F / Alt+F (`sidebar.focusFilter`) and the sidebar's `/` land on it; the leader then Esc; Up/Down/Home/End (and the TUI's `k` `j` `g` `G`), PageUp/PageDown by the rows that fit; Right (`l`) expands, Left (`h`) collapses or goes to the parent; the sidebar keys (see "Sidebar keys"). A collapse never moves a row to another group: a root collapsed over its whole group stays under that group's name, and the selected row stays where it is. The list shows no scrollbar (the wheel and the touchpad scroll it): a row that takes keyboard focus (these keys, ⌘F / Alt+F, F6) is revealed whole by scrolling the list alone, never an ancestor | Enter/Space open the terminal (running) or Start (stopped); an arrow chord the keymap binds is the keymap's, so Alt+Shift+↑/↓ (⌥⌘↑/↓) open the terminal of the row above / below, as from anywhere |
+| Rows whose state is unknown or that the kernel does not report addressable | **Focusable, `aria-disabled` with the reason as a description (fixed: were `disabled`, which hid their tools from the keyboard)** | Activation does nothing; their context menu works |
 | A row's context menu (Open in split, Open pull request…, Knowledge & capabilities…, Start…, Restart with…, Stop…, Retire instance…; Forget… alone on a row its server no longer lists). The row has no ⋯ button | Shift+F10 or the ContextMenu key on the focused row (it opens on the row); a right-click (where you click, once the button is released; the row is not activated) | Focus on its first act; arrows, Home/End move; Enter/Space choose; Esc or Tab close it, back on the row. While it is held (a stale roster, one of its acts still running, a row that can't be used from here) it opens nothing, the focus stays on the row and the line at the bottom of the main area says why |
-| Start / Restart dialog, lifecycle dialog | From the row, its context menu, the instance panel or the leader | Esc (Cancel before anything is sent, Close or Done after); trapped; the lifecycle dialog starts on Cancel and focuses Close or Done when it ends; **focus returns to the row when its tool is hidden again (fixed: fell to `<body>`)**, and after a retire to the row that followed it |
-| Sidebar toggle (**Hide the sidebar**, in the foot's bar right after the OATS mark; `aria-expanded`) | Tab, after the roster | Enter/Space: `sidebar.toggle`, focus to Show sidebar |
-| Spawn instance (words alone at the right of the sidebar's foot, a bar named "Sidebar tools", before the cog; its chord in its tooltip) | Tab, after the sidebar toggle; on an empty roster, its one way in: F6, ⌘F / Alt+F (`sidebar.focusFilter`) and the sidebar's `/` land on it (a failed read's Retry first) | Enter/Space run `app.quickOpenSouls` (Quick Open), as its chord does |
-| Settings (the cog at the right end of the sidebar foot's bar; a menu button, `aria-haspopup="menu"`) | Tab, after Spawn instance | Enter/Space or a click open its menu on the first item, ↓ / ↑ on the first / last; in the menu (`role="menu"`: **Theme…**, **Font…**, **Keyboard shortcuts…**, each with its chord, when it has one), placed with its right edge on the cog's, above it when there is no room below, ↑/↓ move and wrap, Home/End, Enter/Space run the item after the menu has closed with focus back on the cog, Esc closes back on the cog, Tab closes |
-| Sidebar width (the handle on the sidebar's right edge: a vertical `separator` labelled "Sidebar width", `aria-valuenow`, `-valuemin` and `-valuemax` in px; the split separator's resizer, its hover and focus the accent fill) | Tab, after the settings cog (the last stop of the sidebar); F6 from it goes on to Main, Shift+F6 back to the roster | ←/→ narrow and widen it by 8px, Shift+←/→ by 32px; Home and End go to 240px and to the most the window allows (480px, or 45% of a narrower window); Enter or a double-click go back to 288px, as **Sidebar: reset width** does; a drag with the pointer. The width is remembered on this computer and kept while the sidebar is hidden |
-| Show sidebar (start of the main area's top bar, while the sidebar is hidden or in focus mode) | Tab, first in the Main region; hiding the sidebar moves focus to it | Enter/Space: `sidebar.toggle` (leaves focus mode too), focus back on the sidebar toggle |
+| Start / Restart dialog, lifecycle dialog | From the row, its context menu, the instance panel or the leader | Esc (Cancel before anything is sent, Close or Done after); trapped; the lifecycle dialog starts on Cancel and focuses Close or Done when it ends; **focus returns to the row (fixed: fell to `<body>`)**, and after a retire to the row that followed it |
+| N need you (at the left of the sidebar's foot, a bar named "Sidebar tools"; shown while an agent of this workspace needs input; its name: "2 agents need you. Go to the first") | Tab, after the roster | Enter/Space focus the first row that needs you, in the roster's order, itself: a collapsed parent above it is expanded, or the Background section opened, first; its terminal is not opened |
+| New agent (at the right of the sidebar's foot, a + and its words; its chord in its tooltip) | Tab, after N need you; on an empty roster, its one way in: F6, ⌘F / Alt+F (`sidebar.focusFilter`) and the sidebar's `/` land on it (a failed read's Retry first) | Enter/Space run `app.quickOpenSouls` (Quick Open), as its chord does |
+| ? (Keyboard shortcuts, at the right end of the sidebar's foot; a red dot while a shortcut you set clashes) | Tab, after New agent | Enter/Space open the shortcuts editor (`app.shortcuts`), as ⌘, / Ctrl+, do |
+| Sidebar width (the handle on the sidebar's right edge: a vertical `separator` labelled "Sidebar width", `aria-valuenow`, `-valuemin` and `-valuemax` in px; the split separator's resizer, its hover and focus the accent fill) | Tab, after the foot's ? (the last stop of the sidebar); F6 from it goes on to Main, Shift+F6 back to the roster | ←/→ narrow and widen it by 8px, Shift+←/→ by 32px; Home and End go to 240px and to the most the window allows (480px, or 45% of a narrower window); Enter or a double-click go back to 288px, as **Sidebar: reset width** does; a drag with the pointer. The width is remembered on this computer and kept while the sidebar is hidden |
+| Show sidebar (start of the main area's top bar, while the sidebar is hidden or in focus mode) | Tab, first in the Main region; hiding the sidebar moves focus to it | Enter/Space: `sidebar.toggle` (leaves focus mode too), focus back on the roster's current row (on an empty roster, New agent) |
 | Tab bar | One roving stop per tablist (per group when split); F6 (main). Tabs shrink to fit (spec F); the active tab is scrolled fully into view in its own strip on every activation, close and strip resize, and a focused control is revealed in its strip, never by scrolling an ancestor | Left/Right/Home/End select; Delete closes the focused tab, and the keymap's `tabs.close` (⌘W / Alt+W, rebindable; the close button's tooltip names it) closes the active one; Ctrl+Tab, Alt+→/← (⌥⌘→/←) and go-to-tab (each tab shows its number) from anywhere in the tab layer, a terminal included, **keeping focus in the content (fixed: fell to `<body>`)** |
 | Terminal | Enter on its roster row; F6 (main) | Every key reaches the program except the terminal-allowlisted chords; ⇧⌘F6 / Ctrl+Shift+F6 leaves for the next region; ⌘C / Ctrl+Shift+C copy the selection and ⌘V / Ctrl+Shift+V paste |
 | Tab close buttons | Tab | Enter |

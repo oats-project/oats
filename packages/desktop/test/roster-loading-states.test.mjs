@@ -24,11 +24,8 @@ import { instanceActionTarget, sameInstanceActionTarget } from '../renderer/inst
 import { instanceSplitPlan } from '../renderer/instance-split.mjs';
 import { runtimeState, unsupportedSession } from '../../client/instance-presentation.mjs';
 import { canAddressRemote, rowReason } from '../../client/remote-address.mjs';
-import { createRuntimeBadge } from '../renderer/identity-marks.mjs';
 import { iconElement, mountShellIcons } from '../renderer/shell-icons.mjs';
-import { rosterTipFacts } from '../renderer/roster-tip.mjs';
 import { revealInScrollport } from '../renderer/reveal-in-scrollport.mjs';
-import { prChip, prText } from '../renderer/roster-pr.mjs';
 import { createPendingWatch, unservedError, NOT_SERVED_CODE, NO_ANSWER_CODE, PENDING_LIMIT_MS } from '../renderer/deployment-header.mjs';
 import { deploymentUnavailableText } from '../../client/deployment-facts.mjs';
 import { panelErrorCause } from '../../client/deployment-contract.mjs';
@@ -64,6 +61,9 @@ function clock() {
 }
 const row = (name, extra = {}) => ({ instance: name, home: `/synthetic/${name}`, agentsRoot: '/synthetic/agents', repoName: 'oats', branch: `b/${name}`, running: true, ...extra });
 const roster = [row('alpha'), row('beta', { running: false }), row('gamma', { parentInstance: 'alpha' })];
+/** Whether a stale roster holds a stopped row's start (slice 1: no Start… tool; the row's activation starts nothing and
+ * says why, as its description): true held, false not, null when no stopped row is drawn. */
+const startHeld = s => { const b = s.list().querySelector('.ctx-inst.idle'); return b ? b.getAttribute('aria-description') === tree.ROSTER_STALE_TITLE : null; };
 const panelOf = (ws, instances, extra = {}) => ({ workspace: { id: ws, name: ws }, workspaces: [{ id: 'A', name: 'A' }, { id: 'B', name: 'B' }], deployment: { status: 'observed' }, instances, ...extra });
 
 /* ── the helpers in instance-tree-view.mjs ─────────────────────────────────────── */
@@ -179,13 +179,13 @@ function shell(t, { addResult = { ok: true, workspace: { id: 'A' } }, workspace 
     ...tree, document: doc, console,
     // The controller is built by the shipped initContextRoster; the clock is the test's.
     createRosterLoading: (d, el, options) => tree.createRosterLoading(d, el, { ...options, now: c.now, setTimeout: c.setTimeout, clearTimeout: c.clearTimeout }),
-    instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason, createRuntimeBadge, instanceActionTarget, instanceSplitPlan, iconElement, prChip, prText, revealInScrollport,
-    rosterTipFacts, deploymentUnavailableText, staleWorkspaceSelection, panelErrorCause,
+    instanceActions, captureInstanceActionMenu, runtimeState, unsupportedSession, canAddressRemote, rowReason, instanceActionTarget, instanceSplitPlan, iconElement, revealInScrollport,
+    deploymentUnavailableText, staleWorkspaceSelection, panelErrorCause,
     // #461: the bounded wait runs on the test's clock; Re-add goes to a recorded bridge.
     rosterPendingWatch: createPendingWatch({ now: c.now, setTimeout: c.setTimeout, clearTimeout: c.clearTimeout, onOverdue: subject => context.rosterOverdue(subject) }), unservedError, NOT_SERVED_CODE, NO_ANSWER_CODE, rosterReAddLease: 0,
     desktopBridge: { workspaceAdd: async path => { adds.push(path); return typeof addResult === 'function' ? addResult(path) : addResult; } },
     noteUnlisted: result => result, // #1390: a committed add's listing failure is the notifications' (deployments-list tests)
-    rosterTip: { bind() {}, hide() {}, sync() {} }, rosterPrs: { get: () => null, refresh() {} }, spawnJobs: { rows: () => [], announce: () => false, observe() {}, settling: () => false, check() {} }, ctx: {},
+    spawnJobs: { rows: () => [], announce: () => false, observe() {}, settling: () => false, check() {} }, ctx: {},
     connectionGeneration: 0, menuState() {}, runAction: assert.fail, said: [], sayInHint: line => context.said.push(line), getBinding: () => null, formatChord: x => x, isMac: true,
     contextRosterEl: null, contextRosterGen: 0, contextWorkspace: workspace, contextInstances: [], tabWorkspace: workspace,
     rosterState: null, rosterStale: false, contextDeploymentNote: null, ...viewContext(), rosterSignaturePainted: null,
@@ -253,16 +253,16 @@ test('a slow first read shows five roster-row skeletons in the list, then the ro
   assert.equal(s.list().querySelector('[data-skeleton]'), null); assert.equal(s.rows().length, 3);
 });
 
-test('a successful zero read paints the empty copy, "No instances.", the roster\'s only empty copy (it has no filter)', async t => {
+test('a successful zero read paints the empty copy, "No agents yet", the roster\'s only empty copy (it has no filter)', async t => {
   const s = shell(t);
   assert.equal(s.rosterEl.querySelector('.ctx-filter, input'), null, 'the shipped roster has no filter field');
   await s.reply(0, panelOf('A', []));
-  assert.equal(s.text(), 'No instances.'); assert.equal(s.count().textContent, '0 running');
+  assert.equal(s.text(), 'No agents yet'); assert.equal(s.count().textContent, '0 running');
   assert.equal(s.context.rosterState.state, 'empty'); assert.equal(s.list().getAttribute('aria-busy'), null);
   s.refreshContextRoster(); await s.reply(1, panelOf('A', roster));
   assert.deepEqual(s.names(), ['alpha', 'gamma', 'beta']);
   s.refreshContextRoster(); await s.reply(2, panelOf('A', []));
-  assert.equal(s.text(), 'No instances.', 'emptied again: the same copy');
+  assert.equal(s.text(), 'No agents yet', 'emptied again: the same copy');
 });
 
 test('a failed first read paints the failed block (cause, Details, Retry) where the skeleton stood, never "Roster unavailable"; Retry re-reads as a user read', async t => {
@@ -343,10 +343,8 @@ test('failure with data: rows kept, stale line with the observed age and Retry, 
   assert.equal(s.live().textContent, "Couldn't refresh instances.");
   assert.equal(s.count().title, 'Last observation — 2 running · 1 stopped'); assert.equal(s.count().textContent, 'Last observation: 2 running');
   assert.equal(s.doc.activeElement.dataset.treeInstance, alpha.dataset.treeInstance, 'the focused row survives the stale repaint');
-  // Stale marks are aria-disabled (Chromium blurs a focused control that becomes `disabled`), with the reason; their activation does nothing.
-  const start = s.list().querySelector('.ctx-start'); start.focus();
-  assert.equal(start.disabled, false); assert.equal(start.getAttribute('aria-disabled'), 'true'); assert.equal(start.title, tree.ROSTER_STALE_TITLE); assert.equal(start.getAttribute('aria-description'), 'Unavailable: roster is not current', 'an accessible reason, not just a greyed look');
-  start.click(); assert.equal(s.doc.activeElement, start, 'a stale Start… starts nothing (openInstanceStart is assert.fail here) and keeps focus');
+  // Slice 1: no Start… tool on any row (its act is the context menu's, held below).
+  assert.equal(s.list().querySelector('.ctx-start, .ctx-row-tools'), null, 'no row tools');
   // #1559: no ⋯ trigger on any row. A stale roster holds every row's context menu: a right-click (at the pointer) or a
   // key (Shift+F10, the Menu key: no pointer) opens nothing, says why in the hint's line, and leaves focus on the row.
   assert.equal(s.list().querySelector('.ctx-instance-actions'), null, 'no ⋯ trigger on a stale roster');
@@ -364,7 +362,7 @@ test('failure with data: rows kept, stale line with the observed age and Retry, 
   // roster may be wrong about running:false by now (the maintainer's return on #322).
   const alphaRow = s.rows()[0].querySelector('.ctx-inst'), betaRow = s.rows().find(r => r.querySelector('.ctx-name').dataset.name === 'beta').querySelector('.ctx-inst');
   assert.equal(alphaRow.disabled, false); assert.equal(alphaRow.getAttribute('aria-description'), null, 'opening the existing terminal stays possible');
-  assert.equal(betaRow.getAttribute('aria-description'), tree.ROSTER_STALE_TITLE); assert.equal(betaRow.title, tree.ROSTER_STALE_TITLE);
+  assert.equal(betaRow.getAttribute('aria-description'), tree.ROSTER_STALE_TITLE); assert.equal(betaRow.title.split('\n')[0], tree.ROSTER_STALE_TITLE);
   betaRow.click(); // openInstanceStart is assert.fail in this shell: reaching it would fail the test
   alphaRow.focus();
   // The age line keeps itself current.
@@ -380,7 +378,7 @@ test('failure with data: rows kept, stale line with the observed age and Retry, 
   assert.equal(s.rows().length, 3, 'still kept while retrying');
   await s.reply(3, panelOf('A', roster, { observedAt: new Date(s.c.now()).toISOString() }));
   assert.equal(s.status().children.length, 0); assert.equal(s.context.rosterState.state, 'ready');
-  assert.equal(s.list().querySelector('.ctx-start').getAttribute('aria-disabled'), null); assert.equal(s.list().querySelector('.ctx-start').title, '');
+  assert.equal(startHeld(s), false);
   assert.equal(s.rows().find(r => r.querySelector('.ctx-name').dataset.name === 'beta').querySelector('.ctx-inst').getAttribute('aria-description'), null, 'the stopped row is a Start again');
   assert.equal(s.count().dataset.stale, undefined);
   assert.equal(s.live().textContent, 'Instances updated');
@@ -399,7 +397,7 @@ test('a reported panel error beside instances is the last observation: stale lin
   assert.equal(s.context.rosterState.state, 'stale');
   const notice = s.status().querySelector('.loading-notice[data-kind="stale"]');
   assert.equal(notice.title, 'Server is unreachable'); assert.match(notice.textContent, /^Couldn't refresh instances/);
-  assert.equal(s.list().querySelector('.ctx-start').getAttribute('aria-disabled'), 'true');
+  assert.equal(startHeld(s), true);
   assert.equal(s.live().textContent, "Couldn't refresh instances.");
   const rows = s.rows();
   s.refreshContextRoster(); await s.reply(1, panelOf('A', roster, { error: 'Server is unreachable' }));
@@ -407,7 +405,7 @@ test('a reported panel error beside instances is the last observation: stale lin
   assert.equal(s.status().querySelector('.loading-notice'), notice, 'the stale line is updated in place');
   assert.equal(s.live().textContent, "Couldn't refresh instances.", 'and not announced anew');
   s.refreshContextRoster(); await s.reply(2, panelOf('A', roster));
-  assert.equal(s.status().children.length, 0); assert.equal(s.list().querySelector('.ctx-start').getAttribute('aria-disabled'), null);
+  assert.equal(s.status().children.length, 0); assert.equal(startHeld(s), false);
   assert.equal(s.context.rosterState.state, 'ready');
 });
 
@@ -476,7 +474,7 @@ test('a switch away from a stale roster forgets the stale mark and the stale lin
   assert.equal(s.list().querySelector('.loading-failed'), null, 'a superseded failure is not this subject\'s failure');
   assert.equal(s.context.rosterState.state, 'pending');
   await s.reply(3, panelOf('B', [row('b-one', { running: false })]));
-  assert.equal(s.list().querySelector('.ctx-start').disabled, false, 'B starts unmarked');
+  assert.equal(startHeld(s), false, 'B starts unmarked');
 });
 
 test('the retired wording is gone from the roster and the fixed wording is the primitive\'s', () => {
@@ -515,7 +513,7 @@ test('a panel that reports an error with no instances is a failed read, never "N
   void u.refreshContextRoster(); await u.reply(2, panelOf('A', [], { error: 'Server is unreachable' }));
   assert.deepEqual(u.names(), ['alpha', 'gamma', 'beta'], 'the last observation stays'); assert.equal(u.context.rosterState.state, 'stale');
   assert.match(u.status().textContent, /Couldn't refresh instances/); assert.equal(u.status().querySelector('.loading-notice').title, 'Server is unreachable');
-  assert.ok(u.rows().every(r => !r.querySelector('.ctx-start') || r.querySelector('.ctx-start').getAttribute('aria-disabled') === 'true'), 'stale: Start… held (aria-disabled)');
+  assert.equal(startHeld(u), true, 'stale: the stopped row starts nothing and says why');
   assert.equal(u.count().dataset.stale, '1'); assert.equal(u.list().querySelector('.loading-failed'), null, 'no failed block over data');
 });
 
@@ -548,8 +546,8 @@ test('a Herdr-recorded row cannot open or start: the row and its Open in split a
   const s = shell(t), reason = 'E_HERDR_REMOVED: Herdr is no longer supported by OATS (removed in 0.31.0); tmux is the only session backend.';
   await s.reply(0, panelOf('A', [row('alpha'), row('herdr-one', { agent: 'soul', running: null, runtimeState: 'unsupported', runtimeError: reason })]));
   const target = s.rows().find(r => r.textContent.includes('herdr-one')), open = target.querySelector('button[data-tree-control="terminal"]');
-  assert.equal(open.getAttribute('aria-disabled'), 'true'); assert.equal(open.title, reason);
-  assert.equal(target.querySelector('.ctx-start'), null, 'no enabled Start in the row tools');
+  assert.equal(open.getAttribute('aria-disabled'), 'true'); assert.equal(open.title.split('\n')[0], reason);
+  assert.equal(target.querySelector('.ctx-start, .ctx-row-tools'), null, 'no row tools (slice 1)');
   const item = action => target.querySelector(`[data-action="${action}"]`);
   for (const action of ['open-split', 'start']) { assert.equal(item(action).disabled, true, action); assert.equal(item(action).title, reason, action); }
   assert.equal(item('restart'), null); assert.equal(item('retire').disabled, false);
@@ -663,13 +661,13 @@ test('a kept failure with no words is still a failure: the rows go stale and the
   for (const extra of [{ error: '' }, { error: '', errorOrigin: 'kernel' }, { error: ' \n ', errorOrigin: 'kernel' }]) {
     const s = shell(t);
     await s.reply(0, panelOf('A', roster));
-    assert.equal(s.context.rosterState.state, 'ready'); assert.equal(s.list().querySelector('.ctx-start').getAttribute('aria-disabled'), null);
+    assert.equal(s.context.rosterState.state, 'ready'); assert.equal(startHeld(s), false);
     s.refreshContextRoster(); await s.reply(1, panelOf('A', roster, extra));
     assert.equal(s.context.rosterState.state, 'stale', JSON.stringify(extra)); assert.equal(s.rows().length, 3, 'the last observation stays');
     const notice = s.status().querySelector('.loading-notice[data-kind="stale"]');
     assert.match(notice.querySelector('.loading-notice-text').textContent, /^Couldn't refresh instances/); assert.equal(notice.hasAttribute('title') && notice.title !== '', false, 'no words, no title');
     assert.equal(notice.querySelector('.loading-notice-details, details').hidden, true, 'and no Details');
-    assert.equal(s.list().querySelector('.ctx-start').getAttribute('aria-disabled'), 'true'); assert.equal(s.live().textContent, "Couldn't refresh instances.");
+    assert.equal(startHeld(s), true); assert.equal(s.live().textContent, "Couldn't refresh instances.");
     // The same failure with no rows over rows already shown keeps them, stale; a good read clears it.
     s.refreshContextRoster(); await s.reply(2, panelOf('A', [], extra));
     assert.equal(s.context.rosterState.state, 'stale'); assert.equal(s.rows().length, 3); assert.doesNotMatch(s.text(), /No instances/);
@@ -936,7 +934,7 @@ test('an empty deployment\'s observed answer, as the server sends it, settles to
   // /api/panel for an observed deployment with no souls and no instances (unserved-deployment-server.test.mjs).
   await s.reply(0, panelOf('A', [], { deployment: { status: 'observed', root: '/d/A/agents', workspace: { name: 'web', key: 'k' }, reachable: { reachable: true }, withheld: [],
     catalog: { souls: [], ambiguous: [], reason: null, observedAt: null, refreshing: false }, catalogKey: undefined }, observedAt: '2026-10-02T00:00:00.000Z', refreshing: false, running: 0 }));
-  assert.equal(s.text(), 'No instances.'); assert.equal(s.context.rosterState.state, 'empty');
+  assert.equal(s.text(), 'No agents yet'); assert.equal(s.context.rosterState.state, 'empty');
   assert.equal(s.list().getAttribute('aria-busy'), null); assert.doesNotMatch(s.text(), /Reading the deployment/);
   s.refreshContextRoster(); await s.reply(1, panelOf('A', roster));
   assert.equal(s.rows().length, 3, 'refresh still works');
