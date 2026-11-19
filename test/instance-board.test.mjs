@@ -15,16 +15,18 @@
 //   write drops them; facts persist;
 // - the reads: `board` null with no file, an empty board for a malformed one, never an error; the row carries no
 //   history or context; inspect --board carries both; the file is 0600 and kernel-owned;
-// - refusals: --home, --dir and --server, and outside an instance home.
+// - refusals: --home, --dir and --server, and outside an instance home;
+// - the hard cases: the last default id; a session boundary that falls out of the log's bounded read; a
+//   boundary written while a board write runs; a claim write that fails, then the same command again.
 // The remote roster's relay is pinned in test/remote-parity.test.mjs; the probe's boardApi and the feature in
 // test/cli-json-contract.test.mjs.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { v2Deployment, CLI } from "./helpers/v2-deployment.mjs";
-import { BOARD_FILE, ROW_MAX, boardRow, readBoardDocument, readBoardRow, readRemoteBoard } from "../lib/instance-board.mjs";
+import { BOARD_FILE, ROW_MAX, askBoardQuestion, boardRow, readBoardDocument, readBoardRow, readRemoteBoard, setBoardFact } from "../lib/instance-board.mjs";
 import { appendEvent, readEvents, waitingHold } from "../lib/instance-events.mjs";
 import { disposableHomeRootProblem } from "../lib/capability-contract.mjs";
 import { KERNEL_HOME_RECEIPTS } from "../lib/core.mjs";
@@ -301,4 +303,67 @@ test("readRemoteBoard: a host's board read by this kernel's rule; null stays nul
     assert.deepEqual(readRemoteBoard(bad), empty, JSON.stringify(bad)?.slice(0, 80));
   }
   assert.deepEqual(boardRow({ facts: [], questions: [] }), empty);
+});
+
+test("the last default id: past q999999999999999 a default ask is E_BOARD_FULL, and the board stays readable", async () => {
+  const home = await freshHome();
+  ok(agent(home, ["set", "pr", "--label", "Pull request", "--value", "#1"]), "a fact");
+  ok(agent(home, ["ask", "Last?", "--option", "a", "--option", "b", "--id", "q999999999999999"]), "the longest explicit q<n>");
+  const before = fileOf(home);
+  refused(agent(home, ["ask", "Next?", "--option", "a", "--option", "b"]), "E_BOARD_FULL", "no default id is left");
+  assert.equal(fileOf(home), before, "nothing was written");
+  assert.deepEqual(statusRow(home).board.facts.map((f) => f.key), ["pr"], "the facts are still there");
+  assert.equal(ok(agent(home, ["ask", "Next?", "--option", "a", "--option", "b", "--id", "next"]), "an explicit id still goes").id, "next");
+});
+
+test("a session boundary that falls out of the log's bounded read does not bring an ended session's question back; a question can't be asked until a boundary is readable", async () => {
+  const home = await freshHome();
+  ok(agent(home, ["set", "pr", "--label", "Pull request", "--value", "#1"]), "a fact");
+  ok(agent(home, ["ask", "Old?", "--option", "a", "--option", "b"]), "a question");
+  await new Promise((r) => setTimeout(r, 5));
+  const boundary = appendEvent(home, { kind: "restarted" });
+  assert.deepEqual(statusRow(home).board.questions, []);
+  // More than the read's 4 MiB of valid rows after the boundary, in the home log the rows read.
+  const row = { ...boundary.row, kind: "launch-warning", data: { message: "x".repeat(2000) } };
+  const line = JSON.stringify(row) + "\n";
+  appendFileSync(join(home, ".oats-events.jsonl"), line.repeat(Math.ceil((4.5 * 1024 * 1024) / line.length)));
+  assert.deepEqual(statusRow(home).board.questions, [], "the ended question stays ended");
+  ok(agent(home, ["set", "pr", "--label", "Pull request", "--value", "#2"]), "a fact still goes");
+  assert.equal(readEvents(home).waitingOnYou, null, "and asserts no claim");
+  assert.equal(readBoardDocument(home).questions.length, 0, "the write dropped the question");
+  const e = refused(agent(home, ["ask", "New?", "--option", "a", "--option", "b"]), "E_BOARD_FAILED", "a question where the session can't be read");
+  assert.match(e.message, /oats instance attention/);
+  await new Promise((r) => setTimeout(r, 5));
+  appendEvent(home, { kind: "launched" });
+  assert.equal(ok(agent(home, ["ask", "New?", "--option", "a", "--option", "b"]), "after a readable boundary").changed, true);
+  assert.equal(statusRow(home).board.questions.length, 1);
+});
+
+test("a session boundary written while a board write runs ends the question with its claim", async () => {
+  const home = await freshHome();
+  await fx.inEnv(() => askBoardQuestion(home, { question: "Ship?", options: ["yes", "no"] }));
+  assert.equal(readEvents(home).waitingOnYou.message, "Ship?");
+  // The boundary lands after the write has read the board and before it sets the claim.
+  await new Promise((r) => setTimeout(r, 5));
+  await fx.inEnv(() => setBoardFact(home, { key: "pr", label: "Pull request", value: "#1" }, { now: () => { appendEvent(home, { kind: "restarted" }); return new Date(); } }));
+  assert.deepEqual(readBoardRow(home).questions, [], "the question is not live");
+  assert.equal(readEvents(home).waitingOnYou, null, "and its claim, written after the boundary, does not count");
+});
+
+test("a claim write that fails is E_EVENTS_FAILED naming the question; the same command again repairs it and asks nothing twice", async () => {
+  const home = await freshHome();
+  const logs = join(fx.dep, ".agents", "events");
+  const log = join(logs, readdirSync(logs).find((n) => n.endsWith(`--${home.split("/").at(-1)}.jsonl`)));
+  const kept = readFileSync(log);
+  rmSync(log); mkdirSync(log);
+  const argv = ["ask", "Squash?", "--option", "yes", "--option", "no"];
+  const e = refused(agent(home, argv), "E_EVENTS_FAILED", "the workspace log can't be written");
+  assert.equal(e.details.id, "q1");
+  assert.match(e.message, /run the same board command again/);
+  assert.equal(readBoardDocument(home).questions.length, 1, "the board was written");
+  rmSync(log, { recursive: true }); writeFileSync(log, kept);
+  const again = ok(agent(home, argv), "the same command again");
+  assert.equal(again.id, "q1"); assert.equal(again.changed, false);
+  assert.deepEqual(readBoardDocument(home).questions.map((q) => q.id), ["q1"], "nothing was asked twice");
+  assert.equal(readEvents(home).waitingOnYou.message, "Squash?", "the claim is repaired");
 });

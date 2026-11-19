@@ -4871,7 +4871,11 @@ oats instance attention [--message=<text>] [--clear] --json
 
 - **The row.** A claim is a `waiting` event, `data: {waitingOnYou: true,
   reason, message?}` or `{waitingOnYou: false}`, appended to both logs, with
-  `producer` the caller's `--producer`.
+  `producer` the caller's `--producer`. The board's claim (producer
+  `oats.board`, [The agent's board](#the-agents-board-oats-instance-board))
+  also carries `session`, the id of the session it was set in. A row with a
+  `session` counts only while that is still the current session; no verb
+  sets one.
 - **`waiting`.** `--producer` matches `^[a-z0-9][a-z0-9._/-]{0,63}$` and is
   not `kernel`. `set` needs `--reason`, one of `permission`, `question`,
   `attention` (closed). `clear` refuses `--reason` and `--message`. The home
@@ -6972,10 +6976,12 @@ the top of the list, which is something else.
   changed. **`unset`** removes the key and its history.
 - **`ask`** opens a question. Its id is `--id`, or `q<n>` by default. `n` is
   counted per home and never reused while the home lives, so a late answer
-  can't land on a newer question. At most 9 open at once: one more is
-  `E_BOARD_FULL`. Asking again under an open id with the same question,
-  options and context changes nothing, so a retry is safe. Anything else
-  under an open id is `E_BAD_ARGS`. **`ask --clear <id>`** closes the
+  can't land on a newer question (past `q999999999999999` no default id is
+  left: `E_BOARD_FULL`, ask with `--id`). At most 9 open at once: one more is
+  `E_BOARD_FULL`. Asking a question that is open with the same text, options
+  and context again changes nothing and answers its id, with or without
+  `--id`, so a retry is safe. Anything else under an open id is
+  `E_BAD_ARGS`. **`ask --clear <id>`** closes the
   question, which the agent does once it has read the answer. Clearing an id
   that isn't open changes nothing.
 - **Text.** Key and id match `^[a-z0-9][a-z0-9-]{0,15}$`. Label, value,
@@ -6990,23 +6996,30 @@ the top of the list, which is something else.
   8 KiB as UTF-8 JSON is `E_BOARD_FULL`, with `details.bytes` and
   `details.max`. Every client can rely on that bound for every row. A
   refused write writes nothing.
-- **Per session.** A question asked before the instance's latest kernel
-  session boundary (`launched`, `restarted`, `stopped`: the
-  [waiting claim's rule](#waiting-on-you)) is not live. No row shows it, and
-  the next write drops it. Facts persist across sessions until they are unset
-  or the home is retired.
+- **Per session.** A question records the session it was asked in: the
+  instance's latest kernel session boundary (`launched`, `restarted`,
+  `stopped`: the [waiting claim's rule](#waiting-on-you)). It is live only
+  while that is still the current session. Once a later boundary is written,
+  no row shows it, and the next write drops it. Where the events log's bounded
+  read (its last 4 MiB) holds no boundary, the current session can't be
+  proved: no question is live, and `ask` is `E_BOARD_FAILED` until the next
+  boundary. Facts persist across sessions until they are unset or the home is
+  retired.
 
 **The needs-input claim.** While any question is open, the home holds the
 [waiting claim](#waiting-on-you) of producer `oats.board`, reason
 `attention`. Its message is the oldest open question. The last `--clear`
-removes it. Reason `attention` holds no scheduled wake
+removes it. The claim's row records the session the write read
+(`session`), and counts only in that session, so a boundary written while a
+board write runs ends the claim with the question. Reason `attention` holds no scheduled wake
 ([A held wake](schedules.md#a-held-wake)): a board question leaves the
 harness at its normal input line. The claim is a producer of its own, so the
 agent's own `attention` claim can be live beside it, and `waitingOnYou`
 picks between them by its usual rule. Every board write sets the claim to
 what the questions say after it. A write whose claim fails is
-`E_EVENTS_FAILED` after the board was written, and running the same command
-again repairs it.
+`E_EVENTS_FAILED` after the board was written, with `details.id` (or
+`details.key`) naming what was written. Running the same command again
+changes nothing on the board and repairs the claim.
 
 **How a person answers.** The kernel routes no answer. A client types it as
 the person's own keystrokes, in the agent's terminal, as `<id>: <text>`
@@ -7031,9 +7044,10 @@ arrive typed as "<id>: <text>"` (or `cleared`, `was not open`).
 |---|---|
 | `E_USAGE` | Not in an instance session: `$OATS_INSTANCE_HOME` unset, not absolute, or not an instance home under its agents root |
 | `E_BAD_ARGS` | `--home`, `--dir` or `--server`; a field out of its rules; fewer than 2 or more than 4 options; another question under an open id; a flag given twice (`--option` repeats); `--clear` beside anything else |
-| `E_BOARD_FULL` | A 13th fact, a 10th open question, or a row over 8 KiB; nothing was changed |
+| `E_BOARD_FULL` | A 13th fact, a 10th open question, a row over 8 KiB, or no default id left; nothing was changed |
+| `E_BOARD_FAILED` | `ask` where the current session can't be read from the events log (no boundary in its last 4 MiB); nothing was changed. Use `oats instance attention --message` |
 | `E_BOARD_BUSY` | Another process holds the board's lock past 5 seconds (`details.lock`); nothing was changed |
-| `E_EVENTS_FAILED` | The board was written, but its claim was not: run the same command again |
+| `E_EVENTS_FAILED` | The board was written (`details.id` or `details.key`), but its claim was not: run the same command again |
 
 **Where it is read.** [`board` on status rows](#row-board), relayed on
 [remote roster rows](#the-remote-roster-oats-server-roster---json), and with

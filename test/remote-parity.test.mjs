@@ -201,7 +201,10 @@ test("server roster: instance rows carry the remote status facts, null where the
   const odd = { instance: "dev-c", home: "/srv/ws/agents/dev/instances/dev-c", running: false, color: "teal", background: "yes", pinned: "true", sameWork: "true",
     board: { facts: [{ key: "pr", label: "PR", value: "#1", unit: null, link: "javascript:alert(1)", at: "2026-09-29T10:05:00.000Z" }], questions: [] } };
   const oddPin = { instance: "dev-d", home: "/srv/ws/agents/dev/instances/dev-d", running: false, pinned: 1, board: null };
-  const status = { root: "/srv/ws/agents", agents: [{ name: "dev", harness: "claude", instances: [full, bare, odd, oddPin] }] };
+  // A board over the row's 8 KiB bound, each fact within its own: an empty board, never a failed roster.
+  const wide = { key: "w", label: "界".repeat(40), value: "界".repeat(80), unit: "界".repeat(16), link: `https://example.com/${"x".repeat(492)}`, at: "2026-09-29T10:05:00.000Z" };
+  const overBound = { instance: "dev-e", home: "/srv/ws/agents/dev/instances/dev-e", running: false, board: { facts: Array.from({ length: 12 }, (_, i) => ({ ...wide, key: `w${i}` })), questions: [] } };
+  const status = { root: "/srv/ws/agents", agents: [{ name: "dev", harness: "claude", instances: [full, bare, odd, oddPin, overBound] }] };
   const { exec } = countingExec(() => JSON.stringify(status));
   const out = await rosterGroups({ io: { execFileAsync: async (...call) => exec(...call) } });
   const rows = out.groups[0].instances;
@@ -216,6 +219,7 @@ test("server roster: instance rows carry the remote status facts, null where the
   assert.deepEqual(a.board, full.board, "a board is relayed as the host's row says it");
   assert.deepEqual(rows.find((r) => r.instance === "dev-c").board, { facts: [], questions: [] }, "a board out of its rules is an empty board");
   assert.equal(rows.find((r) => r.instance === "dev-d").board, null, "null stays null");
+  assert.deepEqual(rows.find((r) => r.instance === "dev-e").board, { facts: [], questions: [] }, "a board over the row bound is an empty board");
   for (const n of ["dev-b", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === n), "board"), false, `${n}: no board key from a row without one`);
   for (const n of ["dev-b", "dev-c", "dev-d", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === n), "pinned"), false, `${n}: no pinned key, never false or null`);
   for (const name of ["dev-b", "dev-c", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === name), "sameWork"), false, `${name}: no sameWork, never false or null`);
