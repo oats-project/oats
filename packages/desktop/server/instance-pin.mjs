@@ -23,10 +23,11 @@
  *                                                       or `server`, as for the colour)
  *
  * The kernel's answer is `{ instancePinApi: 1, instance, home, pinned, changed }`: one for another instance or
- * another home is an unknown outcome, never a success. */
+ * another home is an unknown outcome, never a success (packages/client instance-pin.mjs pinAnswer, the one reading). */
 import { cliInstancePin } from '../../client/cli-adapter.mjs';
 import { PIN_FEATURE } from '../../client/instance-tree.mjs';
-import { createInstanceRecordBoundary, recordNotRun, recordOutcome } from './instance-record.mjs';
+import { pinAnswer, pinOutcome } from '../../client/instance-pin.mjs';
+import { createInstanceRecordBoundary, recordNotRun } from './instance-record.mjs';
 
 export const INSTANCE_PIN_FEATURE = PIN_FEATURE;
 /** Nothing ran: this boundary's own reasons, each its fixed sentence. */
@@ -38,13 +39,9 @@ export const instancePinNotRun = recordNotRun({
   E_BUSY: 'Another window is pinning this instance. Try again.',
 });
 
-/** The kernel's success for exactly the asked instance and home; else null (an unknown outcome). */
-const pinAnswer = (r, asked) => r.instancePinApi === 1 && r.instance === asked.instance && r.home === asked.home
-  && typeof r.pinned === 'boolean' && typeof r.changed === 'boolean'
-  ? { status: 'ok', instance: r.instance, pinned: r.pinned, changed: r.changed } : null;
-
-/** What the command answered, as the renderer reads it (instance-record.mjs recordOutcome). */
-export const instancePinOutcome = (envelope, asked) => recordOutcome(envelope, result => pinAnswer(result, asked));
+/** What the command answered, as the renderer reads it: the shared reading (packages/client instance-pin.mjs
+ * pinOutcome), the TUI's too. */
+export const instancePinOutcome = pinOutcome;
 
 const PIN_VERB = Object.freeze({ field: 'pinned', valid: v => typeof v === 'boolean', feature: INSTANCE_PIN_FEATURE,
   unavailable: 'E_INSTANCE_PIN_UNAVAILABLE', notRun: instancePinNotRun, invoke: cliInstancePin, answer: pinAnswer });

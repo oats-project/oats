@@ -2563,6 +2563,43 @@ async function acting(options = {}) {
   return r;
 }
 
+test("p pins the selected agent through the kernel's verb, as a change of this run labelled pin, and its answer reads the rows again (feature instance-pin)", async () => {
+  const PIN_CLI = Object.freeze({ ...CLI, features: Object.freeze([...CLI.features, "instance-pin"]) });
+  const r = await started({ kernel: { ok: true, cli: PIN_CLI } });
+  r.reader.answer(ENTRY);
+  await settle();
+  const home = `${DEPLOYMENT}/agents/acme-expert/instances/acme-expert-tui`;
+  // The line under the sidebar's title goes with the next key (Ctrl+L too): read what the run painted.
+  r.stdout.take();
+  r.stdin.type("p");
+  await settle(); await settle();
+  assert.match(textOf(r.stdout.take()), /Pinning acme-expert-tui…/);
+  assert.equal(r.reader.changed.length, 1, "one change");
+  const [change] = r.reader.changed;
+  assert.deepEqual(change.argv, ["instance", "pin", "acme-expert-tui", "on", "--home", home, "--dir", DEPLOYMENT, "--json"]);
+  assert.deepEqual(change.options.label, { verb: "pin", name: "acme-expert-tui" });
+  const before = readerDid(r).filter(([what]) => what === "request").length;
+  change.callback(null, JSON.stringify({ schemaVersion: 1, ok: true, result: { instancePinApi: 1, instance: "acme-expert-tui", home, pinned: true, changed: true } }), "");
+  await settle(); await settle();
+  assert.match(textOf(r.stdout.take()), /acme-expert-tui is pinned to the top/, "the line, wrapped at the sidebar's width");
+  assert.deepEqual(readerDid(r).filter(([what]) => what === "request").slice(before), [["request", { live: true }]]);
+  r.stdin.type("q");
+  assert.equal(await r.status, 0);
+});
+
+test("p on a kernel without instance-pin runs nothing and says why", async () => {
+  const r = await started();
+  r.reader.answer(ENTRY);
+  await settle();
+  r.stdout.take();
+  r.stdin.type("p");
+  await settle();
+  assert.equal(r.reader.changed.length, 0);
+  assert.match(textOf(r.stdout.take()), /This OATS can't pin instances/);
+  r.stdin.type("q");
+  assert.equal(await r.status, 0);
+});
+
 test("keys that came in one read with the key that opened a confirmation never press its act: X⏎ and Xl⏎ and Dl⏎ cancel, X⇥⏎ and D⇥⏎ review again, X⇥⇥⏎ is ignored; Enter in a read of its own presses it (Done 2)", async () => {
   for (const [typed, calls, closed, verb] of [["X\r", [], 1, "stop"], ["Xl\r", [], 1, "stop"], ["Dl\r", [], 1, "retire"], ["X\t\r", ["refresh"], 0, "stop"], ["D\t\r", ["refresh"], 0, "retire"], ["X\t\t\r", [], 0, "stop"]]) {
     const r = await acting();

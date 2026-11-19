@@ -44,7 +44,7 @@ test("the keys the TUI has beyond the shared ones stay its own", () => {
   assert.deepEqual(own, [
     ["detail", ["tab"]], ["palette", ["ctrl+k"]], ["remove", ["delete"]], ["soul-instances", ["i"]],
     ["group-next", []], ["group-previous", []], ["tab-move", []], ["group-close", []],
-    ["spawn-check", ["C"]], ["close", ["escape"]], ["quit", ["q", "ctrl+c"]], ["suspend", ["ctrl+z"]], ["redraw", ["ctrl+l"]],
+    ["spawn-check", ["C"]], ["pin", ["p"]], ["close", ["escape"]], ["quit", ["q", "ctrl+c"]], ["suspend", ["ctrl+z"]], ["redraw", ["ctrl+l"]],
   ]);
 });
 
