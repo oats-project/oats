@@ -240,6 +240,8 @@ test("Claude auth orchestration uses a scratch cwd and only user settings", asyn
     [["exec", container, "node", "-p", "process.arch"], "x64"],
     [program, "runtime fixture"],
     [program, JSON.stringify({ present: true, evidence: [] })],
+    [program, JSON.stringify("inputs: absent without the optional fragment")],
+    [program, JSON.stringify("outbox: absent without the optional fragment")],
     [["exec", "-i", "--user", "0:0", container, "node"], "root scan fixture"],
     [program, "writable scan fixture"],
     [["exec", container, "sh", "-eu", "-c", null], "EACCES /usr/local"],
