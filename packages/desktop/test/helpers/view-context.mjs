@@ -19,7 +19,8 @@
 // roster's line is the shipped words with no chord bound. The relations in words (D26: no drawn lines) are pure too.
 // Feature instance-pin: the pin's order and mark are pure and shared the same way; a suite about other behaviour runs
 // without the feature (`pinsShown`), so nothing moves and no mark is drawn, and its row menu offers no pin item.
-// instance-pin-sidebar.test.mjs turns the feature on.
+// instance-pin-menu.test.mjs turns the feature on. The palette's Instance: Pin to top / Unpin carry their real labels
+// (PIN_LABELS) and offer themselves for no target here (pinTargetOffer), so a suite that builds the palette lists neither.
 import { deploymentState, rosterSections, rowStale, splitByDeployment, rosterSectionKey, sidebarSections, isMultiDeployment } from "../../../client/roster-sections.mjs";
 import { siblingText } from "../../../client/instance-presentation.mjs";
 import { backgroundHeading } from "../../renderer/background-heading.mjs";
@@ -32,6 +33,7 @@ import { createViewMembership, rehomeMap } from "../../renderer/workspace-rehome
 import { waitingClaim, waitingSentence, waitingDetail, waitingClock } from "../../../client/waiting-on-you.mjs";
 import { waitingRollup, backgroundPlacement, rowPinned } from "../../../client/instance-tree.mjs";
 import { pinnedMark } from "../../renderer/instance-tree-view.mjs";
+import { PIN_LABELS } from "../../renderer/instance-pin-menu.mjs";
 import { rowReasonLine, runtimeErrorLine, unsupportedLine, speakerLine, keptFailureLine, heldLine } from "../../renderer/speaker-line.mjs";
 import { keptFailure } from "../../../client/deployment-facts.mjs";
 import { retiredTabs, tabShowsRow, otherIncarnation, terminalOrigin } from "../../renderer/retired-tabs.mjs";
@@ -77,4 +79,5 @@ export const viewContext = () => ({
   automationsFailure: { refresh: async () => {} },
   rowPinned, pinnedMark, pinsShown: () => false,
   pinMenu: { items: () => [], handles: () => false, run: async () => {} },
+  PIN_LABELS, pinTargetOffer: () => null, runPinCommand: async () => {},
 });

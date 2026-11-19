@@ -92,9 +92,9 @@ function rosterOrder(a, b) {
 export const PIN_FEATURE = "instance-pin";
 
 /** Whether a row is pinned: its own `pinned` is exactly `true`, read only where this computer's CLI lists
- * `PIN_FEATURE` (`pins`; a remote row's host is gated by that CLI, which relays `pinned` only from a host that lists
- * it). Any other value, and every value without the feature, is no pin: a stray field from an older host is ignored,
- * as `backgroundPlacement` reads `background`. */
+ * `PIN_FEATURE` (`pins`). A remote row carries `pinned` only when its host's own feature list names it too
+ * (remote-roster.mjs remotePanel drops it otherwise). Any other value, and every value without the feature, is no
+ * pin: a stray field from an older host is ignored, as `backgroundPlacement` reads `background`. */
 export function rowPinned(instance, pins) {
   return pins === true && instance?.pinned === true;
 }

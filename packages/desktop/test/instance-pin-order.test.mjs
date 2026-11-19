@@ -12,6 +12,7 @@ import { DESKTOP_TERMS } from "../renderer/desktop-terms.mjs";
 import { deploymentStatusData } from "../../client/deployment-data.mjs";
 import { panelInstance } from "../../client/deployment-panel.mjs";
 import { projectActivePanel, activeSignature } from "../renderer/active-observation.mjs";
+import { remotePanel } from "../../client/remote-roster.mjs";
 
 const at = (instance, created, extra = {}) => ({ instance, agent: "dev", home: `/w/${instance}`, agentsRoot: "/w",
   running: true, ...(created ? { createdAt: `2026-11-${String(created).padStart(2, "0")}T10:00:00.000Z` } : {}), ...extra });
@@ -183,4 +184,27 @@ test("the field passes the client allow-lists as exactly true, anything else is 
   assert.equal(projectActivePanel(panel(true)).instances[0].pinned, true);
   assert.equal(Object.hasOwn(projectActivePanel(panel(1)).instances[0], "pinned"), false);
   assert.notEqual(activeSignature(projectActivePanel(panel(true))), activeSignature(projectActivePanel(panel(undefined))), "a pin redraws");
+});
+
+test("a remote row pins only when its own host lists instance-pin: an older host, an unknown list or a failed read never pins, nor marks", () => {
+  // The kernel relays a row's pinned whatever its host lists; the host's own list (probe.features, relayed by a CLI
+  // with server-probe-features) is the gate, as same-work's is.
+  const remote = (features, ok = true) => ({
+    id: "host-a", server: "host", label: "Build", registrationPresent: true, target: { workspace: "/remote/p" },
+    probe: ok ? { ok: true, ...(features === undefined ? {} : { features }) } : { ok: false, error: { message: "unreachable" } },
+    agentsRoot: "/remote/p/agents", souls: [{ name: "dev" }],
+    instances: [
+      { instance: "new", agent: "dev", home: "/remote/p/agents/dev/instances/new", createdAt: "2026-10-11T09:00:00.000Z", running: true },
+      { instance: "old", agent: "dev", home: "/remote/p/agents/dev/instances/old", createdAt: "2026-10-01T09:00:00.000Z", running: true, pinned: true },
+    ],
+  });
+  const read = (group) => {
+    const rows = remotePanel(group, "2026-10-11T12:00:00.000Z").instances;
+    return { order: clusterInstances(rows, { pins: true }).flatMap((c) => c.instances.map((i) => i.instance)), pinned: rows.filter((r) => rowPinned(r, true)).map((r) => r.instance) };
+  };
+  for (const [why, group] of [["a host whose list lacks it", remote([])], ["a host with another list", remote(["instance-background"])],
+    ["a host whose list is not relayed", remote(undefined)], ["a list that is not an array", remote("instance-pin")], ["a failed read", remote([PIN_FEATURE], false)]]) {
+    assert.deepEqual(read(group), { order: ["new", "old"], pinned: [] }, why);
+  }
+  assert.deepEqual(read(remote([PIN_FEATURE])), { order: ["old", "new"], pinned: ["old"] }, "a host that lists it: its pin leads");
 });
