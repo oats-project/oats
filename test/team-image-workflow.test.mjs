@@ -35,6 +35,25 @@ test("team image verification builds the exact PR head and runs real acceptance 
   assert.doesNotMatch(read(".github/workflows/team-image.yml"), /secrets\.|packages: write|pull_request_target/);
 });
 
+test("team image verification builds the bb image from the accepted image and accepts it with its fragment", () => {
+  const job = workflow("team-image.yml").jobs.verify;
+  const accepts = job.steps.map((s, i) => [s, i]).filter(([s]) => s.run === "bash .github/scripts/team-image-accept.sh");
+  assert.equal(accepts.length, 2, "the base image and the bb image each take the same acceptance");
+  const [[base, baseAt], [bb, bbAt]] = accepts;
+  assert.equal(base.env, undefined, "the base acceptance runs without the fragment");
+  assert.equal(base.id, "accept", "export and digest binding stay on the base image");
+  assert.equal(bb.id, undefined);
+  const build = job.steps.findIndex((s) => s.run?.includes("container/agent-bb"));
+  assert.ok(baseAt < build && build < bbAt, "built after the base is accepted, accepted after it is built");
+  const image = "oats-team-agent-bb:${{ github.event.pull_request.head.sha || github.sha }}";
+  assert.equal(job.steps[build].run, 'docker build --platform linux/amd64 --build-arg "AGENT_IMAGE=$AGENT_IMAGE" --tag "$AGENT_BB_IMAGE" container/agent-bb');
+  assert.deepEqual(job.steps[build].env, { AGENT_BB_IMAGE: image });
+  assert.deepEqual(bb.env, { AGENT_IMAGE: image, AGENT_BB: "1" });
+  const script = read(".github/scripts/team-image-accept.sh");
+  assert.match(script, /if \[ "\$\{AGENT_BB:-\}" = 1 \]; then\n  compose\+=\(-f container\/agent\/compose\.agent\.bb\.yaml\)\n/);
+  assert.doesNotMatch(read(".github/workflows/release.yml"), /agent-bb|AGENT_BB/, "publication does not include the bb image");
+});
+
 test("the shared acceptance fixture runs the image owner's acceptance against Compose", () => {
   const script = read(".github/scripts/team-image-accept.sh");
   assert.match(script, /docker compose/);

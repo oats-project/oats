@@ -14,6 +14,12 @@ export AGENTS_NETWORK="oats-$TEAM" AGENT_IP=172.30.88.2
 # The base service intentionally has no optional /work mount.
 unset TEAM_WORK_DIR TEAM_INPUT_DIR AGENT_CA_FILE AGENT_MIRRORS_DIR TEAM_OUTBOX_DIR TEAM_OUTBOX_GID
 compose=(docker compose -p "oats-$TEAM" -f container/agent/compose.agent.yaml)
+# AGENT_BB=1 runs the same fixture with the bb fragment, on an image built from
+# container/agent-bb. bb adds about 650 MB and 180 pids to an idle team.
+if [ "${AGENT_BB:-}" = 1 ]; then
+  compose+=(-f container/agent/compose.agent.bb.yaml)
+  export AGENT_PIDS=512 AGENT_MEMORY=2g
+fi
 
 cleanup() {
   result=$?

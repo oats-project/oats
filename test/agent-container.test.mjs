@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { appendFileSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
+import { createServer as createHttpServer } from "node:http";
+import { createServer as createTcpServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -23,6 +25,7 @@ function sshSettings(source) {
 }
 
 const read = (name) => readFileSync(new URL(`../container/agent/${name}`, import.meta.url), "utf8");
+const readBb = (name) => readFileSync(new URL(`../container/agent-bb/${name}`, import.meta.url), "utf8");
 
 function loginFixture() {
   const dir = { uid: 0, gid: 20001, mode: 0o750, isDirectory: () => true };
@@ -203,10 +206,8 @@ test("Claude auth acceptance excludes the instance project settings", () => {
   assert.doesNotMatch(source, /"exec", "--workdir", home/);
 });
 
-test("acceptance refuses drift in the admitted container settings", async t => {
-  const { inspectAgent: inspectOnHost } = await import("../container/agent/accept.mjs");
-  // This metadata fixture has no host files. Real filesystem aliases are checked below.
-  const inspectAgent = (info, env, image, runtime) => inspectOnHost(info, env, image, runtime, source => source);
+// The admitted container as `docker inspect` reports it, with its acceptance inputs.
+function inspectFixture() {
   const env = { AGENT_IMAGE: "oats-agent:reviewed", AGENT_UID: "20001", AGENT_GID: "20001", TEAM_STATE_DIR: "/srv/team/state", TEAM_LOGIN_DIR: "/srv/team/login", AUTHORIZED_KEYS_FILE: "/srv/team/authorized_keys", RESOLV_CONF_FILE: "/srv/team/resolv.conf", AGENT_PIDS: "512", AGENT_TMP_SIZE: "134217728", AGENT_MEMORY: "3g", AGENT_CPUS: "2", AGENTS_NETWORK: "team-agents", AGENT_IP: "172.30.0.2" };
   const image = { Id: "sha256:" + "1".repeat(64), Config: { Env: ["PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/state/home"], Entrypoint: ["/usr/bin/tini", "--", "/usr/local/bin/agent-entrypoint"], Cmd: null } };
   const inspected = {
@@ -225,6 +226,14 @@ test("acceptance refuses drift in the admitted container settings", async t => {
   };
   inspected.HostConfig.Mounts = inspected.Mounts.map((m) => ({ Type: "bind", Source: m.Source, Target: m.Destination, ReadOnly: !m.RW, BindOptions: {} }));
   Object.assign(inspected.HostConfig, { Runtime: "runc", MemorySwap: 6442450944, OomKillDisable: false, DeviceCgroupRules: null, ShmSize: 67108864 });
+  return { env, image, inspected };
+}
+
+test("acceptance refuses drift in the admitted container settings", async t => {
+  const { inspectAgent: inspectOnHost } = await import("../container/agent/accept.mjs");
+  // This metadata fixture has no host files. Real filesystem aliases are checked below.
+  const inspectAgent = (info, env, image, runtime) => inspectOnHost(info, env, image, runtime, source => source);
+  const { env, image, inspected } = inspectFixture();
   assert.ok(inspectAgent(inspected, env, image).length >= 8);
   for (const tmp of [undefined, "0", "-1", "1g", "1,exec", "9007199254740992"]) {
     assert.throws(() => inspectAgent(inspected, {...env, AGENT_TMP_SIZE:tmp}, image), /AGENT_TMP_SIZE/);
@@ -535,16 +544,52 @@ test("acceptance refuses drift in the admitted container settings", async t => {
 });
 
 
-async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false, statusSpawnThrowsOnce = false, statusIgnoresTerm = false, stubbornFinish = false, brokerStatusPid = "owned", pauseAfterStarted = "", brokerDrainMs = 0, productionStopBudgets = false } = {}) {
+async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = false, statusSpawnFailsOnce = false, statusSpawnThrowsOnce = false, statusIgnoresTerm = false, stubbornFinish = false, brokerStatusPid = "owned", pauseAfterStarted = "", brokerDrainMs = 0, productionStopBudgets = false,
+  // bb: the value of AGENT_BB (absent: unset); a real fixture child serves bb's daemon status.
+  bb, bbInstalled = true, bbToken, bbTokenError = "", bbMode = "connected", externalStatus = false,
+  bbBackoffMs = 20, bbBackoffMaxMs = 80, bbStableMs, hostDrainMs = 80 } = {}) {
   const supervisor = new URL("../container/agent/supervisor.mjs", import.meta.url);
   assert.ok(existsSync(supervisor), "the image must own broker readiness and ordered child shutdown");
   const { supervise } = await import(supervisor);
   const dir = mkdtempSync(join(tmpdir(), "oats-image-supervisor-"));
   const events = join(dir, "events"), childFile = join(dir, "child.cjs"), brokerPid = join(dir, "broker-pid");
+  const bbFile = join(dir, "bb-app"), bbTokenFile = join(dir, "agent-login", "claude-token"), bbSeen = join(dir, "bb-seen.json");
   writeFileSync(events, "");
+  if (bbInstalled) writeFileSync(bbFile, "");
+  mkdirSync(join(dir, "agent-login"));
+  if (bbToken !== undefined) writeFileSync(bbTokenFile, bbToken);
+  // A free loopback port stands for 38887; nothing listens there until bb does.
+  const bbPort = await new Promise((resolve, reject) => {
+    const probe = createTcpServer().once("error", reject).listen(0, "127.0.0.1", () => { const { port } = probe.address(); probe.close(() => resolve(port)); });
+  });
+  // Another process answering on bb's port: it also counts every probe made.
+  let statusHits = 0, external;
+  if (externalStatus) {
+    external = createHttpServer((_request, response) => { statusHits += 1; response.end(JSON.stringify({ connected: true })); });
+    await new Promise((resolve, reject) => external.once("error", reject).listen(bbPort, "127.0.0.1", resolve));
+  }
+  const reads = [], existChecks = [];
   writeFileSync(childFile, `
     const fs = require("node:fs");
-    const [role, events, mode, pidFile, pidMode, pausedRole, brokerDrainMs] = process.argv.slice(2);
+    const [role, events, mode, pidFile, pidMode, pausedRole, brokerDrainMs, bbPort, bbSeen, hostDrainMs] = process.argv.slice(2);
+    if (role === "bb") {
+      // What the real child process received, read by the tests.
+      fs.writeFileSync(bbSeen, JSON.stringify({ env: process.env }));
+      if (mode === "leaves-server") {
+        // As bb-app does: the launcher's server child holds the port and outlives a killed launcher.
+        if (process.argv[12] !== "server") {
+          const server = require("node:child_process").spawn(process.execPath, [...process.argv.slice(1), "server"], { stdio: "ignore" });
+          fs.appendFileSync(events, "bb server pid " + server.pid + "\\n");
+          fs.appendFileSync(events, "bb started\\n");
+          setInterval(() => {}, 1000);
+          return;
+        }
+      }
+      if (mode === "exits") { fs.appendFileSync(events, "bb started\\nbb exited\\n"); process.exit(0); }
+      require("node:http").createServer((request, response) => {
+        response.end(JSON.stringify({ hostId: "host_fixture", connected: mode !== "never" && request.url === "/status" }));
+      }).listen(Number(bbPort), "127.0.0.1", () => fs.appendFileSync(events, "bb serving\\n"));
+    }
     const log = text => fs.appendFileSync(events, text + "\\n");
     // Keep TERM pending until SIGCONT, so it uses the disposition at "started".
     // Tests await the real supervisor signal before resuming this child.
@@ -571,7 +616,8 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
       process.on("SIGTERM", () => {
         log(role + " TERM");
         if (mode === "stubborn" && (role === "ssh" || role === "broker")) return;
-        setTimeout(() => { log(role + " ended"); process.exit(0); }, role === "host" ? 80 : role === "broker" ? Number(brokerDrainMs) : 0);
+        if (role === "bb" && mode === "stubborn-bb") return;
+        setTimeout(() => { log(role + " ended"); process.exit(0); }, role === "host" ? Number(hostDrainMs) : role === "broker" ? Number(brokerDrainMs) : 0);
       });
       // Publish the long-lived child's stop handshake only after TERM can drain it.
       started();
@@ -580,12 +626,24 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
       setInterval(() => {}, 1000);
     }
   `);
-  const children = new Map(), said = [];
+  const children = new Map(), said = [], spawned = [];
   let signal, statusFailed = false;
+  const env = { ...process.env };
+  delete env.AGENT_BB;
+  if (bb !== undefined) env.AGENT_BB = bb;
   const running = supervise({
+    env, bbFile, bbTokenFile, bbStatusUrl: `http://127.0.0.1:${bbPort}/status`, bbBackoffMs, bbBackoffMaxMs, ...(bbStableMs === undefined ? {} : {bbStableMs}),
+    ...(productionStopBudgets ? {} : {bbStopMs: 500}),
+    fileExists(path) { existChecks.push(path); return existsSync(path); },
+    readFile(path, encoding) {
+      reads.push(path);
+      if (bbTokenError) throw Object.assign(new Error("fixture read failure"), {code: bbTokenError});
+      return readFileSync(path, encoding);
+    },
     spawnChild(file, args, options) {
-      const role = file === "aw" ? (args[1] === "run" ? "broker" : "status") : file === "oats" ? "host" : "ssh";
-      const mode = role === "status" && statusIgnoresTerm ? "probe-stubborn" : statusTrueAfterBrokerExit ? "after-exit" : stubbornFinish ? "stubborn" : ready ? "ready" : "not-ready";
+      const role = file === bbFile ? "bb" : file === "aw" ? (args[1] === "run" ? "broker" : "status") : file === "oats" ? "host" : "ssh";
+      spawned.push({role, file, args, options, at: Date.now()});
+      const mode = role === "bb" ? bbMode : role === "status" && statusIgnoresTerm ? "probe-stubborn" : statusTrueAfterBrokerExit ? "after-exit" : stubbornFinish ? "stubborn" : ready ? "ready" : "not-ready";
       appendFileSync(events, role + " spawned\n");
       if (role === "status" && statusSpawnThrowsOnce && !statusFailed) {
         statusFailed = true;
@@ -593,7 +651,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
       }
       const failProbe = role === "status" && statusSpawnFailsOnce && !statusFailed;
       if (failProbe) statusFailed = true;
-      const child = spawn(failProbe ? join(dir, "missing-probe") : process.execPath, failProbe ? [] : [childFile, role, events, mode, brokerPid, brokerStatusPid, pauseAfterStarted, String(brokerDrainMs)], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
+      const child = spawn(failProbe ? join(dir, "missing-probe") : process.execPath, failProbe ? [] : [childFile, role, events, mode, brokerPid, brokerStatusPid, pauseAfterStarted, String(brokerDrainMs), String(bbPort), bbSeen, String(hostDrainMs)], { ...options, stdio: role === "status" ? ["ignore", "pipe", "ignore"] : "ignore" });
       if (pauseAfterStarted) {
         const kill = child.kill.bind(child);
         child.kill = signal => {
@@ -612,6 +670,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
   t.after(async () => {
     for (const child of children.values()) child.kill("SIGKILL");
     await running.catch(() => {});
+    if (external) { external.closeAllConnections(); await new Promise(resolve => external.close(resolve)); }
     rmSync(dir, { recursive: true, force: true });
   });
   const text = () => readFileSync(events, "utf8");
@@ -619,7 +678,8 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
     for (let tries = 0; tries < 200; tries += 1) { if (check()) return; await delay(10); }
     assert.fail("supervisor fixture did not reach its checkpoint: " + text() + said.join(";"));
   }
-  return { running, children, said, text, until, term: () => signal("SIGTERM") };
+  const bbReceived = () => JSON.parse(readFileSync(bbSeen, "utf8"));
+  return { running, children, said, text, until, term: () => signal("SIGTERM"), spawned, reads, existChecks, bbReceived, statusHits: () => statusHits };
 }
 
 test("broker TERM at its started checkpoint drains the real fixture child", async t => {
@@ -1028,4 +1088,388 @@ test("outbox acceptance checks setgid ownership, write inheritance, private stat
   assert.throws(() => run({...system, statSync: path => path === "/state" ? {mode: 0o40750, isDirectory: () => true} : system.statSync(path)}), /outbox/);
   assert.throws(() => run({...system, writeFileSync: () => { throw denied("EACCES"); }}), error => /outbox/.test(error.message) && !error.message.includes("PRIVATE_OUTBOX_CONTENTS"));
   for (const lstatSync of [() => ({}), () => { throw denied("EACCES"); }]) assert.throws(() => run({...system, lstatSync}, false), /outbox/);
+});
+
+
+const roles = fx => fx.spawned.map(entry => entry.role).filter(role => role !== "status");
+
+test("without AGENT_BB the supervisor starts exactly the broker, sshd and host run", async t => {
+  for (const bb of [undefined, ""]) {
+    const fx = await supervisorFixture(t, {bb, bbToken: "FIXTURE_TOKEN_NEVER_READ", externalStatus: true});
+    await fx.until(() => fx.text().includes("host started"));
+    fx.term();
+    assert.equal(await fx.running, 0);
+    assert.deepEqual(roles(fx), ["broker", "ssh", "host"], "today's children, in today's order");
+    assert.deepEqual(fx.spawned.filter(entry => entry.role !== "status").map(({file, args}) => [file, args]), [
+      ["aw", ["wake", "run"]], ["/usr/sbin/sshd", ["-D", "-e", "-f", "/etc/agent-sshd_config"]], ["oats", ["host", "run"]],
+    ]);
+    for (const {options} of fx.spawned) assert.deepEqual(Object.keys(options), ["stdio"], "no child gets an environment of its own");
+    assert.equal(fx.statusHits(), 0, "no HTTP probe is made");
+    assert.deepEqual(fx.reads, [], "no file under /etc/agent-login is read");
+    assert.deepEqual(fx.existChecks, [], "bb-app is not looked for");
+  }
+});
+
+test("AGENT_BB without bb-app refuses before any child starts", async t => {
+  const fx = await supervisorFixture(t, {bb: "1", bbInstalled: false, bbToken: "FIXTURE_TOKEN_NEVER_READ"});
+  assert.equal(await fx.running, 1);
+  assert.deepEqual(fx.spawned, []);
+  assert.deepEqual(fx.said, ["AGENT_BB needs the bb image: build container/agent-bb and select it as AGENT_IMAGE"]);
+  assert.deepEqual(fx.reads, []);
+});
+
+test("AGENT_BB with any value but 1 refuses before any child starts", async t => {
+  for (const bb of ["0", "true", "yes", " 1", "1 ", "01", "2"]) {
+    const fx = await supervisorFixture(t, {bb});
+    assert.equal(await fx.running, 1, JSON.stringify(bb));
+    assert.deepEqual(fx.spawned, []);
+    assert.deepEqual(fx.said, ["AGENT_BB must be 1 or unset"]);
+  }
+});
+
+test("bb starts after the broker is ready and before SSH and host run", async t => {
+  const fx = await supervisorFixture(t, {bb: "1"});
+  await fx.until(() => fx.text().includes("host started"));
+  const events = fx.text().split("\n");
+  const order = ["broker spawned", "broker ready", "supervisor broker ready (daemon_running: true)", "bb spawned", "bb serving", "supervisor bb ready (connected: true)", "ssh spawned", "host spawned"].map(event => events.indexOf(event));
+  assert.ok(order.every((at, i) => at >= 0 && (i === 0 || order[i - 1] < at)), fx.text());
+  assert.deepEqual(roles(fx), ["broker", "bb", "ssh", "host"]);
+  const bb = fx.spawned.find(entry => entry.role === "bb");
+  assert.deepEqual(bb.args, ["--no-in-app-updates", "--server-bind-host", "127.0.0.1"]);
+  const received = fx.bbReceived().env;
+  assert.equal(received.BB_TELEMETRY, "false");
+  assert.equal(received.BB_DATA_DIR, undefined, "bb keeps its default data directory under HOME");
+  assert.equal(received.HOME, process.env.HOME, "bb gets the supervisor's own environment");
+  fx.term();
+  assert.equal(await fx.running, 0);
+});
+
+test("only the bb child receives the Claude token", async t => {
+  const token = "FIXTURE_TOKEN_" + "x".repeat(24);
+  const fx = await supervisorFixture(t, {bb: "1", bbToken: `\n  ${token}\n\n`});
+  await fx.until(() => fx.text().includes("host started"));
+  assert.equal(fx.bbReceived().env.CLAUDE_CODE_OAUTH_TOKEN, token, "trimmed file content");
+  fx.children.get("bb").kill("SIGKILL");
+  await fx.until(() => fx.text().split("bb serving").length - 1 >= 2);
+  assert.equal(fx.bbReceived().env.CLAUDE_CODE_OAUTH_TOKEN, token, "a restarted bb gets it too");
+  fx.term();
+  assert.equal(await fx.running, 0);
+  assert.ok(fx.spawned.some(entry => entry.role === "status" && entry !== fx.spawned[0]), "status probes ran");
+  for (const {role, args, options} of fx.spawned) {
+    assert.ok(!args.join("\n").includes(token), role + " arguments");
+    if (role !== "bb") assert.equal(options.env, undefined, role + " inherits the supervisor's environment, which never holds the token");
+  }
+  assert.ok(!Object.values(process.env).includes(token));
+  assert.ok(!fx.said.join("\n").includes(token) && !fx.text().includes(token), "no line the supervisor writes holds the value");
+});
+
+test("an absent token file starts bb without the variable; an unreadable one fails the start", async t => {
+  for (const bbToken of [undefined, "", " \n"]) {
+    const absent = await supervisorFixture(t, {bb: "1", bbToken});
+    await absent.until(() => absent.text().includes("host started"));
+    assert.equal("CLAUDE_CODE_OAUTH_TOKEN" in absent.bbReceived().env, false, "absent or empty: no variable, never an empty one");
+    absent.term();
+    assert.equal(await absent.running, 0);
+  }
+  for (const code of ["EACCES", "EIO", "EISDIR"]) {
+    const unreadable = await supervisorFixture(t, {bb: "1", bbToken: "FIXTURE_TOKEN_NEVER_USED", bbTokenError: code});
+    assert.equal(await unreadable.running, 1);
+    assert.deepEqual(unreadable.spawned, [], "no child starts");
+    assert.deepEqual(unreadable.said, [`the Claude token file could not be read (${code})`]);
+  }
+});
+
+test("bb that never reports connected fails the start and admits neither SSH nor host run", async t => {
+  const fx = await supervisorFixture(t, {bb: "1", bbMode: "never"});
+  assert.equal(await fx.running, 1);
+  assert.ok(fx.said.includes("bb readiness timed out"));
+  assert.deepEqual(roles(fx), ["broker", "bb"]);
+  assert.match(fx.text(), /bb TERM[\s\S]*bb ended/, "the unready bb is stopped");
+  assert.match(fx.text(), /broker TERM[\s\S]*broker ended/);
+});
+
+test("a bb status without our live bb child cannot admit agents", async t => {
+  // The status names no process: one that answers before bb starts is refused,
+  // since it could otherwise pass for our child's while that child still lives.
+  const stale = await supervisorFixture(t, {bb: "1", externalStatus: true});
+  assert.equal(await stale.running, 1);
+  assert.ok(stale.said.includes("bb's status port already answers before bb starts"));
+  assert.deepEqual(roles(stale), ["broker"], "another process's connected: true admits nothing");
+  assert.ok(stale.statusHits() >= 1);
+  const dead = await supervisorFixture(t, {bb: "1", bbMode: "exits"});
+  assert.equal(await dead.running, 1);
+  assert.ok(dead.said.includes("bb exited (0)"));
+  assert.deepEqual(roles(dead), ["broker", "bb"], "a bb that ended before it was ready is not restarted");
+});
+
+test("bb death after a good start is reported and restarted while agents keep running", async t => {
+  const fx = await supervisorFixture(t, {bb: "1"});
+  await fx.until(() => fx.text().includes("host started"));
+  const first = fx.children.get("bb");
+  first.kill("SIGKILL");
+  await fx.until(() => fx.text().split("bb serving").length - 1 >= 2);
+  assert.ok(fx.said.includes("bb exited (SIGKILL)"));
+  assert.notEqual(fx.children.get("bb"), first, "a second bb child");
+  assert.deepEqual(roles(fx), ["broker", "bb", "ssh", "host", "bb"]);
+  assert.doesNotMatch(fx.text(), /(?:host|broker|ssh) (?:TERM|ended|signal)/, "agents, delivery and SSH were left alone");
+  for (const role of ["host", "broker", "ssh"]) assert.equal(fx.children.get(role).exitCode ?? fx.children.get(role).signalCode, null, role);
+  fx.term();
+  assert.equal(await fx.running, 0, "a later clean stop");
+  assert.match(fx.text(), /bb TERM[\s\S]*bb ended/);
+});
+
+test("what a killed bb launcher leaves on bb's ports is removed before the restart", async t => {
+  const fx = await supervisorFixture(t, {bb: "1", bbMode: "leaves-server"});
+  await fx.until(() => fx.text().includes("host started"));
+  const servers = () => [...fx.text().matchAll(/^bb server pid (\d+)$/gm)].map(match => Number(match[1]));
+  const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  const started = servers();
+  t.after(() => { for (const pid of started) if (alive(pid)) process.kill(pid, "SIGKILL"); });
+  assert.equal(alive(started[0]), true);
+  fx.children.get("bb").kill("SIGKILL");
+  // The second server can listen only once the first one is gone.
+  await fx.until(() => fx.text().split("bb serving").length - 1 >= 2);
+  started.push(...servers().slice(1));
+  assert.equal(started.length, 2);
+  assert.equal(alive(servers()[0]), false, "the first launcher's server was killed");
+  fx.term();
+  assert.equal(await fx.running, 0);
+  await fx.until(() => !alive(servers()[1]));
+});
+
+test("TERM stops host run first and bb only after host run has ended", async t => {
+  const fx = await supervisorFixture(t, {bb: "1"});
+  await fx.until(() => ["broker", "bb", "ssh", "host"].every(role => fx.text().includes(role + " listening")));
+  fx.term();
+  assert.equal(await fx.running, 0);
+  const events = fx.text().split("\n");
+  assert.ok(events.indexOf("host TERM") >= 0 && events.indexOf("host TERM") < events.indexOf("host ended"));
+  assert.ok(events.indexOf("host ended") < events.indexOf("bb TERM"), fx.text());
+  assert.ok(events.indexOf("bb TERM") < events.indexOf("bb ended"));
+});
+
+test("bb lost while host run drains is a failed stop and is not restarted", async t => {
+  const fx = await supervisorFixture(t, {bb: "1"});
+  await fx.until(() => fx.text().includes("host started"));
+  fx.term();
+  await fx.until(() => fx.text().includes("host TERM"));
+  fx.children.get("bb").kill("SIGKILL");
+  assert.equal(await fx.running, 1, "bb lost while host run drains is a failed stop, as for the broker");
+  assert.deepEqual(roles(fx), ["broker", "bb", "ssh", "host"], "no bb starts once stopping");
+});
+
+test("TERM while bb waits to restart starts no further bb", async t => {
+  const timers = () => process.getActiveResourcesInfo().filter(resource => resource === "Timeout").length;
+  // The restart falls due while host run still drains: it must not start a bb then.
+  const draining = await supervisorFixture(t, {bb: "1", bbBackoffMs: 300, bbBackoffMaxMs: 300, hostDrainMs: 900});
+  await draining.until(() => draining.text().includes("host started"));
+  draining.children.get("bb").kill("SIGKILL");
+  await draining.until(() => draining.said.includes("bb exited (SIGKILL)"));
+  draining.term();
+  assert.equal(await draining.running, 0, "a bb that ended before TERM does not fail the stop");
+  const drained = draining.text().split("\n"), hostAt = draining.spawned.find(entry => entry.role === "host").at;
+  assert.ok(drained.indexOf("host ended") > drained.indexOf("host TERM") && Date.now() - hostAt >= 900, "the drain outlasted the 300 ms backoff");
+  assert.deepEqual(roles(draining), ["broker", "bb", "ssh", "host"], "no bb starts once stopping");
+  // The restart is still pending when the supervisor returns: nothing of it may
+  // remain, or the container would stay up until the timer ran out.
+  const before = timers();
+  const pending = await supervisorFixture(t, {bb: "1", bbBackoffMs: 5_000, bbBackoffMaxMs: 5_000});
+  await pending.until(() => pending.text().includes("host started"));
+  pending.children.get("bb").kill("SIGKILL");
+  await pending.until(() => pending.said.includes("bb exited (SIGKILL)"));
+  assert.equal(timers(), before + 1, "the restart is pending");
+  pending.term();
+  assert.equal(await pending.running, 0);
+  assert.equal(timers(), before, "the pending restart was cancelled");
+  assert.deepEqual(roles(pending), ["broker", "bb", "ssh", "host"]);
+});
+
+test("bb restarts after 1 s doubling to 60 s, and from 1 s again after five minutes up", async t => {
+  // The same schedule at a tenth of a second, capped at 0.3 s, reset after 1 s up.
+  const fx = await supervisorFixture(t, {bb: "1", bbBackoffMs: 100, bbBackoffMaxMs: 300, bbStableMs: 1000});
+  await fx.until(() => fx.text().includes("host started"));
+  const bbs = () => fx.spawned.filter(entry => entry.role === "bb");
+  // Kills the newest bb and answers how long the supervisor waited to start the next.
+  const restartAfterKill = async () => {
+    const count = bbs().length, exits = fx.said.filter(line => line === "bb exited (SIGKILL)").length;
+    fx.children.get("bb").kill("SIGKILL");
+    await fx.until(() => fx.said.filter(line => line === "bb exited (SIGKILL)").length > exits);
+    const exited = Date.now();
+    await fx.until(() => bbs().length > count);
+    return { atLeast: bbs().at(-1).at - exited + 15, atMost: bbs().at(-1).at - exited };
+  };
+  // `atLeast` allows for the checkpoint's 10 ms poll after the exit was reported.
+  const waits = [];
+  for (let i = 0; i < 4; i += 1) waits.push(await restartAfterKill());
+  for (const [i, expected] of [100, 200, 300, 300].entries()) assert.ok(waits[i].atLeast >= expected, `restart ${i + 1} waited ${waits[i].atMost} ms, expected ${expected}`);
+  assert.ok(waits[1].atMost < 300 && waits[3].atMost < 600, "doubling, capped: " + JSON.stringify(waits));
+  await delay(1100);
+  const afterStable = await restartAfterKill();
+  assert.ok(afterStable.atLeast >= 100 && afterStable.atMost < 250, "a bb that stayed up starts the schedule over: " + JSON.stringify(afterStable));
+  const afterShort = await restartAfterKill();
+  assert.ok(afterShort.atLeast >= 200, "and it doubles again: " + JSON.stringify(afterShort));
+  fx.term();
+  assert.equal(await fx.running, 0);
+});
+
+test("TERM during bb readiness starts neither SSH nor host run", async t => {
+  const fx = await supervisorFixture(t, {bb: "1", bbMode: "never"});
+  await fx.until(() => fx.text().includes("bb serving"));
+  fx.term();
+  assert.equal(await fx.running, 0);
+  assert.deepEqual(roles(fx), ["broker", "bb"]);
+  assert.match(fx.text(), /bb TERM[\s\S]*bb ended/);
+});
+
+test("a bb that ignores TERM is killed within its budget and fails the stop", async t => {
+  const fx = await supervisorFixture(t, {bb: "1", bbMode: "stubborn-bb"});
+  await fx.until(() => fx.text().includes("host started"));
+  fx.term();
+  assert.equal(await fx.running, 1);
+  assert.ok(fx.said.includes("bb exited (SIGKILL)"));
+});
+
+test("the stop budget stays inside the container's grace", async () => {
+  const { stopBudgetsMs } = await import("../container/agent/supervisor.mjs");
+  // The kernel's drain, not exported: lib/host-run-work.mjs (hostRunWork's
+  // naturalMs and cancelMs defaults) and lib/host-run.mjs (STOP_GRACE_MS).
+  const drainMs = 10_000 + 5_000 + 20_000;
+  const kernel = name => readFileSync(new URL(`../lib/${name}`, import.meta.url), "utf8");
+  assert.match(kernel("host-run-work.mjs"), /naturalMs = 10_000, cancelMs = 5_000/, "the pinned drain follows the kernel");
+  assert.match(kernel("host-run.mjs"), /^const STOP_GRACE_MS = 20_000;$/m, "the pinned drain follows the kernel");
+  assert.deepEqual(Object.keys(stopBudgetsMs).sort(), ["bb", "broker", "sshd"]);
+  const grace = parse(read("compose.agent.yaml")).services.agent.stop_grace_period.match(/^(\d+)s$/);
+  assert.ok(grace, "stop_grace_period is whole seconds");
+  // sshd, the broker and bb are stopped side by side: the largest one counts.
+  const stopMs = drainMs + Math.max(...Object.values(stopBudgetsMs));
+  assert.ok(stopMs <= Number(grace[1]) * 1000 - 5_000, `${stopMs} ms of ordered stop must leave 5 s of the ${grace[1]} s grace`);
+  assert.deepEqual({...stopBudgetsMs}, {sshd: 3_000, broker: 6_000, bb: 8_000});
+});
+
+test("the bb fragment sets one fixed environment entry and nothing else", () => {
+  assert.deepEqual(parse(read("compose.agent.bb.yaml")), {services: {agent: {environment: {AGENT_BB: "1"}}}});
+  assert.doesNotMatch(read("compose.agent.bb.yaml"), /\$/, "nothing is interpolated");
+});
+
+test("the derived image adds only pinned bb-app", () => {
+  const dockerfile = readBb("Dockerfile");
+  const instructions = dockerfile.replace(/\\\n/g, " ").split("\n").map(line => line.trim()).filter(line => line && !line.startsWith("#"));
+  assert.deepEqual(instructions.slice(0, 2), ["ARG AGENT_IMAGE", "FROM ${AGENT_IMAGE}"], "the team image is a build argument without a default");
+  assert.equal(instructions.filter(line => /^(?:ARG|FROM)\b/.test(line)).length, 2);
+  assert.equal(instructions.at(-1), "USER agent");
+  assert.deepEqual([...new Set(instructions.map(line => line.split(/\s+/, 1)[0]))].sort(), ["ARG", "COPY", "FROM", "RUN", "USER", "WORKDIR"], "no ENV, ENTRYPOINT, CMD, EXPOSE or VOLUME: the team image's stay");
+  assert.equal(instructions.filter(line => line.startsWith("WORKDIR")).at(-1), "WORKDIR /state");
+  const runs = instructions.filter(line => line.startsWith("RUN"));
+  assert.equal(runs.length, 1);
+  assert.match(runs[0], /^RUN npm ci --ignore-scripts --no-audit --no-fund /);
+  assert.doesNotMatch(dockerfile, /apt-get|\bapt\b|\bcurl\b|\bwget\b|npm rebuild|npm install|ignore-scripts=false/);
+  assert.match(runs[0], /ln -s \/opt\/agent-bb\/node_modules\/\.bin\/bb \/usr\/local\/bin\/bb /);
+  assert.match(runs[0], /ln -s \/opt\/agent-bb\/node_modules\/\.bin\/bb-app \/usr\/local\/bin\/bb-app /);
+  assert.match(runs[0], /bb --version/);
+
+  const manifest = JSON.parse(readBb("package.json")), lock = JSON.parse(readBb("package-lock.json"));
+  assert.deepEqual(Object.keys(manifest.dependencies), ["bb-app"]);
+  assert.match(manifest.dependencies["bb-app"], /^\d+\.\d+\.\d+$/);
+  assert.deepEqual(Object.keys(manifest).sort(), ["dependencies", "name", "private", "version"]);
+  assert.deepEqual(lock.packages[""].dependencies, manifest.dependencies);
+  assert.equal(lock.packages["node_modules/bb-app"].version, manifest.dependencies["bb-app"]);
+  for (const [name, pkg] of Object.entries(lock.packages)) {
+    if (!name) continue;
+    assert.doesNotMatch(name, /claude-code|@anthropic-ai/, "bb uses the team image's Claude Code; a second one never enters the image");
+    // Packages inside a tarball (bb-app's own npm) are covered by that tarball's hash.
+    if (pkg.inBundle) { assert.match(name, /^node_modules\/npm\/node_modules\//); continue; }
+    assert.match(pkg.integrity, /^sha512-/, name);
+    assert.match(pkg.resolved, /^https:\/\/registry\.npmjs\.org\//, name);
+    // Without `libc`, npm also installs the musl build of a platform package.
+    if (/-(?:glibc|musl)$/.test(name)) assert.deepEqual(pkg.libc, [name.match(/-(glibc|musl)$/)[1]], name);
+  }
+
+  const rules = readBb(".dockerignore").split("\n").map(line => line.trim()).filter(line => line && !line.startsWith("#"));
+  assert.equal(rules.shift(), "**", "image context starts closed");
+  const admitted = rules.map(rule => { assert.match(rule, /^![A-Za-z0-9][A-Za-z0-9._-]*$/); return rule.slice(1); });
+  const copied = instructions.filter(line => line.startsWith("COPY")).flatMap(line => {
+    const tokens = line.split(/\s+/).slice(1);
+    assert.ok(tokens.every(token => !token.startsWith("--")), "plain COPY from the context only");
+    return tokens.slice(0, -1);
+  });
+  assert.deepEqual(copied.sort(), ["package-lock.json", "package.json"]);
+  assert.deepEqual(admitted.sort(), ["Dockerfile", ...copied].sort(), "relay.mjs and everything else stay out of the image");
+});
+
+test("acceptance with the bb fragment refuses a non-loopback listener and a published port; and without the fragment refuses AGENT_BB", async () => {
+  const { inspectAgent: inspectOnHost, listenerCheck, agentEnvironment } = await import("../container/agent/accept.mjs");
+  const inspectAgent = (info, env, image) => inspectOnHost(info, env, image, undefined, source => source);
+  const { env, image, inspected } = inspectFixture();
+  const bbEnv = {...env, AGENT_BB: "1"}, withBb = structuredClone(inspected);
+  withBb.Config.Env.push("AGENT_BB=1");
+  assert.doesNotThrow(() => inspectAgent(withBb, bbEnv, image), "the fragment's entry is the one admitted difference");
+  assert.deepEqual(agentEnvironment(image.Config.Env, false, true), [...image.Config.Env, "AGENT_BB=1"]);
+  const published = structuredClone(withBb);
+  published.HostConfig.PortBindings = {"38886/tcp": [{HostIp: "127.0.0.1", HostPort: "38886"}]};
+  assert.throws(() => inspectAgent(published, bbEnv, image), /published ports/);
+  for (const mutate of [
+    v => { v.Config.Env.pop(); },
+    v => { v.Config.Env[v.Config.Env.length - 1] = "AGENT_BB=true"; },
+    v => { v.Config.Env.push("BB_DATA_DIR=/state/elsewhere"); },
+    v => { v.Config.Env.push("CLAUDE_CODE_OAUTH_TOKEN=FIXTURE_VALUE_NEVER_REPORT"); },
+    v => { v.Config.Env.push("AGENT_BB=1"); },
+  ]) {
+    const changed = structuredClone(withBb);
+    mutate(changed);
+    assert.throws(() => inspectAgent(changed, bbEnv, image), error => !error.message.includes("FIXTURE_VALUE_NEVER_REPORT"));
+  }
+  assert.throws(() => inspectAgent(withBb, env, image), /AGENT_BB is set in the container/, "without the fragment");
+  assert.throws(() => inspectAgent(withBb, {...env, AGENT_BB: ""}, image), /AGENT_BB is set in the container/);
+  const baked = structuredClone(image);
+  baked.Config.Env.push("AGENT_BB=1");
+  assert.throws(() => inspectAgent(withBb, env, baked), /AGENT_BB is set in the container/, "an image cannot switch bb on by itself");
+  for (const value of ["0", "true", "yes"]) assert.throws(() => inspectAgent(withBb, {...env, AGENT_BB: value}, image), /AGENT_BB must be 1/);
+
+  // /proc/net/tcp as a little-endian kernel prints it: 08AE is 2222, 97E6 and 97E7 are bb's 38886 and 38887.
+  const row = (local, state = "0A") => `   0: ${local} 00000000:0000 ${state} 00000000:00000000 00:00000000 00000000 20001        0 1234 1 0000000000000000 100 0 0 10 0`;
+  const header = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode";
+  const proc = (v4, v6) => ({readFileSync(path) {
+    if (path === "/proc/net/tcp") return [header, ...v4.map(entry => row(...[].concat(entry)))].join("\n") + "\n";
+    assert.equal(path, "/proc/net/tcp6");
+    if (!v6) throw Object.assign(new Error("IPv6 is off"), {code: "ENOENT"});
+    return [header, ...v6.map(entry => row(entry))].join("\n") + "\n";
+  }});
+  const team = ["00000000:08AE", "0100007F:97E6", "0100007F:97E7"];
+  assert.equal(listenerCheck(proc(team), "LE"), "listening TCP sockets: 0.0.0.0:2222, 127.0.0.1:38886, 127.0.0.1:38887; all on loopback except sshd's port 2222");
+  assert.doesNotThrow(() => listenerCheck(proc([...team, "0500007F:1F90", ["020011AC:1F90", "01"]], ["00000000000000000000000000000000:08AE", "00000000000000000000000001000000:1F90", "0000000000000000FFFF00000100007F:1F91"]), "LE"),
+    "any loopback listener, sshd on every address and a non-listening socket are admitted");
+  for (const [v4, v6] of [
+    [[...team, "00000000:97E6"]], [[...team, "020011AC:97E6"]], [[...team, "00000000:1F90"]], [["0100007F:08AE", "00000000:97E6", "0100007F:97E7"]],
+    [team, ["00000000000000000000000000000000:1F90"]], [team, ["000080FE00000000000000000100000A:97E6"]], [team, ["0000000000000000FFFF0000020011AC:1F90"]],
+  ]) assert.throws(() => listenerCheck(proc(v4, v6), "LE"), /listening beyond loopback: .*only sshd's port 2222 may/);
+  assert.throws(() => listenerCheck(proc(["00000000:08AE", "0100007F:97E6"]), "LE"), /bb is not listening on 127\.0\.0\.1:38887/);
+  assert.equal(listenerCheck(proc(["00000000:08AE", "7F000001:97E6", "7F000001:97E7"]), "BE"), "listening TCP sockets: 0.0.0.0:2222, 127.0.0.1:38886, 127.0.0.1:38887; all on loopback except sshd's port 2222");
+  assert.throws(() => listenerCheck({readFileSync() { throw Object.assign(new Error("unreadable"), {code: "EACCES"}); }}, "LE"));
+});
+
+test("acceptance admits the bb fragment together with the inputs, outbox and trust fragments", async () => {
+  const { inspectAgent: inspectOnHost } = await import("../container/agent/accept.mjs");
+  const inspectAgent = (info, env, image) => inspectOnHost(info, env, image, undefined, source => source);
+  const { env, image, inspected } = inspectFixture();
+  const all = structuredClone(inspected);
+  const allEnv = {...env, AGENT_BB: "1", AGENT_CA_FILE: "/operator/public-ca.pem", TEAM_INPUT_DIR: "/operator/inputs", TEAM_OUTBOX_DIR: "/operator/outbox", TEAM_OUTBOX_GID: "20002"};
+  all.Config.Env.push("SSL_CERT_FILE=/etc/agent-trust/ca.pem", "NODE_EXTRA_CA_CERTS=/etc/agent-trust/ca.pem", "AGENT_BB=1");
+  for (const [source, target, rw] of [[allEnv.AGENT_CA_FILE, "/etc/agent-trust/ca.pem", false], [allEnv.TEAM_INPUT_DIR, "/inputs", false], [allEnv.TEAM_OUTBOX_DIR, "/outbox", true]]) {
+    all.Mounts.push({Source: source, Destination: target, RW: rw, Type: "bind"});
+    all.HostConfig.Mounts.push({Type: "bind", Source: source, Target: target, ReadOnly: !rw, BindOptions: {}});
+  }
+  all.HostConfig.GroupAdd = [allEnv.TEAM_OUTBOX_GID];
+  assert.doesNotThrow(() => inspectAgent(all, allEnv, image));
+  // Each fragment is still required on its own terms beside the others.
+  const withoutBb = {...allEnv};
+  delete withoutBb.AGENT_BB;
+  assert.throws(() => inspectAgent(all, withoutBb, image), /AGENT_BB is set in the container/);
+  for (const name of ["AGENT_CA_FILE", "TEAM_INPUT_DIR", "TEAM_OUTBOX_DIR"]) {
+    const missing = {...allEnv};
+    delete missing[name];
+    assert.throws(() => inspectAgent(all, missing, image), name);
+  }
+  const noEntry = structuredClone(all);
+  noEntry.Config.Env.pop();
+  assert.throws(() => inspectAgent(noEntry, allEnv, image), /environment names differing/);
 });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
@@ -12,13 +12,21 @@ function required(env, name) {
 
 const ids = (env) => ({ uid: env.AGENT_UID || "20001", gid: env.AGENT_GID || "20001" });
 
-// The optional public-CA mount is the only deployment environment exception.
-// Both settings reach the broker before it starts, including its Node child.
-export function agentEnvironment(imageEnv, publicCA = false) {
-  if (!publicCA) return imageEnv;
-  const trust = ["SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS"];
-  return [...imageEnv.filter(entry => !trust.includes(entry.split("=", 1)[0])),
-    ...trust.map(name => `${name}=/etc/agent-trust/ca.pem`)];
+// The acceptance host says whether the bb fragment was included: AGENT_BB=1,
+// the entry compose.agent.bb.yaml sets. Nothing else selects it.
+export function bbSelected(env) {
+  assert.ok(env.AGENT_BB === undefined || env.AGENT_BB === "" || env.AGENT_BB === "1", "AGENT_BB must be 1 (compose.agent.bb.yaml is included) or unset");
+  return env.AGENT_BB === "1";
+}
+
+// The optional public-CA mount and the bb fragment's one fixed entry are the
+// only deployment environment exceptions.
+// Both trust settings reach the broker before it starts, including its Node child.
+export function agentEnvironment(imageEnv, publicCA = false, bb = false) {
+  const fixed = [...(publicCA ? ["SSL_CERT_FILE=/etc/agent-trust/ca.pem", "NODE_EXTRA_CA_CERTS=/etc/agent-trust/ca.pem"] : []), ...(bb ? ["AGENT_BB=1"] : [])];
+  if (!fixed.length) return imageEnv;
+  const names = fixed.map(entry => entry.split("=", 1)[0]);
+  return [...imageEnv.filter(entry => !names.includes(entry.split("=", 1)[0])), ...fixed];
 }
 
 // Compare only reviewed settings, never dump Config.Env or credential contents.
@@ -75,7 +83,10 @@ export function inspectAgent(info, env, image, defaultRuntime = "runc", hostPath
   equal("agent IP", info.NetworkSettings.Networks[network].IPAddress, required(env, "AGENT_IP"));
   const names = (entries) => entries.map((entry) => entry.split("=", 1)[0]);
   assert.ok(Array.isArray(image?.Config?.Env), "image environment baseline is required");
-  const actualEnv = info.Config.Env || [], expectedEnv = agentEnvironment(image.Config.Env, !!env.AGENT_CA_FILE);
+  const bb = bbSelected(env);
+  const actualEnv = info.Config.Env || [], expectedEnv = agentEnvironment(image.Config.Env, !!env.AGENT_CA_FILE, bb);
+  // An image that sets the switch itself is refused too: only the fragment turns bb on.
+  if (!bb) assert.ok(!names(actualEnv).includes("AGENT_BB"), "AGENT_BB is set in the container: include compose.agent.bb.yaml and export AGENT_BB=1 for acceptance, or recreate the container without it");
   const allNames = new Set([...names(actualEnv), ...names(expectedEnv)]);
   const entriesFor = (entries, name) => entries.filter((entry) => entry.split("=", 1)[0] === name).sort();
   const changedNames = [...allNames].filter((name) => !isDeepStrictEqual(entriesFor(actualEnv, name), entriesFor(expectedEnv, name)));
@@ -175,6 +186,42 @@ function runtimeCheck(uid, gid, outboxGid) {
   socket.setTimeout(5000, () => { console.error("SSH banner timed out"); process.exit(1); });
   socket.once("data", (chunk) => { assert.match(chunk.toString(), /^SSH-2\.0-OpenSSH_/); console.log(`SSH banner: ${chunk.toString().trim()}`); socket.destroy(); });
   socket.once("error", (err) => { console.error(err.message); process.exit(1); });
+}
+
+// Serialized inside the agent, with the bb fragment only. /proc/net lists every
+// listening socket of the container's network namespace, whoever owns it.
+// bb's API has no login, so nothing but sshd may listen beyond loopback.
+export function listenerCheck(fs = require("node:fs"), endianness = require("node:os").endianness()) {
+  // The kernel prints each 32-bit word of an address in host byte order.
+  const bytes = (hex) => (hex.match(/.{8}/g) || []).flatMap((word) => {
+    const pairs = word.match(/../g).map((pair) => parseInt(pair, 16));
+    return endianness === "LE" ? pairs.reverse() : pairs;
+  });
+  const listeners = [];
+  for (const [file, length] of [["/proc/net/tcp", 8], ["/proc/net/tcp6", 32]]) {
+    let text;
+    try { text = fs.readFileSync(file, "utf8"); }
+    catch (error) { if (length === 32 && error.code === "ENOENT") continue; throw error; } // IPv6 is off
+    for (const line of text.split("\n").slice(1)) {
+      const fields = line.trim().split(/\s+/);
+      if (fields.length < 4) continue;
+      if (fields[3] !== "0A") continue; // TCP_LISTEN
+      const local = fields[1].match(/^([0-9A-Fa-f]+):([0-9A-Fa-f]{4})$/);
+      if (!local || local[1].length !== length) throw new Error("unreadable listening socket entry");
+      const address = bytes(local[1]), port = parseInt(local[2], 16);
+      const mapped = length === 32 && address.slice(0, 10).every((byte) => byte === 0) && address[10] === 255 && address[11] === 255;
+      const v4 = length === 8 ? address : mapped ? address.slice(12) : null;
+      const loopback = v4 ? v4[0] === 127 : address.slice(0, 15).every((byte) => byte === 0) && address[15] === 1;
+      const name = v4 ? v4.join(".") : "[" + address.map((byte) => byte.toString(16).padStart(2, "0")).join("").replace(/(.{4})(?=.)/g, "$1:") + "]";
+      listeners.push({ name: name + ":" + port, port, loopback });
+    }
+  }
+  const exposed = listeners.filter((listener) => !listener.loopback && listener.port !== 2222).map((listener) => listener.name);
+  if (exposed.length) throw new Error("listening beyond loopback: " + exposed.join(", ") + " (only sshd's port 2222 may)");
+  for (const port of [38886, 38887]) {
+    if (!listeners.some((listener) => listener.port === port)) throw new Error("bb is not listening on 127.0.0.1:" + port);
+  }
+  return "listening TCP sockets: " + listeners.map((listener) => listener.name).sort().join(", ") + "; all on loopback except sshd's port 2222";
 }
 
 // Serialized inside the agent: CA bytes are public, but private-key mistakes
@@ -332,6 +379,12 @@ export function main(args, env, { spawnSync: run = spawnSync } = {}) {
   for (const line of token.evidence) report(line);
   if (env.AGENT_CA_FILE) report(`PASS ${JSON.parse(program(publicCACheck, []))}`);
   if (env.AGENT_MIRRORS_DIR) report(`PASS ${JSON.parse(program(mirrorsCheck, []))}`);
+  if (bbSelected(env)) {
+    report(`PASS ${JSON.parse(program(listenerCheck, []))}`);
+    const pinned = JSON.parse(readFileSync(new URL("../agent-bb/package.json", import.meta.url), "utf8")).dependencies["bb-app"];
+    assert.equal(docker(["exec", container, "bb", "--version"]), pinned, "bb --version must equal container/agent-bb's pinned bb-app");
+    report(`PASS bb: ${pinned} (container/agent-bb's pin)`);
+  }
   report(`PASS ${JSON.parse(program(inputsCheck, [!!env.TEAM_INPUT_DIR]))}`);
   report(`PASS ${JSON.parse(program(outboxCheck, [!!env.TEAM_OUTBOX_DIR, uid, env.TEAM_OUTBOX_GID || null]))}`);
   report(`PASS ${program(credentialScan, [["/"], ["/proc", "/sys", "/dev", "/state", "/tmp", "/run", "/work", "/inputs", "/outbox"]], true)}`);
