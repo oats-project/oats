@@ -360,18 +360,161 @@ test('an answer this Desktop cannot read is a failure, never a partial render', 
   assert.equal(u.$('[role=tree]'), null);
 });
 
-test('the page places Contents after Provides and before Used by; hold() keeps focus across a rebuild', async t => {
+test('the page places Skills under what it does and Contents in its Files fold, last; hold() keeps focus across a rebuild', async t => {
   const u = setup(t); u.go(); await flush(); await flush();
   const page = u.doc.createElement('div'); u.doc.body.append(page);
   const row = { ...packageRow, skills: ['oats-aweb'], commands: [], hooks: [] };
-  renderCapabilityPage(page, { row, status: null, instances: [], root: '/ws', onBack() {}, contents: u.contents.element });
-  assert.deepEqual([...page.querySelectorAll('.page-main > .page-section')].map(s => s.dataset.section), ['Provides', 'Contents', 'Used by']);
-  const item = u.$('[data-path="inject.md"]') || page.querySelector('[data-path="inject.md"]'); item.focus();
+  const render = from => renderCapabilityPage(page, { row, status: null, instances: [], root: '/ws', onBack() {}, contents: u.contents.element, skills: u.contents.skills, skillView: u.contents.skillView, ...(from ? { from } : {}) });
+  render();
+  const order = () => [...page.querySelector('.page-main').children, ...page.querySelector('.cap-folds').children].map(el => el.dataset.fold ?? el.dataset.section ?? el.className);
+  assert.deepEqual(order(), ['cap-page-head', 'Skills', 'cap-folds', 'commands', 'hooks', 'used-by', 'source', 'files']);
+  assert.equal(page.querySelector('details[data-fold=files]').lastElementChild, u.contents.element);
+  page.querySelector('details[data-fold=files]').open = true;
+  const item = page.querySelector('[data-path="inject.md"]'); item.focus();
   const keep = u.contents.hold();
-  renderCapabilityPage(page, { row, status: null, instances: [], root: '/ws', onBack() {}, contents: u.contents.element, from: { label: 'soul-x' } });
+  render({ label: 'soul-x' });
   keep();
   assert.equal(u.doc.activeElement, item);
-  assert.deepEqual([...page.querySelectorAll('.page-main > .page-section')].map(s => s.dataset.section), ['Provides', 'Contents', 'Used by'], 'the soul form too');
+  assert.deepEqual(order(), ['cap-page-head', 'Skills', 'cap-folds', 'commands', 'hooks', 'used-by', 'source', 'files'], 'the soul form too');
+  assert.equal(page.querySelector('details[data-fold=files]').open, true, 'a fold opened on this capability stays open across the rebuild');
+});
+
+test('slice3b capability page skills open whole and folds', async t => {
+  const u = setup(t, { answer: body => body.action === 'show' ? showAnswer() : fileAnswer(body.path, body.path.endsWith('SKILL.md') ? { text: SKILL } : {}) });
+  u.go(); await flush(); await flush();
+  const page = u.doc.createElement('div'); page.className = 'oats-view'; u.doc.body.append(page);
+  const row = { ...packageRow, layer: 'messaging', description: 'Messaging layer via aweb: per-instance team identities.', commands: ['aweb-connect'], hooks: ['spawn'] };
+  const status = { packages: [{ id: 'oats.aweb', source: 'catalog:oats.aweb' }], defaults: { slots: { messaging: { name: 'oats.aweb', from: 'package' } }, capabilities: [] } };
+  const render = () => renderCapabilityPage(page, { row, status, instances: [], root: '/ws', onBack() {}, contents: u.contents.element, triggerSources: u.contents.triggerSources, skills: u.contents.skills, skillView: u.contents.skillView });
+  render();
+  const $ = s => page.querySelector(s), $$ = s => [...page.querySelectorAll(s)];
+  // What it does, as one paragraph; its tags; the origin line ("Comes from" in one line).
+  assert.equal($('.cap-page-what').textContent, row.description);
+  assert.deepEqual($$('.page-title .page-tag').map(t => t.textContent), ['Core · Messaging', 'default']);
+  assert.equal($('.cap-page-origin').textContent, 'Official: in the OATS catalog · package oats.aweb');
+  // Skills: each skill's name and one line (the first sentence of its description); a button that opens it.
+  const skillRows = $$('.cap-skills-section button.cap-skill-row');
+  assert.deepEqual(skillRows.map(b => [b.querySelector('.cap-skill-name').textContent, b.querySelector('.cap-skill-desc')?.textContent ?? null]),
+    [['oats-aweb', "The OATS instance's aweb playbook."], ['aweb-identity', null]]);
+  assert.equal(skillRows[0].getAttribute('aria-label'), 'oats-aweb: open the whole skill');
+  // Then Commands, Triggers (none declared here), Hooks, Used by, Source and Files, each folded: a native disclosure.
+  const folds = $$('.page-main > .cap-folds > details.cap-fold');
+  assert.deepEqual(folds.map(d => [d.dataset.fold, d.open, d.querySelector('summary .cap-fold-title').textContent]),
+    [['commands', false, 'Commands'], ['hooks', false, 'Hooks'], ['used-by', false, 'Used by'], ['source', false, 'Comes from'], ['files', false, 'Files']]);
+  assert.deepEqual($$('details[data-fold=commands] .provides-chip').map(c => c.textContent), ['aweb-connect']);
+  assert.ok($('details[data-fold=source] .page-kv'), 'the "Comes from" facts stay reachable');
+  // Enter on a skill opens the whole skill in the pane: its front matter as facts, then its body; the body hides.
+  skillRows[0].focus(); skillRows[0].click(); await flush(); await flush();
+  const view = u.contents.skillView;
+  assert.equal(view.hidden, false); assert.equal($('.page-body').hidden, true);
+  assert.equal(view.querySelector('.skill-view-title').textContent, 'oats-aweb');
+  assert.deepEqual(u.calls.at(-1), { action: 'file', capability: { name: 'oats.aweb', kind: 'package', package: 'oats.aweb' }, path: 'skills/oats-aweb/SKILL.md' });
+  const fm = view.querySelector('table.cap-fm');
+  assert.deepEqual([...fm.querySelectorAll('th')].map(th => th.textContent), ['name', 'description']);
+  assert.equal(fm.compareDocumentPosition(view.querySelector('.mdv h1')) & u.dom.window.Node.DOCUMENT_POSITION_FOLLOWING, u.dom.window.Node.DOCUMENT_POSITION_FOLLOWING, 'front matter, then the body');
+  assert.equal(view.querySelector('.mdv h1').textContent, 'Playbook');
+  assert.equal(view.querySelectorAll('input, textarea, [contenteditable]').length, 0, 'read-only');
+  assert.equal(u.doc.activeElement, view.querySelector('.skill-view-reader'));
+  // Its other files are a press away; a link to a listed file opens it in place.
+  assert.deepEqual([...view.querySelectorAll('.skill-view-files button')].map(b => b.textContent), ['SKILL.md', 'logo.png', 'refs/a.md']);
+  view.querySelector('.skill-view-files button[data-path="skills/oats-aweb/refs/a.md"]').click(); await flush(); await flush();
+  assert.equal(view.querySelector('.cap-reader-path').textContent, 'skills/oats-aweb/refs/a.md');
+  // A catalog repaint while it is open keeps the skill open and the body hidden.
+  render();
+  assert.equal(page.querySelector('.skill-view'), view); assert.equal(view.hidden, false); assert.equal($('.page-body').hidden, true);
+  // Esc returns to the capability, focus on the skill's row.
+  view.querySelector('.skill-view-reader').dispatchEvent(new u.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  assert.equal(view.hidden, true); assert.equal($('.page-body').hidden, false);
+  assert.equal(u.doc.activeElement, $('.cap-skills-section button.cap-skill-row[data-skill="skills/oats-aweb"]'));
+  // Enter on a fold's summary unfolds it (the native disclosure); a fold the user opened stays open across a repaint.
+  const used = $('details[data-fold=used-by]');
+  used.querySelector('summary').click();
+  assert.equal(used.open, true);
+  render();
+  assert.equal($('details[data-fold=used-by]').open, true);
+});
+
+test('a skill read that lands after the skill was left is dropped (latest intent), on success and on failure', async t => {
+  const pending = [];
+  const u = setup(t, { answer: body => body.action === 'show' ? showAnswer() : (() => { const d = deferred(); pending.push([body.path, d]); return d; })() });
+  u.go(); await flush(); await flush();
+  const page = u.doc.createElement('div'); u.doc.body.append(page);
+  renderCapabilityPage(page, { row: packageRow, status: null, instances: [], root: '/ws', onBack() {}, contents: u.contents.element, skills: u.contents.skills, skillView: u.contents.skillView });
+  const skillPending = () => pending.filter(([path]) => path.startsWith('skills/oats-aweb/SKILL.md'));
+  page.querySelector('button.cap-skill-row[data-skill="skills/oats-aweb"]').click(); await flush();
+  const [, first] = skillPending().at(-1);
+  // Esc before it lands: the late answer paints nothing.
+  u.contents.skillView.dispatchEvent(new u.dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+  first.resolve(fileAnswer('skills/oats-aweb/SKILL.md', { text: '# Late' })); await flush(); await flush();
+  assert.equal(u.contents.skillView.hidden, true);
+  assert.doesNotMatch(u.contents.skillView.textContent, /Late/);
+  // A→B: a failure of A's read that arrives after B opened says nothing; B's answer is painted.
+  page.querySelector('button.cap-skill-row[data-skill="skills/oats-aweb"]').click(); await flush();
+  const [, a] = skillPending().at(-1);
+  u.contents.closeSkill({ focus: false });
+  page.querySelector('button.cap-skill-row[data-skill="skills/aweb-identity"]').click(); await flush();
+  const [, b] = pending.filter(([path]) => path === 'skills/aweb-identity/SKILL.md').at(-1);
+  a.reject(err('E_CLI_FAILED', 'old failure')); await flush(); await flush();
+  assert.doesNotMatch(u.contents.skillView.textContent, /old failure/);
+  b.resolve(fileAnswer('skills/aweb-identity/SKILL.md', { text: '# Identity' })); await flush(); await flush();
+  assert.equal(u.contents.openSkill, 'skills/aweb-identity');
+  assert.equal(u.contents.skillView.querySelector('.mdv h1').textContent, 'Identity');
+});
+
+// Review round 2: a re-read that changes a skill's files (same name, path and description) moves the whole-skill view
+// with it, whether the skill was closed or open when the answer landed.
+test('a skill whose files change on a re-read opens, and stays open, with the files the answer now lists', async t => {
+  const playbook = files => ({ name: 'playbook', path: 'skills/playbook', description: 'The playbook.', files: files.map(f => ({ path: `skills/playbook/${f}`, bytes: 10 })), filesTruncated: false });
+  const answer = { current: showAnswer({ skills: [playbook(['SKILL.md', 'old.md'])] }) };
+  const u = setup(t, { answer: body => body.action === 'show' ? answer.current : fileAnswer(body.path, {}, answer.current.commit) });
+  u.go(); await flush(); await flush();
+  const page = u.doc.createElement('div'); u.doc.body.append(page);
+  renderCapabilityPage(page, { row: packageRow, status: null, instances: [], root: '/ws', onBack() {}, contents: u.contents.element, skills: u.contents.skills, skillView: u.contents.skillView });
+  const shown = () => [...u.contents.skillView.querySelectorAll('.skill-view-files button')].map(b => b.textContent);
+  const row = () => page.querySelector('button.cap-skill-row[data-skill="skills/playbook"]');
+  // Closed during the re-read: the next open lists the new files.
+  answer.current = showAnswer({ skills: [playbook(['SKILL.md', 'new.md'])] });
+  u.contents.refresh(); await flush(); await flush();
+  row().click(); await flush(); await flush();
+  assert.deepEqual(shown(), ['SKILL.md', 'new.md']);
+  // Open during the re-read, on a file the new answer drops: the buttons follow, and the open file falls back to SKILL.md.
+  u.contents.skillView.querySelector('.skill-view-files button[data-path="skills/playbook/new.md"]').click(); await flush(); await flush();
+  assert.equal(u.contents.skillView.querySelector('.cap-reader-path').textContent, 'skills/playbook/new.md');
+  answer.current = showAnswer({ skills: [playbook(['SKILL.md', 'other.md'])] });
+  u.contents.refresh(); await flush(); await flush();
+  assert.equal(u.contents.openSkill, 'skills/playbook');
+  assert.deepEqual(shown(), ['SKILL.md', 'other.md']);
+  assert.equal(u.contents.skillView.querySelector('.cap-reader-path').textContent, 'skills/playbook/SKILL.md');
+  assert.equal(u.calls.filter(c => c.action === 'file').at(-1).path, 'skills/playbook/SKILL.md', 'the new SKILL.md is read');
+  // A re-read that keeps the open file listed keeps it open.
+  u.contents.skillView.querySelector('.skill-view-files button[data-path="skills/playbook/other.md"]').click(); await flush(); await flush();
+  answer.current = showAnswer({ skills: [playbook(['SKILL.md', 'other.md', 'more.md'])] });
+  u.contents.refresh(); await flush(); await flush();
+  assert.deepEqual(shown(), ['SKILL.md', 'other.md', 'more.md']);
+  assert.equal(u.contents.skillView.querySelector('.cap-reader-path').textContent, 'skills/playbook/other.md');
+});
+
+// Review round 3: the open skill leaving the answer closes the view; focus goes to a row still there, else to Back.
+test('an open skill that a re-read removes closes, focus on the page\'s Back (never <body>)', async t => {
+  const answer = { current: showAnswer() };
+  const u = setup(t, { answer: body => body.action === 'show' ? answer.current : fileAnswer(body.path, {}, answer.current.commit) });
+  u.go(); await flush(); await flush();
+  const page = u.doc.createElement('div'); u.doc.body.append(page);
+  renderCapabilityPage(page, { row: packageRow, status: null, instances: [], root: '/ws', onBack() {}, contents: u.contents.element, skills: u.contents.skills, skillView: u.contents.skillView });
+  page.querySelector('button.cap-skill-row[data-skill="skills/oats-aweb"]').click(); await flush(); await flush();
+  assert.equal(u.doc.activeElement.className, 'skill-view-reader');
+  answer.current = showAnswer({ skills: [] });
+  u.contents.refresh(); await flush(); await flush();
+  assert.equal(u.contents.skillView.hidden, true);
+  assert.equal(u.doc.activeElement, page.querySelector('.page-back'));
+  // A skill whose files can no longer be listed closes the same way; focus goes to Back (its row opens nothing).
+  answer.current = showAnswer();
+  u.contents.refresh(); await flush(); await flush();
+  page.querySelector('button.cap-skill-row[data-skill="skills/aweb-identity"]').click(); await flush(); await flush();
+  answer.current = showAnswer({ skills: [showAnswer().skills[0], { ...showAnswer().skills[1], files: null }] });
+  u.contents.refresh(); await flush(); await flush();
+  assert.equal(u.contents.skillView.hidden, true);
+  assert.equal(u.doc.activeElement, page.querySelector('.page-back'));
 });
 
 test('code blocks keep a working copy button: the code to the clipboard, "copied", back to "copy"', async t => {

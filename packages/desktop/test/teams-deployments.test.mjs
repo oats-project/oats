@@ -47,12 +47,12 @@ test('the team page: one card per deployment, headed by its machine and path, wi
   const host = d.querySelector('.workspace-page'); assert.equal(card.showTeam(host, 'web', { onBack: () => {} }), true);
   const cards = [...host.querySelectorAll('.ct-mcard')];
   assert.deepEqual(cards.map(c => [c.querySelector('.ct-machine').textContent, c.querySelector('.ct-path').textContent, c.querySelector('.ct-path').title, c.querySelector('.ct-mcard-count').textContent]),
-    [['This Mac', '~/Agents/oats', OATS.path, '1 instance, 1 running'], ['This Mac', '~/example/oats-qa', V2.path, '1 instance, 1 running'], ['devbox', '~/Agents/web', DEVBOX.path, '1 instance, 1 running']]);
+    [['This Mac', '~/Agents/oats', OATS.path, '1 agent, 1 running'], ['This Mac', '~/example/oats-qa', V2.path, '1 agent, 1 running'], ['devbox', '~/Agents/web', DEVBOX.path, '1 agent, 1 running']]);
   // Two cards on one machine are told apart by their path; a machine of its own is named alone.
   assert.deepEqual(cards.map(c => c.getAttribute('aria-label')), ['This Mac ~/Agents/oats', 'This Mac ~/example/oats-qa', 'devbox']);
-  assert.deepEqual(cards.map(c => c.querySelector('.ct-ilist').getAttribute('aria-label')), ['Your instances on web on This Mac ~/Agents/oats', 'Your instances on web on This Mac ~/example/oats-qa', 'Your instances on web on devbox']);
+  assert.deepEqual(cards.map(c => c.querySelector('.ct-ilist').getAttribute('aria-label')), ['Your agents on web on This Mac ~/Agents/oats', 'Your agents on web on This Mac ~/example/oats-qa', 'Your agents on web on devbox']);
   assert.equal(host.querySelector('.ct-yours-machines').textContent, 'on 2 machines', 'this Mac\'s two deployments are one machine');
-  assert.equal(card.element.querySelector('[data-team="web"] .ct-sum').textContent, '3 of your instances, 1 on other machines');
+  assert.equal(card.element.querySelector('[data-team="web"] .ct-sum').textContent, '3 of your agents, 1 on other machines');
   const far = [...host.querySelectorAll('.ct-irow:not(.ct-ihead)')].find(r => r.querySelector('.ct-member-name').textContent === 'far');
   assert.equal(far.querySelector('.ct-member-term').getAttribute('aria-label'), 'Open far terminal on devbox');
   far.querySelector('.ct-member-term').click();

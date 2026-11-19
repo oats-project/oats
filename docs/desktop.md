@@ -480,40 +480,61 @@ other window.
 
 ## Capabilities and spawning
 
-**Workspace › Capabilities** is in two parts, each with its title:
-**Workspace defaults** (below), then **All capabilities**, what the
-workspace offers. Under the **All capabilities** title, a row of segments
-jumps to its three sections: **Workspace owned** (from the member repos, for every soul),
-**Repo owned** (only for souls of the same repo) and **Packages** (pinned
-versions). Workspace owned and Repo owned are grouped by the repository
-that defines each capability. The groups are headed like the Souls tab:
-repo name, then "member repo · host · N capabilities". The host repository
-comes first, then the others by name; capabilities from outside the member
-repos come last, under **external**. At the top right of Workspace owned,
-pills (**All**, then one per repository, each with its count) show one
-repository at a time; "N of M shown" appears while a pill or the search
-narrows the list.
+**Workspace › Capabilities** lists every capability of the workspace as one
+list of rows. Core capabilities (knowledge, messaging and tasks) come first,
+in that order, each with a dim **core** tag; every other capability follows by
+name. There are no sections, repository groups or colour marks. Each row
+shows:
 
-Above All capabilities, **Workspace defaults** shows what every soul of the
-workspace starts with, unless it turns one off. It is one panel with two
-groups. **Core capabilities** (at most one of each per soul) is always
-**Knowledge**, **Messaging** and **Tasks**. **Additional capabilities** (any
-number per soul) lists the other capabilities the workspace gives every soul,
-or says there are none. Each default is shown the same way: its tile, the
-capability and its source (a package and its pinned version, or a repository
-and "latest"). Click it to open the capability's page. An empty core slot
-shows **None**: there is no workspace default, and each soul chooses its
-own. A core capability the workspace names among its other defaults, rather
-than in its slot, is shown under Core, in that slot, as the kernel fills the
-slot with it. An additional default the workspace turned off is struck through and
-says "turned off by the workspace". A workspace that sets no defaults, a
-standalone deployment for example, shows one line saying so. The search and
-the repository pills never narrow or hide this section. It is read from
-`oats workspace status --json`: an OATS that does not report the defaults
-shows no such part, and the Desktop does not guess them from the souls. The
-defaults have no segment of their own: the segments are All capabilities'.
-Teams add no capabilities (removed in 0.30), so there are no team defaults
-to show.
+- the capability's name;
+- who made it: a small ✓ in a circle for an official one (its tooltip says
+  which fact made it official: **Official: in the OATS catalog** or **Official:
+  from the OATS repository**), or **by** its source (a member repository's
+  name, or a git package's repository);
+- one line of what it does (the manifest's description, cut to one line);
+- its tags: **core**, **default** for one the workspace gives every soul,
+  **default · off** for one the workspace turns off, and **repo only** for one
+  only its own repository's souls can use.
+
+A capability is official by a rule of the Desktop over what the kernel
+already reports: a package the workspace pins from the catalog
+(`oats workspace status` reports its source as `catalog:<id>`), or a
+capability of the OATS repository itself. Its name proves nothing. The mark
+says only that: it is not a trust claim, since being listed is not being
+trusted. Its limit: `OATS_PACKAGE_CATALOG` can point the kernel at another
+catalog file, and workspace status doesn't say which catalog was read, so an
+operator who points it elsewhere sees that catalog's packages marked official.
+A kernel fact for "official" is
+[oats-project/oats#1981](https://github.com/oats-project/oats/issues/1981). A package's
+name and version are not on this list: **Setup**'s Packages box shows them,
+and so does the capability's page.
+
+One sentence above the list says what defaults are: the capabilities the
+workspace gives every soul, so its agents share one way of working. A soul
+can turn a default off and choose its own instead. The sentence also says
+which core slot no default fills, and names a declared default the list can't
+show as a row. A workspace that sets no defaults (a standalone deployment, for
+example) says so in that sentence. The search never narrows it. It is read
+from `oats workspace status --json`: an OATS that doesn't report the defaults
+shows no sentence and no tag, and the Desktop doesn't guess them from the
+souls. The defaults are declared in the workspace file; the page only shows
+them. Teams add no capabilities (removed in 0.30).
+
+↑ and ↓ move along the rows, and Enter opens a capability's page. The page
+reads top to bottom:
+
+- its name, its tags, and one line on where it comes from (who made it, then
+  the package and its pinned version, or the repository at its latest);
+- **what it does**, as one paragraph;
+- **Skills**: each skill's name and one line. Enter opens the whole skill in
+  the pane, read-only: its front matter as a table, then its text, with its
+  other files a press away. Esc returns to the capability;
+- then, folded, each only when there is something to show: **Commands**,
+  **Settings** and the soul's **As <soul> resolves it** (opened from a soul),
+  **Triggers**, **Hooks**, **Used by**, **Comes from** (the commit,
+  fingerprint, path and manifest file) and **Files** (the injected
+  instructions and every skill file, in a tree with a reader). Enter or Space
+  unfolds one, and a fold stays open while the page refreshes.
 
 The round **i** button in the toolbar, beside the search (**About capabilities**), opens
 **What capabilities are**: what a capability gives a soul's instances (skills,
@@ -820,14 +841,21 @@ the CLI, cron semantics, observed outcomes and recovery commands.
 
 ## A workspace's teams and setup
 
-The Workspace › **Teams** tab has one card per team. Under its description,
+The Workspace › **Teams** tab has two sections. **Workspace teams** are the
+teams the workspace declares in `oats-workspace.yaml`: everyone who opens the
+workspace sees them. **This computer's teams** are the teams declared only on
+this computer, in its `oats-local.yaml` (the kernel's local teams), not
+shared with the workspace. Each section says so in one sentence, and a team's
+page lists **your agents** on it, on this computer and the machines added to
+this workspace, never the team's whole membership. The Teams tab has one card per team. Under its description,
 **Default for** says whose default the team is: all souls of a repository, a
 single soul, or every soul without its own default for the default team. **May
 join** says who else may join it. Both are read from the workspace's committed
 `souls:`; a team nobody may join yet says so. The address (the team on the
 messaging provider) and the members running in it follow.
 
-The **Setup** tab's List view is one column. Under the workspace's name, one
+The **Setup** tab is one list, in one column (its graph view went in the
+Desktop UI rework). Under the workspace's name, one
 line counts its members (and those that need attention), its packages and the
 state of the lock. The next line says where the workspace is declared. An
 **Overview** says that the workspace's **host**, the repository that holds
@@ -835,9 +863,12 @@ state of the lock. The next line says where the workspace is declared. An
 packages. **For developers** (folded) explains how a repository becomes a
 member and what each member state means. Then **Shared through Git** lists
 what the workspace declares (Members, with the host first and tagged
-**Host**, Packages and Defaults). **This computer** lists what is not shared:
-this deployment's settings, lock, CLI and instances, the member clones, and
-the machines that run the workspace (**Registered machines**).
+**Host**, Packages and Defaults). Each member's **Details** (or **Why?**, when
+its handshake needs attention) opens its panel under its row: both sides of
+the handshake, what it means now, its capabilities by name and the kernel's
+own detail. **This computer** lists what is not shared: this deployment's
+settings, lock, CLI and agents, and the member clones. The machines that run
+the workspace are the **Machines** tab's.
 
 ## A workspace's machines
 
@@ -845,12 +876,17 @@ A window offers only the machines that run its workspace: those whose
 registration reports the same workspace key as the window's deployment on this
 computer (OATS CLI with `servers-per-workspace` and `server-connect`). The
 spawn dialog's **Where to run** lists "This computer" and those machines; the
-Workspace › Setup tab's **Registered machines** lists them with their OATS version and whether they can
-be reached, with **Check** and **Remove**. Registrations whose key is not known
-yet are checked once in the background after the Desktop starts.
+Workspace › **Machines** tab lists the computers the workspace runs on: this
+computer first (where the view has a deployment here: "reading…" or "not read"
+until it is read), then each of those machines, with whether it can be reached
+and its OATS version. A remote-only view lists its machines' deployments
+instead. The Map and the roster show where agents run; the list counts none.
+Enter on a machine opens it: its name, ssh host and folder,
+**Check** and **Remove**. Registrations whose key is not known yet are checked
+once in the background after the Desktop starts.
 
 **Add a machine to this workspace…** (the last entry of Where to run, and a
-button in Setup) takes an ssh host alias, a name, the folder on that machine
+button on the Machines tab) takes an ssh host alias, a name, the folder on that machine
 and whether to install OATS there, and runs `oats server connect` from this
 deployment; when the workspace uses oats.aweb for messaging, it then runs `oats
 aweb connect` to join that machine to the workspace's team. Each step shows as

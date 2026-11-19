@@ -38,16 +38,35 @@ async function mount(t, answer = () => teams('teams-after'), options = {}) {
   return { dom, doc, card, calls, q, row, click, act };
 }
 
+// The Desktop UI rework, slice 3b (D22, gap-map contradiction 10): the kernel's local teams are teams declared in this
+// computer's oats-local.yaml (docs/configuration.md `teams.<label>`: "a team only this deployment uses"), not another
+// workspace's teams this computer joined: the second section is "This computer's teams", said in one sentence, and the
+// kernel's words (oats-workspace.yaml, oats-local.yaml) stay in those sentences. A team's page keeps its observation
+// scope: your agents, on this computer and the machines added to this workspace.
+test('slice3b teams two sections named per kernel model', async t => {
+  const u = await mount(t);
+  const sections = [...u.card.element.querySelectorAll('.ct-section')];
+  assert.deepEqual(sections.map(s => [s.dataset.section, s.querySelector('h3.ct-section-title').textContent]), [['shared', 'Workspace teams'], ['local', "This computer's teams"]]);
+  assert.match(sections[0].querySelector('.ct-section-lead').textContent, /^Declared by this workspace in oats-workspace\.yaml .*everyone who opens the workspace sees them\.$/);
+  assert.match(sections[1].querySelector('.ct-section-lead').textContent, /^Declared only on this computer, in its oats-local\.yaml: not shared with the workspace\.$/);
+  // The kernel's from: shared are workspace teams, local (oats-local.yaml) are this computer's.
+  assert.deepEqual([...sections[0].querySelectorAll('.ct-card')].map(c => c.dataset.team), teams('teams-after').teams.filter(x => x.from === 'shared').map(x => x.label));
+  assert.deepEqual([...sections[1].querySelectorAll('.ct-card')].map(c => c.dataset.team), teams('teams-after').teams.filter(x => x.from !== 'shared').map(x => x.label));
+  assert.doesNotMatch(u.card.element.textContent, /External teams|Shared teams|Local teams/);
+  // Create and add are today's: the head's add opens the form for a team of this computer.
+  assert.equal(u.q('.ct-page-head button.ct-add').textContent, 'Add a team on this computer');
+});
+
 test('real capture: the page head; the shared and local sections with their leads; each team\'s card with its id, who may join and the kernel\'s problems; one read', async t => {
   const u = await mount(t);
   assert.deepEqual(u.calls, [{ action: 'list' }]);
   assert.equal(u.card.element.dataset.box, 'Teams'); assert.equal(u.q('.ct-page-head .ct-title').textContent, 'Teams');
   assert.equal(u.q('.ct-lead').textContent, 'Who your agents can message. A team never adds capabilities or restricts what a soul can do.');
-  assert.equal(u.q('.ct-page-head button.ct-add').textContent, 'Add a local team'); assert.ok(u.q('.ct-page-head button.ct-add svg.shell-icon'), 'the plus glyph');
+  assert.equal(u.q('.ct-page-head button.ct-add').textContent, 'Add a team on this computer'); assert.ok(u.q('.ct-page-head button.ct-add svg.shell-icon'), 'the plus glyph');
   assert.equal(u.q('.setup-box-head'), null, 'no dashed "Teams on this computer" box: a page');
   assert.deepEqual([...u.card.element.querySelectorAll('.ct-section')].map(s => [s.dataset.section, s.querySelector('.ct-section-title').textContent, s.querySelector('.ct-section-lead').textContent]),
-    [['shared', 'Shared teams', 'Declared in oats-workspace.yaml and shared through Git, so every computer that runs the workspace has them.'],
-      ['local', 'Local teams', 'Only on this computer, in its oats-local.yaml. Not shared.']]);
+    [['shared', 'Workspace teams', 'Declared by this workspace in oats-workspace.yaml and shared through Git: everyone who opens the workspace sees them.'],
+      ['local', "This computer's teams", "Declared only on this computer, in its oats-local.yaml: not shared with the workspace."]]);
   assert.equal(u.q('.ct-scope'), null, 'no scope chips: each section says it in its line');
   assert.deepEqual([...u.card.element.querySelectorAll('.ct-card')].map(c => [c.dataset.team, c.classList.contains('local')]),
     [['engineering', false], ['global', false], ['marketing', false], ['mine', true]], 'a local team\'s card is the dashed one');
@@ -93,14 +112,14 @@ test('the board card sums up your instances on the team, for the members whose i
   ];
   const u = await mount(t, () => mapped(), { readMembers: async () => route(rows), onOpenTeam: () => {} });
   const sum = label => u.row(label).querySelector('.ct-foot .ct-sum');
-  assert.equal(sum('mine').textContent, '4 of your instances');
+  assert.equal(sum('mine').textContent, '4 of your agents');
   assert.deepEqual([...sum('mine').children].map(c => c.className), ['ct-sum-count'], 'all here: no "on other machines"');
-  assert.equal(sum('engineering').textContent, '1 of your instances');
+  assert.equal(sum('engineering').textContent, '1 of your agents');
   for (const label of ['global', 'marketing']) assert.equal(sum(label).textContent, '', 'unmapped: nobody can be in it — nothing, never a zero');
   assert.equal(u.q('.ct-irow, .ct-member-name, .ct-member-term, .ct-members, .ct-default-note'), null, 'no member row, list or note on the board: they are on the team\'s page');
   assert.equal(u.q('.ct-inst, .ct-marks, .ct-count'), null);
   const none = await mount(t, () => mapped(), { readMembers: async () => route([{ instance: 'x', agent: 'x', agentsRoot: '/a', identity: { team: 'other:x.aweb.ai' }, running: true }]) });
-  assert.equal(none.row('mine').querySelector('.ct-sum').textContent, 'None of your instances', 'known and none: said so');
+  assert.equal(none.row('mine').querySelector('.ct-sum').textContent, 'None of your agents', 'known and none: said so');
   assert.deepEqual([...none.row('mine').querySelector('.ct-sum').children].map(c => c.className), ['ct-sum-more'], 'in the quiet step');
   assert.doesNotMatch(none.card.element.textContent, /0 of your|0 member|No members/);
 });
@@ -109,11 +128,11 @@ test('syncRoster: a roster poll that changes who is in a team redraws the cards;
   let rows = [{ instance: 'rm-1', agent: 'release-manager', agentsRoot: '/a', identity: { team: 'mine:alex.aweb.ai' }, running: true }];
   const u = await mount(t, () => mapped(), { readMembers: async () => route(rows) });
   const before = u.row('mine');
-  assert.equal(before.querySelector('.ct-sum').textContent, '1 of your instances');
+  assert.equal(before.querySelector('.ct-sum').textContent, '1 of your agents');
   u.card.syncRoster(); await tick(); assert.equal(u.row('mine'), before, 'the same roster: nothing redrawn');
   rows = [...rows, { instance: 'w-2', agent: 'writer', agentsRoot: '/a', identity: { team: 'mine:alex.aweb.ai' }, running: true }];
   u.card.syncRoster(); await tick();
-  assert.notEqual(u.row('mine'), before); assert.equal(u.row('mine').querySelector('.ct-sum').textContent, '2 of your instances');
+  assert.notEqual(u.row('mine'), before); assert.equal(u.row('mine').querySelector('.ct-sum').textContent, '2 of your agents');
   // A state change redraws too (the team's page follows it; the board's barrier is the same).
   const running = u.row('mine');
   rows = rows.map(r => r.instance === 'w-2' ? { ...r, running: false } : r); u.card.syncRoster(); await tick();
@@ -123,15 +142,15 @@ test('syncRoster: a roster poll that changes who is in a team redraws the cards;
   const label = u.card.element.querySelector('.ct-form input[name=label]'); label.value = 'half'; label.dispatchEvent(new u.dom.window.Event('input', { bubbles: true }));
   rows = rows.slice(0, 1); u.card.syncRoster(); await tick();
   assert.equal(u.card.element.querySelector('.ct-form input[name=label]'), label, 'the form is not rebuilt');
-  assert.equal(u.row('mine').querySelector('.ct-sum').textContent, '2 of your instances');
+  assert.equal(u.row('mine').querySelector('.ct-sum').textContent, '2 of your agents');
 });
 
 test('no local teams: the dashed card with its link opens the add form (Only on this computer); Cancel returns the focus to the link; the head button opens it too', async t => {
   const u = await mount(t, () => { const d = teams('teams-initial'); d.defaultTeam = null; d.teams = d.teams.filter(t => t.from === 'shared'); d.souls.default = {}; return d; });
   assert.deepEqual([...u.q('[data-section=local]').querySelectorAll('.ct-card')], []);
   const empty = u.q('[data-section=local] .ct-empty');
-  assert.equal(empty.firstChild.textContent, "No local teams. A local team lives in this computer's oats-local.yaml and is visible only here.");
-  const link = empty.querySelector('button.ct-link'); assert.equal(link.textContent, 'Add a local team'); assert.equal(link.type, 'button');
+  assert.equal(empty.firstChild.textContent, "No teams of this computer. One lives in this computer's oats-local.yaml and is seen only here.");
+  const link = empty.querySelector('button.ct-link'); assert.equal(link.textContent, 'Add a team on this computer'); assert.equal(link.type, 'button');
   await u.click(link);
   assert.ok(u.q('[data-section=local] .ct-form'), 'the form, in the local section'); assert.equal(u.q('.ct-empty'), null, 'the form replaces the empty card');
   assert.equal(u.doc.activeElement, u.q('.ct-form input[name=label]'));
@@ -187,7 +206,7 @@ test("Add a local team: label + an existing id; the kernel's refusals (captured)
   const submit = async () => { u.q('.ct-form button[type=submit]').click(); await tick(); };
   const type = (name, value) => { const input = u.q(`.ct-form input[name=${name}]`); input.value = value; input.dispatchEvent(new u.dom.window.Event('input', { bubbles: true })); };
   await submit();
-  assert.equal(u.q('.ct-error p').textContent, 'A local team needs a label and its provider team id.'); assert.equal(u.calls.length, 1, 'nothing sent');
+  assert.equal(u.q('.ct-error p').textContent, 'A team of this computer needs a label and its provider team id.'); assert.equal(u.calls.length, 1, 'nothing sent');
   type('label', 'Mine'); type('team', 'mine:alex.aweb.ai'); await submit();
   assert.equal(u.q('.ct-error p').textContent, 'A label is lowercase letters and digits, with . _ or - after the first character.'); assert.equal(u.calls.length, 1, "the kernel's grammar, said before sending");
   type('label', 'engineering'); await submit();
@@ -213,8 +232,8 @@ test("a stale view: the kernel's captured E_TEAM_IN_USE on Remove is shown under
 
 test('no teams yet: both sections say so; a failed read says so', async t => {
   const empty = await mount(t, () => ({ ...teams('teams-initial'), defaultTeam: null, teams: [], souls: { teams: {}, default: {} }, problems: [] }));
-  assert.equal(empty.q('[data-section=shared] .ct-empty').textContent, "No shared teams. A shared team is declared in the workspace's oats-workspace.yaml and committed, so every computer running the workspace has it.");
-  assert.match(empty.q('[data-section=local] .ct-empty').textContent, /^No local teams\./);
+  assert.equal(empty.q('[data-section=shared] .ct-empty').textContent, "No workspace teams. A workspace team is declared in the workspace's oats-workspace.yaml and committed, so everyone who opens the workspace has it.");
+  assert.match(empty.q('[data-section=local] .ct-empty').textContent, /^No teams of this computer\./);
   const failed = await mount(t, () => Promise.reject(refusal('E_CLI_PROTOCOL', 'oats teams answered something this Desktop cannot read')));
   assert.equal(failed.q('.ct-error p').textContent, 'oats teams answered something this Desktop cannot read');
 });

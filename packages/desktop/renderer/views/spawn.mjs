@@ -167,9 +167,10 @@ function ownsSelection(s, ref) {
 }
 /** The shell's navigation to a Workspace tab (⌘1 on Machines, app.chooseSoul's chord on Souls, the leader's 3
  * on Capabilities, the palette's) is an inspection intent, never a launch. */
-export function preselectWorkspaceTab(name) {
+export function preselectWorkspaceTab(name, { machinesView = null } = {}) {
   if (!workspaceTabs.includes(name)) return false;
-  pendingWorkspaceTab = { name, ...nextSelectionIntent() };
+  // `machinesView` ('list' | 'map'): the Machines tab's view to land on (slice 3b); none keeps the one last chosen.
+  pendingWorkspaceTab = { name, ...(name === "machines" && machinesView ? { machinesView } : {}), ...nextSelectionIntent() };
   if (state?.alive) applyWorkspaceTab(state);
   return true;
 }
@@ -184,7 +185,7 @@ function applyWorkspaceTab(s) {
   // The handoff's own tab change is not a newer choice: minting one here would supersede the soul or home
   // this same handoff carries (Go to soul from the Machines tab turned the page and opened nothing).
   s.handoffTab = true;
-  try { s.discovery?.setTab(intent.name); } finally { s.handoffTab = false; }
+  try { if (intent.machinesView) s.discovery?.setMachinesView(intent.machinesView); s.discovery?.setTab(intent.name); } finally { s.handoffTab = false; }
 }
 export function preselectHome(instance) {
   const intent = nextSelectionIntent();
@@ -330,14 +331,15 @@ function showPage(s, mode) {
   s.q("souls-grid").hidden = !!mode || !souls;
   s.q("souls-bar").hidden = !!mode || !souls;
   s.q("souls-notice").hidden = !!mode || !souls; // the grid's stale line belongs to the grid
-  const machines = s.discovery?.tab === "machines";
+  // Machines' Map is the Deployments view's panel; its List is the discovery's (slice 3b).
+  const machines = s.discovery?.tab === "machines" && s.discovery?.machinesView === "map";
   s.q("workspace-machines-panel").hidden = !!mode || !machines;
   s.q("workspace-discovery").hidden = !!mode || souls || machines;
 }
-/** The Machines tab's view (views/hierarchy.mjs, the Deployments page of before): mounted while the tab is shown and
- * unmounted when another tab is chosen or the view leaves, so it reads nothing in the background. */
+/** The Machines tab's view (views/hierarchy.mjs, the Deployments page of before): mounted while the tab's Map is shown and
+ * unmounted when its List or another tab is chosen or the view leaves, so it reads nothing in the background. */
 function syncMachines(s) {
-  const shown = s.alive && s.discovery?.tab === "machines";
+  const shown = s.alive && s.discovery?.tab === "machines" && s.discovery?.machinesView === "map";
   // Its "Workspace" (s, Go to soul's page) is this page: the Souls tab, not a stage switch to the page already shown.
   // Already on Souls (Go to soul's handoff turned the page and opened the soul), it does nothing: setTab would show
   // the grid again under the soul's page.
@@ -437,6 +439,7 @@ function paintCapabilityPage(s) {
     open.signature = signature; open.noticeSignature = null;
     const restore = captureFocusState(host, { fallback: () => host.querySelector(".page-back") }), keep = open.contents.hold();
     renderCapabilityPage(host, { row: shown, ...context, catalogPending, contents: open.contents.element, triggerSources: open.contents.triggerSources,
+      skills: open.contents.skills, skillView: open.contents.skillView,
       openExternal: url => s.ctx.openExternal?.(url),
       backLabel: from ? from.name : "Capabilities", from: from ? { label: from.name, why } : null,
       onBack: () => closeCapability(s, { restoreFocus: true }),
@@ -634,6 +637,7 @@ ${spawnDialogCSS}</style>
     onOpenCapability: row => openCapability(s, row, null),
     onTeamMember: (action, member) => void teamMemberAction(s, action, member),
     onOpenTeam: label => openTeam(s, label),
+    onMachinesView: () => syncMachines(s), // Map mounts the Deployments view, List unmounts it (it reads no more)
     onTab: tab => {
       if (tab !== "souls") s.aboutSouls?.close({ focus: "none" }); // leaving Souls closes its dialog, moving no focus
       s.spawnOp++; closeSpawnModal(s); s.inspector.close(); closeCapability(s); closeTeam(s); s.page.close();

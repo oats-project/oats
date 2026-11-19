@@ -450,7 +450,7 @@ const CLI_OK = { ok: true, bin: "/seed/oats", version: "0.18.0", source: "path",
 
 /** The Deployments view mounted on a fixture roster. `agents(path)` answers /api/agents (a value, a promise, or a throw).
  * `inPage`: as the app mounts it since 2026-10-26, inside the Workspace page (views/spawn.mjs), on its Machines tab
- * (preselected, as stage.hierarchy does; syncMachines mounts the view in .workspace-machines-panel with the page's
+ * (preselected, as stage.hierarchy does, then its Map chosen; syncMachines mounts the view in .workspace-machines-panel with the page's
  * ctx, whose openView("spawn") is the page's Souls tab). The page and the view then read the same fixture, as they read
  * the same server; `pagePoll` is the page's own roster poll. */
 async function card(t, { instances, deployments = null, agents = () => ({ agents: [PACKAGE_SOUL, ELSEWHERE_SOUL] }), ctx: extra = {}, inPage = false } = {}) {
@@ -463,7 +463,7 @@ async function card(t, { instances, deployments = null, agents = () => ({ agents
   common.setWorkspace("/team");
   const unmounts = [];
   t.after(() => { for (const off of unmounts.reverse()) off(); common.setWorkspace(old.ws); Object.assign(globalThis, { window: old.window, document: old.document, setInterval: old.setInterval }); dom.window.close(); });
-  // Every roster poll is the test's to run: the view's first, then (in the page) the page's own.
+  // Every roster poll is the test's to run: the view's; in the page, the page's own first (the view mounts with its Map).
   const polls = [];
   globalThis.setInterval = (fn) => { polls.push(fn); return 0; };
   const calls = [], opened = [], started = [], views = [], notes = [];
@@ -484,8 +484,10 @@ async function card(t, { instances, deployments = null, agents = () => ({ agents
     assert.equal(spawn.preselectWorkspaceTab("machines"), true);
     spawn.mount(doc.getElementById("spawn"), ctx);
     unmounts.push(() => { spawn.unmount(); resetCliStateForTests(); });
+    // The Machines tab opens on its list of computers (slice 3b): its Map is this view.
+    doc.querySelector('#spawn .workspace-tools[data-tools=machines] [data-machines-view=map]').click();
     host = doc.querySelector("#spawn .workspace-machines-panel");
-    assert.equal(polls.length, 2, "the view's roster poll, then the page's");
+    assert.equal(polls.length, 2, "the page's roster poll, then the view's (mounted when its Map is chosen)");
     for (let i = 0; i < 4; i++) await tick();
   } else {
     unmounts.push(hier.mount(host, ctx));
@@ -496,8 +498,8 @@ async function card(t, { instances, deployments = null, agents = () => ({ agents
   const node = (name) => [...host.querySelectorAll(".hnode")].find((n) => n.dataset.name === name);
   return { dom, doc, host, calls, opened, started, views, notes, node, spawn,
     select: async (name) => { node(name).dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true, button: 0 })); await tick(); await tick(); },
-    poll: async () => { polls[0](); await tick(); await tick(); },
-    pagePoll: async () => { polls[1](); for (let i = 0; i < 4; i++) await tick(); },
+    poll: async () => { polls[inPage ? 1 : 0](); await tick(); await tick(); },
+    pagePoll: async () => { polls[0](); for (let i = 0; i < 4; i++) await tick(); },
     key: (key) => { const e = new dom.window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }); host.querySelector(".hier-canvas").dispatchEvent(e); return e; },
     term: () => host.querySelector(".pterm"), soul: () => host.querySelector(".psoul"), status: () => host.querySelector(".pstatus").textContent,
     agentsReads: () => calls.slice(inPage ? mounted : 0).filter((p) => p.startsWith("/api/agents")) };
