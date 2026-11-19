@@ -391,22 +391,25 @@ oats instance attention --clear                                  # once you have
 
 From OATS 0.69.22 (feature `instance-board`), your instance has a board: what
 your person sees around your terminal when they open you. Run its commands
-from your home, like `attention`. If `oats instance board` is refused (an
-older OATS), use `oats instance attention --message` instead.
+from your home, like `attention`. An older OATS has no board: when `oats
+version --json` doesn't list `instance-board` in its `features`, use `oats
+instance attention --message` instead.
 
 **A decision between 2 and 4 options:** ask it on the board, in the request
 shape. Write it so someone who hasn't followed your work can decide. Run it
-as one command, so the context file is made and removed outside your home:
+as one command: the context file is made and removed outside your home, and
+the command's exit status is the ask's:
 
 ```bash
-ctx=$(mktemp) && cat > "$ctx" <<'TXT' && oats instance board ask "<the question, one sentence>" \
+( ctx=$(mktemp) && trap 'rm -f "$ctx"' EXIT && cat > "$ctx" <<'TXT' && oats instance board ask "<the question, one sentence>" \
   --option "<choice>: <what happens if they pick it>" \
-  --option "<choice>: <what happens>" --context-file "$ctx"; rm -f "$ctx"
-<summary, one line>
+  --option "<choice>: <what happens>" --context-file "$ctx"
+<summary, one line, at most 80 characters>
 <context, 2-4 lines: what you did so far and what you found>
 <what happens next: what you will do with the answer>
 <links: the PR, the branch, files>
 TXT
+)
 ```
 
 - Up to 4 `--option`s. The question is one line, at most 200 characters;
@@ -422,6 +425,12 @@ TXT
   needs-input.
 - A question belongs to the session it was asked in: after a restart, ask it
   again if you still need the answer.
+- **When the board refuses** (read the error's code with `--json`):
+  `E_EVENTS_FAILED` means the question IS on the board but its needs-input
+  claim isn't: run the same command again, which asks nothing twice.
+  `E_BOARD_FAILED` means the board can't read your session: use `oats
+  instance attention --message`. `E_BOARD_FULL`: clear a question you have
+  read, or unset a fact, first. `E_BAD_ARGS`: fix the text the message names.
 - Anything else you need from a person (a credential, an approval with no
   options, an open question) stays `attention`.
 

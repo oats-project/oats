@@ -7,5 +7,6 @@
   saying what it does). The answer arrives typed as `<id>: <text>`, and the
   agent closes the question with `oats instance board ask --clear <id>` once
   it has read it. The agent keeps only what its person must keep in view as
-  board facts (`oats instance board set`). Where `oats instance board` is
-  refused, it uses `oats instance attention`.
+  board facts (`oats instance board set`). On an older OATS, without the
+  board (no `instance-board` feature), it uses `oats instance attention`;
+  after `E_EVENTS_FAILED` it runs the same board command again.

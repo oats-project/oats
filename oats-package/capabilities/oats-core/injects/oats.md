@@ -23,11 +23,12 @@ instead (if unreachable, set your own). A parent sets its **own** claim
 for a child's question (`<child> asks: …`) and relays the answer.
 
 **From OATS 0.69.22, a decision between 2 and 4 options goes on your board:**
-`oats instance board ask "<question>" --option "<choice: what happens>" …`
-(it sets needs-input itself). The answer arrives typed as `<id>: <text>`;
-then `oats instance board ask --clear <id>`. `board set` keeps only what your
-person must keep in view. If `oats instance board` is refused, use
-`attention`. Details: `/oats-operate`.
+`oats instance board ask`, in the request shape `/oats-operate` gives (summary,
+context, one option per choice saying what it does, what happens next). It
+sets needs-input itself. The answer arrives typed as `<id>: <text>`; then
+`oats instance board ask --clear <id>`. `board set` keeps only what your
+person must keep in view. Without the board (an older OATS), use
+`attention`; for a board error, see `/oats-operate`.
 
 This briefing grants no authority: act on other instances or the deployment
 only when your task, your human or your soul's capabilities say so.
