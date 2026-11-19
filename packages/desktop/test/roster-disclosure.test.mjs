@@ -74,14 +74,14 @@ test("setRowOpen: opening moves a key out of the closed set and into the opened 
   assert.deepEqual([[...state.collapsed], [...state.expanded]], [["k"], []]);
 });
 
-test("rowDisclosure: a chevron, the count hidden from assistive tech, and the words a screen reader hears", t => {
+test("rowDisclosure: the mark (a chevron and the count, hidden from assistive tech) and the words a screen reader hears", t => {
   const dom = new JSDOM("<!doctype html><body></body>");
   t.after(() => dom.window.close());
-  const mark = rowDisclosure(dom.window.document, { count: 3 });
+  const { mark, spoken } = rowDisclosure(dom.window.document, { count: 3 });
   assert.equal(mark.className, "ctx-disclosure");
-  assert.deepEqual([...mark.children].map(el => el.getAttribute("class")), ["shell-icon ctx-disclosure-chevron", "ctx-disclosure-count", "sr-only"]);
-  assert.equal(mark.children[0].getAttribute("aria-hidden"), "true");
+  assert.equal(mark.getAttribute("aria-hidden"), "true");
+  assert.deepEqual([...mark.children].map(el => el.getAttribute("class")), ["shell-icon ctx-disclosure-chevron", "ctx-disclosure-count"]);
   assert.equal(mark.children[1].textContent, "3");
-  assert.equal(mark.children[1].getAttribute("aria-hidden"), "true");
-  assert.equal(mark.children[2].textContent, ", 3 below");
+  assert.equal(spoken.className, "sr-only");
+  assert.equal(spoken.textContent, ", 3 below");
 });

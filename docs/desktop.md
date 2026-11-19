@@ -974,7 +974,7 @@ joined by a dotted line through their dots. A parent's line to its children
 runs just to the right of the dotted line, so the two never merge.
 
 The sidebar shows the top-level instances only until you open one. An
-instance with children has a chevron after its name, with the number of
+instance with children has a chevron before its name, with the number of
 instances under it at every depth. Click the chevron to show its group as
 it was drawn before, and click it again to hide the group. A click anywhere
 else on the row still opens its terminal. From the keyboard, Right opens the

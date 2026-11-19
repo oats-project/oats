@@ -88,11 +88,15 @@ test("by default only the top-level rows are drawn: each root with children is c
     assert.equal(r.getAttribute("aria-expanded"), "false", `${name} reads collapsed`);
     assert.equal(r.dataset.rosterCollapsed, "1");
     assert.ok(m, `${name} wears the disclosure`);
-    assert.equal(m.parentElement.className, "ctx-name-line", "beside the name");
-    assert.equal(m.parentElement.firstElementChild.className, "ctx-name", "after the name");
+    assert.equal(m.parentElement.className, "ctx-name-line", "on the name line");
+    // Before the name: the row tools overlay the row's end on hover and focus (.ctx-row-tools), so a mark after a
+    // long name sat under a stopped row's Start… (review round 3).
+    assert.equal(m.parentElement.firstElementChild, m, "first, before the name");
+    assert.equal(m.nextElementSibling.className, "ctx-name");
     assert.ok(m.querySelector(":scope > svg.ctx-disclosure-chevron"), "a chevron");
     assert.equal(m.querySelector(".ctx-disclosure-count").textContent, String(count), "every row under it, at every depth");
-    assert.equal(m.querySelector(".ctx-disclosure-count").getAttribute("aria-hidden"), "true");
+    assert.equal(m.getAttribute("aria-hidden"), "true", "the mark is drawn, its words are said after the name");
+    assert.equal(m.parentElement.querySelector(":scope > .ctx-name + .sr-only").textContent, `, ${count} below`);
     assert.match(spokenText(r), new RegExp(`^${name}, ${count} below`), "a screen reader hears the count after the name");
   }
   const solo = u.row("solo");

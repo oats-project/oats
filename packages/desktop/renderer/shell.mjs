@@ -1173,17 +1173,20 @@ function renderContextRoster(instances) {
         if (attn) { meta.className = "ctx-meta ctx-attn-line"; meta.replaceChildren(attn); }
         const isNew = !!spawnJobs.isNew?.(ws, i);
         // The disclosure (the product owner, 2026-11-19): a row with children here wears a chevron and the count
-        // of the rows under it beside its name, after "New"; a click on it opens or closes the row (below).
-        const disclosure = hasChildren ? rowDisclosure(document, { count: rowsUnder(childrenHere, instanceId(i)) }) : null;
+        // of the rows under it before its name, clear of the row tools at its end; a click on it opens or closes the
+        // row (below). Its words follow the name.
+        const told = hasChildren ? rowDisclosure(document, { count: rowsUnder(childrenHere, instanceId(i)) }) : null;
+        const disclosure = told?.mark ?? null;
         if (isNew || disclosure) {
           const line = document.createElement("span"); line.className = "ctx-name-line";
+          if (disclosure) line.append(disclosure);
           line.append(name);
+          if (told) line.append(told.spoken);
           if (isNew) {
             const mark = document.createElement("span"); mark.className = "ctx-new";
             const markDot = document.createElement("span"); markDot.className = "ctx-new-dot"; markDot.setAttribute("aria-hidden", "true");
             mark.append(markDot, "New"); line.append(mark);
           }
-          if (disclosure) line.append(disclosure);
           copy.append(line, ...[spoken].filter(Boolean), meta, ...heldLines);
         } else copy.append(name, ...[spoken].filter(Boolean), meta, ...heldLines);
         row.append(dot, copy);

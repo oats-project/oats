@@ -1,7 +1,8 @@
 /* oats desktop — the sidebar roster's disclosure (the product owner, 2026-11-19).
 
    A row with children in its own section (the main tree or the Background section, and a deployment's part of
-   it) shows that it has them: a chevron and the count of the rows under it, on its name line. The chevron points
+   it) shows that it has them: a chevron and the count of the rows under it, first on its name line, before the
+   name, where the row tools overlaying the row's end on hover never cover it (review round 3). The chevron points
    right while the row is collapsed and down while it is open. A click on it opens or closes the row; a click on
    the rest of the row opens its terminal as before. The keys stay the tree's (roster-keys.mjs: Right opens,
    Left closes), and the row's own `aria-expanded` says the state, so the mark adds no tab stop.
@@ -63,18 +64,19 @@ export function rowsUnder(children, id) {
   return count;
 }
 
-/** The mark on a parent's name line (`span.ctx-disclosure`): the chevron and the count of the rows under it. It is
- * not a control of its own: the shell's row click opens or closes the row when the click lands on it, and a screen
- * reader hears the row's `aria-expanded` and the hidden words ", N below". */
+/** The mark on a parent's name line (`mark`, `span.ctx-disclosure`, aria-hidden): the chevron and the count of the
+ * rows under it, which the shell puts before the name. It is not a control of its own: the shell's row click opens or
+ * closes the row when the click lands on it. A screen reader hears the row's `aria-expanded` and `spoken`, the hidden
+ * words ", N below", which the shell puts after the name so the name is still said first. */
 export function rowDisclosure(doc, { count }) {
   const mark = doc.createElement("span");
-  mark.className = "ctx-disclosure";
+  mark.className = "ctx-disclosure"; mark.setAttribute("aria-hidden", "true");
   const shown = doc.createElement("span");
-  shown.className = "ctx-disclosure-count"; shown.setAttribute("aria-hidden", "true"); shown.textContent = String(count);
+  shown.className = "ctx-disclosure-count"; shown.textContent = String(count);
+  mark.append(iconElement(doc, "chevronRight", { size: 12, className: "shell-icon ctx-disclosure-chevron" }), shown);
   const spoken = doc.createElement("span");
   spoken.className = "sr-only"; spoken.textContent = `, ${count} below`;
-  mark.append(iconElement(doc, "chevronRight", { size: 12, className: "shell-icon ctx-disclosure-chevron" }), shown, spoken);
-  return mark;
+  return { mark, spoken };
 }
 
 /** Open (`open` true) or close a row by hand: the one place both sets change, so a root opened by hand stays open

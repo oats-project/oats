@@ -655,9 +655,10 @@ split into sections) is `packages/client/roster-sections.mjs`.
   sidebar and the TUI never pass it.
 - **The disclosure, and roots that start collapsed** (the product owner, 2026-11-19; `roster-disclosure.mjs`):
   `sectionChildren` lists each row's children inside its own section (the main tree or the Background section,
-  and a deployment's part), and a row with any gets `span.ctx-disclosure` on its `.ctx-name-line`, after the
-  name and "New": a chevron (`svg.ctx-disclosure-chevron`, turned down by `.ctx-inst[aria-expanded="true"]`), the
-  count of every row under it (`rowsUnder`, `aria-hidden`) and a `.sr-only` ", N below". The row's click handler
+  and a deployment's part), and a row with any gets `span.ctx-disclosure` (`aria-hidden`) first on its
+  `.ctx-name-line`, before the name, so the row tools that overlay the row's end on hover never cover it: a chevron
+  (`svg.ctx-disclosure-chevron`, turned down by `.ctx-inst[aria-expanded="true"]`) and the count of every row under
+  it (`rowsUnder`). A `.sr-only` ", N below" follows the name, so the name is said first. The row's click handler
   opens or closes the row when the click lands on the mark (no terminal opens; the focus and the roving stop stay
   on the row), and the tree keys do the same (`onRosterRowKey`). The rows drawn collapsed are `collapsedRows`: the
   shell's `collapsedInstances` (closed by hand) and every root of its section with children that is not in
