@@ -55,6 +55,9 @@ function fixture(t, extra = {}) {
     tabs: new Map(), activeTab: null, tabOpenIntents: { applyFocus: f => f() },
     openTerminalTab() {}, openInstanceStart() {}, openLifecycleDialog: assert.fail, onRosterRowKey() {},
     api: assert.fail, showStage: assert.fail, refreshContextRoster: assert.fail,
+    // The agent view's link (agent-board-tabs.mjs; its own suites agent-view.test.mjs, tab-needs-input.test.mjs): these rows
+    // carry no board, so it never takes the waiting row's claim.
+    tabBoards: { sync: () => false },
     ...(extra.context || {}),
   };
   context.splitOpenState = () => ({ split: null, activeId: null, tabs: context.tabs, workspace: "A", visible: false });

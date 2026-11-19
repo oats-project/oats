@@ -339,7 +339,7 @@ export const CHORDS_READ = Object.freeze([
   ["terminal.focusMode", "zoom"], ["tabs.close", "close-terminal"],
   ["split.vertical", "split-right"], ["split.horizontal", "split-down"],
   ["split.focusPrevGroup", "group-previous"], ["split.focusNextGroup", "group-next"],
-  ["sidebar.focusFilter", "filter"], ["instance.edit", "edit-instance"],
+  ["sidebar.focusFilter", "filter"], ["instance.edit", "edit-instance"], ["agent.viewFocus", "agent-view"],
 ].map(([id, does]) => Object.freeze({ id, does })));
 /** The default of the CHORDS row `does` in `family`: macOS's key, and Linux/Windows' key in that
  * family (chordKeyOf), as one string where both are the same chord. */
@@ -390,10 +390,9 @@ function keymapIn(family) {
     // the seven) on Linux/Windows, ⌘⌥R on macOS. The instance is the leader's
     // target (shell.mjs leaderTargetId).
     "instance.edit": chordOf("instance.edit"),
-    // The agent view (S2-D): the focus through the shown agent's question zone and facts, and back to its terminal.
-    // Alt+T in the Alt family (readline's transpose-words still comes from Esc, then T), Ctrl+Alt+T in the other
-    // two, which leave Alt alone; ⌘⌥T on macOS. The Desktop's own until the shared table (slice 4) takes a row.
-    "agent.viewFocus": { mac: "Mod+Alt+T", other: family === "alt" ? "Alt+T" : "Ctrl+Alt+T" },
+    // The agent view (S2-D; CHORDS agent-view): the focus through the shown agent's questions and facts, and back to
+    // its terminal. Alt+T (Ctrl+Alt+T in the other two families), ⌘⌥T on macOS; transpose-words still comes from Esc, then t.
+    "agent.viewFocus": chordOf("agent.viewFocus"),
     "app.chooseSoul": { mac: "Mod+N", other: "Ctrl+Shift+N" },
     "app.shortcuts": "Mod+,",
     // No default (spec F): ⌘⇧T is "reopen closed tab" in browsers and Ctrl+Shift+T "new tab" in
