@@ -105,7 +105,8 @@ ${groupHeadingCSS}
 .soul-card .sactivity.running { color:var(--fg); font-weight:600; }
 .soul-card .sactivity.running::before { content:""; display:inline-block; width:7px; height:7px; margin-right:6px; border-radius:50%; background:var(--live); vertical-align:1px; }
 .soul-card .skind { flex:none; margin-left:.35em; }
-.soul-card .sproblem { min-width:0; color:var(--warn); font-weight:600; overflow:hidden; text-overflow:ellipsis; }
+.soul-card .sproblem { display:block; min-width:0; margin-top:auto; padding-top:4px; color:var(--warn); font-size:12px; font-weight:600; line-height:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.soul-card .sproblem + .sfoot { margin-top:0; padding-top:2px; }
 /* The table: the same souls as rows, the same groups as heading rows. The name is the row's one button. */
 .souls-table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:12.5px; color:var(--fg); }
 .souls-table th, .souls-table td { padding:7px 10px; text-align:left; vertical-align:top; border-bottom:1px solid var(--border); overflow:hidden; text-overflow:ellipsis; }
@@ -1224,9 +1225,11 @@ function launchText(a) {
  * desktop-facts), else the launch problem its launch report carries (0.30 launch preferences: the kernel's own
  * message); null when neither is reported. `line` is the card's, `text` the table's and the page's sentence. */
 export function soulProblem(a, cli) {
-  if (a?.work === "attached") return null;
+  // The kernel's refusal holds for every soul, an attached one too; an attached soul's own launch report is not what
+  // runs it (its owner's is), so only a standalone soul says a launch problem.
   const refusal = spawnRefusal(a, cli);
   if (refusal !== null) return { text: refusal, line: cantSpawnLine(refusal) };
+  if (a?.work === "attached") return null;
   const problem = soulFacts(a, null, cli, DESKTOP_TERMS).problem;
   const said = problem ? problem.lines[0] ?? problem.lead : null;
   return said ? { text: said, line: said } : null;
@@ -1263,14 +1266,15 @@ function soulCard(s, a) {
   const running = instances.filter(i => i.running === true).length;
   const foot = span("sfoot");
   const problem = soulProblem(a, cliStatus());
-  // A soul a spawn here would refuse says why first: its readiness is the one thing a person needs before anything else.
-  if (problem) { const note = span("sproblem", problem.line); note.title = problem.text; foot.append(note); }
-  else foot.append(span("sactivity" + (running ? " running" : ""), agentsText(running, instances.length)));
+  // A soul a spawn here would refuse says why, on a line of its own above the foot: refusing new agents stops none
+  // already running, so the foot keeps their count.
+  if (problem) { const note = span("sproblem", problem.line); note.title = problem.text; card.append(note); }
+  foot.append(span("sactivity" + (running ? " running" : ""), agentsText(running, instances.length)));
   foot.append(span("skind", `· ${SOUL_KIND_WORDS[soulKind(a)]}`));
   card.append(foot);
   // Its name names it; what it does, its agents and its kind describe it.
   card.setAttribute("aria-label", a.name);
-  card.setAttribute("aria-description", [a.description, problem ? problem.line : agentsText(running, instances.length), `${SOUL_KIND_WORDS[soulKind(a)]} soul`].filter(Boolean).join(". "));
+  card.setAttribute("aria-description", [a.description, problem?.line, agentsText(running, instances.length), `${SOUL_KIND_WORDS[soulKind(a)]} soul`].filter(Boolean).join(". "));
   card.title = [a.name, a.description].filter(Boolean).join("\n");
   return card;
 }

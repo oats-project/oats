@@ -454,6 +454,10 @@ test('kernel #217: a soul a spawn here would refuse says why on its card and on 
   assert.equal(card('dev').querySelector('.sproblem'), null);
   assert.equal(card('campaign-writer').querySelector('.sproblem').textContent, `Can't spawn here · ${message}`);
   assert.match(card('campaign-writer').getAttribute('aria-description'), new RegExp(`Can't spawn here · ${message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  // Refusing new agents stops none already running: the card keeps their count, under the refusal.
+  assert.deepEqual([...card('campaign-writer').children].map(el => el.className), ['stitle', 'sdesc', 'sproblem', 'sfoot']);
+  assert.equal(card('campaign-writer').querySelector('.sfoot .sactivity').textContent, '1 agent running');
+  assert.match(card('campaign-writer').getAttribute('aria-description'), /1 agent running/);
   // The table says it in its Ready column; a soul a spawn would not refuse is Ready.
   u.get('.souls-view [data-view="table"]').click();
   const ready = name => u.get(`.soul-row-open[data-agent="${name}"]`).closest('tr').cells[5];
@@ -500,4 +504,15 @@ test("kernel #217: a capability opened from a soul page adds the catalog's facts
   const cap = u.get('.workspace-cap-page');
   assert.equal(cap.querySelector('.page-lede').textContent, `About ${other.id}.`);
   assert.ok([...cap.querySelectorAll('.page-card')].some(c => c.dataset.card === 'As dev resolves it'), 'the soul\'s resolution still leads');
+});
+
+// Review round 1: one readiness rule for the card, the table and the page: the kernel's refusal holds for an attached
+// soul too; only its own launch report is not what runs it.
+test('soulReadiness: a refusal holds for an attached soul; an attached soul\'s launch report is not its problem; no claim without desktop-facts', () => {
+  const facts = { features: ['desktop-facts'] };
+  const refused = { name: 'reviewer', work: 'attached', spawnable: false, problem: { message: 'Requires an owning instance.', code: 'E_SOUL_ATTACHED' } };
+  assert.deepEqual(spawn.soulReadiness(refused, facts), { ready: false, text: 'Requires an owning instance.' });
+  assert.deepEqual(spawn.soulProblem(refused, facts), { text: 'Requires an owning instance.', line: "Can't spawn here · Requires an owning instance." });
+  assert.deepEqual(spawn.soulReadiness({ name: 'reviewer', work: 'attached', spawnable: true }, facts), { ready: true, text: 'Ready' });
+  assert.equal(spawn.soulReadiness(refused, { features: [] }), null, 'this OATS does not say: no claim');
 });

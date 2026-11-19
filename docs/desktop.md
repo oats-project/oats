@@ -516,8 +516,8 @@ reports no kind of its own, so the name is the rule.
 The souls show as a grid of cards or as a table: **v** (or **Grid** | **Table**
 in the toolbar) switches between them, and each window remembers its choice,
 also after a restart. A card shows the soul's name, what it does, how many of
-its agents run, and its kind; a soul a spawn here would refuse says why instead
-of its count. The table has the same souls as rows: name, what it does, kind,
+its agents run, and its kind; a soul a spawn here would refuse also says why,
+above its count. The table has the same souls as rows: name, what it does, kind,
 agents running, harness · model, and **Ready** (or why a spawn here would be
 refused; **—** when this OATS does not report it). A card or a row's name
 opens the soul's page. A new agent of a soul starts from **New agent** on its

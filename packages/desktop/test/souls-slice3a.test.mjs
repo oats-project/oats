@@ -67,9 +67,13 @@ test('slice3a kind rule', () => {
     'oats-oats-setup-expert': 'operations', 'acme-operator': 'operations', 'ops-admin': 'operations', 'site-operations': 'operations',
     'oats.okf/knowledge-harvester': 'other', 'oats.engineering/code-reviewer': 'other', 'notes': 'other', 'expert-notes': 'other',
     'Platform_Developer': 'developer', 'oats.engineering/review-maintainer': 'maintainer',
+    // A word Object.prototype names is no kind: never an inherited property.
+    'constructor': 'other', 'acme-toString': 'other', 'has-own-property': 'other',
   };
   for (const [name, kind] of Object.entries(cases)) assert.equal(soulKind({ name }), kind, name);
   assert.equal(soulKind('oats-expert'), 'expert', 'a bare name reads the same');
+  assert.equal(soulKind('__proto__'), 'other');
+  assert.deepEqual(['constructor', 'app-maintainer'].sort(compareSouls), ['app-maintainer', 'constructor'], 'an inherited name sorts with the rest');
   assert.deepEqual(SOUL_KINDS, ['maintainer', 'expert', 'developer', 'operations', 'other']);
   assert.deepEqual(['b-developer', 'z', 'a-expert', 'c-maintainer', 'x-setup-expert', 'a-developer'].map(name => ({ name })).sort(compareSouls).map(s => s.name),
     ['c-maintainer', 'a-expert', 'a-developer', 'b-developer', 'x-setup-expert', 'z']);
@@ -150,12 +154,12 @@ function inspection(name = 'release-manager') {
     composedInstructions: composedAnswer(OWN_TEXT), skills: SKILLS });
   return v;
 }
-function page(t, answer = () => inspection()) {
+function page(t, answer = () => inspection(), extra = {}) {
   const previous = currentWorkspace(); setWorkspace('/team');
   const dom = new JSDOM('<body><main><section hidden></section></main></body>', { pretendToBeVisual: true }), el = dom.window.document.querySelector('section');
   const opened = [];
-  const inspector = createSoulInspector(el, { layout: 'page', openCapability: (cap, soul, entry) => opened.push([cap.id, soul.name, entry.slot ?? entry.why]),
-    ctx: { api: async (url, opts) => url.startsWith('/api/capabilities') ? structuredClone(answer(JSON.parse(opts.body))) : { status: 'ok' } } });
+  const inspector = createSoulInspector(el, { layout: 'page', openCapability: (cap, soul, entry) => opened.push([cap.id, soul.name, entry.slot ?? entry.why]), ...extra,
+    ctx: { api: async (url, opts) => url.startsWith('/api/capabilities') ? structuredClone(await answer(JSON.parse(opts.body))) : { status: 'ok' } } });
   t.after(() => { inspector.dispose(); dom.window.close(); setWorkspace(previous); });
   const key = (target, k) => { const e = new dom.window.KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }); target.dispatchEvent(e); return e; };
   return { el, dom, doc: dom.window.document, inspector, opened, key, $: s => el.querySelector(s), $$: s => [...el.querySelectorAll(s)] };
@@ -238,4 +242,28 @@ test('slice3a soul skills still reachable', async t => {
   assert.equal(skills.open, true);
   assert.equal(skills.querySelector('.cap-reader-path').textContent, 'souls/release-manager/skills/ship/SKILL.md');
   assert.equal(skills.querySelector('.cap-reader-body .mdv h1').textContent, 'Ship');
+});
+
+// Review round 1: a paint that does not read the inspection again (a catalog update, a roster poll) uses the held one
+// only for the subject it was read for: another soul's instructions or actions never reach a newer page.
+test('slice3a soul page: a catalog update or a roster poll never paints another soul\'s inspection', async t => {
+  const waits = [];
+  let words = 'first words';
+  const alpha = inspection('alpha'); alpha.souls[0].instructions.text = '# PRIVATE TO ALPHA\n';
+  const u = page(t, body => { if (body.selector.soul === 'alpha') return alpha; const d = {}; d.promise = new Promise(r => { d.resolve = r; }); waits.push(d); return d.promise; },
+    { capabilityFacts: () => ({ by: null, description: words }) });
+  // Alpha is shown; beta is asked for and still pending.
+  await u.inspector.show(selection('alpha')); await settle();
+  assert.match(u.el.textContent, /first words/);
+  void u.inspector.show(selection('beta')); await settle();
+  assert.equal(u.$('h2').textContent, 'beta');
+  words = 'second words';
+  u.inspector.syncCatalog(); u.inspector.syncRoster(); await settle();
+  assert.doesNotMatch(u.el.textContent, /PRIVATE TO ALPHA|Release manager|second words|first words/, 'nothing of alpha on beta\'s page');
+  assert.equal(u.$('.soul-capabilities, .soul-top, .soul-instructions .mdv'), null, 'beta has nothing painted until its own read lands');
+  // Closed, the held inspection goes too: a catalog update paints nothing.
+  u.inspector.close(); u.inspector.syncCatalog(); await settle();
+  assert.equal(u.el.hidden, true); assert.equal(u.$('.soul-capabilities'), null);
+  waits[0].resolve(structuredClone(inspection('beta'))); await settle();
+  assert.equal(u.$('.soul-capabilities'), null, 'a reply for a closed subject paints nothing');
 });

@@ -83,14 +83,9 @@ ${soulTeamsHereCSS}
 .soul-page .inspector-main .skeleton-detail-sections { gap:22px; }
 .soul-page .inspector-main .skeleton-detail-section { margin:0; }
 .soul-page .inspector-main .skeleton-detail-section .skeleton-block { --skeleton-block-h:150px; }
-/* The side column's card skeleton: a page-card at its size with a title line and a body block. */
-.skeleton-page-card { display:flex; flex-direction:column; gap:10px; min-width:0; padding:12px 14px; box-sizing:border-box; background:var(--surface); border:1px solid var(--border); border-radius:10px; }
-.skeleton-page-card .skeleton-title { height:11px; width:40%; }
-.skeleton-page-card .skeleton-block { height:56px; width:100%; border-radius:8px; }
 .oats-view .soul-inspector button.primary:not(:disabled) { background:var(--primary-bg); color:var(--primary-fg); border-color:var(--primary-bg); }
-/* The soul page (Workspace v4 W4): the page bar in place of the Workspace
-   tabs, then identity, core capabilities and the composition table beside a
-   300px column of cards (pageCardCSS). */
+/* The soul page: the page bar in place of the Workspace tabs, then one column (slice 3a): identity, the top block, the
+   capabilities and the instruction tabs. */
 .workspace-page { flex:1; min-height:0; min-width:0; overflow-y:auto; padding:0; box-sizing:border-box; container-type:inline-size; background:var(--bg); }
 .workspace-page[hidden] { display:none; }
 .oats-view .workspace-page button.primary:not(:disabled) { background:var(--primary-bg); color:var(--primary-fg); border-color:var(--primary-bg); }
@@ -107,8 +102,6 @@ ${soulTeamsHereCSS}
 .soul-page .page-facts-row:empty { display:none; }
 .soul-page .inspector-main { display:flex; flex-direction:column; gap:22px; padding:0; }
 .soul-page .inspector-main:empty { display:none; }
-.soul-page .soul-page-side { display:flex; flex-direction:column; gap:14px; min-width:0; }
-.soul-page .soul-page-side:empty { display:none; }
 .soul-page .page-sr { display:inline-block; width:1px; height:1px; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 /* The soul page (the Desktop UI rework, slice 3a): one column at a readable width; the top block is a two-column
    list of facts; its Ready row is a word, or the problem's sentence, then its Details disclosure. */
@@ -220,7 +213,7 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
   let instructionsSection = null, instructionCapabilities = new Map();
   // The soul page's top block parts that outlive a repaint (one per subject): its Ready row's details disclosure (the
   // problem's detail and the soul's readiness checks, read when first opened) and its Teams row's disclosure ("Teams here").
-  let readyBlock = null, teamsBlock = null, shownInspection = null, capabilityWords = null;
+  let readyBlock = null, teamsBlock = null, shownInspection = null, shownFor = null, capabilityWords = null;
   // `warningTargets`: the same lookup for a capability warning's Open capability (the soul's own list, an instance's
   // readiness), from the shown inspection; empty where the host opens no capability.
   let warningTargets = new Map();
@@ -255,7 +248,7 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
   const request = (body, query = scopeQuery()) => postJson(ctx, `/api/capabilities${query}`, body);
   const valid = (id, gen) => alive && id === serial && gen === workspaceGeneration();
   const ownsSubject = (id, gen) => id === subject && valid(serial, gen);
-  let status, content, summary, readiness, headActions = null, facts$ = null, side = null, notice = null;
+  let status, content, summary, readiness, headActions = null, facts$ = null, notice = null;
   // The Refresh control (focus fallback when a repaint drops the focused control) and the
   // roster-derived block's host and signature (repainted on every show(), kept when unchanged).
   let refreshControl = null, rosterColumn = null, rosterSignature = null;
@@ -263,27 +256,12 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
   const subjectKey = sel => sel?.instance || sel?.selector?.home ? `home:${sel.instance?.home ?? sel.selector?.home ?? ''}|${sel.instance?.server ?? ''}`
     : sel?.agent ? `soul:${sel.agent.name}|${sel.agent.agentsRoot ?? ''}|${sel.agent.server ?? ''}` : JSON.stringify(sel?.selector ?? null);
   const noun = () => selection?.agent ? 'soul' : 'instance';
-  /** One skeleton of the final content's shape: the sidebar's three sections; the page's two, with a card beside. */
+  /** One skeleton of the final content's shape: the sidebar's three sections; the page's two. */
   const contentSkeleton = () => skeletonBlock(doc, 'detail-section', { count: layout === 'page' ? 2 : 3 });
-  function sideSkeleton() {
-    const card = node('div', undefined, 'skeleton-item skeleton-page-card'); card.setAttribute('aria-hidden', 'true'); card.dataset.skeleton = 'page-card';
-    const title = skeleton(doc, 'line'); title.classList.add('skeleton-title');
-    const block = skeleton(doc, 'line'); block.classList.add('skeleton-block');
-    card.append(title, block); return card;
-  }
-  /** The subject's controllers: the content's (status, indicator, notice, Retry) and, on the page, the side column's skeleton. */
+  /** The subject's loading controller: the content's (status, indicator, notice, Retry). */
   function createLoading(indicatorHost) {
-    const main = createDataState({ doc, noun: noun(), region: content, skeleton: contentSkeleton, status, indicatorHost, noticeHost: notice,
+    return createDataState({ doc, noun: noun(), region: content, skeleton: contentSkeleton, status, indicatorHost, noticeHost: notice,
       onRetry: () => { void show(selection, { user: true }); }, ...timers });
-    const aside = side ? createDataState({ doc, noun: noun(), region: side, skeleton: sideSkeleton, noticeHost: null, ...timers }) : null;
-    return {
-      get state() { return main.state; }, get settled() { return main.settled; }, get hasData() { return main.hasData; }, get busy() { return main.busy; },
-      begin(o) { const first = !main.hasData && main.state !== 'failed'; main.begin(o); if (first) aside?.begin(o); },
-      succeed(o) { main.succeed(o); aside?.succeed(); },
-      fail(e) { main.fail(e); aside?.reset(); },
-      bindRefresh: main.bindRefresh, touch: main.touch, say: main.say,
-      dispose() { main.dispose(); aside?.dispose(); },
-    };
   }
   function syncReadiness() {
     const w = workspace();
@@ -304,7 +282,7 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
     container.hidden = false;
     if (presentation) presentation.setPresent(true);
     else if (layout !== 'page') container.parentElement?.classList.add('inspecting'); // the page replaces the list; no side column
-    subject++; warningTargets = new Map(); readyBlock?.dispose(); readyBlock = null; teamsBlock = null; scopeLine?.dispose(); scopeLine = layout === 'page' ? null : createDeploymentScopeLine(doc); readiness?.dispose(); readiness = null; loading?.dispose(); loading = null; painted = null; teamsHere?.dispose(); teamsHere = null; instructionsSection?.dispose(); instructionsSection = null;
+    subject++; warningTargets = new Map(); readyBlock?.dispose(); readyBlock = null; teamsBlock = null; shownInspection = null; shownFor = null; capabilityWords = null; scopeLine?.dispose(); scopeLine = layout === 'page' ? null : createDeploymentScopeLine(doc); readiness?.dispose(); readiness = null; loading?.dispose(); loading = null; painted = null; teamsHere?.dispose(); teamsHere = null; instructionsSection?.dispose(); instructionsSection = null;
     container.replaceChildren();
     const head = node('div', undefined, 'inspector-head');
     container.classList.toggle('soul-page', layout === 'page');
@@ -331,7 +309,6 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
       copy.append(heading, facts$); head.append(copy); summary.append(head);
       // One column (the Desktop UI rework, slice 3a): the identity, then the top block, the capabilities and the two
       // instruction tabs, all from the inspection (content); nothing beside it.
-      side = null;
       const body = node('div', undefined, 'page-body soul-page-body'), main = node('div', undefined, 'page-main');
       main.append(summary, status, notice, content); body.append(main);
       container.append(bar.bar, body);
@@ -352,7 +329,7 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
       }
       return;
     }
-    headActions = null; facts$ = null; side = null;
+    headActions = null; facts$ = null;
     // Hosted X hides the slot without deselecting or rebuilding an editor.
     const closeControl = button('', () => {
       if (!alive) return;
@@ -385,7 +362,7 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
     if (alive) reset(restoreFocus);
   }
   function reset(restoreFocus = false) {
-    serial++; subject++; warningTargets = new Map(); readyBlock?.dispose(); readyBlock = null; teamsBlock = null; scopeLine?.dispose(); scopeLine = null; selection = null; selectionGen = null; data = null; teamsPanel = null; teamsHere?.dispose(); teamsHere = null; instructionsSection?.dispose(); instructionsSection = null; container.hidden = true;
+    serial++; subject++; warningTargets = new Map(); readyBlock?.dispose(); readyBlock = null; teamsBlock = null; shownInspection = null; shownFor = null; capabilityWords = null; scopeLine?.dispose(); scopeLine = null; selection = null; selectionGen = null; data = null; teamsPanel = null; teamsHere?.dispose(); teamsHere = null; instructionsSection?.dispose(); instructionsSection = null; container.hidden = true;
     readiness?.dispose(); readiness = null; loading?.dispose(); loading = null; painted = null;
     container.replaceChildren();
     if (presentation) presentation.setPresent(false);
@@ -671,7 +648,7 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
       if (typeof agent.work === 'string' && agent.work) facts$.append(pageFact('branch', workText(agent.work), 'muted'));
       // Kernel #217: the soul's file. Without a web address (a non-GitHub repo) its path shows instead.
       if (facts && typeof agent.file?.path === 'string' && agent.file.path && !(typeof agent.file.url === 'string' && /^https:\/\//.test(agent.file.url))) facts$.append(pageFact('file', agent.file.path, 'mono'));
-      if (shownInspection) readyBlock?.paint(shownInspection);
+      if (shownCurrent()) readyBlock?.paint(shownInspection);
       restore(); return;
     }
     const roster = node('div', undefined, 'inspector-content inspector-roster');
@@ -712,7 +689,9 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
   // ready), its warnings, its capabilities as one list of rows (core first, tagged), then its two prompts as two tabs
   // (soul-instructions.mjs). Only reported facts: what the kernel does not say is not claimed.
   function renderSoulPage(inspected, soul) {
-    shownInspection = inspected;
+    // The inspection this page shows, bound to its subject and workspace generation: a later paint that does not read it
+    // again (a catalog update, a roster poll) uses it only for that same subject (shownCurrent).
+    shownInspection = inspected; shownFor = { subject, gen: selectionGen };
     const said = soulFacts(selection?.agent, inspected, cliStatus(), DESKTOP_TERMS);
     const declared = record(soul.declarations) ? soul.declarations : {};
     const teams = soulTeams(inspected.teams), mapped = (teams || []).filter(t => t.mapped);
@@ -969,10 +948,14 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
   }
   /** The host's roster changed or its read settled (a poll): the roster-derived block — lede, refusal, facts, the
    * Instances card and its empty / pending / no-claim state — follows, behind its signature (focus kept). */
+  /** Whether the held inspection is the shown subject's, in the current workspace generation. */
+  function shownCurrent() {
+    return !!shownInspection && shownFor?.subject === subject && shownFor.gen === selectionGen && selectionGen === workspaceGeneration();
+  }
   /** The host's capability facts changed (its catalog was read): the page's rows follow, in place (focus kept), only
    * when what they say changed. */
   function syncCatalog() {
-    if (!alive || layout !== 'page' || !shownInspection || container.hidden || !selection?.agent) return;
+    if (!alive || layout !== 'page' || !shownCurrent() || container.hidden || !selection?.agent) return;
     const soul = shownInspection.souls[0]; if (!soul) return;
     const coreRows = coreEntries(shownInspection, { layersFrom: layersFrom(), facts: desktopFacts(cliStatus()) });
     const entries = compositionEntries(shownInspection, soul, { facts: desktopFacts(cliStatus()) });

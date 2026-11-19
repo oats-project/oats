@@ -32,7 +32,8 @@ const words = name => name.toLowerCase().split(/[-_./]+/).filter(Boolean);
 export function soulKind(row) {
   const parts = words(nameOf(row));
   if (parts.some(part => OPERATIONS.has(part))) return 'operations';
-  return LAST[parts.at(-1)] ?? 'other';
+  const last = parts.at(-1);
+  return last !== undefined && Object.hasOwn(LAST, last) ? LAST[last] : 'other';
 }
 
 /** List order inside a group: the kind's place in SOUL_KINDS, then the name. */

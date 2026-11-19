@@ -29,7 +29,7 @@ No frameworks, no dependencies; data comes from the bundled backend HTTP API.
   `oats.desktop.soulsView`). A card is one button: the name, the description
   clamped to two lines, and a foot with its agents (*N agents running*, *No agents
   running · N stopped*, through `DESKTOP_NOUNS`) and its kind; a soul a spawn here
-  would refuse says why in `--warn` instead of the count. The table's rows carry
+  would refuse says why in `--warn` on a line above the foot, which keeps its count. The table's rows carry
   the name (the row's one button), what it does, kind, agents running, harness ·
   model and Ready (`soulReadiness`: *Ready*, the refusal, or *—* without
   `desktop-facts`). Cards and rows' names share one roving tab stop (`.soul-item`).
