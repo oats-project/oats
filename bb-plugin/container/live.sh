@@ -60,7 +60,7 @@ fake
 # The plugin, installed from a copy of the checkout (bb builds it in place).
 rm -rf "$LIVE"
 mkdir -p "$LIVE"
-(cd "$PLUGIN" && tar -c --exclude dist --exclude .git .) | tar -x -C "$LIVE"
+(cd "$PLUGIN" && tar -c --exclude ./dist --exclude ./.git .) | tar -x -C "$LIVE"
 if [ ! -f "$LIVE/app.tsx" ]; then
   say "note: app.tsx is not in this tree; installing the backend alone (bb.app removed from the copy's manifest)"
   node -e 'const fs=require("fs"),f=process.argv[1],p=JSON.parse(fs.readFileSync(f));delete p.bb.app;fs.writeFileSync(f,JSON.stringify(p,null,2))' "$LIVE/package.json"
