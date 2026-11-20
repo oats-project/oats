@@ -41,6 +41,12 @@
       "additionalProperties": { "$ref": "#/$defs/soulTeams" },
       "description": "Per soul pattern (\"*\", <member|package>/* or <member|package>/<soul>), the soul's default team and the other teams it may join. The most specific key gives the soul's teams outright (lists never merge); the most specific key that sets a default gives its default. A soul no key matches has its default only. Every label is a label of teams: in this file."
     },
+    "sandboxes": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/sandboxName" },
+      "additionalProperties": { "$ref": "#/$defs/sandbox" },
+      "description": "Boundaries (docs/workspaces.md, Sandboxes): <name>: { team, egress?, credentials?, description? }. A soul whose resolved default team is a sandbox's team runs inside that sandbox on a host whose oats-local.yaml lists it. One sandbox per team; a sandboxed team is only ever a soul's default, named for that soul (never through defaultTeam, a pattern, another soul's teams, \"any\" or an alias). Kernels before feature sandboxes refuse this key: add it only once every host of the workspace lists that feature."
+    },
     "defaults": { "$ref": "#/$defs/defaults" },
     "stores": {
       "type": "object",
@@ -65,6 +71,19 @@
   "$defs": {
     "slug": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
     "label": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$", "maxLength": 64, "description": "A team label: at most 64 characters (0.44.0), the length the Desktop shows." },
+    "sandboxName": { "type": "string", "pattern": "^[a-z0-9]$|^[a-z0-9][a-z0-9-]{0,30}[a-z0-9]$", "description": "A sandbox's name: 1 to 32 lowercase letters, digits and inner hyphens. Its server is sandbox-<name>." },
+    "credentialName": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$", "description": "A credential's name: each host's oats-local.yaml credentials: says where its file is." },
+    "sandbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["team"],
+      "properties": {
+        "team": { "$ref": "#/$defs/label", "description": "A label of teams: in this file; no other sandbox names its team, by label or provider id. A team without a provider id keeps the file valid; the sandbox's start and a routed spawn refuse (E_SANDBOX_TEAM team-not-created)." },
+        "egress": { "type": "array", "items": { "enum": ["model", "source", "forge"] }, "description": "The external egress roles added to the base routes, each once: model (https://api.anthropic.com), source (https://github.com), forge (https://api.github.com; feature sandbox-egress-forge). Absent: []." },
+        "credentials": { "type": "array", "items": { "$ref": "#/$defs/credentialName" }, "description": "The credentials mounted read-only at /run/oats-credentials/<name>, each once: names only. Absent: []." },
+        "description": { "type": "string" }
+      }
+    },
     "capabilityName": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
     "packageId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
     "packageVersion": {
@@ -139,7 +158,7 @@
             { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/label" } },
             { "const": "any" }
           ],
-          "description": "The other teams the soul may join: labels of teams: in this file, or \"any\" for every one. [] (or no teams) is default only."
+          "description": "The other teams the soul may join: labels of teams: in this file, or \"any\" for every one that is no sandbox's team. [] (or no teams) is default only."
         }
       }
     },

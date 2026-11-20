@@ -306,6 +306,10 @@
           "$ref":"#/$defs/OptionalHook",
           "description":"Runs from the staged destination module for a stopped home's package upgrade or undo. OATS_UPGRADE_PHASE=plan is read-only and prints {adopt:true} or {adopt:false,reason,remedy}; apply prints {meta,warning?} on success. A non-zero apply must leave no provider effects through atomicity or compensation: kernel rollback covers composed home bytes only. Receives OATS_META (recorded state), OATS_UPGRADE_FROM (recorded from/commit/digest) and OATS_UPGRADE_TO (locked destination entry) as JSON. Never required."
         },
+        "sandbox": {
+          "$ref":"#/$defs/OptionalHook",
+          "description":"A sandbox provider's one hook (feature sandboxes; docs/capabilities.md, The sandbox event): run at deployment level, never per instance, for each act on a sandbox. OATS_SANDBOX_ACT names the act (plan, start, stop, status, reconcile, seat, bind or release); the request is one JSON object on stdin and the answer one JSON object on stdout. The workspace's defaults compose at most one capability that declares it. Never required."
+        },
         "worktree": {
           "description": "Runs once in each tree the kernel creates: ./work of a work: worktree spawn (after the spawn hooks) and each `oats worktree add`. Its cwd is the new tree; see docs/capabilities.md, The worktree event.",
           "oneOf":[
