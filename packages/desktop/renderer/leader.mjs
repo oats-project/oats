@@ -27,7 +27,7 @@
    belong to the shell (leader-keys.mjs, shell.mjs); this module only decides when the wait
    settles, on which `does`, and which events it eats. */
 
-import { desktopLeaderDoes as leaderDoes } from "./leader-keys.mjs";
+import { leaderDoes } from "../../client/keymap.mjs";
 import { eventMatchesBinding, leaderLeftToField, letThrough } from "./keybindings.mjs";
 
 const NAMED = Object.freeze({

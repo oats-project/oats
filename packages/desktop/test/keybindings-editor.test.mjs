@@ -711,8 +711,7 @@ test("the editor opens on a Leader group, then Sidebar keys, then the groups as 
   assert.equal(f.marks("Leader: the commands that follow one key", "terminal"), "terminal");
   // Then one read-only row per entry of the table the Desktop runs: no m.
   const fixed = rows.slice(1);
-  assert.equal(fixed.length, 26, "26 rows of the TUI's table, less m, then the Desktop's own t (leader-keys.mjs DESKTOP_LEADER_ROWS)");
-  assert.equal(fixed.at(-1).querySelector(".kb-label").textContent, "The agent's questions and facts (focus), and back to its terminal");
+  assert.equal(fixed.length, 25, "26 rows of the TUI's table, less m");
   assert.ok(fixed.every((row) => row.classList.contains("kb-row-fixed") && !row.querySelector("button")), "read-only: no button to record or reset");
   const palette = fixed[0];
   assert.equal(palette.querySelector(".kb-label").textContent, "Command palette", "a key that runs one action shows its label");
@@ -753,7 +752,7 @@ test("the leader's rows are found by their keys and by \"leader\", and Up/Down r
   f.type("ctrl+x shift+n");
   assert.ok(f.shown().includes("Spawn another of the instance's soul…"));
   f.type("leader");
-  assert.equal(f.shown().length, 27, "the group's name finds all of it (the Desktop's own t included)");
+  assert.equal(f.shown().length, 26, "the group's name finds all of it");
   f.type("");
   // Arrow walk: the leader's row, then its fixed rows.
   const chords = [...f.doc.querySelectorAll('.kb-group[data-label="Leader"] .kb-chord')];

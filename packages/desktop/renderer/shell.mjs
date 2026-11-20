@@ -3193,7 +3193,11 @@ function focusMainContent() {
   if (first) tabOpenIntents.applyFocus(() => first.focus());
   return !!first && document.activeElement === first;
 }
-const focusRegions = createFocusRegions({ doc: document, tabLayerVisible: () => tabLayerVisible, focusMainContent });
+// The agent view's two regions (S2-D): the active tab's facts and questions, around its terminal.
+const activeTerminalTab = () => { const t = activeTab == null ? null : tabs.get(activeTab); return t?.kind === "terminal" ? t : null; };
+const focusRegions = createFocusRegions({ doc: document, tabLayerVisible: () => tabLayerVisible, focusMainContent,
+  agentView: { part: name => { const t = activeTerminalTab(); return t ? tabBoards.part(t, name) : null; },
+    focus: name => { const t = activeTerminalTab(); return !!t && tabBoards.focusPart(t, name); } } });
 
 // ── a workspace switch puts the keyboard back where it was there ──────────
 // focus-place.mjs describes where the focus is; every focus outside the transit surfaces (the list of
@@ -3495,7 +3499,6 @@ const rosterInstance = id => (id == null ? null : shownRows(contextInstances).fi
 /** Why a key cannot do its row's work now (leader-keys.mjs leaderApplies): the key, after the leader or in
  * the sidebar, says why in the hint's line rather than doing nothing silently. */
 function notApplicable(does) {
-  // The Desktop's own rows (leader-keys.mjs DESKTOP_LEADER_ROWS) say why themselves when they cannot act.
   const row = LEADER_TABLE.find(r => r.does === does);
   if (!row) return null;
   const state = leaderState();
@@ -3516,7 +3519,6 @@ function rosterActsHeld(instance) {
 }
 const leaderDispatch = createLeaderDispatch({
   say: sayInHint,
-  agentView: () => focusAgentView(),
   targetId: origin => origin.targetId ?? null,
   stepFrom: origin => origin.stepFromId ?? null,
   target: origin => rosterInstance(origin.targetId ?? null),
@@ -3602,9 +3604,10 @@ for (const [id, does] of [["roster.openPrevious", "previous"], ["roster.openNext
 }
 // The instance's name and colour (#1421; CHORDS edit-instance, no leader key): the leader's target, from
 // every focus, a terminal's included. Inert under a modal dialog or the palette, as the leader is.
-// The agent view (S2-D): the leader's t (leader-keys.mjs DESKTOP_LEADER_ROWS; no chord: Alt+T is Claude Code's extended
-// thinking) moves the focus through the shown terminal tab's view: its question zone, its facts, back to its terminal.
-// Nothing when the tab shows no board. Also the palette's command. Inert under a modal dialog or the palette.
+// The agent view (S2-D): the palette's command moves the focus through the shown terminal tab's view: its question
+// zone, its facts, back to its terminal. No chord (Alt+T is Claude Code's extended thinking): F6 reaches the same two
+// regions (focus-regions.mjs), Ctrl+Shift+F6 from the terminal. Nothing when the tab shows no board. Inert under a
+// modal dialog or the palette.
 function focusAgentView() {
   const t = activeTab == null ? null : tabs.get(activeTab);
   if (!t || t.kind !== "terminal" || !tabBoards.cycleFocus(t)) sayInHint("This agent has no questions or facts to show.");

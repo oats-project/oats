@@ -9,7 +9,7 @@ import { createAgentBoard, createHiddenFacts, DIALOG_NOTE, DETAIL_NOTES, BOARD_M
 import { createTabBoards } from '../renderer/agent-board-tabs.mjs';
 import { boardData, BOARD_FEATURE } from '../../client/instance-board.mjs';
 import { defaultBinding, TERMINAL_ALLOWLIST, DEFAULT_KEYMAPS } from '../renderer/keybindings.mjs';
-import { desktopLeaderDoes, supportedLeaderRows } from '../renderer/leader-keys.mjs';
+import { createFocusRegions, REGIONS } from '../renderer/focus-regions.mjs';
 import { leaderDoes } from '../../client/keymap.mjs';
 import { NOW, fact, question, board, detail } from './helpers/board-fixture.mjs';
 
@@ -246,7 +246,7 @@ test('agent view answering: no lease, nothing typed, the card stays and the focu
   assert.equal(f.view.question, 'q1');
 });
 
-test('agent view keys: the leader\'s t cycles terminal → questions → facts → terminal; Esc goes back; no chord takes Alt+T', t => {
+test('agent view keys: the palette command cycles terminal → questions → facts → terminal; Esc goes back; no chord takes Alt+T', t => {
   const f = fixture(t);
   f.view.update(boardData(board()));
   f.terminal.focus();
@@ -254,14 +254,34 @@ test('agent view keys: the leader\'s t cycles terminal → questions → facts �
   f.view.cycleFocus(); assert.ok(f.facts().contains(f.doc.activeElement));
   f.view.cycleFocus(); assert.equal(f.doc.activeElement, f.terminal);
   f.view.cycleFocus(); f.key(f.doc.activeElement, 'Escape'); assert.equal(f.doc.activeElement, f.terminal);
-  assert.equal(desktopLeaderDoes('t'), 'agent-view', 'the leader\'s t');
-  assert.equal(leaderDoes('t'), null, 'not a row of the shared table, which is the TUI\'s');
-  assert.ok(supportedLeaderRows().some(row => row.does === 'agent-view'), 'the shortcuts editor lists it');
+  assert.equal(leaderDoes('t'), null, 'no leader row (the shared table is the TUI\'s)');
   for (const family of ['alt', 'ctrl+alt', 'ctrl+shift']) for (const isMac of [true, false]) {
     assert.equal(defaultBinding('agent.viewFocus', isMac, family), undefined, 'no chord');
     for (const id of Object.keys(DEFAULT_KEYMAPS[family])) assert.notEqual(defaultBinding(id, false, family), 'Alt+T', `${id} takes no Alt+T`);
   }
   assert.equal(TERMINAL_ALLOWLIST.includes('agent.viewFocus'), false);
+});
+
+test('agent view keys: F6 reaches the facts and the questions as regions around the terminal, in the order they show', t => {
+  const dom = new JSDOM(`<!doctype html><body><div id="app"><main id="main"><div class="tab-pane active"><div class="term-wrap"><textarea></textarea></div></div></main>
+    <aside id="context-panel" hidden></aside></div></body>`, { pretendToBeVisual: true });
+  t.after(() => dom.window.close());
+  const doc = dom.window.document, pane = doc.querySelector('.tab-pane'), terminal = doc.querySelector('textarea');
+  const view = createAgentBoard({ pane, home: '/h', name: 'dev-a', now: () => NOW, type: () => true, focusTerminal: () => terminal.focus(), openLink: () => {},
+    hidden: createHiddenFacts(memoryStorage()), observe: () => () => {} });
+  view.update(boardData(board()));
+  const regions = createFocusRegions({ doc, tabLayerVisible: () => true, focusMainContent: () => { terminal.focus(); return true; },
+    agentView: { part: name => view.part(name), focus: name => view.focusPart(name) } });
+  assert.deepEqual(REGIONS.slice(3, 6), ['facts', 'main', 'questions']);
+  terminal.focus();
+  assert.equal(regions.regionOfFocus(), 'main');
+  assert.equal(regions.cycle(1), true); assert.equal(regions.regionOfFocus(), 'questions', 'from the terminal (Ctrl+Shift+F6): the questions');
+  assert.ok(doc.activeElement.classList.contains('agent-q-option'));
+  regions.cycle(-1); assert.equal(regions.regionOfFocus(), 'main');
+  regions.cycle(-1); assert.equal(regions.regionOfFocus(), 'facts', 'Shift+F6 from the terminal: the facts');
+  view.update(boardData({ facts: [], questions: [] }));
+  terminal.focus(); regions.cycle(1);
+  assert.notEqual(regions.regionOfFocus(), 'questions', 'no zone: not in the cycle');
 });
 
 // ── the shell's link (agent-board-tabs.mjs) ──

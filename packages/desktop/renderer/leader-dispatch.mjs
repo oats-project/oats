@@ -125,8 +125,6 @@ export function createLeaderDispatch(d) {
     help: () => d.help(),
     list: () => d.list(),
     refresh: () => d.refresh(),
-    // The agent view (S2-D): the shown agent tab's questions, then its facts, then its terminal.
-    "agent-view": () => d.agentView(),
   });
   return {
     /** Run `does` for the leader's or a sidebar key's origin. False when the Desktop has no such operation. */

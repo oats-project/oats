@@ -56,7 +56,9 @@ function shell(t, { tabs = false } = {}) {
 // above the roster. "nav" and "footer" are no region names any more.
 test("F6 order: workspaces → views → roster → main → panel → workspaces, each on its current item", t => {
   const s = shell(t);
-  assert.deepEqual(REGIONS, ["workspaces", "views", "roster", "main", "panel"]);
+  // The agent view's facts and questions (S2-D) sit either side of main; they are in the cycle only while the active tab
+  // shows them (agent-view.test.mjs), so this window, with no agent view, walks the five below.
+  assert.deepEqual(REGIONS, ["workspaces", "views", "roster", "facts", "main", "questions", "panel"]);
   for (const old of ["nav", "footer"]) {
     assert.equal(s.regions.visible(old), false, `the old region name ${old} is gone`);
     assert.equal(s.regions.focusRegion(old), false);
