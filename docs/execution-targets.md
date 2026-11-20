@@ -691,7 +691,8 @@ operation, a retire or a trigger is given (`OATS_CAPABILITY`, `OATS_LAYER`,
 `OATS_OPERATION`, `OATS_REPO`, `OATS_BRANCH`, `OATS_WORK`, `OATS_KIND`,
 `OATS_TASK`, `OATS_HARNESS`, `OATS_HARNESS_EXECUTABLE`,
 `OATS_PREVIOUS_HARNESS`, `OATS_RUNTIME`,
-`OATS_PREVIOUS_RUNTIME`, `OATS_LAUNCH_PREVIEW`, `OATS_RETIRE_INTENT`,
+`OATS_PREVIOUS_RUNTIME`, `OATS_BACKEND`, `OATS_PREVIOUS_BACKEND`,
+`OATS_LAUNCH_PREVIEW`, `OATS_RETIRE_INTENT`,
 `OATS_TRIGGER_EVENT_FILE`, `OATS_TEST_LOGIN_SHELL` (a test seam that replaces
 the login shell, honoured only for a process whose `HOME` is not your home
 directory; a launch configuration cannot set it),

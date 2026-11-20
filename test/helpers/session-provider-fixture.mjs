@@ -119,7 +119,7 @@ const HOOK_SCRIPT = `import { appendFileSync, mkdirSync, readFileSync } from "no
 import { join } from "node:path";
 const dir = join(process.env.HOME, "fake-session");
 mkdirSync(dir, { recursive: true });
-appendFileSync(join(dir, "calls.log"), JSON.stringify({ hook: process.env.OATS_EVENT, instance: process.env.OATS_INSTANCE, backend: process.env.OATS_BACKEND ?? null, harness: process.env.OATS_HARNESS ?? null, preview: process.env.OATS_LAUNCH_PREVIEW ?? null }) + "\\n");
+appendFileSync(join(dir, "calls.log"), JSON.stringify({ hook: process.env.OATS_EVENT, instance: process.env.OATS_INSTANCE, backend: process.env.OATS_BACKEND ?? null, harness: process.env.OATS_HARNESS ?? null, preview: process.env.OATS_LAUNCH_PREVIEW ?? null, previousBackend: process.env.OATS_PREVIOUS_BACKEND ?? null }) + "\\n");
 // hook-launch.json, when a test wrote it (fx.hookLaunch): the hook's launch arguments, by harness.
 let launch;
 try { launch = JSON.parse(readFileSync(join(dir, "hook-launch.json"), "utf8")); } catch (e) { if (e.code !== "ENOENT") throw e; }

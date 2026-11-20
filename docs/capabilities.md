@@ -664,7 +664,14 @@ preview (only a preview-aware hook does, below); on a real run
 backend the instance launches on, `tmux` or the name of a
 [session provider](#session-providers-sessionproviders). A spawn that launches
 nothing (`--no-launch`) sets it too: it is what a later start launches on. A
-kernel without the feature sets none, which means tmux. A worktree hook also gets the tree
+kernel without the feature sets none, which means tmux. A launch hook also
+gets `OATS_PREVIOUS_BACKEND`: the backend the home was last launched on, as the
+kernel recorded it outside the home (its session receipt), `tmux` or a session
+provider's name. It is absent at a home's first launch, and it is never read
+from the home's own record, which the home's agent can write. A capability
+that keeps files of its own in a home for one backend (a session provider's
+settings file) removes them only when this variable names that backend, and
+removes nothing when it is absent. A worktree hook also gets the tree
 variables of [The worktree event](#the-worktree-event).
 
 A spawn or launch hook also gets `OATS_HARNESS_EXECUTABLE`, for every harness
