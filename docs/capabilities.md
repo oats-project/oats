@@ -1261,13 +1261,17 @@ the seat the host took.
 act gets 30 minutes (a build). Every act but `plan` and `status` runs under the
 sandbox's lock, per deployment: a second one is `E_LIFECYCLE_BUSY`.
 
-**The hook's process group.** The hook runs in a process group of its own. Its
-time limit, an answer over the size limit, and a signal or an exit of the
-kernel kill the whole group, and the act answers only once the group's pipes
-have closed: nothing the hook started (`aw`, `ssh`, a provider's tool) outlives
-its act or the lock around it. A process that leaves the group itself
-(`setsid`, or a double fork into a new session) is not the kernel's to end: a
-provider that starts one owns it.
+**The hook's process group.** The hook runs in a process group of its own.
+The act waits until every pipe of the hook (stdin, stdout and stderr, which is
+read and dropped) has closed, then kills whatever is left of the group, and only
+then answers and releases the sandbox's lock. Its time limit, an answer over the
+size limit, and a signal or an exit of the kernel kill the whole group at once.
+So nothing the hook started (`aw`, `ssh`, a provider's tool) acts after its act
+or its lock, on success and on failure alike.
+
+A provider that needs a process to outlive an act (an SSH ControlMaster, a
+daemon) starts it in its own session (`setsid`) and owns it: the kernel never
+ends a process that left the hook's group.
 
 **The environment.** The invoker's environment without any name the kernel
 generates (no instance, soul, team or captured-context name), then:

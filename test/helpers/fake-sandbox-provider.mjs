@@ -9,8 +9,9 @@
 //   - an answer object (the envelope's sandboxApi and act are filled in when absent);
 //   - a list of them, taken in turn per sandbox (the last one repeats);
 //   - `{ "$exit": <n> }`, `{ "$sleepMs": <n> }` (then the default answer), `{ "$raw": "<stdout>" }`;
-//   - `{ "$child": { "write": "<path>", "afterMs": <n> } }` with any of those: first a child of the hook,
-//     in its process group and holding none of its pipes, that writes `late` to the path after n ms.
+//   - `{ "$child": { "write": "<path>", "afterMs": <n>, "holds": "stderr"? } }`, alone (then the default
+//     answer) or with any of those: first a child of the hook, in its process group, holding none of its
+//     pipes (or only its stderr), that writes `late` to the path after n ms.
 // A key absent from the table gets the default answer below. The record is FAKE_SANDBOX_LOG, one JSON
 // line per call: { act, request, env, pending } (env: the OATS_* names the hook saw; pending: the files in
 // FAKE_SANDBOX_PENDING when it is set, the kept routed requests at that moment).
@@ -63,7 +64,9 @@ if (Array.isArray(entry)) {
 }
 if (entry && entry.$child) {
   const { spawn } = await import("node:child_process");
-  spawn(process.execPath, ["-e", "setTimeout(() => require('node:fs').writeFileSync(" + JSON.stringify(entry.$child.write) + ", 'late'), " + Number(entry.$child.afterMs) + ")"], { stdio: "ignore" }).unref();
+  spawn(process.execPath, ["-e", "setTimeout(() => require('node:fs').writeFileSync(" + JSON.stringify(entry.$child.write) + ", 'late'), " + Number(entry.$child.afterMs) + ")"], { stdio: entry.$child.holds === "stderr" ? ["ignore", "ignore", "inherit"] : "ignore" }).unref();
+  const { $child, ...rest } = entry;
+  entry = Object.keys(rest).length ? rest : defaults[key];
 }
 if (entry && entry.$exit !== undefined) process.exit(entry.$exit);
 if (entry && entry.$raw !== undefined) { process.stdout.write(entry.$raw); process.exit(0); }

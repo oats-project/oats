@@ -175,6 +175,26 @@ test("C4: a settled status or reconcile that leaves out its seats is unknown, ho
   assert.ok(JSON.stringify(got).includes("reconcile without its seats"), rec.stdout);
 });
 
+test("a hook that answers in time: the act waits for a child that holds its stderr, and kills one that holds none of its pipes before the lock goes", async (t) => {
+  const fx = sandboxDeployment({ t });
+  ok(fx.cliS(["sync", "--json"]), "sync");
+  const late = join(fx.dep, "late-effect");
+  const lock = join(fx.dep, ".agents", "locks", "sandbox-ingest.lock");
+  const pause = (ms) => new Promise((done) => setTimeout(done, ms));
+  // A child holding the hook's stderr, which writes after the hook has answered: the act waits for it.
+  fx.sandbox.set({ start: { $child: { write: late, afterMs: 800, holds: "stderr" } } });
+  ok(fx.cliS(["sandbox", "start", "ingest", "--plan-revision", "rev-start", "--idempotency-key", "k-stderr", "--json"]), "start");
+  assert.equal(existsSync(late), true, "its write came before the act answered");
+  assert.equal(existsSync(lock), false, "and the lock went after it");
+  rmSync(late);
+  // A child holding none of the hook's pipes, which would write after the hook has answered: killed.
+  fx.sandbox.set({ start: { $child: { write: late, afterMs: 800 } } });
+  ok(fx.cliS(["sandbox", "start", "ingest", "--plan-revision", "rev-start", "--idempotency-key", "k-none", "--json"]), "start");
+  assert.equal(existsSync(lock), false, "the lock went after the kill");
+  await pause(1500);
+  assert.equal(existsSync(late), false, "nothing the hook started acts after its act");
+});
+
 test("a stale plan answer is E_PLAN_STALE with its fresh plan, as a stale apply's", (t) => {
   const fx = sandboxDeployment({ t });
   ok(fx.cliS(["sync", "--json"]), "sync");
