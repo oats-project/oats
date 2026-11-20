@@ -239,6 +239,11 @@ one read of the home, whatever the provider answered (a refusal included):
 | running, another `startId`, another endpoint | a restart landed | `stop {E}` again (the old one); `E_SESSION_NOT_RUNNING` |
 | running, another `startId`, the same endpoint | a restart landed, and the provider reused the locator, which it must not (below) | nothing is stopped (that locator is the new session's); `E_SESSION_NOT_RUNNING`. The provider may have delivered the input to the new session all the same: the mail stays unread and is presented again, a duplicate, never a loss |
 
+Since every stop drains (the stop rule), a stop's and a restart's own stop
+wait for the input, which then reads the home *stopped*: the two rows
+"running, another `startId`" are reached only by an input that outlasted the
+drain's wait and could not be ended.
+
 The same read before the send refuses without sending. A start of a lost
 home stops the session at `E` after its mark (step 4), which covers the
 input that finished before the mark: its provider call had ended by then, so

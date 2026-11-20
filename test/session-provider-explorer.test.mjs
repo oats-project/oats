@@ -82,6 +82,18 @@ const KILLED = [
   { a: "input to lost", from: "lost", verb: "input", seams: CALL("input") },
   { a: "resume of stopped with the host", from: "host-stopped", verb: "resume", seams: [...CALL("input"), "resume:notice-sent", "resume:stop-cleared"] },
   { a: "resume of lost", from: "lost", verb: "resume", seams: CALL("input") },
+  // From a home stopped with the host (its stop receipt asks for a resume), and from a resent home
+  // that was stopped before its launch (`stoppedAt` set), which settle by another branch.
+  { a: "stop of stopped with the host", from: "host-stopped", verb: "stop", seams: CALL("stop") },
+  { a: "start of stopped with the host", from: "host-stopped", verb: "start", seams: [...CALL("stop"), ...MARK] },
+  { a: "restart of stopped with the host", from: "host-stopped", verb: "restart", seams: [...CALL("stop"), ...MARK] },
+  { a: "retire of stopped with the host", from: "host-stopped", verb: "retire", seams: CALL("stop") },
+  { a: "stop of resent, stopped before", from: "resent (stopped)", verb: "stop", seams: [...CALL("stop"), "settle:record-written"] },
+  { a: "start of resent, stopped before", from: "resent (stopped)", verb: "start", seams: [...CALL("stop"), "settle:record-written"] },
+  { a: "retire of resent, stopped before", from: "resent (stopped)", verb: "retire", seams: [...CALL("stop"), "settle:record-written"] },
+  { a: "host stop of sent", from: "sent", verb: "host stop", seams: [...CALL("stop"), "settle:record-written"] },
+  { a: "host stop of resent", from: "resent", verb: "host stop", seams: ["stop:stoppedAt-written", ...CALL("stop"), "settle:record-written"] },
+  { a: "host stop of resent, stopped before", from: "resent (stopped)", verb: "host stop", seams: [...CALL("stop"), "settle:record-written"] },
   // (The host's stop of a home that is stopped already asks the provider nothing and writes nothing: it passes no seam.)
 ];
 /** The verb that comes next, on whatever the killed one left. */
@@ -148,7 +160,8 @@ async function prepare(fx, from, name, home) {
   if (from === "planned") return must("spawn planned");
   if (from === "sent") return must("spawn", { OATS_TEST_PROVIDER_DIE_AT: "mark:receipt-written" });
   await must("spawn");
-  if (from === "stopped" || from === "resent") await must("stop");
+  if (from === "stopped" || from === "resent" || from === "resent (stopped)") await must("stop");
+  if (from === "resent (stopped)") await must("start", { OATS_TEST_PROVIDER_DIE_AT: "mark:receipt-written" });
   if (from === "resent") await must("start", { OATS_TEST_PROVIDER_DIE_AT: "outcome:receipt-written" });
   if (from === "host-stopped") await must("host stop");
   if (from === "lost") fx.emit({ ev: "gone", thread: receiptOf(home).endpoint.threadId });

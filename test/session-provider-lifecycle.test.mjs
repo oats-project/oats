@@ -212,12 +212,23 @@ const CROSSINGS = [
   ["nothing", {}, async () => {}, "submitted", []],
   ["a stop", {}, (fx, home) => fx.inEnv(() => stopInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
   ["a stop, and the provider refuses the input", { error: { code: "E_SESSION_PROMPT_OPEN", message: "a prompt is open" } }, (fx, home) => fx.inEnv(() => stopInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
-  ["a restart, to another endpoint", {}, (fx, home) => fx.inEnv(() => restartInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
-  ["a restart, and the provider reuses the locator (which a provider must not)", { stable: true }, (fx, home) => fx.inEnv(() => restartInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
+  // A restart's stop waits for the input too (the drain), so the input reads the home STOPPED: the
+  // row "stopped" again, whatever endpoint the restart's launch then answers.
+  ["a restart (its stop waits for the input: stopped)", {}, (fx, home) => fx.inEnv(() => restartInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
+  ["a restart whose provider reuses the locator, which a provider must not (the same: stopped)", { stable: true }, (fx, home) => fx.inEnv(() => restartInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
+  // The rows "running, another startId": a restart that was RECORDED while the input was still
+  // being sent, which the drain allows only for an input that outlasted its wait and could not be
+  // ended. Built by writing the records as that restart leaves them.
+  ["a restart recorded meanwhile, at another endpoint", {}, (fx, home) => restartedUnder(home, E("x", 2)), "E_SESSION_NOT_RUNNING", ["stop:E"]],
+  ["a restart recorded meanwhile, at the same endpoint (nothing is stopped: that locator is the new session's)", {}, (fx, home) => restartedUnder(home, runtimeOf(home).endpoint), "E_SESSION_NOT_RUNNING", []],
   // Every stop waits for the input before it asks the provider: the input's own stop (the home is
   // still there, stopped), then the verb's, after which nothing can restart the session.
   ["a retire", {}, (fx, home) => { const r = JSON.parse(fx.cli(["retire", home.split("/").pop(), "--json"]).stdout); assert.equal(r.retired, home.split("/").pop(), JSON.stringify(r).slice(0, 300)); }, "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
 ];
+/** The records of `home` as a restart that launched at `endpoint` leaves them: another start. */
+function restartedUnder(home, endpoint) {
+  writeRuntime(home, { ...runtimeOf(home), endpoint }, { startId: "another-start", session: { provider: FAKE_CAPABILITY, endpoint } });
+}
 for (const [what, behaviour, act, answer, stops] of CROSSINGS) {
   test(`an input in flight while ${what} lands: ${answer}; stops: ${stops.join(", ") || "none"}`, async (t) => {
     const fx = providerDeployment(t);
