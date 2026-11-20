@@ -40,7 +40,7 @@ state, in what order it writes, and what happens when two things cross.
 | **Stop receipt** | `<home>/.oats-stop.json` | the kernel; inside the home | which stop the last one was, for the current `startId`: an operator's, or the host's (`resume: true, reason: "host-stop"`) |
 | **Claim** | `<instances>/.oats-retirement/claims/<name>.lock` | the kernel; outside the home | which lifecycle verb acts on the home now, and its process |
 | **Resume count** | `OATS_HOME_DIR/session-resume/provider-resumes/<hash>.json` | the kernel; outside the home | the resumes of the last hour, this boot |
-| **Provider call in flight** | `<instances>/.oats-retirement/provider-calls/<name>/<verb>-<pid>-<id>.json`, and `….json.group` | the kernel (the `.group` file: the leader of the process group the provider's command runs in); outside the home | a launch or an input is being sent for the home now: by which kernel process, and in which process group the provider's command runs |
+| **Provider call in flight** | `<instances>/.oats-retirement/provider-calls/<name>/<verb>-<pid>-<id>.json`, and `….json.group` | the kernel (the `.group` file: the leader of the process group the provider's command runs in); outside the home | a launch, an input or a stop is being sent for the home now: by which kernel process, and in which process group the provider's command runs |
 
 The receipt decides. The record must agree with it
 (`E_RUNTIME_AUTHORITY_MISMATCH` otherwise), **except while the receipt says a

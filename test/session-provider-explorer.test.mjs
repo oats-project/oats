@@ -48,8 +48,11 @@ const LATE_MS = 1500;
 const CALL = (verb) => [`call:${verb}:before`, `call:${verb}:during`, `call:${verb}:after`];
 const MARK = ["mark:receipt-written", ...CALL("launch"), "outcome:receipt-written", "outcome:record-written"];
 const STOP_RULE = ["stop:stoppedAt-written", "stop:receipt-written", ...CALL("stop")];
-/** The verb that is killed: from which state of the home, and the seams it passes. A seam listed
- *  here must kill it (the explorer says so when it does not), so the list cannot rot. */
+/** The verb that is killed: from which state of the home, and the seams it passes: every verb,
+ *  from every state of the page in which it calls the provider or writes a record. A seam listed
+ *  here must kill it (the explorer says so when it does not), so the list cannot rot. Where a verb
+ *  calls the provider more than once, a `call:` seam is its FIRST such call; the later ones are
+ *  reached from the state the first leaves (a stop of resent: stop {E}, then the settle's). */
 const KILLED = [
   { a: "spawn", from: "none", verb: "spawn", seams: ["spawn:record-written", ...MARK, "spawn:recorded", "spawn:published"] },
   { a: "spawn without a launch", from: "none", verb: "spawn planned", seams: ["spawn:record-written"] },
@@ -62,14 +65,24 @@ const KILLED = [
   { a: "start of lost", from: "lost", verb: "start", seams: [...MARK, ...CALL("stop")] },
   { a: "start of sent", from: "sent", verb: "start", seams: [...CALL("stop"), "settle:record-written"] },
   { a: "start of resent", from: "resent", verb: "start", seams: [...CALL("stop"), "settle:record-written"] },
+  { a: "start of stopped, its launch lost", from: "stopped", verb: "start", provider: { launch: { exit: 1 } }, seams: ["settle:record-written"] },
+  { a: "restart of stopped", from: "stopped", verb: "restart", seams: [...CALL("stop"), ...MARK] },
+  { a: "restart of lost", from: "lost", verb: "restart", seams: [...MARK, ...CALL("stop")] },
   { a: "restart of running", from: "running", verb: "restart", seams: [...STOP_RULE, ...MARK] },
   { a: "stop of running", from: "running", verb: "stop", seams: STOP_RULE },
   { a: "stop of resent", from: "resent", verb: "stop", seams: [...CALL("stop"), "settle:record-written"] },
+  { a: "stop of sent", from: "sent", verb: "stop", seams: [...CALL("stop"), "settle:record-written"] },
+  { a: "stop of stopped", from: "stopped", verb: "stop", seams: CALL("stop") },
   { a: "host stop of running", from: "running", verb: "host stop", seams: STOP_RULE },
   { a: "retire of running", from: "running", verb: "retire", seams: STOP_RULE },
+  { a: "retire of stopped", from: "stopped", verb: "retire", seams: CALL("stop") },
+  { a: "retire of sent", from: "sent", verb: "retire", seams: [...CALL("stop"), "settle:record-written"] },
+  { a: "retire of resent", from: "resent", verb: "retire", seams: [...CALL("stop"), "settle:record-written"] },
   { a: "input to running", from: "running", verb: "input", seams: CALL("input") },
   { a: "input to lost", from: "lost", verb: "input", seams: CALL("input") },
   { a: "resume of stopped with the host", from: "host-stopped", verb: "resume", seams: [...CALL("input"), "resume:notice-sent", "resume:stop-cleared"] },
+  { a: "resume of lost", from: "lost", verb: "resume", seams: CALL("input") },
+  // (The host's stop of a home that is stopped already asks the provider nothing and writes nothing: it passes no seam.)
 ];
 /** The verb that comes next, on whatever the killed one left. */
 const NEXT = ["start", "restart", "stop", "host stop", "retire", "input", "resume"];
