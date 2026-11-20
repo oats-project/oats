@@ -2271,7 +2271,8 @@ configuration, and handed to the provider with every launch:
   capability's: the deployment's events directory, where `oats instance
   attention` appends. The kernel creates each before your launch: an
   allowance on a path that does not exist does not let a sandboxed agent
-  create it.
+  create it. Each is a real directory at exactly that path: one reached
+  through a symbolic link refuses the launch (`E_BACKEND_SANDBOX_HOST`).
 - **`missing`** is always there, `[]` when nothing is missing: what a line
   names and the deployment's configuration does not hold. `team` is the id
   of a team of the instance with no entry in a map, or `null` for a setting
@@ -2295,11 +2296,20 @@ readiness read): the kernel asks it before a restart stops anything.
 
 **A start or a restart of an existing home** resolves the deployment's
 configuration again, for the home's soul, so a setting changed there reaches
-the home at its next launch. Hosts are taken only for capabilities that are
-also the home's modules; a slot's provider of the deployment that is not one
-of them adds none and is named (`skipped`, and a warning of the start). When
+the home at its next launch. **Which deployment and which soul that is comes
+from where the home is, never from what is in it**: the deployment is the
+directory four levels above the home (`<deployment>/agents/<agent>/instances/<instance>`,
+as its real path) and must hold its own `oats-local.yaml`; the soul is the
+one the workspace offers whose agent directory is `<agent>`. The home's
+`instance.json` decides neither. Hosts are taken only for capabilities that
+are also the home's modules, as the home records them: that record can only
+leave a host of the deployment's list out, never add one. A slot's provider
+of the deployment that is not one of them adds none and is named (`skipped`,
+and a warning of the start). When
 the deployment's configuration cannot be resolved (a member repository that
-cannot be read, a soul the workspace no longer offers), the launch input
+cannot be read, a soul the workspace no longer offers, a home whose real
+path is not under a deployment because its agents root is reached through a
+link), the launch input
 carries `"sandbox": { "unavailable": "<the cause>" }` in place of the three
 lists, and the kernel refuses nothing: a provider that would sandbox the
 session does.

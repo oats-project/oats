@@ -2,7 +2,7 @@
 // pinned in test/sandbox-allowances.test.mjs; this file pins what a spawn does with it.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { FAKE_CAPABILITY, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
 
@@ -43,6 +43,10 @@ test("S6: the preview lists each host with who asked for it, and each path with 
     domains: [{ host: "app.example.org", capability: MSG, setting: "server" }],
     write: [{ path: eventsOf(fx), reason: "oats events" }], missing: [],
   });
+  // The preview a person reads says the same.
+  const text = fx.cli(["spawn", "dev", "--backend", "fake", "--launch-config", "claude", "--preview"]).stdout;
+  assert.match(text, /^sandbox allowances:\n {2}host app\.example\.org {2}asked by acme\.msg \(setting server\)\n {2}path .+\/\.agents\/events {2}asked by the kernel \(oats events\)$/m);
+  assert.equal(/sandbox/.test(fx.cli(["spawn", "dev", "--launch-config", "claude", "--preview"]).stdout), false, "a tmux preview says nothing of it");
 });
 
 test("S6: readiness of a provider home lists the same entries, what is missing, and nothing for a tmux home", async (t) => {
@@ -187,7 +191,7 @@ test("a start that cannot resolve the deployment's configuration says so in the 
   const sent = fx.verbs("launch")[0].request.input.sandbox;
   assert.deepEqual(Object.keys(sent), ["unavailable"]);
   assert.deepEqual(restarted.result.sandbox, sent, "and so does the start's answer");
-  assert.match(sent.unavailable, /^E_SOUL_UNKNOWN: no soul /);
+  assert.match(sent.unavailable, /^E_SOUL_UNKNOWN: the workspace offers no soul whose agent directory is dev$/);
   assert.deepEqual(fx.verbs("check")[0].request.input.launch.sandbox, sent, "and its check was told the same, first");
 
   // 2. A provider that would sandbox it refuses in its check: nothing is stopped, nothing launched.
@@ -197,4 +201,73 @@ test("a start that cannot resolve the deployment's configuration says so in the 
   assert.deepEqual([refused.ok, refused.error.code], [false, "E_BACKEND_SANDBOX_UNAVAILABLE"], JSON.stringify(refused));
   assert.match(refused.error.message, /nothing was stopped or started/);
   assert.deepEqual(fx.verbs().map((c) => c.verb).filter((v) => v === "stop" || v === "launch"), []);
+});
+
+test("nothing in the home decides the deployment or the soul: a home that rewrites its own record gets its own soul's hosts, the real events directory, and the deployment's own file", async (t) => {
+  // What a sandboxed agent can write: its home, and the events directory once that is allowed.
+  const kb = { layer: "knowledge", settings: { "bindings-file": { default: "" } }, sandboxDomains: [{ settingFile: "bindings-file", urls: "/bases/*/repository" }] };
+  const msg = { layer: "messaging", settings: { server: { default: "" } }, sandboxDomains: [{ setting: "server" }] };
+  const soulOf = (server) => ({ soul: { capabilities: { [FAKE_CAPABILITY]: { from: "here" }, [MSG]: { from: "here" }, "acme.kb": { from: "here" } }, messaging: { server }, knowledge: { "bindings-file": "okf/bindings.json" } } });
+  const fx = providerDeployment(t, {
+    capabilities: { [MSG]: { manifest: msg, files: {} }, "acme.kb": { manifest: kb, files: {} } },
+    souls: { dev: soulOf("https://app.example.org"), ops: soulOf("https://ops-only.example.net") },
+  });
+  mkdirSync(join(fx.dep, "okf"), { recursive: true });
+  writeFileSync(join(fx.dep, "okf", "bindings.json"), JSON.stringify({ bases: { kb: { repository: "https://good.example.org/kb.git" } } }));
+  const { home } = await fx.launch("one");
+  const expected = {
+    domains: [{ host: "good.example.org", capability: "acme.kb", setting: "bindings-file" }, { host: "app.example.org", capability: MSG, setting: "server" }],
+    write: [{ path: eventsOf(fx), reason: "oats events" }], missing: [],
+  };
+  assert.deepEqual(fx.verbs("launch")[0].request.input.sandbox, expected);
+  const rewrite = (change) => writeFileSync(join(home, "instance.json"), JSON.stringify(change(JSON.parse(readFileSync(join(home, "instance.json"), "utf8"))), null, 2) + "\n");
+  const relaunched = () => { fx.clearCalls(); const answer = startCli(fx, home, "restart"); return { answer, sandbox: fx.verbs("launch")[0]?.request.input.sandbox ?? null }; };
+
+  // 1. It names another soul as its own: the soul is the home's path's (agents/dev/...), not the record's.
+  rewrite((m) => ({ ...m, agent: "ops", workspace: { ...m.workspace, soul: { ...m.workspace.soul, name: "ops" } } }));
+  assert.deepEqual(fx.cli(["readiness", "--home", home, "--json"]).json().result.sandbox, expected);
+  const asOps = relaunched();
+  assert.equal(JSON.stringify(asOps).includes("ops-only.example.net"), false, JSON.stringify(asOps.answer));
+
+  // 2. It names a deployment of its own making, inside the events directory it may write, holding a
+  //    link back to the home and a file of its own: neither the file nor the events path follows.
+  const fake = join(eventsOf(fx), "y");
+  mkdirSync(join(fake, "agents", "dev", "instances"), { recursive: true });
+  symlinkSync(home, join(fake, "agents", "dev", "instances", "one"));
+  mkdirSync(join(fake, "okf"), { recursive: true });
+  writeFileSync(join(fake, "okf", "bindings.json"), JSON.stringify({ bases: { kb: { repository: "https://evil.example.net/x" } } }));
+  rewrite((m) => ({ ...m, workspace: { ...m.workspace, deployment: fake } }));
+  assert.deepEqual(fx.cli(["readiness", "--home", home, "--json"]).json().result.sandbox, expected);
+  { const r = relaunched(); assert.deepEqual(r.sandbox, expected, JSON.stringify(r.answer).slice(0, 600)); }
+
+  // 3. The same from inside the home, with its own events directory linked to another place.
+  const inside = join(home, "x");
+  mkdirSync(join(inside, "agents", "dev", "instances"), { recursive: true });
+  symlinkSync(home, join(inside, "agents", "dev", "instances", "one"));
+  mkdirSync(join(fx.dep, "victim-dir"));
+  mkdirSync(join(inside, ".agents"), { recursive: true });
+  symlinkSync(join(fx.dep, "victim-dir"), join(inside, ".agents", "events"));
+  rewrite((m) => ({ ...m, workspace: { ...m.workspace, deployment: inside } }));
+  assert.deepEqual(relaunched().sandbox.write, expected.write);
+
+  // 4. It lists a module it does not have, or drops one: the record can only leave a host out.
+  //    (As readiness computes it: a start of a home whose record of its modules was edited may be refused for that alone.)
+  const computed = () => fx.cli(["readiness", "--home", home, "--json"]).json().result.sandbox;
+  rewrite((m) => ({ ...m, modules: { ...m.modules, "acme.unknown": m.modules[MSG] } }));
+  assert.deepEqual(computed().domains, expected.domains);
+  rewrite((m) => { const { [MSG]: _dropped, "acme.unknown": _added, ...modules } = m.modules; return { ...m, modules }; });
+  assert.deepEqual([computed().domains.map((d) => d.host), computed().skipped.map((k) => k.capability)], [["good.example.org"], [MSG]]);
+});
+
+test("the events directory handed as writable is a real directory at its own path: one reached through a link refuses the launch", async (t) => {
+  const fx = deployment(t);
+  rmSync(eventsOf(fx), { recursive: true, force: true });
+  mkdirSync(join(fx.dep, "elsewhere"));
+  mkdirSync(join(fx.dep, ".agents"), { recursive: true });
+  symlinkSync(join(fx.dep, "elsewhere"), eventsOf(fx));
+  const refused = fx.cli(["spawn", "dev", "--name", "nope", "--backend", "fake", "--launch-config", "claude", "--json"]).json();
+  assert.deepEqual([refused.ok, refused.error.code], [false, "E_BACKEND_SANDBOX_HOST"], JSON.stringify(refused));
+  assert.match(refused.error.message, /the session's sandbox may not be allowed to write .+\/\.agents\/events: it is reached through a symbolic link, or is no directory/);
+  assert.deepEqual(fx.verbs("launch"), [], "the provider was never asked to launch");
+  assert.equal(existsSync(join(fx.root, "dev", "instances", "nope")), false, "and the spawn was rolled back");
 });

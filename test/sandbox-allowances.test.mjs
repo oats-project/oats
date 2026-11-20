@@ -3,7 +3,7 @@
 // test/session-providers-sandbox.test.mjs.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MAX_SANDBOX_LINES, SETTING_FILE_MAX_BYTES, SETTING_FILE_MAX_HOSTS, readSettingFileHosts, sandboxAllowances, sandboxDomainsOf, sandboxHostOf } from "../lib/sandbox-allowances.mjs";
@@ -226,4 +226,11 @@ test("a settingFile line is validated with the manifest: its key, its pointer, a
   assert.deepEqual(sandboxDomainsOf({ layer: "knowledge", sandboxDomains: [{ settingFile: "bindings-file", urls: "/bases/*/repository" }] }), { lines: [{ settingFile: "bindings-file", urls: "/bases/*/repository" }], problems: [] });
   for (const line of [{ settingFile: "bindings-file" }, { settingFile: "bindings-file", urls: "bases/*" }, { settingFile: "bindings-file", urls: "/a/*/b/*" }, { settingFile: "bindings-file", urls: "/a//b" }, { settingFile: "bindings-file", urls: "/a/~2" }, { settingFile: 7, urls: "/a" }, { settingFile: "bindings-file", urls: "/a", optional: true }, { settingFile: "f", setting: "f", urls: "/a" }]) assert.deepEqual(problemsOf(line), bad, JSON.stringify(line));
   assert.deepEqual(sandboxDomainsOf({ layer: "knowledge", sandboxDomains: [{ setting: "f" }, { settingFile: "f", urls: "/a" }] }).problems, ["sandboxDomains[1] names the setting f a second time"]);
+  // The published schema says the same of a pointer as the kernel does: a package that passes its
+  // schema check is not refused at every launch for its pointer.
+  const urls = JSON.parse(readFileSync(new URL("../docs/capability-manifest.schema.json", import.meta.url), "utf8")).properties.sandboxDomains.items.oneOf[1].properties.urls;
+  const schemaTakes = (pointer) => pointer.length <= urls.maxLength && new RegExp(urls.pattern).test(pointer) && !new RegExp(urls.not.pattern).test(pointer);
+  for (const pointer of ["/bases/*/repository", "/*", "/a/~1b/~0c", "/a/*/b/*", "/*/*", "/a/~2", "/a/~", "/a//b", "a/b", "/", "", `/${"x".repeat(400)}`, `/${Array.from({ length: 16 }, () => "s").join("/")}`, `/${Array.from({ length: 17 }, () => "s").join("/")}`]) {
+    assert.equal(schemaTakes(pointer), problemsOf({ settingFile: "bindings-file", urls: pointer }).length === 0, JSON.stringify(pointer));
+  }
 });

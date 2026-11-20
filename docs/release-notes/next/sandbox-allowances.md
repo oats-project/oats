@@ -18,7 +18,8 @@
     before the launch.
   - Values come from the deployment's configuration as a spawn preview
     resolves it, never from an instance home. A start and a restart resolve
-    it again; when that cannot be done the launch input says `sandbox:
+    it again, for the deployment and the soul the home's path names (its
+    `instance.json` decides neither); when that cannot be done the launch input says `sandbox:
     {unavailable}`, and the provider refuses a launch it would sandbox.
   - A provider's `check` is handed the planned launch (`launch: {harness,
     yolo, args, sandbox}`) before every launch.
