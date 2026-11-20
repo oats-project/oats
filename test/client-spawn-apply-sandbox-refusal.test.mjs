@@ -84,12 +84,18 @@ test('through the confirmed-spawn broker: refused, nothing created, in the kerne
   assert.match(problem.fact, /runs in a sandbox/);
   assert.match(problem.fact, /Nothing was created/);
   assert.ok(problem.detail.endsWith(REMEDY), problem.detail);
-  assert.equal(problem.next, null, 'no act to try again: a confirmed spawn cannot reach a sandbox');
-  // The sentence the Desktop composes from it names no retry.
+  assert.equal(problem.next, 'details', 'the kernel\'s detail says more');
+  // The Desktop's sentence (renderer/spawn-words.mjs, its per-code DASHED words) names no retry.
   const { spawnText } = await import('../packages/desktop/renderer/spawn-words.mjs');
   const sentence = spawnText(problem, 'spawn');
-  assert.match(sentence, /runs in a sandbox/);
+  assert.equal(sentence, 'This soul runs in a sandbox, which a confirmed spawn can’t reach yet. Nothing was created. Spawn it with oats spawn in a terminal, or from a schedule — Details says what to do instead.');
   assert.doesNotMatch(sentence, /try again/i, sentence);
+  // The TUI's outcome line (packages/tui/lib/model.mjs spawnLine) keeps the kernel's detail, the remedy, under it.
+  const { spawnLine } = await import('../packages/tui/lib/model.mjs');
+  const line = spawnLine(problem, 'ingester', {});
+  assert.deepEqual(line.under, [problem.detail]);
+  assert.ok(line.under[0].endsWith(REMEDY), line.under[0]);
+  assert.doesNotMatch(line.said.map((p) => p.own ?? p.shown ?? p.command ?? '').join(''), /try again/i);
   // Any other dispatched refusal the broker does not know is still unknown, never refused.
   const other = createSpawnApplyBoundary({ read: async () => ({ status: 'available', data: applyPreview(target) }),
     exec: (_b, _a, _o, done) => { done({ code: 1 }, JSON.stringify({ schemaVersion: 1, ok: false, error: { code: 'E_SOMETHING_NEW', message: 'm' } })); return { kill() { return true; } }; } });
