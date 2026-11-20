@@ -999,26 +999,28 @@ function canonicalInside(path, parent) {
     return real === base || real.startsWith(base.endsWith(sep) ? base : base + sep) ? real : null;
   } catch { return null; }
 }
-function containedIn(base) {
+function canonicalSkillRoots(base) {
   try { return [realpathSync(base)]; } catch { return []; }
 }
-function listSkills(dir, contained) {
+function listSkills(dir, allowedRoots) {
   // skills live as <dir>/<skill>/SKILL.md with `name`/`description` frontmatter
   const skills = [];
   try {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       if (!e.isDirectory()) continue;
-      const s = skillEntry(join(dir, e.name), contained);
+      const s = skillEntry(join(dir, e.name), allowedRoots);
       if (s) skills.push(s);
     }
   } catch { /* no skills dir */ }
   return skills.sort((a, b) => a.name.localeCompare(b.name));
 }
-function skillEntry(skillDir, contained) {
+function skillEntry(skillDir, allowedRoots) {
   const p = join(skillDir, "SKILL.md");
   if (!existsSync(p)) return null;
-  const read = readContainedFile(p, contained || [], { maxBytes: FILE_MAX_BYTES, tokenFile: TOKEN_FILE });
-  if (read.error === "path outside allowed roots" || read.code === 404) return null;
+  const read = readContainedFile(p, allowedRoots, { maxBytes: FILE_MAX_BYTES, tokenFile: TOKEN_FILE });
+  if (read.error === "path outside allowed roots") return null;
+  // A skill with unreadable metadata still appears under its directory name.
+  if (read.code === 404 && !existsSync(p)) return null;
   const meta = read.buf ? skillFrontmatter(read.buf.toString("utf8")) : {};
   return { name: meta.name || basename(skillDir), path: p, description: String(meta.description || "").trim() };
 }
@@ -1062,8 +1064,8 @@ function brainData(agentName, wsId) {
   /* OATSWEB_BRAINSKILLS_END */
   // Soul content is workspace-member content: every file must stay inside the
   // kernel-reported soul directory (a per-commit copy behind the soul pointer).
-  const soulContained = containedIn(def.dir);
-  const soulSkills = mergeSkills(listSkills(join(soulDir, "skills"), soulContained));
+  const soulRoots = canonicalSkillRoots(def.dir);
+  const soulSkills = mergeSkills(listSkills(join(soulDir, "skills"), soulRoots));
   const knowledgeDir = join(soulDir, "knowledge");
   // Instances are exactly the kernel-reported rows of this soul and root.
   const rows = (observed.instances || []).filter((i) => !i.server && i.agent === def.name && i.agentsRoot === root
@@ -1071,12 +1073,12 @@ function brainData(agentName, wsId) {
     .sort((a, b) => String(a.instance).localeCompare(String(b.instance)));
   const instances = rows.map((live) => {
     const home = live.home;
-    const homeContained = containedIn(home);
+    const homeRoots = canonicalSkillRoots(home);
     const skillsDir = join(home, ".agents", "skills");
     let entries = [];
     try { entries = readdirSync(skillsDir, { withFileTypes: true }).filter((e) => e.isDirectory()); } catch { /* none */ }
     const skills = mergeSkills(entries.flatMap((e) => expandSkillPath(join(skillsDir, e.name), existsSync,
-      (d) => listSkills(d, homeContained), (d) => skillEntry(d, homeContained))));
+      (d) => listSkills(d, homeRoots), (d) => skillEntry(d, homeRoots))));
     const notesDir = join(home, "notes");
     return {
       instance: live.instance, home, running: live.running === true,
@@ -1137,13 +1139,13 @@ function readContainedFile(requested, allowedRoots, { maxBytes, tokenFile = null
   let fd;
   try {
     try {
-      try { fd = io.openSync(requested, flags); }
+      const path = resolve(requested);
+      try { fd = io.openSync(path, flags); }
       catch (e) {
-        if (e.code === "ELOOP") {
-          const g = resolveGuardedFile(requested, allowedRoots, io);
-          if (g.error) return g;
-          fd = io.openSync(g.real, flags);
-        } else throw e;
+        const g = resolveGuardedFile(path, allowedRoots, io);
+        if (g.error) return g;
+        if (e.code !== "ELOOP") throw e;
+        fd = io.openSync(g.real, flags);
       }
       const st = io.fstatSync(fd);
       const g = resolveGuardedFile(requested, allowedRoots, io);

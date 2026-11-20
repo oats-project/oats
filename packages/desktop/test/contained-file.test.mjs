@@ -54,6 +54,7 @@ test('contained file: ordinary files and stable links preserve content and descr
   const result = r.read(f.inside);
   assert.equal(result.buf.toString(), 'inside');
   assert.equal(result.real, f.inside);
+  assert.equal(r.read(f.root + '/missing/../note.md').buf.toString(), 'inside');
   assert.equal(result.st.ino, fs.statSync(f.inside).ino);
   assert.equal(result.st.mtimeMs, fs.statSync(f.inside).mtimeMs);
   const link = join(f.root, 'link.md'); fs.symlinkSync(f.inside, link);
@@ -76,6 +77,22 @@ test('contained file: absolute paths, missing files, containment and prefixes', 
   refused(r, link, 403);
 });
 
+test('contained file: a permission refusal does not disclose paths outside the roots', t => {
+  const f = fixture(t);
+  fs.chmodSync(f.outside, 0o000);
+  const io = {
+    ...fs,
+    openSync(...args) {
+      // Privileged runners can open mode 000, so supply the error at the syscall boundary there.
+      if (process.getuid() === 0) throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
+      return fs.openSync(...args);
+    },
+    readSync() { assert.fail('a denied open must not read content'); },
+  };
+  assert.deepEqual(readContainedFile(f.outside, [f.root], { maxBytes: LIMIT, io }),
+    { error: 'path outside allowed roots', code: 403 });
+});
+
 test('contained file: directories, FIFOs, sockets and devices are refused without blocking', async t => {
   const f = fixture(t);
   refused(reader([f.root]), f.root, 400);
@@ -86,6 +103,7 @@ test('contained file: directories, FIFOs, sockets and devices are refused withou
   await new Promise((ok, reject) => { server.once('error', reject); server.listen(socket, ok); });
   t.after(() => new Promise(ok => server.close(ok)));
   refused(reader([f.base]), socket, 400);
+  refused(reader([f.root]), socket, 403);
   const link = join(f.root, 'socket-link'); fs.symlinkSync(socket, link);
   refused(reader([f.base]), link, 400);
   refused(reader(['/dev']), '/dev/null', 400);
@@ -191,6 +209,10 @@ test('brain skills: shared reader contains and bounds frontmatter, including cre
   const normalRead = (p, roots, options) => readContainedFile(p, roots, { ...options, io: fs });
   const entry = make(normalRead);
   assert.deepEqual(entry(skill, [f.root]), { name: 'named', description: 'displayed', path });
+  const unreadable = make((p, roots, options) => readContainedFile(p, roots, { ...options, io: {
+    ...fs, openSync() { throw Object.assign(new Error('permission denied'), { code: 'EACCES' }); },
+  } }));
+  assert.deepEqual(unreadable(skill, [f.root]), { name: 'skill', description: '', path });
   assert.deepEqual(make(normalRead, fs.statSync(path))(skill, [f.root]), { name: 'skill', description: '', path });
   fs.writeFileSync(path, Buffer.alloc(LIMIT + 1, 65));
   assert.deepEqual(entry(skill, [f.root]), { name: 'skill', description: '', path });
