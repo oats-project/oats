@@ -268,8 +268,8 @@ The exact order of a routed spawn, with the value each step binds (r2, r3):
    source outside the entry refuses (`capability-not-applied`), an excluded one refuses
    (`capability-excluded`), and nothing is kept, minted or applied.
 3. **Before anything is minted, the kernel keeps the whole routed request** (r3,
-   contract): server, `spawnKey`, `D`, the composition `D` binds and the admission
-   revision it was checked against (r5), the exact argv and provider options, and the
+   contract): server, `spawnKey`, `D`, the composition `D` binds and the revision of
+   the recorded entry it was checked against (r5), the exact argv and provider options, and the
    task text, in `~/.oats/remote/<server>/pending/<spawnKey>.json` (0600, under the
    operator account, beside today's remote snapshots). It holds the task text, which
    #1912 took off argv for a reason, so: it is removed as soon as its seat settles
@@ -630,7 +630,7 @@ sandboxes:
   reason `capability-not-applied`, naming the soul, the sandbox, the applicable
   capability and source, and how to review and apply the updated plan (`oats sync
   --plan`, then `oats sync --admission-revision <revision>`). The routed apply rechecks
-  the same admission revision against what it will materialize: the host checks the
+  the recorded entry for this sandbox and soul against what it will materialize: the host checks the
   composition `D` binds, after the remote preview and before anything is kept or
   minted, and again before each replay (Identities, steps 2 and 7). An explicitly excluded capability refuses as
   `capability-excluded`. Never strip a capability to make a spawn pass. Narrowing
@@ -650,12 +650,17 @@ sandboxes:
     - **Widening:** only `oats sync --admission-revision <revision>` widens admission,
       and only when its revision equals the one the current inputs give. An upstream
       change anywhere in the plan after it was reviewed changes the revision, so the
-      apply refuses all admission for that sync (`E_PLAN_STALE`, with the fresh plan
-      in its detail) and records nothing. The rest of the sync goes on.
+      apply refuses all admission for that sync (`E_PLAN_STALE`, with the fresh
+      `admissionRevision` and changes in its detail) and records nothing. The refusal
+      is reported once in the answer's top-level `problems`, the rest of the sync
+      goes on, and sync exits nonzero.
     - **The commit point:** a sync that applies an admission revision writes, in one
-      atomic write under sync's own lock, only the entries its plan widens or changes
-      (per sandbox and soul, the derived set and the revision). An unchanged or
-      narrowed entry keeps its recorded set. The write happens only when the whole
+      atomic write under sync's own lock, only the entries whose changes are
+      non-empty: an added capability or a changed source. Each such entry records its
+      recorded set plus the additions, with the source changes applied, and the
+      revision. A capability the soul no longer derives stays recorded. An entry with
+      no additions or source changes keeps its recorded set and revision, so
+      narrowing never edits the recorded plan. The write happens only when the whole
       sync has succeeded, with no problem in any sandbox. A sync that fails
       anywhere writes none. Its infrastructure changes stand, as they always have,
       and a later sync with a fresh revision applies the admission. So when sandbox A
@@ -913,9 +918,9 @@ and by act:
   revision refuses `E_PLAN_STALE` with the fresh plan in its detail (r1).
 - `oats sync --json` gains `sandboxes` with the same entries plus `action`
   (`build|start|stop|none`), and, in a plan, the admission it would apply: each
-  sandbox entry carries its `admission: {changes: [{soul, added:[{id, source}], sourceChanged:[{id, from, to}]}]}`,
-  and the answer carries one top-level `admissionRevision` over every sandbox's
-  changes (r5). `oats sync --admission-revision <revision>` takes that one value and
+  sandbox entry carries `admissionChanges: [{soul, added:[{id, source}], sourceChanged:[{id, from, to}]}]`,
+  and the answer carries one top-level `admissionRevision`, the hash of the whole
+  admission plan (C1) (r5). `oats sync --admission-revision <revision>` takes that one value and
   applies all of it or none (C1, "The applied-plan gate"), and a sync without the
   flag widens nothing. The fields are additive, so
   `syncApi` stays 1; the flag is new.
@@ -1275,7 +1280,7 @@ the release notes when that feature ships (r5).
 | Same team, separate sandboxes | A reviewer and a deployer in one team, in two sandboxes, exchange the messages aweb allows. Their state, session material and mounts stay separate, and the reviewer can't use the deployment credential. The same holds with cross-team messaging allowed, and with it denied, by aweb's policy. Pending for v1's provider until aweb's maintainers say whether teamctl runs two sandboxes for one team (C8). |
 | Teams independent of the runtime | Changing a soul's default team, or a label's alias, moves no soul. Two teams in one sandbox, accepted as co-resident trust, run on a provider that serves several teams; v1's provider refuses it with `team-not-served`. One team in two sandboxes introduces no second team. |
 | Placement and capability refusals | An ambiguous target, a wrong host, a wrong sandbox, an excluded capability, a capability not yet applied, a forged seat binding and an unavailable provider route each fail with the responsible decision and a remedy, before any placement succeeds or usable authority leaks. |
-| The admission fence and its commit | An exclusion committed between the seat and the apply: the apply is not sent, the seat is released with no home made, and the request is gone. The same exclusion before a replay of an apply that was sent: the replay isn't sent and the seat stays delivered (`held-not-admitted`). Sandbox A's sync step succeeds and B's fails under `--admission-revision`: neither's admission is recorded. Both succeed under the plan's one revision: both sandboxes' widened entries are recorded in one write. A's entry had narrowed while B's widens: A keeps its recorded set. |
+| The admission fence and its commit | An exclusion committed between the seat and the apply: the apply is not sent, the seat is released with no home made, and the request is gone. The same exclusion before a replay of an apply that was sent: the replay isn't sent and the seat stays delivered (`held-not-admitted`). Sandbox A's sync step succeeds and B's fails under `--admission-revision`: neither's admission is recorded. Both succeed under the plan's one revision: both sandboxes' widened entries are recorded in one write. A's entry had narrowed while B's widens: A keeps its recorded set. An upstream change in B after the plan: `--admission-revision` refuses `E_PLAN_STALE` in the top-level `problems`, neither A's nor B's admission is recorded, both sandboxes' infrastructure steps still run, and sync exits nonzero. |
 | Capabilities widen only through an applied plan | One sandbox lists review (capability `read`) and deploy (`read` and `deploy`). Upstream adds `deploy` to review, with no new applied plan. A manual spawn of review and its tick both refuse before minting (`capability-not-applied`), and deploy still works. After the revised plan is approved and applied, review may load the capability, which still grants it no credential or operation. |
 | Identity apart from the route | Designed while grant seats stay on the host. A grant-backed agent restarts with the same stable DID and a new valid session; one without public inbound reach stays usable as the same principal; an alias match, a wrong team or a stale session can't spend its grant; revocation stops the next dispatch with both sandboxes left in place. |
 | Target and policy | With Compose: start, authorized work, stop, resume and delist, with separate state and one clock. The same contract against an existing Kubernetes cluster, including storage across a workload replacement and a check of the network policy, before that provider is claimed. |
