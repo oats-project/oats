@@ -10,7 +10,8 @@
 //   - a list of them, taken in turn per sandbox (the last one repeats);
 //   - `{ "$exit": <n> }`, `{ "$sleepMs": <n> }` (then the default answer), `{ "$raw": "<stdout>" }`.
 // A key absent from the table gets the default answer below. The record is FAKE_SANDBOX_LOG, one JSON
-// line per call: { act, request, env } (env: the OATS_* names the hook saw).
+// line per call: { act, request, env, pending } (env: the OATS_* names the hook saw; pending: the files in
+// FAKE_SANDBOX_PENDING when it is set, the kept routed requests at that moment).
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -22,12 +23,14 @@ export const FAKE_SEAT_CAPABILITY = "fixture.seat";
 export const SSH_INCLUDE_REMEDY = "add `Include ~/.oats/sandboxes/ssh_config` to ~/.ssh/config, then rerun oats readiness";
 
 const HOOK = String.raw`
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 const input = readFileSync(0, "utf8");
 const request = JSON.parse(input);
 const act = process.env.OATS_SANDBOX_ACT;
 const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.startsWith("OATS_")));
-if (process.env.FAKE_SANDBOX_LOG) appendFileSync(process.env.FAKE_SANDBOX_LOG, JSON.stringify({ act, request, env }) + "\n");
+const pendingDir = process.env.FAKE_SANDBOX_PENDING;
+const pending = pendingDir && existsSync(pendingDir) ? readdirSync(pendingDir).sort() : [];
+if (process.env.FAKE_SANDBOX_LOG) appendFileSync(process.env.FAKE_SANDBOX_LOG, JSON.stringify({ act, request, env, pending }) + "\n");
 const table = process.env.FAKE_SANDBOX_TABLE && existsSync(process.env.FAKE_SANDBOX_TABLE) ? JSON.parse(readFileSync(process.env.FAKE_SANDBOX_TABLE, "utf8")) : {};
 const key = act === "plan" ? "plan:" + request.target : act;
 const server = "sandbox-" + request.sandbox;
