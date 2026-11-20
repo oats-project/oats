@@ -41,7 +41,8 @@ function fixture(t, { rows = [], phase = "ready", cli = () => ({ features: [] })
     chordText: () => "",
   };
   const ws = { gen: 1, listeners: new Set() };
-  const home = createHome(el, ctx, { doc, cli: () => cli(), subscribeCli: () => () => {}, subscribeWorkspace: (fn) => { ws.listeners.add(fn); return () => ws.listeners.delete(fn); },
+  const cliListeners = new Set();
+  const home = createHome(el, ctx, { doc, cli: () => cli(), subscribeCli: (fn) => { cliListeners.add(fn); return () => cliListeners.delete(fn); }, subscribeWorkspace: (fn) => { ws.listeners.add(fn); return () => ws.listeners.delete(fn); },
     generation: () => ws.gen, setTimeout: () => 0, clearTimeout: () => {} });
   t.after(() => { home.dispose(); dom.window.close(); });
   return {
@@ -49,6 +50,7 @@ function fixture(t, { rows = [], phase = "ready", cli = () => ({ features: [] })
     set(next) { state = { ...state, ...next }; for (const fn of listeners) fn(); },
     fail(on) { mark = on; for (const fn of failedListeners) fn(on); },
     switchWorkspace() { ws.gen++; for (const fn of ws.listeners) fn(); },
+    cliChanged() { for (const fn of cliListeners) fn(); },
     needs: () => [...el.querySelectorAll('[data-home-section="needs-you"] [data-home-agent]')].map((b) => b.dataset.homeAgent),
     running: () => [...el.querySelectorAll('[data-home-section="running"] [data-home-agent]')].map((b) => b.dataset.homeAgent),
     tile: (key) => el.querySelector(`[data-home-open="${key}"]`),
@@ -357,4 +359,39 @@ test("slice2b capabilities shows workspace defaults", async () => {
   assert.match(buttons[0].dataset.focusKey, /^defaults:cap:/);
   assert.doesNotMatch(catalogCSS, /\.cap-(part|group|slot)[^{]*\{[^}]*(#[0-9a-f]{3,8}\b|rgba?\(|opacity)/i, "tokens only");
   dom.window.close();
+});
+
+// Review r1 (slice 2b): a CLI gate change supersedes a count read in flight, on its answer and on its failure.
+test("slice2b a count read the CLI's gate superseded never lands, on success or on rejection", async (t) => {
+  const supported = { ok: true, features: ["automations"], automationsApi: 1 }, unsupported = { ok: true, features: [] };
+  let status = supported; const pending = [];
+  const post = (path, body) => (path.startsWith("/api/automations")
+    ? new Promise((resolve, reject) => pending.push({ kind: body.kind, resolve, reject }))
+    : Promise.resolve({ status: "ok", capabilities: { capabilities: [] } }));
+  const u = fixture(t, { rows: pepe(), cli: () => status, post });
+  await u.settle();
+  assert.equal(pending.length, 1, "the schedule read is in flight");
+  // Supported, then not: the tile drops its count, and the old read's late failure doesn't come back as one.
+  status = unsupported; u.cliChanged();
+  assert.equal(u.tile("automations").getAttribute("aria-label"), "Automations");
+  pending[0].reject(new Error("late")); await u.settle(); await u.settle();
+  assert.equal(u.tile("automations").getAttribute("aria-label"), "Automations", "no 'Couldn't count' from a superseded read");
+  // Supported again: a newer read; the older one answering after it is dropped, and asks nothing more.
+  status = supported; u.cliChanged(); await u.settle();
+  assert.equal(pending.length, 2);
+  pending[1].resolve({ status: "ok", result: { schedules: [{ qualifiedId: "a" }] } }); await u.settle(); await u.settle();
+  assert.equal(pending.length, 3, "the newer read asks for the triggers");
+  pending[2].resolve({ status: "ok", result: { triggers: [] } }); await u.settle(); await u.settle();
+  assert.equal(u.tile("automations").getAttribute("aria-label"), "Automations, 1");
+  const stale = fixture(t, { rows: pepe(), cli: () => status, post });
+  await stale.settle();
+  const old = pending.at(-1); status = unsupported; stale.cliChanged(); status = supported; stale.cliChanged(); await stale.settle();
+  const newer = pending.at(-1); assert.notEqual(old, newer);
+  newer.resolve({ status: "ok", result: { schedules: [] } }); await stale.settle(); await stale.settle();
+  pending.at(-1).resolve({ status: "ok", result: { triggers: [{ qualifiedId: "t" }] } }); await stale.settle(); await stale.settle();
+  assert.equal(stale.tile("automations").getAttribute("aria-label"), "Automations, 1");
+  const asked = pending.length;
+  old.resolve({ status: "ok", result: { schedules: [{ qualifiedId: "a" }, { qualifiedId: "b" }] } }); await stale.settle(); await stale.settle();
+  assert.equal(stale.tile("automations").getAttribute("aria-label"), "Automations, 1", "the older answer, later, changes nothing");
+  assert.equal(pending.length, asked, "and the superseded read asks for no triggers");
 });

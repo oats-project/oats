@@ -190,7 +190,11 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
       const line = node("span", "home-row-line");
       line.append(node("span", "home-row-name", facts.name), node("span", "home-row-meta", facts.detail));
       copy.append(line, node("span", "home-row-message", displayLine(waitingDetail(claim) ?? waitingLabel(claim)) || waitingLabel(claim)));
-    } else copy.append(node("span", "home-row-name", facts.name), node("span", "home-row-meta", facts.detail));
+    } else {
+      copy.append(node("span", "home-row-name", facts.name), node("span", "home-row-meta", facts.detail));
+      // Home › Agents: a waiting row keeps its message under its meta line (as merged in slice 2).
+      if (claim) copy.append(node("span", "home-row-meta", displayLine(waitingDetail(claim) ?? waitingLabel(claim)) || waitingLabel(claim)));
+    }
     b.append(dot, copy);
     if (side) b.append(node("span", "home-row-side", side));
     b.addEventListener("click", () => { ctx.openAgent?.(row); });
@@ -369,9 +373,16 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
   /** Teams has a count only where the CLI has a team model: unknown while its probe is pending ("loading"), none
    * (null) where it has none. */
   const teamsState = () => { const status = cli(); return status == null ? "loading" : teamModelOf(status.features) ? "read" : null; };
-  // Each count is its own read, owned by the workspace generation it was asked in: a late answer, or a failure, for
-  // a workspace since left is dropped. A read never rejects: a refused or malformed answer is that count's "failed".
+  // Each count is its own read, owned by the workspace generation it was asked in and by its own latest intent (a
+  // serial per count): a late answer, or a failure, for a workspace since left, or for a read a newer one or a gate
+  // (the CLI no longer serving Teams or Automations: revoke) superseded, is dropped. A read never rejects: a refused
+  // or malformed answer is that count's "failed".
   const own = (asked) => alive && asked === gen && generation() === asked;
+  const serials = new Map(); // key -> the serial of its latest read
+  function revoke(key) {
+    serials.set(key, (serials.get(key) ?? 0) + 1);
+    if (retries.has(key)) { cancel(retries.get(key)); retries.delete(key); }
+  }
   // A read may answer PENDING: the server has no settled observation yet (the souls catalog still reading). The count
   // stays "Counting…" and is asked again PENDING_RETRY_MS later, on a timer this Home owns (cleared on a workspace
   // switch and on disposal; one read in flight per count), for as long as it is pending: a still-reading catalog
@@ -380,11 +391,13 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
   const retries = new Map(); // key -> its retry timer, while pending
   function readCount(key, read) {
     const asked = gen;
+    revoke(key);
+    const serial = serials.get(key), owns = () => own(asked) && serials.get(key) === serial;
     counts[key] = "loading";
-    if (retries.has(key)) { cancel(retries.get(key)); retries.delete(key); }
-    Promise.resolve().then(() => read()).catch(() => "failed").then((value) => {
-      if (!own(asked)) return;
-      if (value === PENDING) { retries.set(key, schedule(() => { retries.delete(key); if (own(asked)) readCount(key, read); }, PENDING_RETRY_MS)); return; }
+    // `owns` goes to the read too, so a read of several answers stops between them once superseded.
+    Promise.resolve().then(() => read(owns)).catch(() => "failed").then((value) => {
+      if (!owns()) return;
+      if (value === PENDING) { retries.set(key, schedule(() => { retries.delete(key); if (owns()) readCount(key, read); }, PENDING_RETRY_MS)); return; }
       counts[key] = value; paint();
     });
   }
@@ -402,7 +415,7 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
   let teamsReadIn = null; // the generation a Teams read was asked in: a CLI answer then asks no second one
   function readTeams() {
     const state = teamsState();
-    if (state !== "read") { counts.teams = state; teamsReadIn = null; return; }
+    if (state !== "read") { revoke("teams"); counts.teams = state; teamsReadIn = null; return; }
     if (teamsReadIn === gen) return;
     teamsReadIn = gen;
     readCount("teams", async () => {
@@ -416,13 +429,14 @@ export function createHome(el, ctx, { doc = el.ownerDocument, cli = cliStatus, s
   let automationsReadIn = null;
   function readAutomations() {
     const status = cli();
-    if (status == null) { counts.automations = "loading"; automationsReadIn = null; return; }
-    if (!automationsSupported(status)) { counts.automations = null; automationsReadIn = null; return; }
+    const gated = status == null ? "loading" : automationsSupported(status) ? null : "none";
+    if (gated) { revoke("automations"); counts.automations = gated === "loading" ? "loading" : null; automationsReadIn = null; return; }
     if (automationsReadIn === gen) return;
     automationsReadIn = gen;
-    readCount("automations", async () => {
+    readCount("automations", async (owns) => {
       let total = 0;
       for (const kind of ["schedule", "trigger"]) {
+        if (!owns()) return "failed"; // superseded: the answer is dropped anyway, so ask nothing more
         const r = await postJson(ctx, `/api/automations${wsQuery()}`, { kind, action: "list" });
         const rows = r?.status === "ok" ? automationRows(r.result, kind)?.rows : null;
         if (!Array.isArray(rows)) return "failed";

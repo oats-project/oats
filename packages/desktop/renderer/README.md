@@ -2505,7 +2505,9 @@ doesn't read already:
   with no deployment list is this machine's: one), Automations from `POST /api/automations {kind, action:"list"}`
   for schedules and triggers (only where `automationsSupported`; its red mark is the sidebar row's, slice 1's
   reader, through `ctx.automationsFailed()` and `ctx.subscribeAutomationsFailed`). Each count is its own read, owned
-  by the workspace generation it was asked in (a late answer or failure for a workspace since left is dropped), and
+  by the workspace generation it was asked in and by its own serial (`revoke`: a newer read of that count, or the CLI's
+  gate taking Teams or Automations away, supersedes it; a superseded read's answer or failure is dropped, and a read of
+  several answers asks nothing more), so a late answer or failure for a workspace since left is dropped, and
   never rejects: a refused or malformed answer is that count's "Couldn't count", the others stand. The tiles are one
   row of buttons (`TILES`), each named with its count ("Souls, 26"); their heights are `HOME_LAYOUT`'s, the budget the
   DOM test sums so the tiles stay in the first viewport at 1280×800 with 8 needs-you rows. No Graph tile: the Graph is

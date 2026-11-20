@@ -156,6 +156,7 @@ test("slice2 home agents flat list", async (t) => {
   assert.match(listed[1].textContent, /Child.*oats-expert · falcon.*stopped · started by Lead one/s);
   // The roster's dot grammar (the lead's return): a waiting row wears the needs-input mark and says "needs you" first.
   assert.match(listed[2].textContent, /needs you · started by Joan/);
+  assert.match(listed[2].querySelector(".home-row-copy").textContent, /Pick the copy/, "its claim's message, as merged (review r1, slice 2b)");
   assert.ok(listed[2].querySelector(".attn-mark"), "the needs-input mark, not a running dot");
   assert.equal(listed[2].querySelector(".home-dot"), null);
   assert.match(listed[3].textContent, /running$/);
