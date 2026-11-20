@@ -261,8 +261,8 @@ other than `off`, or a soul `knowledge.propose` key, refuses the spawn
    commit text, the PR body with its provenance block and a digest; nothing
    remote changes, and the instance reads that diff once as a reviewer would.
    It refuses only what protects against real harm (for example an unsafe
-   or non-Markdown file, `okf-base.json`, an invalid base or the content
-   screen's findings);
+   file, a non-Markdown file where Markdown is required, `okf-base.json`, an
+   invalid base or the content screen's findings);
    a path outside the write surface, a claim with no subject, a broken link
    or an unfilled `proposal.md` is a `W_*` warning, listed under
    `## Check warnings` in the PR body, which the maintainer resolves before
