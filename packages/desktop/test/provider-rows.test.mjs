@@ -10,7 +10,7 @@ import { runInNewContext } from "node:vm";
 import { JSDOM } from "jsdom";
 import { viewContext } from "./helpers/view-context.mjs";
 import * as treeShared from "../../client/instance-tree.mjs";
-import * as sameWork from "../../client/same-work.mjs";
+import * as relatedWork from "../../client/related-work.mjs";
 import * as treeView from "../renderer/instance-tree-view.mjs";
 import { instanceActions, captureInstanceActionMenu } from "../renderer/instance-actions.mjs";
 import { instanceActionTarget, sameInstanceActionTarget } from "../renderer/instance-action-target.mjs";
@@ -98,7 +98,7 @@ const read = name => readFileSync(new URL(`../renderer/${name}`, import.meta.url
 const shell = read("shell.mjs"), html = read("index.html"), css = read("shell.css");
 const fn = name => { const found = shell.match(new RegExp(`function ${name}\\([^)]*\\) \\{[\\s\\S]*?\\n\\}`)); assert.ok(found, name); return found[0]; };
 const source = ["renderContextRoster", "needsInputMark", "pendingSpawnRow", "setRovingRow", "focusFirstNeedingYou", "setBackgroundOpen"].map(fn).join("\n");
-const tree = { ...treeShared, ...treeView, ...sameWork };
+const tree = { ...treeShared, ...treeView, ...relatedWork };
 
 /** The shipped roster paint over the shipped index.html, in workspace "A" (the fixture of sidebar-slice1.test.mjs),
  * recording what a row's activation and its menu open. */
