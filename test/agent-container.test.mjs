@@ -1242,6 +1242,22 @@ test("an absent token file starts bb without the variable; an unreadable one fai
   }
 });
 
+test("a token file with whitespace inside the token fails the start before any child, and never shows the value", async t => {
+  for (const bbToken of ["FIXTURE_TOKEN_FIRST\nFIXTURE_TOKEN_SECOND\n", "FIXTURE_TOKEN_FIRST FIXTURE_TOKEN_SECOND", "FIXTURE_TOKEN_FIRST\r\nFIXTURE_TOKEN_SECOND", "FIXTURE_TOKEN_FIRST\tFIXTURE_TOKEN_SECOND"]) {
+    const wrapped = await supervisorFixture(t, {bb: "1", bbToken});
+    assert.equal(await wrapped.running, 1);
+    assert.deepEqual(wrapped.spawned, [], "no child starts");
+    assert.deepEqual(wrapped.said, ["the Claude token file must hold the token on one line"]);
+    assert.ok(!wrapped.text().includes("FIXTURE_TOKEN"), "no part of the value is written");
+  }
+  // Whitespace around one token is trimmed, as before.
+  const padded = await supervisorFixture(t, {bb: "1", bbToken: "  FIXTURE_TOKEN_PADDED\n\n"});
+  await padded.until(() => padded.text().includes("host started"));
+  assert.equal(padded.bbReceived().env.CLAUDE_CODE_OAUTH_TOKEN, "FIXTURE_TOKEN_PADDED");
+  padded.term();
+  assert.equal(await padded.running, 0);
+});
+
 test("bb that never reports connected fails the start and admits neither SSH nor host run", async t => {
   const fx = await supervisorFixture(t, {bb: "1", bbMode: "never"});
   assert.equal(await fx.running, 1);

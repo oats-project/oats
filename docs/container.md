@@ -723,11 +723,19 @@ environment is the supervisor's own plus two entries:
   that file exists, so bb's Claude threads use the team's inference token.
   The supervisor reads the file once and gives the value to bb alone: never
   to the broker, sshd or host run, never in an argument or a log line. With
-  no file, or an empty one, bb starts without the variable.
+  no file, or an empty one, bb starts without the variable. The file must
+  hold the token on one line: a token with a space or a line break inside it
+  is refused at start, before any child, since bb would report ready while
+  every model call failed.
 
 bb reads its environment once, when it starts. After replacing the token,
 restart the container; restart the agents as
 [After changing a credential](#after-changing-a-credential) says.
+
+In a team container, spawn bb agents with `--yolo` (bb's full mode): the
+container is the boundary, as it is for tmux agents there. bb's sandboxed
+modes need bubblewrap, which the image does not carry; without it every
+command waits for a person in bb, so an agent cannot answer mail unattended.
 
 bb keeps its data in its default directory, `/state/home/.bb`. It needs no
 getbb.app account. At start it looks up `getbb.app` and
@@ -835,7 +843,8 @@ bb counts toward the container's limits. Add to `AGENT_MEMORY` and
   exits first, a timeout, or a status that already answers before bb starts
   fails the container start: neither sshd nor host run starts, the exit is
   nonzero and the restart policy starts the container again. An unreadable
-  token file fails the start too, before any child.
+  token file, or one whose token has whitespace inside it, fails the start
+  too, before any child.
 - **bb ends later.** That is not a container failure. The supervisor
   writes `agent-supervisor: bb exited (<code or signal>)`, removes what bb's
   launcher left running, and starts bb again after 1 second, doubling to 60
