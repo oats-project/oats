@@ -193,6 +193,14 @@ test('contained file: exact limit, growth, truncation and replacement keep reads
   assert.equal(replace.read(f.inside).buf.toString(), 'original');
 });
 
+test('contained file: growth below the cap refuses the changed file', t => {
+  const f = fixture(t);
+  const size = fs.statSync(f.inside).size;
+  const grow = reader([f.root], { fstat() { fs.appendFileSync(f.inside, 'more'); } });
+  assert.deepEqual(grow.read(f.inside), { error: 'path outside allowed roots', code: 403 });
+  assert.equal(grow.reads.reduce((a, b) => a + b, 0), size + 1);
+});
+
 for (const phase of ['fstat', 'stat', 'read']) test(`contained file: ${phase} I/O failures close descriptors`, t => {
   const f = fixture(t);
   const error = Object.assign(new Error('I/O error'), { code: 'EIO' });

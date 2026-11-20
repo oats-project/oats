@@ -1158,7 +1158,7 @@ function readContainedFile(requested, allowedRoots, { maxBytes, tokenFile = null
     if (sameFile(st, tokenFile)) return { error: "forbidden", code: 403 };
     if (!st.isFile()) return notFile;
     if (st.size > maxBytes) return { error: `file too large (${st.size} bytes)`, code: 413 };
-    const buf = Buffer.alloc(maxBytes + 1);
+    const buf = Buffer.alloc(Math.min(st.size + 1, maxBytes + 1));
     let size = 0;
     while (size < buf.length) {
       const n = io.readSync(fd, buf, size, buf.length - size, null);
@@ -1166,6 +1166,7 @@ function readContainedFile(requested, allowedRoots, { maxBytes, tokenFile = null
       size += n;
     }
     if (size > maxBytes) return { error: `file too large (${size} bytes)`, code: 413 };
+    if (size === buf.length) return outside; // The file grew past its inspected size.
     return { real: g.real, st, buf: buf.subarray(0, size) };
   } catch (e) {
     if (["ENOENT", "ENOTDIR", "ELOOP"].includes(e.code)) return missing;

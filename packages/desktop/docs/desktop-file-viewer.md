@@ -39,7 +39,9 @@ A remote (server-routed) instance grants no local roots.
   admitted roots before any content is read;
 - a non-regular file is 400;
 - metadata and credential-file checks use the opened descriptor;
-- reads take at most 2 MiB plus one byte; larger than 2 MiB is 413;
+- reads take at most the inspected size plus one byte, capped at 2 MiB plus
+  one byte. A size above 2 MiB returns 413. Growth detected below that limit
+  returns the same 403 as an identity mismatch;
 - containing a NUL byte ("binary") is 415.
 
 The answer is `{path (canonical), name, size, mtime, markdown, content}`. `markdown` is true for
