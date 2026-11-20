@@ -361,13 +361,13 @@ for (const [name, hold] of Object.entries(RETIRING)) {
   });
 }
 
-test("a row its host no longer lists: its context menu offers Forget… alone, which opens the Forget confirmation", async t => {
+test("a row its host no longer lists: its context menu offers Forget… (and slice 6a's read-only Details), Forget… opening the Forget confirmation", async t => {
   const u = fixture(t, () => []);
   const gone = { ...instance("gone"), home: "/srv/agents/dev/instances/gone", agentsRoot: "/srv/agents", server: "build", repoName: "Build box",
     addressable: false, savedRoute: true, missingRemotely: true, running: null };
   u.render([...roster, gone]);
   noTools(u, "gone");
-  assert.deepEqual(u.menu("gone"), ["forget"], "Forget… alone");
+  assert.deepEqual(u.menu("gone"), ["details", "forget"], "Forget…, and Details (slice 6a: every row's)");
   u.row("gone").focus(); u.contextMenu("gone");
   const menu = u.wrap("gone").querySelector(".ctx-instance-menu");
   assert.equal(menu.dataset.instanceMenuOpen, "true", "a missing row's menu opens, though the row is blocked"); assert.deepEqual(u.said, []);

@@ -346,7 +346,8 @@ test('failure with data: rows kept, stale line with the observed age and Retry, 
   // Slice 1: no Start… tool on any row (its act is the context menu's, held below).
   assert.equal(s.list().querySelector('.ctx-start, .ctx-row-tools'), null, 'no row tools');
   // #1559: no ⋯ trigger on any row. A stale roster holds every row's context menu: a right-click (at the pointer) or a
-  // key (Shift+F10, the Menu key: no pointer) opens nothing, says why in the hint's line, and leaves focus on the row.
+  // key (Shift+F10, the Menu key: no pointer) says why in the hint's line. Slice 6a: the menu opens for its read-only
+  // Details (always), every act in it disabled until the roster is re-read.
   assert.equal(s.list().querySelector('.ctx-instance-actions'), null, 'no ⋯ trigger on a stale roster');
   for (const r of s.rows()) {
     const button = r.querySelector('.ctx-inst'), menu = r.querySelector('.ctx-instance-menu');
@@ -354,8 +355,10 @@ test('failure with data: rows kept, stale line with the observed age and Retry, 
       button.focus(); s.context.said.length = 0;
       button.dispatchEvent(new s.dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, ...at }));
       assert.deepEqual(s.context.said, [tree.ROSTER_STALE_TITLE], `${button.dataset.treeInstance}: says why (${at.clientX ? 'pointer' : 'key'})`);
-      assert.notEqual(menu.dataset.instanceMenuOpen, 'true', 'opens nothing');
-      assert.equal(s.doc.activeElement, button, 'focus stays on the row');
+      assert.equal(menu.dataset.instanceMenuOpen, 'true', 'opens for Details');
+      const enabled = [...menu.querySelectorAll('[role=menuitem]')].filter(item => !item.disabled).map(item => item.dataset.action);
+      assert.deepEqual(enabled, ['details'], 'its acts wait: only Details is usable');
+      menu.hidePopover?.(); menu.dataset.instanceMenuOpen = 'false';
     }
   }
   // The row itself: a running row still opens its terminal; a stopped row's activation (click, Enter) starts nothing and says why — the

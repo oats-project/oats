@@ -134,7 +134,7 @@ export function instanceActions(doc, instance, { row, invoke, openLifecycle, ope
     whenRightButtonReleased(event, () => {
       if (!owns() || !visible(row)) return;
       const why = heldReason();
-      if (why !== null && !hasAlways) { say(why); return; }
+      if (why !== null) { say(why); if (!hasAlways) return; } // held: says why; opens with its acts disabled if it reads
       open(undefined, place);
     });
   });

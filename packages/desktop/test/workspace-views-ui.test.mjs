@@ -178,11 +178,13 @@ test("roster: a stale deployment (its last re-read failed) is marked in words, a
   assert.equal(list.querySelector(".ctx-start, .ctx-row-tools"), null, "no row tools");
   assert.equal(wrap("b").querySelector(".ctx-inst").getAttribute("aria-description"), tree.ROSTER_STALE_TITLE, "the held row waits");
   assert.equal(wrap("a").querySelector(".ctx-inst").hasAttribute("aria-description"), false, "the live deployment's row acts as before");
-  // Its context menu (#1559: no ⋯ trigger) is held the same: asked, it opens nothing and says why; the live one's opens.
+  // Its context menu (#1559: no ⋯ trigger) is held the same: asked, it says why and (slice 6a) opens with only its
+  // read-only Details usable; the live one's opens.
   assert.equal(list.querySelector(".ctx-instance-actions"), null, "no ⋯ trigger");
   const ask = (name) => wrap(name).querySelector(".ctx-inst").dispatchEvent(new list.ownerDocument.defaultView.MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
   ask("b");
-  assert.deepEqual(said, [tree.ROSTER_STALE_TITLE]); assert.notEqual(wrap("b").querySelector(".ctx-instance-menu").dataset.instanceMenuOpen, "true");
+  assert.deepEqual(said, [tree.ROSTER_STALE_TITLE]);
+  assert.deepEqual([...wrap("b").querySelectorAll(".ctx-instance-menu [role=menuitem]")].filter((item) => !item.disabled).map((item) => item.dataset.action), ["details"], "its acts wait");
   ask("a");
   assert.deepEqual(said, [tree.ROSTER_STALE_TITLE], "the live row's menu is not held"); assert.equal(wrap("a").querySelector(".ctx-instance-menu").dataset.instanceMenuOpen, "true");
 });
