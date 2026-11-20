@@ -1,3 +1,0 @@
-## Changed
-
-- **OATS pins oats.aweb 1.45.0** (from 1.44.0). Floors are unchanged: OATS >=0.68.0, aw >=1.36.33, tested aw 1.36.58. A launch on a session provider (an `OATS_BACKEND` other than `tmux` or unset) is delivered by the host wake broker, whatever `delivery` and the runtime say. It is inert until the kernel launches homes on a session provider. Homes on tmux behave as before, and nothing changes for them. A host that runs a session provider's homes under `delivery: channel` keeps `aweb-channel` at 1.7.9 or later and `@awebai/pi` at 0.3.10 or later. Running instances keep the module they were spawned with: respawn them, or move a stopped one with `oats instance upgrade`, to take 1.45.0.
