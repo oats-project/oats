@@ -45,7 +45,7 @@ export const drawsParentLine = (row) => row?.sameWorkKnown !== true || row.sameW
 
 /** Whether a row's host reported it doing its parent's work: the host declares the feature and the kernel flagged
  * the row. The Desktop's sidebar draws its solid parent line only then (the Desktop UI rework, slice 1b: Joan's
- * decision of 2026-11-20 at Pepe's request, narrowing D26 "no lines"), and says "same work" only then; a host that
+ * decision of 2026-11-20 at Pepe's request, narrowing D26 "no lines"), and says "related work" only then; a host that
  * does not declare the feature flags no row, so its children are indented with no line. The command palette keeps
  * `drawsParentLine`. Where the host declares the feature the two agree, so the order (`drawingFirst`) still ends a
  * parent's line at its last joined child. */

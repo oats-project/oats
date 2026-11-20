@@ -602,10 +602,10 @@ split into sections) is `packages/client/roster-sections.mjs`.
   `rowFactsTitle` to its tooltip); a collapsed parent's roll-up takes line 2, which its description
   then says. Lines for same work only (slice 1b, narrowing D26's "no lines"; Joan, 2026-11-20, at Pepe's
   request): `treeConnectors` with `joins: sameWorkFlagged` (packages/client/same-work.mjs) draws the solid elbow
-  and stem only to a child its host flags `sameWork`, and the dotted link between a bundle's top-level members
-  (declared siblings); a row with no line carries no `.ctx-guides`. `--depth` indents a child 18px a level,
+  and stem only to a child its host flags `sameWork`, and with `siblingLinks: false` no dotted link (Amendment 1:
+  it waits on the kernel recording related work between siblings); a row with no line carries no `.ctx-guides`. `--depth` indents a child 18px a level,
   `.ctx-bundle-gap` separates bundles, `stateSpan` says its state (", running", ", stopped", ", status unknown"; a held home's line says its own),
-  and `relationSpan` (instance-tree-view.mjs) says ", under <parent>" (", same work" after it for a child its
+  and `relationSpan` (instance-tree-view.mjs) says ", under <parent>" (", related work" after it for a child its
   host reports `sameWork`) and siblingText's
   ", sibling of …" after the row's lines, resolved per deployment over its full roster as the palette's are.
 - **The sidebar's width** (`sidebar-width.mjs`): one custom property, `--sidebar-w` on `#app` (288px in
@@ -2190,7 +2190,7 @@ or rendered acceptance.
 ## Editor groups (splits) and the hideable sidebar (shell-level)
 
 The roster draws relationship guides only for same work since slice 1b of the Desktop UI rework (narrowing D26): a
-solid elbow to a child its host flags `sameWork`, and the dotted link between declared siblings. Its rows nest by an
+solid elbow to a child its host flags `sameWork`, and no sibling link yet. Its rows nest by an
 18px step and say their relations in words (`relationSpan`); the command palette's rows draw the guides by
 `drawsParentLine`. Compact outer gutters reserve more width for instance
 names without changing relationship grouping, disclosure controls, 56px row

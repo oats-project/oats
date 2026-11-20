@@ -204,18 +204,18 @@ test("slice1 lines and order unchanged (Amendment 1, D26: no lines; the tree, th
   assert.deepEqual(drawn, order.map(tree.instanceId), "the shared cluster order: spawn time, newest first");
   assert.deepEqual(order.map(i => i.instance), ["solo-new", "solo-old", "needs", "p", "c", "b"],
     "newest bundle first (the sibling-linked pair is one bundle), a waiting row not moved up; the same-work child first under its parent");
-  // Slice 1b narrows D26 (Joan, 2026-11-20, at Pepe's request): lines return for a same-work child and between declared
-  // siblings only (sidebar-slice1b.test.mjs pins them). Here: c's elbow and p's stem, the siblings' dotted link; b
-  // (unflagged) and needs (alone) draw none.
+  // Slice 1b narrows D26 (Joan, 2026-11-20, at Pepe's request): lines return for a same-work child only
+  // (sidebar-slice1b.test.mjs pins them). Here: c's elbow and p's stem; b (unflagged), the siblings (no link yet,
+  // Amendment 1) and needs (alone) draw none.
   const lined = [...u.list.querySelectorAll(".ctx-tree-row")].filter(r => r.querySelector(".ctx-guide")).map(r => r.querySelector(".ctx-inst").dataset.treeInstance);
-  assert.deepEqual(lined, ["solo-new", "solo-old", "p", "c"].map(n => tree.instanceId(rows.find(r => r.instance === n))), "lines only for same work and declared siblings");
+  assert.deepEqual(lined, ["p", "c"].map(n => tree.instanceId(rows.find(r => r.instance === n))), "lines only for same work");
   // Indentation keeps the tree: a child one step in, its parent at the top level.
   const depth = name => u.row(name).closest(".ctx-tree-row").style.getPropertyValue("--depth");
   assert.deepEqual(["p", "c", "b", "needs"].map(depth), ["0", "1", "1", "0"]);
   // The relations in words, after the name, for assistive technology only.
   const words = name => u.row(name).querySelector(".ctx-relation")?.textContent ?? null;
   // Same work in words (the flag the drawn line said): the joined child says so, the other one doesn't.
-  assert.equal(words("c"), ", under p, same work"); assert.equal(words("b"), ", under p");
+  assert.equal(words("c"), ", under p, related work", "slice 1b: the flag in the UI's words"); assert.equal(words("b"), ", under p");
   assert.equal(words("solo-new"), ", sibling of solo-old"); assert.equal(words("solo-old"), ", sibling of solo-new", "on both ends");
   assert.equal(words("p"), null); assert.equal(words("needs"), null);
   assert.ok(u.row("c").querySelector(".ctx-relation").classList.contains("sr-only"));

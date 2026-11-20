@@ -1,8 +1,9 @@
 // Slice 1b of the Desktop UI rework: lines for same work (the spec's pinned acceptance, by name). Joan's decision of
 // 2026-11-20, at Pepe's request, narrowing D26 ("no lines"): the roster draws the solid lineage elbow and stem from a
 // parent to a child only when its host flags the child doing its parent's work (packages/client/same-work.mjs
-// `sameWorkFlagged`), and the dotted sibling cue between declared siblings; a child without the flag is indented with
-// no line. Executes the shipped roster paint (shell.mjs renderContextRoster) on the shipped index.html and shell.css.
+// `sameWorkFlagged`); a child without the flag, or on a host without the feature, is indented with no line. The
+// spec's Amendment 1 drops the dotted sibling cue until the kernel records related work between siblings, so its
+// pinned test, by its name, now pins that declared siblings draw none. Executes the shipped roster paint (shell.mjs renderContextRoster) on the shipped index.html and shell.css.
 // No shell startup, HTTP, Electron, CLI or session. The connectors' own rules are instance-tree.test.mjs's and
 // same-work-lines.test.mjs's (the palette keeps `drawsParentLine`); their geometry is roster-spacing.test.mjs's.
 import test from "node:test";
@@ -88,7 +89,8 @@ test("slice1b same-work child has a line", t => {
   // The lines are drawing only: aria-hidden, and the words stay as slice 1 says them.
   for (const name of ["p", "a", "b", "c"]) for (const g of u.wrap(name).querySelectorAll(".ctx-guides")) assert.equal(g.getAttribute("aria-hidden"), "true");
   assert.equal(u.wrap("b").querySelector(".ctx-guides"), u.wrap("b").firstElementChild, "the guides lead the row, as before slice 1");
-  assert.deepEqual(["p", "a", "b", "c"].map(u.words), [null, ", under p, same work", ", under p", ", under b, same work"]);
+  assert.deepEqual(["p", "a", "b", "c"].map(u.words), [null, ", under p, related work", ", under p", ", under b, related work"],
+    "the flag in the UI's words (Amendment 1): related work");
   // The geometry is main's before slice 1: 1.5px, the solid lineage one step right of the dot column.
   assert.match(css, /\.ctx-guide \{[^}]*left: calc\(13\.25px \+ var\(--tree-branch-offset\) \+ var\(--guide-level\) \* var\(--tree-step\)\);[^}]*border-left: 1\.5px solid var\(--tree-line\);/);
   // A host that doesn't declare the feature flags no child: every child indented, no line at all.
@@ -102,24 +104,21 @@ test("slice1b same-work child has a line", t => {
 
 test("slice1b sibling dotted cue", t => {
   const u = fixture(t);
-  // hub, and two siblings declared on it, one with an unflagged child; solo is unrelated.
+  // Amendment 1: no sibling link until the kernel records related work between siblings (the "related work"
+  // contract). hub and two siblings declared on it, one with a flagged child and one with an unflagged child.
   const rows = [row("hub", 1), row("s-one", 2, { siblingInstance: "hub" }), row("s-two", 3, { siblingInstance: "hub" }),
-    row("kid", 4, { parentInstance: "s-two" }), row("solo", 5)];
+    row("kid", 4, { parentInstance: "s-two" }), row("joined", 5, { parentInstance: "s-one", sameWork: true }), row("solo", 6)];
   u.render(rows);
-  assert.deepEqual(u.drawn(), ["solo", "s-two", "kid", "s-one", "hub"], "the bundle in the roster's order, newest first");
+  assert.deepEqual(u.drawn(), ["solo", "s-two", "kid", "s-one", "joined", "hub"], "the bundle in the roster's order, newest first");
   assert.deepEqual(Object.fromEntries(u.drawn().map(n => [n, u.lines(n)])), {
-    solo: [],
-    "s-two": ["link-out@0"],
-    kid: ["link-through@0"], // the dotted cue passes beside a child to the next sibling; the child itself has no line
-    "s-one": ["link-in@0", "link-out@0"],
-    hub: ["link-in@0"],
-  });
-  assert.equal(u.wrap("solo").querySelector(".ctx-guides"), null, "an unrelated row carries no guides");
-  // Dotted, on the dot column, 2px left of its centre, in --tree-link (theme-contrast holds it at 3:1): as before.
-  assert.match(css, /\.ctx-guide\.link-in, \.ctx-guide\.link-out, \.ctx-guide\.link-through \{ left: calc\(13\.25px - var\(--tree-link-shift, 0px\) \+ var\(--guide-level\) \* var\(--tree-step\)\);\s*border-left: 1\.5px dotted var\(--tree-link\); \}/);
+    solo: [], "s-two": [], kid: [], "s-one": ["down@0"], joined: ["elbow@0"], hub: [],
+  }, "no dotted link between the siblings, nor beside their children; a same-work child keeps its line");
+  assert.equal(u.list.querySelector(".ctx-guide.link-in, .ctx-guide.link-out, .ctx-guide.link-through"), null);
+  for (const name of ["solo", "s-two", "kid", "hub"]) assert.equal(u.wrap(name).querySelector(".ctx-guides"), null, `${name}: no guides`);
   // The words stay.
   assert.equal(u.words("hub"), ", sibling of s-two and s-one");
   assert.equal(u.words("kid"), ", under s-two");
+  assert.equal(u.words("joined"), ", under s-one, related work");
 });
 
 test("slice1b collapsed and pinned unchanged", t => {

@@ -1174,14 +1174,14 @@ function renderContextRoster(instances) {
   const partGroups = (sections, level) => sections.flatMap((section) => section.groups.map((group, at) => ({ ...group, heading: at === 0 && section.deployment ? section : null, level })));
   const groups = [...partGroups(main, 3), ...(background ? [{ background }, ...partGroups(background.sections, 4)] : [])];
   // The lines (slice 1b, Joan's decision of 2026-11-20 at Pepe's request, narrowing D26 "no lines"): a line only
-  // where it means something. The solid elbow and stem join a child to its parent only when its host flags it doing
-  // its parent's work (same-work.mjs `sameWorkFlagged`); any other child is indented with no line. The dotted link
-  // joins the top-level members of one bundle, the declared siblings (treeConnectors' `link-*`). The same builder
-  // the command palette uses (treeConnectors, treeGuides), over the cluster's drawn rows, so a collapsed parent
-  // draws no line into rows it hides. Indentation and the gap between bundles show the rest of the tree.
-  // A row with no line carries no guides at all.
+  // where work is shared. The solid elbow and stem join a child to its parent only when its host flags it doing its
+  // parent's work (same-work.mjs `sameWorkFlagged`); any other child, and every child of a host without the feature,
+  // is indented with no line. No sibling link yet (Amendment 1: it waits on the kernel recording related work between
+  // siblings). The same builder the command palette uses (treeConnectors, treeGuides), over the cluster's drawn rows,
+  // so a collapsed parent draws no line into rows it hides. Indentation and the gap between bundles show the rest of
+  // the tree. A row with no line carries no guides at all.
   const rowGuides = (items, i) => {
-    const connectors = treeConnectors(items, i, instances, { joins: sameWorkFlagged });
+    const connectors = treeConnectors(items, i, instances, { joins: sameWorkFlagged, siblingLinks: false });
     return connectors.length ? treeGuides(document, connectors) : null;
   };
   // The relations in words (slice 1): "under <parent>" for a row indented under its parent and "sibling of …" for an
@@ -1192,10 +1192,10 @@ function renderContextRoster(instances) {
   const siblingPins = { pins: pinsShown() };
   const siblingsOf = new Map(ownRows ? [...ownRows.values()].flatMap((list) => [...instanceSiblings(list, siblingPins)]) : instanceSiblings(instances, siblingPins));
   // A child its host reports doing its parent's work (#1577: `sameWork` where the host declares the feature, the
-  // flag its drawn line shows) says so too: "same work"; a child the host reports not doing it, or one whose host
-  // doesn't report the flag, says nothing more.
+  // flag its drawn line shows) says so too, in the UI's words for it (slice 1b, Pepe): "related work"; a child the
+  // host reports not doing it, or one whose host doesn't report the flag, says nothing more.
   const underWords = (i) => (i.depth || 0) > 0 && i.parentInstance
-    ? `under ${i.parentInstance}${sameWorkFlagged(i) ? ", same work" : ""}` : null;
+    ? `under ${i.parentInstance}${sameWorkFlagged(i) ? ", related work" : ""}` : null;
   const relationWords = (i) => [underWords(i), siblingText(siblingsOf.get(instanceId(i)))].filter(Boolean).join(", ");
   for (const group of groups) {
     if (group.background) {

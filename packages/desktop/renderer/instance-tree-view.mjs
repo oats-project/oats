@@ -34,7 +34,7 @@ export function stateSpan(doc, state) {
 }
 
 /** A roster row's relations in words for assistive technology (the Desktop UI rework, slice 1; the roster's lines,
- * drawn for same work and declared siblings only since slice 1b, are aria-hidden), ", under p, sibling of s", visually hidden after its lines; null when it has none.
+ * drawn for same-work children only since slice 1b, are aria-hidden), ", under p, sibling of s", visually hidden after its lines; null when it has none.
  * The words are the command palette's ("under …", siblingText's "sibling of …"). */
 export function relationSpan(doc, words) {
   if (!words) return null;
@@ -83,8 +83,10 @@ export function clusterSeparator(doc, { label, count } = {}) {
  * `joins` (optional): which child draws its parent line, `drawsParentLine` by default (the command palette's). The
  * sidebar passes same-work.mjs `sameWorkFlagged` (slice 1b: a line only for a child its host flags as doing its
  * parent's work; where the host declares the feature the two agree, so the order still holds).
+ * `siblingLinks` (optional, default true): whether the dotted links are drawn. The sidebar passes false (slice 1b,
+ * Amendment 1: no sibling link until the kernel records related work between siblings); the palette keeps them.
  * `items` is the rendered group order. */
-export function treeConnectors(items, item, allInstances = items, { joins = drawsParentLine } = {}) {
+export function treeConnectors(items, item, allInstances = items, { joins = drawsParentLine, siblingLinks = true } = {}) {
   const at = items.indexOf(item), depth = item.depth || 0;
   const segments = treeGuideSegments(items, item, allInstances, { joins });
   const out = [];
@@ -101,6 +103,7 @@ export function treeConnectors(items, item, allInstances = items, { joins = draw
   if (next && (next.depth || 0) === depth + 1 && joins(next)) out.push({ kind: "down", level: depth });
   const rootBefore = at > 0 && items.slice(0, at).some((i) => !(i.depth || 0));
   const rootAfter = at >= 0 && items.slice(at + 1).some((i) => !(i.depth || 0));
+  if (!siblingLinks) return out;
   if (!depth) {
     if (rootBefore) out.push({ kind: "link-in", level: 0 });
     if (rootAfter) out.push({ kind: "link-out", level: 0 });

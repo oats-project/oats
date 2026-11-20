@@ -203,8 +203,8 @@ function assertConnectors(u) {
 }
 
 // Slice 1 of the Desktop UI rework (D26): indentation (18px a level) and the gap before the next bundle show the tree,
-// and each row says its relations in words. Slice 1b narrows D26: lines only for a same-work child and between
-// declared siblings (sidebar-slice1b.test.mjs); these rows have neither, so they draw none. A parent wears its
+// and each row says its relations in words. Slice 1b narrows D26: lines only for a same-work child
+// (sidebar-slice1b.test.mjs); no row here is flagged, so none draws one. A parent wears its
 // disclosure on its name line (#1970). The connectors' rules are the sidebar's and the palette's (assertConnectors).
 test("tree (non-layout): indentation, no lines without same work, a parent's chevron on its name line; the connector rules", t => {
   const u = fixture(t);
@@ -219,7 +219,7 @@ test("tree (non-layout): indentation, no lines without same work, a parent's che
     assert.ok(row.querySelector(".ctx-name-line > .ctx-disclosure:first-child"), "first on the name line");
   }
   assert.deepEqual(u.rows.map(row => row.style.getPropertyValue("--depth")), ["0", "1", "2", "1", "2", "0"]);
-  assert.deepEqual(u.rows.map(row => row.querySelectorAll(".ctx-guide, .ctx-guides").length), [0, 0, 0, 0, 0, 0], "no lines on any row: none is flagged same work, none has a declared sibling");
+  assert.deepEqual(u.rows.map(row => row.querySelectorAll(".ctx-guide, .ctx-guides").length), [0, 0, 0, 0, 0, 0], "no lines on any row: none is flagged same work");
   assert.deepEqual(u.rows.map(row => row.querySelector(".ctx-relation")?.textContent ?? null),
     [null, ", under root", ", under child-a", ", under root", ", under child-b", null], "each child says its parent");
 });

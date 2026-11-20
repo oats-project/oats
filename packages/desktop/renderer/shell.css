@@ -281,8 +281,8 @@ body {
    ring. Dots paint above every line with a ring in the row's own solid colour (--row-solid:
    surface, hover surface-2, selected sel), so every line appears to leave the dot itself and a
    running dot stays solid on the tint instead of reading hollow inside a white halo. */
-/* The sidebar draws these for same work and declared siblings only (the Desktop UI rework, slice 1b: shell.mjs
-   renderContextRoster's rowGuides); the command palette's tree rows draw them by drawsParentLine.
+/* The sidebar draws only the solid lineage, for same-work children (the Desktop UI rework, slice 1b: shell.mjs
+   renderContextRoster's rowGuides); the command palette's tree rows draw both kinds, by drawsParentLine.
    The guides span the row's transparent borders too, so lines cross the gap between rows. */
 .ctx-guides { position: absolute; inset: calc(-1 * var(--row-gap)) auto calc(-1 * var(--row-gap)) 0; width: 100%; pointer-events: none; }
 .ctx-guide { position: absolute; box-sizing: border-box; width: 0;

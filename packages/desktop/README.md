@@ -54,8 +54,7 @@ The shell has three navigation contexts:
   be repositioned freely; edges follow live.
 - **Instances** — the shell's single sidebar becomes a compact, recursively
   nested roster. It draws lines only for same work: a solid line from a parent to a child its host reports
-  doing the same work (`sameWork`), and a dotted line between declared siblings; any other child is indented
-  with no line. Selecting a running instance opens its direct tmux-attach
+  doing the same work (`sameWork`); any other child, and siblings, are indented or listed with no line. Selecting a running instance opens its direct tmux-attach
   xterm terminal in the main area. Terminal tabs are scoped to this context.
 - **Home** (where a window opens, the Desktop UI rework's slice 2) — what needs you (the agents waiting on you,
   then the running ones) and what you have (a count for each part of the workspace, each opening its

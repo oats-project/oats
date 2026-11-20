@@ -1045,12 +1045,12 @@ error in the terminal. Each drop/paste accepts up to 16 files totaling 25 MB.
 The sidebar lists a workspace's instances as a tree: a child sits one step
 right of its parent, and related instances are grouped together, with a little
 space before the next group. The indent and that space show the tree. The
-sidebar draws a line only where it means something: a solid line from a parent
-to a child its host reports doing the same work as its parent, and a dotted
-line joining instances linked as siblings. A child without that report is
-indented with no line, and a host that doesn't report it draws none. A screen reader hears each row's state ("running", "stopped" or "status
+sidebar draws a line only where work is shared: a solid line from a parent to a
+child its host reports doing the same work as its parent. Any other child is
+indented with no line, and so is every child on a host whose OATS doesn't
+report shared work. Siblings get no line yet. A screen reader hears each row's state ("running", "stopped" or "status
 unknown") after its two lines, then each child "under"
-its parent, with "same work" when its host reports it doing its parent's work,
+its parent, with "related work" when its host reports it doing its parent's work,
 and each instance linked as a sibling "sibling of" the other, after the row's
 two lines.
 
