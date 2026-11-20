@@ -10,7 +10,7 @@ policy. Choosing another model is a supported architectural choice.
 | Alternative | Describe the replacement model, its own learning/retention/consistency contract and tests |
 
 A graph store can adopt the reference promotion bar without Markdown, YAML,
-`index.md`, branches or a universal harvester API. A capability using continuous
+`index.md`, branches or a universal proposal API. A capability using continuous
 retrieval without a separate judge might instead choose an alternative model.
 Neither storage choice decides theory. Alternative capabilities still honor
 framework work-mode, package containment, explicit configuration and executable
@@ -25,12 +25,26 @@ lifecycle effects, scheduling, native persistence, validation and diagnostics.
 There is no invisible shared theory layer underneath it. It must be usable
 without the expert running or reference documentation fetched over the network.
 
-The default OKF model chooses external bases/nodes, instructional
-read/capture-only workers, independent harvesting, PR-only Git delivery and
-real non-Git custody. These are adoption choices, not new mandatory kernel
+The default OKF model chooses external bases/nodes, working instances that
+capture and propose at checkpoints, a knowledge maintainer that reviews every
+proposal, PR-only Git delivery and real non-Git custody. These are adoption choices, not new mandatory kernel
 fields. OKF-specific files, schemas and validator calls stay in OKF. A
 capability choosing another approach is not rejected for failing an OKF or
 reference-doctrine test that does not apply to it.
+
+## An option: an independent harvester
+
+A capability may instead give judgment to an independent harvester: a separate
+worker that judges a source's captured evidence, possibly after the source has
+retired, and delivers the result. Earlier OATS knowledge capabilities worked
+this way; `oats.okf` 6 replaced it with proposals at checkpoints. A capability
+choosing it adapts the reference model and owns what proposals avoid: copying
+bounded evidence out of the source's home before retirement, per-source jobs
+that a reused name cannot consume, destinations frozen at capture, explicit
+host scheduling, and recovery when work outlives its source. The judgment
+procedure, the exclusions and the delivery states in
+[judgment and proposal](proposal.md) still apply to it, and a reviewer of its
+output is still the gate before acceptance.
 
 ## Record the choice
 

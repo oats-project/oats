@@ -13,8 +13,8 @@ owns slot selection, composition, lifecycle, work-mode boundaries and the
 hook contract, not a memory model or a judge.
 
 Every implementing capability supplies its full runtime: reader tools,
-injections, capture conventions, judgment instructions, a harvester if any,
-lifecycle and scheduling, validation, delivery and diagnostics. Reuse may be
+injections, capture conventions, judgment and proposal instructions, the
+review that accepts them, lifecycle, validation, delivery and diagnostics. Reuse may be
 explicit and versioned, never a hidden fetch of mutable doctrine. The theory
 expert advises authors; it does not operate their stores or approve their
 compatibility. Composing this capability selects no knowledge provider.
@@ -54,9 +54,12 @@ curriculum, not this repository.
 3. **Author working behavior.** Use the [reader/capture pattern](knowledge-reference/reader-capture.md).
    Keep every-session instructions short; load detailed native operations from
    that capability's own skills.
-4. **Author deliberate judgment.** Use the [harvester pattern](knowledge-reference/harvester.md)
-   if adopting this model. Freeze inputs and destinations before execution,
-   separate semantic outcomes from delivery outcomes, and define recovery.
+4. **Author deliberate judgment.** Use the [proposal pattern](knowledge-reference/proposal.md)
+   if adopting this model: the instance judges at its checkpoints, a reviewer
+   accepts. Freeze destinations when a proposal is planned, separate semantic
+   outcomes from delivery outcomes, and define recovery. An independent
+   harvester is an [option](knowledge-reference/adoption.md#an-option-an-independent-harvester)
+   with its own obligations.
 5. **Deliver an independently usable package.** Follow [package craft](knowledge-reference/package-craft.md).
    No path in a released soul or skill may depend on an author's checkout.
 6. **Verify observable outcomes.** Run the relevant [acceptance cases](knowledge-reference/acceptance.md).
@@ -68,7 +71,7 @@ curriculum, not this repository.
 - Model: adopt / adapt / alternative; rationale and deliberate departures.
 - Provider and version: verified tools, evidence, unknown guarantees.
 - Responsibility map: who supplies reader, capture, judgment, delivery,
-  lifecycle, scheduling and diagnostics; no unowned runtime step.
+  review, lifecycle and diagnostics; no unowned runtime step.
 - Custody: named destinations, owner identity, accepted state, concurrency,
   retry and reader-refresh semantics. No credentials in the report.
 - Proposed artifacts: capability manifest, local resources, instructions,

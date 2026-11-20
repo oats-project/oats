@@ -15,7 +15,7 @@ npm root; the kernel npm tarball does not contain it.
 | `oats.onboarding` | `oats-tailor-workspace` (the package soul `oats-setup-expert` uses it) | How the setup expert turns OATS's defaults into a new workspace's own coordination, knowledge and tasks capabilities; procedure only, no inject |
 | `oats.coordination-setup` | `coordination-best-practices`, `adapt-to-the-organisation`, `design-the-roster`, `set-landing-rules`, `review-the-setup`, and the coordination-setup inject (the package soul `oats-setup-expert` uses it) | How the setup expert shapes OATS's coordination practices to an organisation: its roster of souls, its landing rules and its ownership record across people; resource-only, proposes for the people's yes |
 | `oats.support` | `support-intake`, `support-safety`, `support-ticket`, `support-handoff`, `support-relay`, and the support inject | The support desk role: tickets requests and hands them to the project's support maintainer; never changes code, reviews, merges, releases or deploys |
-| `oats.knowledge-theory` | `knowledge-capability-authoring` with its complete local references (the package soul `knowledge-theory-expert` uses it) | Optional authoring theory; no mandatory runtime doctrine, harvester or OKF dependency |
+| `oats.knowledge-theory` | `knowledge-capability-authoring` with its complete local references (the package soul `knowledge-theory-expert` uses it) | Optional authoring theory; no mandatory runtime doctrine, judge or OKF dependency |
 
 ## How a workspace selects them
 

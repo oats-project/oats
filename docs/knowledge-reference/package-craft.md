@@ -34,7 +34,7 @@ A knowledge implementation's capability manifest might begin:
   "description": "Native knowledge capability.",
   "compatibility": { "oats": ">=0.22.19" },
   "layer": "knowledge",
-  "skills": ["skills/native-reader", "skills/native-harvest"],
+  "skills": ["skills/native-reader", "skills/native-propose"],
   "inject": "injects/knowledge.md"
 }
 ```
@@ -67,7 +67,7 @@ Ground the role in a real authoring/review task and its corrections. Mark an
 untested role as such rather than inventing expertise. Omit deployment paths,
 accounts, credentials and pending work. Packaged souls are read-only resources;
 instances home locally. A knowledge-disabled expert must not assume `STATE.md`,
-`notes/`, a soul knowledge bundle or a harvest command exists. Do not silently
+`notes/`, a soul knowledge bundle or a proposal command exists. Do not silently
 pin a model or runtime if the role does not need that choice.
 
 ## Skill craft
