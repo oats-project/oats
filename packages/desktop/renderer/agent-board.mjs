@@ -214,7 +214,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     return true;
   }
 
-  // Reaching the zone (Alt+T, a click) reads the claims again, so a dialog that opened since shows before a press. The
+  // Reaching the zone (the leader's t, a click) reads the claims again, so a dialog that opened since shows before a press. The
   // read paints through its owner (update) only when it is the latest; nothing here uses its answer.
   zone.addEventListener('focusin', ev => {
     // A repaint that moves the focus to an option's replacement is not an entry into the zone.
@@ -479,7 +479,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     input(data) {
       if (pending && typeof data === 'string' && data.includes('\r')) { answered.add(pending); pending = null; paint(); }
     },
-    /** Alt+T's place: the zone from the terminal, then the facts, then back to the terminal. */
+    /** The leader's t: the zone from the terminal, then the facts, then back to the terminal. */
     cycleFocus() {
       const at = doc.activeElement;
       const inZone = zone.isConnected && zone.contains(at), inFacts = facts.isConnected && facts.contains(at);

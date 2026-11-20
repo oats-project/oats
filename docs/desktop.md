@@ -986,8 +986,9 @@ comes from an OATS without the feature, the facts strip and the context fold
 say which. A board the Desktop can't read, or one with entries it had to leave
 out, says so too. None of these hides a question or reads as "no questions".
 
-**Answering.** **Alt+T** (Ctrl+Alt+T in the Ctrl+Alt and Ctrl+Shift families,
-⌘⌥T on macOS) moves the focus from the terminal to the questions, then to the
+**Answering.** **The leader, then t** (Ctrl+X t; the palette's **Agent:
+questions and facts (focus)** too) moves the focus from the terminal to the
+questions, then to the
 facts, then back; Esc goes back to the terminal. A number, or a press on an
 option, puts `<id>: <option>` on the agent's input line, for example
 `q2: Yes, one clean commit`, and gives the terminal the focus. Nothing is sent:

@@ -110,7 +110,7 @@ export function createTabBoards({ features, eventsReadable = () => false, post, 
     close,
     /** The person's input in the tab's terminal (its xterm onData). */
     input(tab, data) { states.get(tab)?.view.input(data); },
-    /** Alt+T in `tab`: terminal → questions → facts → terminal. False when the tab shows no board. */
+    /** The leader's t in `tab`: terminal → questions → facts → terminal. False when the tab shows no board. */
     cycleFocus(tab) { return states.get(tab)?.view.cycleFocus() ?? false; },
     /** Puts `tab`'s strip and zone either side of its terminal (after the shell appended the terminal). */
     place(tab) { states.get(tab)?.view.place(); },

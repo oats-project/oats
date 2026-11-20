@@ -3495,6 +3495,7 @@ const rosterInstance = id => (id == null ? null : shownRows(contextInstances).fi
 /** Why a key cannot do its row's work now (leader-keys.mjs leaderApplies): the key, after the leader or in
  * the sidebar, says why in the hint's line rather than doing nothing silently. */
 function notApplicable(does) {
+  // The Desktop's own rows (leader-keys.mjs DESKTOP_LEADER_ROWS) say why themselves when they cannot act.
   const row = LEADER_TABLE.find(r => r.does === does);
   if (!row) return null;
   const state = leaderState();
@@ -3515,6 +3516,7 @@ function rosterActsHeld(instance) {
 }
 const leaderDispatch = createLeaderDispatch({
   say: sayInHint,
+  agentView: () => focusAgentView(),
   targetId: origin => origin.targetId ?? null,
   stepFrom: origin => origin.stepFromId ?? null,
   target: origin => rosterInstance(origin.targetId ?? null),
@@ -3600,10 +3602,14 @@ for (const [id, does] of [["roster.openPrevious", "previous"], ["roster.openNext
 }
 // The instance's name and colour (#1421; CHORDS edit-instance, no leader key): the leader's target, from
 // every focus, a terminal's included. Inert under a modal dialog or the palette, as the leader is.
-// The agent view (S2-D): Alt+T moves the focus through the shown terminal tab's view: its question zone, its facts,
-// back to its terminal. Nothing when the tab shows no board. Inert under a modal dialog or the palette.
-registerAction({ id: "agent.viewFocus", label: "Agent: questions and facts (focus)", context: "global", when: () => !modalOpen(),
-  run: () => { const t = activeTab == null ? null : tabs.get(activeTab); if (!t || t.kind !== "terminal" || !tabBoards.cycleFocus(t)) sayInHint("This agent has no questions or facts to show."); } });
+// The agent view (S2-D): the leader's t (leader-keys.mjs DESKTOP_LEADER_ROWS; no chord: Alt+T is Claude Code's extended
+// thinking) moves the focus through the shown terminal tab's view: its question zone, its facts, back to its terminal.
+// Nothing when the tab shows no board. Also the palette's command. Inert under a modal dialog or the palette.
+function focusAgentView() {
+  const t = activeTab == null ? null : tabs.get(activeTab);
+  if (!t || t.kind !== "terminal" || !tabBoards.cycleFocus(t)) sayInHint("This agent has no questions or facts to show.");
+}
+registerAction({ id: "agent.viewFocus", label: "Agent: questions and facts (focus)", context: "global", when: () => !modalOpen(), run: () => focusAgentView() });
 registerAction({ id: "instance.edit", label: "Instance: name and colour…", context: "global", when: () => !modalOpen(),
   run: (e) => openInstanceEdit(leaderTargetId(e?.target ?? document.activeElement)) });
 

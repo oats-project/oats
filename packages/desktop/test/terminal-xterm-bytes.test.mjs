@@ -69,7 +69,6 @@ const CTRL_ALT_SENDS = {
   "split.focusNextGroup": ctrlAlt("A"),
   "sidebar.focusFilter": ctrlAlt("F"),
   "instance.edit": ctrlAlt("R"),
-  "agent.viewFocus": ctrlAlt("T"),
 };
 // The Ctrl+Shift family's seven (below) send nothing; its other rows keep their Ctrl+Alt key.
 const SEVEN = { "app.palette": "K", "app.quickOpenSouls": "P", "app.workspaces": "S", "terminal.focusMode": "M",
@@ -93,7 +92,6 @@ const SENDS = {
     "split.focusNextGroup": altShiftArrow("C"),
     "sidebar.focusFilter": alt("f"),
     "instance.edit": alt("r"),
-    "agent.viewFocus": alt("t"),
   },
   "ctrl+alt": CTRL_ALT_SENDS,
   "ctrl+shift": Object.fromEntries(Object.entries(CTRL_ALT_SENDS).filter(([id]) => !Object.hasOwn(SEVEN, id))),

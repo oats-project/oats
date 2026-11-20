@@ -2279,8 +2279,10 @@ character, no line end, never while the pane isn't active), and the person's Ent
 (`checkClaims`): only the latest claims read paints and may let the press type,
 and the shell's `inView` (the tab's pane active, the tab layer shown, its
 workspace current) is checked before the read, after it and at the write.
-A question's optimistic state is keyed by its occurrence (`id@since`). Alt+T
-is `agent.viewFocus`, the shared CHORDS row `agent-view` (the TUI skips it).
+A question's optimistic state is keyed by its occurrence (`id@since`). The
+leader's `t` runs `agent.viewFocus`: a row of the Desktop's own after the shared
+table (`leader-keys.mjs` DESKTOP_LEADER_ROWS), since the shared table is the
+TUI's; it has no chord (Alt+T is Claude Code's extended thinking).
 
 ### Workspace-local tab memory
 

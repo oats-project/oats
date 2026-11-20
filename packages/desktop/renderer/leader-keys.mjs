@@ -11,6 +11,20 @@
 import { LEADER_TABLE } from "../../client/keymap.mjs";
 import { chordFromKeyId, chordKeys } from "./keybindings.mjs";
 
+/** The Desktop's own rows after the shared table's, for what the TUI has no action for yet (the shared table is the
+ * TUI's, which reads every row as one it handles). `t`: the agent view's focus, terminal → questions → facts →
+ * terminal (S2-D; the lead's call, 2026-11-19: the leader only, no Alt chord, since Alt+T is Claude Code's extended
+ * thinking and readline's transpose-words). A key here is one the shared table does not use. */
+export const DESKTOP_LEADER_ROWS = Object.freeze([
+  Object.freeze({ keys: Object.freeze(["t"]), does: "agent-view", label: "questions and facts", terminal: true }),
+]);
+/** The table the Desktop reads after the leader: the shared one, then its own rows. */
+export const DESKTOP_LEADER_TABLE = Object.freeze([...LEADER_TABLE, ...DESKTOP_LEADER_ROWS]);
+/** What the leader then `keyId` does in the Desktop, or null. */
+export function desktopLeaderDoes(keyId) {
+  return DESKTOP_LEADER_TABLE.find((row) => row.keys.includes(keyId))?.does ?? null;
+}
+
 /** A `does` that runs one registered action: its label is that action's, so the editor and the
  * palette show one name for one thing. */
 export const LEADER_ACTIONS = Object.freeze({
@@ -48,6 +62,7 @@ export const LEADER_LABELS = Object.freeze({
   retire: "Retire the instance…",
   "spawn-another": "Spawn another of the instance's soul…",
   list: "Instance roster",
+  "agent-view": "The agent's questions and facts (focus), and back to its terminal",
   refresh: "Read the instance roster now",
 });
 
@@ -83,12 +98,12 @@ export function leaderApplies(row, state = {}) {
 }
 
 /** The row a key id belongs to, or null. */
-export function leaderRowOf(keyId, rows = LEADER_TABLE) {
+export function leaderRowOf(keyId, rows = DESKTOP_LEADER_TABLE) {
   return rows.find((row) => row.keys.includes(keyId)) ?? null;
 }
 
 /** The rows the Desktop supports at all (the editor's Leader group). */
-export function supportedLeaderRows(rows = LEADER_TABLE) {
+export function supportedLeaderRows(rows = DESKTOP_LEADER_TABLE) {
   return rows.filter((row) => !LEADER_UNSUPPORTED.has(row.does));
 }
 

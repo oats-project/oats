@@ -9,6 +9,8 @@ import { createAgentBoard, createHiddenFacts, DIALOG_NOTE, DETAIL_NOTES, BOARD_M
 import { createTabBoards } from '../renderer/agent-board-tabs.mjs';
 import { boardData, BOARD_FEATURE } from '../../client/instance-board.mjs';
 import { defaultBinding, TERMINAL_ALLOWLIST, DEFAULT_KEYMAPS } from '../renderer/keybindings.mjs';
+import { desktopLeaderDoes, supportedLeaderRows } from '../renderer/leader-keys.mjs';
+import { leaderDoes } from '../../client/keymap.mjs';
 import { NOW, fact, question, board, detail } from './helpers/board-fixture.mjs';
 
 function memoryStorage() {
@@ -244,7 +246,7 @@ test('agent view answering: no lease, nothing typed, the card stays and the focu
   assert.equal(f.view.question, 'q1');
 });
 
-test('agent view keys: Alt+T cycles terminal → questions → facts → terminal; Esc goes back; the default is Alt+T, allowed in a terminal', t => {
+test('agent view keys: the leader\'s t cycles terminal → questions → facts → terminal; Esc goes back; no chord takes Alt+T', t => {
   const f = fixture(t);
   f.view.update(boardData(board()));
   f.terminal.focus();
@@ -252,11 +254,14 @@ test('agent view keys: Alt+T cycles terminal → questions → facts → termina
   f.view.cycleFocus(); assert.ok(f.facts().contains(f.doc.activeElement));
   f.view.cycleFocus(); assert.equal(f.doc.activeElement, f.terminal);
   f.view.cycleFocus(); f.key(f.doc.activeElement, 'Escape'); assert.equal(f.doc.activeElement, f.terminal);
-  assert.equal(defaultBinding('agent.viewFocus', false, 'alt'), 'Alt+T');
-  assert.equal(defaultBinding('agent.viewFocus', false, 'ctrl+alt'), 'Ctrl+Alt+T');
-  assert.equal(defaultBinding('agent.viewFocus', true), 'Mod+Alt+T');
-  assert.ok(TERMINAL_ALLOWLIST.includes('agent.viewFocus'));
-  assert.ok(Object.values(DEFAULT_KEYMAPS).every(k => Object.hasOwn(k, 'agent.viewFocus')));
+  assert.equal(desktopLeaderDoes('t'), 'agent-view', 'the leader\'s t');
+  assert.equal(leaderDoes('t'), null, 'not a row of the shared table, which is the TUI\'s');
+  assert.ok(supportedLeaderRows().some(row => row.does === 'agent-view'), 'the shortcuts editor lists it');
+  for (const family of ['alt', 'ctrl+alt', 'ctrl+shift']) for (const isMac of [true, false]) {
+    assert.equal(defaultBinding('agent.viewFocus', isMac, family), undefined, 'no chord');
+    for (const id of Object.keys(DEFAULT_KEYMAPS[family])) assert.notEqual(defaultBinding(id, false, family), 'Alt+T', `${id} takes no Alt+T`);
+  }
+  assert.equal(TERMINAL_ALLOWLIST.includes('agent.viewFocus'), false);
 });
 
 // ── the shell's link (agent-board-tabs.mjs) ──
@@ -487,7 +492,7 @@ test('r1: with several questions, the keyboard reaches the Context fold (c), and
   f.view.update(boardData({ ...board(), questions: [question('q1', { hasContext: true }), question('q2')] }));
   f.view.detail({ state: 'ok', facts: new Map(), questions: new Map([['q1', { context: 'Why: three commits.' }]]) });
   f.terminal.focus();
-  f.view.cycleFocus(); // Alt+T: an option of the zone
+  f.view.cycleFocus(); // the leader's t: an option of the zone
   assert.ok(f.zone().contains(f.doc.activeElement));
   f.key(f.doc.activeElement, 'c');
   const fold = f.zone().querySelector('.agent-q-context');
@@ -534,7 +539,7 @@ test('r2: entering the zone reads the claims once; the repaints that answer it s
   await answerAll();
   const before = f.calls.length;
   const terminal = f.pane.ownerDocument.createElement('textarea'); f.pane.querySelector('.term-wrap').append(terminal); terminal.focus();
-  assert.equal(f.boards.cycleFocus(f.tab), true); // Alt+T: an option takes the focus
+  assert.equal(f.boards.cycleFocus(f.tab), true); // the leader's t: an option takes the focus
   await answerAll();
   assert.equal(f.calls.length - before, 1, 'one read for one entry, every answer resolved');
   assert.ok(f.pane.querySelector('.agent-questions').contains(f.pane.ownerDocument.activeElement), 'the focus stays in the zone');

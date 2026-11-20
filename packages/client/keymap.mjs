@@ -167,10 +167,6 @@ export const CHORDS = Object.freeze([
   // such action, so it binds no key for it (chordKeys skips a `does` it does not handle). Not one of
   // the seven the Ctrl+Shift family moves: Ctrl+Alt+R in both of those (the maintainer's ruling).
   { does: "edit-instance", mac: "cmd+alt+r", alt: "alt+r", other: "ctrl+alt+r" },
-  // The Desktop's alone for now (the agent view, S2-D; the lead's call, 2026-11-19): the focus through the shown agent's
-  // questions and facts. No leader key; the TUI has no such action yet, so it binds no key for it (chordKeys skips it).
-  // Alt+T takes readline's, zsh's and Emacs's transpose-words in the Alt family (Esc, then t still sends it).
-  { does: "agent-view", mac: "cmd+alt+t", alt: "alt+t", other: "ctrl+alt+t" },
 ].map((entry) => Object.freeze({ ...entry, alt: entry.alt ?? entry.other, shift: entry.shift ?? entry.other })));
 
 /** The palette's own keys, read only while the palette is open: there they win over every binding
