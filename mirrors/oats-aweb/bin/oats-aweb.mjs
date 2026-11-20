@@ -95,7 +95,7 @@ import { custodyPreflight } from "../lib/grant-custody.mjs";
 import { registryEnv, registryOrigin as configuredRegistryOrigin, registryMigration, registryShellAssignment, registryShellValue } from "../lib/registry-setting.mjs";
 import { promptHidden } from "../lib/hidden-prompt.mjs";
 import { channelCacheNote, clearChannelFailure, recordedClaudeConfigDir } from "../lib/claude-channel.mjs";
-import { selectClaudeChannel, launchChannelWarning, brokerDelivers, joinedTeamsPolled, recordedRuntime, recordedStart, statusListsHome, wakeBrokerRefusal, wakeRegistration } from "../lib/wake-receive.mjs";
+import { selectClaudeChannel, launchChannelWarning, brokerDelivers, joinedTeamsPolled, recordedBackend, recordedRuntime, recordedStart, sessionProviderBackend, statusListsHome, wakeBackendHint, wakeBrokerRefusal, wakeRegistration } from "../lib/wake-receive.mjs";
 
 /** Run a command as ARGV — never a shell string. Team ids, aliases, instance
  * names and invite tokens all flow through here; quoting them correctly is a
@@ -584,9 +584,11 @@ const CHANNEL_DELIVERY_BRIEF = {
  *  the broker (AWEB_DELIVERY=session, which also silences any ambient channel
  *  package) or the runtime's own channel (the Claude plugin needs its launch
  *  flag; pi loads its extension itself). The kernel captures the setting at
- *  spawn, and the runtime may change at every start. */
-function deliveryFor(runtime = process.env.OATS_RUNTIME || "", delivery = deliveryMode) {
-  const broker = brokerDelivers({ delivery, runtime });
+ *  spawn, and the runtime may change at every start. A session provider's
+ *  launch (OATS_BACKEND names one) is always the broker's: the provider
+ *  starts the session, and no channel launch argument reaches it. */
+function deliveryFor(runtime = process.env.OATS_RUNTIME || "", delivery = deliveryMode, backend = process.env.OATS_BACKEND) {
+  const broker = brokerDelivers({ delivery, runtime, backend });
   return {
     broker,
     env: broker ? { AWEB_DELIVERY: "session" } : {},
@@ -597,10 +599,11 @@ function deliveryFor(runtime = process.env.OATS_RUNTIME || "", delivery = delive
 /** Whether the broker delivered to this home's primary identity as of its last
  *  recorded start (retire runs under no runtime of its own). A meta with no
  *  delivery comes from a spawn that never reached the registration. */
-const brokerDeliveredTo = (meta = {}) => !!meta.delivery && brokerDelivers({ delivery: meta.delivery, runtime: instanceRuntime(meta) });
+const brokerDeliveredTo = (meta = {}) => !!meta.delivery && brokerDelivers({ delivery: meta.delivery, runtime: instanceRuntime(meta), backend: instanceBackend(meta) });
 // Session delivery registers the home with the host wake broker (aweb-abil:
 // `aw wake register --home <abs> --identity-home <abs> --delivery session
-// [--backend tmux|herdr]`, durable even when the daemon is down). An aw
+// [--backend tmux|herdr]`, durable even when the daemon is down). `--backend`
+// is aw's terminal hint, so a session provider's name is never passed. An aw
 // without `aw wake` cannot deliver in session mode: refuse, never silently
 // turn a working channel into a poll-only instance.
 // Throws, never exits: both callers run it inside a try whose catch performs
@@ -610,13 +613,14 @@ const brokerDeliveredTo = (meta = {}) => !!meta.delivery && brokerDelivers({ del
  *  diagnostics may name it (a network error does), so they show none of aw's output. */
 const seatRun = (argv, cwd, timeout) => run(argv, cwd, timeout, { withhold: "aw's output may name the seat's service, which is never printed" });
 /** Registers `instanceHome` with the host wake broker. `runner` runs the aw call: run, or a
- *  retained seat's seatRun, which withholds aw's output because it may name the seat's service. */
-function wakeRegister(instanceHome, identityHome, runner = run) {
-  const backend = process.env.OATS_BACKEND;
+ *  retained seat's seatRun, which withholds aw's output because it may name the seat's service.
+ *  `sessionBackend` is the home's session backend: a start's own OATS_BACKEND by default. */
+function wakeRegister(instanceHome, identityHome, runner = run, sessionBackend = process.env.OATS_BACKEND) {
+  const backend = wakeBackendHint(sessionBackend);
   try {
     runner(["aw", "wake", "register", "--home", instanceHome, "--identity-home", identityHome, "--delivery", "session", ...(backend ? ["--backend", backend] : [])], instanceHome, 60000);
   } catch (e) {
-    throw new Error(`the host wake broker delivers to this home (delivery: session, or a runtime with no aweb channel) and needs an aw with the wake broker CLI (aw wake register), which failed (${e.message || e}); install the aweb release that ships aw wake`);
+    throw new Error(`the host wake broker delivers to this home (delivery: session, a runtime with no aweb channel, or a session provider) and needs an aw with the wake broker CLI (aw wake register), which failed (${e.message || e}); install the aweb release that ships aw wake`);
   }
 }
 function wakeDeregister(instanceHome) {
@@ -666,11 +670,15 @@ function requireWakeBroker() {
   });
   if (refusal) fatal(refusal);
 }
-/** The meta a start records: the delivery setting it ran under and its runtime. */
+/** The meta a start records: the delivery setting it ran under, its runtime
+ *  and, when a session provider launches it, that backend (a retire, a join
+ *  or a leave has no OATS_BACKEND of its own to decide the path from). A
+ *  start on tmux, or under a kernel that names no backend, records none. */
 const startedMeta = (meta = {}) => {
-  const {claudeChannelMode: previousMode, ...retained} = meta;
+  const {claudeChannelMode: previousMode, backend: previousBackend, ...retained} = meta;
   const runtime = process.env.OATS_RUNTIME || "";
-  return {...deliveryRuntimeMeta(retained, deliveryMode, runtime), ...(deliveryMode === "channel" && runtime === "claude" ? {claudeChannelMode: claudeChannel.mode} : {})};
+  const provider = sessionProviderBackend(process.env.OATS_BACKEND) ? process.env.OATS_BACKEND : undefined;
+  return {...deliveryRuntimeMeta(retained, deliveryMode, runtime), ...(provider ? {backend: provider} : {}), ...(deliveryMode === "channel" && runtime === "claude" && !provider ? {claudeChannelMode: claudeChannel.mode} : {})};
 };
 /** wakeDeregister as a child that runs while the hook does other work (retire
  *  overlaps it with the self-delete). Settles to whether it succeeded. */
@@ -2262,6 +2270,13 @@ function instanceRuntime(meta = {}) {
   if (["spawn", "launch"].includes(event)) return process.env.OATS_RUNTIME || "";
   return recordedRuntime(meta, recordedStart(home).harness) ?? (process.env.OATS_RUNTIME || undefined);
 }
+/** The home's session backend, read as its runtime is: spawn and launch run
+ *  under the kernel's OATS_BACKEND; a retire, join or leave reads what the
+ *  last start recorded. */
+function instanceBackend(meta = {}) {
+  if (["spawn", "launch"].includes(event)) return process.env.OATS_BACKEND || undefined;
+  return recordedBackend(meta, recordedStart(home).backend);
+}
 function primaryIdentityHomeOf(meta = {}) {
   return meta.identity?.mode === "global" && meta.identity?.grant?.id ? priorGrantHome(meta) : join(home, ".aw");
 }
@@ -2276,8 +2291,9 @@ function syncWakeReceive(meta) {
   const delivery = meta.delivery || deliveryMode;
   const runtime = instanceRuntime(meta);
   const primary = primaryIdentityHomeOf(meta);
-  const polled = joinedTeamsPolled({ delivery, runtime });
-  const doc = polled ? null : wakeRegistration({ home, primaryIdentityHome: primary, delivery, runtime, joined, backend: process.env.OATS_BACKEND });
+  const backend = instanceBackend(meta);
+  const polled = joinedTeamsPolled({ delivery, runtime, backend });
+  const doc = polled ? null : wakeRegistration({ home, primaryIdentityHome: primary, delivery, runtime, joined, backend });
   const warnings = [];
   let receive = "poll", wakeJoined = false;
   if (doc) {
@@ -2287,7 +2303,7 @@ function syncWakeReceive(meta) {
   if (!wakeJoined && meta.wakeJoined) {
     // Back to one identity: a broker home keeps its legacy registration, a
     // native home leaves the broker entirely.
-    if (brokerDelivers({ delivery, runtime })) { try { wakeRegister(home, primary); } catch (e) { warnings.push(String(e.message || e)); } }
+    if (brokerDelivers({ delivery, runtime, backend })) { try { wakeRegister(home, primary, run, backend); } catch (e) { warnings.push(String(e.message || e)); } }
     else if (!wakeDeregister(home)) warnings.push("aw wake deregister failed; the broker treats a stale registration as inactive on its own");
   }
   const next = { ...meta, ...(typeof runtime === "string" ? { runtime } : {}), wakeJoined, joinedTeams: joinedTeamsOf(meta).map((j) => { const { expectedPoll: _last, ...team } = j; return { ...team, receive: joined.includes(j) ? receive : "poll", ...(polled ? { expectedPoll: true } : {}) }; }) };

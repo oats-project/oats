@@ -13,6 +13,7 @@ import {teamKeyIn} from './aweb-team-id.mjs';
 export {healthSettings} from './health-settings.mjs';
 import {assessHealth, combineSeats, retiredHealth} from './health-vocabulary.mjs';
 import {checkDocument} from './status-document.mjs';
+import {sessionProviderBackend} from './wake-receive.mjs';
 
 export const VALIDITY_MS = 300 * 1000;
 const DEFAULT_BUDGET_MS = 45 * 1000;
@@ -38,8 +39,9 @@ function identitiesOf(row, settings) {
   const id = meta.identity ?? {};
   // A Claude or pi home on channel delivery receives through its own channel,
   // which leaves a receipt in the identity directory it runs as; everything
-  // else receives through the host wake broker and leaves none.
-  const native = (meta.delivery ?? 'channel') === 'channel' && ['claude', 'pi'].includes(meta.runtime);
+  // else (a session provider's home included) receives through the host wake
+  // broker and leaves none.
+  const native = (meta.delivery ?? 'channel') === 'channel' && ['claude', 'pi'].includes(meta.runtime) && !sessionProviderBackend(meta.backend);
   if (id.mode === 'global') {
     const custody = settings.residents?.[id.resident];
     if (!custody) return {skip: `resident ${id.resident} is not in settings.oats.aweb.residents`};
