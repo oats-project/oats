@@ -10,3 +10,4 @@
   board facts (`oats instance board set`). On an older OATS, without the
   board (no `instance-board` feature), it uses `oats instance attention`;
   after `E_EVENTS_FAILED` it runs the same board command again.
+  See [The agent's board](../desktop-cli-api.md#the-agents-board-oats-instance-board).
