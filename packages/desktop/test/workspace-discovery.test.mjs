@@ -156,7 +156,7 @@ test('the declared soul is read-only; its page is stable under roster polling', 
   const u = await setup(t);
   u.doc.querySelector('.soul-card').click(); await tick();
   const inspector = u.doc.querySelector('.workspace-soul-page');
-  assert.match(inspector.textContent, /Capabilities/); assert.ok(inspector.querySelector('.soul-capabilities .cap-line'));
+  assert.match(inspector.textContent, /Capabilities/); assert.ok(inspector.querySelector('.soul-capabilities .cap-row'));
   assert.doesNotMatch(inspector.textContent, /Edit this soul/);
   assert.equal(inspector.querySelector('form, textarea, input'), null, 'no in-place editor');
   const main = inspector.querySelector('.inspector-main');

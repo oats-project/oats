@@ -365,24 +365,26 @@ test('slice 3a: a soul page lists its capabilities as one list of rows, core fir
   u.get('.soul-card').click(); await tick(); await tick();
   const soulPage = u.get('.workspace-soul-page');
   assert.equal(soulPage.querySelector('.inspector-core-table, .inspector-capability-table, .soul-caps, .core-card'), null, 'no tables and no cards');
-  const lists = soulPage.querySelectorAll('.soul-capabilities ul.cap-lines');
+  const lists = soulPage.querySelectorAll('.soul-capabilities ul.cap-list');
   assert.equal(lists.length, 1);
-  const rows = [...lists[0].querySelectorAll('.cap-line')];
+  const rows = [...lists[0].querySelectorAll('.cap-row')];
   const coreIds = ['knowledge', 'messaging', 'tasks'].map(slot => inspection.layers[slot]?.id).filter(Boolean);
   const others = inspection.capabilities.filter(c => !coreIds.includes(c.id) && !['knowledge', 'messaging', 'tasks'].includes(c.layer)).map(c => c.id);
   assert.deepEqual(rows.slice(0, coreIds.length).map(r => r.dataset.capability), coreIds, 'core first, in slot order');
   assert.deepEqual(rows.slice(coreIds.length).map(r => r.dataset.capability).sort(), [...others].sort(), 'then every other capability, once');
   for (const row of rows) {
     const core = coreIds.includes(row.dataset.capability);
-    assert.equal(row.querySelector('.cap-line-tag')?.textContent ?? null, core ? 'core' : null, `${row.dataset.capability}: the core tag on core rows only`);
-    // Until 3b's official rule: the workspace's own repository (agents.git, the host) goes unsaid, any other source is named.
-    const cap = inspection.capabilities.find(c => c.id === row.dataset.capability);
-    if (cap.from?.kind === 'member' && cap.from.repoKey === 'local//fixture/base/fx/remotes/agents.git') assert.equal(row.querySelector('.cap-line-by'), null, `${cap.id}: the host repository`);
-    else assert.match(row.querySelector('.cap-line-by').textContent, /^by \S/, `${cap.id}: where it comes from`);
+    assert.equal(row.querySelector('.cap-tag')?.textContent ?? null, core ? 'core' : null, `${row.dataset.capability}: the core tag on core rows only`);
+    // Slice 3b's rule (capability-origin.mjs), as on the Capabilities page: official, or "by <source>"; the workspace's
+    // own repository (agents.git, the host) is named too.
+    const cap = inspection.capabilities.find(c => c.id === row.dataset.capability), origin = row.querySelector('.cap-origin');
+    if (cap.from?.kind === 'member' && cap.from.repoKey === 'local//fixture/base/fx/remotes/agents.git') assert.match(origin.textContent, /^by \S/, `${cap.id}: the host repository, named`);
+    else assert.ok(origin.dataset.official === 'true' || /^by \S/.test(origin.textContent), `${cap.id}: where it comes from`);
+    assert.equal(row.querySelector('.cap-tag[data-tag^=default]'), null, `${cap.id}: no "default" tag on a soul's row`);
   }
   const first = others[0], line = rows.find(r => r.dataset.capability === first);
   const listed = described.filter(r => r.name === first);
-  if (listed.length === 1) assert.equal(line.querySelector('.cap-line-desc').textContent, `About ${first}.`, 'one line of what it does, from the catalog');
+  if (listed.length === 1) assert.equal(line.querySelector('.cap-row-desc').textContent, `About ${first}.`, 'one line of what it does, from the catalog');
   line.click();
   const cap = u.get('.workspace-cap-page');
   assert.equal(cap.hidden, false); assert.equal(soulPage.hidden, true);
@@ -407,9 +409,9 @@ test('a core row and a capability row open their page with the soul page\'s reas
   const u = await fixture(t, { cli: { ...V2_CLI, features: [...V2_CLI.features, 'layers-from', 'desktop-facts'] }, inspect: () => facts, sync: () => catalogReply() });
   u.get('.soul-card').click(); await tick(); await tick();
   const soulPage = u.get('.workspace-soul-page');
-  const list = soulPage.querySelector('.soul-capabilities .cap-lines');
-  const knowledge = list.querySelector('.cap-line[data-capability="oats.okf"]');
-  assert.equal(knowledge.querySelector('.cap-line-tag').textContent, 'core');
+  const list = soulPage.querySelector('.soul-capabilities .cap-list');
+  const knowledge = list.querySelector('.cap-row[data-capability="oats.okf"]');
+  assert.equal(knowledge.querySelector('.cap-tag').textContent, 'core');
   assert.match(knowledge.title, /Resolves the workspace default|A workspace default|workspace/i, 'why it is here, in its title');
   assert.equal(list.querySelector('[data-capability="oats.aweb"]'), null, 'the emptied slot is not a row');
   assert.equal(soulPage.querySelector('.soul-capabilities-note').textContent, 'no messaging capability · no tasks capability');
@@ -419,10 +421,10 @@ test('a core row and a capability row open their page with the soul page\'s reas
   assert.deepEqual(why(), ['Workspace default · knowledge', "dev doesn't choose a knowledge capability; it resolves the workspace's default."]);
   key(u, u.doc.activeElement, 'Escape');
   assert.equal(u.doc.activeElement.dataset.capability, 'oats.okf', 'back to the core row');
-  u.get('.soul-capabilities .cap-line[data-capability="nw-release-tooling"]').click();
+  u.get('.soul-capabilities .cap-row[data-capability="nw-release-tooling"]').click();
   assert.deepEqual(why(), ['Declared by the soul', 'dev declares it.']);
   key(u, u.doc.activeElement, 'Escape');
-  u.get('.soul-capabilities .cap-line[data-capability="nw-house-style"]').click();
+  u.get('.soul-capabilities .cap-row[data-capability="nw-house-style"]').click();
   assert.deepEqual(why(), ['Workspace default', "dev doesn't declare it; it resolves the workspace's default."]);
 });
 
@@ -497,7 +499,7 @@ test("kernel #217: a capability opened from a soul page adds the catalog's facts
   const coreIds = new Set(Object.values(inspection.layers).map(l => l?.id).filter(Boolean));
   const other = inspection.capabilities.find(c => !coreIds.has(c.id) && described.filter(r => r.name === c.id).length === 1);
   assert.ok(other, 'a composed capability the catalog lists once');
-  u.get(`.soul-capabilities .cap-line[data-capability="${other.id}"]`).click();
+  u.get(`.soul-capabilities .cap-row[data-capability="${other.id}"]`).click();
   const cap = u.get('.workspace-cap-page');
   assert.equal(cap.querySelector('.page-lede').textContent, `About ${other.id}.`);
   assert.ok(cap.querySelector('details.cap-fold[data-fold="as-soul"]'), 'the soul\'s resolution still there');
@@ -522,12 +524,12 @@ test('a catalog that lands while a capability page covers the soul page: Back sh
   const u = await fixture(t, { cli: V2_CLI, sync: () => held.promise });
   u.get('.soul-card').click(); await tick(); await tick();
   const soulPage = u.get('.workspace-soul-page');
-  assert.equal(soulPage.querySelectorAll('.cap-line-desc').length, 0, 'no catalog yet: no line');
-  soulPage.querySelector('.cap-line[data-capability="nw-house-style"]').click(); await tick();
+  assert.equal(soulPage.querySelectorAll('.cap-row-desc').length, 0, 'no catalog yet: no line');
+  soulPage.querySelector('.cap-row[data-capability="nw-house-style"]').click(); await tick();
   assert.equal(soulPage.hidden, true, 'the capability page covers it');
   held.resolve(catalogReply(described)); await tick(); await tick(); await tick();
   key(u, u.doc.activeElement, 'Escape'); await tick();
   assert.equal(soulPage.hidden, false);
-  assert.equal(soulPage.querySelector('.cap-line[data-capability="nw-house-style"] .cap-line-desc')?.textContent, 'About nw-house-style.');
+  assert.equal(soulPage.querySelector('.cap-row[data-capability="nw-house-style"] .cap-row-desc')?.textContent, 'About nw-house-style.');
   assert.equal(u.doc.activeElement?.dataset.capability, 'nw-house-style', 'focus back on the row');
 });

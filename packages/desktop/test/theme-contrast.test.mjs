@@ -10,7 +10,7 @@ import { deriveHostTokens, mixHex } from "../renderer/host-theme.mjs";
 import { hostState } from "./helpers/host-theme-fixture.mjs";
 import { createSoulMark, createRuntimeBadge, identityCSS } from "../renderer/identity-marks.mjs";
 import { workspaceStatusData, syncData } from "../../client/deployment-data.mjs";
-import { renderCapabilityList, sourceChip } from "../renderer/workspace-catalog.mjs";
+import { renderCapabilityList, sourceChip, capabilityRowElement } from "../renderer/workspace-catalog.mjs";
 import { capabilitySections, hostKeyOf, memberNames } from "../../client/capability-rows.mjs";
 import { renderSetup, teamsBox } from "../renderer/workspace-setup.mjs";
 import { discoveryCSS } from "../renderer/workspace-discovery.mjs";
@@ -1549,7 +1549,6 @@ for (const [name] of palettes) test(`${name}: v4 page bar, cards, facts, used-by
 // Slice 3a: the Souls grid's cards (name, what it does, its agents and kind, a refusal in the warn token), its table
 // (a header, a group row, the cells, a refusal, an unreported cell) and a soul page's top block (the facts, Ready as a
 // word or a problem, its Details) and capability rows, each on its actual painted ground.
-import { capabilityLine, capabilityLines } from '../renderer/capability-row.mjs';
 for (const [name] of palettes) test(`${name}: the Souls grid, its table and a soul page's top block and rows meet computed AA`, t => {
   const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><div class="oats-view"><div class="souls">
     <button class="soul-card" id="refused"><span class="stitle">writer</span><span class="sdesc">Writes</span><span class="sfoot"><span class="sproblem">Can't spawn here · disabled</span><span class="skind">· developer</span></span></button>
@@ -1564,7 +1563,14 @@ for (const [name] of palettes) test(`${name}: the Souls grid, its table and a so
   t.after(() => dom.window.close());
   const doc = dom.window.document, spawnCSS = spawnViewCSS();
   for (const source of [css, readFileSync(new URL('shell.css', renderer), 'utf8'), spawnCSS, inspectorCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
-  doc.querySelector('.soul-capabilities').append(capabilityLines(doc, [capabilityLine(doc, { name: 'oats.okf', by: 'oats.okf', description: 'Keeps knowledge', core: true, onOpen() {} })], { label: 'Capabilities' }));
+  // The soul page's capability rows are the Capabilities page's (slice 3b: capabilityRowElement, on the list's --surface).
+  const capRows = doc.createElement('ul'); capRows.className = 'cap-list';
+  for (const origin of [{ official: false, by: 'oats.okf', reason: null }, { official: true, by: 'OATS', reason: 'oats-repo' }]) {
+    const item = doc.createElement('li');
+    item.append(capabilityRowElement(doc, { row: { name: 'oats.okf', kind: 'package', package: 'oats.okf', description: 'Keeps knowledge' }, core: 'knowledge', default: null, origin }, { onOpen() {} }));
+    capRows.append(item);
+  }
+  doc.querySelector('.soul-capabilities').append(capRows);
   const root = dom.window.getComputedStyle(doc.documentElement);
   const painted = el => { for (let p = el; p; p = p.parentElement) { const bg = dom.window.getComputedStyle(p).background; if (/^var\(--/.test(bg)) return bg.slice(6, -1); } return 'bg'; };
   for (const [selector, fg, bg] of [
@@ -1574,7 +1580,8 @@ for (const [name] of palettes) test(`${name}: the Souls grid, its table and a so
     ['.souls-table td.agents.muted', 'muted', 'bg'], ['.souls-table td.problem', 'warn', 'bg'], ['.souls-table button.soul-row-open', 'fg', 'bg'], ['.souls-lede', 'muted', 'bg'],
     ['.soul-top dt', 'muted', 'bg'], ['.soul-top dd .strong', 'fg', 'bg'], ['.soul-top dd .muted', 'muted', 'bg'], ['.soul-top .soul-top-note', 'muted', 'bg'],
     ['.soul-ready-line.problem', 'warn', 'bg'], ['.soul-ready-details > summary', 'muted', 'bg'], ['.soul-capabilities-note', 'muted', 'bg'],
-    ['.cap-line-name', 'fg', 'bg'], ['.cap-line-by', 'muted', 'bg'], ['.cap-line-tag', 'muted', 'bg'], ['.cap-line-desc', 'muted', 'bg'],
+    ['.soul-capabilities .cap-row-name', 'fg', 'surface'], ['.soul-capabilities .cap-origin:not([data-official])', 'muted', 'surface'], ['.soul-capabilities .cap-official', 'fg', 'surface'],
+    ['.soul-capabilities .cap-tag[data-tag=core]', 'muted', 'surface'], ['.soul-capabilities .cap-row-desc', 'muted', 'surface'],
   ]) {
     const el = doc.querySelector(selector); assert.ok(el, selector);
     const color = dom.window.getComputedStyle(el).color;

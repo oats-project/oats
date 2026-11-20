@@ -168,16 +168,19 @@ function page(t, answer = () => inspection(), extra = {}) {
 test('slice3a soul page capabilities one list core first', async t => {
   const u = page(t);
   await u.inspector.show(selection('release-manager')); await settle();
-  const lists = u.$$('.soul-capabilities ul.cap-lines');
+  const lists = u.$$('.soul-capabilities ul.cap-list');
   assert.equal(lists.length, 1, 'one list');
-  const rows = [...lists[0].querySelectorAll('.cap-line')];
+  const rows = [...lists[0].querySelectorAll('.cap-row')];
   assert.deepEqual(rows.map(r => r.dataset.capability), ['oats.okf', 'oats.aweb', 'nw-house-style', 'oats.core', 'nw-deploy', 'nw-release-tooling'],
     'core first (knowledge, messaging), then the rest in composition order');
-  assert.deepEqual(rows.map(r => !!r.querySelector('.cap-line-tag')), [true, true, false, false, false, false], 'a dim "core" tag on core rows only');
-  assert.equal(rows[0].querySelector('.cap-line-tag').textContent, 'core');
-  assert.ok(rows.every(r => r.className === 'cap-line'), 'the same row styling for core and additional');
-  assert.equal(rows[0].querySelector('.cap-line-by').textContent, 'by oats.okf', '"by <source>": no rule says official yet');
-  assert.equal(u.$('.cap-line-verified'), null, 'no verified mark');
+  assert.deepEqual(rows.map(r => !!r.querySelector('.cap-tag[data-tag=core]')), [true, true, false, false, false, false], 'a dim "core" tag on core rows only');
+  assert.equal(rows[0].querySelector('.cap-tag').textContent, 'core');
+  assert.ok(rows.every(r => r.className === 'cap-row'), 'the same row styling for core and additional');
+  // Slice 3b: the Capabilities page's row (capabilityRowElement). With no host facts (no workspace status), no rule
+  // says official: every row names its source.
+  assert.equal(rows[0].querySelector('.cap-origin').textContent, 'by oats.okf', '"by <source>"');
+  assert.equal(u.$('.cap-official'), null, 'no official mark without the workspace status');
+  assert.equal(u.$('.cap-tag[data-tag=default], .cap-tag[data-tag=default-off]'), null, 'a soul\'s rows carry no "default" tag');
   assert.equal(u.$('.soul-capabilities-note').textContent, 'no tasks capability', 'an empty core slot is said, not a row');
   // One tab stop; the arrows move; Enter (the button's click) opens the capability page.
   assert.deepEqual(rows.map(r => r.tabIndex), [0, -1, -1, -1, -1, -1]);

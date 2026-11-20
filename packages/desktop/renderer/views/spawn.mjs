@@ -6,13 +6,13 @@
 import { createSoulInspector, inspectorCSS } from "../soul-inspector.mjs";
 import { createWorkspaceDiscovery, discoveryCSS, workspaceTabs } from "../workspace-discovery.mjs";
 import { capabilityRow } from "../workspace-catalog.mjs";
+import { capabilityOrigin } from "../../../client/capability-origin.mjs";
 import { renderCapabilityPage, capabilityPageCSS, pageCardCSS, soulCapabilitiesCSS, catalogNotice, catalogNoticeKind, updateCatalogNotice } from "../capability-page.mjs";
 import { sameRepo } from "../../../client/repo-moves.mjs";
 import { spawnRefusal, cantSpawnLine, soulMatches, desktopFacts, soulFacts } from "../../../client/soul-facts.mjs";
 import { soulRole, compareSoulsByRole, SOUL_ROLE_WORDS } from "../../../client/soul-role.mjs";
 import { createCapabilityContents, capabilityContentsCSS } from "../capability-contents.mjs";
 import { sourceQuoteCSS } from "../source-quote.mjs";
-import { sourceText } from "../source-chip.mjs";
 import { memberNames } from "../../../client/capability-rows.mjs";
 import { soulInstructionsCSS } from "../soul-instructions.mjs";
 import { capabilitySelector, sameSelector } from "../../../client/capability-show-contract.mjs";
@@ -321,17 +321,15 @@ function applyCapability(s) {
   openCapability(s, matches[0], null);
 }
 
-/** What a soul page's capability row says besides its name: "by <source>" (the source chip's words: a package, a
- * member repository by its name; nothing for the workspace's own repository) and the one line of the catalog's row of
- * that name, when exactly one is listed. */
+/** A soul page's capability row as the Capabilities page draws it (slice 3b's capabilityRowElement): the resolved
+ * capability in the catalog's row shape, with the one line of the catalog's row of that name when exactly one is listed,
+ * and its origin by the official rule (capability-origin.mjs: official, or "by <source>", the host repository named too). */
 function soulCapabilityFacts(s, cap) {
   const { catalog, status } = s.discovery?.context() ?? {};
   const row = capabilityRow(cap);
   const listed = Array.isArray(catalog) ? catalog.filter(r => r?.name === row.name) : [];
-  const description = listed.length === 1 && typeof listed[0].description === "string" && listed[0].description ? listed[0].description : null;
-  // Until a rule establishes "official" (slice 3b), the workspace's own repository goes unsaid and every other source is named.
-  const own = row.kind === "member" && !!row.repoKey && sameRepo(row.repoKey, hostKey(s));
-  return { by: own ? null : sourceText(row, memberNames(status)).name || null, description };
+  if (listed.length === 1 && typeof listed[0].description === "string" && listed[0].description) row.description = listed[0].description;
+  return { row, origin: capabilityOrigin(row, status, memberNames(status)) };
 }
 
 /** A page (a soul's, a capability's or a team's) replaces the list it was opened from

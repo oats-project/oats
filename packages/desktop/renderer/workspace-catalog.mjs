@@ -89,7 +89,7 @@ export function roveRows(listEl) {
 }
 
 /** One capability row, the list's and any page's that lists capabilities the same way (the soul page, slice 3a):
- * `entry` is a capabilityList entry ({ row, core, default, origin }; packages/client/capability-list.mjs). A button that
+ * `entry` is a capabilityList entry ({ row, core, default, origin }; packages/client/capability-list.mjs), or a soul page's (origin null: no source to say). A button that
  * opens `onOpen(row)` (Enter and Space are its own), or a plain div with no opener. `tabStop`: whether it takes the
  * list's one tab stop (the list moves it with the arrows: roveRows). Its CSS is catalogCSS. */
 export function capabilityRowElement(doc, entry, { onOpen = null, tabStop = true } = {}) {
@@ -98,7 +98,7 @@ export function capabilityRowElement(doc, entry, { onOpen = null, tabStop = true
   el.dataset.capability = row.name; el.dataset.kind = row.kind;
   const line = node(doc, 'span', null, 'cap-row-line');
   const name = node(doc, 'span', row.name, 'cap-row-name'); name.title = row.name;
-  line.append(name, ...entryTags(doc, entry), originElement(doc, origin));
+  line.append(name, ...entryTags(doc, entry), ...(origin ? [originElement(doc, origin)] : [])); // origin null: a soul's slot the inspection names without its capability
   el.append(line);
   // Kernel #217: the manifest's description, one line; the page carries the whole text.
   if (text(row.description)) { const desc = node(doc, 'span', row.description, 'cap-row-desc'); desc.title = row.description; el.append(desc); }

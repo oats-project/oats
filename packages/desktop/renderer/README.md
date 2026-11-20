@@ -1277,9 +1277,10 @@ the list on each host's real ground.
 **The soul page (slice 3a).** One column (`soul-inspector.mjs` `renderSoulPage`):
 the top block (`dl.soul-top`: Harness · model, Teams with "Teams on this computer"
 folded under it, Knowledge, Ready), the soul's warnings, its capabilities as one
-list of rows (`capability-row.mjs` `capabilityLine`, shared with the Capabilities
-page: core first with a dim *core* tag, *by <source>*, the catalog's one line;
-one roving stop, Up/Down/Home/End), then the instructions. Ready
+list of rows (`workspace-catalog.mjs` `capabilityRowElement` and `roveRows`, the
+Capabilities page's own row since slice 3b: core first with its *core* tag, the
+official mark or *by <source>* by the same rule, the catalog's one line, and no
+*default* tag; one roving stop, Up/Down/Home/End), then the instructions. Ready
 (`createReadyBlock`) is *Ready* or the first of: the roster row's spawn refusal,
 the inspection's first problem, the launch problem; behind a native **Details**
 the problems in full and the soul's readiness checks (`readiness-view.mjs`, a soul
@@ -1435,7 +1436,7 @@ listed or counted under Capabilities (`compositionEntries`,
 `desktop-facts`, "No default" only with both and a soul subject; never a
 guess), in the same words everywhere (`whyTag`, `coreNote`, `whyFact` for the
 capability page's "Why" row). On the soul page (slice 3a) both are one list of
-`capabilityLine` rows, core first, each a `button` with
+`capabilityRowElement` rows, core first, each a `button` with
 `data-focus-key="capability:<id>"`; why a capability is there is the row's title and
 its page's "Why" row, and what the soul turns off is one line under the list.
 

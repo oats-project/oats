@@ -10,6 +10,8 @@
     **default** tag on the workspace's defaults. One sentence above the list says what defaults are
     for. The sections, repository pills, colour tiles and two-letter marks are gone. A package's
     name and version are in Setup's Packages box.
+  - **A soul's page** lists its capabilities with the same row: the same mark or **by** its source
+    (the workspace's own repository is named too), core first, and no **default** tag.
   - **A capability's page** reads top to bottom: what it does, then its **Skills**. Enter on a
     skill opens the whole skill in the pane, and Esc returns. Commands, Settings, Triggers, Hooks,
     Used by, Comes from and Files are folded underneath. Nothing the page showed before is gone.
