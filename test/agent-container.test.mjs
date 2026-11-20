@@ -282,6 +282,9 @@ test("Claude auth orchestration uses a scratch cwd and only user settings", asyn
   assert.ok(commands.includes('cd "$probe"'));
   const command = commands.find(line => line.startsWith("claude "));
   assert.ok(command, "the auth probe invokes Claude");
+  const mktempAt = commands.indexOf('probe=$(mktemp -d /tmp/oats-claude-probe.XXXXXX)');
+  const cdAt = commands.indexOf('cd "$probe"');
+  assert.ok(mktempAt < cdAt && cdAt < commands.indexOf(command), "create and enter the scratch cwd before invoking Claude");
   const { tokens } = parseLaunchCommand("'claude' " + command.slice("claude ".length));
   assert.deepEqual(tokens.map(token => token.value), ["claude", "-p", "--setting-sources", "user", "--tools", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--no-session-persistence", "Reply with exactly OATS_CONTAINER_AUTH_OK"]);
   const authReceipt = `[local] PASS claude -p for ${home}: OATS_CONTAINER_AUTH_OK (scratch cwd; user settings only; token read only inside the process)`;

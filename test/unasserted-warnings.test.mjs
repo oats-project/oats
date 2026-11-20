@@ -109,6 +109,7 @@ test("the reporter reads lines, whole: one split over two events is one, and an 
 
 test("a skipped real-aw path fails the root run and names the missing coverage", t => {
   for (const [name, source] of [
+    ["real aw runtime skip", `${HEAD}test("real aw runtime skip", t => { t.skip("native binary absent"); });\n`],
     ["real aw custody status", `${HEAD}test("real aw custody status", { skip: "native fixture absent" }, () => {});\n`],
     ["real aw native suite", `${HEAD}import { describe } from "node:test"; describe("real aw native suite", { skip: "native fixture absent" }, () => { test("custody status", () => {}); });\n`],
   ]) {
