@@ -1607,16 +1607,20 @@ workspace is observed through its server and never synced from here.
   repaint. Back from a page returns to the row with the list's scroll offset
   and search.
   **The defaults** (`workspace-defaults.mjs` `defaultsLead`) are a tag on their
-  own rows and one sentence above the list (`p.cap-lead`), whenever `oats
-  workspace status` reports `defaults` (`defaultsSummary`); without it there is
-  no sentence and no tag. The sentence says what defaults are and what they are
+  own rows and, since slice 2b's Amendment 1 (D), a **Workspace defaults** part above the list
+  (`workspace-catalog.mjs` `workspaceDefaultsPart`, from `packages/client/capability-list.mjs`
+  `workspaceDefaultsSections`: Core, one slot each for Knowledge, Messaging, Tasks, its default's row or "No default";
+  then Additional, every other default, on or off), opened by one sentence (`p.cap-lead`), then **All capabilities**
+  over the list, whenever `oats workspace status` reports `defaults` (`defaultsSummary`); without it there is no part,
+  no sentence and no tag, and the list is the tab's only content. The part's rows are the list's own
+  (`capabilityRowElement`), one roving stop across both groups, their focus key prefixed `defaults:`. The sentence says what defaults are and what they are
   for (one shared way of working; a soul can turn one off and choose its own),
   then which core slot no default fills and any declared default no row
   matches (`defaultNames` matches by name and source: `from: "package"` a
   package row, a member key that member's row, `"here"` the host's). The search
-  never narrows it. This replaces the Core / Additional panel
-  (workspace-defaults-show-scope-and-purpose, superseded by Joan's design in
-  the rework); it never edited the defaults, which the workspace file declares.
+  never narrows it. Slice 3b had replaced slice 0's Core / Additional panel with the tag and the sentence; slice 2b
+  brings the Core / Additional grouping back as rows (Pepe, 2026-11-20, Joan's yes). Neither ever edited the defaults,
+  which the workspace file declares.
   The capability page (`capability-page.mjs` `renderCapabilityPage`) is one
   column: the name and its tags, the origin line (who made it, then the package
   and version or the repository at its latest), the description as one
@@ -2524,7 +2528,16 @@ doesn't read already:
 - **Where you are** (slice 2b; supersedes slice 2's "Home's row stands for the Workspace page"): `PINNED` is Home,
   Workspace and Automations, and `pinnedRowFor(name)` is a stage's own row, so every way onto the Workspace page (a
   tile, the palette, ⌘2 / Ctrl+2, a soul's or capability's page, a soul's files) marks Workspace, and Home's row marks
-  Home and Home › Agents only. The Workspace page's head says "Workspace › <tab>" above its tab bar
-  (`views/spawn.mjs` `syncWorkspaceTitle`, Home's head style), hidden while a soul's, capability's or team's page
-  shows its own breadcrumb.
+  Home and Home › Agents only. The Workspace page's head is a trail, "Home › Workspace › <tab>", above its tab bar
+  (`views/spawn.mjs` `nav.workspace-title`, the tab its `h1`, `syncWorkspaceTitle`; Home's head type), hidden while a
+  soul's, capability's or team's page shows its bar. A Workspace page's bar (`capability-page.mjs` `pageBar`, crumbs
+  starting "Workspace") draws the same trail one level deeper, Home first, each part above the page a link: Home,
+  Workspace and a tab dispatch `workspace-navigate` (`workspaceNavigate`), which the Workspace page handles
+  (`navigateTrail`: Home through `ctx.openPage`; else its pages closed, then the tab, focus on its control); the part
+  just above the page is its Back. A capability's open skill extends the trail (a MutationObserver on the skill
+  view's `hidden`). Esc goes up one level (a page to its list, the page to Home: shell.mjs `stageHost`).
+- **Amendment 1** (Pepe, 2026-11-20; Joan's yes): the column is centred (`.home-inner` 880px, `margin:0 auto`); a
+  Running group under the tiles (`RUNNING_SHOWN`, 5, in the roster's order, "Show all N running" / "Show fewer");
+  the Souls grid's cards in the information-role type scale (name 17 / 700, what it does 13 muted, the meta line 12
+  muted).
 
