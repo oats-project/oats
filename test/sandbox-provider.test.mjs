@@ -5,7 +5,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { sandboxDeployment, TEAM_ID } from "./helpers/sandbox-fixture.mjs";
 import { CLI } from "./helpers/v2-deployment.mjs";
 import { fakeSandboxCapabilities } from "./helpers/fake-sandbox-provider.mjs";
@@ -68,13 +69,17 @@ test("the hook call: each act's request is the record's, in an environment witho
   assert.deepEqual(plan, { sandboxApi: 1, sandbox: "ingest", act: "start", planRevision: "rev-start", actions: [] });
   const applied = ok(fx.cliS(["sandbox", "start", "ingest", "--plan-revision", "rev-start", "--idempotency-key", "k-1", "--json"]), "start");
   assert.deepEqual(applied, { sandboxApi: 1, sandbox: "ingest", act: "start", state: "ready", server: "sandbox-ingest", receipts: [{ step: "start", ok: true }], problems: [] });
-  ok(fx.cliS(["sandbox", "stop", "ingest", "--plan", "--json"]), "stop --plan");
+  const splan = ok(fx.cliS(["sandbox", "stop", "ingest", "--plan", "--json"]), "stop --plan");
+  assert.deepEqual(splan, { sandboxApi: 1, sandbox: "ingest", act: "stop", planRevision: "rev-stop", actions: [{ step: "stop", detail: "stop the containers" }] });
   const stopped = ok(fx.cliS(["sandbox", "stop", "ingest", "--plan-revision", "rev-stop", "--idempotency-key", "k-2", "--json"]), "stop");
   assert.equal(stopped.state, "stopped");
+  assert.deepEqual(stopped, { sandboxApi: 1, sandbox: "ingest", act: "stop", state: "stopped", server: "sandbox-ingest", receipts: [{ step: "stop", ok: true }], problems: [] });
   const rplan = ok(fx.cliS(["sandbox", "reconcile", "ingest", "--plan", "--json"]), "reconcile --plan");
   assert.equal(rplan.act, "reconcile");
+  assert.deepEqual(rplan, { sandboxApi: 1, sandbox: "ingest", act: "reconcile", planRevision: "rev-reconcile", actions: [] });
   const reconciled = ok(fx.cliS(["sandbox", "reconcile", "ingest", "--plan-revision", "rev-reconcile", "--idempotency-key", "k-3", "--json"]), "reconcile");
   assert.deepEqual(Object.keys(reconciled).sort(), ["act", "problems", "receipts", "replays", "sandbox", "sandboxApi", "seats", "server", "state"]);
+  assert.deepEqual(reconciled, { sandboxApi: 1, sandbox: "ingest", act: "reconcile", state: "ready", server: "sandbox-ingest", receipts: [], problems: [], seats: [], replays: [] });
   const calls = fx.sandbox.calls();
   assert.deepEqual(calls.map((c) => (c.act === "plan" ? `plan:${c.request.target}` : c.act)), ["plan:start", "start", "plan:stop", "stop", "plan:reconcile", "reconcile"]);
   const dep = realpathSync(fx.dep);
@@ -129,6 +134,45 @@ test("a stale plan is E_PLAN_STALE with the provider's fresh plan", (t) => {
   fx.sandbox.set({ start: { state: "stale", plan: fresh } });
   const e = refused(fx.cliS(["sandbox", "start", "ingest", "--plan-revision", "rev-1", "--idempotency-key", "k", "--json"]), "E_PLAN_STALE", "stale");
   assert.deepEqual(e.details.plan, fresh);
+});
+
+test("a hook killed at its time limit takes what it started with it: its process group ends before the act answers and the lock goes", async (t) => {
+  const fx = sandboxDeployment({ t });
+  ok(fx.cliS(["sync", "--json"]), "sync");
+  const late = join(fx.dep, "late-effect");
+  const pause = (ms) => new Promise((done) => setTimeout(done, ms));
+  // The control: a hook that answers in time; its child writes, so the fake's child is real.
+  fx.sandbox.set({ start: { $child: { write: late, afterMs: 100 }, $sleepMs: 600 } });
+  ok(fx.cliS(["sandbox", "start", "ingest", "--plan-revision", "rev-start", "--idempotency-key", "k-control", "--json"]), "the control start");
+  await pause(300);
+  assert.equal(existsSync(late), true, "the control's child wrote");
+  rmSync(late);
+  // The hook's child would write after 1.5 s; the hook is killed at 0.5 s, and its group with it.
+  fx.sandbox.set({ start: { $child: { write: late, afterMs: 1500 }, $sleepMs: 5000 } });
+  const r = fx.cliS(["sandbox", "start", "ingest", "--plan-revision", "rev-start", "--idempotency-key", "k-late", "--json"], { OATS_TEST_SANDBOX_HOOK_TIMEOUT_MS: "500" });
+  const d = JSON.parse(r.stdout.trim().split("\n").pop());
+  assert.equal(d.result?.state ?? d.error?.details?.state, "unknown", r.stdout);
+  // The next mutating act takes the lock, and nothing of the killed start writes after it.
+  fx.sandbox.set({ start: { state: "ready", server: "sandbox-ingest" } });
+  ok(fx.cliS(["sandbox", "stop", "ingest", "--plan-revision", "rev-stop", "--idempotency-key", "k-stop", "--json"]), "stop");
+  await pause(2000);
+  assert.equal(existsSync(late), false, "the killed hook's child never wrote");
+});
+
+test("C4: a settled status or reconcile that leaves out its seats is unknown, hook-failed, never an empty ledger", (t) => {
+  const fx = sandboxDeployment({ t });
+  ok(fx.cliS(["sync", "--json"]), "sync");
+  fx.sandbox.set({ status: { state: "ready", server: "sandbox-ingest" } });
+  const s = ok(fx.cliS(["sandbox", "status", "--json"]), "status");
+  assert.equal(s.sandboxes[0].state, "unknown");
+  assert.equal(s.sandboxes[0].problems[0].reason, "hook-failed");
+  assert.match(s.sandboxes[0].problems[0].message, /status without its seats/);
+  fx.sandbox.set({ reconcile: { state: "ready", server: "sandbox-ingest" } });
+  const rec = fx.cliS(["sandbox", "reconcile", "ingest", "--plan-revision", "rev-reconcile", "--idempotency-key", "k-r", "--json"]);
+  const answer = JSON.parse(rec.stdout.trim().split("\n").pop());
+  const got = answer.result ?? answer.error?.details;
+  assert.equal(got.state, "unknown", rec.stdout);
+  assert.ok(JSON.stringify(got).includes("reconcile without its seats"), rec.stdout);
 });
 
 test("a stale plan answer is E_PLAN_STALE with its fresh plan, as a stale apply's", (t) => {

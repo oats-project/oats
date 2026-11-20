@@ -20,7 +20,7 @@ const listed = (fx, names, extra = {}) => fx.writeLocal({ host: { name: "cloud-1
 
 test("sync --plan performs nothing: the actions are reported, no act runs, nothing is recorded", (t) => {
   const fx = sandboxDeployment({ t });
-  fx.sandbox.set({ status: { state: "absent" } });
+  fx.sandbox.set({ status: { state: "absent", seats: [] } });
   const r = ok(fx.cliS(["sync", "--plan", "--json"]), "sync --plan");
   assert.equal(r.sandboxes[0].action, "build");
   assert.deepEqual(acts(fx), ["status", "plan:start"]);
@@ -31,10 +31,10 @@ test("sync --plan performs nothing: the actions are reported, no act runs, nothi
 test("sync's actions: build (absent, or a plan that renders), start (stopped), none (ready, nothing to do), stop (delisted, never destroyed)", (t) => {
   const fx = sandboxDeployment({ t });
   const action = (table) => { fx.sandbox.set(table); fx.sandbox.reset(); return ok(fx.cliS(["sync", "--json"]), JSON.stringify(table)).sandboxes; };
-  assert.equal(action({ status: { state: "absent" } })[0].action, "build");
+  assert.equal(action({ status: { state: "absent", seats: [] } })[0].action, "build");
   assert.ok(acts(fx).includes("start"), "a build starts");
   assert.equal(action({ "plan:start": { state: "ready", planRevision: "r", actions: [{ step: "render" }] } })[0].action, "build");
-  assert.equal(action({ status: { state: "stopped", server: "sandbox-ingest" }, "plan:start": { state: "ready", planRevision: "r", actions: [{ step: "start" }] } })[0].action, "start");
+  assert.equal(action({ status: { state: "stopped", server: "sandbox-ingest", seats: [] }, "plan:start": { state: "ready", planRevision: "r", actions: [{ step: "start" }] } })[0].action, "start");
   const none = action({});
   assert.equal(none[0].action, "none");
   assert.deepEqual(acts(fx), ["status", "plan:start", "plan:reconcile", "reconcile"], "none starts nothing, and the seats are still reconciled");
@@ -135,7 +135,7 @@ test("D-S1-1: two concurrent starts of two sandboxes lose no name", async (t) =>
 
 test("a failed sandbox: in problems, exit 1, the answer ok and the lock written", (t) => {
   const fx = sandboxDeployment({ t });
-  fx.sandbox.set({ status: { state: "stopped" }, "plan:start": { state: "ready", planRevision: "r", actions: [{ step: "start" }] }, start: { state: "failed", problem: { code: "E_SANDBOX_PROVIDER", reason: "docker", message: "docker is not running" } } });
+  fx.sandbox.set({ status: { state: "stopped", seats: [] }, "plan:start": { state: "ready", planRevision: "r", actions: [{ step: "start" }] }, start: { state: "failed", problem: { code: "E_SANDBOX_PROVIDER", reason: "docker", message: "docker is not running" } } });
   const r = fx.cliS(["sync", "--json"]);
   assert.equal(r.status, 1);
   const d = envelope(r);

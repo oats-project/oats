@@ -77,7 +77,7 @@ async function sheetShows(answer) {
 
 test("a failed sandbox's sync, the kernel's real answer: ok: true, exit 1, the failure in a sandboxes entry's problems; the client reads it as the report, the boundary and the sheet show it", async (t) => {
   const fx = sandboxDeployment({ t });
-  fx.sandbox.set({ status: { state: "stopped", server: "sandbox-ingest" }, "plan:start": { state: "ready", planRevision: "r", actions: [{ step: "start" }] },
+  fx.sandbox.set({ status: { state: "stopped", server: "sandbox-ingest", seats: [] }, "plan:start": { state: "ready", planRevision: "r", actions: [{ step: "start" }] },
     start: { state: "failed", problem: { code: "E_SANDBOX_PROVIDER", reason: "docker", message: "docker is not running" } } });
   // The kernel side, as the client's exit rule reads it (packages/client/workspace-cli.mjs sandboxFailureReport).
   const raw = fx.cliS(["sync", "--json"]);

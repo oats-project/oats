@@ -205,7 +205,7 @@ test("a sandbox whose kernel does not advertise the routed floor is refused befo
 
 test("a listed sandbox its provider does not answer ready is E_SANDBOX_NOT_HERE not-running; a team with no id is E_SANDBOX_TEAM", async (t) => {
   const fx = await routed(t);
-  fx.sandbox.set({ status: { state: "stopped", server: "sandbox-ingest" } });
+  fx.sandbox.set({ status: { state: "stopped", server: "sandbox-ingest", seats: [] } });
   await assert.rejects(fx.spawnInto(fakeHost(fx)), (e) => e.code === "E_SANDBOX_NOT_HERE" && e.details.reason === "not-running");
   fx.commitWorkspace(fx.workspace({ teams: { global: { description: "Fixture team" }, "ingest-team": {} } }));
   await assert.rejects(fx.spawnInto(fakeHost(fx)), (e) => e.code === "E_SANDBOX_TEAM" && e.details.reason === "team-not-created");
@@ -497,4 +497,18 @@ test("a caller's own identity.seat never reaches the sandbox: its spawn, the sea
   const record = JSON.parse(readFileSync(join(fx.pendingDir, kept), "utf8"));
   assert.doesNotMatch(JSON.stringify(record.argv), /\/caller\/seat/);
   assert.ok(record.argv.includes(`identity.seat=${seatPath}`), JSON.stringify(record.argv));
+});
+
+test("C4: with a request kept, a reconcile that leaves out its seats is no empty ledger: sync reports the sandbox failed, keeps the request and replays nothing", async (t) => {
+  const fx = await routed(t);
+  const { spawnKey } = await keptByLostAnswer(fx);
+  fx.sandbox.set({ reconcile: { state: "ready", server: "sandbox-ingest" } });
+  fx.sandbox.reset();
+  const host = fakeHost(fx);
+  const pass = await fx.withKernel((sb, ctx) => sb.syncSandboxes(ctx, { io: host.io }));
+  assert.equal(pass.failed, true, JSON.stringify(pass));
+  const p = pass.problems.find((x) => x.sandbox === "ingest");
+  assert.ok(p && /reconcile without its seats/.test(p.message), JSON.stringify(pass.problems));
+  assert.deepEqual(fx.kept(), [`${spawnKey}.json`], "kept");
+  assert.equal(host.calls.filter((c) => c.command.includes(" spawn ")).length, 0, "no replay");
 });

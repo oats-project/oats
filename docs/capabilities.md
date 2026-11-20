@@ -1243,7 +1243,9 @@ fields are the record's table (C4); every answer has the envelope
 `{sandboxApi: 1, act, state, receipts, problem?}`. A hook that exits nonzero,
 is killed at its time limit, or prints anything but one valid answer is read
 as `state: "unknown"` with problem `E_SANDBOX_PROVIDER`, reason
-`hook-failed`. A valid answer that settles an act carries every field of that
+`hook-failed`. A settled `status` or `reconcile` answers its `seats`, `[]`
+when the ledger holds none; one that leaves it out is `hook-failed`, never an
+empty ledger. A valid answer that settles an act carries every field of that
 act's row, each a non-empty string: a seat plan's `seat: {id, path}`, a
 `seat`'s `seat: {id, path, alias, certificateId, team}`, and a `bind`'s or a
 `release`'s `seat: {id, certificateId, state}`; one without them is
@@ -1258,6 +1260,14 @@ the seat the host took.
 **Time limits.** `plan` and `status` are read-only and get 60 s; every other
 act gets 30 minutes (a build). Every act but `plan` and `status` runs under the
 sandbox's lock, per deployment: a second one is `E_LIFECYCLE_BUSY`.
+
+**The hook's process group.** The hook runs in a process group of its own. Its
+time limit, an answer over the size limit, and a signal or an exit of the
+kernel kill the whole group, and the act answers only once the group's pipes
+have closed: nothing the hook started (`aw`, `ssh`, a provider's tool) outlives
+its act or the lock around it. A process that leaves the group itself
+(`setsid`, or a double fork into a new session) is not the kernel's to end: a
+provider that starts one owns it.
 
 **The environment.** The invoker's environment without any name the kernel
 generates (no instance, soul, team or captured-context name), then:
