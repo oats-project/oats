@@ -302,9 +302,20 @@ test("a settingFile is read the same whichever way the caller spells the deploym
       assert.deepEqual(readSettingFileHosts({ path, pointer: "/bases/*/repository", within, outside }), hosts, `${path} within ${within}`);
     }
   }
-  // A link BELOW the deployment is still refused, whichever way the deployment is spelled.
+  // A link BELOW the deployment is still refused, whichever way the deployment is spelled: one
+  // to a directory of it, one that leads back to the deployment itself, and one made inside a home.
   symlinkSync(join(fx.dep, "config"), join(fx.dep, "config-link"));
-  assert.match(readSettingFileHosts({ path: join(link, "config-link", "bindings.json"), pointer: "/bases/*/repository", within: fx.dep, outside }).refused, /through a symbolic link/);
+  mkdirSync(join(fx.dep, "a"));
+  symlinkSync(fx.dep, join(fx.dep, "a", "back"));
+  symlinkSync(fx.dep, join(fx.dep, "agents", "dev", "instances", "one", "l"));
+  for (const within of [fx.dep, link]) {
+    for (const spelled of [fx.dep, link]) {
+      for (const parts of [["config-link", "bindings.json"], ["a", "back", "config", "bindings.json"], ["agents", "dev", "instances", "one", "l", "config", "bindings.json"]]) {
+        const read = readSettingFileHosts({ path: join(spelled, ...parts), pointer: "/bases/*/repository", within, outside });
+        assert.match(read.refused ?? "", /through a symbolic link|which a session's agent can write/, `${join(spelled, ...parts)} within ${within}: ${JSON.stringify(read)}`);
+      }
+    }
+  }
   // A file with a second name (a hard link) is not read: that name could be in a home.
   linkSync(join(fx.dep, "config", "bindings.json"), join(fx.dep, "agents", "dev", "instances", "one", "mine.json"));
   assert.deepEqual(fx.read("config/bindings.json"), { unread: `${join(fx.dep, "config", "bindings.json")} has more than one hard link` });

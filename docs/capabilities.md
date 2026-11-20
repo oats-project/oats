@@ -2274,10 +2274,12 @@ configuration, and handed to the provider with every launch:
   its host. The file is the deployment's own: inside the deployment, never
   inside an instance home or a path the allowances make writable, reached
   through no symbolic link anywhere along its path (otherwise
-  `E_BACKEND_SANDBOX_HOST`); a regular file with one name (no second hard
-  link) of at most 64 KiB, strict JSON, at most 16 hosts. An absolute path
-  may spell the deployment's own directory through a link; below it no
-  link is allowed. A file that is missing or is none of that gives no host,
+  `E_BACKEND_SANDBOX_HOST`); a regular file with one name (a file that has a
+  second hard link when it is read is not read; keep the file where a
+  session cannot link or write it) of at most 64 KiB, strict JSON, at most
+  16 hosts. An absolute path may spell the deployment's own directory
+  through a link; from the first place it enters the deployment, no link is
+  allowed. A file that is missing or is none of that gives no host,
   is named in the answer and in readiness (`unread`), and the launch goes on.
   **A host of a general forge opens that whole forge to the agent**, not
   only the repository named: say so where you document your line.

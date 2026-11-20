@@ -1100,6 +1100,15 @@ test("one wire version: a provider that declares another, or none, is refused by
     await assert.rejects(act(), (e) => e.code === "E_BACKEND_WIRE" && e.details.wire.kernel === "1.3" && new RegExp(`old was not ${what}: .*speaks wire 1\\.2 \\(it declares none\\).*nothing was (stopped|sent)`).test(e.message), what);
   }
   assert.deepEqual([existsSync(join(home, ".oats-stop.json")), rowOf(fx, "old").running, rowOf(fx, "old").runtimeState], [false, null, "unreachable"], "still not recorded as stopped");
+  // The host's stop of a home that is stopped already and has an unsettled launch would ask the
+  // provider (to settle it): refused by the wire's code too, and nothing is settled.
+  const receiptPath = join(dirname(home), ".oats-retirement", "baselines", `${createHash("sha256").update(home).digest("hex")}.json`);
+  const receipt = readFileSync(receiptPath, "utf8");
+  const unsettled = JSON.parse(receipt);
+  writeFileSync(receiptPath, JSON.stringify({ ...unsettled, runtime: { ...unsettled.runtime, stoppedAt: "2026-11-20T10:00:00.000Z", launchSent: "2026-11-20T10:00:01.000Z" } }, null, 2) + "\n");
+  await assert.rejects(fx.inEnv(() => stopInstanceSession(home, { withHost: true, graceMs: 20000 })), (e) => e.code === "E_BACKEND_WIRE" && /nothing was stopped/.test(e.message));
+  assert.equal(JSON.parse(readFileSync(receiptPath, "utf8")).runtime.launchSent, "2026-11-20T10:00:01.000Z", "the launch stays marked");
+  writeFileSync(receiptPath, receipt);
   assert.deepEqual(fx.verbs(), [], "the provider was never called");
   // A retire keeps its own rule: it cannot ask that provider, no process works in the home, so it
   // goes on, and says that the session was not stopped through its backend.
