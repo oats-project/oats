@@ -194,10 +194,10 @@ test("the head is the Workspace heading and Add local workspace…; the list's s
 
 test("only current destinations render, dispatch unchanged stage ids, and project aria-current", t => {
   const s = shell(t), buttons = [...s.document.querySelectorAll("#nav button")];
-  // Home and Automations (the Desktop UI rework, slice 2): the Workspace page has no row of its own (Home opens it),
-  // and Machines, the Deployments page of before, is the Workspace page's tab (NAV_TABS), not a nav item.
-  assert.deepEqual(buttons.map(b => b.textContent), ["Home", "Automations"]);
-  assert.deepEqual(buttons.map(b => b.dataset.action), ["stage.home", "stage.automations"]);
+  // Home, Workspace and Automations (the Desktop UI rework, slice 2b: the Workspace page has its own row again), and
+  // Machines, the Deployments page of before, is the Workspace page's tab (NAV_TABS), not a nav item.
+  assert.deepEqual(buttons.map(b => b.textContent), ["Home", "Workspace", "Automations"]);
+  assert.deepEqual(buttons.map(b => b.dataset.action), ["stage.home", "stage.spawn", "stage.automations"]);
   assert.equal(s.document.querySelector('#nav [data-view="hierarchy"]'), null);
   assert.deepEqual(NAV_TABS.map(({ name, page, tab }) => ({ name, page, tab })), [{ name: "hierarchy", page: "spawn", tab: "machines" }]);
   for (const button of buttons) {
@@ -211,7 +211,7 @@ test("only current destinations render, dispatch unchanged stage ids, and projec
   s.setNavActive(null);
   assert.equal(s.document.querySelector("#nav [aria-current]"), null);
   assert.equal(s.document.querySelector("#nav .active"), null);
-  assert.equal(getBinding("stage.spawn"), "Mod+2", "Workspace overview is a label change, not a chord change");
+  assert.equal(getBinding("stage.spawn"), "Mod+2", "Workspace (once Workspace overview) is a label change, not a chord change");
   assert.equal(getBinding("stage.automations"), "Mod+3");
   // stage.hierarchy keeps its chord and its registry entry, though it has no nav item of its own.
   assert.equal(getBinding("stage.hierarchy"), "Mod+1");
