@@ -1,6 +1,7 @@
 // The kernel's part of a provider home's integrity (docs/capabilities.md "Session providers", "What
-// the kernel trusts in a provider home"): nothing the home's agent can write is run, or read as
-// configuration, by the kernel. Every home here is a real spawn through the kernel on the fake
+// the kernel trusts in a provider home"): the kernel runs only its own copy of the home's modules,
+// kept outside the home, and reads their settings from the home's receipt; nothing the home's
+// agent can write is run, or read as configuration, by the kernel. Every home here is a real spawn through the kernel on the fake
 // provider (test/helpers/session-provider-fixture.mjs); a tmux home's side is in the tmux tests.
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -27,7 +28,6 @@ const copyOf = (home, capability = FAKE_CAPABILITY) => join(home, ".oats", "modu
 /** A script that leaves a mark when it runs, put before `source`: what an agent that can write its
  *  home would make of one of its capabilities' files. */
 const marking = (marker, source = "") => `import { writeFileSync as leaveMark } from "node:fs"; leaveMark(${JSON.stringify(marker)}, "ran");\n${source}`;
-const NOT_THE_SPAWNS = /the copy of capability (acme\.[a-z]+) in [a-z-]+ \(.*\) is not the one the home was spawned with/;
 /** A second capability with hooks of its own and no session provider, composed into soul `dev`
  *  beside the fake: what a hook's check is told apart from the provider's by. */
 const HOOKED = "acme.hooked";
@@ -216,7 +216,7 @@ test("a tmux home is unchanged: its receipt records no composition, and nothing 
   assert.equal(Object.hasOwn(readJson(receiptOf(home)), "composition"), false);
   assert.equal(providerHomeTrust(home), null);
   assert.equal(Object.hasOwn(rowOf(fx, "on-tmux"), "moduleCopy"), false, "and its status row gains no key");
-  // A copy its agent edited is its own business, as before: no problem is found, no digest taken.
+  // A copy its agent edited is its own business, and is what runs, as before: the kernel keeps no copy of it.
   writeFileSync(join(copyOf(home), "bin", "hook.mjs"), "// edited\n");
   assert.equal(moduleCopyProblem(home, FAKE_CAPABILITY), null);
   assert.equal(homeModulesProblem(home), null);

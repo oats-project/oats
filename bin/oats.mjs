@@ -851,7 +851,7 @@ async function workspaceOperation(t, { bail, address, layer, opName }) {
   const [script, ...rest] = spec.trim().split(/\s+/);
   const abs = lp?.executable(script);
   if (!abs) return bail("E_CAPABILITY_BROKEN", `${mod.name} ${op.command}: script not found (${script})`);
-  // A provider home's copy is run only when it digests to what its receipt records.
+  // A provider home's own copy is never run: the kernel runs its copy of it (a guard; `dir` is that copy).
   const untrustedCopy = lp.dir ? (await import("../lib/home-integrity.mjs")).moduleCopyProblemAt(lp.dir) : null;
   if (untrustedCopy) return bail("E_CAPABILITY_BLOCKED", `${address} was not run: ${untrustedCopy}`);
   const settings = lp.settings;
@@ -4258,7 +4258,7 @@ async function capabilityCommand() {
     try { abs = capabilityExecutablePath(withDir, script); }
     catch (e) { bail("E_CAPABILITY_BROKEN", e.message); }
     if (!abs) bail("E_CAPABILITY_BROKEN", `${cmd} ${sub}: script not found (${join(dir, script)})`);
-    // A provider home's copy is run only when it digests to what its receipt records.
+    // A provider home's own copy is never run: the kernel runs its copy of it (a guard; `dir` is that copy).
     const untrustedCopy = (await import("../lib/home-integrity.mjs")).moduleCopyProblemAt(dir);
     if (untrustedCopy) bail("E_CAPABILITY_BLOCKED", `oats ${cmd} ${sub} was not run: ${untrustedCopy}`);
     // The soul the command acts for → { dir, cleanup, agent, id }: a home's recorded soul directory, or
