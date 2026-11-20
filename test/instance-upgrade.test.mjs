@@ -18,7 +18,7 @@ import { readEvents } from "../lib/instance-events.mjs";
 import { readInstanceBackground, writeInstanceBackground } from "../lib/instance-background.mjs";
 import { readInstancePin, writeInstancePin } from "../lib/instance-pin.mjs";
 import { readBoardDocument, setBoardFact } from "../lib/instance-board.mjs";
-import { readSameWork, writeSameWork } from "../lib/instance-same-work.mjs";
+import { readSameWork, writeSameWork } from "../lib/instance-related-work.mjs";
 
 const json = p => JSON.parse(readFileSync(p, "utf8"));
 function pkg(version, mode = "adopt", names = ["acme.one"], launch = false) {

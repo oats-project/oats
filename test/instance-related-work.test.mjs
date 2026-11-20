@@ -1,5 +1,5 @@
 // Feature instance-same-work (awebai/oats#1577): a child instance's declared "same work as my parent", in a home
-// file of its own (`.oats-same-work.json`, lib/instance-same-work.mjs) bound to the parent it was set against.
+// file of its own (`.oats-same-work.json`, lib/instance-related-work.mjs) bound to the parent it was set against.
 // Set at spawn (`--same-work`) or by `oats instance same-work <instance> on|off`; read on status rows, where
 // `sameWork: true` stands only while the bound parent is the row's current `parentInstance`.
 //
@@ -21,7 +21,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync,
 import { dirname, join } from "node:path";
 import { fixtureBase } from "./helpers/host-fixture.mjs";
 import { v2Deployment } from "./helpers/v2-deployment.mjs";
-import { RECORD_MAX, SAME_WORK_FILE, readSameWork, sameWorkOf, writeSameWork } from "../lib/instance-same-work.mjs";
+import { RECORD_MAX, SAME_WORK_FILE, readSameWork, sameWorkOf, writeSameWork } from "../lib/instance-related-work.mjs";
 import { disposableHomeRootProblem } from "../lib/capability-contract.mjs";
 import { KERNEL_HOME_RECEIPTS, retireInstance, retirePendingMarkerPath, storedTreeDigest } from "../lib/core.mjs";
 
