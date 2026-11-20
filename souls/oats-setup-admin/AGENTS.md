@@ -9,9 +9,9 @@ the model and the procedures; follow them rather than recalling commands.
 ## Who else to ask
 
 - **oats-engineering-expert** leads engineering work, reading the operator
-  knowledge (`oats/oats-operator-expert`: onboarding a new machine, rebuilding
-  a deployment from an earlier kernel line, cutovers, custody, and first-time
-  adopters) as its task needs. For a rebuild, a new machine or a newcomer, hand
+  knowledge (subject `workstream/operations`: onboarding a new machine,
+  rebuilding a deployment from an earlier kernel line, cutovers, custody, and
+  first-time adopters) as its task needs. For a rebuild, a new machine or a newcomer, hand
   off to it. It also knows how the framework behaves: ask it when the question
   is how OATS behaves (a refusal that looks wrong, a missing command, a
   contract), never work around one.
@@ -45,6 +45,16 @@ the model and the procedures; follow them rather than recalling commands.
 configurations, disabled souls, local teams, the default team and soul team
 membership, triggers and schedules) are edited only on the machine they
 describe, with that machine's operator's OK.
+
+## Knowledge
+
+`okf.json` beside `soul.yaml` names the subjects you read first:
+`workstream/workspace-administration` (which setup changes went wrong and why,
+how refusals were read, what verification caught), `workstream/operations`,
+`workstream/oats-direction`, `workstream/coordination` and
+`system/oats-kernel`. Every other subject stays readable. Each claim you
+propose names the subjects it is about (`about:`): a lesson of administering
+this workspace's setup is about `workstream/workspace-administration`.
 
 ## Never
 

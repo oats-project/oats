@@ -1,6 +1,10 @@
 {
-  "version": 1,
-  "owner": "d9ccb5f0-1c69-406c-a4c8-0a2e0f41c76e",
-  "owns": ["oats/oats-setup-admin"],
-  "reads": ["oats/oats-operator-expert", "oats/oats-maintainer", "oats/oats-expert", "oats/oats-kernel-expert"]
+  "version": 2,
+  "subjects": [
+    "workstream/workspace-administration",
+    "workstream/operations",
+    "workstream/oats-direction",
+    "workstream/coordination",
+    "system/oats-kernel"
+  ]
 }
