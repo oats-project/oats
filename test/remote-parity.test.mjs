@@ -194,8 +194,9 @@ test("server roster: instance rows carry the remote status facts, null where the
   const bare = { instance: "dev-b", home: "/srv/ws/agents/dev/instances/dev-b", running: false };
   // Feature instance-color: a colour outside the palette is relayed as none.
   // Feature instance-background: only `true` is relayed; anything else is absent, never false.
-  // Feature instance-related-work: anything but `relatedWork: true` is relayed as absent; a `sameWork` key, from a
-  // host that does not say it is older (no features here), is never relayed, nor read as the flag.
+  // Feature instance-related-work: anything but `relatedWork: true` is relayed as absent; a `sameWork: true`, from a
+  // host that does not say it is older (no features here), is relayed only beside it (a parent binding, by both
+  // names), and never read as the flag on its own.
   // Feature instance-pin: only exactly `true` is relayed; `"true"` and `1` are absent, never false.
   // Feature instance-board: a board out of its rules (a link that is not https) is relayed as an empty board;
   // null stays null; a row without the key carries none.
@@ -224,7 +225,8 @@ test("server roster: instance rows carry the remote status facts, null where the
   for (const n of ["dev-b", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === n), "board"), false, `${n}: no board key from a row without one`);
   for (const n of ["dev-b", "dev-c", "dev-d", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === n), "pinned"), false, `${n}: no pinned key, never false or null`);
   for (const name of ["dev-b", "dev-c", "dev-gone"]) assert.equal(Object.hasOwn(rows.find((r) => r.instance === name), "relatedWork"), false, `${name}: no relatedWork, never false or null`);
-  for (const r of rows) assert.equal(Object.hasOwn(r, "sameWork"), false, `${r.instance}: no sameWork key is relayed`);
+  assert.equal(a.sameWork, true, "sameWork: true is relayed beside relatedWork: true");
+  for (const r of rows.filter((r) => r.instance !== "dev-a")) assert.equal(Object.hasOwn(r, "sameWork"), false, `${r.instance}: no sameWork key without relatedWork`);
   for (const k of FIELDS) assert.deepEqual(a[k], full[k], k);
   assert.equal(a.savedRoute, false);
   assert.equal(a.running, true); assert.equal(a.harness, "claude");
@@ -530,7 +532,7 @@ const ENVELOPES = {
   stopApply: { schemaVersion: 1, ok: true, result: { ok: true, results: [], replayed: false } },
   color: { schemaVersion: 1, ok: true, result: { instanceColorApi: 1, instance: "dev-a", home: HOME_A, color: "sage", changed: true } },
   background: { schemaVersion: 1, ok: true, result: { instanceBackgroundApi: 1, instance: "dev-a", home: HOME_A, background: true, changed: true } },
-  relatedWork: { schemaVersion: 1, ok: true, result: { instance: "dev-a", relatedWork: true } },
+  relatedWork: { schemaVersion: 1, ok: true, result: { instance: "dev-a", relatedWork: true, sameWork: true } },
   pin: { schemaVersion: 1, ok: true, result: { instancePinApi: 1, instance: "dev-a", home: HOME_A, pinned: true, changed: true } },
   // `facts.ownWorktree` (awebai/oats#988): the host's plan crosses with its facts as the host answered them.
   retirePlan: { schemaVersion: 1, ok: true, result: { planRevision: "r2", home: HOME_A, facts: { workMode: "worktree", ownWorktree: true }, defaults: { retainWorktree: true }, notes: [] } },
@@ -576,6 +578,8 @@ const SURFACE_CALLS = [
   ["instance-background", ["instance", "background", "dev-a", "on", "--server", "build", "--json"], ENVELOPES.background],
   // Feature instance-related-work: the feature alone, as instance color.
   ["instance-related-work", ["instance", "related-work", "dev-a", "on", "--server", "build", "--json"], ENVELOPES.relatedWork],
+  // ... and by its deprecated alias, sent to that host by the new name.
+  ["instance-related-work", ["instance", "same-work", "dev-a", "on", "--server", "build", "--json"], ENVELOPES.relatedWork],
   // Feature instance-pin: the feature alone, as instance background.
   ["instance-pin", ["instance", "pin", "dev-a", "on", "--server", "build", "--json"], ENVELOPES.pin],
 ];
@@ -593,27 +597,30 @@ test("routed readiness, instance events, git, diff, stop and retire plans: run o
   void r;
 });
 
-test("server roster, feature instance-related-work: from a host that advertises only instance-same-work, its row's sameWork: true is relayed as relatedWork: true; from any other host a sameWork key is no flag; no sameWork key is relayed", async () => {
+test("server roster, feature instance-related-work: from a host that advertises only instance-same-work, its row's sameWork: true is relayed as relatedWork: true beside it; from any other host a sameWork key alone is no flag; sameWork: true is relayed only beside relatedWork: true", async () => {
   writeServers({ build: { sshHost: "build-host", workspace: "/srv/ws" } });
   const rowsFrom = async (features) => {
     const status = { root: "/srv/ws/agents", ...(features ? { features } : {}), agents: [{ name: "dev", harness: "claude", instances: [
       { instance: "dev-old", home: "/srv/ws/agents/dev/instances/dev-old", running: false, parentInstance: "boss", sameWork: true },
       { instance: "dev-odd", home: "/srv/ws/agents/dev/instances/dev-odd", running: false, parentInstance: "boss", sameWork: "true" },
       { instance: "dev-new", home: "/srv/ws/agents/dev/instances/dev-new", running: false, siblingInstance: "boss", relatedWork: true },
+      { instance: "dev-both", home: "/srv/ws/agents/dev/instances/dev-both", running: false, parentInstance: "boss", relatedWork: true, sameWork: true },
       { instance: "dev-off", home: "/srv/ws/agents/dev/instances/dev-off", running: false, parentInstance: "boss" }] }] };
     const { exec } = countingExec(() => JSON.stringify(status));
     const out = await rosterGroups({ io: { execFileAsync: async (...call) => exec(...call) } });
     const rows = out.groups[0].instances;
-    for (const r of rows) assert.equal(Object.hasOwn(r, "sameWork"), false, `${r.instance}: no sameWork key is relayed (${JSON.stringify(features)})`);
-    return Object.fromEntries(rows.map((r) => [r.instance, Object.hasOwn(r, "relatedWork") ? r.relatedWork : "absent"]));
+    for (const r of rows) assert.equal(Object.hasOwn(r, "sameWork"), r.sameWork === true && r.relatedWork === true, `${r.instance}: sameWork only as true, beside relatedWork (${JSON.stringify(features)})`);
+    const keys = (r) => [Object.hasOwn(r, "relatedWork") ? r.relatedWork : "absent", Object.hasOwn(r, "sameWork") ? r.sameWork : "absent"];
+    return Object.fromEntries(rows.map((r) => [r.instance, keys(r)]));
   };
-  assert.deepEqual(await rowsFrom(["instance-same-work", "instance-pin"]), { "dev-old": true, "dev-odd": "absent", "dev-new": true, "dev-off": "absent" }, "an older host: its flag, by the old name");
+  const A = "absent";
+  assert.deepEqual(await rowsFrom(["instance-same-work", "instance-pin"]), { "dev-old": [true, true], "dev-odd": [A, A], "dev-new": [true, A], "dev-both": [true, true], "dev-off": [A, A] }, "an older host: its flag, by both names");
   for (const features of [["instance-related-work"], ["instance-same-work", "instance-related-work"], [], null]) {
-    assert.deepEqual(await rowsFrom(features), { "dev-old": "absent", "dev-odd": "absent", "dev-new": true, "dev-off": "absent" }, JSON.stringify(features));
+    assert.deepEqual(await rowsFrom(features), { "dev-old": [A, A], "dev-odd": [A, A], "dev-new": [true, A], "dev-both": [true, true], "dev-off": [A, A] }, JSON.stringify(features));
   }
 });
 
-test("routed instance related-work against a host with only instance-same-work: asked by the old name, its answer in the new words; on for an instance bound to a sibling is E_REMOTE_INCOMPATIBLE with nothing sent", () => {
+test("routed instance related-work (and its alias instance same-work) against a host with only instance-same-work: asked by the old name, its answer with relatedWork beside sameWork; on for an instance bound to a sibling is E_REMOTE_INCOMPATIBLE with nothing sent", () => {
   const dir = mkdtempSync(join(base, "rw-old-"));
   const HOME_S = homeOf("dev", "dev-s");
   const roster = { root: `${WS}/agents`, agents: [{ name: "dev", instances: [
@@ -631,12 +638,18 @@ test("routed instance related-work against a host with only instance-same-work: 
   writeFileSync(join(env.OATS_HOME_DIR, "servers.json"), JSON.stringify({ servers: { build: { sshHost: "build-host", workspace: WS, oatsPath: host.oatsPath } } }));
   let r = cli(env, ["instance", "related-work", "dev-a", "on", "--server", "build", "--json"]);
   assert.equal(r.status, 0, r.stdout + r.stderr);
-  assert.deepEqual(r.json(), { schemaVersion: 1, ok: true, result: { instance: "dev-a", relatedWork: true } });
+  assert.deepEqual(r.json(), { schemaVersion: 1, ok: true, result: { instance: "dev-a", relatedWork: true, sameWork: true } });
+  assert.doesNotMatch(r.stderr, /renamed/, "the new spelling says no deprecation");
   r = cli(env, ["instance", "related-work", "dev-a", "off", "--server", "build", "--json"]);
-  assert.deepEqual(r.json(), { schemaVersion: 1, ok: true, result: { instance: "dev-a", relatedWork: false } });
+  assert.deepEqual(r.json(), { schemaVersion: 1, ok: true, result: { instance: "dev-a", relatedWork: false, sameWork: false } });
+  // The alias: the same route and answer, its deprecation on stderr only.
+  r = cli(env, ["instance", "same-work", "dev-a", "on", "--server", "build", "--json"]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), { schemaVersion: 1, ok: true, result: { instance: "dev-a", relatedWork: true, sameWork: true } });
+  assert.deepEqual(r.stderr.split("\n").filter((l) => l.includes("renamed")), ["oats: oats instance same-work is renamed: use oats instance related-work"]);
   // off goes as asked, whatever the binding would be.
   r = cli(env, ["instance", "related-work", "dev-s", "off", "--server", "build", "--json"]);
-  assert.deepEqual(r.json(), { schemaVersion: 1, ok: true, result: { instance: "dev-s", relatedWork: false } });
+  assert.deepEqual(r.json(), { schemaVersion: 1, ok: true, result: { instance: "dev-s", relatedWork: false, sameWork: false } });
   const before = host.calls().filter((c) => c.includes(" same-work ")).length;
   r = cli(env, ["instance", "related-work", "dev-s", "on", "--server", "build", "--json"]);
   assert.equal(r.status, 1);
@@ -653,12 +666,13 @@ test("routed instance related-work against a host with only instance-same-work: 
   assert.equal(host.calls().filter((c) => c.includes(" related-work ")).length, 0, "the new name is never sent to that host");
 });
 
-test("routed oats status --server --json: each instance row carries relatedWork by the roster's rule, an older host's sameWork: true as relatedWork: true, and no row carries sameWork", () => {
+test("routed oats status --server --json: each instance row carries relatedWork by the roster's rule, an older host's sameWork: true as relatedWork: true beside it, and sameWork: true only beside relatedWork: true", () => {
   const statusOf = (features) => ({ schemaVersion: 1, ok: true, result: { root: `${WS}/agents`, ...(features ? { features } : {}), agents: [{ name: "dev", instances: [
     { instance: "dev-old", home: homeOf("dev", "dev-old"), running: false, parentInstance: "boss", sameWork: true },
     { instance: "dev-odd", home: homeOf("dev", "dev-odd"), running: false, parentInstance: "boss", sameWork: "true", relatedWork: "true" },
     { instance: "dev-false", home: homeOf("dev", "dev-false"), running: false, parentInstance: "boss", sameWork: false, relatedWork: false },
-    { instance: "dev-new", home: homeOf("dev", "dev-new"), running: false, siblingInstance: "boss", relatedWork: true, color: "sage" }] }] } });
+    { instance: "dev-new", home: homeOf("dev", "dev-new"), running: false, siblingInstance: "boss", relatedWork: true, color: "sage" },
+    { instance: "dev-both", home: homeOf("dev", "dev-both"), running: false, parentInstance: "boss", relatedWork: true, sameWork: true }] }] } });
   for (const [features, old] of [[["instance-same-work"], true], [["instance-related-work"], false], [["instance-same-work", "instance-related-work"], false], [null, false]]) {
     const dir = mkdtempSync(join(base, "status-rw-"));
     const host = fakeHost(dir, { probe: FULL_PROBE, answers: { [`status --dir ${WS} --json`]: { stdout: JSON.stringify(statusOf(features)) }, [`status --json --dir ${WS}`]: { stdout: JSON.stringify(statusOf(features)) } } });
@@ -667,10 +681,11 @@ test("routed oats status --server --json: each instance row carries relatedWork 
     writeFileSync(join(env.OATS_HOME_DIR, "servers.json"), JSON.stringify({ servers: { build: { sshHost: "build-host", workspace: WS, oatsPath: host.oatsPath } } }));
     const r = cli(env, ["status", "--server", "build", "--json"]);
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    assert.doesNotMatch(r.stdout, /"sameWork"/, `${JSON.stringify(features)}: no sameWork key`);
     const rows = Object.fromEntries(r.json().result.agents[0].instances.map((i) => [i.instance, i]));
-    const flag = (name) => (Object.hasOwn(rows[name], "relatedWork") ? rows[name].relatedWork : "absent");
-    assert.deepEqual({ old: flag("dev-old"), odd: flag("dev-odd"), false: flag("dev-false"), new: flag("dev-new") }, { old: old ? true : "absent", odd: "absent", false: "absent", new: true }, JSON.stringify(features));
+    const flag = (name, key = "relatedWork") => (Object.hasOwn(rows[name], key) ? rows[name][key] : "absent");
+    assert.deepEqual({ old: flag("dev-old"), odd: flag("dev-odd"), false: flag("dev-false"), new: flag("dev-new"), both: flag("dev-both") }, { old: old ? true : "absent", odd: "absent", false: "absent", new: true, both: true }, JSON.stringify(features));
+    assert.deepEqual({ old: flag("dev-old", "sameWork"), odd: flag("dev-odd", "sameWork"), false: flag("dev-false", "sameWork"), new: flag("dev-new", "sameWork"), both: flag("dev-both", "sameWork") },
+      { old: old ? true : "absent", odd: "absent", false: "absent", new: "absent", both: true }, `${JSON.stringify(features)}: sameWork`);
     assert.equal(rows["dev-new"].color, "sage", "the rest of the row is the host's");
     assert.equal(rows["dev-old"].parentInstance, "boss");
   }

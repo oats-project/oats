@@ -101,7 +101,7 @@ const { callSession, parseMaxAge, readBudget } = await kernelImport("read-call",
 const { cachedWorkspace, legacyLayoutProblems, statusAnswer, statusView } = await kernelImport("roster-read", () => import("../lib/roster-read.mjs"));
 const { memberLabel, memberRows, packageRows, standaloneCatalogVersion, standalonePackages, workspaceName, workspaceStatusAnswer, workspaceStatusView } = await kernelImport("workspace-read", () => import("../lib/workspace-read.mjs"));
 const { expandInlineValues, flagValue } = await kernelImport("argv", () => import("../lib/argv.mjs"));
-const { APPROVAL_REMOVED, NATIVE_RECORD_REFUSED, HOST_RUN_USAGE, RESUME_LOCAL_ONLY, RETIRE_USAGE, SOUL_LAUNCH_USAGE, SPAWN_USAGE, SYNC_USAGE, TEAMS_USAGE, WORKTREE_USAGE, BOARD_USAGE, commandArgvProblem, commandFlags } = await kernelImport("command-flags", () => import("../lib/command-flags.mjs"));
+const { APPROVAL_REMOVED, NATIVE_RECORD_REFUSED, HOST_RUN_USAGE, RESUME_LOCAL_ONLY, RETIRE_USAGE, SOUL_LAUNCH_USAGE, SPAWN_USAGE, SYNC_USAGE, TEAMS_USAGE, WORKTREE_USAGE, BOARD_USAGE, commandArgvProblem, commandFlags, sameWorkDeprecation } = await kernelImport("command-flags", () => import("../lib/command-flags.mjs"));
 
 const rawArgs = process.argv.slice(2);
 const { argv: args, problem: argvProblem, inline: inlineValues } = expandInlineValues(rawArgs);
@@ -1540,8 +1540,8 @@ async function instanceCmd() {
   if (sub === "waiting" || sub === "attention") return instanceWaitingCmd(sub, bail);
   if (sub === "board") return instanceBoardCmd(bail);
   if (sub === "suggest-name") return instanceSuggestNameCmd(bail);
-  const usage = "usage: oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] [--json] | oats instance attention [--message=<text>] [--clear] [--json] | oats instance board set|unset|ask … [--json] | oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--dir <d>] [--json] | oats instance git <instance> [--home <abs>] [--dir <d>] [--json] | oats instance diff <instance> --file <id> --revision <rev> [--index-revision <rev>] [--home <abs>] [--dir <d>] [--json] | oats instance stop <instance> (--plan | --apply --plan-revision <rev> --idempotency-key <key>) [--no-recursive] [--grace-ms <n>] [--home <abs>] [--dir <d>] [--json] | oats instance color <instance> (<color> | --clear) [--home <abs>] [--dir <d>] [--json] | oats instance background <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance pin <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance related-work <instance> on|off [--home <abs>] [--dir <d>] [--json]";
-  if (!["git", "diff", "stop", "events", "color", "background", "pin", "related-work"].includes(sub) || !name || name.startsWith("--")) return bail("E_BAD_ARGS", usage);
+  const usage = "usage: oats instance waiting <set|clear> --producer <id> [--reason permission|question|attention] [--message=<text>] [--home <abs>] [--dir <d>] [--json] | oats instance attention [--message=<text>] [--clear] [--json] | oats instance board set|unset|ask … [--json] | oats instance events <instance> [--limit <n>] [--since <iso>] [--home <abs>] [--dir <d>] [--json] | oats instance git <instance> [--home <abs>] [--dir <d>] [--json] | oats instance diff <instance> --file <id> --revision <rev> [--index-revision <rev>] [--home <abs>] [--dir <d>] [--json] | oats instance stop <instance> (--plan | --apply --plan-revision <rev> --idempotency-key <key>) [--no-recursive] [--grace-ms <n>] [--home <abs>] [--dir <d>] [--json] | oats instance color <instance> (<color> | --clear) [--home <abs>] [--dir <d>] [--json] | oats instance background <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance pin <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance related-work <instance> on|off [--home <abs>] [--dir <d>] [--json] | oats instance same-work <instance> on|off (deprecated alias of related-work)";
+  if (!["git", "diff", "stop", "events", "color", "background", "pin", "related-work", "same-work"].includes(sub) || !name || name.startsWith("--")) return bail("E_BAD_ARGS", usage);
   dropAmbientRoot();
   if (sub === "events") {
     // K7: typed producer events, bounded window; nothing inferred.
@@ -1634,7 +1634,8 @@ async function instanceCmd() {
       return lifecycleFail(e, "E_LIFECYCLE_FAILED", e.candidates ? { candidates: e.candidates } : e.details);
     }
   }
-  if (sub === "related-work") {
+  // `oats instance same-work` is the verb's deprecated alias (the dispatch said so on stderr): the same command.
+  if (sub === "related-work" || sub === "same-work") {
     // Feature instance-related-work: presentation only, so no plan; addressed as color addresses an instance.
     const homeOpt = flag("home");
     if (homeOpt === true || (homeOpt !== undefined && !isAbsolute(homeOpt))) return bail("E_BAD_ARGS", "--home needs an absolute instance home");
@@ -3005,7 +3006,8 @@ async function spawnCmd() {
       ...(args.includes("--allow-child-spawns") ? { allowChildSpawns: true } : args.includes("--no-child-spawns") ? { allowChildSpawns: false } : {}),
       // Feature instance-related-work: the kernel binds it to the parent the new home records, else to its
       // sibling, or refuses.
-      ...(args.includes("--related-work") ? { relatedWork: true } : {}),
+      // `--same-work` is its deprecated alias (the dispatch said so on stderr).
+      ...(args.includes("--related-work") || args.includes("--same-work") ? { relatedWork: true } : {}),
       // Directory execution uses deployment configuration, not an ambient Git
       // checkout (especially when invoked via --dir from a source instance).
       // An attached instance's repository is the repository of the tree it is attached to (derived by the kernel).
@@ -4904,6 +4906,9 @@ if (cmd && KERNEL_COMMANDS.has(cmd) && wantsHelp) { if (JSON_MODE) { jsonOk({ co
 // A state-changing command's argv against the flags it defines (lib/command-flags.mjs), before it runs
 // and before a --server command is sent: a host on an older OATS would ignore a flag it does not read.
 { const problem = commandArgvProblem(rawArgs); if (problem) cmdFail(problem.code, problem.message, problem.details); }
+// A deprecated alias of the related-work flag or verb (lib/command-flags.mjs SAME_WORK_ALIASES) works as the
+// new spelling, and says so once on stderr, never in a --json answer: before it runs or is sent to a host.
+{ const deprecated = sameWorkDeprecation(rawArgs); if (deprecated) process.stderr.write(`oats: ${deprecated}\n`); }
 // Session resume is local only (#1559, D1): a server resumes its own instances.
 if (cmd === "session" && args[1] === "start" && flag("server") !== undefined && args.includes("--resume")) cmdFail("E_BAD_ARGS", RESUME_LOCAL_ONLY);
 if (flag("server") !== undefined && ROUTED_COMMANDS.has(cmd)) await serverRouteCmd();
@@ -5165,7 +5170,8 @@ Usage:
       [--related-work]                      record that the new instance does related work with
                                             its parent, else its sibling; clients draw the
                                             line for it (needs a relation that records a
-                                            parent or a sibling; --same-work is renamed)
+                                            parent or a sibling)
+      [--same-work]                         deprecated alias of --related-work
       [--work worktree|checkout|attached|workspace|directory]  override the soul's work mode
       [--work-dir <owner-work>]             attached: the owner's work tree (always a child)
       [--branch <b>] [--base <ref>]          worktree branch and starting ref;
@@ -5372,7 +5378,8 @@ Usage:
                                              record that this instance does related work with
                                              its parent, else its sibling (on needs one
                                              recorded); clients draw the line for it; off
-                                             removes it (oats instance same-work is renamed)
+                                             removes it; oats instance same-work is its
+                                             deprecated alias
   oats instance suggest-name [--soul <soul>] (--task <t> | --task-file <f>) [--harness claude|pi]
       [--model <m>] [--launch-config <n>] [--dir <d>] [--json]
                                              a name for a spawn by this machine's harness, as a

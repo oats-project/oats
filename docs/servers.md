@@ -651,8 +651,9 @@ dropped ([`retire`](desktop-cli-api.md#row-retire)). `relatedWork` (feature
 with its sibling) is relayed only when the host's row has `relatedWork:
 true`, and is absent otherwise. From a host whose features list
 `instance-same-work` and not `instance-related-work` (an older OATS), its
-row's `sameWork: true` is relayed as `relatedWork: true`; no roster row
-carries `sameWork` ([`relatedWork`](desktop-cli-api.md#row-related-work)). `pinned` (feature
+row's `sameWork: true` is relayed as `relatedWork: true`. `sameWork: true`
+is relayed beside `relatedWork: true` for a parent binding, and never alone
+([`relatedWork`](desktop-cli-api.md#row-related-work)). `pinned` (feature
 `instance-pin`, the instance is pinned at the top of its machine's list) is
 relayed only when the host's row has exactly `pinned: true`, and is absent
 otherwise ([`pinned`](desktop-cli-api.md#row-pinned)). A removed or edited registration keeps

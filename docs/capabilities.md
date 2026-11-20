@@ -334,7 +334,7 @@ A self-contained package has an `oats.json`:
       with `.oats-events`, `.oats-stop`, `.oats-restart`, `.oats-rollback`,
       `.oats-agents-md`, `.oats-start`, `.oats-attachments`, `.oats-color`,
       `.oats-background`, `.oats-pinned`, `.oats-related-work`, `.oats-same-work` (the
-      file of the flag `.oats-related-work` replaced, no longer read and still the kernel's) or
+      file of the flag `.oats-related-work` replaced, still read while the new one is absent) or
       `.oats-board`: the top-level entries the kernel itself writes in an instance home;
     - a prefix that starts with `.oats-`.
 

@@ -1014,7 +1014,7 @@ test("routed spawn --suggest-name on an apply (#1490 §3) needs the host's spawn
   }
 });
 
-test("routed spawn --related-work: as given to a host with instance-related-work; by its old spelling to a host with only instance-same-work for a parent binding, E_REMOTE_INCOMPATIBLE there for a sibling one; refused by any other host; nothing sent on a refusal, a preview's included", () => {
+test("routed spawn --related-work (or its alias --same-work): as --related-work to a host with instance-related-work; by its old spelling to a host with only instance-same-work for a parent binding, E_REMOTE_INCOMPATIBLE there for a sibling one; refused by any other host; nothing sent on a refusal, a preview's included", () => {
   const base = mkdtempSync("/tmp/oats-rrw-");
   const prevHomeDir = process.env.OATS_HOME_DIR; process.env.OATS_HOME_DIR = join(base, "oats-home"); mkdirSync(process.env.OATS_HOME_DIR);
   try {
@@ -1043,10 +1043,13 @@ test("routed spawn --related-work: as given to a host with instance-related-work
       const host = remote(features);
       return { host, run: () => routeCommand("build", "spawn", args, { server, execFileSync: host.exec }) };
     };
-    const spawnArgs = (relation) => ["dev", "--purpose", "new", ...relation, "--related-work"];
+    let flag;
+    const spawnArgs = (relation) => ["dev", "--purpose", "new", ...relation, flag];
     const PARENT = [["--parent", "boss"], ["--relation", "child", "--relative-to", "boss"], ["--relation", "sibling", "--relative-to", "kid"], ["--relation", "parent", "--relative-to", "kid"], ["--work", "attached", "--work-dir", "/w/agents/dev/instances/boss/work"]];
     const SIBLING = [["--relation", "sibling", "--relative-to", "boss"], ["--relation", "sibling", "--relative-to", "peer"], ["--relation", "parent", "--relative-to", "peer2"]];
-    for (const preview of [false, true]) {
+    // The deprecated alias --same-work routes as --related-work does: the host is sent the spelling it takes.
+    for (const [spelling, preview] of [["--related-work", false], ["--related-work", true], ["--same-work", false], ["--same-work", true]]) {
+      flag = spelling;
       const tail = preview ? ["--preview"] : [];
       // A host that advertises neither feature refuses the flag, as it refused --same-work before.
       for (const relation of [...PARENT, ...SIBLING]) {

@@ -15,13 +15,16 @@
 // - spawn: `--related-work` binds whichever relation records a parent, else the sibling it records (a sibling of a
 //   root binds the root, a sibling of a sibling binds the sibling it was spawned beside), and is refused with
 //   nothing created (a preview's included) when neither is recorded; `--relation parent` leaves its anchor's flag
-//   bound to the old relation; no row carries `sameWork`;
-// - the old spellings: `--same-work`, `oats instance same-work` and spawnInstance's `sameWork` are refused naming
-//   the new one, with nothing done; an existing `.oats-same-work.json` is not read and not deleted;
+//   bound to the old relation;
+// - the compatibility layer (item 4 of the related-work contract): `--same-work`, `oats instance same-work` and
+//   spawnInstance's `sameWork` are aliases, bound by the same rule, each use saying so once on stderr and never in
+//   a --json answer; rows carry `sameWork: true` beside `relatedWork: true` for a parent binding only, and the
+//   verb's answer `sameWork` the same; the old `.oats-same-work.json` reads as a parent binding while the new file
+//   is absent, the new file wins when both exist, the write that creates it removes the old one, and off both;
 // - the verb: its exact answer, on twice writes nothing, off always succeeds, on with neither relation is refused,
 //   resolution as `instance color` answers it, E_INSTANCE_RETIRING beside a retire or in a quarantined home;
 //   a corrupt, oversized, linked or directory record reads off and off removes it; the feature, and the old one
-//   no longer advertised;
+//   still advertised beside it;
 // - retire: the file is never work; a parent's retirement, which relinks its child, and a sibling's retirement,
 //   which moves its sibling's link, leave the flag off until `on` rebinds it.
 import test from "node:test";
@@ -53,13 +56,19 @@ function home(t) {
   mkdirSync(dir);
   return dir;
 }
-/** The status rows of `fx`, by instance name. status --json answers its document bare, not in an envelope. No row,
- *  anywhere in the document, carries the flag's old name. */
+/** The status rows of `fx`, by instance name. status --json answers its document bare, not in an envelope. On every
+ *  row, the flag's old name `sameWork: true` stands exactly beside `relatedWork: true` of a parent binding (a row
+ *  with a parent holds only a parent binding), and never as `false`. */
 function rows(fx) {
   const r = fx.cli(["status", "--json"]);
   assert.equal(r.status, 0, r.stderr);
-  assert.doesNotMatch(r.stdout, /"sameWork"/, "no sameWork key anywhere in status --json");
-  return Object.fromEntries(JSON.parse(r.stdout).agents.flatMap((a) => a.instances).map((i) => [i.instance, i]));
+  const byName = Object.fromEntries(JSON.parse(r.stdout).agents.flatMap((a) => a.instances).map((i) => [i.instance, i]));
+  for (const [name, row] of Object.entries(byName)) {
+    const parentBound = row.relatedWork === true && typeof row.parentInstance === "string" && row.parentInstance !== "";
+    assert.equal(Object.hasOwn(row, "sameWork"), parentBound, `${name}: sameWork beside a parent binding only`);
+    if (parentBound) assert.equal(row.sameWork, true, name);
+  }
+  return byName;
 }
 const spawnCli = (fx, args, what) => okResult(fx.cli(["spawn", "dev", ...args, "--no-launch", "--json"]), what);
 const instanceNames = (fx) => { const dir = join(fx.root, "dev", "instances"); return existsSync(dir) ? readdirSync(dir).filter((n) => !n.startsWith(".")).sort() : []; };
@@ -201,6 +210,7 @@ test("spawn --related-work: bound to the parent the new home records, by each re
   assert.equal(preview.parentInstance, boss);
   assert.equal(Object.hasOwn(preview, "relatedWork"), false);
   assert.equal(Object.hasOwn(preview, "sameWork"), false);
+  assert.equal(Object.hasOwn(preview, "relatedWorkApi"), false);
   assert.equal(existsSync(preview.home), false, "a preview creates nothing");
 
   // A child: flagged, bound to its parent, shown from its first status.
@@ -234,7 +244,7 @@ test("spawn --related-work: bound to the parent the new home records, by each re
   assert.equal(r[kid.instance].parentInstance, mid.instance);
   assert.equal(Object.hasOwn(r[kid.instance], "relatedWork"), false, "bound to an old parent: absent");
   // `on` rebinds to the current parent.
-  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "on", "--json"]), "rebind"), { instance: kid.instance, relatedWork: true });
+  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "on", "--json"]), "rebind"), { instance: kid.instance, relatedWork: true, sameWork: true });
   assert.deepEqual(readRelatedWork(kid.home), { parent: mid.instance });
   assert.equal(rows(fx)[kid.instance].relatedWork, true);
 });
@@ -269,54 +279,114 @@ test("spawn --related-work with a sibling and no parent: bound to the sibling th
   for (const name of [root, plain.instance]) assert.equal(Object.hasOwn(r[name], "relatedWork"), false, name);
 });
 
-test("the old spellings are refused naming the new one, with nothing done: --same-work, oats instance same-work, spawnInstance's sameWork", async (t) => {
+test("the deprecated aliases work as the new spellings, by the same rule: --same-work, oats instance same-work and spawnInstance's sameWork; each use says so once on stderr, never in a --json answer", async (t) => {
   const fx = v2Deployment({ t });
   const boss = spawnCli(fx, ["--purpose", "boss"], "boss");
-  const kid = spawnCli(fx, ["--purpose", "kid", "--parent", boss.instance], "kid");
-  for (const preview of [false, true]) {
-    const before = instanceNames(fx);
-    const e = refused(fx.cli(["spawn", "dev", "--purpose", "old", "--parent", boss.instance, "--same-work", ...(preview ? ["--preview"] : []), "--no-launch", "--json"]), "--same-work");
-    assert.deepEqual({ code: e.code, message: e.message }, { code: "E_BAD_ARGS", message: "--same-work is renamed: use --related-work" });
-    assert.deepEqual(instanceNames(fx), before, "nothing was spawned");
-  }
-  assert.equal(refused(fx.cli(["spawn", "dev", "--purpose", "old", "--same-work=true", "--json"]), "--same-work=").message, "--same-work is renamed: use --related-work");
-  const text = fx.cli(["spawn", "dev", "--purpose", "old", "--parent", boss.instance, "--same-work", "--no-launch"]);
-  assert.notEqual(text.status, 0);
-  assert.match(text.stderr, /--same-work is renamed: use --related-work/);
-  for (const argv of [[kid.instance, "on"], [kid.instance, "off"], [kid.instance, "on", "--home", kid.home], []]) {
-    const e = refused(fx.cli(["instance", "same-work", ...argv, "--json"]), `instance same-work ${argv.join(" ")}`);
-    assert.deepEqual({ code: e.code, message: e.message }, { code: "E_BAD_ARGS", message: "oats instance same-work is renamed: use oats instance related-work" });
-  }
-  const verbText = fx.cli(["instance", "same-work", kid.instance, "on"]);
-  assert.notEqual(verbText.status, 0);
-  assert.match(verbText.stderr, /oats instance same-work is renamed: use oats instance related-work/);
-  for (const file of [RELATED_WORK_FILE, SAME_WORK_FILE]) assert.equal(existsSync(join(kid.home, file)), false, `${file}: nothing was written`);
-  // A programmatic caller of spawnInstance is told the same, before anything is created.
+  const FLAG = "oats: --same-work is renamed: use --related-work", VERB = "oats: oats instance same-work is renamed: use oats instance related-work";
+  /** `oats <argv> --json`: its envelope, parsed from the whole of stdout (one JSON document, no deprecation in it),
+   *  and its stderr's lines. */
+  const json = (argv, what) => {
+    const r = fx.cli([...argv, "--json"]);
+    assert.equal(r.status, 0, `${what}: ${r.stdout}${r.stderr}`);
+    const envelope = JSON.parse(r.stdout);
+    assert.doesNotMatch(r.stdout, /renamed|deprecat/i, `${what}: nothing of the deprecation in the --json answer`);
+    assert.equal(envelope.ok, true, what);
+    assert.equal(Object.hasOwn(envelope, "warnings"), false, `${what}: no envelope warning`);
+    return { result: envelope.result, stderr: r.stderr.split("\n").filter(Boolean) };
+  };
+  // --same-work: a parent binding, as --related-work gives it.
+  const kid = json(["spawn", "dev", "--purpose", "kid", "--parent", boss.instance, "--same-work", "--no-launch"], "spawn --same-work");
+  assert.deepEqual(kid.stderr.filter((l) => l.includes("renamed")), [FLAG], "one deprecation line, on stderr");
+  assert.deepEqual(readRelatedWork(kid.result.home), { parent: boss.instance });
+  assert.equal(existsSync(join(kid.result.home, SAME_WORK_FILE)), false, "the alias writes the new file only");
+  // ... and a sibling binding, by the same rule (parent, else sibling).
+  const peer = json(["spawn", "dev", "--purpose", "peer", "--relation", "sibling", "--relative-to", boss.instance, "--same-work", "--no-launch"], "sibling --same-work");
+  assert.deepEqual(readRelatedWork(peer.result.home), { sibling: boss.instance });
+  // A preview with the alias says so too, and creates nothing.
+  const shown = json(["spawn", "dev", "--purpose", "seen", "--parent", boss.instance, "--same-work", "--preview"], "preview --same-work");
+  assert.deepEqual(shown.stderr.filter((l) => l.includes("renamed")), [FLAG]);
+  assert.equal(existsSync(shown.result.home), false);
+  // With neither relation, the alias is refused as the new spelling is, nothing created.
   const before = instanceNames(fx);
-  await assert.rejects(fx.spawn("dev", { instance: "dev-prog", parent: boss.instance, sameWork: true }), (e) => e.code === "E_BAD_ARGS" && e.message === "sameWork is renamed: use relatedWork");
+  const refusal = fx.cli(["spawn", "dev", "--purpose", "nope", "--same-work", "--no-launch", "--json"]);
+  assert.equal(refused(refusal, "alias with neither").code, "E_BAD_ARGS");
   assert.deepEqual(instanceNames(fx), before);
+  // A switch takes no value, as every switch.
+  assert.equal(refused(fx.cli(["spawn", "dev", "--purpose", "old", "--same-work=true", "--json"]), "--same-work=").code, "E_BAD_ARGS");
+  let r = rows(fx);
+  assert.equal(r[kid.result.instance].relatedWork, true);
+  assert.equal(r[kid.result.instance].sameWork, true, "a parent binding: sameWork beside relatedWork");
+  assert.equal(r[peer.result.instance].relatedWork, true);
+  assert.equal(Object.hasOwn(r[peer.result.instance], "sameWork"), false, "a sibling binding: no sameWork");
+
+  // oats instance same-work: the verb, with the same answer and one line on stderr.
+  const off = json(["instance", "same-work", kid.result.instance, "off"], "same-work off");
+  assert.deepEqual(off.result, { instance: kid.result.instance, relatedWork: false, sameWork: false });
+  assert.deepEqual(off.stderr.filter((l) => l.includes("renamed")), [VERB]);
+  const on = json(["instance", "same-work", kid.result.instance, "on"], "same-work on");
+  assert.deepEqual(on.result, { instance: kid.result.instance, relatedWork: true, sameWork: true });
+  assert.deepEqual(json(["instance", "same-work", peer.result.instance, "on"], "same-work on a sibling").result, { instance: peer.result.instance, relatedWork: true, sameWork: false });
+  // In text: the new verb's line on stdout, the deprecation on stderr.
+  const text = fx.cli(["instance", "same-work", kid.result.instance, "on"]);
+  assert.equal(text.status, 0, text.stderr);
+  assert.equal(text.stdout.trim(), `${kid.result.instance}: related work on`);
+  assert.deepEqual(text.stderr.split("\n").filter((l) => l.includes("renamed")), [VERB]);
+  // The new spellings say nothing of the kind.
+  assert.deepEqual(json(["instance", "related-work", kid.result.instance, "on"], "new verb").stderr.filter((l) => l.includes("renamed")), []);
+  // spawnInstance's sameWork option is the same alias.
+  const prog = await fx.spawn("dev", { instance: "dev-prog", parent: boss.instance, sameWork: true });
+  assert.deepEqual(readRelatedWork(prog.home), { parent: boss.instance });
+  await assert.rejects(fx.spawn("dev", { instance: "dev-prog2", parent: boss.instance, sameWork: "yes" }), (e) => e.code === "E_BAD_ARGS" && e.message === "sameWork must be true or false");
 });
 
-test("an existing .oats-same-work.json is not read and not deleted: the row has no relatedWork until oats instance related-work on, which writes the new file", (t) => {
+test("the old .oats-same-work.json reads as a parent binding while the new file is absent; the new file wins when both exist; the write that creates it removes the old one, and off removes both", (t) => {
   const fx = v2Deployment({ t });
   const boss = spawnCli(fx, ["--purpose", "boss"], "boss");
+  const mid = spawnCli(fx, ["--purpose", "mid", "--parent", boss.instance], "mid");
   const kid = spawnCli(fx, ["--purpose", "kid", "--parent", boss.instance], "kid");
-  const old = join(kid.home, SAME_WORK_FILE);
+  const old = join(kid.home, SAME_WORK_FILE), file = join(kid.home, RELATED_WORK_FILE);
   const oldBytes = JSON.stringify({ sameWorkApi: 1, parent: boss.instance, at: "2026-10-27T12:00:00.000Z" }) + "\n";
-  writeFileSync(old, oldBytes, { mode: 0o600 });
-  // A sameWork in instance.json is no flag either.
+  const putOld = (parent = boss.instance) => writeFileSync(old, JSON.stringify({ sameWorkApi: 1, parent, at: "2026-10-27T12:00:00.000Z" }) + "\n", { mode: 0o600 });
+  // A flag set before the rename keeps working: the old record, bound to the current parent, is a parent binding.
+  putOld();
+  let r = rows(fx);
+  assert.equal(r[kid.instance].relatedWork, true, "an existing flag reads on");
+  assert.equal(r[kid.instance].sameWork, true);
+  assert.deepEqual(readRelatedWork(kid.home), { parent: boss.instance });
+  // on with that binding again is no change: nothing written, the old file left as it is.
+  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "on", "--json"]), "on again"), { instance: kid.instance, relatedWork: true, sameWork: true });
+  assert.equal(readFileSync(old, "utf8"), oldBytes);
+  assert.equal(existsSync(file), false);
+  // An old record bound to another parent reads off, as it always did; the old format is a parent binding only.
+  putOld("someone");
+  assert.equal(Object.hasOwn(rows(fx)[kid.instance], "relatedWork"), false);
+  writeFileSync(old, JSON.stringify({ sameWorkApi: 1, sibling: boss.instance }));
+  assert.equal(readRelatedWork(kid.home), null, "no sibling in the old format");
+  for (const bad of ["{", JSON.stringify({ sameWorkApi: 2, parent: boss.instance }), JSON.stringify({ relatedWorkApi: 1, parent: boss.instance })]) {
+    writeFileSync(old, bad);
+    assert.equal(readRelatedWork(kid.home), null, bad);
+  }
+  // The write that creates the new file removes the old one.
+  putOld("someone");
+  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "on", "--json"]), "rebind"), { instance: kid.instance, relatedWork: true, sameWork: true });
+  assert.deepEqual(JSON.parse(readFileSync(file, "utf8")).parent, boss.instance);
+  assert.equal(existsSync(old), false, "the old file goes with the write that creates the new one");
+  // Both present: the new one wins, whatever the old says, an invalid new one included.
+  putOld(mid.instance);
+  assert.deepEqual(readRelatedWork(kid.home), { parent: boss.instance });
+  writeFileSync(file, "{not json");
+  assert.equal(readRelatedWork(kid.home), null, "an invalid new record wins over a valid old one");
+  assert.equal(Object.hasOwn(rows(fx)[kid.instance], "relatedWork"), false);
+  // off removes both, whatever stands at either name.
+  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "off", "--json"]), "off"), { instance: kid.instance, relatedWork: false, sameWork: false });
+  for (const path of [file, old]) assert.throws(() => lstatSync(path), { code: "ENOENT" }, path);
+  putOld();
+  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "off", "--json"]), "off the old file alone"), { instance: kid.instance, relatedWork: false, sameWork: false });
+  assert.throws(() => lstatSync(old), { code: "ENOENT" });
+  // A sameWork or relatedWork in instance.json is no flag.
   const metaFile = join(kid.home, "instance.json");
   writeFileSync(metaFile, JSON.stringify({ ...meta(kid.home), sameWork: true, relatedWork: true }, null, 2));
-  let r = rows(fx);
-  assert.equal(Object.hasOwn(r[kid.instance], "relatedWork"), false, "the old flag reads off");
-  assert.equal(readFileSync(old, "utf8"), oldBytes, "and is left where it is");
-  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "on", "--json"]), "on"), { instance: kid.instance, relatedWork: true });
-  assert.deepEqual(readRelatedWork(kid.home), { parent: boss.instance });
-  assert.equal(readFileSync(old, "utf8"), oldBytes, "on leaves the old file alone");
-  r = rows(fx);
-  assert.equal(r[kid.instance].relatedWork, true);
-  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "off", "--json"]), "off"), { instance: kid.instance, relatedWork: false });
-  assert.equal(readFileSync(old, "utf8"), oldBytes, "off removes only the new file");
+  assert.equal(Object.hasOwn(rows(fx)[kid.instance], "relatedWork"), false);
 });
 
 test("oats instance related-work: on, on again, off, off again; the exact answer; on with neither parent nor sibling is refused; a sibling binding; the text; the feature", (t) => {
@@ -326,20 +396,20 @@ test("oats instance related-work: on, on again, off, off again; the exact answer
   const file = join(kid.home, RELATED_WORK_FILE);
   assert.equal(Object.hasOwn(rows(fx)[kid.instance], "relatedWork"), false);
 
-  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "on", "--json"]), "on"), { instance: kid.instance, relatedWork: true });
+  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "on", "--json"]), "on"), { instance: kid.instance, relatedWork: true, sameWork: true });
   assert.equal(rows(fx)[kid.instance].relatedWork, true);
   const written = readFileSync(file, "utf8"), mtime = statSync(file).mtimeMs;
-  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "on", "--home", kid.home, "--json"]), "on again"), { instance: kid.instance, relatedWork: true });
+  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "on", "--home", kid.home, "--json"]), "on again"), { instance: kid.instance, relatedWork: true, sameWork: true });
   assert.equal(readFileSync(file, "utf8"), written, "on twice writes nothing");
   assert.equal(statSync(file).mtimeMs, mtime);
-  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "off", "--json"]), "off"), { instance: kid.instance, relatedWork: false });
+  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "off", "--json"]), "off"), { instance: kid.instance, relatedWork: false, sameWork: false });
   assert.equal(existsSync(file), false);
   assert.equal(Object.hasOwn(rows(fx)[kid.instance], "relatedWork"), false);
-  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "off", "--json"]), "off again"), { instance: kid.instance, relatedWork: false });
+  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "off", "--json"]), "off again"), { instance: kid.instance, relatedWork: false, sameWork: false });
 
   // A root's sibling: on binds the sibling it records.
   const peer = spawnCli(fx, ["--purpose", "peer", "--relation", "sibling", "--relative-to", boss.instance], "peer");
-  assert.deepEqual(okResult(fx.cli(["instance", "related-work", peer.instance, "on", "--json"]), "sibling on"), { instance: peer.instance, relatedWork: true });
+  assert.deepEqual(okResult(fx.cli(["instance", "related-work", peer.instance, "on", "--json"]), "sibling on"), { instance: peer.instance, relatedWork: true, sameWork: false });
   assert.deepEqual(readRelatedWork(peer.home), { sibling: boss.instance });
   assert.equal(rows(fx)[peer.instance].relatedWork, true);
   const peerWritten = readFileSync(join(peer.home, RELATED_WORK_FILE), "utf8");
@@ -351,11 +421,11 @@ test("oats instance related-work: on, on again, off, off again; the exact answer
   assert.equal(e.code, "E_BAD_ARGS");
   assert.equal(e.message, `${boss.instance} would record no parent or sibling instance: related work is declared against a recorded parent or sibling; the flag was not changed`);
   assert.equal(existsSync(join(boss.home, RELATED_WORK_FILE)), false);
-  assert.deepEqual(okResult(fx.cli(["instance", "related-work", boss.instance, "off", "--json"]), "off with neither"), { instance: boss.instance, relatedWork: false });
+  assert.deepEqual(okResult(fx.cli(["instance", "related-work", boss.instance, "off", "--json"]), "off with neither"), { instance: boss.instance, relatedWork: false, sameWork: false });
   // A record left in a home that has neither (hand-made, or its edge removed) reads off, and off removes it.
   writeRelatedWork(boss.home, { parent: "someone" });
   assert.equal(Object.hasOwn(rows(fx)[boss.instance], "relatedWork"), false);
-  assert.deepEqual(okResult(fx.cli(["instance", "related-work", boss.instance, "off", "--json"]), "off a stray record"), { instance: boss.instance, relatedWork: false });
+  assert.deepEqual(okResult(fx.cli(["instance", "related-work", boss.instance, "off", "--json"]), "off a stray record"), { instance: boss.instance, relatedWork: false, sameWork: false });
   assert.equal(existsSync(join(boss.home, RELATED_WORK_FILE)), false);
 
   // Arguments: exactly one of on or off.
@@ -369,7 +439,7 @@ test("oats instance related-work: on, on again, off, off again; the exact answer
   }
   const features = JSON.parse(fx.cli(["version", "--json"]).stdout).features;
   assert.ok(features.includes("instance-related-work"));
-  assert.equal(features.includes("instance-same-work"), false, "the old feature is no longer advertised");
+  assert.ok(features.includes("instance-same-work"), "the old feature is still advertised beside it (the compatibility layer)");
 });
 
 test("oats instance related-work resolves as instance color does, refuses a home being retired or quarantined, and reads a corrupt record as off", (t) => {
@@ -413,11 +483,11 @@ test("oats instance related-work resolves as instance color does, refuses a home
   for (const [what, make] of Object.entries(states)) {
     make();
     assert.equal(Object.hasOwn(rows(fx)[kid.instance], "relatedWork"), false, `${what}: off`);
-    assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "off", "--json"]), `${what}: off`), { instance: kid.instance, relatedWork: false });
+    assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "off", "--json"]), `${what}: off`), { instance: kid.instance, relatedWork: false, sameWork: false });
     assert.throws(() => lstatSync(file), { code: "ENOENT" }, `${what}: removed`);
   }
   assert.ok(existsSync(elsewhere), "a link's target is never touched");
-  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "on", "--json"]), "after"), { instance: kid.instance, relatedWork: true });
+  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "on", "--json"]), "after"), { instance: kid.instance, relatedWork: true, sameWork: true });
 });
 
 test("retire: the flag is never work; a parent's retirement relinks its flagged child, and a sibling's retirement moves its flagged sibling's link, whose flag then reads off until on rebinds it", async (t) => {
@@ -444,7 +514,7 @@ test("retire: the flag is never work; a parent's retirement relinks its flagged 
   assert.equal(r[kid.instance].parentInstance, top.instance);
   assert.equal(Object.hasOwn(r[kid.instance], "relatedWork"), false);
   assert.deepEqual(readRelatedWork(kid.home), { parent: mid.instance }, "the relink leaves the record alone");
-  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "on", "--json"]), "rebind"), { instance: kid.instance, relatedWork: true });
+  assert.deepEqual(okResult(fx.cli(["instance", "related-work", kid.instance, "on", "--json"]), "rebind"), { instance: kid.instance, relatedWork: true, sameWork: true });
   assert.deepEqual(readRelatedWork(kid.home), { parent: top.instance });
   assert.equal(rows(fx)[kid.instance].relatedWork, true);
 
@@ -461,7 +531,7 @@ test("retire: the flag is never work; a parent's retirement relinks its flagged 
   assert.equal(r[s.instance].siblingInstance, q.instance, "the link moved to the retiree's own sibling");
   assert.equal(Object.hasOwn(r[s.instance], "relatedWork"), false, "bound to the retired sibling: absent");
   assert.deepEqual(readRelatedWork(s.home), { sibling: rr.instance });
-  assert.deepEqual(okResult(fx.cli(["instance", "related-work", s.instance, "on", "--json"]), "rebind a sibling"), { instance: s.instance, relatedWork: true });
+  assert.deepEqual(okResult(fx.cli(["instance", "related-work", s.instance, "on", "--json"]), "rebind a sibling"), { instance: s.instance, relatedWork: true, sameWork: false });
   assert.deepEqual(readRelatedWork(s.home), { sibling: q.instance });
   assert.equal(rows(fx)[s.instance].relatedWork, true);
   // The cluster root Q retires: S's link to it is dropped (Q had none to hand on), S becomes top-level, and with

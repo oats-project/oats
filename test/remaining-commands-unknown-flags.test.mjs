@@ -67,6 +67,8 @@ const TYPOS = (d) => [
   ["instance background", ["instance", "background", "dev-one", "on", "--dri", d.fx.dep], "--dri"],
   ["instance pin", ["instance", "pin", "dev-one", "on", "--hme", d.home], "--hme"],
   ["instance related-work", ["instance", "related-work", "dev-one", "on", "--hom", d.home], "--hom"],
+  // The deprecated alias: a typo is refused before its deprecation line is said.
+  ["instance same-work", ["instance", "same-work", "dev-one", "on", "--hom", d.home], "--hom"],
   ["instance waiting set", ["instance", "waiting", "set", "--producer", "oats.core", "--reason", "permission", "--home", d.home, "--mesage", "x"], "--mesage"],
   ["instance waiting clear", ["instance", "waiting", "clear", "--producer", "oats.core", "--home", d.home, "--resaon", "permission"], "--resaon"],
   ["instance attention", ["instance", "attention", "--claer"], "--claer", d.inHome],
@@ -146,6 +148,7 @@ test("each command's defined flags are read: one smoke case per command", async 
   assert.equal(ok(["instance", "background", "dev-one", "on", ...at]).background, true);
   assert.equal(ok(["instance", "pin", "dev-one", "on", ...at]).pinned, true);
   assert.equal(ok(["instance", "related-work", "dev-one", "off", ...at]).relatedWork, false);
+  assert.equal(ok(["instance", "same-work", "dev-one", "off", ...at]).relatedWork, false);
   assert.equal(ok(["instance", "waiting", "set", "--producer", "oats.core", "--reason", "permission", "--message=a question", ...at]).waitingOnYou.message, "a question");
   assert.equal(ok(["instance", "waiting", "clear", "--producer", "oats.core", ...at]).waitingOnYou, null);
   assert.equal(ok(["instance", "attention", "--message", "look", "--json"], d.inHome).waitingOnYou.message, "look");

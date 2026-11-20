@@ -487,14 +487,17 @@ existing instance, addressed as `oats instance color` addresses it and routed
 with `--server`. `on` needs a recorded parent or sibling and binds the flag
 to the current one, so it also rebinds after a relink; `off` always
 succeeds. An instance with the flag on carries `relatedWork: true` on its
-`oats status --json` row; otherwise the key is absent.
+`oats status --json` row, and `sameWork: true` beside it when the flag is
+bound to its parent; otherwise the keys are absent.
 
 The flag was the same-work flag (`--same-work`, `oats instance same-work`,
 `.oats-same-work.json`, a parent binding only). The old spellings are
-refused with `E_BAD_ARGS`, naming the new one, and nothing is done. An old
-`.oats-same-work.json` is not read, so an instance flagged before the rename
-reads off until `on` is run again; the file is left in the home. The answer,
-the errors and the remote relay are in
+deprecated aliases of the new ones: they work the same, by the same binding
+rule, and each use prints one line on stderr naming the new spelling, never
+in `--json` output. Move skills and scripts to `--related-work` once their
+hosts run an OATS that has it. An old `.oats-same-work.json` still reads as
+a parent binding until the new record is written, which removes it; `off`
+removes both. The answer, the errors and the remote relay are in
 [desktop-cli-api.md](desktop-cli-api.md#related-work-oats-instance-related-work).
 
 `oats instance pin <instance> on|off` (feature `instance-pin`) pins an

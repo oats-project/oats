@@ -170,7 +170,8 @@ see the [official catalog](official-catalog.md) for current pins.
 | `roster-workspace-key` | `oats server roster --workspace-key <key>`, repeatable: only the groups that can belong to one of the given workspaces are probed and returned (registered for one of them, registered with no known `workspaceKey`, or saved routes only); the answer's shape is unchanged, OATS 0.56.0 ([The remote roster](#roster-workspace-key)). Gate on the probe: a kernel without it ignores the flag and probes and answers every group | |
 | `spawn-apply-max-age` | `--max-age <s>` on a spawn apply bound by `--expect-decision <revision>`: the apply reuses member heads as the preview does, its decision fence unchanged, and its answer carries no `observation` block, OATS 0.58.0 ([Apply](#apply)). Gate on the probe: a kernel without it refuses the flag on an apply (`E_BAD_ARGS`) | |
 | `instance-color` | `oats instance color <instance> (<color> \| --clear)`, local and `--server` ([An instance's colour](#an-instances-colour-oats-instance-color)); `color` on `oats status --json` instance rows, on `oats server roster --json` rows and on `oats inspect --home` `instance` (`null` for none). Gate on the probe, locally or in the host's `probe.features`: an older kernel's rows have no `color` | `instanceColorApi: 1` (payload only) |
-| `instance-related-work` | `oats instance related-work <instance> on\|off` and `oats spawn … --related-work`, local and `--server` ([Related work](#related-work-oats-instance-related-work)); `relatedWork: true` on `oats status --json` instance rows and on `oats server roster --json` rows while the instance's flag is bound to its current `parentInstance`, or, with no parent, to its current `siblingInstance`, the key absent otherwise ([`relatedWork`](#row-related-work)). It replaces `instance-same-work`, which is no longer advertised: `--same-work` and `oats instance same-work` are refused (`E_BAD_ARGS`), and rows never carry `sameWork`. Gate on the probe, locally or in the host's `probe.features`: an older kernel's rows never carry `relatedWork`, and it refuses the flag and the verb (`E_BAD_ARGS`) | |
+| `instance-related-work` | `oats instance related-work <instance> on\|off` and `oats spawn … --related-work`, local and `--server` ([Related work](#related-work-oats-instance-related-work)); `relatedWork: true` on `oats status --json` instance rows and on `oats server roster --json` rows while the instance's flag is bound to its current `parentInstance`, or, with no parent, to its current `siblingInstance`, the key absent otherwise ([`relatedWork`](#row-related-work)). It renames `instance-same-work`, still advertised beside it ([below](#feature-instance-same-work)). Gate on the probe, locally or in the host's `probe.features`: an older kernel's rows never carry `relatedWork`, and it refuses the flag and the verb (`E_BAD_ARGS`) | |
+| <a id="feature-instance-same-work"></a>`instance-same-work` | the related-work flag by its old name, kept for a release at least ([The deprecated aliases](#the-deprecated-aliases)): `oats spawn … --same-work` and `oats instance same-work <instance> on\|off` work as the new spellings, each use saying so in one line on stderr and never in `--json`; status and roster rows carry `sameWork: true` beside `relatedWork: true` for a parent binding; `.oats-same-work.json` reads as a parent binding while `.oats-related-work.json` is absent. An older kernel advertises it alone: there the flag binds a parent only. Its removal gets its own release-notes entry | |
 | `deployments-list` | `oats deployments [list]\|add\|remove\|import --json`, this computer's list of its deployments (`~/.oats/config/deployments.json`); `listed` on `oats onboard --json`; a kernel command run in an unlisted deployment lists it ([This computer's deployments](#this-computers-deployments-oats-deployments)). Gate on the probe: there is no fallback scan | `deploymentsApi: 1` |
 | `status-retire-state` | `retire` on `oats status --json` instance rows and on remote roster rows: whether a retire of the home is running, cannot be told, failed or was interrupted, read only from the files beside the home, OATS 0.59.0 ([`retire`](#row-retire)). `retirePending` is unchanged. Gate on the probe: a kernel without it never carries the field, so its absence there says nothing | |
 | `instance-suggest-name` | `oats instance suggest-name [--soul <soul>] (--task <t> \| --task-file <f>) [--harness claude\|pi] [--model <m>] [--launch-config <n>] --json`: the name a `--suggest-name` spawn would get, chosen on this machine for a spawn that may land on another, not made unique ([A name for a spawn elsewhere](#a-name-for-a-spawn-elsewhere-oats-instance-suggest-name)). Local only: `--server` is `E_BAD_ARGS`. Gate on the local probe; without it, the spawn goes unnamed (numbered, or named where it lands) | |
@@ -326,7 +327,7 @@ for `--no-recursive`) is never ignored.
 | Command | Arguments | Flags that take a value | Switches | Refused in their own words | Its own answers |
 |---|---|---|---|---|---|
 | `oats retire` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir`, `--server` | `--plan`, `--self`, `--discard-worktree`, `--keep-dir`, `--force`, `--json` | `--delete-branch` | none |
-| `oats spawn` | `<soul>` | `--agents-root`, `--backend`, `--base`, `--branch`, `--dir`, `--expect-decision`, `--harness`, `--herdr-socket`, `--idempotency-key`, `--instance`, `--launch-config`, `--max-age`, `--model`, `--name`, `--parent`, `--provider` (2 words), `--purpose`, `--relation`, `--relative-root`, `--relative-to`, `--repo`, `--runtime`, `--server`, `--task`, `--task-file`, `--trigger-event`, `--wake-cron`, `--wake-every`, `--wake-file`, `--wake-json`, `--wake-message`, `--wake-message-file`, `--wake-tz`, `--work`, `--work-dir` | `--allow-child-spawns`, `--background`, `--json`, `--no-background`, `--no-child-spawns`, `--no-launch`, `--no-yolo`, `--preview`, `--related-work`, `--suggest-name`, `--yolo` | `--instructions-file`, `--def-file`, `--ephemeral`, `--same-work` | an unknown flag, an argument after the last |
+| `oats spawn` | `<soul>` | `--agents-root`, `--backend`, `--base`, `--branch`, `--dir`, `--expect-decision`, `--harness`, `--herdr-socket`, `--idempotency-key`, `--instance`, `--launch-config`, `--max-age`, `--model`, `--name`, `--parent`, `--provider` (2 words), `--purpose`, `--relation`, `--relative-root`, `--relative-to`, `--repo`, `--runtime`, `--server`, `--task`, `--task-file`, `--trigger-event`, `--wake-cron`, `--wake-every`, `--wake-file`, `--wake-json`, `--wake-message`, `--wake-message-file`, `--wake-tz`, `--work`, `--work-dir` | `--allow-child-spawns`, `--background`, `--json`, `--no-background`, `--no-child-spawns`, `--no-launch`, `--no-yolo`, `--preview`, `--related-work`, `--same-work`, `--suggest-name`, `--yolo` | `--instructions-file`, `--def-file`, `--ephemeral` | an unknown flag, an argument after the last |
 | `oats sync` | none | `--dir` | `--plan`, `--json` | `--approve` | none |
 | `oats instance stop` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--grace-ms`, `--home`, `--dir`, `--server` | `--plan`, `--apply`, `--no-recursive`, `--json` | none | none |
 | `oats instance upgrade` | `<instance>` | `--plan-revision`, `--idempotency-key`, `--home`, `--dir` | `--undo`, `--plan`, `--json` | `--server` | none |
@@ -334,6 +335,7 @@ for `--no-recursive`) is never ignored.
 | `oats instance background` | `<instance>` `<state>` | `--home`, `--dir`, `--server` | `--json` | none | none |
 | `oats instance pin` | `<instance>` `<state>` | `--home`, `--dir`, `--server` | `--json` | none | none |
 | `oats instance related-work` | `<instance>` `<state>` | `--home`, `--dir`, `--server` | `--json` | none | none |
+| `oats instance same-work` | `<instance>` `<state>` | `--home`, `--dir`, `--server` | `--json` | none | none |
 | `oats instance waiting set` | none | `--producer`, `--reason`, `--message`, `--home`, `--dir` | `--json` | none | none |
 | `oats instance waiting clear` | none | `--producer`, `--reason`, `--message`, `--home`, `--dir` | `--json` | none | none |
 | `oats instance attention` | none | `--message` | `--clear`, `--json` | `--home`, `--dir`, `--producer`, `--reason` | none |
@@ -1233,8 +1235,6 @@ A removed verb answers, before any namespace can claim it:
 | `spawn --ephemeral`, `--instructions-file`, `--def-file` | `E_BAD_ARGS` | a soul in a member repository |
 | `soul teams --add`, `--remove`, `--default`, `--clear-default` (0.38.0) | `E_BAD_ARGS` (`details: {flag, replacement}`) | `souls:` in `oats-workspace.yaml` |
 | `session … --native-record` | `E_BAD_ARGS` | none |
-| `spawn --same-work` | `E_BAD_ARGS` (`details: {flag}`) | `--related-work` ([Related work](#related-work-oats-instance-related-work)) |
-| `instance same-work` | `E_BAD_ARGS` | `oats instance related-work` |
 
 `details.replacement` is the kernel's prose (shortened above): show it, do not
 parse it.
@@ -3467,7 +3467,7 @@ kernel stage raised as well.
 
 | Code | Details | When |
 |---|---|---|
-| `E_USAGE`, `E_BAD_ARGS` | | no soul; bad, contradictory, removed or unknown flags; an argument after the soul; `--related-work` for an instance that would record no parent or sibling, and `--same-work`, renamed ([Related work](#related-work-oats-instance-related-work)) |
+| `E_USAGE`, `E_BAD_ARGS` | | no soul; bad, contradictory, removed or unknown flags; an argument after the soul; `--related-work` (or its deprecated alias `--same-work`) for an instance that would record no parent or sibling ([Related work](#related-work-oats-instance-related-work)) |
 | `E_LOCAL_MISSING`, `E_NO_DEPLOYMENT` | | no `oats-local.yaml`; no `agents/` root |
 | `E_SOUL_UNKNOWN` | `{name, members, packages, unconfirmed?}` | no such soul, or not at `--agents-root`. `unconfirmed`, only when a member could not be confirmed: `[{key, reason, detail}]`, which the message repeats with what to do |
 | `E_SOUL_AMBIGUOUS` | `{name, repos, qualified}` | several souls answer the bare name; use one of `qualified` |
@@ -3917,7 +3917,10 @@ its absence.
   the key is absent, never `false` or `null`: no flag, a flag bound to an
   earlier relation, neither relation, and a row whose `instance.json`
   cannot be read. A `relatedWork` or `sameWork` in `instance.json` never
-  stands in for it, and no row carries `sameWork`, the flag's old name.
+  stands in for it. **`sameWork`** (feature `instance-same-work`), the
+  flag's old name, stands beside it as `true` when the binding is to the
+  parent, for a client that reads the old key; it is absent for a sibling
+  binding and whenever `relatedWork` is, never `false` or `null`.
   Clients draw the line between the row and the instance it is bound to; a
   client that does not know the key ignores it, and an older kernel never
   sends it.
@@ -4203,12 +4206,12 @@ route target:
   whose features list `instance-same-work` and not `instance-related-work`
   (an older OATS), its row's `sameWork: true` is relayed as `relatedWork:
   true`. Any other value, a host whose kernel predates both features, and a
-  saved route the host did not list carry no key, and no roster row carries
-  `sameWork` ([`relatedWork`](#row-related-work)). `oats status --server
-  <id> --json` relays the host's answer as it gave it, except for this one
-  key: each instance row carries `relatedWork` by the same rule (an older
-  host's `sameWork: true` as `relatedWork: true`), and no row carries
-  `sameWork`.
+  saved route the host did not list carry no key
+  ([`relatedWork`](#row-related-work)). `sameWork: true` is relayed beside
+  `relatedWork: true` when the host's row says it (a parent binding), and
+  never on its own. `oats status --server <id> --json` relays the host's
+  answer as it gave it, except for these two keys: each instance row carries
+  them by the same rule (an older host's `sameWork: true` as both).
 - **`sessionEnd`** (feature `session-resume`; relayed from 0.69.5) is on a row only
   when the host's row has the key, with the host's value: a host whose kernel
   predates the feature, a row the host reports without it (one that runs,
@@ -7207,8 +7210,9 @@ the home.
 ## Related work (`oats instance related-work`)
 
 <a id="same-work-as-the-parent-oats-instance-same-work"></a>
-Feature `instance-related-work`. It replaces `instance-same-work`
-(awebai/oats#1577), which no kernel advertises any more.
+Feature `instance-related-work`. It renames `instance-same-work`
+(awebai/oats#1577), which the kernel still advertises beside it for the
+[deprecated aliases](#the-deprecated-aliases) and the old row field.
 
 ```text
 oats instance related-work <instance> on|off [--home <abs>] [--dir <d>] [--json]
@@ -7251,16 +7255,28 @@ only `--related-work` and `on` do.
 - **Lifetime.** It survives `oats session restart`, a stop and a start, a
   resume (`oats session start --resume`) and `oats instance upgrade`. Only
   `off` and retirement clear it.
-- **The old flag.** A same-work record, `<home>/.oats-same-work.json`, is not
-  read: an instance flagged before the rename reads off until `on` sets the
-  new record. The old file is left where it is (`on` and `off` touch only
-  the new one) and its name stays kernel-owned.
+- **The old flag.** A same-work record, `<home>/.oats-same-work.json`
+  (`{"sameWorkApi": 1, "parent": "<instance>", "at": "<ISO time>"}`), reads
+  as a parent binding while nothing stands at the new record's name, by the
+  same reader rules; so an instance flagged before the rename keeps its
+  flag. When both exist, the new record wins, whatever it holds. The write
+  that creates the new record removes the old one, and `off` removes both.
+  `on` for a binding the old record already holds writes nothing. Both names
+  are kernel-owned.
 
-**The old spellings are refused**, with `E_BAD_ARGS` and nothing done:
-`oats spawn … --same-work` (`--same-work is renamed: use --related-work`)
-and `oats instance same-work …` (`oats instance same-work is renamed: use
-oats instance related-work`), locally and before anything is sent with
-`--server`. In `--json` the refusal is the usual error envelope.
+<a id="the-deprecated-aliases"></a>
+**The deprecated aliases.** `oats spawn … --same-work` is `--related-work`,
+and `oats instance same-work <instance> on|off` is `oats instance
+related-work`, with the same binding rule (the parent, else the sibling),
+the same refusals and the same answer; spawnInstance's `sameWork` option is
+`relatedWork`. Each use prints one line on stderr, before the command runs
+or is sent with `--server`: `oats: --same-work is renamed: use
+--related-work`, or `oats: oats instance same-work is renamed: use oats
+instance related-work`. It is never in the `--json` answer: the envelope is
+the one the new spelling gives, with no `warnings`. The aliases, the
+feature `instance-same-work` and the [`sameWork`](#row-related-work) row
+field stay until their removal is decided on its own, with its own
+release-notes entry.
 
 **The verb.** The instance is addressed as `oats instance color` addresses
 it, and refused with the same answers.
@@ -7269,18 +7285,20 @@ it, and refused with the same answers.
   its recorded `siblingInstance`; an instance with neither is refused. `on`
   again while the flag holds that binding writes nothing; `on` after a
   relink rebinds it to the current relation.
-- `off` removes whatever stands at the record's name (a file, a link, a
+- `off` removes whatever stands at either record's name (a file, a link, a
   directory). It succeeds whether or not the flag was on and whether or not
   a relation is recorded; `off` again is the same answer.
 
-The answer, the envelope's `result`, has exactly these two keys:
+The answer, the envelope's `result`, has exactly these three keys:
 
 ```json
-{"instance":"dev-a","relatedWork":true}
+{"instance":"dev-a","relatedWork":true,"sameWork":true}
 ```
 
 `relatedWork` is the binding rule read after the write: `true` after `on`,
-`false` after `off`. The text answer is `dev-a: related work on` (or `off`).
+`false` after `off`. `sameWork` is the old verb's answer: `true` only when
+the flag holds a parent binding, so `false` for a sibling binding. The text
+answer is `dev-a: related work on` (or `off`).
 
 | Code | When |
 |---|---|
@@ -7310,10 +7328,11 @@ spawned`.
 Routed with `--server <id>`, the verb runs on the host
 ([Routed reads and plans](#routed-reads-and-plans)) and `spawn --server …
 --related-work` sends the flag there. A host that advertises
-`instance-related-work` takes both as given. A host that advertises only
-`instance-same-work` (an older OATS), and only that host, is asked by the
-old spellings when the binding is a parent: `--same-work` and `oats instance
-same-work`, its answer's `sameWork` returned as `relatedWork`. The binding
+`instance-related-work` is sent the new spellings, the aliases included. A
+host that advertises only `instance-same-work` (an older OATS), and only
+that host, is asked by the old spellings when the binding is a parent:
+`--same-work` and `oats instance same-work`, its answer's `sameWork`
+returned with `relatedWork` beside it. The binding
 is read from the spawn's arguments and the host's own roster (the anchor's
 row for `--relation sibling|parent`, the instance's row for `on`). A sibling
 binding is refused there with `E_REMOTE_INCOMPATIBLE`, naming the host and
@@ -7321,9 +7340,10 @@ the feature it lacks, and nothing is sent; it is never dropped. A host that
 advertises neither feature is refused with `E_REMOTE_INCOMPATIBLE` for
 either, and nothing is sent.
 
-Where it is read: `relatedWork` on [status rows](#row-related-work) and on
-[remote roster rows](#the-remote-roster-oats-server-roster---json) (only
-`true` is relayed).
+Where it is read: `relatedWork` (and `sameWork` beside it for a parent
+binding) on [status rows](#row-related-work) and on [remote roster
+rows](#the-remote-roster-oats-server-roster---json) (only `true` is
+relayed).
 
 ## Sessions and launch configurations
 
