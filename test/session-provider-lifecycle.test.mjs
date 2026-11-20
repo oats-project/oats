@@ -534,9 +534,8 @@ test("a spawn whose launch answer was lost, whose stop the provider confirmed an
 test("a pending start receipt in a provider home is not read: a start launches on the provider, and the receipt keeps its backend", async (t) => {
   const fx = providerDeployment(t);
   const { home } = await fx.launch("p");
-  const plain = await fx.spawn("plain", { name: "t" });
   // A file the home's agent can write, shaped as a tmux home's pending start.
-  writeFileSync(join(home, ".oats-start-pending.json"), JSON.stringify({ id: "planted-1", target: { backend: "tmux", session: "nosuch", window: "p", socket: join(fx.base, "no-such-socket") }, command: recordOf(plain.home).command, model: null, startedAt: new Date().toISOString() }));
+  writeFileSync(join(home, ".oats-start-pending.json"), JSON.stringify({ id: "planted-1", target: { backend: "tmux", session: "nosuch", window: "p", socket: join(fx.base, "no-such-socket") }, command: "claude", model: null, startedAt: new Date().toISOString() }));
   fx.control({ p: { inspect: { result: LOST } } });
   fx.clearCalls();
   assert.equal(await answerOf(fx, "start", home), "launched");

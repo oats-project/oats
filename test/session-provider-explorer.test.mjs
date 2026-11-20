@@ -19,6 +19,7 @@
 // takes seconds. A failure prints the seed and the schedule's steps.
 //   OATS_EXPLORER_SEED=<n>    another sample           OATS_EXPLORER_COUNT=<n>|all   its size
 //   OATS_EXPLORER_ONLY="<a> | <seam> | <b>"            one schedule, as a failure prints it
+//   OATS_EXPLORER_VERBOSE=1   a refusal's message beside its code, in a failure's steps
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -133,7 +134,7 @@ async function explore(fx, setControl, n, { a, from, verb: killed, provider = {}
   const name = `x${n}${again}`, home = join(fx.root, "dev", "instances", name);
   const steps = [`${a}, killed at ${seam}`];
   const broken = [];
-  const answered = (what, r) => { steps.push(`${what}: ${r.ok ? "ok" : r.code ?? `NO CODE ${r.message}`}`); if (!r.ok && (r.code === null || NO_STATE.has(r.code))) broken.push(`${what} answered ${r.code ?? "an error that is no kernel answer"}: ${String(r.message).slice(0, 300)}`); return r; };
+  const answered = (what, r) => { steps.push(`${what}: ${r.ok ? "ok" : r.code ?? `NO CODE ${r.message}`}`); if (!r.ok && process.env.OATS_EXPLORER_VERBOSE) steps.push(String(r.message).slice(0, 500)); if (!r.ok && (r.code === null || NO_STATE.has(r.code))) broken.push(`${what} answered ${r.code ?? "an error that is no kernel answer"}: ${String(r.message).slice(0, 300)}`); return r; };
   await prepare(fx, from, name, home);
   // The provider's commands act late, so that one whose kernel died during it would act after the next verb.
   const lateFor = (v) => (provider[v] ? {} : { [v]: { sleepMs: LATE_MS } });
