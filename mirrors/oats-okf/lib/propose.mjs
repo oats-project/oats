@@ -5,10 +5,19 @@
 // (--check), then publishes exactly that through the package's publication
 // helper (--apply). The knowledge maintainer gates every merge.
 //
+// oats.okf 6.3 (#164, lighter proposals): what only the maintainer can judge
+// no longer refuses. The write surface outside what protects the base, a
+// claim's subject, the --strict lints, a rejected id and the shape of
+// proposal.md each answer a W_* warning that names the rule it replaces; the
+// PR body lists them under `## Check warnings`, and the maintainer resolves
+// each before merging. --slug and --digest are optional: a bare --apply
+// prints the check and stops, then publishes what that check printed
+// (checked.json); the diff is always in front of the author before a push.
+//
 // The source record is consistency, not authorship: any caller that can run
 // the command can name a home. What bounds a proposal is the soul's owned
 // nodes, OKF validation, the content screen and the maintainer's review.
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { isAbsolute, relative, sep } from 'node:path';
@@ -18,8 +27,8 @@ import { hostRefusal } from './credential.mjs';
 import { git as rawGit, gitEnv, ghChildEnv, preflightLocalRepository, unavailable, validateBase, ID_WARNING, unstampedWarning } from './stores.mjs';
 import { consultSource } from './sources.mjs';
 import { harvestPolicy } from './harvest-policy.mjs';
-import { isBridgedMeta } from './okf-reindex.mjs';
-import { prepareSubjectProposal, checkWriteSurface, generatedPath, proposalFindings, proposalVerdicts, verdictSection } from './write-surface.mjs';
+import { isBridgedMeta, parseFrontmatter, isReservedFile } from './okf-reindex.mjs';
+import { prepareSubjectProposal, checkWriteSurface, generatedPath, proposalFindings, subjectFindings, proposalVerdicts, verdictSection } from './write-surface.mjs';
 // The proposer's own copy of the shared publication helper (okf-authoring),
 // byte-identical to the maintainer's: the SAME screen and publication calls
 // the 5.x harvest procedure made (screen, commit, create), moved here.
@@ -39,6 +48,28 @@ const sha256 = bytes => hash(bytes);
 const present = p => { try { fs.lstatSync(p); return true; } catch (e) { if (e.code === 'ENOENT') return false; throw e; } };
 const failWith = (code, message, result) => { throw Object.assign(new Error(message), { code, ...(result ? { result } : {}) }); };
 const parseJson = (bytes, label) => { try { return JSON.parse(bytes); } catch { return fail('E_SOURCE', `${label} is not readable JSON`); } };
+
+// ------------------------------------------------------------ check warnings (6.3)
+// One row per finding the maintainer resolves: its code, the rule it replaces
+// in brackets, then the path and what the maintainer does. A row is published
+// in the PR body, so a character that could start a line there or hide text
+// (a control, line-separator or bidi character in a file name) is shown as
+// an escape, never as itself.
+const HIDDEN = /[\p{Cc}\u2028\u2029\u202A-\u202E\u2066-\u2069\u200B\u2060\uFEFF\u{E0000}-\u{E007F}]/gu;
+const visible = text => String(text).replace(HIDDEN, c => { const n = c.codePointAt(0).toString(16); return n.length > 4 ? `\\u{${n}}` : `\\u${n.padStart(4, '0')}`; });
+const ROW_CODES = ['W_SCOPE', 'W_SUBJECT', 'W_LINT', 'W_VERDICT', 'W_PROPOSAL'];
+const row = (code, was, text) => `${code} [was ${was}]: ${visible(text)}`;
+/** Deduplicated, by code (SCOPE, SUBJECT, LINT, VERDICT, PROPOSAL), then by the text from its path on. */
+function sortRows(rows) {
+  const key = r => [ROW_CODES.indexOf(r.slice(0, r.indexOf(' '))), r.slice(r.indexOf(']: ') + 3)];
+  return [...new Set(rows)].sort((a, b) => { const [ca, ta] = key(a), [cb, tb] = key(b); return ca - cb || (ta < tb ? -1 : ta > tb ? 1 : 0); });
+}
+/** At most 200 UTF-16 units (the 6.2 limit), never splitting a character. */
+function cut200(text) {
+  let out = '';
+  for (const ch of text) { if (out.length + ch.length > 200) break; out += ch; }
+  return out;
+}
 
 // ------------------------------------------------------------ attribution
 // The kernel's refused set and one-line rule for text it did not write (a
@@ -219,11 +250,44 @@ function findProposal(source, slug) {
   return names.filter(n => DIR.exec(n)?.[2] === slug).map(n => join(dir, n));
 }
 function proposalDir(source, slug) {
+  // 6.3: without --slug, the one open proposal (a plan with no publish/ attempt).
+  if (slug === undefined) return openProposal(source);
   const found = findProposal(source, slug);
   if (!found.length) fail('E_USAGE', `no proposal ${slug}: run oats okf propose --plan --slug ${slug} first`);
   if (found.length > 1) fail('E_PROPOSAL_EXISTS', `more than one proposal directory has slug ${slug}; remove the stale one`);
   return found[0];
 }
+/** The one proposal directory under proposals/ that was never applied (no publish/). */
+function openProposal(source) {
+  const root = proposalsRoot(source);
+  let names; try { names = fs.readdirSync(root); } catch { names = []; }
+  const open = names.filter(n => SLUG.test(DIR.exec(n)?.[2] ?? '') && fs.lstatSync(join(root, n)).isDirectory() && !present(join(root, n, 'publish'))).sort();
+  if (!open.length) fail('E_USAGE', 'no open proposal: run oats okf propose --plan');
+  if (open.length > 1) fail('E_USAGE', `more than one open proposal (${open.map(n => DIR.exec(n)[2]).join(', ')}): give --slug <one of them>`);
+  return join(root, open[0]);
+}
+/** A slug for --plan without --slug: p-<HHMMSS UTC>-<4 hex>, lowercase, matching SLUG. */
+function newSlug(source) {
+  for (let i = 0; i < 8; i++) {
+    const slug = `p-${new Date().toISOString().slice(11, 19).replaceAll(':', '')}-${randomBytes(2).toString('hex')}`;
+    if (!findProposal(source, slug).length) return slug;
+  }
+  return fail('E_PROPOSAL_EXISTS', 'could not choose a free slug under proposals/: give --slug');
+}
+/** checked.json (6.3): the digest the last successful --check printed. A
+ *  record that a check printed it, not authentication against another process
+ *  of the same user, any more than the digest is. → the digest, or null when
+ *  there is none or it cannot be read (a symlink, malformed). */
+const CHECKED = 'checked.json';
+function readChecked(dir) {
+  let value;
+  try { value = JSON.parse(readWithin(dir, join(dir, CHECKED), 'E_PROPOSAL_FORMAT')); }
+  catch { return null; }
+  return object(value) && value.version === 1 && typeof value.digest === 'string' && /^[0-9a-f]{64}$/.test(value.digest) && isoInstant(value.checkedAt) ? value.digest : null;
+}
+/** The instant recordCheck writes (Date#toISOString), and nothing else. */
+const isoInstant = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(v) && Number.isFinite(Date.parse(v)) && new Date(v).toISOString() === v;
+const recordCheck = (dir, digest) => atomic(join(dir, CHECKED), JSON.stringify({ version: 1, digest, checkedAt: new Date().toISOString() }, null, 2) + '\n');
 function readPlan(dir) {
   const plan = parseJson(readWithin(dir, join(dir, 'plan.json'), 'E_PROPOSAL_FORMAT'), 'plan.json');
   const bad = () => fail('E_PROPOSAL_FORMAT', 'plan.json is not an oats okf propose plan; never edit it; remove the proposal directory and plan again');
@@ -257,13 +321,20 @@ const stripComments = text => text.replace(/<!--[\s\S]*?-->/g, '');
 
 // 5.x proposals did not prescribe a heading level or list grammar. Normalize
 // explicit note references anywhere in the proposal, plus list entries under
-// Backing notes. Unparseable note-bearing text is a format refusal, never an
-// empty evidence list (the oats.okf 5.8 note-locator rules).
-export function backingNotes(task) {
+// Backing notes (the oats.okf 5.8 note-locator rules). Unparseable
+// note-bearing text is a format refusal, never an empty evidence list;
+// 6.3 (#164): given `onUnrecognized(line)`, it is reported there instead (the
+// 1-based line of `task`) and that reference is dropped.
+export function backingNotes(task, { onUnrecognized } = {}) {
   const notes = new Set();
-  const formatError = () => fail('E_PROPOSAL_FORMAT', 'unrecognized backing-note reference; reformat as a Backing notes list with one literal `- notes/<path>.md` entry per note');
+  let n = 0;
+  const unrecognized = () => {
+    if (!onUnrecognized) fail('E_PROPOSAL_FORMAT', 'unrecognized backing-note reference; reformat as a Backing notes list with one literal `- notes/<path>.md` entry per note');
+    onUnrecognized(n);
+  };
   let inSection = false;
   for (const line of String(task).split(/\r?\n/)) {
+    n++;
     if (/^Source:/.test(line)) continue;
     const heading = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
     if (heading) inSection = /^Backing notes\s*:?$/i.test(heading[2]);
@@ -276,25 +347,20 @@ export function backingNotes(task) {
       const start = match.index;
       if (start < consumed) continue;
       const before = start ? line[start - 1] : '';
-      let end, note;
+      let note = null;
       if (['`', '"', "'", '[', '('].includes(before)) {
         const closing = before === '[' ? ']' : before === '(' ? ')' : before;
-        end = line.indexOf(closing, start);
-        if (end < 0) formatError();
-        note = line.slice(start, end);
-        if (before === '(' && /[\s()]/.test(note)) formatError();
-        const following = line.slice(end + 1);
-        if (following && !/^(?:\s|[.,;!?:)\]]+(?:\s|$))/.test(following)) formatError();
+        const end = line.indexOf(closing, start);
+        if (end < 0) { unrecognized(); break; }
+        const quoted = line.slice(start, end), following = line.slice(end + 1);
         consumed = end + 1;
+        if (!(before === '(' && /[\s()]/.test(quoted)) && !(following && !/^(?:\s|[.,;!?:)\]]+(?:\s|$))/.test(following))) note = quoted;
       } else if (!before || /\s/.test(before)) {
-        const token = /^[^\s`"'<>\[\]()]+/.exec(line.slice(start))?.[0];
-        if (!token) formatError();
-        end = start + token.length;
-        if (end < line.length && !/\s/.test(line[end])) formatError();
-        note = token.replace(/[.,;!?:]+$/, '');
+        const token = /^[^\s`"'<>\[\]()]+/.exec(line.slice(start))[0], end = start + token.length;
         consumed = end;
-      } else formatError();
-      if (!note.endsWith('.md')) formatError();
+        if (end >= line.length || /\s/.test(line[end])) note = token.replace(/[.,;!?:]+$/, '');
+      }
+      if (note === null || !note.endsWith('.md')) { unrecognized(); continue; }
       notes.add(note);
     }
   }
@@ -306,30 +372,66 @@ export function backingNotes(task) {
 // empty, parent or hidden segment, at most 512 characters.
 const safeNote = note => note.length <= 512 && /^notes\/.+\.md$/.test(note) && !/[\\\x00-\x1f\x7f]/.test(note) && note.split('/').every(p => p && p !== '.' && p !== '..' && !p.startsWith('.'));
 
-/** proposal.md → { claim, bytes, body, notes } or E_PROPOSAL_FORMAT. */
+const PROPOSAL_ROW = text => row('W_PROPOSAL', 'E_PROPOSAL_FORMAT', text);
+/** proposal.md as the proposer left it → { bytes (null when missing), filled,
+ *  shown, title (null when it has none), sections, notes, rows } or a hard
+ *  E_PROPOSAL_FORMAT: unreadable, a symlink, not UTF-8, or a provenance fence.
+ *  6.3 (#164): every other shape is published with a W_PROPOSAL row; the
+ *  title and the What list come from the claims where it gives none
+ *  (finishProposal). */
 function readProposal(dir) {
-  let bytes;
+  let bytes = null;
   try { bytes = readWithin(dir, join(dir, 'proposal.md'), 'E_PROPOSAL_FORMAT'); }
-  catch (e) { fail('E_PROPOSAL_FORMAT', `proposal.md is missing or unreadable (${e.message})`); }
+  catch (e) { if (e.code !== 'ENOENT') fail('E_PROPOSAL_FORMAT', `proposal.md is unreadable (${e.message})`); }
+  if (bytes === null || bytes.equals(Buffer.from(SKELETON))) return { bytes, filled: false, notes: [], rows: [PROPOSAL_ROW('proposal.md was not filled; the PR text was built from the claims')] };
   let text;
   try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { fail('E_PROPOSAL_FORMAT', 'proposal.md is not UTF-8'); }
   const shown = stripComments(text);
-  const lines = shown.split(/\r?\n/);
-  const first = lines.find(l => l.trim());
-  const claim = /^# OKF proposal:[ \t]*(.+?)\s*$/.exec(first ?? '')?.[1];
-  if (!claim || claim.includes('<one-line claim>')) fail('E_PROPOSAL_FORMAT', 'proposal.md must start with `# OKF proposal: <your one-line claim>`');
-  if (claim.length > 200) fail('E_PROPOSAL_FORMAT', 'the one-line claim is longer than 200 characters');
   if (/^```(?:okf-proposal|okf-harvest)\b/m.test(shown)) fail('E_PROPOSAL_FORMAT', 'proposal.md must not carry a provenance block: the command writes it');
+  const rows = [], lines = shown.split(/\r?\n/);
+  const first = lines.find(l => l.trim());
+  let title = /^# OKF proposal:[ \t]*(.+?)\s*$/.exec(first ?? '')?.[1] ?? null;
+  if (title?.includes('<one-line claim>')) title = null;
+  if (title === null) rows.push(PROPOSAL_ROW('proposal.md has no `# OKF proposal: <one-line claim>` title; the title was built from the claims'));
+  let titleCut = false;
+  if (title !== null && title.length > 200) { rows.push(PROPOSAL_ROW('proposal.md: the one-line claim is longer than 200 characters; it was cut to 200')); title = cut200(title); titleCut = true; }
+  const sections = {};
   for (const section of ['What', 'Why', 'Evidence']) {
     const at = lines.flatMap((l, i) => new RegExp(`^##[ \\t]+${section}[ \\t]*$`).test(l) ? [i] : []);
-    if (at.length !== 1) fail('E_PROPOSAL_FORMAT', `proposal.md needs exactly one \`## ${section}\` section`);
-    const next = lines.findIndex((l, i) => i > at[0] && /^#{1,2}[ \t]/.test(l));
-    if (!lines.slice(at[0] + 1, next < 0 ? undefined : next).some(l => l.trim())) fail('E_PROPOSAL_FORMAT', `the \`## ${section}\` section is empty`);
+    const next = at.length ? lines.findIndex((l, i) => i > at[0] && /^#{1,2}[ \t]/.test(l)) : -1;
+    sections[section] = !at.length ? 'missing' : at.length > 1 ? 'duplicated' : !lines.slice(at[0] + 1, next < 0 ? undefined : next).some(l => l.trim()) ? 'empty' : 'ok';
+    if (sections[section] === 'missing') rows.push(PROPOSAL_ROW(`proposal.md has no \`## ${section}\` section; ${section === 'What' ? 'the What list was built from the claims' : 'published as written: the maintainer judges the claims without it'}`));
+    else if (sections[section] !== 'ok') rows.push(PROPOSAL_ROW(`proposal.md: the \`## ${section}\` section is ${sections[section] === 'empty' ? 'empty' : 'given more than once'}; published as written`));
   }
-  const notes = backingNotes(shown);
-  if (notes.length > MAX_NOTES) fail('E_PROPOSAL_FORMAT', `proposal.md names more than ${MAX_NOTES} backing notes`);
-  for (const note of notes) if (!safeNote(note)) fail('E_PROPOSAL_FORMAT', `backing note ${JSON.stringify(note).slice(0, 120)} is not a notes/<path>.md (no backslash or control character, no empty, hidden or parent segment)`);
-  return { claim, bytes, body: shown.replace(/\n{3,}/g, '\n\n').trim() + '\n', notes };
+  // Line numbers of the file as written: a comment keeps its line breaks here.
+  const named = backingNotes(text.replace(/<!--[\s\S]*?-->/g, c => c.replace(/[^\n]/g, '')), { onUnrecognized: line => rows.push(PROPOSAL_ROW(`unrecognized backing-note reference on line ${line}: dropped from evidence`)) });
+  const notes = [];
+  for (const note of named) {
+    if (!safeNote(note)) { rows.push(PROPOSAL_ROW(`backing note ${JSON.stringify(note).slice(0, 120)} is not a notes/<path>.md (no backslash or control character, no empty, hidden or parent segment): dropped from evidence`)); continue; }
+    notes.push(note);
+  }
+  if (notes.length > MAX_NOTES) { rows.push(PROPOSAL_ROW(`proposal.md names ${notes.length} backing notes: the first ${MAX_NOTES} are kept, the rest dropped from evidence`)); notes.length = MAX_NOTES; }
+  return { bytes, filled: true, shown, title, titleCut, sections, notes, rows };
+}
+/** The claim line and PR body: the proposer's, completed from the changed
+ *  concepts [{path, title, description}] (repository paths, sorted) where it
+ *  gives no title or no What. A fully written proposal.md publishes exactly
+ *  as in 6.2. */
+function finishProposal(raw, concepts) {
+  const titled = concepts.find(c => c.title);
+  const built = cut200(titled ? `${visible(titled.title)}${concepts.length > 1 ? ` (and ${concepts.length - 1} more)` : ''}` : 'knowledge proposal');
+  const what = concepts.length ? concepts.map(c => `- ${visible(c.path)}${c.title ? `: ${visible(c.title)}` : ''}${c.description ? ` — ${visible(c.description)}` : ''}`).join('\n') : '- (no concept is added or changed; see the diff)';
+  if (!raw.filled) return { claim: built, body: `# OKF proposal: ${built}\n\n## What\n${what}\n` };
+  let text = raw.shown;
+  if (raw.title === null || raw.titleCut || raw.sections.What === 'missing') {
+    const lines = text.split(/\r?\n/), at = lines.findIndex(l => l.trim());
+    // A placeholder or over-long title line is replaced; with none, the built one goes first.
+    if (at >= 0 && /^# OKF proposal:/.test(lines[at])) lines.splice(at, 1, `# OKF proposal: ${raw.title ?? built}`);
+    else lines.unshift(`# OKF proposal: ${built}`, '');
+    if (raw.sections.What === 'missing') lines.splice(lines.findIndex(l => l.trim()) + 1, 0, '', '## What', what, '');
+    text = lines.join('\n');
+  }
+  return { claim: raw.title ?? built, body: text.replace(/\n{3,}/g, '\n\n').trim() + '\n' };
 }
 
 /** Hash the named notes; a missing or unreadable one is dropped from evidence
@@ -442,17 +544,23 @@ function checkFiles(owned, list) {
   }
 }
 /** Node ownership (a version-1 soul); checkFiles has already judged root
- *  containment, hidden paths and modes. */
+ *  containment, hidden paths and modes. okf-base.json and a non-Markdown file
+ *  refuse (E_SCOPE); 6.3 (#164): a path in a node this soul does not own, or
+ *  outside its nodes, is a W_SCOPE row for the maintainer (it was E_OWNER or
+ *  E_SCOPE). → the rows. */
 function checkScope(owned, scope, list) {
+  const rows = [];
   for (const c of list) {
     const shown = JSON.stringify(c.path).slice(0, 200);
     const rel = baseRel(owned.base, c.path);
     if (rel === 'index.md') continue;
-    const other = scope.others.find(n => rel === n.path || rel.startsWith(`${n.path}/`));
-    if (other) fail('E_OWNER', `${shown} is in node ${owned.alias}/${other.node}, which this soul does not own; leave that claim for the node's owner`);
-    if (!scope.paths.some(p => rel.startsWith(`${p}/`))) fail('E_SCOPE', `${shown} is outside the write surface: the owned nodes (${scope.paths.join(', ')}) and the base root index.md`);
+    if (rel === 'okf-base.json') fail('E_SCOPE', `${shown} is outside the write surface: a proposal never changes okf-base.json`);
     if (!rel.endsWith('.md')) fail('E_SCOPE', `${shown} is not a Markdown concept`);
+    const other = scope.others.find(n => rel === n.path || rel.startsWith(`${n.path}/`));
+    if (other) rows.push(row('W_SCOPE', 'E_OWNER', `${c.path} is in node ${owned.alias}/${other.node}, which this soul does not own; the maintainer chooses its home`));
+    else if (!scope.paths.some(p => rel.startsWith(`${p}/`))) rows.push(row('W_SCOPE', 'E_SCOPE', `${c.path} is outside the write surface (the owned nodes ${scope.paths.map(p => `${baseFile(owned.base, p)}/`).join(', ')} and the base root index.md); the maintainer chooses its home`));
   }
+  return rows;
 }
 /** The tree's exact bytes in `out`: every blob as stored (git cat-file
  *  --batch), never through a checkout, so no smudge filter, working-tree
@@ -542,15 +650,17 @@ function preparedTree(clone, owned, treeId, prepare) {
 }
 /** Validate the proposed tree's stored bytes; `inspect(baseDir)` first runs
  *  any other check that must see the same frozen bytes (the subject layout's
- *  write surface and verdict lanes), its refusal unwrapped. */
+ *  write surface and verdict lanes, the changed concepts' titles), its
+ *  refusal unwrapped. Validator errors refuse; 6.3 (#164): its --strict
+ *  warnings that `allow` leaves are returned, for W_LINT. → those warnings. */
 function validateTree(clone, owned, treeId, allow, inspect) {
-  withIndex(clone, (env, scratch) => {
+  return withIndex(clone, (env, scratch) => {
     const out = join(scratch, 'tree');
     fs.mkdirSync(out);
     rawTree(clone, treeId, out);
-    if (inspect) inspect(owned.base.root === '.' ? out : join(out, owned.base.root));
-    try { validateBase(owned.base.root === '.' ? out : join(out, owned.base.root), owned.base, allow ? { allow } : {}); }
-    catch (e) { fail('E_VALIDATION', `base ${owned.alias}: the proposed tree is not a valid OKF base (okf-validate --strict): ${e.message.replaceAll(out, '<clone>')}`); }
+    inspect(owned.base.root === '.' ? out : join(out, owned.base.root));
+    try { return validateBase(owned.base.root === '.' ? out : join(out, owned.base.root), owned.base, { allow, lints: true }).lints; }
+    catch (e) { return fail('E_VALIDATION', `base ${owned.alias}: the proposed tree is not a valid OKF base (okf-validate --strict): ${e.message.replaceAll(out, '<clone>')}`); }
   });
 }
 
@@ -586,7 +696,9 @@ function trailers(source, screened) {
   return { rows, withheld };
 }
 const commitText = (source, proposal, rows) => `okf-proposal: ${proposal.claim}\n\nSource: instance ${source.record.instance}, soul ${source.soul}\n\n${rows.join('\n')}\n`;
-const prBody = (proposal, block, candidates = '') => `${proposal.body}${candidates ? `\n${candidates}` : ''}\n\`\`\`okf-proposal\n${JSON.stringify(block, null, 2)}\n\`\`\`\n`;
+/** 6.3 (#164): the rows the maintainer resolves before merging, verbatim. */
+const warningSection = rows => rows.length ? `## Check warnings\n\nThe proposer's \`oats okf propose --check\` reported these. The knowledge maintainer resolves each before merging (fixed, moved, or accepted with a reason).\n\n${rows.map(r => `- ${r}`).join('\n')}\n` : '';
+const prBody = (proposal, block, candidates = '', rows = []) => `${proposal.body}${rows.length ? `\n${warningSection(rows)}` : ''}${candidates ? `\n${candidates}` : ''}\n\`\`\`okf-proposal\n${JSON.stringify(block, null, 2)}\n\`\`\`\n`;
 function termsFile() {
   const file = settings()['screen-terms-file'];
   if (file === undefined) return undefined;
@@ -661,8 +773,8 @@ function aftermath(code, r, branch, bodyFile, pushed, late) {
 /** Everything --check verifies and --apply re-verifies. Writes only the
  *  outgoing texts under the proposal directory; nothing remote. */
 function prepare(source, dir, plan) {
-  const proposal = readProposal(dir);
-  const { evidence: ev, warnings } = evidence(source, proposal.notes);
+  const raw = readProposal(dir), rows = [...raw.rows];
+  const { evidence: ev, warnings } = evidence(source, raw.notes);
   const { git: bases } = ownedBases(source);
   const terms = termsFile();
   const outgoing = join(dir, 'outgoing');
@@ -680,8 +792,7 @@ function prepare(source, dir, plan) {
     } finally { fs.rmSync(scratch, { recursive: true, force: true }); }
   });
   for (const key of attributed.withheld) warnings.push(`W_ATTRIBUTION: the ${key} trailer is left out of the commit: the content screen refuses its value (this home's recorded messaging identity); the proposal is otherwise unchanged`);
-  const message = commitText(source, proposal, attributed.rows);
-  const results = [], checked = [], verdicts = [];
+  const results = [], checked = [], verdicts = [], concepts = [];
   for (const entry of plan.bases) {
     const owned = bases.find(b => b.alias === entry.alias);
     if (!owned) fail('E_SOURCE', `the plan's base ${entry.alias} is no longer an owned Git base; plan a new proposal`);
@@ -694,36 +805,62 @@ function prepare(source, dir, plan) {
     let treeId = workingTree(clone, accepted), list = changes(clone, accepted, treeId);
     if (!list.length) { results.push({ alias: entry.alias, clone, accepted, tree: treeId, changed: [] }); continue; }
     checkFiles(owned, list);
-    let allow, inspect, unstamped = 0;
+    const rel = l => l.map(c => ({ path: baseRel(owned.base, c.path), status: c.status }));
+    // 6.3: one W_SUBJECT per claim preparation left as written (it was E_SUBJECT).
+    const unassigned = new Set();
+    let checks = () => {};
     if (scope.subjects) {
       // okf 6.0, the subject layout (spec §3): a version-1 soul's new claims get
       // about: from legacy-nodes, every generated index is regenerated, then the
       // write surface, the proposal's own ids and the verdict lanes.
-      const rel = l => l.map(c => ({ path: baseRel(owned.base, c.path), status: c.status }));
-      treeId = preparedTree(clone, owned, treeId, base => prepareSubjectProposal({ root: base, decl: source.decl, ownedNodes: scope.ownedNodes, changes: rel(list) }));
+      treeId = preparedTree(clone, owned, treeId, base => {
+        const prepared = prepareSubjectProposal({ root: base, decl: source.decl, ownedNodes: scope.ownedNodes, changes: rel(list) });
+        for (const w of prepared.warnings) { unassigned.add(w.path); rows.push(row('W_SUBJECT', 'E_SUBJECT', baseFile(owned.base, w.text))); }
+        return prepared;
+      });
       list = changes(clone, accepted, treeId);
       checkFiles(owned, list);
-      if (source.decl.version !== 2) checkScope(owned, scope, list.filter(c => !generatedPath(baseRel(owned.base, c.path))));
+      if (source.decl.version !== 2) rows.push(...checkScope(owned, scope, list.filter(c => !generatedPath(baseRel(owned.base, c.path)))));
       // The write surface and the verdict lanes judge stored bytes on both
       // sides (the accepted blob, the proposed tree's blob), never a checkout:
       // a smudge or ident expansion in the clone changes neither.
       const readAccepted = acceptedReader(clone, accepted), before = p => readAccepted(baseFile(owned.base, p));
-      const changed = rel(list);
-      inspect = proposed => {
-        checkWriteSurface({ root: proposed, decl: source.decl, ownedNodes: scope.ownedNodes, changes: changed, before });
-        verdicts.push(...proposalVerdicts(proposed, changed).map(v => ({ ...v, path: baseFile(owned.base, v.path) })));
+      checks = proposed => {
+        const changed = rel(list), soft = checkWriteSurface({ root: proposed, decl: source.decl, ownedNodes: scope.ownedNodes, changes: changed, before });
+        // A version-1 soul's paths outside its nodes are checkScope's rows above, with the node they are in.
+        if (source.decl.version === 2) for (const w of soft) rows.push(row('W_SCOPE', 'E_SCOPE', baseFile(owned.base, w)));
+        for (const v of proposalVerdicts(proposed, changed)) {
+          const path = baseFile(owned.base, v.path);
+          verdicts.push({ ...v, path });
+          if (v.refusal) rows.push(row('W_VERDICT', 'E_VERDICT', `${path}: ${v.refusal}; the maintainer judges whether it is the same claim or a reconsideration`));
+        }
       };
-      // okf 6.0.2 (#138): a claims/ concept the base already holds without id
-      // (merged without the maintainer's stamp) does not refuse the proposal;
-      // it is reported as the readers report it, W_ID_MISSING. 6.0.3 (#140):
-      // so is an old-node concept merged the same way (a version-1 proposal).
-      allow = findings => {
-        const rest = proposalFindings(findings, changed), kept = rest.filter(f => !ID_WARNING.test(f));
-        unstamped = rest.length - kept.length;
-        return kept;
-      };
-    } else checkScope(owned, scope, list);
-    validateTree(clone, owned, treeId, allow, inspect);
+    } else rows.push(...checkScope(owned, scope, list));
+    // The changed concepts' titles and descriptions, for a PR text proposal.md does not give.
+    const inspect = proposed => {
+      checks(proposed);
+      for (const c of rel(list)) {
+        if (c.status === 'D' || !c.path.endsWith('.md') || isReservedFile(c.path) || generatedPath(c.path)) continue;
+        const fm = parseFrontmatter(fs.readFileSync(join(proposed, ...c.path.split('/')), 'utf8')), field = k => fm.parsed && typeof fm.meta[k] === 'string' && fm.meta[k].trim() ? fm.meta[k].trim() : null;
+        concepts.push({ path: baseFile(owned.base, c.path), title: field('title'), description: field('description') });
+      }
+    };
+    // okf 6.0.2 (#138): a claims/ concept the base already holds without id
+    // (merged without the maintainer's stamp) does not refuse the proposal;
+    // it is reported as the readers report it, W_ID_MISSING. 6.0.3 (#140):
+    // so is an old-node concept merged the same way (a version-1 proposal).
+    // 6.3 (#164): the about: errors on the proposal's own files are W_SUBJECT
+    // (the maintainer assigns the subject), and the --strict lints come back
+    // from validateTree for W_LINT; any other error still refuses.
+    let unstamped = 0;
+    const allow = ({ errors, warnings: lints }) => {
+      const changed = rel(list), { subject, rest } = subjectFindings(proposalFindings(errors, changed), changed), own = proposalFindings(lints, changed);
+      for (const f of subject) if (!unassigned.has(f.path)) rows.push(row('W_SUBJECT', 'E_VALIDATION', `${baseFile(owned.base, f.text)}; the maintainer assigns its subject`));
+      const keptErrors = rest.filter(f => !ID_WARNING.test(f)), keptLints = own.filter(f => !ID_WARNING.test(f));
+      unstamped = rest.length - keptErrors.length + own.length - keptLints.length;
+      return { errors: keptErrors, warnings: keptLints };
+    };
+    for (const lint of validateTree(clone, owned, treeId, allow, inspect)) rows.push(row('W_LINT', 'E_VALIDATION', `${baseFile(owned.base, lint)}; the maintainer fixes it at review`));
     if (unstamped) warnings.push(unstampedWarning(unstamped, `${entry.alias}@${accepted.slice(0, 12)}`));
     // What the clone's files stage to now: --apply refuses if they move
     // before it stages the checked tree (which, prepared on stored bytes, may
@@ -731,7 +868,9 @@ function prepare(source, dir, plan) {
     const staged = scope.subjects ? workingTree(clone, accepted) : treeId;
     checked.push({ entry, owned, clone, accepted, treeId, list, staged });
   }
-  const block = provenance(source, source.decl.version === 2 ? bases.filter(b => plan.bases.some(e => e.alias === b.alias)) : bases, ev), body = prBody(proposal, block, verdictSection(verdicts));
+  concepts.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+  const proposal = { ...finishProposal(raw, concepts), bytes: raw.bytes }, message = commitText(source, proposal, attributed.rows), sorted = sortRows(rows);
+  const block = provenance(source, source.decl.version === 2 ? bases.filter(b => plan.bases.some(e => e.alias === b.alias)) : bases, ev), body = prBody(proposal, block, verdictSection(verdicts), sorted);
   for (const { entry, owned, clone, accepted, treeId, list, staged } of checked) {
     // outgoing/ keeps a readable copy; the screen reads this invocation's own
     // private copy, so a concurrent --check cannot swap the bytes it screens.
@@ -750,11 +889,13 @@ function prepare(source, dir, plan) {
     results.push({ alias: entry.alias, clone, accepted, tree: treeId, staged, owned, changed: list.map(c => `${c.status} ${c.path}`), diff, commitFile, bodyFile });
   }
   if (!results.some(r => r.changed.length)) fail('E_USAGE', 'nothing to propose: no owned base changed. If nothing passed the promotion test, record that in log.md and remove the proposal directory');
-  // The digest binds every byte --apply publishes: the trees, the proposal,
-  // the evidence, and the generated commit text and PR body themselves.
-  const digest = hash({ version: 2, bases: results.map(r => ({ alias: r.alias, accepted: r.accepted, tree: r.tree })), proposal: sha256(proposal.bytes), evidence: ev,
+  // The digest binds every byte --apply publishes: the trees, the proposal
+  // (null when there is no proposal.md), the evidence, and the generated
+  // commit text and PR body themselves (the rows and a built title included).
+  const digest = hash({ version: 2, bases: results.map(r => ({ alias: r.alias, accepted: r.accepted, tree: r.tree })), proposal: raw.bytes === null ? null : sha256(raw.bytes), evidence: ev,
     commitText: sha256(Buffer.from(message)), prBody: sha256(Buffer.from(body)) });
-  return { proposal, evidence: ev, warnings, body, message, results, digest, terms };
+  // The rows first, in their fixed order; then the notes, attribution and id warnings, as in 6.2.
+  return { proposal, evidence: ev, warnings: [...sorted, ...warnings], body, message, results, digest, terms };
 }
 
 // ------------------------------------------------------------ the three steps
@@ -771,7 +912,9 @@ function duplicates(base) {
   return out;
 }
 
-export function plan(source, slug) {
+/** `slug` (6.3) is optional: without it one is made and printed. */
+export function plan(source, given) {
+  const slug = given ?? newSlug(source);
   if (findProposal(source, slug).length) fail('E_PROPOSAL_EXISTS', `a proposal with slug ${slug} already exists under proposals/; choose another slug, or remove the old directory once it is no longer needed`);
   const { git: bases, skipped } = ownedBases(source);
   const date = new Date().toISOString().slice(0, 10);
@@ -795,29 +938,55 @@ export function plan(source, slug) {
     atomic(join(staging, 'proposal.md'), SKELETON);
     atomic(join(staging, 'plan.json'), JSON.stringify({ version: 1, slug, form: source.form, bases: rows.map(({ alias, accepted }) => ({ alias, accepted })) }, null, 2) + '\n');
     fs.renameSync(staging, dir);
-    return { proposal: dir, form: source.form, source: { instance: source.record.instance, soul: source.soul, owner: source.decl.owner }, ...(source.legacyKeysIgnored.length ? { legacyKeysIgnored: source.legacyKeysIgnored } : {}),
+    return { proposal: dir, slug, form: source.form, source: { instance: source.record.instance, soul: source.soul, owner: source.decl.owner }, ...(source.legacyKeysIgnored.length ? { legacyKeysIgnored: source.legacyKeysIgnored } : {}),
       bases: rows.map(r => ({ ...r, clone: join(dir, 'work', r.alias) })), skipped,
-      next: `write the knowledge in each clone (${source.decl.version === 2 ? 'claims/, with about: [<kind>/<slug>] on each claim and no id' : 'owned nodes and the base root index.md only'}), fill ${join(dir, 'proposal.md')}, then oats okf propose --check --slug ${slug}` };
+      // A given slug keeps the 6.2 steps; without one, the two-command flow.
+      next: given !== undefined
+        ? `write the knowledge in each clone (${source.decl.version === 2 ? 'claims/, with about: [<kind>/<slug>] on each claim and no id' : 'owned nodes and the base root index.md only'}), fill ${join(dir, 'proposal.md')}, then oats okf propose --check --slug ${slug}`
+        : `write the knowledge in each clone (${source.decl.version === 2 ? 'claims/, with about: [<kind>/<slug>] on each claim and no id' : 'your owned nodes, or the node a claim belongs in'}); ${join(dir, 'proposal.md')} is optional (left as it is, the PR text is built from the claims); then oats okf propose --apply: it prints the outgoing diff and stops; read it, then run oats okf propose --apply again to publish it` };
   } catch (e) { fs.rmSync(staging, { recursive: true, force: true }); throw e; }
 }
 
-export function check(source, slug) {
-  const dir = proposalDir(source, slug), p = prepare(source, dir, readPlan(dir));
+const READ = 'read the complete outgoing diff, commit text and PR body above once as a reviewer would (knowledge-theory\'s reject list; no personal data, secrets or private paths)';
+/** The --check answer for a prepared proposal (also a bare --apply's first run). */
+function checkAnswer(dir, p, next) {
   return { proposal: dir, digest: p.digest, warnings: p.warnings, evidence: p.evidence,
     bases: p.results.filter(r => r.changed.length).map(r => ({ alias: r.alias, accepted: r.accepted, changed: r.changed, diff: r.diff })),
     unchanged: p.results.filter(r => !r.changed.length).map(r => r.alias),
-    commitText: p.message, prBody: p.body,
-    next: `read the complete outgoing diff, commit text and PR body above once as a reviewer would (knowledge-theory's reject list; no personal data, secrets or private paths), then oats okf propose --apply --slug ${slug} --digest ${p.digest}` };
+    commitText: p.message, prBody: p.body, next };
+}
+/** 6.3: records the printed digest (checked.json) for a bare --apply. */
+export function check(source, slug) {
+  const dir = proposalDir(source, slug), p = prepare(source, dir, readPlan(dir));
+  recordCheck(dir, p.digest);
+  return checkAnswer(dir, p, slug !== undefined
+    ? `${READ}, then oats okf propose --apply --slug ${slug} --digest ${p.digest}`
+    : `${READ}, then oats okf propose --apply`);
 }
 
+/** `expected` (6.3) is optional. Without it, --apply publishes only what the
+ *  last --check printed (checked.json); with no such record it runs the check,
+ *  prints it, records it and stops (`published: false`). One command cannot
+ *  both put the diff in front of the author and push, so there are two. */
 export function apply(source, slug, expected) {
-  if (typeof expected !== 'string' || !/^[0-9a-f]{64}$/.test(expected)) fail('E_USAGE', '--apply needs --digest <the 64-hex digest --check printed>');
   const dir = proposalDir(source, slug);
-  const p = prepare(source, dir, readPlan(dir));
-  if (p.digest !== expected) fail('E_DIGEST', 'the clone, proposal.md, a named note or the generated commit text or PR body changed since --check (or the digest is not the one it printed): run --check again and read its diff before --apply');
-  // The publish directory is the attempt marker: one attempt per proposal.
   const publish = join(dir, 'publish');
   const attempted = () => fail('E_PROPOSAL_EXISTS', `this proposal was already applied or attempted (see ${publish}); never retry it: plan a new proposal if knowledge is still missing`);
+  // A bare --apply of an attempted proposal refuses as such, before printing a check.
+  if (expected === undefined && present(publish)) attempted();
+  const p = prepare(source, dir, readPlan(dir));
+  if (expected === undefined) {
+    const recorded = readChecked(dir);
+    if (recorded === null) {
+      recordCheck(dir, p.digest);
+      return { ...checkAnswer(dir, p, `nothing was pushed: ${READ}, then run oats okf propose --apply${slug !== undefined ? ` --slug ${slug}` : ''} again to publish exactly this`), published: false };
+    }
+    // A refused apply never records a check: checked.json stays as it is.
+    if (recorded !== p.digest) fail('E_DIGEST', 'the clone, proposal.md, a named note or the generated commit text or PR body changed since the last --check: run --check again and read its diff, then --apply');
+    expected = recorded;
+  }
+  if (p.digest !== expected) fail('E_DIGEST', 'the clone, proposal.md, a named note or the generated commit text or PR body changed since --check (or the digest is not the one it printed): run --check again and read its diff before --apply');
+  // The publish directory is the attempt marker: one attempt per proposal.
   // An attempted proposal refuses as such, before the gate below could call it untouched.
   if (present(publish)) attempted();
   // Every gh precondition, for every base, before the attempt marker.
@@ -882,7 +1051,7 @@ export function apply(source, slug, expected) {
   }
   try { atomic(join(dir, 'published.json'), JSON.stringify({ version: 1, prs: published }, null, 2) + '\n'); }
   catch { p.warnings.push(`W_RECEIPT: every PR is open, but published.json could not be written under ${dir}: record the URLs from this output`); }
-  return { proposal: dir, prs: published, warnings: p.warnings,
+  return { proposal: dir, published: true, prs: published, warnings: p.warnings,
     next: 'record each PR URL in log.md and go back to work; the knowledge maintainer reviews it (the proposal-review trigger), you never shepherd it' };
 }
 
@@ -899,14 +1068,16 @@ export function render(step, r) {
   return [`proposal ${r.proposal}`, ...r.warnings.map(w => `warning: ${w}`), ...r.prs.map(x => `opened ${x.url} (${x.branch} at ${x.head.slice(0, 12)}, onto ${x.base.slice(0, 12)}, base-move recoveries ${x.recovered})`), `next: ${r.next}`].join('\n');
 }
 
-/** `oats okf propose --plan | --check | --apply --slug S [--digest D]`. */
+/** `oats okf propose --plan | --check | --apply [--slug S] [--digest D]`
+ *  (6.3: both optional; every 6.2 invocation behaves as before). */
 export function propose(home, flags, env = process.env) {
   const steps = ['plan', 'check', 'apply'].filter(s => flags[s]);
   if (steps.length !== 1) fail('E_USAGE', 'give exactly one of --plan, --check or --apply');
   const [step] = steps;
-  if (typeof flags.slug !== 'string' || !SLUG.test(flags.slug)) fail('E_USAGE', '--slug must be lowercase letters, digits and inner dashes (at most 64), naming this proposal');
+  if (flags.slug !== undefined && (typeof flags.slug !== 'string' || !SLUG.test(flags.slug))) fail('E_USAGE', '--slug must be lowercase letters, digits and inner dashes (at most 64), naming this proposal');
   if (step !== 'apply' && flags.digest !== undefined) fail('E_USAGE', '--digest belongs to --apply');
+  if (flags.digest !== undefined && (typeof flags.digest !== 'string' || !/^[0-9a-f]{64}$/.test(flags.digest))) fail('E_USAGE', '--apply --digest needs the 64-hex digest --check printed (or leave --digest out: --apply then publishes what the last --check printed)');
   const source = resolveSource(home, env);
   const result = step === 'plan' ? plan(source, flags.slug) : step === 'check' ? check(source, flags.slug) : apply(source, flags.slug, flags.digest);
-  return { result, text: render(step, result) };
+  return { result, text: render(step === 'apply' && result.published === false ? 'check' : step, result) };
 }

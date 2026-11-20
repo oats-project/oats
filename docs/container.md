@@ -525,7 +525,7 @@ container may do. Give them an identity with the write role only on the
 knowledge repository, its token in a file named by
 `settings.oats.okf.github-token-file`, and keep the identity that merges to
 the accepted branch outside the container. oats.okf's
-[Bringing up a deployment's knowledge store](https://github.com/oats-project/oats-okf/blob/v6.2.0/README.md#bringing-up-a-deployments-knowledge-store)
+[Bringing up a deployment's knowledge store](https://github.com/oats-project/oats-okf/blob/v6.3.0/README.md#bringing-up-a-deployments-knowledge-store)
 (oats.okf 6.2 and later) has each step; run its
 `oats okf setup --check` in the container to check them.
 

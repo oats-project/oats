@@ -67,19 +67,24 @@ const INDEX_WARNING=/: generated index is (stale|missing|orphan); run okf-reinde
 export const ID_WARNING=/: missing 'id' \(stamped by the maintainer at acceptance\)$/;
 /** The validator's error for a claims/ concept without `id` (one claim each). */
 export const UNSTAMPED_ERROR=/^claims\/.+\.md: missing 'id' \(stamped by the maintainer at acceptance\)$/;
-/** `allow(findings)` (okf 6.0, propose only) returns the findings that still
- *  refuse: a proposed claim may wait for the maintainer's id. → {..., stale:
- *  the number of generated files a reader found stale, unstamped: the number
- *  of claims/ concepts a reader found without id (both 0 unless `reader`)}. */
-export function validateBase(root, base, { allow = findings => findings, reader = false } = {}) {
+/** `allow({errors, warnings})` (okf 6.0, propose only) returns the
+ *  `{errors, warnings}` that still count: a proposed claim may wait for the
+ *  maintainer's id. `lints` (okf 6.3, propose only, #164): the --strict
+ *  warnings left after `allow` no longer refuse; they are returned as
+ *  `lints` for the proposer's W_LINT warning, and only errors refuse.
+ *  → {..., stale: the number of generated files a reader found stale,
+ *  unstamped: the number of claims/ concepts a reader found without id (both
+ *  0 unless `reader`), lints: [] unless `lints`}. */
+export function validateBase(root, base, { allow = findings => findings, reader = false, lints = false } = {}) {
   const files=tree(root,{git:base.kind==='git' && base.root==='.'}); const meta=metadata(files,base);
   const result=JSON.parse(exec(process.execPath,[validator,root,'--strict','--json'],{acceptedStatus:[0,1]}));
   const subjectLayout=reader && result.layout==='subjects';
   const tolerated=subjectLayout ? result.warnings.filter(w=>INDEX_WARNING.test(w) || ID_WARNING.test(w)) : [];
   const unstamped=subjectLayout ? result.errors.filter(e=>UNSTAMPED_ERROR.test(e)) : [];
-  const findings=allow([...result.errors.filter(e=>!unstamped.includes(e)),...result.warnings.filter(w=>!tolerated.includes(w))]);
+  const kept=allow({errors:result.errors.filter(e=>!unstamped.includes(e)),warnings:result.warnings.filter(w=>!tolerated.includes(w))});
+  const findings=lints ? kept.errors : [...kept.errors,...kept.warnings];
   if(findings.length) throw Object.assign(new Error(findings.join('; ')),{code:'E_VALIDATION',findings});
-  return {files,meta,digest:digest(files),subjects:subjectsOf(files,meta),stale:tolerated.filter(w=>INDEX_WARNING.test(w)).length,unstamped:unstamped.length};
+  return {files,meta,digest:digest(files),subjects:subjectsOf(files,meta),stale:tolerated.filter(w=>INDEX_WARNING.test(w)).length,unstamped:unstamped.length,lints:lints ? kept.warnings : []};
 }
 /** The reader's warning for a base whose generated indexes are stale. */
 export const staleWarning=(n,at)=>`W_INDEX_STALE: ${n} generated file${n===1?'':'s'} stale at ${at}; the maintainer regenerates (okf-reindex.mjs)`;

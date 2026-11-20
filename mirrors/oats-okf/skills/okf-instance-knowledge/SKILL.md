@@ -109,9 +109,9 @@ Relates to: oats/expert/decisions/retries.md@5b6a9cab (refines it).
 Soul knowledge changes only through a reviewed PR that the knowledge
 maintainer merges. The duty to propose comes from the `oats.okf` capability,
 not a task briefing: follow the `okf-propose` skill (`oats okf propose`), one
-proposal per knowledge checkpoint, only for durable, non-duplicate claims in
-nodes your soul owns, and a line in log.md for every checkpoint, including
-one with nothing to propose. A soul with `knowledge: { harvest: off }` (or
+proposal per knowledge checkpoint, for durable claims (when in doubt, propose:
+the maintainer judges duplicates and canonical homes), and a line in log.md
+for every checkpoint, including one with nothing to propose. A soul with `knowledge: { harvest: off }` (or
 `publish: off`) has no duty to propose: keep consulting and capturing for
 your own work, but do not propose.
 
