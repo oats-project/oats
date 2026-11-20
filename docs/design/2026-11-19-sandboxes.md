@@ -22,7 +22,9 @@ role's Host guarantee corrected to what a TLS pass-through can enforce. Both sid
 decided the r3 contracts, with the domain-fronting risk statement and the pending
 request's custody. **Revised after review round 4** (marked "(r4)"): the apply
 evidence `bind` acts on, and the fence that keeps a replay away from an interrupted
-delivery. A later change to a contract goes back to
+delivery. **Revised after the round-4 delta read** (marked "(r4d)"): a seat is
+released only on proof that no home can hold it, and the readiness and ordering text
+that follows from that. A later change to a contract goes back to
 both sides (the lane map's "Contract changes" line). When this record and a reference
 page disagree after it is built, the reference page wins.
 
@@ -187,15 +189,26 @@ The exact order of a routed spawn, with the value each step binds (r2, r3):
    | The apply's answer | Evidence | The seat |
    | --- | --- | --- |
    | Success, or the keyed replay of one | the home's `capabilityMeta["oats.aweb"].seat`, `{seatApi:1, seatId, certificateId, spawnKey}`, written by oats.aweb's spawn hook once the seat is connected, matching the ledger entry | `active` |
-   | `E_DECISION_STALE` or `E_IDEMPOTENCY_CONFLICT` | the code: both are refused before anything is placed or any hook runs | released (`spawn-failed`) |
-   | oats.aweb's `seat-binding` refusal | its problem detail says `seatConsumed: false`: oats.aweb refuses it before it reads or copies any seat file | released (`spawn-failed`) |
-   | `E_SPAWN_INCOMPLETE`, a failed or uncertain seat connect, any other refusal, or no answer | none of these proves the seat unused | stays `delivered` |
+   | `E_DECISION_STALE` | the kernel's key recovery found no home holding `spawnKey` and refused before placing anything; the descriptor admits only that key (C6), so no home holds the seat | released (`spawn-failed`) |
+   | `E_REQUIRED_HOOK_FAILED` or `E_HOOK_ENVIRONMENT_CONTRACT` whose details carry no `unconfirmed: true` (r4d) | the spawn's rollback confirmed its home is gone, so no home holds the seat, whatever the hook did before it failed (oats.aweb's `seat-binding` refusal arrives this way) | released (`spawn-failed`) |
+   | `E_IDEMPOTENCY_CONFLICT` (r4d) | a home already holds `spawnKey` under another decision and may hold the seat | stays `delivered` |
+   | `E_SPAWN_INCOMPLETE`, a hook failure with `unconfirmed: true`, a failed or uncertain seat connect, any other refusal, or no answer | none of these proves that no home holds the seat | stays `delivered` |
 
-   `ok: false` alone is never evidence. S1 pins that the routed apply's answer, and
-   its keyed replay, carry the new home's `capabilityMeta`, and that both
-   `E_DECISION_STALE` and `E_IDEMPOTENCY_CONFLICT` are raised before any placement or
-   hook. S2 pins the meta oats.aweb writes, `seatConsumed: false` on each pre-read
-   refusal, and a `bind` test per row.
+   A seat is released only on proof that no home can hold it (r4d): releasing revokes
+   the member, which is right for a seat that no home holds, used or not, and wrong
+   for one a live home holds. Before such a release the provider deletes any copy at
+   `/state/seats/<seat-id>/` through the server route. If that deletion cannot be
+   confirmed, the entry stays `delivered`, the kept request is deleted (its refusal
+   was terminal), and readiness reports `sandbox-seat-unsettled`. `ok: false` alone is
+   never evidence, and the provider reads no field of a refusal beyond its code and
+   `unconfirmed`. S1 pins that the routed apply's answer, and its keyed replay, carry
+   the new home's `capabilityMeta`; that the routed answer carries the host's refusal
+   code and its `unconfirmed` detail unchanged; that `E_DECISION_STALE` is raised
+   only when no home holds the key, before any placement or hook; and that a required
+   hook's failure carries `unconfirmed: true` whenever the rollback could not confirm
+   the home gone. S2 pins the meta oats.aweb writes and a `bind` test per row,
+   including a prior home holding the key under another decision
+   (`E_IDEMPOTENCY_CONFLICT`: the member is kept) and a failed copy deletion.
 7. **The kernel settles a `delivered` seat** (r3, r4): `oats sandbox reconcile`, and
    so sync, first runs the provider's `reconcile` act, which settles interrupted mints
    and deliveries (below) and answers the ledger's seats. Only then does it replay a
@@ -365,8 +378,9 @@ reconciles each sandbox the local file lists:
 - running with the same inputs: no infrastructure change (`action: "none"`).
 
 Whatever the action, sync then reconciles each listed, running sandbox's seats
-(`oats sandbox reconcile`'s work: the kept requests, then the provider's `reconcile`
-act), so a self-retire is completed by the next sync even when nothing else changed
+(`oats sandbox reconcile`'s work: the provider's `reconcile` act, then the replay of
+each kept request whose entry it answers durably `delivered`, as in step 7 of the
+Identities section) (r4d), so a self-retire is completed by the next sync even when nothing else changed
 (r3). A pinned test: a self-retire, then an otherwise no-op sync, removes the member.
 
 A sandbox declared in the workspace but not listed locally is never started. A sandbox
@@ -603,8 +617,9 @@ and by act:
   one; `seatId` is the seat its home took (r2).
 - `oats sandbox status --json`'s entries also carry `seats` (as C4's `status`), and
   `oats sandbox reconcile <name> (--plan | --plan-revision <r> --idempotency-key <k>)`
-  runs on its own what sync runs for each sandbox: the kept requests' replays, then
-  the `reconcile` act (r2, r3).
+  runs on its own what sync runs for each sandbox: the `reconcile` act, then the
+  replays of the kept requests whose entries it answers durably `delivered` (r2, r3,
+  r4d).
 - **That these are additive must be shown, not assumed.** The readers of sync's answer
   are `packages/desktop/server/workspace-sync.mjs`,
   `packages/desktop/renderer/workspace-sync-view.mjs`,
@@ -762,8 +777,13 @@ egress routes only.
   running or stopped;
 - `sandbox-provider-missing`;
 - `sandbox-ssh-include-missing`;
-- `sandbox-seat-unsettled`: a `delivered` seat with no kept request, or a
-  `mint-uncertain` seat without a certificate ID (r2, r3);
+- `sandbox-seat-unsettled`: a `mint-uncertain` seat, with or without a certificate
+  ID (r4d: one whose delivered copy could not be confirmed deleted stays here); a
+  `delivered` seat with no kept request, including one whose release waits on a copy
+  deletion that could not be confirmed; or a `delivered` seat whose last replay
+  answered `E_IDEMPOTENCY_CONFLICT` or `E_SPAWN_INCOMPLETE` (r2, r3, r4d). A pinned
+  negative: a known certificate ID whose copy deletion fails gives no replay, no home,
+  and this item;
 - `sandbox-state-orphaned`: provider state under another deployment key for a
   sandbox this deployment lists (r2);
 - `sandbox-pending-stale`: a kept routed request older than 24 hours, named by its
