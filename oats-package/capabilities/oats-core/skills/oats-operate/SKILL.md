@@ -23,7 +23,8 @@ walking up to `oats-local.yaml`), or pass `--dir <deployment>`. Use `--json`
 when you parse output. Flags take `--flag value` or `--flag=value`. When a flag
 is not shown here, read `oats help`; never invent one.
 
-Use Node.js 22.5 or later. Node 18 and 20 refuse every command with
+Use Node.js 22.13+ on 22.x, 23.4+ on 23.x, or a newer major.
+Node 18 and 20 refuse every command with
 `E_NODE_UNSUPPORTED`, including `version`, the reader and capabilities.
 An older Node that cannot parse the entry may fail before that refusal.
 

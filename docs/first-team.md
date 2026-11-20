@@ -20,17 +20,19 @@ declaration and locked to a commit and integrity). Nothing is installed.
 
 ## 0. Prerequisites
 
-Node.js 22.5 or later (the floor `@awebai/oats` declares in `engines`), Git
-with read access to the repositories below (your own credential helpers; the
-kernel never prompts), tmux, and an authenticated harness (Pi, Claude or
-Codex).
+Node.js 22.13+ on 22.x, 23.4+ on 23.x, or a newer major (the range
+`@awebai/oats` declares in `engines`), Git with read access to the repositories
+below (your own credential helpers; the kernel never prompts), tmux, and an
+authenticated harness (Pi, Claude or Codex).
 
 Node 18 and 20 get
 `E_NODE_UNSUPPORTED` before any command runs, including `version` and
 capability commands. With `--json` the refusal is one failure envelope on
 stdout and exit 1; without it the message is on stderr. A Node too old to
 parse the entry (for example Node 12) can fail with a SyntaxError first.
-The npm package declares `engines.node: ">=22.5.0"` so npm warns at install time.
+The npm package declares `engines.node: "^22.13.0 || >=23.4.0"` so npm warns
+at install time on Node 22.0–22.12 and 23.0–23.3. The CLI still runs on those
+versions, but the turn record needs `node:sqlite` without an experimental flag.
 
 Git 2.45 or later recommended (partial caches); an older Git works, with
 whole-tree fetches. `oats doctor` reports the version and cache support as

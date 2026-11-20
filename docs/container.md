@@ -841,8 +841,8 @@ repository proves.
 
 ## Acceptance and evidence
 
-The host needs Docker and Node 22.5+. Export the same plain variables used for
-Compose, then run:
+The host needs Docker and Node 22.13+ on 22.x, 23.4+ on 23.x, or a newer
+major. Export the same plain variables used for Compose, then run:
 
 ```sh
 container/agent/accept.sh "oats-agent-${TEAM}" --evidence local
