@@ -2416,8 +2416,10 @@ by `dataset.key`), and never takes out a row that stays, whatever the repaint (a
 poll's, or the budget's, which lays the strip out full and then compact): a focus
 in the pane selects its tab, which reads the roster and syncs the board again, so
 a repaint that replaced the focused control and focused its new copy would loop,
-and a press would land on a replaced button (`agent-view.test.mjs`, "no loop",
-and "a compact strip keeps its row").
+and a press would land on a replaced button. A focused control whose row was
+replaced, or moved (a fact the agent unsets and sets again goes last), is given
+the focus back (`agent-view.test.mjs`, "no loop", "a compact strip keeps its row"
+and "a moved row").
 
 ### Workspace-local tab memory
 

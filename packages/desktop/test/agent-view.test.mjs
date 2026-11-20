@@ -777,6 +777,18 @@ test('agent view facts: a compact strip keeps its row through the budget\'s repa
   assert.deepEqual([...pane.querySelectorAll('.agent-fact')].map(li => li.dataset.key), ['b'], 'the press hid it');
 });
 
+// The fix's second reader: a kept row moved within the list (the agent unset a fact and set it again: it goes last)
+// loses the focus to the move, and is given it back.
+test('agent view facts: a moved row\'s focused control is given the focus back', t => {
+  const f = fixture(t);
+  const facts = keys => boardData({ facts: keys.map(k => fact(k)), questions: [] });
+  f.view.update(facts(['a', 'b', 'c']));
+  const hide = f.facts().querySelector('li[data-key="c"] .agent-fact-hide'); hide.focus();
+  f.view.update(facts(['a', 'c', 'b']));
+  assert.deepEqual([...f.facts().querySelectorAll('.agent-fact')].map(li => li.dataset.key), ['a', 'c', 'b']);
+  assert.equal(f.doc.activeElement, f.facts().querySelector('li[data-key="c"] .agent-fact-hide'));
+});
+
 // The round-4 delta's finding: the occurrence check fails closed.
 test('r4 delta: an answer that does not prove its question\'s since (absent, null, not a time) shows no context', t => {
   for (const since of [undefined, null, 'invalid']) {

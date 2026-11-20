@@ -358,7 +358,9 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
       urlBox.replaceChildren(node(doc, 'span', 'agent-fact-says', `${name} says:`), text, open);
     }
     if (facts.parentNode !== pane) pane.prepend(facts);
-    if (!at || at.isConnected) return;
+    // Given back where the focus left its control: a replaced row, or a kept one moved within the list (insertBefore
+    // blurs it), as when the agent unsets a fact and sets it again, which puts it last.
+    if (!at || doc.activeElement === at) return;
     if (focusedPart === 'open') urlBox.querySelector('.agent-fact-url-open')?.focus();
     else if (focusedKey) factList.querySelector(`:scope > li[data-key="${focusedKey}"] > ${focusedPart === 'link' ? '.agent-fact-link' : focusedPart === 'hide' ? '.agent-fact-hide' : '.agent-fact-focus'}`)?.focus();
   }
