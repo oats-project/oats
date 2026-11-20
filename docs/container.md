@@ -756,6 +756,18 @@ Inside the container that changes what the trust group shares
   container and is in any copy of the volume, and OATS never trims it
   ([Where conversations are stored](#where-conversations-are-stored)).
 - The token in bb's environment is the one every agent can already read.
+- Any agent, one in a sandboxed bb thread included, can write every other
+  thread's storage: the threads of one bb share bb's thread-storage
+  directory under `/state/home/.bb`, and bb's own sandbox settings leave
+  the whole thread-storage directory writable. (They keep bb's database and
+  auth files read-only to a sandboxed thread.)
+- bb's sandboxed permission modes (`auto`, `accept-edits`) are not a
+  security boundary. They limit accidents, not a determined agent: an agent
+  in such a mode can write its own instance home, which holds code that OATS
+  and the harness later run outside the sandbox. Treat an agent in a
+  sandboxed mode as able to do what any agent in the container can. OATS
+  counts no harness's sandbox as a boundary
+  ([What OATS does not promise](trust-model.md#what-oats-does-not-promise)).
 
 One bb serves one container. Never share one across teams, and never point
 two containers at one `/state`.
