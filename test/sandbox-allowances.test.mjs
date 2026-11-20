@@ -3,10 +3,10 @@
 // test/session-providers-sandbox.test.mjs.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MAX_SANDBOX_LINES, SETTING_FILE_MAX_BYTES, SETTING_FILE_MAX_HOSTS, readSettingFileHosts, sandboxAllowances, sandboxDomainsOf, sandboxHostOf, sandboxLaunchInput } from "../lib/sandbox-allowances.mjs";
+import { MAX_SANDBOX_LINES, SETTING_FILE_MAX_BYTES, SETTING_FILE_MAX_HOSTS, ensureSandboxWritePaths, readSettingFileHosts, sandboxAllowances, sandboxDomainsOf, sandboxHostOf, sandboxLaunchInput, sandboxWritePathsRefusal } from "../lib/sandbox-allowances.mjs";
 
 const EVENTS = "/srv/acme/.agents/events";
 const WRITE = [{ path: EVENTS, reason: "oats events" }];
@@ -260,4 +260,29 @@ test("a settingFile line is validated with the manifest: its key, its pointer, a
   for (const pointer of ["/bases/*/repository", "/*", "/a/~1b/~0c", "/a/*/b/*", "/*/*", "/a/~2", "/a/~", "/a//b", "a/b", "/", "", `/${"x".repeat(400)}`, `/${Array.from({ length: 16 }, () => "s").join("/")}`, `/${Array.from({ length: 17 }, () => "s").join("/")}`]) {
     assert.equal(schemaTakes(pointer), problemsOf({ settingFile: "bindings-file", urls: pointer }).length === 0, JSON.stringify(pointer));
   }
+});
+
+test("the write paths: a real directory at its own path, made through no link; a readiness read says what a launch would refuse and creates nothing", (t) => {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), "oats-sandbox-write-")));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const pathOf = (...parts) => [{ path: join(base, ...parts), reason: "oats events" }];
+  // Not there yet: a readiness read refuses nothing and creates nothing; a launch makes it.
+  assert.equal(sandboxWritePathsRefusal(pathOf("a", "events")), null);
+  assert.equal(existsSync(join(base, "a")), false);
+  ensureSandboxWritePaths(pathOf("a", "events"));
+  assert.deepEqual([existsSync(join(base, "a", "events")), sandboxWritePathsRefusal(pathOf("a", "events"))], [true, null]);
+  // The directory itself is a link.
+  mkdirSync(join(base, "target"));
+  mkdirSync(join(base, "b"));
+  symlinkSync(join(base, "target"), join(base, "b", "events"));
+  // A directory above it is a link: nothing is made in its target.
+  symlinkSync(join(base, "target"), join(base, "c"));
+  // It is a file.
+  mkdirSync(join(base, "d"));
+  writeFileSync(join(base, "d", "events"), "");
+  for (const parts of [["b", "events"], ["c", "events"], ["d", "events"]]) {
+    assert.equal(sandboxWritePathsRefusal(pathOf(...parts))?.code, "E_BACKEND_SANDBOX_HOST", parts.join("/"));
+    assert.equal(refusal(() => ensureSandboxWritePaths(pathOf(...parts)))?.code, "E_BACKEND_SANDBOX_HOST", parts.join("/"));
+  }
+  assert.deepEqual(readdirSync(join(base, "target")), [], "nothing was made through a link");
 });

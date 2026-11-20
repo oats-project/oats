@@ -2010,8 +2010,12 @@ claims, the refusals and the JSON answers. What an operator sees is in
   kernel calls only a provider that declares its own version. One that
   declares another, or none (a provider written before the key: wire 1.2),
   is refused `E_BACKEND_WIRE`, naming both versions, before anything is
-  created, stopped or started; its homes' sessions read unavailable, never
-  stopped. Every request carries the kernel's version (`"wire"`), so refuse
+  created, recorded, stopped or started: a spawn, a start, a stop (an
+  operator's and the host's) and an input alike. Its homes' sessions read
+  unavailable, and are never recorded as stopped by a provider that was not
+  asked. A retire of such a home cannot ask it either: it goes on when no
+  process works in the home, with a warning that names the provider's own
+  tooling. Every request carries the kernel's version (`"wire"`), so refuse
   a request that carries none or another, with the same code.
 - No other key.
 

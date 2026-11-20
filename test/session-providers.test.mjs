@@ -1090,7 +1090,23 @@ test("one wire version: a provider that declares another, or none, is refused by
   assert.deepEqual([inspected.ok, inspected.error.code], [false, "E_SESSION_UNAVAILABLE"]);
   assert.match(inspected.error.message, /speaks wire 1\.2 \(it declares none\), and this kernel speaks 1\.3/);
   assert.deepEqual([rowOf(fx, "old").running, rowOf(fx, "old").runtimeState], [null, "unreachable"], "never stopped");
+  // A stop (an operator's and the host's) and an input are refused the same way BEFORE anything is
+  // recorded: the home is not recorded as stopped by a provider that was never asked.
+  for (const [what, act] of [
+    ["stopped", () => fx.inEnv(() => stopInstanceSession(home, {}))],
+    ["stopped", () => fx.inEnv(() => stopInstanceSession(home, { withHost: true, graceMs: 20000 }))],
+    ["sent the input", () => fx.inEnv(() => inputInstanceSession(home, "a mail"))],
+  ]) {
+    await assert.rejects(act(), (e) => e.code === "E_BACKEND_WIRE" && e.details.wire.kernel === "1.3" && new RegExp(`old was not ${what}: .*speaks wire 1\\.2 \\(it declares none\\).*nothing was (stopped|sent)`).test(e.message), what);
+  }
+  assert.deepEqual([existsSync(join(home, ".oats-stop.json")), rowOf(fx, "old").running, rowOf(fx, "old").runtimeState], [false, null, "unreachable"], "still not recorded as stopped");
   assert.deepEqual(fx.verbs(), [], "the provider was never called");
+  // A retire keeps its own rule: it cannot ask that provider, no process works in the home, so it
+  // goes on, and says that the session was not stopped through its backend.
+  const retired = JSON.parse(fx.cli(["retire", "old", "--json"]).stdout);
+  assert.deepEqual([retired.retired, existsSync(home)], ["old", false], JSON.stringify(retired).slice(0, 400));
+  assert.match(JSON.stringify(retired.warnings), /was not stopped through its session backend/);
+  assert.deepEqual(fx.verbs(), [], "nor by the retire");
 });
 
 // ----------------------------------------------------------------------- T12: nothing relayed

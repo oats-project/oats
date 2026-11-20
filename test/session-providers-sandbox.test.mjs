@@ -293,6 +293,16 @@ test("the events directory handed as writable is a real directory at its own pat
   assert.equal(fx.cli(["spawn", "dev", "--backend", "fake", "--launch-config", "claude", "--preview", "--json"]).json().ok, true);
 });
 
+test("nothing is created through a link: a directory above the events directory that is a link refuses the launch, and its target is left as it was", async (t) => {
+  const fx = deployment(t);
+  rmSync(join(fx.dep, ".agents"), { recursive: true, force: true });
+  mkdirSync(join(fx.dep, "elsewhere"));
+  symlinkSync(join(fx.dep, "elsewhere"), join(fx.dep, ".agents"));
+  const refused = fx.cli(["spawn", "dev", "--name", "nope", "--backend", "fake", "--launch-config", "claude", "--json"]).json();
+  assert.deepEqual([refused.ok, refused.error.code], [false, "E_BACKEND_SANDBOX_HOST"], JSON.stringify(refused));
+  assert.deepEqual(readdirSync(join(fx.dep, "elsewhere")), [], "no directory was made in the link's target");
+});
+
 test("the deployment's own oats-local.yaml is read as it is now, and a repository this host's cache does not hold is named", async (t) => {
   const fx = deployment(t, { settings: {} });
   const { home } = await fx.launch("one");

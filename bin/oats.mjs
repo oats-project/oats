@@ -2835,8 +2835,6 @@ function namingLine(naming) {
   if (naming?.source === "numbered") return `numbered (${terminalText(naming.reason)}: ${terminalText(naming.message)})`;
   return null;
 }
-/** A spawn preview's text: the local one, or a host's answer to a routed
- *  preview (`server`, its id), which this side printed the same way (#610). */
 /** What a session provider may widen its harness's sandbox by (lib/sandbox-allowances.mjs), as a
  *  spawn preview and readiness say it in text: each host with who asked for it, each path with its
  *  reason, what is missing, what was left out or not read; or why there is none. Nothing for a
@@ -2852,6 +2850,8 @@ function printSandboxAllowances(sb, indent = "") {
   for (const k of sb.skipped ?? []) console.log(`${indent}  left out: ${terminalText(k.capability)}: ${terminalText(k.reason)}`);
   for (const u of sb.unread ?? []) console.log(`${indent}  not read: ${terminalText(u.capability)} setting ${terminalText(u.setting)}: ${terminalText(u.reason)}`);
 }
+/** A spawn preview's text: the local one, or a host's answer to a routed
+ *  preview (`server`, its id), which this side printed the same way (#610). */
 function printSpawnPreview(r, { server, soulFetched = false } = {}) {
   // A host before 0.27 names the harness `runtime` (it still answers spawn-preview-2).
   const harness = r.harness ?? r.runtime;
