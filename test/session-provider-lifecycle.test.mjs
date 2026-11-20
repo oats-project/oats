@@ -232,7 +232,7 @@ for (const [what, behaviour, act, answer, stops] of CROSSINGS) {
     if (what === "a retire") {
       // The retire's last stop came after the input's provider call had ended, and the home is gone.
       const order = fx.calls().filter((c) => c.verb === "input" || c.verb === "stop").map((c) => c.verb);
-      assert.deepEqual([order.at(-1), existsSync(home), existsSync(join(dirname(home), ".oats-retirement", "inputs", "x")) ? readdirSync(join(dirname(home), ".oats-retirement", "inputs", "x")) : []], ["stop", false, []]);
+      assert.deepEqual([order.at(-1), existsSync(home), existsSync(join(dirname(home), ".oats-retirement", "provider-calls", "x"))], ["stop", false, false]);
     }
   });
 }
@@ -266,7 +266,7 @@ async function killedDuring(fx, args, name, verb) {
   assert.equal(fx.verbs(verb).filter((c) => c.instance === name).length, 1, `the provider's ${verb} is in flight`);
   child.kill("SIGKILL");
   await done;
-  await new Promise((r) => setTimeout(r, 1800));
+  // No wait for the provider's command, which outlives the kernel that ran it: the next verb ends it.
 }
 const SPAWN = (name) => ["spawn", "dev", "--name", name, "--backend", "fake", "--launch-config", "claude", "--json"];
 const homeOf = (fx, name) => join(fx.root, "dev", "instances", name);
@@ -310,7 +310,7 @@ for (const verb of ["start", "restart"]) {
     assert.deepEqual([stateOf(home), runtimeOf(home).endpoint], ["resent", E("k", 1)]);
     assert.equal(await answerOf(fx, "status", home), "unknown");
     assert.equal(await answerOf(fx, "start", home), "launched");
-    assert.deepEqual([callsOf(fx), stateOf(home), runtimeOf(home).endpoint], [["stop:E", "stop:null", "launch"], "running", E("k", 3)]);
+    assert.deepEqual([callsOf(fx), stateOf(home), runtimeOf(home).endpoint], [["stop:E", "stop:null", "launch"], "running", E("k", 2)], "the killed launch never made its session: the next is the second");
   });
 }
 
@@ -575,4 +575,59 @@ test("a spawn holds its home's claim to its last write of the record: one killed
   assert.deepEqual([stateOf(home), recordOf(home).spawnCompleted, claim.action], ["running", true, "start"]);
   // Its holder is gone: the next verb takes the claim over.
   assert.equal(await answerOf(fx, "stop", home), "stopped");
+});
+
+// A provider's command outlives the kernel that ran it. The next verb ends it, with its process
+// group, before it relies on the provider's stop: what that command would still have done never happens.
+test("a launch whose kernel was killed is ended with its process group before the home is settled: settled at once, no session appears afterwards", async (t) => {
+  const fx = providerDeployment(t);
+  const late = join(fx.fake, "late-launch");
+  fx.control({ k: { launch: { sleepMs: 2500, late } } });
+  await killedDuring(fx, SPAWN("k"), "k", "launch");
+  const home = homeOf(fx, "k");
+  const calls = join(dirname(home), ".oats-retirement", "provider-calls", "k");
+  // The call is recorded outside the home: the kernel that made it, and the group its command runs in.
+  const records = readdirSync(calls);
+  assert.deepEqual(records.map((name) => name.replace(/^launch-\d+-[0-9a-f-]+/, "launch")).sort(), ["launch.json", "launch.json.group"]);
+  const group = readJson(join(calls, records.find((name) => name.endsWith(".group"))));
+  assert.doesNotThrow(() => process.kill(group.pid, 0), "the provider's command is still running");
+  fx.clearCalls();
+  assert.equal(await answerOf(fx, "stop", home), "stopped");
+  assert.throws(() => process.kill(-group.pid, 0), { code: "ESRCH" }, "no process of its group is left");
+  assert.deepEqual([callsOf(fx), stateOf(home), existsSync(calls)], [["stop:null"], "planned", false]);
+  await new Promise((r) => setTimeout(r, 3000));
+  assert.deepEqual([existsSync(late), existsSync(join(fx.fake, "threads"))], [false, false], "the launch never completed");
+});
+
+test("an input whose kernel was killed is ended with its process group before a retire's stop: it restarts nothing after the home is gone", async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("i");
+  const late = join(fx.fake, "late-input");
+  fx.control({ i: { input: { sleepMs: 2500, late } } });
+  fx.clearCalls();
+  const core = join(HERE, "..", "lib", "core.mjs");
+  const child = spawn(process.execPath, ["--input-type=module", "-e", `const { inputInstanceSession } = await import(${JSON.stringify(core)}); inputInstanceSession(${JSON.stringify(home)}, "a mail");`], { cwd: fx.dep, env: fx.env, stdio: "ignore" });
+  const done = new Promise((resolve) => child.on("close", resolve));
+  for (let i = 0; i < 200 && !fx.verbs("input").length; i++) await new Promise((r) => setTimeout(r, 50));
+  assert.equal(fx.verbs("input").length, 1, "the provider's input is in flight");
+  child.kill("SIGKILL");
+  await done;
+  const started = Date.now();
+  const retired = JSON.parse(fx.cli(["retire", "i", "--json"]).stdout);
+  assert.deepEqual([retired.retired, existsSync(home)], ["i", false], JSON.stringify(retired).slice(0, 400));
+  assert.ok(Date.now() - started < 20_000, "a dead kernel's input is not waited for");
+  assert.deepEqual(callsOf(fx).filter((c) => c.startsWith("stop")), ["stop:E"]);
+  await new Promise((r) => setTimeout(r, 3000));
+  assert.equal(existsSync(late), false, "the input never completed");
+});
+
+test("a provider's command that outlasts its timeout is ended with its whole process group", async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("slow");
+  const late = join(fx.fake, "late-stop");
+  fx.control({ slow: { inspect: { sleepMs: 4000, late } } });
+  const answered = JSON.parse(fx.cli(["session", "inspect", "--home", home, "--json"], { env: { OATS_TEST_SESSION_PROVIDER_TIMEOUT_MS: "500" } }).stdout);
+  assert.equal(answered.error?.code, "E_SESSION_UNAVAILABLE", JSON.stringify(answered).slice(0, 300));
+  await new Promise((r) => setTimeout(r, 4500));
+  assert.equal(existsSync(late), false, "the command did not go on after its timeout");
 });

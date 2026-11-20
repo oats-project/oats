@@ -1569,8 +1569,10 @@ lists the feature `session-providers`, in this order:
    and once the home is gone nothing could stop it. The retire waits for
    those inputs to end (at most an input's timeout and 5 s) and asks the
    provider to stop once more. An input still being sent after that does not
-   hold the retire: it goes on, with a warning that names that input's
-   process.
+   hold the retire: its provider command is ended, and the retire goes on,
+   with a warning that names that input's process. An input whose `oats`
+   command was killed is not waited for: its provider command is ended
+   before the first stop.
 4. **No process may work in the home**, whatever the provider answered: a
    stop it confirms can still leave one behind (a harness that outlives its
    server for a while), and there is no window whose absence would say

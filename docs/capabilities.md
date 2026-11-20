@@ -2045,7 +2045,14 @@ retires the home, and a provider's call must never be one of them.
   A refusal's code is `E_` followed by capitals, digits and underscores.
 - **Exit status 0**, for a result and for a refusal.
 - **Timeouts:** launch 120 s, stop 20 s plus the grace it is given, every
-  other verb 20 s. The command is killed (SIGKILL) at its timeout.
+  other verb 20 s. The command is killed at its timeout.
+- **Process group:** OATS runs each command in a process group of its own,
+  and ends the whole group (SIGKILL) at the timeout, and when the `oats`
+  command that ran a `launch` or an `input` was itself killed while it
+  waited (the next stop, start or retire of the home does it, before it asks
+  for a `stop`). **Run your helpers inside that group and never detach
+  them** (no `setsid`, no daemon): a helper that escapes it can start a
+  session OATS has no record of.
 - stderr is never read.
 
 A call that does not end that way (another exit status, a signal, the

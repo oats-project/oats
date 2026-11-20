@@ -23,7 +23,7 @@ state, in what order it writes, and what happens when two things cross.
 | **Stop receipt** | `<home>/.oats-stop.json` | the kernel; inside the home | which stop the last one was, for the current `startId`: an operator's, or the host's (`resume: true, reason: "host-stop"`) |
 | **Claim** | `<instances>/.oats-retirement/claims/<name>.lock` | the kernel; outside the home | which lifecycle verb acts on the home now, and its process |
 | **Resume count** | `OATS_HOME_DIR/session-resume/provider-resumes/<hash>.json` | the kernel; outside the home | the resumes of the last hour, this boot |
-| **Input in flight** | `<instances>/.oats-retirement/inputs/<name>/<pid>-<id>.json` | the kernel; outside the home | an input is being sent to the home now, and by which process |
+| **Provider call in flight** | `<instances>/.oats-retirement/provider-calls/<name>/<verb>-<pid>-<id>.json`, and `….json.group` | the kernel (the `.group` file: the leader of the process group the provider's command runs in); outside the home | a launch or an input is being sent for the home now: by which kernel process, and in which process group the provider's command runs |
 
 The receipt decides. The record must agree with it
 (`E_RUNTIME_AUTHORITY_MISMATCH` otherwise), **except while the receipt says a
@@ -219,9 +219,31 @@ home and until its answer; and a retire, after `stoppedAt` (from which a new
 input is refused at that read) and its first `stop {E}`, waits for the
 inputs in flight to end, at most an input's timeout and a margin, and asks
 `stop {E}` once more. Then its scan, then the removal. An input still in
-flight at the bound does not hold the retire: it goes on, with a warning
-that names the input's process. A marker whose process is gone (judged as a
-claim's holder is) is no input, and is removed.
+flight at the bound does not hold the retire: its provider command is ended
+(below), and the retire goes on, with a warning that names the input's
+process.
+
+**A provider's command outlives the kernel that ran it.** The kernel runs
+every command of a provider in a process group of its own. A kernel that is
+killed while it waits for one leaves that command running: a launch that
+creates its session later, an input that restarts one. No record would name
+that session. So a launch and an input are recorded while they run (the
+table at the top: the kernel that made the call, and the group its command
+runs in, written by the group's leader before the provider runs), and the
+record is removed when the call returns.
+
+A record whose kernel is gone is a call that may still act. **Before the
+kernel relies on a provider's stop** (a settle, the stop rule, a start's
+stops, a retire's) it ends each such call of the home: the group is killed
+(SIGKILL) and seen empty, and only then is the provider asked to stop. A
+call whose group had not recorded itself yet is made void first: its leader,
+if it still comes, runs nothing. A group that cannot be ended (its leader is
+gone and members are left, or they survive) is a stop that is not confirmed:
+`E_SESSION_STOP_FAILED`, and an unsettled home stays unsettled.
+
+One window stays: a request the provider's own server had accepted before
+the group was killed can complete moments later. The provider's `stop`,
+which the kernel sends after the group is gone, is what covers it.
 
 **Resume count.** Taken under its own lock, before the provider's `input`,
 and given back only when the provider itself refused the input.
@@ -235,3 +257,7 @@ and given back only when the provider itself refused the input.
   endpoint it answered before for that home**: an endpoint names one session,
   never a place that a later session takes over.
 - `input` answers `submitted: true` only when it dispatched the input.
+- A command runs its own helpers inside the process group the kernel runs
+  it in, and never detaches them: ending the group ends everything the
+  command would still do on this host. Its `stop` looks at what is there
+  when it is asked, after that group is gone.

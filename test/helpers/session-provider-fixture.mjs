@@ -48,6 +48,8 @@ const b = behaviourOf(instance, req.verb);
 // touch: a file this call appends one space to before it answers (a record another verb changes meanwhile).
 if (b.touch) appendFileSync(b.touch, " ");
 if (b.sleepMs) await new Promise((r) => setTimeout(r, b.sleepMs));
+// late: a file this call appends to AFTER its sleep (what a command that outlived its kernel would still do).
+if (b.late) appendFileSync(b.late, "late");
 if (b.exit !== undefined) process.exit(b.exit);
 if (b.raw !== undefined) { process.stdout.write(b.raw); process.exit(0); }
 if (b.error) { process.stdout.write(JSON.stringify({ ...echo, ...(b.echo ?? {}), ok: false, error: b.error }) + "\\n"); process.exit(0); }

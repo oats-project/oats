@@ -19,6 +19,12 @@
     its outcome is recorded (`runtime.launchSent`): a spawn or a start
     killed mid-launch leaves a home that reads as unknown, whose next stop,
     start or retire first asks the provider to stop what it started.
+  - Each command of a provider runs in a process group of its own, ended
+    whole at its timeout. A `launch` or an `input` whose `oats` command was
+    killed is ended, with its group, by the next stop, start or retire of
+    the home, before the provider is asked to stop: it starts no session
+    that OATS has no record of. A provider's command runs its helpers
+    inside that group.
   - A stop made with OATS stays stopped: inspect answers stopped and every
     input is refused `E_SESSION_NOT_RUNNING` until the home is started,
     without asking the provider.
