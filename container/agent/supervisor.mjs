@@ -39,6 +39,8 @@ export async function supervise({
     try {
       bbToken = readFile(bbTokenFile, "utf8").trim();
       if (!bbToken) say("the Claude token file is empty: bb starts without it");
+      // A wrapped or pasted-over file: bb would read ready while every model call fails.
+      else if (/\s/.test(bbToken)) { say("the Claude token file must hold the token on one line"); return 1; }
     } catch (e) {
       if (e.code !== "ENOENT") { say(`the Claude token file could not be read (${e.code || "error"})`); return 1; }
     }
