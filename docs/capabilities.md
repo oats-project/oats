@@ -2177,13 +2177,17 @@ leaves such a mail unread; a scheduled wake records it not delivered.
 
 ### stop
 
-In: `{ "home", "endpoint", "graceSeconds" }`. Out: `{ "stopped": true }`.
+In: `{ "home", "endpoint", "graceSeconds", "launchSent"? }`. Out: `{ "stopped": true }`.
 `endpoint` is `null` when the kernel has no endpoint for a session you may
 have started: a launch whose answer was lost, and a launch it sent whose
 spawn or start ended before recording your answer (it was killed while you
 launched). Then stop whatever live session is rooted at the home, and answer
-`stopped: true` also when there is none. **The kernel relies on this**: it
-is the only way a session started by a killed spawn is ever stopped.
+`stopped: true` also when there is none. The input then also carries
+`"launchSent": "<instant>"`, the time the kernel recorded for that launch,
+when it has one: what the launch started was created at or after it, so you
+can leave alone what was in the home's place before (a person's own session
+there). **The kernel relies on this stop**: it is the only way a session
+started by a killed spawn is ever stopped.
 
 ### check (optional)
 

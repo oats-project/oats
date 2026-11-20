@@ -7535,13 +7535,15 @@ open) and `E_SESSION_INPUT_QUEUED`.
 
 **A launch that was sent and never recorded.** A spawn or a start that ends
 while the provider launches (it was killed) leaves `launchSent` in the home's
-receipt. Until it is settled the home is unknown: `oats session inspect`
-answers `E_SESSION_UNAVAILABLE`, its status row reads `running: null`,
-`runtimeState: "unreachable"` with the reason, and a `--resume` is
-`E_SESSION_UNKNOWN`. A stop, a start and a retire settle it first, by asking
-the provider to stop whatever session is rooted at the home: a stop then
-answers `stopped: true` (never `alreadyIdle` with `not-launched`), or
-`E_SESSION_STOP_FAILED` when the provider does not confirm.
+receipt. Until it is settled the home is unknown, whether it was launched
+before or not: `oats session inspect` answers `E_SESSION_UNAVAILABLE`, its
+status row reads `running: null`, `runtimeState: "unreachable"` with the
+reason, a `--resume` is `E_SESSION_UNKNOWN`, and `oats session input` is
+`E_SESSION_INPUT_FAILED` (nothing sent). A stop, a start and a retire settle
+it first, by asking the provider to stop whatever session is rooted at the
+home: a stop then answers `stopped: true` (never `alreadyIdle`), or
+`E_SESSION_STOP_FAILED` when the provider does not confirm. The row of a
+never-launched home reads `launched: true` meanwhile.
 
 **Stop and retire.** The stop's row is `{ok: true, stopped, alreadyIdle,
 state: "stopped"}`; `E_SESSION_STOP_FAILED` when the provider does not confirm

@@ -983,12 +983,21 @@ before the provider's launch is called, by a spawn and by a start, and taken
 away when the endpoint is recorded or the launch is known to have started
 nothing. One that is still there afterwards is a spawn or a start that ended
 first (it was killed, or its host stopped): a session may run that no record
-names. Such a home reads as unknown (`oats session inspect` answers
-`E_SESSION_UNAVAILABLE`, its status row `running: null`, `runtimeState:
-"unreachable"`), never as not launched or stopped; and a stop, a start and a
-retire first ask the provider to stop whatever session is rooted at the
-home. A stop the provider does not confirm is `E_SESSION_STOP_FAILED`, and
-the record stays until one is.
+names. Such a home, launched before or not, reads as unknown (`oats session
+inspect` answers `E_SESSION_UNAVAILABLE`, its status row `running: null`,
+`runtimeState: "unreachable"`), never as not launched or stopped; input to
+it is refused (`E_SESSION_INPUT_FAILED`, nothing sent); and a stop, a start
+and a retire first ask the provider to stop whatever session is rooted at
+the home, handing it that instant. A stop the provider does not confirm is
+`E_SESSION_STOP_FAILED`, and the record stays until one is; a stop of a home
+launched before records `stoppedAt` first all the same.
+
+For a home that was **never launched**, the receipt reads `runtime:
+{launched: true, backend, provider, launchSent}` meanwhile, and
+`instance.json` `launched: true`, both without an endpoint; both go back to
+not launched when the launch is settled. A kernel from before session
+providers reads that as a launch it cannot address and refuses every verb on
+the home, a retire included.
 
 **The verbs.**
 

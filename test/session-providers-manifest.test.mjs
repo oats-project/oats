@@ -5,7 +5,7 @@
 // the older kernel is T10 (session-provider-older-kernel.test.mjs).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -117,10 +117,13 @@ test("the records' and the answers' rules: an endpoint, a receipt's runtime, an 
   for (const no of [null, undefined, "thr_1", 7, ["thr_1"], true]) assert.equal(validEndpoint(no), false, JSON.stringify(no));
 
   const runtime = { launched: true, backend: "fake", provider: "acme.fake", endpoint: { threadId: "thr_1" }, stoppedAt: null };
-  assert.deepEqual(providerRuntimeOf(runtime), runtime);
+  assert.deepEqual(providerRuntimeOf(runtime), { ...runtime, launchSent: null });
+  // `launchSent`: a launch that was sent and has no recorded outcome; an instant, or the receipt is no authority.
+  assert.equal(providerRuntimeOf({ ...runtime, launchSent: "2026-11-20T10:00:00.000Z" }).launchSent, "2026-11-20T10:00:00.000Z");
+  assert.equal(providerRuntimeOf({ ...runtime, launchSent: "soon" }), undefined);
   assert.equal(providerRuntimeOf({ ...runtime, stoppedAt: "2026-11-19T10:00:00.000Z" }).stoppedAt, "2026-11-19T10:00:00.000Z");
   const { stoppedAt: _a, ...bare } = runtime;
-  assert.deepEqual(providerRuntimeOf(bare), runtime, "a receipt without stoppedAt was never stopped");
+  assert.deepEqual(providerRuntimeOf(bare), { ...runtime, launchSent: null }, "a receipt without stoppedAt was never stopped");
   for (const [what, broken] of [
     ["not launched", { ...runtime, launched: false }], ["a tmux endpoint beside it", { ...runtime, tmux: { session: "s", window: "w", socket: "/x" } }],
     ["a Herdr target", { ...runtime, sessionTarget: {} }], ["the built-in backend's name", { ...runtime, backend: "tmux" }], ["the word for any provider as a backend", { ...runtime, backend: "session-provider" }], ["no backend", { ...runtime, backend: undefined }],
@@ -243,4 +246,29 @@ test("a kernel from before the contract applies a requires row that carries `bac
   const older = JSON.parse(r.stdout.trim().split("\n").pop());
   assert.deepEqual([older.ok, older.error.code], [false, "E_HARNESS_RESOURCE_MISSING"], JSON.stringify(older));
   assert.match(older.error.message, /acme\.provided requires the claude package needed@acme-market/);
+});
+
+test("a kernel from before the contract refuses a home whose spawn was killed while its provider launched: it never retires it as one never launched", async (t) => {
+  // Such a home has no endpoint, and its provider may run a session for it. Its receipt says a
+  // launch was sent (`launched: true`, no tmux endpoint): the older kernel reads that as a launch
+  // it cannot address, and refuses, where a `launched: false` receipt would read as a home it may retire.
+  const cli = preContractKernel(t);
+  const fx = providerDeployment(t);
+  fx.control({ launch: { sleepMs: 1500 } });
+  const child = spawn(process.execPath, [join(REPO, "bin", "oats.mjs"), "spawn", "dev", "--name", "cut", "--backend", "fake", "--launch-config", "claude", "--json"], { cwd: fx.dep, env: fx.env, stdio: "ignore" });
+  const done = new Promise((resolve) => child.on("close", resolve));
+  for (let i = 0; i < 100 && fx.verbs("launch").length === 0; i++) await new Promise((r) => setTimeout(r, 100));
+  assert.equal(fx.verbs("launch").length, 1, "the provider's launch is in flight");
+  child.kill("SIGKILL");
+  await done;
+  await new Promise((r) => setTimeout(r, 2000));
+  fx.clearCalls();
+  const home = join(fx.root, "dev", "instances", "cut");
+  const older = (args) => { const r = spawnSync(process.execPath, [cli, ...args], { cwd: fx.dep, env: fx.env, encoding: "utf8" }); return JSON.parse(r.stdout); };
+  for (const args of [["session", "inspect", "--home", home, "--json"], ["session", "start", "--home", home, "--json"], ["retire", "cut", "--json"]]) {
+    const answer = older(args);
+    assert.equal(answer.ok, false, `${args.join(" ")}: ${JSON.stringify(answer).slice(0, 300)}`);
+  }
+  assert.equal(existsSync(home), true, "the home is kept");
+  assert.deepEqual(fx.verbs(), [], "and that kernel called no provider");
 });
