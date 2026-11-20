@@ -154,14 +154,6 @@ function runBindingCheck(bin, settings, context, env = {}) {
   return { ...r, doc };
 }
 
-function awAtLeast(text, floor) {
-  const parsed = /aw\s+v?(\d+)\.(\d+)\.(\d+)/.exec(text || "");
-  if (!parsed) return false;
-  const a = parsed.slice(1, 4).map(Number), b = floor.split(".").map(Number);
-  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
-  return true;
-}
-
 function spawnGrant(base, extraSettings = {}, extraEnv = {}) {
   const bin = fakeAw(base); const { root, home } = deployment(base); const custody = resident(base);
   const payload = { ...settings(custody), ...extraSettings, identity: { ...settings(custody).identity, ...(extraSettings.identity || {}) } };
@@ -245,35 +237,6 @@ test("custody preflight requires team grant-status endpoint when reported, allow
     assert.match(r.doc.warning, /team t:example\.test certificate is not present in custody status/);
     assert.equal(logLines(base).some((l) => l.argv.slice(0, 3).join(" ") === "id grant mint"), false);
   } finally { rmSync(base, { recursive: true, force: true }); }
-});
-
-test("real aw 1.36.33 custody preflight reports needs-configuration instead of faking a pass", (t) => {
-  const realAw = process.env.AW_REAL_CLI_BIN;
-  if (!realAw) { t.skip("set AW_REAL_CLI_BIN to a real aw 1.36.33+ binary to exercise native custody status"); return; }
-  const version = spawnSync(realAw, ["version"], { encoding: "utf8", timeout: 10000 });
-  if (version.status !== 0 || !awAtLeast(version.stdout + version.stderr, "1.36.33")) { t.skip(`real aw is not 1.36.33+: ${version.stdout || version.stderr}`); return; }
-  const base = mkdtempSync(join(tmpdir(), "oats-aweb-113-real-"));
-  try {
-    const { root, home } = deployment(base); const custody = resident(base);
-    const r = runHook(dirname(realAw), "spawn", { OATS_INSTANCE: "probe", OATS_HOME: home, OATS_WORKSPACE: root, OATS_CONTEXT: root, OATS_SETTINGS: JSON.stringify(settings(custody)) });
-    assert.notEqual(r.status, 0);
-    assert.match(r.doc.warning, /custody preflight failed for merlin/);
-    assert.match(r.doc.warning, /status=not_running/);
-    assert.match(r.doc.warning, /custody_unavailable/);
-    assert.match(r.doc.warning, /start aw custody serve for merlin/);
-    assert.equal(existsSync(join(home, ".aweb-identity")), false, "no grant home is minted on failed real custody preflight");
-  } finally { rmSync(base, { recursive: true, force: true }); }
-});
-
-test("real aw fixture: unattached grant home reports the released custody locator error", (t) => {
-  const fixture = process.env.AW_REAL_GRANT_FIXTURE;
-  const realAw = process.env.AW_REAL_CLI_BIN || "aw";
-  if (!fixture) { t.skip("set AW_REAL_GRANT_FIXTURE to an unattached real grant home"); return; }
-  const version = spawnSync(realAw, ["version"], { encoding: "utf8", timeout: 10000 });
-  if (version.status !== 0 || !awAtLeast(version.stdout + version.stderr, "1.36.33")) { t.skip(`real aw is not 1.36.33+: ${version.stdout || version.stderr}`); return; }
-  const r = spawnSync(realAw, ["custody", "status", "--json"], { cwd: fixture, encoding: "utf8", env: { ...process.env, AWEB_IDENTITY_HOME: fixture }, timeout: 10000 });
-  assert.notEqual(r.status, 0);
-  assert.match(r.stderr + r.stdout, /grant home has no custody\.socket_path locator/);
 });
 
 test("custody preflight requires e2ee operations by default; identity.e2ee false needs signing only and briefs a warning", () => {

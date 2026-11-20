@@ -4,10 +4,12 @@ import { spawn } from "node:child_process";
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createTcpServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
+import { isDeepStrictEqual } from "node:util";
+import { parseLaunchCommand } from "../lib/instance-listing.mjs";
 import { parse } from "yaml";
 
 function sshSettings(source) {
@@ -26,6 +28,28 @@ function sshSettings(source) {
 
 const read = (name) => readFileSync(new URL(`../container/agent/${name}`, import.meta.url), "utf8");
 const readBb = (name) => readFileSync(new URL(`../container/agent-bb/${name}`, import.meta.url), "utf8");
+
+function acceptanceFixture() {
+  const env = { AGENT_IMAGE: "oats-agent:reviewed", AGENT_UID: "20001", AGENT_GID: "20001", TEAM_STATE_DIR: "/srv/team/state", TEAM_LOGIN_DIR: "/srv/team/login", AUTHORIZED_KEYS_FILE: "/srv/team/authorized_keys", RESOLV_CONF_FILE: "/srv/team/resolv.conf", AGENT_PIDS: "512", AGENT_TMP_SIZE: "134217728", AGENT_MEMORY: "3g", AGENT_CPUS: "2", AGENTS_NETWORK: "team-agents", AGENT_IP: "172.30.0.2" };
+  const image = { Id: "sha256:" + "1".repeat(64), Config: { Env: ["PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/state/home"], Entrypoint: ["/usr/bin/tini", "--", "/usr/local/bin/agent-entrypoint"], Cmd: null } };
+  const inspected = {
+    Image: image.Id,
+    State: { Running: true },
+    Config: { Image: env.AGENT_IMAGE, Hostname:"oats-agent", User: "20001:20001", Env: [...image.Config.Env], Entrypoint: [...image.Config.Entrypoint], Cmd: null, StopTimeout: 50,
+      Healthcheck: { Test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2222"], Interval: 30000000000, Timeout: 5000000000, StartPeriod: 10000000000, Retries: 3 } },
+    HostConfig: { CapDrop: ["ALL"], CapAdd: null, SecurityOpt: ["no-new-privileges:true"], ReadonlyRootfs: true, Privileged: false, PidMode: "", IpcMode: "private", GroupAdd: null, UsernsMode: "", UTSMode: "", CgroupnsMode: "private", Sysctls: null, PortBindings: {}, ExtraHosts: [], Dns: null, NetworkMode: "team-agents", PidsLimit: 512, Memory: 3221225472, NanoCpus: 2000000000, Tmpfs: { "/tmp": "rw,nosuid,nodev,size=134217728,mode=1777" }, Binds: [], Mounts: [], Devices: [], DeviceRequests: null, RestartPolicy: { Name: "unless-stopped" } },
+    NetworkSettings: { Networks: { "team-agents": { IPAddress: "172.30.0.2" } } },
+    Mounts: [
+      { Source: "/srv/team/state", Destination: "/state", Type: "bind", RW: true },
+      { Source: "/srv/team/login", Destination: "/etc/agent-login", Type: "bind", RW: false },
+      { Source: "/srv/team/authorized_keys", Destination: "/etc/agent-ssh/authorized_keys", Type: "bind", RW: false },
+      { Source: "/srv/team/resolv.conf", Destination: "/etc/resolv.conf", Type: "bind", RW: false },
+    ],
+  };
+  inspected.HostConfig.Mounts = inspected.Mounts.map((m) => ({ Type: "bind", Source: m.Source, Target: m.Destination, ReadOnly: !m.RW, BindOptions: {} }));
+  Object.assign(inspected.HostConfig, { Runtime: "runc", MemorySwap: 6442450944, OomKillDisable: false, DeviceCgroupRules: null, ShmSize: 67108864 });
+  return { env, image, inspected };
+}
 
 function loginFixture() {
   const dir = { uid: 0, gid: 20001, mode: 0o750, isDirectory: () => true };
@@ -180,14 +204,22 @@ test("agent Compose service retains the isolation contract", () => {
   assert.deepEqual(work.services.agent.volumes, [{ type: "bind", source: "${TEAM_WORK_DIR:?Set TEAM_WORK_DIR}", target: "/work", bind: { create_host_path: false } }]);
 });
 
-test("the entrypoint gives PID-only tini the image supervisor after NSS and key setup", () => {
-  const source = read("entrypoint.sh"), lines = source.trimEnd().split("\n");
-  assert.equal(lines.at(-1), "exec node /usr/local/lib/agent-supervisor.mjs");
-  assert.equal(lines.filter((line) => /^\s*exec\b/.test(line)).length, 1);
-  assert.doesNotMatch(source, /sshd -D|exec oats/);
-  assert.match(source, /export NSS_WRAPPER_PASSWD=/);
-  assert.match(source, /ssh-keygen/);
-  assert.match(read("Dockerfile"), /COPY --chmod=644 supervisor\.mjs \/usr\/local\/lib\/agent-supervisor\.mjs/);
+test("the entrypoint command structure hands PID-only tini the supervisor after NSS and key setup", () => {
+  const checkEntrypoint = source => {
+    const commands = source.split("\n").map(line => line.trim()).filter(line => line && !line.startsWith("#")).map(line => line.split(/\s+/));
+    assert.deepEqual(commands.at(-1), ["exec", "node", "/usr/local/lib/agent-supervisor.mjs"]);
+    assert.equal(commands.filter(argv => argv[0] === "exec").length, 1);
+    assert.ok(commands.every(argv => !argv.some(word => basename(word.replace(/^['"]|['"]$/g, "")) === "sshd")), "the supervisor alone launches sshd");
+    assert.ok(commands.some(argv => isDeepStrictEqual(argv, ["export", "NSS_WRAPPER_PASSWD=/state/ssh/passwd"])));
+    assert.ok(commands.some(argv => isDeepStrictEqual(argv, ["ssh-keygen", "-q", "-t", "ed25519", "-N", "''", "-f", "/state/ssh/ssh_host_ed25519_key"])));
+  };
+  const source = read("entrypoint.sh");
+  checkEntrypoint(source);
+  for (const direct of ["/usr/sbin/sshd -D &", "nohup sshd -D &", "env PATH=/usr/sbin /usr/sbin/sshd -D &"]) {
+    assert.throws(() => checkEntrypoint(source.replace("exec node", direct + "\nexec node")), /supervisor alone/, direct);
+  }
+  const copies = read("Dockerfile").split("\n").map(line => line.trim().split(/\s+/)).filter(words => words[0] === "COPY");
+  assert.deepEqual(copies.find(words => words.includes("supervisor.mjs")), ["COPY", "--chmod=644", "supervisor.mjs", "/usr/local/lib/agent-supervisor.mjs"]);
 });
 
 test("SSH accepts only agent public keys with forwarding disabled", () => {
@@ -199,41 +231,72 @@ test("SSH guard refuses repeated keywords or conditional configuration", () => {
   for (const prefix of ["PasswordAuthentication yes", "disableforwarding no", "  Match User agent", "  Include /tmp/unreviewed.conf", "disableforwarding=no", "PasswordAuthentication=yes", "DisableForwarding = no", "Include=/tmp/unreviewed.conf", '"PasswordAuthentication" yes']) assert.throws(() => sshSettings(prefix + "\n" + read("sshd_config")), prefix);
 });
 
-test("Claude auth acceptance excludes the instance project settings", () => {
-  const source = read("accept.mjs");
-  assert.match(source, /--setting-sources user/);
-  assert.match(source, /mktemp -d \/tmp\/oats-claude-probe\.XXXXXX/);
-  assert.doesNotMatch(source, /"exec", "--workdir", home/);
+test("Claude auth orchestration uses a scratch cwd and only user settings", async t => {
+  const report = t.mock.method(console, "log", () => {});
+  // Pins orchestration argv at the Docker subprocess boundary. Docker's
+  // acceptance of those arguments belongs to team-image CI.
+  const { main } = await import("../container/agent/accept.mjs");
+  assert.equal(typeof main, "function");
+  const { env, image, inspected } = acceptanceFixture();
+  const container = "fixture-agent", home = "/state/deploy/fixture/instance";
+  const program = ["exec", "-i", container, "node"];
+  const expected = [
+    [["inspect", container], JSON.stringify([inspected])],
+    [["image", "inspect", "--", env.AGENT_IMAGE], JSON.stringify([image])],
+    [["info", "--format", "{{.DefaultRuntime}}"], "runc"],
+    [["exec", container, "node", "-p", "process.arch"], "x64"],
+    [program, "runtime fixture"],
+    [program, JSON.stringify({ present: true, evidence: [] })],
+    [program, JSON.stringify("inputs: absent without the optional fragment")],
+    [program, JSON.stringify("outbox: absent without the optional fragment")],
+    [["exec", "-i", "--user", "0:0", container, "node"], "root scan fixture"],
+    [program, "writable scan fixture"],
+    [["exec", container, "sh", "-eu", "-c", null], "EACCES /usr/local"],
+    [["exec", container, "oats", "version", "--json"], JSON.stringify({ version: "fixture" })],
+    [["exec", container, "aw", "version"], "aw fixture"],
+    [["exec", container, "claude", "--version"], "claude fixture"],
+    [["exec", container, "sh", "-eu", "-c", null, "oats-claude-probe", home], "OATS_CONTAINER_AUTH_OK"],
+    [program, "final scan fixture"],
+  ];
+  const calls = [], unexpected = [];
+  const run = (executable, argv) => {
+    const row = expected[calls.length];
+    calls.push(argv);
+    const matches = row && argv.length === row[0].length && row[0].every((value, at) => value === null ? typeof argv[at] === "string" : isDeepStrictEqual(argv[at], value));
+    if (executable !== "docker" || !matches) {
+      unexpected.push({ executable, argv });
+      return { status: 2, stdout: "", stderr: `unexpected ${executable} ${JSON.stringify(argv)}` };
+    }
+    return { status: 0, stdout: row[1], stderr: "" };
+  };
+  try { main([container, "--evidence", "local", "--claude", home], env, { spawnSync: run }); }
+  finally { assert.deepEqual(unexpected, [], "unexpected Docker argv, including the auth path"); }
+  assert.equal(calls.length, expected.length);
+  const auth = calls.find(argv => argv.includes("oats-claude-probe"));
+  assert.ok(auth, "the orchestration emits one auth probe");
+  assert.deepEqual(auth.slice(0, 5), ["exec", container, "sh", "-eu", "-c"]);
+  assert.deepEqual(auth.slice(6), ["oats-claude-probe", home]);
+  assert.ok(calls.every(argv => !argv.includes("--workdir")), "the instance home is never a Docker workdir");
+  const commands = auth[5].trim().split("\n").map(line => line.trim());
+  assert.ok(commands.includes('probe=$(mktemp -d /tmp/oats-claude-probe.XXXXXX)'));
+  assert.ok(commands.includes('cd "$probe"'));
+  const command = commands.find(line => line.startsWith("claude "));
+  assert.ok(command, "the auth probe invokes Claude");
+  const mktempAt = commands.indexOf('probe=$(mktemp -d /tmp/oats-claude-probe.XXXXXX)');
+  const cdAt = commands.indexOf('cd "$probe"');
+  assert.ok(mktempAt < cdAt && cdAt < commands.indexOf(command), "create and enter the scratch cwd before invoking Claude");
+  const { tokens } = parseLaunchCommand("'claude' " + command.slice("claude ".length));
+  assert.deepEqual(tokens.map(token => token.value), ["claude", "-p", "--setting-sources", "user", "--tools", "", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--no-session-persistence", "Reply with exactly OATS_CONTAINER_AUTH_OK"]);
+  const authReceipt = `[local] PASS claude -p for ${home}: OATS_CONTAINER_AUTH_OK (scratch cwd; user settings only; token read only inside the process)`;
+  assert.equal(report.mock.calls.filter(call => call.arguments[0] === authReceipt).length, 1, "capture and assert the simulated report instead of emitting a PASS receipt");
 });
 
-// The admitted container as `docker inspect` reports it, with its acceptance inputs.
-function inspectFixture() {
-  const env = { AGENT_IMAGE: "oats-agent:reviewed", AGENT_UID: "20001", AGENT_GID: "20001", TEAM_STATE_DIR: "/srv/team/state", TEAM_LOGIN_DIR: "/srv/team/login", AUTHORIZED_KEYS_FILE: "/srv/team/authorized_keys", RESOLV_CONF_FILE: "/srv/team/resolv.conf", AGENT_PIDS: "512", AGENT_TMP_SIZE: "134217728", AGENT_MEMORY: "3g", AGENT_CPUS: "2", AGENTS_NETWORK: "team-agents", AGENT_IP: "172.30.0.2" };
-  const image = { Id: "sha256:" + "1".repeat(64), Config: { Env: ["PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/state/home"], Entrypoint: ["/usr/bin/tini", "--", "/usr/local/bin/agent-entrypoint"], Cmd: null } };
-  const inspected = {
-    Image: image.Id,
-    State: { Running: true },
-    Config: { Image: env.AGENT_IMAGE, Hostname:"oats-agent", User: "20001:20001", Env: [...image.Config.Env], Entrypoint: [...image.Config.Entrypoint], Cmd: null, StopTimeout: 50,
-      Healthcheck: { Test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2222"], Interval: 30000000000, Timeout: 5000000000, StartPeriod: 10000000000, Retries: 3 } },
-    HostConfig: { CapDrop: ["ALL"], CapAdd: null, SecurityOpt: ["no-new-privileges:true"], ReadonlyRootfs: true, Privileged: false, PidMode: "", IpcMode: "private", GroupAdd: null, UsernsMode: "", UTSMode: "", CgroupnsMode: "private", Sysctls: null, PortBindings: {}, ExtraHosts: [], Dns: null, NetworkMode: "team-agents", PidsLimit: 512, Memory: 3221225472, NanoCpus: 2000000000, Tmpfs: { "/tmp": "rw,nosuid,nodev,size=134217728,mode=1777" }, Binds: [], Mounts: [], Devices: [], DeviceRequests: null, RestartPolicy: { Name: "unless-stopped" } },
-    NetworkSettings: { Networks: { "team-agents": { IPAddress: "172.30.0.2" } } },
-    Mounts: [
-      { Source: "/srv/team/state", Destination: "/state", Type: "bind", RW: true },
-      { Source: "/srv/team/login", Destination: "/etc/agent-login", Type: "bind", RW: false },
-      { Source: "/srv/team/authorized_keys", Destination: "/etc/agent-ssh/authorized_keys", Type: "bind", RW: false },
-      { Source: "/srv/team/resolv.conf", Destination: "/etc/resolv.conf", Type: "bind", RW: false },
-    ],
-  };
-  inspected.HostConfig.Mounts = inspected.Mounts.map((m) => ({ Type: "bind", Source: m.Source, Target: m.Destination, ReadOnly: !m.RW, BindOptions: {} }));
-  Object.assign(inspected.HostConfig, { Runtime: "runc", MemorySwap: 6442450944, OomKillDisable: false, DeviceCgroupRules: null, ShmSize: 67108864 });
-  return { env, image, inspected };
-}
 
 test("acceptance refuses drift in the admitted container settings", async t => {
   const { inspectAgent: inspectOnHost } = await import("../container/agent/accept.mjs");
   // This metadata fixture has no host files. Real filesystem aliases are checked below.
   const inspectAgent = (info, env, image, runtime) => inspectOnHost(info, env, image, runtime, source => source);
-  const { env, image, inspected } = inspectFixture();
+  const { env, image, inspected } = acceptanceFixture();
   assert.ok(inspectAgent(inspected, env, image).length >= 8);
   for (const tmp of [undefined, "0", "-1", "1g", "1,exec", "9007199254740992"]) {
     assert.throws(() => inspectAgent(inspected, {...env, AGENT_TMP_SIZE:tmp}, image), /AGENT_TMP_SIZE/);
@@ -1399,7 +1462,7 @@ test("the derived image adds only pinned bb-app", () => {
 test("acceptance with the bb fragment refuses a non-loopback listener and a published port; and without the fragment refuses AGENT_BB", async () => {
   const { inspectAgent: inspectOnHost, listenerCheck, agentEnvironment } = await import("../container/agent/accept.mjs");
   const inspectAgent = (info, env, image) => inspectOnHost(info, env, image, undefined, source => source);
-  const { env, image, inspected } = inspectFixture();
+  const { env, image, inspected } = acceptanceFixture();
   const bbEnv = {...env, AGENT_BB: "1"}, withBb = structuredClone(inspected);
   withBb.Config.Env.push("AGENT_BB=1");
   assert.doesNotThrow(() => inspectAgent(withBb, bbEnv, image), "the fragment's entry is the one admitted difference");
@@ -1450,7 +1513,7 @@ test("acceptance with the bb fragment refuses a non-loopback listener and a publ
 test("acceptance admits the bb fragment together with the inputs, outbox and trust fragments", async () => {
   const { inspectAgent: inspectOnHost } = await import("../container/agent/accept.mjs");
   const inspectAgent = (info, env, image) => inspectOnHost(info, env, image, undefined, source => source);
-  const { env, image, inspected } = inspectFixture();
+  const { env, image, inspected } = acceptanceFixture();
   const all = structuredClone(inspected);
   const allEnv = {...env, AGENT_BB: "1", AGENT_CA_FILE: "/operator/public-ca.pem", TEAM_INPUT_DIR: "/operator/inputs", TEAM_OUTBOX_DIR: "/operator/outbox", TEAM_OUTBOX_GID: "20002"};
   all.Config.Env.push("SSL_CERT_FILE=/etc/agent-trust/ca.pem", "NODE_EXTRA_CA_CERTS=/etc/agent-trust/ca.pem", "AGENT_BB=1");
