@@ -93,9 +93,11 @@ your recommendation.
      before every merge, a final review of every PR, an expert that must find a
      maintainer before any PR.
    - **Keep the Desktop's grouping** (`/oats-tailor-workspace` step 2's list):
-     a lead the dispatcher starts is top-level, a feature's agents share its
-     work (`--same-work`), a related effort's lead is the first lead's
-     sibling, and each group has one colour.
+     a lead the dispatcher starts is top-level, a feature's agents are
+     spawned with related work (`--related-work` from OATS 0.69.23,
+     `--same-work` before), a related effort's lead is the first lead's
+     sibling, with related work from OATS 0.69.23, and each group has one
+     colour.
    - **Make the role skills agree with the landing rules:** who builds (the
      lead or a developer) and that its author runs the review loop, who opens
      the PR (the developer's inject, the expert's landing skill), who merges,

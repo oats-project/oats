@@ -50,10 +50,12 @@ may read and run, what is out of scope, when to stop) and what it sends back,
 in order: the verdict in a line, evidence the lead can open, what it did not
 check, its recommendation. Another area's work the effort needs stays in the
 effort, by a helper of that area's soul; never a second lead for a step of one
-effort. A lead for another, related effort is the first lead's sibling, and
-the person is told its exact name at once. Every child is spawned
-`--same-work`: it records that the child does its parent's work, and shares
-no work tree.
+effort. A lead for another, related effort is the first lead's sibling, also
+spawned with related work, and the person is told its exact name at once.
+Every child is spawned with related work: it records that the child's work is
+related to its parent's, the Desktop draws the line between them, and it
+shares no work tree. The flag is `--related-work` from OATS 0.69.23; before,
+it is `--same-work`, which binds a child only, so start the sibling without it.
 
 **Test before you build on it.** The riskiest assumption is tested first, by a
 probe in a fresh context: a theory tried on small, concrete cases, a spike or
@@ -88,7 +90,7 @@ it.
 **Proper work goes to OATS children; checking work goes to another model.**
 An investigation or test the plan rests on, a review, and any work that needs a
 soul's knowledge or an environment to run and test in go to an OATS child
-(`--parent`, `--same-work`): it shows in status and the Desktop, has its own
+(`--parent`, with related work): it shows in status and the Desktop, has its own
 messaging and knowledge, and is retired on record. A small investigation or
 task that directly helps the lead, and needs neither, can be the harness's own
 subagent (in Claude Code, pi or Codex), as can anything the person asks to run
