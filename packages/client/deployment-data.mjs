@@ -216,7 +216,7 @@ export function deploymentStatusData(document, deployment) {
       if (own(instance, 'tmux')) row.tmux = instance.tmux === null ? null : fields(instance.tmux, ['session', 'window', 'socket']);
       if (own(instance, 'sessionTarget')) row.sessionTarget = sessionTarget(instance.sessionTarget);
       // Session providers (feature session-providers): where the instance runs, when it is not tmux's. Validated,
-      // never check()ed: `backend` is kept when it is text (instance-presentation.mjs `sessionProvider` reads it:
+      // never check()ed: `backend` is kept when it is text that is not empty (instance-presentation.mjs `sessionProvider` reads it:
       // "tmux", or anything else, which is a provider's and never asked of tmux), else dropped, and the row reads
       // as one with none (a tmux row). "herdr" is not kept: a Herdr-recorded row of this machine is known by its
       // `sessionTarget` or its `runtimeState`, as before session providers, and a row that only names the backend

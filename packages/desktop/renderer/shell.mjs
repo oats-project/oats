@@ -2559,10 +2559,13 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
   const judged = judgedAnswer;
   if (judged && judged.read > read && judged.workspace === ws
     && retiredTabs([[0, { kind: "terminal", workspace: ws, key, origin }]], judged.panel).length) {
-    // The newer answer may show the row moved to a session provider, not retired: it is there and has no terminal,
-    // which is said as any open of such a row says it (the open's own `say`: a notice, never an alert).
-    const now = resolveTerminalOpen(judged.panel.instances || [], inst, ws);
-    return now.error === "no-terminal" ? say(now.sentence) : notify(`unknown instance "${name}"`);
+    // The newer answer may show this very row moved to a session provider, not retired: it is there and has no
+    // terminal, which is said as any open of such a row says it (the open's own `say`: a notice, never an alert).
+    // Only for the open's own target: a row of the judged answer with this terminal key and no other incarnation.
+    // Another incarnation at the home, or a same-named home elsewhere, is not this instance: it stays unknown.
+    const moved = (judged.panel.instances || []).find((row) => row && typeof row === "object" && terminalKey(ws, row) === key
+      && !otherIncarnation(origin.incarnation, row.createdAt) && noTerminal(row));
+    return moved ? say(noTerminal(moved).sentence) : notify(`unknown instance "${name}"`);
   }
 
   if (!commitDestination()) return notify('The terminal destination changed. Select the instance again.');

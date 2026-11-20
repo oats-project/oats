@@ -3762,8 +3762,10 @@ its absence.
   be read or written. A status routed with `--server` records nothing on this
   machine ([execution-targets.md](execution-targets.md#which-losses-come-back)).
 - <a id="row-backend-clients"></a>**How the clients read `backend`** (the
-  Desktop and the TUI, `packages/client`). A row whose `backend` is text and
-  not `tmux` runs on a session provider, in no terminal:
+  Desktop and the TUI, `packages/client`). A row whose `backend` is text that
+  is not empty and not `tmux` runs on a session provider, in no terminal (an
+  empty `backend` names none: the kernel never sends one, and the row reads
+  as one with no `backend`):
   - Its `running`, `runtimeState` and `runtimeError` are shown as the kernel
     reports them. No client asks tmux about it: with an older kernel, whose
     rows a client's own terminal check refines, such a row is never passed

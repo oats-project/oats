@@ -248,3 +248,22 @@ test("a started instance on a session provider: the dialog closes, no terminal i
     } finally { s.cleanup(); }
   }
 });
+
+test("a start answered on a session provider, for a row the dialog was opened with as a tmux row: no terminal is waited for or opened, and nothing is said of one; a receipt on tmux, or with no backend, follows as before", async () => {
+  const receipt = backend => ({ instance: "accountant-minerva", home: "/workspace/agents/accountant/instances/accountant-minerva", ...(backend === undefined ? {} : { backend }) });
+  for (const ready of [false, async () => assert.fail("no terminal is waited for")]) {
+    const s = setup({ ready, start: () => ({ ...receipt("bb"), session: { provider: "oats.bb" }, target: null }) });
+    try {
+      await tick(); s.submit(); await tick(); await tick();
+      assert.equal(s.modal.isConnected, false);
+      assert.deepEqual([s.opened, s.notified], [[], []], "the receipt's backend decides, not the captured row");
+    } finally { s.cleanup(); }
+  }
+  for (const backend of ["tmux", undefined, ""]) {
+    const s = setup({ start: () => receipt(backend) });
+    try {
+      await tick(); s.submit(); await tick(); await tick();
+      assert.deepEqual(s.opened, [s.instance], String(backend));
+    } finally { s.cleanup(); }
+  }
+});

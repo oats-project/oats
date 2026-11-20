@@ -69,11 +69,13 @@ export const sessionProviderName = (value) => typeof value === "string" && value
  * `running`, `runtimeState` and `runtimeError` from the kernel as given, never probes tmux for it
  * (liveness.mjs) and opens, splits or restores no terminal for it (instance-acts.mjs `openAct`).
  *
- * It is the row's `backend` whenever that is text and not "tmux": any such row is not tmux's, so none is ever
+ * It is the row's `backend` whenever that is text that is not empty and not "tmux": any such row is not tmux's, so none is ever
  * asked of tmux, also one whose value is no name the contract allows (`sessionProviderName`): what is answered
  * is then the row's own text, for display only through `displayLine`, and never set in a sentence or sent as
  * an argument. A row with no `backend` (an older kernel's, or an older routed host's) is a tmux row, as one
- * with "tmux" is, and reads as it always did; so does one whose `backend` is not text. A Herdr-recorded row
+ * with "tmux" is, and reads as it always did; so does one whose `backend` is not text, or is empty: an empty
+ * `backend` names no backend, the kernel never sends one, and reading it as a provider's would take a tmux
+ * home's terminal away. A Herdr-recorded row
  * (`unsupportedSession`, `backend: "herdr"` included) is never one: its own reason comes first, everywhere.
  * Not on the stable surface: a client reads `openAct`'s answer. */
 export function sessionProvider(instance) {

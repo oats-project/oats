@@ -11,6 +11,7 @@ import { displayLine } from "../../client/display-text.mjs";
 import { startRefusalSentence } from "../../client/start-messages.mjs";
 import { runtimeErrorLine } from "./speaker-line.mjs";
 import { noTerminal } from "./provider-row.mjs";
+import { sessionProvider } from "../../client/instance-presentation.mjs";
 import { kernelLines } from "../../client/kernel-lines.mjs";
 import { DESKTOP_TERMS } from "./desktop-terms.mjs";
 import { sourceQuoteCSS } from "./source-quote.mjs";
@@ -117,8 +118,11 @@ export function createInstanceStarter(doc, ctx, { waitForReady = waitForInstance
     // workspace it was started from and the operator has chosen nothing since (`chosen`, the shell's
     // selection watch). The open's own selection ticket supersedes the watch from then on.
     // A row on a session provider (provider-row.mjs) has no terminal: its start opens none and says nothing of one.
-    const openWhenReady = async (chosen) => {
-      if (noTerminal(instance)) return;
+    // So does a start the kernel answered on a provider, whatever the row this dialog was opened with said: the home's
+    // backend can move while the dialog is open, and the receipt's `backend` is what was started. A receipt with no
+    // `backend` (an older kernel's) keeps the row's answer.
+    const openWhenReady = async (chosen, receipt = null) => {
+      if (noTerminal(instance) || sessionProvider({ backend: receipt?.backend }) !== null) return;
       const ours = () => ws === currentWorkspace() && generation === workspaceGeneration() && chosen();
       try {
         const ready = await waitForReady({ ctx }, instance, ours);
@@ -200,7 +204,7 @@ export function createInstanceStarter(doc, ctx, { waitForReady = waitForInstance
         if (!open) return;
         // Taken after the focus return: any explicit choice from now on (another terminal, tab, view or
         // the sidebar) keeps the foreground, and this terminal does not take it later.
-        void openWhenReady(ctx.watchSelection?.() ?? (() => true));
+        void openWhenReady(ctx.watchSelection?.() ?? (() => true), result);
       } catch (error) {
         if (!owns()) return;
         // A start that stopped at a launch prompt says what happened in the Desktop's words, and so does a

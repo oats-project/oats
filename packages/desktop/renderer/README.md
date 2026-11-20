@@ -2313,7 +2313,7 @@ only when even that does not fit (`shell.css`, `.tab-trigger`).
 
 ### A row on a session provider
 
-A roster row whose `backend` is text and not "tmux" runs on a session provider (a capability's session
+A roster row whose `backend` is text that is not empty and not "tmux" runs on a session provider (a capability's session
 backend: "bb"): it has no tmux target and no terminal. Whether a row is one, its
 sentence ("Runs in a bb thread; open it in bb.") and its link are the shared
 home's (`packages/client/instance-acts.mjs` `openAct`, reason `no-terminal`);
@@ -2340,7 +2340,8 @@ home's (`packages/client/instance-acts.mjs` `openAct`, reason `no-terminal`);
   stopped; `home-board.mjs` `homeBoard`: running on `running: true` alone), since a
   provider's `runtimeState` is never "running" and a waiting agent is idle there.
 - **Start and Restart** are sent as for any row; `start-instance.mjs` waits for no
-  terminal and opens none after one. A launched spawn whose row is a provider's is
+  terminal and opens none after one, also when only the start's receipt names a provider
+  (the home's backend moved while the dialog was open). A launched spawn whose row is a provider's is
   complete once the roster shows it running (`spawn-jobs.mjs`: no tmux session to wait
   for); the follow then opens no terminal and marks the row New.
 - **No terminal**: `resolveTerminalOpen` (`instance-tree-view.mjs`) answers such a

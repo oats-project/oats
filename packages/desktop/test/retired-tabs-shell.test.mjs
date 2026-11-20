@@ -389,5 +389,12 @@ test("an open that races a home's move to a session provider says where it runs 
   assert.deepEqual([said.length, notified], [1, ["Runs in a bb thread; open it in bb."]], "with no say of its own, the open's notify is told the same sentence");
   await racing(answer([row("a", T2)]), { say: line => said.push(line) });
   assert.deepEqual([said.length, notified.at(-1)], [1, 'unknown instance "a"'], "another incarnation: retired, as before");
+  // The sentence is for the open's own target only: another incarnation at the home that runs on bb, and a same-named
+  // bb home of another agents root, are not this instance.
+  await racing(answer([{ ...moved, createdAt: T2 }]), { say: line => said.push(line) });
+  assert.deepEqual([said.length, notified.at(-1), notified.length], [1, 'unknown instance "a"', 3], "a bb respawn under the same home");
+  const homonym = { ...moved, home: "/elsewhere/agents/dev/instances/a", agentsRoot: "/elsewhere/agents" };
+  await racing(answer([homonym]), { say: line => said.push(line) });
+  assert.deepEqual([said.length, notified.at(-1), notified.length], [1, 'unknown instance "a"', 4], "a bb row of the same name in another agents root");
   assert.deepEqual([s.c.tabs.size, s.attachments.length], [0, 0], "no tab and no viewer for any of them");
 });
