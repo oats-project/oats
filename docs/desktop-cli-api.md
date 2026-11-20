@@ -6989,8 +6989,9 @@ the top of the list, which is something else.
   and 200 code points, with none of the characters a
   [waiting message](#waiting-on-you) refuses. A link is an absolute `https:`
   URL of at most 512 printable ASCII characters. The context comes from a
-  UTF-8 file (`--context-file`), at most 2000 code points after its trailing
-  newlines. Newlines (LF) are allowed in it, and every other refused
+  UTF-8 file (`--context-file`), at most 2000 code points once its trailing
+  newlines are trimmed (a file's final newline, such as a heredoc's, isn't
+  content). Newlines (LF) are allowed in it, and every other refused
   character is not. Anything else is `E_BAD_ARGS`.
 - **The row bound.** A write that would make the row's `board` larger than
   8 KiB as UTF-8 JSON is `E_BOARD_FULL`, with `details.bytes` and

@@ -140,7 +140,7 @@ test("the context: from a file, newlines kept, on inspect --board only; the row 
   const r = fx.cli(["inspect", "--home", home, "--board", "--json"]);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const board = JSON.parse(r.stdout).result.instance.board;
-  assert.equal(board.questions[0].context, "The branch has 14 commits.\nThree are fixups of the first.");
+  assert.equal(board.questions[0].context, "The branch has 14 commits.\nThree are fixups of the first.", "the file's trailing newline is not content");
   assert.deepEqual(board.facts[0].history.map((h) => h.value), ["#1", "#2"]);
   assert.ok(board.facts[0].history.every((h) => typeof h.at === "string"));
   const plain = fx.cli(["inspect", "--home", home, "--json"]);
@@ -152,6 +152,8 @@ test("the context: from a file, newlines kept, on inspect --board only; the row 
   assert.equal(JSON.parse(soul.stdout).error.code, "E_BAD_ARGS", "--board takes --home, not --soul");
   writeFileSync(ctx, "a\rb");
   refused(agent(home, ["ask", "Again?", "--option", "a", "--option", "b", "--context-file", ctx]), "E_BAD_ARGS", "a CR in the context");
+  writeFileSync(ctx, `${"x".repeat(2000)}\n`);
+  ok(agent(home, ["ask", "At the bound?", "--option", "a", "--option", "b", "--context-file", ctx]), "2000 code points and a final newline: at the bound");
   writeFileSync(ctx, "x".repeat(2001));
   refused(agent(home, ["ask", "Again?", "--option", "a", "--option", "b", "--context-file", ctx]), "E_BAD_ARGS", "a context over 2000 characters");
   refused(agent(home, ["ask", "Again?", "--option", "a", "--option", "b", "--context-file", join(home, "absent.txt")]), "E_BAD_ARGS", "a context file that is not there");
@@ -384,4 +386,22 @@ test("reads: a board file that can't be read is an empty board; a home that can'
     chmodSync(home, 0o000);
     assert.equal(readBoardRow(home), null);
   } finally { chmodSync(home, 0o755); chmodSync(file, 0o600); }
+});
+
+test("two session boundaries of one millisecond are two sessions: the earlier one's question ends, and a later fact write sets no claim for it; the same boundary written again is the same session", async () => {
+  const home = await freshHome();
+  const at = "2026-11-20T10:00:00.000Z";
+  // Two launches at the same instant, told apart by their start ids, as recordStartBoundary writes them.
+  assert.equal(appendEvent(home, { kind: "launched", data: { startId: "first" } }, { at }).ok, true);
+  await fx.inEnv(() => askBoardQuestion(home, { question: "Ship?", options: ["yes", "no"] }, { now: () => new Date(at) }));
+  assert.equal(readBoardRow(home).questions.length, 1, "asked in the first session");
+  const again = appendEvent(home, { kind: "launched", data: { startId: "first" } }, { at });
+  assert.equal(again.ok, true);
+  assert.equal(readBoardRow(home).questions.length, 1, "the same boundary written again is the same session");
+  assert.equal(appendEvent(home, { kind: "launched", data: { startId: "second" } }, { at }).ok, true);
+  assert.deepEqual(readBoardRow(home).questions, [], "a second launch of the same millisecond ends it");
+  assert.equal(readEvents(home).waitingOnYou, null);
+  await fx.inEnv(() => setBoardFact(home, { key: "pr", label: "Pull request", value: "#1" }));
+  assert.equal(readEvents(home).waitingOnYou, null, "a later fact write sets no claim for the ended question");
+  assert.deepEqual(readBoardRow(home).questions, []);
 });

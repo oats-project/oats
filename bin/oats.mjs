@@ -1377,6 +1377,8 @@ function instanceBoardCmd(bail) {
       line = `question ${r.id} ${r.changed ? "cleared" : "was not open"}`;
     } else {
       if (operands.length > 1) return bail("E_BAD_ARGS", `oats instance board ask takes one question (quote it); ${usage}`);
+      // A file's trailing newlines are not content (a heredoc's final LF): they are trimmed before the
+      // context is counted and stored (desktop-rework-lead, a detail filled within contract v4).
       let context;
       const file = one("context-file");
       if (file !== undefined) {
@@ -5225,7 +5227,7 @@ Usage:
                                             a detached external retirement runs
   oats inspect [--dir <scope>] [--soul <name>   one authoritative JSON answer for a GUI: souls
       [--agents-root <abs>]] [--home <abs>]   (harness defaults, editability, instructions),
-      [--instructions] [--skills]           installed capabilities with health, effective
+      [--board] [--instructions] [--skills] installed capabilities with health, effective
       [--composed-skills] [--max-age <s>]   layer bindings and activation, declared
       [--json]                              operations with availability; --home answers the
                                             running home's recorded modules and their drift
@@ -5233,6 +5235,8 @@ Usage:
                                             adds the AGENTS.md a spawn of the soul here would write;
                                             --skills (--soul only) adds the soul's own skills, the
                                             ones a spawn copies, with each file's text;
+                                            --board (--home only) adds the agent's board, each
+                                            fact's history and each question's context;
                                             --composed-skills (--soul only) adds every skill a spawn
                                             would give the instance, its capabilities' included
   oats operation run <layer>:<name>          run an operation the soul's core capability for that
