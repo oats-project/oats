@@ -6,6 +6,7 @@ import { JSDOM } from 'jsdom';
 import { soulRole, compareSoulsByRole, SOUL_ROLES } from '../../client/soul-role.mjs';
 import { createSoulInstructions, SOUL_INSTRUCTIONS_COPY, OWN, COMPOSED } from '../renderer/soul-instructions.mjs';
 import { createSoulInspector } from '../renderer/soul-inspector.mjs';
+import { capabilityRow } from '../renderer/workspace-catalog.mjs';
 import { setWorkspace, currentWorkspace } from '../renderer/views/common.mjs';
 
 const tick = () => new Promise(r => setTimeout(r, 0));
@@ -196,6 +197,24 @@ test('slice3a soul page capabilities one list core first', async t => {
   assert.equal(u.$('details.soul-ready-details > summary').textContent, 'Details', 'readiness detail behind a native disclosure');
 });
 
+// Slice 3b's shared row: a core slot the inspection names without its capability is a plain line with no source, and the
+// list's one tab stop is its first row that opens, not that line.
+test('slice3b soul page: a named core slot without its capability says no source; the tab stop is the first row that opens', async t => {
+  const v = inspection(); v.layers.knowledge = { ...v.layers.knowledge, id: 'nw-missing' };
+  const u = page(t, () => v);
+  await u.inspector.show(selection('release-manager')); await settle();
+  const rows = u.$$('.soul-capabilities .cap-row');
+  assert.equal(rows[0].dataset.capability, 'nw-missing');
+  assert.equal(rows[0].tagName, 'DIV', 'nothing to open');
+  assert.equal(rows[0].querySelector('.cap-origin'), null, 'no source invented');
+  assert.equal(rows[0].querySelector('.cap-tag').textContent, 'core');
+  const buttons = u.$$('.soul-capabilities button.cap-row');
+  assert.ok(buttons.length > 1);
+  assert.deepEqual(buttons.map(b => b.tabIndex), [0, ...buttons.slice(1).map(() => -1)], 'exactly one stop, on the first row that opens');
+  buttons[0].focus(); u.key(buttons[0], 'ArrowDown');
+  assert.equal(u.doc.activeElement, buttons[1]);
+});
+
 test('slice3a soul page two instruction tabs', async t => {
   const dom = new JSDOM('<!doctype html><body><main></main></body>', { pretendToBeVisual: true });
   const doc = dom.window.document, host = doc.querySelector('main');
@@ -254,7 +273,7 @@ test('slice3a soul page: a catalog update or a roster poll never paints another 
   let words = 'first words';
   const alpha = inspection('alpha'); alpha.souls[0].instructions.text = '# PRIVATE TO ALPHA\n';
   const u = page(t, body => { if (body.selector.soul === 'alpha') return alpha; const d = {}; d.promise = new Promise(r => { d.resolve = r; }); waits.push(d); return d.promise; },
-    { capabilityFacts: () => ({ by: null, description: words }) });
+    { capabilityFacts: cap => ({ row: { ...capabilityRow(cap), description: words }, origin: null }) });
   // Alpha is shown; beta is asked for and still pending.
   await u.inspector.show(selection('alpha')); await settle();
   assert.match(u.el.textContent, /first words/);
@@ -321,7 +340,7 @@ test('slice3a soul page: Ready\'s Details reads the soul\'s readiness once, on f
 test('slice3a soul page: an empty refresh is not painted over by a catalog update; a wordless problem is not Ready', async t => {
   let answer = inspection('release-manager'), words = 'first words';
   answer.souls[0].instructions.text = '# SOUL PRIVATE TEXT\n';
-  const u = page(t, () => answer, { capabilityFacts: () => ({ by: null, description: words }) });
+  const u = page(t, () => answer, { capabilityFacts: cap => ({ row: { ...capabilityRow(cap), description: words }, origin: null }) });
   await u.inspector.show(selection('release-manager')); await settle();
   assert.match(u.el.textContent, /SOUL PRIVATE TEXT/); assert.ok(u.$('.soul-capabilities'));
   answer = { ...structuredClone(fixture), souls: [], capabilities: [], problems: [{ code: 'gone', message: 'The soul is no longer available.' }] };

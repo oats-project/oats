@@ -752,11 +752,13 @@ export function createSoulInspector(container, { ctx, presentation, openSoul = n
     const id = subject, gen = selectionGen;
     // The Capabilities page's row (workspace-catalog.mjs capabilityRowElement, slice 3b): the same name, tags, origin
     // (the official rule, capability-origin.mjs) and one line. A soul's rows carry no "default" tag (`default: null`).
+    // The list's one tab stop is its first row that opens (a core slot named without its capability is a plain line).
+    const firstOpen = typeof openCapability === 'function' ? shown.findIndex(({ cap }) => !!cap) : -1;
     const lines = shown.map(({ entry, cap, name, core }, i) => {
       const said = describeCapability(cap, name);
       const why = entry.why ? whyTag(entry)[1] : null;
       const opens = cap && typeof openCapability === 'function' ? () => { if (ownsSubject(id, gen)) openCapability(cap, selection.agent, entry); } : null;
-      const el = capabilityRowElement(doc, { row: said.row, core: core ? entry.slot : null, default: null, origin: said.origin }, { onOpen: opens, tabStop: i === 0 });
+      const el = capabilityRowElement(doc, { row: said.row, core: core ? entry.slot : null, default: null, origin: said.origin }, { onOpen: opens, tabStop: i === firstOpen });
       el.dataset.focusKey = `capability:${name}`;
       el.title = [name, core ? `core: ${layerLabel(entry.slot)}` : null, why].filter(Boolean).join(' · ');
       return el;
