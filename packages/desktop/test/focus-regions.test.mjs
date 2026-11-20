@@ -82,8 +82,8 @@ test("workspaces lands on the list's tab stop, else Add local workspace…; view
   assert.equal(s.regions.focusRegion("workspaces"), true); assert.equal(s.where(), "#ws-add-open");
   assert.equal(s.regions.regionOfFocus(), "workspaces");
   const nav = s.doc.getElementById("nav");
-  assert.deepEqual([...nav.querySelectorAll("button")].map(b => b.textContent), ["Home", "Automations"],
-    "the views under the list: Home, then Automations (the Desktop UI rework, slice 2)");
+  assert.deepEqual([...nav.querySelectorAll("button")].map(b => b.textContent), ["Home", "Workspace", "Automations"],
+    "the views under the list: Home, Workspace, then Automations (the Desktop UI rework, slice 2b)");
   assert.equal(s.regions.focusRegion("views"), true); assert.equal(s.where(), "Home", "the current view's nav item");
   nav.querySelector('[aria-current="page"]').removeAttribute("aria-current"); // a terminal in front: no current view
   nav.querySelector(".nav-item:last-child").focus(); // focus elsewhere, so the landing is the region's, not where it was

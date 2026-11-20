@@ -87,7 +87,7 @@ test('the sentence names what no row can show: empty core slots, unlisted defaul
 test('search never narrows the sentence; a catalog with no rows still says what every soul gets', t => {
   const u = mount(t);
   u.render(status(FULL), { query: 'okf' });
-  assert.deepEqual(u.$$('.cap-row').map(r => r.dataset.capability), ['oats.okf']);
+  assert.deepEqual(u.$$('[data-part=all] .cap-row').map(r => r.dataset.capability), ['oats.okf']);
   assert.match(u.$('.cap-lead').textContent, /^Capabilities tagged default/);
   u.render(status(FULL), { rows: [] });
   assert.match(u.$('.cap-lead').textContent, /Also a default, but not in this list: oats\.okf, oats\.aweb, nw-tasks, oats\.core and nw-brand-voice\. Turned off by the workspace, and not in this list: nw-house-style\.$/);
@@ -96,7 +96,7 @@ test('search never narrows the sentence; a catalog with no rows still says what 
 test('the sentence\'s look: one muted paragraph at a readable width, its tag word and the workspace in --fg', () => {
   assert.match(defaultsCSS, /\.cap-lead \{ margin:0 0 14px; max-width:80ch; color:var\(--muted\); font-size:13px; line-height:1\.55; \}/);
   assert.match(defaultsCSS, /\.cap-lead b \{ color:var\(--fg\); font-weight:600; \}/);
-  assert.doesNotMatch(defaultsCSS, /ws-defaults|ws-default-/, 'the Core / Additional panel is gone');
+  assert.doesNotMatch(defaultsCSS, /ws-defaults|ws-default-/, "slice 3b's panel CSS stays gone: the defaults part (slice 2b) draws the list's own rows");
 });
 
 function about(t) {

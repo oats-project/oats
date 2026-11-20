@@ -131,7 +131,7 @@ test('a manifest\'s markup, URL, bidi and control characters, or a sentence in t
   const row = u.row();
   assertOnlyQuotedText(row);
   assert.equal(u.host.querySelectorAll('img, script, a').length, 0, 'nowhere on the page either');
-  assert.equal(u.host.querySelectorAll('.capability-page button').length, 1, 'only the page\'s own Back');
+  assert.equal(u.host.querySelectorAll('.capability-page button:not(.page-crumb-link)').length, 1, 'only the page\'s own Back (and its trail\'s links, slice 2b)');
   assert.deepEqual(u.lines(), [
     { text: [`${MARKUP}: <b>opened</b>, ${URL_TEXT}`, `<a href="${URL_TEXT}">${VOICE}</a>`], notes: [] },
     { text: ['bidi\uFFFDevil\uFFFDname: up\uFFFDdated, two lines', VOICE], notes: [] },

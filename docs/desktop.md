@@ -270,7 +270,7 @@ workspace on a server: `name — server`).
 
 The sidebar, top to bottom: the **Workspace** heading, with **Add local
 workspace…** (the **+**) at its end, over the list of workspaces; a thin line;
-two pinned rows, **Home** and **Automations**, drawn like the
+three pinned rows, **Home**, **Workspace** and **Automations**, drawn like the
 instance rows (Automations shows a red dot, and says "a run failed", while a
 schedule's last run failed: see [Scheduling agents](#scheduling-agents-and-wake-messages));
 another line; **Agents**, a heading with the running count over the list of
@@ -288,36 +288,54 @@ for the keys. A window opens on **Home**: at launch, and after you choose a work
 for it. Connections is in the
 command palette (**Connections**, among its sections), and the palette opens with its
 shortcut or the leader (Ctrl+Space) then `k`.
-**Home** answers two questions on one page: what needs you, and what you
-have.
+**Home** answers two questions on one screen: what needs you, and what you
+have. It is one centred column. Top to bottom:
 
-- **The board.** **Needs you** lists the agents waiting on you, each with its
-  message, newest first; **Running** lists the live ones, newest first. A
-  group with nobody in it isn't shown. Stopped agents aren't on the board, and
-  a live agent is "running": OATS doesn't report working or idle yet, and the
-  Desktop doesn't guess it. There is no "New" group yet either, since nothing
-  records which agents stopped or finished since you last looked. Enter (or a
-  click) on a row opens it as it does in the roster: a running agent's
-  terminal, a stopped one's Start.
-- **The overview.** Agents, Souls, Capabilities, Teams, Machines and Graph,
-  each with what you have ("You have 4 souls"). Enter opens that part of the
-  Workspace page on its tab (the Machines canvas stands in for the Graph for
-  now), and Esc there comes back to Home. Agents opens **Home › Agents**: every
-  agent, running or stopped, with its soul and machine, its state, and who
-  started it (the person it's attributed to, or the agent that spawned it).
-  An agent waiting on you wears the needs-input mark there too, and says
-  "needs you". Esc or the **‹ Home** button returns.
+- **Needs you.** The agents waiting on you, newest first: each with the
+  needs-input mark, its name, its soul and machine, and its message. Enter (or
+  a click) opens one as it does in the roster. Eight show at most, then **Show
+  all N**, which shows the rest in place. With none, one quiet line says
+  "Nothing needs you."
+- **One summary line**, such as "24 agents · 21 running · 3 need you · 0
+  stopped" (and how many have no known state, when some don't). A live agent
+  is "running": OATS doesn't report working or idle yet, and the Desktop
+  doesn't guess it.
+- **The workspace, as one row of tiles**, each a button with its count:
+  **Agents**, **Souls**, **Capabilities**, **Teams**, **Machines** and
+  **Automations** (with the sidebar row's red dot while a run failed). A count
+  still being read says "Counting…", and one that couldn't be read says so;
+  nothing is guessed. Enter opens that part of the Workspace page on its tab
+  (Machines on its List), and Esc there comes back to Home; Automations opens
+  its page. Agents opens **Home › Agents**: every agent, running or stopped, in
+  the sidebar's order (pinned ones first), with its soul and machine, its
+  state, and who started it (the person it's attributed to, or the agent that
+  spawned it). An agent waiting on you wears the needs-input mark there too,
+  and says "needs you". Esc or the **‹ Home** button returns.
+- **Running**, under the tiles: the first five running agents, in the
+  sidebar's order, then **Show all N running**, which shows the rest in place
+  (and **Show fewer** folds them back). The heading says they run; no row
+  repeats it.
 - **A workspace with no agents yet** shows what OATS does in two lines and
-  three keys (New agent, the command palette, Home), then the overview.
+  three keys (New agent, the command palette, Home), then the tiles.
 
-Home has no key of its own yet: the palette's **Home** (among its sections)
-opens it. The
-board never changes the roster's order: urgency is sorted on Home only.
+Home has no key of its own yet: its row, or the palette's **Home** (among its
+sections), opens it, and always on its board, also from **Home › Agents**. Home never changes the roster's order: urgency is sorted
+on Home only.
+
+**The Workspace page** has its own row, under Home's, and ⌘2 / Ctrl+2. Its
+head says where you are and how to get back, **Home › Workspace › Souls**,
+above its tabs (Souls, Capabilities, Teams, Machines, Setup): Home and
+Workspace are links (Workspace opens the page on Souls). A soul's, a
+capability's or a team's page carries the same trail in its bar, one level
+deeper (**Home › Workspace › Souls › dev**, and a skill one more), each part
+above the page a link. Esc goes up one level: from a soul's page to Souls,
+then to Home. Every way onto the page (its row, a Home tile, the palette, the
+key, a soul's or a capability's page) marks the Workspace row, never Home's.
 
 **The command palette** (⌘K / Alt+K) is the one place to reach everything.
 It lists, in order: the agents that need you (the newest first), your recent
 agents (the sidebar's tree, the one you used last on top), the sections
-(Home, Workspace overview and its tabs, Automations, Connections), the commands,
+(Home, Workspace and its tabs, Automations, Connections), the commands,
 and one **New agent: <soul>** row per soul. Type to narrow it; `>` keeps only
 the commands and `+` only the souls.
 
@@ -428,8 +446,8 @@ a choice saved for it is ignored.)
 - **The current workspace** has its circle filled, like a running
   instance's, and its name in bold; the others have the ring a stopped
   instance has. It has no background of its own: the selection's background
-  marks the current page (Home, whose row also stands for the Workspace page it
-  opens, or Automations), so the
+  marks the current page (Home, Workspace, whichever of its tabs or pages
+  shows, or Automations), so the
   sidebar fills one "you are here" row. A screen reader hears it as current,
   and the list's description names it, by the same name as its row.
 - **The needs-input mark.** A row has an exclamation mark (a small amber
@@ -535,12 +553,17 @@ A kernel fact for "official" is
 name and version are not on this list: **Setup**'s Packages box shows them,
 and so does the capability's page.
 
-One sentence above the list says what defaults are: the capabilities the
-workspace gives every soul, so its agents share one way of working. A soul
-can turn a default off and choose its own instead. The sentence also says
-which core slot no default fills, and names a declared default the list can't
-show as a row. A workspace that sets no defaults (a standalone deployment, for
-example) says so in that sentence. The search never narrows it. It is read
+Above the list, **Workspace defaults** shows what the workspace gives every
+soul, so its agents share one way of working. One sentence says what defaults
+are (a soul can turn a default off and choose its own instead); then **Core**,
+one line each for Knowledge, Messaging and Tasks with the capability that fills
+it (its name alone when the list doesn't hold it, or "No default"), and **Additional**, every other default, a turned-off one
+tagged so. Each default is the list's own row, with its one line and where it
+comes from, and opens its page; ↑ and ↓ move across them. The list follows,
+under **All capabilities**. The sentence also names a declared default the
+list can't show as a row. A workspace that sets no defaults (a standalone
+deployment, for example) says so. The search narrows only the list, never the
+defaults. It is read
 from `oats workspace status --json`: an OATS that doesn't report the defaults
 shows no sentence and no tag, and the Desktop doesn't guess them from the
 souls. The defaults are declared in the workspace file; the page only shows
@@ -589,8 +612,9 @@ reports no role for a soul yet, so the name is the rule until it does
 
 The souls show as a grid of cards or as a table: **v** (or **Grid** | **Table**
 in the toolbar) switches between them, and each window remembers its choice,
-also after a restart. A card shows the soul's name, what it does, how many of
-its agents run, and its kind; a soul a spawn here would refuse also says why,
+also after a restart. A card shows the soul's name, large and bold, what it
+does, in muted body text, and a smaller line with how many of its agents run
+and its kind; a soul a spawn here would refuse also says why,
 above its count. The table has the same souls as rows: name, what it does, kind,
 agents running, harness · model, and **Ready** (or why a spawn here would be
 refused; **—** when this OATS does not report it). A card or a row's name
@@ -1493,7 +1517,7 @@ then requires that launch to reactivate the retained tab with exactly
 one viewer and no terminal focus event. CDP sends a key to the window;
 independent tmux pane/output reads prove no input reached the inert harness. The stopped fixture stays selected
 only, with no tab or Start dialog, on Home (its row current and its view
-shown, since Home's row also stands for the Workspace page). The smoke also
+shown). The smoke also
 asserts that viewer cleanup restores its private tmux baseline. The fixture's
 workspace/member source, soul definition and inert harness executable are authored by the test-only
 [`launch-fixture.mjs`](../packages/desktop/test/helpers/launch-fixture.mjs).

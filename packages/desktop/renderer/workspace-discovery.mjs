@@ -36,7 +36,7 @@ export const workspaceTabs = ['souls', 'capabilities', 'teams', 'machines', 'sou
 /** The tabs whose panel the Workspace view owns (`owned`): Souls, and Machines while its Map is shown; this module shows
  * and hides it, and paints nothing in it. Machines' List is this module's. */
 export const MACHINES_VIEWS = Object.freeze([['list', 'List'], ['map', 'Map']]);
-const TAB_LABELS = { machines: 'Machines', teams: 'Teams', souls: 'Souls', capabilities: 'Capabilities', sources: 'Setup' };
+export const TAB_LABELS = { machines: 'Machines', teams: 'Teams', souls: 'Souls', capabilities: 'Capabilities', sources: 'Setup' };
 /** The Workspace page's tab bar rules for a selector: plain-text tabs, the selected one at 650 over a 2px
  * --live underline. Shared with the Deployments page's tabs (deployments-page.mjs), so the two never drift. */
 export const tabBarCSS = (sel) => `${sel} { display:flex; flex-wrap:nowrap; overflow-x:auto; gap:22px; min-width:0; scrollbar-width:none; }
@@ -243,7 +243,8 @@ export function createWorkspaceDiscovery(header, panel, { ctx, soulsPanel, machi
    * neutral one while another element is the tab's panel. */
   const panelId = name => owned(name) ? 'workspace-capabilities' : name === 'machines' ? 'workspace-machines-list' : `workspace-${name}`;
   header.className = 'workspace-header';
-  // No title in the bar (human, 2026-09-28): the sidebar already says Workspace; the tabs lead.
+  // No title in the bar (human, 2026-09-28): the tabs lead. The page's title, "Workspace › <tab>", is the line above it
+  // (views/spawn.mjs .workspace-title, the Desktop UI rework's slice 2b).
   const tabs = node('div', undefined, 'workspace-tabs'); tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Workspace sections'); header.append(tabs);
   // #482: every Workspace tab reads the view's primary deployment, without naming it (the product owner, 2026-10-23).
   const controls = new Map(), counts = new Map();

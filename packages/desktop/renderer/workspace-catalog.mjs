@@ -12,7 +12,7 @@ import { iconElement } from './shell-icons.mjs';
 import { sourceChip, sourceText } from './source-chip.mjs';
 import { defaultsLead, DEFAULTS_COPY } from './workspace-defaults.mjs';
 import { layerLabel } from '../../client/capability-rows.mjs';
-import { capabilityList } from '../../client/capability-list.mjs';
+import { capabilityList, workspaceDefaultsSections } from '../../client/capability-list.mjs';
 import { ORIGIN_COPY } from '../../client/capability-origin.mjs';
 
 export const catalogCSS = `
@@ -41,6 +41,13 @@ export const catalogCSS = `
 .source-chip.boxed { height:24px; padding:0 8px; border:1px solid var(--border); border-radius:6px; background:var(--surface); font-size:11.5px; box-sizing:border-box; }
 .source-note { color:var(--warn); font-weight:600; font-size:11px; line-height:normal; font-family:var(--ui-font,system-ui); white-space:nowrap; }
 .catalog-empty { margin:0; padding:24px 16px; color:var(--muted); line-height:1.5; }
+/* The tab's two parts (slice 2b, Amendment 1, D): Workspace defaults, then All capabilities, each a box title. */
+.cap-part { margin:0 0 24px; }
+.cap-part-title { margin:0 0 10px; color:var(--fg); font-size:15px; font-weight:650; line-height:20px; }
+.cap-group-title { margin:14px 0 6px; color:var(--muted); font-size:12px; font-weight:600; line-height:16px; }
+.cap-slot { display:flex; flex-direction:column; min-width:0; }
+.cap-slot-label { padding:8px 16px 0; color:var(--muted); font-size:12px; font-weight:600; line-height:16px; background:var(--surface); }
+.cap-slot-none { padding:2px 16px 10px; color:var(--muted); font-size:12.5px; line-height:1.4; background:var(--surface); }
 .catalog-notes { display:grid; gap:4px; margin:0 0 14px; }
 .catalog-notes:empty { display:none; }
 .catalog-note { margin:0; color:var(--muted); font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
@@ -110,18 +117,68 @@ export function capabilityRowElement(doc, entry, { onOpen = null, tabStop = true
   return el;
 }
 
-/** The Capabilities tab: the defaults sentence (when the kernel reports defaults), then the one list.
+/** The Workspace defaults part (slice 2b, Amendment 1, D: Pepe, 2026-11-20; it brings back what slice 3b had folded
+ * into a tag): what the workspace gives every soul, above the list and never narrowed by its search. Core: one slot
+ * each for Knowledge, Messaging and Tasks, its default's row or "No default"; then Additional, every other default
+ * (a turned-off one tagged so). Each is the list's own row (capabilityRowElement), opening its page; its focus key
+ * is prefixed `defaults:` so a repaint puts focus back on this copy, not the list's. Null with no reported defaults. */
+function workspaceDefaultsPart(doc, { status, rows, onOpen }) {
+  const sections = workspaceDefaultsSections(rows, status);
+  if (!sections) return null;
+  const part = node(doc, 'section', null, 'cap-part cap-defaults'); part.dataset.part = 'defaults';
+  const title = node(doc, 'h3', DEFAULTS_COPY.title, 'cap-part-title'); title.id = 'cap-defaults-title';
+  part.append(title);
+  const lead = defaultsLead(doc, { status, rows });
+  if (lead) part.append(lead);
+  const row = (entry, first) => {
+    const el = capabilityRowElement(doc, entry, { onOpen, tabStop: first });
+    if (el.dataset.focusKey) el.dataset.focusKey = `defaults:${el.dataset.focusKey}`;
+    return el;
+  };
+  let first = true;
+  const coreTitle = node(doc, 'h4', DEFAULTS_COPY.core, 'cap-group-title'); coreTitle.id = 'cap-defaults-core';
+  const core = node(doc, 'ul', null, 'cap-list'); core.setAttribute('aria-labelledby', coreTitle.id);
+  for (const { layer, entries, unlisted } of sections.core) {
+    const item = node(doc, 'li'); const slot = node(doc, 'div', null, 'cap-slot'); slot.dataset.slot = layer;
+    slot.append(node(doc, 'span', layerLabel(layer), 'cap-slot-label'));
+    // A declared default the catalog doesn't list is named (the lead sentence says so too); "No default" is for none.
+    if (unlisted) slot.append(node(doc, 'span', DEFAULTS_COPY.unlistedSlot(unlisted), 'cap-slot-none'));
+    else if (!entries.length) slot.append(node(doc, 'span', DEFAULTS_COPY.noDefault, 'cap-slot-none'));
+    for (const entry of entries) { slot.append(row(entry, first)); first = false; }
+    item.append(slot); core.append(item);
+  }
+  part.append(coreTitle, core);
+  const extraTitle = node(doc, 'h4', DEFAULTS_COPY.additional, 'cap-group-title'); extraTitle.id = 'cap-defaults-additional';
+  part.append(extraTitle);
+  if (!sections.additional.length) part.append(node(doc, 'p', DEFAULTS_COPY.noAdditional, 'cap-slot-none'));
+  else {
+    const extra = node(doc, 'ul', null, 'cap-list'); extra.setAttribute('aria-labelledby', extraTitle.id);
+    for (const entry of sections.additional) { const item = node(doc, 'li'); item.append(row(entry, first)); first = false; extra.append(item); }
+    part.append(extra);
+  }
+  // One tab stop for the whole part: the arrows move across both groups.
+  if (typeof onOpen === 'function') roveRows(part);
+  return part;
+}
+
+/** The Capabilities tab: the Workspace defaults part (when the kernel reports defaults), then All capabilities.
  * `rows`: the catalog (`oats capabilities`); `query` narrows by name; `onOpen(row)` opens a row's page (a row with no
  * opener is a plain line). A declared default the catalog does not list is said in the sentence, not as a row.
  * Each row's focus key (`cap:<kind>:<source>:<name>`) puts focus back on it after a repaint. */
 export function renderCapabilityList(host, { rows, status, query = '', onOpen = null, label = 'Capabilities' }) {
   const doc = host.ownerDocument;
   host.replaceChildren();
-  const lead = defaultsLead(doc, { status, rows });
-  if (lead) host.append(lead);
+  const defaults = workspaceDefaultsPart(doc, { status, rows, onOpen });
+  let target = host;
+  if (defaults) {
+    // Two parts: the defaults, then the list under its own title.
+    const all = node(doc, 'section', null, 'cap-part'); all.dataset.part = 'all';
+    all.append(node(doc, 'h3', DEFAULTS_COPY.allTitle, 'cap-part-title'));
+    host.append(defaults, all); target = all;
+  }
   const entries = capabilityList(rows, status, { query });
   if (!entries.length) {
-    host.append(node(doc, 'p', Array.isArray(rows) && rows.length ? 'No capability matches this search.' : 'The workspace reports no capabilities yet: members publish capabilities and packages lock theirs on sync.', 'catalog-empty'));
+    target.append(node(doc, 'p', Array.isArray(rows) && rows.length ? 'No capability matches this search.' : 'The workspace reports no capabilities yet: members publish capabilities and packages lock theirs on sync.', 'catalog-empty'));
     return;
   }
   const listEl = node(doc, 'ul', null, 'cap-list'); listEl.setAttribute('aria-label', label);
@@ -131,7 +188,7 @@ export function renderCapabilityList(host, { rows, status, query = '', onOpen = 
     const item = node(doc, 'li'); item.append(el); listEl.append(item);
   }
   if (typeof onOpen === 'function') roveRows(listEl);
-  host.append(listEl);
+  target.append(listEl);
 }
 
 /** The source chip (source-chip.mjs), re-exported for the pages that draw one. */

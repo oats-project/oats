@@ -1,4 +1,6 @@
-/** Workspace › Capabilities: the workspace's defaults, as the list says them (the Desktop UI rework, slice 3b).
+/** Workspace › Capabilities: the workspace's defaults, as the list says them (the Desktop UI rework, slice 3b), and,
+ * since slice 2b's Amendment 1 (D), as a Workspace defaults part above the list again (workspace-catalog.mjs
+ * workspaceDefaultsPart: Core slots, then Additional, each the list's own row), opened by this sentence.
  *
  * A default is a tag on its own row of the one capability list ("default", or "default · off" for one the workspace
  * turns off: workspace-catalog.mjs), and one sentence above the list says what defaults are and what they are for:
@@ -27,6 +29,13 @@ const text = v => typeof v === 'string' && v ? v : null;
 const joined = items => items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
 
 export const DEFAULTS_COPY = Object.freeze({
+  title: 'Workspace defaults',
+  allTitle: 'All capabilities',
+  core: 'Core',
+  additional: 'Additional',
+  noDefault: 'No default',
+  unlistedSlot: name => `${name}: the default, but not in this list`,
+  noAdditional: 'None: every other capability is a soul\'s own choice.',
   tag: 'default',
   offTag: 'default · off',
   tagTitle: 'A workspace default: every soul starts with it, unless it turns it off',

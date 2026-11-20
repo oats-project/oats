@@ -942,7 +942,7 @@ test("Settings: Connections is in the shortcuts list (Global, by its label) and 
 
 // ── What has no button (the sidebar's simpler foot) is taught by the editor's own rows ───────────
 // The palette and Connections have no button (the settings cog's menu holds Theme… and Keyboard
-// shortcuts… alone); Machines is a tab of the Workspace page, and Spawn instance (Quick Open), Workspace overview and
+// shortcuts… alone); Machines is a tab of the Workspace page, and Spawn instance (Quick Open), Workspace and
 // Automations are small buttons (the product owner, 2026-10-26). These are all taught in the shortcuts editor, by
 // their rows alone (no line above them). The rows are the shipped registrations, run as shipped.
 async function shippedRows() {
@@ -999,7 +999,7 @@ for (const [platform, isMac] of [["macOS", true], ["Linux", false]]) {
       assert.ok(machines, "Machines says it is the Workspace page's tab");
       assert.deepEqual(caps(machines), mod("1"));
       assert.equal(machines.querySelector(".kb-note").textContent, `${isMac ? "⌃Space" : "Ctrl+Space"} then 1 is Instances, as in the TUI`);
-      assert.deepEqual(caps(rowIn("Global", "View: Workspace overview")), mod("2"));
+      assert.deepEqual(caps(rowIn("Global", "View: Workspace")), mod("2"));
       const automations = rowIn("Global", "View: Automations");
       assert.ok(automations, "Automations is a page of its own");
       assert.deepEqual(caps(automations), mod("3"));

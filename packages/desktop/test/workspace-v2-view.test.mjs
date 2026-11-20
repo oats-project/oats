@@ -62,7 +62,8 @@ async function setup(t, { status = 'workspace-status', cli = CLI, sync, teams, m
     tab: async name => { doc.getElementById(`workspace-tab-${name}`).click(); await settle(); },
     /** Machines' Map (the Deployments view). */
     map: async () => { doc.querySelector('.workspace-tools[data-tools=machines] [data-machines-view=map]').click(); await settle(); },
-    rows: () => [...doc.querySelectorAll('.workspace-discovery .cap-list button.cap-row')],
+    // The list's rows (slice 2b: the Workspace defaults part above it draws its defaults as rows too).
+    rows: () => [...doc.querySelectorAll('.workspace-discovery .cap-list button.cap-row')].filter(row => !row.closest('[data-part=defaults]')),
     button: text => [...doc.querySelectorAll('button')].find(el => el.textContent.trim() === text),
     syncCalls: () => calls.filter(call => call.path.startsWith('/api/workspace-sync')).map(call => call.body),
     setStatus: name => { observedStatus = statusOf(name); },
@@ -116,7 +117,7 @@ test('Capabilities: the defaults sentence above the list, the "i" in the toolbar
   assert.equal(info.getAttribute('aria-label'), 'About capabilities');
   const sentence = () => u.doc.querySelector('.workspace-discovery .cap-lead');
   assert.match(sentence().textContent, /^Capabilities tagged default are the ones northwind gives every soul/);
-  assert.deepEqual([...u.doc.querySelectorAll('.cap-row [data-tag=default]')].map(tag => tag.closest('.cap-row').dataset.capability), ['oats.okf']);
+  assert.deepEqual(u.rows().filter(row => row.querySelector('[data-tag=default]')).map(row => row.dataset.capability), ['oats.okf']);
   // A repaint (a search) keeps the same "i", focused, and never narrows the sentence.
   info.focus();
   const search = u.doc.querySelector('.ws-toolbar[data-tools=capabilities] input');
@@ -179,7 +180,7 @@ test('core capabilities first with their tag; a repo-owned one in the same list,
   spawn.unmount();
   const v = await setup(t, { status: 'f7/workspace-status', sync: () => catalog('f7/capabilities') });
   await v.tab('capabilities');
-  assert.equal(v.doc.querySelectorAll('.workspace-discovery .cap-list').length, 1);
+  assert.equal(v.doc.querySelectorAll('.workspace-discovery .cap-list').length - v.doc.querySelectorAll('.workspace-discovery [data-part=defaults] .cap-list').length, 1);
 });
 
 // Workspace v4 (W1/W2) — replaces the Setup tests that pinned the old

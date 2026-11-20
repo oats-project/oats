@@ -55,11 +55,13 @@ test('slice3b capabilities one list core first with tags', t => {
   const u = mount(t);
   const opened = [];
   renderCapabilityList(u.$('.caps'), { rows: ROWS, status: STATUS, onOpen: row => opened.push(row.name) });
-  // One list, no sections, headings, pills, tiles or two-letter marks.
-  assert.equal(u.$$('.cap-list').length, 1);
-  assert.equal(u.$$('.caps h2, .caps h3, .catalog-pills, .catalog-tile, .identity-mark, .capability-nav').length, 0);
+  // Slice 2b, Amendment 1 (D): with reported defaults, two parts, Workspace defaults then All capabilities; the list is
+  // still one list. No pills, tiles or two-letter marks.
+  assert.deepEqual(u.$$('.caps h3').map(h => h.textContent), ['Workspace defaults', 'All capabilities']);
+  assert.equal(u.$$('[data-part=all] .cap-list').length, 1);
+  assert.equal(u.$$('.caps h2, .catalog-pills, .catalog-tile, .identity-mark, .capability-nav').length, 0);
   // Core first in slot order (knowledge, messaging, tasks), then the rest by name; every row says who made it.
-  assert.deepEqual(u.$$('.cap-row').map(line), [
+  assert.deepEqual(u.$$('[data-part=all] .cap-row').map(line), [
     'oats.okf [core] [default] Official: in the OATS catalog',
     'oats.aweb [core] Official: in the OATS catalog',
     'oats.jira [core] Official: in the OATS catalog',
@@ -85,13 +87,14 @@ test('slice3b capabilities one list core first with tags', t => {
   assert.equal(u.css(desc).whiteSpace, 'nowrap'); assert.equal(u.css(desc).textOverflow, 'ellipsis');
   assert.equal(desc.title, ROWS[2].description);
   assert.equal(u.$('[data-capability="own-runbook"] .cap-row-desc'), null);
-  // The defaults, in one sentence above the list: what they are for, and what no row can show (an empty slot).
+  // The defaults, in one sentence opening their part (slice 2b: above its Core slots): what they are for, and what no
+  // row can show (an empty slot).
   const lead = u.$('.cap-lead');
-  assert.equal(lead.nextElementSibling, u.$('.cap-list'));
+  assert.equal(lead.previousElementSibling.textContent, 'Workspace defaults'); assert.equal(lead.nextElementSibling.textContent, 'Core');
   assert.match(lead.textContent, /^Capabilities tagged default are the ones acme gives every soul, so your agents share one way of working\. A soul can turn a default off and choose its own instead\./);
   assert.match(lead.textContent, /No default for messaging and tasks\.$/);
   // Each row is one button: Enter and Space are the native button's; arrows move along the list, one tab stop.
-  const rows = u.$$('button.cap-row');
+  const rows = u.$$('[data-part=all] button.cap-row');
   assert.deepEqual(rows.map(r => r.tabIndex), [0, ...Array(rows.length - 1).fill(-1)]);
   rows[0].focus(); key(u, rows[0], 'ArrowDown');
   assert.equal(u.doc.activeElement, rows[1]);
@@ -127,6 +130,8 @@ test('the defaults sentence: none set, unlisted ones, and nothing when the kerne
   assert.match(u.$('.cap-lead').textContent, / Also a default, but not in this list: gone\. Turned off by the workspace, and not in this list: nowhere\.$/);
   renderCapabilityList(u.$('.caps'), { rows: ROWS, status: { ...STATUS, defaults: undefined }, onOpen() {} });
   assert.equal(u.$('.cap-lead'), null, 'no reported defaults: no claim');
+  assert.equal(u.$('[data-part]'), null, 'nor a defaults part: one list, no headings');
+  assert.equal(u.$$('.caps h3').length, 0);
   assert.equal(u.$$('[data-tag^=default]').length, 0);
 });
 
@@ -139,7 +144,7 @@ test('empty and narrowed lists keep their words; a list with no opener is plain 
   assert.ok(u.$('.cap-lead'), 'the defaults sentence is never filtered by the search');
   renderCapabilityList(u.$('.caps'), { rows: ROWS, status: STATUS });
   assert.equal(u.$$('button.cap-row').length, 0);
-  assert.equal(u.$$('div.cap-row').length, ROWS.length);
+  assert.equal(u.$$('[data-part=all] div.cap-row').length, ROWS.length);
 });
 
 test('rule 2 in the row CSS: hover and focus restyle the surface; no outline of its own, no opacity, no raw colour', () => {
