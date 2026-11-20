@@ -13,7 +13,7 @@
  * and the other party, the team when the agent reads more than one, the time, the subject, then the body as an
  * attributed plain-text quote ("<alias> wrote:") cut to a few lines until the item is expanded (Enter, Space or a
  * click on its head). Each message says what the provider said about it: encrypted, not read by the agent yet, high
- * priority, an unverified or failed signature, shortened past the 16 KiB bound, or part of a long conversation of
+ * priority, an unverified or failed signature, shortened by the provider to fit its bounds, or part of a long conversation of
  * which only the older part can be read.
  *
  * Keys: ↑/↓ (Home/End) move between messages, Enter or Space expands one, r reads again, Esc closes; Tab cycles
@@ -67,7 +67,9 @@ export const MAIL_WORDS = Object.freeze({
   received: 'From', sent: 'To',
   encrypted: 'Encrypted', unread: `Not read by the ${agent} yet`, high: 'High priority',
   unverified: 'Unverified sender', signatureFailed: 'Signature failed',
-  truncated: 'Shortened: the message is longer than 16 KiB.',
+  // `truncated`: the provider cut the body (past 16 KiB) or, for a message too large to fit an answer alone, its subject
+  // and title too (oats.aweb, redesign-mail-read-developer 49e4169f).
+  truncated: 'Shortened: the message is too long to show whole.',
   partial: "Older part of a long conversation shown; the newest messages can't be read yet.",
   wrote: alias => `${alias} wrote:`,
   noSubject: '(no subject)',

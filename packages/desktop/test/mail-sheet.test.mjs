@@ -134,6 +134,10 @@ test('too old, no messaging, an old aw, an unreadable answer: each says so, and 
   const none2 = rig(t, { answer: () => Promise.reject(refusal('E_MAIL_UNREADABLE', 'no identity could be read')) });
   none2.sheet.open(row, 'ws-1'); await settle();
   assert.equal(none2.one('.mail-sheet-problem > p').textContent, MAIL_WORDS.noIdentity);
+  const large = rig(t, { answer: () => Promise.reject(refusal('E_MAIL_TOO_LARGE', "this instance's mail answer can't fit the 256 KiB bound, even with no messages (90 identities)")) });
+  large.sheet.open(row, 'ws-1'); await settle();
+  assert.equal(large.one('.mail-sheet-problem > p').textContent, MAIL_WORDS.failed);
+  assert.equal(large.one('.mail-sheet-problem pre').textContent, "E_MAIL_TOO_LARGE: this instance's mail answer can't fit the 256 KiB bound, even with no messages (90 identities)");
   const odd = rig(t, { answer: () => fixture(d => { d.acknowledges = true; }) });
   odd.sheet.open(row, 'ws-1'); await settle();
   assert.equal(odd.one('.mail-sheet-problem > p').textContent, MAIL_WORDS.unreadable);

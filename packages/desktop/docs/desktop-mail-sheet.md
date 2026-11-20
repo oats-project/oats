@@ -37,7 +37,9 @@ primary one and each joined team's). One item per message:
 - What the provider says about it: **Encrypted** (an end-to-end encrypted body,
   decrypted with the agent's keys), **Not read by the agent yet**, **High
   priority**, **Unverified sender** (unverified, or verification unknown) or **Signature failed**.
-- **Shortened**, when the body passed the 16 KiB bound and the provider cut it.
+- **Shortened**, when the provider cut the message to fit its bounds: the body
+  past 16 KiB, or, for a message too large for an answer on its own, its subject
+  and title too.
 - "Older part of a long conversation shown; the newest messages can't be read
   yet.", once per conversation, where the provider could read only its oldest
   messages (aw's `mail show` reads oldest first).
@@ -87,6 +89,7 @@ computer's OATS can route operations there.
 | One identity can't be read (`identities[].error`) | Mail from *team* can't be read: and its error, with what it means for oats.aweb's `identity-missing`, `identity-unreadable`, `no-mail-read`, `threads-unreadable`, `conversation-unreadable`, `too-many-threads`; any other as given); the rest of the mail shows. |
 | No identity can be read (`E_MAIL_UNREADABLE`) | None of this agent's mail identities could be read. |
 | A server's OATS can't run operations (`E_REMOTE_INCOMPATIBLE`) | The OATS on *server* is too old to read this agent's mail. |
+| The answer can't fit its 256 KiB bound even with no messages (`E_MAIL_TOO_LARGE`) | Couldn't read the agent's mail, with the provider's message under Details. |
 | An answer outside the contract | The messaging layer answered mail this Desktop can't read. |
 | The CLI is newer than this Desktop was tested with | The held-back notice; nothing is sent. |
 
