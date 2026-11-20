@@ -708,6 +708,44 @@ test('r4: an unchanged repaint keeps the focus on the control that had it', t =>
   }
 });
 
+// The live check's finding (S2-D finish): a focus in the pane selects its tab, which reads the roster and syncs the
+// board again; a repaint that replaced the focused fact control and focused its new copy made that a loop.
+test('agent view facts: an unchanged repaint keeps the nodes, so a focus that repaints is no loop and a press lands', t => {
+  const f = fixture(t);
+  f.view.update(boardData(board()));
+  // The shell's part, as selection-ownership and activateTab do it: a focus in the pane syncs the board again.
+  let focuses = 0, shell = true;
+  f.pane.addEventListener('focusin', () => { if (shell && ++focuses < 20) f.view.update(boardData(board()), { claims: [] }); });
+  for (const part of ['agent-fact-focus', 'agent-fact-link', 'agent-fact-hide']) {
+    focuses = 0;
+    const el = f.facts().querySelector(`li[data-key="pr"] .${part}`);
+    el.focus();
+    assert.equal(focuses, 1, `${part}: one focus, no loop`);
+    assert.equal(f.facts().querySelector(`li[data-key="pr"] .${part}`), el, `${part}: the same node`);
+    assert.equal(f.doc.activeElement, el);
+  }
+  // The address's Open: the same address keeps its button and the focus on it.
+  f.facts().querySelector('li[data-key="pr"] .agent-fact-link').click();
+  const open = f.facts().querySelector('.agent-fact-url-open');
+  f.terminal.focus(); focuses = 0; open.focus();
+  assert.equal(focuses, 1, 'Open: one focus, no loop');
+  assert.equal(f.facts().querySelector('.agent-fact-url-open'), open);
+  // A press: a poll's repaint between the press and its release leaves the button in place, so the click lands.
+  const hide = f.facts().querySelector('li[data-key="score"] .agent-fact-hide');
+  f.view.update(boardData(board()));
+  assert.ok(hide.isConnected);
+  hide.click();
+  assert.deepEqual([...f.facts().querySelectorAll('.agent-fact')].map(li => li.dataset.key), ['pr']);
+  // What a fact shows changed: the list is rebuilt, and the focus goes back to the same fact's same control.
+  shell = false;
+  const body = f.facts().querySelector('li[data-key="pr"] .agent-fact-focus'); body.focus();
+  f.view.update(boardData({ ...board(), facts: [board().facts[0], fact('pr', { label: 'PR', value: '#1991', link: 'https://github.com/oats-project/oats/pull/1990' })] }));
+  const now = f.facts().querySelector('li[data-key="pr"] .agent-fact-focus');
+  assert.notEqual(now, body, 'a new node');
+  assert.match(now.textContent, /#1991/);
+  assert.equal(f.doc.activeElement, now);
+});
+
 // The round-4 delta's finding: the occurrence check fails closed.
 test('r4 delta: an answer that does not prove its question\'s since (absent, null, not a time) shows no context', t => {
   for (const since of [undefined, null, 'invalid']) {

@@ -309,12 +309,17 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     setText(factsNote, notes.join(' ')); factsNote.hidden = !notes.length;
     const any = view.shown.length + view.folded.length + view.hidden.length > 0 || notes.length > 0;
     if (!any) { facts.remove(); return; }
-    // The control that has the focus is given it back after the repaint: the same fact's body, link or hide button,
-    // or the address's Open button (a poll repaints unchanged facts).
+    // The control that has the focus is given it back after a repaint that replaced it: the same fact's body, link or
+    // hide button, or the address's Open button.
     const at = facts.contains(doc.activeElement) ? doc.activeElement : null;
     const focusedKey = at?.closest?.('li')?.dataset.key ?? null;
     const focusedPart = !at ? null : urlBox.contains(at) ? 'open' : at.classList.contains('agent-fact-link') ? 'link' : at.classList.contains('agent-fact-hide') ? 'hide' : 'body';
-    factList.replaceChildren(...view.shown.map(paintFact));
+    // The list is rebuilt only when what it shows changed, as the zone's options are (a poll repaints unchanged facts).
+    // A rebuild under the focus gives the focus back, and a focus in the pane selects its tab, which reads the roster
+    // again and repaints: rebuilding on every repaint made that a loop, and a press landed on a replaced button.
+    const factsKey = JSON.stringify([view.shown.map(f => [f.key, f.label, f.value, f.unit, f.link?.href ?? null, !!f.withheld, f.at,
+      updatedText(f.at, now()), sparkValues(detail?.state === 'ok' ? detail.facts.get(f.key)?.history : null)]), openUrl]);
+    if (factList.dataset.key !== factsKey) { factList.dataset.key = factsKey; factList.replaceChildren(...view.shown.map(paintFact)); }
     fold.hidden = !view.folded.length && !(unfolded && view.shown.length > FACTS_SHOWN);
     setText(fold, unfolded ? 'Fold' : `${view.folded.length} more`);
     fold.setAttribute('aria-expanded', String(unfolded));
@@ -324,7 +329,11 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     const url = view.shown.find(f => f.key === openUrl && f.link)?.link ?? null;
     if (!url) openUrl = null;
     urlBox.hidden = !url;
-    if (url) {
+    const urlKey = JSON.stringify(url ? [url.href, url.host] : null);
+    // The same address keeps its nodes, and the focus on its Open.
+    if (urlBox.dataset.key !== urlKey && !url) { urlBox.dataset.key = urlKey; urlBox.replaceChildren(); }
+    else if (urlBox.dataset.key !== urlKey) {
+      urlBox.dataset.key = urlKey;
       const lower = url.href.toLowerCase(), at = lower.indexOf(`//${url.host}`) + 2;
       const text = node(doc, 'p', 'agent-fact-url-text'); text.dir = 'ltr';
       // The host in bold where it is spelled in the address (any case); an address whose host the URL parser
@@ -335,8 +344,9 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
       open.addEventListener('click', () => openLink(url.href));
       urlBox.setAttribute('aria-label', `The address ${name} gives`);
       urlBox.replaceChildren(node(doc, 'span', 'agent-fact-says', `${name} says:`), text, open);
-    } else urlBox.replaceChildren();
+    }
     if (facts.parentNode !== pane) pane.prepend(facts);
+    if (!at || at.isConnected) return;
     if (focusedPart === 'open') urlBox.querySelector('.agent-fact-url-open')?.focus();
     else if (focusedKey) factList.querySelector(`:scope > li[data-key="${focusedKey}"] > ${focusedPart === 'link' ? '.agent-fact-link' : focusedPart === 'hide' ? '.agent-fact-hide' : '.agent-fact-focus'}`)?.focus();
   }

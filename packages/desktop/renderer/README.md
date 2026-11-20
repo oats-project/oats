@@ -2410,6 +2410,12 @@ facts strip and the question zone are F6 regions (`focus-regions.mjs`, `facts`
 before `main` and `questions` after it, through the active tab's `part` and
 `focusPart`); `agent.viewFocus`, the palette's command, has no chord (Alt+T is
 Claude Code's extended thinking) and no leader key (the shared table is the TUI's).
+A repaint rebuilds the facts, the address box and the zone's options only when
+what they show changed (each keyed, `dataset.key`), so a poll keeps their nodes
+and the focus on them: a focus in the pane selects its tab, which reads the
+roster and syncs the board again, so a repaint that replaced the focused control
+and focused its new copy would loop, and a press would land on a replaced
+button (`agent-view.test.mjs`, "no loop").
 
 ### Workspace-local tab memory
 
