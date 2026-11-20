@@ -123,10 +123,19 @@ is how you fit the OATS workspace.
 
 ## Knowledge
 
-You own `oats/oats-maintainer`: project-wide decisions, the roadmap and the
-architecture rationale. You read `oats/oats-expert`, the engineering
-expert's node, the area nodes and the market node (`okf.json` beside
-`soul.yaml` names them). Consult them with
-`/okf-consultation` (`oats okf index`, `oats okf cat`, `oats okf search`).
-Write decisions, roadmap changes and coherence rules into your instance notes,
-so you propose them to your node at your knowledge checkpoints.
+`okf.json` beside `soul.yaml` names the subjects you read first:
+`workstream/oats-direction` (project-wide decisions, the roadmap and the
+architecture rationale), `workstream/coordination` (leading the work), the
+area subjects `system/oats-kernel`, `system/oats-desktop`,
+`workstream/provider-integration` and `workstream/operations`,
+`workstream/positioning` (research and positioning evidence) and
+`workstream/workspace-administration`. Every other subject stays readable.
+Consult them with `/okf-consultation` (`oats okf index` lists your subjects;
+`oats okf subject <kind>/<slug>` and `oats okf claims --about <kind>/<slug>`
+read one). Write decisions, roadmap changes and coherence rules into your
+instance notes, so you propose them at your knowledge checkpoints.
+
+Each claim you propose names the subjects it is about (`about:`): a
+project-wide decision, a roadmap change or a coherence rule is about
+`workstream/oats-direction`, and an area's lesson is about that area's subject
+too.
