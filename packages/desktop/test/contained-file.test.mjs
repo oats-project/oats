@@ -35,9 +35,11 @@ function reader(roots, hooks = {}, options = {}) {
     closeSync(fd) { fs.closeSync(fd); },
   };
   return { reads, read(path) {
-    const result = readContainedFile(path, roots, { maxBytes: LIMIT, ...options, io });
-    for (const fd of descriptors) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
-    return result;
+    try {
+      return readContainedFile(path, roots, { maxBytes: LIMIT, ...options, io });
+    } finally {
+      for (const fd of descriptors) assert.throws(() => fs.fstatSync(fd), { code: 'EBADF' });
+    }
   } };
 }
 
@@ -175,10 +177,27 @@ test('contained file: exact limit, growth, truncation and replacement keep reads
   assert.equal(replace.read(f.inside).buf.toString(), 'original');
 });
 
-for (const phase of ['fstat', 'realpath', 'stat', 'read']) test(`contained file: ${phase} failures close descriptors and return no content`, t => {
+for (const phase of ['fstat', 'stat', 'read']) test(`contained file: ${phase} I/O failures close descriptors`, t => {
   const f = fixture(t);
-  const r = reader([f.root], { [phase]() { throw new Error('unreadable'); } });
-  assert.equal(r.read(f.inside).code, 404);
+  const error = Object.assign(new Error('I/O error'), { code: 'EIO' });
+  const r = reader([f.root], { [phase]() { throw error; } });
+  assert.throws(() => r.read(f.inside), e => e === error);
+});
+
+test('contained file: disappearance during validation closes the descriptor and returns 404', t => {
+  const f = fixture(t);
+  const r = reader([f.root], { fstat() { fs.unlinkSync(f.inside); } });
+  refused(r, f.inside, 404);
+});
+
+test('contained file: admitted paths preserve unexpected open errors for the HTTP handler', t => {
+  const f = fixture(t);
+  for (const code of ['EACCES', 'EMFILE', 'EIO']) {
+    const error = Object.assign(new Error(code), { code });
+    const io = { ...fs, openSync() { throw error; } };
+    assert.throws(() => readContainedFile(f.inside, [f.root], { maxBytes: LIMIT, io }),
+      e => e === error, code);
+  }
 });
 
 test('/api/file: descriptor content determines size; response fields and refusals stay stable', t => {

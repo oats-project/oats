@@ -1017,11 +1017,12 @@ function listSkills(dir, allowedRoots) {
 function skillEntry(skillDir, allowedRoots) {
   const p = join(skillDir, "SKILL.md");
   if (!existsSync(p)) return null;
-  const read = readContainedFile(p, allowedRoots, { maxBytes: FILE_MAX_BYTES, tokenFile: TOKEN_FILE });
-  if (read.error === "path outside allowed roots") return null;
-  // A skill with unreadable metadata still appears under its directory name.
-  if (read.code === 404 && !existsSync(p)) return null;
-  const meta = read.buf ? skillFrontmatter(read.buf.toString("utf8")) : {};
+  let meta = {};
+  try {
+    const read = readContainedFile(p, allowedRoots, { maxBytes: FILE_MAX_BYTES, tokenFile: TOKEN_FILE });
+    if (read.error === "path outside allowed roots" || read.code === 404) return null;
+    if (read.buf) meta = skillFrontmatter(read.buf.toString("utf8"));
+  } catch { /* Unreadable metadata leaves the skill listed under its directory name. */ }
   return { name: meta.name || basename(skillDir), path: p, description: String(meta.description || "").trim() };
 }
 function mdTree(dir) {
@@ -1136,38 +1137,38 @@ function readContainedFile(requested, allowedRoots, { maxBytes, tokenFile = null
   const outside = { error: "path outside allowed roots", code: 403 };
   const notFile = { error: "not a regular file", code: 400 };
   const flags = fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK;
+  const path = resolve(requested);
   let fd;
   try {
-    try {
-      const path = resolve(requested);
-      try { fd = io.openSync(path, flags); }
-      catch (e) {
-        const g = resolveGuardedFile(path, allowedRoots, io);
-        if (g.error) return g;
-        if (e.code !== "ELOOP") throw e;
-        fd = io.openSync(g.real, flags);
-      }
-      const st = io.fstatSync(fd);
-      const g = resolveGuardedFile(requested, allowedRoots, io);
+    try { fd = io.openSync(path, flags); }
+    catch (e) {
+      const g = resolveGuardedFile(path, allowedRoots, io);
       if (g.error) return g;
-      if (!sameFile(st, io.statSync(g.real))) return outside;
-      if (sameFile(st, tokenFile)) return { error: "forbidden", code: 403 };
-      if (!st.isFile()) return notFile;
-      if (st.size > maxBytes) return { error: `file too large (${st.size} bytes)`, code: 413 };
-      const buf = Buffer.alloc(maxBytes + 1);
-      let size = 0;
-      while (size < buf.length) {
-        const n = io.readSync(fd, buf, size, buf.length - size, null);
-        if (n === 0) break;
-        size += n;
-      }
-      if (size > maxBytes) return { error: `file too large (${size} bytes)`, code: 413 };
-      return { real: g.real, st, buf: buf.subarray(0, size) };
-    } finally {
-      if (fd !== undefined) io.closeSync(fd);
+      if (e.code !== "ELOOP") throw e;
+      fd = io.openSync(g.real, flags);
     }
+    const st = io.fstatSync(fd);
+    const g = resolveGuardedFile(path, allowedRoots, io);
+    if (g.error) return g;
+    if (!sameFile(st, io.statSync(g.real))) return outside;
+    if (sameFile(st, tokenFile)) return { error: "forbidden", code: 403 };
+    if (!st.isFile()) return notFile;
+    if (st.size > maxBytes) return { error: `file too large (${st.size} bytes)`, code: 413 };
+    const buf = Buffer.alloc(maxBytes + 1);
+    let size = 0;
+    while (size < buf.length) {
+      const n = io.readSync(fd, buf, size, buf.length - size, null);
+      if (n === 0) break;
+      size += n;
+    }
+    if (size > maxBytes) return { error: `file too large (${size} bytes)`, code: 413 };
+    return { real: g.real, st, buf: buf.subarray(0, size) };
   } catch (e) {
-    return ["ENXIO", "ENODEV", "EISDIR", "EOPNOTSUPP", "ENOTSUP"].includes(e.code) ? notFile : missing;
+    if (["ENOENT", "ENOTDIR", "ELOOP"].includes(e.code)) return missing;
+    if (fd === undefined && ["ENXIO", "ENODEV", "EISDIR", "EOPNOTSUPP", "ENOTSUP"].includes(e.code)) return notFile;
+    throw e;
+  } finally {
+    if (fd !== undefined) io.closeSync(fd);
   }
 }
 /* OATSWEB_FILEGUARD_END */

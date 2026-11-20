@@ -1483,8 +1483,9 @@ unknown or unreported harness shows "?". Sources and licences are in
   caller names.
 - Workspace content is treated as untrusted: file paths are checked against
   admitted roots, and capability packages cannot read outside their own tree.
-  The file viewer uses path and descriptor identity checks within the model where agents and
-  Desktop share an OS user, which does not exclude a writer that repeatedly swaps directories during a read.
+  The file viewer uses path and descriptor identity checks where agents and
+  Desktop share an OS user, and a writer can still repeatedly swap directories
+  during a read.
 
 ## Troubleshooting
 
