@@ -651,10 +651,12 @@ sandboxes:
   - **The admission revision and its commit (r5).** `oats sync --plan` answers one
     admission revision for the whole sync, with the per-soul changes it would admit,
     grouped by sandbox (C5). The revision is one hash over the entire admission plan:
-    the workspace's commit and lock and, for every listed sandbox and soul, its derived
+    the workspace's commit and the lock sync would install (the plan's lock) and, for
+    every listed sandbox and soul, its derived
     set (ids and sources), the exclusions and the currently recorded entry.
     - **Widening:** only `oats sync --admission-revision <revision>` widens admission,
-      and only when its revision equals the one the current inputs give. An upstream
+      and only when its revision equals the one the current inputs give, checked
+      after sync's own lock step. An upstream
       change anywhere in the plan after it was reviewed changes the revision, so the
       apply refuses all admission for that sync (`E_PLAN_STALE`, with the fresh
       `admissionRevision` and changes in its detail) and records nothing. The refusal
@@ -682,8 +684,10 @@ sandboxes:
     - **The commit fence.** The rows written are the ones captured from the exact
       plan whose revision matched, and they are never re-resolved for writing. Under
       sync's lock, immediately before the write, the kernel recomputes the hashed
-      inputs. If any changed while the sync ran (a member's composition, the lock, an
-      exclusion or this host's listing), the whole admission is refused as
+      inputs and compares them with the plan's inputs as sync applied them. Sync's
+      own lock and package steps are not a change; an edit from outside sync is. If
+      any input changed that way while the sync ran (a member's composition, the
+      lock, an exclusion or this host's listing), the whole admission is refused as
       `E_PLAN_STALE` and nothing is written. No newer or partly recomputed plan is ever
       written under the earlier revision.
     - **Where they live:** in the host deployment's own state, per sandbox and soul.
@@ -824,8 +828,10 @@ its own because a kernel reads it:
   to spawn it from the host into a sandbox that lists it. A routed request must name
   the sandbox, soul and composition its preview showed, and its sandbox must equal
   `self`. The sandbox reaches the in-sandbox kernel as `--sandbox <S>` on both the
-  remote preview and the apply (Identities, step 2); a routed request without it is
-  refused (`wrong-sandbox`), and `D` binds it. One that names another sandbox is refused with `E_SANDBOX_PLACEMENT`,
+  remote preview and the apply (Identities, step 2); a request carrying a seat option (a
+  routed request) without `--sandbox` is refused with `E_SANDBOX_PLACEMENT`,
+  `wrong-sandbox`, and `D` binds it. A local spawn inside the sandbox carries no seat
+  option and is judged by `not-placed-here` alone. One that names another sandbox is refused with `E_SANDBOX_PLACEMENT`,
   reason `wrong-sandbox`, even when the soul is eligible in both. Its remedy says the
   host routed it to the wrong registration, and to check the host's `sandbox-<name>`
   server entry (C7). Nothing is spawned. `D`
@@ -935,7 +941,8 @@ and by act:
   `run: spawn` schedule's `sandbox: <id>` does the same (C2, r5). Both are new
   contracts. Inside a sandbox, the host's routed preview and apply carry the same
   `--sandbox <S>`, which must equal `self` (C3b). `--sandbox` is refused together with `--server`, which names a target of
-  its own (`E_BAD_ARGS`).
+  its own (`E_BAD_ARGS`). That refusal applies to the caller's argv; the routed
+  preview and apply run inside S with `--sandbox` and no `--server`.
 - `oats sandbox start|stop <name> --plan --json` answers
   `{sandboxApi:1, sandbox, act, planRevision, actions}`; the apply answers
   `{sandboxApi:1, sandbox, act, state, server, receipts, problems}`, and a stale
@@ -944,7 +951,8 @@ and by act:
   (`build|start|stop|none`), and, in a plan, the admission it would apply: each
   sandbox entry carries `admissionChanges: [{soul, first, added:[{id, source}], sourceChanged:[{id, from, to}]}]`
   (`first: true` for a soul with no recorded entry, whose `added` is its whole derived
-  set, possibly empty),
+  set, excluded capabilities omitted since they refuse at spawn regardless, possibly
+  empty),
   and the answer carries one top-level `admissionRevision`, the hash of the whole
   admission plan (C1) (r5). `oats sync --admission-revision <revision>` takes that one value and
   applies all of it or none (C1, "The applied-plan gate"), and a sync without the
@@ -1214,7 +1222,7 @@ The refusals belong to the acts:
 | No provider, or more than one (r1) | every sandbox act | `E_SANDBOX_PROVIDER`, `none` or `ambiguous` |
 | A placed soul whose selected sandbox this host does not list or run | `oats spawn`, a schedule's spawn | `E_SANDBOX_NOT_HERE` |
 | A soul this sandbox doesn't list, inside it (r5) | the in-sandbox `oats spawn` | `E_SANDBOX_PLACEMENT`, `not-placed-here` |
-| A routed request naming another sandbox, inside it (r5) | the in-sandbox `oats spawn` | `E_SANDBOX_PLACEMENT`, `wrong-sandbox` |
+| A routed request naming another sandbox, or none, inside it (r5) | the in-sandbox remote preview, before any mint | `E_SANDBOX_PLACEMENT`, `wrong-sandbox` |
 | Several eligible sandboxes and no `--sandbox` or schedule `sandbox:` (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `sandbox-ambiguous` |
 | A named target that isn't declared, or doesn't list the soul (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `sandbox-unknown` or `sandbox-not-eligible` |
 | A soul reference no member or package offers (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `soul-unknown` |
