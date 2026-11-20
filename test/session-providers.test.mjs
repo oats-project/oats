@@ -9,7 +9,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, parse } from "node:path";
 import { fileURLToPath } from "node:url";
 import { attachInstanceSession, inputInstanceSession, inspectInstanceSession, listInstances, restartInstanceSession, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
@@ -789,6 +789,25 @@ test("restart stops, then launches, under the kernel's stop rule; a start never 
   assert.equal(Number.isFinite(Date.parse(runtimeOf(home).stoppedAt)), true);
 });
 
+test("a spawn whose launch is refused, fails or loses its answer releases the home's claim: the name can be spawned again in the same process", async (t) => {
+  const fx = providerDeployment(t);
+  const claims = () => { const dir = join(fx.root, "dev", "instances", ".oats-retirement", "claims"); return existsSync(dir) ? readdirSync(dir) : []; };
+  for (const [what, launch, code] of [
+    ["a refusal", { error: { code: "E_BACKEND_LAUNCH_ENV", message: "no" } }, "E_BACKEND_LAUNCH_ENV"],
+    ["a lost answer", { raw: "garbage" }, "E_SESSION_START_FAILED"],
+    ["a failed call", { exit: 9 }, "E_SESSION_START_FAILED"],
+  ]) {
+    fx.control({ launch });
+    // In this process: a claim left behind would still be this process's, held, not a dead one's to take over.
+    assert.equal(await codeOf(() => fx.launch("again")), code, what);
+    assert.deepEqual(claims(), [], `${what}: no claim is left on the home`);
+    assert.equal(existsSync(join(fx.root, "dev", "instances", "again")), false, what);
+  }
+  fx.control({});
+  const { home } = await fx.launch("again");
+  assert.deepEqual([claims(), runtimeOf(home).launched], [[], true], "and after a launch that is recorded");
+});
+
 test("a launch the provider refuses or fails leaves the home as it was; its own E_BACKEND_* refusal is relayed", async (t) => {
   const fx = providerDeployment(t);
   // At spawn: nothing is left behind.
@@ -1020,6 +1039,66 @@ test("the two test seams only shorten: a value above the kernel's own limit is t
     for (const name of names) process.env[name] = value;
     assert.deepEqual([timeouts(), waits()], [[120_000, 20_000, 20_000, 40_000], [150_000, 150_000, 0]], JSON.stringify(value));
   }
+});
+
+test("a spawn killed while its provider launches leaves a launch that was sent: reads are unknown, and a stop, a start and a retire first ask the provider to stop what it started", async (t) => {
+  const fx = providerDeployment(t);
+  const receiptOf = (home) => JSON.parse(readFileSync(join(dirname(home), ".oats-retirement", "baselines", `${createHash("sha256").update(home).digest("hex")}.json`), "utf8")).runtime;
+  /** A home whose spawn was killed (SIGKILL) after the provider was asked to launch: the provider goes on and starts its session. */
+  const killedSpawn = async (name) => {
+    fx.control({ [name]: { launch: { sleepMs: 1500 } } });
+    const child = spawn(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "oats.mjs"), "spawn", "dev", "--name", name, "--backend", "fake", "--launch-config", "claude", "--json"], { cwd: fx.dep, env: fx.env, stdio: "ignore" });
+    const done = new Promise((resolve) => child.on("close", resolve));
+    for (let i = 0; i < 100 && !fx.verbs("launch").some((c) => c.instance === name); i++) await new Promise((r) => setTimeout(r, 100));
+    assert.equal(fx.verbs("launch").filter((c) => c.instance === name).length, 1, "the provider's launch is in flight");
+    child.kill("SIGKILL");
+    await done;
+    await new Promise((r) => setTimeout(r, 2000)); // the provider finishes what it was asked: a session runs
+    fx.control({});
+    fx.clearCalls();
+    return join(fx.root, "dev", "instances", name);
+  };
+  const stopsOf = () => fx.verbs("stop").map((c) => c.request.input.endpoint);
+
+  // 1. What is left: no endpoint anywhere, and the receipt's word that a launch was sent.
+  const home = await killedSpawn("cut");
+  assert.deepEqual([recordOf(home).launched, recordOf(home).session.endpoint], [false, null]);
+  const runtime = receiptOf(home);
+  assert.deepEqual([runtime.launched, runtime.backend, runtime.provider, Number.isFinite(Date.parse(runtime.launchSent))], [false, "fake", FAKE_CAPABILITY, true]);
+  // Its reads are unknown, never "not launched", and call no provider.
+  const inspected = fx.cli(["session", "inspect", "--home", home, "--json"]).json();
+  assert.deepEqual([inspected.ok, inspected.error.code], [false, "E_SESSION_UNAVAILABLE"]);
+  assert.match(inspected.error.message, /a launch of cut was sent to session backend fake at .+ and its outcome was never recorded/);
+  assert.deepEqual([rowOf(fx, "cut").running, rowOf(fx, "cut").runtimeState], [null, "unreachable"]);
+  assert.deepEqual(fx.verbs(), []);
+  // A stop the provider does not confirm is E_SESSION_STOP_FAILED, and the word stays.
+  fx.control({ stop: { exit: 1 } });
+  assert.equal(await codeOf(() => fx.inEnv(() => stopInstanceSession(home, {}))), "E_SESSION_STOP_FAILED");
+  assert.equal(Number.isFinite(Date.parse(receiptOf(home).launchSent)), true);
+  // A stop asks the provider to stop whatever is rooted at the home (no endpoint), and answers stopped.
+  fx.control({});
+  fx.clearCalls();
+  const stopped = await fx.inEnv(() => stopInstanceSession(home, {}));
+  assert.deepEqual([stopped.stopped, stopped.alreadyIdle, stopped.state], [true, false, "stopped"]);
+  assert.deepEqual(stopsOf(), [null]);
+  assert.equal(Object.hasOwn(receiptOf(home), "launchSent"), false, "settled: the word is taken away");
+  // From then on it is an ordinary never-launched home.
+  fx.clearCalls();
+  assert.deepEqual([(await fx.inEnv(() => stopInstanceSession(home, {}))).state, fx.verbs()], ["not-launched", []]);
+
+  // 2. A start does the same before its own launch: never a second session beside the first.
+  const started = await killedSpawn("again");
+  const start = fx.cli(["session", "start", "--home", started, "--json"]).json();
+  assert.equal(start.ok, true, JSON.stringify(start));
+  assert.deepEqual(fx.verbs().filter((c) => c.verb === "stop" || c.verb === "launch").map((c) => [c.verb, c.request.input.endpoint ?? c.request.input.previous ?? null]), [["stop", null], ["launch", null]]);
+  assert.deepEqual([receiptOf(started).launched, Object.hasOwn(receiptOf(started), "launchSent")], [true, false]);
+
+  // 3. A retire does it, then scans the home: the session is not left running under a removed home.
+  const retiring = await killedSpawn("gone");
+  const retired = JSON.parse(fx.cli(["retire", "gone", "--json"]).stdout);
+  assert.equal(retired.retired, "gone", JSON.stringify(retired));
+  assert.deepEqual(stopsOf(), [null]);
+  assert.equal(existsSync(retiring), false);
 });
 
 // ----------------------------------------------------------------------- T12: nothing relayed

@@ -7441,11 +7441,11 @@ pointer, message}]`.
 tmux). A preview carries `backend: "<name>"`, `backendStatus: {name,
 installed: true, started: false}` and `executable: null`. A launched spawn's
 answer carries `backend: "<name>"`, `session: {provider, endpoint}`, `tmux:
-null`, `attach: null`, and its `launch.executable` is `null`. Refusals, before
-anything is created (a preview answers them too). While the provider
-launches, the spawn holds the new home's lifecycle claim: a stop's apply, a
-start and a retire of it are refused as busy (`E_LIFECYCLE_BUSY`,
-`E_SESSION_START_BUSY`) until the launch is recorded or undone.
+null`, `attach: null`, and its `launch.executable` is `null`. While the
+provider launches, the spawn holds the new home's lifecycle claim: a stop's
+apply, a start and a retire of it are refused as busy (`E_LIFECYCLE_BUSY`,
+`E_SESSION_START_BUSY`) until the launch is recorded or undone. Refusals,
+before anything is created (a preview answers them too):
 
 | Code | `details` |
 |---|---|
@@ -7532,6 +7532,16 @@ Its refusals: `E_RESUME_NOT_LOST` (not a lost session), `E_SESSION_NOT_RUNNING`
 `E_SESSION_UNKNOWN` (a process of the last run still works in the home, or
 the session cannot be read), `E_SESSION_PROMPT_OPEN` (a claim or a prompt is
 open) and `E_SESSION_INPUT_QUEUED`.
+
+**A launch that was sent and never recorded.** A spawn or a start that ends
+while the provider launches (it was killed) leaves `launchSent` in the home's
+receipt. Until it is settled the home is unknown: `oats session inspect`
+answers `E_SESSION_UNAVAILABLE`, its status row reads `running: null`,
+`runtimeState: "unreachable"` with the reason, and a `--resume` is
+`E_SESSION_UNKNOWN`. A stop, a start and a retire settle it first, by asking
+the provider to stop whatever session is rooted at the home: a stop then
+answers `stopped: true` (never `alreadyIdle` with `not-launched`), or
+`E_SESSION_STOP_FAILED` when the provider does not confirm.
 
 **Stop and retire.** The stop's row is `{ok: true, stopped, alreadyIdle,
 state: "stopped"}`; `E_SESSION_STOP_FAILED` when the provider does not confirm

@@ -2178,9 +2178,12 @@ leaves such a mail unread; a scheduled wake records it not delivered.
 ### stop
 
 In: `{ "home", "endpoint", "graceSeconds" }`. Out: `{ "stopped": true }`.
-`endpoint` is `null` in one case: a launch whose answer was lost. Then stop
-whatever live session is rooted at the home, and answer `stopped: true` also
-when there is none.
+`endpoint` is `null` when the kernel has no endpoint for a session you may
+have started: a launch whose answer was lost, and a launch it sent whose
+spawn or start ended before recording your answer (it was killed while you
+launched). Then stop whatever live session is rooted at the home, and answer
+`stopped: true` also when there is none. **The kernel relies on this**: it
+is the only way a session started by a killed spawn is ever stopped.
 
 ### check (optional)
 
@@ -2231,6 +2234,12 @@ the feature.
 - **A launch that fails** leaves the home as it was (stopped, or never
   launched; a spawn is rolled back). When its answer was lost, the kernel
   calls `stop` with `endpoint: null` first.
+- **A launch that was sent and never recorded.** The kernel writes in the
+  home's receipt that a launch is being sent, right before it calls you, and
+  takes that away when it has recorded your endpoint. A spawn or a start
+  that is killed while you launch leaves it there: the home then reads as
+  unknown, and the next stop, start or retire first calls `stop` with
+  `endpoint: null`.
 - **Which stop it was** is on the home's stop receipt, never a field of
   yours: `oats host run`'s shutdown is a loss that the sweep resumes, an
   operator's stop is the intent that keeps the home down.

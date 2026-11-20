@@ -977,6 +977,19 @@ stoppedAt}`. The two must agree as for tmux: `E_RUNTIME_AUTHORITY_MISMATCH`
 otherwise, whose `details.fields` are `backend`, `session.provider` and
 `session.endpoint`.
 
+The receipt's `runtime` also carries `launchSent` (an instant) **while a
+launch that was sent to the provider has no recorded outcome**: written right
+before the provider's launch is called, by a spawn and by a start, and taken
+away when the endpoint is recorded or the launch is known to have started
+nothing. One that is still there afterwards is a spawn or a start that ended
+first (it was killed, or its host stopped): a session may run that no record
+names. Such a home reads as unknown (`oats session inspect` answers
+`E_SESSION_UNAVAILABLE`, its status row `running: null`, `runtimeState:
+"unreachable"`), never as not launched or stopped; and a stop, a start and a
+retire first ask the provider to stop whatever session is rooted at the
+home. A stop the provider does not confirm is `E_SESSION_STOP_FAILED`, and
+the record stays until one is.
+
 **The verbs.**
 
 | Verb | On a provider home |

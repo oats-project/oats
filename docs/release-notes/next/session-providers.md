@@ -14,6 +14,11 @@
     thread id; the endpoint is on its local inspect, spawn and start answers
     only, and nothing of it is relayed to another machine. `oats inspect` and
     `oats capabilities show` list `sessionProviders`.
+  - A spawn holds its new home's lifecycle claim while the provider
+    launches, and the home's receipt records that a launch was sent until
+    its outcome is recorded (`runtime.launchSent`): a spawn or a start
+    killed mid-launch leaves a home that reads as unknown, whose next stop,
+    start or retire first asks the provider to stop what it started.
   - A stop made with OATS stays stopped: inspect answers stopped and every
     input is refused `E_SESSION_NOT_RUNNING` until the home is started,
     without asking the provider.
