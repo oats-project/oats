@@ -76,6 +76,8 @@ test("T1: a spawn with --backend fake launches through the provider and records 
     unset: [], pathPrepend: [join(home, ".oats", "bin")], args: [], promptFile: join(home, "TASK.md"), previous: null,
     // The allowances (test/session-providers-sandbox.test.mjs): no capability here asks for a host.
     sandbox: { domains: [], write: [{ path: join(realpathSync(fx.dep), ".agents", "events"), reason: "oats events" }], missing: [] },
+    // The home's trees (test/provider-home-integrity.test.mjs): work/, and no extra tree here.
+    trees: [join(home, "work")],
   });
 
   // The records: instance.json and the independent receipt carry the endpoint; no tmux in either.
@@ -1182,7 +1184,7 @@ test("a provider's check is asked before every launch, and before any hook: a pr
   // With the launch that is planned (test/session-providers-sandbox.test.mjs): the harness, yolo
   // and the allowances as the launch input will carry them, and the launch configuration's own
   // arguments (none here), without what a hook adds.
-  assert.deepEqual(fx.verbs("check")[0].request.input, { home, soul: null, settings: {}, launch: { harness: "claude", yolo: null, args: [], sandbox: fx.verbs("launch")[0].request.input.sandbox } });
+  assert.deepEqual(fx.verbs("check")[0].request.input, { home, soul: null, settings: {}, launch: { harness: "claude", yolo: null, args: [], sandbox: fx.verbs("launch")[0].request.input.sandbox, trees: [join(home, "work")] } });
   assert.deepEqual(fx.verbs("launch")[0].request.input.args, ["--from-a-hook"]);
   // And with the environment every later call of the home has: its soul, though its record is not written yet.
   const envOf = (call) => [call.soul, call.soulId, call.level];

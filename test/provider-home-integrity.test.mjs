@@ -14,7 +14,7 @@ import { writeLock } from "../lib/packages.mjs";
 import { contentDigest } from "../lib/remote.mjs";
 import { git } from "./helpers/v2-deployment.mjs";
 import { compositionOf, homeModulesProblem, moduleCopyDigest, moduleCopyProblem, providerHomeTrust } from "../lib/home-integrity.mjs";
-import { FAKE_CAPABILITY, fakeFiles, fakeManifest, providerDeployment } from "./helpers/session-provider-fixture.mjs";
+import { FAKE_CAPABILITY, fakeFiles, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
 
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 const receiptOf = (home) => join(dirname(home), ".oats-retirement", "baselines", `${createHash("sha256").update(home).digest("hex")}.json`);
@@ -321,4 +321,29 @@ test("Git over a provider home's trees runs no hook and no file monitor the repo
   assert.equal(retired.retired, "planted", JSON.stringify(retired));
   assert.equal(existsSync(home), false);
   assert.deepEqual(ran(), [], "the retire");
+});
+
+test("the launch input and the check's planned launch carry the home's trees: work/ alone for a home with no extra tree, work/ and each extra tree Git knows for one with some, and never what the home's record or a plain directory says", async (t) => {
+  const fx = providerDeployment(t, { manifest: fakeManifest({ fake: fakeProvider({ check: true }) }) });
+  const treesOf = (verb) => fx.verbs(verb).map((c) => (verb === "check" ? c.request.input.launch.trees : c.request.input.trees));
+  // A directory home: work/ alone, at the spawn's check and at its launch.
+  const plain = await fx.launch("no-trees");
+  assert.deepEqual([treesOf("check"), treesOf("launch")], [[[join(plain.home, "work")]], [[join(plain.home, "work")]]]);
+  // A home with a tree of its own and one extra tree.
+  const { home } = await fx.launch("two-trees", { work: "worktree" });
+  const inHome = { cwd: home, env: { OATS_INSTANCE_HOME: home } };
+  const added = fx.cli(["worktree", "add", "--purpose", "docs", "--branch", "agents/two-trees-docs", "--base", "main", "--json"], inHome).json();
+  assert.equal(added.ok, true, JSON.stringify(added));
+  // What is NOT a tree: a plain directory with a tree's name, and a tree the home's record names.
+  mkdirSync(join(home, ".work-plain"));
+  writeFileSync(join(home, "instance.json"), JSON.stringify({ ...recordOf(home), trees: ["/etc"], extraTrees: ["/etc"] }));
+  fx.clearCalls();
+  await fx.inEnv(() => restartInstanceSession(home));
+  const both = [join(home, "work"), join(home, ".work-docs")];
+  assert.deepEqual([treesOf("check"), treesOf("launch")], [[both], [both]], "the check is told what the launch will be");
+  // The extra tree removed: work/ alone again.
+  assert.equal(fx.cli(["worktree", "remove", "--purpose", "docs", "--json"], inHome).json().ok, true);
+  fx.clearCalls();
+  await fx.inEnv(() => restartInstanceSession(home));
+  assert.deepEqual([treesOf("check"), treesOf("launch")], [[[join(home, "work")]], [[join(home, "work")]]]);
 });
