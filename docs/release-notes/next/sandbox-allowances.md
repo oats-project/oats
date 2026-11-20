@@ -17,9 +17,13 @@
   - `write` is the deployment's events directory, which the kernel creates
     before the launch.
   - Values come from the deployment's configuration as a spawn preview
-    resolves it, never from an instance home.
-  - `oats spawn --preview` lists each host with who asked for it and each
-    path with its reason;
+    resolves it, never from an instance home. A start and a restart resolve
+    it again; when that cannot be done the launch input says `sandbox:
+    {unavailable}`, and the provider refuses a launch it would sandbox.
+  - A provider's `check` is handed the planned launch (`launch: {harness,
+    yolo, args, sandbox}`) before every launch.
+  - `oats spawn --preview`, a start's answer and `oats readiness --home`
+    list each host with who asked for it and each path with its reason;
     `oats capabilities show` lists `sandboxDomains` and its problems.
   - tmux launches are unchanged: no `sandbox`, and `sandboxDomains` is not
     read. A kernel from before session providers ignores the key.

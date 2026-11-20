@@ -2206,7 +2206,9 @@ started by a killed spawn is ever stopped.
 ### check (optional)
 
 The provider's readiness. In: `{ "home": "/abs/home" | null, "soul": "<name>" | null, "settings": { … } }`:
-a home, or, before any home exists, a soul. Out:
+a home, or, before any home exists, a soul; and, right before a launch,
+`"launch": { "harness", "yolo", "args", "sandbox" }`, the launch that is
+planned, as its launch input will carry them. Out:
 `{ "status": "ready" | "needs-configuration" | "authorization-required" | "unavailable", "problems": [ { "code", "message" } ], "warnings": [ { "code", "message" } ] }`
 (`warnings` optional; no problem on `ready`). Say where a credential comes
 from, never print it.
@@ -2285,12 +2287,26 @@ the instance home**, which a sandboxed agent can write.
 **What the provider does with it** is its own rule, because only it knows
 whether it sandboxes this launch: widen the sandbox by exactly `domains` and
 `write`; **refuse a launch you would sandbox** when `missing` holds a row
-that is not optional, with an `E_BACKEND_*` code; write nothing for a launch
-you do not sandbox.
+that is not optional, or when `sandbox` is `{ "unavailable": "<why>" }`
+(below), with an `E_BACKEND_*` code; write nothing for a launch you do not
+sandbox. Answer those refusals in `check` too, which is handed the planned
+launch (`"launch": { "harness", "yolo", "args", "sandbox" }`, absent on a
+readiness read): the kernel asks it before a restart stops anything.
 
-The allowances are handed to a spawn's launch. `oats spawn --preview` lists
-each host with who asked for it and each path with its reason. A tmux launch
-has no `sandbox`, and reads no `sandboxDomains`.
+**A start or a restart of an existing home** resolves the deployment's
+configuration again, for the home's soul, so a setting changed there reaches
+the home at its next launch. Hosts are taken only for capabilities that are
+also the home's modules; a slot's provider of the deployment that is not one
+of them adds none and is named (`skipped`, and a warning of the start). When
+the deployment's configuration cannot be resolved (a member repository that
+cannot be read, a soul the workspace no longer offers), the launch input
+carries `"sandbox": { "unavailable": "<the cause>" }` in place of the three
+lists, and the kernel refuses nothing: a provider that would sandbox the
+session does.
+
+`oats spawn --preview`, a start's and a restart's answer and `oats readiness
+--home` list each host with who asked for it and each path with its reason.
+A tmux launch has no `sandbox`, and reads no `sandboxDomains`.
 
 **A kernel from before session providers ignores `sandboxDomains`**: it
 neither refuses the manifest nor acts on the line. The line costs an older

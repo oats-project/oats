@@ -7458,7 +7458,7 @@ before anything is created (a preview answers them too):
 | `E_BACKEND_AMBIGUOUS` | `{backend, capabilities}`; also from a start or a restart |
 | `E_BACKEND_HARNESS` | `{backend, capability, harness, harnesses}` |
 | `E_BACKEND_LAUNCH_ARG` | `{backend, launchConfig, field: "executable"}` |
-| `E_BACKEND_SANDBOX_HOST` | `{capability, setting, host, team?}`: a capability's `sandboxDomains` line that may not add a host; `setting` and `host` are null where there is none to name |
+| `E_BACKEND_SANDBOX_HOST` | `{capability, setting, host, team?}`: a capability's `sandboxDomains` line that may not add a host; `setting` and `host` are null where there is none to name. Also from a start or a restart, before anything is stopped |
 | `E_BACKEND_NOT_READY`, any other `E_BACKEND_*` | the provider's readiness, or its own refusal of the launch: `{backend, capability}`; the spawn is rolled back |
 
 A launch that fails otherwise is `E_SESSION_START_FAILED`.
@@ -7592,6 +7592,15 @@ as the kernel computes it from the deployment's configuration. One key,
   value; `optional: true` only on a row of an optional line). `unread`, only
   when there is one: a `settingFile` line's file that gave no host, or
   values in it that were skipped.
+- a start's and a restart's answer: the same object, with `skipped?:
+  [{capability, reason}]` (a slot's provider of the deployment that is not
+  one of the home's modules: it added no host), or `sandbox: {unavailable:
+  "<why>"}` when the deployment's configuration could not be resolved for
+  the home's soul. Each `skipped` row is also a `warnings` line.
+- `oats readiness --home <abs> --json` of a provider home: the same, as a
+  start would compute it now, or `sandbox: {refused: {code:
+  "E_BACKEND_SANDBOX_HOST", message, details}}` when a start would be
+  refused for it.
 
 `oats capabilities show <name> --json` carries `sandboxDomains` (the
 manifest's key, exactly as declared) and, only when there is one,

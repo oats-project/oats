@@ -1113,7 +1113,8 @@ test("a provider's check is asked right before every launch: a provider that is 
   // Ready: the check, then the launch.
   const { home } = await fx.launch("checked");
   assert.deepEqual(fx.calls().map((c) => c.hook ?? c.verb), ["spawn", "check", "launch"]);
-  assert.deepEqual(fx.verbs("check")[0].request.input, { home, soul: null, settings: {} });
+  // With the launch that is planned (test/session-providers-sandbox.test.mjs): what the launch input will carry.
+  assert.deepEqual(fx.verbs("check")[0].request.input, { home, soul: null, settings: {}, launch: { harness: "claude", yolo: null, args: [], sandbox: fx.verbs("launch")[0].request.input.sandbox } });
 
   // Not ready at a spawn: refused with the provider's words, rolled back, no launch.
   fx.clearCalls();
