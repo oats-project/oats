@@ -514,9 +514,21 @@ is deleted.": that retire finishes the spawn's compensation, and the result's
 branches (the kernel deletes the branch only when the worktree is removed).
 Every other retire plan keeps "Branches and pull requests are not changed."
 
+## Stop, Start and Restart stay dialogs
+
+The Desktop UI rework (slice 4) built a y/n question on the status line for Stop, Start and Restart, and then took
+it out of the slice (the lead, 2026-11-19, after five review rounds): a line that takes every key while it waits
+decides when a keystroke stops an agent, and each round found another way a keystroke meant for something else could
+answer it. Stop, Start and Restart keep their dialogs; the status line carries keys and messages only, and may ask in a
+later slice with a design of its own.
+
 ## UI and ownership
 
-The 420px confirmation surface follows the supplied layout, semantic theme
+The Stop and Retire dialog is a centred sheet over the
+dim scrim with a 150 ms ease, none with reduced motion (`renderer/sheet.mjs`; D10). After Enter its row reads
+Retiring… (#1247), and once the roster no longer lists it, a dim "✕ name · retired" row stands in its place for
+10 s (`renderer/retire-ghosts.mjs`): this window's memory of its own retire, never a control. The plan has no
+fact for the agent's messaging address, so the sheet does not list it (a contract change would add it). The 420px confirmation surface follows the supplied layout, semantic theme
 colors and keyboard focus language. Stop/Retire are separate from existing
 Start/Restart/Inspect; the roster row's context menu says **Retire instance…**, the
 context panel's footer **Stop…** and **Retire…**. Stop always requires explicit

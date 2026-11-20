@@ -10,7 +10,7 @@ import { deriveHostTokens, mixHex } from "../renderer/host-theme.mjs";
 import { hostState } from "./helpers/host-theme-fixture.mjs";
 import { createSoulMark, createRuntimeBadge, identityCSS } from "../renderer/identity-marks.mjs";
 import { workspaceStatusData, syncData } from "../../client/deployment-data.mjs";
-import { renderCapabilities, renderCapabilitySections, renderRepoPills, repoChoices, sourceChip } from "../renderer/workspace-catalog.mjs";
+import { renderCapabilityList, sourceChip, capabilityRowElement } from "../renderer/workspace-catalog.mjs";
 import { capabilitySections, hostKeyOf, memberNames } from "../../client/capability-rows.mjs";
 import { renderSetup, teamsBox } from "../renderer/workspace-setup.mjs";
 import { discoveryCSS } from "../renderer/workspace-discovery.mjs";
@@ -451,13 +451,13 @@ function spawnViewCSS() {
 for (const [name] of palettes) test(`${name}: actual identity/runtime markup wins the cascade and meets AA`, t => {
   const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><head></head><body>
     <div id="app"><aside id="sidebar"><button class="ctx-inst active"></button><button class="ctx-inst idle"></button></aside>
-      <div class="oats-view"><button class="soul-card"><span class="sname"></span></button>
+      <div class="oats-view"><aside class="soul-inspector soul-page"><div class="inspector-head"></div></aside>
         <button class="act primary"><span class="inspector-marks"></span></button></div></div>
   </body></html>`);
   t.after(() => dom.window.close());
   const { document } = dom.window;
   const spawnCSS = spawnViewCSS();
-  assert.ok(spawnCSS, "exercise actual late-mounted soul card/glyph rules");
+  assert.ok(spawnCSS, "exercise the actual late-mounted Souls rules");
   for (const source of [css, readFileSync(new URL("shell.css", renderer), "utf8"), spawnCSS, identityCSS]) {
     const style = document.createElement("style"); style.textContent = source; document.head.append(style);
   }
@@ -491,7 +491,8 @@ for (const [name] of palettes) test(`${name}: actual identity/runtime markup win
     }
     assert.ok(svg.getAttribute("fill") === "currentColor" || svg.getAttribute("stroke") === "currentColor");
   }
-  for (const selector of [".ctx-inst", ".soul-card .sname", ".inspector-marks"]) {
+  // A soul card carries no mark (slice 3a); the soul page's head does.
+  for (const selector of [".ctx-inst", ".soul-page .inspector-head", ".inspector-marks"]) {
     const container = document.querySelector(selector);
     for (const color of soulTones) {
       const mark = createSoulMark(document, { name: "Fixture soul", agentsRoot: "/fixture/agents", color });
@@ -524,16 +525,12 @@ for (const [name] of palettes) test(`${name}: workspace catalog, sources and syn
   // Kernel #217: rows carry a description (rendered as a muted line under the name).
   const rows = f2('capabilities').result.capabilities.map(r => ({ ...r, description: `About ${r.name}.` }));
   const names = memberNames(status);
-  // Workspace owned's repository pills: one pressed (the first repository), the rest not, and the shown count.
-  const repos = repoChoices(rows, names, hostKeyOf(status));
-  renderRepoPills(doc.querySelector('.filters'), { repos, value: repos[0].key, total: rows.length, shown: repos[0].count, narrowed: true, onChange() {} });
-  renderCapabilities(doc.querySelector('.caps'), { rows, status, instances: [], root: dir });
-  // The boxed source chip left the list (its group heading names the source); a soul's capability tables and the
-  // capability page still draw it with this sheet.
+  // The Desktop UI rework, slice 3b: one list of rows (name, tags, who made it, one line), with the defaults sentence.
+  // F7 (kernel #185): core capabilities and a repo-owned (private) row carry their tags.
+  const f7rows = JSON.parse(readFileSync(new URL('fixtures/workspace-v2/f7/capabilities.json', new URL('./', import.meta.url)), 'utf8')).result.capabilities.map(r => ({ ...r, description: `About ${r.name}.` }));
+  renderCapabilityList(doc.querySelector('.caps'), { rows: [...rows, ...f7rows], status: { ...status, defaults: { slots: { knowledge: { name: 'oats.okf', from: 'package' } }, capabilities: [] } }, onOpen() {} });
+  // The boxed source chip left the list; a soul's capability tables and the capability page still draw it with this sheet.
   doc.querySelector('.caps').append(sourceChip(doc, rows[0], names, { boxed: true }));
-  // F7 (kernel #185): the three sections, with a repo-owned (private) row.
-  const sections = capabilitySections(JSON.parse(readFileSync(new URL('fixtures/workspace-v2/f7/capabilities.json', new URL('./', import.meta.url)), 'utf8')).result.capabilities);
-  renderCapabilitySections(doc.querySelector('.sections'), { sections, shown: sections.workspace, filterHost: null, privateListed: true, status, instances: [], root: dir });
   // Kernel #217 desktop facts: a hosted workspace file, clones (one here, one refused, the rest not cloned), the lock file.
   const unconfirmed = status.members.find(m => m.status !== 'confirmed');
   const facts = { ...status, workspace: { ...status.workspace, file: { path: 'oats-workspace.yaml', url: 'https://github.com/northwind/agents/blob/a/oats-workspace.yaml' } },
@@ -547,31 +544,23 @@ for (const [name] of palettes) test(`${name}: workspace catalog, sources and syn
   renderSetup(doc.querySelector('.sources'), { status: listed, instances: [{ agent: 'a', running: true }], souls: [{ team: 'marketing' }], cli: { version: '0.26.0' }, openExternal() {} });
   // The Workspace's Teams tab (0.29 box; first tab since 2026-09-28), beside Setup.
   doc.querySelector('.sources').append(teamsBox(doc, { status: facts, souls: [{ team: 'marketing' }] }));
-  renderSetup(doc.querySelector('.graph'), { status: { ...facts, unsynced: ['x.pkg'] }, view: 'graph', selected: unconfirmed.key, openExternal() {} });
+  // A member's panel, open under its row (the graph went in slice 3b).
+  renderSetup(doc.querySelector('.graph'), { status: { ...facts, unsynced: ['x.pkg'] }, selected: unconfirmed.key, openExternal() {} });
   // The sync sheet's refusal text, as createWorkspaceSync builds it.
   const sheet = doc.createElement('section'); sheet.className = 'ws-sync-dialog';
   sheet.innerHTML = '<div class="ws-sync-body"><p class="ws-sync-lead error">x</p><p class="ws-sync-lead">x</p><button class="ws-sync-details">Details</button><p class="ws-sync-detail">x</p></div>';
   doc.querySelector('main').append(sheet);
   const root = dom.window.getComputedStyle(doc.documentElement);
   for (const [selector, painted, fg, bg] of [
-    // Workspace v4.1: the column head sits on the page; each capability is a row card (surface) with its
-    // name, one-line description and used-by words; the boxed source chip (soul tables, the page).
-    ['.catalog-head', '.oats-view', 'muted', 'bg'],
-    ['.catalog-name', 'button.catalog-row', 'fg', 'surface'],
-    ['.catalog-desc', 'button.catalog-row', 'muted', 'surface'],
+    // Slice 3b: the defaults sentence on the page; each capability a row (surface) with its name, its dim tags, who made
+    // it (the official mark's check in --fg, "by <source>" in --muted) and its one line; the boxed source chip (the page).
+    ['.cap-lead', '.oats-view', 'muted', 'bg'], ['.cap-lead b', '.oats-view', 'fg', 'bg'],
+    ['.cap-row-name', 'button.cap-row', 'fg', 'surface'],
+    ['.cap-row-desc', 'button.cap-row', 'muted', 'surface'],
+    ['.cap-tag[data-tag=core]', 'button.cap-row', 'muted', 'surface'], ['.cap-tag[data-tag=private]', 'button.cap-row', 'muted', 'surface'], ['.cap-tag[data-tag=default]', 'button.cap-row', 'muted', 'surface'],
+    ['.cap-origin:not([data-official])', 'button.cap-row', 'muted', 'surface'], ['.cap-official', 'button.cap-row', 'fg', 'surface'],
     ['.source-chip', '.source-chip.boxed', 'muted', 'surface'], ['.source-chip-name', '.source-chip.boxed', 'fg', 'surface'],
-    ['.catalog-used-count.none', 'button.catalog-row', 'muted', 'surface'],
-    // Repository pills (rule 1): unpressed --muted on --surface, pressed --accent on --sel (name and count), and the shown count.
-    ['.catalog-pills button[aria-pressed=false]', '.catalog-pills button[aria-pressed=false]', 'muted', 'surface'],
-    ['.catalog-pills button[aria-pressed=true]', '.catalog-pills button[aria-pressed=true]', 'accent', 'sel'],
-    ['.catalog-shown', '.oats-view', 'muted', 'bg'],
     ['.catalog-note.warn', '.oats-view', 'warn', 'bg'], ['.catalog-note:not(.warn)', '.oats-view', 'muted', 'bg'],
-    // Sections: the segmented jump (current = brand tint, rule 1), titles with their lead, repo headings.
-    ['.capability-nav button[aria-current]', '.capability-nav button[aria-current]', 'accent', 'sel'],
-    ['.capability-nav button:not([aria-current])', '.capability-nav', 'muted', 'surface'],
-    ['.capability-section-title', '.oats-view', 'fg', 'bg'], ['.capability-section-lead', '.oats-view', 'muted', 'bg'],
-    // A repository group's heading (the Souls tab's, group-heading.mjs): the name --fg, its qualifier --muted.
-    ['.catalog-group .souls-group-name', '.oats-view', 'fg', 'bg'], ['.catalog-group .souls-group-note', '.oats-view', 'muted', 'bg'],
     // Workspace v4 Setup (W1/W2), the 2026-10-14 redesign: the lede and its summary on the page, the overview card
     // (the drawing's boxes on --surface-2), Shared through Git's boxes, the This computer zone (--surface-2).
     ['.setup-lede h2', '.oats-view', 'fg', 'bg'], ['.setup-summary', '.oats-view', 'muted', 'bg'],
@@ -602,12 +591,6 @@ for (const [name] of palettes) test(`${name}: workspace catalog, sources and syn
     ['.setup-def dt', '.setup-box', 'muted', 'surface'], ['.setup-def dd.muted', '.setup-box', 'muted', 'surface'],
     ['.setup-def-cap:not(.off) .setup-def-name', '.setup-box', 'fg', 'surface'], ['.setup-def-from', '.setup-box', 'muted', 'surface'],
     ['.setup-team-adds', '.setup-box', 'muted', 'surface'], ['.setup-def-cap.off .setup-def-name', '.setup-box', 'muted', 'surface'],
-    ['.setup-caption', '.setup-here', 'muted', 'surface-2'], ['.setup-card-title', '.setup-computer', 'fg', 'surface'], ['.setup-card-meta', '.setup-computer', 'muted', 'surface'],
-    ['.setup-ws .setup-card-meta', '.setup-ws', 'fg', 'sel'],
-    ['.setup-lock.warn', '.oats-view', 'warn', 'bg'],
-    ['.setup-tree-label', '.setup-shared', 'muted', 'surface'],
-    ['.setup-node:not(.bad) .setup-node-name', '.setup-node:not(.bad)', 'fg', 'surface'], ['.setup-node:not(.bad) .setup-node-meta', '.setup-node:not(.bad)', 'muted', 'surface'],
-    ['.setup-node.bad .setup-node-name', '.setup-node.bad', 'fg', 'attn-bg'], ['.setup-node.bad .setup-node-meta', '.setup-node.bad', 'warn', 'attn-bg'],
     ['.setup-panel-name', '.setup-panel', 'fg', 'surface'], ['.setup-panel h4', '.setup-panel', 'muted', 'surface'],
     ['.setup-hand-title', '.setup-panel', 'fg', 'surface'], ['.setup-hand-sub', '.setup-panel', 'muted', 'surface'], ['.setup-hand-mark.warn', '.setup-panel', 'warn', 'surface'],
     ['.setup-panel p:not(.muted):not(.warn)', '.setup-panel', 'fg', 'surface'], ['.setup-panel p.warn', '.setup-panel', 'warn', 'surface'], ['.setup-panel p.muted', '.setup-panel', 'muted', 'surface'],
@@ -625,18 +608,17 @@ for (const [name] of palettes) test(`${name}: workspace catalog, sources and syn
     assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${selector} on ${bg}`);
     for (let parent = el; parent; parent = parent.parentElement) assert.equal(dom.window.getComputedStyle(parent).opacity, '1');
   }
-  // A keyboard-focused pill takes the shell's tint (its own rule out-ranks the global one): its --muted
-  // (unpressed) and --accent (pressed) ink on --sel are inventoried pairs and meet AA here.
-  // (jsdom does not resolve the pill's :focus-visible here: the declared rule is read.)
-  assert.ok([...doc.styleSheets].flatMap(sheet => [...sheet.cssRules]).some(rule => rule.selectorText === '.oats-view .catalog-pills button:focus-visible' && rule.style.background === 'var(--sel)'), 'the pill focus tint rule');
-  for (const fg of ['muted', 'accent']) {
+  // A keyboard-focused row takes the shell's tint (its own rule out-ranks the global one): its --fg and --muted
+  // ink on --sel are inventoried pairs and meet AA here. (jsdom does not resolve :focus-visible: the declared rule is read.)
+  assert.ok([...doc.styleSheets].flatMap(sheet => [...sheet.cssRules]).some(rule => rule.selectorText === '.oats-view button.cap-row:focus-visible' && rule.style.background === 'var(--sel)'), 'the row focus tint rule');
+  for (const fg of ['muted', 'fg']) {
     assert.ok(pairs.some(([f, b]) => f === fg && b === 'sel'), `--${fg} on --sel is inventoried`);
-    assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue('--sel').trim())) >= 4.5, `focused pill: --${fg} on --sel`);
+    assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue('--sel').trim())) >= 4.5, `focused row: --${fg} on --sel`);
   }
 });
 
-// Workspace › Capabilities' Workspace defaults panel (filled and empty core slots, additional defaults from a package
-// and a member repository, one the workspace turned off) and the "About capabilities" dialog in the lifecycle frame: every text on its computed surface.
+// Workspace › Capabilities' defaults (slice 3b: a sentence and a tag; one turned off) and the "About capabilities" dialog
+// in the lifecycle frame: every text on its computed surface.
 for (const [name] of palettes) test(`${name}: Workspace defaults and the About dialog use AA tokens on their computed surfaces`, t => {
   const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><main class="oats-view"><div class="sections"></div><div class="tools"></div></main></body></html>`, { pretendToBeVisual: true });
   const doc = dom.window.document;
@@ -647,24 +629,13 @@ for (const [name] of palettes) test(`${name}: Workspace defaults and the About d
   const status = { workspace: { key: 'github.com/nw/agents', name: 'northwind' }, members: [],
     defaults: { slots: { knowledge: { name: 'oats.okf', from: 'package' }, messaging: 'none', tasks: null },
       capabilities: [{ name: 'oats.core', from: 'package', off: false }, { name: 'house-style', from: 'here', off: false }, { name: 'old-style', from: null, off: true }] } };
-  const sections = capabilitySections(rows);
-  renderCapabilitySections(doc.querySelector('.sections'), { sections, shown: sections.workspace, filterHost: null, privateListed: false, status, instances: [], onOpen() {} });
+  renderCapabilityList(doc.querySelector('.sections'), { rows: [...rows, { name: 'old-style', kind: 'member', repoKey: 'github.com/nw/agents' }], status, onOpen() {} });
   const about = createAboutDialog(doc, { copy: ABOUT_COPY.capabilities, id: 'about' });
   doc.querySelector('.tools').append(about.button); about.open();
   const root = dom.window.getComputedStyle(doc.documentElement);
   for (const [selector, painted, fg, bg] of [
-    ['.ws-defaults-scope', '.ws-defaults-panel', 'fg', 'surface'], ['.ws-defaults-sub', '.ws-defaults-panel', 'muted', 'surface'],
-    // The two groups' headings and leads, the one cell's words, its chip and tiles (core tints, an empty slot and a
-    // package neutral, a member capability clay), an additional default turned off.
-    ['.ws-defaults-group-head', '.ws-defaults-panel', 'fg', 'surface'], ['.ws-defaults-group-lead', '.ws-defaults-panel', 'muted', 'surface'],
-    ['button.ws-default-cell .ws-default-label', 'button.ws-default-cell', 'muted', 'surface'],
-    ['button.ws-default-cell .ws-default-name', 'button.ws-default-cell', 'fg', 'surface'],
-    ['button.ws-default-cell .source-chip', 'button.ws-default-cell', 'muted', 'surface'], ['button.ws-default-cell .source-chip-name', 'button.ws-default-cell', 'fg', 'surface'],
-    ['div.ws-default-cell .ws-default-none', 'div.ws-default-cell', 'muted', 'surface'], ['div.ws-default-cell .ws-default-note', 'div.ws-default-cell', 'muted', 'surface'],
-    ['.ws-default-tile[data-tint=slate]', '.ws-default-tile[data-tint=slate]', 'soul-slate-fg', 'soul-slate-bg'],
-    ['.ws-default-tile[data-tint=clay]', '.ws-default-tile[data-tint=clay]', 'soul-clay-fg', 'soul-clay-bg'],
-    ['.ws-default-tile:not([data-tint])', '.ws-default-tile:not([data-tint])', 'chip-fg', 'chip-bg'],
-    ['.ws-default-cell.off .ws-default-name', '.ws-default-cell.off', 'muted', 'surface'], ['.ws-default-cell.off .ws-default-note', '.ws-default-cell.off', 'muted', 'surface'],
+    ['.cap-lead', '.oats-view', 'muted', 'bg'], ['.cap-lead b', '.oats-view', 'fg', 'bg'], ['.cap-lead .cap-lead-name', '.oats-view', 'fg', 'bg'],
+    ['.cap-tag[data-tag=default]', 'button.cap-row', 'muted', 'surface'], ['.cap-tag[data-tag=default-off]', 'button.cap-row', 'muted', 'surface'],
     ['.ws-info-button', '.ws-info-button', 'muted', 'surface'],
     ['.about-dialog h2', '.about-dialog', 'fg', 'surface'], ['.about-dialog > p', '.about-dialog', 'fg', 'surface'],
     ['.about-dialog .lifecycle-mark', '.about-dialog .lifecycle-mark', 'accent', 'surface-2'],
@@ -1510,7 +1481,7 @@ for (const [name] of palettes) test(`${name}: the spawn footer's Preview ready c
 // Workspace v4 pages (W4/W5b) — replaces the F7 page inventory (header band,
 // facts, used-by rows, borderless back): the page bar, side cards, key/value
 // facts, the used-by table and a soul's composition table with its why tags.
-import { renderCapabilityPage, renderSoulCapabilities, renderSoulCore, capabilityPageCSS, pageCardCSS, soulCapabilitiesCSS } from '../renderer/capability-page.mjs';
+import { renderCapabilityPage, renderSoulCapabilities, renderSoulCore, capabilityPageCSS, pageCardCSS, soulCapabilitiesCSS, pageCard, pageFacts } from '../renderer/capability-page.mjs';
 for (const [name] of palettes) test(`${name}: v4 page bar, cards, facts, used-by rows, why tags and the core table meet computed AA`, () => {
   const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><div class="oats-view"><section class="host"></section><section class="soul"></section><section class="core"></section></div></body></html>`, { pretendToBeVisual: true });
   const doc = dom.window.document;
@@ -1528,6 +1499,10 @@ for (const [name] of palettes) test(`${name}: v4 page bar, cards, facts, used-by
     { slot: 'knowledge', id: null, cap: null, reported: true, why: 'off', reason: 'slot-none', names: ['oats.okf'], name: 'oats.okf', overrides: 'workspace' },
     { slot: 'messaging', id: 'oats.aweb', cap: { id: 'oats.aweb', version: '1.17.3', from: { kind: 'package', package: 'oats.aweb', version: '1.17.3' } }, reported: true, why: 'workspace', detail: 'Default team only' },
     { slot: 'tasks', id: null, cap: null, reported: true, why: 'none' }] });
+  // A side card (the soul page and Automations still draw them; the capability page folds its facts since slice 3b).
+  const card = pageCard(doc, 'Card'); card.card.append(pageFacts(doc, [['Key', 'value']])); doc.querySelector('.oats-view').append(card.card);
+  // The capability page's folds are open, so their facts are laid out.
+  for (const fold of doc.querySelectorAll('details.cap-fold')) fold.open = true;
   const root = dom.window.getComputedStyle(doc.documentElement);
   for (const [selector, painted, fg, bg] of [
     ['.page-crumbs', '.page-bar', 'muted', 'surface'],
@@ -1535,7 +1510,11 @@ for (const [name] of palettes) test(`${name}: v4 page bar, cards, facts, used-by
     ['button.page-back', 'button.page-back', 'fg', 'surface'],
     ['.page-tag', '.page-tag', 'fg', 'chip-bg'],
     ['.page-card-title', '.page-card', 'muted', 'surface'],
-    ['.page-kv dt', '.page-card', 'muted', 'surface'],
+    ['.page-card .page-kv dt', '.page-card', 'muted', 'surface'],
+    // Slice 3b: the capability page's origin line, its paragraph and its folds sit on the page's --bg.
+    ['.cap-page-origin .cap-origin', '.oats-view', 'muted', 'bg'], ['.cap-page-where', '.oats-view', 'muted', 'bg'],
+    ['.cap-fold > summary', '.oats-view', 'fg', 'bg'], ['.cap-fold-count', '.oats-view', 'muted', 'bg'],
+    ['.capability-page .page-kv dt', '.oats-view', 'muted', 'bg'],
     ['.page-table-row.head', '.capability-page .page-table', 'muted', 'surface'],
     ['.used-name', 'button.used-row', 'fg', 'surface'],
     ['.used-meta.warn', 'button.used-row', 'warn', 'surface'],
@@ -1545,8 +1524,8 @@ for (const [name] of palettes) test(`${name}: v4 page bar, cards, facts, used-by
     ['.why-tag:not(.soul)', '.why-tag:not(.soul)', 'fg', 'tag-bg'],
     ['.why-tag.soul', '.why-tag.soul', 'primary-fg', 'primary-bg'],
     ['.why-note', '.soul-caps', 'muted', 'surface'],
-    ['.page-why-label', '.capability-page .page-card', 'fg', 'surface'],
-    ['.page-why-note', '.capability-page .page-card', 'muted', 'surface'],
+    ['.page-why-label', '.oats-view', 'fg', 'bg'],
+    ['.page-why-note', '.oats-view', 'muted', 'bg'],
     ['.soul-core .soul-cap-slot', '.soul-core', 'muted', 'surface'],
     ['.soul-core .soul-cap-row.none .soul-cap-id', '.soul-core', 'muted', 'surface'],
     ['.soul-core .soul-cap-row.none .soul-cap-why-note', '.soul-core', 'muted', 'surface'],
@@ -1567,46 +1546,52 @@ for (const [name] of palettes) test(`${name}: v4 page bar, cards, facts, used-by
   dom.window.close();
 });
 
-// Kernel #217: a soul a spawn here would refuse says why on its card and its page, in the warn token.
-for (const [name] of palettes) test(`${name}: the can't-spawn-here notes meet computed AA`, t => {
-  const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><div class="oats-view"><div class="souls"><div class="soul-tile"><button class="soul-card"><span class="sbody"><span class="sproblem">Can't spawn here</span></span></button></div></div>
-    <aside class="soul-inspector soul-page"><div class="inspector-head"><p class="inspector-refusal">Can't spawn here</p></div></aside></div></body></html>`);
-  t.after(() => dom.window.close());
-  const doc = dom.window.document, spawnCSS = spawnViewCSS();
-  for (const source of [css, spawnCSS, inspectorCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
-  const root = dom.window.getComputedStyle(doc.documentElement);
-  const painted = el => { for (let p = el; p; p = p.parentElement) { const bg = dom.window.getComputedStyle(p).background; if (/^var\(--/.test(bg)) return bg.slice(6, -1); } return null; };
-  for (const selector of ['.sproblem', '.inspector-refusal']) {
-    const el = doc.querySelector(selector), bg = painted(el);
-    assert.equal(dom.window.getComputedStyle(el).color, 'var(--warn)', selector); assert.ok(bg, selector);
-    assert.ok(contrast(opaqueChannels(root.getPropertyValue('--warn').trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${selector} on ${bg}`);
-    for (let p = el; p; p = p.parentElement) assert.equal(dom.window.getComputedStyle(p).opacity, '1');
-  }
-});
-
-// Board 3 soul cards: the labelled chips (the default team's muted "· default" too) on the tag tint, and the
-// foot's lines on the card: a running count, a stopped one, and a refusal over its muted running count.
-for (const [name] of palettes) test(`${name}: soul-card chips, the default note and the foot lines meet computed AA`, t => {
+// Slice 3a: the Souls grid's cards (name, what it does, its agents and kind, a refusal in the warn token), its table
+// (a header, a group row, the cells, a refusal, an unreported cell) and a soul page's top block (the facts, Ready as a
+// word or a problem, its Details) and capability rows, each on its actual painted ground.
+for (const [name] of palettes) test(`${name}: the Souls grid, its table and a soul page's top block and rows meet computed AA`, t => {
   const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><div class="oats-view"><div class="souls">
-    <div class="soul-tile" id="refused"><button class="soul-card"><span class="sbody"><span class="schips"><span class="schip" data-default="true"><span class="schip-key">Team</span><b>oats</b><span class="schip-note">· default</span></span><span class="schip"><span class="schip-key">Repo</span><b>agents</b></span></span></span>
-      <span class="sfoot"><span class="sfoot-lines"><span class="sproblem">Can't spawn here · disabled</span><span class="sactivity running">1 instance running</span></span></span></button></div>
-    <div class="soul-tile" id="running"><button class="soul-card"><span class="sfoot"><span class="sactivity running">2 instances running</span></span></button></div>
-    <div class="soul-tile" id="stopped"><button class="soul-card"><span class="sfoot"><span class="sactivity">1 stopped</span></span></button></div></div></div></body></html>`);
+    <button class="soul-card" id="refused"><span class="stitle">writer</span><span class="sdesc">Writes</span><span class="sfoot"><span class="sproblem">Can't spawn here · disabled</span><span class="skind">· developer</span></span></button>
+    <button class="soul-card" id="running"><span class="stitle">dev</span><span class="sfoot"><span class="sactivity running">2 agents running</span><span class="skind">· other</span></span></button>
+    <button class="soul-card" id="stopped"><span class="sfoot"><span class="sactivity">No agents running</span></span></button>
+    <div class="souls-grid"><table class="souls-table"><thead><tr><th>Name</th></tr></thead><tbody><tr><th class="souls-table-group"><h3 class="souls-group-title"><span class="souls-group-name plain">agents</span><span class="souls-group-note">2 souls</span></h3></th></tr>
+      <tr class="soul-row"><td class="name"><button class="soul-row-open">dev</button></td><td class="what">Builds</td><td class="kind">developer</td><td class="agents muted">0</td><td class="problem">disabled</td><td class="muted">—</td></tr></tbody></table></div>
+    <p class="souls-lede">A soul is</p></div>
+    <div class="workspace-page soul-page"><div class="inspector-content inspector-main"><dl class="soul-top"><dt>Ready</dt><dd><span class="strong">Claude</span><span class="muted"> · opus</span><span class="soul-top-note">Set in x</span>
+      <div class="soul-ready"><span class="soul-ready-line problem">disabled</span><details class="soul-ready-details"><summary>Details</summary></details></div></dd></dl>
+      <section class="soul-capabilities"><p class="soul-capabilities-note">Turned off: x</p></section></div></div></div></body></html>`);
   t.after(() => dom.window.close());
   const doc = dom.window.document, spawnCSS = spawnViewCSS();
-  for (const source of [css, spawnCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
+  for (const source of [css, readFileSync(new URL('shell.css', renderer), 'utf8'), spawnCSS, inspectorCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
+  // The soul page's capability rows are the Capabilities page's (slice 3b: capabilityRowElement, on the list's --surface).
+  const capRows = doc.createElement('ul'); capRows.className = 'cap-list';
+  for (const origin of [{ official: false, by: 'oats.okf', reason: null }, { official: true, by: 'OATS', reason: 'oats-repo' }]) {
+    const item = doc.createElement('li');
+    item.append(capabilityRowElement(doc, { row: { name: 'oats.okf', kind: 'package', package: 'oats.okf', description: 'Keeps knowledge' }, core: 'knowledge', default: null, origin }, { onOpen() {} }));
+    capRows.append(item);
+  }
+  doc.querySelector('.soul-capabilities').append(capRows);
   const root = dom.window.getComputedStyle(doc.documentElement);
-  const painted = el => { for (let p = el; p; p = p.parentElement) { const bg = dom.window.getComputedStyle(p).background; if (/^var\(--/.test(bg)) return bg.slice(6, -1); } return null; };
+  const painted = el => { for (let p = el; p; p = p.parentElement) { const bg = dom.window.getComputedStyle(p).background; if (/^var\(--/.test(bg)) return bg.slice(6, -1); } return 'bg'; };
   for (const [selector, fg, bg] of [
-    ['#refused .schip .schip-key', 'muted', 'tag-bg'], ['#refused .schip b', 'fg', 'tag-bg'], ['#refused .schip .schip-note', 'muted', 'tag-bg'],
-    ['#refused .sfoot-lines .sproblem', 'warn', 'surface'], ['#refused .sfoot-lines .sactivity', 'muted', 'surface'],
+    ['#refused .stitle', 'fg', 'surface'], ['#refused .sdesc', 'fg', 'surface'], ['#refused .sproblem', 'warn', 'surface'], ['#refused .skind', 'muted', 'surface'],
     ['#running .sactivity.running', 'fg', 'surface'], ['#stopped .sactivity', 'muted', 'surface'],
+    ['.souls-table thead th', 'muted', 'bg'], ['.souls-table .souls-group-note', 'muted', 'bg'], ['.souls-table td.what', 'fg', 'bg'], ['.souls-table td.kind', 'fg', 'bg'],
+    ['.souls-table td.agents.muted', 'muted', 'bg'], ['.souls-table td.problem', 'warn', 'bg'], ['.souls-table button.soul-row-open', 'fg', 'bg'], ['.souls-lede', 'muted', 'bg'],
+    ['.soul-top dt', 'muted', 'bg'], ['.soul-top dd .strong', 'fg', 'bg'], ['.soul-top dd .muted', 'muted', 'bg'], ['.soul-top .soul-top-note', 'muted', 'bg'],
+    ['.soul-ready-line.problem', 'warn', 'bg'], ['.soul-ready-details > summary', 'muted', 'bg'], ['.soul-capabilities-note', 'muted', 'bg'],
+    ['.soul-capabilities .cap-row-name', 'fg', 'surface'], ['.soul-capabilities .cap-origin:not([data-official])', 'muted', 'surface'], ['.soul-capabilities .cap-official', 'fg', 'surface'],
+    ['.soul-capabilities .cap-tag[data-tag=core]', 'muted', 'surface'], ['.soul-capabilities .cap-row-desc', 'muted', 'surface'],
   ]) {
-    const el = doc.querySelector(selector);
-    assert.equal(dom.window.getComputedStyle(el).color, `var(--${fg})`, selector); assert.equal(painted(el), bg, `${selector} painted`);
+    const el = doc.querySelector(selector); assert.ok(el, selector);
+    const color = dom.window.getComputedStyle(el).color;
+    assert.ok(color === `var(--${fg})` || (fg === 'fg' && ['', 'inherit'].includes(color)), `${selector}: ${color}`); assert.equal(painted(el), bg, `${selector} painted`);
     assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${selector}: ${fg} on ${bg}`);
     for (let p = el; p; p = p.parentElement) assert.equal(dom.window.getComputedStyle(p).opacity, '1');
   }
+  // A hovered table row and a hovered or focused capability row: their text on --surface and --sel.
+  for (const [fg, bg] of [['fg', 'surface'], ['muted', 'surface'], ['warn', 'surface'], ['fg', 'sel'], ['muted', 'sel'], ['warn', 'sel']])
+    assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${fg} on ${bg}`);
 });
 
 // 0.30 launch preferences: the soul page's notes under the facts and the side panel's Harness card
@@ -1736,7 +1721,7 @@ for (const [name] of palettes) test(`${name}: team model 3 card facts, address, 
     ['[data-team="lone"] .ct-fact[data-fact=join] dd.none', '.ct-card', 'muted', 'surface'],
     // The workspace's default: its tag in the brand tint, and where it is set.
     ['[data-team="lab-all"] .ct-tag', '[data-team="lab-all"] .ct-tag', 'accent', 'sel'], ['[data-team="lab-all"] .ct-from', '.ct-card', 'muted', 'surface'],
-    // The card opens its team's page: the label's button, the foot's count, "None of your instances" and the cue.
+    // The card opens its team's page: the label's button, the foot's count, "None of your agents" and the cue.
     ['.ct-name-h button.ct-open', '.ct-card', 'fg', 'surface'], ['[data-team="lab-ai-team"] .ct-sum-count', '.ct-card', 'fg', 'surface'],
     ['[data-team="idle"] .ct-sum-more', '.ct-card', 'muted', 'surface'], ['.ct-go', '.ct-card', 'muted', 'surface'],
     // The souls: table in its card: the headers, the pattern (its folder muted, "* every soul"), the team chips and "none".
@@ -2000,17 +1985,33 @@ for (const [name] of palettes) test(`${name}: capability Contents navigation, re
     assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${name} ${selector}`);
     for (let parent = el; parent; parent = parent.parentElement) assert.equal(dom.window.getComputedStyle(parent).opacity, '1');
   }
-  // Provides: one card, a row per kind, every name its own code chip.
+  // Slice 3b: the Commands and Hooks folds (every name its own code chip, "None" on the page), the Skills rows, and the
+  // whole skill in the pane (its title, hint and files on the page; its reader on the viewer's ground).
   const page = doc.createElement('section'); doc.querySelector('.oats-view').append(page);
-  renderCapabilityPage(page, { row: { name: 'oats.aweb', kind: 'package', package: 'oats.aweb', skills: ['oats-aweb'], commands: ['join'], hooks: [] }, status: null, instances: [], root: '/ws', onBack() {} });
-  for (const [selector, painted, fg, bg] of [['.provides-chip', '.provides-chip', 'fg', 'tag-bg'], ['.provides-kind', '.provides-card', 'muted', 'surface'], ['.provides-items .page-note', '.provides-card', 'muted', 'surface']]) {
-    const el = page.querySelector(selector), surface = page.querySelector(painted); assert.ok(el && surface, selector);
+  renderCapabilityPage(page, { row: { name: 'oats.aweb', kind: 'package', package: 'oats.aweb', skills: ['oats-aweb'], commands: ['join'], hooks: [] }, status: null, instances: [], root: '/ws', onBack() {},
+    skills: contents.skills, skillView: contents.skillView });
+  for (const fold of page.querySelectorAll('details.cap-fold')) fold.open = true;
+  const skillRow = page.querySelector('button.cap-skill-row');
+  for (const [selector, painted, fg, bg] of [['.provides-chip', '.provides-chip', 'fg', 'tag-bg'], ['.provides-items .page-note', '.oats-view', 'muted', 'bg'],
+    ['.cap-skill-name', 'button.cap-skill-row', 'fg', 'surface'], ['.cap-skill-desc', 'button.cap-skill-row', 'muted', 'surface']]) {
+    const el = page.querySelector(selector), surface = page.querySelector(painted) || doc.querySelector(painted); assert.ok(el && surface, selector);
     const color = dom.window.getComputedStyle(el).color;
     assert.ok(color === `var(--${fg})` || (fg === 'fg' && ['', 'var(--fg)'].includes(color)), `${selector}: ${color}`);
     assert.equal(dom.window.getComputedStyle(surface).background.replace(/^.*(var\(--[\w-]+\)).*$/, '$1'), `var(--${bg})`, painted);
     assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${name} ${selector}`);
   }
-  // Provides › Trigger sources (feature trigger-sources): the manifest's words quoted (the lead-in, the text, the kernel's
+  skillRow.click(); await new Promise(r => setTimeout(r, 0)); await new Promise(r => setTimeout(r, 0));
+  for (const [selector, painted, fg, bg] of [['.skill-view-title', '.oats-view', 'fg', 'bg'], ['.skill-view-hint', '.oats-view', 'muted', 'bg'],
+    ['.skill-view .cap-reader-path', '.skill-view-reader', 'fg', 'bg'], ['.skill-view .cap-reader-line', '.skill-view-reader', 'muted', 'bg'], ['button.skill-back', 'button.skill-back', 'fg', 'surface']]) {
+    const el = page.querySelector(selector), surface = selector === '.skill-view-title' || selector === '.skill-view-hint' ? doc.querySelector(painted) : page.querySelector(painted); assert.ok(el && surface, selector);
+    const color = dom.window.getComputedStyle(el).color;
+    assert.ok(color === `var(--${fg})` || (fg === 'fg' && ['', 'var(--fg)'].includes(color)), `${selector}: ${color}`);
+    assert.equal(dom.window.getComputedStyle(surface).background.replace(/^.*(var\(--[\w-]+\)).*$/, '$1') || 'var(--bg)', `var(--${bg})`, painted);
+    assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${name} ${selector}`);
+    for (let parent = el; parent; parent = parent.parentElement) assert.equal(dom.window.getComputedStyle(parent).opacity, '1');
+  }
+  contents.closeSkill({ focus: false });
+  // Triggers › Trigger sources (feature trigger-sources): the manifest's words quoted (the lead-in, the text, the kernel's
   // note under it), and the plain lines of a declaration that can't be read (the Desktop's, then the kernel's).
   const quoted = doc.createElement('div'), unreadable = doc.createElement('div');
   fillTriggerSourcesRow(quoted, { sources: [{ name: 'harvest-branches', events: ['opened', 'updated'], description: 'Ready harvest branches', problems: [] },
@@ -2037,16 +2038,16 @@ for (const [name] of palettes) test(`${name}: capability Contents navigation, re
   contents.dispose(); dom.window.close();
 });
 
-// Spec D (B1): the soul page's Instructions — the Contents card's grammar on the soul page, its own copy (the
-// group label, the file's repository path, the truncated flag, the unreadable line) on the same grounds.
+// Slice 3a: the soul page's two instruction tabs (each a reader with its section list) and its folded Skills (the
+// Contents card's tree and reader), their own copy on the same grounds.
 import { createSoulInstructions, soulInstructionsCSS } from '../renderer/soul-instructions.mjs';
-for (const [name] of palettes) test(`${name}: the soul page's Instructions section meets computed AA without opacity`, () => {
+for (const [name] of palettes) test(`${name}: the soul page's instruction tabs and Skills meet computed AA without opacity`, () => {
   const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><div class="oats-view"><div class="workspace-page soul-page"><div class="inspector-content inspector-main"></div></div></div></body></html>`, { pretendToBeVisual: true });
   const doc = dom.window.document;
   for (const source of [css, inspectorCSS, pageCardCSS, capabilityPageCSS, capabilityContentsCSS, soulInstructionsCSS, MARKDOWN_CSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
   const section = createSoulInstructions(doc, { openExternal() {}, canOpenCapability: () => true, openCapability() {} }); doc.querySelector('.inspector-main').append(section.element);
   const soul = text => ({ name: 'release-manager', path: 'souls/release-manager', instructions: { file: '/cache/AGENTS.md', text, truncated: true } });
-  section.update(soul('---\nname: x\n---\n# T\n\n[a](https://example.com)\n'));
+  section.update(soul('---\nname: x\n---\n# T\n\n[a](https://example.com)\n\n## U\n\n### V\n'));
   const root = dom.window.getComputedStyle(doc.documentElement);
   const check = list => { for (const [selector, painted, fg, bg] of list) {
     const el = doc.querySelector(selector), surface = doc.querySelector(painted); assert.ok(el && surface, selector);
@@ -2056,61 +2057,68 @@ for (const [name] of palettes) test(`${name}: the soul page's Instructions secti
     assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${name} ${selector}`);
     for (let parent = el; parent; parent = parent.parentElement) assert.equal(dom.window.getComputedStyle(parent).opacity, '1');
   } };
+  const own = '[role=tabpanel][data-tab=own]', composed = '[role=tabpanel][data-tab=composed]';
   check([
-    ['.soul-instructions .page-section-lead', '.workspace-page', 'muted', 'bg'],
-    ['.cap-contents-group-label', '.cap-contents', 'muted', 'surface'],
-    ['[aria-selected=true] .cap-node-name', '[aria-selected=true] > .cap-node', 'fg', 'sel'],
-    ['[aria-selected=true] .cap-node-file', '[aria-selected=true] > .cap-node', 'muted', 'sel'],
-    ['.cap-reader-path', '.cap-reader-head', 'fg', 'bg'],
-    ['.cap-reader-flag', '.cap-reader-head', 'warn', 'bg'],
-    ['.cap-fm th', '.cap-contents-reader', 'muted', 'bg'],
-    ['.cap-reader-body .mdv a', '.cap-contents-reader', 'accent', 'bg'],
+    ['.soul-tab[aria-selected=true]', '.workspace-page', 'fg', 'bg'],
+    ['.soul-tab[aria-selected=false]', '.workspace-page', 'muted', 'bg'],
+    [`${own} .soul-tab-lead`, '.workspace-page', 'muted', 'bg'],
+    [`${own} .soul-doc-link`, `${own} .soul-doc`, 'fg', 'bg'],
+    [`${own} li[data-depth="1"] .soul-doc-link`, `${own} .soul-doc`, 'muted', 'bg'],
+    [`${own} .cap-reader-path`, `${own} .cap-reader-head`, 'fg', 'bg'],
+    [`${own} .cap-reader-flag`, `${own} .cap-reader-head`, 'warn', 'bg'],
+    [`${own} .cap-fm th`, `${own} .cap-contents-reader`, 'muted', 'bg'],
+    [`${own} .cap-reader-body .mdv a`, `${own} .cap-contents-reader`, 'accent', 'bg'],
+    [`${composed} .soul-panel-note`, '.workspace-page', 'muted', 'bg'],
   ]);
+  // A focused or hovered section link: its text on --sel and --surface-2.
+  for (const [fg, bg] of [['fg', 'sel'], ['fg', 'surface-2'], ['muted', 'sel'], ['muted', 'surface-2']])
+    assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${name} ${fg} on ${bg}`);
   section.update({ ...soul(null), instructions: { file: '/cache/AGENTS.md', text: null, truncated: false } });
-  check([['.cap-reader-line', '.cap-contents-reader', 'muted', 'bg']]);
-  assert.equal(doc.querySelector('.cap-reader-line').textContent, "This soul's AGENTS.md could not be read.");
-  // B2: the composed document's part headers ("From this soul" / "Injected by …", file, size, the cut flag) and the
+  check([[`${own} .cap-reader-line`, `${own} .cap-contents-reader`, 'muted', 'bg']]);
+  assert.equal(doc.querySelector(`${own} .cap-reader-line`).textContent, "This soul's AGENTS.md could not be read.");
+  // The composed document's part headers ("From this soul" / "Injected by …", file, size, the cut flag) and the
   // past-the-limit line. A kernel-shaped answer: the body, a capability block cut by the cap, a block wholly past it.
   const body = '# T\n\n', block = '<!-- oats:capability:oats.core -->\n## Core\n\nText that the cap cuts.\n<!-- /oats:capability:oats.core -->\n\n';
   const cap = body.length + 40, text = (body + block).slice(0, cap);
   section.update({ ...soul('# T\n'), composedInstructions: { file: null, text, truncated: true, resolution: 'r', body: { start: 0, end: body.length, truncated: false },
     sources: [{ source: 'capability:oats.core', file: '.oats/modules/oats.core/inject.md', start: body.length, end: cap, truncated: true },
       { source: 'work-mode:worktree', file: null, start: cap, end: cap, truncated: true }] } });
-  doc.querySelector('[data-path="composed"] .cap-node-name').click();
+  section.setTab('composed');
   check([
-    ['.cap-tree [role=group] [role=treeitem] .cap-node-name.mono', '.cap-contents', 'fg', 'surface'],
-    ['[data-path=composed][aria-selected=true] > .cap-node .cap-node-desc', '[data-path=composed][aria-selected=true] > .cap-node', 'muted', 'sel'],
-    ['.soul-part[data-source=soul] .soul-part-title', '.cap-contents-reader', 'fg', 'bg'],
-    ['.soul-part[data-source=soul] .soul-part-file', '.cap-contents-reader', 'fg', 'bg'],
-    ['.soul-part[data-source^=capability] .soul-part-size', '.cap-contents-reader', 'muted', 'bg'],
-    ['.soul-part[data-source^=capability] .soul-part-flag', '.cap-contents-reader', 'warn', 'bg'],
-    ['.soul-part[data-source^=work-mode] .cap-reader-line', '.cap-contents-reader', 'muted', 'bg'],
+    [`${composed} .soul-doc-link`, `${composed} .soul-doc`, 'fg', 'bg'],
+    ['.soul-part[data-source=soul] .soul-part-title', `${composed} .cap-contents-reader`, 'fg', 'bg'],
+    ['.soul-part[data-source=soul] .soul-part-file', `${composed} .cap-contents-reader`, 'fg', 'bg'],
+    ['.soul-part[data-source^=capability] .soul-part-size', `${composed} .cap-contents-reader`, 'muted', 'bg'],
+    ['.soul-part[data-source^=capability] .soul-part-flag', `${composed} .cap-contents-reader`, 'warn', 'bg'],
+    ['.soul-part[data-source^=work-mode] .cap-reader-line', `${composed} .cap-contents-reader`, 'muted', 'bg'],
   ]);
-  // #1144: the Skills group (the shared skill item, "more files", a selected file) and a cut skill file's head; then its note in place.
+  // #1144: the Skills (the shared skill item, "more files", a selected file) and a cut skill file's head; then its note in place.
   section.update({ ...soul('# T\n'), skills: [{ name: 'oats-pr-review', path: 'skills/oats-pr-review', description: 'Reviews. More.', filesTruncated: true,
     files: [{ path: 'skills/oats-pr-review/SKILL.md', bytes: 300000, text: '# R\n', binary: false, truncated: true }] }] });
+  doc.querySelector('.soul-skills').open = true;
   doc.querySelector('[data-skill] > .cap-node').click();
   doc.querySelector('[data-path="file:skills/oats-pr-review/SKILL.md"] > .cap-node').click();
   check([
-    ['[data-skill] > .cap-node .cap-node-name', '.cap-contents', 'fg', 'surface'],
-    ['[data-skill] > .cap-node .cap-node-desc', '.cap-contents', 'muted', 'surface'],
-    ['.cap-more', '.cap-contents', 'muted', 'surface'],
+    ['.soul-skills > summary', '.workspace-page', 'fg', 'bg'],
+    ['[data-skill] > .cap-node .cap-node-name', '.soul-skills .cap-contents', 'fg', 'surface'],
+    ['[data-skill] > .cap-node .cap-node-desc', '.soul-skills .cap-contents', 'muted', 'surface'],
+    ['.cap-more', '.soul-skills .cap-contents', 'muted', 'surface'],
     ['[aria-selected=true] .cap-node-name.mono', '[aria-selected=true] > .cap-node', 'fg', 'sel'],
-    ['.cap-reader-path', '.cap-reader-head', 'fg', 'bg'],
-    ['.cap-reader-flag', '.cap-reader-head', 'warn', 'bg'],
+    ['.soul-skills .cap-reader-path', '.soul-skills .cap-reader-head', 'fg', 'bg'],
+    ['.soul-skills .cap-reader-flag', '.soul-skills .cap-reader-head', 'warn', 'bg'],
   ]);
   section.update({ ...soul('# T\n'), skills: [] });
-  check([['[role=tree] .cap-contents-group-label', '.cap-contents', 'muted', 'surface'], ['[role=tree] .cap-contents-note', '.cap-contents', 'muted', 'surface'],
-    // The two sections' headings ("Defined in this soul", "Composed for an instance"); the rule between them is a border, not text.
-    ['[role=tree] .soul-section-title', '.cap-contents', 'fg', 'surface']]);
+  check([['[role=tree] .cap-contents-note', '.soul-skills .cap-contents', 'muted', 'surface'],
+    // The two sections' headings ("Defined in this soul", "Every skill an agent gets"); the rule between them is a border, not text.
+    ['[role=tree] .soul-section-title', '.soul-skills .cap-contents', 'fg', 'surface']]);
   section.dispose(); dom.window.close();
 });
 
 // #517: Add a machine (every step status) and the Setup tab's Registered machines box (a row, its states and the Remove confirmation).
 import { openAddMachineDialog, addMachineCSS } from '../renderer/add-machine-dialog.mjs';
 import { createWorkspaceMachines, machinesCSS, resetMachineChecks } from '../renderer/workspace-machines.mjs';
-for (const [name] of palettes) test(`${name}: Add a machine and the Registered machines box meet computed AA without opacity`, async t => {
-  const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><div class="oats-view"><div class="setup" id="setup"></div></div></body></html>`, { pretendToBeVisual: true });
+for (const [name] of palettes) test(`${name}: Add a machine and the Machines list meet computed AA without opacity`, async t => {
+  const dom = new JSDOM(`<!doctype html><html data-theme="${name}"><body><div class="oats-view"><div id="setup"></div></div></body></html>`, { pretendToBeVisual: true });
   const doc = dom.window.document;
   for (const source of [css, readFileSync(new URL('shell.css', renderer), 'utf8'), setupCSS, machinesCSS]) { const style = doc.createElement('style'); style.textContent = source; doc.head.append(style); }
   const steps = [{ step: 'ssh', status: 'ok' }, { step: 'oats', status: 'done', detail: 'installed' },
@@ -2128,8 +2136,31 @@ for (const [name] of palettes) test(`${name}: Add a machine and the Registered m
   const folder = doc.querySelector('.machine-folder'); folder.value = '~/k'; folder.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
   doc.querySelector('.machine-primary').click();
   for (let i = 0; i < 10; i++) await new Promise(resolve => setImmediate(resolve));
-  doc.querySelector('[data-machine="down"] .machine-remove').click();
   const root = dom.window.getComputedStyle(doc.documentElement);
+  const measure = list => { for (const [selector, painted, fg, bg] of list) {
+    const el = doc.querySelector(selector), surface = doc.querySelector(painted); assert.ok(el && surface, selector);
+    assert.equal(dom.window.getComputedStyle(el).color, `var(--${fg})`, selector);
+    assert.equal(dom.window.getComputedStyle(surface).background.replace(/^.*(var\(--[\w-]+\)).*$/, '$1'), `var(--${bg})`, painted);
+    assert.ok(contrast(opaqueChannels(root.getPropertyValue(`--${fg}`).trim()), opaqueChannels(root.getPropertyValue(`--${bg}`).trim())) >= 4.5, `${name} ${selector}`);
+    for (let parent = el; parent; parent = parent.parentElement) assert.equal(dom.window.getComputedStyle(parent).opacity, '1', selector);
+  } };
+  // The Machines list (slice 3b): this computer and each machine a row on --surface; an open machine's Check and Remove.
+  doc.querySelector('[data-machine="up"] .machine-row').click();
+  measure([
+    ['.machines-title', '.oats-view', 'fg', 'bg'], ['.machines-lead', '.oats-view', 'muted', 'bg'], ['.machines-add', '.oats-view', 'accent', 'bg'],
+    ['[data-machine="up"] .machine-cell.name', '[data-machine="up"] .machine-row', 'fg', 'surface'],
+    ['[data-machine="up"] .machine-cell.version', '[data-machine="up"] .machine-row', 'muted', 'surface'],
+    ['[data-machine="up"] .machine-state', '[data-machine="up"] .machine-row', 'muted', 'surface'], ['[data-machine="up"] .machine-state .shell-icon', '[data-machine="up"] .machine-row', 'ok', 'surface'],
+    ['[data-machine="down"] .machine-state', '[data-machine="down"] .machine-state', 'warn', 'attn-bg'],
+    ['[data-machine="up"] .machine-facts dt', '.machines-list', 'muted', 'surface'], ['[data-machine="up"] .machine-facts dd', '.machines-list', 'fg', 'surface'],
+    ['[data-machine="up"] .machine-check', '[data-machine="up"] .machine-check', 'fg', 'surface'],
+  ]);
+  doc.querySelector('[data-machine="down"] .machine-row').click();
+  doc.querySelector('[data-machine="down"] .machine-remove').click();
+  measure([
+    ['.machine-confirm p', '.machine-confirm', 'fg', 'surface-2'], ['.machine-confirm-cancel', '.machine-confirm-cancel', 'fg', 'surface'],
+    ['.machine-confirm-remove', '.machine-confirm-remove', 'primary-fg', 'danger'],
+  ]);
   for (const [selector, painted, fg, bg] of [
     ['.machine-dialog h2', '.machine-dialog', 'fg', 'surface'], ['.machine-lede', '.machine-dialog', 'muted', 'surface'],
     ['.machine-field span', '.machine-dialog', 'muted', 'surface'], ['.machine-install-row span', '.machine-dialog', 'fg', 'surface'],
@@ -2143,15 +2174,6 @@ for (const [name] of palettes) test(`${name}: Add a machine and the Registered m
     ['.machine-step-code', '.machine-phase', 'muted', 'surface-2'], ['.machine-command code', '.machine-command code', 'fg', 'surface'],
     ['.machine-status', '.machine-dialog', 'muted', 'surface'], ['.machine-copy', '.machine-copy', 'fg', 'surface'],
     ['.machine-primary', '.machine-primary', 'primary-fg', 'primary-bg'], ['.machine-cancel', '.machine-cancel', 'fg', 'surface'],
-    // The Registered machines box: a solid --surface card (in Setup's This computer zone), Setup's members grammar.
-    ['.setup-machines .setup-box-head h4', '.setup-machines', 'fg', 'surface'], ['.setup-machines .setup-box-lead', '.setup-machines', 'muted', 'surface'],
-    ['[data-machine="up"] .machine-cell.name', '.setup-machines', 'fg', 'surface'], ['[data-machine="up"] .machine-cell.ssh', '.setup-machines', 'fg', 'surface'],
-    ['[data-machine="up"] .machine-cell.folder', '.setup-machines', 'muted', 'surface'], ['[data-machine="up"] .machine-cell.version', '.setup-machines', 'muted', 'surface'],
-    ['[data-machine="up"] .machine-state', '.setup-machines', 'muted', 'surface'], ['[data-machine="up"] .machine-state .shell-icon', '.setup-machines', 'ok', 'surface'],
-    ['[data-machine="down"] .machine-state', '[data-machine="down"] .machine-state', 'warn', 'attn-bg'],
-    ['[data-machine="up"] .machine-check', '.setup-machines', 'accent', 'surface'], ['.machines-add', '.setup-machines', 'accent', 'surface'],
-    ['.machine-confirm p', '.machine-confirm', 'fg', 'surface-2'], ['.machine-confirm-cancel', '.machine-confirm-cancel', 'fg', 'surface'],
-    ['.machine-confirm-remove', '.machine-confirm-remove', 'primary-fg', 'danger'],
   ]) {
     const el = doc.querySelector(selector), surface = doc.querySelector(painted); assert.ok(el && surface, selector);
     assert.equal(dom.window.getComputedStyle(el).color, `var(--${fg})`, selector);

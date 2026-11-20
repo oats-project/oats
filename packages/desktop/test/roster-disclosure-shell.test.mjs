@@ -86,14 +86,14 @@ test("by default only the top-level rows are drawn: each root with children is c
     assert.equal(r.dataset.rosterCollapsed, "1");
     assert.ok(m, `${name} wears the disclosure`);
     assert.equal(m.parentElement.className, "ctx-name-line", "on the name line");
-    // Before the name: the row tools overlay the row's end on hover and focus (.ctx-row-tools), so a mark after a
-    // long name sat under a stopped row's Start… (review round 3).
-    assert.equal(m.parentElement.firstElementChild, m, "first, before the name");
-    assert.equal(m.nextElementSibling.className, "ctx-name");
+    // Right after the name (the product owner, 2026-11-20: "so that all instance names look aligned on the left"):
+    // the name leads its line, as on a row with no children; an instance row has no tools over its end (slice 1).
+    assert.equal(m.parentElement.firstElementChild.className, "ctx-name", "the name first");
+    assert.equal(m.previousElementSibling.className, "ctx-name", "the mark right after the name");
     assert.ok(m.querySelector(":scope > svg.ctx-disclosure-chevron"), "a chevron");
     assert.equal(m.querySelector(".ctx-disclosure-count").textContent, String(count), "every row under it, at every depth");
     assert.equal(m.getAttribute("aria-hidden"), "true", "the mark is drawn, its words are said after the name");
-    assert.equal(m.parentElement.querySelector(":scope > .ctx-name + .sr-only").textContent, `, ${count} below`);
+    assert.equal(m.parentElement.querySelector(":scope > .ctx-name + .ctx-disclosure + .sr-only").textContent, `, ${count} below`);
     assert.match(spokenText(r), new RegExp(`^${name}, ${count} below`), "a screen reader hears the count after the name");
   }
   const solo = u.row("solo");

@@ -190,7 +190,7 @@ export function holdTerminalResizes() {
 }
 
 export function createTerminalTab({ desk, term, tmux, remote, serverLabel, wrap, isActive, ownsFocus = () => false,
-  focusInput = () => term.focus(), fit, observe, interceptKey, onError = () => {},
+  focusInput = () => term.focus(), fit, observe, interceptKey, onError = () => {}, onLink = () => {},
   clock = { now: () => Date.now(), setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: t => clearTimeout(t) } }) {
   let offData, offExit, unobserve, detachAttachments, bannerEl, stripEl, liveEl;
   // The current lease's output gate (terminal-sync.mjs): a synchronized redraw reaches xterm whole.
@@ -278,6 +278,9 @@ export function createTerminalTab({ desk, term, tmux, remote, serverLabel, wrap,
     if (term.cols === cols && term.rows === rows) sendSize();
   };
   function wait() {
+    // The Desktop UI rework, slice 4: the first drop of an episode is told once (the shell says it on the status line
+    // when this is the terminal in front); the countdown strip in the pane is unchanged.
+    if (link === 'connected') { try { onLink({ state: 'disconnected', server }); } catch { /* the strip says it */ } }
     link = 'waiting';
     dueAt = clock.now() + RECONNECT_DELAYS_MS[Math.min(failures, RECONNECT_DELAYS_MS.length - 1)];
     failures++;
@@ -382,7 +385,10 @@ export function createTerminalTab({ desk, term, tmux, remote, serverLabel, wrap,
     if (remote) term.options.disableStdin = false;
     // tmux redraws the screen for the new client: the scrollback is left as it is.
     desk.termResize(h, term.cols, term.rows);
-    if (link !== 'connected') { link = 'connected'; failures = 0; noAnswers = 0; clearStrip(); announce(`Reconnected to ${server}.`); }
+    if (link !== 'connected') {
+      link = 'connected'; failures = 0; noAnswers = 0; clearStrip(); announce(`Reconnected to ${server}.`);
+      try { onLink({ state: 'reconnected', server }); } catch { /* the pane said it */ }
+    }
     focus();
   }
   return {

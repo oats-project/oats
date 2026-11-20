@@ -47,20 +47,22 @@ any checked-in icon's pixels stop matching what the source derives.
 
 The shell has three navigation contexts:
 
-- **Workspace › Machines** (the Active overview, then the Deployments page,
-  before 2026-10-26) — a tab of the Workspace page, before Setup (⌘1 / Ctrl+1): a
-  fitted, zoomable tidy tree of running and idle instances with
-  `parentInstance` spawn relationships, one tab per deployment. Agent boxes can
-  be repositioned freely; edges follow live.
+- **Workspace › Machines** — a tab of the Workspace page, before Setup (⌘1 / Ctrl+1).
+  It opens on the list of the computers the workspace runs on (reachable, the OATS
+  version; Enter opens one with Check and Remove). Its **Map** (the
+  Active overview, then the Deployments page, before 2026-10-26) is a fitted, zoomable
+  tidy tree of running and idle instances with `parentInstance` spawn relationships,
+  one tab per deployment. Agent boxes can be repositioned freely; edges follow live.
 - **Instances** — the shell's single sidebar becomes a compact, recursively
   nested roster. Selecting a running instance opens its direct tmux-attach
   xterm terminal in the main area. Terminal tabs are scoped to this context.
 - **Home** (where a window opens, the Desktop UI rework's slice 2) — what needs you (the agents waiting on you,
   then the running ones) and what you have (a count for each part of the workspace, each opening its
   Workspace tab), Home › Agents (every agent), and a first run for a workspace with no agents yet.
-- **Soul roster** (Workspace › Souls) — searchable soul cards with explicit **Spawn** and
-  **View brain** actions. Brain and markdown artifacts are scoped to this
-  context; the markdown reader is the flagship file surface.
+- **Souls** (Workspace › Souls) — the souls grouped by where they come from, in kind
+  order (`packages/client/soul-role.mjs`), as a searchable grid of cards or a table (`v`); a soul's page shows its
+  facts, its capabilities as one list of rows and its two prompts as two tabs, its skills folded below. Brain and
+  markdown artifacts are scoped to this context; the markdown reader is the flagship file surface.
 
 - `main.mjs` — Electron main: server management (always starts the bundled server,
   never uses one it did not start), IPC `api` proxy, node-pty terminals
@@ -311,8 +313,9 @@ catalog (`soul-catalog.mjs`, over the holding rules of `keyed-catalog.mjs`),
 the row each soul is listed as (`soul-rows.mjs` `soulRows`), the inspect
 boundary and its cache (`inspect-boundary.mjs`, `inspect-cache.mjs`), the gate
 for a soul's composed AGENTS.md and skills (`composed-gate.mjs`), the launch
-vocabulary (`launch-view.mjs`) and what is said about a soul
-(`soul-facts.mjs`, which the page loads). The catalog, the cache and the
+vocabulary (`launch-view.mjs`), what is said about a soul
+(`soul-facts.mjs`, which the page loads) and a soul's kind and list order
+(`soul-role.mjs`, a name rule until OATS reports a role). The catalog, the cache and the
 boundary are factories: a client makes its own, with its own terms and its
 own `exec`, and two of them share nothing. The boundary holds nothing itself,
 so `server/capabilities.mjs` makes one per request around the backend's
@@ -345,8 +348,11 @@ same holding rules: a factory made with the client's terms and an optional
 capability row's rules (`capability-rows.mjs`: its source and group, the
 sections and the search, and who uses it, `capabilityUsers`), and its facts as
 the capability page shows them (`capability-facts.mjs` `capabilityFacts`, with
-the page's own words in `CAPABILITY_COPY`). The backend makes the table and owns
-it; the page loads the other two. And it holds the house fuzzy matcher
+the page's own words in `CAPABILITY_COPY`). The Capabilities list's order and tags
+(`capability-list.mjs`: core first, the workspace's defaults) and who made a
+capability (`capability-origin.mjs` `capabilityOrigin`: official from the catalog pin or
+the OATS repository, else "by <source>") are there too. The backend makes the table and owns
+it; the page loads the others. And it holds the house fuzzy matcher
 (`subsequence-score.mjs` `subsequenceScore`), one copy for the Desktop's palette
 and Quick Open and the TUI's palette and switcher.
 

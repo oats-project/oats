@@ -128,24 +128,23 @@ test("the kernel declares its Node floor, the lock carries it, and no package de
 });
 
 test("v2 preparation aligns standalone OKF and Git-only theory catalog pins", () => {
+  const catalog = json("package-catalog.json");
+  const okfVersion = catalog.packages["oats.okf"].ref.slice(1);
   for (const cap of MIRROR_PATHS) {
-    assert.equal(json(`${cap}/oats.json`).version, "6.2.0");
+    assert.equal(json(`${cap}/oats.json`).version, okfVersion);
     assert.equal(json(`${cap}/oats.json`).compatibility.oats, ">=0.69.2", `${cap}: OKF 5.6.0+ package souls say background:, which a kernel before 0.69.2 refuses; provider CI separately qualifies the real kernel`);
   }
-  assert.equal(json("package-catalog.json").packages["oats.okf"].ref, "v6.2.0");
   // The getting-started skill writes a workspace file pinning oats.framework only (#1314): that version is the catalog's.
   const gettingStarted = readFileSync(join(ROOT, "skills/oats-getting-started/SKILL.md"), "utf8");
-  assert.match(gettingStarted, /^  oats\.framework: v1\.26\.0\b/m, "the getting-started skill shows the catalog's oats.framework version");
-  const catalog = json("package-catalog.json");
+  assert.equal(gettingStarted.match(/^  oats\.framework: (v\S+)/m)?.[1], catalog.packages["oats.framework"].ref.split("/").at(-1), "the getting-started skill shows the catalog's oats.framework version");
   const onboarding = readFileSync(join(ROOT, "oats-package/capabilities/oats-setup/skills/oats-onboarding/SKILL.md"), "utf8");
-  const okfVersion = catalog.packages["oats.okf"].ref.slice(1);
   assert.ok(onboarding.includes("`oats.okf` " + okfVersion), "onboarding names the catalog's OKF release");
   assert.ok(onboarding.includes("oats.okf: v" + okfVersion), "onboarding's workspace example pins that release");
   const okfFloor = json(`${MIRROR_PATHS[0]}/oats.json`).compatibility.oats.replace(/^>=/, "");
   assert.ok(onboarding.includes("kernel ≥ " + okfFloor), "onboarding carries the mirrored provider's kernel floor");
   assert.equal(catalog.packages["oats.knowledge-theory"], undefined, "the theory package identity was renamed to oats.framework");
   const framework = catalog.packages["oats.framework"];
-  assert.equal(framework.ref, "oats-framework/v1.26.0", "catalog uses the published distribution tag, not a pending kernel release tag");
+  assert.match(framework.ref, /^oats-framework\/v\d+\.\d+\.\d+$/, "catalog names a published distribution tag; a prep manifest may advance before the pin");
   assert.equal(framework.path, "oats-package");
   for (const id of ["oats.knowledge-theory", "oats.core", "oats.setup", "oats.onboarding"]) assert.equal(catalog.capabilities[id], "oats.framework");
 });

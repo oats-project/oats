@@ -19,7 +19,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 // all post-sync reads use installed/materialized bytes after their deletion.
 import { CAPABILITY_PATH, EXPERT_PATH, SKILL_PATH, checkKnowledgeTheoryPackage, checkReferenceClosure, treeFiles } from "./check-knowledge-theory-package.mjs";
 import { checkJavaScript, checkKernelPackFiles } from "./check-package-dry-runs.mjs";
-import { CAPABILITY_PATHS, capabilityEntries, checkOkfMirror, checkOkfPayload, materializeOkfGitPayload, payloadEntries } from "./check-okf-mirror.mjs";
+import { checkMirrors } from "./check-mirrors.mjs";
+import { CAPABILITY_PATHS, capabilityEntries, checkOkfPayload, materializeOkfGitPayload, payloadEntries } from "./check-okf-mirror.mjs";
 
 const started = Date.now();
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -124,7 +125,7 @@ try {
   // The "official" oats.okf is the checkout's verified mirror (mirrors/),
   // materialized as the exact standalone Git payload: never invent wrapper
   // bytes or synthesize CLAUDE.md.
-  const inventory = checkOkfMirror({ repoRoot: repo });
+  const inventory = checkMirrors({ repoRoot: repo })["oats.okf"];
   const officialRepo = join(room, "official", "oats-okf");
   const payload = join(officialRepo, "oats-package");
   materializeOkfGitPayload(payload, { repoRoot: repo });
@@ -135,17 +136,11 @@ try {
   const pinnedRef = packedCatalog.packages?.["oats.okf"]?.ref;
   const mirroredVersion = readJson(join(payload, "capabilities/oats-okf/oats.json")).version;
   assert.equal(pinnedRef, `v${mirroredVersion}`, "okf mirror and packed official catalog version drift");
-  assert.equal(mirroredVersion, "6.2.0");
-  // The PACKED tarball's catalog carries this release's provider pins, each equal to the checkout's mirror of it.
-  for (const [id, slug, version] of [["oats.aweb", "oats-aweb", "1.45.0"], ["oats.apps", "oats-folio", "1.0.0"], ["oats.apps", "oats-library", "1.0.0"]]) {
-    const mirrored = readJson(join(repo, "mirrors", slug, "oats.json")).version;
-    assert.equal(mirrored, version, `${id}: the mirror is ${mirrored}`);
-    assert.equal(packedCatalog.packages?.[id]?.ref, `v${version}`, `${id}: the packed catalog pins ${packedCatalog.packages?.[id]?.ref}`);
-  }
-  // The frozen oats.engineering keeps its catalog entry, so existing pins resolve; this
-  // workspace doesn't pin it, so the checkout keeps no mirror of it.
-  assert.equal(packedCatalog.packages?.["oats.engineering"]?.ref, "v1.18.0", "the packed catalog keeps the frozen oats.engineering at v1.18.0");
-  for (const slug of ["oats-engineering-expert", "oats-developer", "oats-code-review", "oats-maintainer"]) assert.ok(!existsSync(join(repo, "mirrors", slug)), `mirrors/${slug}: no mirror of an unpinned package`);
+
+  // Every packed pin equals the checkout catalog; each mirrored payload has
+  // already passed the complete offline byte/mode/file-set verification.
+  const sourceCatalog = readJson(join(repo, "package-catalog.json"));
+  assert.deepEqual(packedCatalog, sourceCatalog, "packed catalog differs from the reviewed source catalog");
   const okfCommit = gitRepo(officialRepo, "okf");
   const okfTag = `v${mirroredVersion}`;
   run("git", ["-C", officialRepo, "tag", okfTag]);

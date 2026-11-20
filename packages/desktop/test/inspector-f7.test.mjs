@@ -230,15 +230,15 @@ test('soul page: team-model-2 shows "Teams here" from the soul teams route; with
   const v2 = await page();
   const card = v2.querySelector('[data-card="Teams here"]');
   assert.ok(card, 'the Teams here card');
-  assert.equal(v2.querySelector('[data-card="Teams"]'), null, 'in place of the 0.29 card');
+  assert.equal(card.closest('details.soul-teams-details')?.parentElement?.dataset.fact, 'teams', 'folded under the top block\'s Teams row (slice 3a)');
   assert.deepEqual(urls.filter(([url]) => url === '/api/workspace-soul-teams'), [['/api/workspace-soul-teams', { soul: 'release-manager', action: 'show' }]]);
   assert.equal(card.querySelector('.sth-default').textContent, "Default: mine (the workspace's default on this computer)");
   assert.doesNotMatch(v2.textContent, /primary|personal/i);
   await refreshCli({ api: async () => ({ ...doc('version'), ok: true, bin: '/fixture/bin/oats' }) });
   urls.length = 0;
   const v1 = await page();
-  assert.equal(v1.querySelector('[data-card="Teams here"]'), null);
-  assert.ok(v1.querySelector('[data-card="Teams"]'), 'the 0.29 card');
+  assert.equal(v1.querySelector('[data-card="Teams here"], details.soul-teams-details'), null);
+  assert.match(v1.querySelector('.soul-top [data-fact="teams"]').textContent, /\S/, 'the 0.29 teams, in the Teams row');
   assert.equal(urls.some(([url]) => url === '/api/workspace-soul-teams'), false);
 });
 
@@ -256,15 +256,16 @@ test("soul page: 'Teams here' is keyed by the roster row's kernel key (always pr
     } } });
     t.after(() => { inspector.dispose(); dom.window.close(); });
     await inspector.show({ ...soulSelection, agent: { ...soulSelection.agent, ...agent } }); for (let i = 0; i < 4; i++) await tick();
-    return { card: el.querySelector('[data-card="Teams here"]'), bodies };
+    return { card: el.querySelector('[data-card="Teams here"]'), row: el.querySelector('.soul-top [data-fact="teams"]'), bodies };
   };
   const pkg = await open({ key: 'acme.pkg/release-manager' }, 'package');
   assert.deepEqual(pkg.bodies, [{ soul: 'acme.pkg/release-manager', action: 'show' }], "the kernel's key, never a name the Desktop builds");
   const external = await open({ key: 'release-manager' }, 'external');
   assert.deepEqual(external.bodies, [{ soul: 'release-manager', action: 'show' }], 'the kind does not matter: the key does');
   const unkeyed = await open({}, 'package');
-  assert.equal(unkeyed.card.querySelector('.page-note').textContent, "Set this soul's teams with the CLI (oats soul teams): this Desktop's server does not report the soul's key.", 'a server from before #275');
-  assert.equal(unkeyed.card.querySelector('button'), null);
+  assert.equal(unkeyed.card, null);
+  assert.equal(unkeyed.row.querySelector('.soul-top-note').textContent, "Set this soul's teams with the CLI (oats soul teams): this Desktop's server does not report the soul's key.", 'a server from before #275');
+  assert.equal(unkeyed.row.querySelector('button'), null);
   assert.deepEqual(unkeyed.bodies, [], 'nothing asked without the kernel key');
 });
 

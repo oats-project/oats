@@ -94,7 +94,8 @@ function assertMirrorUnchanged(root, run, pattern) {
 
 test("checked-in mirror is a complete standalone inventory with consistent pending or published provenance", () => {
   const inventory = checkOkfMirror();
-  assert.equal(inventory.version, "6.2.0");
+  const catalog = JSON.parse(readFileSync(join(REPO_ROOT, "package-catalog.json"), "utf8"));
+  assert.equal(`v${inventory.version}`, catalog.packages["oats.okf"].ref);
   assert.equal(inventory.source.repository, "https://github.com/awebai/oats-okf.git");
   assert.equal(inventory.release.plannedTag, `v${inventory.version}`);
   if (inventory.release.status === "pending") {

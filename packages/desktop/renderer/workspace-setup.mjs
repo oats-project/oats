@@ -1,4 +1,4 @@
-/** Workspace v4 Setup (W1 list, W2 graph): what the workspace shares through Git
+/** Workspace v4 Setup (the W1 list; the W2 graph was dropped in the Desktop UI rework, slice 3b): what the workspace shares through Git
  * (members, packages, defaults) above what lives only on this computer, under an
  * overview of what the host repository defines (design-brief.md §3.1, §8).
  * Presentation only, from `oats workspace status` (and the roster, the CLI
@@ -10,6 +10,9 @@ import { iconElement } from './shell-icons.mjs';
 import { memberState, MEMBER_PROBLEMS } from './workspace-catalog.mjs';
 import { packageOrigin } from '../../client/capability-facts.mjs';
 import { sameRepo } from '../../client/repo-moves.mjs';
+import { DESKTOP_NOUNS } from './desktop-terms.mjs';
+
+const capitalized = word => word.charAt(0).toUpperCase() + word.slice(1);
 
 export const setupCSS = `
 /* Type scale (spec "Type hierarchy", shared with the Teams tab): screen title 24/700, section 18/650,
@@ -146,59 +149,9 @@ export const setupCSS = `
 .setup-team-note { margin:0; padding:10px 20px; border-top:1px solid var(--border); color:var(--muted); font-size:11.5px; line-height:1.5; }
 .oats-view .setup button.setup-file { height:auto; min-height:0; padding:0; border:0; background:transparent; color:var(--accent); font:inherit; font-family:var(--mono,monospace); text-decoration:underline; text-underline-offset:2px; cursor:pointer; overflow-wrap:anywhere; text-align:left; }
 .oats-view .setup button.setup-file:focus-visible { background:var(--sel); border-radius:4px; padding:0 3px; margin:0 -3px; }
-/* W2: this computer → the workspace → its members and packages. */
-.setup-graph-wrap { display:grid; grid-template-columns:minmax(0,1fr); gap:16px; align-items:stretch; min-width:0; }
-.setup-graph-wrap.with-panel { grid-template-columns:minmax(0,1fr) 340px; }
-@container (max-width: 1060px) { .setup-graph-wrap.with-panel { grid-template-columns:minmax(0,1fr); } }
-.setup-graph-box { container-type:inline-size; min-width:0; }
-.setup-graph { display:flex; align-items:center; min-width:0; margin:0; }
-.setup-here { flex:none; width:230px; display:flex; flex-direction:column; gap:10px; padding:14px; box-sizing:border-box; border:1px dashed var(--border); border-radius:12px; background:var(--surface-2); }
-.setup-caption { color:var(--muted); font-size:12px; font-weight:600; }
-.setup-card { display:flex; flex-direction:column; gap:3px; min-width:0; padding:10px 12px; box-sizing:border-box; border:1px solid var(--border); border-radius:8px; background:var(--surface); }
-.setup-card-title { color:var(--fg); font-size:12.5px; font-weight:650; overflow-wrap:anywhere; }
-.setup-card-meta { color:var(--muted); font-size:11.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.setup-card-meta.mono { font-weight:normal; font-size:11.5px; line-height:normal; font-family:var(--mono,monospace); }
-.setup-lock { flex:none; width:96px; display:flex; flex-direction:column; align-items:center; gap:4px; color:var(--muted); font-weight:normal; font-size:10.5px; line-height:normal; font-family:var(--mono,monospace); }
-.setup-lock.warn { color:var(--warn); }
-.setup-lock-text { display:inline-flex; align-items:center; gap:2px; }
-.setup-edge { display:block; width:100%; border-top:1.5px solid var(--graph-edge); }
-.setup-shared { flex:1; min-width:0; align-self:stretch; display:flex; flex-direction:column; padding:14px 18px; box-sizing:border-box; border:1px solid var(--border); border-radius:12px; background:var(--surface); }
-.setup-shared-body { flex:1; display:flex; align-items:center; min-width:0; }
-.setup-ws { flex:none; width:176px; border:1.5px solid var(--live); background:var(--sel); }
-.setup-ws .setup-card-title { font-weight:700; }
-.setup-ws .setup-card-meta { color:var(--fg); }
-.setup-stub { flex:none; width:28px; border-top:1.5px solid var(--graph-edge); }
-.setup-tree { flex:1; min-width:0; display:flex; flex-direction:column; margin:0; padding:0; list-style:none; }
-.setup-tree > li { position:relative; padding:4px 0 4px 22px; }
-.setup-tree > li::before { content:''; position:absolute; left:0; top:0; bottom:0; border-left:1.5px solid var(--graph-edge); }
-.setup-tree > li:first-child::before { top:50%; }
-.setup-tree > li:last-child::before { bottom:50%; }
-.setup-tree > li.setup-tree-label { padding:10px 0 4px 22px; color:var(--muted); font-size:12px; font-weight:600; }
-.setup-tree > li.setup-tree-label:first-child { padding-top:4px; }
-.setup-tree > li:not(.setup-tree-label)::after { content:''; position:absolute; left:0; top:50%; width:22px; border-top:1.5px solid var(--graph-edge); }
-.setup-tree > li.bad::after { border-top:1.5px dashed var(--attn-dot); }
-.setup-node { display:flex; align-items:center; gap:8px; width:100%; height:34px; min-height:34px; padding:0 10px; box-sizing:border-box; border:1px solid var(--border); border-radius:7px; background:var(--surface); color:var(--fg); font:inherit; text-align:left; }
-.oats-view .setup button.setup-node { cursor:pointer; font-weight:400; }
-.oats-view .setup button.setup-node:hover { border-color:var(--sel-border); }
-.setup-node .shell-icon { flex:none; color:var(--muted); }
-.setup-node-name { min-width:0; font-weight:600; font-size:12px; line-height:normal; font-family:var(--mono,monospace); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.setup-node-meta { flex:none; margin-left:auto; color:var(--muted); font-size:11.5px; white-space:nowrap; }
-.setup-node.bad { border-style:dashed; border-color:var(--attn-border); background:var(--attn-bg); }
-.setup-node.bad .setup-node-meta { color:var(--warn); }
-.setup-node.selected { border-color:var(--live); box-shadow:0 0 0 3px var(--sel); }
-.setup-node.bad.selected { border-color:var(--attn-dot); box-shadow:0 0 0 3px var(--attn-border); }
-@container (max-width: 720px) {
- .setup-graph { flex-direction:column; align-items:stretch; }
- .setup-here { width:auto; }
- .setup-lock { width:auto; flex-direction:row; justify-content:center; padding:6px 0; }
- .setup-lock-text { display:inline-flex; align-items:center; gap:2px; }
-.setup-edge { width:0; height:14px; border-top:0; border-left:1.5px solid var(--graph-edge); }
- .setup-shared-body { flex-direction:column; align-items:stretch; gap:10px; }
- .setup-ws { width:auto; }
- .setup-stub { display:none; }
-}
-@container (max-width: 860px) { .setup-here { width:190px; } .setup-lock { width:64px; } .setup-ws { width:150px; } .setup-stub { width:18px; } }
-/* The Member panel (W2): the handshake, what it means, the kernel's detail. */
+/* A member's panel (opened from its row in Members): the handshake, what it means, the kernel's detail. It spans
+   the box under its row. */
+.setup-row-panel { grid-column:1 / -1; padding:4px 20px 16px; }
 .setup-panel { display:flex; flex-direction:column; min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
 .setup-panel-head { display:flex; align-items:center; gap:8px; min-height:48px; padding:0 10px 0 16px; box-sizing:border-box; border-bottom:1px solid var(--border); }
 .setup-panel-head h3 { margin:0; color:var(--fg); font-size:13px; font-weight:650; }
@@ -292,20 +245,16 @@ export function box(doc, title, lead, { heading = 'h3' } = {}) {
  * element may record one, so a superseded element's late event never overwrites it. */
 const developersOpen = new WeakMap(), developersDrawn = new WeakMap();
 
-/** The whole Setup tab. view: 'list' | 'graph'; selected: a member key (graph panel). */
-/** `machines`: the Machines box (workspace-machines.mjs), owned by the tab and kept across renders: the same
- * element moves into This computer (list) or below the graph. */
-export function renderSetup(host, { status, instances = [], souls = [], cli = null, view = 'list', selected = null, onSelect = () => {}, onOpenRepo = null, onOpenPackages = null, openExternal = null, machines = null }) {
+/** The whole Setup tab: the list (members and their handshake, packages pinned and locked, the defaults as declared,
+ * this computer). `selected`: a member key whose panel is open under its row (`onSelect(key | null)` opens or closes one). */
+export function renderSetup(host, { status, instances = [], cli = null, selected = null, onSelect = () => {}, openExternal = null }) {
   const doc = host.ownerDocument;
   const drawn = host.querySelector('.setup-explain-dev');
   if (drawn) developersOpen.set(host, drawn.open);
   host.replaceChildren();
-  const root = el(doc, 'div', null, 'setup'); root.dataset.view = view;
-  root.append(lede(doc, status, openExternal), explainer(doc, status, host));
-  if (view === 'graph') {
-    root.append(graph(doc, { status, instances, selected, onSelect, onOpenRepo, onOpenPackages, openExternal }));
-    if (machines) root.append(machines);
-  } else root.append(sharedSection(doc, { status, onSelect, openExternal }), hereZone(doc, { status, instances, cli, machines }));
+  const root = el(doc, 'div', null, 'setup'); root.dataset.view = 'list';
+  root.append(lede(doc, status, openExternal), explainer(doc, status, host),
+    sharedSection(doc, { status, selected, onSelect, openExternal }), hereZone(doc, { status, instances, cli }));
   host.append(root);
   return root;
 }
@@ -417,7 +366,7 @@ function section(doc, cls, title, lead) {
 const externalSource = item => [tail(String(item?.source || '').replace(/@[^@/]*$/, '')), text(item?.team)].filter(Boolean).join(', ');
 
 /** Shared through Git: what the workspace declares (members, packages, defaults). */
-function sharedSection(doc, { status, onSelect, openExternal }) {
+function sharedSection(doc, { status, selected, onSelect, openExternal }) {
   const ws = status?.workspace || {};
   const shared = section(doc, 'setup-sec', 'Shared through Git', 'What the workspace declares: the same on every computer that runs it.');
   shared.dataset.zone = 'shared';
@@ -434,12 +383,18 @@ function sharedSection(doc, { status, onSelect, openExternal }) {
     const gives = contribution(member), state = memberState(member);
     const cell = el(doc, 'span', gives.text, `setup-cell${gives.muted ? ' muted' : ''}`); cell.title = gives.text;
     row.append(name, stateChip(doc, member), cell);
-    if (!state.ok) {
-      const act = el(doc, 'button', 'Why?', 'setup-link-act'); act.type = 'button';
-      act.setAttribute('aria-label', `${memberName(member)}: why it ${state.why}`);
-      act.addEventListener('click', () => onSelect(member.key)); row.append(act);
-    } else row.append(el(doc, 'span', '', 'setup-end'));
+    // Every member opens its panel under its row: "Why?" when its handshake needs attention, else "Details".
+    const open = member.key === selected;
+    const act = el(doc, 'button', state.ok ? 'Details' : 'Why?', 'setup-link-act'); act.type = 'button';
+    act.setAttribute('aria-label', state.ok ? `${memberName(member)}: its membership` : `${memberName(member)}: why it ${state.why}`);
+    act.setAttribute('aria-expanded', String(open)); act.dataset.focusKey = `member:${member.key}`;
+    act.addEventListener('click', () => onSelect(open ? null : member.key)); row.append(act);
     memberRows.append(row);
+    if (open) {
+      const holder = el(doc, 'div', null, 'setup-row-panel'); holder.dataset.memberPanel = member.key;
+      holder.append(memberPanel(doc, member, { status, onClose: () => onSelect(null), openExternal }));
+      memberRows.append(holder);
+    }
   }
   // External souls: listed by the workspace from a repository it does not take as a member.
   const external = list(status?.external);
@@ -483,11 +438,11 @@ function sharedSection(doc, { status, onSelect, openExternal }) {
   return shared;
 }
 
-/** This computer: what is not shared (this deployment's settings, lock, CLI and instances, the member
- * clones, the Machines box). */
-function hereZone(doc, { status, instances, cli, machines }) {
+/** This computer: what is not shared (this deployment's settings, lock, CLI and agents, the member clones). The
+ * machines that run the workspace are the Workspace page's Machines tab (workspace-machines.mjs). */
+function hereZone(doc, { status, instances, cli }) {
   const ws = status?.workspace || {};
-  const zone = section(doc, 'setup-zone', 'This computer', "Not shared: this deployment's own settings, clones and machines.");
+  const zone = section(doc, 'setup-zone', 'This computer', "Not shared: this deployment's own settings and clones. The computers it runs on are under Machines.");
   zone.dataset.zone = 'here';
   const facts = el(doc, 'dl', null, 'setup-facts');
   const fact = (key, value, cls = '', title = value) => { if (!text(value)) return; const r = el(doc, 'div', null, 'setup-fact'); r.dataset.fact = key; const dd = el(doc, 'dd', value, cls); dd.title = title; r.append(el(doc, 'dt', key), dd); facts.append(r); };
@@ -498,7 +453,7 @@ function hereZone(doc, { status, instances, cli, machines }) {
   if (text(status?.lock?.path)) fact('Lock file', within(status.lock.path, folder), 'mono', `${status.lock.path} · lockfile version ${status.lock.lockfileVersion}`);
   fact('CLI', text(cli?.version) ? `oats ${cli.version}` : null, 'prim');
   const all = list(instances), running = all.filter(i => i?.running === true).length;
-  fact('Instances', all.length ? `${all.length}, ${running} running` : 'none yet', 'prim');
+  fact(capitalized(DESKTOP_NOUNS.instances), all.length ? `${all.length}, ${running} running` : 'none yet', 'prim');
   const disabled = list(status?.disabledSouls).filter(text);
   if (disabled.length) fact('Disabled souls', disabled.join(', '), 'mono');
   zone.append(facts);
@@ -514,8 +469,6 @@ function hereZone(doc, { status, instances, cli, machines }) {
     }
     part.append(el(doc, 'h4', 'Member clones'), rows); zone.append(part);
   }
-  // The Machines box (workspace-machines.mjs): the same element across renders, a solid card in the zone.
-  if (machines) zone.append(machines);
   return zone;
 }
 
@@ -601,76 +554,8 @@ function teamDefaults(doc, status, label) {
   return line;
 }
 
-function graph(doc, { status, instances, selected, onSelect, onOpenRepo, onOpenPackages, openExternal }) {
-  const ws = status?.workspace || {};
-  const members = list(status?.members), chosen = members.find(m => m.key === selected) || null;
-  const wrap = el(doc, 'div', null, `setup-graph-wrap${chosen ? ' with-panel' : ''}`);
-  const figure = el(doc, 'figure', null, 'setup-graph'); figure.setAttribute('aria-label', 'How this workspace is set up');
-  // This computer: the deployment folder and its instances.
-  const here = el(doc, 'div', null, 'setup-here'); here.append(el(doc, 'span', 'This computer', 'setup-caption'));
-  const deployment = el(doc, 'div', null, 'setup-card setup-computer');
-  const settings = text(ws.local), folder = settings ? settings.replace(/\/[^/]+$/, '') : null;
-  deployment.append(el(doc, 'span', 'Deployment', 'setup-card-title'));
-  if (folder) { const path = el(doc, 'span', folder, 'setup-card-meta mono'); path.title = folder; deployment.append(path); }
-  const all = list(instances);
-  deployment.append(el(doc, 'span', [settings ? settings.split('/').pop() : null, plural(all.length, 'instance')].filter(Boolean).join(' · '), 'setup-card-meta'));
-  here.append(deployment);
-  // The lock between them.
-  const lock = lockText(status);
-  const link = el(doc, 'div', null, `setup-lock${lock.warn ? ' warn' : ''}`); link.setAttribute('aria-label', `Lock ${lock.text}`);
-  const said = el(doc, 'span', lock.warn ? 'lock out of date' : 'lock ', 'setup-lock-text'); if (!lock.warn) said.append(iconElement(doc, 'check', { size: 11 }));
-  link.append(said, el(doc, 'span', null, 'setup-edge'));
-  if (text(ws.commit)) link.append(el(doc, 'span', short(ws.commit)));
-  // Shared in git: the workspace, its members and packages.
-  const shared = el(doc, 'div', null, 'setup-shared'); shared.append(el(doc, 'span', 'Shared through Git', 'setup-caption'));
-  const body = el(doc, 'div', null, 'setup-shared-body');
-  const card = el(doc, 'div', null, 'setup-card setup-ws');
-  card.append(el(doc, 'span', `Workspace ${text(ws.name) || ''}`.trim(), 'setup-card-title'));
-  const host = members.find(m => sameRepo(m.key, ws.key));
-  if (text(ws.key)) { const h = el(doc, 'span', host ? memberName(host) : tail(ws.url || ws.key), 'setup-card-meta mono'); h.title = ws.key; card.append(h); }
-  card.append(el(doc, 'span', [plural(list(ws.teams).length, 'team'), plural(list(status?.packages).length, 'package')].join(' · '), 'setup-card-meta'));
-  const tree = el(doc, 'ul', null, 'setup-tree'); tree.setAttribute('aria-label', 'What the workspace is built from');
-  const label = value => tree.append(el(doc, 'li', value, 'setup-tree-label'));
-  const leaf = (node, bad = false) => { const li = el(doc, 'li', null, bad ? 'bad' : ''); li.append(node); tree.append(li); };
-  const item = (icon, name, meta, { bad = false, run = null, aria = null, pressed = null } = {}) => {
-    const node = el(doc, run ? 'button' : 'div', null, `setup-node${bad ? ' bad' : ''}`);
-    if (run) { node.type = 'button'; node.addEventListener('click', run); if (aria) node.setAttribute('aria-label', aria); }
-    if (pressed !== null) { node.setAttribute('aria-pressed', String(pressed)); node.classList.toggle('selected', pressed); }
-    const label = el(doc, 'span', name, 'setup-node-name'); label.title = name;
-    node.append(iconElement(doc, icon, { size: 14 }), label, el(doc, 'span', meta, 'setup-node-meta'));
-    return node;
-  };
-  if (members.length) label('Members, latest');
-  for (const member of members) {
-    const state = memberState(member), souls = list(member.souls).length;
-    const meta = state.ok ? [sameRepo(member.key, ws.key) ? 'host · member' : null, plural(souls, 'soul')].filter(Boolean).join(' · ') : state.label;
-    const node = item('repo', memberName(member), meta, { bad: !state.ok, pressed: member.key === selected,
-      run: () => onSelect(member.key === selected ? null : member.key), aria: `${memberName(member)}: ${meta} — show its membership` });
-    node.dataset.member = member.key; leaf(node, !state.ok);
-  }
-  const packages = list(status?.packages);
-  if (packages.length || list(status?.unsynced).length) label('Packages, pinned');
-  for (const pkg of packages) {
-    const origin = String(pkg.source || '').startsWith('catalog:') ? 'official' : 'git tag';
-    const newer = available(pkg);
-    const node = item('package', [pkg.id, pkg.version].filter(text).join(' '), newer ? `${newer.version} available` : origin, // latest is only reported for catalog packages
-      onOpenPackages ? { run: () => onOpenPackages(), aria: `${pkg.id}: show package capabilities` } : {});
-    node.dataset.package = pkg.id; leaf(node);
-  }
-  for (const id of list(status?.unsynced)) { const node = item('package', id, 'not locked', { bad: true }); node.dataset.package = id; leaf(node, true); }
-  if (list(status?.external).length) label('External souls');
-  for (const row of list(status?.external)) leaf(item('repo', text(row.soul) || 'soul', tail(String(row.source || '').replace(/@[^@/]*$/, ''))));
-  if (!tree.children.length) tree.append(el(doc, 'li', 'No members or packages reported yet.', 'setup-tree-label'));
-  body.append(card, el(doc, 'span', null, 'setup-stub'), tree);
-  shared.append(body);
-  figure.append(here, link, shared);
-  const frame = el(doc, 'div', null, 'setup-graph-box'); frame.append(figure); wrap.append(frame);
-  if (chosen) wrap.append(memberPanel(doc, chosen, { status, onClose: () => onSelect(null), onOpenRepo, openExternal }));
-  return wrap;
-}
-
 /** The Member panel: the two sides of the handshake, what it means now, and the kernel's own detail. */
-function memberPanel(doc, member, { status, onClose, onOpenRepo, openExternal }) {
+function memberPanel(doc, member, { status, onClose, openExternal }) {
   const ws = status?.workspace || {};
   const state = memberState(member), name = memberName(member);
   const panel = el(doc, 'aside', null, 'setup-panel'); panel.setAttribute('aria-label', `Member ${name}`); panel.dataset.member = member.key;
@@ -714,9 +599,13 @@ function memberPanel(doc, member, { status, onClose, onOpenRepo, openExternal })
   const means = el(doc, 'section'); means.append(el(doc, 'h4', 'What this means'));
   const souls = list(member.souls).filter(text);
   const p = el(doc, 'p');
+  let which = null;
   if (state.ok) {
     const caps = list(member.capabilities).length;
     p.append(`It contributes ${[plural(souls.length, 'soul'), plural(caps, 'capability', 'capabilities')].join(' and ')} at its latest commit.`);
+    // Which capabilities, by name (workspace status members[].capabilities): the Capabilities list says "by" it on each.
+    const names = list(member.capabilities).filter(text);
+    if (names.length) { which = el(doc, 'p', names.join(', '), 'mono'); which.dataset.memberCapabilities = member.key; }
   } else {
     p.append('Until both sides agree, this repo contributes nothing.');
     if (souls.length) {
@@ -725,17 +614,13 @@ function memberPanel(doc, member, { status, onClose, onOpenRepo, openExternal })
       p.append(` ${souls.length === 1 ? 'is' : 'are'} hidden from Souls and can't be spawned.`);
     }
   }
-  means.append(p); body.append(means);
+  means.append(p); if (which) means.append(which); body.append(means);
   // The kernel's own words about it (for example which file is missing).
   if (text(member.detail)) {
     const fix = el(doc, 'section'); fix.append(el(doc, 'h4', state.ok ? 'Detail' : 'Fix'), el(doc, 'div', member.detail, 'setup-detail'));
     body.append(fix);
   }
   const acts = el(doc, 'div', null, 'setup-panel-acts');
-  if (state.ok && list(member.capabilities).length && onOpenRepo) {
-    const open = el(doc, 'button', 'Show its capabilities', 'act'); open.type = 'button'; open.addEventListener('click', () => onOpenRepo(member.key));
-    acts.append(open);
-  }
   // The repository on the web (members[].url), when it has a web address.
   if (webUrl(member.url) && openExternal) {
     const web = el(doc, 'button', 'Open repository', 'act'); web.type = 'button'; web.title = member.url;

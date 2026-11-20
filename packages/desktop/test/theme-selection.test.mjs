@@ -36,12 +36,13 @@ function fixture(t, { saved = null, readError = false, writeError = false, noSto
   };
 }
 
-test("initial HTML is White before scripts run; public choices have stable labels and order", t => {
+test("initial HTML is Light (once White) before scripts run; public choices have stable labels and order", t => {
   const { doc, theme } = fixture(t);
   assert.equal(doc.documentElement.dataset.theme, "light");
   assert.equal(theme.currentTheme(), "light");
   assert.deepEqual(Array.from(theme.THEMES, item => [item.id, item.label]), [
-    ["light", "White"], ["solarized", "Solarized"], ["dark", "Dark"], ["host", "This computer"],
+    // The Appearance sheet's words (the Desktop UI rework, slice 4): White is Light and This computer is System; the ids stay.
+    ["light", "Light"], ["solarized", "Solarized"], ["dark", "Dark"], ["host", "System"],
   ]);
   assert.ok(Object.isFrozen(theme.THEMES));
   for (const item of theme.THEMES) assert.ok(Object.isFrozen(item));

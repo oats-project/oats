@@ -1,7 +1,9 @@
 // The getting-started skill's own-server (BYOT) branch (#1774, #1775): a new workspace on the
 // person's own aweb server gets the team `<workspace>:ND`, created by `oats aweb setup --create`,
 // and aw at oats.aweb's published `tested` version, read from aw-compat.json at the catalog's exact
-// oats.aweb ref. Hosted keeps the latest aw. The literals the skill reads are checked here against
+// oats.aweb ref. Hosted keeps the latest aw. On a private AWID registry (#1966) the registry is
+// recorded first with `oats aweb setup --registry RG` (awebai/oats-aweb#284), never by
+// AWID_REGISTRY_URL. The literals the skill reads are checked here against
 // the oats.aweb mirror (mirrors/oats-aweb, a copy of the pinned tag), so they can't drift from
 // what the provider prints.
 import assert from "node:assert/strict";
@@ -32,6 +34,9 @@ const ownServer = section("   - **Their own aweb server (step 1), in place of th
 // The own-server branch's oats.aweb floor: the first release whose `setup --create` takes `--name`
 // on a fresh deployment and that publishes aw-compat.json, and the one the VM run proved.
 const FLOOR = "v1.42.1";
+// On a private registry: the first release with `setup --registry` (awebai/oats-aweb#284), the one
+// #1962's VM run 2 proved the registry step on (#1966, issuecomment-7017472134).
+const PRIVATE_FLOOR = "v1.43.0";
 const semver = (v) => v.replace(/^v/, "").split(".").map(Number);
 const atLeast = (v, min) => {
   const a = semver(v), b = semver(min);
@@ -43,8 +48,10 @@ test("step 1 asks hosted or own server, with the three non-secret inputs and the
   assert.ok(flat.includes("**Hosted aweb, or their own aweb server?** The line says \"on aweb's hosted service, unless you run your own aweb server\"; hosted is the default."));
   assert.ok(flat.includes("Keep its second half in your own words too: it is how a person with their own server learns this branch exists."), "the own-server option survives a paraphrase of the line");
   for (const input of ["the namespace domain `ND` they control", "the server's public address `U`", "whether their server uses the public AWID registry"]) assert.ok(flat.includes(input), input);
-  // A private registry stops the branch before anything is written: it needs oats.aweb's --registry setting (awebai/oats-aweb#284).
-  assert.ok(flat.includes("When it uses a private registry, the own-server branch stops here, before anything is written: tell the person in one sentence that a private registry needs oats.aweb with `oats aweb setup --registry`, and that this skill stops here."));
+  // A private registry no longer stops the branch (#1966): step 1 takes its origin RG, and the TXT record must name it.
+  assert.ok(flat.includes("When it uses a private registry, ask its address too, the registry origin `RG` (`https://…`, the scheme and host only, with no path), also not a secret. Step 9 records it for this deployment."));
+  assert.ok(!flat.includes("this skill stops here"), "no private-registry stop");
+  assert.ok(flat.includes("On a private registry, that record must name their registry: a key prepared without `--registry RG` gives a record for the public registry, so tell them to check that its value carries `registry=RG`."), "the _awid TXT names the private registry");
   assert.ok(flat.includes("Answers given in the prompt that started you are used without asking."), "the headless path keeps working");
   for (const prerequisite of ["the namespace's controller key on this computer, for this computer account", "the `_awid.ND` DNS record published for that key", "their server reachable at `U`"]) assert.ok(flat.includes(prerequisite), prerequisite);
   assert.ok(flat.includes("Never offer it on a machine found-list, or for an existing workspace"));
@@ -59,7 +66,10 @@ test("step 4 keeps hosted on the latest aw and pins the own server to oats.aweb'
   assert.match(step4, /`aw version`'s first line must be exactly `aw <tested>`, and the `file`\s+line must name this machine's architecture, the one `uname -m` prints/);
   assert.ok(!/allow-scripts|--ignore-scripts|\bnpm pack\b/.test(step4), "no allow-scripts or tarball pre-check (Juan's side, 5853f141)");
   assert.ok(step4.includes(`older than \`${FLOOR}\``), "the floor the reader enforces is named");
+  assert.ok(step4.replace(/\s+/g, " ").includes(`on a private registry, older than \`${PRIVATE_FLOOR}\`, the first that records the registry (\`oats aweb setup --registry\`)`), "the private floor is named");
+  assert.ok(flat.includes("On a private registry (step 1), add ` private` at the end of the line, after the catalog's path: that branch needs a later `oats.aweb`."));
   assert.ok(atLeast(catalog.packages["oats.aweb"].ref, FLOOR), "the catalog's oats.aweb is at or above the own-server floor, so this release offers the branch");
+  assert.ok(atLeast(catalog.packages["oats.aweb"].ref, PRIVATE_FLOOR), "and at or above the private-registry floor, so it offers that branch too");
 });
 
 test("the tested-version reader reads aw-compat.json at the catalog's ref, never main, and refuses what it can't trust", (t) => {
@@ -68,6 +78,7 @@ test("the tested-version reader reads aw-compat.json at the catalog's ref, never
   const [script] = readers;
   assert.ok(!script.includes("main"), "never reads main");
   assert.ok(script.includes("[1,42,1]"), `the reader's floor is ${FLOOR}`);
+  assert.ok(script.includes("[1,43,0]"), `the reader's private-registry floor is ${PRIVATE_FLOOR}`);
   // The provider publishes the file at this path; the mirror is its copy at the pinned tag.
   const compat = JSON.parse(read("mirrors/oats-aweb/aw-compat.json"));
   assert.deepEqual(Object.keys(compat).sort(), ["min", "tested"]);
@@ -77,10 +88,10 @@ test("the tested-version reader reads aw-compat.json at the catalog's ref, never
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const stub = join(dir, "fetch-stub.mjs");
   writeFileSync(stub, `globalThis.fetch = async (url) => { process.stderr.write("URL " + url + "\\n"); const body = JSON.parse(process.env.STUB_BODY); return { ok: process.env.STUB_STATUS === "200", status: Number(process.env.STUB_STATUS), json: async () => body }; };\n`);
-  const run = (entry, { status = "200", body = compat } = {}) => {
+  const run = (entry, { status = "200", body = compat, args = [] } = {}) => {
     const file = join(dir, `catalog-${Math.random().toString(36).slice(2)}.json`);
     writeFileSync(file, JSON.stringify({ ...catalog, packages: { ...catalog.packages, "oats.aweb": { ...catalog.packages["oats.aweb"], ...entry } } }));
-    const r = spawnSync(process.execPath, ["--import", pathToFileURL(stub).href, "-e", script, file], { encoding: "utf8", env: { ...process.env, STUB_STATUS: status, STUB_BODY: JSON.stringify(body) } });
+    const r = spawnSync(process.execPath, ["--import", pathToFileURL(stub).href, "-e", script, file, ...args], { encoding: "utf8", env: { ...process.env, STUB_STATUS: status, STUB_BODY: JSON.stringify(body) } });
     return { code: r.status, out: r.stdout.trim(), url: (r.stderr.match(/^URL (.+)$/m) || [])[1] };
   };
 
@@ -93,6 +104,12 @@ test("the tested-version reader reads aw-compat.json at the catalog's ref, never
 
   for (const ref of ["v1.42.0", "v1.41.9", "v0.99.0", "fabe460", "main"]) assert.deepEqual([run({ ref }).out, run({ ref }).code], [`TOO_OLD ${ref}`, 1], ref);
   assert.equal(run({ ref: "v1.43.0" }).out, `TESTED ${compat.tested}`, "a newer release passes");
+  // The private-registry branch (#1966): ` private` after the catalog raises the floor to v1.43.0; the public floor is unchanged.
+  assert.equal(run({ ref: "v1.42.1" }).out, `TESTED ${compat.tested}`, "the public registry keeps v1.42.1");
+  for (const ref of ["v1.42.1", "v1.42.9", "v1.41.0", "main"]) assert.deepEqual([run({ ref }, { args: ["private"] }).out, run({ ref }, { args: ["private"] }).code], [`TOO_OLD ${ref}`, 1], `private ${ref}`);
+  for (const ref of ["v1.43.0", "v1.43.1", "v1.45.0", "v2.0.0"]) assert.equal(run({ ref }, { args: ["private"] }).out, `TESTED ${compat.tested}`, `private ${ref}`);
+  assert.equal(run({}, { args: ["private"] }).out, `TESTED ${compat.tested}`, "the catalog's pin offers the private branch");
+  for (const args of [["public"], ["Private"], [""], ["private", "x"]]) assert.deepEqual([run({}, { args }).out, run({}, { args }).code], ["FAILED usage", 1], JSON.stringify(args));
   assert.deepEqual([run({ url: "https://gitlab.com/awebai/oats-aweb.git" }).out, run({ url: "https://gitlab.com/awebai/oats-aweb.git" }).code], ["NOT_GITHUB https://gitlab.com/awebai/oats-aweb.git", 1]);
   assert.match(run({}, { status: "404" }).out, /^FAILED HTTP 404 /, "a catalog older than the file stops the branch");
   assert.match(run({}, { body: { min: "1.36.33", tested: "latest" } }).out, /^FAILED unexpected /, "tested must be an exact version");
@@ -115,7 +132,7 @@ test("the installed aw is compared with tested in oats.aweb's own version order:
   // Each outcome has its instruction, and a kept aw is named in the hand-over.
   for (const outcome of ["- **`INSTALL`:** no `aw`, a version it can't read, or one below `<tested>`", "- **`EQUAL <tested>`:** that version is installed already: install nothing.", "- **`NEWER <version>`:** a newer `aw` is installed. Keep it, install nothing, and go on"]) assert.ok(flat.includes(outcome), outcome);
   assert.ok(flat.includes('Keep "aw <version> is newer than the tested <tested>; kept" for the hand-over'));
-  assert.ok(flat.includes('namespace ND, aw <tested> (oats.aweb\'s tested version) or "aw <version> is newer than the tested <tested>; kept"'), "the hand-over's Messaging line");
+  assert.ok(flat.includes('namespace ND, registry public | RG (recorded in `settings.oats.aweb.registry`), aw <tested> (oats.aweb\'s tested version) or "aw <version> is newer than the tested <tested>; kept"'), "the hand-over's Messaging line");
 
   // Agrees with the provider's compareVersions (aw-floor.mjs) on every pair, pre-releases included.
   const versions = ["1.36.33", "1.36.57", "1.36.58-rc.1", "1.36.58-rc.10", "1.36.58-rc.2", "1.36.58-alpha", "1.36.58-1", "1.36.58", "1.36.58+build.7", "1.36.59-rc.3", "1.36.59", "1.37.0", "2.0.0-0"];
@@ -140,11 +157,33 @@ test("step 9's own-server form checks the prerequisites read-only, then creates 
   const check = ownServer.indexOf('cd "D" && aw id namespace check-txt --domain ND --json; echo "exit=$?"');
   const create = ownServer.indexOf('cd "D" && AWEB_URL="U" oats aweb setup --soul S --create L --namespace ND --name A\n');
   assert.ok(check !== -1 && create !== -1 && check < create, "check-txt before the create");
+  // On a private registry the registry is recorded first (#1966): before item 1's check, which a non-public
+  // AWID_REGISTRY_URL already in the environment refuses until the setting exists, and so before check-txt and the create.
+  const step9 = section("## 9. Messaging on this machine", "## 10. ");
+  const record = step9.indexOf('cd "D" && oats aweb setup --soul S --registry RG\n');
+  const item1 = step9.indexOf('cd "D" && oats aweb setup --soul S --check-only --json\n');
+  const at = (needle) => step9.indexOf(needle);
+  assert.ok(record !== -1 && item1 !== -1 && record < item1, "--registry before item 1's check");
+  assert.ok(record < at('cd "D" && aw id namespace check-txt --domain ND --json') && record < at('cd "D" && AWEB_URL="U" oats aweb setup --soul S --create L --namespace ND --name A\n'), "--registry before check-txt and the create");
+  assert.equal(skill.split('oats aweb setup --soul S --registry RG').length, 2, "one --registry command");
+  assert.ok(flat.includes("**Their own aweb server on a private registry (step 1): record it first,** before item 1, with `RG` written in. Skip this on the public registry and on hosted aweb."));
+  assert.ok(flat.includes("oats.aweb refuses a private registry given that way (`registry-setting-required`), item 1's check included, until this setting is recorded."));
+  // The provider's check-only reads the registry setting before anything else, and refuses an ambient non-public registry without it.
+  assert.match(provider, /const migration = effective \? undefined : registryMigration\(settings\);\n\s*if\(migration\) throw new Error\(migration\);/);
+  assert.match(read("mirrors/oats-aweb/lib/registry-setting.mjs"), /if \(Object\.hasOwn\(env, 'AWID_REGISTRY_URL'\) && env\.AWID_REGISTRY_URL !== '' && !publicRegistryLocator\(env\.AWID_REGISTRY_URL\)\) return REGISTRY_MIGRATION;/);
   assert.ok(skill.indexOf(ownServer) > skill.indexOf("## 9. Messaging on this machine"));
   assert.ok(flat.includes("On their own aweb server there is no signup: take \"Their own aweb server\", the last part of this item, instead."), "the hosted signup is skipped");
   // No ambient registry selector: a non-public AWID_REGISTRY_URL is refused from the oats.aweb release with --registry (registry-setting-required).
-  assert.ok(!skill.includes("AWID_REGISTRY_URL"), "the skill never sets AWID_REGISTRY_URL");
-  assert.ok(!/`RG`/.test(skill), "no registry input is carried to step 9");
+  assert.ok(!/AWID_REGISTRY_URL=|export AWID_REGISTRY_URL|AWID_REGISTRY_URL="/.test(skill), "the skill never sets AWID_REGISTRY_URL");
+  assert.ok(read("mirrors/oats-aweb/lib/registry-setting.mjs").includes("export const REGISTRY_MIGRATION='registry-setting-required: settings.oats.aweb.registry: `oats aweb setup --registry <origin>`;"), "the refusal the skill names");
+  assert.ok(read("mirrors/oats-aweb/lib/registry-setting.mjs").includes("export const REGISTRY_SETTING='settings.oats.aweb.registry';"), "the setting the skill names");
+  // The --registry act's answers are the provider's.
+  assert.ok(provider.includes("usage: oats aweb setup [--registry <origin>]"));
+  assert.ok(provider.includes('next:["Restart resident serve: oats aweb resident create <name>", "Restart wake: oats aweb wake install (operator shell)"]'));
+  assert.ok(flat.includes("Its `next` lists \"Restart resident serve\" and \"Restart wake\": both are expected and need nothing from you"), "both next steps are expected");
+  assert.ok(provider.includes('else console.error(`oats aweb setup: E_SETUP_REGISTRY: ${error.message}`);'));
+  assert.ok(flat.includes("An `E_SETUP_REGISTRY` refusal that starts `settings.oats.aweb.registry:` says what is wrong with the address"));
+  assert.match(read("mirrors/oats-aweb/lib/registry-setting.mjs"), /const invalid=detail=>\{throw new Error\(`\$\{REGISTRY_SETTING\}: \$\{detail\}`\);\};/, "an address refusal starts with the setting's name");
 
   // The create's flags and environment are the provider's: no --plan (it needs --username) and no JSON.
   assert.ok(provider.includes("--create <label> [--namespace <domain>] [--name <alias>]"));
@@ -176,8 +215,43 @@ test("step 9's own-server form checks the prerequisites read-only, then creates 
   assert.ok(!ownServer.includes("default:"), "no hosted team on the own-server form");
 });
 
+test("item 6 on a private registry: a read-only install plan catches a broker that can't carry RG before the person's install", () => {
+  const wake = read("mirrors/oats-aweb/lib/wake-service.mjs");
+  // The plan runs every refusal the install would, the registry pin included, and changes nothing.
+  assert.ok(wake.includes("/** Everything install decides before it changes anything: every refusal, the\n *  unit text and the actions. Runs read-only commands only. */\nasync function prepareInstall(opts, ctx) {"));
+  assert.ok(wake.includes('fail("E_WAKE_REGISTRY_CONFLICT",'), "the conflict the plan raises");
+  assert.ok(wake.includes('if (!manager) fail("E_WAKE_UNSUPPORTED",'), "no service manager");
+  assert.ok(wake.includes("if (opts.plan) return { ok: true, plan: true,"), "a plan writes nothing");
+  assert.ok(wake.includes('if (json) print(1, JSON.stringify({ ok: false, ...(opts?.plan ? { plan: true } : {}), error: { code, message } }) + "\\n");'), "the error.code the skill reads");
+  // The status the go-on gate reads does not report which registry a running broker serves.
+  const status = wake.slice(wake.indexOf("export async function wakeStatus("), wake.indexOf("const lines = (warnings)"));
+  assert.ok(status.length > 0 && !/registry/i.test(status), "wake status can't see the pin, so the plan is the check");
+
+  const item6 = section("6. **Codex, or `delivery: session`: the wake broker runs before the spawn.**", "The setup expert does the rest");
+  const flat6 = item6.replace(/\s+/g, " ");
+  const plan = item6.indexOf('cd "D" && oats aweb wake install --plan --json\n');
+  const install = item6.indexOf('cd "D" && oats aweb wake install\n');
+  assert.ok(plan !== -1 && install !== -1 && plan < install, "the plan runs before the person's install");
+  assert.ok(flat6.includes("**On a private registry (step 1), first check the install yourself,** read-only"));
+  assert.ok(flat6.includes("- **`E_WAKE_REGISTRY_CONFLICT`:** this computer account already runs a wake broker for another registry, or for none"));
+  assert.ok(flat6.includes("Stop, spawn nothing, and tell the person in plain words; the choice is theirs"), "the conflict goes to the person");
+  assert.ok(flat6.includes("Never uninstall the broker or deregister another deployment's homes yourself."));
+  // A plain `aw wake run` carries no registry pin: it is the public registry's fallback only.
+  assert.ok(flat6.includes("- **`E_WAKE_UNSUPPORTED`** (a container, or a machine with neither launchd nor systemd): there is no service to install, and the plain `aw wake run` below would not carry `RG`. Stop and spawn nothing."));
+  assert.ok(flat6.includes("offer a Claude or pi setup expert instead, which its own channel wakes"));
+  assert.ok(flat6.includes("on the public registry, the line is `aw wake run`, kept running as a supervised process."));
+  // Only a plan that passes lets the private branch go on: any other refusal leaves a running broker that may not carry RG.
+  assert.ok(flat6.includes("Only `\"ok\": true` lets you go on to their install below"));
+  assert.ok(flat6.includes("- **Any other refusal** (for example a broker started by hand or by another supervisor, `E_WAKE_RUNNING_UNSUPERVISED`, or a service the install didn't write, `E_WAKE_UNIT_CONFLICT`): stop and spawn nothing."));
+  assert.ok(flat6.includes("Never stop, uninstall or deregister a broker yourself."));
+  assert.ok(!/go on\. Their own install decides/.test(flat6), "a refused plan is never a go-on");
+  const prepare = wake.slice(wake.indexOf("async function prepareInstall(opts, ctx) {"), wake.indexOf("if (opts.plan) return { ok: true, plan: true,"));
+  for (const code of ["E_WAKE_UNSUPPORTED", "E_WAKE_UNIT_CONFLICT", "E_WAKE_REGISTRY_CONFLICT", "E_WAKE_RUNNING_UNSUPERVISED"]) assert.ok(prepare.includes(code), `the plan refuses ${code} before any change`);
+  assert.ok(!/AWID_REGISTRY_URL/.test(item6), "no ambient registry for the broker either");
+});
+
 test("the hand-over and Never carry the own-server branch", () => {
-  assert.ok(flat.includes("or team T on their own aweb server U, namespace ND, aw <tested> (oats.aweb's tested version) or \"aw <version> is newer than the tested <tested>; kept\", its key at <team key path>"));
-  assert.ok(flat.includes("- **On their own aweb server:** make or touch the namespace's controller key (`aw id namespace prepare-controller`, `~/.awid`), set or ask for `AWEB_API_KEY`, or write a hosted `default:…aweb.ai` team or `localTeams` into the workspace."));
+  assert.ok(flat.includes("or team T on their own aweb server U, namespace ND, registry public | RG (recorded in `settings.oats.aweb.registry`), aw <tested> (oats.aweb's tested version) or \"aw <version> is newer than the tested <tested>; kept\", its key at <team key path>"));
+  assert.ok(flat.includes("- **On their own aweb server:** make or touch the namespace's controller key (`aw id namespace prepare-controller`, `~/.awid`), set or ask for `AWEB_API_KEY`, set `AWID_REGISTRY_URL` (a private registry is recorded by `oats aweb setup --registry` only), or write a hosted `default:…aweb.ai` team or `localTeams` into the workspace."));
   assert.ok(flat.includes("or `<workspace>:ND` on their own aweb server, checked against step 9's create."));
 });

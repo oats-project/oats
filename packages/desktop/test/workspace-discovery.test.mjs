@@ -156,7 +156,7 @@ test('the declared soul is read-only; its page is stable under roster polling', 
   const u = await setup(t);
   u.doc.querySelector('.soul-card').click(); await tick();
   const inspector = u.doc.querySelector('.workspace-soul-page');
-  assert.match(inspector.textContent, /Core capabilities/);
+  assert.match(inspector.textContent, /Capabilities/); assert.ok(inspector.querySelector('.soul-capabilities .cap-row'));
   assert.doesNotMatch(inspector.textContent, /Edit this soul/);
   assert.equal(inspector.querySelector('form, textarea, input'), null, 'no in-place editor');
   const main = inspector.querySelector('.inspector-main');
@@ -190,15 +190,16 @@ for (const outcome of ['success', 'rejection']) test(`selected inspector ignores
   assert.equal(u.doc.querySelector('.spawn-dialog'), null);
 });
 
-test('instance rows reflect exact root/host identity and open only read-only snapshots', async t => {
+// Slice 3a: the soul page lists no instances; its card counts them (exact root and host), and an instance opens in the
+// sidebar from the roster (preselectHome), beside the soul page when one is open.
+test('instance counts reflect exact root/host identity; an instance opens only as a read-only snapshot in the sidebar', async t => {
   const instance = { agent: 'dev', instance: 'dev-seat', agentsRoot: '/team/one/agents', home: '/team/one/agents/dev/instances/dev-seat', running: true };
-  const u = await setup(t, { instances: [instance, { ...instance, agentsRoot: '/team/two/agents' }, { ...instance, server: 'another-host' }],
+  const u = await setup(t, { instances: [instance, { ...instance, agentsRoot: '/team/two/agents', home: '/team/two/agents/dev/instances/dev-seat' }, { ...instance, server: 'another-host' }],
     inspect: body => body.selector.home ? homeInspection(body.selector.home, { instance: 'dev-seat', soul: 'dev', instructions: { file: '/fixture/AGENTS.md', text: 'Captured instructions', truncated: false, sources: [] } }) : inspectData() });
-  assert.equal(u.doc.querySelector('.sactivity').textContent, '1 instance running');
-  assert.equal(u.doc.querySelector('.sactivity').title, '1 running · 1 instance', 'the full count stays on the activity');
+  assert.equal(u.doc.querySelector('.sactivity').textContent, '1 agent running');
   u.doc.querySelector('.soul-card').click(); await tick();
-  const buttons = u.doc.querySelectorAll('.inspector-instance'); assert.equal(buttons.length, 1);
-  buttons[0].click(); await tick();
+  assert.equal(u.doc.querySelector('.workspace-soul-page .inspector-instance'), null, 'no instances on the soul page');
+  spawn.preselectHome(instance); await tick();
   assert.deepEqual(u.inspections().at(-1).body.selector, { home: instance.home });
   // F7: the instance opens in the sidebar beside the soul's page, which keeps the soul.
   assert.equal(u.doc.querySelector('.workspace-soul-page .inspector-head h2').textContent, 'dev');
@@ -284,17 +285,26 @@ test('soul identity marks stay qualified and stable across reordered polling and
   ];
   const u = await setup(t, { agents });
   const identity = card => JSON.stringify([card.dataset.root, card.dataset.agent, card.dataset.server]);
-  const colors = () => Object.fromEntries([...u.doc.querySelectorAll('.soul-card')].map(card => [identity(card), card.querySelector('[data-avatar-color]').dataset.avatarColor]));
-  const before = colors();
-  u.setAgents([...agents].reverse()); u.polls[0](); await tick(); assert.deepEqual(colors(), before);
-  for (const card of u.doc.querySelectorAll('.soul-card')) {
-    card.click(); await tick();
-    const avatar = card.querySelector('.soul-avatar'), selected = u.doc.querySelector('.inspector-head .soul-avatar');
-    assert.equal(selected.dataset.avatarColor, avatar.dataset.avatarColor); assert.equal(selected.textContent, avatar.textContent);
-    assert.equal(selected.getAttribute('aria-hidden'), 'true');
-    assert.equal(u.doc.querySelector('.inspector-head h2').textContent, name);
-    assert.equal(u.doc.querySelector('[name=color]'), null, 'no invented writable CLI field');
-  }
+  // Slice 3a: a card carries no mark (name, what it does, agents, kind); the soul's page head shows its mark.
+  assert.equal(u.doc.querySelector('.soul-card [data-avatar-color]'), null, 'no mark on a card');
+  const marks = async () => {
+    const out = {};
+    for (const card of [...u.doc.querySelectorAll('.soul-card')]) {
+      card.click(); await tick();
+      const selected = u.doc.querySelector('.inspector-head .soul-avatar');
+      assert.equal(selected.getAttribute('aria-hidden'), 'true');
+      assert.equal(u.doc.querySelector('.inspector-head h2').textContent, name);
+      assert.equal(u.doc.querySelector('[name=color]'), null, 'no invented writable CLI field');
+      out[identity(card)] = [selected.dataset.avatarColor, selected.textContent];
+      u.doc.querySelector('.workspace-soul-page .inspector-back').click(); await tick();
+    }
+    return out;
+  };
+  const before = await marks();
+  assert.equal(Object.keys(before).length, agents.length, 'every qualified soul its own page');
+  assert.equal(before[JSON.stringify(['/team/one/shared/agents', name, ''])][0], 'sage');
+  u.setAgents([...agents].reverse()); u.polls[0](); await tick();
+  assert.deepEqual(await marks(), before, 'stable across a reordered poll');
   assert.equal(u.doc.querySelector('img,svg:not(.shell-icon):not(.runtime-mark),script,[data-runtime="<svg onload=evil()>"]'), null, 'only the vetted Lucide chrome and the static harness marks render SVG');
   for (const mark of u.doc.querySelectorAll('svg.runtime-mark')) assert.match(mark.parentElement.dataset.runtime, /^(claude|pi|codex)$/, 'a harness mark only inside a known harness badge');
   // Read-only POSTs only: inspect, and the catalog read the tab bar counts (never a spawn or sync).
@@ -302,9 +312,9 @@ test('soul identity marks stay qualified and stable across reordered polling and
   assert.deepEqual(u.files, []); assert.deepEqual(u.opens, []);
 });
 
-// Workspace v4 (W3): cards grouped by primary team or repository; reported labels as
-// chips (primary first); souls of an unconfirmed member listed apart with its reason.
-test('Souls group by primary team or repository, and unconfirmed members explain their hidden souls', async t => {
+// Slice 3a (replaces W3's team grouping and chips): cards grouped by repository only, no team chips; souls of an
+// unconfirmed member listed apart with its reason.
+test('Souls group by repository, and unconfirmed members explain their hidden souls', async t => {
   const agents = [
     { ...soul('/nw/agents', 'writer'), team: 'marketing', repoName: 'site', labels: ['marketing', 'engineering'] },
     { ...soul('/nw/agents', 'builder'), team: 'engineering', repoName: 'app' },
@@ -320,54 +330,115 @@ test('Souls group by primary team or repository, and unconfirmed members explain
   // Board 3: each header is an icon, the name and a muted qualifier (with the count).
   const titles = () => [...u.doc.querySelectorAll('.souls-group-title')].map(el => [el.querySelector('svg').getAttribute('data-icon'),
     el.querySelector('.souls-group-name').textContent, el.querySelector('.souls-group-note').textContent]);
-  const chips = name => [...u.doc.querySelector(`.soul-card[data-agent=${name}]`).querySelectorAll('.schip')].map(el => [el.querySelector('.schip-key').textContent, el.querySelector('b').textContent]);
-  // Repo is the default grouping (the human's direction).
-  assert.equal(u.doc.querySelector('.souls-group-by [data-group-by=repo]').getAttribute('aria-pressed'), 'true');
+  assert.equal(u.doc.querySelector('.souls-group-by, [data-group-by]'), null, 'no Group by');
   assert.deepEqual(titles(), [['repo', 'app', '1 soul'], ['repo', 'site', '2 souls'], ['warning', 'Not available', "lab hasn't joined the workspace"]]);
-  assert.deepEqual(chips('writer'), [['Team', 'marketing'], ['Team', 'engineering']], 'labelled chips: its teams, the default first; no work-mode chip');
-  // The default is marked visibly, in words: "Team marketing · default", the word muted, with a tooltip.
-  const [first, second] = u.doc.querySelectorAll('.soul-card[data-agent=writer] .schip');
-  assert.equal(first.dataset.default, 'true'); assert.equal(first.textContent, 'Teammarketing· default');
-  assert.equal(first.querySelector('.schip-note').textContent, '· default'); assert.equal(first.title, "Team marketing: this soul's default team");
-  assert.equal(u.doc.defaultView.getComputedStyle(first.querySelector('.schip-note')).color, 'var(--muted)');
-  assert.equal(second.querySelector('.schip-note'), null, 'only the default says so');
-  assert.equal(u.doc.querySelector('.soul-card[data-agent=builder] .scontext').textContent, 'Pi', 'the reported harness; no model claimed without launch data');
-  assert.equal(u.doc.querySelector('.soul-card[data-agent=builder] .runtime-badge').getAttribute('aria-label'), 'Harness: Pi');
-  assert.equal(u.doc.querySelector('.soul-card[data-agent=builder] .sactivity').textContent, 'No instances', 'never the bare word "none"');
+  assert.equal(u.doc.querySelector('.soul-card .schip, .soul-card .scontext, .soul-card .runtime-badge'), null, 'no team chips, no harness on a card');
+  assert.equal(u.doc.querySelector('.soul-card[data-agent=builder] .sactivity').textContent, 'No agents running', 'never the bare word "none"');
   assert.doesNotMatch(u.doc.querySelector('.souls-grid').textContent, /\bnone\b/);
   const hidden = u.doc.querySelector('[data-unavailable=prober]');
   assert.equal(hidden.tagName, 'DIV', 'an unavailable soul is not a control: it has no page to open');
-  assert.equal(hidden.querySelector('.sfoot .sproblem').textContent, 'Hidden until membership is confirmed', 'the reason, in the foot\'s left slot');
-  assert.deepEqual([...hidden.querySelectorAll('.schip')].map(el => el.textContent), ['Teamresearch']);
+  assert.equal(hidden.querySelector('.sfoot .sproblem').textContent, 'Hidden until membership is confirmed', 'the reason, in the foot');
+  assert.equal(hidden.querySelector('.sdesc').textContent, 'lab', 'the member it comes from');
   assert.equal(u.doc.querySelectorAll('.souls-grid .soul-card[tabindex="0"]').length, 1, 'one roving card');
-  u.doc.querySelector('.souls-group-by [data-group-by=team]').click();
-  assert.deepEqual(titles(), [['users', 'engineering', '2 souls'], ['users', 'marketing', '1 soul'], ['warning', 'Not available', "lab hasn't joined the workspace"]]);
-  assert.deepEqual(chips('writer'), [['Repo', 'site'], ['Team', 'engineering']], 'grouped by team: its repository instead of repeating the team');
-  assert.equal(u.doc.querySelector('.souls-group-by [data-group-by=team]').getAttribute('aria-pressed'), 'true');
-  u.doc.querySelector('.souls-group-by [data-group-by=repo]').click();
-  assert.equal(u.doc.querySelector('.souls-group-by [data-group-by=repo]').getAttribute('aria-pressed'), 'true');
+  // The table lists them the same way, the hidden one as a row that opens nothing.
+  u.doc.querySelector('.souls-view [data-view=table]').click();
+  assert.deepEqual([...u.doc.querySelectorAll('.souls-table th.souls-table-group .souls-group-name')].map(el => el.textContent), ['app', 'site', 'Not available']);
+  const row = u.doc.querySelector('.souls-table tr[data-unavailable=prober]');
+  assert.equal(row.querySelector('button'), null); assert.equal(row.cells[1].textContent, 'Hidden until membership is confirmed');
+  assert.equal(u.doc.querySelectorAll('.souls-table .soul-row-open[tabindex="0"]').length, 1, 'one roving row');
 });
 
-// #517: the Setup tab lists the workspace's machines when the CLI connects machines to a workspace.
-test('Setup: the Registered machines box follows the gates; it is read for this window and kept across repaints', async t => {
+// #517 and the Desktop UI rework's slice 3b: the Machines tab lists the workspace's computers; with the CLI's machine
+// gates, the machines registered to this workspace too.
+test('Machines: the list follows the gates; it is read for this window and kept across repaints; Setup holds no machines', async t => {
   const gated = { ...CLI, features: [...CLI.features, 'servers-per-workspace', 'server-connect'] };
   const machine = { id: 'devbox-team', label: 'devbox', sshHost: 'devbox', workspace: '/home/alex/team', workspaceKey: 'github.com/acme/team', check: { reachable: true, version: '0.39.0', error: null } };
   const u = await setup(t, { cli: gated, servers: () => ({ servers: [machine], filtered: true, key: 'github.com/acme/team', deployment: '/team', aweb: false }) });
-  u.tab('sources'); for (let i = 0; i < 6; i++) await tick();
-  const box = u.doc.querySelector('.setup .setup-machines');
-  assert.ok(box, 'the Registered machines box');
-  assert.deepEqual([...box.querySelectorAll('[data-machine]')].map(r => r.dataset.machine), ['devbox-team']);
+  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
+  const list = u.doc.querySelector('.workspace-discovery section.machines');
+  assert.ok(list, 'the Machines list');
+  assert.deepEqual([...list.querySelectorAll('[data-machine]')].map(r => r.dataset.machine), [':here', 'devbox-team']);
   assert.ok(u.calls.some(c => c.path === `/api/servers?ws=${encodeURIComponent('/team')}`));
-  assert.equal(box.querySelector('.machines-add').textContent, 'Add a machine to this workspace…');
-  u.click('Graph'); await tick();
-  assert.equal(u.doc.querySelector('.setup .setup-machines'), box, 'the same box, in either view');
+  assert.equal(list.querySelector('.machines-add').textContent, 'Add a machine to this workspace…');
+  u.tab('souls'); await tick(); u.tab('machines'); await tick();
+  assert.equal(u.doc.querySelector('.workspace-discovery section.machines'), list, 'the same list across repaints');
+  u.tab('sources'); for (let i = 0; i < 6; i++) await tick();
+  assert.equal(u.doc.querySelector('.setup section.machines, .setup .setup-machines'), null, 'not in Setup');
 });
 
-test('Setup: without servers-per-workspace and server-connect there is no Registered machines box and no Add a machine', async t => {
+// Review round 1: the list stays mounted across the page's repaints, so a roster poll never drops focus from a row or a
+// machine's control; and a view with no deployment on this computer never lists "This computer".
+test('Machines: a roster poll keeps focus on the focused machine\'s row and on its open controls', async t => {
+  const gated = { ...CLI, features: [...CLI.features, 'servers-per-workspace', 'server-connect'] };
+  const machine = { id: 'devbox-team', label: 'devbox', sshHost: 'devbox', workspace: '/home/alex/team', workspaceKey: 'github.com/acme/team', check: { reachable: true, version: '0.39.0', error: null } };
+  let instances = [];
+  const u = await setup(t, { cli: gated, servers: () => ({ servers: [machine], filtered: true, key: 'github.com/acme/team', deployment: '/team', aweb: false }) });
+  u.setLoaders(null, () => ({ ...u.panel(), instances }));
+  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
+  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
+  const rowButton = () => u.doc.querySelector('[data-machine="devbox-team"] button.machine-row');
+  rowButton().focus();
+  instances = [{ instance: 'dev-1', agent: 'dev', agentsRoot: '/team/one/agents', server: 'devbox-team', running: true }];
+  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
+  assert.equal(u.calls.filter(c => c.path.startsWith('/api/panel')).length > 1, true, 'the poll ran');
+  assert.equal(u.doc.activeElement, rowButton(), 'focus stays on the row');
+  rowButton().click();
+  const check = () => u.doc.querySelector('[data-machine="devbox-team"] .machine-check');
+  check().focus();
+  instances = [...instances, { instance: 'dev-2', agent: 'dev', agentsRoot: '/team/one/agents', server: 'devbox-team', running: false }];
+  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
+  assert.equal(u.doc.activeElement, check(), 'and on the open machine\'s Check');
+});
+
+test('Machines: a remote-only view lists its machine\'s deployment, never "This computer"', async t => {
+  const u = await setup(t, { workspace: { remote: true, server: 'devbox' }, instances: [{ instance: 'dev-1', agent: 'dev', server: 'devbox', deployment: { id: 'remote:devbox:/srv/team' } }] });
+  u.setLoaders(null, () => ({ ...u.panel(), deployments: [{ id: 'remote:devbox:/srv/team', machine: 'devbox', path: '/srv/team', local: false, reachable: true }] }));
+  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
+  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
+  const rows = [...u.doc.querySelectorAll('.workspace-discovery section.machines [data-machine]')];
+  assert.deepEqual(rows.map(r => [...r.querySelectorAll('.machine-row > .machine-cell')].map(c => c.textContent)), [['devbox', 'reachable', '']], 'no version is claimed for it');
+  assert.equal(u.doc.querySelector('[data-machine=":here"]'), null);
+  assert.equal(u.doc.querySelector('.machines-empty'), null, 'it is not "no other machine"');
+});
+
+test('Machines: an unread deployment here says so and why; a good read clears it', async t => {
+  let failing = true;
+  const u = await setup(t, { deployment: () => failing ? { status: 'unavailable', reason: { code: 'E_CLI_FAILED', message: 'roster command failed' } } : observed() });
+  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
+  const here = () => [...u.doc.querySelectorAll('[data-machine=":here"] .machine-row > .machine-cell')].map(c => c.textContent);
+  assert.deepEqual(here().slice(0, 2), ['This computer', 'not read']);
+  assert.match(u.doc.querySelector('.workspace-discovery section.machines .machines-reason').textContent, /E_CLI_FAILED: roster command failed/);
+  failing = false;
+  for (const poll of u.polls) poll(); for (let i = 0; i < 6; i++) await tick();
+  assert.deepEqual(here().slice(0, 2), ['This computer', 'reachable']);
+  assert.equal(u.doc.querySelector('.workspace-discovery section.machines .machines-reason'), null);
+});
+
+test('Machines: without servers-per-workspace and server-connect the list is this computer alone, with no Add a machine', async t => {
   const u = await setup(t);
-  u.tab('sources'); for (let i = 0; i < 6; i++) await tick();
-  assert.ok(u.doc.querySelector('.setup'));
-  assert.equal(u.doc.querySelector('.setup-machines'), null);
+  u.tab('machines'); for (let i = 0; i < 6; i++) await tick();
+  const list = u.doc.querySelector('.workspace-discovery section.machines');
+  assert.deepEqual([...list.querySelectorAll('[data-machine]')].map(r => r.dataset.machine), [':here']);
   assert.equal([...u.doc.querySelectorAll('button')].some(b => b.textContent === 'Add a machine to this workspace…'), false);
-  assert.equal(u.calls.some(c => c.path.startsWith('/api/servers?')), false);
+  assert.equal(u.calls.some(c => c.path.startsWith('/api/servers?')), false, 'nothing to read');
+});
+
+// Review round 2: the soul page follows its roster row across polls: a refusal that appears or clears changes its
+// Ready line and New agent, as it changes the card, from the real roster read (not an injected refusal).
+test('a roster poll that refuses or clears a soul moves its page\'s Ready line and New agent, both ways', async t => {
+  const cli = { ...CLI, features: [...CLI.features, 'desktop-facts'] };
+  const ready = { ...soul(), spawnable: true, problem: null };
+  const refused = { ...soul(), spawnable: false, problem: { code: 'E_SOUL_DISABLED', message: 'Disabled on this computer.' } };
+  const u = await setup(t, { cli, agents: [ready] });
+  u.doc.querySelector('.soul-card').click(); await tick(); await tick();
+  const line = () => u.doc.querySelector('.workspace-soul-page .soul-ready-line').textContent;
+  const newAgent = () => u.doc.querySelector('.workspace-soul-page .spawn-act');
+  assert.equal(line(), 'Ready'); assert.equal(newAgent().disabled, false);
+  u.setAgents([refused]); u.polls[0](); await tick(); await tick();
+  assert.equal(line(), 'Disabled on this computer.', 'the refusal reaches the page');
+  assert.equal(newAgent().disabled, true, 'and New agent');
+  newAgent().ownerDocument.querySelector('.workspace-soul-page button[title="Inspect again"]').click(); await tick(); await tick();
+  assert.equal(line(), 'Disabled on this computer.', 'an explicit Refresh keeps the current row');
+  u.setAgents([ready]); u.polls[0](); await tick(); await tick();
+  assert.equal(line(), 'Ready', 'cleared again'); assert.equal(newAgent().disabled, false);
 });

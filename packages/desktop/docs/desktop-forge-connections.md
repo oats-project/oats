@@ -1,7 +1,7 @@
 # Desktop forge connections
 
 Connections are **workstation/ADE accounts**, not capabilities. Settings (the
-command palette's **Settings: Connections…**) → Connections contains the GitHub card, beside the
+command palette's **Connections**, among its sections) → Connections contains the GitHub card, beside the
 Terminal section (font size; `settings-terminal.mjs`); the selected instance's Developer tab (Git and GitHub)
 shows pull-request facts. Every local workspace uses gh's native account store.
 No OATS config, soul, instance, lock or catalog is changed. GitLab and automatic

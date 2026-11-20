@@ -128,12 +128,12 @@ function rig(t, { platform = "Linux x86_64" } = {}) {
     current: () => document.querySelector('#ws-options .ws-option[aria-current="true"]'),
     row: key => rows().find(row => row.dataset.workspaceId === key) ?? null,
     line: () => document.querySelector("#leader-hint .leader-hint-line")?.textContent ?? null,
-    /** Ctrl+X (the leader on both platforms), then `key`, pressed where focus is. */
+    /** Ctrl+Space (the Desktop's leader on both platforms, D18), then `key`, pressed where focus is. */
     leaderThen(key) {
       const at = document.activeElement === document.body ? document.getElementById("sidebar-spawn") : document.activeElement;
       at.focus();
-      fire(at, { key: "x", code: "KeyX", keyCode: 88, ctrlKey: true });
-      assert.ok(s.leader.isWaiting(), "Ctrl+X opens the leader");
+      fire(at, { key: " ", code: "Space", keyCode: 32, ctrlKey: true });
+      assert.ok(s.leader.isWaiting(), "Ctrl+Space opens the leader");
       fire(document.activeElement, key === "up" ? { key: "ArrowUp", code: "ArrowUp", keyCode: 38 } : key === "down" ? { key: "ArrowDown", code: "ArrowDown", keyCode: 40 }
         : { key, code: `Key${key.toUpperCase()}`, keyCode: key.toUpperCase().charCodeAt(0) });
     },
@@ -142,7 +142,7 @@ function rig(t, { platform = "Linux x86_64" } = {}) {
   };
 }
 
-for (const platform of ["Linux x86_64", "MacIntel"]) test(`${platform}: Ctrl+X then ↓ / ↑ step the list as drawn, as a click does, wrapping at the ends; with no other workspace the hint says so`, async t => {
+for (const platform of ["Linux x86_64", "MacIntel"]) test(`${platform}: Ctrl+Space then ↓ / ↑ step the list as drawn, as a click does, wrapping at the ends; with no other workspace the hint says so`, async t => {
   const r = rig(t, { platform });
   r.shows(A, [A, B, C]); await flush();
   // The rows are the served views alone: the list asks main for nothing (this computer's deployments are Add's).

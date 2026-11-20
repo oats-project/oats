@@ -144,7 +144,7 @@ test("nothing binds Super/Meta on Linux/Windows: Mod is Ctrl there", () => {
 
 test("the terminal allowlist is exactly the actions that must work in a terminal", () => {
   assert.deepEqual([...TERMINAL_ALLOWLIST].sort(), [
-    "app.chooseSoul", "app.leader", "app.palette", "app.quickOpenSouls", "app.shortcuts", "app.themePicker", "app.workspaces", "focus.leaveTerminal",
+    "app.chooseSoul", "app.leader", "app.newAgent", "app.palette", "app.quickOpenSouls", "app.shortcuts", "app.themePicker", "app.workspaces", "focus.leaveTerminal",
     "instance.edit", "panel.toggle", "roster.openNext", "roster.openPrevious", "sidebar.focusFilter", "sidebar.toggle",
     "split.close", "split.focusNextGroup", "split.focusPrevGroup", "split.horizontal", "split.vertical",
     "stage.automations", "stage.hierarchy", "stage.spawn",
@@ -156,11 +156,11 @@ test("the terminal allowlist is exactly the actions that must work in a terminal
   // Every shared chord works in a terminal (CHORDS_READ): the leader's keys are reachable from every focus.
   for (const { id } of CHORDS_READ) assert.ok(TERMINAL_ALLOWLIST.includes(id), `${id} is allowlisted`);
   // No allowlisted default on Linux/Windows, in any family, is a plain Ctrl+letter, a bare function
-  // key or Ctrl+PgUp/PgDn. The one named exception, the leader's Ctrl+X (0x18, which the leader
-  // pressed twice gives the program).
+  // key or Ctrl+PgUp/PgDn. The one named exception, the leader's Ctrl+Space (NUL, which the leader
+  // pressed twice gives the program; D18).
   for (const family of CHORD_FAMILIES) for (const id of TERMINAL_ALLOWLIST) {
     const chord = defaultBinding(id, false, family);
-    if (id === "app.leader") { assert.equal(chord, "Ctrl+X"); continue; }
+    if (id === "app.leader") { assert.equal(chord, "Ctrl+Space"); continue; }
     // The workspace moves have no key outside the Alt family: Alt+↑/↓ are left to the program there.
     if (chord === null) { assert.ok(family !== "alt" && ["workspace.previous", "workspace.next"].includes(id), `${id} has no key, ${family}`); continue; }
     assert.doesNotMatch(chord, /^(Mod|Ctrl)\+[A-Za-z\\]$|^(Shift\+)?F\d+$|^Ctrl\+Page(Up|Down)$/, `${id}: ${chord}, ${family}`);
@@ -169,7 +169,9 @@ test("the terminal allowlist is exactly the actions that must work in a terminal
     // sequence). In the Alt family it is one of the shared chords (CHORDS_READ), the family's own keys,
     // which the program still gets from Esc, then the key. In the other two only the Alt+Shift arrows;
     // Alt+digit, Alt+letter and the Alt arrows stay the program's.
-    if (family === "alt") assert.ok(CHORDS_READ.some((read) => read.id === id), `${id}: ${chord} is a shared chord of the Alt family`);
+    // New agent's Alt+N (the Desktop UI rework, decided 2026-11-19) is the one Alt family key the Desktop holds alone
+    // until the TUI takes it; readline's and zsh's history search forward still get ESC n from Esc, then n.
+    if (family === "alt") assert.ok(CHORDS_READ.some((read) => read.id === id) || id === "app.newAgent", `${id}: ${chord} is a shared chord of the Alt family`);
     else assert.match(chord, /^Alt\+Shift\+[←→↑↓]$/, `${id}: ${chord}, ${family}`);
   }
 });
@@ -180,6 +182,7 @@ const ctrlAltPresses = [
   [linux("w", { altKey: true }), "tabs.close"], [linux("e", { altKey: true }), "split.vertical"], [linux("E", { altKey: true, shiftKey: true }), "split.horizontal"],
   [linux("A", { altKey: true, shiftKey: true }), "split.focusPrevGroup"], [linux("a", { altKey: true }), "split.focusNextGroup"],
   [linux("z", { altKey: true }), "terminal.focusMode"], [linux("r", { altKey: true }), "instance.edit"], [linux("f", { altKey: true }), "sidebar.focusFilter"],
+  [linux("n", { altKey: true }), "app.newAgent"],
   ...Array.from({ length: 9 }, (_, i) => [linux(`${i + 1}`, { altKey: true }), `tabs.goto${i + 1}`]),
   // The Alt+Shift arrows: the tab moves.
   [ev("ArrowLeft", { altKey: true, shiftKey: true }), "tabs.prevPage"], [ev("ArrowRight", { altKey: true, shiftKey: true }), "tabs.nextPage"],
@@ -191,6 +194,7 @@ const FAMILY_PRESSES = {
     [ev("w", { altKey: true }), "tabs.close"], [ev("e", { altKey: true }), "split.vertical"], [ev("E", { altKey: true, shiftKey: true }), "split.horizontal"],
     [ev("ArrowLeft", { altKey: true, shiftKey: true }), "split.focusPrevGroup"], [ev("ArrowRight", { altKey: true, shiftKey: true }), "split.focusNextGroup"],
     [ev("z", { altKey: true }), "terminal.focusMode"], [ev("r", { altKey: true }), "instance.edit"], [ev("f", { altKey: true }), "sidebar.focusFilter"],
+    [ev("n", { altKey: true }), "app.newAgent"],
     ...Array.from({ length: 9 }, (_, i) => [ev(`${i + 1}`, { altKey: true }), `tabs.goto${i + 1}`]),
     [ev("ArrowLeft", { altKey: true }), "tabs.prevPage"], [ev("ArrowRight", { altKey: true }), "tabs.nextPage"],
     // The leader's ↑ / ↓, the Alt family's alone.
@@ -208,7 +212,7 @@ const FAMILY_PRESSES = {
 // The same key in every family.
 const SHARED_PRESSES = [
   [linux("N", { shiftKey: true }), "app.chooseSoul"], [linux("Tab"), "tabs.next"], [linux("Tab", { shiftKey: true }), "tabs.prev"],
-  [linux("W", { shiftKey: true, altKey: true }), "split.close"], [linux("x"), "app.leader"],
+  [linux("W", { shiftKey: true, altKey: true }), "split.close"], [linux(" ", { code: "Space" }), "app.leader"],
   // The Alt+Shift arrows (no Ctrl) ↑ / ↓: the previous / next instance.
   [ev("ArrowUp", { altKey: true, shiftKey: true }), "roster.openPrevious"], [ev("ArrowDown", { altKey: true, shiftKey: true }), "roster.openNext"],
   [linux("F6", { shiftKey: true }), "focus.leaveTerminal"], [linux("C", { shiftKey: true }), "terminal.copySelection"],
@@ -477,10 +481,10 @@ test("theme picker: Ctrl+Shift+Space on Linux/Windows, ⇧⌘Space on macOS, fro
     assert.equal(matchEvent(space({ metaKey: true, shiftKey: true }), macOpts), "app.themePicker", `macOS, terminal=${insideTerminal}`);
     const claimed = space({ ctrlKey: true, shiftKey: true }); handleKeydown(claimed, linuxOpts);
     assert.equal(claimed.defaultPrevented, true, "claimed before the pty");
-    // Plain Ctrl+Space (NUL: set-mark in emacs, completion in shells and editors) is never the app's.
+    // Plain Ctrl+Space (NUL: set-mark in emacs, completion in shells and editors) is the leader since D18 (decided
+    // 2026-11-19), on both platforms: the leader pressed twice gives the program its NUL (leader.test.mjs).
     const nul = space({ ctrlKey: true });
-    for (const opts of [linuxOpts, macOpts]) assert.equal(matchEvent(nul, opts), null, `Ctrl+Space, mac=${opts.isMac}`);
-    assert.equal(handleKeydown(nul, linuxOpts), false); assert.equal(nul.defaultPrevented, false);
+    for (const opts of [linuxOpts, macOpts]) assert.equal(matchEvent(nul, opts), "app.leader", `Ctrl+Space, mac=${opts.isMac}`);
     // Not the other platform's chord: ⌃⇧Space on macOS (⌃ in a terminal is the program's), ⌘ alone elsewhere.
     assert.equal(matchEvent(space({ ctrlKey: true, shiftKey: true }), macOpts), null);
     assert.equal(matchEvent(space({ metaKey: true, ctrlKey: true, shiftKey: true }), macOpts), null, "⌃⇧⌘Space is not the macOS chord");
@@ -688,10 +692,11 @@ test("macOS: the copy action has no chord, so ⌘C stays the menu's Copy and ⌃
 // leader pressed twice gives the program: terminal-xterm-bytes), and Cut keeps it in a text field
 // (leaderLeftToField). On macOS ⌃X fires in a terminal by name and shape (⌃\, the leader before 0.67,
 // too), a named exception to principle 3, and in a field as well: Cut is ⌘X there.
-test("the leader: Ctrl+X fires app.leader inside a terminal on Linux/Windows, and claims it", t => {
+test("the leader: Ctrl+X (the other choice; D18's default is Ctrl+Space) fires app.leader inside a terminal on Linux/Windows, and claims it", t => {
   registerAll(t);
-  assert.equal(defaultBinding("app.leader", false), "Ctrl+X");
-  assert.equal(defaultBinding("app.leader", true), "Ctrl+X");
+  assert.equal(defaultBinding("app.leader", false), "Ctrl+Space");
+  assert.equal(defaultBinding("app.leader", true), "Ctrl+Space");
+  setBinding("app.leader", "Ctrl+X"); // the Ctrl+X choice (the Keyboard shortcuts sheet)
   for (const insideTerminal of [true, false]) {
     const opts = { isMac: false, insideTerminal };
     const ctrlX = linux("x");
@@ -720,6 +725,7 @@ test("the leader: Ctrl+X fires app.leader inside a terminal on Linux/Windows, an
 
 test("the leader in a text field: Linux/Windows leave Ctrl+X to Cut; a terminal's own textarea, a field with nothing to cut and macOS open it", t => {
   registerAll(t);
+  setBinding("app.leader", "Ctrl+X"); // the Ctrl+X choice: Ctrl+Space, the default, types nothing in a field and opens there
   const dom = new JSDOM(`<input class="palette-input"><input type="search" class="search"><textarea class="ftask"></textarea>
     <div class="editable" contenteditable="true"></div><input type="checkbox" class="check"><button class="button">b</button>
     <input class="readonly" readonly><textarea class="readonly-area" readonly></textarea><input type="password" class="password"><input type="date" class="date">
@@ -783,6 +789,7 @@ test("the leader in a text field: Linux/Windows leave Ctrl+X to Cut; a terminal'
 
 test("the leader on macOS: ⌃X fires inside a terminal, and ⌃\\ bound back; another ⌃ chord does not, ⌘ does", t => {
   registerAll(t);
+  setBinding("app.leader", "Ctrl+X"); // the Ctrl+X choice; ⌃Space, the default, fires there by the same rule
   const inTerm = { isMac: true, insideTerminal: true };
   const ctrlX = ev("x", { ctrlKey: true });
   assert.equal(matchEvent(ctrlX, inTerm), "app.leader");
@@ -814,6 +821,7 @@ test("the leader is inert under a shown modal: the chord goes where it goes toda
   resetAllBindings();
   let modal = false;
   const off = registerAction({ id: "app.leader", label: "Leader", context: "global", when: () => !modal, run: () => {} });
+  setBinding("app.leader", "Ctrl+X"); // the Ctrl+X choice
   t.after(() => { off(); resetAllBindings(); });
   assert.equal(matchEvent(linux("x"), { isMac: false, insideTerminal: true }), "app.leader");
   modal = true;
@@ -1267,7 +1275,7 @@ test("Ctrl+Shift family: every action's Linux/Windows default, as the shortcuts 
     assert.equal(getBinding(id, false), defaultBinding(id, false, "ctrl+alt"), `${id} keeps its key`);
   }
   // The leader is the same in both families, and so are the palette's own group keys.
-  assert.equal(getBinding("app.leader", false), "Ctrl+X");
+  assert.equal(getBinding("app.leader", false), "Ctrl+Space");
   assert.equal(paletteGroupHint(false), "Alt+Shift+↓ next group · Alt+Shift+↑ previous");
 });
 

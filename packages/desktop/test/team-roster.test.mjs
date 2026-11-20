@@ -55,13 +55,13 @@ test('memberGroups: one server\'s two groups (an edited registration): the machi
   assert.equal(down[0].reached, false); assert.equal(down[0].error, 'ssh failed');
 });
 
-test('memberSummary: "N of your instances", ", M on other machines" when some run elsewhere, the machines not reached (each once), and "None of your instances"', () => {
-  assert.equal(memberSummary([]), 'None of your instances');
-  assert.equal(memberSummary([m('a')]), '1 of your instances');
-  assert.equal(memberSummary([m('a'), m('b'), far('c', 'build')], [server('build')]), '3 of your instances, 1 on other machines');
+test('memberSummary: "N of your agents", ", M on other machines" when some run elsewhere, the machines not reached (each once), and "None of your agents"', () => {
+  assert.equal(memberSummary([]), 'None of your agents');
+  assert.equal(memberSummary([m('a')]), '1 of your agents');
+  assert.equal(memberSummary([m('a'), m('b'), far('c', 'build')], [server('build')]), '3 of your agents, 1 on other machines');
   const down = [far('c', 'down', { running: null }), far('d', 'down', { workspace: 'remote:down:2', running: null }), far('e', 'build', { running: null })];
   assert.equal(memberSummary([m('a'), ...down], [server('down', { reached: false }), server('down', { group: 'down:2', reached: false }), server('build', { reached: false })]),
-    '4 of your instances, 3 on other machines, Build box, Down box not reached', 'two groups on one machine name it once');
+    '4 of your agents, 3 on other machines, Build box, Down box not reached', 'two groups on one machine name it once');
 });
 
 test('stateKind: run only when running and openable, stop when plainly stopped, warn for everything else', () => {
@@ -88,15 +88,15 @@ test('the team page lists its members by machine: one card per machine, a table 
     far('far-d', 'build', { addressable: false, reason: 'Build box did not report this instance as reachable.', reasonLabel: 'not reachable on Build box' })],
     servers: [server('build'), server('down', { reached: false, error: 'ssh failed: timeout' })], notReached: [] }, { onMember: (action, x) => calls.push([action, x.instance, x.server]) });
   assert.equal(u.q('.ct-irow, .ct-member-name'), null, 'the board lists nobody');
-  assert.equal(u.q('[data-team="alex"] .ct-sum').textContent, '4 of your instances, 3 on other machines, Down box not reached');
+  assert.equal(u.q('[data-team="alex"] .ct-sum').textContent, '4 of your agents, 3 on other machines, Down box not reached');
   const cards = u.pall('.ct-mcard');
   assert.deepEqual(cards.map(c => [c.getAttribute('role'), c.getAttribute('aria-label'), c.querySelector('.ct-mcard-head').textContent]),
-    [['group', 'This computer', 'This computer1 instance, 1 running'], ['group', 'Build box', 'Build box2 instances, 0 running'], ['group', 'Down box', 'Down boxnot reached']]);
+    [['group', 'This computer', 'This computer1 agent, 1 running'], ['group', 'Build box', 'Build box2 agents, 0 running'], ['group', 'Down box', 'Down boxnot reached']]);
   assert.equal(cards[2].querySelector('.ct-mcard-head').title, 'ssh failed: timeout'); assert.ok(cards[2].classList.contains('unreached'));
   assert.equal(cards[0].querySelector('.ct-mcard-head').title, '');
   for (const c of cards) {
     const table = c.querySelector('.ct-ilist');
-    assert.equal(table.getAttribute('role'), 'table'); assert.equal(table.getAttribute('aria-label'), `Your instances on alex on ${c.getAttribute('aria-label')}`);
+    assert.equal(table.getAttribute('role'), 'table'); assert.equal(table.getAttribute('aria-label'), `Your agents on alex on ${c.getAttribute('aria-label')}`);
     assert.deepEqual([...table.querySelectorAll('.ct-ihead [role=columnheader]')].map(h => h.textContent), ['Instance', 'Soul', 'State', 'Created', 'Terminal']);
     assert.ok(table.querySelector('.ct-ihead .ct-vh'), 'the Terminal header is for assistive tech only');
   }
@@ -134,11 +134,11 @@ test('the team page\'s counts: instances, running, stopped, those needing attent
   const u = await mount(t, { members: [m('dev-a'), m('dev-b', { running: false }), far('far-c', 'build', { running: null, reasonLabel: 'Build box not reached', reason: 'x' })],
     servers: [server('build')], notReached: [] });
   const sum = u.p('.ct-yours-sum');
-  assert.deepEqual([...sum.children].map(c => c.textContent), ['3instances', '1running', '1stopped', '1needs attention', 'on 2 machines']);
+  assert.deepEqual([...sum.children].map(c => c.textContent), ['3agents', '1running', '1stopped', '1needs attention', 'on 2 machines']);
   assert.ok(sum.querySelector('.warn b'), 'attention in the warn colour'); assert.equal(sum.lastElementChild.className, 'ct-yours-machines');
-  assert.equal(u.p('.ct-default-note').textContent, 'Every instance joins its default team, so all of your instances are here.', 'alex is the default');
+  assert.equal(u.p('.ct-default-note').textContent, 'Every agent joins its default team, so all of your agents are here.', 'alex is the default');
   u.set({ members: [m('dev-a')], servers: [], notReached: [] }); u.card.syncRoster(); await tick();
-  assert.deepEqual([...u.p('.ct-yours-sum').children].map(c => c.textContent), ['1instance', '1running', 'on 1 machine'], 'no stopped, no attention: not said');
+  assert.deepEqual([...u.p('.ct-yours-sum').children].map(c => c.textContent), ['1agent', '1running', 'on 1 machine'], 'no stopped, no attention: not said');
 });
 
 test('not reached: a status line under the head names every server we hold no rows for, and follows each answer even with focus inside', async t => {
@@ -159,10 +159,10 @@ test('the board\'s repaint barrier holds with focus inside it: a changed roster 
   const button = u.q('[data-team="alex"] .ct-open'), card = u.q('[data-team="alex"]'); button.focus();
   u.set({ members: [m('dev-a', { running: false }), m('dev-b')], servers: [], notReached: [] }); u.card.syncRoster(); await tick();
   assert.equal(u.q('[data-team="alex"]'), card, 'not rebuilt under the keyboard'); assert.equal(u.doc.activeElement, button);
-  assert.equal(u.q('[data-team="alex"] .ct-sum').textContent, '1 of your instances');
+  assert.equal(u.q('[data-team="alex"] .ct-sum').textContent, '1 of your agents');
   assert.equal(u.pall('.ct-irow:not(.ct-ihead)').length, 2, 'the page has its own rule');
   button.blur(); u.card.syncRoster(); await tick();
-  assert.equal(u.q('[data-team="alex"] .ct-sum').textContent, '2 of your instances', 'redrawn once focus left');
+  assert.equal(u.q('[data-team="alex"] .ct-sum').textContent, '2 of your agents', 'redrawn once focus left');
 });
 
 test('hostile instance, home and server label strings are text, never markup', async t => {
@@ -191,8 +191,8 @@ test('the team page: its card first (the label as the page\'s h2, no foot, not a
   assert.equal(card.querySelector('.ct-open, .ct-foot, .ct-go'), null);
   assert.ok(card.querySelector('[data-fact=address]')); assert.ok(card.querySelector('.ct-why'), 'why Remove is off: on the page too');
   const yours = page.querySelector('[data-section=yours]');
-  assert.equal(yours.querySelector('h3.ct-section-title').textContent, 'Your instances on this team');
-  assert.equal(yours.querySelector('.ct-section-lead').textContent, 'On this computer and the machines you added to this workspace. Instances other people run on alex are not listed here.');
+  assert.equal(yours.querySelector('h3.ct-section-title').textContent, 'Your agents on this team');
+  assert.equal(yours.querySelector('.ct-section-lead').textContent, 'On this computer and the machines you added to this workspace. Agents other people run on alex are not listed here.');
   assert.deepEqual([...u.host.querySelectorAll('.page-bar .page-crumbs span')].map(s => s.textContent), ['Workspace', '/', 'Teams', '/', 'alex']);
   assert.equal(u.p('.page-back').getAttribute('aria-label'), 'Back to Teams'); assert.equal(u.p('.page-back').title, 'Back to Teams (Esc)');
 });
