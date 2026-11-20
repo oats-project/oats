@@ -220,7 +220,9 @@ here.
 - **[0.69.23](release-notes/v0.69.23.md#upgrade):** the catalog pins
   oats.framework 1.27.0, oats.aweb 1.46.0 and oats.okf 6.3.0. Respawn
   instances, or move stopped ones with `oats instance upgrade`, to take the
-  board teaching and the mail read. A team image that ran the experimental
+  board teaching and the mail read. `--same-work` and `oats instance
+  same-work` are deprecated aliases of `--related-work` and `oats instance
+  related-work`. A team image that ran the experimental
   bb image is rebuilt, with the bb image from oats-project/oats-bb.
 - **[0.69.22](release-notes/v0.69.22.md#upgrade):** the catalog pins
   oats.aweb 1.45.0; `setup --install-aw` installs the tested aw by default.
