@@ -264,6 +264,7 @@ async function a13(browser, viewport, threads) {
       `${at} the row's chips: soul, instance, alias, parent, home, OATS`,
       chips,
     );
+    check(await page.evaluate(visible(testId("oats-chip-oats"))), `${at} the OATS chip is on screen, whatever the other chips' width`);
     const rowHeight = await page.evaluate(`document.querySelector(${JSON.stringify(testId("oats-identity-row"))}).getBoundingClientRect().height`);
     check(rowHeight < 50, `${at} the row is one line (${Math.round(rowHeight)} px)`);
     await page.shot(`a13-${viewport.name}-thread`);

@@ -80,17 +80,24 @@ function SpawnForm({ soul }: { soul: Soul }) {
   const ready = nameOk && task.trim() !== "" && busy === null;
   const input = { soul: soul.name, name, task };
 
+  // What the form holds now. A preview's answer is for the input it was asked with: one that
+  // lands after the name or the task changed is dropped, never drawn under the new input.
+  const shown = useRef("");
+  shown.current = JSON.stringify(input);
+
   const preview = () => {
     if (!ready) return;
+    const asked = shown.current;
     setBusy("preview");
     setError(null);
     rpc.call("spawnPreview", input).then(
       (answer) => {
         setBusy(null);
-        setSummary(answer.summary);
+        if (shown.current === asked) setSummary(answer.summary);
       },
       (cause: unknown) => {
         setBusy(null);
+        if (shown.current !== asked) return;
         setSummary(null);
         setError(errorMessage(cause));
       },

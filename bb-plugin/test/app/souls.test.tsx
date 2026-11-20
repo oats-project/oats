@@ -228,3 +228,30 @@ test("a preview is taken down when the name or the task it answered for changes"
     expect(slot.queryByTestId("oats-preview")).toBeNull();
   }
 });
+
+test("a preview that answers after the name changed is not drawn for the new input", async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const slot = await souls("oats-developer", {
+    spawnPreview: async () => (await held, { summary: { modules: [], teams: [], launch: null, warnings: [], problems: ["E_INSTANCE_EXISTS: first-name exists"] } }),
+  });
+  await slot.findByTestId("oats-spawn-form");
+  fill(slot, "first-name", "Task.");
+  fireEvent.click(slot.getByTestId("oats-spawn-preview"));
+  fireEvent.change(slot.getByTestId("oats-spawn-name"), { target: { value: "second-name" } });
+  release();
+  await waitFor(() => expect(slot.getByTestId("oats-spawn-preview").textContent).toBe("Preview")); // the call is over
+  expect(slot.queryByTestId("oats-preview")).toBeNull();
+});
+
+test("a preview's refusal that arrives after the task changed is dropped too", async () => {
+  let refuse!: (cause: Error) => void;
+  const slot = await souls("oats-developer", { spawnPreview: () => new Promise<never>((_resolve, reject) => (refuse = reject)) });
+  await slot.findByTestId("oats-spawn-form");
+  fill(slot, "a-name", "First task.");
+  fireEvent.click(slot.getByTestId("oats-spawn-preview"));
+  fireEvent.change(slot.getByTestId("oats-spawn-task"), { target: { value: "Second task." } });
+  refuse(new Error("E_TASK_REFUSED: about the first task"));
+  await waitFor(() => expect(slot.getByTestId("oats-spawn-preview").textContent).toBe("Preview"));
+  expect(slot.queryByRole("alert")).toBeNull();
+});

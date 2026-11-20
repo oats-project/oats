@@ -43,7 +43,7 @@ export function IdentityRow({ threadId }: ExperimentalThreadHeaderRowProps) {
   return (
     <div
       data-testid="oats-identity-row"
-      className="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap border-b border-border px-3 py-1.5"
+      className="flex items-center gap-1.5 overflow-x-auto whitespace-nowrap border-b border-border pl-3"
     >
       <Chip title="soul">
         <span data-testid="oats-chip-soul">{clean(oats.soulOf(agent))}</span>
@@ -88,15 +88,19 @@ export function IdentityRow({ threadId }: ExperimentalThreadHeaderRowProps) {
       <Chip title={agent.home}>
         <span data-testid="oats-chip-home">{`home · ${clean(homeTail(agent.home))}`}</span>
       </Chip>
-      <button
-        type="button"
-        data-testid="oats-chip-oats"
-        title="Open the OATS home"
-        className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border border-border bg-card px-2 py-0.5 text-xs font-semibold text-foreground hover:bg-accent"
-        onClick={openHome}
-      >
-        OATS
-      </button>
+      {/* Pinned to the row's end while the chips before it scroll under it: the way to the home is
+          always on screen. Its own background covers what scrolls behind, up to the row's edge. */}
+      <span data-testid="oats-chip-pinned" className="sticky right-0 ml-auto flex shrink-0 self-stretch bg-background py-1.5 pl-1.5 pr-3">
+        <button
+          type="button"
+          data-testid="oats-chip-oats"
+          title="Open the OATS home"
+          className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border border-border bg-card px-2 py-0.5 text-xs font-semibold text-foreground hover:bg-accent"
+          onClick={openHome}
+        >
+          OATS
+        </button>
+      </span>
     </div>
   );
 }

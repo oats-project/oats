@@ -138,4 +138,9 @@ test("the chips are one line that scrolls sideways and never wraps", async () =>
   expect(line.className).toContain("overflow-x-auto");
   expect(line.className).toContain("whitespace-nowrap");
   expect(line.className).not.toContain("flex-wrap");
+  // the OATS chip stays at the row's end while the others scroll
+  const pinned = slot.getByTestId("oats-chip-pinned");
+  expect(pinned.className).toContain("sticky right-0");
+  expect(line.lastElementChild).toBe(pinned);
+  expect(pinned.contains(slot.getByTestId("oats-chip-oats"))).toBe(true);
 });
