@@ -5,7 +5,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { homeSoulEntry } from "../lib/instance-resolution.mjs";
 import { MAX_SANDBOX_LINES, SETTING_FILE_MAX_BYTES, SETTING_FILE_MAX_HOSTS, ensureSandboxWritePaths, readSettingFileHosts, sandboxAllowances, sandboxDomainsOf, sandboxHostOf, sandboxLaunchInput, sandboxWritePathsRefusal } from "../lib/sandbox-allowances.mjs";
 
 const EVENTS = "/srv/acme/.agents/events";
@@ -280,11 +282,14 @@ test("the write paths: a real directory at its own path, made through no link; a
   // It is a file.
   mkdirSync(join(base, "d"));
   writeFileSync(join(base, "d", "events"), "");
-  for (const parts of [["b", "events"], ["c", "events"], ["d", "events"]]) {
+  // A link that leads nowhere, above the path: a launch refuses it, so a readiness read does.
+  symlinkSync(join(base, "nowhere"), join(base, "e"));
+  for (const parts of [["b", "events"], ["c", "events"], ["d", "events"], ["e", "events"]]) {
     assert.equal(sandboxWritePathsRefusal(pathOf(...parts))?.code, "E_BACKEND_SANDBOX_HOST", parts.join("/"));
     assert.equal(refusal(() => ensureSandboxWritePaths(pathOf(...parts)))?.code, "E_BACKEND_SANDBOX_HOST", parts.join("/"));
   }
   assert.deepEqual(readdirSync(join(base, "target")), [], "nothing was made through a link");
+  assert.equal(existsSync(join(base, "nowhere")), false, "nor a dangling link's target");
 });
 
 test("a settingFile is read the same whichever way the caller spells the deployment, and never when it has another name", (t) => {
@@ -319,4 +324,39 @@ test("a settingFile is read the same whichever way the caller spells the deploym
   // A file with a second name (a hard link) is not read: that name could be in a home.
   linkSync(join(fx.dep, "config", "bindings.json"), join(fx.dep, "agents", "dev", "instances", "one", "mine.json"));
   assert.deepEqual(fx.read("config/bindings.json"), { unread: `${join(fx.dep, "config", "bindings.json")} has more than one hard link` });
+});
+
+test("the published schema refuses what the kernel refuses of a manifest's sandboxDomains, and takes both forms", async () => {
+  const { default: Ajv2020 } = await import("ajv/dist/2020.js");
+  const schema = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "docs", "capability-manifest.schema.json"), "utf8"));
+  const validate = new Ajv2020({ strict: false, allowUnionTypes: true }).compile(schema);
+  const manifest = (sandboxDomains, layer = "messaging") => ({ capability: "acme.msg", version: "1.0.0", compatibility: { oats: ">=0.6.2" }, description: "x", ...(layer ? { layer } : {}), sandboxDomains });
+  const CASES = [
+    // [what, the manifest, the schema takes it, the kernel's validator finds no problem]
+    ["a setting line", manifest([{ setting: "server" }]), true, true],
+    ["an optional setting line", manifest([{ setting: "server", optional: true }]), true, true],
+    ["a file line", manifest([{ settingFile: "bindings", urls: "/bases/*/repository" }]), true, true],
+    ["no layer", manifest([{ setting: "server" }], null), false, false],
+    ["an empty list", manifest([]), false, false],
+    ["both forms in one line", manifest([{ setting: "server", settingFile: "bindings", urls: "/a" }]), false, false],
+    ["two * in a pointer", manifest([{ settingFile: "bindings", urls: "/*/*" }]), false, false],
+    ["optional on a file line", manifest([{ settingFile: "bindings", urls: "/a", optional: true }]), false, false],
+    ["an unknown key in a line", manifest([{ setting: "server", host: "x.example" }]), false, false],
+    // The one rule the schema does not express, and says so: a setting named twice.
+    ["a setting named by two lines", manifest([{ setting: "server" }, { setting: "server", optional: true }]), true, false],
+  ];
+  for (const [what, m, bySchema, byKernel] of CASES) {
+    assert.equal(validate(m), bySchema, `${what}: the schema (${JSON.stringify(validate.errors?.[0]?.message ?? null)})`);
+    assert.equal(sandboxDomainsOf(m).problems.length === 0, byKernel, `${what}: the kernel (${JSON.stringify(sandboxDomainsOf(m).problems)})`);
+  }
+});
+
+test("which soul a home is of is told by its agent directory alone: two souls that share it leave it untold, and the cause says what to do", () => {
+  const soul = (name, source) => ({ name, source });
+  const one = soul("dev", { kind: "member", key: "acme/ws" });
+  const entries = [one, soul("ops", { kind: "member", key: "acme/ws" })];
+  assert.deepEqual(homeSoulEntry(entries, "dev"), { entry: one });
+  assert.match(homeSoulEntry(entries, "gone").unavailable, /^E_SOUL_UNKNOWN: the workspace offers no soul whose agent directory is gone$/);
+  const shared = homeSoulEntry([...entries, soul("dev", { kind: "member", key: "acme/other" })], "dev").unavailable;
+  assert.match(shared, /^2 souls of this workspace share the agent directory dev \(.+\), so which one this home is of cannot be told: rename one of them, or take one out of the workspace$/);
 });

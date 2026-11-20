@@ -2340,7 +2340,9 @@ leave a host of the deployment's list out, never add one. A slot's provider
 of the deployment that is not one of them adds none and is named (`skipped`,
 and a warning of the start). When
 the deployment's configuration cannot be resolved (a member repository that
-this host's cache does not hold, a soul the workspace no longer offers, a home whose real
+this host's cache does not hold, a soul the workspace no longer offers, two
+souls of the workspace that share the home's agent directory (the same bare
+name: rename one, or take one out of the workspace), a home whose real
 path is not under a deployment because its agents root is reached through a
 link), the launch input
 carries `"sandbox": { "unavailable": "<the cause>" }` in place of the three

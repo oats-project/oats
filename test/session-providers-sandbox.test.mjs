@@ -289,8 +289,9 @@ test("the events directory handed as writable is a real directory at its own pat
   assert.match(refused.error.message, /the session's sandbox may not be allowed to write .+\/\.agents\/events: it is reached through a symbolic link, or is no directory/);
   assert.deepEqual(fx.calls(), [], "before anything was created: no hook ran, and the provider was never called");
   assert.equal(existsSync(join(fx.root, "dev", "instances", "nope")), false);
-  // A preview creates nothing, and says nothing of it.
-  assert.equal(fx.cli(["spawn", "dev", "--backend", "fake", "--launch-config", "claude", "--preview", "--json"]).json().ok, true);
+  // A preview creates nothing, and refuses what the apply would.
+  const previewed = fx.cli(["spawn", "dev", "--backend", "fake", "--launch-config", "claude", "--preview", "--json"]).json();
+  assert.deepEqual([previewed.ok, previewed.error.code, readdirSync(join(fx.dep, "elsewhere"))], [false, "E_BACKEND_SANDBOX_HOST", []]);
 });
 
 test("nothing is created through a link: a directory above the events directory that is a link refuses the launch, and its target is left as it was", async (t) => {

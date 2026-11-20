@@ -952,7 +952,7 @@ anything is created, and shown by a spawn preview:
 | `E_BACKEND_LAUNCH_ARG` | the launch configuration declares an `executable`: a provider runs the harness itself |
 | `E_BACKEND_WIRE` | the provider speaks another version of the session-provider wire than this kernel (its manifest's `wire`), or declares none: use the release of its capability that goes with this OATS |
 | `E_BACKEND_NOT_READY` | the provider's own readiness check, asked right before the launch, says it cannot take it |
-| `E_BACKEND_SANDBOX_HOST` | a capability asks to add a host to the session's sandbox that it may not ask for: it declares `sandboxDomains` and fills none of the instance's messaging, knowledge or tasks slots, its line is malformed, its setting's value gives no plain host, or its file is not the deployment's own ([Sandbox allowances](capabilities.md#sandbox-allowances-sandboxdomains-the-launch-inputs-sandbox)) |
+| `E_BACKEND_SANDBOX_HOST` | a capability asks to add a host to the session's sandbox that it may not ask for: it declares `sandboxDomains` and fills none of the instance's messaging, knowledge or tasks slots, its line is malformed, its setting's value gives no plain host, its file is not the deployment's own, its setting was given to this one spawn (`--provider <capability> <setting>=…`: a launch's own argument is never a host source), or the directory the sandbox may write (the deployment's events directory) is reached through a symbolic link or is no directory ([Sandbox allowances](capabilities.md#sandbox-allowances-sandboxdomains-the-launch-inputs-sandbox)) |
 
 A provider can also refuse the launch with its own `E_BACKEND_*` code (a
 launch environment entry or an argument it cannot carry), which OATS relays;

@@ -7604,7 +7604,9 @@ as the kernel computes it from the deployment's configuration. One key,
   [{capability, reason}]` (a slot's provider of the deployment that is not
   one of the home's modules: it added no host), or `sandbox: {unavailable:
   "<why>"}` when the deployment's configuration could not be resolved for
-  the home's soul. That resolution reaches no remote: it reads the
+  the home's soul (a repository this host's cache does not hold, a soul the
+  workspace no longer offers, or two souls that share the home's agent
+  directory). That resolution reaches no remote: it reads the
   workspace as this host last read it and `oats-local.yaml` as it is now, so
   a repository this host's cache does not hold is such a cause, by name. Each `skipped` row is also a `warnings` line.
 - `oats readiness --home <abs> --json` of a provider home: the same, as a
