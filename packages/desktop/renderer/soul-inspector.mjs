@@ -92,23 +92,25 @@ ${soulTeamsHereCSS}
 .oats-view .workspace-page button.primary:not(:disabled) { background:var(--primary-bg); color:var(--primary-fg); border-color:var(--primary-bg); }
 .oats-view .soul-page .page-bar-actions .inspector-actions { display:flex; gap:8px; margin:0; }
 .oats-view .soul-page .page-bar-actions button.icon-act { display:inline-flex; align-items:center; justify-content:center; width:30px; height:30px; min-height:30px; padding:0; }
-.soul-page .inspector-content h3.page-section-title { margin:0; color:var(--fg); font-size:13.5px; font-weight:650; letter-spacing:0; text-transform:none; }
-.soul-page .inspector-content h3.page-section-title .page-section-lead { color:var(--muted); font-size:12px; font-weight:400; }
+.soul-page .inspector-content h3.page-section-title { margin:0; color:var(--muted); font-size:var(--text-label); font-weight:var(--label-weight); letter-spacing:var(--label-tracking); text-transform:uppercase; line-height:16px; }
+.soul-page .inspector-content h3.page-section-title .page-section-lead { color:var(--muted); font-size:var(--text-label); font-weight:400; letter-spacing:0; text-transform:none; }
 .soul-page .inspector-summary { min-width:0; padding:0; }
 .soul-page .inspector-head { display:flex; align-items:center; gap:14px; min-width:0; margin:0; flex-wrap:nowrap; }
-.soul-page .inspector-head .identity-mark { width:48px; height:48px; border-radius:11px; font-size:20px; font-weight:700; flex:none; }
+.soul-page .inspector-head .identity-mark { width:40px; height:40px; border-radius:var(--radius-card); font-size:16px; font-weight:650; flex:none; }
 .soul-page .page-identity-copy { display:flex; flex-direction:column; gap:3px; min-width:0; }
-.soul-page .inspector-head h2 { flex:none; margin:0; font-size:20px; font-weight:700; letter-spacing:-.01em; line-height:1.3; }
-.soul-page .inspector-head .inspector-lede { margin:0; color:var(--muted); font-size:13px; line-height:1.45; }
+/* The title in the prototype's scale (slice 3c): 17 / 600; what the soul does under it, muted body. */
+.soul-page .inspector-head h2 { flex:none; margin:0; font-size:var(--text-title); font-weight:600; letter-spacing:0; line-height:24px; }
+.soul-page .inspector-head .inspector-lede { margin:0; color:var(--muted); font-size:var(--text-body); line-height:1.5; }
 .soul-page .page-facts-row:empty { display:none; }
-.soul-page .inspector-main { display:flex; flex-direction:column; gap:22px; padding:0; }
+.soul-page .inspector-main { display:flex; flex-direction:column; gap:var(--space-5); padding:0; }
 .soul-page .inspector-main:empty { display:none; }
 .soul-page .page-sr { display:inline-block; width:1px; height:1px; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 /* The soul page (the Desktop UI rework, slice 3a): one column at a readable width; the top block is a two-column
    list of facts; its Ready row is a word, or the problem's sentence, then its Details disclosure. */
 .soul-page .soul-page-body { display:block; }
 .soul-page .soul-page-body > .page-main { max-width:960px; }
-.soul-top { display:grid; grid-template-columns:max-content minmax(0,1fr); gap:8px 20px; margin:0; font-size:13px; line-height:1.45; }
+/* The facts block (slice 3c): the prototype's key-value grid, a 120px muted label column. */
+.soul-top { display:grid; grid-template-columns:minmax(120px, max-content) minmax(0,1fr); gap:6px var(--space-4); margin:0; font-size:var(--text-body); line-height:20px; }
 .soul-top dt { color:var(--muted); }
 .soul-top dd { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 6px; min-width:0; margin:0; color:var(--fg); overflow-wrap:anywhere; }
 .soul-top dd .strong { font-weight:600; }
@@ -116,14 +118,14 @@ ${soulTeamsHereCSS}
 .soul-top .soul-top-note { flex-basis:100%; font-size:12px; }
 .soul-top .runtime-badge { align-self:center; width:18px; height:18px; font-size:10px; }
 .soul-ready { display:flex; flex-direction:column; gap:4px; min-width:0; }
-.soul-ready-line.problem { color:var(--warn); font-weight:600; }
+.soul-ready-line.problem { color:var(--warn); font-weight:400; }
 .soul-ready-details > summary, .soul-teams-details > summary { cursor:pointer; color:var(--muted); font-size:12px; }
 .soul-ready-details[open] > summary, .soul-teams-details[open] > summary { margin-bottom:8px; }
 .soul-ready-problems { display:flex; flex-direction:column; gap:8px; font-size:12px; }
 .soul-ready-problems p { margin:0; }
 .soul-ready-checks .readiness-view { margin:8px 0 0; }
 .soul-teams-details { flex-basis:100%; }
-.soul-capabilities .cap-list { margin-top:4px; }
+.soul-capabilities .cap-list { margin-top:0; }
 .soul-capabilities-note { margin:8px 0 0; color:var(--muted); font-size:12px; }
 ${catalogCSS}
 /* The readiness title reads as a section title, like every other card's. */

@@ -40,13 +40,15 @@ export const pageCardCSS = `
 .page-side { gap:14px; }
 @container (max-width: 860px) { .page-body { grid-template-columns:minmax(0,1fr); } }
 .page-identity { display:flex; align-items:center; gap:14px; min-width:0; }
-.page-identity .identity-mark, .page-glyph { width:48px; height:48px; border-radius:11px; font-size:20px; font-weight:700; flex:none; }
+.page-identity .identity-mark, .page-glyph { width:40px; height:40px; border-radius:var(--radius-card); font-size:16px; font-weight:650; flex:none; }
 .page-glyph { display:grid; place-items:center; background:var(--chip-bg); color:var(--fg); }
 .page-identity-copy { display:flex; flex-direction:column; gap:3px; min-width:0; }
-.page-title { display:flex; align-items:center; gap:10px; min-width:0; margin:0; font-size:20px; font-weight:700; letter-spacing:-.01em; overflow-wrap:anywhere; }
-.page-title.mono { font-weight:700; font-size:20px; line-height:normal; font-family:var(--mono,monospace); }
-.page-tag { display:inline-flex; align-items:center; height:22px; padding:0 7px; border-radius:5px; background:var(--chip-bg); color:var(--fg); font-weight:650; font-size:11.5px; line-height:normal; font-family:var(--ui-font,system-ui); letter-spacing:0; white-space:nowrap; }
-.page-lede { margin:0; color:var(--muted); font-size:13px; }
+/* A page's title in the prototype's scale (slice 3c): 17 / 600, the page's one large line. */
+.page-title { display:flex; align-items:center; gap:var(--space-2); min-width:0; margin:0; font-size:var(--text-title); font-weight:600; line-height:24px; letter-spacing:0; overflow-wrap:anywhere; }
+.page-title.mono { font-weight:600; font-size:var(--text-title); line-height:24px; font-family:var(--mono,monospace); }
+/* A page's pills (slice 3c): the list's pills, a hairline frame with muted words. */
+.page-tag { display:inline-flex; align-items:center; height:18px; padding:0 6px; border:1px solid var(--border); border-radius:var(--radius-tag); box-sizing:border-box; background:transparent; color:var(--muted); font-weight:400; font-size:var(--text-label); line-height:normal; font-family:var(--ui-font,system-ui); letter-spacing:.02em; white-space:nowrap; }
+.page-lede { margin:0; color:var(--muted); font-size:var(--text-body); line-height:1.5; }
 /* desktop/loading-states item 7: the catalog's facts arrive after the page (opened from a soul): a
    lede-sized line and a facts-sized block stand where they go; the catalog's age line sits under the bar. */
 .page-lede.skeleton { height:13px; width:55%; margin-top:2px; }
@@ -63,9 +65,10 @@ export const pageCardCSS = `
 .page-fact .muted { color:var(--muted); }
 .page-fact .strong { font-weight:600; }
 .page-fact .runtime-badge { width:22px; height:22px; border-radius:6px; font-size:11px; }
-.page-section { display:flex; flex-direction:column; gap:10px; min-width:0; }
-.page-section-title { display:flex; align-items:baseline; flex-wrap:wrap; gap:10px; margin:0; font-size:13.5px; font-weight:650; }
-.page-section-lead { color:var(--muted); font-size:12px; font-weight:400; }
+/* A section's title: the small uppercase label (slice 3c), its lead in ordinary case after it. */
+.page-section { display:flex; flex-direction:column; gap:var(--space-2); min-width:0; }
+.page-section-title { display:flex; align-items:baseline; flex-wrap:wrap; gap:6px; margin:0; color:var(--muted); font-size:var(--text-label); font-weight:var(--label-weight); letter-spacing:var(--label-tracking); text-transform:uppercase; line-height:16px; }
+.page-section-lead { color:var(--muted); font-size:var(--text-label); font-weight:400; letter-spacing:0; text-transform:none; }
 .page-card { display:flex; flex-direction:column; gap:6px; min-width:0; padding:12px 14px; box-sizing:border-box; background:var(--surface); border:1px solid var(--border); border-radius:10px; font-size:12px; }
 .page-card-title { display:flex; align-items:baseline; gap:8px; margin:0 0 4px; color:var(--muted); font-size:11px; font-weight:650; letter-spacing:.05em; text-transform:uppercase; }
 .page-card-title .shell-icon { align-self:center; }
@@ -101,25 +104,25 @@ export const capabilityPageCSS = `
 .capability-page .page-main { gap:16px; }
 .cap-page-head { display:flex; flex-direction:column; gap:6px; min-width:0; }
 .capability-page .page-title { font-family:var(--ui-font,system-ui); }
-.cap-page-origin { display:flex; flex-wrap:wrap; align-items:center; gap:2px 0; margin:0; color:var(--muted); font-size:12.5px; }
-.cap-page-origin .cap-origin { margin:0; padding:0; font-size:12.5px; }
+.cap-page-origin { display:flex; flex-wrap:wrap; align-items:center; gap:2px 0; margin:0; color:var(--muted); font-size:var(--text-meta); }
+.cap-page-origin .cap-origin { margin:0; padding:0; font-size:var(--text-meta); }
 .cap-origin-words { color:var(--fg); }
 .cap-page-sep { white-space:pre; }
 .cap-page-where { color:var(--muted); }
-.capability-page .cap-page-what { color:var(--fg); font-size:14px; line-height:1.55; max-width:72ch; }
+.capability-page .cap-page-what { color:var(--fg); font-size:var(--text-name); line-height:1.5; max-width:80ch; }
 /* A fold: a native disclosure, its summary a row with a turning chevron. */
 .cap-folds { display:flex; flex-direction:column; min-width:0; }
 .cap-folds:empty { display:none; }
 .cap-fold { min-width:0; border-top:1px solid var(--border); }
 .cap-fold:last-child { border-bottom:1px solid var(--border); }
-.cap-fold > summary { display:flex; align-items:center; gap:8px; min-height:40px; padding:0 4px; list-style:none; cursor:pointer; border-radius:6px; color:var(--fg); font-size:13.5px; font-weight:650; }
+.cap-fold > summary { display:flex; align-items:center; gap:var(--space-2); min-height:36px; padding:0 10px; list-style:none; cursor:pointer; border-radius:var(--radius-control); color:var(--fg); font-size:var(--text-name); font-weight:var(--name-weight); }
 .cap-fold > summary::-webkit-details-marker { display:none; }
 .cap-fold > summary:hover { background:var(--surface-2); }
 .cap-fold > summary:focus-visible { background:var(--sel); }
 .cap-fold > summary .shell-icon { flex:none; color:var(--muted); transition:transform .15s; }
 .cap-fold[open] > summary .shell-icon { transform:rotate(90deg); }
 @media (prefers-reduced-motion: reduce) { .cap-fold > summary .shell-icon { transition:none; } }
-.cap-fold-count { color:var(--muted); font-weight:normal; font-size:11.5px; }
+.cap-fold-count { color:var(--muted); font-weight:normal; font-size:var(--text-meta); }
 .cap-fold > :not(summary) { margin:4px 4px 16px; }
 .capability-page .cap-fold > .provides-items { display:flex; flex-wrap:wrap; gap:6px; }
 .capability-page .cap-fold-pre { margin-top:8px; }

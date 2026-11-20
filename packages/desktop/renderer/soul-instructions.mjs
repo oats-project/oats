@@ -75,16 +75,17 @@ export const soulInstructionsCSS = `
 .soul-instructions { display:flex; flex-direction:column; gap:10px; min-width:0; }
 /* The two tabs: one roving tab stop; the shown one underlined (its text says which, not the colour alone). */
 .soul-tabs { display:flex; gap:4px; min-width:0; border-bottom:1px solid var(--border); }
-.oats-view .soul-tabs button.soul-tab { height:auto; min-height:32px; margin:0 0 -1px; padding:6px 12px; border:0; border-bottom:2px solid transparent; border-radius:0;
-  background:none; color:var(--muted); font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
+/* The prototype's tabs (slice 3c): 30px, muted until shown, the shown one in --fg over a 2px accent rule. */
+.oats-view .soul-tabs button.soul-tab { height:auto; min-height:30px; margin:0 0 -1px; padding:4px var(--space-3); border:0; border-bottom:2px solid transparent; border-radius:0;
+  background:none; color:var(--muted); font:inherit; font-size:var(--text-body); font-weight:500; cursor:pointer; }
 .oats-view .soul-tabs button.soul-tab[aria-selected=true] { color:var(--fg); border-bottom-color:var(--accent); }
 .oats-view .soul-tabs button.soul-tab:hover { color:var(--fg); }
-.soul-tab-lead { margin:0; color:var(--muted); font-size:12px; }
+.soul-tab-lead { margin:0; color:var(--muted); font-size:var(--text-meta); }
 .soul-tabpanel { display:flex; flex-direction:column; gap:8px; min-width:0; }
 /* The section's own display rules (grid, flex) would beat the HTML hidden attribute: hidden always wins here. */
 .soul-instructions [hidden] { display:none !important; }
 /* A tab's document: its sections on the left when the pane is wide, the text at a readable measure. */
-.soul-doc { display:grid; grid-template-columns:200px minmax(0,1fr); height:min(75vh, 820px); min-width:0; background:var(--bg); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+.soul-doc { display:grid; grid-template-columns:200px minmax(0,1fr); height:min(75vh, 820px); min-width:0; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-card); overflow:hidden; }
 .soul-doc-nav { min-height:0; overflow:auto; padding:10px 8px 12px; border-right:1px solid var(--border); box-sizing:border-box; font-size:12px; }
 .soul-doc-nav[hidden] { display:none; }
 .soul-doc:has(> .soul-doc-nav[hidden]) { grid-template-columns:minmax(0,1fr); }
@@ -109,8 +110,8 @@ export const soulInstructionsCSS = `
 .soul-part-body { padding-left:12px; border-left:3px solid var(--border); }
 .soul-part[data-source=soul] > .soul-part-body { border-left-color:var(--accent); }
 /* Skills: folded under the tabs; open, the Contents card's tree and reader. */
-.soul-skills > summary { cursor:pointer; color:var(--fg); font-size:13.5px; font-weight:650; }
-.soul-skills > summary .soul-skills-count { color:var(--muted); font-size:12px; font-weight:400; }
+.soul-skills > summary { cursor:pointer; color:var(--fg); font-size:var(--text-name); font-weight:var(--name-weight); }
+.soul-skills > summary .soul-skills-count { color:var(--muted); font-size:var(--text-meta); font-weight:400; }
 .soul-skills[open] > summary { margin-bottom:10px; }
 .soul-instructions .cap-tree [role=treeitem] [role=group] .cap-node { font-family:inherit; font-size:12px; }
 .soul-instructions .cap-tree [role=treeitem] [role=group] .cap-node-name.mono { font-family:var(--mono,monospace); font-size:11.5px; }

@@ -31,10 +31,12 @@ export const statusLineCSS = `
  * @param {Document} o.doc
  * @param {Element} o.host  where the line goes
  * @param {Element|null} [o.before]  the child of `host` it goes in front of (else it is appended)
- * @param {() => Array<{ keys: string, label: string }>} [o.keysFor]  the three keys for where the focus is now
+ * @param {() => Array<{ keys: string, label: string }>} [o.keysFor]  the keys for where the focus is now
+ * @param {number} [o.max]  how many of them it shows: three (slice 4), or four where a page lists its own (the shell's,
+ *   slice 3c: the Souls page's "↑↓ move · Enter open · v table · Esc Home")
  * @param {Window} [o.win]
  */
-export function createStatusLine({ doc, host, before = null, keysFor = () => [], win = doc.defaultView }) {
+export function createStatusLine({ doc, host, before = null, keysFor = () => [], max = 3, win = doc.defaultView }) {
   const el = doc.createElement("footer");
   el.id = "status-line"; el.className = "status-line";
   el.setAttribute("aria-label", "Status");
@@ -49,7 +51,7 @@ export function createStatusLine({ doc, host, before = null, keysFor = () => [],
     if (message) { keys.hidden = true; return; }
     keys.hidden = false;
     let list = [];
-    try { list = (keysFor() || []).slice(0, 3); } catch { list = []; }
+    try { list = (keysFor() || []).slice(0, max); } catch { list = []; }
     keys.replaceChildren(...list.map(({ keys: chord, label }) => {
       const span = doc.createElement("span"); span.className = "status-key";
       const kbd = doc.createElement("kbd"); kbd.textContent = chord;
