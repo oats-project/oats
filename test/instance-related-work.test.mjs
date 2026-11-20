@@ -333,9 +333,18 @@ test("the deprecated aliases work as the new spellings, by the same rule: --same
   assert.deepEqual(text.stderr.split("\n").filter((l) => l.includes("renamed")), [VERB]);
   // The new spellings say nothing of the kind.
   assert.deepEqual(json(["instance", "related-work", kid.result.instance, "on"], "new verb").stderr.filter((l) => l.includes("renamed")), []);
-  // spawnInstance's sameWork option is the same alias.
-  const prog = await fx.spawn("dev", { instance: "dev-prog", parent: boss.instance, sameWork: true });
+  // spawnInstance's sameWork option is the same alias, said once as Node's DeprecationWarning (stderr only).
+  const warned = [];
+  const onWarning = (w) => { if (w.code === "OATS_SAME_WORK") warned.push(w); };
+  process.on("warning", onWarning);
+  let prog;
+  try {
+    prog = await fx.spawn("dev", { instance: "dev-prog", parent: boss.instance, sameWork: true });
+    await new Promise((resolve) => setImmediate(resolve));
+  } finally { process.off("warning", onWarning); }
+  assert.deepEqual(warned.map((w) => [w.name, w.message]), [["DeprecationWarning", "sameWork is renamed: use relatedWork"]], "one deprecation for the option");
   assert.deepEqual(readRelatedWork(prog.home), { parent: boss.instance });
+  assert.equal(prog.instance, "dev-prog", "the result is the spawn's as the new option gives it");
   await assert.rejects(fx.spawn("dev", { instance: "dev-prog2", parent: boss.instance, sameWork: "yes" }), (e) => e.code === "E_BAD_ARGS" && e.message === "sameWork must be true or false");
 });
 

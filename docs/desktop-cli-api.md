@@ -7269,7 +7269,8 @@ only `--related-work` and `on` do.
 and `oats instance same-work <instance> on|off` is `oats instance
 related-work`, with the same binding rule (the parent, else the sibling),
 the same refusals and the same answer; spawnInstance's `sameWork` option is
-`relatedWork`. Each use prints one line on stderr, before the command runs
+`relatedWork`, and each call with it emits one Node `DeprecationWarning`
+(code `OATS_SAME_WORK`, `sameWork is renamed: use relatedWork`). Each CLI use prints one line on stderr, before the command runs
 or is sent with `--server`: `oats: --same-work is renamed: use
 --related-work`, or `oats: oats instance same-work is renamed: use oats
 instance related-work`. It is never in the `--json` answer: the envelope is
