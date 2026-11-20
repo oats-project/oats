@@ -521,7 +521,9 @@ wide: the pinned destinations as icons, then one dot per agent in the
 roster's order, each with its needs-input mark, and at the foot the "need
 you" count. Each is a button named by the agent's name and state; its
 tooltip is the name, and Enter or a click opens it as its row does. The
-same key brings the sidebar back.
+same key brings the sidebar back, and so does going to the roster or the
+workspace list from a key or the palette, which the rail doesn't hold.
+Focus mode and **Sidebar: hide** hide the rail too.
 
 ## Capabilities and spawning
 

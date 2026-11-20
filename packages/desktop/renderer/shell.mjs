@@ -380,8 +380,11 @@ document.getElementById("tabhost").addEventListener("keydown", (e) => {
   if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable="true"], dialog, [role="dialog"], [role="menu"], [role="listbox"]')) return;
   e.preventDefault();
   // Back to Home in this pane, on the section that opened the Workspace page (Home marks it), else Home's tab.
+  // The watch is taken after the open begins its own intent (selectTab and openViewTab begin one synchronously): it
+  // is that open's ticket, which a later choice still supersedes.
+  const opening = showStage("home");
   const owns = tabOpenIntents.watch();
-  void showStage("home").then(() => {
+  void opening.then(() => {
     if (!owns() || currentPage() !== "home") return;
     const pane = tabs.get(activeTab)?.paneEl;
     (pane?.querySelector("[data-home-return]") ?? tabs.get(activeTab)?.triggerEl)?.focus();
@@ -717,6 +720,8 @@ function focusWorkspaceList() {
   tabOpenIntents.invalidate();
   contextPanel.setFocusMode(false);
   setSidebarHidden(false);
+  // The rail has no workspace list: going to it expands the sidebar (its full/rail preference with it).
+  if (document.getElementById("app")?.classList?.contains("sidebar-rail")) setSidebarRail(false);
   workspaceLabel.focusList();
 }
 
@@ -3188,6 +3193,7 @@ function focusRoster() {
   tabOpenIntents.invalidate(); // also when the roster already has DOM focus
   contextPanel.setFocusMode(false);
   setSidebarHidden(false); // a shortcut must not focus display:none content
+  if (document.getElementById("app")?.classList?.contains("sidebar-rail")) setSidebarRail(false); // nor the rail's hidden roster
   const entry = rosterEntry();
   if (entry?.matches(".ctx-inst, .ctx-background-toggle")) setRovingRow(entry.closest(".ctx-list"), entry);
   else entry?.focus({ preventScroll: true });

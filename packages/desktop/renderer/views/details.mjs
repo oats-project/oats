@@ -25,7 +25,7 @@ import { harnessName } from "../identity-marks.mjs";
 import { runtimeErrorLine } from "../speaker-line.mjs";
 import { desktopActs } from "../desktop-acts.mjs";
 import { iconElement } from "../shell-icons.mjs";
-import { driftText, workRepo, workFolder, LINKED } from "../context-panel.mjs";
+import { driftText, workRepo, workFolder, LINKED, remoteWorkNote } from "../context-panel.mjs";
 import { needsInputReportingGap } from "../../../client/needs-input-reporting-gap.mjs";
 import { servedIdentityText } from "../../../client/deployment-facts.mjs";
 
@@ -168,6 +168,9 @@ export function createDetails(el, ctx, { doc = el.ownerDocument, now = () => Dat
     parts.push(dl);
     const error = typeof row.runtimeError === "string" && row.runtimeError ? runtimeErrorLine(row) : null;
     if (error) parts.push(node("p", "details-note", error));
+    // A remote row that doesn't report its work and build says why, and which computer to update (context-panel).
+    const remote = remoteWorkNote(row);
+    if (remote) parts.push(node("p", "details-note", remote));
     const drift = driftText(row);
     if (drift) parts.push(node("p", "details-note", drift));
     const gap = needsInputReportingGap(row);

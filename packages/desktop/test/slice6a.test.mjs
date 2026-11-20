@@ -11,6 +11,7 @@ import { requestSplit, groupOfTab, removeSplitTab } from "../renderer/split-layo
 import { splitControlsState } from "../renderer/split-controls.mjs";
 import { tabVisibleInContext, canActivateTab } from "../renderer/workspace-tabs.mjs";
 import { createSidebarRail } from "../renderer/sidebar-rail.mjs";
+import { createSelectionOwnership } from "../renderer/selection-ownership.mjs";
 import { createDetails } from "../renderer/views/details.mjs";
 import { createHome } from "../renderer/views/home.mjs";
 import { homeAgents } from "../../client/home-board.mjs";
@@ -294,4 +295,56 @@ test("slice6a tab memory restores page tabs", async () => {
   assert.ok(restore.indexOf("leavingActive = activeTab") < restore.indexOf("showTabLayer(false)"), "the active tab is taken before the layer hides");
   assert.match(restore, /closePageTabs\(leaving, leavingPages, leavingActive\);/);
   assert.match(fn("restoreWorkspaceTabs"), /void reopenPageTabs\(tabWorkspace\);/);
+});
+
+test("slice6a review r3: Esc from Workspace lands focus on Home, both when Home is open and when it opens", async () => {
+  // The real Esc handler, with the real selection ownership: the Home open begins its own intent (synchronously), and
+  // the return watches that open, not a ticket taken before it. A later choice still wins.
+  const start = shell.indexOf('document.getElementById("tabhost").addEventListener("keydown", (e) => {');
+  const body = shell.slice(start, shell.indexOf("\n});", start) + 4);
+  for (const homeOpen of [true, false]) for (const later of [false, true]) {
+    const intents = createSelectionOwnership({ currentWorkspace: () => "A", workspaceGeneration: () => 0 });
+    let page = "spawn", focused = null, handler = null;
+    const homeReturn = { focus() { focused = "home-return"; } };
+    const context = {
+      Element: class {}, tabOpenIntents: intents, activeTab: 1,
+      tabs: new Map([[1, { paneEl: { querySelector: () => homeReturn }, triggerEl: { focus() { focused = "trigger"; } } }]]),
+      currentPage: () => page,
+      // selectTab (an open Home) and openViewTab (a new one) both begin an intent synchronously.
+      showStage: async () => { intents.begin(); if (!homeOpen) await Promise.resolve(); page = "home"; },
+      document: { getElementById: () => ({ addEventListener: (_type, f) => { handler = f; } }) },
+    };
+    runInNewContext(body, context);
+    handler({ key: "Escape", defaultPrevented: false, target: null, preventDefault() {} });
+    if (later) intents.begin(); // the operator chose something else before Home showed
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(focused, later ? null : "home-return", `Home ${homeOpen ? "open" : "opening"}${later ? ", superseded" : ""}`);
+  }
+});
+
+test("slice6a review r3: going to the roster or the workspace list from the rail expands the sidebar", () => {
+  for (const name of ["focusRoster", "focusWorkspaceList"]) {
+    const calls = [], classes = new Set(["sidebar-rail"]);
+    const context = {
+      tabOpenIntents: { invalidate() {} }, contextPanel: { setFocusMode() {} }, setSidebarHidden: () => {},
+      setSidebarRail: (on) => { calls.push(on); if (!on) classes.delete("sidebar-rail"); },
+      document: { getElementById: () => ({ classList: { contains: (c) => classes.has(c) } }) },
+      rosterEntry: () => ({ matches: () => false, focus() { calls.push("focus"); } }), setRovingRow() {},
+      workspaceLabel: { focusList() { calls.push("focus"); } },
+    };
+    runInNewContext(`${fn(name)}\n${name}();`, context);
+    assert.deepEqual(calls, [false, "focus"], `${name}: expands the rail, then focuses`);
+  }
+});
+
+test("slice6a review r3: Details keeps the old panel's remote work notes", (t) => {
+  for (const [row, words] of [
+    [{ server: "build", work: null }, /doesn't report this instance's work and build\. Update OATS on/],
+    [{ server: "build" }, /This computer's OATS doesn't show the work and build of instances on .*\. Update OATS here\./],
+    [{ server: "build", serverUnreached: true }, /wasn't reached, so this instance's work and build aren't known\./],
+  ]) {
+    const r = stopped({ repoName: "Build box", repo: "/srv/n", ...row }); if (!Object.hasOwn(row, "work")) delete r.work;
+    const u = details(t, r);
+    assert.match(u.el.textContent, words);
+  }
 });
