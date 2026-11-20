@@ -389,11 +389,11 @@ oats instance attention --clear                                  # once you have
 
 ### Your board: questions with options, and facts in view
 
-From OATS 0.69.22 (feature `instance-board`), your instance has a board: what
-your person sees around your terminal when they open you. Run its commands
-from your home, like `attention`. An older OATS has no board: when `oats
-version --json` doesn't list `instance-board` in its `features`, use `oats
-instance attention --message` instead.
+When `oats version --json` lists `instance-board` in its `features`, your
+instance has a board: what your person sees around your terminal when they
+open you. Run its commands from your home, like `attention`. An OATS that
+doesn't list it has no board: use `oats instance attention --message`
+instead.
 
 **A decision between 2 and 4 options:** ask it on the board, in the request
 shape. Write it so someone who hasn't followed your work can decide. Run it
