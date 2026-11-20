@@ -2525,7 +2525,8 @@ seat, outcome}`, outcome `replayed`, `held-<state>`, `held-unlisted`,
   the request is replayable again. The kept apply names the instance the
   preview showed (`--name`, in place of `--purpose` or `--suggest-name`;
   the decision is unchanged), so a replay meets that instance's own keyed
-  home, or `E_PLACEMENT_TAKEN`, never the next number.
+  home, or a name- or placement-taken refusal (`E_INSTANCE_NAME_TAKEN`,
+  `E_PLACEMENT_TAKEN`), never the next number.
 - The sandbox's kernel is checked for the routed floor (`sandboxes`,
   `spawn-task-stdin`, `spawn-preview-2`, `spawn-apply-2`,
   `spawn-idempotency-2`) on the probe that sends each preview, apply and
