@@ -264,12 +264,14 @@ test("slice6a home agents pins first", () => {
 test("slice6a tab memory restores page tabs", async () => {
   // Leaving a workspace closes its page tabs and keeps them by page and group; coming back reopens them, the active
   // one active again.
-  const tabs = new Map([[1, { kind: "terminal", workspace: "A" }], [2, { kind: "page", page: "home", workspace: "A" }], [3, { kind: "page", page: "spawn", workspace: "A" }]]);
+  const tabs = new Map([[1, { kind: "terminal", workspace: "A" }], [2, { kind: "page", page: "home", workspace: "A" }], [3, { kind: "page", page: "spawn", workspace: "A",
+    mod: { currentDestination: () => ({ tab: "capabilities", capability: "nw-house-style" }) } }]]);
   const split = { orientation: "row", nextId: 3, groups: [{ id: 1, tabs: [1, 2], activeTab: 2 }, { id: 2, tabs: [3], activeTab: 3 }], focusedGroup: 2 };
   const c = { tabs, split, activeTab: 3, groupOfTab, NAV, canActivateTab, nextTabId: 1, ws: "A", closed: [], reopened: [], selected: [],
     currentWorkspace: () => c.ws, tabOpenIntents: { watch: () => () => true },
     closeTab: (id) => { c.closed.push(id); tabs.delete(id); },
-    showStage: async () => {},
+    showStage: async () => {}, destinations: [],
+    preselectWorkspaceDestination: async (d) => { c.destinations.push([d, c.reopened.length]); },
     openViewTab: async (name, title, extra, key, kind) => {
       const id = 10 + c.reopened.length; c.reopened.push([name, c.split.focusedGroup]); tabs.set(id, { kind, page: name, workspace: c.ws });
       // as activation would: the new tab joins the focused group, its active one
@@ -285,6 +287,8 @@ test("slice6a tab memory restores page tabs", async () => {
   c.split = { ...c.split, groups: [{ id: 1, tabs: [1], activeTab: 1 }, { id: 2, tabs: [], activeTab: null }], focusedGroup: 2 };
   c.ws = "A"; await run.reopenPageTabs("A");
   assert.deepEqual(c.reopened, [["home", 1], ["spawn", 2]], "each page reopens in its group");
+  // Review r4: the Workspace page reopens where it was (its capability's page here), handed over before it mounts.
+  assert.deepEqual(JSON.parse(JSON.stringify(c.destinations)), [[{ tab: "capabilities", capability: "nw-house-style" }, 1]]);
   assert.deepEqual(c.selected, [11], "the active page is active again");
   // Every pane as it was: group 1's strip order (terminal, then its Home) and its active member (its Home), and the
   // focused group (2).
@@ -347,4 +351,31 @@ test("slice6a review r3: Details keeps the old panel's remote work notes", (t) =
     const u = details(t, r);
     assert.match(u.el.textContent, words);
   }
+});
+
+test("slice6a review r4: the newest page request wins over a superseded open it joins", async () => {
+  // Home's module still loading, then Automations, then Home again: the last choice is Home. The real showStage, with
+  // the real selection ownership and an opener that commits only while its own ticket holds (as openViewTab does).
+  const intents = createSelectionOwnership({ currentWorkspace: () => "A", workspaceGeneration: () => 0 });
+  const loads = [], committed = [], tabs = new Map();
+  let page = null;
+  const c = {
+    tabs, split: null, NAV, navTab, canActivateTab, nextTabId: 1, tabOpenIntents: intents, pageOpens: new Map(),
+    windowState: () => "bound", currentWorkspace: () => "A", currentPage: () => page, hideEmptyState() {},
+    selectTab: (id) => { intents.begin(); page = tabs.get(id).page; committed.push(tabs.get(id).page); },
+    openViewTab: async (name) => {
+      const owns = intents.begin();
+      await new Promise((resolve) => loads.push(resolve));
+      if (!owns()) return;
+      const id = c.nextTabId++; tabs.set(id, { kind: "page", page: name, workspace: "A" }); page = name; committed.push(name);
+    },
+  };
+  const run = runInNewContext(`${fn("showStage")}\n({ showStage })`, c);
+  const first = run.showStage("home"), second = run.showStage("automations"), third = run.showStage("home");
+  for (const resolve of loads.splice(0)) resolve();
+  await Promise.all([first, second]); await new Promise((resolve) => setImmediate(resolve));
+  for (const resolve of loads.splice(0)) resolve(); // the reopen the newest request asked for
+  await third;
+  assert.equal(page, "home", "the last choice shows");
+  assert.equal(committed.at(-1), "home");
 });

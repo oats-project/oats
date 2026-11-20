@@ -494,7 +494,8 @@ later), which a pinned row brings into the focused pane, moving it there when
 it is open in another. With no tab at all, the main area says so and offers
 **Open Home**. Each workspace keeps its own tabs: its page tabs close when
 another workspace shows, and come back, each in its pane, when it shows
-again.
+again; the Workspace tab comes back where it was, on its section or on the
+soul's or capability's page it had open.
 
 **Details** is an agent's facts, for any agent, running or stopped: `i` on
 its row in the sidebar, ⌘I / Ctrl+Shift+I, **Details** in the row's menu, or

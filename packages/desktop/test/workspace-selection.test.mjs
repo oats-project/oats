@@ -436,3 +436,23 @@ test('preselectCapability from an open soul page closes it and opens the capabil
   assert.equal(u.selectedTab().id, 'workspace-tab-capabilities');
   assert.equal(u.doc.querySelector('.workspace-discovery').hidden, false);
 });
+
+test("slice6a: the Workspace page's destination survives its tab closing and reopening (page-tab memory)", async t => {
+  // A capability's page open: currentDestination names it; after an unmount (the tab closed as its workspace was
+  // left), preselectDestination before the next mount opens the same page, on its subtab.
+  const u = await setup(t, { catalog: () => catalogRead() }); await settle();
+  spawn.preselectCapability('nw-house-style'); await settle();
+  assert.equal(capabilityPage(u)?.dataset.capability, 'nw-house-style');
+  const destination = spawn.currentDestination();
+  assert.deepEqual(destination, { tab: 'capabilities', capability: 'nw-house-style' });
+  spawn.unmount(); assert.equal(spawn.currentDestination(), null);
+  spawn.preselectDestination(destination); spawn.mount(u.doc.querySelector('#host'), u.ctx); await settle();
+  assert.equal(u.selectedTab().id, 'workspace-tab-capabilities');
+  assert.equal(capabilityPage(u)?.dataset.capability, 'nw-house-style', 'the capability page again');
+  // A plain subtab comes back as itself.
+  capabilityPage(u).querySelector('.page-back').click(); await settle();
+  u.tab('machines'); await settle();
+  assert.deepEqual(spawn.currentDestination(), { tab: 'machines' });
+  spawn.unmount(); spawn.preselectDestination({ tab: 'machines' }); spawn.mount(u.doc.querySelector('#host'), u.ctx); await settle();
+  assert.equal(u.selectedTab().id, 'workspace-tab-machines');
+});

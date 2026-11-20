@@ -177,6 +177,23 @@ export function preselectWorkspaceTab(name) {
 export function currentWorkspaceTab() {
   return state?.alive ? state.discovery?.tab ?? null : null;
 }
+/** Where the Workspace page is while it is mounted, to restore when its workspace is visited again (the shell's
+ * page-tab memory, slice 6a): a soul's page (its qualified reference), a capability's (its name), else the tab;
+ * null when not mounted. A team's page returns to its tab. */
+export function currentDestination() {
+  if (!state?.alive) return null;
+  if (state.pageMode === "soul" && state.inspectRef?.name) return { tab: "souls", soul: { ...state.inspectRef } };
+  if (state.pageMode === "capability" && typeof state.capOpen?.row?.name === "string") return { tab: "capabilities", capability: state.capOpen.row.name };
+  const tab = state.discovery?.tab ?? null;
+  return tab ? { tab } : null;
+}
+/** The way back to a destination currentDestination gave, through the same preselections (and their gates: a
+ * soul or capability no longer found, or no longer unique, opens nothing beyond its tab). */
+export function preselectDestination(destination) {
+  if (destination?.soul?.name) { preselectSoul(destination.soul); return; }
+  if (typeof destination?.capability === "string") { preselectCapability(destination.capability); return; }
+  if (typeof destination?.tab === "string") preselectWorkspaceTab(destination.tab);
+}
 function applyWorkspaceTab(s) {
   if (!pendingWorkspaceTab) return;
   const intent = pendingWorkspaceTab; pendingWorkspaceTab = null;
@@ -325,6 +342,7 @@ function showPage(s, mode) {
   const soulPage = s.q("workspace-soul-page"), capPage = s.q("workspace-cap-page"), teamPage = s.q("workspace-team-page");
   if (!soulPage || !capPage || !teamPage) return;
   soulPage.hidden = mode !== "soul"; capPage.hidden = mode !== "capability"; teamPage.hidden = mode !== "team";
+  s.pageMode = mode || null; // currentDestination's: which page, if any, covers the Workspace tabs
   // Workspace v4: a page's own bar replaces the Workspace header while it is open.
   s.q("workspace-header").hidden = !!mode;
   const souls = (s.discovery?.tab ?? "souls") === "souls";

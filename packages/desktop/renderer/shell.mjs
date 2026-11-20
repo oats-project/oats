@@ -443,7 +443,12 @@ async function showStage(name) {
   // One open of a page at a time per workspace and group: a second ask while the first is mounting waits for it.
   const pendingKey = `${ws}\u0000${name}\u0000${focusedGroup?.id ?? ""}`;
   const opens = pageOpens;
-  if (opens.has(pendingKey)) return opens.get(pendingKey);
+  if (opens.has(pendingKey)) {
+    // Joining a pending open shares its module load, not its authority: this request is the newest choice, so it
+    // begins its own intent, and once that open settles it selects the page or (the open was superseded) opens it.
+    const latest = tabOpenIntents.begin();
+    return opens.get(pendingKey).then(() => (latest() && currentPage() !== name ? showStage(name) : undefined));
+  }
   hideEmptyState();
   const opening = openViewTab(name, v.title, {}, name === "home" ? `page:home:${nextTabId}` : `page:${name}`, "page")
     .finally(() => opens.delete(pendingKey));
@@ -4002,17 +4007,25 @@ function restoreWorkspaceTabs() {
 const workspacePages = new Map();
 function takePageTabs(ws) {
   return [...tabs].filter(([, t]) => t.kind === "page" && t.workspace === ws)
-    .map(([id, t]) => ({ id, page: t.page, group: groupOfTab(split, id)?.id ?? null, active: id === activeTab }));
+    .map(([id, t]) => ({ id, page: t.page, group: groupOfTab(split, id)?.id ?? null, active: id === activeTab,
+      // The Workspace page's destination (its tab, or the soul's or capability's page open on it), restored with it.
+      ...(t.page === "spawn" ? { destination: t.mod?.currentDestination?.() ?? null } : {}) }));
 }
 function closePageTabs(ws, pages, active = activeTab) {
   if (!ws) return;
   const groups = split ? split.groups.map((g) => ({ id: g.id, tabs: [...g.tabs], active: g.activeTab })) : null;
-  workspacePages.set(ws, { pages: pages.map(({ id, page, group, active }) => ({ id, page, group, active })), groups,
+  workspacePages.set(ws, { pages: pages.map(({ id, page, group, active, destination }) => ({ id, page, group, active, ...(destination ? { destination } : {}) })), groups,
     focused: split?.focusedGroup ?? null, active });
   for (const { id } of pages) closeTab(id, false, { explicit: false, passive: true });
 }
 /** Reopen the page tabs a workspace had, each in its group; then every group's strip order and active member, the
  * focused group and the active tab, as they were. A workspace that had none and has no tab at all lands on Home. */
+/** The Workspace page's saved destination, handed to it before it mounts again (views/spawn.mjs preselectDestination,
+ * whose gates hold: a soul or capability no longer found opens its tab alone). */
+async function preselectWorkspaceDestination(destination) {
+  try { (await import("./views/spawn.mjs")).preselectDestination(destination); }
+  catch (e) { console.warn("Workspace destination not restored:", e); }
+}
 async function reopenPageTabs(ws) {
   const saved = workspacePages.get(ws) ?? null;
   workspacePages.delete(ws);
@@ -4028,6 +4041,7 @@ async function reopenPageTabs(ws) {
     if (split && p.group != null && split.groups.some((g) => g.id === p.group)) split = { ...split, focusedGroup: p.group };
     const before = new Set(tabs.keys());
     const title = NAV.find((v) => v.name === p.page)?.title ?? p.page;
+    if (p.destination) await preselectWorkspaceDestination(p.destination);
     await openViewTab(p.page, title, {}, p.page === "home" ? `page:home:${nextTabId}` : `page:${p.page}`, "page", () => true, owns);
     const made = [...tabs.keys()].find((id) => !before.has(id));
     if (made != null) opened.set(p.id, made);
