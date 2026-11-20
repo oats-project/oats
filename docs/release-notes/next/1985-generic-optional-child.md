@@ -1,11 +1,13 @@
 ## Upgrade
 
 - **If you tried the experimental bb image of 0.69.22** (`container/agent-bb`
-  with `container/agent/compose.agent.bb.yaml`): build the bb image from
-  [oats-project/oats-bb](https://github.com/oats-project/oats-bb) on your
-  team image instead, replace `compose.agent.bb.yaml` in your Compose
-  commands by that repository's fragment, and set no `AGENT_BB`. A
-  container that still sets `AGENT_BB` does not start.
+  with `container/agent/compose.agent.bb.yaml`): rebuild your team image
+  from this release's `container/agent`, since the 0.69.22 supervisor does
+  not know `AGENT_CHILD`; build the bb image from
+  [oats-project/oats-bb](https://github.com/oats-project/oats-bb) on that
+  team image; replace `compose.agent.bb.yaml` in your Compose commands by
+  that repository's fragment, which sets `AGENT_CHILD: "bb"`; and set no
+  `AGENT_BB`. A container that still sets `AGENT_BB` does not start.
 
 ## Changed
 
