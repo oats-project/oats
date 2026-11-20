@@ -2026,8 +2026,9 @@ the instance being spawned. Two of them declaring the same name is
 Every call runs the **home's own copy** of the capability:
 `node <home>/.oats/modules/<capability>/<script> <args>`. **Its working
 directory is not the home** (it is the filesystem root): read the home from
-the request (`input.home`) or `OATS_INSTANCE_HOME`, and start nothing that
-outlives the call with its working directory in the home. OATS looks for
+the request (`input.home`) or `OATS_INSTANCE_HOME`, and leave
+nothing of the call's own running in the home (the session's processes work
+there; a helper of your command must not). OATS looks for
 processes working in a home before it resumes a lost session and before it
 retires the home, and a provider's call must never be one of them.
 

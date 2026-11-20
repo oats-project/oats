@@ -1562,11 +1562,14 @@ lists the feature `session-providers`, in this order:
    `E_SESSION_NOT_RUNNING`, so nothing restarts its session.
 2. **The provider is asked to stop the session**, with the usual grace,
    never escalated.
-3. **No process may work in the home**, as for every retire: a stop the
-   provider confirms can still leave one behind (a harness that outlives its
-   server for a while). With a process working in the home, or when that
-   cannot be told, the retire refuses `E_RUNTIME_QUIESCE_FAILED`, names the
-   processes and keeps the home; its stop stays recorded.
+3. **No process may work in the home**, whatever the provider answered: a
+   stop it confirms can still leave one behind (a harness that outlives its
+   server for a while), and there is no window whose absence would say
+   otherwise. With a process working in the home, or when that cannot be
+   told, the retire refuses `E_RUNTIME_QUIESCE_FAILED` at once, names the
+   processes and keeps the home; its stop stays recorded. A shell whose
+   working directory is in the home counts too: run the retire from
+   elsewhere.
 4. The retire hooks run (the provider's own archives its session there), the
    work is preserved as for any home, and the home is removed.
 

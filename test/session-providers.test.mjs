@@ -57,7 +57,7 @@ test("T1: a spawn with --backend fake launches through the provider and records 
   const calls = fx.calls();
   assert.deepEqual(calls.map((c) => c.hook ?? c.verb), ["spawn", "launch"]);
   assert.equal(calls[0].backend, "fake");
-  // The call: the home's own module copy, in the home, with the hook environment and OATS_BACKEND.
+  // The call: the home's own module copy, run outside the home, with the hook environment and OATS_BACKEND.
   const [launch] = fx.verbs("launch");
   assert.equal(launch.cwd === home || launch.cwd.startsWith(`${home}/`), false, "a call never works in the home: the home is in the request");
   assert.deepEqual([parse(launch.cwd).root, launch.instance, launch.backend, launch.event, launch.capability, launch.argv], [launch.cwd, "one", "fake", "session", FAKE_CAPABILITY, ["launch"]]);
@@ -920,6 +920,16 @@ test("inputs that run at the same time to a lost session pass the cap together n
   assert.deepEqual([...new Set(answers.filter((a) => !a.ok).map((a) => [a.error.code, a.error.details?.resumeCap?.limit ?? null].join(" ")))], [`E_SESSION_NOT_RUNNING ${RESUME_LIMIT}`], "every other one is refused by the cap, and by nothing else");
   assert.equal(fx.verbs("input").length, RESUME_LIMIT, "the provider's input is called up to the cap");
   assert.equal((await input()).error.code, "E_SESSION_NOT_RUNNING", "and the next one too");
+
+  // A count whose lock the system will not make is a count that cannot be written: the same refusal.
+  const counts = join(fx.env.OATS_HOME_DIR, "session-resume", "provider-resumes");
+  rmSync(counts, { recursive: true, force: true });
+  writeFileSync(counts, "not a directory\n");
+  fx.clearCalls();
+  const uncounted = await input();
+  assert.equal(uncounted.error.code, "E_SESSION_NOT_RUNNING");
+  assert.match(uncounted.error.message, /crowd lost its session, and its resume could not be counted \(.+\); nothing was sent/);
+  assert.deepEqual(fx.verbs("input"), []);
 });
 
 // ----------------------------------------------------------------------- T12: nothing relayed

@@ -988,7 +988,7 @@ otherwise, whose `details.fields` are `backend`, `session.provider` and
 | `session restart` | stop, then start, under one lifecycle claim |
 | `session start --resume` | sends the resume notice through the provider's input; nothing is launched ([below](#provider-homes-lost-sessions)) |
 | `session attach` | `E_SESSION_NO_TERMINAL`; the message carries inspect's `open` link when there is one |
-| `oats retire` | records the stop, asks the provider to stop, then runs the retire hooks and removes the home ([souls-and-instances.md](souls-and-instances.md#retiring-a-home-on-a-session-provider)) |
+| `oats retire` | records the stop, asks the provider to stop, checks that no process works in the home, then runs the retire hooks and removes the home ([souls-and-instances.md](souls-and-instances.md#retiring-a-home-on-a-session-provider)) |
 
 **Stop stays stopped.** OATS records `stoppedAt` in the receipt at every stop
 it makes (`oats instance stop`, a restart's stop, a retire, the host's
