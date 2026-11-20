@@ -128,8 +128,8 @@ The shell has three navigation contexts:
   `terminal-bridge.cjs` by `build-preload.mjs` into `generated/preload.cjs`.
   Only that bundle ships and main loads it with sandbox and contextIsolation
   on, nodeIntegration off. The bundle requires only `electron`. Electron's
-  sandboxed preload supplies the `Buffer` global used by terminal writes. Postinstall,
-  `npm start` and `npm run dist` rebuild it. Its one constant, `isOmarchy`,
+  sandboxed preload supplies the `Buffer` global used by terminal writes.
+  Postinstall, `npm start` and `npm run dist` rebuild it. Its one constant, `isOmarchy`,
   is a boolean read once from main's window argument `--oats-host-omarchy`
   (`host-theme.mjs` `OMARCHY_ARG`, `omarchyHost`); nothing sends it, and it
   picks only the font's and the terminal size's defaults (`renderer/theme.mjs`

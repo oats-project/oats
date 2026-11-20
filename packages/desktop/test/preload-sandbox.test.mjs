@@ -67,6 +67,7 @@ test('source and electron-only bundled preload expose exactly the pinned worlds,
 test('built text requires only electron, with no dynamic require, path, builtin or unsupported process member', () => {
   const requires = [...bundle.matchAll(/\brequire\s*\(([^)]*)\)/g)].map(match => match[1].trim());
   assert.deepEqual(requires, ['"electron"']);
+  assert.equal([...bundle.matchAll(/\brequire\b/g)].length, 1, 'no other references to require');
   assert.doesNotMatch(bundle, /\b__require\b/, 'no esbuild dynamic require shim');
   for (const [, member] of bundle.matchAll(/\bprocess\s*\.\s*([\w$]+)/g))
     assert.ok(['argv', 'platform', 'env', 'versions'].includes(member), `process.${member}`);
@@ -74,6 +75,8 @@ test('built text requires only electron, with no dynamic require, path, builtin 
   const main = read('main.mjs');
   const preferences = /new BrowserWindow\(\{[\s\S]*?webPreferences: \{([^}]+)\}/.exec(main)?.[1];
   assert.ok(preferences, 'window webPreferences found');
+  for (const key of ['preload', 'sandbox', 'contextIsolation', 'nodeIntegration'])
+    assert.equal([...preferences.matchAll(new RegExp(`^\\s*${key}\\s*:`, 'gm'))].length, 1, `one ${key} preference`);
   assert.match(preferences, /preload: join\(HERE, "generated", "preload\.cjs"\)/);
   assert.match(preferences, /\bsandbox: true,/);
   assert.match(preferences, /\bcontextIsolation: true,/);
