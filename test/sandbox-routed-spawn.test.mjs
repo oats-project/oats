@@ -17,6 +17,9 @@ const FEATURES = ["sandboxes", "spawn-task-stdin", "spawn-preview-2", "spawn-app
 /** A sandbox's kernel behind the server route: `apply` is the apply's answer (an envelope, or "no-answer"
  *  for a link that failed after ssh started). `calls` records each spawn with the provider's call count
  *  at that moment, so the two sides' order can be read together. */
+// Test output is pristine (docs/implementation.md, "Tests and gates"): under a long temporary path the
+// route warns that ssh runs without connection reuse; the fake's io takes that warning and asserts it.
+const routeWarn = (m) => assert.match(m, /^ssh to sandbox-ingest runs without connection reuse: /, "the only warning a route may give here");
 function fakeHost(fx, { apply = "ok", features = FEATURES } = {}) {
   const probe = { schemaVersion: 1, name: "@awebai/oats", version: "0.70.0", desktopApi: 1, harnesses: ["pi"], sessionBackends: ["tmux"], launchOptions: [], remote: ["spawn", "status", "retire"], features };
   const status = { schemaVersion: 1, ok: true, result: { root: "/sbx/agents", agents: [{ name: "ingester", harness: "pi", instances: [] }] } };
@@ -36,7 +39,7 @@ function fakeHost(fx, { apply = "ok", features = FEATURES } = {}) {
     }
     throw new Error(`unexpected remote call: ${command}`);
   };
-  return { calls, io: { execFileSync } };
+  return { calls, io: { execFileSync, warn: routeWarn } };
 }
 
 /** The fixture, synced, with server sandbox-ingest registered, and a runner of the kernel's routed spawn. */
@@ -378,7 +381,7 @@ test("a replay re-checks the sandbox's routed floor on the probe that sends it: 
   fx.sandbox.set({ reconcile: { state: "ready", server: "sandbox-ingest", seats: [{ seatId, state: "delivered" }] } });
   const host = fakeHost(fx, { features: FEATURES.filter((f) => f !== "spawn-task-stdin") });
   const commands = [];
-  const io = { execFileSync: (bin, argv, options) => { commands.push(String(argv.at(-1))); return host.io.execFileSync(bin, argv, options); } };
+  const io = { ...host.io, execFileSync: (bin, argv, options) => { commands.push(String(argv.at(-1))); return host.io.execFileSync(bin, argv, options); } };
   const answer = await fx.withKernel((sb, ctx) => sb.reconcileSandbox(ctx, "ingest", { planRevision: "r", idempotencyKey: "k", io }));
   assert.deepEqual(answer.replays.map((r) => [r.spawnKey, r.outcome, r.apply]), [[spawnKey, "held-unsent", "E_REMOTE_INCOMPATIBLE"]]);
   assert.ok(answer.problems.some((p) => p.code === "E_REMOTE_INCOMPATIBLE" && p.sandbox === "ingest"), JSON.stringify(answer.problems));

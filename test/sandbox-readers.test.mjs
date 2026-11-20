@@ -44,6 +44,10 @@ function clientSync(fx) {
   return cliWorkspace(cli, { action: "sync", context: fx.dep }, DESKTOP_TERMS, { env, exec });
 }
 
+// Test output is pristine (docs/implementation.md, "Tests and gates"): under a long temporary path the
+// route warns that ssh runs without connection reuse; the fake's io takes that warning and asserts it.
+const routeWarn = (m) => assert.match(m, /^ssh to sandbox-ingest runs without connection reuse: /, "the only warning a route may give here");
+
 test("readers of oats sync --json's sandboxes: the client's exec and projector, and the Desktop's boundary", async (t) => {
   const fx = sandboxDeployment({ t });
   // A sandbox problem that is no failure of the sync: the delisted sandbox's stop answered absent once
@@ -166,7 +170,7 @@ test("readers of oats status --json's placement: the client's roster reader, the
   const groups = await fx.inEnv(async () => {
     const { writeServers } = await import("../lib/servers.mjs");
     writeServers({ "sandbox-ingest": { sshHost: "sandbox-ingest", workspace: fx.dep } });
-    return rosterGroups({ io: { execFileSync, execFileAsync: async (bin, argv) => execFileSync(bin, argv) } });
+    return rosterGroups({ io: { execFileSync, execFileAsync: async (bin, argv) => execFileSync(bin, argv), warn: routeWarn } });
   });
   const group = (Array.isArray(groups) ? groups : groups.groups).find((g) => g.server === "sandbox-ingest");
   assert.ok(group, JSON.stringify(groups).slice(0, 2000));
