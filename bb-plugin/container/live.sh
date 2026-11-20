@@ -5,6 +5,7 @@
 # when it is there.
 #   L1  the installed plugin reads the deployment through the host entry
 #   L2  a line appended to the deployment's event log, with the poll off, makes the server reread (watch -> signal -> reread)
+#   L3  a status slower than the kernel's limit is the typed OATS_TIMEOUT, not a lost host call
 #   A14 (backend) with the fake oats removed, the snapshot says what is missing and bb answers as usual
 #   A15 `bb plugin reload oats` during a slow oats leaves no oats process
 #   A15b stopping bb during a slow oats leaves none either
@@ -97,6 +98,26 @@ sleep 1
 fake
 sleep 5.5 # past the floor between two reads
 rpc refresh > /dev/null
+
+# ---- L3: a status slower than the kernel's 20 s limit. bb sends a retryable host call again at half
+# its transport timeout: the limit must be reached before that, in one process.
+fake '{"status":{"sleepMs":600000}}'
+: > "$FAKE_LOG"
+l3_start=$SECONDS
+rpc refresh > /dev/null
+l3_took=$((SECONDS - l3_start))
+slow=$(rpc snapshot)
+first_two=$(grep -c '"verb":"status"' "$FAKE_LOG" || true)
+if [ "$(field code <<<"$slow")" = OATS_TIMEOUT ] && [ "$l3_took" -ge 19 ] && [ "$l3_took" -le 27 ]; then
+  pass "L3 a status that never answers is OATS_TIMEOUT after ${l3_took} s ($first_two status process(es) logged by then)"
+else
+  fail "L3 slow status: code $(field code <<<"$slow") after ${l3_took} s"; say "$slow" | head -c 300
+fi
+fake
+sleep 5.5
+rpc refresh > /dev/null
+none_yet() { [ -z "$(oats_processes)" ]; }
+wait_until 10 none_yet || { fail "L3 a slow oats is still running"; oats_processes; }
 
 # ---- A14, the backend's part: no oats.
 mv "$OATS" "$OATS.away"

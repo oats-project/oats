@@ -134,6 +134,27 @@ describe("retire", () => {
     await fake.behave({ "retire --plan": { stdout: JSON.stringify(answer) } });
     const running = await oats.retirePlan("weekly-digest-helper");
     expect(running.ok && running.value.lines[0]).toMatch(/Its session is running and is stopped first\.$/);
+    // Established and observably gone: nothing to stop.
+    answer.result.facts.session = { state: "absent", present: false, backend: "bb", established: true };
+    await fake.behave({ "retire --plan": { stdout: JSON.stringify(answer) } });
+    const absent = await oats.retirePlan("weekly-digest-helper");
+    expect(absent.ok && absent.value.lines[0]).toMatch(/Its session is not running\.$/);
+  });
+
+  it("says for each extra tree what the kernel would do with it: keep, remove, or refuse the retire", async () => {
+    const answer = JSON.parse(await readFile(join(FIXTURES, "retire-plan.json"), "utf8"));
+    const tree = (name: string, disposition: string, reason: string | null) => ({
+      path: `/h/.work-${name}`, repo: "/w/docs", branch: `agents/x-${name}`, detachedAt: null, disposition, movedTo: disposition === "retain" ? "/w/.agents/worktrees/docs/x" : null, reason,
+    });
+    answer.result.facts.extraWorktrees = [tree("a", "retain", "2 changed files"), tree("b", "remove", null), tree("c", "refuse", "its target exists"), tree("d", "quarantine", null)];
+    await fake.behave({ "retire --plan": { stdout: JSON.stringify(answer) } });
+    const plan = await oats.retirePlan("weekly-digest-helper");
+    expect(plan.ok && plan.value.lines.filter((line) => line.includes("the extra tree"))).toEqual([
+      "Kept: the extra tree /h/.work-a on branch agents/x-a, moved out of the home (2 changed files).",
+      "Removed: the extra tree /h/.work-b on branch agents/x-b (it is clean; its branch is kept).",
+      "Blocks the retire: the extra tree /h/.work-c on branch agents/x-c (its target exists). The kernel would refuse and keep the home.",
+      "quarantine: the extra tree /h/.work-d on branch agents/x-d.",
+    ]);
   });
 
   it("applies the plan: the first answer is the receipt itself, a replay is an envelope", async () => {

@@ -5,10 +5,10 @@ import { join } from "node:path";
 import { createFakePluginHost, makeHostResponse, type FakePluginHost } from "@get-bb/plugin-sdk/testing";
 import { experimental_createHostEntryHarness } from "@get-bb/plugin-sdk/testing/host";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { REALTIME_CHANGED } from "../contract.js";
+import { hostContract, REALTIME_CHANGED } from "../contract.js";
 import { createHostEntry } from "../host.js";
-import { codes } from "../kernel/index.js";
-import plugin, { MIN_INTERVAL_MS } from "../server.js";
+import { codes, timeouts } from "../kernel/index.js";
+import plugin, { HOST_TIMEOUT, MIN_INTERVAL_MS } from "../server.js";
 import { FIXTURES, installFakeOats, type FakeOats } from "./support/fake-oats.js";
 
 let fake: FakeOats;
@@ -142,6 +142,25 @@ describe("snapshot", () => {
     await load({ deployment: join(fake.deployment, "agents") });
     expect(await rpc("snapshot")).toMatchObject({ ok: false, code: codes.noDeployment });
   });
+
+  it("does not keep a deployment found with settings that changed meanwhile", async () => {
+    await server.harness.dispose();
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    await load();
+    server.harness.sdk.stub("hosts.list", (async () => {
+      await held; // the discovery is in flight, with the settings as they were
+      return hosts;
+    }) as never);
+    const first = rpc("snapshot");
+    await expect.poll(() => server.harness.sdk.callsTo("hosts.list").length).toBe(1);
+    await server.harness.setSettings({ deployment: join(fake.deployment, "agents") }); // holds no oats-local.yaml
+    server.harness.sdk.stub("hosts.list", (async () => hosts) as never);
+    release();
+    await first;
+    // The next read looks for the deployment again, with the new setting, instead of using the old one.
+    await expect.poll(async () => (await rpc("snapshot")).code, { timeout: MIN_INTERVAL_MS + 4_000 }).toBe(codes.noDeployment);
+  }, 20_000);
 
   it("asks to choose a machine when the server has several and none is set", async () => {
     await server.harness.dispose();
@@ -303,6 +322,19 @@ describe("acts", () => {
     expect(await rpc("start", { instance: "weekly-digest-helper" })).toEqual({ threadId: "thr_digest" });
   }, 20_000);
 
+  it("refuses with a code of its own, never a kernel code, when no thread is named anywhere", async () => {
+    const roster = JSON.parse(await readFile(join(FIXTURES, "status.json"), "utf8"));
+    for (const group of roster.agents) for (const instance of group.instances) if (instance.instance === "weekly-digest-helper") delete instance.session;
+    await fake.behave({
+      status: { stdout: JSON.stringify(roster) },
+      "session start": { stdout: JSON.stringify({ schemaVersion: 1, ok: true, result: { instance: "weekly-digest-helper", backend: "bb", warnings: [] } }) },
+    });
+    expect(await refusalOf(rpc("start", { instance: "weekly-digest-helper" }))).toEqual({
+      code: "conflict",
+      message: "NO_THREAD_NAMED: Started weekly-digest-helper, but the kernel named no bb thread for it",
+    });
+  }, 20_000);
+
   it("retires through the plan and its guarded apply", async () => {
     const plan = await rpc("retirePlan", { instance: "weekly-digest-helper" });
     expect(plan.revision).toBe("4e5f6a7b8c9d0e1f2a3b4c5d");
@@ -317,6 +349,20 @@ describe("acts", () => {
     await rpc("stopApply", { instance: "redesign-ui-lead", revision: "9c1f2e3d4b5a69788796a5b4", key: "stop-7f3a9c2e41b8" });
     await expect.poll(async () => (await verbs()).filter((verb) => verb === "status").length, { timeout: MIN_INTERVAL_MS + 4_000 }).toBe(2);
   }, 20_000);
+});
+
+describe("the host-call limits", () => {
+  it("leave the kernel's own limit reachable before bb retries a retryable call at half the transport timeout", () => {
+    expect(HOST_TIMEOUT.read / 2).toBeGreaterThan(timeouts.read);
+    expect(HOST_TIMEOUT.preview / 2).toBeGreaterThan(timeouts.preview);
+    // Not retryable: the kernel's limit only has to come first.
+    expect(HOST_TIMEOUT.act).toBeGreaterThan(timeouts.act);
+    expect(HOST_TIMEOUT.long).toBeGreaterThan(timeouts.long);
+    expect(HOST_TIMEOUT.long).toBeLessThanOrEqual(30 * 60_000); // bb's cap for a host call
+    // Which verbs bb retries, and so which limit each needs.
+    const retryable = Object.entries(hostContract).filter(([, method]) => "experimental_retryable" in method && method.experimental_retryable).map(([name]) => name);
+    expect(retryable.sort()).toEqual(["capabilities", "discover", "servers", "souls", "spawnPreview", "status", "stopPlan", "teams"]);
+  });
 });
 
 describe("the slow poll", () => {

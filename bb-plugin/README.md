@@ -137,7 +137,7 @@ bb sovereign: no account, `BB_TELEMETRY=false`, loopback). Never `npm install` o
 
 ```sh
 container/ci.sh            # the image, the installs, typecheck, unit tests, build, live tests
-container/ci.sh unit       # typecheck and unit tests only
+container/ci.sh unit       # typecheck, unit tests and the build
 container/ci.sh live       # the live tests only (bb-app, the plugin installed, a fake oats)
 ```
 

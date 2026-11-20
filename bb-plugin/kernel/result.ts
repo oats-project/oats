@@ -39,6 +39,8 @@ export const codes = {
   noDeployment: "NO_DEPLOYMENT",
   /** the machine's host daemon did not answer */
   hostUnreachable: "HOST_UNREACHABLE",
+  /** an act went through, and neither its answer nor the next status names the agent's bb thread */
+  noThread: "NO_THREAD_NAMED",
 } as const;
 
 export const isKernelCode = (code: string): boolean => /^E_[A-Z0-9_]+$/.test(code);

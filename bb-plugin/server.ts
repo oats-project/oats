@@ -18,8 +18,13 @@ export const MIN_INTERVAL_MS = 5_000;
 const PAGE_TTL_MS = 30_000;
 /** A client that asked for the snapshot this recently counts as connected, beside the watched reads. */
 const CLIENT_SEEN_MS = 45_000;
-/** Host-call limits, each a little over the kernel's own (kernel/index.ts), so the typed timeout answers first. */
-const HOST_TIMEOUT = { read: 25_000, preview: 50_000, act: 125_000, long: 26 * 60_000 } as const;
+/**
+ * Host-call limits. The kernel's own limit (kernel/index.ts) must answer first, so that a slow
+ * `oats` is the typed OATS_TIMEOUT and not a lost call. For a verb the host contract marks
+ * `experimental_retryable`, bb cancels the call and sends it once more at HALF this limit: so `read`
+ * and `preview` are more than twice the kernel's 20 s and 45 s. The acts are not retryable.
+ */
+export const HOST_TIMEOUT = { read: 45_000, preview: 100_000, act: 125_000, long: 26 * 60_000 } as const;
 
 type Snapshot = z.infer<typeof snapshotSchema>;
 type Target = { hostId: string; deployment: string; machine: string };
@@ -85,6 +90,8 @@ export default async function plugin(bb: BbPluginApi) {
   const lifetime = new AbortController();
 
   let target: Target | null = null;
+  /** Counts the settings changes, so that a discovery that read the old settings is not kept. */
+  let settingsGeneration = 0;
   let watchAsserted = false;
   let cached: Snapshot | null = null;
   let comparable = "";
@@ -141,13 +148,19 @@ export default async function plugin(bb: BbPluginApi) {
   }
 
   async function base(signal: AbortSignal): Promise<{ target: Target; input: { deployment: string; oatsBin: string } } | Failure> {
-    if (target === null) {
+    let at = target;
+    if (at === null) {
+      const generation = settingsGeneration;
       const found = await findTarget(signal);
       if ("ok" in found) return found;
-      target = found;
-      watchAsserted = false;
+      at = found;
+      // Kept only if the settings it was found with are still the settings.
+      if (generation === settingsGeneration) {
+        target = found;
+        watchAsserted = false;
+      }
     }
-    return { target, input: { deployment: target.deployment, oatsBin: (await settings.get()).oatsBin } };
+    return { target: at, input: { deployment: at.deployment, oatsBin: (await settings.get()).oatsBin } };
   }
 
   /** The watch dies with the host worker: it is asserted again whenever it may be gone. */
@@ -283,7 +296,7 @@ export default async function plugin(bb: BbPluginApi) {
     const next = await reread();
     const row = next.ok ? next.agents.find((agent) => agent.instance === instance) : undefined;
     if (row?.threadId) return row.threadId;
-    throw refusal({ code: "E_RUNTIME_ENDPOINT_UNKNOWN", message: `${act} ${instance}, but the kernel named no bb thread for it` });
+    throw refusal({ code: codes.noThread, message: `${act} ${instance}, but the kernel named no bb thread for it` });
   }
 
   // ---- the RPC contract ----
@@ -421,6 +434,7 @@ export default async function plugin(bb: BbPluginApi) {
   bb.events.on("thread.created", rereadSoon);
   bb.events.on("thread.deleted", rereadSoon);
   settings.onChange(() => {
+    settingsGeneration += 1;
     target = null;
     watchAsserted = false;
     pages.clear();

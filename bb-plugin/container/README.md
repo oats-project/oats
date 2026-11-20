@@ -19,7 +19,7 @@ host's home; the checkout goes in through `tar` and the artefacts come out to `c
 | `ci.sh` | on the host | builds the image, starts the container, copies the checkout in, runs the scripts below, copies `out/` back, removes the container |
 | `setup.sh` | in the container | `npm install -g bb-app@<the version package.json pins>`, `npm ci` |
 | `unit.sh` | in the container | `tsc --noEmit`, `vitest run`, `bb plugin build` |
-| `live.sh` | in the container | starts bb-app, makes a deployment and a bb project in it, installs the fake `oats` and the plugin, and checks L1, L2, A14 (backend), A15 and A15b (below); runs `live-ui.mjs` when the app is in the tree |
+| `live.sh` | in the container | starts bb-app, makes a deployment and a bb project in it, installs the fake `oats` and the plugin, and checks L1, L2, L3, A14 (backend), A15 and A15b (below); runs `live-ui.mjs` when the app is in the tree |
 | `fake-oats.mjs` | as `oats` | prints the recorded answer of the verb it is asked (`test/fixtures/`) and logs each call; a JSON file beside it sets a verb's output, exit code, delay, or makes it start a child of its own |
 | `workflow.yml` | - | the CI job, to move to `.github/workflows/` in the bb package repository |
 
@@ -27,6 +27,7 @@ The live checks of the backend:
 
 - **L1** the installed plugin reads the deployment through the host entry (`bb plugin rpc call oats snapshot`).
 - **L2** with the poll off (no RPC for 50 s), one line appended to `<deployment>/.agents/events/` makes the server run `oats status`: the host watch, the `changed` signal, the reread. The proof is the fake's call log.
+- **L3** an `oats status` slower than the kernel's 20 s limit is the typed `OATS_TIMEOUT` in the snapshot, after one process and about 20 s: bb's retry of a retryable host call does not cut it short.
 - **A14** (the backend's part) with `oats` removed, the snapshot says what is missing and bb's own lists answer; with `oats` back, the snapshot is back.
 - **A15** `bb plugin reload oats` while a fake `oats` sleeps and holds a child of its own: neither process is left.
 - **A15b** the same when bb itself is stopped.

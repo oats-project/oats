@@ -2,6 +2,7 @@
 // with a schema into the plugin's types. No bb and no React import, so plain unit tests cover it.
 import type { Capability, Machine, Soul, SpawnSummary, Team } from "../model/types.js";
 import { answerOf } from "./envelope.js";
+import { checkKey, checkRevision } from "./input.js";
 import * as lifecycle from "./lifecycle.js";
 import * as pages from "./pages.js";
 import type { Result } from "./result.js";
@@ -102,8 +103,10 @@ export class Oats {
     const checked = spawn.checkSpawn(input, context.knownSouls);
     if (!checked.ok) return checked;
     // The key and the revision are checked before the task file is written.
-    const probe = spawn.spawnArgv(checked.value, "task", input);
-    if (!probe.ok) return probe;
+    const revision = checkRevision(input.revision);
+    if (!revision.ok) return revision;
+    const key = checkKey(input.key);
+    if (!key.ok) return key;
     return withTaskFile(context.tempDir, input.task, (taskFile) =>
       this.#run(spawn.spawnArgv(checked.value, taskFile, input), spawn.parseSpawn, this.#timeouts.long, signal),
     );
