@@ -200,12 +200,13 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.sha }}
 
+      # (Only an explicit "false" skips: a decision that wrote nothing runs every schedule.)
       - name: Install supported-node dependencies
-        if: steps.changes.outputs.run == 'true'
+        if: steps.changes.outputs.run != 'false'
         run: npm ci
 
       - name: Every schedule of the session-provider lifecycle
-        if: steps.changes.outputs.run == 'true'
+        if: steps.changes.outputs.run != 'false'
         run: npm run test:provider-lifecycle
 
   # The one check to wait on (the name reviewers and merge tooling already know).

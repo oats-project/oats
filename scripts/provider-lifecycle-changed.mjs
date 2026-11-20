@@ -22,6 +22,12 @@ export const LIFECYCLE_FILES = Object.freeze([
   "lib/hook-env.mjs",
   "lib/instance-listing.mjs",
   "bin/oats.mjs",
+  // The lifecycle's own records and what writes them: the claim, the locks (the resume count's),
+  // the home's events (the session boundary, the waiting claim) and the record's writer.
+  "lib/claim.mjs",
+  "lib/dir-lock.mjs",
+  "lib/instance-events.mjs",
+  "lib/write-through-private-file.mjs",
   // What tells a live process from one that is gone, and ends a process group.
   "lib/worktree-hooks.mjs",
   "lib/process-group.mjs",
@@ -48,8 +54,9 @@ export const LIFECYCLE_PATTERNS = Object.freeze([
 /** Whether a change to `files` (paths from the repository's root) touches the lifecycle. */
 export const touchesLifecycle = (files) => files.some((file) => LIFECYCLE_FILES.includes(file) || LIFECYCLE_PATTERNS.some((pattern) => pattern.test(file)));
 
-/** `{ run, why }` for the change from `base` to `head`. */
-export function decide({ base, head, changed = (range) => execFileSync("git", ["diff", "--name-only", range], { encoding: "utf8" }).split("\n").filter(Boolean) }) {
+/** `{ run, why }` for the change from `base` to `head`. The change is listed without rename
+ *  detection: a file renamed out of the list is a file of the list that was removed. */
+export function decide({ base, head, changed = (range) => execFileSync("git", ["diff", "--no-renames", "--name-only", range], { encoding: "utf8" }).split("\n").filter(Boolean) }) {
   if (!base || !head || /^0+$/.test(base)) return { run: true, why: "no base to compare with" };
   let files;
   try { files = changed(`${base}...${head}`); } catch (e) { return { run: true, why: `the change could not be listed (${String(e?.message ?? e).split("\n")[0]})` }; }

@@ -144,7 +144,7 @@ test("pull-request CI runs every schedule of the session-provider lifecycle for 
   // is tolerated: a red run stays red.
   const decision = job.steps.find((step) => step.id === "changes");
   assert.deepEqual([job.if, decision.if, { ...decision.env }], [undefined, undefined, { BASE_SHA: "${{ github.event.pull_request.base.sha || github.event.before }}", HEAD_SHA: "${{ github.sha }}" }]);
-  assert.deepEqual(job.steps.filter((step) => step.if !== undefined).map((step) => [step.run, step.if]), [["npm ci", "steps.changes.outputs.run == 'true'"], ["npm run test:provider-lifecycle", "steps.changes.outputs.run == 'true'"]]);
+  assert.deepEqual(job.steps.filter((step) => step.if !== undefined).map((step) => [step.run, step.if]), [["npm ci", "steps.changes.outputs.run != 'false'"], ["npm run test:provider-lifecycle", "steps.changes.outputs.run != 'false'"]], "only an explicit false skips: a decision that wrote nothing runs every schedule");
   assert.equal(job.steps.find((step) => step.uses?.startsWith("actions/checkout")).with["fetch-depth"], 0, "the decision compares with the base: it needs the history");
   for (const part of [job, ...job.steps]) assert.equal(part["continue-on-error"], undefined, "no failure may be tolerated");
   assert.ok(workflow.jobs.gate.needs.includes("provider-lifecycle"));
@@ -158,8 +158,10 @@ test("pull-request CI runs every schedule of the session-provider lifecycle for 
     assert.equal(touchesLifecycle([file]), true, file);
   }
   // …widened by what the explorer's invariants also stand on: the CLI its verbs run through, the
-  // status rows, process liveness and process groups, the fixtures' deployment, and what decides and runs this.
-  for (const file of ["bin/oats.mjs", "lib/instance-listing.mjs", "lib/worktree-hooks.mjs", "lib/process-group.mjs", "packages/record/lib/process-identity.mjs", "test/helpers/v2-deployment.mjs",
+  // status rows, the claim, the locks, the home's events and the record's writer, process liveness
+  // and process groups, the fixtures' deployment, and what decides and runs this.
+  for (const file of ["bin/oats.mjs", "lib/instance-listing.mjs", "lib/claim.mjs", "lib/dir-lock.mjs", "lib/instance-events.mjs", "lib/write-through-private-file.mjs",
+    "lib/worktree-hooks.mjs", "lib/process-group.mjs", "packages/record/lib/process-identity.mjs", "test/helpers/v2-deployment.mjs",
     "scripts/provider-lifecycle-changed.mjs", ".github/workflows/provider-lifecycle-nightly.yml"]) {
     assert.equal(touchesLifecycle([file]), true, file);
   }
@@ -177,16 +179,21 @@ test("pull-request CI runs every schedule of the session-provider lifecycle for 
   // Every night on main, with no condition at all: what sees a change elsewhere that breaks an ordering.
   const nightly = parseConfigData(read(".github/workflows/provider-lifecycle-nightly.yml")).value;
   assert.ok(Array.isArray(nightly.on.schedule) && typeof nightly.on.schedule[0].cron === "string", "it runs on a schedule");
-  assert.deepEqual({ ...nightly.permissions }, { contents: "read", issues: "write" });
+  assert.deepEqual({ ...nightly.permissions }, { contents: "read" }, "the run of the repository's code may write nothing");
   const every = nightly.jobs["provider-lifecycle"];
-  const runs = every.steps.filter((step) => step.run);
-  assert.deepEqual(runs.slice(0, 2).map((step) => step.run.trim()), ["npm ci", "npm run test:provider-lifecycle"]);
-  // It fails loudly: the run is red (nothing is tolerated, nothing skips the schedules), and its last
-  // step, on a failure only, opens an issue or adds to the open one.
-  assert.equal(every.if, undefined);
-  for (const part of [every, ...every.steps]) assert.equal(part["continue-on-error"], undefined);
-  assert.deepEqual(every.steps.map((step) => step.if).filter((condition) => condition !== undefined), ["failure()"]);
-  assert.deepEqual([runs.length, runs[2].if, /gh issue create/.test(runs[2].run), /gh issue comment/.test(runs[2].run)], [3, "failure()", true, true]);
+  assert.deepEqual(every.steps.filter((step) => step.run).map((step) => step.run.trim()), ["npm ci", "npm run test:provider-lifecycle"]);
+  // It fails loudly. The run is red: nothing is tolerated, nothing skips the schedules, and a
+  // schedule that never settles fails its step by the step's own bound (under the job's, whose
+  // timeout would cancel the job, and a cancelled job is no failure).
+  for (const part of [every, ...every.steps]) assert.deepEqual([part.if, part["continue-on-error"]], [undefined, undefined]);
+  const schedules = every.steps.find((step) => step.run?.trim() === "npm run test:provider-lifecycle");
+  assert.ok(schedules["timeout-minutes"] < every["timeout-minutes"], "the step's bound is under the job's");
+  assert.equal(every.steps.find((step) => step.uses?.startsWith("actions/checkout")).with["persist-credentials"], false, "the token stays out of the checkout the install and the tests run in");
+  // And a job of its own says so in an issue, on a failure only: the one job that may write an
+  // issue, with no checkout and none of the repository's code.
+  const report = nightly.jobs.report;
+  assert.deepEqual([report.needs, report.if, { ...report.permissions }, report.steps.some((step) => step.uses !== undefined)], ["provider-lifecycle", "failure()", { issues: "write" }, false]);
+  assert.deepEqual([report.steps.length, /gh issue create/.test(report.steps[0].run), /gh issue comment/.test(report.steps[0].run)], [1, true, true]);
 });
 
 test("pull-request CI runs the suites that followed a session variable with every one poisoned, and the gate requires it", () => {

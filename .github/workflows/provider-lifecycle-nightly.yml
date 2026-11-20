@@ -12,8 +12,6 @@ on:
 
 permissions:
   contents: read
-  # (For the issue this run opens when a schedule fails: a red scheduled run alone is seen by nobody.)
-  issues: write
 
 jobs:
   provider-lifecycle:
@@ -21,7 +19,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      # The token stays out of the checkout's configuration: the install and the tests run without it.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -30,12 +31,23 @@ jobs:
       - name: Install supported-node dependencies
         run: npm ci
 
+      # (Its own bound, under the job's: a schedule that never settles fails this step, and so the
+      # job, where the job's own timeout would only cancel it.)
       - name: Every schedule of the session-provider lifecycle
+        timeout-minutes: 40
         run: npm run test:provider-lifecycle
 
-      # A failure is said where people look: one open issue, commented on while it stays open.
+  # A failure is said where people look: one open issue, commented on while it stays open. A job of
+  # its own, the only one that may write an issue, with no checkout and no code of the repository.
+  report:
+    name: Open an issue for a failed nightly run
+    needs: provider-lifecycle
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
       - name: Open, or add to, the issue for a failed run
-        if: failure()
         run: |
           title="Nightly: a schedule of the session-provider lifecycle failed on main"
           body="The nightly run of every schedule of the session-provider lifecycle failed at ${GITHUB_SHA}: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. A failing schedule prints its seed and steps; one schedule runs with OATS_EXPLORER_ONLY, as the log shows."
