@@ -4,7 +4,7 @@
 import { z } from "zod";
 import { shaped } from "./envelope.js";
 import { checkHome, checkInstance, checkKey, checkRevision } from "./input.js";
-import { err, ok, type Result } from "./result.js";
+import { codes, err, ok, type Result } from "./result.js";
 
 export type Plan = { revision: string; lines: string[] };
 type Apply = { instance: string; revision: string; key: string };
@@ -179,10 +179,24 @@ export function parseRetirePlan(document: unknown): Result<Plan> {
   return ok({ revision: plan.planRevision, lines });
 }
 
-const retireReceipt = z.looseObject({ retired: z.string().min(1) });
+const retireReceipt = z.looseObject({
+  retired: z.string().min(1),
+  rollbackIncomplete: z.array(z.string()).nullish(),
+  retainedHome: text,
+});
 
-/** A first guarded retire prints the receipt itself; a replayed one prints it in an envelope. */
+/**
+ * A first guarded retire prints the receipt itself; a replayed one prints it in an envelope. A
+ * receipt with `rollbackIncomplete` (printed with exit 1) is a retire whose cleanup is incomplete:
+ * the home is kept, and the kernel's own lines say what is left.
+ */
 export function parseRetireApply(document: unknown): Result<Record<string, never>> {
   const parsed = shaped(retireReceipt, document, "oats retire");
-  return parsed.ok ? ok({}) : parsed;
+  if (!parsed.ok) return parsed;
+  const left = parsed.value.rollbackIncomplete;
+  if (left) {
+    const home = parsed.value.retainedHome ? ` at ${parsed.value.retainedHome}` : "";
+    return err(codes.retireIncomplete, `the retire of ${parsed.value.retired} is incomplete and its home is kept${home}:\n${left.join("\n")}`);
+  }
+  return ok({});
 }

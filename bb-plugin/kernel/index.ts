@@ -2,7 +2,6 @@
 // with a schema into the plugin's types. No bb and no React import, so plain unit tests cover it.
 import type { Capability, Machine, Soul, SpawnSummary, Team } from "../model/types.js";
 import { answerOf } from "./envelope.js";
-import { checkKey, checkRevision } from "./input.js";
 import * as lifecycle from "./lifecycle.js";
 import * as pages from "./pages.js";
 import type { Result } from "./result.js";
@@ -49,12 +48,13 @@ export class Oats {
     parse: (document: unknown) => Result<Value>,
     timeoutMs: number,
     signal?: AbortSignal,
+    options: { failedDocument?: boolean } = {},
   ): Promise<Result<Value>> {
     const checked: Result<string[]> = Array.isArray(argv) ? { ok: true, value: argv } : argv;
     if (!checked.ok) return checked; // refused before any process starts
     const { bin, cwd, processes, env } = this.#options;
     const outcome = await processes.run({ bin, argv: checked.value, cwd, timeoutMs, signal, env });
-    const document = answerOf(outcome, bin);
+    const document = answerOf(outcome, bin, options);
     return document.ok ? parse(document.value) : document;
   }
 
@@ -103,12 +103,10 @@ export class Oats {
     const checked = spawn.checkSpawn(input, context.knownSouls);
     if (!checked.ok) return checked;
     // The key and the revision are checked before the task file is written.
-    const revision = checkRevision(input.revision);
-    if (!revision.ok) return revision;
-    const key = checkKey(input.key);
-    if (!key.ok) return key;
+    const apply = spawn.checkApply(input);
+    if (!apply.ok) return apply;
     return withTaskFile(context.tempDir, input.task, (taskFile) =>
-      this.#run(spawn.spawnArgv(checked.value, taskFile, input), spawn.parseSpawn, this.#timeouts.long, signal),
+      this.#run(spawn.spawnArgv(checked.value, taskFile, apply.value), spawn.parseSpawn, this.#timeouts.long, signal),
     );
   }
 
@@ -128,7 +126,8 @@ export class Oats {
     return this.#run(lifecycle.retirePlanArgv(instance), lifecycle.parseRetirePlan, this.#timeouts.read, signal);
   }
   retireApply(apply: { instance: string; revision: string; key: string }, signal?: AbortSignal): Promise<Result<Record<string, never>>> {
-    return this.#run(lifecycle.retireApplyArgv(apply), lifecycle.parseRetireApply, this.#timeouts.long, signal);
+    // An incomplete retire prints its receipt and exits 1: the receipt is what says what is left.
+    return this.#run(lifecycle.retireApplyArgv(apply), lifecycle.parseRetireApply, this.#timeouts.long, signal, { failedDocument: true });
   }
 }
 

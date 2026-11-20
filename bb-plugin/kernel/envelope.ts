@@ -19,8 +19,13 @@ const firstLines = (text: string, lines = 3): string =>
     .slice(0, lines)
     .join("\n");
 
-/** The JSON document a finished process answered: an envelope's `result`, or the bare document. */
-export function answerOf(outcome: RunOutcome, bin: string): Result<unknown> {
+/**
+ * The JSON document a finished process answered: an envelope's `result`, or the bare document.
+ * `failedDocument` is for a verb that prints its document and exits nonzero to say that the act is
+ * incomplete (a retire whose cleanup stayed incomplete): the document is then answered for the verb's
+ * parser to judge, instead of "exited 1".
+ */
+export function answerOf(outcome: RunOutcome, bin: string, options: { failedDocument?: boolean } = {}): Result<unknown> {
   switch (outcome.kind) {
     case "spawn-error":
       return outcome.code === "ENOENT" || outcome.code === "EACCES" || outcome.code === "ENOTDIR"
@@ -50,7 +55,7 @@ export function answerOf(outcome: RunOutcome, bin: string): Result<unknown> {
   }
   const refused = failure.safeParse(document);
   if (refused.success) return err(refused.data.error.code, refused.data.error.message);
-  if (outcome.code !== 0) {
+  if (outcome.code !== 0 && !(options.failedDocument && outcome.signal === null)) {
     const how = outcome.signal ? `was ended by ${outcome.signal}` : `exited ${outcome.code}`;
     return err(codes.failed, `\`oats\` ${how}${firstLines(outcome.stderr) ? `: ${firstLines(outcome.stderr)}` : ""}`);
   }

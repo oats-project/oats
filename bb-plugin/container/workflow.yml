@@ -16,6 +16,7 @@ jobs:
       run:
         working-directory: plugin
     steps:
+      # When this file moves: pin both actions by commit, as the repository's rules there ask.
       - uses: actions/checkout@v4
       # Typecheck, unit tests (A1 to A12), build, then bb-app with the plugin installed and a fake
       # oats (A13 to A15), all inside one container: container/ci.sh.

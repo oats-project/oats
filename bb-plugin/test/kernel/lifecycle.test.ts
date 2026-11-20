@@ -166,6 +166,26 @@ describe("retire", () => {
     expect((await fake.calls())[0]?.argv).toEqual(["retire", "weekly-digest-helper", "--plan-revision", "4e5f6a7b8c9d0e1f2a3b4c5d", "--idempotency-key", "retire-2b9d4e6f8a1c", "--json"]);
   });
 
+  it("says what the kernel left when a retire's cleanup is incomplete (the receipt, with exit 1)", async () => {
+    const receipt = JSON.parse(await readFile(join(FIXTURES, "retire-incomplete.json"), "utf8"));
+    await fake.behave({ retire: { file: "retire-incomplete.json", exit: 1 } });
+    const applied = await oats.retireApply({ instance: "weekly-digest-helper", revision: "4e5f6a7b8c9d0e1f2a3b4c5d", key: "retire-2b9d4e6f8a1c" });
+    expect(applied).toEqual({
+      ok: false,
+      error: {
+        code: codes.retireIncomplete,
+        message: `the retire of weekly-digest-helper is incomplete and its home is kept at ${receipt.retainedHome}:\n${receipt.rollbackIncomplete.join("\n")}`,
+      },
+    });
+    expect(receipt.rollbackIncomplete.length).toBeGreaterThan(0);
+  });
+
+  it("still says that oats failed when another verb exits nonzero with a document that is no refusal", async () => {
+    await fake.behave({ "instance stop --apply": { file: "stop-apply.json", exit: 1 } });
+    const applied = await oats.stopApply({ instance: "redesign-ui-lead", revision: "9c1f2e3d4b5a69788796a5b4", key: "stop-7f3a9c2e41b8" });
+    expect(applied.ok === false && applied.error.code).toBe(codes.failed);
+  });
+
   it("answers the kernel's refusal unchanged", async () => {
     await fake.behave({ retire: { stdout: JSON.stringify({ schemaVersion: 1, ok: false, error: { code: "E_CHILDREN_RUNNING", message: "1 child still runs: digest-links-helper", details: {} } }) } });
     const applied = await oats.retireApply({ instance: "weekly-digest-helper", revision: "4e5f6a7b8c9d0e1f2a3b4c5d", key: "retire-2b9d4e6f8a1c" });

@@ -16,5 +16,6 @@ The other files are one answer per other `oats` verb, as the kernel prints it (a
 - Shaped as docs/desktop-cli-api.md documents the answer, with the agreed `session` fields, since
   no kernel answers them for a bb home yet: `spawn.json`, `stop-apply.json`,
   `stop-apply-stale.json` (the `E_PLAN_STALE` refusal), `start.json`, `restart.json`,
-  `retire-plan.json`, `retire-apply.json`, `servers.json`.
+  `retire-plan.json`, `retire-apply.json`, `retire-incomplete.json` (a receipt with
+  `rollbackIncomplete`, which the kernel prints with exit 1), `servers.json`.
 `container/fake-oats.mjs` prints them; the unit and live tests run the plugin against it.

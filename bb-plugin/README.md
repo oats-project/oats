@@ -49,6 +49,10 @@ shows one line that says what is missing. The line's code:
 | `OATS_TIMEOUT`, `OATS_NOT_JSON`, `OATS_BAD_ANSWER`, `OATS_FAILED` | `oats status` took more than 20 s, printed something that is not JSON, answered a document the plugin cannot read, or failed with no answer |
 | `E_…` | the kernel's own refusal, with its message unchanged |
 
+An act's refusal has the same codes, and two of its own: `RETIRE_INCOMPLETE` (the retire ran, its
+cleanup is incomplete, the kernel kept the home and its lines say what is left) and
+`NO_THREAD_NAMED` (a spawn or a start went through and the kernel names no bb thread for the agent).
+
 ## The sidebar's thread list
 
 The plugin registers a thread list and leaves bb's choice of the list on automatic: it does not pin
