@@ -1424,8 +1424,9 @@ waiting clear --producer oats.core --home <home>` from anywhere.
 - **Its own entries only.** oats.core marks its entries by the absolute
   path of its `claude-waiting.sh`. Each run removes only the entries that
   name that path (and any matcher group or event array the removal
-  empties), then appends its current ones. Every other key and entry stays
-  as it was, in order. The file is written atomically, mode 0600, and only
+  empties), then appends its current ones. Apart from adding `tui` when
+  absent (below), every other key and entry stays as it was, in order.
+  The file is written atomically, mode 0600, and only
   when its content changes. A temp file an interrupted write left behind
   (`.claude/.settings.json.oats-core-<pid>-<ms>.tmp`) is removed by the next
   spawn or start once its writer is gone, so it needs no retirement
@@ -1546,9 +1547,24 @@ that file replaces earlier ones wholesale, even one with no hooks. The
 project `.claude/settings.json` composes with the user's settings (under any
 `CLAUDE_CONFIG_DIR`) and with a `--settings`. So any capability that needs
 Claude settings uses the same managed `<home>/.claude/settings.json` with
-its own marker, never `--settings`. oats.core leaves
+marked entries for its hooks, never `--settings`. oats.core leaves
 `.claude/settings.local.json` to Claude Code, which writes its "don't ask
 again" permission rules there.
+
+**Renderer selection.** In the same merge, at spawn and every launch,
+oats.core adds `"tui": "default"` when the project's settings have no `tui`
+key. Any existing value, including a non-string, is kept: a scalar has no
+marker to distinguish the person's choice from oats.core's. Any `tui` in
+Claude's merged settings skips its fullscreen-renderer offer, which can
+otherwise stop an unattended agent before it receives a wake. `"default"`
+selects the classic renderer used by the launch-prompt captures and keeps
+tmux scrollback. The cost: agent panes use Claude's classic renderer even
+where Claude defaults to fullscreen, and the project setting overrides a
+user-level `"tui": "fullscreen"`. An existing project `tui` still wins.
+A pass that changes nothing does not rewrite the file. The existing file
+refusals, preview behaviour and non-Claude behaviour above apply to `tui`
+too. If oats.core ever stops adding it, existing homes keep the key until
+respawn.
 
 **Limits.**
 

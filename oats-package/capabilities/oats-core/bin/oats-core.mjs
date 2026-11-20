@@ -8,13 +8,16 @@
  * when the session waits on a permission prompt or a question for the human.
  * Every entry runs claude-waiting.sh (beside this file), which never affects
  * the Claude session: it exits 0, writes nothing to stdout and bounds the CLI.
+ * It also adds `tui: "default"` when absent, keeping agent panes on the classic
+ * renderer without Claude's fullscreen-renderer offer; any existing value stays.
  *
  * Why the project settings file and not `--settings`: Claude Code honours only
  * the LAST `--settings` flag on a command line (the last file replaces earlier
  * ones wholesale), while the project `.claude/settings.json` composes with the
  * user's settings and with a `--settings`. So oats.core owns its entries in
  * that file, marked by the absolute path of its claude-waiting.sh, and leaves
- * every other key and entry alone (docs/capabilities.md, oats.core).
+ * every other key and entry alone, besides the absent `tui` key above
+ * (docs/capabilities.md, oats.core).
  *
  * Hook contract (docs/capabilities.md, Commands and hooks): run with cwd = the
  * home and OATS_EVENT, OATS_INSTANCE_HOME, OATS_HARNESS, OATS_CLI_BIN, OATS_NODE_BIN
@@ -35,8 +38,9 @@
  *
  * The upgrade hook (`oats instance upgrade`, a stopped home) adopts a home whose
  * oats.core moves: spawn and launch answer no meta, so the only state oats.core
- * keeps is those settings entries, which name the module copy's fixed path and
- * which the next launch rewrites. It reads nothing and calls no host; see upgrade().
+ * keeps is those settings entries and the `tui` key. The entries name the module
+ * copy's fixed path and the next launch rewrites them; an existing `tui` stays.
+ * It reads nothing and calls no host; see upgrade().
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -175,7 +179,9 @@ function isOurs(hook, scriptPath) {
 /** Merge oats.core's settings into a parsed settings document, by marker: remove only
  *  the hook entries whose command names `scriptPath`, drop the matcher groups and
  *  event arrays that this removal empties, then append ours. Every other key, group
- *  and entry stays, in order. Returns { ok: true, settings } or { ok: false, problem }
+ *  and entry stays, in order. Add `tui: "default"` only when absent; any present
+ *  value suppresses Claude's renderer offer and cannot be identified as ours.
+ *  Returns { ok: true, settings } or { ok: false, problem }
  *  when the document is not one this merge may touch. */
 export function mergeSettings(existing, ours, scriptPath) {
   if (!isObject(existing)) return { ok: false, problem: "is not a JSON object" };
@@ -193,7 +199,9 @@ export function mergeSettings(existing, ours, scriptPath) {
     if (kept.length || !groups.length) hooks[event] = kept;
   }
   for (const [event, groups] of Object.entries(ours.hooks)) hooks[event] = [...(hooks[event] || []), ...groups];
-  return { ok: true, settings: { ...existing, hooks } };
+  const settings = { ...existing, hooks };
+  if (!Object.hasOwn(existing, "tui")) settings.tui = "default";
+  return { ok: true, settings };
 }
 
 export const serialize = (settings) => `${JSON.stringify(settings, null, 2)}\n`;

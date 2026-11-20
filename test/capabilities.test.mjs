@@ -682,8 +682,8 @@ test("operational commands are gated by active instance metadata; doctor exposes
   assert.equal(r.status, 0, r.stderr);
   const doctor = JSON.parse(r.stdout); assert.match(doctor.composedInstructions, /Canonical dev/);
   // No oats.core: no operating instructions at all (the kernel ships no "You run on OATS" copy since 0.26), and doctor says so.
-  // Operator coverage (#671) reports on its own lines; this pins the oats.core note.
-  assert.deepEqual(doctor.information.filter((l) => !l.startsWith("operator-coverage-unknown:")), ["soul dev has no oats.core capability (the workspace default); it gets no OATS operating instructions"]);
+  // Operator coverage and Git support report on their own lines; this pins the oats.core note.
+  assert.deepEqual(doctor.information.filter((l) => !l.startsWith("operator-coverage-unknown:") && !l.startsWith("git-version:")), ["soul dev has no oats.core capability (the workspace default); it gets no OATS operating instructions"]);
   assert.doesNotMatch(doctor.composedInstructions, /You run on OATS/);
   assert.ok(doctor.instructionBlocks.some((b) => b.source === "kernel:instance-boundary"));
   // The module's inject is part of what doctor shows, as it is of what a spawned home carries.

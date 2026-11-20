@@ -40,7 +40,6 @@ launch-configs:                              # named ways this host starts a har
   personal:
     harness: claude
     executable: "./bin/claude-wrapper.sh"    # relative → against this deployment directory
-    args: ["--verbose"]
     env:
       CLAUDE_CONFIG_DIR: { fromEnv: PERSONAL_CLAUDE_DIR }
     model: opus
@@ -304,6 +303,19 @@ configuration is a host choice: a soul never names one.
   crosses harnesses.
 - The executable must be a regular executable file; it is never run to probe
   it.
+- **`args` and package verification.** When any active capability declares
+  an applicable harness package requirement for the selected harness, a
+  configuration with any non-empty `args` is refused at spawn with
+  `E_LAUNCH_PROBE_UNSUPPORTED`; nothing is created. With `oats.aweb`, every
+  Claude launch has such a requirement. The package probe runs
+  `claude plugin list --json`, which cannot carry the launch's args;
+  arguments such as `--settings` can change which plugins load, so that
+  probe could not verify the actual launch. There is no passthrough or
+  exception for permission flags. Put native settings in the user
+  `settings.json` of the Claude config the launch uses: for agents only,
+  set `CLAUDE_CONFIG_DIR` through the configuration's `env`, which the
+  probe does carry. The other supported route is a wrapper `executable`,
+  which both the launch and the package probe use.
 - `oats launch-config list` shows the effective entries;
   `oats launch-config set <name> --file <json>` and
   `oats launch-config remove <name>` rewrite only this block, under the
@@ -315,9 +327,10 @@ configuration is a host choice: a soul never names one.
   `deprecated-runtime-name` warning.
 - **Claude's permissions** are Claude's own settings, not OATS keys. They go
   in the user settings of the Claude config a launch uses (its
-  `CLAUDE_CONFIG_DIR`, else `~/.claude`), or `--permission-mode` goes in a
-  configuration's `args`. Never in a home's `.claude/settings.json`: the
-  capabilities manage it at every start, and Claude ignores auto mode there.
+  `CLAUDE_CONFIG_DIR`, else `~/.claude`): set
+  `"permissions": {"defaultMode": "auto"}` there for auto mode. Never in a
+  home's `.claude/settings.json`: the capabilities manage it at every start,
+  and Claude ignores auto mode there.
   oats.setup's `/oats-agent-permissions` (oats.framework 1.13.0) teaches the
   setup: auto mode, narrow allow rules for the `oats` and `gh` reads,
   `oats spawn` and reading `aw` mail and chat, and what stays gated.
@@ -334,9 +347,13 @@ person; nothing in OATS writes it.
 launch-configs:
   claude-auto:
     harness: claude
-    args: ["--permission-mode", "auto"]
+    env:
+      CLAUDE_CONFIG_DIR: { fromEnv: AGENTS_CLAUDE_DIR }
     default: true
 ```
+
+Here `AGENTS_CLAUDE_DIR` names an agents-only Claude config directory;
+its user `settings.json` sets `"permissions": {"defaultMode": "auto"}`.
 
 - **One key.** The file holds `launch-configs:` and nothing else. Its entries
   have exactly the schema of the deployment's block and the same checks.
@@ -385,7 +402,8 @@ launch-configs:
 `default: true` makes a configuration this host's baseline for its harness
 (0.32, feature `launch-config-default`). Use it for what every launch of a
 harness on this machine needs, whatever soul or preference chose it: an
-account directory (`CLAUDE_CONFIG_DIR`), a wrapper `executable`, an argument.
+account directory (`CLAUDE_CONFIG_DIR`) or a wrapper `executable`. Its `args`
+are subject to the package-verification refusal above.
 
 - **When it applies:** a new launch that picks the harness without naming a
   configuration: a soul's `launch:`, an inline `souls.launch` preference,
@@ -632,7 +650,9 @@ came from, the executable, args, env, model, yolo, and each capability's
 launch contribution with its settings and trust, and the kernel that launched
 it (`kernelBin`, re-written by every start). One renderer turns it into
 the `command`. Configuration `args` go after the harness's own options and
-before capability arguments; every argument is single-quoted.
+before capability arguments; every argument is single-quoted. The
+[package-verification refusal](#launch-configurations) applies to these
+`args`.
 
 **Starting and restarting a home.** `oats session start --home <abs>` runs
 the recorded recipe. With `--launch-config`, `--harness` or `--yolo`, the

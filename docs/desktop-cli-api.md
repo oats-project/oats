@@ -437,6 +437,7 @@ kernel command.
 
 | Code | When |
 |---|---|
+| `E_NODE_UNSUPPORTED` | Node.js is older than 22: before every command, exit 1 with `details: {found: "<process.versions.node>", minimum: "22"}` and message `oats needs Node.js 22 or later; this is Node.js <found>`. With `--json` anywhere in argv, stdout is one failure envelope; otherwise the message is on stderr. This includes the `version --json` probe, whose success shape is not the envelope: on unsupported Node it answers this failure envelope with exit 1. Node 18 and 20 get this refusal; a Node too old to parse the entry can fail with a SyntaxError first |
 | `E_UNKNOWN_COMMAND` | No kernel command or capability namespace matches; an unknown capability subcommand; a [removed verb](#removed-verbs-and-flags) (`details: {removed, replacement}`) |
 | `E_CAPABILITY_INACTIVE` | In a home: the namespace's module is not one of the home's recorded capabilities |
 | `E_CAPABILITY_BLOCKED` | In a home: the manifest claiming the namespace is not a workspace module copy of that home. There is no package trust gate |
@@ -1850,6 +1851,14 @@ it cannot answer is one `information[]` line `hook-events-unchecked: <member
 capabilities | package <id>'s capabilities> were not checked …`, never an
 empty list read as "no warning". Older kernels answer no such `warnings` key
 (inspect, readiness, show, doctor) and refuse the capability instead.
+
+`oats doctor --json` reports the Git version and whether it supports partial
+caches in an existing `information[]` line starting `git-version:` (text:
+`INFO: git-version: …`). Git before 2.45 uses the whole-tree fallback; this
+is information, never a warning or a refusal. A failed version probe reports
+unknown support. A newer Git supports partial caches, but a remote can
+require whole-tree fetches and an existing whole-tree cache keeps its mode
+([Git version failures](workspaces.md#membership-and-trust)).
 
 `oats doctor --json` also lists what retires left behind in `information[]`:
 one `retained-recovery:` and one `retained-worktree:` line per item, after a

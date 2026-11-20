@@ -18,6 +18,21 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  unsupported-node:
+    name: Node 20 / unsupported-node refusal
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # No install: the refusal must load without the kernel or its dependencies.
+      - name: Unsupported Node refuses every CLI path before startup
+        run: node scripts/check-unsupported-node.mjs
+
   # The suite is ~470s serial on a 2-vCPU runner; six shards run it in parallel
   # (node --test --test-shard). Every shard installs the desktop deps, so no
   # Desktop suite is skipped.
@@ -159,7 +174,7 @@ jobs:
   # The one check to wait on (the name reviewers and merge tooling already know).
   gate:
     name: Node 22 / test, validate, pack, smoke
-    needs: [tests, verify, desktop-standalone, session-inheritance]
+    needs: [tests, verify, desktop-standalone, session-inheritance, unsupported-node]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -169,3 +184,4 @@ jobs:
           test "${{ needs.verify.result }}" = success
           test "${{ needs.desktop-standalone.result }}" = success
           test "${{ needs.session-inheritance.result }}" = success
+          test "${{ needs.unsupported-node.result }}" = success

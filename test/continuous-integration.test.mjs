@@ -37,13 +37,25 @@ test("direct main pushes retain the same read-only CI gates as pull requests", (
   // One stable check name gates on BOTH the shards and the static gates.
   const gate = workflow.jobs.gate;
   assert.equal(gate.name, "Node 22 / test, validate, pack, smoke");
-  assert.deepEqual(gate.needs, ["tests", "verify", "desktop-standalone", "session-inheritance"]);
+  assert.deepEqual(gate.needs, ["tests", "verify", "desktop-standalone", "session-inheritance", "unsupported-node"]);
   assert.equal(gate.if, "always()");
   // `always()` runs the gate after a failed job too, so needing a job is not enough: the
   // gate must test each needed job's result itself, or that job's failure passes the gate.
   const checks = gate.steps.flatMap((step) => (step.run ?? "").split("\n").map((line) => line.trim()));
   for (const job of gate.needs) {
     assert.ok(checks.includes(`test "\${{ needs.${job}.result }}" = success`), `the gate must fail when ${job} did not succeed`);
+  }
+});
+
+test("CI exercises the early refusal on real Node 20 without installing the kernel's dependencies", () => {
+  const workflow = parseConfigData(readFileSync(new URL("../.github/workflows/pull-request.yml", import.meta.url))).value;
+  const job = workflow.jobs["unsupported-node"];
+  const setup = job.steps.find((step) => step.uses?.startsWith("actions/setup-node@"));
+  assert.equal(Number(setup.with["node-version"]), 20);
+  assert.deepEqual(job.steps.filter((step) => step.run).map((step) => step.run), ["node scripts/check-unsupported-node.mjs"]);
+  for (const part of [job, ...job.steps]) {
+    assert.equal(part.if, undefined);
+    assert.equal(part["continue-on-error"], undefined);
   }
 });
 
