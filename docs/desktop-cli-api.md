@@ -7583,10 +7583,11 @@ as the kernel computes it from the deployment's configuration. One key,
 `sandbox`, only where the launch is a provider's (never for tmux):
 
 - a spawn preview (`oats spawn … --backend <name> --preview --json`):
-  `sandbox: {domains: [{host, capability, setting}], write: [{path, reason}],
+  `sandbox: {domains: [{host, capability, setting, team?}], write: [{path, reason}],
   missing: [{capability, setting, team, optional?}], unread?: [{capability,
   setting, reason}]}`. `domains`: each host with the capability and the
-  setting that asked for it. `write`: each path with its reason (the
+  setting that asked for it, and `team` (a team id) on a host taken from a
+  map: a team the instance may join, not one it is known to have joined. `write`: each path with its reason (the
   kernel's own). `missing`: what a capability's line names and the
   deployment does not hold (`team`: a team id, or null for a setting with no
   value; `optional: true` only on a row of an optional line). `unread`, only

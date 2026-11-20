@@ -2844,7 +2844,7 @@ function printSandboxAllowances(sb, indent = "") {
   if (sb.unavailable) { console.log(`${indent}sandbox allowances: none could be computed (${terminalText(sb.unavailable)})`); return; }
   if (sb.refused) { console.log(`${indent}sandbox allowances: refused (${sb.refused.code}): ${terminalText(sb.refused.message)}`); return; }
   console.log(`${indent}sandbox allowances:`);
-  for (const d of sb.domains) console.log(`${indent}  host ${terminalText(d.host)}  asked by ${terminalText(d.capability)} (setting ${terminalText(d.setting)})`);
+  for (const d of sb.domains) console.log(`${indent}  host ${terminalText(d.host)}  asked by ${terminalText(d.capability)} (setting ${terminalText(d.setting)}${d.team ? `, for team ${terminalText(d.team)}, which this instance may join` : ""})`);
   for (const w of sb.write) console.log(`${indent}  path ${terminalText(w.path)}  asked by the kernel (${terminalText(w.reason)})`);
   for (const m of sb.missing) console.log(`${indent}  missing${m.optional ? " (optional)" : ""}: ${terminalText(m.capability)} setting ${terminalText(m.setting)}${m.team === null ? " has no value" : ` has no entry for team ${terminalText(m.team)}`}`);
   for (const k of sb.skipped ?? []) console.log(`${indent}  left out: ${terminalText(k.capability)}: ${terminalText(k.reason)}`);

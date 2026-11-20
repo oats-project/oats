@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MAX_SANDBOX_LINES, SETTING_FILE_MAX_BYTES, SETTING_FILE_MAX_HOSTS, readSettingFileHosts, sandboxAllowances, sandboxDomainsOf, sandboxHostOf } from "../lib/sandbox-allowances.mjs";
+import { MAX_SANDBOX_LINES, SETTING_FILE_MAX_BYTES, SETTING_FILE_MAX_HOSTS, readSettingFileHosts, sandboxAllowances, sandboxDomainsOf, sandboxHostOf, sandboxLaunchInput } from "../lib/sandbox-allowances.mjs";
 
 const EVENTS = "/srv/acme/.agents/events";
 const WRITE = [{ path: EVENTS, reason: "oats events" }];
@@ -49,10 +49,14 @@ test("a map from team id to URL gives the hosts of the instance's own teams only
   const services = { "default:acme.example": "https://aweb.example.org/api", "ops:acme.example": "https://ops.example.net", "other:else.example": "https://*.not-read.example" };
   const of = (teams) => sandboxAllowances({ modules: [messaging([{ setting: "services" }, { setting: "registryHost" }])], slots: { messaging: "acme.msg" }, payloads: { "acme.msg": { services, registryHost: "registry.example.org" } }, teams, eventsDir: EVENTS }).domains;
   assert.deepEqual(of(["default:acme.example", "ops:acme.example", "default:acme.example"]), [
-    { host: "aweb.example.org", capability: "acme.msg", setting: "services" },
-    { host: "ops.example.net", capability: "acme.msg", setting: "services" },
+    { host: "aweb.example.org", capability: "acme.msg", setting: "services", team: "default:acme.example" },
+    { host: "ops.example.net", capability: "acme.msg", setting: "services", team: "ops:acme.example" },
     { host: "registry.example.org", capability: "acme.msg", setting: "registryHost" },
-  ], "another team's entry is neither taken nor judged");
+  ], "another team's entry is neither taken nor judged; a host from the map says which team's it is");
+  // The provider is handed the host with who asked, never the team: that label is for people.
+  assert.deepEqual(sandboxLaunchInput({ domains: of(["ops:acme.example"]), write: WRITE, missing: [], skipped: [], unread: [] }), {
+    domains: [{ host: "ops.example.net", capability: "acme.msg", setting: "services" }, { host: "registry.example.org", capability: "acme.msg", setting: "registryHost" }], write: WRITE, missing: [],
+  });
   assert.deepEqual(of(["default:acme.example"]).map((d) => d.host), ["aweb.example.org", "registry.example.org"]);
   assert.deepEqual(of(["unlisted:acme.example"]).map((d) => d.host), ["registry.example.org"], "a team without an entry contributes no host");
   assert.deepEqual(of([]).map((d) => d.host), ["registry.example.org"]);

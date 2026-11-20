@@ -2316,6 +2316,9 @@ session does.
 
 `oats spawn --preview`, a start's and a restart's answer and `oats readiness
 --home` list each host with who asked for it and each path with its reason.
+A host taken from a map is listed with its team: a team the instance **may
+join** (one the deployment allows its soul), which is not to say it has
+joined it. The launch input carries no team.
 A tmux launch has no `sandbox`, and reads no `sandboxDomains`.
 
 **A kernel from before session providers ignores `sandboxDomains`**: it
