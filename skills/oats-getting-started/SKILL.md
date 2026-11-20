@@ -249,15 +249,16 @@ the final values in one short message before you go on. The rules:
     `U` (`https://…`, the API URL their server gives its users), and whether
     their server uses the public AWID registry. Answers given in the prompt
     that started you are used without asking. When it uses a private
-    registry, the own-server branch stops here, before anything is written:
-    tell the person in one sentence that a private registry needs oats.aweb
-    with `oats aweb setup --registry`, and that this skill stops here. Offer
-    hosted aweb now (the hosted defaults above, `N` among them, shown in one
-    short message) or waiting for that release. Otherwise, tell them, in
+    registry, ask its address too, the registry origin `RG` (`https://…`,
+    the scheme and host only, with no path), also not a secret. Step 9
+    records it for this deployment. Then tell them, in
     plain words, what must already be in place on their side, since you
     make none of it: the namespace's controller key on this computer, for
     this computer account; the `_awid.ND` DNS record published for that
-    key; and their server reachable at `U`. Step 9
+    key; and their server reachable at `U`. On a private registry, that
+    record must name their registry: a key prepared without
+    `--registry RG` gives a record for the public registry, so tell them
+    to check that its value carries `registry=RG`. Step 9
     checks them, read-only. On their own server there is no account `N` and
     no step 5: the team is `<workspace>:ND`, created in step 9 in their
     namespace, and `A` is `<workspace>-root` as on hosted. Never offer it on
@@ -601,14 +602,18 @@ release's `oats.aweb` was tested with, which `oats.aweb` publishes in its
 `aw-compat.json`: hosted aweb upgrades its server before a new `aw` comes
 out, but their own server has no such order. Read that version at the exact
 `oats.aweb` release the installed CLI's catalog names, never at `main`.
-This prints `TESTED <version>`, or why it can't:
+On a private registry (step 1), add ` private` at the end of the line,
+after the catalog's path: that branch needs a later `oats.aweb`. This
+prints `TESTED <version>`, or why it can't:
 
 ```bash
-node -e 'const c=require(process.argv[1]).packages["oats.aweb"],m=/^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?$/.exec(c.url),v=/^v(\d+)\.(\d+)\.(\d+)$/.exec(c.ref);if(!m){console.log("NOT_GITHUB "+c.url);process.exit(1)}if(!v||v.slice(1).reduce((d,x,i)=>d||x-[1,42,1][i],0)<0){console.log("TOO_OLD "+c.ref);process.exit(1)}const u="https://raw.githubusercontent.com/"+m[1]+"/"+m[2]+"/"+c.ref+"/"+c.path+"/capabilities/oats-aweb/aw-compat.json";fetch(u).then(r=>{if(!r.ok)throw new Error("HTTP "+r.status+" "+u);return r.json()}).then(j=>{if(Object.keys(j).sort().join()!=="min,tested"||typeof j.tested!=="string"||!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/.test(j.tested))throw new Error("unexpected "+JSON.stringify(j));console.log("TESTED "+j.tested)}).catch(e=>{console.log("FAILED "+e.message);process.exit(1)})' "$(oats root)/package-catalog.json"
+node -e 'const c=require(process.argv[1]).packages["oats.aweb"],m=/^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?$/.exec(c.url),v=/^v(\d+)\.(\d+)\.(\d+)$/.exec(c.ref);if(!m){console.log("NOT_GITHUB "+c.url);process.exit(1)}if(process.argv.length>3||![undefined,"private"].includes(process.argv[2])){console.log("FAILED usage");process.exit(1)}const f=process.argv[2]?[1,43,0]:[1,42,1];if(!v||v.slice(1).reduce((d,x,i)=>d||x-f[i],0)<0){console.log("TOO_OLD "+c.ref);process.exit(1)}const u="https://raw.githubusercontent.com/"+m[1]+"/"+m[2]+"/"+c.ref+"/"+c.path+"/capabilities/oats-aweb/aw-compat.json";fetch(u).then(r=>{if(!r.ok)throw new Error("HTTP "+r.status+" "+u);return r.json()}).then(j=>{if(Object.keys(j).sort().join()!=="min,tested"||typeof j.tested!=="string"||!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/.test(j.tested))throw new Error("unexpected "+JSON.stringify(j));console.log("TESTED "+j.tested)}).catch(e=>{console.log("FAILED "+e.message);process.exit(1)})' "$(oats root)/package-catalog.json"
 ```
 
 - **`TOO_OLD`:** this OATS release's `oats.aweb` is older than `v1.42.1`,
-  the first that sets up a team on a person's own server.
+  the first that sets up a team on a person's own server, or, on a private
+  registry, older than `v1.43.0`, the first that records the registry
+  (`oats aweb setup --registry`).
   **`NOT_GITHUB` or `FAILED`:** the tested version can't be read. Either
   way, the own-server branch stops here. Tell the person in one sentence,
   and offer hosted aweb now (step 1's hosted defaults, `N` among them,
@@ -1088,7 +1093,28 @@ readiness still reports a problem.
    - **Their own aweb server (step 1), in place of the signup.** Nothing for
      the person to type, and no key passes through you. `ND`, `U` and `A`
      come from step 1, and `L` is step 7's label.
-     - **First, the prerequisites, read-only:**
+     - **On a private registry (step 1), first record it** for this
+       deployment, with `RG` written in. Skip this on the public registry.
+
+       ```bash
+       cd "D" && oats aweb setup --soul S --registry RG
+       ```
+
+       It writes only `settings.oats.aweb.registry` in `D/oats-local.yaml`,
+       the one setting that admits a private registry here: every later
+       `oats aweb` command and every agent of `D` reads its registry from
+       it. Never set `AWID_REGISTRY_URL` instead: oats.aweb refuses a
+       private registry given that way (`registry-setting-required`).
+       Success prints one line of JSON whose `registry` is `RG` as an
+       origin (the host in lowercase, no trailing `/`). Its `next` lists
+       "Restart resident serve" and "Restart wake": both are expected and
+       need nothing from you, since this new deployment has no resident
+       yet and item 6 installs the broker after this. An `E_SETUP_REGISTRY`
+       refusal that starts `settings.oats.aweb.registry:` says what is wrong
+       with the address (a path, `/api`, a query): ask the person for the
+       registry's origin again and run this again. Anything else: stop,
+       spawn nothing, and tell the person what it shows.
+     - **Then the prerequisites, read-only:**
 
        ```bash
        cd "D" && aw id namespace check-txt --domain ND --json; echo "exit=$?"
@@ -1251,6 +1277,14 @@ readiness still reports a problem.
    Otherwise stop, spawn nothing, and tell the person what the status
    shows.
 
+   **`E_WAKE_REGISTRY_CONFLICT`** in their terminal: this computer account
+   already runs a wake broker for another registry, or for none, most
+   likely for another deployment, and one account's broker serves one
+   registry. Nothing was changed. Stop, spawn nothing, and tell the person
+   in plain words; the choice is theirs: run this deployment under another
+   computer account, or move the other one, as the message says. Never
+   uninstall the broker or deregister another deployment's homes yourself.
+
 The setup expert does the rest of this machine's messaging
 (`/oats-host-delivery`).
 
@@ -1323,8 +1357,10 @@ are cloned, knowledge tools, messaging wanted or not>
   the person (new workspace), or T owned by aweb account <handle>
   (signed in at step 5), or new account N signed up (machine found-list),
   or joined L by invite (existing), or team T on their own aweb server U,
-  namespace ND, aw <tested> (oats.aweb's tested version) or "aw <version>
-  is newer than the tested <tested>; kept", its key at
+  namespace ND, registry public | RG (recorded in
+  `settings.oats.aweb.registry`), aw <tested> (oats.aweb's tested
+  version) or "aw <version> is newer than the tested <tested>; kept", its
+  key at
   <team key path> | not set up (the setup expert has no messaging)
 - Harness channel mode: development, confirmed by OATS at each start
   (Claude with aweb) | none (Codex, pi or no messaging)
@@ -1493,8 +1529,9 @@ the setup expert, not in this message. You are done.
   aweb server, checked against step 9's create.
 - **On their own aweb server:** make or touch the namespace's controller key
   (`aw id namespace prepare-controller`, `~/.awid`), set or ask for
-  `AWEB_API_KEY`, or write a hosted `default:…aweb.ai` team or
-  `localTeams` into the workspace.
+  `AWEB_API_KEY`, set `AWID_REGISTRY_URL` (a private registry is
+  recorded by `oats aweb setup --registry` only), or write a hosted
+  `default:…aweb.ai` team or `localTeams` into the workspace.
 - **Write a setup soul into the workspace:** the setup expert is
   `oats.framework`'s.
 - **The Desktop:** never download it through a browser, skip a verification
