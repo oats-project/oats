@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { mailAnswer, mailArgs, mailBodyLines, MAIL_OPERATION } from '../../client/mail-contract.mjs';
-import { createMailSheet, MAIL_WORDS, mailSheetCSS } from '../renderer/mail-sheet.mjs';
+import { createMailSheet, MAIL_WORDS, UNREADABLE_IDS_SHOWN, mailSheetCSS } from '../renderer/mail-sheet.mjs';
 
 const FIXTURE = JSON.parse(readFileSync(new URL('./fixtures/mail-read/mail-v2.json', import.meta.url), 'utf8'));
 const fixture = (edit = () => {}) => { const run = structuredClone(FIXTURE); edit(run.result.mail, run); return run; };
@@ -366,7 +366,7 @@ test('modal: a real shortcut that focuses the roster behind the scrim (Alt+F) le
   assert.equal(u.sheet.isOpen(), false); assert.equal(u.doc.activeElement, ok);
 });
 
-test('an identity with an error AND its own messages shows both; unreadableConversations are counted and named', async t => {
+test('an identity with an error AND its own messages shows both; unreadableConversations are counted, their ids in a tooltip', async t => {
   const unreadable = (list) => fixture(d => { d.identities[1].error = 'conversation-unreadable'; if (list) d.identities[1].unreadableConversations = list; });
   // The decoder: the key only with conversation-unreadable, an array of ids, possibly empty.
   assert.ok(mailAnswer(unreadable(['c-2', 'c-x'])));
@@ -377,13 +377,13 @@ test('an identity with an error AND its own messages shows both; unreadableConve
   assert.equal(mailAnswer(fixture(d => { d.identities[1].error = 'conversation-unreadable'; d.identities[1].unreadableConversations = 'c-2'; })), null);
   assert.equal(mailAnswer(fixture(d => { d.identities[1].error = 'conversation-unreadable'; d.identities[1].unreadableConversations = ['']; })), null);
   // The sheet: product's own messages (m-2, m-1) stay, beside the line that some of its mail couldn't be read.
-  const u = rig(t, { answer: () => unreadable(['c-2', 'c-x']) });
+  const u = rig(t, { answer: () => unreadable(['c-8', 'c-x']) });
   u.sheet.open(row, 'ws-1'); await settle();
   const box = u.one('[data-mail-identity="product"]');
-  assert.equal(box.querySelector('p').textContent, 'Mail from product: 2 conversations can\'t be read');
-  const named = [...box.querySelectorAll('li')];
-  assert.deepEqual(named.map(li => li.textContent), ['Mount', MAIL_WORDS.unnamedConversation], 'a shown message gives the title');
-  assert.equal(named[0].title, ''); assert.equal(named[1].title, 'c-x', 'else the id in the tooltip');
+  // Counted, never titled (desktop-rework-lead, 2026-11-20): an unreadable conversation's messages are never shown.
+  assert.equal(box.textContent, 'Mail from product: 2 conversations can\'t be read');
+  assert.equal(box.querySelectorAll('li').length, 0, 'no list of conversations');
+  assert.equal(box.querySelector('p').title, 'c-8, c-x', 'the ids in the tooltip');
   assert.deepEqual(u.all('.mail-item').map(li => JSON.parse(li.dataset.mailKey)), [['default', 'm-3'], ['product', 'm-2'], ['product', 'm-1']],
     "the erroring identity's own messages are shown");
   // An empty list: the error's own line, and the messages.
@@ -391,11 +391,13 @@ test('an identity with an error AND its own messages shows both; unreadableConve
   e.sheet.open(row, 'ws-1'); await settle();
   assert.match(e.one('[data-mail-identity="product"]').textContent, /^Mail from product can't be read: conversation-unreadable — /);
   assert.equal(e.all('.mail-item').length, 3);
-  // Ids are opaque per team: default's c-1 doesn't title product's unreadable c-1.
-  const other = rig(t, { answer: () => unreadable(['c-1']) });
-  other.sheet.open(row, 'ws-1'); await settle();
-  const li = other.one('[data-mail-identity="product"] li');
-  assert.equal(li.textContent, MAIL_WORDS.unnamedConversation); assert.equal(li.title, 'c-1');
+  // Many: the tooltip lists the first UNREADABLE_IDS_SHOWN, then how many more.
+  const ids = Array.from({ length: UNREADABLE_IDS_SHOWN + 2 }, (_, n) => `c-${n + 10}`);
+  const many = rig(t, { answer: () => unreadable(ids) });
+  many.sheet.open(row, 'ws-1'); await settle();
+  const manyLine = many.one('[data-mail-identity="product"] p');
+  assert.equal(manyLine.textContent, `Mail from product: ${ids.length} conversations can't be read`);
+  assert.equal(manyLine.title, `${ids.slice(0, UNREADABLE_IDS_SHOWN).join(', ')}, and 2 more`);
   // One conversation: singular.
   const one = rig(t, { answer: () => unreadable(['c-x']) });
   one.sheet.open(row, 'ws-1'); await settle();
