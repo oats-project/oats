@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { createAgentBoard, createHiddenFacts, DIALOG_NOTE, IN_MODE_NOTE, PENDING_NOTE, DETAIL_NOTES, BOARD_MALFORMED, boardDropped } from '../renderer/agent-board.mjs';
+import { createAgentBoard, createHiddenFacts, DIALOG_NOTE, IN_MODE_NOTE, MODE_UNKNOWN_NOTE, PENDING_NOTE, DETAIL_NOTES, BOARD_MALFORMED, boardDropped } from '../renderer/agent-board.mjs';
 import { createTabBoards } from '../renderer/agent-board-tabs.mjs';
 import { boardData, boardDetailData, BOARD_FEATURE } from '../../client/instance-board.mjs';
 import { defaultBinding, TERMINAL_ALLOWLIST, DEFAULT_KEYMAPS } from '../renderer/keybindings.mjs';
@@ -817,9 +817,9 @@ test('agent view answering: an answer refused for the scrollback types nothing, 
   const dom = new JSDOM('<!doctype html><body><div class="tab-pane active"><div class="term-wrap"><textarea></textarea></div></div></body>');
   t.after(() => dom.window.close());
   const doc = dom.window.document, pane = doc.querySelector('.tab-pane'), terminal = doc.querySelector('textarea');
-  const typed = []; let mode = true;
+  const typed = []; let mode = 'in-mode';
   const view = createAgentBoard({ pane, home: '/h', name: 'dev-a', now: () => NOW, focusTerminal: () => terminal.focus(), openLink: () => {},
-    hidden: createHiddenFacts(memoryStorage()), type: async text => { if (mode) return 'in-mode'; typed.push(text); return true; } });
+    hidden: createHiddenFacts(memoryStorage()), type: async text => { if (mode) return mode; typed.push(text); return true; } });
   view.update(boardData(board()));
   const zone = pane.querySelector('.agent-questions'), note = () => zone.querySelector('.agent-q-note');
   zone.focus();
@@ -829,6 +829,11 @@ test('agent view answering: an answer refused for the scrollback types nothing, 
   assert.notEqual(doc.activeElement, terminal, 'the focus stays in the zone');
   view.input('\r');
   assert.equal(view.question, 'q1', 'nothing was pending: an Enter hides no card');
+  // A mode main could not read (or an agent on another machine) types nothing either, and says so.
+  mode = 'mode-unknown';
+  zone.querySelectorAll('.agent-q-option')[0].click(); for (let i = 0; i < 10; i++) await Promise.resolve();
+  assert.deepEqual(typed, []);
+  assert.equal(note().textContent, MODE_UNKNOWN_NOTE);
   mode = false;
   zone.querySelectorAll('.agent-q-option')[0].click(); for (let i = 0; i < 10; i++) await Promise.resolve();
   assert.deepEqual(typed, ['q1: Yes, one clean commit']);

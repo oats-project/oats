@@ -353,37 +353,59 @@ test('shutdown revokes every owner and pending work without freeing unconfirmed 
   f.ptys[0].exit({ exitCode: 0 }); await drain(); assert.equal(f.broker.counts().slots, 0);
 });
 
-// The agent view's answer (the Opus whole read, 2026-11-20): main reads the viewer pane's mode first and never types into
-// a pane in a mode (tmux copy mode, where q is cancel: "q1: Yes" would reach the agent as "1: Yes").
-test('term:answer types only into a pane in no mode; in a mode, or unknown, nothing is typed (E_TERM_IN_MODE)', async () => {
-  let mode = false;
-  const inModeFor = { value: () => Promise.resolve(mode) };
+// The agent view's answer (the Opus whole read, 2026-11-20; the maintainer's conditions): main reads the viewer pane's
+// mode first and types only on a read that says no mode (tmux copy mode, where q is cancel: "q1: Yes" would reach the
+// agent as "1: Yes"). In a mode, or a mode it can't read, not one character reaches the PTY.
+function answerFixture() {
+  const reads = { count: 0, value: () => false };
   const f = fixture({ create() {
     const p = { writes: [], sizes: [], kills: 0, viewers: 0, data: null, exit: null };
     f.ptys.push(p);
     return { pty: { onData(fn) { p.data = fn; return { dispose() {} }; }, onExit(fn) { p.exit = fn; return { dispose() {} }; },
-      write(d) { p.writes.push(d); }, resize() {}, kill() {} }, killViewer() {}, inMode: () => inModeFor.value() };
+      write(d) { p.writes.push(d); }, resize() {}, kill() {} }, killViewer() {}, inMode: () => { reads.count++; return reads.value(); } };
   } });
-  const a = f.owner('A'), b = f.owner('B'), h = await f.attached(a), answer = (e, ...args) => f.handlers.get('term:answer')(e, ...args);
+  return { f, reads, answer: (e, ...args) => f.handlers.get('term:answer')(e, ...args) };
+}
+
+test('term:answer types only on a read that says no mode; in a mode or unreadable, not one character reaches the PTY', async () => {
+  const { f, reads, answer } = answerFixture(), a = f.owner('A'), h = await f.attached(a);
   assert.deepEqual(await answer(f.event(a), h, 'q1: Yes, one clean commit'), { terminalApi: 2, ok: true, status: 'sent' });
-  mode = true;
-  assert.equal((await answer(f.event(a), h, 'q1: No')).code, 'E_TERM_IN_MODE');
-  inModeFor.value = () => Promise.reject(new Error('tmux gone'));
-  assert.equal((await answer(f.event(a), h, 'q1: No')).code, 'E_TERM_IN_MODE', 'a mode that cannot be read is not ruled out');
-  inModeFor.value = () => Promise.resolve(false);
+  reads.value = () => true;
+  assert.deepEqual(await answer(f.event(a), h, 'q1: No'), terminalFailure('E_TERM_IN_MODE'));
+  for (const unreadable of [() => { throw new Error('tmux gone'); }, () => '1', () => undefined, () => 0]) {
+    reads.value = unreadable;
+    assert.deepEqual(await answer(f.event(a), h, 'q1: No'), terminalFailure('E_TERM_MODE_UNKNOWN'), 'fail closed');
+  }
+  reads.value = () => false;
   for (const bad of ['', 'q1: Yes\r', 'q1: Yes\n', 'q1: \x1b[A', 'x'.repeat(513), 42]) assert.equal((await answer(f.event(a), h, bad)).code, 'E_TERM_BAD_ARGS');
-  assert.equal((await answer(f.event(b), h, 'q1: No')).ok, false, 'another window never types');
-  assert.equal((await answer(f.event(a), h.id, 'q1: No')).code, 'E_TERM_LEASE');
-  // The lease ends while the mode is read: nothing is typed.
-  let release; inModeFor.value = () => new Promise(r => { release = r; });
-  const late = answer(f.event(a), h, 'q1: Late'); await drain();
-  f.navigate(a); release(false);
-  assert.equal((await late).ok, false);
-  assert.deepEqual(f.ptys[0].writes, ['q1: Yes, one clean commit']);
+  assert.deepEqual(f.ptys[0].writes, ['q1: Yes, one clean commit'], 'only the answer read to be in no mode was typed');
 });
 
-test('term:answer on a terminal with no mode reader (a remote viewer) types as write does', async () => {
+test('term:answer tells a document with no lease on the pane nothing about it: refused before the pane is read', async () => {
+  const { f, reads, answer } = answerFixture(), a = f.owner('A'), b = f.owner('B'), unknown = f.owner('unknown', false), h = await f.attached(a);
+  const answers = [];
+  for (const value of [() => true, () => false]) {
+    reads.value = value;
+    for (const [e, handle] of [[f.event(b), h], [f.event(unknown), h], [f.event(a), h.id], [f.event(a), { ...h, lease: 'b'.repeat(64) }]]) {
+      answers.push(JSON.stringify(await answer(e, handle, 'q1: Yes')));
+    }
+  }
+  assert.equal(reads.count, 0, 'the pane is never read for them');
+  assert.deepEqual(answers.slice(0, 4), answers.slice(4), 'the same refusals whatever the pane\'s mode');
+  assert.deepEqual(f.ptys[0].writes, []);
+});
+
+test('term:answer on a viewer with no mode reader (a remote one) types nothing (E_TERM_MODE_UNKNOWN); a plain write is as before', async () => {
   const f = fixture(), a = f.owner('A'), h = await f.attached(a);
-  assert.equal((await f.handlers.get('term:answer')(f.event(a), h, 'q1: Yes')).status, 'sent');
-  assert.deepEqual(f.ptys[0].writes, ['q1: Yes']);
+  assert.deepEqual(await f.handlers.get('term:answer')(f.event(a), h, 'q1: Yes'), terminalFailure('E_TERM_MODE_UNKNOWN'));
+  assert.deepEqual(f.ptys[0].writes, []);
+  f.sends.get('term:write')(f.event(a), h, 'typed');
+  assert.deepEqual(f.ptys[0].writes, ['typed'], 'term:write still types as it did');
+});
+
+test('term:write never reads the pane\'s mode, in a mode or not: the person\'s own typing is as before', async () => {
+  const { f, reads } = answerFixture(), a = f.owner('A'), h = await f.attached(a);
+  reads.value = () => true;
+  f.sends.get('term:write')(f.event(a), h, 'q');
+  assert.equal(reads.count, 0); assert.deepEqual(f.ptys[0].writes, ['q']);
 });

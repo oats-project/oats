@@ -221,4 +221,10 @@ test('preload termWrite with { answer: true } asks main (term:answer) and resolv
   for (const options of [null, {}, { answer: 1 }, { answer: true, extra: 1 }]) assert.equal((await bridge.termWrite(h, 'q1: Yes', options)).code, 'E_TERM_BAD_ARGS');
   assert.equal((await bridge.termWrite(7, 'q1: Yes', { answer: true })).code, 'E_TERM_LEASE');
   assert.deepEqual(calls, [], 'nothing reaches main for a refused request');
+  reply = { terminalApi: 2, ok: false, code: 'E_TERM_MODE_UNKNOWN', message: 'The terminal could not be checked for its scrollback. Nothing was typed.' };
+  assert.equal((await bridge.termWrite(h, 'q1: Yes', { answer: true })).code, 'E_TERM_MODE_UNKNOWN');
+  // Without the option, termWrite is as before: synchronous, one-way, never an invoke.
+  calls.length = 0;
+  assert.deepEqual(bridge.termWrite(h, 'q'), { terminalApi: 2, ok: true, status: 'sent' });
+  assert.deepEqual(calls, [['send', 'term:write', { ...h }, 'q']]);
 });

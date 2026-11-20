@@ -394,7 +394,8 @@ export function createTerminalTab({ desk, term, tmux, remote, serverLabel, wrap,
   return {
     /** The agent view's answer (agent-board.mjs): `text` on the input line through this tab's current lease, exactly
      * where the person's typing goes, never with a line end. Resolves true once main typed it; 'in-mode' when main
-     * refused because the terminal is in its scrollback (tmux copy mode, where q would be read as cancel); false when
+     * refused because the terminal is in its scrollback (tmux copy mode, where q would be read as cancel); 'mode-unknown'
+     * when main could not tell (it types only on a read that says no mode); false when
      * no lease is ready to take it, or main refused for another reason (said in the tab's banner). */
     async type(text) {
       if (typeof text !== 'string' || !text || /[\x00-\x1f\x7f]/.test(text)) return false;
@@ -403,6 +404,7 @@ export function createTerminalTab({ desk, term, tmux, remote, serverLabel, wrap,
       if (!ready || closed || ended || !h || !isActive()) return false;
       const result = await desk.termWrite(h, text, { answer: true });
       if (result?.code === 'E_TERM_IN_MODE') return 'in-mode';
+      if (result?.code === 'E_TERM_MODE_UNKNOWN') return 'mode-unknown';
       if (result?.ok !== true) { banner(terminalFailure(result?.code ?? 'E_TERM_TRANSPORT').message); return false; }
       return true;
     },

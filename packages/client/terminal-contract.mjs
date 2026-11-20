@@ -39,6 +39,8 @@ const messages = {
   E_TERM_INPUT_LIMIT: 'Terminal input exceeds the safe write limit. Nothing was sent.',
   // An answer (the agent view) refused because the terminal is in tmux's scrollback (copy mode): nothing was typed.
   E_TERM_IN_MODE: 'The terminal is in its scrollback. Nothing was typed.',
+  // An answer refused because the pane's mode could not be read (or there is no local pane to read): nothing was typed.
+  E_TERM_MODE_UNKNOWN: 'The terminal could not be checked for its scrollback. Nothing was typed.',
   E_TERM_TRANSPORT: 'The terminal service did not confirm the operation.',
   E_HERDR_REMOVED: HERDR_REMOVED,
   E_TERM_REMOTE_UNREACHABLE: serverMessages.E_TERM_REMOTE_UNREACHABLE('the server'),

@@ -7,6 +7,7 @@ const messages = {
   E_TERM_INPUT_LIMIT: 'Terminal input exceeds the safe write limit. Nothing was sent.',
   E_TERM_TRANSPORT: 'The terminal service did not confirm the operation.',
   E_TERM_IN_MODE: 'The terminal is in its scrollback. Nothing was typed.',
+  E_TERM_MODE_UNKNOWN: 'The terminal could not be checked for its scrollback. Nothing was typed.',
   E_TERM_ATTACHMENT_FAILED: 'Could not prepare these attachments.',
 };
 const fail = code => ({ terminalApi: 2, ok: false, code, message: messages[code] });

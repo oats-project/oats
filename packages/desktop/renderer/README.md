@@ -2402,9 +2402,12 @@ changes, never on an unchanged poll. The answer goes through
 `createTerminalTab`'s `type(text)`, the tab's own PTY lease (no control
 character, no line end, never while the pane isn't active): `desk.termWrite(h, text, { answer: true })`, which main
 answers (`term:answer`, terminal-owner.mjs `answer`, the same frame guard and lease as a write) only after reading
-the viewer pane's `#{pane_in_mode}` on its `=`-anchored session: in a mode (tmux copy mode, where `q` is cancel and
-`q1: Yes` would arrive as `1: Yes`), or a mode it can't read, nothing is typed and it answers `E_TERM_IN_MODE`, which
-the zone says (`IN_MODE_NOTE`); never a cancel. A remote viewer has no local pane to read and types as before. While
+the viewer pane's `#{pane_in_mode}` on its `=`-anchored session, synchronously, and writes with no turn of the event
+loop in between. Only a read of 0 types. In a mode (tmux copy mode, where `q` is cancel and `q1: Yes` would arrive as
+`1: Yes`) it answers `E_TERM_IN_MODE` (`IN_MODE_NOTE`); a read that failed or didn't resolve, or a remote viewer, which
+has no local pane to read, answers `E_TERM_MODE_UNKNOWN` (`MODE_UNKNOWN_NOTE`); either way not one character is
+written, and never a cancel. The frame and lease checks come before the read, so a document that holds no lease learns
+nothing about a pane. Not closed: a key the person presses into the scrollback during the read's few milliseconds. While
 an answer is pending (typed, no Enter yet; Ctrl+C or Ctrl+U frees it) a further press is refused (`PENDING_NOTE`).
 While the board has a question, answered on this tab or not, `sync` keeps its claim off the waiting row. The person's Enter is seen through its
 `onInput` observer. Before a number types, the view reads the claims again

@@ -32,6 +32,9 @@ export const DIALOG_NOTE = "The agent's terminal is showing a prompt: answer it 
 export const IN_MODE_NOTE = 'The terminal is in its scrollback: press q or scroll to the bottom, then press the number again.';
 /** What the zone says to a press while an earlier answer is still on the input line, unsent: a second one would be
  * typed onto the same line, and the Desktop can't clear a harness's line for it. */
+/** What the zone says when main could not tell whether the terminal is in its scrollback (a failed read, or an agent on
+ * another machine, whose pane this computer can't read): it types only on a read that says no, so nothing was typed. */
+export const MODE_UNKNOWN_NOTE = "The answer wasn't typed: the Desktop couldn't check the terminal's scrollback. Type it there yourself, or press the number again.";
 export const PENDING_NOTE = 'An answer is already on the input line: send it, or clear it first.';
 /** What the view says for each outcome of the detail read (instance-board.mjs boardDetailData, and `failed`), and
  * for a row board that was not read whole: none of them reads as "no history" or "no questions". */
@@ -228,7 +231,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     }
     if (typed !== true) {
       if (pending === mine) pending = null;
-      refusal = typed === 'in-mode' ? IN_MODE_NOTE : null;
+      refusal = typed === 'in-mode' ? IN_MODE_NOTE : typed === 'mode-unknown' ? MODE_UNKNOWN_NOTE : null;
       if (alive) paint();
       return false;
     }

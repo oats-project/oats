@@ -677,3 +677,28 @@ test("held resizes: none reaches the program until the last hold lets go, then o
   grow(150);
   assert.deepEqual(sent, [], "nor after");
 });
+
+// The agent view's answer (the Opus whole read; the maintainer's conditions): type() goes through termWrite's answer
+// option and hands the zone main's refusal, the scrollback or an unread mode, without a banner of its own.
+test("terminal tab type: the answer option, and main's scrollback refusals reach the caller as theirs", async () => {
+  const d = makeDoubles(Promise.resolve(5));
+  const calls = [];
+  let reply = { terminalApi: 2, ok: true, status: 'sent' };
+  d.desk.termWrite = async (h, data, options) => { calls.push([h, data, options]); return reply; };
+  const tab = mk(d);
+  await tab.start();
+  assert.equal(await tab.type('q1: Yes'), true);
+  assert.deepEqual(calls, [[handle(5), 'q1: Yes', { answer: true }]]);
+  reply = terminalFailure('E_TERM_IN_MODE');
+  assert.equal(await tab.type('q1: Yes'), 'in-mode');
+  reply = terminalFailure('E_TERM_MODE_UNKNOWN');
+  assert.equal(await tab.type('q1: Yes'), 'mode-unknown');
+  assert.equal(d.wrap.querySelector('.term-banner'), null, 'the zone says it, not the terminal');
+  reply = terminalFailure('E_TERM_NOT_READY');
+  assert.equal(await tab.type('q1: Yes'), false);
+  assert.equal(d.wrap.querySelector('.term-banner').textContent, terminalFailure('E_TERM_NOT_READY').message);
+  calls.length = 0;
+  for (const bad of ['', 'q1: Yes\r', 'q1: \x1b[A']) assert.equal(await tab.type(bad), false);
+  assert.deepEqual(calls, [], 'refused before the bridge');
+  await tab.close();
+});

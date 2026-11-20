@@ -1179,7 +1179,14 @@ frees it.) While the terminal is in its scrollback (you scrolled up with the
 wheel or Shift+PgUp), nothing is typed either, because the scrollback would
 read the answer's first letter as its own key: the zone says "The terminal is
 in its scrollback: press q or scroll to the bottom, then press the number
-again."
+again." The Desktop checks the terminal just before it types, and types only
+when the check says it isn't in its scrollback: when it can't tell (the check
+failed, or the agent runs on another machine, whose terminal this computer can't
+check), nothing is typed and the zone says "The answer wasn't typed: the Desktop
+couldn't check the terminal's scrollback. Type it there yourself, or press the
+number again." The check and the typing are two steps a few milliseconds apart:
+if you enter the scrollback in exactly that moment, tmux can still read the
+answer's first letter as a scrollback key. That window is not closed.
 
 **While a dialog is open** (the agent has a live `permission` or `question`
 claim, from its harness or any other producer), the numbers are disabled and

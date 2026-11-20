@@ -87,10 +87,10 @@ export function createTerminalIo({ context, attachmentDirectory, spawnPty, execF
       });
       // Whether the viewer's pane is in a mode (tmux copy mode, the person's scrollback), read on its own anchored
       // session, where its client types: the agent view types an answer only when it is not (terminal-owner answer).
-      const inMode = async () => {
-        const { stdout } = await run('tmux', [...tmuxSocketArgs(spec.socket), 'display-message', '-p', '-t', `=${opened.viewer}:`, '#{pane_in_mode}'],
-          { encoding: 'utf8', timeout: 2000, maxBuffer: 4096 });
-        const value = String(stdout).trim();
+      // Synchronous on purpose: the broker writes right after it, with no turn of the event loop in between. Anything
+      // but a plain 0 or 1 (tmux failed, the target didn't resolve) throws: unknown, which types nothing.
+      const inMode = () => {
+        const value = local.tmuxOut(['display-message', '-p', '-t', `=${opened.viewer}:`, '#{pane_in_mode}']);
         if (value !== '0' && value !== '1') throw new Error('pane mode unreadable');
         return value === '1';
       };
