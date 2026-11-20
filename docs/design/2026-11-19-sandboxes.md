@@ -1,8 +1,9 @@
 # Sandboxes: boundaries declared in the workspace, started by `oats sync`
 
 **Amended in r5 (2026-11-20), decided by both sides.** Placement no longer follows a
-team. A sandbox lists the souls it may run and a ceiling on the capabilities they
-compose, and it has no team. A soul's team is declared once, in `souls:`, and
+team. A sandbox lists the souls it may run, admits the capabilities their resolved
+compositions need (with optional exclusions, behind an applied-plan gate), and has no
+team. A soul's team is declared once, in `souls:`, and
 placement never changes it. Messaging between agents is governed by aweb's policy,
 whichever sandboxes they run in. What can an agent do? That's authorized per team or
 per long-lived principal, by the resource's owner. This replaces the rule "a soul runs
@@ -76,6 +77,10 @@ nothing. All of this is shown by a live rehearsal and by the tests pinned in eac
   entry sets them for a set of souls. A sandbox places souls and never changes their
   team (decided 2026-11-20). Whether the key itself gets another name is a separate
   question, outside this record.
+- **Capabilities are derived from the souls, per soul (r5).** A sandbox admits each
+  listed soul's resolved composition at the lock's versions, less an optional
+  `excludeCapabilities`. Admission widens only when the operator applies a plan that
+  shows the change (C1, "The applied-plan gate"; decided 2026-11-20 by both sides).
 - **Credential files are a bridge for the whole sandbox (r5).** v1 ships read-only
   credential files mounted into the sandbox, because the first use has no other path
   to its tokens. Every process in the sandbox can read them. Read-only stops writes,
@@ -134,7 +139,7 @@ nothing. All of this is shown by a live rehearsal and by the tests pinned in eac
 
 | Question | Who decides, and how |
 | --- | --- |
-| What runs where? | The shared workspace names sandboxes and the souls each may run, with a ceiling on their capabilities. A machine's local file selects which declared sandboxes it runs, and nothing else. A spawn or a schedule selects a soul; if the soul is placed, it resolves to an eligible sandbox (C2). |
+| What runs where? | The shared workspace names sandboxes and the souls each may run; the capabilities admitted for each soul are derived from its resolved composition, less any exclusions, and widen only through an applied plan. A machine's local file selects which declared sandboxes it runs, and nothing else. A spawn or a schedule selects a soul; if the soul is placed, it resolves to an eligible sandbox (C2). |
 | What does the runtime isolate? | Each sandbox has its own name, workload, private state, and declared egress and mounts. Several sandboxes may run on one machine. Agents that share readable state, credential files or a process trust boundary are mutually trusted. |
 | Who can communicate? | aweb team membership, service routes, and contact, inbound and federation policy. A sandbox needs egress to a service to reach it. Sharing a sandbox joins no team. Sharing a team neither colocates agents nor gives them each other's local state. |
 | Who is acting? | The identity provider binds each instance to an authenticated principal, from that instance's identity configuration, resolved per instance. Its messaging context, the team it joins, is resolved separately, from `souls:` and the documented fallbacks. Neither comes from its sandbox. |
@@ -546,7 +551,7 @@ souls:                                       # the one declaration of each soul'
 sandboxes:
   ingest:
     souls: [knowledge/knowledge-ingestor]    # who may run here; never their team
-    capabilities: [oats.core, oats.aweb, oats.okf]   # a ceiling; [] permits none
+    excludeCapabilities: [acme-deploy]       # optional: never admitted here
     egress: [model, source, forge]           # closed set, added to the base routes
     credentials: [sources-read, knowledge-propose]   # names only: a whole-sandbox bridge
     description: Knowledge ingestors         # optional
@@ -563,21 +568,49 @@ sandboxes:
   by several sandboxes; C2 says how a spawn chooses. A reference no member or package
   offers is reported by readiness (`sandbox-soul-unknown`), and a spawn of it is
   refused (`E_SANDBOX_PLACEMENT`, `soul-unknown`).
-- **`capabilities`** (required) is a ceiling over the fully resolved composition of each
-  instance placed here, including workspace defaults, the soul's own layer and required
-  dependencies. `[]` permits none. A composition that needs a capability outside it is
-  refused at the spawn's preview, before any seat is staged (`E_SANDBOX_PLACEMENT`,
-  `capability-not-admitted`, naming the capability and its reference). The remedy is a
-  workspace soul, or a variant of one, whose composition fits. The runtime never strips
-  a required capability, and never admits unpinned code. The sandbox provider's own
-  capability never composes inside a sandbox (C3b). The image's contents and the
-  egress are separate limits, and choosing software grants nothing.
+- **Capabilities are derived, per soul (r5).** For each soul a sandbox lists, the
+  admitted capabilities are that soul's fully resolved composition (workspace defaults,
+  the soul's own layer and required dependencies) at the lock's versions. Each one is
+  identified by its resolved id and its authorized source, a canonical member or a
+  package. Admission is per (sandbox, canonical soul): one soul never rides on a
+  capability admitted for another, and the sandbox-wide union is for display only.
+  Package integrity and member trust are unchanged, and the gate adds no per-commit
+  consent for member code.
+- **`excludeCapabilities`** (optional) names capabilities never admitted in this
+  sandbox. A soul whose composition needs one is refused (`E_SANDBOX_PLACEMENT`,
+  `capability-excluded`, naming the capability and the soul), never trimmed. The remedy
+  is a workspace soul, or a variant of one, whose composition doesn't need it, or a
+  reviewed change to the exclusion. The sandbox provider's own capability never
+  composes inside a sandbox (C3b). The image's contents and the egress are separate
+  limits, and choosing software grants nothing.
+- **The applied-plan gate.** Before minting a seat or starting a session through spawn
+  or a schedule tick, the kernel compares the actual resolved composition to the last
+  successfully applied plan entry for this sandbox and soul. Missing admission, a new
+  capability or a changed capability source refuses with `E_SANDBOX_PLACEMENT`,
+  reason `capability-not-applied`, naming the soul, the sandbox, the applicable
+  capability and source, and how to review and apply the updated plan (`oats sync
+  --plan`, then the apply). The routed apply rechecks the same admission revision
+  against what it will materialize. An explicitly excluded capability refuses as
+  `capability-excluded`. Never strip a capability to make a spawn pass. Narrowing
+  within the approved set needs no additional apply, and does not edit the recorded
+  plan.
+  - Only a successful, operator-authorized apply of the plan revision that shows the
+    change widens admission. A plan-only run, a failed sync, a schedule tick or a
+    recovery never does.
+  - Sync's plan, and readiness, show each soul's additions and source changes before
+    they're applied. Sandbox status and readiness show the recorded set and the
+    current derived set.
+  - The kernel keeps the recorded entries in the deployment's own state, per sandbox
+    and soul.
+  - An unattended sync that applies its own plan would admit changes without review,
+    weakening the gate to "since the last apply". A deployment that wants the gate
+    keeps the apply operator-authorized.
 - **No team (r5).** A sandbox has no `team` field. `souls:` is the one declaration of
   each soul's team (Decided with the product owner), and placing a soul never changes
   it. The `team` field of the earlier, unreleased shape is refused when the file is
   read (`E_WORKSPACE_SCHEMA`, reason `sandbox-team-field`). The remedy names the
-  migration: the souls whose default team it was go in `souls`, and a `capabilities`
-  ceiling is added, under the same sandbox ID. There's no silent inference from a team.
+  migration: the souls whose default team it was go in `souls`, under the same sandbox
+  ID. There's no silent inference from a team.
 - **One served team, in v1 (r5).** The model admits several teams in one sandbox. v1's
   provider, teamctl, serves one team per sandbox (C8), so in practice v1 runs one team
   per sandbox. That's the provider's limit, not the model's, and it lifts when a
@@ -588,8 +621,9 @@ sandboxes:
   free-form list.
 - `credentials` names match `^[a-z0-9][a-z0-9-]{0,62}$`, and are distinct. Committing
   them approves exposing each file to the whole sandbox (Credentials).
-- `egress`, `credentials` and `description` are optional; the two lists default to
-  `[]`. A duplicate in any list is refused (reason `duplicate-entry`) (r1).
+- `egress`, `credentials`, `excludeCapabilities` and `description` are optional; the
+  lists default to `[]`. A duplicate in any list is refused (reason `duplicate-entry`)
+  (r1).
 - **A team not yet created (r2, r5).** A shared team may omit its provider id
   (declared, not created). A soul whose team has none stays valid, so other hosts are
   not refused. A routed spawn of it refuses (`E_SANDBOX_TEAM`, reason
@@ -695,7 +729,7 @@ The provider writes it into the in-sandbox deployment's local file. It is a cont
 its own because a kernel reads it:
 
 - `self` must name a sandbox the workspace declares. That deployment then spawns only
-  souls that sandbox's `souls` lists, within its `capabilities` ceiling, and refuses
+  souls that sandbox's `souls` lists, with the capabilities admitted for them, and refuses
   others with `E_SANDBOX_PLACEMENT` (r5). A routed request must name the sandbox,
   soul and composition its preview showed, and its sandbox must equal `self`. `D`
   already binds the composition, and the `self` check refuses a request that names
@@ -735,7 +769,7 @@ hook that exits nonzero, times out or prints anything but one valid answer is re
 {"sandboxApi":1,"act":"start","sandbox":"ingest","host":"cloud-1",
  "souls":[{"soul":"knowledge/knowledge-ingestor",
            "team":{"label":"ingest-team","id":"ingest:example.org"}}],
- "capabilities":["oats.core","oats.aweb","oats.okf"],
+ "excludeCapabilities":["acme-deploy"],
  "egress":["model","source"],
  "credentials":[{"name":"sources-read","path":"/srv/…"}],
  "workspace":{"url":"…","commit":"…","lock":"<sha256>"}}
@@ -794,8 +828,10 @@ and by act:
 
 - `oats sandbox status [--json]`, `oats sandbox start|stop <name> (--plan | --plan-revision <r> --idempotency-key <k>)`.
 - `oats sandbox status --json` answers
-  `{sandboxApi:1, host, sandboxes:[{name, souls, capabilities, listedHere, state, server, egress, credentials:[{name, source:"present"|"missing"}], problems}]}`.
-  A sandbox has no `team` (r5): what the sandbox allows (`souls`, `capabilities`) is
+  `{sandboxApi:1, host, sandboxes:[{name, souls, excludeCapabilities, admission:[{soul, recorded:[{id, source}], current:[{id, source}]}], listedHere, state, server, egress, credentials:[{name, source:"present"|"missing"}], problems}]}`.
+  `admission` shows, per soul, the set the last applied plan recorded and the set
+  derived now. The sandbox-wide union is the client's to display.
+  A sandbox has no `team` (r5): what the sandbox allows (`souls`, `excludeCapabilities`, `admission`) is
   shown apart from the team each instance actually joined, which is on its seat
   (`seats[].team`). The answer's readers change with it (below).
 - `oats spawn <soul> --sandbox <id>` selects among a soul's eligible sandboxes, and a
@@ -807,7 +843,9 @@ and by act:
   `{sandboxApi:1, sandbox, act, state, server, receipts, problems}`, and a stale
   revision refuses `E_PLAN_STALE` with the fresh plan in its detail (r1).
 - `oats sync --json` gains `sandboxes` with the same entries plus `action`
-  (`build|start|stop|none`). The field is additive, so `syncApi` stays 1.
+  (`build|start|stop|none`), and, in a plan, each soul's admission changes
+  (`admissionChanges: [{soul, added:[{id, source}], sourceChanged:[{id, from, to}]}]`,
+  r5). The field is additive, so `syncApi` stays 1.
 - `oats status --json` gains `placement: {sandbox, seatId}` on each instance placed in
   one; `seatId` is the seat its home took (r2).
 - `oats sandbox status --json`'s entries also carry `seats` (as C4's `status`), and
@@ -1041,7 +1079,10 @@ egress routes only.
 - `sandbox-pending-stale`: a kept routed request older than 24 hours, named by its
   spawn key, never its task (r3);
 - `sandbox-soul-unknown`: a sandbox's `souls` names a soul no member or package
-  offers (r5).
+  offers (r5);
+- `sandbox-admission-pending`: a soul whose current derived capabilities add a
+  capability, or change one's source, beyond the last applied plan, with the
+  additions and changes listed (r5).
 
 The refusals belong to the acts:
 
@@ -1070,7 +1111,8 @@ The refusals belong to the acts:
 | Several eligible sandboxes and no `--sandbox` or schedule `sandbox:` (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `sandbox-ambiguous` |
 | A named target that isn't declared, or doesn't list the soul (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `sandbox-unknown` or `sandbox-not-eligible` |
 | A soul reference no member or package offers (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `soul-unknown` |
-| A composition outside the sandbox's `capabilities` ceiling (r5) | the spawn's preview | `E_SANDBOX_PLACEMENT`, `capability-not-admitted` |
+| A composition that needs an excluded capability (r5) | the spawn's preview | `E_SANDBOX_PLACEMENT`, `capability-excluded` |
+| A composition with a capability, or a capability source, the last applied plan didn't admit for this soul (r5) | `oats spawn`, a schedule tick, before any mint; the routed apply's recheck | `E_SANDBOX_PLACEMENT`, `capability-not-applied` |
 | A join beyond the default team, into a sandbox (r5) | `seat`, before the mint | `E_SANDBOX_PLACEMENT`, `join-not-seated` |
 | A resident's grant seat, into a sandbox (r5) | `seat`, before the mint | `E_SANDBOX_PLACEMENT`, `grant-seat-not-sandboxable` |
 | A sandbox entry with a `team` field (the unreleased shape) (r5) | reading the workspace file | `E_WORKSPACE_SCHEMA`, `sandbox-team-field` |
@@ -1132,8 +1174,11 @@ the release notes when that feature ships (r5).
 - **The local file choosing between eligible sandboxes (r5 draft):** it let a machine's
   file decide a placement, which only the shared workspace decides. Replaced by the
   explicit selector (C2).
-- **An optional `capabilities` list meaning "everything" (r5 draft):** the ceiling is
-  required, so it never has to be guessed.
+- **A declared `capabilities` list per sandbox (r5 drafts):** first optional, meaning
+  "everything", then a required ceiling where `[]` permitted none. Both made every
+  sandbox repeat the workspace's common capabilities. A `defaults` shorthand was
+  considered and dropped too. Replaced by admission derived per soul, optional
+  exclusions and the applied-plan gate (decided 2026-11-20).
 - **A `team:` alias for a `souls:` entry's `default`:** two spellings of one key in a
   closed schema. Left out of this amendment by both sides.
 - **Docker in the kernel:** the kernel stays runtime-neutral; the provider owns
@@ -1151,7 +1196,8 @@ the release notes when that feature ships (r5).
 | --- | --- |
 | Same team, separate sandboxes | A reviewer and a deployer in one team, in two sandboxes, exchange the messages aweb allows. Their state, session material and mounts stay separate, and the reviewer can't use the deployment credential. The same holds with cross-team messaging allowed, and with it denied, by aweb's policy. Pending for v1's provider until aweb's maintainers say whether teamctl runs two sandboxes for one team (C8). |
 | Teams independent of the runtime | Changing a soul's default team, or a label's alias, moves no soul. Two teams in one sandbox, accepted as co-resident trust, run on a provider that serves several teams; v1's provider refuses it with `team-not-served`. One team in two sandboxes introduces no second team. |
-| Placement and capability refusals | An ambiguous target, a wrong host, a wrong sandbox, a missing or extra capability, a forged seat binding and an unavailable provider route each fail with the responsible decision and a remedy, before any placement succeeds or usable authority leaks. |
+| Placement and capability refusals | An ambiguous target, a wrong host, a wrong sandbox, an excluded capability, a capability not yet applied, a forged seat binding and an unavailable provider route each fail with the responsible decision and a remedy, before any placement succeeds or usable authority leaks. |
+| Capabilities widen only through an applied plan | One sandbox lists review (capability `read`) and deploy (`read` and `deploy`). Upstream adds `deploy` to review, with no new applied plan. A manual spawn of review and its tick both refuse before minting (`capability-not-applied`), and deploy still works. After the revised plan is approved and applied, review may load the capability, which still grants it no credential or operation. |
 | Identity apart from the route | Designed while grant seats stay on the host. A grant-backed agent restarts with the same stable DID and a new valid session; one without public inbound reach stays usable as the same principal; an alias match, a wrong team or a stale session can't spend its grant; revocation stops the next dispatch with both sandboxes left in place. |
 | Target and policy | With Compose: start, authorized work, stop, resume and delist, with separate state and one clock. The same contract against an existing Kubernetes cluster, including storage across a workload replacement and a check of the network policy, before that provider is claimed. |
 
@@ -1159,8 +1205,8 @@ the release notes when that feature ships (r5).
 
 | Spec | Surface | Lane | Builds first |
 | --- | --- | --- | --- |
-| S1a Kernel, the part placement doesn't touch: C1's shape, C3, C3b, C4's caller and runner, C5's lifecycle and sync, C7, the kept-request custody and replay fence, readiness | `lib/`, `bin/`, schemas, `docs/` | lane:product | first; reuses the reviewed work of #2025 that no team placement touches, merged after #1912's hold lifts |
-| S1b Kernel, placement: C2's selection, the seat's team and settings (C4), C3b's checks, the r5 refusals (C10), the status answer without `team` | `lib/`, `bin/`, schemas, `docs/` | lane:product | after S1a |
+| S1a Kernel, the part placement doesn't touch: C1's shape (validated when read), C3, C3b, C4's caller and runner, C5's lifecycle and sync, C7, the kept-request custody and replay fence, readiness | `lib/`, `bin/`, schemas, `docs/` | lane:product | first; reuses the reviewed work of #2025 that no team placement touches, merged after #1912's hold lifts |
+| S1b Kernel, placement: C2's selection, derived admission and the applied-plan gate (C1), the seat's team and settings (C4), C3b's checks, the r5 refusals (C10), the status answer without `team` | `lib/`, `bin/`, schemas, `docs/` | lane:product | after S1a |
 | S2 Provider: `oats.aweb-sandbox`, C4's hook, C6, C7, C8's one served team, the registry setting (C3) | the oats-aweb package | lane:setup, aweb's maintainers read first | after S1b's contract is merged |
 | S3 Credential mount and the `forge` role: C8, the egress component, teamctl's inputs | `container/agent`, and teamctl on aweb's maintainers' side | lane:juan | in parallel with S1 |
 | S4 Broker contracts: C9 docs, then the client verbs | `docs/`, `lib/` | lane:product | after the first real provider |
