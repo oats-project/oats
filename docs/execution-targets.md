@@ -981,18 +981,22 @@ otherwise, whose `details.fields` are `backend`, `session.provider` and
 `session.endpoint`.
 
 The receipt of a provider home also records its **composition**:
-`composition: { version: 1, modules: { "<capability>": { digest, bytes,
-entries } }, capabilityRuntime: [ <row> ] }`, the digest and size of every
-module copy as the spawn made it, and the capability rows the spawn
-resolved. For such a home the kernel runs a module copy, and reads a
-capability's settings and hook commands, by this record alone
+`composition: { version: 1, store: "<name>", modules: { "<capability>": {
+from, commit } }, capabilityRuntime: [ <row> ] }`: which store holds the
+kernel's own copies of the home's modules
+(`<instances>/.oats-retirement/modules/<hash of the home>/<store>/`), which
+modules the home has and where each came from, and the capability rows the
+spawn resolved. For such a home the kernel runs its own copy of a module,
+never the home's, and reads a capability's settings and hook commands from
+this record alone
 ([What the kernel trusts in a provider home](capabilities.md#what-the-kernel-trusts-in-a-provider-home)).
-A tmux home's receipt has no such key. A kernel from before it ignores the
-key: one from before session providers still refuses every session verb on
-a provider home, and one that knows providers and not this record runs the
-home's copies unchecked, as it always did. A provider home whose receipt
-has no `composition` (a kernel from before it spawned the home) runs
-nothing on this kernel: retire it and spawn it again.
+A tmux home's receipt has no such key, and the kernel keeps no copy of its
+modules. A kernel from before it ignores the key: one from before session
+providers still refuses every session verb on a provider home, and one that
+knows providers and not this record runs the home's own copies, as it
+always did. A provider home whose receipt has no `composition` (a kernel
+from before it spawned the home) runs nothing on this kernel: retire it and
+spawn it again.
 
 **The lifecycle of a provider home is one state machine**, set out in
 [its design record](design/2026-11-20-provider-home-lifecycle.md): the

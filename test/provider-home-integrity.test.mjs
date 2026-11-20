@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn as spawnChild } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { inputInstanceSession, restartInstanceSession, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
@@ -13,7 +13,7 @@ import { applyUpgrade, planUpgrade } from "../lib/instance-upgrade.mjs";
 import { writeLock } from "../lib/packages.mjs";
 import { contentDigest } from "../lib/remote.mjs";
 import { git } from "./helpers/v2-deployment.mjs";
-import { compositionOf, homeModulesProblem, moduleCopyDigest, moduleCopyProblem, providerHomeTrust } from "../lib/home-integrity.mjs";
+import { homeModulesProblem, kernelModuleDir, moduleCopyProblem, providerHomeTrust, pruneModulesStores, upgradedComposition } from "../lib/home-integrity.mjs";
 import { FAKE_CAPABILITY, fakeFiles, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
 
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
@@ -23,8 +23,6 @@ const codeOf = async (call) => { try { await call(); } catch (e) { return e.code
 const runtimeOf = (home) => readJson(receiptOf(home)).runtime;
 const rowOf = (fx, name) => JSON.parse(fx.cli(["status", "--json"]).stdout).agents.flatMap((agent) => agent.instances).find((row) => row.instance === name);
 const copyOf = (home, capability = FAKE_CAPABILITY) => join(home, ".oats", "modules", capability);
-/** What a receipt records of a module copy's bytes (beside where the module came from). */
-const sized = ({ digest, bytes, entries }) => ({ digest, bytes, entries });
 /** A script that leaves a mark when it runs, put before `source`: what an agent that can write its
  *  home would make of one of its capabilities' files. */
 const marking = (marker, source = "") => `import { writeFileSync as leaveMark } from "node:fs"; leaveMark(${JSON.stringify(marker)}, "ran");\n${source}`;
@@ -59,94 +57,99 @@ test("a launch hook is told the backend the home was last launched on, from the 
   assert.deepEqual(told(), []);
 });
 
-test("a module copy edited after the spawn is never run: the next provider call is refused naming the module, the home reads unavailable and never stopped, and each kind of change is seen", async (t) => {
+test("the kernel runs its own copy of a provider home's modules, never the home's: whatever the agent does to its copy, at rest or while the kernel runs, the spawn's code is what runs, and the home goes on", async (t) => {
   const fx = providerDeployment(t);
   const { home } = await fx.launch("edited");
   const script = join(copyOf(home), "bin", "session.mjs"), original = readFileSync(script, "utf8");
   const marker = join(fx.fake, "edited-ran");
   const inspect = () => fx.cli(["session", "inspect", "--home", home, "--json"]).json();
-  const refusedEverywhere = async (what) => {
+  // The kernel's copy: outside the home, the spawn's bytes.
+  const kept = kernelModuleDir(home, FAKE_CAPABILITY);
+  assert.equal(kept.startsWith(join(dirname(home), ".oats-retirement", "modules")), true, kept);
+  assert.equal(readFileSync(join(kept, "bin", "session.mjs"), "utf8"), original);
+  const goesOn = async (what) => {
     fx.clearCalls();
     const inspected = inspect();
-    assert.deepEqual([inspected.ok, inspected.error?.code], [false, "E_SESSION_UNAVAILABLE"], what);
-    assert.match(inspected.error.message, NOT_THE_SPAWNS, what);
-    assert.equal(inspected.error.message.match(NOT_THE_SPAWNS)[1], FAKE_CAPABILITY, "the module is named");
-    assert.deepEqual([rowOf(fx, "edited").running, rowOf(fx, "edited").runtimeState], [null, "unreachable"], `${what}: unavailable in status, never stopped`);
-    assert.equal(await codeOf(() => fx.inEnv(() => inputInstanceSession(home, "x"))), "E_SESSION_INPUT_FAILED", what);
-    // (A restart first reads whether the session runs, which the copy's state already refuses.)
-    await assert.rejects(fx.inEnv(() => restartInstanceSession(home)), (e) => e.code === "E_SESSION_UNKNOWN" && NOT_THE_SPAWNS.test(e.message) && /nothing was started/.test(e.message), what);
-    assert.deepEqual(fx.calls(), [], `${what}: no command of the provider ran, and no hook`);
-    assert.equal(runtimeOf(home).stoppedAt, null, `${what}: the home is not recorded as stopped`);
+    assert.deepEqual([inspected.ok, inspected.result?.running], [true, true], `${what}: ${JSON.stringify(inspected)}`);
+    assert.equal(rowOf(fx, "edited").running, true, what);
+    await fx.inEnv(() => inputInstanceSession(home, "x"));
+    await fx.inEnv(() => restartInstanceSession(home));
+    assert.deepEqual(fx.verbs().map((c) => c.verb).filter((verb, i, all) => all.indexOf(verb) === i).sort(), ["input", "inspect", "inspectMany", "launch", "stop"], what);
+    assert.equal(fx.verbs().every((c) => c.cwd !== undefined), true);
+    assert.equal(existsSync(marker), false, `${what}: nothing of the home's copy ran`);
   };
-  // 1. A command of the provider rewritten: it would leave a mark.
+  // 1. A command of the provider rewritten in the home: it would leave a mark.
   writeFileSync(script, marking(marker, original));
-  await refusedEverywhere("an edited command");
-  assert.equal(existsSync(marker), false, "the edited command never ran");
-  // The same bytes back: the copy is the spawn's again, and it is run. (Nothing is remembered
-  // between two calls: the copy is hashed at each.)
-  writeFileSync(script, original);
-  assert.deepEqual([inspect().ok, inspect().result.running], [true, true]);
-  // 2. A file added beside the spawn's (what a command could import).
-  writeFileSync(join(copyOf(home), "bin", "extra.mjs"), "export const x = 1;\n");
-  await refusedEverywhere("an added file");
-  rmSync(join(copyOf(home), "bin", "extra.mjs"));
-  // 3. A file exchanged for a link to the same bytes elsewhere (which could change later).
-  renameSync(script, join(fx.fake, "session-elsewhere.mjs"));
-  symlinkSync(join(fx.fake, "session-elsewhere.mjs"), script);
-  await refusedEverywhere("a link in place of a file");
-  rmSync(script); renameSync(join(fx.fake, "session-elsewhere.mjs"), script);
-  // 4. A file removed.
-  renameSync(join(copyOf(home), "bin", "hook.mjs"), join(fx.fake, "hook-elsewhere.mjs"));
-  await refusedEverywhere("a removed file");
-  renameSync(join(fx.fake, "hook-elsewhere.mjs"), join(copyOf(home), "bin", "hook.mjs"));
-  // 5. The whole copy exchanged for a link to a tree with the same bytes.
-  renameSync(copyOf(home), join(fx.fake, "copy-elsewhere"));
+  await goesOn("an edited command");
+  // 2. A file added, 3. the copy emptied, 4. the whole copy exchanged for a link elsewhere.
+  writeFileSync(join(copyOf(home), "bin", "extra.mjs"), marking(marker));
+  await goesOn("an added file");
+  rmSync(join(copyOf(home), "bin"), { recursive: true });
+  await goesOn("an emptied copy");
+  rmSync(copyOf(home), { recursive: true });
+  mkdirSync(join(fx.fake, "copy-elsewhere", "bin"), { recursive: true });
+  writeFileSync(join(fx.fake, "copy-elsewhere", "bin", "session.mjs"), marking(marker, original));
+  writeFileSync(join(fx.fake, "copy-elsewhere", "oats.json"), "{}");
   symlinkSync(join(fx.fake, "copy-elsewhere"), copyOf(home));
-  await refusedEverywhere("a link in place of the copy");
-  rmSync(copyOf(home)); renameSync(join(fx.fake, "copy-elsewhere"), copyOf(home));
-  assert.equal(inspect().ok, true, "the spawn's copy, back in place, is run");
+  await goesOn("a link in place of the copy");
 });
 
-test("the digest of a module copy is bounded by what the spawn recorded: a copy that grew is told so without reading more than the copy's own size", async (t) => {
+test("a session that rewrites its copy WHILE the kernel runs changes nothing the kernel runs (the race a check of the home's copy would lose)", async (t) => {
   const fx = providerDeployment(t);
-  const { home } = await fx.launch("grown");
-  const recorded = readJson(receiptOf(home)).composition.modules[FAKE_CAPABILITY];
-  assert.deepEqual(moduleCopyDigest(copyOf(home)), sized(recorded), "the receipt records the copy's digest, bytes and entries");
-  assert.deepEqual(moduleCopyDigest(copyOf(home), recorded), sized(recorded));
-  assert.deepEqual([recorded.from, recorded.commit], [recordOf(home).modules[FAKE_CAPABILITY].from, recordOf(home).modules[FAKE_CAPABILITY].commit], "and where the module came from");
-  // More bytes than the spawn copied: stopped at the bound, whatever the file's size.
-  writeFileSync(join(copyOf(home), "bin", "big.bin"), Buffer.alloc(4 * 1024 * 1024));
-  assert.match(moduleCopyDigest(copyOf(home), recorded).over, /more than the \d+ (bytes|entries) the spawn copied/);
-  rmSync(join(copyOf(home), "bin", "big.bin"));
-  // More entries.
-  for (let i = 0; i < 3; i++) writeFileSync(join(copyOf(home), `empty-${i}`), "");
-  assert.match(moduleCopyDigest(copyOf(home), recorded).over, /more than the \d+ entries the spawn copied/);
-  const inspected = fx.cli(["session", "inspect", "--home", home, "--json"]).json();
-  assert.match(inspected.error.message, /it holds more than the \d+ entries the spawn copied/);
+  const { home } = await fx.launch("racy");
+  const script = join(copyOf(home), "bin", "session.mjs"), original = readFileSync(script, "utf8");
+  const marker = join(fx.fake, "raced");
+  // The agent's loop: its script is the spawn's bytes for a moment, then edited ones, for ever.
+  const flipper = join(fx.fake, "flip.mjs");
+  writeFileSync(flipper, `import { writeFileSync, renameSync } from "node:fs";
+const script = ${JSON.stringify(script)}, original = ${JSON.stringify(original)}, edited = ${JSON.stringify(marking(marker, original))};
+const put = (text) => { writeFileSync(script + ".tmp", text); renameSync(script + ".tmp", script); };
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+for (;;) { put(original); await wait(6); put(edited); await wait(30); }
+`);
+  const child = spawnChild(process.execPath, [flipper], { stdio: "ignore" });
+  t.after(() => child.kill("SIGKILL"));
+  await new Promise((r) => setTimeout(r, 300));
+  for (let i = 0; i < 20; i++) {
+    const inspected = fx.cli(["session", "inspect", "--home", home, "--json"]).json();
+    assert.equal(inspected.ok, true, JSON.stringify(inspected));
+  }
+  assert.equal(existsSync(marker), false, "the edited script never ran");
 });
 
-test("a hook script edited in the home never runs edited: a launch is refused naming the module with nothing stopped, and a retire reports the hook as not run", async (t) => {
+test("a provider home whose kernel copy of a module is gone runs nothing of that module, reads unavailable and never stopped, and names it", async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("unkept");
+  rmSync(kernelModuleDir(home, FAKE_CAPABILITY), { recursive: true });
+  fx.clearCalls();
+  const inspected = fx.cli(["session", "inspect", "--home", home, "--json"]).json();
+  assert.deepEqual([inspected.ok, inspected.error.code], [false, "E_SESSION_UNAVAILABLE"]);
+  assert.match(inspected.error.message, /the kernel's copy of capability acme\.fake for unkept is not at .*Retire the instance and spawn it again/);
+  assert.deepEqual([rowOf(fx, "unkept").running, rowOf(fx, "unkept").runtimeState], [null, "unreachable"]);
+  assert.equal(await codeOf(() => fx.inEnv(() => inputInstanceSession(home, "x"))), "E_SESSION_INPUT_FAILED");
+  assert.deepEqual([fx.calls(), runtimeOf(home).stoppedAt], [[], null], "the home's own copy was not run in its place");
+});
+
+test("a hook script edited in the home never runs edited: a launch and a retire run the spawn's hook, from the kernel's copy", async (t) => {
   const fx = providerDeployment(t, withHooked());
   const { home } = await fx.launch("hooked");
   assert.deepEqual(fx.hooks("spawn").map((h) => h.capability).sort(), [FAKE_CAPABILITY, HOOKED]);
   const hook = join(copyOf(home, HOOKED), "bin", "hook.mjs"), marker = join(fx.fake, "hook-ran-edited");
   writeFileSync(hook, marking(marker, readFileSync(hook, "utf8")));
-  // The provider's own copy is untouched: its session is read as before.
+  // The receipt's rows name the kernel's copy of each capability, never the home's.
+  const rows = readJson(receiptOf(home)).composition.capabilityRuntime;
+  for (const row of rows) for (const command of Object.values(row.hooks ?? {})) {
+    assert.equal(command.includes(kernelModuleDir(home, row.id)), true, command);
+    assert.equal(command.includes(join(home, ".oats")), false, command);
+  }
   fx.clearCalls();
-  assert.equal(fx.cli(["session", "inspect", "--home", home, "--json"]).json().result.running, true);
-  // A launch is made of every module of the home: refused before the check, any hook and any stop.
+  await fx.inEnv(() => restartInstanceSession(home));
+  assert.deepEqual(fx.hooks("launch").map((h) => h.capability).sort(), [FAKE_CAPABILITY, HOOKED], "the launch hooks ran");
+  assert.equal(existsSync(marker), false, "and not the edited one");
   fx.clearCalls();
-  await assert.rejects(fx.inEnv(() => restartInstanceSession(home)), (e) => e.code === "E_SESSION_START_FAILED" && e.message.match(NOT_THE_SPAWNS)?.[1] === HOOKED && /nothing was stopped or started/.test(e.message));
-  assert.deepEqual([fx.calls().filter((c) => c.verb !== "inspect"), runtimeOf(home).stoppedAt, existsSync(marker)], [[], null, false]);
-  // A retire: the session is stopped through the provider (its copy is the spawn's), the edited
-  // hook is not run and is named, and nothing is removed without --force.
-  const refused = fx.cli(["retire", "hooked", "--json"]);
-  const said = `${refused.stdout}${refused.stderr}`;
-  assert.match(said, NOT_THE_SPAWNS);
-  assert.equal(said.match(NOT_THE_SPAWNS)[1], HOOKED);
-  assert.equal(existsSync(marker), false, "the edited retire hook never ran");
-  assert.equal(existsSync(home), true, "the home is kept: its capability's cleanup did not run");
-  assert.deepEqual(fx.hooks("retire").map((h) => h.capability), [], "nor did the fake's (it declares none)");
+  assert.equal(JSON.parse(fx.cli(["retire", "hooked", "--json"]).stdout).retired, "hooked");
+  assert.deepEqual([fx.hooks("retire").map((h) => h.capability), existsSync(marker), existsSync(home)], [[HOOKED], false, false]);
+  assert.equal(existsSync(kernelModuleDir(home, HOOKED)), false, "the kernel's copies go with the home");
 });
 
 test("what a provider's command and a hook are handed is the receipt's: the settings, hook commands and launch contributions in the home's own record, edited, change nothing", async (t) => {
@@ -185,8 +188,8 @@ test("a provider home whose receipt records no composition runs none of its capa
   const fx = providerDeployment(t);
   const { home } = await fx.launch("before");
   const receipt = readJson(receiptOf(home));
-  assert.deepEqual(Object.keys(receipt.composition).sort(), ["capabilityRuntime", "modules", "version"]);
-  assert.deepEqual(receipt.composition, compositionOf(home, recordOf(home).capabilityRuntime), "the spawn recorded every module copy and the rows of the record");
+  assert.deepEqual(Object.keys(receipt.composition).sort(), ["capabilityRuntime", "modules", "store", "version"]);
+  assert.deepEqual([Object.keys(receipt.composition.modules), receipt.composition.capabilityRuntime.map((row) => [row.id, row.settings])], [Object.keys(recordOf(home).modules), recordOf(home).capabilityRuntime.map((row) => [row.id, row.settings])], "the spawn recorded every module and the rows of the record");
   const { composition: _removed, ...older } = receipt;
   writeFileSync(receiptOf(home), JSON.stringify(older, null, 2));
   fx.clearCalls();
@@ -243,20 +246,22 @@ async function upgradable(t, name) {
   return { fx, home, plan: (opts) => upgrade(planUpgrade, opts), apply: (opts) => upgrade(applyUpgrade, opts), ran: () => (existsSync(join(fx.fake, "packaged.log")) ? readFileSync(join(fx.fake, "packaged.log"), "utf8").trim().split("\n") : []) };
 }
 
-test("an upgrade of a provider home rewrites the receipt's record in the step that moves the copies: the moved module and its row are the new ones, the others as recorded, and the home's calls and hooks go on", async (t) => {
+test("an upgrade of a provider home exchanges the kernel's copy of each moved module, and rewrites the receipt's record, in the step that moves the home's copies: the home's calls and hooks go on, on the new module", async (t) => {
   const { fx, home, plan, apply, ran } = await upgradable(t, "moved");
   const before = readJson(receiptOf(home)).composition;
+  const keptLaunch = () => readFileSync(join(kernelModuleDir(home, PACKAGED), "launch.mjs"), "utf8");
+  assert.match(keptLaunch(), /1\.0\.0/);
   const planned = await plan();
   assert.deepEqual(planned.modules.map((m) => m.capability), [PACKAGED]);
   const done = await apply({ planRevision: planned.planRevision, idempotencyKey: "move-1" });
   assert.equal(done.status, "complete");
   const after = readJson(receiptOf(home)).composition;
   assert.deepEqual(after.modules[FAKE_CAPABILITY], before.modules[FAKE_CAPABILITY], "a module that did not move is as it was recorded");
-  assert.notEqual(after.modules[PACKAGED].digest, before.modules[PACKAGED].digest);
-  assert.deepEqual(sized(after.modules[PACKAGED]), moduleCopyDigest(copyOf(home, PACKAGED)), "the moved module is recorded as its copy is");
-  assert.deepEqual([after.modules[PACKAGED].from.version, before.modules[PACKAGED].from.version], ["2.0.0", "1.0.0"], "and as the version it was moved to");
-  assert.deepEqual(after.capabilityRuntime, recordOf(home).capabilityRuntime, "the rows are the ones the upgrade derived");
-  assert.match(after.capabilityRuntime.find((row) => row.id === PACKAGED).hooks.launch, /launch\.mjs/);
+  assert.deepEqual([after.modules[PACKAGED].from.version, before.modules[PACKAGED].from.version], ["2.0.0", "1.0.0"]);
+  assert.match(keptLaunch(), /2\.0\.0/, "the kernel's copy is the moved module's");
+  assert.equal(keptLaunch(), readFileSync(join(copyOf(home, PACKAGED), "launch.mjs"), "utf8"));
+  const row = after.capabilityRuntime.find((r) => r.id === PACKAGED);
+  assert.equal(row.hooks.launch.includes(join(kernelModuleDir(home, PACKAGED), "launch.mjs")), true, row.hooks.launch);
   assert.equal(homeModulesProblem(home), null);
   // The home starts: the provider is called, and the moved capability's NEW hook runs.
   fx.clearCalls();
@@ -265,16 +270,9 @@ test("an upgrade of a provider home rewrites the receipt's record in the step th
   assert.equal(fx.cli(["session", "inspect", "--home", home, "--json"]).json().result.running, true);
 });
 
-test("an upgrade of a provider home starts only from copies the receipt records, is not undone from the home's kept copies, and is not resumed from the home's journal", async (t) => {
+test("an upgrade of a provider home is not undone from the home's kept copies, and is not resumed from the home's journal", async (t) => {
   const { fx, home, plan, apply } = await upgradable(t, "guarded");
   const before = readFileSync(receiptOf(home), "utf8");
-  // A copy that is not the spawn's: refused at the plan and at the apply, and nothing is moved or kept.
-  const hook = join(copyOf(home, PACKAGED), "launch.mjs"), original = readFileSync(hook, "utf8");
-  writeFileSync(hook, marking(join(fx.fake, "kept-edited"), original));
-  await assert.rejects(plan(), (e) => e.code === "E_UPGRADE_INTEGRITY" && e.message.match(NOT_THE_SPAWNS)?.[1] === "acme.one" && /no modules were upgraded/.test(e.message));
-  await assert.rejects(apply({ planRevision: "x".repeat(24), idempotencyKey: "guard-1" }), (e) => e.code === "E_UPGRADE_INTEGRITY");
-  assert.equal(existsSync(join(home, ".oats", "previous")), false, "no copy of the edited module was kept");
-  writeFileSync(hook, original);
   // Undo: refused for a provider home, before and after a move.
   await assert.rejects(plan({ undo: true }), (e) => e.code === "E_UPGRADE_UNDO" && /is on a session provider/.test(e.message));
   const planned = await plan();
@@ -285,6 +283,8 @@ test("an upgrade of a provider home starts only from copies the receipt records,
   const journal = join(home, ".oats", "upgrade-receipt.guard-2.json");
   writeFileSync(journal, JSON.stringify({ ...readJson(journal), status: "partial", step: "swap" }));
   await assert.rejects(apply({ planRevision: planned.planRevision, idempotencyKey: "guard-2" }), (e) => e.code === "E_UPGRADE_PARTIAL" && /is not resumed from the journal in its home/.test(e.message));
+  // What the kernel runs after it is still its own copy.
+  assert.match(readFileSync(join(kernelModuleDir(home, PACKAGED), "launch.mjs"), "utf8"), /2\.0\.0/);
 });
 
 test("Git over a provider home's trees runs no hook and no file monitor the repository names: at the spawn, in status, at `oats worktree add` and `remove`, and at the retire", async (t) => {
@@ -385,7 +385,7 @@ for (const second of ["a provider home", "a tmux home"]) {
   });
 }
 
-test("the composition is taken once per spawn: a spawn undone after its provider launched keeps the record of the copies as the spawn made them, not as the launch left them", async (t) => {
+test("the kernel's copies are made once per spawn: a spawn undone after its provider launched keeps them as the spawn made them, not as the launch left the home's", async (t) => {
   const fx = providerDeployment(t, withHooked());
   const probe = await fx.launch("probe");
   const home = join(dirname(probe.home), "undone");
@@ -394,15 +394,11 @@ test("the composition is taken once per spawn: a spawn undone after its provider
   // launch does it (the fake appends to the file), and then fails, so the spawn is undone.
   fx.control({ undone: { launch: { touch: hook, exit: 1 } } });
   await assert.rejects(fx.launch("undone"));
-  assert.equal(existsSync(home), true, "the home is kept: a retire hook could not be run");
-  const spawned = moduleCopyDigest(copyOf(probe.home, HOOKED)).digest, edited = moduleCopyDigest(copyOf(home, HOOKED)).digest;
-  assert.notEqual(edited, spawned, "the launch changed the copy");
-  assert.equal(readJson(receiptOf(home)).composition.modules[HOOKED].digest, spawned, "the receipt records the copy the spawn made");
-  assert.match(moduleCopyProblem(home, HOOKED), NOT_THE_SPAWNS);
-  // The retire the spawn's message asks for does not run the edited copy's hook.
-  fx.clearCalls();
-  fx.cli(["retire", "undone", "--json"]);
-  assert.deepEqual(fx.hooks("retire").filter((h) => h.capability === HOOKED), []);
+  // The undo ran the capabilities' retire hooks from the kernel's copies, and took the home away.
+  assert.equal(existsSync(home), false);
+  assert.deepEqual(fx.hooks("retire").map((h) => [h.instance, h.capability]), [["undone", HOOKED]]);
+  assert.equal(existsSync(kernelModuleDir(home, HOOKED)), false, "the kernel's copies went with it");
+  assert.equal(readFileSync(join(kernelModuleDir(probe.home, HOOKED), "bin", "hook.mjs"), "utf8"), fakeFiles()["bin/hook.mjs"].replace('{ env: { ACME_FAKE_TOKEN_FILE: "/nowhere/token" }, ', "{ "));
 });
 
 test("an upgrade of a provider home takes its module set from the receipt: a module only the home's own record names refuses it, and is never written into the receipt or run", async (t) => {
@@ -432,4 +428,37 @@ test("an upgrade of a provider home takes its module set from the receipt: a mod
   assert.deepEqual([Object.keys(after.modules).sort(), after.capabilityRuntime.map((row) => row.id).sort(), after.modules[PACKAGED].from.package], [[FAKE_CAPABILITY, PACKAGED], [FAKE_CAPABILITY, PACKAGED], "acme.pkg"]);
   await fx.inEnv(() => startInstanceSession(home));
   assert.equal(existsSync(marker), false, "nothing of the agent's module ran");
+});
+
+test("an upgrade's copies are made beside the ones the receipt names: one that fails before the receipt is written leaves the old copies and the old rows, together, and nothing of its own", async (t) => {
+  const { home } = await upgradable(t, "half");
+  const storesOf = () => readdirSync(dirname(dirname(kernelModuleDir(home, PACKAGED)))).sort();
+  const before = readFileSync(receiptOf(home), "utf8"), trust = providerHomeTrust(home), old = trust.composition.store;
+  assert.deepEqual(storesOf(), [old]);
+  const moved = new Set([PACKAGED]), rows = trust.composition.capabilityRuntime;
+  // A copy that cannot be made (a module the home does not hold): nothing is left of the attempt.
+  assert.throws(() => upgradedComposition(home, trust, { moved: new Set(["acme.absent"]), modules: { ...trust.composition.modules, "acme.absent": {} }, rows }));
+  assert.deepEqual([storesOf(), readFileSync(receiptOf(home), "utf8")], [[old], before]);
+  // The copies made, the receipt not yet written: the receipt names the old store, whose rows
+  // name the old copies, and that is what the kernel runs.
+  const next = upgradedComposition(home, trust, { moved, modules: trust.composition.modules, rows });
+  assert.deepEqual([storesOf().length, next.store !== old, readFileSync(receiptOf(home), "utf8")], [2, true, before]);
+  assert.equal(kernelModuleDir(home, PACKAGED), join(dirname(kernelModuleDir(home, PACKAGED)), PACKAGED));
+  assert.equal(kernelModuleDir(home, PACKAGED).includes(old), true);
+  for (const row of next.capabilityRuntime) for (const command of Object.values(row.hooks ?? {})) assert.equal(command.includes(next.store) && !command.includes(old), true, command);
+  // What an interrupted upgrade left goes at the next prune; the store the receipt names stays.
+  pruneModulesStores(home);
+  assert.deepEqual(storesOf(), [old]);
+});
+
+test("readiness of a provider home says which of the home's copies differ from the ones the kernel runs: an added, optional key, and nothing on a status row", async (t) => {
+  const fx = providerDeployment(t, withHooked());
+  const { home } = await fx.launch("compared");
+  const readiness = () => fx.cli(["readiness", "--home", home, "--json"]).json().result;
+  const store = readJson(receiptOf(home)).composition.store;
+  assert.deepEqual(readiness().kernelCopies, { store, differing: [] });
+  writeFileSync(join(copyOf(home, HOOKED), "bin", "hook.mjs"), "// the agent's own\n");
+  writeFileSync(join(copyOf(home), "bin", "added.mjs"), "");
+  assert.deepEqual(readiness().kernelCopies, { store, differing: [{ capability: FAKE_CAPABILITY, differs: true }, { capability: HOOKED, differs: true }] });
+  assert.equal(Object.hasOwn(rowOf(fx, "compared"), "kernelCopies"), false);
 });

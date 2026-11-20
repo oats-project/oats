@@ -1,31 +1,37 @@
 ## Added
 
-- **A provider home is run by its receipt, not by what is in it.** A session
-  provider may run its harness in a sandbox that still lets the agent write
-  its own home, and the kernel that runs the home's hooks and the
-  provider's commands runs outside any sandbox. For a home on a session
-  provider the kernel now takes nothing it runs from the home alone
+- **The kernel runs its own copy of a provider home's modules, never the
+  home's.** A session provider may run its harness in a sandbox that still
+  lets the agent write its own home, and the kernel that runs the home's
+  hooks and the provider's commands runs outside any sandbox, while that
+  agent runs. For a home on a session provider the kernel now runs nothing
+  that is in the home
   ([What the kernel trusts in a provider home](../capabilities.md#what-the-kernel-trusts-in-a-provider-home)):
-  - The home's receipt, outside the home, records its `composition`: the
-    digest and size of every module copy as the spawn made it, and the
+  - The kernel keeps its own copy of the home's modules outside the home,
+    at `<instances>/.oats-retirement/modules/<hash of the home>/<store>/`,
+    made once by the spawn before the provider is asked to launch. Every
+    lifecycle hook and worktree hook, every command of the provider, every
+    capability's readiness check and every command or operation dispatched
+    in the home runs from it, and the home's manifests are read there. The
+    copies in the home stay, for the agent and its harness.
+  - The home's receipt records its `composition`: which store holds those
+    copies, which modules the home has and where each came from, and the
     capability rows the spawn resolved (settings, their origins, hook
-    commands, levels). `oats instance upgrade` rewrites it in the step that
-    moves the copies.
-  - A module copy is run only when it digests to that record, hashed whole
-    at every use and never cached: a provider's command, a lifecycle hook,
-    a worktree hook, a capability's readiness check, and a command or an
-    operation dispatched in the home. A launch checks every copy first.
-  - `OATS_SETTINGS`, `OATS_SETTINGS_ORIGINS` and the hook commands of such a
-    home come from the receipt, never from `instance.json`.
-  - A copy that differs refuses the call, naming the module. A read shows
-    the home unavailable (`E_SESSION_UNAVAILABLE`; `running: null`,
-    `runtimeState: "unreachable"`), never stopped. A hook that may not run
-    counts as a failed required hook. The remedy is to retire the instance
-    and spawn it again.
-  - Measured on a developer laptop: a module copy of 0.96 MB in 82 entries
-    hashes in 0.9 ms, and the five module copies of a home (1.1 MB) in 1.2
-    ms. A status row of a provider home costs one hash of its provider's
-    copy and a read of its receipt, and each call to the provider one more.
+    commands, levels). `OATS_SETTINGS`, `OATS_SETTINGS_ORIGINS` and the hook
+    commands of such a home come from the receipt, never from
+    `instance.json`.
+  - A retire removes the kernel's copy with the home. `oats instance
+    upgrade` makes the copies for the upgraded home in a new store and then
+    writes the receipt once, naming the new store and the new rows together:
+    an upgrade that fails before that write leaves the old copy and the old
+    rows.
+  - `oats status` and drift read the home's own record of its modules, as
+    for every home. `oats readiness --home` of a provider home gains an
+    optional key, `kernelCopies: {store, differing}`, which lists the
+    modules whose copy in the home is not the one the kernel runs.
+  - Nothing is hashed at a call, so a read of a provider home costs no more
+    than before. The cost is disk: a provider home's modules are kept twice
+    (about 1.3 MB for a home with the usual capabilities).
 - **The launch input and the check's planned launch carry `trees`**: the
   home's `work/`, then every extra tree Git itself lists for the home, as
   absolute paths. A provider that sandboxes keeps each tree's Git pointer,
@@ -47,12 +53,13 @@
   link, and written only when they are a regular file with one name: a
   symbolic link, a hard link and a FIFO at a log's name are refused, as the
   reader already refuses them. The other log still gets its row.
-- **`oats instance upgrade` of a provider home** starts only from module
-  copies its receipt records, is not undone (`--undo` is refused,
-  `E_UPGRADE_UNDO`), and is not resumed after an interruption
-  (`E_UPGRADE_PARTIAL`): the copies it would restore and the journal it
-  would resume from are in the home. An interrupted upgrade of such a home
-  is finished by retiring and respawning it.
+- **`oats instance upgrade` of a provider home** takes its module set and
+  each module's source from the receipt (a module only the home's record
+  names refuses it), is not undone (`--undo` is refused, `E_UPGRADE_UNDO`),
+  and is not resumed after an interruption (`E_UPGRADE_PARTIAL`): the
+  copies it would restore and the journal it would resume from are in the
+  home. An interrupted upgrade of such a home is finished by retiring and
+  respawning it.
 
 ## Upgrade notes
 
@@ -63,14 +70,15 @@
   it (its retire hooks are not run, and the retire says which). The
   session-provider wire has been experimental so far, and no released
   provider exists; tmux homes are not affected.
-- **For a capability's author:** never write inside your own module copy
-  (`<home>/.oats/modules/<capability>/`): a file that appears there after
-  the spawn (a cache, a log, `__pycache__`) makes the copy another one, and
-  every later use of the capability in a provider home is refused until
-  the instance is respawned.
+- **For a capability's author:** in a provider home your hooks and commands
+  run from the kernel's copy of your capability, not from
+  `<home>/.oats/modules/<capability>/`. Find the home by
+  `OATS_INSTANCE_HOME`, never by your own location, and never write beside
+  your own code.
 - **For a provider's author:** if your provider sandboxes its harness, keep
-  `<instances>/.oats-retirement/` unwritable from the session (the receipts
-  are there), and deny writes to the Git pointer, configuration and hooks
+  `<instances>/.oats-retirement/` unwritable from the session (the kernel's
+  copies of the modules and the receipts are there; the session never needs
+  to read it), and deny writes to the Git pointer, configuration and hooks
   of each path in `trees`. Nothing in this release makes a provider's
   sandboxed mode a security boundary between an agent and the operator's
   account.

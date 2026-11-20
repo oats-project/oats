@@ -2265,29 +2265,30 @@ from, never print it.
 
 A provider may run its harness in a sandbox that still lets the agent write
 its own home. The kernel that runs the home's hooks and your commands runs
-outside any sandbox, as the operator. So, for a home on a session provider,
-**nothing the kernel runs, and no capability setting it hands to what it
-runs, is taken from the home alone**:
+outside any sandbox, as the operator, while that agent runs. So, for a home
+on a session provider, **the kernel runs nothing that is in the home, and
+takes no capability setting from it**:
 
-- **The receipt records the home's composition.** The home's receipt, which
-  the kernel keeps outside the home
-  (`<instances>/.oats-retirement/baselines/`), carries `composition`: the
-  digest of every module copy under `<home>/.oats/modules/` as the spawn
-  made it, with its size, and the capability rows the spawn resolved from
-  the deployment (each capability's settings, their origins, its hook
-  commands and its level). `oats instance upgrade` rewrites it in the step
-  that moves the copies.
-- **A module copy is run only when it digests to that record.** The copy is
-  hashed whole at every use, and nothing is remembered between two uses (a
-  file's time stamp can be set back): before each of your commands (when the
-  kernel binds the provider, and again right before the call), before each
-  lifecycle hook and each worktree hook, before a capability's readiness
-  check, and before a command or an operation dispatched in the home. A
-  launch checks every copy of the home first, since its plan reads all
-  their manifests. A file changed, added, removed or exchanged for a link
-  makes the copy another one. The read is bounded by the size the spawn
-  recorded, so a large file put in a home costs no more than the copy's own
-  size.
+- **The kernel keeps its own copy of the home's modules, outside the home,**
+  at `<instances>/.oats-retirement/modules/<hash of the home>/<store>/<capability>/`,
+  beside the home's receipt. The spawn makes it from the copies it
+  materialised, once, before it asks you to launch. Every lifecycle hook
+  and worktree hook, every one of your commands, every capability's
+  readiness check and every command or operation dispatched in the home is
+  run from that copy, and the home's manifests are read there. The copies
+  under `<home>/.oats/modules/` stay where they are, for the agent and its
+  harness (its skills, what the harness runs inside its sandbox). The kernel
+  never runs them and never reads them, so nothing the agent does to them,
+  at rest or while the kernel is running a command, changes what the kernel
+  runs. (A copy in the home that is checked and then run can be exchanged
+  between the two by the session that writes the home. That is why the
+  kernel keeps a copy instead of checking the home's.)
+- **The receipt records the home's composition.** The home's receipt
+  (`<instances>/.oats-retirement/baselines/`) carries `composition`: which
+  store holds the kernel's copies, which modules the home has and where each
+  came from, and the capability rows the spawn resolved from the deployment
+  (each capability's settings, their origins, its level, and its hook
+  commands, which name the kernel's copy).
 - **A capability's settings and hook commands are the receipt's.**
   `OATS_SETTINGS`, `OATS_SETTINGS_ORIGINS`, which hooks a capability has and
   the command of each come from the receipt's rows, never from
@@ -2295,31 +2296,54 @@ runs, is taken from the home alone**:
   settings recorded with each launch contribution) nor from a rollback
   marker. A capability the home's record adds is no capability of the
   home, at a launch, at a retire and at an upgrade alike.
-- **What a copy that differs does.** The call is refused with a sentence
-  that names the module. A read (`oats session inspect`, a status row, the
-  sweep's plan, readiness) then shows the home **unavailable**
-  (`E_SESSION_UNAVAILABLE`; `running: null`, `runtimeState: "unreachable"`),
-  never stopped. A start or a restart is refused before the check, any hook
-  and any stop. A hook that may not run counts as a failed required hook: a
-  retire stops the session through the provider when the provider's own
-  copy is the recorded one, runs the other capabilities' retire hooks,
-  names the one it did not run, and removes the home only with `--force`.
+- **Retirement removes the kernel's copy** with the home, and so does the
+  rollback of a spawn that fails. A home that is kept (a retire that could
+  not finish, a quarantined spawn) keeps its copy, so that its cleanup can
+  run. A spawn takes away whatever an earlier home left at its path, the
+  receipt and the copies, before anything reads them.
+- **An upgrade** (`oats instance upgrade`) makes the kernel's copies for the
+  upgraded home in a new store beside the old one: each moved module from
+  the home's new copy, once that is found to be the one the upgrade verified
+  against the lock, and every other module from the kernel's own earlier
+  copy. The receipt is then written once, naming the new store and the new
+  rows together, and the old store is removed. **An upgrade that fails
+  before that write leaves the old copy and the old capability rows,
+  together**: the kernel goes on running the earlier version, whatever the
+  home's own copies have become. Such a home's upgrade takes its module set
+  and each module's source from the receipt, is not undone (`--undo`) from
+  the copies kept in the home, and is not resumed from the journal in the
+  home: both are where the agent can write. An upgrade that was interrupted
+  is finished by respawning.
+- **When the kernel has no copy.** A home whose receipt has no
+  `composition` (a kernel from before this spawned it), or whose kernel
+  copy of a module is gone, runs nothing of that module. The call is
+  refused with a sentence that names the module; a read (`oats session
+  inspect`, a status row, the sweep's plan, readiness) shows the home
+  **unavailable** (`E_SESSION_UNAVAILABLE`; `running: null`,
+  `runtimeState: "unreachable"`), never stopped; a hook that cannot run
+  counts as a failed required hook, so a retire names it and removes the
+  home only with `--force`. The home's own copy is never run in its place.
   The remedy is to retire the instance and spawn it again.
-- **An upgrade** of such a home starts only from copies the receipt
-  records, and is neither undone (`--undo`) from the copies kept in the home
-  nor resumed from the journal in the home: both are where the agent can
-  write. An upgrade that was interrupted is finished by respawning.
-- **A home spawned before this record existed** (its receipt has no
-  `composition`) runs none of its capabilities and reads unavailable; its
-  message says to retire it and spawn it again.
+- **What `oats status` and drift report.** They read the home's own record
+  of which modules it holds, from where and at which version, as for every
+  home: they describe the home's copies. They do not compare a home's copy
+  with the kernel's, because a home copy its agent changed changes nothing
+  the kernel runs. `oats readiness --home` says which home copies differ
+  from the ones the kernel runs (`kernelCopies.differing`, an added,
+  optional key). After an upgrade both are the
+  new version. After an upgrade that was interrupted between moving the
+  home's copies and writing the receipt, drift can say `current` while the
+  kernel still runs the earlier copy, until the instance is respawned.
 
 Your own part, if you sandbox: **keep `<instances>/.oats-retirement/`
 unwritable from the session**, by the harness's shell and by its file tools
-alike. It holds the receipts (the composition above, the session's
-endpoint), the lifecycle claims and the kernel's records of provider
-commands in flight. Every check above compares the home with its receipt,
-so a session that can write the receipt can make the kernel run anything.
-The kernel cannot check this for you: it does not run your sandbox.
+alike. The session never needs to read it either: nothing the harness runs
+is there. The
+directory holds the kernel's copies of the modules, the receipts (the
+composition above, the session's endpoint), the lifecycle claims and the
+kernel's records of provider commands in flight. A session that can write
+there can make the kernel run anything. The kernel cannot check this for
+you: it does not run your sandbox.
 
 What this does not cover: other fields of `instance.json` still reach hooks
 and your commands (the recorded teams, the harness, the soul directory,
@@ -2328,16 +2352,22 @@ environment, and the launch arguments and environment names each
 capability's hooks contributed). Nothing here makes a provider's sandboxed
 mode a security boundary between an agent and the operator's account.
 
-**For a capability's author: never write inside your own module copy.**
-`<home>/.oats/modules/<your capability>/` is recorded whole at the spawn,
-and a file that appears there later (a cache, a log, an interpreter's
-compiled files such as `__pycache__`) makes the copy another one: every
-later use of your capability in that home is refused until the instance is
-respawned. Keep what your code writes in the home outside that directory.
+**For a capability's author.** In a provider home your hooks and commands
+run from the kernel's copy of your capability, not from
+`<home>/.oats/modules/<your capability>/`. Find the home by
+`OATS_INSTANCE_HOME`, never by your own location, and never write beside
+your own code: what your code writes belongs in the home. A file of your
+own that you find by your own location is the kernel's copy of it. When a
+hook hands such a path to the harness (as `oats.core`'s launch hook hands
+Claude Code the script its hooks run), the harness runs what the kernel
+keeps, which the agent cannot rewrite where the provider keeps that
+directory unwritable. The path changes at an upgrade (the copies move to a
+new store), so write it again at every launch, as a launch hook does.
 
 A tmux home is unchanged, and why: its agent already runs unsandboxed as
 the operator, and can do directly whatever a module it rewrote could. Its
-receipt gains no key and nothing of it is hashed.
+receipt gains no key, the kernel keeps no copy of its modules, and they are
+run from the home as before.
 
 Every Git the kernel runs over a provider home's trees, or over their
 repository, runs with the repository's hooks and its file monitor off

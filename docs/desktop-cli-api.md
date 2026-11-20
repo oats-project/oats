@@ -7614,6 +7614,18 @@ as the kernel computes it from the deployment's configuration. One key,
   "E_BACKEND_SANDBOX_HOST", message, details}}` when a start would be
   refused for it.
 
+- `oats readiness --home <abs> --json` of a provider home also carries
+  `kernelCopies: {store, differing: [{capability, differs}]}`, an optional
+  key that no other answer has and that changes the meaning of none: `store`
+  is the name of the store that holds the kernel's own copies of the home's
+  modules, and `differing` lists each module whose copy in the home is not
+  the one the kernel runs (`differs: true`), or could not be compared
+  (`differs: null`); `[]` when every home copy is the kernel's. It is
+  information: the kernel runs its own copy either way
+  ([capabilities.md](capabilities.md#what-the-kernel-trusts-in-a-provider-home)).
+  It is computed for this answer only. A status row and the drift rows are
+  unchanged: they report the home's own record of its modules.
+
 `oats capabilities show <name> --json` carries `sandboxDomains` (the
 manifest's key, exactly as declared) and, only when there is one,
 `sandboxDomainProblems: [<message>]`.
