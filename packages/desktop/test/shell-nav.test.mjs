@@ -179,7 +179,7 @@ test("the landing surface is Home: at start, after a choice, and as the nav's fa
   // Slice 6a: no stage behind the tabs. The last terminal closing with no other tab shows the empty state (Open Home),
   // and a workspace switch that restores no tab reopens its page tabs, or lands on Home.
   const terminal = src.match(/function showTerminalContext\(\) \{[^]*?\n\}/)[0];
-  assert.match(terminal, /if \(typeof showEmptyState === "function"\) showEmptyState\(\);/, "the last tab closing: the empty state, its Open Home");
+  assert.match(terminal, /\n  showEmptyState\(\);/, "the last tab closing: the empty state, its Open Home");
   assert.match(src, /if \(!pages\?\.length\) \{\n    if \(still\(\) && !\[\.\.\.tabs\.values\(\)\]\.some\(\(t\) => canActivateTab\(t, ws\)\)\) await showStage\("home"\);/,
     "a workspace with no tab lands on Home");
   // After a choice (or an adoption) the window leaves the chooser for the home surface: run the shipped handler.

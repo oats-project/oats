@@ -121,7 +121,7 @@ test("slice6a details for a stopped agent", (t) => {
   u.el.querySelector('[data-details-key="start"]').click();
   assert.deepEqual(u.acts.at(-1), ["start", "web-developer-1"], "today's Start dialog");
   // Every way in: i on a row, Ctrl+Shift+I (panel.toggle), the row's menu and the palette (its captured target).
-  assert.match(shell, /if \(e\.key !== "i" \|\| e\.altKey \|\| e\.ctrlKey \|\| e\.metaKey \|\| e\.shiftKey \|\| typeof openDetailsTab !== "function"\) return;\n          e\.preventDefault\(\); openDetailsTab\(i\);/);
+  assert.match(shell, /if \(e\.key !== "i" \|\| e\.altKey \|\| e\.ctrlKey \|\| e\.metaKey \|\| e\.shiftKey\) return;\n          e\.preventDefault\(\); openDetailsTab\(i\);/);
   assert.match(shell, /registerAction\(\{ id: "panel\.toggle", label: "Agent: Details"/);
   assert.match(shell, /\{ action: 'details', actionId: 'panel\.toggle', label: 'Details', reason: '', always: true, secondary: true \},/);
   assert.match(shell, /if \(action === 'details'\) \{ openDetailsTab\(instance\); return; \}/);
@@ -181,7 +181,7 @@ test("slice6a rail", (t) => {
 test("slice6a home works with the sidebar hidden", async (t) => {
   // Home hears the roster model, not the sidebar's DOM: no MutationObserver, a signal from each paint of the model.
   assert.doesNotMatch(fn("subscribeHomeRoster"), /MutationObserver|querySelector/, "no DOM watched");
-  assert.match(fn("renderContextRoster"), /if \(typeof rosterModelChanged === "function"\) rosterModelChanged\(\);/);
+  assert.match(fn("renderContextRoster"), /\n  rosterModelChanged\(\);/);
   // Its board follows a roster change, and Enter opens an agent, whatever the sidebar shows.
   const dom = new JSDOM('<!doctype html><body><div id="app" class="sidebar-hidden"><aside id="sidebar"></aside><main></main></div></body>');
   t.after(() => dom.window.close());

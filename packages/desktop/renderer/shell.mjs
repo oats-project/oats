@@ -420,7 +420,7 @@ function pageModule(name) {
  * (NAV_TABS: Machines) opens the Workspace page on that tab. Returns once the tab is open. */
 async function showStage(name) {
   // A window with no workspace shows only its choice (#481): no view may read with no workspace.
-  if (typeof windowState === "function" && windowState() === "choosing") { void showChooser(); return; }
+  if (windowState() === "choosing") { void showChooser(); return; }
   const asTab = navTab(name);
   if (asTab) return openWorkspaceSouls(asTab.tab);
   const v = NAV.find((x) => x.name === name);
@@ -439,10 +439,9 @@ async function showStage(name) {
   }
   // One open of a page at a time per workspace and group: a second ask while the first is mounting waits for it.
   const pendingKey = `${ws}\u0000${name}\u0000${focusedGroup?.id ?? ""}`;
-  if (typeof openViewTab !== "function") return; // a harness without the tab host: no page to open
-  const opens = typeof pageOpens === "object" ? pageOpens : new Map(); // a harness without the map opens each ask
+  const opens = pageOpens;
   if (opens.has(pendingKey)) return opens.get(pendingKey);
-  if (typeof hideEmptyState === "function") hideEmptyState();
+  hideEmptyState();
   const opening = openViewTab(name, v.title, {}, name === "home" ? `page:home:${nextTabId}` : `page:${name}`, "page")
     .finally(() => opens.delete(pendingKey));
   opens.set(pendingKey, opening);
@@ -522,7 +521,7 @@ function setNavActive(name) {
     if (active) b.setAttribute("aria-current", "page");
     else b.removeAttribute("aria-current");
   }
-  if (typeof updateRail === "function") updateRail(); // the rail shows the same current destination (slice 6a)
+  updateRail(); // the rail shows the same current destination (slice 6a)
 }
 
 function showTabLayer(on) {
@@ -894,7 +893,7 @@ async function refreshContextRoster({ user = false } = {}) {
       if (rosterState?.hasData && !rosterStale) { rosterStale = true; renderContextRoster(contextInstances); }
       else if (rosterState && !rosterState.hasData) {
         renderRosterCount(contextRosterEl.querySelector(".ctx-count"), [], { failed: true }); applyRosterPlace();
-        if (typeof rosterModelChanged === "function") rosterModelChanged(); // a first read failed: Home says so
+        rosterModelChanged(); // a first read failed: Home says so
       }
       refreshPanelInstance([], ws);
     }
@@ -1070,8 +1069,8 @@ function emptyRosterLine() {
 
 function renderContextRoster(instances) {
   instances = shownRows(instances);
-  // The roster model changed (each paint is one): Home hears it (a harness without the seam paints alone).
-  if (typeof rosterModelChanged === "function") rosterModelChanged();
+  // The roster model changed (each paint is one): Home, the rail and Details hear it.
+  rosterModelChanged();
   const listEl = contextRosterEl.querySelector(".ctx-list");
   const restoreTreeState = captureTreeRenderState(listEl);
   // #1579: what had focus in the list, for the Background heading (no instance identity: it keeps its own focus)
@@ -1395,7 +1394,7 @@ function renderContextRoster(instances) {
         row.tabIndex = -1;
         // i: Details for this row's agent (slice 6a), running or not.
         row.addEventListener("keydown", (e) => {
-          if (e.key !== "i" || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || typeof openDetailsTab !== "function") return;
+          if (e.key !== "i" || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
           e.preventDefault(); openDetailsTab(i);
         });
         row.addEventListener("keydown", onRosterRowKey);
@@ -1724,7 +1723,7 @@ function showTerminalContext() {
   if (other) { activateTab(other[0]); return; }
   showTabLayer(false);
   setNavActive(null);
-  if (typeof showEmptyState === "function") showEmptyState();
+  showEmptyState();
 }
 
 // ── tabs ──────────────────────────────────────────────────────────────────
@@ -2418,7 +2417,7 @@ function closeTab(id, restoreFocus = false, { explicit = true, confirmed = false
       showTabLayer(false);
       // The last tab closed (slice 6a: no stage behind the tabs): the empty state, its Open Home the way back.
       setNavActive(null);
-      if (typeof showEmptyState === "function") showEmptyState();
+      showEmptyState();
       if (restoreFocus) focusAfterLastTab("artifact", {
         stageEntry: stageHost.querySelector(".tabs-empty button") || navEl.querySelector(".nav-item"),
       });
@@ -3570,7 +3569,7 @@ registerAction({ id: "sidebar.resetWidth", label: "Reset the sidebar's width", c
 // a tab; with none selected, the panel as before (a page's own panel).
 registerAction({ id: "panel.toggle", label: "Agent: Details", context: "global", run: () => {
   tabOpenIntents.invalidate();
-  const row = typeof detailsTarget === "function" ? detailsTarget() : null; // (a harness without Details: the panel)
+  const row = detailsTarget();
   if (row) openDetailsTab(row); else contextPanel.toggle();
 } });
 // Focus mode lives on the keyboard (rebindable, no default chord) and the palette.
@@ -3948,8 +3947,7 @@ function restoreWorkspaceTabs() {
   tabOpenIntents.invalidate();
   workspaceLabel.reset(currentWorkspace());
   // Where the keyboard was in the workspace left (focus-place.mjs), taken before its tabs are hidden.
-  // (A harness that runs this function without the page-tab memory, typeof-guarded, keeps no page tabs.)
-  const leaving = tabWorkspace, leavingPages = typeof takePageTabs === "function" ? takePageTabs(leaving) : [];
+  const leaving = tabWorkspace, leavingPages = takePageTabs(leaving);
   workspaceTabMemory.remember(tabWorkspace, { split, activeTab, sidebarMode, tabLayerVisible, place: focusPlaces.take(tabWorkspace) });
   // Hide synchronously and park ALL nodes before replacing group identities.
   // Workspace-local group ids can overlap; deleting old cells first would
@@ -3957,7 +3955,7 @@ function restoreWorkspaceTabs() {
   showTabLayer(false);
   // Its page tabs close (slice 6a: a page reads the current workspace, and the Workspace and Automations views hold
   // one module state); the memory keeps them, by page and group, and reopens them when the workspace comes back.
-  if (typeof closePageTabs === "function") closePageTabs(leaving, leavingPages);
+  closePageTabs(leaving, leavingPages);
   renderSplit(false);
   tabWorkspace = currentWorkspace();
   const restored = workspaceTabMemory.recall(tabWorkspace, tabs);
@@ -3977,7 +3975,7 @@ function restoreWorkspaceTabs() {
   updateContextTabs();
   focusArrival(restored.place ?? null);
   refreshContextRoster();
-  if (typeof reopenPageTabs === "function") void reopenPageTabs(tabWorkspace);
+  void reopenPageTabs(tabWorkspace);
 }
 /** Page tabs a workspace keeps while another shows (slice 6a: tab memory remembers page tabs): each page with its
  * group, and every group's strip order and active member, so coming back restores each pane as it was. */
