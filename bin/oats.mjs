@@ -721,6 +721,19 @@ async function homeLiveTeams(home) {
   return Array.isArray(teams) ? { teams, defaultTeam, teamsSource: source } : {};
 }
 
+/** For a start or a restart of a home on a session provider: the deployment's configuration its
+ *  sandbox allowances are computed from (lib/instance-resolution.mjs homeSandboxSource), read now.
+ *  → `{ sandboxSource }`, or `{}` for a tmux home, which reads nothing. (A `--resume` launches
+ *  nothing on a provider, and reads nothing either.) The home's record only says whether to read:
+ *  which deployment and which soul are the home's path's to say. */
+async function homeSandboxSourceOf(home) {
+  let meta;
+  try { meta = JSON.parse(readFileSync(join(home, "instance.json"), "utf8")); } catch { return {}; }
+  const { recordsSessionProvider } = await import("../lib/session-providers.mjs");
+  if (!recordsSessionProvider(meta)) return {};
+  const { homeSandboxSource } = await import("../lib/instance-resolution.mjs");
+  return { sandboxSource: await homeSandboxSource(home, { remoteOptions: remoteOptionsFromEnv() }) };
+}
 /** For `--reselect-launch`: what the home's launch layers need of the workspace to say which keys of
  *  souls.launch name no soul (lib/core.mjs homeLaunchLayers), read only when they need it and the layers
  *  decide (`named`: --harness names the launch, so no key is consulted). A home the start will refuse
@@ -1779,6 +1792,7 @@ async function readinessCmd() {
     }
     if (doc.policy) console.log(`  policy: child spawns ${doc.policy.childSpawns.allowed ? "allowed" : "disabled"} (${doc.policy.childSpawns.origin.kind}${doc.policy.childSpawns.enforced ? ", enforced" : ""}); worktrees ${doc.policy.worktrees.allowed === null ? "unknown" : doc.policy.worktrees.allowed ? "allowed" : "not in this work mode"}`);
     for (const w of doc.warnings) console.log(`  warning  ${w.code}  ${w.message}`);
+    printSandboxAllowances(doc.sandbox, "  ");
     for (const n of doc.notes) console.log(`  note: ${terminalText(n)}`);
     return;
   }
@@ -2638,6 +2652,15 @@ async function capabilityShowCmd(bail) {
     }
     for (const p of doc.sessionProviderProblems ?? []) console.log(`  session provider problem: ${p.pointer} — ${safeText(p.message, 300)}`);
   }
+  if (doc.sandboxDomains !== undefined) {
+    // As declared, made safe to print: the settings whose hosts a session provider's sandbox may be widened by.
+    const { safeText } = await import("../lib/refused-text.mjs");
+    // A `{ setting }` line: the setting's host. A `{ settingFile, urls }` line: the hosts in the file the setting names.
+    const lines = Array.isArray(doc.sandboxDomains) ? doc.sandboxDomains.map((l) => (typeof l?.setting === "string" ? `the host of setting ${safeText(l.setting, 80)}${l.optional === true ? " (optional)" : ""}`
+      : typeof l?.settingFile === "string" ? `the hosts in the file of setting ${safeText(l.settingFile, 80)} at ${safeText(String(l.urls ?? "?"), 200)}` : "?")) : null;
+    console.log(`  sandbox domains: ${lines ? lines.join("; ") : "(malformed — see sandbox domain problems)"}`);
+    for (const p of doc.sandboxDomainProblems ?? []) console.log(`  sandbox domain problem: ${safeText(p, 300)}`);
+  }
   for (const p of doc.problems) console.log(`  problem: ${p.code}${p.path ? ` ${p.path}` : ""} — ${p.message}`);
   for (const w of doc.warnings) console.log(`  warning  ${w.code}  ${w.message}`);
   console.log(`\n  a file's text: oats capabilities show ${doc.name}${doc.kind === "package" ? ` --package ${doc.package}` : ""} --file <path>`);
@@ -2812,6 +2835,21 @@ function namingLine(naming) {
   if (naming?.source === "numbered") return `numbered (${terminalText(naming.reason)}: ${terminalText(naming.message)})`;
   return null;
 }
+/** What a session provider may widen its harness's sandbox by (lib/sandbox-allowances.mjs), as a
+ *  spawn preview and readiness say it in text: each host with who asked for it, each path with its
+ *  reason, what is missing, what was left out or not read; or why there is none. Nothing for a
+ *  launch that has none (tmux). */
+function printSandboxAllowances(sb, indent = "") {
+  if (!sb) return;
+  if (sb.unavailable) { console.log(`${indent}sandbox allowances: none could be computed (${terminalText(sb.unavailable)})`); return; }
+  if (sb.refused) { console.log(`${indent}sandbox allowances: refused (${sb.refused.code}): ${terminalText(sb.refused.message)}`); return; }
+  console.log(`${indent}sandbox allowances:`);
+  for (const d of sb.domains) console.log(`${indent}  host ${terminalText(d.host)}  asked by ${terminalText(d.capability)} (setting ${terminalText(d.setting)}${d.team ? `, for team ${terminalText(d.team)}, which this instance may join` : ""})`);
+  for (const w of sb.write) console.log(`${indent}  path ${terminalText(w.path)}  asked by the kernel (${terminalText(w.reason)})`);
+  for (const m of sb.missing) console.log(`${indent}  missing${m.optional ? " (optional)" : ""}: ${terminalText(m.capability)} setting ${terminalText(m.setting)}${m.team === null ? " has no value" : ` has no entry for team ${terminalText(m.team)}${m.defaultTeam ? " (the default team)" : ""}`}`);
+  for (const k of sb.skipped ?? []) console.log(`${indent}  left out: ${terminalText(k.capability)}: ${terminalText(k.reason)}`);
+  for (const u of sb.unread ?? []) console.log(`${indent}  not read: ${terminalText(u.capability)} setting ${terminalText(u.setting)}: ${terminalText(u.reason)}`);
+}
 /** A spawn preview's text: the local one, or a host's answer to a routed
  *  preview (`server`, its id), which this side printed the same way (#610). */
 function printSpawnPreview(r, { server, soulFetched = false } = {}) {
@@ -2822,6 +2860,7 @@ function printSpawnPreview(r, { server, soulFetched = false } = {}) {
   { const line = namingLine(r.naming); if (line) console.log(`name: ${line}`); }
   if (r.background === true) console.log(`list: background (from the ${r.backgroundFrom === "flag" ? "--background flag" : "soul"})`);
   if (Array.isArray(r.worktreeHooks)) console.log(r.worktreeHooks.length ? `worktree hooks: ${r.worktreeHooks.map((h) => `${h.capability}${h.required ? " (required)" : ""}`).join(", ")}` : "worktree hooks: none");
+  printSandboxAllowances(r.sandbox);
   for (const w of r.warnings || []) console.log(`  WARNING: ${terminalText(w)}`);
 }
 async function spawnCmd() {
@@ -3659,7 +3698,7 @@ async function sessionCmd() {
       // upgrade that runs (it holds the claim) the start is busy, not a partial upgrade: that one is
       // left to the claim. A resume is always refused under the claim.
       if (!resume && !upgradeHoldsClaim(home)) assertNoPartialUpgrade(home);
-      const opts = { model: model || undefined, launchConfig, harness, yolo: yoloFlag(), ...(reselectLaunch ? { reselectLaunch: true, launchOffered: await homeLaunchOffered(home, { named: harness !== undefined }) } : {}), ...(resume ? { resume: true } : {}), env: process.env, ...(await homeLiveTeams(home)) };
+      const opts = { model: model || undefined, launchConfig, harness, yolo: yoloFlag(), ...(resume ? {} : await homeSandboxSourceOf(home)), ...(reselectLaunch ? { reselectLaunch: true, launchOffered: await homeLaunchOffered(home, { named: harness !== undefined }) } : {}), ...(resume ? { resume: true } : {}), env: process.env, ...(await homeLiveTeams(home)) };
       if (args[1] === "restart") {
         const grace = flag("stop-grace");
         if (grace !== undefined) { if (grace === true || !/^\d+$/.test(String(grace)) || Number(grace) < 1 || Number(grace) > 300) bad("--stop-grace needs a number of seconds (1..300) to wait for the harness after SIGTERM"); opts.stopGraceMs = Number(grace) * 1000; }

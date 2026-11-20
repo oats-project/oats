@@ -561,7 +561,12 @@ differs), `package-manifests` (a package's manifests), `list` (a skill
 listing) and `tree-oids` (the tree ids of a set of directories). An entry is only ever a pure function of those bytes and this kernel's
 code, never local state and never a transient error; it is written
 atomically, a corrupt one is a miss, and `pruneStores` bounds the store
-(`PARSED_LIMITS`, least recently used first). `--max-age` adds the observation
+(`PARSED_LIMITS`, least recently used first). A read session made with
+`offline: true` never reaches a remote: a head is the one this host last
+observed (its record, of any age), a commit and a file are read only when the
+cache holds them, and anything else is `E_REMOTE_UNREADABLE` with reason
+`not-cached`. The sandbox allowances of a session provider's start are
+resolved in one (`lib/instance-resolution.mjs` `homeSandboxSource`). `--max-age` adds the observation
 store `<cache>/.observed/` ([Observation reuse](desktop-cli-api.md#observation-reuse-feature-observe-max-age-oats-0311)):
 one record per (repo key, ref args, url digest), so two spellings of one repo
 keep a record each; the url itself is never written. Beside it,

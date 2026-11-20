@@ -7458,6 +7458,8 @@ before anything is created (a preview answers them too):
 | `E_BACKEND_AMBIGUOUS` | `{backend, capabilities}`; also from a start or a restart |
 | `E_BACKEND_HARNESS` | `{backend, capability, harness, harnesses}` |
 | `E_BACKEND_LAUNCH_ARG` | `{backend, launchConfig, field: "executable"}` |
+| `E_BACKEND_WIRE` | `{backend, capability, wire: {provider, kernel}}`: the provider's declared wire version (null: none) and this kernel's. Also from a start, a restart, a `--resume`, a stop (an operator's and the host's) and an input, before anything is read or stopped |
+| `E_BACKEND_SANDBOX_HOST` | `{capability, setting, host, team?, path?}`: a capability's `sandboxDomains` line that may not add a host; `setting` and `host` are null where there is none to name. With `path` (and `capability: null`): a path the kernel itself would allow the session to write that is reached through a symbolic link, or is no directory. Also from a start or a restart, before anything is stopped |
 | `E_BACKEND_NOT_READY`, any other `E_BACKEND_*` | the provider's readiness, or its own refusal of the launch: `{backend, capability}`; the spawn is rolled back |
 
 A launch that fails otherwise is `E_SESSION_START_FAILED`.
@@ -7518,7 +7520,9 @@ spawn's and a start's). `E_SESSION_NOT_RUNNING` for a home OATS
 stopped (nothing was sent, the provider was not called), and for a lost
 session at its resume cap or with a process of its last run still in the
 home; `E_SESSION_PROMPT_OPEN` and `E_SESSION_INPUT_QUEUED` from the provider
-(nothing was sent); `E_SESSION_INPUT_FAILED` for anything else. A stop or a
+(nothing was sent); `E_BACKEND_WIRE` for a home whose provider speaks
+another wire than this kernel (nothing was sent, the provider was not
+called); `E_SESSION_INPUT_FAILED` for anything else. A stop or a
 restart that lands while an input is being sent wins, whatever the provider
 answered to it: `E_SESSION_NOT_RUNNING`, the input not delivered. A delivery
 is accepted only on `ok: true` with `submitted: true`.
@@ -7556,7 +7560,10 @@ launched before is left stopped. The row of a never-launched home reads
 
 **Stop and retire.** The stop's row is `{ok: true, stopped, alreadyIdle,
 state: "stopped"}`; `E_SESSION_STOP_FAILED` when the provider does not confirm
-(the home stays recorded as stopped; a second stop asks the provider again). A retire goes on
+(the home stays recorded as stopped; a second stop asks the provider again);
+`E_BACKEND_WIRE` for a home whose provider speaks another wire than this
+kernel (nothing is recorded or stopped; a retire of it goes on by the rule
+below, with its warning). A retire goes on
 only when no process works in the home after the provider's stop, confirmed
 or not: otherwise `E_RUNTIME_QUIESCE_FAILED`, naming the processes. When the
 provider could not confirm the stop, the retire's answer carries a warning.
@@ -7575,6 +7582,41 @@ declares one, as a `providers` item: `subject: "<capability> session backend
 warnings}` relayed as given, or `result: null` with `problems` when the
 provider could not be asked. Required for a home on that backend; not
 required for a soul.
+
+**Sandbox allowances.** What a session provider may widen its harness's
+sandbox by for an instance ([capabilities.md](capabilities.md#sandbox-allowances-sandboxdomains-the-launch-inputs-sandbox)),
+as the kernel computes it from the deployment's configuration. One key,
+`sandbox`, only where the launch is a provider's (never for tmux):
+
+- a spawn preview (`oats spawn … --backend <name> --preview --json`):
+  `sandbox: {domains: [{host, capability, setting, team?}], write: [{path, reason}],
+  missing: [{capability, setting, team, defaultTeam, optional?}], unread?: [{capability,
+  setting, reason}]}`. `domains`: each host with the capability and the
+  setting that asked for it, and `team` (a team id) on a host taken from a
+  map: a team the instance may join, not one it is known to have joined. `write`: each path with its reason (the
+  kernel's own). `missing`: what a capability's line names and the
+  deployment does not hold (`team`: a team id, or null for a setting with no
+  value; `defaultTeam`: true for the soul's default team's row and for a row
+  with no team; `optional: true` only on a row of an optional line). `unread`, only
+  when there is one: a `settingFile` line's file that gave no host, or
+  values in it that were skipped.
+- a start's and a restart's answer: the same object, with `skipped?:
+  [{capability, reason}]` (a slot's provider of the deployment that is not
+  one of the home's modules: it added no host), or `sandbox: {unavailable:
+  "<why>"}` when the deployment's configuration could not be resolved for
+  the home's soul (a repository this host's cache does not hold, a soul the
+  workspace no longer offers, or two souls that share the home's agent
+  directory). That resolution reaches no remote: it reads the
+  workspace as this host last read it and `oats-local.yaml` as it is now, so
+  a repository this host's cache does not hold is such a cause, by name. Each `skipped` row is also a `warnings` line.
+- `oats readiness --home <abs> --json` of a provider home: the same, as a
+  start would compute it now, or `sandbox: {refused: {code:
+  "E_BACKEND_SANDBOX_HOST", message, details}}` when a start would be
+  refused for it.
+
+`oats capabilities show <name> --json` carries `sandboxDomains` (the
+manifest's key, exactly as declared) and, only when there is one,
+`sandboxDomainProblems: [<message>]`.
 
 **The sweep.** A row of `oats session resume` for a provider home carries
 `backend`. Its outcomes: `resumed` (a lost session: the notice was sent),

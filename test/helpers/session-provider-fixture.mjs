@@ -19,6 +19,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { v2Deployment } from "./v2-deployment.mjs";
+import { SESSION_PROVIDER_WIRE } from "../../lib/session-providers.mjs";
 
 export const FAKE_CAPABILITY = "acme.fake";
 export const FAKE_SERVER = "http://127.0.0.1:9";
@@ -48,7 +49,7 @@ const dir = join(process.env.HOME, "fake-session");
 mkdirSync(dir, { recursive: true });
 const req = JSON.parse(readFileSync(0, "utf8"));
 const instance = process.env.OATS_INSTANCE;
-appendFileSync(join(dir, "calls.log"), JSON.stringify({ verb: req.verb, argv: process.argv.slice(2), cwd: process.cwd(), instance, backend: process.env.OATS_BACKEND, event: process.env.OATS_EVENT, capability: process.env.OATS_CAPABILITY, settings: process.env.OATS_SETTINGS, request: req }) + "\\n");
+appendFileSync(join(dir, "calls.log"), JSON.stringify({ verb: req.verb, argv: process.argv.slice(2), cwd: process.cwd(), instance, backend: process.env.OATS_BACKEND, event: process.env.OATS_EVENT, capability: process.env.OATS_CAPABILITY, settings: process.env.OATS_SETTINGS, soul: process.env.OATS_SOUL ?? null, soulId: process.env.OATS_SOUL_ID ?? null, level: process.env.OATS_LEVEL ?? null, request: req }) + "\\n");
 const control = existsSync(join(dir, "control.json")) ? JSON.parse(readFileSync(join(dir, "control.json"), "utf8")) : {};
 // A stop's behaviour can be set by what it is asked to stop: "stop:E" (an endpoint), "stop:null" (whatever is rooted at the home).
 const stopKind = req.verb === "stop" ? (req.input.endpoint === null ? "stop:null" : "stop:E") : null;
@@ -118,7 +119,8 @@ process.stdout.write(JSON.stringify({ env: { ACME_FAKE_TOKEN_FILE: "/nowhere/tok
 export const LOST = Object.freeze({ present: false, state: "stopped", running: false });
 /** The provider declaration: `fake`, for claude (and whatever `harnesses` says), with inspectMany and,
  *  when asked, the optional readiness command `check`. */
-export const fakeProvider = ({ harnesses = ["claude"], inspectMany = true, check = false, description = "A fake session backend for tests" } = {}) => ({
+export const fakeProvider = ({ harnesses = ["claude"], inspectMany = true, check = false, description = "A fake session backend for tests", wire = SESSION_PROVIDER_WIRE } = {}) => ({
+  ...(wire === null ? {} : { wire }),
   description, harnesses,
   commands: { launch: "session-launch", inspect: "session-inspect", input: "session-input", stop: "session-stop", ...(inspectMany ? { inspectMany: "session-inspect-many" } : {}), ...(check ? { check: "session-check" } : {}) },
 });

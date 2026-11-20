@@ -11,13 +11,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, parse } from "node:path";
 import { fileURLToPath } from "node:url";
 import { attachInstanceSession, inputInstanceSession, inspectInstanceSession, listInstances, restartInstanceSession, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
 import { setWaiting } from "../lib/instance-events.mjs";
 import { PROVIDER_RESUME_NOTICE, RESUME_LIMIT, RESUME_QUIET_WAIT_MS, resumeQuietWait } from "../lib/provider-resume.mjs";
-import { sessionProviderTimeout } from "../lib/session-providers.mjs";
+import { SESSION_PROVIDER_WIRE, sessionProviderTimeout } from "../lib/session-providers.mjs";
 import { parseRemoteEnvelope, rosterGroups, writeServers } from "../lib/servers.mjs";
 import { FAKE_CAPABILITY, FAKE_SERVER, LOST, fakeFiles, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
 
@@ -64,7 +64,7 @@ test("T1: a spawn with --backend fake launches through the provider and records 
   const [launch] = fx.verbs("launch");
   assert.equal(launch.cwd === home || launch.cwd.startsWith(`${home}/`), false, "a call never works in the home: the home is in the request");
   assert.deepEqual([parse(launch.cwd).root, launch.instance, launch.backend, launch.event, launch.capability, launch.argv], [launch.cwd, "one", "fake", "session", FAKE_CAPABILITY, ["launch"]]);
-  assert.deepEqual({ ...launch.request, input: null }, { schemaVersion: 1, phase: "session", capability: FAKE_CAPABILITY, provider: "fake", verb: "launch", input: null });
+  assert.deepEqual({ ...launch.request, input: null }, { schemaVersion: 1, wire: SESSION_PROVIDER_WIRE, phase: "session", capability: FAKE_CAPABILITY, provider: "fake", verb: "launch", input: null });
   // The launch as data: every variable with its source, the arguments, the harness, the model, yolo, the prompt.
   assert.deepEqual(launch.request.input, {
     home, instance: "one", harness: "claude", model: null, yolo: null,
@@ -74,6 +74,8 @@ test("T1: a spawn with --backend fake launches through the provider and records 
       { name: "ACME_FAKE_TOKEN_FILE", value: "/nowhere/token", source: "capability", capability: FAKE_CAPABILITY },
     ],
     unset: [], pathPrepend: [join(home, ".oats", "bin")], args: [], promptFile: join(home, "TASK.md"), previous: null,
+    // The allowances (test/session-providers-sandbox.test.mjs): no capability here asks for a host.
+    sandbox: { domains: [], write: [{ path: join(realpathSync(fx.dep), ".agents", "events"), reason: "oats events" }], missing: [] },
   });
 
   // The records: instance.json and the independent receipt carry the endpoint; no tmux in either.
@@ -734,7 +736,8 @@ test("restart stops, then launches, under the kernel's stop rule; a start never 
   // A session that is there and that OATS did not stop: running, or not tellable.
   await assert.rejects(fx.inEnv(() => startInstanceSession(home, {})), (e) => e.code === "E_SESSION_RUNNING");
   fx.control({ inspect: { result: { present: true, state: "unknown", running: null } } });
-  await assert.rejects(fx.inEnv(() => startInstanceSession(home, {})), (e) => e.code === "E_SESSION_UNKNOWN");
+  // The way out it names is the stop as it is run: its plan, then its apply.
+  await assert.rejects(fx.inEnv(() => startInstanceSession(home, {})), (e) => e.code === "E_SESSION_UNKNOWN" && e.message.includes("Stop it first, in the stop's two steps (oats instance stop cycled --plan, then --apply --plan-revision <rev> --idempotency-key <key>, which the plan prints), or use oats session restart --home"));
   fx.control({ inspect: { result: { present: true, state: "shell", running: false } } });
   await assert.rejects(fx.inEnv(() => startInstanceSession(home, {})), (e) => e.code === "E_SESSION_UNKNOWN");
   fx.control({ inspect: { exit: 1 } });
@@ -1054,6 +1057,67 @@ test("a provider home whose receipt cannot be used is never retired as a home fr
   assert.deepEqual(fx.verbs(), []);
 });
 
+test("one wire version: a provider that declares another, or none, is refused by name before anything is created, read as unavailable, and never called", async (t) => {
+  assert.equal(SESSION_PROVIDER_WIRE, "1.3");
+  for (const [wire, theirs] of [[null, "1\\.2 \\(it declares none\\)"], ["1.2", "1\\.2"], ["2.0", "2\\.0"]]) {
+    const fx = providerDeployment(t, { manifest: fakeManifest({ fake: fakeProvider({ wire, check: true }) }) });
+    for (const preview of [["--preview"], []]) {
+      const refused = fx.cli(["spawn", "dev", "--name", "nope", "--backend", "fake", "--launch-config", "claude", ...preview, "--json"]).json();
+      assert.deepEqual([refused.ok, refused.error.code, refused.error.details], [false, "E_BACKEND_WIRE", { backend: "fake", capability: FAKE_CAPABILITY, wire: { provider: wire, kernel: "1.3" } }], JSON.stringify(wire));
+      assert.match(refused.error.message, new RegExp(`acme\\.fake's session provider fake speaks wire ${theirs}, and this kernel speaks 1\\.3: they must be the same.*nothing was created`));
+    }
+    assert.equal(existsSync(join(fx.root, "dev", "instances", "nope")), false);
+    assert.deepEqual(fx.calls(), [], "no hook ran and the provider was never called");
+    // It is still listed, with its version: a sound declaration this kernel does not call.
+    assert.deepEqual(fx.cli(["capabilities", "show", FAKE_CAPABILITY, "--json"]).json().result.sessionProviderProblems ?? [], []);
+  }
+
+  // A home whose provider no longer speaks this kernel's wire (its module copy says another): a
+  // start is refused by name before anything is read or stopped, and its session reads unavailable.
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("old");
+  const manifestPath = join(home, ".oats", "modules", FAKE_CAPABILITY, "oats.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  delete manifest.sessionProviders.fake.wire;
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  fx.clearCalls();
+  for (const verb of [["start"], ["restart"], ["start", "--resume"]]) {
+    const refused = fx.cli(["session", ...verb, "--home", home, "--json"]).json();
+    assert.deepEqual([refused.ok, refused.error.code, refused.error.details.wire], [false, "E_BACKEND_WIRE", { provider: null, kernel: "1.3" }], verb.join(" "));
+    assert.match(refused.error.message, /old was not started: .*speaks wire 1\.2 \(it declares none\), and this kernel speaks 1\.3.*nothing was stopped or started/);
+  }
+  const inspected = fx.cli(["session", "inspect", "--home", home, "--json"]).json();
+  assert.deepEqual([inspected.ok, inspected.error.code], [false, "E_SESSION_UNAVAILABLE"]);
+  assert.match(inspected.error.message, /speaks wire 1\.2 \(it declares none\), and this kernel speaks 1\.3/);
+  assert.deepEqual([rowOf(fx, "old").running, rowOf(fx, "old").runtimeState], [null, "unreachable"], "never stopped");
+  // A stop (an operator's and the host's) and an input are refused the same way BEFORE anything is
+  // recorded: the home is not recorded as stopped by a provider that was never asked.
+  for (const [what, act] of [
+    ["stopped", () => fx.inEnv(() => stopInstanceSession(home, {}))],
+    ["stopped", () => fx.inEnv(() => stopInstanceSession(home, { withHost: true, graceMs: 20000 }))],
+    ["sent the input", () => fx.inEnv(() => inputInstanceSession(home, "a mail"))],
+  ]) {
+    await assert.rejects(act(), (e) => e.code === "E_BACKEND_WIRE" && e.details.wire.kernel === "1.3" && new RegExp(`old was not ${what}: .*speaks wire 1\\.2 \\(it declares none\\).*nothing was (stopped|sent)`).test(e.message), what);
+  }
+  assert.deepEqual([existsSync(join(home, ".oats-stop.json")), rowOf(fx, "old").running, rowOf(fx, "old").runtimeState], [false, null, "unreachable"], "still not recorded as stopped");
+  // The host's stop of a home that is stopped already and has an unsettled launch would ask the
+  // provider (to settle it): refused by the wire's code too, and nothing is settled.
+  const receiptPath = join(dirname(home), ".oats-retirement", "baselines", `${createHash("sha256").update(home).digest("hex")}.json`);
+  const receipt = readFileSync(receiptPath, "utf8");
+  const unsettled = JSON.parse(receipt);
+  writeFileSync(receiptPath, JSON.stringify({ ...unsettled, runtime: { ...unsettled.runtime, stoppedAt: "2026-11-20T10:00:00.000Z", launchSent: "2026-11-20T10:00:01.000Z" } }, null, 2) + "\n");
+  await assert.rejects(fx.inEnv(() => stopInstanceSession(home, { withHost: true, graceMs: 20000 })), (e) => e.code === "E_BACKEND_WIRE" && /nothing was stopped/.test(e.message));
+  assert.equal(JSON.parse(readFileSync(receiptPath, "utf8")).runtime.launchSent, "2026-11-20T10:00:01.000Z", "the launch stays marked");
+  writeFileSync(receiptPath, receipt);
+  assert.deepEqual(fx.verbs(), [], "the provider was never called");
+  // A retire keeps its own rule: it cannot ask that provider, no process works in the home, so it
+  // goes on, and says that the session was not stopped through its backend.
+  const retired = JSON.parse(fx.cli(["retire", "old", "--json"]).stdout);
+  assert.deepEqual([retired.retired, existsSync(home)], ["old", false], JSON.stringify(retired).slice(0, 400));
+  assert.match(JSON.stringify(retired.warnings), /was not stopped through its session backend/);
+  assert.deepEqual(fx.verbs(), [], "nor by the retire");
+});
+
 // ----------------------------------------------------------------------- T12: nothing relayed
 
 test("T12: relayed rows and routed answers for a provider home carry no session.threadId and no session.endpoint", async (t) => {
@@ -1106,12 +1170,22 @@ test("T12: relayed rows and routed answers for a provider home carry no session.
 
 // ------------------------------------------------------------------- readiness, before a launch
 
-test("a provider's check is asked right before every launch: a provider that is not ready is E_BACKEND_NOT_READY, and nothing is launched or stopped", async (t) => {
+test("a provider's check is asked before every launch, and before any hook: a provider that is not ready is E_BACKEND_NOT_READY, no hook runs, and nothing is launched or stopped", async (t) => {
   const fx = providerDeployment(t, { manifest: fakeManifest({ fake: fakeProvider({ check: true }) }) });
-  // Ready: the check, then the launch.
+  // A capability's hooks contribute launch arguments: they reach the launch, not the check.
+  fx.hookLaunch({ claude: "--from-a-hook" });
+  // Ready: the check, then the spawn's hooks, then the launch.
   const { home } = await fx.launch("checked");
-  assert.deepEqual(fx.calls().map((c) => c.hook ?? c.verb), ["spawn", "check", "launch"]);
-  assert.deepEqual(fx.verbs("check")[0].request.input, { home, soul: null, settings: {} });
+  assert.deepEqual(fx.calls().map((c) => c.hook ?? c.verb), ["check", "spawn", "launch"]);
+  // With the launch that is planned (test/session-providers-sandbox.test.mjs): the harness, yolo
+  // and the allowances as the launch input will carry them, and the launch configuration's own
+  // arguments (none here), without what a hook adds.
+  assert.deepEqual(fx.verbs("check")[0].request.input, { home, soul: null, settings: {}, launch: { harness: "claude", yolo: null, args: [], sandbox: fx.verbs("launch")[0].request.input.sandbox } });
+  assert.deepEqual(fx.verbs("launch")[0].request.input.args, ["--from-a-hook"]);
+  // And with the environment every later call of the home has: its soul, though its record is not written yet.
+  const envOf = (call) => [call.soul, call.soulId, call.level];
+  assert.deepEqual(envOf(fx.verbs("check")[0]), envOf(fx.verbs("launch")[0]));
+  assert.ok(fx.verbs("check")[0].soul && fx.verbs("check")[0].soulId, JSON.stringify(envOf(fx.verbs("check")[0])));
 
   // Not ready at a spawn: refused with the provider's words, rolled back, no launch.
   fx.clearCalls();
@@ -1119,7 +1193,7 @@ test("a provider's check is asked right before every launch: a provider that is 
   const refused = fx.cli(["spawn", "dev", "--name", "unready", "--backend", "fake", "--launch-config", "claude", "--json"]).json();
   assert.deepEqual([refused.ok, refused.error.code, refused.error.details], [false, "E_BACKEND_NOT_READY", { backend: "fake", capability: FAKE_CAPABILITY }]);
   assert.match(refused.error.message, /acme\.fake's session provider fake is not ready \(unavailable\): claude-code-unauthenticated: bb's claude-code provider is unauthenticated/);
-  assert.deepEqual(fx.verbs().map((c) => c.verb), ["check"], "no launch was sent");
+  assert.deepEqual(fx.calls().map((c) => c.hook ?? c.verb), ["check"], "no hook ran, and no launch was sent");
   assert.equal(existsSync(join(fx.root, "dev", "instances", "unready")), false);
   // The provider's own E_BACKEND_* problem code is the refusal's.
   fx.control({ check: { result: { status: "needs-configuration", problems: [{ code: "E_BACKEND_VERSION", message: "bb 0.49.0 is not the pinned 0.50.1" }] } } });
@@ -1133,7 +1207,7 @@ test("a provider's check is asked right before every launch: a provider that is 
   fx.control({ check: { result: { status: "unavailable", problems: [{ code: "server-down", message: "the bb server does not answer" }] } } });
   fx.clearCalls();
   await assert.rejects(fx.inEnv(() => restartInstanceSession(home, {})), (e) => e.code === "E_BACKEND_NOT_READY" && /nothing was stopped or started/.test(e.message));
-  assert.deepEqual(fx.verbs().map((c) => c.verb), ["inspect", "check"], "the session still runs: no stop, no launch");
+  assert.deepEqual(fx.calls().map((c) => c.hook ?? c.verb), ["inspect", "check"], "the session still runs: no launch hook, no stop, no launch");
   assert.equal(runtimeOf(home).stoppedAt, null);
 
   // `oats readiness` relays the same answer as a providers item: for the home, required.
@@ -1227,4 +1301,30 @@ test("E_BACKEND_AMBIGUOUS at a start: a home whose modules now hold two capabili
     await assert.rejects(fx.inEnv(start), (e) => e.code === "E_BACKEND_AMBIGUOUS" && JSON.stringify(e.details) === JSON.stringify({ backend: "fake", capabilities: [FAKE_CAPABILITY, "acme.twin"] }) && /nothing was stopped or started/.test(e.message));
   }
   assert.deepEqual(fx.verbs(), [], "nothing was launched");
+});
+
+test("a start's check is asked with no hook run and whatever its plan says: a selection whose recorded contributions do not pass preflight still asks, before anything is stopped", async (t) => {
+  // The capability's hook owns ACME_FAKE_TOKEN_FILE at the spawn and no longer at a launch, and it
+  // previews (as oats.aweb's does): a plan made from the RECORDED contributions refuses a launch
+  // configuration that sets that name; the real plan, which runs the hook, does not.
+  const files = fakeFiles();
+  const hook = files["bin/hook.mjs"].replace('process.stdout.write(JSON.stringify({ env: { ACME_FAKE_TOKEN_FILE: "/nowhere/token" },', 'process.stdout.write(JSON.stringify({ env: process.env.OATS_EVENT === "spawn" ? { ACME_FAKE_TOKEN_FILE: "/nowhere/token" } : {},');
+  assert.notEqual(hook, files["bin/hook.mjs"]);
+  files["bin/hook.mjs"] = hook;
+  const fx = providerDeployment(t, {
+    capabilities: { [FAKE_CAPABILITY]: { manifest: { ...fakeManifest({ fake: fakeProvider({ check: true }) }), launchPreview: true }, files } },
+    local: { "launch-configs": { claude: { harness: "claude" }, over: { harness: "claude", env: { ACME_FAKE_TOKEN_FILE: "/mine" } } } },
+  });
+  const { home } = await fx.launch("picky");
+  const sequence = () => fx.calls().map((c) => c.hook ? `${c.hook} hook${c.preview ? " (preview)" : ""}` : c.verb);
+  // Refused: the check was asked, no hook ran (not as a preview either), and the session still runs.
+  fx.control({ check: { result: { status: "unavailable", problems: [{ code: "server-down", message: "the bb server does not answer" }] } } });
+  fx.clearCalls();
+  await assert.rejects(fx.inEnv(() => restartInstanceSession(home, { launchConfig: "over" })), (e) => e.code === "E_BACKEND_NOT_READY" && /nothing was stopped or started/.test(e.message));
+  assert.deepEqual([sequence(), runtimeOf(home).stoppedAt], [["inspect", "check"], null]);
+  // Ready: the check first, then the hooks (as a preview, then for real), then the stop and the launch.
+  fx.control({});
+  fx.clearCalls();
+  await fx.inEnv(() => restartInstanceSession(home, { launchConfig: "over" }));
+  assert.deepEqual(sequence(), ["inspect", "check", "launch hook (preview)", "launch hook", "stop", "launch"]);
 });

@@ -39,7 +39,7 @@ test("sessionProviders: a sound provider is normalized; each rule's breach is on
   const ok = sessionProvidersOf(manifest({ fake: sound }));
   assert.deepEqual(ok.problems, []);
   assert.deepEqual(ok.providers.fake, {
-    name: "fake", description: "A fake session backend for tests", harnesses: ["claude"],
+    name: "fake", description: "A fake session backend for tests", harnesses: ["claude"], wire: "1.3",
     commands: {
       launch: { command: "session-launch", script: "bin/session.mjs", args: ["launch"] }, inspect: { command: "session-inspect", script: "bin/session.mjs", args: ["inspect"] },
       input: { command: "session-input", script: "bin/session.mjs", args: ["input"] }, stop: { command: "session-stop", script: "bin/session.mjs", args: ["stop"] },
@@ -51,6 +51,13 @@ test("sessionProviders: a sound provider is normalized; each rule's breach is on
   assert.deepEqual([withCheck.problems, withCheck.providers.fake.commands.check], [[], { command: "session-check", script: "bin/session.mjs", args: ["check"] }], "so is check, the provider's readiness");
   assert.equal(validate(JSON.parse(JSON.stringify(manifest({ fake: fakeProvider({ check: true }) }, { ...COMMANDS, "session-check": "bin/session.mjs check" })))), true);
   assert.equal(sessionProvidersOf(manifest({ fake: { harnesses: ["claude"], commands: sound.commands } })).providers.fake.description, null, "so is the description");
+  // `wire`: any version is a sound declaration (one that is not this kernel's is refused where the provider is used); none is null.
+  assert.deepEqual([sessionProvidersOf(manifest({ fake: { ...sound, wire: "2.0" } })).providers.fake.wire, sessionProvidersOf(manifest({ fake: { harnesses: ["claude"], commands: sound.commands } })).providers.fake.wire], ["2.0", null]);
+  for (const wire of ["1", "v1.3", 1.3, "1.3.0", ""]) {
+    const bad = { ...manifest({ fake: { ...sound, wire } }) };
+    assert.deepEqual(sessionProvidersOf(bad).problems.map((p) => p.pointer), ["/sessionProviders/fake/wire"], JSON.stringify(wire));
+    assert.equal(validate(JSON.parse(JSON.stringify(bad))), false, `the schema refuses wire ${JSON.stringify(wire)} too`);
+  }
   for (const nothing of [undefined, null, 7, "x", [], {}, { capability: "acme.x" }]) assert.deepEqual(sessionProvidersOf(nothing), { providers: {}, problems: [] });
 
   assert.equal(validate(manifest({ fake: sound })), true, JSON.stringify(validate.errors));

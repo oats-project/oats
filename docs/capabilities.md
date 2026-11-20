@@ -1988,6 +1988,7 @@ claims, the refusals and the JSON answers. What an operator sees is in
 "sessionProviders": {
   "bb": {
     "description": "Runs the agent as a bb thread",
+    "wire": "1.3",
     "harnesses": ["claude"],
     "commands": { "launch": "session-launch", "inspect": "session-inspect", "input": "session-input",
                   "stop": "session-stop", "inspectMany": "session-inspect-many" }
@@ -2005,6 +2006,17 @@ claims, the refusals and the JSON answers. What an operator sees is in
 - **`harnesses`** lists the harnesses the provider runs (1 to 16 names). A
   spawn or a start on another one is refused `E_BACKEND_HARNESS`.
 - **`description`** is optional: one line of at most 200 characters.
+- **`wire`** is the version of this wire the provider speaks: `"1.3"`. The
+  kernel calls only a provider that declares its own version. One that
+  declares another, or none (a provider written before the key: wire 1.2),
+  is refused `E_BACKEND_WIRE`, naming both versions, before anything is
+  created, recorded, stopped or started: a spawn, a start, a stop (an
+  operator's and the host's) and an input alike. Its homes' sessions read
+  unavailable, and are never recorded as stopped by a provider that was not
+  asked. A retire of such a home cannot ask it either: it goes on when no
+  process works in the home, with a warning that names the provider's own
+  tooling. Every request carries the kernel's version (`"wire"`), so refuse
+  a request that carries none or another, with the same code.
 - No other key.
 
 **Containment.** A malformed `sessionProviders` never refuses the capability:
@@ -2038,7 +2050,7 @@ retires the home, and a provider's call must never be one of them.
   `OATS_META`, `OATS_CLI_BIN` and the rest, with `OATS_EVENT=session` and
   `OATS_BACKEND=<name>`.
 - **stdin:** one JSON request,
-  `{ "schemaVersion": 1, "phase": "session", "capability": "<id>", "provider": "<name>", "verb": "<verb>", "input": { … } }`.
+  `{ "schemaVersion": 1, "wire": "1.3", "phase": "session", "capability": "<id>", "provider": "<name>", "verb": "<verb>", "input": { … } }`.
 - **stdout:** exactly one JSON document of at most 1 MiB, the same five header
   keys echoed, then `"ok": true, "result": { … }` or
   `"ok": false, "error": { "code": "E_…", "message": "…" }`. No other key.
@@ -2088,7 +2100,8 @@ In:
   "pathPrepend": ["/abs/home/.oats/bin"],
   "args": ["--flag", "value"],
   "promptFile": "/abs/home/TASK.md",
-  "previous": null }
+  "previous": null,
+  "sandbox": { "domains": [], "write": [ { "path": "/abs/deployment/.agents/events", "reason": "oats events" } ], "missing": [] } }
 ```
 
 - `env` is every variable the launch sets, in the order a tmux launch sets
@@ -2115,6 +2128,8 @@ In:
   just before, always (a restart's stop, once more for a home OATS had
   stopped, and for a session you answered as gone too: an input that reached
   it since may have had you restart it).
+- `sandbox` is what you may widen your harness's sandbox by, and nothing
+  else: [Sandbox allowances](#sandbox-allowances-sandboxdomains-the-launch-inputs-sandbox).
 
 **A provider that cannot carry an env entry, an argument or `unset`
 refuses, naming it** (`E_BACKEND_LAUNCH_ENV`, `E_BACKEND_LAUNCH_ARG`). It
@@ -2203,7 +2218,12 @@ started by a killed spawn is ever stopped.
 ### check (optional)
 
 The provider's readiness. In: `{ "home": "/abs/home" | null, "soul": "<name>" | null, "settings": { … } }`:
-a home, or, before any home exists, a soul. Out:
+a home, or, before any home exists, a soul; and, before a launch,
+`"launch": { "harness", "yolo", "args", "sandbox" }`, the launch that is
+planned: the harness, yolo and the allowances as its launch input will
+carry them, and in `args` the launch configuration's own arguments. **The
+arguments a capability's hooks contribute are not in it**: the check runs
+before any hook, and those reach the launch input only. Out:
 `{ "status": "ready" | "needs-configuration" | "authorization-required" | "unavailable", "problems": [ { "code", "message" } ], "warnings": [ { "code", "message" } ] }`
 (`warnings` optional; no problem on `ready`). Say where a credential comes
 from, never print it.
@@ -2212,11 +2232,140 @@ from, never print it.
   binding check's answer has: for a home, its own backend's, required; for a
   soul, each provider its capabilities offer, not required (the soul can
   launch on tmux).
-- **The kernel asks it right before every launch** (a spawn's, a start's, a
-  restart's before its stop). A status other than `ready` refuses the launch:
-  with the first problem's code when that is an `E_BACKEND_*` code, else
-  `E_BACKEND_NOT_READY`, the message carrying your problems. A check that
-  fails or answers outside these words is not ready.
+- **The kernel asks it before every launch, and before any hook runs** (a
+  spawn's before its spawn hooks, a start's and a restart's before their
+  launch hooks and before a restart's stop). A status other than `ready`
+  refuses the launch: with the first problem's code when that is an
+  `E_BACKEND_*` code, else `E_BACKEND_NOT_READY`, the message carrying your
+  problems. A refused spawn runs no hook and leaves no home; a refused
+  start or restart runs no hook and stops nothing. A check that fails or
+  answers outside these words is not ready.
+
+### Sandbox allowances (`sandboxDomains`, the launch input's `sandbox`)
+
+A provider may run its harness in a sandbox. What an instance needs from
+outside that sandbox is decided by the kernel, from the deployment's
+configuration, and handed to the provider with every launch:
+
+```json
+"sandbox": { "domains": [ { "host": "app.example.org", "capability": "oats.aweb", "setting": "services" } ],
+             "write":   [ { "path": "/abs/deployment/.agents/events", "reason": "oats events" } ],
+             "missing": [ { "capability": "oats.aweb", "setting": "services", "team": "ops:acme.example", "defaultTeam": false } ] }
+```
+
+- **`domains`** are exact hosts (`host` or `host:port`, lower case; never a
+  wildcard, a scheme or a path), each with the capability and the setting
+  that asked for it. **Only the capability that fills the instance's
+  messaging, knowledge or tasks slot can ask**, and only through its
+  manifest:
+
+  ```json
+  "layer": "messaging",
+  "sandboxDomains": [ { "setting": "services" }, { "setting": "registryHost", "optional": true } ]
+  ```
+
+  Each line names one of the capability's own settings. Its value is a URL
+  (its host is taken), a bare host, or a map from team id to one of those,
+  of which only the entries of the instance's own teams are read (the teams
+  a spawn preview shows for the soul). A value that is set and gives no plain
+  host refuses the launch, `E_BACKEND_SANDBOX_HOST`, naming the capability
+  and the setting. So does the line on a capability that fills none of the
+  three slots: it is never dropped. `"optional": true` says the session
+  works without that host.
+
+  A line may instead name a file: `{ "settingFile": "<setting>", "urls":
+  "<JSON pointer>" }`. The setting's value is the path of a JSON file of the
+  deployment, and each string at the pointer (one segment may be `*`: every
+  key, every element) that is a URL or a git remote (`git@host:path`) gives
+  its host. The file is the deployment's own: inside the deployment, never
+  inside an instance home or a path the allowances make writable, reached
+  through no symbolic link anywhere along its path (otherwise
+  `E_BACKEND_SANDBOX_HOST`); a regular file with one name (a file that has a
+  second hard link when it is read is not read; keep the file where a
+  session cannot link or write it) of at most 64 KiB, strict JSON, at most
+  16 hosts. An absolute path may spell the deployment's own directory
+  through a link; from the first place it enters the deployment, no link is
+  allowed. A file that is missing or is none of that gives no host,
+  is named in the answer and in readiness (`unread`), and the launch goes on.
+  **A host of a general forge opens that whole forge to the agent**, not
+  only the repository named: say so where you document your line.
+- **`write`** are exact absolute paths, the kernel's own, never a
+  capability's: the deployment's events directory, where `oats instance
+  attention` appends. The kernel creates each before your launch: an
+  allowance on a path that does not exist does not let a sandboxed agent
+  create it. Each is a real directory at exactly that path: one reached
+  through a symbolic link refuses the launch (`E_BACKEND_SANDBOX_HOST`).
+- **`missing`** is always there, `[]` when nothing is missing: what a line
+  names and the deployment's configuration does not hold. `team` is the id
+  of a team of the instance with no entry in a map, or `null` for a setting
+  with no value at all. `defaultTeam` is `true` on the row of the soul's
+  default team and on a row with `team: null`, `false` on another team's.
+  A row of an optional line carries `"optional": true`. The kernel adds no
+  host for these and refuses nothing.
+
+**Nothing else adds a host or a path:** not hook output, not an environment
+variable, not a launch argument, not a task. A setting given to one spawn
+(`oats spawn … --provider <capability> <setting>=…`) is such an argument: a
+spawn that gives a setting a `sandboxDomains` line names is refused
+(`E_BACKEND_SANDBOX_HOST`), so that no host comes from it and the next start
+does not quietly resolve another. The values come from the
+deployment's configuration as a spawn preview resolves it (the workspace,
+the deployment's own settings, the soul's payload), **never from a file in
+the instance home**, which a sandboxed agent can write.
+
+**What the provider does with it** is its own rule, because only it knows
+whether it sandboxes this launch: widen the sandbox by exactly `domains` and
+`write`; **refuse a launch you would sandbox** when `missing` holds a row
+that is not optional and whose `defaultTeam` is `true` (the other rows are
+for your readiness: say what the agent cannot reach), or when `sandbox` is
+`{ "unavailable": "<why>" }`
+(below), with an `E_BACKEND_*` code; write nothing for a launch you do not
+sandbox. Answer those refusals in `check` too, which is handed the planned
+launch (`"launch": { "harness", "yolo", "args", "sandbox" }`, absent on a
+readiness read): the kernel asks it before any hook runs and before a
+restart stops anything.
+
+**A start or a restart of an existing home** resolves the deployment's
+configuration again, for the home's soul, **without reaching any remote**:
+the workspace and each repository are read **as this host last read them**
+(the commits any `oats` command that reads the workspace last saw here, from
+this host's cache), and the deployment's own `oats-local.yaml` and lock as
+they are now. So a launch never waits on the network or fails with it; a
+setting a person or a setup command writes to `oats-local.yaml` reaches the
+home at its next launch; and a change committed to the workspace reaches it
+once a command on this host has read the workspace (`oats status`, a spawn
+preview). A soul disabled for spawning on
+this machine (`souls.disabled`) still has its homes' allowances. **Which
+deployment and which soul that is comes from where the home is, never from
+what is in it**: the deployment is the
+directory four levels above the home (`<deployment>/agents/<agent>/instances/<instance>`,
+as its real path) and must hold its own `oats-local.yaml`; the soul is the
+one the workspace offers whose agent directory is `<agent>`. The home's
+`instance.json` decides neither. Hosts are taken only for capabilities that
+are also the home's modules, as the home records them: that record can only
+leave a host of the deployment's list out, never add one. A slot's provider
+of the deployment that is not one of them adds none and is named (`skipped`,
+and a warning of the start). When
+the deployment's configuration cannot be resolved (a member repository that
+this host's cache does not hold, a soul the workspace no longer offers, two
+souls of the workspace that share the home's agent directory (the same bare
+name: rename one, or take one out of the workspace), a home whose real
+path is not under a deployment because its agents root is reached through a
+link), the launch input
+carries `"sandbox": { "unavailable": "<the cause>" }` in place of the three
+lists, and the kernel refuses nothing: a provider that would sandbox the
+session does.
+
+`oats spawn --preview`, a start's and a restart's answer and `oats readiness
+--home` list each host with who asked for it and each path with its reason.
+A host taken from a map is listed with its team: a team the instance **may
+join** (one the deployment allows its soul), which is not to say it has
+joined it. The launch input carries no team.
+A tmux launch has no `sandbox`, and reads no `sandboxDomains`.
+
+**A kernel from before session providers ignores `sandboxDomains`**: it
+neither refuses the manifest nor acts on the line. The line costs an older
+deployment nothing and gives it nothing.
 
 ### Requirements by backend (`requires[].backends`)
 
