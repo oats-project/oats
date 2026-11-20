@@ -64,7 +64,10 @@
  *   a Herdr-recorded row            not enabled, with Start's own reason (unsupported-session), as below
  *   a row on a session provider     not enabled (no-terminal), whatever its state: it has no terminal.
  *                                   The sentence names where the agent runs ("Runs in a bb thread; open it
- *                                   in bb."), this home's own, built from the provider's name. `link` is
+ *                                   in bb."), this home's own, built from the provider's name when the
+ *                                   row's `backend` is one (`sessionProviderName`); a row whose `backend`
+ *                                   is any other text says "Runs outside tmux; it has no terminal to
+ *                                   open.", and none of that text. `link` is
  *                                   the row's `open` (`openLink`: `{ label, url }`, an http(s) url), there
  *                                   only for a row of this machine that carries one: another machine's url
  *                                   is its own loopback. A client may show `link` as an external link (the
@@ -78,7 +81,7 @@
  * client's, and is not here.
  */
 import { heldHome } from './instance-tree.mjs';
-import { unsupportedSession, sessionProvider, openLink } from './instance-presentation.mjs';
+import { unsupportedSession, sessionProvider, sessionProviderName, openLink } from './instance-presentation.mjs';
 import { canAddressRemote, rowReason } from './remote-address.mjs';
 
 const act = (verb, reason = null, secondary = false) => ({ verb, enabled: !reason, reason, ...(secondary ? { secondary: true } : {}) });
@@ -117,7 +120,9 @@ export function openAct(instance) {
   const provider = sessionProvider(instance);
   if (provider) {
     const link = instance.server ? null : openLink(instance);
-    return act('open', { code: NO_TERMINAL, sentence: `Runs in a ${provider} thread; open it in ${provider}.`, ...(link ? { link } : {}) });
+    // The sentence is this home's own, shown as written: only a provider's name is set in it, never other text of the row.
+    const sentence = sessionProviderName(provider) ? `Runs in a ${provider} thread; open it in ${provider}.` : 'Runs outside tmux; it has no terminal to open.';
+    return act('open', { code: NO_TERMINAL, sentence, ...(link ? { link } : {}) });
   }
   const restart = acts.find(({ verb }) => verb === 'restart'), start = acts.find(({ verb }) => verb === 'start');
   if (restart?.enabled) return act('open');

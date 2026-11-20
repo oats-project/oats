@@ -274,7 +274,7 @@ test("A5: --backend bb is accepted when the kernel lists bb, refused otherwise",
 test("spawnArgv: tmux as before with no list or one that names it; a listed value must still be a backend's name, never option-shaped, never herdr", () => {
   for (const backends of [undefined, ["tmux"], ["tmux", "bb"]]) assert.ok(spawnArgv("dev", "/ws", "/t", { backend: "tmux", backends }).includes("--backend"), JSON.stringify(backends));
   assert.throws(() => spawnArgv("dev", "/ws", "/t", { backend: "tmux", backends: ["bb"] }), /invalid backend value/, "a kernel that does not list tmux");
-  for (const backend of ["--json", "-bb", "BB", "b b", "bb;rm", "a".repeat(41), "herdr", "bb\n"]) {
+  for (const backend of ["--json", "-bb", "BB", "b b", "bb;rm", "a".repeat(41), "herdr", "session-provider", "bb\n"]) {
     assert.throws(() => spawnArgv("dev", "/ws", "/t", { backend, backends: ["tmux", backend] }), /invalid backend value/, JSON.stringify(backend));
   }
   assert.ok(!spawnArgv("dev", "/ws", "/t", { backends: ["tmux", "bb"] }).includes("--backend"), "no backend chosen: no flag");

@@ -57,23 +57,29 @@ export function unsupportedSession(instance) {
 /** A session provider's name, by the session-provider contract: 1 to 40 lowercase letters, digits and dashes.
  * Here it also starts with a letter or a digit: a name is a `--backend` value, and one that starts with a dash
  * is an option to the CLI's parser. `tmux` is the kernel's own backend and `session-provider` the contract's
- * word for any provider: both are reserved, never a provider's name. Not on the stable surface. */
+ * word for any provider: both are reserved, never a provider's name. This is the rule for a name a client
+ * sends (`--backend`, cli-adapter.mjs), offers (session-backends.mjs) or sets in a sentence of its own
+ * (instance-acts.mjs); which row runs on a provider is `sessionProvider`'s, wider on purpose. Not on the
+ * stable surface. */
 const PROVIDER_NAME = /^[a-z0-9][a-z0-9-]{0,39}$/;
 export const sessionProviderName = (value) => typeof value === "string" && value !== "tmux" && value !== "session-provider" && PROVIDER_NAME.test(value);
 
-/** The session provider a row runs on, by name, or null for a row that runs in tmux. A provider (a
+/** The session provider a row runs on, as the row's `backend` says it, or null for a row that runs in tmux. A provider (a
  * capability's session backend, "bb" say) has no tmux target and no terminal: a client takes such a row's
  * `running`, `runtimeState` and `runtimeError` from the kernel as given, never probes tmux for it
  * (liveness.mjs) and opens, splits or restores no terminal for it (instance-acts.mjs `openAct`).
  *
- * It is the row's `backend` when that is a provider's name. A row with no `backend` (an older kernel's, or an
- * older routed host's) is a tmux row, as one with "tmux" is; a value that is no name the contract allows is
- * no provider's either, and the row reads as it always did. A Herdr-recorded row
+ * It is the row's `backend` whenever that is text and not "tmux": any such row is not tmux's, so none is ever
+ * asked of tmux, also one whose value is no name the contract allows (`sessionProviderName`): what is answered
+ * is then the row's own text, for display only through `displayLine`, and never set in a sentence or sent as
+ * an argument. A row with no `backend` (an older kernel's, or an older routed host's) is a tmux row, as one
+ * with "tmux" is, and reads as it always did; so does one whose `backend` is not text. A Herdr-recorded row
  * (`unsupportedSession`, `backend: "herdr"` included) is never one: its own reason comes first, everywhere.
  * Not on the stable surface: a client reads `openAct`'s answer. */
 export function sessionProvider(instance) {
   if (unsupportedSession(instance)) return null;
-  return sessionProviderName(instance?.backend) ? instance.backend : null;
+  const backend = instance?.backend;
+  return typeof backend === "string" && backend !== "" && backend !== "tmux" ? backend : null;
 }
 
 /** What a provider offers in place of a terminal: the row's `open`, `{ label, url }`, or null. Kept only

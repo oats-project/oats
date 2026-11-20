@@ -181,8 +181,9 @@ test("(P) A4: a tab for instance 'a' whose current row has backend 'bb' is close
   // With no incarnation on either side, and on another machine.
   assert.deepEqual(retiredTabs(tabs(A_TAB), answer({ a: [row(A, "a", { createdAt: null, ...bb })] })), [1]);
   assert.deepEqual(retiredTabs(tabs(REMOTE), answer({ far: [remoteRow("far-a", FAR, { createdAt: T1, backend: "bb", tmux: null })] })), [1]);
-  // A tmux row, named or not, keeps its tab; so does a value that is no provider's name.
-  for (const backend of [undefined, "tmux", "Not A Name"]) assert.deepEqual(retiredTabs(tabs(A_TAB), answer({ a: [row(A, "a", { createdAt: T1, backend })] })), [], String(backend));
+  // A tmux row, named or not, keeps its tab; a row whose backend is any other text is a provider's, name or not.
+  for (const backend of [undefined, "tmux", ""]) assert.deepEqual(retiredTabs(tabs(A_TAB), answer({ a: [row(A, "a", { createdAt: T1, backend })] })), [], String(backend));
+  assert.deepEqual(retiredTabs(tabs(A_TAB), answer({ a: [row(A, "a", { createdAt: T1, backend: "Not A Name", tmux: null })] })), [1]);
   // A row held from a read that is not current proves nothing, as for (R) and (G).
   const stale = answer({ far: [remoteRow("far-a", FAR, { createdAt: T1, backend: "bb", tmux: null })], groupExtra: { probe: { ok: false, error: { message: "unreachable" } } } });
   assert.deepEqual(retiredTabs(tabs(REMOTE), stale), []);

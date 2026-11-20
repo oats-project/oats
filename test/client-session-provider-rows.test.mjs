@@ -47,17 +47,23 @@ test("deployment-data keeps a row's backend, its provider and thread id, and its
   for (const key of ["backend", "session", "open"]) assert.ok(!Object.hasOwn(old, key), key);
 });
 
-test("deployment-data validates the three fields and never refuses the roster for them: a value out of the contract is dropped", () => {
+test("deployment-data validates the three fields and never refuses the roster for them: a backend that is text is kept, whatever it says; anything else out of the contract is dropped", () => {
   const rows = projected([
-    bbRow("b1", { backend: "Not A Name" }), bbRow("b2", { backend: 7 }), bbRow("b3", { backend: null }), bbRow("b4", { backend: "x".repeat(41) }),
+    bbRow("b1", { backend: "Not A Name" }), bbRow("b2", { backend: 7 }), bbRow("b3", { backend: null }), bbRow("b4", { backend: "-bb" }), bbRow("b5", { backend: "" }),
     bbRow("s1", { session: null }), bbRow("s2", { session: "thr_x" }), bbRow("s3", { session: { provider: 7, threadId: 7, endpoint: ENDPOINT } }),
     bbRow("s4", { session: { provider: "oats.bb", endpoint: null } }), bbRow("s5", { session: { threadId: "thr_y", token: "never kept" } }),
     bbRow("o1", { open: null }), bbRow("o2", { open: { label: "Open", url: "file:///etc/passwd" } }), bbRow("o3", { open: "http://127.0.0.1/" }),
     bbRow("o4", { open: { label: "Open", url: "http://user:pw@127.0.0.1/" } }), bbRow("o5", { open: { label: "Open", url: "https://bb.example/t/1", more: true } }),
   ]);
   const by = Object.fromEntries(rows.map((row) => [row.instance, row]));
-  assert.equal(rows.length, 14, "no row is withheld or refused");
-  for (const name of ["b1", "b2", "b3", "b4"]) assert.ok(!Object.hasOwn(by[name], "backend"), name);
+  assert.equal(rows.length, 15, "no row is withheld or refused");
+  for (const name of ["b2", "b3", "b5"]) assert.ok(!Object.hasOwn(by[name], "backend"), name);
+  // Present, text and not "tmux": the row is a provider's (never asked of tmux), also when it is no name the contract allows.
+  assert.deepEqual([by.b1.backend, by.b4.backend], ["Not A Name", "-bb"]);
+  for (const name of ["b1", "b4"]) {
+    assert.equal(sessionProvider(by[name]), by[name].backend, name);
+    assert.deepEqual(openAct({ ...by[name], open: undefined }), { verb: "open", enabled: false, reason: { code: "no-terminal", sentence: "Runs outside tmux; it has no terminal to open." } }, `${name}: its text is in no sentence`);
+  }
   for (const name of ["s1", "s2", "s3"]) assert.ok(!Object.hasOwn(by[name], "session"), name);
   assert.deepEqual(by.s4.session, { provider: "oats.bb" });
   assert.deepEqual(by.s5.session, { threadId: "thr_y" });
@@ -125,6 +131,9 @@ test("the three readers: a provider's name, the link, the thread id", () => {
   for (const name of ["bb", "my-provider-2", "0", "a".repeat(40)]) assert.equal(sessionProviderName(name), true, name);
   for (const name of ["tmux", "session-provider", "", "BB", "b b", "bb!", "a".repeat(41), "bb\n", "-bb", "--json", null, undefined, 7, ["bb"]]) assert.equal(sessionProviderName(name), false, String(name));
   assert.equal(sessionProvider({ backend: "bb" }), "bb");
+  // Any text that is not "tmux" is a provider's row, also one that is no name: it is never asked of tmux.
+  for (const backend of ["-bb", "session-provider", "Not A Name", "x".repeat(41)]) assert.equal(sessionProvider({ backend }), backend);
+  for (const backend of ["", 7, null, undefined, ["bb"]]) assert.equal(sessionProvider({ backend }), null, String(backend));
   assert.equal(sessionProvider({ backend: "tmux" }), null);
   assert.equal(sessionProvider({}), null);
   assert.equal(sessionProvider(null), null);
@@ -140,12 +149,11 @@ test("the three readers: a provider's name, the link, the thread id", () => {
 });
 
 test("the backend names the kernel lists: its own from the probe, a soul's session providers from its inspection, and nothing else", () => {
-  // The inspection's list, as rows, as names or keyed by name; only names the contract allows, each once.
-  assert.deepEqual(sessionProviderNames({ sessionProviders: [{ name: "bb", capability: "oats.bb" }, { name: "other" }] }), ["bb", "other"]);
-  assert.deepEqual(sessionProviderNames({ sessionProviders: ["bb", "bb"] }), ["bb"]);
-  assert.deepEqual(sessionProviderNames({ sessionProviders: { bb: { capability: "oats.bb" } } }), ["bb"]);
-  assert.deepEqual(sessionProviderNames({ sessionProviders: [{ name: "tmux" }, { name: "Not A Name" }, { name: 7 }, null, 7, { capability: "x" }, "--json"] }), []);
-  for (const inspection of [null, undefined, {}, { sessionProviders: null }, { sessionProviders: "bb" }, "bb", []]) assert.deepEqual(sessionProviderNames(inspection), [], JSON.stringify(inspection));
+  // The inspection's list: rows naming a provider; only names the contract allows, each once; never herdr.
+  assert.deepEqual(sessionProviderNames({ sessionProviders: [{ name: "bb", capability: "oats.bb" }, { name: "other" }, { name: "bb" }] }), ["bb", "other"]);
+  assert.deepEqual(sessionProviderNames({ sessionProviders: [{ name: "tmux" }, { name: "session-provider" }, { name: "herdr" }, { name: "Not A Name" }, { name: "--json" }, { name: 7 }, null, 7, { capability: "x" }, "bb"] }), []);
+  for (const inspection of [null, undefined, {}, { sessionProviders: null }, { sessionProviders: "bb" }, { sessionProviders: { bb: { capability: "oats.bb" } } }, "bb", []]) assert.deepEqual(sessionProviderNames(inspection), [], JSON.stringify(inspection));
+  assert.deepEqual(sessionBackendNames({ sessionBackends: ["tmux", "herdr"] }, { sessionProviders: [{ name: "herdr" }, { name: "bb" }] }), ["tmux", "bb"]);
   // With the probe's own list first; "tmux" alone for a probe record without one; never herdr.
   assert.deepEqual(sessionBackendNames({ sessionBackends: ["tmux"] }), ["tmux"]);
   assert.deepEqual(sessionBackendNames({ sessionBackends: ["tmux", "herdr"] }, { sessionProviders: [{ name: "bb" }] }), ["tmux", "bb"]);
@@ -174,7 +182,7 @@ test("needs input on a provider row: the kernel's claim shows unless the row is 
   // No claim, a null one or a malformed one is none.
   for (const waitingOnYou of [undefined, null, {}, "waiting"]) assert.equal(waitingClaim(bb({ running: null, waitingOnYou })), null);
   // A tmux row, named or not: running and no state but "running", exactly as before.
-  for (const backend of [undefined, "tmux", "Not A Name"]) {
+  for (const backend of [undefined, "tmux", "", 7]) {
     const tmux = (extra) => ({ instance: "dev-t", ...(backend === undefined ? {} : { backend }), waitingOnYou: CLAIM, ...extra });
     assert.deepEqual(waitingClaim(tmux({ running: true, runtimeState: "running" })), CLAIM, String(backend));
     assert.deepEqual(waitingClaim(tmux({ running: true })), CLAIM, String(backend));

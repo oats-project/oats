@@ -31,12 +31,13 @@ export function noTerminal(row) {
 /** Where the row's session runs, in one line for the instance panel's Session card and the row's tooltip:
  * `tmux · <session>` for a row with a recorded tmux session, `<provider> · thread <id>` for a provider row whose
  * row names its thread (`session.threadId`, this machine's rows only; `<provider>` alone without one), '' for a row that reports neither. Display only:
- * the thread id through the display filter; it addresses nothing. */
+ * the provider (the row's `backend`) and the thread id through the display filter; neither addresses anything. A
+ * provider row whose `backend` has nothing to show reads `session provider`. */
 export function sessionLine(row) {
   const provider = sessionProvider(row);
   if (provider) {
-    const thread = shown(sessionThreadId(row));
-    return thread ? `${provider} · thread ${thread}` : provider;
+    const name = shown(provider) ?? "session provider", thread = shown(sessionThreadId(row));
+    return thread ? `${name} · thread ${thread}` : name;
   }
   return typeof row?.tmux?.session === "string" && row.tmux.session ? `tmux · ${row.tmux.session}` : "";
 }

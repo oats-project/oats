@@ -34,6 +34,7 @@ import { kernelMade } from './kernel-made.mjs';
 import { SOUL_COLORS } from './soul-colors.mjs';
 import { NAMING_TIMEOUT_MS } from './spawn-preview-contract.mjs';
 import { listedBackends } from './session-backends.mjs';
+import { sessionProviderName } from './instance-presentation.mjs';
 
 const ENVELOPE_TIMEOUT_MS = 60_000;
 
@@ -65,9 +66,10 @@ const SPAWN_ARG_RULES = {
   name:    { flag: "--name",    re: /^[a-z0-9][a-z0-9-]*$/ },
   repo:    { flag: "--repo",    re: /^[^-][^\0]*$/ },                       // path — anything not option-shaped
   work:    { flag: "--work",    re: /^(worktree|checkout|attached|workspace|directory)$/ },
-  // A session backend's name: the kernel's own ("tmux") or a session provider's (1 to 40 lowercase letters,
-  // digits and dashes; never option-shaped), and only one the kernel lists (`backendsListed`, below).
-  backend: { flag: "--backend", re: /^[a-z0-9][a-z0-9-]{0,39}$/ },
+  // A session backend's name: the kernel's own ("tmux") or a session provider's (instance-presentation.mjs
+  // `sessionProviderName`: 1 to 40 lowercase letters, digits and dashes, never option-shaped, never a reserved
+  // word), and only one the kernel lists (`backendsListed`, below).
+  backend: { flag: "--backend", re: { test: (value) => value === "tmux" || sessionProviderName(value) } },
   // The flag is the kernel's (harness-names.mjs harnessFlag): the caller names it, never guessed.
   harness: { flag: null, re: /^(pi|claude|codex)$/ },
   // A configuration's name, or the word that selects none (launch-contract.mjs LAUNCH_CONFIG_NONE), which this rule admits.

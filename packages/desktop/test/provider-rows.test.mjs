@@ -61,6 +61,10 @@ test("sessionLine: tmux and its session, a provider and its thread, or nothing; 
 test("the row's tooltip facts: a provider row adds where it runs; a tmux row's line is as it was", () => {
   assert.equal(rowFactsTitle(bb("a", { model: "opus" })), "Repository: desktop-repo · Branch: b/a · Claude · opus · bb · thread thr_x");
   assert.equal(rowFactsTitle(bb("a", { session: undefined })), "Repository: desktop-repo · Branch: b/a · Claude · bb");
+  // A backend that is no name is shown as one display line, never raw; one with nothing to show is "session provider".
+  assert.equal(sessionLine(bb("a", { backend: "Not\nA  Name", session: undefined })), "Not A Name");
+  assert.equal(sessionLine(bb("a", { backend: "token=abcdef0123456789" })), "session provider · thread thr_x");
+  assert.equal(noTerminal(bb("a", { backend: "Not A Name" })).sentence, "Runs outside tmux; it has no terminal to open.");
   assert.equal(rowFactsTitle(local("t", { model: "opus", tmux: { session: "oats-agents" } })), "Repository: desktop-repo · Branch: b/t · Claude · opus");
 });
 

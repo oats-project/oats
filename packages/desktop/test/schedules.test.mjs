@@ -228,7 +228,8 @@ test("keyboard: the schedule form is a modal dialog that keeps Tab inside", asyn
 const providerSchedule = { id: "bb-review", kind: "spawn", enabled: true, cron: "0 3 * * *", tz: "UTC", agent: "reviewer", agentsRoot: "/team/src/agents", repo: "src", task: "Review work", backend: "bb" };
 test("editing a schedule on a session provider the soul's inspection lists: the form keeps the backend, and a save sends it unchanged", async () => {
   let saved; const inspected = [];
-  for (const sessionProviders of [[{ name: "bb", capability: "oats.bb" }], { bb: { capability: "oats.bb" } }]) {
+  {
+    const sessionProviders = [{ name: "bb", capability: "oats.bb" }];
     const s = setup({ read: async () => ({ schedules: [providerSchedule], scheduler: { installed: true, active: true, registered: true } }), mutate: async (path, body) => {
       if (path.startsWith("/api/capabilities")) { inspected.push(body); return { operationsApi: 2, sessionProviders }; }
       return scheduleRequest(body, { workspace, cli, agents: [{ name: "reviewer", agentsRoot: "/team/src/agents", repo: "src", work: "worktree" }], invoke: async (bin, args) => {
@@ -250,11 +251,12 @@ test("editing a schedule on a session provider the soul's inspection lists: the 
       assert.deepEqual([...form.elements.backend.options].map(o => o.value), ["", "tmux"]);
     } finally { s.cleanup(); }
   }
-  assert.equal(inspected.length, 2);
+  assert.equal(inspected.length, 1);
 });
 
 test("a schedule whose backend the kernel does not list is refused as before: an unlisted provider, a failed inspection, an answer without the list", async () => {
-  for (const answer of [async () => ({ operationsApi: 2, sessionProviders: [{ name: "other" }] }), async () => { throw new Error("inspect failed"); }, async () => ({ operationsApi: 2 })]) {
+  for (const answer of [async () => ({ operationsApi: 2, sessionProviders: [{ name: "other" }] }), async () => { throw new Error("inspect failed"); }, async () => ({ operationsApi: 2 }),
+    async () => ({ operationsApi: 2, sessionProviders: { bb: { capability: "oats.bb" } } })]) {
     const s = setup({ read: async () => ({ schedules: [providerSchedule], scheduler: { installed: true, active: true, registered: true } }),
       mutate: async (path) => { assert.ok(path.startsWith("/api/capabilities"), path); return answer(); } });
     try {

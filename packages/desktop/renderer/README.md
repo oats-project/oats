@@ -2313,8 +2313,8 @@ only when even that does not fit (`shell.css`, `.tab-trigger`).
 
 ### A row on a session provider
 
-A roster row whose `backend` is a session provider's name (a capability's session
-backend: "bb") has no tmux target and no terminal. Whether a row is one, its
+A roster row whose `backend` is text and not "tmux" runs on a session provider (a capability's session
+backend: "bb"): it has no tmux target and no terminal. Whether a row is one, its
 sentence ("Runs in a bb thread; open it in bb.") and its link are the shared
 home's (`packages/client/instance-acts.mjs` `openAct`, reason `no-terminal`);
 `provider-row.mjs` reads that answer for the places that draw it (`noTerminal`,
@@ -2332,8 +2332,9 @@ home's (`packages/client/instance-acts.mjs` `openAct`, reason `no-terminal`);
 - **Its tooltip** (`rowFactsTitle`) adds `bb · thread <id>`, and the instance
   panel's Session line reads the same where it read `tmux · <session>`
   (`sessionLine`; the thread id is `session.threadId`, which only this machine's rows carry, shown through the
-  display filter, addressing nothing). The panel shows a row only while its
-  terminal tab is active, so a provider row reaches it once Details serves any row.
+  display filter, addressing nothing). The panel shows the row of the active
+  terminal tab only, and a provider row never has one: the panel never shows a
+  provider row, and the tooltip is where a person reads its backend and thread.
 - **Needs input and Home**: the shared gates read such a row by its own rule
   (`packages/client/waiting-on-you.mjs` `waitingClaim`: the kernel's claim unless the row is
   stopped; `home-board.mjs` `homeBoard`: running on `running: true` alone), since a

@@ -181,19 +181,23 @@ test('a provider row: unknown and unreachable stay the kernel\'s, with its text;
   for (const row of sent) assert.equal(livenessOrigin(row), 'kernel', row.instance);
 });
 
-test('which rows are a provider\'s: no backend, "tmux" and a value that is no provider name are probed as before; Herdr comes first', () => {
+test('which rows are a provider\'s: any backend that is text and not "tmux", also one that is no name the contract allows; no backend, "tmux" and a value that is no text are probed as before; Herdr comes first', () => {
   const r = reader();
   const rows = observeLiveness([
     { instance: 't1', running: true },
     { instance: 't2', backend: 'tmux', running: false },
-    { instance: 't3', backend: 'Not A Name', running: true },
     { instance: 't4', backend: '', running: true },
     { instance: 't5', backend: 7, running: true },
+    { instance: 't6', backend: null, running: true },
+    { instance: 'p1', backend: 'Not A Name', running: true, runtimeState: 'unknown' },
+    { instance: 'p2', backend: '-bb', running: true, runtimeState: 'unknown', tmux: null },
+    { instance: 'p3', backend: 'session-provider', running: true, runtimeState: 'unknown' },
     { instance: 'h1', backend: 'herdr', running: true },
     { instance: 'h2', backend: 'bb', sessionTarget, running: true },
   ], r);
-  assert.deepEqual(r.seen, ['t1', 't2', 't3', 't4', 't5']);
+  assert.deepEqual(r.seen, ['t1', 't2', 't4', 't5', 't6']);
   for (const row of rows.slice(0, 5)) assert.deepEqual(row, { tmux: undefined, running: true, runtimeState: 'running' });
-  for (const row of rows.slice(5)) assert.deepEqual(row, { running: null, runtimeState: 'unsupported', runtimeError: kernelText, tmux: null });
+  for (const row of rows.slice(5, 8)) assert.deepEqual(row, { running: true, runtimeState: 'unknown' }, 'present and not tmux: the kernel\'s fields, never the reader\'s');
+  for (const row of rows.slice(8)) assert.deepEqual(row, { running: null, runtimeState: 'unsupported', runtimeError: kernelText, tmux: null });
   assert.equal(livenessOrigin({ instance: 't2', backend: 'tmux', running: false }), 'terminal-probe');
 });

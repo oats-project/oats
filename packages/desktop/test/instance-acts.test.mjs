@@ -337,10 +337,16 @@ test("a provider row's link: only an http(s) url with no credentials and a label
   assert.deepEqual(verbsOf({ ...REMOTE, backend: "bb", running: true }), ["inspect", "restart", "stop", "retire"]);
 });
 
-test("which rows are a provider's: no backend, \"tmux\" and a value that is no provider name open as before; a held or unaddressable provider row says its own reason", () => {
-  for (const backend of [undefined, null, "tmux", "", "Not A Name", "bb!", "x".repeat(41), 7]) {
+test("which rows are a provider's: no backend, \"tmux\" and a value that is no text open as before; any other text is a provider's, named in the sentence only when it is a name; a held or unaddressable provider row says its own reason", () => {
+  for (const backend of [undefined, null, "tmux", "", 7]) {
     assert.deepEqual(openAct({ ...LOCAL, backend, running: true, open: BB_LINK }), { verb: "open", enabled: true, reason: null }, String(backend));
     assert.deepEqual(openAct({ ...LOCAL, backend, running: false }), closed({ code: "not-running", sentence: NO_TERMINAL }), String(backend));
+  }
+  // Present and not tmux, but no name the contract allows: no terminal, the acts of its state, and none of its text in the sentence.
+  for (const backend of ["Not A Name", "bb!", "-bb", "session-provider", "x".repeat(41), "<img src=x>", "bb\nrm -rf"]) {
+    assert.deepEqual(openAct({ ...LOCAL, backend, running: true }), closed({ code: "no-terminal", sentence: "Runs outside tmux; it has no terminal to open." }), backend);
+    assert.deepEqual(openAct({ ...LOCAL, backend, running: true, open: BB_LINK }).reason.link, BB_LINK, backend);
+    assert.deepEqual(verbsOf({ ...LOCAL, backend, running: true }), ["inspect", "restart", "stop", "retire"], backend);
   }
   assert.equal(openAct({ ...BB, running: false, spawnInProgress: true }), null);
   assert.equal(openAct({ ...BB, running: true, rollbackIncomplete: true }), null);

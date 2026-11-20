@@ -11,13 +11,13 @@ import { sessionProviderName } from './instance-presentation.mjs';
 
 const record = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
-/** The provider names an inspection lists, in its order, each once: `sessionProviders` as a list of names or of
- * `{ name }` rows, or as a record keyed by name. Only a name the contract allows (instance-presentation.mjs
- * `sessionProviderName`); anything else, and an inspection without the key, lists none. */
+/** The provider names an inspection lists, in its order, each once: the `name` of each row of its top-level
+ * `sessionProviders` (`[{ name, capability }]`). Only a name the contract allows (instance-presentation.mjs
+ * `sessionProviderName`) and never "herdr", which OATS removed; anything else, and an inspection without the
+ * list, lists none. */
 export function sessionProviderNames(inspection) {
-  const listed = record(inspection) ? inspection.sessionProviders : undefined;
-  const names = Array.isArray(listed) ? listed.map((row) => (record(row) ? row.name : row)) : record(listed) ? Object.keys(listed) : [];
-  return [...new Set(names.filter(sessionProviderName))];
+  const listed = record(inspection) && Array.isArray(inspection.sessionProviders) ? inspection.sessionProviders : [];
+  return [...new Set(listed.map((row) => (record(row) ? row.name : undefined)).filter((name) => sessionProviderName(name) && name !== 'herdr'))];
 }
 
 /** A list of backend names as a client may offer or send them: its strings, never empty, never "herdr". */

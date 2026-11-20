@@ -3762,10 +3762,8 @@ its absence.
   be read or written. A status routed with `--server` records nothing on this
   machine ([execution-targets.md](execution-targets.md#which-losses-come-back)).
 - <a id="row-backend-clients"></a>**How the clients read `backend`** (the
-  Desktop and the TUI, `packages/client`). A row whose `backend` is a session
-  provider's name (1 to 40 lowercase letters, digits and dashes, the first a
-  letter or a digit; not `tmux`)
-  runs in no terminal:
+  Desktop and the TUI, `packages/client`). A row whose `backend` is text and
+  not `tmux` runs on a session provider, in no terminal:
   - Its `running`, `runtimeState` and `runtimeError` are shown as the kernel
     reports them. No client asks tmux about it: with an older kernel, whose
     rows a client's own terminal check refines, such a row is never passed
@@ -3800,8 +3798,12 @@ its absence.
 
   A row with no `backend` (an older kernel's, or an older routed host's)
   reads as tmux, as one with `tmux` does: both are read as before. A row recorded
-  on Herdr keeps its own reason (`E_HERDR_REMOVED`) before any of this, and a
-  `backend` that is no name of that form is ignored. `--backend` on a
+  on Herdr keeps its own reason (`E_HERDR_REMOVED`) before any of this. A
+  `backend` that is no provider's name (1 to 40 lowercase letters, digits
+  and dashes, the first a letter or a digit; not `tmux` or
+  `session-provider`) still makes the row a provider's, never asked of tmux:
+  the clients then say "Runs outside tmux; it has no terminal to open." and
+  show the value only as display text. `--backend` on a
   client's spawn is held to the names the kernel lists: `sessionBackends` of
   `oats version --json` and the session providers `oats inspect --json`
   reports.
