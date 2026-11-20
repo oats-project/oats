@@ -3778,7 +3778,7 @@ its absence.
 - <a id="row-board"></a>**`board`** (feature `instance-board`): the agent's
   board, `{facts: [{key, label, value, unit, link, at}], questions: [{id,
   question, options, hasContext, since}]}`, or `null` for a home with no board
-  file ([The agent's board](#the-agents-board-oats-instance-board)). Facts come
+  file (or one whose directory can't be read) ([The agent's board](#the-agents-board-oats-instance-board)). Facts come
   in the order first set, questions in the order asked, and only the questions
   of the instance's current session. A file that can't be read as a board is an
   empty board, never an error. The value is at most 8 KiB as UTF-8 JSON on every

@@ -153,9 +153,9 @@ for (const shape of SHAPES) {
     assert.deepEqual(Object.keys(rows).sort(), ["bad", "good", "stub"], "every instance is listed");
     const runtimeError = `E_UNIDENTIFIED_INSTANCE_HOME: ${record} cannot be read (${reason})`;
     assert.deepEqual(rows.bad, { instance: "bad", home: d.homes.bad, startedAt: null, identityAddress: null, modelFrom: null, attributedHuman: null,
-      running: null, runtimeState: "unreachable", runtimeError, waitingOnYou: null, color: null });
+      running: null, runtimeState: "unreachable", runtimeError, waitingOnYou: null, board: null, color: null });
     // One row shape for a home without a usable record: the fields of the row a missing record gets, and the two that say why.
-    assert.deepEqual(rows.stub, { instance: "stub", home: stub, startedAt: null, identityAddress: null, modelFrom: null, attributedHuman: null, running: false, waitingOnYou: null, color: null }, "the row of a home with no record is as before");
+    assert.deepEqual(rows.stub, { instance: "stub", home: stub, startedAt: null, identityAddress: null, modelFrom: null, attributedHuman: null, running: false, waitingOnYou: null, board: null, color: null }, "the row of a home with no record is as before");
     assert.deepEqual(Object.keys(rows.bad).sort(), [...Object.keys(rows.stub), "runtimeState", "runtimeError"].sort());
     // The other instance's row is its record's, as ever.
     assert.equal(rows.good.agent, "dev");
@@ -471,7 +471,7 @@ test("a home with no record beside another instance: its row, the refusal of its
   mkdirSync(stub);
   writeFileSync(join(stub, "note.md"), "left behind\n");
 
-  assert.deepEqual(d.rows().stub, { instance: "stub", home: stub, startedAt: null, identityAddress: null, modelFrom: null, attributedHuman: null, running: false, waitingOnYou: null, color: null });
+  assert.deepEqual(d.rows().stub, { instance: "stub", home: stub, startedAt: null, identityAddress: null, modelFrom: null, attributedHuman: null, running: false, waitingOnYou: null, board: null, color: null });
   assert.deepEqual(readHomeRecord(stub), { state: "absent", path: join(stub, "instance.json") });
 
   const plan = answered(fx.cli(["instance", "stop", "good", "--plan", "--json"]), "stop --plan of the other instance").json();
@@ -502,7 +502,7 @@ test("a home at mode 000: retire plan refuses like apply, stop still reports unk
 
   assert.deepEqual(readHomeRecord(d.homes.closed), { state: "absent", path: join(d.homes.closed, "instance.json") });
   const rows = d.rows();
-  assert.deepEqual(rows.closed, { instance: "closed", home: d.homes.closed, startedAt: null, identityAddress: null, modelFrom: null, attributedHuman: null, running: false, waitingOnYou: null, color: null });
+  assert.deepEqual(rows.closed, { instance: "closed", home: d.homes.closed, startedAt: null, identityAddress: null, modelFrom: null, attributedHuman: null, running: false, waitingOnYou: null, board: null, color: null });
   assert.equal(rows.good.agent, "dev");
 
   const stop = answered(fx.cli(["instance", "stop", "closed", "--plan", "--json"]), "stop --plan of the closed home").json();

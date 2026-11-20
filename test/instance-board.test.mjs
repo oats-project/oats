@@ -22,7 +22,7 @@
 // test/cli-json-contract.test.mjs.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { appendFileSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { v2Deployment, CLI } from "./helpers/v2-deployment.mjs";
@@ -371,4 +371,17 @@ test("a claim write that fails is E_EVENTS_FAILED naming the question; the same 
   assert.equal(again.id, "q1"); assert.equal(again.changed, false);
   assert.deepEqual(readBoardDocument(home).questions.map((q) => q.id), ["q1"], "nothing was asked twice");
   assert.equal(readEvents(home).waitingOnYou.message, "Squash?", "the claim is repaired");
+});
+
+// A mode no longer keeps root out: as test/unreadable-record.test.mjs, this shape is skipped for root.
+test("reads: a board file that can't be read is an empty board; a home that can't be read shows no board file (null)", { skip: process.getuid?.() === 0 && "root reads whatever the mode says" }, async () => {
+  const home = await freshHome();
+  const file = join(home, BOARD_FILE);
+  writeFileSync(file, JSON.stringify({ boardApi: 1, facts: {}, questions: [] }));
+  chmodSync(file, 0o000);
+  try {
+    assert.deepEqual(readBoardRow(home), { facts: [], questions: [] });
+    chmodSync(home, 0o000);
+    assert.equal(readBoardRow(home), null);
+  } finally { chmodSync(home, 0o755); chmodSync(file, 0o600); }
 });
