@@ -91,7 +91,7 @@ before its home can be acted on):
 
 | # | Step | Record written | State after |
 |---|---|---|---|
-| 1 | What can refuse: the plan, the launch hooks, the provider's `check` with the planned launch. (Three checks run later, after step 3: the home's roots, the kernel's shim, the host run's admission. One that refuses there leaves the home as step 3 left it: stopped) | none | unchanged |
+| 1 | What can refuse: the plan, the launch hooks, the provider's `check` with the planned launch. (Three checks run right before step 4: the home's roots, the kernel's shim, the host run's admission. One that refuses there leaves the home as it then is: stopped by step 3, or as before the verb) | none | unchanged |
 | 2 | If unsettled: settle | see Settling | planned or stopped |
 | 3 | If launched before: stop the session at `E`. A restart of *running* whose session is there records `stoppedAt` and the stop receipt first (the stop rule). A start or a restart of *stopped*, and of *running* whose session is gone, ask the provider's `stop {endpoint: E}` again and record nothing (so a stop that is not confirmed leaves a lost home lost, not stopped as by an operator); not confirmed is `E_SESSION_STOP_FAILED`, nothing started | receipt, stop receipt (a restart of a session that is there) | stopped, or running-and-gone with `E` stopped |
 | 4 | **Mark**: receipt `launchSent: t` (and `launched: true` from planned), then the record's `launched: true` from planned | receipt, then record | sent or resent |
@@ -164,7 +164,8 @@ one that has it started at another time (the id was reused), or it is a
 zombie; a holder whose liveness cannot be read is not gone, and the verb is
 refused as busy. The next verb takes over a gone holder's claim. The records
 are in one of the states above whatever the point of death, by the write
-orders of "A launch" and of the stop rule:
+orders of "A launch" and of the stop rule, with one exception, a spawn that
+dies before its home has a receipt (the row below):
 
 | Died | State left | The next verb |
 |---|---|---|
@@ -174,6 +175,7 @@ orders of "A launch" and of the stop rule:
 | during the stop rule, after `stoppedAt` | stopped (as an operator's until the stop receipt is written, then as the stop's own); the provider may not have been asked | a stop or a start asks `stop {E}` again |
 | during a settle, after the provider confirmed | unsettled still, or settled | settles again (the provider's stop is idempotent), or acts |
 | during a launch the provider refused, between the record and the receipt of its unmarking | sent | settles (there is nothing to stop) |
+| during a spawn, between the planned record and the receipt | a directory home: planned (its early receipt names the provider). A worktree home: a planned record and **no receipt**, which is no state of the table: no verb runs on it but a retire | a retire takes it as never launched, after its scan: the mark of a launch is written to the receipt first, so a home with no receipt was never sent one. (A receipt that is there and cannot be used says nothing, and refuses) |
 | during a resume of a home stopped with the host, after its notice | stopped with the host; its session may run again | the sweep sends the notice again; a stop or a start asks `stop {E}` |
 | during that resume, after `stoppedAt` was cleared | running, with the host's stop receipt left | acts on a running home; a later loss of that start is a loss like any other, counted (a stop receipt says the host's stop only beside a receipt that says stopped) |
 

@@ -361,7 +361,7 @@ test("T6: an operator's stop after the host's withdraws the resume; a notice tha
   hostStop(fx, other.home);
   const stoppedAt = runtimeOf(other.home).stoppedAt;
   const stillToResume = () => assert.deepEqual([runtimeOf(other.home).stoppedAt, stopReceiptOf(other.home)?.resume, rowOf(fx, "retry").sessionEnd], [stoppedAt, true, "lost"]);
-  // The notice is input: the provider's refusals are its refusals, and the stop is put back.
+  // The notice is input: the provider's refusals are its refusals, and the home stays stopped with the host.
   for (const code of ["E_SESSION_INPUT_QUEUED", "E_SESSION_PROMPT_OPEN"]) {
     fx.control({ input: { error: { code, message: "the fake refuses" } } });
     await assert.rejects(fx.inEnv(() => startInstanceSession(other.home, { resume: true })), (e) => e.code === code, code);

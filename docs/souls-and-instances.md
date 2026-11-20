@@ -1561,8 +1561,17 @@ lists the feature `session-providers`, in this order:
    inspect answers stopped and every input to the home is refused
    `E_SESSION_NOT_RUNNING`, so nothing restarts its session.
 2. **The provider is asked to stop the session**, with the usual grace,
-   never escalated.
-3. **No process may work in the home**, whatever the provider answered: a
+   never escalated. A launch that was sent and never recorded (a command
+   killed while it launched) is settled the same way: the provider is asked
+   to stop whatever it runs for the home.
+3. **Inputs that were being sent are waited for.** An input already on its
+   way when the stop was recorded can have the provider restart the session,
+   and once the home is gone nothing could stop it. The retire waits for
+   those inputs to end (at most an input's timeout and 5 s) and asks the
+   provider to stop once more. An input still being sent after that does not
+   hold the retire: it goes on, with a warning that names that input's
+   process.
+4. **No process may work in the home**, whatever the provider answered: a
    stop it confirms can still leave one behind (a harness that outlives its
    server for a while), and there is no window whose absence would say
    otherwise. With a process working in the home, or when that cannot be
@@ -1570,12 +1579,12 @@ lists the feature `session-providers`, in this order:
    processes and keeps the home; its stop stays recorded. A shell whose
    working directory is in the home counts too, and one named in the
    refusal may be your own: leaving the home's directory clears it.
-4. The retire hooks run (the provider's own archives its session there), the
+5. The retire hooks run (the provider's own archives its session there), the
    work is preserved as for any home, and the home is removed.
 
 **When the provider cannot confirm the stop** (it fails, it does not answer,
 or its capability is no longer among the home's modules after an upgrade),
-the retire does not strand the home. It goes on when step 3 finds no
+the retire does not strand the home. It goes on when step 4 finds no
 process in the home, and its answer then carries a warning that the session
 was not stopped through its backend: archive or remove that session with the
 provider's own tooling.
