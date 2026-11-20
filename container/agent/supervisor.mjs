@@ -42,8 +42,11 @@ export function parseChildDeclaration(text) {
   const refuse = (key, reason) => { throw new Error(`${key} ${reason}`); };
   let declared;
   try { declared = JSON.parse(text); } catch { refuse("the declaration", "must be JSON"); }
-  const closed = (at, value, required, optional = []) => {
+  const object = (at, value) => {
     if (value === null || typeof value !== "object" || Array.isArray(value)) refuse(at ?? "the declaration", "must be an object");
+  };
+  const closed = (at, value, required, optional = []) => {
+    object(at, value);
     for (const key of Object.keys(value)) {
       if (required.includes(key) || optional.includes(key)) continue;
       // A key's name is the file's text too: only a plain one is repeated.
@@ -57,7 +60,7 @@ export function parseChildDeclaration(text) {
     return [...value];
   };
   const variables = (key, value, admit) => {
-    closed(key, value, [], Object.keys(value ?? {}));
+    object(key, value);
     for (const [name, entry] of Object.entries(value)) {
       if (!/^[A-Z_][A-Z0-9_]*$/.test(name)) refuse(key, "has a name that is not [A-Z_][A-Z0-9_]*");
       if (reservedVariables.includes(name)) refuse(key, `must not set ${name}`);
