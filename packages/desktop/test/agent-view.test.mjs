@@ -720,3 +720,18 @@ test('r4 delta: an answer that does not prove its question\'s since (absent, nul
     assert.match(body, /Reading the context/, `since ${String(since)}`);
   }
 });
+
+test('r4 delta 2: on one view, the fold\'s words follow each answer: no context, then unproven, then proven', t => {
+  const f = fixture(t);
+  f.view.update(boardData({ facts: [], questions: [question('q1', { hasContext: true })] }));
+  const read = q1 => f.view.detail(boardDetailData({ instance: { board: { facts: [], questions: [{ id: 'q1', ...q1 }] } } }));
+  const fold = () => f.zone().querySelector('.agent-q-context-body').textContent;
+  read({ since: AT, context: null });
+  assert.match(fold(), /sent no context/);
+  read({ context: 'Unproven context' });
+  assert.match(fold(), /Reading the context/); assert.doesNotMatch(fold(), /Unproven/);
+  read({ since: AT, context: 'Proven.' });
+  assert.match(fold(), /Proven\./);
+  read({ since: AT, context: null });
+  assert.match(fold(), /sent no context/);
+});
