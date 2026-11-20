@@ -1080,9 +1080,9 @@ test("one wire version: a provider that declares another, or none, is refused by
   delete manifest.sessionProviders.fake.wire;
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
   fx.clearCalls();
-  for (const verb of ["start", "restart"]) {
-    const refused = fx.cli(["session", verb, "--home", home, "--json"]).json();
-    assert.deepEqual([refused.ok, refused.error.code, refused.error.details.wire], [false, "E_BACKEND_WIRE", { provider: null, kernel: "1.3" }], verb);
+  for (const verb of [["start"], ["restart"], ["start", "--resume"]]) {
+    const refused = fx.cli(["session", ...verb, "--home", home, "--json"]).json();
+    assert.deepEqual([refused.ok, refused.error.code, refused.error.details.wire], [false, "E_BACKEND_WIRE", { provider: null, kernel: "1.3" }], verb.join(" "));
     assert.match(refused.error.message, /old was not started: .*speaks wire 1\.2 \(it declares none\), and this kernel speaks 1\.3.*nothing was stopped or started/);
   }
   const inspected = fx.cli(["session", "inspect", "--home", home, "--json"]).json();

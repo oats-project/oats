@@ -2288,7 +2288,11 @@ configuration, and handed to the provider with every launch:
   true`. The kernel adds no host for these and refuses nothing.
 
 **Nothing else adds a host or a path:** not hook output, not an environment
-variable, not a launch argument, not a task. The values come from the
+variable, not a launch argument, not a task. A setting given to one spawn
+(`oats spawn … --provider <capability> <setting>=…`) is such an argument: a
+spawn that gives a setting a `sandboxDomains` line names is refused
+(`E_BACKEND_SANDBOX_HOST`), so that no host comes from it and the next start
+does not quietly resolve another. The values come from the
 deployment's configuration as a spawn preview resolves it (the workspace,
 the deployment's own settings, the soul's payload), **never from a file in
 the instance home**, which a sandboxed agent can write.
@@ -2311,8 +2315,10 @@ they are now. So a launch never waits on the network or fails with it; a
 setting a person or a setup command writes to `oats-local.yaml` reaches the
 home at its next launch; and a change committed to the workspace reaches it
 once a command on this host has read the workspace (`oats status`, a spawn
-preview). **Which deployment and which soul that is comes
-from where the home is, never from what is in it**: the deployment is the
+preview). A soul disabled for spawning on
+this machine (`souls.disabled`) still has its homes' allowances. **Which
+deployment and which soul that is comes from where the home is, never from
+what is in it**: the deployment is the
 directory four levels above the home (`<deployment>/agents/<agent>/instances/<instance>`,
 as its real path) and must hold its own `oats-local.yaml`; the soul is the
 one the workspace offers whose agent directory is `<agent>`. The home's

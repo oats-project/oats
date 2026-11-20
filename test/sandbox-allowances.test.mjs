@@ -72,6 +72,17 @@ test("a map from team id to URL gives the hosts of the instance's own teams only
   assert.match(refused.message, /its setting services for team other:else\.example, whose value names a wildcard host/);
 });
 
+test("a setting a line names that was given to this spawn alone is refused: no host comes from a launch's own arguments", () => {
+  const of = (origins) => refusal(() => sandboxAllowances({ modules: [messaging([{ setting: "server" }, { setting: "services" }])], slots: { messaging: "acme.msg" }, payloads: { "acme.msg": { server: "https://app.example.org", services: { "t:x": "https://s.example.org" } } }, origins: { "acme.msg": origins }, teams: ["t:x"], eventsDir: EVENTS }));
+  assert.equal(of({ "/server": { kind: "soul" }, "/services/t:x": { kind: "host" } }), null, "the deployment's own layers");
+  for (const [origins, setting] of [[{ "/server": { kind: "spawn" } }, "server"], [{ "/services/t:x": { kind: "spawn" } }, "services"], [{ "/services": { kind: "spawn" } }, "services"]]) {
+    const refused = of(origins);
+    assert.deepEqual([refused.code, refused.details], ["E_BACKEND_SANDBOX_HOST", { capability: "acme.msg", setting, host: null }], JSON.stringify(origins));
+    assert.match(refused.message, /this spawn was given that setting itself \(--provider acme\.msg/);
+  }
+  assert.equal(of({ "/other": { kind: "spawn" }, "/servers": { kind: "spawn" } }), null, "another setting given to the spawn is no host and no refusal");
+});
+
 test("S2, S3: a capability that declares the line and fills none of the three slots is refused, naming it and its host", () => {
   // S2: no layer at all (an installed module: manifest validation refuses it earlier).
   const plain = refusal(() => allow([{ name: "acme.plain", manifest: { sandboxDomains: [{ setting: "server" }] } }], { "acme.plain": { server: "https://evil.example.net/x" } }));
@@ -166,6 +177,8 @@ test("a settingFile line gives the hosts of every string at its pointer: URLs an
   assert.deepEqual(fx.read("config/bindings.json"), fx.read(path), "a relative path is the deployment's");
   assert.deepEqual(fx.read(path, "/bases/team/repository"), { hosts: ["github.com"], skippedValues: 0 });
   assert.deepEqual(fx.read(path, "/nothing/here"), { hosts: [], skippedValues: 0 });
+  // A git remote without a user needs a dotted host: a drive path or `name:path` is no remote.
+  assert.deepEqual(fx.read(fx.write("config/odd.json", { remotes: ["git.example.org:acme/kb.git", "C:/repos/kb", "name:path"] }), "/remotes/*"), { hosts: ["git.example.org"], skippedValues: 2 });
   assert.deepEqual(fx.read(fx.write("config/list.json", { remotes: ["https://a.example.org/x", "b.example.org:8443", "https://user:pw@c.example.org"] }), "/remotes/*"), { hosts: ["a.example.org", "b.example.org:8443"], skippedValues: 1 });
   // In the allowances: named with the capability and the setting, and what was skipped is said.
   const allowed = sandboxAllowances({

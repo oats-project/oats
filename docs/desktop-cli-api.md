@@ -7458,7 +7458,7 @@ before anything is created (a preview answers them too):
 | `E_BACKEND_AMBIGUOUS` | `{backend, capabilities}`; also from a start or a restart |
 | `E_BACKEND_HARNESS` | `{backend, capability, harness, harnesses}` |
 | `E_BACKEND_LAUNCH_ARG` | `{backend, launchConfig, field: "executable"}` |
-| `E_BACKEND_WIRE` | `{backend, capability, wire: {provider, kernel}}`: the provider's declared wire version (null: none) and this kernel's. Also from a start or a restart, before anything is read or stopped |
+| `E_BACKEND_WIRE` | `{backend, capability, wire: {provider, kernel}}`: the provider's declared wire version (null: none) and this kernel's. Also from a start, a restart and a `--resume`, before anything is read or stopped |
 | `E_BACKEND_SANDBOX_HOST` | `{capability, setting, host, team?}`: a capability's `sandboxDomains` line that may not add a host; `setting` and `host` are null where there is none to name. Also from a start or a restart, before anything is stopped |
 | `E_BACKEND_NOT_READY`, any other `E_BACKEND_*` | the provider's readiness, or its own refusal of the launch: `{backend, capability}`; the spawn is rolled back |
 

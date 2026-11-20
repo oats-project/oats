@@ -314,3 +314,62 @@ test("the deployment's own oats-local.yaml is read as it is now, and a repositor
   assert.equal(startCli(fx, home, "restart").ok, true);
   assert.match(fx.verbs("launch")[0].request.input.sandbox.unavailable, /^E_REMOTE_UNREADABLE: cannot read .+ws\.git without reaching it/);
 });
+
+// ------------------------------------------------------------------ the rest of what a host may come from
+
+test("a setting given to one spawn (--provider) is no host source: the spawn is refused, naming it; without a line on it, --provider is as it was", (t) => {
+  const fx = deployment(t);
+  for (const preview of [["--preview"], []]) {
+    const refused = fx.cli(["spawn", "dev", "--name", "nope", "--backend", "fake", "--launch-config", "claude", "--provider", MSG, "server=https://from-argument.example.net", ...preview, "--json"]).json();
+    assert.deepEqual([refused.ok, refused.error.code, refused.error.details], [false, "E_BACKEND_SANDBOX_HOST", { capability: MSG, setting: "server", host: null }], JSON.stringify(refused));
+    assert.match(refused.error.message, /capability acme\.msg asks to allow the host of its setting server, and this spawn was given that setting itself \(--provider acme\.msg server=…\): a host comes from the deployment's configuration/);
+    assert.equal(JSON.stringify(refused).includes("from-argument.example.net"), false);
+  }
+  assert.equal(existsSync(join(fx.root, "dev", "instances", "nope")), false);
+  assert.deepEqual(fx.calls(), []);
+  // Another setting of the same capability, given to the spawn, is no host and no refusal.
+  const other = fx.cli(["spawn", "dev", "--backend", "fake", "--launch-config", "claude", "--provider", MSG, "mode=quiet", "--preview", "--json"]).json();
+  assert.deepEqual([other.ok, other.result.sandbox.domains.map((d) => d.host)], [true, ["app.example.org"]], JSON.stringify(other.error ?? null));
+  // A tmux spawn reads no line: the same argument is taken as it always was.
+  assert.equal(fx.cli(["spawn", "dev", "--launch-config", "claude", "--provider", MSG, "server=https://from-argument.example.net", "--preview", "--json"]).json().ok, true);
+});
+
+test("a soul disabled for spawning on this machine still has its homes' allowances at a start", async (t) => {
+  const fx = deployment(t);
+  const { home } = await fx.launch("one");
+  assert.equal(readWorkspace(fx).json().ok, true);
+  const localPath = join(fx.dep, "oats-local.yaml");
+  writeFileSync(localPath, `${readFileSync(localPath, "utf8").trimEnd()}\nsouls:\n  disabled: [dev]\n`);
+  assert.equal(readWorkspace(fx).json().error.code, "E_SOUL_DISABLED", "no new home of it");
+  fx.clearCalls();
+  assert.equal(startCli(fx, home, "restart").ok, true);
+  assert.deepEqual(fx.verbs("launch")[0].request.input.sandbox.domains.map((d) => d.host), ["app.example.org"]);
+});
+
+test("the teams whose hosts a map gives are the offline resolution's, never the start's live read of the workspace's teams", async (t) => {
+  const services = { "global:acme.example": "https://aweb.example.org/api", "ops:acme.example": "https://ops.example.net" };
+  const workspace = (teams) => ({ teams, defaultTeam: "global", souls: { "*": { teams: "any" } } });
+  const fx = providerDeployment(t, {
+    workspace: workspace({ global: { team: "global:acme.example" } }),
+    capabilities: { [MSG]: { manifest: { layer: "messaging", settings: { services: { hostOnly: true } }, sandboxDomains: [{ setting: "services" }] }, files: {} } },
+    souls: { dev: { soul: { capabilities: { [FAKE_CAPABILITY]: { from: "here" }, [MSG]: { from: "here" } } } } },
+    local: { settings: { [MSG]: { services } } },
+  });
+  const spawned = fx.cli(["spawn", "dev", "--name", "one", "--backend", "fake", "--launch-config", "claude", "--json"]).json();
+  assert.equal(spawned.ok, true, JSON.stringify(spawned));
+  const home = spawned.result.home;
+  assert.deepEqual(fx.verbs("launch")[0].request.input.sandbox.domains, [{ host: "aweb.example.org", capability: MSG, setting: "services" }]);
+  // The workspace gains a team, in its remote. The start's live read of the teams sees it at once
+  // (its hooks are told); the allowances are the configuration as this host last read it.
+  fx.commit({ "oats-workspace.yaml": { yaml: { schemaVersion: 2, name: "acme", members: [fx.ref], defaults: { knowledge: "none", messaging: "none", tasks: "none" }, ...workspace({ global: { team: "global:acme.example" }, ops: { team: "ops:acme.example" } }) } } });
+  fx.clearCalls();
+  const restarted = startCli(fx, home, "restart");
+  assert.equal(restarted.ok, true, JSON.stringify(restarted));
+  assert.deepEqual(fx.verbs("launch")[0].request.input.sandbox.domains.map((d) => d.host), ["aweb.example.org"], "the new team's host is not allowed on the live teams' word");
+  // Once a command on this host has read the workspace, the next launch has it, labelled with its team.
+  assert.equal(readWorkspace(fx).json().ok, true);
+  fx.clearCalls();
+  const again = startCli(fx, home, "restart");
+  assert.deepEqual(fx.verbs("launch")[0].request.input.sandbox.domains.map((d) => d.host), ["aweb.example.org", "ops.example.net"]);
+  assert.deepEqual(again.result.sandbox.domains.map((d) => [d.host, d.team]), [["aweb.example.org", "global:acme.example"], ["ops.example.net", "ops:acme.example"]]);
+});
