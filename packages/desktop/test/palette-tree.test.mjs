@@ -576,14 +576,16 @@ test("rendered: the sidebar's guides (one builder) and state dot on each instanc
   assert.ok(command.querySelector(".picon"), "a command keeps its chevron");
   assert.equal(command.querySelector(".ctx-guides, .ctx-dot"), null);
   assert.ok(!command.classList.contains("tree"));
-  // The one builder: the picker draws its rows' guides with it; nobody repeats the loop. The roster draws none since
-  // slice 1 of the Desktop UI rework (D26): it calls neither the builder nor the connectors.
+  // The one builder: the shell draws both its row kinds with it (slice 1b: lines for same work, its `joins`), and the
+  // picker too; nobody repeats the loop.
   for (const file of ["../renderer/shell.mjs", "../renderer/overlay-picker.mjs"]) {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");
     assert.doesNotMatch(source, /className = `ctx-guide \$\{kind\}`/, file);
   }
   const shell = readFileSync(new URL("../renderer/shell.mjs", import.meta.url), "utf8");
-  assert.doesNotMatch(shell, /treeGuides|treeConnectors/, "the roster draws no lines");
+  assert.equal(shell.match(/treeGuides\(document, connectors\)/g)?.length, 1, "the roster's one guides builder");
+  assert.equal(shell.match(/treeConnectors\(items, i, instances, \{ joins: sameWorkFlagged \}\)/g)?.length, 1, "over the full roster, same work only");
+  assert.equal(shell.match(/rowGuides\(items, i\)/g)?.length, 2, "the roster row and the pending spawn's");
   assert.match(readFileSync(new URL("../renderer/overlay-picker.mjs", import.meta.url), "utf8"), /row\.prepend\(treeGuides\(doc, it\.connectors\)\)/, "the palette's rows, through the one builder");
 });
 

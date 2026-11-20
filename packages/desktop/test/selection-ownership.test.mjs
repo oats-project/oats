@@ -506,21 +506,24 @@ test("roster polling restores logical focus without superseding a terminal selec
 
 function ambiguousClusterGuides(t, ambiguity, shellSource = source) {
   const s = shell(t, { shellSource });
+  // Slice 1b: a solid line joins only a child its host flags same work, so worker and child are flagged: the line is
+  // what an ambiguous parent name must not forge.
   const full = [
     { instance: "parent", home: "/a/parent", agentsRoot: "/a/agents", siblingInstance: "worker", running: true },
     { instance: "parent", home: "/b/parent", agentsRoot: ambiguity === "same-root" ? "/a/agents" : "/b/agents", running: true },
-    { instance: "worker", home: "/c/worker", agentsRoot: ambiguity === "same-root" ? "/a/agents" : "/c/agents", parentInstance: "parent", running: true },
-    { instance: "child", home: "/c/child", agentsRoot: "/c/agents", parentInstance: "worker", running: true },
-  ];
+    { instance: "worker", home: "/c/worker", agentsRoot: ambiguity === "same-root" ? "/a/agents" : "/c/agents", parentInstance: "parent", sameWork: true, running: true },
+    { instance: "child", home: "/c/child", agentsRoot: "/c/agents", parentInstance: "worker", sameWork: true, running: true },
+  ].map(row => ({ ...row, sameWorkKnown: true }));
   assert.equal(instanceTree.visibleClusters(full, full).length, 2, "duplicate parent is outside the worker's cluster");
   s.renderContextRoster(full);
   const rows = [...s.document.querySelectorAll(".ctx-tree-row")];
   assert.equal(rows.length, full.length, "ambiguity must not hide a row");
   const row = name => rows.find(r => r.querySelector(".ctx-name").dataset.name === name);
-  // Slice 1b: no row here is flagged same work, so none draws a line; a row's parent is its indent and its
-  // "under <parent>" words, decided on the full roster (an ambiguous parent name forges neither).
+  // A row's parent is its line, its indent and its "under <parent>" words, decided on the full roster (an ambiguous
+  // parent name forges none of them).
   const words = name => row(name).querySelector(".ctx-relation")?.textContent ?? "";
-  assert.equal(s.document.querySelector(".ctx-guide"), null, "no line without the same-work flag");
+  assert.equal(row("worker").querySelectorAll(".ctx-guide.elbow").length, 0, "shipped caller must not forge an ambiguous parent guide");
+  assert.equal(row("child").querySelectorAll(".ctx-guide.elbow").length, 1, "unambiguous parent still draws its elbow");
   assert.doesNotMatch(words("worker"), /under/, "shipped caller must not forge an ambiguous parent");
   assert.equal(row("worker").style.getPropertyValue("--depth"), "0");
   assert.match(words("child"), /under worker/, "an unambiguous parent is still said");
@@ -530,6 +533,11 @@ for (const ambiguity of ["same-root", "cross-root"]) {
   test(`shipped roster relations use the full roster for ${ambiguity} ambiguity across clusters`, t => ambiguousClusterGuides(t, ambiguity));
   test(`mutation: saying a parent the tree did not resolve (${ambiguity}) is caught at the shipped caller`, t => {
     const mutant = source.replace("const underWords = (i) => (i.depth || 0) > 0 && i.parentInstance", "const underWords = (i) => i.parentInstance");
+    assert.notEqual(mutant, source);
+    assert.throws(() => ambiguousClusterGuides(t, ambiguity, mutant), /shipped caller must not forge/);
+  });
+  test(`mutation: omitting the full roster for ${ambiguity} guides is caught at the shipped caller`, t => {
+    const mutant = source.replace("treeConnectors(items, i, instances, ", "treeConnectors(items, i, items, ");
     assert.notEqual(mutant, source);
     assert.throws(() => ambiguousClusterGuides(t, ambiguity, mutant), /shipped caller must not forge/);
   });
