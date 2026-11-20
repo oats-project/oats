@@ -1408,7 +1408,8 @@ test("the child starts after the broker is ready and before SSH and host run, wi
   assert.equal(await fx.running, 0);
 });
 
-test("an envFromFile value reaches only the child; an absent file starts it without the variable; an unreadable one, or one with whitespace inside, fails the start and never shows the value", async t => {
+// Bounded: on a supervisor without a refusal the child, sshd and host run start and `running` never settles.
+test("an envFromFile value reaches only the child; an absent file starts it without the variable; an unreadable one, or one with whitespace inside, fails the start and never shows the value", {timeout: 60_000}, async t => {
   const token = "FIXTURE_TOKEN_" + "x".repeat(24);
   // Two entries: one file present, the other absent.
   const fx = await supervisorFixture(t, {child: "extra", loginFiles: {"child-token": `\n  ${token}\n\n`}});

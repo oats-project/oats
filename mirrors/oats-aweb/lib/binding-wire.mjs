@@ -377,7 +377,8 @@ async function workspaceReadinessPhase(req,{env=process.env}={}) {
       if(channel) {receiveProblems.push(...channel.problems);warnings.push(...channel.warnings);}
       if(expected.native) warnings.push({code:'native-receive-unproven',message:channel?.receiveMessage??'native receive connection is unproven: plugin/extension configuration and confirmation do not establish connected receive'});
       // req.settings is the home's captured payload, its origins the captured ones.
-      if(expected.capturedDelivery==='channel' && expected.runtime==='claude' && claudeChannelModeUnset(req.settings,settingsOrigins(env))) warnings.push({...CLAUDE_CHANNEL_MODE_DEFAULT});
+      // A session provider's Claude home runs no channel, so it has no mode to choose.
+      if(expected.capturedDelivery==='channel' && expected.runtime==='claude' && !expected.primaryBroker && claudeChannelModeUnset(req.settings,settingsOrigins(env))) warnings.push({...CLAUDE_CHANNEL_MODE_DEFAULT});
       if(expected.brokerRequired) {
         let status;
         try {status=JSON.parse(localAw(['aw','wake','status','--json'],ctx.home));} catch { /* unavailable below */ }
