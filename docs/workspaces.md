@@ -649,6 +649,72 @@ instance). The provider receives them in its environment — see
 shapes: [desktop-cli-api.md](desktop-cli-api.md#team-model-3-feature-team-model-3-oats-0370-replaces-feature-team-model-2).
 Why it is shaped this way: [team model 3](design/2026-10-02-team-model-3.md).
 
+## Sandboxes
+
+A **sandbox** is the boundary of one team (feature `sandboxes`; the design
+record [2026-11-19-sandboxes](design/2026-11-19-sandboxes.md)). The workspace
+declares it once; a soul whose resolved default team is a sandbox's team runs
+inside that sandbox, on a host whose `oats-local.yaml` lists it
+([configuration.md](configuration.md#sandboxes)), and never on the host. The
+one capability the defaults compose that declares the `sandbox` hook builds,
+starts and stops it ([capabilities.md](capabilities.md#the-sandbox-event)).
+
+```yaml
+# oats-workspace.yaml
+teams:
+  ingest-team: { team: "ingest:example.org" }
+souls:
+  agents/ingester: { default: ingest-team }   # ingester runs in sandbox ingest
+sandboxes:
+  ingest:
+    team: ingest-team
+    egress: [model, source]        # added to the base routes; absent: []
+    credentials: [sources-read]    # names only; each host's local file says where
+defaults:
+  capabilities:
+    oats.aweb-sandbox: { from: package }
+```
+
+- **The name** is 1 to 32 lowercase letters, digits and inner hyphens; its
+  server is `sandbox-<name>` (an id `oats server add|connect` refuses,
+  [servers.md](servers.md#register)).
+- **`team`** is a label of `teams:`. A team without a provider id keeps the
+  file valid; the sandbox's start and a spawn into it refuse
+  (`E_SANDBOX_TEAM`, reason `team-not-created`).
+- **`egress`** is a closed set: `model` (`https://api.anthropic.com`),
+  `source` (`https://github.com`) and `forge` (`https://api.github.com`,
+  feature `sandbox-egress-forge`). **`credentials`** are names
+  (`^[a-z0-9][a-z0-9-]{0,62}$`), each mounted read-only at
+  `/run/oats-credentials/<name>` in that sandbox only. Each list names an entry
+  once (`duplicate-entry`).
+
+**A sandboxed team is only ever a soul's own default.** The workspace file is
+refused (`E_WORKSPACE_SCHEMA`, with the reason) when a sandboxed team is
+reached any other way. Teams are compared by provider id, or by label while a
+team has no id, so two labels of one id are one team:
+
+| Reason | Where |
+|---|---|
+| `sandbox-team-taken` | a second sandbox names the same team |
+| `sandboxed-team-alias` | another shared label carries the sandboxed team's id |
+| `sandboxed-team-by-wildcard` | `defaultTeam:`, or a `*` or `<member>/*` pattern's `default`, is a sandboxed team |
+| `sandboxed-team-not-default` | a soul's `teams:` list names a sandboxed team (`"any"` never includes one) |
+| `sandboxed-team-local` | a deployment's local team, or its local `defaultTeam`, names a sandboxed team by label or by id |
+
+**Add `sandboxes:` only once every host lists feature `sandboxes`.** Every
+host reads the shared file, so the commit that adds the block makes each host
+on an older kernel refuse the whole workspace (`E_WORKSPACE_SCHEMA`, with the
+"upgrade OATS" hint), not only the sandbox's host. The kernel cannot see
+another person's host: whoever commits the block checks first that `oats
+version --json` on each host lists `sandboxes` in `features`.
+
+**A sandbox removed from the workspace.** Each deployment records the
+sandboxes it started (`.oats/sandboxes/started.json`). One removed from the
+workspace but still listed in a local file is refused there
+(`sandbox-unknown`): delist it from `sandboxes:` in that `oats-local.yaml`,
+and the next `oats sync` stops it. One removed from both files is stopped by
+the next sync through that record. A sandbox is stopped, never destroyed.
+
 ## Provider payloads have three homes
 
 | What it is | Where | Example |

@@ -833,6 +833,11 @@ modes against users, which cannot be proved from inside one account.
 - Kubernetes. The provider contract (C4) is platform-neutral, and v1's provider is
   Compose through teamctl.
 - Publishing the image, and its digest in the lock.
+- A Desktop spawn into a sandbox. The Desktop's apply is bound by its caller
+  (`--expect-decision`, `--idempotency-key`), and a spawn into a sandbox is bound and
+  keyed by the kernel itself (D-S1-4), so it is refused with `E_SANDBOX_PLACEMENT`,
+  reason `caller-bound`. A later spec
+  ([#2017](https://github.com/oats-project/oats/issues/2017)).
 
 ## Alternatives rejected
 

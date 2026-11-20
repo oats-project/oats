@@ -76,6 +76,12 @@
         "kind": "task-file",
         "file": "TASK.md"
       }
+    },
+    "capabilityMeta": {
+      "golden.messaging": {
+        "alias": "dev-claude-worktree-knone-mstub",
+        "endpoint": "stub://broker/dev-claude-worktree-knone-mstub"
+      }
     }
   }
 }

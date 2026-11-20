@@ -74,6 +74,16 @@
         "kind": "task-file",
         "file": "TASK.md"
       }
+    },
+    "capabilityMeta": {
+      "golden.knowledge": {
+        "state": "STATE.md",
+        "notes": "notes/"
+      },
+      "golden.messaging": {
+        "alias": "dev-pi-worktree-kstub-mstub-modellist",
+        "endpoint": "stub://broker/dev-pi-worktree-kstub-mstub-modellist"
+      }
     }
   }
 }

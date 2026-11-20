@@ -179,10 +179,35 @@
     "defaultTeam": {
       "$ref": "#/$defs/label",
       "description": "This deployment's default team (`oats teams default` writes it; the first `oats teams add` sets it): a label of teams here or in oats-workspace.yaml. Allowed only when oats-workspace.yaml says localTeams: true (or in the standalone view). A soul's souls: default in the workspace wins over it; it wins over the workspace's defaultTeam."
+    },
+    "sandboxes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/sandboxName" },
+      "description": "The sandboxes this machine runs (docs/configuration.md, Sandboxes): names oats-workspace.yaml sandboxes: declares, each once (sandbox-unknown, duplicate-entry); needs host.name (sandbox-host-name-required). `oats sync` builds and starts each; one delisted is stopped, never destroyed. A deployment that lists a sandbox runs every agent inside one (E_SANDBOX_HOST_AGENT)."
+    },
+    "credentials": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/credentialName" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["fromFile"],
+        "properties": { "fromFile": { "type": "string", "pattern": "^/[^\\u0000]*$", "description": "The absolute path of the credential's file on this machine." } }
+      },
+      "description": "Where each credential a listed sandbox declares is on this machine: <name>: { fromFile: /absolute/path }. A declared credential with no entry, or whose file is missing, refuses the sandbox's start (E_SANDBOX_CREDENTIAL)."
+    },
+    "sandbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["self"],
+      "properties": { "self": { "$ref": "#/$defs/sandboxName", "description": "The sandbox this deployment runs inside: a name oats-workspace.yaml declares." } },
+      "description": "Written by the sandbox provider into the deployment inside a sandbox, never by hand: that deployment spawns only souls placed in sandbox `self`, each with a seat the host delivered (E_SANDBOX_PLACEMENT). It takes no sandboxes, credentials, teams or defaultTeam (sandbox-self-conflict)."
     }
   },
   "$defs": {
     "launchPreference": { "type": "object", "additionalProperties": false, "required": ["harness"], "properties": { "harness": { "enum": ["pi", "claude", "codex"], "description": "The harness the role should run on." }, "model": { "type": "string", "minLength": 1, "pattern": "^[^\\s-][^\\s]*$", "description": "A model id for that harness; absent: the harness's own model." } } },
-    "label": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$", "maxLength": 64, "description": "A team label: at most 64 characters (0.44.0), the length the Desktop shows." }
+    "label": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$", "maxLength": 64, "description": "A team label: at most 64 characters (0.44.0), the length the Desktop shows." },
+    "sandboxName": { "type": "string", "pattern": "^[a-z0-9]$|^[a-z0-9][a-z0-9-]{0,30}[a-z0-9]$", "description": "A sandbox's name, as oats-workspace.yaml's $defs.sandboxName." },
+    "credentialName": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$", "description": "A credential's name, as oats-workspace.yaml's $defs.credentialName." }
   }
 }

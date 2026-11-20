@@ -109,13 +109,13 @@ const { callSession, parseMaxAge, readBudget } = await kernelImport("read-call",
 const { cachedWorkspace, legacyLayoutProblems, statusAnswer, statusView } = await kernelImport("roster-read", () => import("../lib/roster-read.mjs"));
 const { memberLabel, memberRows, packageRows, standaloneCatalogVersion, standalonePackages, workspaceName, workspaceStatusAnswer, workspaceStatusView } = await kernelImport("workspace-read", () => import("../lib/workspace-read.mjs"));
 const { expandInlineValues, flagValue } = await kernelImport("argv", () => import("../lib/argv.mjs"));
-const { APPROVAL_REMOVED, NATIVE_RECORD_REFUSED, HOST_RUN_USAGE, RESUME_LOCAL_ONLY, RETIRE_USAGE, SOUL_LAUNCH_USAGE, SPAWN_USAGE, SYNC_USAGE, TEAMS_USAGE, WORKTREE_USAGE, BOARD_USAGE, commandArgvProblem, commandFlags, sameWorkDeprecation } = await kernelImport("command-flags", () => import("../lib/command-flags.mjs"));
+const { APPROVAL_REMOVED, NATIVE_RECORD_REFUSED, HOST_RUN_USAGE, RESUME_LOCAL_ONLY, RETIRE_USAGE, SANDBOX_USAGE, SOUL_LAUNCH_USAGE, SPAWN_USAGE, SYNC_USAGE, TEAMS_USAGE, WORKTREE_USAGE, BOARD_USAGE, commandArgvProblem, commandFlags, sameWorkDeprecation } = await kernelImport("command-flags", () => import("../lib/command-flags.mjs"));
 
 const rawArgs = process.argv.slice(2);
 const { argv: args, problem: argvProblem, inline: inlineValues } = expandInlineValues(rawArgs);
 let cmd = args[0];
 const HELP_WORDS = new Set(["help", "--help", "-h"]);
-const KERNEL_COMMANDS = new Set(["harness", "automations", "trigger", "capture", "capabilities", "deployments", "doctor", "inspect", "instance", "operation", "package", "readiness", "souls", "soul", "teams", "launch-config", "experimental", "host", "onboard", "pane", "reader", "recall", "retire", "root", "schedule", "server", "session", "setup", "spawn", "status", "sync", "tui", "update", "version", "workspace", "worktree"]);
+const KERNEL_COMMANDS = new Set(["harness", "automations", "trigger", "capture", "capabilities", "deployments", "doctor", "inspect", "instance", "operation", "package", "readiness", "souls", "soul", "teams", "launch-config", "experimental", "host", "onboard", "pane", "reader", "recall", "retire", "root", "sandbox", "schedule", "server", "session", "setup", "spawn", "status", "sync", "tui", "update", "version", "workspace", "worktree"]);
 /** Commands whose argv another parser reads (packages/record, packages/experimental and packages/tui parse process.argv). */
 const OWN_ARGV_COMMANDS = new Set(["capture", "recall", "setup", "experimental", "tui"]);
 /** Commands `--server <id>` runs on a registered server. */
@@ -177,7 +177,10 @@ const JSON_MODE = args.includes("--json");
 // env contract for dispatched package commands (never resolved via PATH).
 const CLI_BIN = realpathSync(fileURLToPath(import.meta.url));
 // The one deprecated-name warning (lib/deprecation.mjs) rides the envelope, only when there is one.
-const envelopeWarnings = () => { const w = runtimeNameWarning(); if (w) warningDelivered = true; return w ? { warnings: [w] } : {}; };
+const envelopeWarnings = () => { const w = runtimeNameWarning(); if (w) warningDelivered = true; const all = [...(w ? [w] : []), ...commandWarnings]; return all.length ? { warnings: all } : {}; };
+/** The envelope warnings a command adds of its own (a sandbox's readiness facts, lib/sandboxes.mjs
+ *  advisoryWarnings): beside its result, never in it. */
+const commandWarnings = [];
 let warningDelivered = false;
 /** A forwarded envelope keeps the host's warnings; this command's own deprecated-name
  *  note (a `--runtime` given here) joins the host's into the one warning. */
@@ -2131,8 +2134,9 @@ function printSyncReport(ctx, synced) {
   console.log(`teams      ${sharedTeams.length ? `${sharedTeams.join(", ")} (shared)` : "(no shared teams)"} · this deployment's: oats teams`);
   const ac = report.automations;
   if (ac.triggers || ac.schedules) console.log(`automations ${ac.triggers} trigger${ac.triggers === 1 ? "" : "s"}, ${ac.schedules} schedule${ac.schedules === 1 ? "" : "s"} in the members (oats trigger list · oats schedule list)`);
-  for (const p of synced.problems ?? discovery.problems) console.log(`problem    ${p.code}  ${p.repoKey ? `${memberLabel(p.repoKey)}:` : ""}${p.path}  ${p.message}`);
-  for (const w of discovery.warnings ?? []) console.log(`warning    ${w.code}  ${w.message}`);
+  for (const p of synced.problems ?? discovery.problems) console.log(`problem    ${p.code}  ${p.sandbox ? `sandbox ${p.sandbox}` : `${p.repoKey ? `${memberLabel(p.repoKey)}:` : ""}${p.path}`}  ${p.message}`);
+  for (const sb of report.sandboxes ?? []) console.log(`sandbox    ${sb.name}  ${plan ? "would " : ""}${sb.action}${plan ? "" : `  → ${sb.state}`}${sb.server ? `  (server ${sb.server})` : ""}`);
+  for (const w of [...(discovery.warnings ?? []), ...commandWarnings]) console.log(`warning    ${w.code}  ${w.message}`);
   if (plan) console.log(`\nplan       nothing written: \`oats sync\` would write ${shortPath(lockFile)} ${changes.length ? "with the changes above" : "(unchanged)"}${synced.snapshotDue ? " and the automations snapshot" : ""}`);
   else console.log(`\nlock       ${shortPath(lockFile)}`);
 }
@@ -2226,9 +2230,198 @@ async function syncCmd() {
   // A second --dir: flag() would read the first and drop it.
   if (args.filter((a) => a === "--dir").length > 1) return bail("E_BAD_ARGS", `oats sync: give --dir once\n${SYNC_USAGE}`, { flag: "--dir" });
   const ctx = workspaceContext(bail);
-  const synced = await performSync(ctx, bail, { plan: args.includes("--plan") });
-  // One envelope (or the §8 report); success is exit 0 (a failure bails with its code).
+  const plan = args.includes("--plan");
+  const synced = await performSync(ctx, bail, { plan });
+  // Sandboxes ("What sync does"): after the lock, the package souls and the automation snapshot. A
+  // deployment that neither lists nor started one answers exactly as before (no `sandboxes` key). A
+  // failed sandbox undoes nothing: it is in `problems`, and the exit is 1 with the answer still ok
+  // (docs/desktop-cli-api.md, oats sync).
+  let pass = null;
+  try {
+    const sb = await import("../lib/sandboxes.mjs");
+    pass = await sb.syncSandboxes(sb.sandboxContext({ deploymentDir: ctx.deploymentDir, local: ctx.local, discovery: synced.discovery, lock: synced.lock, catalog: catalogForSync(bail), remoteOptions: ctx.remoteOptions }), { plan });
+  } catch (e) { if (typeof e?.code === "string" && e.code.startsWith("E_")) return bail(e.code, e.message, e.details); throw e; }
+  if (pass) {
+    synced.report.sandboxes = pass.sandboxes;
+    synced.report.problems.push(...pass.problems);
+    commandWarnings.push(...pass.warnings);
+  }
+  // One envelope (or the §8 report); success is exit 0 (a failure bails with its code), and 1 when a sandbox failed.
   if (JSON_MODE) jsonOk(synced.report); else printSyncReport(ctx, synced);
+  if (pass?.failed) process.exitCode = 1;
+}
+
+/** Where a spawn's soul runs, before anything is written (the design record: Placement, C3b, C10):
+ *  - inside a sandbox (oats-local.yaml `sandbox: {self}`): only a soul placed in that sandbox, and only
+ *    with a host-delivered seat (an `identity.seat` provider option; an apply bound and keyed), else
+ *    E_SANDBOX_PLACEMENT; → { placement: {sandbox, seatId} } (seatId: the seat path's last segment,
+ *    the kernel never reads the seat);
+ *  - on a host that lists sandboxes: a host-placed soul is E_SANDBOX_HOST_AGENT, one placed in a sandbox
+ *    this host does not list E_SANDBOX_NOT_HERE, and one placed in a listed sandbox is routed into it →
+ *    { route, ctx };
+ *  - on a host that lists none: a soul placed in a sandbox is E_SANDBOX_NOT_HERE, never spawned here
+ *    → null for every other soul. */
+async function spawnSandboxGate({ local, deploymentDir, discovery, prepared, remoteOptions, isPreview, providerPairs, bail }) {
+  const sb = await import("../lib/sandboxes.mjs");
+  const declares = discovery?.standalone !== true && discovery?.workspace?.sandboxes && typeof discovery.workspace.sandboxes === "object";
+  const self = local?.sandbox?.self ?? null, listed = Array.isArray(local?.sandboxes) ? local.sandboxes : [];
+  if (!declares && self === null && !listed.length) return null; // a workspace without sandboxes: as before
+  let lock = null;
+  try { lock = readLockIfPresent(deploymentDir); } catch (e) { return bail(e.code || "E_LOCK_SCHEMA", e.message, e.details); }
+  const ctx = sb.sandboxContext({ deploymentDir, local, discovery, lock, catalog: catalogForSync(bail), remoteOptions });
+  const placed = sb.soulPlacement(ctx, prepared.resolution);
+  const R = sb.SANDBOX_REASONS;
+  const soul = prepared.soulEntry?.qualifiedName ?? prepared.soulEntry?.name ?? args[1];
+  if (ctx.self !== null) {
+    // The last one, as parseProviderFlags reads repeated options: the seat recorded is the seat the provider gets.
+    const seat = providerPairs.findLast(([, kv]) => typeof kv === "string" && kv.startsWith("identity.seat="));
+    const bound = flag("expect-decision") !== undefined && flag("expect-decision") !== true && flag("idempotency-key") !== undefined && flag("idempotency-key") !== true;
+    const elsewhere = placed !== ctx.self ? Object.assign(new Error(`${soul} is ${placed ? `placed in sandbox ${placed}` : "placed on the host"}, and this deployment runs inside sandbox ${ctx.self}: it spawns only souls placed in ${ctx.self}; nothing was spawned`), { code: "E_SANDBOX_PLACEMENT", details: { reason: R.notPlacedHere, sandbox: ctx.self, placement: placed } }) : null;
+    // A bound and keyed apply keeps the spawn's own order (lib/core.mjs, K6e): its key's recovery and its
+    // decision's check come first, so a retry still reaches the home it made, and a drifted decision is
+    // E_DECISION_STALE; a soul placed elsewhere is refused right after them, before anything is placed.
+    if (elsewhere && !(bound && !isPreview && seat)) return bail(elsewhere.code, elsewhere.message, elsewhere.details);
+    if (!seat || (!isPreview && !bound)) return bail("E_SANDBOX_PLACEMENT", `this deployment runs inside sandbox ${ctx.self}, where a spawn takes a seat the host delivered (an identity.seat provider option on an apply bound by --expect-decision and keyed by --idempotency-key): spawn ${soul} from the host instead (\`oats spawn ${soul}\` on the machine that lists ${ctx.self}); nothing was spawned`, { reason: R.spawnFromHost, sandbox: ctx.self, remedy: `spawn ${soul} from the host that lists sandbox ${ctx.self}` });
+    const seatId = seat[1].slice("identity.seat=".length).replace(/\/+$/, "").split("/").pop() || null;
+    return { placement: { sandbox: ctx.self, seatId }, ...(elsewhere ? { refuseAfterDecision: elsewhere } : {}) };
+  }
+  if (!ctx.listed.length) {
+    if (placed === null) return null;
+    return bail("E_SANDBOX_NOT_HERE", `${soul} runs in sandbox ${placed}, which this host does not list: spawn it on the host that lists ${placed}, or add ${placed} to sandboxes: in this deployment's oats-local.yaml; nothing was spawned, and it never runs on the host`, { reason: R.notListed, sandbox: placed, localKey: "sandboxes" });
+  }
+  if (placed === null) return bail("E_SANDBOX_HOST_AGENT", `${soul} would run on the host: this deployment lists a sandbox (oats-local.yaml sandboxes:), so it runs no agent on the host; nothing was spawned — ${sb.HOST_AGENT_REMEDY}`, { reason: R.hostSpawn, remedy: sb.HOST_AGENT_REMEDY });
+  if (!ctx.listed.includes(placed)) return bail("E_SANDBOX_NOT_HERE", `${soul} runs in sandbox ${placed}, which this host does not list (it lists ${ctx.listed.join(", ")}): spawn it on the host that lists ${placed}, or add ${placed} to sandboxes: in this deployment's oats-local.yaml; nothing was spawned, and it never runs on the host`, { reason: R.notListed, sandbox: placed, localKey: "sandboxes" });
+  return { route: placed, ctx, soul };
+}
+/** A spawn routed into sandbox `gate.route` (lib/sandboxes.mjs routedSandboxSpawn): its arguments as a
+ *  server route forwards them, the task off them. Answers as `oats spawn --server` answers. */
+async function routedSpawnIntoSandbox(gate, soulArg, bail) {
+  if (flag("trigger-event") !== undefined) return bail("E_BAD_ARGS", `--trigger-event names a file on this machine, which a spawn into sandbox ${gate.route} cannot read; nothing was spawned`, { flag: "--trigger-event", sandbox: gate.route });
+  const forwarded = [];
+  let task = null;
+  for (let i = 1; i < args.length; i++) {
+    const a = args[i];
+    if (["--dir", "--agents-root"].includes(a)) { i++; continue; }
+    if (a === "--json") continue;
+    if (a === "--task") { const v = args[++i]; if (v === undefined || v.startsWith("--")) return bail("E_BAD_ARGS", "--task needs a value (use --task-file for long tasks)"); task ??= v; continue; }
+    if (a === "--task-file") {
+      const f = args[++i];
+      if (!f || (f !== "-" && f.startsWith("--"))) return bail("E_BAD_ARGS", "--task-file needs a path");
+      if (f === "-") {
+        if (process.stdin.isTTY) return bail("E_BAD_ARGS", "--task-file - reads the task from stdin");
+        try { task ??= (await readStreamBounded(process.stdin, MAX_ATTACHMENT_BYTES)).toString("utf8"); } catch (e) { return bail("E_BAD_ARGS", `--task-file -: the task could not be read from stdin (${e.message})`); }
+      } else {
+        if (!existsSync(f)) return bail("E_BAD_ARGS", `--task-file not found: ${f}`);
+        task ??= readFileSync(f, "utf8");
+      }
+      continue;
+    }
+    if (a === "--wake-file" || a === "--wake-message-file") {
+      const f = args[++i];
+      if (!f || f.startsWith("--") || !existsSync(f)) return bail("E_BAD_ARGS", `${a} needs a readable path`);
+      if (a === "--wake-message-file") { forwarded.push("--wake-message", readFileSync(f, "utf8")); continue; }
+      let doc; try { doc = JSON.parse(readFileSync(f, "utf8")); } catch (e) { return bail("E_SCHEDULE_INVALID", `--wake-file is not valid JSON: ${e.message}`); }
+      if (!doc || typeof doc !== "object" || !["cron", "tz", "message"].every((k) => typeof doc[k] === "string" && doc[k].trim())) return bail("E_SCHEDULE_INVALID", "--wake-file must hold {cron, tz, message, enabled}");
+      forwarded.push("--wake-json", JSON.stringify({ cron: doc.cron, tz: doc.tz, message: doc.message, enabled: doc.enabled === undefined ? true : doc.enabled }));
+      continue;
+    }
+    forwarded.push(a);
+  }
+  const sb = await import("../lib/sandboxes.mjs");
+  let routed;
+  try { routed = await sb.routedSandboxSpawn(gate.ctx, gate.route, { soul: soulArg, args: forwarded, task }); }
+  catch (e) { return spawnFail(e); }
+  const { envelope, stderr } = routed;
+  if (stderr && stderr.trim()) process.stderr.write(stderr.endsWith("\n") ? stderr : `${stderr}\n`);
+  if (JSON_MODE) { console.log(JSON.stringify(withLocalWarnings(envelope), null, 2)); if (!envelope.ok) process.exit(1); return; }
+  if (!envelope.ok) die(`sandbox ${gate.route}: ${envelope.error?.message || "the spawn failed"} (${envelope.error?.code || "E_REMOTE"})`);
+  const r = envelope.result;
+  if (r.preview === true) { printSpawnPreview(r, { server: r.server, soulFetched: r.soulFetched === true }); return; }
+  console.log(`Spawned ${r.instance} in sandbox ${gate.route} (server ${r.server}; ${r.work}${r.branch ? `, branch ${r.branch}` : ""})${r.launched ? "" : " — not launched"}`);
+  console.log(`  remote home: ${r.home}`);
+  if (routed.seat) console.log(`  seat: ${routed.seat.id} ${routed.seat.state}`);
+  for (const w of r.warnings || []) console.log(`  WARNING: ${terminalText(w)}`);
+  console.log(`  attach: oats session attach --server ${shellQuote(r.server)} --instance ${shellQuote(r.instance)}`);
+}
+
+/** The sandbox context of the deployment this command runs in (lib/sandboxes.mjs sandboxContext). */
+async function sandboxContextForCli(bail) {
+  const ctx = workspaceContext(bail);
+  const discovery = await discoverForCli(ctx, bail);
+  let lock;
+  try { lock = readLock(ctx.deploymentDir); } catch (e) { return bail(e.code || "E_LOCK_SCHEMA", e.message, e.details); }
+  const sb = await import("../lib/sandboxes.mjs");
+  return { sb, sctx: sb.sandboxContext({ deploymentDir: ctx.deploymentDir, local: ctx.local, discovery, lock, catalog: catalogForSync(bail), remoteOptions: ctx.remoteOptions }) };
+}
+/** After a routed retire on server sandbox-<name>, when this deployment lists <name>: the seat's release.
+ *  → a warning line when the seat did not settle, else null. */
+async function releaseAfterRoutedRetire(name, instance, bail) {
+  if (typeof instance !== "string" || !instance) return null;
+  let local = null;
+  try { ({ local } = loadLocal(dirFlag())); } catch (e) { if (e?.code === "E_LOCAL_MISSING") return null; throw e; }
+  if (!Array.isArray(local?.sandboxes) || !local.sandboxes.includes(name)) return null;
+  const { sb, sctx } = await sandboxContextForCli(bail);
+  try {
+    const released = await sb.releaseRetiredSeat(sctx, name, { instance });
+    if (released === null) return `sandbox ${name}: its provider names no seat of ${instance}; \`oats sandbox reconcile ${name}\` settles it`;
+    if (released.seat?.state === "released") return null;
+    if (released.state === "stale") return `sandbox ${name}: the release of ${instance}'s seat answered stale (E_PLAN_STALE: the provider's state changed since its plan); nothing was released; \`oats sandbox reconcile ${name}\` settles it`;
+    return `sandbox ${name}: the release of ${instance}'s seat answered ${released.seat?.state ?? released.state}${released.problem?.message ? ` (${released.problem.message})` : ""}; \`oats sandbox status ${name}\` shows it, and \`oats sandbox reconcile ${name}\` settles it`;
+  } catch (e) {
+    if (typeof e?.code === "string" && e.code.startsWith("E_")) return `sandbox ${name}: the seat of ${instance} was not released (${e.code}: ${e.message}); \`oats sandbox reconcile ${name}\` settles it`;
+    throw e;
+  }
+}
+/** The server ids the sandbox provider registers (C7). */
+const SANDBOX_SERVER_PREFIX = "sandbox-";
+/** `oats sandbox status|start|stop|reconcile` (docs/desktop-cli-api.md, Sandboxes; the design record's C5):
+ *  each through the one sandbox provider the workspace's defaults compose (lib/sandboxes.mjs). */
+async function sandboxCmd() {
+  const bail = (code, msg, details) => (JSON_MODE ? jsonFail(code, msg, details) : die(msg));
+  const verb = args[1];
+  if (!["status", "start", "stop", "reconcile"].includes(verb)) return bail("E_BAD_ARGS", SANDBOX_USAGE);
+  if (args.filter((a) => a === "--dir").length > 1) return bail("E_BAD_ARGS", `oats sandbox: give --dir once\n${SANDBOX_USAGE}`, { flag: "--dir" });
+  const name = verb === "status" ? null : args[2];
+  const planned = args.includes("--plan"), revision = valueFlag("plan-revision"), key = valueFlag("idempotency-key");
+  if (name !== null) {
+    if (!name || name.startsWith("-")) return bail("E_BAD_ARGS", SANDBOX_USAGE);
+    if (planned === (revision !== undefined || key !== undefined) || (!planned && (revision === undefined || key === undefined))) return bail("E_BAD_ARGS", `oats sandbox ${verb}: give --plan, or --plan-revision and --idempotency-key\n${SANDBOX_USAGE}`);
+  }
+  const { sb, sctx } = await sandboxContextForCli(bail);
+  let answer;
+  try {
+    if (verb === "status") answer = await sb.sandboxStatus(sctx);
+    else if (verb === "reconcile") answer = await sb.reconcileSandbox(sctx, name, { plan: planned, planRevision: revision ?? null, idempotencyKey: key ?? null });
+    else answer = await sb.sandboxLifecycle(sctx, name, verb, { plan: planned, planRevision: revision ?? null, idempotencyKey: key ?? null });
+  } catch (e) { if (typeof e?.code === "string" && e.code.startsWith("E_")) return bail(e.code, e.message, e.details); throw e; }
+  if (verb === "status") commandWarnings.push(...sb.advisoryWarnings(answer.sandboxes));
+  if (JSON_MODE) jsonOk(answer);
+  else { printSandboxAnswer(verb, answer); for (const w of commandWarnings) console.log(`warning ${w.code}  ${terminalText(w.message)}`); }
+  // An apply whose sandbox failed, or whose outcome is unknown, is not a success.
+  if (answer.state !== undefined && ["failed", "unknown"].includes(answer.state)) process.exitCode = 1;
+}
+function printSandboxAnswer(verb, answer) {
+  if (verb === "status") {
+    if (!answer.sandboxes.length) console.log("no sandboxes are declared in oats-workspace.yaml");
+    for (const s of answer.sandboxes) {
+      console.log(`${s.name}  ${s.state}${s.listedHere ? "" : " (not listed here)"}  team ${s.team?.label ?? "-"}${s.team && s.team.id === null ? " (not created)" : ""}${s.server ? `  server ${s.server}` : ""}`);
+      if (s.egress.length) console.log(`  egress       ${s.egress.join(", ")}`);
+      for (const c of s.credentials) console.log(`  credential   ${c.name} (${c.source})`);
+      for (const seat of s.seats) console.log(`  seat         ${seat.seatId} ${seat.state}${seat.instance ? ` (${seat.instance})` : ""}`);
+      for (const p of s.problems) console.log(`  problem      ${p.code}${p.reason ? ` ${p.reason}` : ""}  ${terminalText(p.message ?? "")}`);
+    }
+    return;
+  }
+  if (answer.planRevision !== undefined) {
+    console.log(`${answer.act} ${answer.sandbox}: plan ${answer.planRevision}`);
+    for (const a of answer.actions) console.log(`  ${a.step}${a.detail ? `  ${terminalText(String(a.detail))}` : ""}`);
+    console.log(`apply with: oats sandbox ${answer.act} ${answer.sandbox} --plan-revision ${answer.planRevision} --idempotency-key <new key>`);
+    return;
+  }
+  console.log(`${answer.act} ${answer.sandbox}: ${answer.state}${answer.server ? ` (server ${answer.server})` : ""}`);
+  for (const r of answer.receipts) console.log(`  ${r.ok ? "ok    " : "FAILED"} ${r.step}${r.detail ? `  ${terminalText(String(r.detail))}` : ""}`);
+  for (const p of answer.problems) console.log(`  problem ${p.code}${p.reason ? ` ${p.reason}` : ""}  ${terminalText(p.message ?? "")}`);
+  for (const r of answer.replays ?? []) console.log(`  replay ${r.spawnKey} ${r.instance ?? ""}: ${r.outcome}${r.bound ? ` → ${r.bound}` : ""}`);
 }
 
 /** Walk up from dir for oats-workspace.yaml INSIDE a Git checkout → { file, root } | null. */
@@ -2862,7 +3055,7 @@ async function spawnCmd() {
   // the per-commit cache, or fetches it to a temporary copy (reported as soulFetched).
   const providerPairs = [];
   for (let i = 0; i < args.length; i++) if (args[i] === "--provider") { if (!args[i + 1] || !args[i + 2]) bail("E_BAD_ARGS", "--provider needs <capability> <key>=<value>"); providerPairs.push([args[i + 1], args[i + 2]]); i += 2; }
-  let wsPrepared, soulFetched = false, wsDiscovery;
+  let wsPrepared, soulFetched = false, wsDiscovery, sandboxPlacement = null;
   {
     let discovery = null;
     try {
@@ -2874,6 +3067,10 @@ async function spawnCmd() {
       // Each package the soul composes is the content the lock records (E_PACKAGE_INTEGRITY), before the
       // first write of the spawn: the soul cache below is the first thing a spawn creates under the agents root.
       await verifyPreparedPackages(wsPrepared);
+      // Sandboxes (the design record's Placement, C3b and C10): where this soul runs decides the spawn
+      // before anything is written here, a preview's soul copy included.
+      sandboxPlacement = await spawnSandboxGate({ local, deploymentDir: dirname(localPath), discovery, prepared: wsPrepared, remoteOptions, isPreview, providerPairs, bail });
+      if (sandboxPlacement?.route) return await routedSpawnIntoSandbox(sandboxPlacement, name, bail);
       const soulName = agentDirOf(wsPrepared.soulEntry);
       let soulDir;
       if (isPreview) {
@@ -3047,6 +3244,9 @@ async function spawnCmd() {
       ...(flag("expect-decision") !== undefined && flag("expect-decision") !== true ? { expectDecision: String(flag("expect-decision")) } : {}),
       // K6c: with --idempotency-key, a retry of the SAME confirmed decision replays the recorded home instead of spawning twice.
       ...(flag("idempotency-key") !== undefined && flag("idempotency-key") !== true ? { idempotencyKey: String(flag("idempotency-key")) } : {}),
+      // Inside a sandbox (C3b): the home records the sandbox and the seat it took.
+      ...(sandboxPlacement?.placement ? { placement: sandboxPlacement.placement } : {}),
+      ...(sandboxPlacement?.refuseAfterDecision ? { refuseAfterDecision: sandboxPlacement.refuseAfterDecision } : {}),
     };
       r = await spawnInstanceAsync(root, agent, spawnOpts); }
     if (args.includes("--preview")) {
@@ -3100,6 +3300,11 @@ async function spawnCmd() {
       ...(r.worktreeHooks ? { worktreeHooks: r.worktreeHooks } : {}),
       // Feature spawn-apply-suggest-name: how the name was chosen; only with --suggest-name.
       ...(r.naming ? { naming: r.naming } : {}),
+      // Sandboxes (the record's step 6): what the capabilities' spawn hooks recorded in the new home,
+      // as instance.json holds it; a keyed replay answers the first spawn's. Only when one recorded any.
+      ...(r.capabilityMeta && typeof r.capabilityMeta === "object" && Object.keys(r.capabilityMeta).length ? { capabilityMeta: r.capabilityMeta } : {}),
+      // Inside a sandbox: the sandbox and the seat the home took.
+      ...(r.placement ? { placement: r.placement } : {}),
     });
     return;
   }
@@ -4383,6 +4588,11 @@ async function serverCmd() {
   const sub = args[1];
   const usage = "usage: oats server add <id> --ssh <host-alias> [--operator-ssh <alias> | --no-operator-ssh] --workspace </abs/path> [--oats <path>] [--path <dir:dir>] [--label <text>] [--replace] | connect <id> --ssh <host-alias> [--operator-ssh <alias> | --no-operator-ssh] [--workspace-ref <ref>] [--dir </abs/path or ~/path on the host>] [--oats <path>] [--path <dir:dir>] [--label <text>] [--install-oats] [--replace] | list [--workspace-ref <ref>] | remove <id> | check <id> | roster [--server <id>] [--workspace-key <key>]... | forget <id> --instance <name>  [--json]";
   if (!["add", "connect", "list", "remove", "check", "roster", "forget"].includes(sub)) bail("E_USAGE", usage);
+  // The sandbox- prefix is the sandbox provider's (the sandboxes record, C7): it registers sandbox-<name>
+  // itself. A registration under it that exists is read as before and is never adopted; none is written here.
+  if ((sub === "add" || sub === "connect") && typeof args[2] === "string" && args[2].startsWith(SANDBOX_SERVER_PREFIX)) {
+    bail("E_SERVER_INVALID", `server id ${JSON.stringify(args[2])}: the ${SANDBOX_SERVER_PREFIX} prefix is reserved for the sandboxes this deployment lists (\`oats sandbox start\` registers sandbox-<name>); choose another id; nothing was registered`, { reason: "reserved-prefix", id: args[2], prefix: SANDBOX_SERVER_PREFIX });
+  }
   if (sub === "connect") return serverConnectCmd(bail);
   if (sub === "forget") {
     // A saved route whose remote instance is gone can be dropped only by
@@ -4790,6 +5000,14 @@ async function serverRouteCmd() {
   catch (e) { bail(e.code || "E_SSH", e.message, e.details); }
   const { envelope, stderr } = routed;
   if (stderr && stderr.trim()) process.stderr.write(stderr.endsWith("\n") ? stderr : stderr + "\n");
+  // A retire in a sandbox this deployment lists (the sandboxes record, Lifecycle): once the remote retire
+  // removed the home, the provider releases its seat at once (reason retired). A failed, deferred,
+  // quarantined or kept-home retire releases nothing (servers.mjs remoteRetireCompleted: the home may be
+  // live); a release that does not settle is a warning, and the next reconcile settles the seat.
+  if (cmd === "retire" && !rest.includes("--plan") && id.startsWith(SANDBOX_SERVER_PREFIX) && (await import("../lib/servers.mjs")).remoteRetireCompleted(envelope)) {
+    const warning = await releaseAfterRoutedRetire(id.slice(SANDBOX_SERVER_PREFIX.length), envelope.result?.retired, bail);
+    if (warning) envelope.result.warnings = [...(Array.isArray(envelope.result.warnings) ? envelope.result.warnings : []), warning];
+  }
   // The host's own reads and plans: its envelope, relayed unchanged.
   if (cmd === "readiness" || cmd === "instance" || (cmd === "retire" && rest.includes("--plan"))) {
     if (JSON_MODE) { console.log(JSON.stringify(withLocalWarnings(envelope), null, 2)); if (!envelope.ok) process.exit(1); return; }
@@ -4906,7 +5124,7 @@ try {
 // the canonical root when the command resolved one (lib/resolved-deployment.mjs; lib/deployments.mjs
 // listResolved): a listed deployment costs one bounded read of the list. Never on --server (the remote's path is not this computer's), never for
 // help, and silent: no output, no change to the command's answer or exit status.
-const LISTS_ITS_DEPLOYMENT = new Set(["automations", "capabilities", "doctor", "harness", "inspect", "instance", "launch-config", "operation", "package", "pane", "readiness", "retire", "schedule", "session", "soul", "souls", "spawn", "status", "sync", "teams", "trigger", "update", "workspace", "worktree"]);
+const LISTS_ITS_DEPLOYMENT = new Set(["automations", "capabilities", "doctor", "harness", "inspect", "instance", "launch-config", "operation", "package", "pane", "readiness", "retire", "sandbox", "schedule", "session", "soul", "souls", "spawn", "status", "sync", "teams", "trigger", "update", "workspace", "worktree"]);
 // `instance suggest-name` records nothing (#1490 §2): the oats-local.yaml it reads is not listed.
 // `session resume` reads the list and never writes it (#1559).
 if (LISTS_ITS_DEPLOYMENT.has(cmd) && flag("server") === undefined && !(cmd === "instance" && args[1] === "suggest-name") && !(cmd === "session" && args[1] === "resume") && !args.slice(1).some((a) => a === "--help" || a === "-h")) observeResolvedDeployment(listResolved);
@@ -4947,6 +5165,7 @@ else if (cmd === "instance") await instanceCmd();
 else if (cmd === "worktree") await worktreeCmd();
 else if (cmd === "root") console.log(resolve(new URL("..", import.meta.url).pathname));
 else if (cmd === "sync") await syncCmd();
+else if (cmd === "sandbox") await sandboxCmd();
 else if (cmd === "package") await packageCmd();
 else if (cmd === "workspace") await workspaceCmd();
 else if (cmd === "capabilities" || cmd === "souls") await itemsCmd(cmd);
@@ -5306,7 +5525,20 @@ Usage:
                                             the same report, nothing written (what a bare sync
                                             would change). No approval step: declaring a
                                             package in packages: is the trust decision
-                                            (--approve is E_BAD_ARGS)
+                                            (--approve is E_BAD_ARGS). Then each sandbox
+                                            oats-local.yaml lists is built, started or left,
+                                            one delisted is stopped (never destroyed), and each
+                                            running one's seats are reconciled; a failed one is
+                                            in problems, and the exit is 1
+  oats sandbox status [--dir <d>] [--json]   the workspace's sandboxes: listed here or not, the
+                                            provider's state, server, egress, credentials, seats
+  oats sandbox start|stop <name> (--plan | --plan-revision <r> --idempotency-key <k>)
+      [--dir <d>] [--json]                  build and start, or stop (never destroy), one
+                                            sandbox through its provider's sandbox hook
+  oats sandbox reconcile <name> (--plan | --plan-revision <r> --idempotency-key <k>)
+      [--dir <d>] [--json]                  settle its seats: the provider's reconcile, then
+                                            the replay of each kept routed spawn whose seat is
+                                            delivered
   oats package add <id> <version|git:<repo>@<ref>>  edit packages: in oats-workspace.yaml when the
       | remove <id>  [--dir <d>]            workspace repo is the current checkout; otherwise
                                             print the line to add (the file travels through Git)

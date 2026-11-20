@@ -744,6 +744,44 @@ and `NODE_DISABLE_COMPILE_CACHE=1` turns it off. A cache that cannot be
 written means no cache, never a different answer. Hooks and other processes the
 CLI starts do not inherit it.
 
+## Sandboxes
+
+Feature `sandboxes` (the workspace's side: [workspaces.md](workspaces.md#sandboxes)).
+
+**On a host that runs sandboxes**, the local file lists them and says where
+each credential is:
+
+```yaml
+host: { name: cloud-1 }          # required once sandboxes is not empty
+sandboxes: [ingest]              # each declared in oats-workspace.yaml sandboxes:
+credentials:
+  sources-read: { fromFile: /srv/secrets/sources-read }   # absolute
+```
+
+- A name the workspace does not declare is refused (`E_WORKSPACE_SCHEMA`,
+  reason `sandbox-unknown`); a name listed twice is `duplicate-entry`; a list
+  without `host.name` is `sandbox-host-name-required`.
+- A deployment that lists a sandbox runs **every** agent inside one: a
+  host-placed spawn, a session start, restart or resume of a host home, and a
+  sandbox start while a host home runs, are refused (`E_SANDBOX_HOST_AGENT`).
+  Run host agents from another deployment, under another OS user, or remove
+  `sandboxes:` from this file.
+- `oats sync` builds or starts each listed sandbox, stops each one no longer
+  listed (never destroys it) and reconciles their seats. A sandbox removed
+  from the workspace but still listed here is refused as `sandbox-unknown`:
+  delist it here, and the next sync stops it.
+- A spawn of a soul placed in a sandbox this file does not list is refused
+  (`E_SANDBOX_NOT_HERE`): it never runs on the host.
+
+**Inside a sandbox**, the provider writes the in-sandbox deployment's file
+with `sandbox: {self: <name>}`. It may not be combined with `sandboxes:`,
+`credentials:`, local `teams:` or a local `defaultTeam` (`sandbox-self-conflict`).
+That deployment spawns only souls placed in its sandbox, and only with a seat
+the host delivered: a provider option `identity.seat=<path>` on an apply bound
+by `--expect-decision` and keyed by `--idempotency-key`, which a routed spawn
+from the host sends. Anything else is `E_SANDBOX_PLACEMENT` (`spawn-from-host`,
+or `not-placed-here` for a soul placed elsewhere): spawn from the host.
+
 ## What is not in it
 
 - **Which capabilities a soul gets:** the soul's `capabilities:` plus the

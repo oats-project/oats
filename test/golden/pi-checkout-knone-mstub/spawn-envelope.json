@@ -71,6 +71,12 @@
         "kind": "task-file",
         "file": "TASK.md"
       }
+    },
+    "capabilityMeta": {
+      "golden.messaging": {
+        "alias": "dev-pi-checkout-knone-mstub",
+        "endpoint": "stub://broker/dev-pi-checkout-knone-mstub"
+      }
     }
   }
 }

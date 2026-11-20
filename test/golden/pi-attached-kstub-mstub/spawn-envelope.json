@@ -71,6 +71,16 @@
         "kind": "task-file",
         "file": "TASK.md"
       }
+    },
+    "capabilityMeta": {
+      "golden.knowledge": {
+        "state": "STATE.md",
+        "notes": "notes/"
+      },
+      "golden.messaging": {
+        "alias": "dev-pi-attached-kstub-mstub",
+        "endpoint": "stub://broker/dev-pi-attached-kstub-mstub"
+      }
     }
   }
 }

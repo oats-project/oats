@@ -674,6 +674,13 @@ When the program has changed, the launch runs the new one and says so: a warning
 in the answer and a `launch-warning` event in the home, both naming the path the
 hooks were given and the path it runs.
 
+A spawn hook of a keyed apply (`oats spawn … --expect-decision <D>
+--idempotency-key <k>`) also gets `OATS_SPAWN_IDEMPOTENCY_KEY` (feature
+`sandboxes`): the key `k`, so a provider can bind what it delivers to that one
+spawn (a sandbox's seat). An unkeyed spawn's hooks never get it, and it is
+reserved like `OATS_SPAWNER_HOME`: an inherited value is dropped, and a launch
+configuration cannot set it.
+
 A spawn hook also gets `OATS_SPAWNER_HOME` (feature `spawn-attribution`): the
 absolute home of the instance whose session ran the spawn, as the kernel
 validated it and recorded it in `instance.json` `spawnedBy`
@@ -1207,6 +1214,101 @@ own configuration.
 4. To limit it, put the hook in a small capability composed only by the souls
    that need the setup.
 5. Declare it `required` when the tree is unusable without the setup.
+
+### The sandbox event
+
+`OATS_EVENT=sandbox` (feature `sandboxes`; the design record
+[2026-11-19-sandboxes](design/2026-11-19-sandboxes.md), C4) is a sandbox
+provider's one hook. It runs at deployment level, never per instance, for each
+act on a sandbox: `oats sandbox status|start|stop|reconcile`, `oats sync`'s
+sandbox pass, a spawn routed into a sandbox, and the release after a retire
+from the host ([Sandboxes](desktop-cli-api.md#sandboxes)).
+
+```json
+{ "hooks": { "sandbox": "bin/sandbox.mjs" } }
+```
+
+**Which capability.** The capabilities the workspace's `defaults` compose (a
+spawn's resolution without a soul's layer) whose manifest declares `sandbox`:
+exactly one. None is `E_SANDBOX_PROVIDER` reason `none`; two or more are
+`ambiguous`, naming them. Its settings are its manifest defaults, then the
+workspace's payload for its slot when it fills one, then the host's
+`settings.<capability>` in `oats-local.yaml`, merged as for a spawn.
+
+**The call.** The kernel runs `node <script>` from the capability's
+materialized directory with `OATS_SANDBOX_ACT` set to `plan`, `start`, `stop`,
+`status`, `reconcile`, `seat`, `bind` or `release`, writes one JSON request on
+its stdin and reads one JSON answer on its stdout. The request and each act's
+fields are the record's table (C4); every answer has the envelope
+`{sandboxApi: 1, act, state, receipts, problem?}`. A hook that exits nonzero,
+is killed at its time limit, or prints anything but one valid answer is read
+as `state: "unknown"` with problem `E_SANDBOX_PROVIDER`, reason
+`hook-failed`. A settled `status` or `reconcile` answers its `seats`, `[]`
+when the ledger holds none; one that leaves it out is `hook-failed`, never an
+empty ledger. A valid answer that settles an act carries every field of that
+act's row, each a non-empty string: a seat plan's `seat: {id, path}`, a
+`seat`'s `seat: {id, path, alias, certificateId, team}`, and a `bind`'s or a
+`release`'s `seat: {id, certificateId, state}`; one without them is
+`hook-failed` too. A `stale` answer, to a plan or to an act, carries a fresh
+`plan`, which the kernel answers as `E_PLAN_STALE`.
+
+A seat plan's `spawnProvider` options are the seat's: on a routed spawn, a
+caller's own `--provider` pair for the same capability and key is dropped,
+so the sandbox's spawn, its kept request and the home's recorded seat name
+the seat the host took.
+
+**Time limits.** `plan` and `status` are read-only and get 60 s; every other
+act gets 30 minutes (a build). Every act but `plan` and `status` runs under the
+sandbox's lock, per deployment: a second one is `E_LIFECYCLE_BUSY`.
+
+**The hook's process group.** The hook runs in a process group of its own.
+The act waits until every pipe of the hook (stdin, stdout and stderr, which is
+read and dropped) has closed, then kills whatever is left of the group, and only
+then answers and releases the sandbox's lock. Its time limit, an answer over the
+size limit, and a signal or an exit of the kernel kill the whole group at once.
+So nothing the hook started (`aw`, `ssh`, a provider's tool) acts after its act
+or its lock, on success and on failure alike.
+
+A kernel killed outright (SIGKILL: the OOM killer, `kill -9`, a lost host
+session) cannot end its hook's group. So the kernel records the group (its
+leader's pid and start) in the lock it holds around the act, the sandbox's and,
+for a routed spawn, the kept request's. The next oats that takes that lock over
+from its dead holder first ends the recorded group (SIGTERM, then SIGKILL) and
+waits for it to go, and only then acts. A recorded group whose leader's start no
+longer matches is someone else's and is left alone. One that cannot be told (its
+leader's start unreadable now, or not recorded when the hook began, or its
+leader gone with members left) or that survives SIGKILL is never signalled
+blind: the lock stays held, the act is
+refused `E_LIFECYCLE_BUSY` (a kept request is `held-in-flight`), and the
+refusal names the group to check by hand.
+
+A provider that needs a process to outlive an act (an SSH ControlMaster, a
+daemon) starts it in its own session (`setsid`) and owns it: the kernel never
+ends a process that left the hook's group.
+
+**The environment.** The invoker's environment without any name the kernel
+generates (no instance, soul, team or captured-context name), then:
+
+| Name | Value |
+|---|---|
+| `OATS_EVENT` | `sandbox` |
+| `OATS_SANDBOX_ACT` | the act |
+| `OATS_CAPABILITY`, `OATS_LAYER` | the provider and its layer |
+| `OATS_LEVEL` | `deployment` |
+| `OATS_WORKSPACE` | the deployment directory's real path (the provider derives its deployment key from it) |
+| `OATS_ROOT` | the deployment's agents root |
+| `OATS_SETTINGS`, `OATS_SETTINGS_ORIGINS` | the merged settings and where each came from |
+| `OATS_CLI_BIN`, `OATS_NODE_BIN` | the kernel's own executables |
+
+`OATS_DEPLOYMENT` is never set: it marks a captured context, in which the
+kernel refuses every command but `version`.
+
+**The provider's readiness facts.** A `status` answer on a `ready` or
+`stopped` sandbox whose `problem.reason` is `ssh-include-missing` or
+`state-orphaned` is no failure: readiness reports it as item
+`sandbox-<reason>` with the provider's remedy unchanged, and `oats sync` and
+`oats sandbox status` give it as an envelope warning. The kernel reads the
+reason, never the code alone.
 
 ## Official packages
 
