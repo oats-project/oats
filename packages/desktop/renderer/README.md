@@ -2400,7 +2400,13 @@ terminal's geometry is never set here. Its two reads, the detail through
 and on rejection, and run when the view opens and when the board or the claim
 changes, never on an unchanged poll. The answer goes through
 `createTerminalTab`'s `type(text)`, the tab's own PTY lease (no control
-character, no line end, never while the pane isn't active), and the person's Enter is seen through its
+character, no line end, never while the pane isn't active): `desk.termWrite(h, text, { answer: true })`, which main
+answers (`term:answer`, terminal-owner.mjs `answer`, the same frame guard and lease as a write) only after reading
+the viewer pane's `#{pane_in_mode}` on its `=`-anchored session: in a mode (tmux copy mode, where `q` is cancel and
+`q1: Yes` would arrive as `1: Yes`), or a mode it can't read, nothing is typed and it answers `E_TERM_IN_MODE`, which
+the zone says (`IN_MODE_NOTE`); never a cancel. A remote viewer has no local pane to read and types as before. While
+an answer is pending (typed, no Enter yet; Ctrl+C or Ctrl+U frees it) a further press is refused (`PENDING_NOTE`).
+While the board has a question, answered on this tab or not, `sync` keeps its claim off the waiting row. The person's Enter is seen through its
 `onInput` observer. Before a number types, the view reads the claims again
 (`checkClaims`): only the latest claims read paints and may let the press type,
 and the shell's `inView` (the tab's pane active, the tab layer shown, its

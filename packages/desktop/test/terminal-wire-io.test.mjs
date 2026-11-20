@@ -205,3 +205,20 @@ test('actual main composition registers owner BEFORE load and uses shared broker
   assert.ok(commands.some(([, args]) => args.includes('=agents:=one')));
   for (const [bin, args] of commands) { assert.equal(bin, 'tmux'); assert.ok(args.includes('/memory/socket')); }
 });
+
+test('preload termWrite with { answer: true } asks main (term:answer) and resolves its answer, E_TERM_IN_MODE included', async () => {
+  const calls = [];
+  let reply = { terminalApi: 2, ok: true, status: 'sent' };
+  const ipc = { send: (...args) => calls.push(['send', ...args]), invoke: async (...args) => { calls.push(['invoke', ...args]); return reply; } };
+  const bridge = createTerminalBridge(ipc, {}), h = handle(3);
+  assert.deepEqual(await bridge.termWrite(h, 'q1: Yes', { answer: true }), { terminalApi: 2, ok: true, status: 'sent' });
+  assert.deepEqual(calls, [['invoke', 'term:answer', { ...h }, 'q1: Yes']]);
+  reply = { terminalApi: 2, ok: false, code: 'E_TERM_IN_MODE', message: 'The terminal is in its scrollback. Nothing was typed.' };
+  assert.equal((await bridge.termWrite(h, 'q1: Yes', { answer: true })).code, 'E_TERM_IN_MODE');
+  reply = { terminalApi: 2, ok: true, status: 'opened' };
+  assert.equal((await bridge.termWrite(h, 'q1: Yes', { answer: true })).code, 'E_TERM_TRANSPORT');
+  calls.length = 0;
+  for (const options of [null, {}, { answer: 1 }, { answer: true, extra: 1 }]) assert.equal((await bridge.termWrite(h, 'q1: Yes', options)).code, 'E_TERM_BAD_ARGS');
+  assert.equal((await bridge.termWrite(7, 'q1: Yes', { answer: true })).code, 'E_TERM_LEASE');
+  assert.deepEqual(calls, [], 'nothing reaches main for a refused request');
+});

@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { createAgentBoard, createHiddenFacts, DIALOG_NOTE, DETAIL_NOTES, BOARD_MALFORMED, boardDropped } from '../renderer/agent-board.mjs';
+import { createAgentBoard, createHiddenFacts, DIALOG_NOTE, IN_MODE_NOTE, PENDING_NOTE, DETAIL_NOTES, BOARD_MALFORMED, boardDropped } from '../renderer/agent-board.mjs';
 import { createTabBoards } from '../renderer/agent-board-tabs.mjs';
 import { boardData, boardDetailData, BOARD_FEATURE } from '../../client/instance-board.mjs';
 import { defaultBinding, TERMINAL_ALLOWLIST, DEFAULT_KEYMAPS } from '../renderer/keybindings.mjs';
@@ -156,8 +156,18 @@ test('agent view answering: a number puts "<id>: <option>" on the input line, un
   f.zone().focus(); f.key(f.zone(), '1');
   assert.deepEqual(f.typed, ['q1: Yes, one clean commit']);
   assert.equal(f.doc.activeElement, f.terminal);
+  // A second press before the person's Enter would be typed onto the same line: it is refused, and the zone says why
+  // (the Opus whole read, 2026-11-20; it was typed before).
   f.zone().focus(); f.key(f.zone(), 'Tab'); f.key(f.zone(), '3');
+  assert.deepEqual(f.typed, ['q1: Yes, one clean commit']);
+  assert.equal(f.zone().querySelector('.agent-q-note').textContent, PENDING_NOTE);
+  assert.equal(f.zone().querySelector('.agent-q-note').hidden, false);
+  f.view.input('\r');
+  assert.equal(f.zone().querySelector('.agent-q-note').hidden, true, 'the Enter sent it: the line is free');
+  f.zone().focus(); f.key(f.zone(), '3');
   assert.deepEqual(f.typed, ['q1: Yes, one clean commit', 'q2: Close']);
+  // Ctrl+U (or Ctrl+C) clears the line: the answer is gone, unsent, and a press types again.
+  f.view.input('\x15');
   f.zone().querySelectorAll('.agent-q-option')[0].click();
   assert.equal(f.typed.at(-1), 'q2: Merge', 'a press of the option types the same');
 });
@@ -170,7 +180,7 @@ test('agent view answering: no digit is ever typed without its id, and nothing i
   assert.ok(f.typed.length >= 1);
   for (const text of f.typed) { assert.match(text, /^q\d: \S/); assert.doesNotMatch(text, /[\r\n]/); }
   assert.ok(!f.typed.some(text => /^\d+$/.test(text)), 'no bare digit');
-  assert.equal(f.typed.length, 2, '9 and 5 name no option: nothing typed');
+  assert.equal(f.typed.length, 1, 'the 2 is refused while the 1 is unsent, and 9 and 5 name no option: nothing typed');
   assert.equal(f.view.question, 'q1', 'the card stays until the person sends');
   f.view.input('x'); assert.equal(f.view.question, 'q1');
   f.view.input('\n'); assert.equal(f.view.question, 'q1', 'Shift+Enter is a new line, not a send');
@@ -798,6 +808,45 @@ test('agent view questions: the key hint names 1–N for the shown question\'s N
   f.zone().querySelector('.agent-q-turn[aria-label="Next question"]').click();
   assert.equal(f.view.question, 'q2');
   assert.match(hint(), /^1–3 put the answer on the input line/, 'q2 has three');
+});
+
+// The Opus whole read (2026-11-20): main refuses an answer while the terminal is in its scrollback (tmux copy mode,
+// where q is cancel and "q1: Yes" would arrive as "1: Yes"). Nothing is pending, the zone says why, and the next press,
+// out of the scrollback, types.
+test('agent view answering: an answer refused for the scrollback types nothing, says why, and a press after it types', async t => {
+  const dom = new JSDOM('<!doctype html><body><div class="tab-pane active"><div class="term-wrap"><textarea></textarea></div></div></body>');
+  t.after(() => dom.window.close());
+  const doc = dom.window.document, pane = doc.querySelector('.tab-pane'), terminal = doc.querySelector('textarea');
+  const typed = []; let mode = true;
+  const view = createAgentBoard({ pane, home: '/h', name: 'dev-a', now: () => NOW, focusTerminal: () => terminal.focus(), openLink: () => {},
+    hidden: createHiddenFacts(memoryStorage()), type: async text => { if (mode) return 'in-mode'; typed.push(text); return true; } });
+  view.update(boardData(board()));
+  const zone = pane.querySelector('.agent-questions'), note = () => zone.querySelector('.agent-q-note');
+  zone.focus();
+  zone.querySelectorAll('.agent-q-option')[0].click(); for (let i = 0; i < 10; i++) await Promise.resolve();
+  assert.deepEqual(typed, []);
+  assert.equal(note().textContent, IN_MODE_NOTE); assert.equal(note().hidden, false);
+  assert.notEqual(doc.activeElement, terminal, 'the focus stays in the zone');
+  view.input('\r');
+  assert.equal(view.question, 'q1', 'nothing was pending: an Enter hides no card');
+  mode = false;
+  zone.querySelectorAll('.agent-q-option')[0].click(); for (let i = 0; i < 10; i++) await Promise.resolve();
+  assert.deepEqual(typed, ['q1: Yes, one clean commit']);
+  assert.equal(note().hidden, true, 'the line goes once a press types');
+  assert.equal(doc.activeElement, terminal);
+});
+
+// The Opus whole read (2026-11-20): the board's claim stays off the waiting row while the board has a question, also
+// once the person answered the last one on this tab and the agent has not cleared it yet.
+test('agent view gate: after the last open question is answered, the waiting row still gives way to the zone', async t => {
+  const f = tabsFixture(t, { events: false });
+  const claim = { producer: 'oats.board', reason: 'attention', since: AT, message: 'Squash q1?' };
+  const row = f.row({ board: boardData({ facts: [], questions: [question('q1')] }) });
+  assert.equal(f.boards.sync(f.tab, row, claim, 'w'), true);
+  f.pane.querySelector('.agent-q-option').click(); await f.flush();
+  f.boards.input(f.tab, '\r');
+  assert.equal(f.pane.querySelector('.agent-questions'), null, 'the answered card hides');
+  assert.equal(f.boards.sync(f.tab, row, claim, 'w'), true, 'the next poll keeps the claim off the waiting row');
 });
 
 // The round-4 delta's finding: the occurrence check fails closed.

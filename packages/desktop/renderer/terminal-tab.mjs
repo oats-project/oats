@@ -393,14 +393,17 @@ export function createTerminalTab({ desk, term, tmux, remote, serverLabel, wrap,
   }
   return {
     /** The agent view's answer (agent-board.mjs): `text` on the input line through this tab's current lease, exactly
-     * where the person's typing goes, never with a line end. False when no lease is ready to take it. */
-    type(text) {
+     * where the person's typing goes, never with a line end. Resolves true once main typed it; 'in-mode' when main
+     * refused because the terminal is in its scrollback (tmux copy mode, where q would be read as cancel); false when
+     * no lease is ready to take it, or main refused for another reason (said in the tab's banner). */
+    async type(text) {
       if (typeof text !== 'string' || !text || /[\x00-\x1f\x7f]/.test(text)) return false;
       const h = life.ptyId();
       // Never into a terminal off screen (contract D30: the answer is typed only where the person sees it).
       if (!ready || closed || ended || !h || !isActive()) return false;
-      const result = desk.termWrite(h, text);
-      if (result?.ok === false) { banner(terminalFailure(result.code).message); return false; }
+      const result = await desk.termWrite(h, text, { answer: true });
+      if (result?.code === 'E_TERM_IN_MODE') return 'in-mode';
+      if (result?.ok !== true) { banner(terminalFailure(result?.code ?? 'E_TERM_TRANSPORT').message); return false; }
       return true;
     },
     start: () => life.start(connect, error => banner(`could not attach: ${terminalMessage(error?.code, server)}`)),

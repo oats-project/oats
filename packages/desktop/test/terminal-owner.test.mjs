@@ -352,3 +352,38 @@ test('shutdown revokes every owner and pending work without freeing unconfirmed 
   gate.resolve({}); assert.equal((await pending).code, 'E_TERM_CONTEXT_CHANGED'); assert.equal(f.broker.counts().slots, 1);
   f.ptys[0].exit({ exitCode: 0 }); await drain(); assert.equal(f.broker.counts().slots, 0);
 });
+
+// The agent view's answer (the Opus whole read, 2026-11-20): main reads the viewer pane's mode first and never types into
+// a pane in a mode (tmux copy mode, where q is cancel: "q1: Yes" would reach the agent as "1: Yes").
+test('term:answer types only into a pane in no mode; in a mode, or unknown, nothing is typed (E_TERM_IN_MODE)', async () => {
+  let mode = false;
+  const inModeFor = { value: () => Promise.resolve(mode) };
+  const f = fixture({ create() {
+    const p = { writes: [], sizes: [], kills: 0, viewers: 0, data: null, exit: null };
+    f.ptys.push(p);
+    return { pty: { onData(fn) { p.data = fn; return { dispose() {} }; }, onExit(fn) { p.exit = fn; return { dispose() {} }; },
+      write(d) { p.writes.push(d); }, resize() {}, kill() {} }, killViewer() {}, inMode: () => inModeFor.value() };
+  } });
+  const a = f.owner('A'), b = f.owner('B'), h = await f.attached(a), answer = (e, ...args) => f.handlers.get('term:answer')(e, ...args);
+  assert.deepEqual(await answer(f.event(a), h, 'q1: Yes, one clean commit'), { terminalApi: 2, ok: true, status: 'sent' });
+  mode = true;
+  assert.equal((await answer(f.event(a), h, 'q1: No')).code, 'E_TERM_IN_MODE');
+  inModeFor.value = () => Promise.reject(new Error('tmux gone'));
+  assert.equal((await answer(f.event(a), h, 'q1: No')).code, 'E_TERM_IN_MODE', 'a mode that cannot be read is not ruled out');
+  inModeFor.value = () => Promise.resolve(false);
+  for (const bad of ['', 'q1: Yes\r', 'q1: Yes\n', 'q1: \x1b[A', 'x'.repeat(513), 42]) assert.equal((await answer(f.event(a), h, bad)).code, 'E_TERM_BAD_ARGS');
+  assert.equal((await answer(f.event(b), h, 'q1: No')).ok, false, 'another window never types');
+  assert.equal((await answer(f.event(a), h.id, 'q1: No')).code, 'E_TERM_LEASE');
+  // The lease ends while the mode is read: nothing is typed.
+  let release; inModeFor.value = () => new Promise(r => { release = r; });
+  const late = answer(f.event(a), h, 'q1: Late'); await drain();
+  f.navigate(a); release(false);
+  assert.equal((await late).ok, false);
+  assert.deepEqual(f.ptys[0].writes, ['q1: Yes, one clean commit']);
+});
+
+test('term:answer on a terminal with no mode reader (a remote viewer) types as write does', async () => {
+  const f = fixture(), a = f.owner('A'), h = await f.attached(a);
+  assert.equal((await f.handlers.get('term:answer')(f.event(a), h, 'q1: Yes')).status, 'sent');
+  assert.deepEqual(f.ptys[0].writes, ['q1: Yes']);
+});

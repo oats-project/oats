@@ -16,7 +16,7 @@
  * the numbers are disabled and the zone says so. After the person's Enter the card hides on this tab (optimistic);
  * the agent's `board ask --clear` removes it for real.
  *
- * Pure DOM, no shell state: shell.mjs (syncTabBoards) gives it the validated board, the claims and the detail read,
+ * Pure DOM, no shell state: agent-board-tabs.mjs (createTabBoards, synced from shell.mjs syncTabNeedsInput) gives it the validated board, the claims and the detail read,
  * and the hooks to type, to focus the terminal and to open a link. The board's own facts and questions are
  * agent-supplied text: every text is set with textContent, never as markup (source-prose-is-an-attributed-quote). */
 import { iconElement } from './shell-icons.mjs';
@@ -27,7 +27,12 @@ import { displayLine } from '../../client/display-text.mjs';
 
 /** What the zone says while a harness dialog is open (contract D30 v4, "How an answer is typed"). */
 export const DIALOG_NOTE = "The agent's terminal is showing a prompt: answer it there first.";
-/** The zone's key hint. */
+/** What the zone says when main refused to type an answer: the terminal is in its scrollback (tmux copy mode), where the
+ * answer's first letter would be read as a key of the scrollback's own (terminal-owner answer, E_TERM_IN_MODE). */
+export const IN_MODE_NOTE = 'The terminal is in its scrollback: press q or scroll to the bottom, then press the number again.';
+/** What the zone says to a press while an earlier answer is still on the input line, unsent: a second one would be
+ * typed onto the same line, and the Desktop can't clear a harness's line for it. */
+export const PENDING_NOTE = 'An answer is already on the input line: send it, or clear it first.';
 /** What the view says for each outcome of the detail read (instance-board.mjs boardDetailData, and `failed`), and
  * for a row board that was not read whole: none of them reads as "no history" or "no questions". */
 export const DETAIL_NOTES = Object.freeze({
@@ -38,6 +43,7 @@ export const DETAIL_NOTES = Object.freeze({
 });
 export const BOARD_MALFORMED = "This agent's board could not be read.";
 export const boardDropped = n => `${n} ${n === 1 ? 'entry' : 'entries'} of this agent's board could not be shown.`;
+/** The zone's key hint: the shown question's own number keys. */
 export const zoneHint = count => `1–${count} put the answer on the input line · Enter there sends it · c the context · Esc back to the terminal`;
 const HIDDEN_STORE = 'oats.desktop.board.hidden';
 
@@ -134,7 +140,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   measure: measured = {}, observe = observePane }) {
   const measure = { ...defaultMeasure, ...measured };
   const doc = pane.ownerDocument;
-  let board = null, detail = null, dialog = false, unfolded = false, index = 0, shownId = null, pending = null, alive = true, chooseSeq = 0, painting = false, compact = false, openUrl = null;
+  let board = null, detail = null, dialog = false, unfolded = false, index = 0, shownId = null, pending = null, alive = true, chooseSeq = 0, painting = false, compact = false, openUrl = null, refusal = null;
   // Each fact's row as last painted (its key -> { sig, li }): paintFacts keeps a row whose sig is unchanged.
   const factRows = new Map();
   // A question's occurrence (instance-board.mjs questionOccurrence): its answer, its context and its options are its own.
@@ -198,6 +204,8 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
   async function choose(i) {
     const q = open()[index];
     if (!q || dialog || answerText(q, i) === null || !inView() || !terminalSeen()) return false;
+    // One answer on the line at a time: a second press before the person's Enter would be typed onto the first.
+    if (pending) { refusal = PENDING_NOTE; paint(); return false; }
     const seq = ++chooseSeq;
     if (checkClaims) {
       zone.setAttribute('aria-busy', 'true');
@@ -210,9 +218,22 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
       if (dialog || !still || occurrence(still) !== occurrence(q) || !inView()) return false;
     }
     const answer = answerText(open()[index], i);
-    if (!answer || !inView() || !terminalSeen() || !type(answer)) return false;
-    pending = occurrence(q);
-    focusTerminal();
+    if (!answer || !inView() || !terminalSeen() || pending) return false;
+    // Held while main types it, so a press meanwhile is refused as one after it would be.
+    const mine = occurrence(q);
+    pending = mine;
+    let typed = type(answer);
+    if (typed && typeof typed.then === 'function') {
+      try { typed = await typed; } catch { typed = false; }
+    }
+    if (typed !== true) {
+      if (pending === mine) pending = null;
+      refusal = typed === 'in-mode' ? IN_MODE_NOTE : null;
+      if (alive) paint();
+      return false;
+    }
+    if (refusal) { refusal = null; paint(); }
+    if (alive && seq === chooseSeq) focusTerminal();
     return true;
   }
 
@@ -411,7 +432,8 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     if (focusedOption) options.querySelector(`[data-option="${focusedOption}"]:not([disabled])`)?.focus();
     // A focused option that is gone or disabled now (a dialog opened) leaves the focus on the zone, never on the page.
     if (hadFocus && (!zone.contains(doc.activeElement) || doc.activeElement.disabled)) zone.focus();
-    note.hidden = !dialog; setText(note, dialog ? DIALOG_NOTE : '');
+    const said = dialog ? DIALOG_NOTE : refusal;
+    note.hidden = !said; setText(note, said ?? '');
     zone.setAttribute('aria-label', `${count ? `${count[0].toUpperCase()}${count.slice(1)}` : 'A question'} from ${name}`);
     // The context: read with the detail (inspect --board) once the view is open; attributed, plain text, line breaks kept.
     // A detail read for an earlier occurrence of this id says nothing about this one: it reads as still reading.
@@ -498,7 +520,7 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
       // An answer the agent has cleared is forgotten; one it has not stays hidden on this tab.
       const live = new Set((board?.questions ?? []).map(occurrence));
       for (const key of answered) if (!live.has(key)) answered.delete(key);
-      if (pending && !live.has(pending)) pending = null;
+      if (pending && !live.has(pending)) { pending = null; if (refusal === PENDING_NOTE) refusal = null; }
       paint();
     },
     /** The inspect --board read (instance-board.mjs boardDetailData): history and context. */
@@ -506,7 +528,11 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
     /** The person's input to the terminal (the tab's xterm onData): Enter (CR; Shift+Enter is a new line) with an answer
      * on the line hides its card. */
     input(data) {
-      if (pending && typeof data === 'string' && data.includes('\r')) { answered.add(pending); pending = null; paint(); }
+      if (!pending || typeof data !== 'string') return;
+      // The person's Enter sends the answer: its card hides. Ctrl+C or Ctrl+U clears the line in most harnesses: the
+      // answer is gone, unsent, and another press may type again.
+      if (data.includes('\r')) { answered.add(pending); pending = null; refusal = null; paint(); }
+      else if (/[\x03\x15]/.test(data)) { pending = null; refusal = null; paint(); }
     },
     /** The palette's command: the zone from the terminal, then the facts, then back to the terminal. */
     cycleFocus() {

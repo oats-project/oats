@@ -1172,6 +1172,15 @@ isn't on screen: a press whose terminal left the screen while the Desktop read
 the agent's claims types nothing. The card hides once you press Enter; the
 agent removes the question for real once it has read the answer.
 
+One answer goes on the line at a time: while an answer is there unsent, another
+press types nothing and the zone says "An answer is already on the input line:
+send it, or clear it first." (Enter sends it; Ctrl+C or Ctrl+U clearing the line
+frees it.) While the terminal is in its scrollback (you scrolled up with the
+wheel or Shift+PgUp), nothing is typed either, because the scrollback would
+read the answer's first letter as its own key: the zone says "The terminal is
+in its scrollback: press q or scroll to the bottom, then press the number
+again."
+
 **While a dialog is open** (the agent has a live `permission` or `question`
 claim, from its harness or any other producer), the numbers are disabled and
 the zone says "The agent's terminal is showing a prompt: answer it there

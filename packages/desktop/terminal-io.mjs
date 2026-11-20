@@ -64,7 +64,7 @@ export function createTerminalIo({ context, attachmentDirectory, spawnPty, execF
       };
       sweep(spec.socket); check();
       const local = localTmuxIo(spec.socket, { execFileSync, spawnPty, env });
-      return openTerm(spec, {
+      const opened = openTerm(spec, {
         ...local,
         // Nonblocking cleanup lets the broker honor its2s pending receipt. The
         // same saved socket/exact owned viewer is used; no stronger signal.
@@ -85,6 +85,16 @@ export function createTerminalIo({ context, attachmentDirectory, spawnPty, execF
         tmuxOut: args => { if (args[0] !== 'list-sessions') check(); return local.tmuxOut(args); },
         spawnPty: (...args) => { check(); return local.spawnPty(...args); },
       });
+      // Whether the viewer's pane is in a mode (tmux copy mode, the person's scrollback), read on its own anchored
+      // session, where its client types: the agent view types an answer only when it is not (terminal-owner answer).
+      const inMode = async () => {
+        const { stdout } = await run('tmux', [...tmuxSocketArgs(spec.socket), 'display-message', '-p', '-t', `=${opened.viewer}:`, '#{pane_in_mode}'],
+          { encoding: 'utf8', timeout: 2000, maxBuffer: 4096 });
+        const value = String(stdout).trim();
+        if (value !== '0' && value !== '1') throw new Error('pane mode unreadable');
+        return value === '1';
+      };
+      return { ...opened, inMode };
     },
     async attachments(items, spec, control) {
       const epoch = spec.remote ? context() : undefined;

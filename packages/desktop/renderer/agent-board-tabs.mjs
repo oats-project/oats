@@ -15,6 +15,10 @@ import { createAgentBoard, createHiddenFacts } from './agent-board.mjs';
 import { rowHasBoard, boardClaim, detailSignature, boardDetailData, questionOccurrence } from '../../client/instance-board.mjs';
 import { eventsSelector } from '../../client/instance-events-contract.mjs';
 
+/** The deployment a row belongs to (#482): its `deployment.id`, else the tab's workspace. An instance-addressed read
+ * names the row's own deployment, never the window's view. */
+const rowDeployment = (row, workspace) => typeof row?.deployment?.id === 'string' && row.deployment.id ? row.deployment.id : workspace;
+
 /**
  * @param {object} o
  * @param {() => string[] | null} o.features   this computer's CLI features (the probe)
@@ -23,18 +27,13 @@ import { eventsSelector } from '../../client/instance-events-contract.mjs';
  * @param {(url: string) => void} o.openLink
  * @param {ReturnType<typeof createHiddenFacts>} [o.hidden]
  */
-/** The deployment a row belongs to (#482): its `deployment.id`, else the tab's workspace. An instance-addressed read
- * names the row's own deployment, never the window's view. */
-const rowDeployment = (row, workspace) => typeof row?.deployment?.id === 'string' && row.deployment.id ? row.deployment.id : workspace;
-
 export function createTabBoards({ features, eventsReadable = () => false, post, openLink, hidden = createHiddenFacts(), now }) {
   const states = new WeakMap(); // tab record -> { view, detailSeq, claimsSeq, detailSig, claimsSig, claims }
 
   function open(tab, row) {
     const state = { view: null, detailSeq: 0, claimsSeq: 0, detailSig: null, claimsSig: null, claims: [], alive: true, home: row.home };
     state.view = createAgentBoard({ pane: tab.paneEl, home: row.home, name: row.instance,
-      type: text => tab.typeText?.(text) === true, focusTerminal: () => tab.focusTerminal?.(), openLink, hidden, ...(now ? { now } : {}),
-      // Before a number types: the claims again, read now (null when unknown).
+      type: text => tab.typeText ? tab.typeText(text) : false, focusTerminal: () => tab.focusTerminal?.(), openLink, hidden, ...(now ? { now } : {}),
       // Before a number types: the claims again, read now. Only the latest read's claims reach the view (update).
       checkClaims: () => readClaims(state, state.workspace, state.row),
       // The shell's test that this tab's terminal is the one in view (never type into a tab off screen).
@@ -105,7 +104,8 @@ export function createTabBoards({ features, eventsReadable = () => false, post, 
       const claimsSig = JSON.stringify([state.board?.questions.map(q => q.id) ?? [], claim?.producer ?? null, claim?.reason ?? null, claim?.since ?? null]);
       if (state.board?.questions.length && (fresh || claimsSig !== state.claimsSig)) { state.claimsSig = claimsSig; void readClaims(state, workspace, row); }
       else if (!state.board?.questions.length) { state.claimsSig = claimsSig; state.claims = []; }
-      return boardClaim(claim) && state.view.question !== null;
+      // While the board has a question, answered on this tab or not, its claim is the zone's, never the waiting row's.
+      return boardClaim(claim) && (state.board?.questions.length ?? 0) > 0;
     },
     close,
     /** The person's input in the tab's terminal (its xterm onData). */
