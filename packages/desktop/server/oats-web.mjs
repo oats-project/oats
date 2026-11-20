@@ -1158,16 +1158,26 @@ function readContainedFile(requested, allowedRoots, { maxBytes, tokenFile = null
     if (sameFile(st, tokenFile)) return { error: "forbidden", code: 403 };
     if (!st.isFile()) return notFile;
     if (st.size > maxBytes) return { error: `file too large (${st.size} bytes)`, code: 413 };
-    const buf = Buffer.alloc(Math.min(st.size + 1, maxBytes + 1));
+    const limit = maxBytes + 1;
+    const chunks = [];
+    let chunk = Buffer.alloc(Math.min(st.size + 1, limit));
     let size = 0;
-    while (size < buf.length) {
-      const n = io.readSync(fd, buf, size, buf.length - size, null);
+    let used = 0;
+    for (;;) {
+      const n = io.readSync(fd, chunk, used, chunk.length - used, null);
       if (n === 0) break;
       size += n;
+      used += n;
+      if (size === limit) return { error: `file too large (${size} bytes)`, code: 413 };
+      if (used === chunk.length) {
+        chunks.push(chunk);
+        chunk = Buffer.alloc(Math.min(64 * 1024, limit - size));
+        used = 0;
+      }
     }
-    if (size > maxBytes) return { error: `file too large (${size} bytes)`, code: 413 };
-    if (size === buf.length) return outside; // The file grew past its inspected size.
-    return { real: g.real, st, buf: buf.subarray(0, size) };
+    const tail = chunk.subarray(0, used);
+    const buf = chunks.length ? Buffer.concat([...chunks, tail], size) : tail;
+    return { real: g.real, st, buf };
   } catch (e) {
     if (["ENOENT", "ENOTDIR", "ELOOP"].includes(e.code)) return missing;
     // Node may report macOS's EOPNOTSUPP on a socket with only its errno.

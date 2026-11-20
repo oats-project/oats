@@ -193,12 +193,19 @@ test('contained file: exact limit, growth, truncation and replacement keep reads
   assert.equal(replace.read(f.inside).buf.toString(), 'original');
 });
 
-test('contained file: growth below the cap refuses the changed file', t => {
+test('contained file: growth below the cap returns the grown content', t => {
   const f = fixture(t);
-  const size = fs.statSync(f.inside).size;
-  const grow = reader([f.root], { fstat() { fs.appendFileSync(f.inside, 'more'); } });
-  assert.deepEqual(grow.read(f.inside), { error: 'path outside allowed roots', code: 403 });
-  assert.equal(grow.reads.reduce((a, b) => a + b, 0), size + 1);
+  const added = 'more'.repeat(40_000);
+  const grow = reader([f.root], { fstat() { fs.appendFileSync(f.inside, added); } });
+  assert.equal(grow.read(f.inside).buf.toString(), 'inside' + added);
+  assert.equal(grow.reads.reduce((a, b) => a + b, 0), Buffer.byteLength('inside' + added));
+});
+
+test('contained file: growth across chunks still stops at the cap plus one', t => {
+  const f = fixture(t);
+  const grow = reader([f.root], { fstat() { fs.appendFileSync(f.inside, Buffer.alloc(LIMIT, 97)); } });
+  assert.deepEqual(grow.read(f.inside), { error: `file too large (${LIMIT + 1} bytes)`, code: 413 });
+  assert.equal(grow.reads.reduce((a, b) => a + b, 0), LIMIT + 1);
 });
 
 for (const phase of ['fstat', 'stat', 'read']) test(`contained file: ${phase} I/O failures close descriptors`, t => {
