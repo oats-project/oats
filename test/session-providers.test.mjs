@@ -17,7 +17,7 @@ import { setWaiting } from "../lib/instance-events.mjs";
 import { PROVIDER_RESUME_NOTICE, RESUME_LIMIT, RESUME_QUIET_WAIT_MS, resumeQuietWait } from "../lib/provider-resume.mjs";
 import { sessionProviderTimeout } from "../lib/session-providers.mjs";
 import { parseRemoteEnvelope, rosterGroups, writeServers } from "../lib/servers.mjs";
-import { FAKE_CAPABILITY, FAKE_SERVER, LOST, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
+import { FAKE_CAPABILITY, FAKE_SERVER, LOST, fakeFiles, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
 
 const HOST_STOP_CHILD = join(dirname(fileURLToPath(import.meta.url)), "..", "lib", "host-stop-child.mjs");
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
@@ -1074,7 +1074,7 @@ test("a spawn killed while its provider launches leaves a launch that was sent: 
   // Its reads are unknown, never "not launched", and call no provider.
   const inspected = fx.cli(["session", "inspect", "--home", home, "--json"]).json();
   assert.deepEqual([inspected.ok, inspected.error.code], [false, "E_SESSION_UNAVAILABLE"]);
-  assert.match(inspected.error.message, /a launch of cut was sent to session backend fake at .+ and its outcome was never recorded/);
+  assert.match(inspected.error.message, /a launch of cut was sent to session backend fake at .+ and its outcome is not recorded: a spawn or a start is launching it now, or ended before recording it/);
   assert.deepEqual([rowOf(fx, "cut").running, rowOf(fx, "cut").runtimeState], [null, "unreachable"]);
   assert.deepEqual(fx.verbs(), []);
   // A stop the provider does not confirm is E_SESSION_STOP_FAILED, and the word stays.
@@ -1141,8 +1141,18 @@ test("a start or a restart killed while its provider launches: the home, launche
   // A stop settles it and stops the recorded session too, and answers that it stopped something.
   const stopped = await fx.inEnv(() => stopInstanceSession(re, {}));
   assert.deepEqual([stopped.stopped, stopped.alreadyIdle, stopped.state], [true, false, "stopped"]);
-  assert.deepEqual(fx.verbs("stop").map((c) => [c.request.input.endpoint, c.request.input.launchSent ?? null]), [[null, before.launchSent], [endpointOf("re", 1), null]]);
+  assert.deepEqual(fx.verbs("stop").map((c) => [c.request.input.endpoint, c.request.input.launchSent ?? null]), [[endpointOf("re", 1), null], [null, before.launchSent]], "the recorded session by the one stop rule, then whatever the sent launch started");
   assert.equal(Object.hasOwn(receiptOf(re), "launchSent"), false);
+
+  // 1b. A home stopped with the host, whose start was then killed: an operator's stop withdraws the
+  //     resume, as it does without a sent launch (the one stop rule), and settles the launch.
+  await fx.launch("hs");
+  hostStop(fx, join(fx.root, "dev", "instances", "hs"));
+  const hs = await killed("hs", "restart");
+  assert.equal(JSON.parse(readFileSync(join(hs, ".oats-stop.json"), "utf8")).reason, "host-stop");
+  await fx.inEnv(() => stopInstanceSession(hs, {}));
+  assert.notEqual(JSON.parse(readFileSync(join(hs, ".oats-stop.json"), "utf8")).reason, "host-stop", "an operator's stop: no sweep brings it back");
+  assert.equal(Object.hasOwn(receiptOf(hs), "launchSent"), false);
 
   // 2. A start of a lost home: no stop had been recorded (stoppedAt null), and a session was being launched.
   await fx.launch("lost");
@@ -1166,6 +1176,29 @@ test("a start or a restart killed while its provider launches: the home, launche
   const started = fx.cli(["session", "start", "--home", lost, "--json"]).json();
   assert.equal(started.ok, true, JSON.stringify(started));
   assert.deepEqual([receiptOf(lost).stoppedAt, Object.hasOwn(receiptOf(lost), "launchSent")], [null, false]);
+});
+
+test("a spawn whose launch answered, that then fails, and whose session the provider does not confirm stopped: the home is retained, and a retire stops that session by its endpoint", async (t) => {
+  // The capability has a retire hook, so the retained home's rollback marker drives the retire.
+  const fx = providerDeployment(t, { capabilities: { [FAKE_CAPABILITY]: {
+    manifest: { ...fakeManifest(), hooks: { spawn: "bin/hook.mjs", launch: "bin/hook.mjs", retire: "bin/retire.mjs" } },
+    files: { ...fakeFiles(), "bin/retire.mjs": 'process.stdout.write("{}\\n");\n' },
+  } } });
+  const anchor = await fx.spawn("dev", { name: "anchor" });
+  // The parent's record changes while the provider launches: the spawn fails after the launch answered.
+  fx.control({ elder: { launch: { touch: join(anchor.home, "instance.json") } }, stop: { exit: 1 } });
+  const failed = fx.cli(["spawn", "dev", "--name", "elder", "--backend", "fake", "--launch-config", "claude", "--relation", "parent", "--relative-to", "anchor", "--json"]).json();
+  assert.equal(failed.ok, false, JSON.stringify(failed).slice(0, 400));
+  assert.match(failed.error.message, /rollback INCOMPLETE/);
+  const home = join(fx.root, "dev", "instances", "elder");
+  assert.deepEqual([existsSync(home), runtimeOf(home).launched, runtimeOf(home).endpoint], [true, true, endpointOf("elder", 1)], "retained, with the endpoint the provider answered");
+  // The provider answers again: a retire, without --force, stops the session it recorded and removes the home.
+  fx.control({});
+  fx.clearCalls();
+  const retired = JSON.parse(fx.cli(["retire", "elder", "--json"]).stdout);
+  assert.equal(retired.retired, "elder", JSON.stringify(retired).slice(0, 400));
+  assert.deepEqual(fx.verbs("stop").map((c) => c.request.input.endpoint), [endpointOf("elder", 1)]);
+  assert.equal(existsSync(home), false);
 });
 
 test("a provider home whose receipt cannot be used is never retired as a home from before session receipts", async (t) => {

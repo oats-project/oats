@@ -45,6 +45,8 @@ const defaults = {
   check: () => ({ status: "ready", problems: [], warnings: [] }),
 };
 const b = behaviourOf(instance, req.verb);
+// touch: a file this call appends one space to before it answers (a record another verb changes meanwhile).
+if (b.touch) appendFileSync(b.touch, " ");
 if (b.sleepMs) await new Promise((r) => setTimeout(r, b.sleepMs));
 if (b.exit !== undefined) process.exit(b.exit);
 if (b.raw !== undefined) { process.stdout.write(b.raw); process.exit(0); }

@@ -2104,9 +2104,9 @@ In:
   starts on.
 - `previous` is the endpoint of the session a start or a restart replaces;
   `null` for the home's first launch. The kernel has asked you to stop it
-  just before (a restart's stop, or once more for a home OATS had stopped),
-  except where you answered that session as gone: a lost session is launched
-  over without a stop.
+  just before, always (a restart's stop, once more for a home OATS had
+  stopped, and for a session you answered as gone too: an input that reached
+  it since may have had you restart it).
 
 **A provider that cannot carry an env entry, an argument or `unset`
 refuses, naming it** (`E_BACKEND_LAUNCH_ENV`, `E_BACKEND_LAUNCH_ARG`). It
@@ -2268,7 +2268,8 @@ the feature.
   whatever you answered to it, a refusal included). After a restart it asks
   that only when the new session has another endpoint: where you hand a
   restart the same locator again, that locator is the new session's, and the
-  kernel tells the two apart by its own record of the start.
+  kernel tells the two apart by its own record of the start. An input that
+  is in flight when a start begins its launch is such a crossing too.
   Answer `stopped: true` for a session that is already stopped.
 - **A spawn holds the home while you launch.** From before the home can be
   acted on until your launch's endpoint is recorded (or the spawn is undone),
