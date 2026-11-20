@@ -612,7 +612,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
   // the removed switch. `declaration`: false for an image without one, a string for the file's
   // raw text, or a function that changes the good declaration in place. A real fixture child serves the ready URL.
   child, agentBb, declaration, declarationMode = 0o644, declarationOwner = "root", declarationIs = "file",
-  commandIs = "file", rootFiles = [], loginFiles = {}, loginReadErrors = {}, childMode = "ready", externalStatus = false,
+  commandIs = "file", rootFiles = [], loginFiles = {}, loginReadErrors = {}, inherited = {}, childMode = "ready", externalStatus = false,
   restartBackoffMs = 20, restartBackoffMaxMs = 80, restartStableMs, hostDrainMs = 80 } = {}) {
   const supervisor = new URL("../container/agent/supervisor.mjs", import.meta.url);
   assert.ok(existsSync(supervisor), "the image must own broker readiness and ordered child shutdown");
@@ -647,7 +647,12 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
     else { writeFileSync(inRoot(declarationPath), text); chmodSync(inRoot(declarationPath), declarationMode); }
   }
   if (commandIs === "file") writeFileSync(inRoot("opt/agent-child/serve"), "");
-  else if (commandIs !== "absent") {
+  else if (commandIs === "chain") {
+    // The declared path reaches an image file by way of a link an agent can re-point.
+    writeFileSync(inRoot("usr/bin/real-serve"), "");
+    symlinkSync(inRoot("usr/bin/real-serve"), inRoot("state/hop"));
+    symlinkSync(inRoot("state/hop"), inRoot("opt/agent-child/serve"));
+  } else if (commandIs !== "absent") {
     // The declared path is a link to somewhere an agent can write.
     writeFileSync(inRoot(`${commandIs}/planted`), "");
     symlinkSync(inRoot(`${commandIs}/planted`), inRoot("opt/agent-child/serve"));
@@ -685,8 +690,10 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
   let statusHits = 0, external;
   if (externalStatus) {
     // true: ready at once. "later": not ready when first asked, ready from then on. "error": 503 first. "text": not JSON first.
+    // "mute": accepts the first request and never answers it, ready from then on.
     external = createHttpServer((_request, response) => {
       statusHits += 1;
+      if (externalStatus === "mute" && statusHits === 1) return;
       if (externalStatus === "error" && statusHits === 1) response.statusCode = 503;
       response.end(externalStatus === "text" && statusHits === 1 ? "starting" : JSON.stringify({ up: externalStatus === true || statusHits > 1 }));
     });
@@ -715,7 +722,15 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
         ready: { hostId: "host_fixture", up: true }, never: { up: false }, truthy: { up: "true" }, nested: { status: { up: true } },
         "not-json": "up: true", array: [true], missing: { ready: true },
       };
+      const began = Date.now();
       require("node:http").createServer((request, response) => {
+        if (mode === "straddle") {
+          // Not ready for 0.7 s. A request after that is answered "ready" 0.6 s later: asked
+          // for inside the fixture's 1 s budget, answered past it.
+          if (Date.now() - began < 700) response.end(JSON.stringify({ up: false }));
+          else setTimeout(() => response.end(JSON.stringify({ up: true })), 600);
+          return;
+        }
         if (mode === "not-200") response.statusCode = 503;
         const answer = request.url === "/status" ? answers[mode] ?? answers.ready : { up: false };
         response.end(typeof answer === "string" ? answer : JSON.stringify(answer));
@@ -759,7 +774,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
   `);
   const children = new Map(), said = [], spawned = [];
   let signal, statusFailed = false;
-  const env = { ...process.env };
+  const env = { ...process.env, ...inherited };
   delete env.AGENT_BB;
   delete env.AGENT_CHILD;
   if (agentBb !== undefined) env.AGENT_BB = agentBb;
@@ -767,7 +782,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
   const running = supervise({
     env, fs, restartBackoffMs, restartBackoffMaxMs, ...(restartStableMs === undefined ? {} : {restartStableMs}),
     spawnChild(file, args, options) {
-      const role = file === declared.command[0] ? "child" : file === "aw" ? (args[1] === "run" ? "broker" : "status") : file === "oats" ? "host" : "ssh";
+      const role = options.argv0 === declared.command[0] ? "child" : file === "aw" ? (args[1] === "run" ? "broker" : "status") : file === "oats" ? "host" : "ssh";
       spawned.push({role, file, args, options, at: Date.now()});
       const mode = role === "child" ? childMode : role === "status" && statusIgnoresTerm ? "probe-stubborn" : statusTrueAfterBrokerExit ? "after-exit" : stubbornFinish ? "stubborn" : ready ? "ready" : "not-ready";
       appendFileSync(events, role + " spawned\n");
@@ -1382,6 +1397,22 @@ test("a command that resolves under a writable mount refuses", async t => {
     await refusedBeforeAnyChild(fx, "/etc/agent-child.json: command[0] resolves under a writable mount", commandIs);
     assert.deepEqual(fx.fileCalls, [["open", declarationFile], ["realpath", "/opt/agent-child/serve"]], "no login file is read");
   }
+  // A link in a writable mount on the way to an image file: admitted, since the file is the image's,
+  // and what runs is that resolved file, at the start and at every restart, never the path through the link.
+  const chain = await supervisorFixture(t, {child: "extra", commandIs: "chain"});
+  await chain.until(() => chain.text().includes("host started"));
+  chain.children.get("child").kill("SIGKILL");
+  await chain.until(() => chain.text().split("child serving").length - 1 >= 2);
+  const launches = chain.spawned.filter(entry => entry.role === "child");
+  assert.equal(launches.length, 2);
+  for (const launch of launches) {
+    assert.equal(launch.file, "/usr/bin/real-serve", "the resolved file is spawned");
+    assert.equal(launch.options.argv0, "/opt/agent-child/serve", "under its declared name");
+    assert.deepEqual(launch.args, chain.declared.command.slice(1));
+  }
+  assert.equal(chain.fileCalls.filter(([call]) => call === "realpath").length, 1, "resolved once, at admission: not again for the restart");
+  chain.term();
+  assert.equal(await chain.running, 0);
   // Declared there outright, with no link.
   const direct = await supervisorFixture(t, {child: "extra", commandIs: "absent", rootFiles: ["state/home/serve"], declaration: d => { d.command[0] = "/state/home/serve"; }});
   await refusedBeforeAnyChild(direct, "/etc/agent-child.json: command[0] resolves under a writable mount", "declared under /state");
@@ -1406,8 +1437,9 @@ test("the child starts after the broker is ready and before SSH and host run, wi
   assert.deepEqual(fx.fileCalls, [["open", declarationFile], ["realpath", "/opt/agent-child/serve"], ["read", "/etc/agent-login/child-token"], ["read", "/etc/agent-login/other-token"]], "everything is read once");
   const child = fx.spawned.find(entry => entry.role === "child");
   assert.equal(fx.spawned.indexOf(child) > 0 && fx.fileCalls.length, 4, "and before any child");
-  assert.deepEqual([child.file, ...child.args], ["/opt/agent-child/serve", "--flag", "two words", ""], "argv is exactly `command`: no shell, nothing added");
-  assert.deepEqual(Object.keys(child.options).sort(), ["detached", "env", "stdio"]);
+  assert.deepEqual([child.options.argv0, ...child.args], ["/opt/agent-child/serve", "--flag", "two words", ""], "argv is exactly `command`: no shell, nothing added");
+  assert.equal(child.file, "/opt/agent-child/serve", "the file that was resolved and checked");
+  assert.deepEqual(Object.keys(child.options).sort(), ["argv0", "detached", "env", "stdio"]);
   assert.equal(child.options.detached, true, "its own process group");
   assert.equal(child.options.stdio, "inherit");
   const { AGENT_BB: _gone, ...own } = process.env;
@@ -1454,6 +1486,19 @@ test("an envFromFile value reaches only the child; an absent file starts it with
     empty.term();
     assert.equal(await empty.running, 0);
   }
+  // A variable of that name in the supervisor's own environment never stands in for the file:
+  // absent or empty, the child has none; present, the file's value is the one it gets.
+  for (const [loginFiles, expected] of [[{}, undefined], [{"child-token": " \n"}, undefined], [{"child-token": token}, token]]) {
+    const inherits = await supervisorFixture(t, {child: "extra", loginFiles, inherited: {CHILD_TOKEN: "INHERITED_VALUE", UNRELATED_INHERITED: "kept"}});
+    await inherits.until(() => inherits.text().includes("host started"));
+    const received = inherits.childReceived().env;
+    assert.equal(received.CHILD_TOKEN, expected, JSON.stringify(Object.keys(loginFiles)));
+    assert.equal("CHILD_TOKEN" in received, expected !== undefined);
+    assert.equal(received.UNRELATED_INHERITED, "kept", "the rest of the supervisor's environment reaches the child");
+    for (const {role, options} of inherits.spawned) if (role !== "child") assert.deepEqual(Object.keys(options), ["stdio"], role + " keeps the supervisor's environment as it is");
+    inherits.term();
+    assert.equal(await inherits.running, 0);
+  }
   for (const code of ["EACCES", "EIO"]) {
     const unreadable = await supervisorFixture(t, {child: "extra", loginFiles: {"child-token": token, "other-token": token}, loginReadErrors: {"/etc/agent-login/other-token": code}});
     await refusedBeforeAnyChild(unreadable, `the file for CHILD_OTHER could not be read (${code})`, code);
@@ -1470,10 +1515,12 @@ test("an envFromFile value reaches only the child; an absent file starts it with
   }
 });
 
-test("a child that never reports ready fails the start and admits neither SSH nor host run", async t => {
+// Bounded: on a supervisor that admitted a late answer, sshd and host run start and `running` never settles.
+test("a child that never reports ready fails the start and admits neither SSH nor host run", {timeout: 60_000}, async t => {
   // A false field, a truthy value that is not `true`, the field one level down, no such
-  // field, an answer that is not JSON or not an object, and a status other than 200.
-  for (const childMode of ["never", "truthy", "nested", "missing", "not-json", "array", "not-200"]) {
+  // field, an answer that is not JSON or not an object, a status other than 200, and a
+  // ready answer that was asked for inside the budget and arrived after it.
+  for (const childMode of ["never", "truthy", "nested", "missing", "not-json", "array", "not-200", "straddle"]) {
     const fx = await supervisorFixture(t, {child: "extra", childMode});
     assert.equal(await fx.running, 1, childMode);
     assert.ok(fx.said.includes("extra readiness timed out"), childMode);
@@ -1492,10 +1539,10 @@ test("a ready answer without our live child, or before the child starts, cannot 
   assert.ok(stale.said.includes("extra's ready URL already answers before extra starts"));
   assert.deepEqual(roles(stale), ["broker"], "another process's ready answer admits nothing");
   assert.ok(stale.statusHits() >= 1);
-  // Any answer before the child starts refuses, not only a ready one: a process that holds the
-  // port and says "not ready", 503 or no JSON now would say "ready" later, beside a child of
-  // ours that lives and never held the port.
-  for (const externalStatus of ["later", "error", "text"]) {
+  // Whatever accepts a connection there before the child starts refuses, not only a ready answer:
+  // a process that holds the port and says "not ready", 503, no JSON or nothing at all now would
+  // say "ready" later, beside a child of ours that lives and never held the port.
+  for (const externalStatus of ["later", "error", "text", "mute"]) {
     const early = await supervisorFixture(t, {child: "extra", externalStatus, childMode: "idle"});
     assert.equal(await early.running, 1, externalStatus);
     assert.ok(early.said.includes("extra's ready URL already answers before extra starts"), externalStatus);

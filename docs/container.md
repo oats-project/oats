@@ -704,7 +704,7 @@ every key below is required unless marked, and an unknown key is refused.
 | Key | Grammar | Meaning |
 | --- | --- | --- |
 | `name` | 1 to 20 lowercase letters, digits or dashes; not `broker`, `sshd`, `host-run`, `status` or `supervisor`, the base's own names in the log | What the supervisor's lines call the child, and the value `AGENT_CHILD` must have. |
-| `command` | A non-empty array of strings; `command[0]` an absolute path that exists and whose real path is outside `/state`, `/work`, `/tmp`, `/run`, `/outbox` and `/dev/shm` | The child's argv, exactly. No shell. A command an agent could replace is refused. |
+| `command` | A non-empty array of strings; `command[0]` an absolute path that exists and whose real path is outside `/state`, `/work`, `/tmp`, `/run`, `/outbox` and `/dev/shm` | The child's argv, exactly. No shell. The supervisor resolves `command[0]` once, at start, refuses a file inside a writable mount, and runs that resolved file under its declared name at the start and at every restart, so a link on the way that an agent could re-point is never followed again. |
 | `env` | An object of strings; names match `[A-Z_][A-Z0-9_]*` | Literal variables added to the child's environment. May be `{}`. |
 | `envFromFile` | Optional. An object of variable name to a file directly under `/etc/agent-login/`; names as for `env`, and no name in both | Variables whose value is the file's content, read once at start ([below](#envfromfile)). |
 | `ready.url` | `http://127.0.0.1:<port>/<path>`, the port one of `listen`; the path of letters, digits and `._~/?&=%-` | Where the supervisor asks whether the child is ready. |
@@ -727,7 +727,9 @@ and the process group are the base image's
 One rule for every entry. The supervisor reads each file once, before any
 child starts:
 
-- **No such file:** the child starts without that variable.
+- **No such file:** the child starts without that variable, even when the
+  supervisor's own environment holds one of that name: an `envFromFile`
+  name comes from its file or not at all.
 - **Empty after trimming:** the same, with one line that names the variable.
 - **Any other read error:** the start is refused.
 - **Whitespace or a NUL byte inside the trimmed value** (a second line, a
@@ -747,10 +749,13 @@ With `AGENT_CHILD` set, the supervisor reads the declaration once, before
 any child, and then:
 
 1. Starts the wake broker and waits for it, as on the base image.
-2. Asks `ready.url` once. Any HTTP answer before the child exists, ready or
-   not, is another process's, and refuses the start.
-3. Starts the child: argv exactly `command`, the supervisor's own
-   environment plus `env` plus the `envFromFile` values, in a process group
+2. Asks `ready.url` once, for at most a second. Whatever accepts that
+   connection before the child exists is another process, whether it answers
+   ready, not ready or nothing, and refuses the start. Nobody listening is
+   the only pass.
+3. Starts the child: the resolved `command[0]` with argv exactly `command`,
+   the supervisor's own environment without the `envFromFile` names, plus
+   `env`, plus the `envFromFile` values that were read, in a process group
    of its own.
 4. Asks `ready.url` until it answers 200 with JSON whose top-level
    `ready.field` is `true` while the child it started is still alive, for up
@@ -796,8 +801,8 @@ file.
   declares its child and AGENT_CHILD (the bb image now lives in
   oats-project/oats-bb)`.
 - **The child is not ready.** A child that exits before it is ready, 30
-  seconds without a ready answer, or any answer from `ready.url` before the
-  child starts
+  seconds without a ready answer (one that arrives later does not count), or
+  anything listening on `ready.url` before the child starts
   fails the container start: neither sshd nor host run starts, the exit is
   nonzero and the restart policy starts the container again.
 - **The child ends later.** That is not a container failure. The supervisor

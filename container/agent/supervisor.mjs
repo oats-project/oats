@@ -98,8 +98,10 @@ export function parseChildDeclaration(text) {
 
 /** Everything read for the declared child, once and before any child starts:
  * the declaration, its command's real place and the envFromFile values. Says
- * one fixed line and answers nothing when the start must be refused. */
-function admitChild(selected, fs, say) {
+ * one fixed line and answers nothing when the start must be refused. Answers
+ * the declaration with `file`, the resolved command every launch runs, and
+ * `environment`, the child's whole environment. */
+function admitChild(selected, env, fs, say) {
   const at = childDeclarationFile, code = (error) => error?.code || "error";
   const notTheImagesFile = `${at} must be a regular file owned by root, not a symlink and not writable by its group or by others`;
   let text;
@@ -144,7 +146,13 @@ function admitChild(selected, fs, say) {
     if (/[\s\0]/.test(value)) { say(`the file for ${variable} must hold its value on one line`); return; }
     fromFiles[variable] = value;
   }
-  return { ...declared, env: { ...declared.env, ...fromFiles } };
+  // An envFromFile name comes from its file or not at all: a variable of that
+  // name the supervisor itself inherited never stands in for an absent or empty file.
+  const environment = { ...env, ...declared.env };
+  for (const variable of Object.keys(declared.envFromFile)) delete environment[variable];
+  // `real` was checked, so `real` is what runs, now and at every restart: a
+  // link on the way that an agent can re-point is never followed again.
+  return { ...declared, file: real, environment: { ...environment, ...fromFiles } };
 }
 
 /** System boundaries are injectable for subprocess fixtures; the image has no
@@ -160,7 +168,7 @@ export async function supervise({
   // Unset or empty: nothing is read, and a declaration in the image is inert.
   let declared;
   if (env.AGENT_CHILD) {
-    declared = admitChild(env.AGENT_CHILD, fs, say);
+    declared = admitChild(env.AGENT_CHILD, env, fs, say);
     if (!declared) return 1;
   }
   let stopping = false, failed = false, wakeStop, broker, ssh, host, child, childUp = false, restartTimer, restartDelay = restartBackoffMs;
@@ -168,9 +176,9 @@ export async function supervise({
   const stop = () => { stopping = true; wakeStop(); };
   const unlisten = onSignal(stop);
   // `role` decides what an exit means; `label` is what the lines call the child.
-  const launch = (role, file, args, stdio = "inherit", label = role, childEnv) => {
+  const launch = (role, file, args, stdio = "inherit", label = role, own) => {
     // The declared child leads a process group of its own, so what it leaves can be removed.
-    const spawned = spawnChild(file, args, childEnv ? { stdio, env: childEnv, detached: true } : { stdio });
+    const spawned = spawnChild(file, args, own ? { stdio, ...own, detached: true } : { stdio });
     const state = { child: spawned, ended: false, started: Date.now() };
     state.done = new Promise((resolve) => {
       spawned.once("error", () => {
@@ -199,7 +207,8 @@ export async function supervise({
     });
     return state;
   };
-  const startChild = () => launch("child", declared.command[0], declared.command.slice(1), "inherit", declared.name, { ...env, ...declared.env });
+  // The resolved file under its declared name: argv stays exactly `command`.
+  const startChild = () => launch("child", declared.file, declared.command.slice(1), "inherit", declared.name, { env: declared.environment, argv0: declared.command[0] });
   // One second, doubling to a minute; a child that stayed up five minutes starts over.
   const restartChild = (upMs) => {
     if (upMs >= restartStableMs) restartDelay = restartBackoffMs;
@@ -212,7 +221,8 @@ export async function supervise({
       catch { say(`${declared.name} could not start`); restartChild(0); }
     }, wait);
   };
-  // One request to the ready URL: "ready", "answered" (any other HTTP response) or "silent".
+  // One request to the ready URL: "ready", "answered" (any other HTTP response,
+  // or a connection that was accepted and gave none in time) or "silent" (nobody listens).
   const askChild = () => new Promise((resolve) => {
     let text = "", settled = false, responded = false, request;
     const answer = (ready) => {
@@ -238,6 +248,7 @@ export async function supervise({
           } catch { answer(false); }
         });
       });
+      request.on("socket", (socket) => socket.once("connect", () => { responded = true; }));
       request.on("error", () => answer(false));
     } catch { answer(false); }
   });
@@ -286,19 +297,21 @@ export async function supervise({
       await pause();
     }
     if (!stopping) say("broker ready (daemon_running: true)");
-    // The answer names no process. Nothing else runs yet, so any answer before
-    // the child starts is another process's: ready now or only later, it could
-    // pass for our child's while that child lives without holding the port.
+    // The answer names no process. Nothing else runs yet, so whatever accepts a
+    // connection there before the child starts is another process: ready now,
+    // only later or silent so far, it could pass for our child's while that
+    // child lives without holding the port. Nobody listening is the only pass.
     if (!stopping && declared && await askChild() !== "silent") { failed = true; say(`${declared.name}'s ready URL already answers before ${declared.name} starts`); stop(); }
     if (!stopping && declared) {
       child = startChild();
       const childDeadline = Date.now() + startupMs;
       while (!stopping) {
         // Only while our own child lives does a ready answer count.
-        const ready = await childReady();
-        if (ready && !child.ended && child.child.exitCode === null && child.child.signalCode === null && !stopping) { childUp = true; break; }
+        // And only when it arrives inside the budget: not one asked for in time and answered late.
+        const ready = await childReady(), late = Date.now() >= childDeadline;
+        if (ready && !late && !child.ended && child.child.exitCode === null && child.child.signalCode === null && !stopping) { childUp = true; break; }
         if (stopping) break;
-        if (Date.now() >= childDeadline) { failed = true; say(`${declared.name} readiness timed out`); stop(); break; }
+        if (late) { failed = true; say(`${declared.name} readiness timed out`); stop(); break; }
         await pause();
       }
       if (childUp) say(`${declared.name} ready (${declared.ready.field}: true)`);
