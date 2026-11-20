@@ -548,9 +548,11 @@ export function openDecision(state, row, acts) {
     if (act.reason.code === "not-running") return no(OPEN_WORDS.notRunning(name));
     if (act.reason.code === "state-unknown") return no(OPEN_WORDS.stateUnknown(name));
     // A row on a session provider (code `no-terminal`) has no terminal: the shared home's sentence says where
-    // the agent runs, and under it the link the provider offers, as the kernel's row gave it (its label and
-    // its url, one text from outside), for the person to open themselves. Nothing is attached or started.
-    const link = act.reason.link ? spoken(`${act.reason.link.label}: ${act.reason.link.url}`, "kernel", false) : null;
+    // the agent runs, and under it the link the provider offers (its label and its url, one text from outside),
+    // for the person to open themselves. The link carries no mark of who made it, and the TUI names no speaker
+    // of its own (test/tui-boundary.test.mjs): it stands in quotation marks, as any text nobody vouches for.
+    // Nothing is attached or started.
+    const link = act.reason.link ? spoken(`${act.reason.link.label}: ${act.reason.link.url}`, undefined, false) : null;
     return no([], [...outside(reasonSpoken(act.reason)), ...outside(link)]);
   }
   if (!elsewhere(row)) return { open: true, id, name, machine, target: { home: row.home }, routed: false };

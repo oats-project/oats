@@ -18,10 +18,10 @@ const bbRow = (name, extra = {}) => instanceRow("dev", name, { backend: "bb", tm
 const rowOf = (state, name) => roster(state).instances.find((row) => row.instance === name);
 const on = (state, name) => Object.freeze({ ...state, selected: instanceId(rowOf(state, name)) });
 
-test("Enter on a provider row opens nothing in any state and says the shared sentence; its link is printed under it, as the kernel's", () => {
+test("Enter on a provider row opens nothing in any state and says the shared sentence; its link is printed under it, in quotation marks", () => {
   const state = stateOf(observed([instanceRow("dev", "dev-t"), bbRow("dev-run"), bbRow("dev-idle", { running: null }),
     bbRow("dev-stopped", { running: false, runtimeState: "stopped", open: null })]));
-  for (const [name, under] of [["dev-run", [SENTENCE, `OATS says: ${LINK.label}: ${LINK.url}`]], ["dev-idle", [SENTENCE, `OATS says: ${LINK.label}: ${LINK.url}`]], ["dev-stopped", [SENTENCE]]]) {
+  for (const [name, under] of [["dev-run", [SENTENCE, `"${LINK.label}: ${LINK.url}"`]], ["dev-idle", [SENTENCE, `"${LINK.label}: ${LINK.url}"`]], ["dev-stopped", [SENTENCE]]]) {
     const row = rowOf(state, name), act = openAct(row);
     assert.equal(act.reason.code, "no-terminal", name);
     assert.deepEqual(openDecision(state, row, instanceActs(row)), { open: false, said: { said: [], under } }, name);

@@ -18,6 +18,10 @@ import { knownOrigin, hasRuntimeError, byRuntimeState, instanceColor, sessionPro
 import { retireData } from './retire-state.mjs';
 
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+/** The `backend` a row of this machine carries on, or undefined: the row's own, but never "herdr". A Herdr-recorded
+ * row of this machine is known by its `sessionTarget` or its `runtimeState` (instance-presentation.mjs
+ * `unsupportedSession`), as before session providers; one that only names the backend reads as it always did. */
+const localBackend = (row) => (row.backend === 'herdr' ? undefined : row.backend);
 
 /** One row per instance of a roster (deployment-data.mjs `deploymentStatusData`): the kernel's row,
  * with `agent`, `description` and `team` from its soul and `agentsRoot` from the roster, and `soulKey`, the
@@ -53,8 +57,9 @@ export function kernelLiveness(cli) {
  * `running` is the kernel's answer: the collector leaves a row it answered `null` as the kernel has it. */
 export function livenessInput(rows) {
   return rows.map((i) => ({ instance: i.instance, running: i.running, tmux: i.tmux, sessionTarget: i.sessionTarget,
-    // A row on a session provider is never probed (liveness.mjs): the collector knows it by its `backend`.
-    ...(i.backend !== undefined ? { backend: i.backend } : {}),
+    // A row on a session provider is never probed (liveness.mjs): the collector knows it by its `backend`. Never
+    // "herdr": a Herdr-recorded row of this machine is known by its `sessionTarget` or its state, as before.
+    ...(localBackend(i) !== undefined ? { backend: localBackend(i) } : {}),
     runtimeState: i.runtimeState, runtimeError: i.runtimeError }));
 }
 
@@ -109,8 +114,9 @@ export function panelInstance(i) {
     tmux: i.tmux, git: null,
     // Session providers: the row's backend ("tmux" or a provider's name), the provider's capability and thread
     // id, and the link it offers in place of a terminal, each as deployment-data.mjs validated it; absent stays
-    // absent. instance-presentation.mjs `sessionProvider` and instance-acts.mjs `openAct` read them.
-    ...(i.backend !== undefined ? { backend: i.backend } : {}),
+    // absent. instance-presentation.mjs `sessionProvider` and instance-acts.mjs `openAct` read them. "herdr" is no
+    // backend of a row of this machine (`localBackend`).
+    ...(localBackend(i) !== undefined ? { backend: localBackend(i) } : {}),
     ...(i.session !== undefined ? { session: i.session } : {}),
     ...(i.open !== undefined ? { open: i.open } : {}),
     // Workspace-model v2 facts exactly as `oats status --json` reported them:

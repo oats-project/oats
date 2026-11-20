@@ -273,7 +273,7 @@ while a terminal is open); under 80 columns it has the whole width.
   the provider's own word), and `S`, `R`, `X` and `D` act on it as on any agent. `Enter` opens
   nothing: the line says where it runs ("Runs in a bb thread; open it in
   bb.") and, when the provider offers a link, prints it under that
-  (`OATS says: Open in bb: http://…`) for you to open. The palette does not
+  (`"Open in bb: http://…"`) for you to open. The palette does not
   list it among the agents to open, the agent steps pass over it, and a
   workspace's remembered tabs never open it. Its `!` mark shows whenever
   OATS reports that it waits on you and it is not stopped

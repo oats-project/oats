@@ -58,6 +58,12 @@ test("deployment-data validates the three fields and never refuses the roster fo
   const by = Object.fromEntries(rows.map((row) => [row.instance, row]));
   assert.equal(rows.length, 15, "no row is withheld or refused");
   for (const name of ["b2", "b3", "b5"]) assert.ok(!Object.hasOwn(by[name], "backend"), name);
+  // "herdr" is never kept on a row of this machine: such a row is known by its sessionTarget or its state, as before
+  // session providers, and one that only names the backend reads as it always did (a probed tmux row).
+  const [herdr] = projected([{ instance: "dev-h", home: home("dev-h"), backend: "herdr", running: true, tmux: { session: "oats", window: "dev-h", socket: "/s" } }]);
+  assert.ok(!Object.hasOwn(herdr, "backend"));
+  assert.equal(sessionProvider(herdr), null);
+  assert.deepEqual(openAct(herdr), { verb: "open", enabled: true, reason: null });
   // Present, text and not "tmux": the row is a provider's (never asked of tmux), also when it is no name the contract allows.
   assert.deepEqual([by.b1.backend, by.b4.backend], ["Not A Name", "-bb"]);
   for (const name of ["b1", "b4"]) {
