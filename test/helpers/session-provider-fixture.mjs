@@ -9,19 +9,40 @@
 //   control: { "<verb>": <behaviour>, "<instance>": { "<verb>": <behaviour> } }   (the instance's wins)
 //   behaviour: { result } | { error: { code, message } } | { raw: "<stdout>" } | { exit: <status> }
 //              | { sleepMs } (then the default answer) | { echo: { <header overrides> } }
+//   control.stateful: true: the fake has sessions (sessionsOf): launch creates one, stop stops it, an
+//   input restarts a stopped one, inspect answers what is there; each effect is a line of events.log.
 // Defaults: launch answers a new endpoint `{ server, threadId }`; inspect a running session with an
 // `open` link; input `{ submitted: true, verified: true }`; stop `{ stopped: true }`; inspectMany
 // each home's own inspect behaviour, in order; check (declared only by `fakeProvider({ check: true })`)
 // `{ status: "ready", problems: [], warnings: [] }`.
 // LOST is what a provider answers for a session that is gone (as bb's error reads): a lost session.
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { v2Deployment } from "./v2-deployment.mjs";
 
 export const FAKE_CAPABILITY = "acme.fake";
 export const FAKE_SERVER = "http://127.0.0.1:9";
 
+/** The sessions a stateful fake has (control `stateful: true`), from its events (fx.events()),
+ *  oldest first → Map of thread id → `{ home, createdAt, running }` (`home`: the instance's name). A session runs once created;
+ *  a stop of its thread stops it, as a stop of its home does when it was created at or after that
+ *  stop's `launchSent`; an input RESTARTS a stopped one, as a provider's does; `gone` is a session
+ *  that ended by itself (a test's own event). The fake's inspect and a test's invariants read
+ *  sessions through this one function. */
+export function sessionsOf(events) {
+  const sessions = new Map();
+  for (const e of events) {
+    const one = sessions.get(e.thread);
+    if (e.ev === "created") sessions.set(e.thread, { home: e.home, createdAt: e.at, running: true });
+    else if (e.ev === "input" && one) one.running = true;
+    else if ((e.ev === "stop" || e.ev === "gone") && one) one.running = false;
+    else if (e.ev === "stopHome") for (const s of sessions.values()) if (s.home === e.home && (!e.launchSent || s.createdAt >= Date.parse(e.launchSent))) s.running = false;
+  }
+  return sessions;
+}
+
 const SESSION_SCRIPT = `import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
 const dir = join(process.env.HOME, "fake-session");
 mkdirSync(dir, { recursive: true });
@@ -34,6 +55,22 @@ const stopKind = req.verb === "stop" ? (req.input.endpoint === null ? "stop:null
 const behaviourOf = (name, verb) => (verb === "stop" && stopKind ? control[name]?.[stopKind] ?? control[stopKind] : undefined) ?? control[name]?.[verb] ?? control[verb] ?? {};
 const echo = { schemaVersion: req.schemaVersion, phase: req.phase, capability: req.capability, provider: req.provider, verb: req.verb };
 const open = (endpoint) => ({ label: "Open in fake", url: "${FAKE_SERVER}/thread/" + (endpoint?.threadId ?? "none") });
+// Stateful (control.stateful): each effect is an event, written when it happens (after a sleep),
+// and inspect answers from them.
+const stateful = control.stateful === true;
+const events = () => (existsSync(join(dir, "events.log")) ? readFileSync(join(dir, "events.log"), "utf8").trim().split("\\n").filter(Boolean).map((line) => JSON.parse(line)) : []);
+const emit = (event) => appendFileSync(join(dir, "events.log"), JSON.stringify({ ...event, at: Date.now() }) + "\\n");
+${sessionsOf.toString()}
+const statefulDefaults = {
+  launch: () => {
+    const thread = "thr_" + req.input.instance + "_" + randomUUID();
+    emit({ ev: "created", thread, home: instance });
+    return { endpoint: { server: "${FAKE_SERVER}", threadId: thread } };
+  },
+  inspect: (input) => (sessionsOf(events()).get(input.endpoint?.threadId)?.running === true ? { present: true, state: "unknown", running: true, open: open(input.endpoint) } : { present: false, state: "stopped", running: false }),
+  input: () => { emit({ ev: "input", thread: req.input.endpoint?.threadId }); return { submitted: true, verified: true }; },
+  stop: () => { emit(req.input.endpoint === null ? { ev: "stopHome", home: instance, launchSent: req.input.launchSent ?? null } : { ev: "stop", thread: req.input.endpoint.threadId }); return { stopped: true }; },
+};
 const defaults = {
   launch: () => {
     const counter = join(dir, "threads");
@@ -59,10 +96,10 @@ let result = b.result;
 if (result === undefined && req.verb === "inspectMany") {
   result = { results: req.input.homes.map((h) => {
     const own = behaviourOf(h.instance ?? basename(h.home), "inspect");
-    return own.error ? { error: own.error } : own.result ?? defaults.inspect(h);
+    return own.error ? { error: own.error } : own.result ?? (stateful ? statefulDefaults : defaults).inspect(h);
   }) };
 }
-if (result === undefined) result = defaults[req.verb](req.input);
+if (result === undefined) result = (stateful && statefulDefaults[req.verb] ? statefulDefaults : defaults)[req.verb](req.input);
 process.stdout.write(JSON.stringify({ ...echo, ...(b.echo ?? {}), ok: true, result }) + "\\n");
 `;
 
@@ -117,6 +154,9 @@ export function providerDeployment(t, { manifest = fakeManifest(), capabilities 
   fx.verbs = (verb) => fx.calls().filter((c) => c.verb !== undefined && (verb === undefined || c.verb === verb));
   fx.hooks = (event) => fx.calls().filter((c) => c.hook !== undefined && (event === undefined || c.hook === event));
   fx.clearCalls = () => rmSync(join(fx.fake, "calls.log"), { force: true });
+  /** A stateful fake's events so far, oldest first (sessionsOf reads them), and a test's own event. */
+  fx.events = () => (existsSync(join(fx.fake, "events.log")) ? readFileSync(join(fx.fake, "events.log"), "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line)) : []);
+  fx.emit = (event) => appendFileSync(join(fx.fake, "events.log"), `${JSON.stringify({ ...event, at: Date.now() })}\n`);
   /** A home of soul `dev` launched on the fake backend. */
   fx.launch = (name, spawnOpts = {}) => fx.spawn("dev", { name, backend: "fake", launchConfig: "claude", launch: true, ...spawnOpts });
   return fx;

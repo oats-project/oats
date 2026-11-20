@@ -7,6 +7,19 @@ Decided 2026-11-20. The tests in `test/session-provider-lifecycle.test.mjs`
 follow the tables below: one test per cell of "The verbs, by state", one per
 crossing, and one per point between two writes at which the kernel can die
 (it is killed there, by a seam, and the records it leaves are checked).
+`test/session-provider-explorer.test.mjs` goes over what the tables do not
+list one by one: for each verb, the kernel ends at each seam it passes (each
+point between two writes, and each provider call: before, during, after),
+then another verb runs, then an input, against a provider that has sessions;
+and the invariants below are checked once everything has settled. It runs a
+seeded sample by default and every schedule on request.
+
+**The invariants.** (1) No session runs that no record names. (2) A home
+recorded planned has no session; one recorded stopped has none but the one
+its record names, and not that one either once a stop of it was confirmed.
+(3) No home is left that no verb can act on: every verb answers a kernel
+code, and a retire takes the home. (4) No input is delivered after a stop
+was confirmed.
 
 A provider runs the session; **OATS decides what state the home is in, from
 its own records alone**. The provider is asked only what a record cannot say
@@ -131,22 +144,27 @@ reads the launch from its receipt and record, never from the marker.
 | **resume** (`resume`) | `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` | gone → count, then `input` (the notice); there → `E_SESSION_RUNNING` / `E_RESUME_NOT_LOST` | host's stop → `input` (the notice), then `stoppedAt` cleared, then the stop receipt removed → running; operator's → `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` |
 | **retire** (`retire`) | remove | settle, scan, remove | the stop rule, scan, remove | `stop {E}` again, scan, remove | the stop rule, settle, scan, remove |
 
-**The stop rule** (every OATS stop of a *running* home: stop, restart,
-retire, the host's shutdown): an earlier stop's receipt is removed (one a
-resume that died left names this same start, and would make this stop the
-host's), then receipt `stoppedAt: t`, then the stop receipt, then the
-drain, then the provider's `stop {endpoint: E}`. Not confirmed is
-`E_SESSION_STOP_FAILED` (a retire goes on when no process works in the home,
-with a warning), and the home is *stopped* all the same: from the first
-write on, input is refused whatever the provider does.
+**The stop rule: fence, drain, stop.** Every stop the kernel asks of a
+provider, whatever the verb, is made by one function, in this order:
 
-**Fence, drain, stop.** That order holds for every stop the kernel asks of a
-provider, whatever the verb: first the **fence**, the record from which no
-new input is admitted (`stoppedAt`, or a launch's mark); then the **drain**
-of the provider calls recorded for the home (see "A provider's command
-outlives the kernel that ran it"); then the provider's `stop`. A stop the
-provider confirms is therefore final: nothing admitted before the fence is
-still on its way.
+1. The **fence**: the record from which no new input is admitted. For a stop
+   of a *running* home (stop, restart, retire, the host's shutdown): an
+   earlier stop's receipt is removed (one a resume that died left names this
+   same start, and would make this stop the host's), then receipt
+   `stoppedAt: t`, then the stop receipt. For a launch: its mark. A home
+   that is stopped or unsettled already has its fence.
+2. The **drain** of the provider calls recorded for the home (see "A
+   provider's command outlives the kernel that ran it"): an input that is
+   being sent is waited for, at most an input's timeout and a margin (about
+   25 s), and ended if it outlasts that or if its kernel is gone.
+3. The provider's `stop {endpoint: E}`.
+
+A stop the provider confirms is therefore final: nothing admitted before the
+fence is still on its way. Not confirmed is `E_SESSION_STOP_FAILED` (a
+retire goes on when no process works in the home, with a warning), and the
+home is *stopped* all the same: from the fence on, input is refused whatever
+the provider does. The cost is the wait of step 2, while an input is in
+flight.
 
 **Scan** (a retire): no process may work in the home after the provider's
 stop, confirmed or not.
