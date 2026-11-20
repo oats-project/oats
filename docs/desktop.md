@@ -1054,6 +1054,24 @@ starts, ends or its text changes, never as the age ticks over. In a split,
 each group's row follows its own tab. The row goes as soon as the wait ends,
 and it never shows for a stopped instance or a roster that is out of date.
 
+## An agent's mail
+
+**Alt+M** (⌥⌘M on macOS), the palette's **Agent: mail** or **Mail** in
+Details' Messaging & Teams section opens the agent's own mail, received and
+sent, newest first, in a read-only sheet from the right. Each message says who
+it is from or to, its team when the agent is in more than one, its subject and
+its body as plain text attributed to its sender, and whether it was encrypted,
+is not read by the agent yet, is high priority, or its sender is not verified.
+**r** reads it again and **Older mail** reads further back; Esc closes it.
+
+Reading it never acknowledges anything or marks anything read: the Desktop
+runs only the messaging layer's `messaging:mail` operation, when the sheet
+opens or you ask it to read again, never on its own. Nothing else on the screen
+says anything about an agent's mail. An agent whose messaging layer predates
+the operation says so, with what to do: stop it and upgrade it (`oats instance
+upgrade`), or start a new agent of its soul. The details are in
+[packages/desktop/docs/desktop-mail-sheet.md](../packages/desktop/docs/desktop-mail-sheet.md).
+
 ## Copy from a terminal
 
 Drag over an agent's output to select it, as in any terminal. The selection

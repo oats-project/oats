@@ -1,0 +1,77 @@
+{
+ "schemaVersion": 1,
+ "ok": true,
+ "result": {
+  "operationsApi": 2,
+  "operation": "messaging:mail",
+  "capability": "oats.aweb",
+  "version": "1.43.0",
+  "argv": [
+   "aweb",
+   "mail"
+  ],
+  "cwd": "/home/alex/oats/agents/mail-tryout/instances/mail-read-tryout-probe",
+  "target": {
+   "home": "/home/alex/oats/agents/mail-tryout/instances/mail-read-tryout-probe",
+   "instance": "mail-read-tryout-probe"
+  },
+  "result": {
+   "documents": [
+    {
+     "label": "Mail",
+     "kind": "markdown",
+     "text": "(replaced)"
+    }
+   ],
+   "mail": {
+    "mailApi": 1,
+    "acknowledges": false,
+    "observedAt": "2026-11-19T22:45:14.583Z",
+    "identities": [
+     {
+      "team": "oats",
+      "alias": "mail-read-tryout-probe",
+      "identity": "did:key:z6MkoM2RjzALL6Fmfy6b8gFAEjvtJ3y9GoQq2mDD7KZ9Hsif",
+      "primary": true,
+      "error": null
+     }
+    ],
+    "messages": [
+     {
+      "id": "ae3bc288-3135-45c0-be0e-049d05c186fe",
+      "conversationId": "4ef4d0fe-d16f-4d4b-8401-491db5c875d9",
+      "threadTitle": "Thread 1",
+      "direction": "received",
+      "team": "oats",
+      "from": {
+       "alias": "redesign-mail-read-developer",
+       "address": "oats.aweb.ai/redesign-mail-read-developer",
+       "identity": "did:key:z6MkkU15Pg8rmnpMMoqwBtaXpwy8avZzP9SgH3yDqG2euTwj"
+      },
+      "to": {
+       "alias": "mail-read-tryout-probe",
+       "address": "mail-read-tryout-probe",
+       "identity": "did:key:z6MkoM2RjzALL6Fmfy6b8gFAEjvtJ3y9GoQq2mDD7KZ9Hsif"
+      },
+      "subject": "Subject 1",
+      "body": "Body 1, replaced in the captured answer.",
+      "truncated": false,
+      "createdAt": "2026-11-19T22:45:07.869891+00:00",
+      "readByAgent": false,
+      "encrypted": false,
+      "verification": "verified",
+      "priority": "normal"
+     }
+    ],
+    "conversations": [
+     {
+      "id": "4ef4d0fe-d16f-4d4b-8401-491db5c875d9",
+      "partial": null
+     }
+    ],
+    "hasMore": false,
+    "nextCursor": null
+   }
+  }
+ }
+}

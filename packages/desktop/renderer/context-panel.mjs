@@ -60,6 +60,10 @@ export const contextPanelCSS = `
 #context-panel .context-panel-section-head { display:flex; align-items:center; gap:8px; min-width:0; min-height:24px; }
 #context-panel .context-panel-tools { display:flex; align-items:center; gap:2px; margin-left:auto; }
 #context-panel .context-panel-tools:empty { display:none; }
+/* Messaging's Mail: opens the agent's read-only mail sheet (mail-sheet.mjs). */
+#context-panel .context-panel-mail { display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 9px; border-radius:6px; border:1px solid var(--border);
+  background:var(--surface); color:var(--fg); font:600 11.5px/1 inherit; cursor:pointer; }
+#context-panel .context-panel-mail:hover { background:var(--surface-2); }
 /* Messaging & Teams: each part under a sentence-case sub-label (not the uppercase section style). */
 #context-panel .context-panel-part { display:flex; flex-direction:column; gap:4px; min-width:0; }
 #context-panel .context-panel-sublabel { font-size:11.5px; font-weight:600; line-height:1.45; color:var(--muted); }
@@ -258,7 +262,7 @@ export function instanceDeployment(context) {
 
 export function createContextPanel({
   document: suppliedDocument, root: suppliedRoot, onIntent = noop,
-  applyFocus = callback => callback(), onFocusModeChange = noop, fallbackFocus = () => null, closedFocus = () => null, createGitPanel, createTeamsSection, createSoulSection, openSoul, lifecycle = null,
+  applyFocus = callback => callback(), onFocusModeChange = noop, fallbackFocus = () => null, closedFocus = () => null, createGitPanel, createTeamsSection, createSoulSection, openSoul, openMail = null, lifecycle = null,
   connectionGeneration = () => 0, subscribeConnections = () => noop, instanceOpen = { read: () => true, write: noop }, onChange = noop,
 } = {}) {
   const document = suppliedDocument ?? suppliedRoot?.ownerDocument ?? globalThis.document;
@@ -479,6 +483,17 @@ export function createContextPanel({
   const teamsHost = node('section', 'context-panel-section'); teamsHost.dataset.contextSection = 'teams'; teamsHost.hidden = true;
   const teamsHead = node('div', 'context-panel-section-head'), teamsTools = node('div', 'context-panel-tools');
   teamsHead.append(node('div', 'context-panel-label', 'Messaging & Teams'), teamsTools);
+  // Mail (S2-M3): the agent's own mail, read-only, in the sheet from the right; shown with the section, which shows
+  // only where a messaging provider fills the layer. The host opens it (openMail); this panel performs no IO.
+  if (typeof openMail === 'function') {
+    const mailControl = node('button', 'context-panel-mail', 'Mail'); mailControl.type = 'button';
+    mailControl.title = "Read this agent's mail (read-only)"; mailControl.dataset.action = 'instance.mail';
+    mailControl.addEventListener('click', event => {
+      if (disposed || !context.instance?.home) return;
+      onIntent(event); openMail({ workspace: context.workspace, instance: context.instance });
+    });
+    teamsTools.append(mailControl);
+  }
   const idPart = node('div', 'context-panel-part'), idLine = node('div', 'context-panel-idline');
   idLine.append(field('span', 'context-panel-id', 'identity'), copyControl('identity', 'Copy messaging ID'));
   idPart.append(node('div', 'context-panel-sublabel', 'Messaging ID'), idLine); idPart.dataset.row = 'identity'; rows.set('identity', idPart);

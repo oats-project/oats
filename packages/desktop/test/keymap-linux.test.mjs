@@ -78,6 +78,7 @@ test("the shipped table: each changed default resolves per platform and per chor
     "workspace.previous": ["Alt+↑", "Alt+↑", null, null], "workspace.next": ["Alt+↓", "Alt+↓", null, null],
     "terminal.focusMode": ["Mod+Alt+Z", "Alt+Z", "Ctrl+Alt+Z", "Ctrl+Shift+M"],
     "instance.edit": ["Mod+Alt+R", "Alt+R", "Ctrl+Alt+R", "Ctrl+Alt+R"],
+    "instance.mail": ["Mod+Alt+M", "Alt+M", "Ctrl+Alt+M", "Ctrl+Alt+M"],
     "tabs.close": ["Mod+W", "Alt+W", "Ctrl+Alt+W", "Ctrl+Shift+W"],
     "tabs.next": ["Ctrl+Tab", "Ctrl+Tab"], "tabs.prev": ["Ctrl+Shift+Tab", "Ctrl+Shift+Tab"],
     "tabs.nextPage": ["Alt+→", "Alt+→", "Alt+Shift+→", "Alt+Shift+→"], "tabs.prevPage": ["Alt+←", "Alt+←", "Alt+Shift+←", "Alt+Shift+←"],
@@ -145,7 +146,7 @@ test("nothing binds Super/Meta on Linux/Windows: Mod is Ctrl there", () => {
 test("the terminal allowlist is exactly the actions that must work in a terminal", () => {
   assert.deepEqual([...TERMINAL_ALLOWLIST].sort(), [
     "app.chooseSoul", "app.leader", "app.newAgent", "app.palette", "app.quickOpenSouls", "app.shortcuts", "app.themePicker", "app.workspaces", "focus.leaveTerminal",
-    "instance.edit", "panel.toggle", "roster.openNext", "roster.openPrevious", "sidebar.focusFilter", "sidebar.toggle",
+    "instance.edit", "instance.mail", "panel.toggle", "roster.openNext", "roster.openPrevious", "sidebar.focusFilter", "sidebar.toggle",
     "split.close", "split.focusNextGroup", "split.focusPrevGroup", "split.horizontal", "split.vertical",
     "stage.automations", "stage.hierarchy", "stage.spawn",
     "tabs.close", "tabs.next", "tabs.nextPage", "tabs.prev", "tabs.prevPage",
@@ -183,6 +184,7 @@ const ctrlAltPresses = [
   [linux("A", { altKey: true, shiftKey: true }), "split.focusPrevGroup"], [linux("a", { altKey: true }), "split.focusNextGroup"],
   [linux("z", { altKey: true }), "terminal.focusMode"], [linux("r", { altKey: true }), "instance.edit"], [linux("f", { altKey: true }), "sidebar.focusFilter"],
   [linux("n", { altKey: true }), "app.newAgent"],
+  [linux("m", { altKey: true }), "instance.mail"],
   ...Array.from({ length: 9 }, (_, i) => [linux(`${i + 1}`, { altKey: true }), `tabs.goto${i + 1}`]),
   // The Alt+Shift arrows: the tab moves.
   [ev("ArrowLeft", { altKey: true, shiftKey: true }), "tabs.prevPage"], [ev("ArrowRight", { altKey: true, shiftKey: true }), "tabs.nextPage"],
@@ -195,6 +197,7 @@ const FAMILY_PRESSES = {
     [ev("ArrowLeft", { altKey: true, shiftKey: true }), "split.focusPrevGroup"], [ev("ArrowRight", { altKey: true, shiftKey: true }), "split.focusNextGroup"],
     [ev("z", { altKey: true }), "terminal.focusMode"], [ev("r", { altKey: true }), "instance.edit"], [ev("f", { altKey: true }), "sidebar.focusFilter"],
     [ev("n", { altKey: true }), "app.newAgent"],
+    [ev("m", { altKey: true }), "instance.mail"],
     ...Array.from({ length: 9 }, (_, i) => [ev(`${i + 1}`, { altKey: true }), `tabs.goto${i + 1}`]),
     [ev("ArrowLeft", { altKey: true }), "tabs.prevPage"], [ev("ArrowRight", { altKey: true }), "tabs.nextPage"],
     // The leader's ↑ / ↓, the Alt family's alone.
@@ -350,6 +353,7 @@ test("macOS inside a terminal: ⌘ chords fire (they never reach the pty), plus 
     [ev("ArrowUp", { altKey: true }), "workspace.previous"], [ev("ArrowDown", { altKey: true }), "workspace.next"],
     [ev("¡", { code: "Digit1", metaKey: true, altKey: true }), "tabs.goto1"],
     [ev("®", { code: "KeyR", metaKey: true, altKey: true }), "instance.edit"],
+    [ev("µ", { code: "KeyM", metaKey: true, altKey: true }), "instance.mail"],
   ]) assert.equal(matchEvent(event, inTerm), id, id);
   // ⌃3 is ESC, ⌃4–⌃7 FS/GS/RS/US, ⌃8 DEL, ⌃6 vim's alternate file; F6 is mc's/htop's/nano's. The old
   // ⌥⌘←/→ and ⌥⌘A are bound to nothing now (one key a row), and ⌥⇧↑/↓ to nothing on macOS.

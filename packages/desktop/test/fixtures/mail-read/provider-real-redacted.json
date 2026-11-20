@@ -1,0 +1,116 @@
+{
+ "schemaVersion": 1,
+ "ok": true,
+ "result": {
+  "documents": [
+   {
+    "label": "Mail",
+    "kind": "markdown",
+    "text": "(replaced)"
+   }
+  ],
+  "mail": {
+   "mailApi": 1,
+   "acknowledges": false,
+   "observedAt": "2026-11-19T22:40:51.370Z",
+   "identities": [
+    {
+     "team": "oats",
+     "alias": "redesign-mail-read-developer",
+     "identity": "did:key:z6MkkU15Pg8rmnpMMoqwBtaXpwy8avZzP9SgH3yDqG2euTwj",
+     "primary": true,
+     "error": null
+    }
+   ],
+   "messages": [
+    {
+     "id": "c7fcd355-d81d-4283-9619-a1496d284168",
+     "conversationId": "7bf3eccc-b1f5-41d2-b2e3-41e9de1ffa7f",
+     "threadTitle": "Thread 1",
+     "direction": "received",
+     "team": "oats",
+     "from": {
+      "alias": "desktop-rework-lead",
+      "address": "oats.aweb.ai/desktop-rework-lead",
+      "identity": "did:key:z6Mkhne3zKMT48xfnihniZHEqXDCchCfCeYBzv3awm1QG8wd"
+     },
+     "to": {
+      "alias": "redesign-mail-read-developer",
+      "address": "did:key:z6MkkU15Pg8rmnpMMoqwBtaXpwy8avZzP9SgH3yDqG2euTwj",
+      "identity": "did:key:z6MkkU15Pg8rmnpMMoqwBtaXpwy8avZzP9SgH3yDqG2euTwj"
+     },
+     "subject": "Subject 1",
+     "body": "Body 1, replaced in the captured answer.\nIts second line.",
+     "truncated": false,
+     "createdAt": "2026-11-19T22:19:07.207074+00:00",
+     "readByAgent": true,
+     "encrypted": false,
+     "verification": "verified",
+     "priority": "normal"
+    },
+    {
+     "id": "87df9499-3117-48bd-8291-53007e1e33a9",
+     "conversationId": "7bf3eccc-b1f5-41d2-b2e3-41e9de1ffa7f",
+     "threadTitle": "Thread 2",
+     "direction": "sent",
+     "team": "oats",
+     "from": {
+      "alias": "redesign-mail-read-developer",
+      "address": "oats.aweb.ai/redesign-mail-read-developer",
+      "identity": "did:key:z6MkkU15Pg8rmnpMMoqwBtaXpwy8avZzP9SgH3yDqG2euTwj"
+     },
+     "to": {
+      "alias": "desktop-rework-lead",
+      "address": "desktop-rework-lead",
+      "identity": "did:key:z6Mkhne3zKMT48xfnihniZHEqXDCchCfCeYBzv3awm1QG8wd"
+     },
+     "subject": "Subject 2",
+     "body": "Body 2, replaced in the captured answer.\nIts second line.",
+     "truncated": false,
+     "createdAt": "2026-11-19T22:18:50.969938+00:00",
+     "readByAgent": true,
+     "encrypted": false,
+     "verification": "verified",
+     "priority": "normal"
+    },
+    {
+     "id": "def09b7e-04a6-4a61-ac22-967d76b4634c",
+     "conversationId": "3c28155a-241f-433b-850e-6f067fcbcf1c",
+     "threadTitle": "Thread 3",
+     "direction": "received",
+     "team": "oats",
+     "from": {
+      "alias": "redesign-mail-sheet-developer",
+      "address": "oats.aweb.ai/redesign-mail-sheet-developer",
+      "identity": "did:key:z6MkqkhRGkubXjvc38TGwmw3mrrxx1qvBUP139nTkjyaF3CW"
+     },
+     "to": {
+      "alias": "redesign-mail-read-developer",
+      "address": "redesign-mail-read-developer",
+      "identity": "did:key:z6MkkU15Pg8rmnpMMoqwBtaXpwy8avZzP9SgH3yDqG2euTwj"
+     },
+     "subject": "Subject 3",
+     "body": "Body 3, replaced in the captured answer.\nIts second line.",
+     "truncated": false,
+     "createdAt": "2026-11-19T22:15:44.204162+00:00",
+     "readByAgent": true,
+     "encrypted": false,
+     "verification": "verified",
+     "priority": "normal"
+    }
+   ],
+   "conversations": [
+    {
+     "id": "3c28155a-241f-433b-850e-6f067fcbcf1c",
+     "partial": null
+    },
+    {
+     "id": "7bf3eccc-b1f5-41d2-b2e3-41e9de1ffa7f",
+     "partial": null
+    }
+   ],
+   "hasMore": false,
+   "nextCursor": null
+  }
+ }
+}

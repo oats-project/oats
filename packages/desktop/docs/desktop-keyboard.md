@@ -367,6 +367,7 @@ The three Linux / Windows columns are [the chord families](#the-chord-families):
 | The sidebar's width back to 288px (`sidebar.resetWidth`; the palette's **Sidebar: reset width**; also Enter or a double-click on the sidebar's width handle) | none | none | none | none | – (the palette keeps it) |
 | Focus the instance roster, on its current row, or, on an empty roster, the foot's New agent (`sidebar.focusFilter`, its id from when the roster had a filter; to find an instance by name, use the command palette) | ⌘F | Alt+F | Ctrl+Alt+F | Ctrl+Alt+F | yes |
 | An instance's name and colour, for the leader's target (`instance.edit`; also **Instance: name and colour…**; no leader key) | ⌥⌘R | Alt+R | Ctrl+Alt+R | Ctrl+Alt+R | yes |
+| The agent's mail, a read-only sheet from the right, for the leader's target; pressed again, or Esc, it closes (`instance.mail`; also **Agent: mail** and Details' **Mail**; no leader key; [desktop-mail-sheet.md](desktop-mail-sheet.md)) | ⌥⌘M | Alt+M | Ctrl+Alt+M | Ctrl+Alt+M | yes (ESC m, which Esc, then m still sends: Emacs's M-m, back-to-indentation, and zsh's copy-prev-shell-word; readline binds none) |
 | Instance panel (`panel.toggle`; also Show instance panel while it is closed, and the panel's own close button) | ⌘I | Ctrl+Shift+I | the same | the same | yes (plain Ctrl+I, the Tab byte, stays the program's) |
 | The Appearance sheet, on Theme (`app.themePicker`; also the palette's **Appearance…**) | ⇧⌘Space | Ctrl+Shift+Space | the same | the same | yes |
 | The Appearance sheet, on Font (`app.fontPicker`; also the palette's **Font: choose…**) | none | none | none | none | – (the palette keeps it) |
@@ -580,14 +581,15 @@ Rebinding applies everywhere a chord is shown: tooltips (the sidebar's Spawn
 instance's among them), the settings menu's items, the palette's command
 details and the spawn dialog's Spawn button.
 
-**Shared with the TUI.** Twenty-six of these chords are written down once, in
+**Shared with the TUI.** Twenty-seven of these chords are written down once, in
 `CHORDS` in `packages/client/keymap.mjs`, and `DEFAULT_KEYMAP` reads them from
 there (`CHORDS_READ`, one action each), per family on Linux/Windows; on
 macOS ⌘ or ⌥⌘ with a letter or a digit, and ⌥ with an arrow. In the Alt family, Alt with a letter does an action: the palette
 (K), Quick open (P; a spawn, in the TUI), the list of workspaces (O), focus
 mode (Z, the leader's `z`), close tab (W), split right (E) and split down
-(Shift+E), the instance roster (F) and the instance's name and colour (R;
-`instance.edit`, ⌥⌘R on macOS, no leader key). Alt with a digit goes to tab
+(Shift+E), the instance roster (F), the instance's name and colour (R;
+`instance.edit`, ⌥⌘R on macOS, no leader key) and the agent's mail (M;
+`instance.mail`, ⌥⌘M on macOS, no leader key). Alt with a digit goes to tab
 1–8 of the active tab's strip, 9 to its last (with the tabs split, the
 focused group's). Alt with an arrow moves between tabs (← →, the leader's
 ← →) and workspaces (↑ ↓, the leader's ↑ ↓; the Alt family's alone); Alt+Shift with an arrow
@@ -597,8 +599,9 @@ some of them (see "The chord families"), in both clients. The TUI binds the
 same chords from every focus (docs/tui.md, "Chords"); the leader stays the
 key that always works. Ctrl+Tab / Ctrl+Shift+Tab, the stages' ⌘1–⌘3 /
 Ctrl+1–Ctrl+3 and the shortcuts editor's ⌘, / Ctrl+, are the Desktop's own
-and are not shared; help is the leader's `?` (it pins the help sheet). `edit-instance` (Alt+R) is the
-Desktop's alone so far: the TUI has no such action and binds no key for it.
+and are not shared; help is the leader's `?` (it pins the help sheet). `edit-instance` (Alt+R) and `mail`
+(Alt+M) are the Desktop's alone so far: the TUI has no such actions and binds
+no key for them.
 `test/keymap-shared.test.mjs` pins the table and the whole default keymap in
 each family.
 
@@ -653,7 +656,8 @@ letters and digits, and ⌥ with an arrow moves (principle 3).
   an arrow selects text in an input; go to tab, since Ctrl+Shift with a digit
   is a shifted symbol on most layouts; the editor groups and the instance
   roster, whose Ctrl+Shift+A and Ctrl+Shift+F terminals and agents take;
-  an instance's name and colour (Ctrl+Alt+R), the Desktop's alone. Like the
+  an instance's name and colour (Ctrl+Alt+R) and the agent's mail
+  (Ctrl+Alt+M, since Ctrl+Shift+M is focus mode here), the Desktop's alone. Like the
   Ctrl+Alt family it has no workspace move: Alt+↑ / Alt+↓ are the program's,
   and the leader's ↑ ↓ move.
 
@@ -736,22 +740,24 @@ takes those (docs/tui.md).
 | Claude Code | Alt+P | the model picker | unknown: its docs don't say whether Esc, then P is Meta+P, and Esc alone interrupts; switch to Ctrl+Alt |
 | Claude Code | Alt+O | fast mode on or off | as Alt+P |
 | Claude Code | Alt+F | forward a word | as Alt+P |
+| Claude Code | Alt+M, on Windows only where its runtime can't read Shift+Tab | cycle the permission mode (Shift+Tab everywhere else) | as Alt+P |
 | Codex | Alt+R | raw output on or off | unknown; switch to Ctrl+Alt |
 | Codex | Alt+F | a word right | Ctrl+→, its other key for it |
 | pi | Alt+F | a word right | Esc, then f: pi reads ESC f as a word right |
 | bash (readline) | Alt+P, Alt+F, Alt+R | search history back; forward a word; revert the line | Esc, then p, f or r |
 | bash (readline) | Alt+1–Alt+9 | a numeric argument | Esc, then the digit |
-| zsh (emacs keymap) | Alt+P, Alt+Z, Alt+W, Alt+F | history search back; run the last named command; copy the region; forward a word | Esc, then the letter |
+| zsh (emacs keymap) | Alt+P, Alt+Z, Alt+W, Alt+F, Alt+M | history search back; run the last named command; copy the region; forward a word; copy the previous shell word | Esc, then the letter |
 | zsh (emacs keymap) | Alt+1–Alt+9 | a numeric argument | Esc, then the digit |
 | irssi | Alt+1–Alt+9; Alt+W, E, R, O | go to window 1–9; to window 12, 13, 14, 19 | Esc, then the key |
 | irssi | Alt+K, P, F | erase completion; page back; forward a word | Esc, then the key |
 | WeeChat | Alt+1–Alt+9 | go to buffer 1–9 | unknown; switch to Ctrl+Alt |
 | WeeChat | Alt+K, R, F, P, Z, W | grab a key; delete the line; next word; previous highlight; zoom; Alt+W starts the window keys | unknown; switch to Ctrl+Alt |
 | tmux | nothing without the prefix (the root table binds only the mouse) | after the prefix: Alt+1–Alt+7 the preset layouts, Alt+O / P / N rotate panes and go to a window with an alert | its commands (`select-layout`, `resize-pane`); Esc, then the key is read as Alt only within `escape-time` (10 ms by default in tmux 3.7c), so not by hand; or switch to Ctrl+Alt |
-| Emacs (`emacs -nw`) | Alt+K, E, Shift+E, Z, W, F, R | kill-sentence, forward-sentence (with Shift too), zap-to-char, kill-ring-save, forward-word, move-to-window-line | Esc, then the letter |
+| Emacs (`emacs -nw`) | Alt+K, E, Shift+E, Z, W, F, R, M | kill-sentence, forward-sentence (with Shift too), zap-to-char, kill-ring-save, forward-word, move-to-window-line, back-to-indentation | Esc, then the letter |
 | Emacs | Alt+1–Alt+9 | a numeric argument | Esc, then the digit |
 
-Not taken from any of them: Alt+A, which the Alt family leaves alone (the
+Alt+M takes Emacs's M-m (back-to-indentation) and zsh's copy-prev-shell-word, both still Esc, then m; readline binds
+none. Not taken from any of them: Alt+A, which the Alt family leaves alone (the
 next group is Alt+Shift+→ there), so zsh's accept-and-hold, irssi's and
 WeeChat's next active window or buffer and Emacs's backward-sentence keep it.
 Not taken from these programs, by their docs: Alt+K, Z, W, E and R in
