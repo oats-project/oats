@@ -413,3 +413,41 @@ test("a stale bind is E_PLAN_STALE with its fresh plan, saying the apply already
   assert.ok(answer.problems.some((p) => p.code === "E_PLAN_STALE" && p.sandbox === "ingest"), JSON.stringify(answer.problems));
   assert.deepEqual(fx.kept(), [`${spawnKey}.json`]);
 });
+
+test("a bind that fails, or whose plan fails, in sync's seat pass is a failure of that sandbox: in its entry and in problems; the request stays kept; a first spawn whose bind fails says so", async (t) => {
+  const fx = await routed(t);
+  const { spawnKey, seatId } = await keptByLostAnswer(fx);
+  for (const [what, table] of [
+    ["the bind hook exits 3", { bind: { $exit: 3 } }],
+    ["the bind plan answers failed", { "plan:bind": { state: "failed", problem: { code: "E_SANDBOX_PROVIDER", reason: "ledger-locked", message: "the ledger is locked" } } }],
+  ]) {
+    fx.sandbox.set({ ...table, reconcile: { state: "ready", server: "sandbox-ingest", seats: [{ seatId, state: "delivered" }] } });
+    fx.sandbox.reset();
+    const pass = await fx.withKernel((sb, ctx) => sb.syncSandboxes(ctx, { io: fakeHost(fx).io }));
+    assert.equal(pass.failed, true, what);
+    const p = pass.problems.find((x) => x.sandbox === "ingest" && /the bind of ingester-a's seat answered (failed|unknown)/.test(x.message));
+    assert.ok(p, `${what}: ${JSON.stringify(pass.problems)}`);
+    assert.ok(pass.sandboxes[0].problems.some((x) => x.code === p.code), `${what}: in the entry too`);
+    assert.deepEqual(fx.kept(), [`${spawnKey}.json`], `${what}: kept`);
+  }
+  // A first spawn whose apply succeeds and whose bind fails: the apply's answer, with a warning that says so.
+  const second = await routed(t);
+  second.sandbox.set({ bind: { $exit: 3 } });
+  const out = await second.spawnInto(fakeHost(second));
+  assert.equal(out.envelope.ok, true);
+  assert.ok(out.envelope.result.warnings.some((w) => /the bind of ingester-a's seat answered unknown/.test(w)), JSON.stringify(out.envelope.result.warnings));
+  assert.equal(second.kept().length, 1, "kept for the next reconcile");
+});
+
+test("the CLI's answer to a caller-bound spawn into a sandbox carries its reason and its remedy (the client's reader passes them on)", async (t) => {
+  const fx = await routed(t);
+  const r = fx.cliS(["spawn", "ingester", "--purpose", "a", "--expect-decision", D, "--idempotency-key", "caller-key", "--no-launch", "--json"]);
+  assert.notEqual(r.status, 0);
+  const error = r.json().error;
+  assert.equal(error.code, "E_SANDBOX_PLACEMENT", JSON.stringify(error));
+  assert.equal(error.details.reason, "caller-bound");
+  assert.equal(error.details.remedy, "Spawn it with `oats spawn ingester` (OATS binds it to the sandbox itself) or from a schedule; the Desktop can't spawn into a sandbox yet.");
+  assert.ok(error.message.endsWith(error.details.remedy));
+  assert.deepEqual(acts(fx), [], "no provider act");
+  assert.deepEqual(fx.kept(), []);
+});

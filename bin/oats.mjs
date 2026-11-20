@@ -2255,12 +2255,16 @@ async function spawnSandboxGate({ local, deploymentDir, discovery, prepared, rem
   const R = sb.SANDBOX_REASONS;
   const soul = prepared.soulEntry?.qualifiedName ?? prepared.soulEntry?.name ?? args[1];
   if (ctx.self !== null) {
-    if (placed !== ctx.self) return bail("E_SANDBOX_PLACEMENT", `${soul} is ${placed ? `placed in sandbox ${placed}` : "placed on the host"}, and this deployment runs inside sandbox ${ctx.self}: it spawns only souls placed in ${ctx.self}; nothing was spawned`, { reason: R.notPlacedHere, sandbox: ctx.self, placement: placed });
     const seat = providerPairs.find(([, kv]) => typeof kv === "string" && kv.startsWith("identity.seat="));
     const bound = flag("expect-decision") !== undefined && flag("expect-decision") !== true && flag("idempotency-key") !== undefined && flag("idempotency-key") !== true;
+    const elsewhere = placed !== ctx.self ? Object.assign(new Error(`${soul} is ${placed ? `placed in sandbox ${placed}` : "placed on the host"}, and this deployment runs inside sandbox ${ctx.self}: it spawns only souls placed in ${ctx.self}; nothing was spawned`), { code: "E_SANDBOX_PLACEMENT", details: { reason: R.notPlacedHere, sandbox: ctx.self, placement: placed } }) : null;
+    // A bound and keyed apply keeps the spawn's own order (lib/core.mjs, K6e): its key's recovery and its
+    // decision's check come first, so a retry still reaches the home it made, and a drifted decision is
+    // E_DECISION_STALE; a soul placed elsewhere is refused right after them, before anything is placed.
+    if (elsewhere && !(bound && !isPreview && seat)) return bail(elsewhere.code, elsewhere.message, elsewhere.details);
     if (!seat || (!isPreview && !bound)) return bail("E_SANDBOX_PLACEMENT", `this deployment runs inside sandbox ${ctx.self}, where a spawn takes a seat the host delivered (an identity.seat provider option on an apply bound by --expect-decision and keyed by --idempotency-key): spawn ${soul} from the host instead (\`oats spawn ${soul}\` on the machine that lists ${ctx.self}); nothing was spawned`, { reason: R.spawnFromHost, sandbox: ctx.self, remedy: `spawn ${soul} from the host that lists sandbox ${ctx.self}` });
     const seatId = seat[1].slice("identity.seat=".length).replace(/\/+$/, "").split("/").pop() || null;
-    return { placement: { sandbox: ctx.self, seatId } };
+    return { placement: { sandbox: ctx.self, seatId }, ...(elsewhere ? { refuseAfterDecision: elsewhere } : {}) };
   }
   if (!ctx.listed.length) {
     if (placed === null) return null;
@@ -3223,6 +3227,7 @@ async function spawnCmd() {
       ...(flag("idempotency-key") !== undefined && flag("idempotency-key") !== true ? { idempotencyKey: String(flag("idempotency-key")) } : {}),
       // Inside a sandbox (C3b): the home records the sandbox and the seat it took.
       ...(sandboxPlacement?.placement ? { placement: sandboxPlacement.placement } : {}),
+      ...(sandboxPlacement?.refuseAfterDecision ? { refuseAfterDecision: sandboxPlacement.refuseAfterDecision } : {}),
     };
       r = await spawnInstanceAsync(root, agent, spawnOpts); }
     if (args.includes("--preview")) {

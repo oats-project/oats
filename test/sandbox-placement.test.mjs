@@ -206,3 +206,34 @@ test("retire from the host: the remote retire, then release (reason retired) wit
   assert.deepEqual(release.request.instance, { name: "ingester-a", seatId: "seat-r1" });
   assert.deepEqual(fx.sandbox.calls().map((c) => (c.act === "plan" ? `plan:${c.request.target}` : c.act)), ["status", "plan:release", "release"]);
 });
+
+test("inside a sandbox, a bound and keyed apply keeps the spawn's order: its key's recovery and its decision's check come before the placement refusal", (t) => {
+  const fx = sandboxDeployment({ t, souls: { dev: {}, ingester: { soul: { capabilities: { [FAKE_SEAT_CAPABILITY]: { from: "here" } } } } } });
+  hostLocal(fx);
+  ok(fx.cliS(["sync", "--json"]), "sync");
+  fx.writeLocal({ host: { name: "sbx" }, sandbox: { self: "ingest" } });
+  const seat = (id) => ["--provider", FAKE_SEAT_CAPABILITY, `identity.seat=/state/seats/${id}/`];
+  const spawn = (purpose, id, extra) => fx.cli(["spawn", "ingester", "--purpose", purpose, ...seat(id), ...extra, "--no-launch", "--json"]);
+  // The first apply, placed here; then the workspace places ingester elsewhere (on the host).
+  const held = ok(spawn("held", "seat-held", ["--preview"]), "preview");
+  const first = ok(spawn("held", "seat-held", ["--expect-decision", held.decision.revision, "--idempotency-key", "held-key"]), "first apply");
+  // A second preview, made while ingester is still placed here, for an apply after the change.
+  const later = ok(spawn("later", "seat-later", ["--preview"]), "preview before the change");
+  fx.commitWorkspace(fx.workspace({ souls: { "ws/ingester": {} } }));
+  // The same key and decision again: the home it made answers, replayed.
+  const again = ok(spawn("held", "seat-held", ["--expect-decision", held.decision.revision, "--idempotency-key", "held-key"]), "the retry reaches its receipt");
+  assert.equal(again.replayed, true);
+  assert.equal(again.home, first.home);
+  // A fresh key with the preview made before the change: the decision is checked first.
+  const stale = refused(spawn("later", "seat-later", ["--expect-decision", later.decision.revision, "--idempotency-key", "later-key"]), "E_DECISION_STALE", null, "a preview from before the change");
+  assert.ok(stale.details.decision, "the fresh decision travels");
+  // A fresh key with a decision nobody previewed: the decision is checked first, as for any apply.
+  refused(spawn("fresh", "seat-fresh", ["--expect-decision", "not-the-decision", "--idempotency-key", "fresh-key"]), "E_DECISION_STALE", null, "a decision nobody previewed");
+  // A preview after the change is refused at once: the soul is placed elsewhere.
+  const preview = refused(spawn("fresh", "seat-fresh", ["--preview"]), "E_SANDBOX_PLACEMENT", "not-placed-here", "a preview after the change");
+  assert.equal(preview.details.sandbox, "ingest");
+  assert.deepEqual(instances(fx, "ingester").sort(), [first.instance], "nothing else placed");
+  // Without a key there is no recovery to keep: refused at once.
+  const unkeyed = refused(spawn("plain", "seat-plain", []), "E_SANDBOX_PLACEMENT", "not-placed-here", "unkeyed");
+  assert.equal(unkeyed.details.sandbox, "ingest");
+});
