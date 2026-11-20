@@ -63,7 +63,7 @@ import { existsSync, readFileSync, readdirSync, statSync, lstatSync, unlinkSync,
 import { StartupRefusal, readSecretFd, readSecretFile, checkSocketParent, bearerBytes, bearerMatches, sameFile, carriesSecret, CREDENTIAL_IN_REPLY, UNAUTHORIZED } from "./request-checks.mjs";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { homedir } from "node:os";
+import { homedir, constants as osConstants } from "node:os";
 import { performance } from "node:perf_hooks";
 import { scheduleRequest } from "./schedules.mjs";
 import { capabilityRequest } from "./capabilities.mjs";
@@ -1165,7 +1165,9 @@ function readContainedFile(requested, allowedRoots, { maxBytes, tokenFile = null
     return { real: g.real, st, buf: buf.subarray(0, size) };
   } catch (e) {
     if (["ENOENT", "ENOTDIR", "ELOOP"].includes(e.code)) return missing;
-    if (fd === undefined && ["ENXIO", "ENODEV", "EISDIR", "EOPNOTSUPP", "ENOTSUP"].includes(e.code)) return notFile;
+    // Node may report macOS's EOPNOTSUPP on a socket with only its errno.
+    if (fd === undefined && (e.errno === -osConstants.errno.EOPNOTSUPP
+      || ["ENXIO", "ENODEV", "EISDIR", "EOPNOTSUPP", "ENOTSUP"].includes(e.code))) return notFile;
     throw e;
   } finally {
     if (fd !== undefined) io.closeSync(fd);

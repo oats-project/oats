@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:net';
-import { tmpdir } from 'node:os';
+import { tmpdir, constants as osConstants } from 'node:os';
 import { join, resolve, sep, basename, extname } from 'node:path';
 import { sameFile } from '../server/request-checks.mjs';
 
 const source = fs.readFileSync(new URL('../server/oats-web.mjs', import.meta.url), 'utf8');
 const block = source.slice(source.indexOf('function underRoot('), source.indexOf('/* OATSWEB_FILEGUARD_END */'));
-const readContainedFile = new Function('realpathSync', 'resolve', 'sep', 'fsConstants', 'sameFile',
-  `${block}; return readContainedFile;`)(fs.realpathSync, resolve, sep, fs.constants, sameFile);
+const readContainedFile = new Function('realpathSync', 'resolve', 'sep', 'fsConstants', 'osConstants', 'sameFile',
+  `${block}; return readContainedFile;`)(fs.realpathSync, resolve, sep, fs.constants, osConstants, sameFile);
 const LIMIT = 2 * 1024 * 1024;
 
 function fixture(t) {
