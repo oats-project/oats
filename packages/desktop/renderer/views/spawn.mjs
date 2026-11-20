@@ -63,9 +63,9 @@ const CSS = `
 .souls-bar .souls-group-title { padding:0 2px; }
 .souls-bar .ws-segmented { margin-left:2px; }
 .workspace-header .wssel { max-width:100%; min-width:0; flex:0 1 140px; }
-/* The page's head (slice 2b): "Workspace › Souls", where you are, above the tab bar, as Home's head (views/home.mjs
-   .home h1) draws it. A soul's, a capability's or a team's page hides it: each keeps its own breadcrumb. */
-.workspace-title { flex:none; margin:0; padding:24px calc(32px + var(--main-trail-inset, 0px)) 12px calc(32px + var(--main-lead-inset, 0px));
+/* The page's head (slice 2b): "Workspace › Souls", where you are, above the tab bar, in Home's head type (views/home.mjs
+   .home h1), lined up with the page's own content. A soul's, a capability's or a team's page hides it: each keeps its own breadcrumb. */
+.workspace-title { flex:none; margin:0; padding:24px calc(20px + var(--main-trail-inset, 0px)) 12px calc(20px + var(--main-lead-inset, 0px));
   font-size:24px; font-weight:700; line-height:30px; color:var(--fg); font-family:var(--ui-font, system-ui); }
 .workspace-title[hidden] { display:none; }
 .souls-sum { color:var(--muted); font-size:12px; }
