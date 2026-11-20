@@ -4158,9 +4158,9 @@ async function capabilityCommand() {
         const meta = JSON.parse(readFileSync(metaFile, "utf8"));
         // A provider home's capabilities and their settings are its receipt's, never its own
         // record's, which its agent can write (lib/home-integrity.mjs).
-        const { providerHomeTrust } = await import("../lib/home-integrity.mjs");
+        const { capabilityRuntimeOf, providerHomeTrust } = await import("../lib/home-integrity.mjs");
         const trust = providerHomeTrust(instanceHome);
-        const rows = trust ? trust.composition?.capabilityRuntime ?? [] : meta.capabilities || [];
+        const rows = trust ? capabilityRuntimeOf(instanceHome, meta, trust) : meta.capabilities || [];
         activeIds = rows.map((c) => c.id);
         for (const c of rows) { capSettings[c.id] = c.settings || {}; capOrigins[c.id] = c.settingsOrigins || {}; }
         // Workspace-model homes only (lead decision c3 Q2).

@@ -2292,8 +2292,9 @@ runs, is taken from the home alone**:
   `OATS_SETTINGS`, `OATS_SETTINGS_ORIGINS`, which hooks a capability has and
   the command of each come from the receipt's rows, never from
   `instance.json` (`capabilityRuntime`, `capabilities`, `providers`, the
-  recorded launch contributions) nor from a rollback marker. A capability
-  the home's record adds is no capability of the home.
+  settings recorded with each launch contribution) nor from a rollback
+  marker. A capability the home's record adds is no capability of the
+  home, at a launch, at a retire and at an upgrade alike.
 - **What a copy that differs does.** The call is refused with a sentence
   that names the module. A read (`oats session inspect`, a status row, the
   sweep's plan, readiness) then shows the home **unavailable**
@@ -2322,8 +2323,17 @@ The kernel cannot check this for you: it does not run your sandbox.
 
 What this does not cover: other fields of `instance.json` still reach hooks
 and your commands (the recorded teams, the harness, the soul directory,
-`OATS_META`, the recorded launch). Nothing here makes a provider's sandboxed
+`OATS_META`, and the recorded launch: its harness, its arguments and
+environment, and the launch arguments and environment names each
+capability's hooks contributed). Nothing here makes a provider's sandboxed
 mode a security boundary between an agent and the operator's account.
+
+**For a capability's author: never write inside your own module copy.**
+`<home>/.oats/modules/<your capability>/` is recorded whole at the spawn,
+and a file that appears there later (a cache, a log, an interpreter's
+compiled files such as `__pycache__`) makes the copy another one: every
+later use of your capability in that home is refused until the instance is
+respawned. Keep what your code writes in the home outside that directory.
 
 A tmux home is unchanged, and why: its agent already runs unsandboxed as
 the operator, and can do directly whatever a module it rewrote could. Its

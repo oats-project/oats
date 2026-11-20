@@ -23,6 +23,8 @@ const codeOf = async (call) => { try { await call(); } catch (e) { return e.code
 const runtimeOf = (home) => readJson(receiptOf(home)).runtime;
 const rowOf = (fx, name) => JSON.parse(fx.cli(["status", "--json"]).stdout).agents.flatMap((agent) => agent.instances).find((row) => row.instance === name);
 const copyOf = (home, capability = FAKE_CAPABILITY) => join(home, ".oats", "modules", capability);
+/** What a receipt records of a module copy's bytes (beside where the module came from). */
+const sized = ({ digest, bytes, entries }) => ({ digest, bytes, entries });
 /** A script that leaves a mark when it runs, put before `source`: what an agent that can write its
  *  home would make of one of its capabilities' files. */
 const marking = (marker, source = "") => `import { writeFileSync as leaveMark } from "node:fs"; leaveMark(${JSON.stringify(marker)}, "ran");\n${source}`;
@@ -109,8 +111,9 @@ test("the digest of a module copy is bounded by what the spawn recorded: a copy 
   const fx = providerDeployment(t);
   const { home } = await fx.launch("grown");
   const recorded = readJson(receiptOf(home)).composition.modules[FAKE_CAPABILITY];
-  assert.deepEqual(moduleCopyDigest(copyOf(home)), recorded, "the receipt records the copy's digest, bytes and entries");
-  assert.deepEqual(moduleCopyDigest(copyOf(home), recorded), recorded);
+  assert.deepEqual(moduleCopyDigest(copyOf(home)), sized(recorded), "the receipt records the copy's digest, bytes and entries");
+  assert.deepEqual(moduleCopyDigest(copyOf(home), recorded), sized(recorded));
+  assert.deepEqual([recorded.from, recorded.commit], [recordOf(home).modules[FAKE_CAPABILITY].from, recordOf(home).modules[FAKE_CAPABILITY].commit], "and where the module came from");
   // More bytes than the spawn copied: stopped at the bound, whatever the file's size.
   writeFileSync(join(copyOf(home), "bin", "big.bin"), Buffer.alloc(4 * 1024 * 1024));
   assert.match(moduleCopyDigest(copyOf(home), recorded).over, /more than the \d+ (bytes|entries) the spawn copied/);
@@ -250,7 +253,8 @@ test("an upgrade of a provider home rewrites the receipt's record in the step th
   const after = readJson(receiptOf(home)).composition;
   assert.deepEqual(after.modules[FAKE_CAPABILITY], before.modules[FAKE_CAPABILITY], "a module that did not move is as it was recorded");
   assert.notEqual(after.modules[PACKAGED].digest, before.modules[PACKAGED].digest);
-  assert.deepEqual(after.modules[PACKAGED], moduleCopyDigest(copyOf(home, PACKAGED)), "the moved module is recorded as its copy is");
+  assert.deepEqual(sized(after.modules[PACKAGED]), moduleCopyDigest(copyOf(home, PACKAGED)), "the moved module is recorded as its copy is");
+  assert.deepEqual([after.modules[PACKAGED].from.version, before.modules[PACKAGED].from.version], ["2.0.0", "1.0.0"], "and as the version it was moved to");
   assert.deepEqual(after.capabilityRuntime, recordOf(home).capabilityRuntime, "the rows are the ones the upgrade derived");
   assert.match(after.capabilityRuntime.find((row) => row.id === PACKAGED).hooks.launch, /launch\.mjs/);
   assert.equal(homeModulesProblem(home), null);
@@ -353,4 +357,79 @@ test("the launch input and the check's planned launch carry the home's trees: wo
   fx.clearCalls();
   await fx.inEnv(() => restartInstanceSession(home));
   assert.deepEqual([treesOf("check"), treesOf("launch")], [[[join(home, "work")]], [[join(home, "work")]]]);
+});
+
+for (const second of ["a provider home", "a tmux home"]) {
+  test(`a spawn that reuses the name of a retired provider home is run by its own resolution, never by the receipt the retired home left: ${second}`, async (t) => {
+    const fx = providerDeployment(t);
+    const first = { server: "http://127.0.0.1:11" }, next = { server: "http://127.0.0.1:22" };
+    const retired = await fx.launch("reuse", { work: "worktree", providers: { [FAKE_CAPABILITY]: first } });
+    assert.equal(JSON.parse(fx.cli(["retire", "reuse", "--json"]).stdout).retired, "reuse");
+    // A retire keeps the receipt, by the home's path: the next home of that name is at the same path.
+    assert.deepEqual([existsSync(retired.home), existsSync(receiptOf(retired.home))], [false, true]);
+    assert.deepEqual(readJson(receiptOf(retired.home)).composition.capabilityRuntime.find((row) => row.id === FAKE_CAPABILITY).settings, first);
+    fx.clearCalls();
+    const again = { work: "worktree", branch: "agents/reuse-again", providers: { [FAKE_CAPABILITY]: next } };
+    const { home } = second === "a provider home" ? await fx.launch("reuse", again) : await fx.spawn("dev", { name: "reuse", ...again });
+    assert.equal(home, retired.home);
+    // Its spawn hooks ran with THIS spawn's settings (they run before this spawn's receipt is written).
+    assert.deepEqual(fx.hooks("spawn").map((h) => [h.capability, JSON.parse(h.settings)]), [[FAKE_CAPABILITY, next]]);
+    const receipt = readJson(receiptOf(home));
+    if (second === "a provider home") {
+      assert.deepEqual([...new Set(fx.verbs().map((c) => c.settings))].map((text) => JSON.parse(text)), [next], "and so did its provider's commands");
+      assert.deepEqual(receipt.composition.capabilityRuntime.find((row) => row.id === FAKE_CAPABILITY).settings, next, "its receipt is its own");
+    } else {
+      assert.equal(Object.hasOwn(receipt, "composition"), false, "a tmux home's receipt records no composition, whatever was at its path");
+      assert.equal(providerHomeTrust(home), null);
+    }
+  });
+}
+
+test("the composition is taken once per spawn: a spawn undone after its provider launched keeps the record of the copies as the spawn made them, not as the launch left them", async (t) => {
+  const fx = providerDeployment(t, withHooked());
+  const probe = await fx.launch("probe");
+  const home = join(dirname(probe.home), "undone");
+  const hook = join(copyOf(home, HOOKED), "bin", "hook.mjs");
+  // What a session can do while it runs: write into a capability's copy. Here the provider's
+  // launch does it (the fake appends to the file), and then fails, so the spawn is undone.
+  fx.control({ undone: { launch: { touch: hook, exit: 1 } } });
+  await assert.rejects(fx.launch("undone"));
+  assert.equal(existsSync(home), true, "the home is kept: a retire hook could not be run");
+  const spawned = moduleCopyDigest(copyOf(probe.home, HOOKED)).digest, edited = moduleCopyDigest(copyOf(home, HOOKED)).digest;
+  assert.notEqual(edited, spawned, "the launch changed the copy");
+  assert.equal(readJson(receiptOf(home)).composition.modules[HOOKED].digest, spawned, "the receipt records the copy the spawn made");
+  assert.match(moduleCopyProblem(home, HOOKED), NOT_THE_SPAWNS);
+  // The retire the spawn's message asks for does not run the edited copy's hook.
+  fx.clearCalls();
+  fx.cli(["retire", "undone", "--json"]);
+  assert.deepEqual(fx.hooks("retire").filter((h) => h.capability === HOOKED), []);
+});
+
+test("an upgrade of a provider home takes its module set from the receipt: a module only the home's own record names refuses it, and is never written into the receipt or run", async (t) => {
+  const { fx, home, plan, apply } = await upgradable(t, "adds");
+  const before = readFileSync(receiptOf(home), "utf8");
+  // The agent: a module of its own in its home, named in its own record with its own digest.
+  const mine = copyOf(home, "acme.mine"), marker = join(fx.fake, "mine-ran");
+  mkdirSync(join(mine, "bin"), { recursive: true });
+  writeFileSync(join(mine, "oats.json"), JSON.stringify({ capability: "acme.mine", version: "1.0.0", description: "x", hooks: { launch: "bin/hook.mjs", retire: "bin/hook.mjs" } }));
+  writeFileSync(join(mine, "bin", "hook.mjs"), marking(marker, 'console.log("{}");\n'));
+  const record = recordOf(home);
+  writeFileSync(join(home, "instance.json"), JSON.stringify({ ...record, modules: { ...record.modules, "acme.mine": { ...record.modules[FAKE_CAPABILITY], digest: contentDigest(mine) } } }, null, 2));
+  const refused = (e) => e.code === "E_UPGRADE_INTEGRITY" && /the record adds acme\.mine/.test(e.message) && /no modules were upgraded/.test(e.message);
+  await assert.rejects(plan(), refused);
+  await assert.rejects(apply({ planRevision: "x".repeat(24), idempotencyKey: "adds-1" }), refused);
+  assert.equal(readFileSync(receiptOf(home), "utf8"), before, "the receipt is as it was");
+  // A module the record leaves out refuses it too.
+  const { [PACKAGED]: _left, ...fewer } = record.modules;
+  writeFileSync(join(home, "instance.json"), JSON.stringify({ ...record, modules: fewer }, null, 2));
+  await assert.rejects(plan(), (e) => e.code === "E_UPGRADE_INTEGRITY" && /the record leaves out acme\.one/.test(e.message));
+  // Where a module came from is the receipt's: a record that names another source changes nothing.
+  writeFileSync(join(home, "instance.json"), JSON.stringify({ ...record, modules: { ...record.modules, [PACKAGED]: { ...record.modules[PACKAGED], from: { ...record.modules[PACKAGED].from, package: "acme.other" } } } }, null, 2));
+  const planned = await plan();
+  assert.deepEqual(planned.modules.map((m) => m.capability), [PACKAGED]);
+  assert.equal((await apply({ planRevision: planned.planRevision, idempotencyKey: "adds-2" })).status, "complete");
+  const after = readJson(receiptOf(home)).composition;
+  assert.deepEqual([Object.keys(after.modules).sort(), after.capabilityRuntime.map((row) => row.id).sort(), after.modules[PACKAGED].from.package], [[FAKE_CAPABILITY, PACKAGED], [FAKE_CAPABILITY, PACKAGED], "acme.pkg"]);
+  await fx.inEnv(() => startInstanceSession(home));
+  assert.equal(existsSync(marker), false, "nothing of the agent's module ran");
 });

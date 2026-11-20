@@ -63,6 +63,11 @@
   it (its retire hooks are not run, and the retire says which). The
   session-provider wire has been experimental so far, and no released
   provider exists; tmux homes are not affected.
+- **For a capability's author:** never write inside your own module copy
+  (`<home>/.oats/modules/<capability>/`): a file that appears there after
+  the spawn (a cache, a log, `__pycache__`) makes the copy another one, and
+  every later use of the capability in a provider home is refused until
+  the instance is respawned.
 - **For a provider's author:** if your provider sandboxes its harness, keep
   `<instances>/.oats-retirement/` unwritable from the session (the receipts
   are there), and deny writes to the Git pointer, configuration and hooks
