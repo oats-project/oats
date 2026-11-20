@@ -166,16 +166,18 @@ test("direct routing leaves a caller's remote task-file path unchanged", (t) => 
 
 test("a host below the routing floor is refused with the upgrade command before any spawn", (t) => {
   for (const version of ["0.22.1", "0.69.14"]) {
-    const host = fakeHost([FEATURE], { version });
-    assert.throws(() => routed(t, ["dev", "--task", "ZEBRA-OLD-HOST", "--no-launch"], host), (e) => {
-      assert.equal(e.code, "E_REMOTE_INCOMPATIBLE");
-      assert.ok(e.message.includes(`remote oats ${version} at h`));
-      assert.ok(e.message.includes("minimum 0.69.15"));
-      assert.ok(e.message.includes("npm install -g @awebai/oats@latest"));
-      return true;
-    });
-    assert.equal(host.calls.length, 1, "only the version probe is sent");
-    assert.equal(host.calls.some((call) => call.argv.join(" ").includes("ZEBRA")), false);
+    for (const flags of [[], ["--related-work"]]) {
+      const host = fakeHost([FEATURE], { version });
+      assert.throws(() => routed(t, ["dev", "--task", "ZEBRA-OLD-HOST", "--no-launch", ...flags], host), (e) => {
+        assert.equal(e.code, "E_REMOTE_INCOMPATIBLE");
+        assert.ok(e.message.includes(`remote oats ${version} at h`));
+        assert.ok(e.message.includes("minimum 0.69.15"));
+        assert.ok(e.message.includes("npm install -g @awebai/oats@latest"));
+        return true;
+      });
+      assert.equal(host.calls.length, 1, "only the version probe is sent");
+      assert.equal(host.calls.some((call) => call.argv.join(" ").includes("ZEBRA")), false);
+    }
   }
 });
 
