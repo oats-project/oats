@@ -192,7 +192,7 @@ function chooserStage(choices) {
   const calls = [], list = { now: choices };
   const context = {
     document: dom.window.document, stageHost: dom.window.document.getElementById('stage'), contextRosterEl: null,
-    tabOpenIntents: { invalidate() {} }, showTabLayer() {}, closeStage: async () => true, windowState: () => 'choosing',
+    tabOpenIntents: { invalidate() {} }, showTabLayer() {}, windowState: () => 'choosing',
     choosingWorkspaces: () => list.now, focusWorkspaceList: () => calls.push(['focus']),
     workspaceLabel: { choose: (rows) => calls.push(['choose', rows.length]), openModal: (opener) => { calls.push(['modal', opener?.textContent]); } },
   };

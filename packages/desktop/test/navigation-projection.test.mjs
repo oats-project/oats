@@ -50,7 +50,7 @@ function shell(t, shellSource = source) {
     loadSpawnView: async () => ({ preselectWorkspaceTab: tab => { preselected.push(tab); return true; } }),
     focusRegions: { focusRegion: name => { regionCalls.push(name); return false; } },
     workspace: "A", generation: 0, tabWorkspace: "A", contextWorkspace: "A", activeInstanceMenu: null,
-    stage: null, stageOp: 0, stageHost: document.getElementById("stagehost"), navEl,
+    stageHost: document.getElementById("stagehost"), navEl,
     tabs: new Map(), nextTabId: 1, activeTab: null, split: null, sidebarMode: "overview", tabLayerVisible: false,
     contextRosterGen: 0, contextInstances: [], contextRosterEl: null, rosterState: null, rosterStale: false, contextDeploymentNote: null, ...viewContext(), rosterSignaturePainted: null,
     tabbar: document.getElementById("tabbar"), tabhost: document.getElementById("tabhost"),
@@ -69,7 +69,7 @@ function shell(t, shellSource = source) {
     createPanelOwner: () => ({ dispose() {} }),
     ctx: { notify: message => assert.fail(`unexpected notice: ${message}`) },
   };
-  const names = ["currentPage", "pageModule", "showEmptyState", "hideEmptyState", "takePageTabs", "closePageTabs", "reopenPageTabs", "closeStage", "showStage", "setNavActive", "showTabLayer", "updateActiveContexts", "setSidebarMode", "updateContextTabs",
+  const names = ["currentPage", "pageModule", "showEmptyState", "hideEmptyState", "takePageTabs", "closePageTabs", "reopenPageTabs", "showStage", "setNavActive", "showTabLayer", "updateActiveContexts", "setSidebarMode", "updateContextTabs",
     "addTab", "selectTab", "activateTab", "revealActiveRosterRow", "closeTab", "tabStrips", "revealActiveTabs", "observeTabStrips", "onTabKeydown", "walkedTabs", "visibleTabEntries", "renderSplit", "selectEmptyGroup", "restoreWorkspaceTabs", "showTerminalContext", "openViewTab", "openWorkspaceSouls", "showStageFocused"];
   const functions = names.map(name => {
     const match = shellSource.match(new RegExp(`(?:async )?function ${name}\\([^]*?\\n\\}`));

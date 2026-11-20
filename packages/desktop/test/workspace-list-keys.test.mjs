@@ -254,7 +254,7 @@ function tabsRig(t) {
   const c = {
     document, console, navigator: { platform: "MacIntel" }, NAV, navTab, stageSidebarMode,
     workspace: "A", generation: 0, tabWorkspace: "A", contextWorkspace: "A", activeInstanceMenu: null,
-    stage: null, stageOp: 0, stageHost: document.getElementById("stagehost"), navEl,
+    stageHost: document.getElementById("stagehost"), navEl,
     tabs: new Map(), nextTabId: 1, activeTab: null, split: null, sidebarMode: "overview", tabLayerVisible: false,
     contextRosterGen: 0, contextInstances: [], contextRosterEl: null, rosterState: null, rosterStale: false, contextDeploymentNote: null, ...viewContext(), rosterSignaturePainted: null,
     tabbar: document.getElementById("tabbar"), tabhost: document.getElementById("tabhost"), tabActionsEl: document.getElementById("tab-actions"),
@@ -270,7 +270,7 @@ function tabsRig(t) {
     // The palette's read: this window's state, and the roster of the workspace it asks for.
     windowState: () => "bound", panelDeployments, api: async path => ({ instances: ROSTERS[new URLSearchParams(path.split("?")[1]).get("ws")] }),
   };
-  const names = ["closeStage", "showStage", "setNavActive", "showTabLayer", "updateActiveContexts", "setSidebarMode", "updateContextTabs",
+  const names = ["showStage", "setNavActive", "showTabLayer", "updateActiveContexts", "setSidebarMode", "updateContextTabs",
     "addTab", "selectTab", "activateTab", "revealActiveRosterRow", "closeTab", "tabStrips", "revealActiveTabs", "observeTabStrips", "onTabKeydown",
     "walkedTabs", "visibleTabEntries", "renderSplit", "selectEmptyGroup", "restoreWorkspaceTabs", "showTerminalContext", "openViewTab"];
   const functions = names.map(name => shipped(name)).join("\n").replace('import(`./views/${name}.mjs`)', "loadStageView(name)");

@@ -246,8 +246,8 @@ const ctx = {
   // except for http(s), which routes to the OS browser).
   chooseCliBinary: () => desk.cliPickBinary(),
   openExternal: (url) => window.open(url, "_blank", "noreferrer"),
-  // additive shell affordance (views feature-detect it): switch the STAGE
-  // to a named sidebar view (stage views are not tabs — see below).
+  // additive shell affordance (views feature-detect it): open or focus a page's tab (showStage; slice 6a: pages are
+  // tabs).
   openView: (name) => showStage(name),
   // #1247: this window's own retires in flight. A view that reads its own roster draws its rows through
   // `retiringRows` and draws them again when `subscribeRetires` says the held set changed.
@@ -367,11 +367,10 @@ registerSpawnDialogKeys();
 spawnJobs.recover();
 window.addEventListener('pagehide', () => spawnJobs.dispose(), { once: true });
 
-// ── stage: the sidebar-driven main surface ──────────────────────────
-// Sidebar items switch the stage view in place; they never create tabs.
-// The tab strip is reserved for OPENED ARTIFACTS (terminals, files): things
-// you accumulate and close, not places you navigate. Selecting a nav item
-// hides the tab layer; activating a tab covers the stage.
+// ── pages and the stage host ─────────────────────────────────────────
+// Since slice 6a the pages (Home, Workspace, Automations) are tabs, like terminals and files: a nav item, a pinned
+// row or a palette entry opens or focuses its page's tab (showStage). The stage host under the tab layer holds only
+// what shows with no tab: the empty state (Open Home) and a window's workspace chooser.
 const stageHost = document.getElementById("stagehost");
 // Esc on the Workspace page goes back to Home, which opens it (slice 2): only an Esc nothing on the page took
 // (a field, a list, a menu or a dialog handles its own, and marks it), from no text field.
@@ -390,23 +389,6 @@ document.getElementById("tabhost").addEventListener("keydown", (e) => {
     (pane?.querySelector("[data-home-return]") ?? tabs.get(activeTab)?.triggerEl)?.focus();
   });
 });
-let stage = null;           // { name, life, el, mod }
-let stageOp = 0;            // switch generation — a slow mount must not paint over a newer switch
-
-/** Unmount the stage on screen. Resolves to this switch's generation, or null when a newer switch
- * superseded it meanwhile. */
-async function closeStage() {
-  const myOp = ++stageOp;
-  const prev = stage;
-  stage = null;
-  syncContextPanel(); // hide the old owner before awaiting its unmount
-  if (prev) {
-    try { await prev.life.close(); } catch (e) { console.error(e); }
-    prev.panelOwner?.dispose(); prev.el.remove();
-  }
-  return myOp === stageOp ? myOp : null;
-}
-
 /** The page the active tab shows ("home", "spawn", "automations"), or null (slice 6a: pages are tabs). */
 function currentPage() {
   const t = tabLayerVisible ? tabs.get(activeTab) : null;
@@ -476,7 +458,7 @@ async function showChooser() {
   tabOpenIntents.invalidate();
   showTabLayer(false);
   if (contextRosterEl) contextRosterEl.hidden = true;
-  if (await closeStage() === null || windowState() !== "choosing") return;
+  if (windowState() !== "choosing") return;
   const el = document.createElement("div");
   el.className = "placeholder window-chooser";
   const heading = document.createElement("h2");
@@ -503,9 +485,9 @@ onWindowState((state) => {
   void showStage("home"); // the landing surface: Home (slice 2)
 });
 
-/** A stage switch from the keyboard (a chord, the palette, a nav button) keeps focus on a
- * control: where it was when that is still shown (the nav button), else the stage's first
- * control — never <body> after the terminal it was in is hidden (spec F audit). */
+/** A page opened from the keyboard (a chord, the palette, a nav button) keeps focus on a control: where it was
+ * when that is still shown (the nav button), else the page tab's trigger — never <body> after the terminal it was
+ * in is hidden (spec F audit). */
 async function showStageFocused(name) {
   const page = navTab(name)?.page ?? name;
   await showStage(name);
@@ -731,16 +713,14 @@ function focusWorkspaceList() {
 }
 
 // ── keybinding contexts ──────────────────────────────────────────────────────────
-// The engine dispatches an action only when its context is active. "tabs"
-// is live while the tab layer covers the stage; "stage:<name>" while that
-// stage is the visible surface. Views register their own view-local actions
-// (context stage:<name>) in mount and dispose them in unmount.
+// The engine dispatches an action only when its context is active. "tabs" is live while the tab layer is shown
+// (every page is a tab since slice 6a, so no "stage:<name>" context is set any more). Views register their own
+// view-local actions in a context the shell never activates (view:<name>), dispatched by the view itself.
 let tabLayerVisible = false;
 function updateActiveContexts(tabLayerOn = tabLayerVisible) {
   tabLayerVisible = tabLayerOn;
   const set = new Set();
   if (tabLayerOn) set.add("tabs");
-  else if (stage) set.add(`stage:${stage.name}`);
   // The sidebar's plain keys (context `sidebar`, sidebar.key.*): live while focus is in the sidebar
   // (the list of workspaces, its nav, the roster rows, the headings' controls, the foot), never inside an open
   // popup there (an instance row's context menu, the settings cog's menu) and never in an editable field (the sidebar has none since its roster filter
@@ -1859,13 +1839,13 @@ function updatePanelControl({ present, open, changes }) {
   // Opened by its chord while it had focus: focus follows into the panel (never <body>).
   if (hide && focused && !contextPanel.focus()) stableFocusTarget()?.focus();
 }
-/** Projection only: foreground comes from the committed active tab/stage. */
+/** Projection only: foreground comes from the committed active tab. */
 function syncContextPanel() {
   const tab = tabLayerVisible ? tabs.get(activeTab) : null;
   // The right-hand panel shows a page's own panel (the Workspace page's soul context) while that page's tab is the
   // one shown. A terminal tab brings no instance panel since slice 6a: its agent's Details is a tab of its own
   // (views/details.mjs: `i`, Ctrl+Shift+I, the row's menu, the palette).
-  contextPanel.setContext({ workspace: currentWorkspace(), owner: tab?.kind === "page" ? tab : tabLayerVisible ? null : stage,
+  contextPanel.setContext({ workspace: currentWorkspace(), owner: tab?.kind === "page" ? tab : null,
     instance: null, key: null, waiting: null });
 }
 /** The roster's current row for an agent (by identity), else the row Details was opened with. */

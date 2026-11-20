@@ -140,7 +140,7 @@ function shell(t) {
   c.queueMicrotask = queueMicrotask; c.MutationObserver = dom.window.MutationObserver;
   // initContextRoster's: a native focus entry into the sidebar is a newer intent, unless the shell restores it.
   document.getElementById("sidebar").addEventListener("focusin", () => { if (!c.tabOpenIntents.isApplyingFocus()) c.tabOpenIntents.invalidate(); });
-  const names = ["setSidebarMode", "updateContextTabs", "showTabLayer", "closeStage", "showStage", "renderSplit", "selectEmptyGroup", "splitPane", "closeSplit", "restoreTerminalGroups",
+  const names = ["setSidebarMode", "updateContextTabs", "showTabLayer", "showStage", "renderSplit", "selectEmptyGroup", "splitPane", "closeSplit", "restoreTerminalGroups",
     "updateSplitControls", "onTabKeydown", "walkedTabs", "visibleTabEntries", "addTab", "selectTab", "activateTab", "revealActiveRosterRow", "closeTab", "tabStrips", "revealActiveTabs", "observeTabStrips", "showTerminalContext",
     "openTerminalTabFlow", "openTerminalTabInner", "restoreWorkspaceTabs", "focusActiveTerminal", "syncTabNeedsInput", "focusGroup",
     "releaseTakenWorkspace", "closeWorkspaceTabs", "restoreHandedLayout", "rosterEntry", "setRovingRow",
