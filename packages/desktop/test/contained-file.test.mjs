@@ -202,3 +202,16 @@ test('brain skills: shared reader contains and bounds frontmatter, including cre
   } });
   assert.equal(make(changedRead)(skill, [f.root]), null);
 });
+
+test('contained file: repeated parent changes cannot return outside content', t => {
+  const f = fixture(t), parent = join(f.root, 'parent'), saved = join(f.root, 'saved');
+  fs.mkdirSync(parent); fs.writeFileSync(join(parent, 'note.md'), 'inside');
+  fs.renameSync(parent, saved); fs.symlinkSync(f.other, parent);
+  const r = reader([f.root], {
+    open() { fs.unlinkSync(parent); fs.renameSync(saved, parent); },
+    realpath() { fs.renameSync(parent, saved); fs.symlinkSync(f.other, parent); },
+  });
+  const result = r.read(join(parent, 'note.md'));
+  assert.equal(result.buf?.toString().includes('outside') ?? false, false, 'no outside content');
+  assert.equal(result.code, 403);
+});
