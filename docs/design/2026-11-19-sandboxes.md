@@ -258,8 +258,18 @@ The exact order of a routed spawn, with the value each step binds (r2, r3):
    that the apply's `--expect-decision` must match, as #1912 requires. The in-sandbox
    kernel admits a preview that carries a seat option without reading the seat; only
    an apply needs it.
+   **The admission check (r5).** The preview's answer lists the composition the apply
+   will materialize: each module with its resolved id and source. `D` binds that
+   composition, because the apply's `--expect-decision D` refuses any other
+   (`E_DECISION_STALE`). So `D` is the gate's carrier into the sandbox, and the
+   in-sandbox kernel needs no new input. Before step 3, the host compares that
+   composition with the recorded admission entry for this sandbox and soul (C1, "The
+   applied-plan gate"), and with the current `excludeCapabilities`. A capability or a
+   source outside the entry refuses (`capability-not-applied`), an excluded one refuses
+   (`capability-excluded`), and nothing is kept, minted or applied.
 3. **Before anything is minted, the kernel keeps the whole routed request** (r3,
-   contract): server, `spawnKey`, `D`, the exact argv and provider options, and the
+   contract): server, `spawnKey`, `D`, the composition `D` binds and the admission
+   revision it was checked against (r5), the exact argv and provider options, and the
    task text, in `~/.oats/remote/<server>/pending/<spawnKey>.json` (0600, under the
    operator account, beside today's remote snapshots). It holds the task text, which
    #1912 took off argv for a reason, so: it is removed as soon as its seat settles
@@ -314,7 +324,13 @@ The exact order of a routed spawn, with the value each step binds (r2, r3):
    `delivered`: a kept request whose entry is `minting` or `mint-uncertain` is never
    applied or replayed, and one whose seat was released is deleted. Each replay is
    unchanged, keyed by its `spawnKey`, and its answer goes to `bind` as in 6. A replay of an apply that was
-   never sent is that apply, with its task, and a stale `D` refuses it terminally. The
+   never sent is that apply, with its task, and a stale `D` refuses it terminally.
+   Before each replay the host rechecks the kept composition against the current
+   recorded entry and exclusions (r5). The recorded entry only widens, but an
+   exclusion added since can refuse the replay. A replay that fails the recheck is not
+   sent. Its request is kept and reported (`held-not-admitted`), and its seat stays
+   `delivered` (readiness, `sandbox-seat-unsettled`), because no proof says no home
+   holds it. The
    provider never builds or replays a spawn itself. Absence of the instance's name, or
    an unused seat directory, is never evidence. A `delivered` seat with no kept request
    stays `delivered`, and readiness reports `sandbox-seat-unsettled`.
@@ -580,17 +596,24 @@ sandboxes:
   sandbox. A soul whose composition needs one is refused (`E_SANDBOX_PLACEMENT`,
   `capability-excluded`, naming the capability and the soul), never trimmed. The remedy
   is a workspace soul, or a variant of one, whose composition doesn't need it, or a
-  reviewed change to the exclusion. The sandbox provider's own capability never
-  composes inside a sandbox (C3b). The image's contents and the egress are separate
+  reviewed change to the exclusion. The image's contents and the egress are separate
   limits, and choosing software grants nothing.
+- **The sandbox provider is composed like any default (r5).** A capability in the
+  workspace's `defaults`, the sandbox provider included (C4), is part of every listed
+  soul's resolved composition, and it's admitted by the same rule as the rest. Nothing
+  removes it. Inside a sandbox its `sandbox` hook is simply never called: a deployment
+  with `sandbox: {self}` runs no sandboxes (C3b). A sandbox that wants to keep it out
+  excludes it, and a soul that needs it is then refused, never trimmed.
 - **The applied-plan gate.** Before minting a seat or starting a session through spawn
   or a schedule tick, the kernel compares the actual resolved composition to the last
   successfully applied plan entry for this sandbox and soul. Missing admission, a new
   capability or a changed capability source refuses with `E_SANDBOX_PLACEMENT`,
   reason `capability-not-applied`, naming the soul, the sandbox, the applicable
   capability and source, and how to review and apply the updated plan (`oats sync
-  --plan`, then the apply). The routed apply rechecks the same admission revision
-  against what it will materialize. An explicitly excluded capability refuses as
+  --plan`, then `oats sync --admission-revision <revision>`). The routed apply rechecks
+  the same admission revision against what it will materialize: the host checks the
+  composition `D` binds, after the remote preview and before anything is kept or
+  minted, and again before each replay (Identities, steps 2 and 7). An explicitly excluded capability refuses as
   `capability-excluded`. Never strip a capability to make a spawn pass. Narrowing
   within the approved set needs no additional apply, and does not edit the recorded
   plan.
@@ -600,8 +623,25 @@ sandboxes:
   - Sync's plan, and readiness, show each soul's additions and source changes before
     they're applied. Sandbox status and readiness show the recorded set and the
     current derived set.
-  - The kernel keeps the recorded entries in the deployment's own state, per sandbox
-    and soul.
+  - **The admission revision and its commit (r5).** `oats sync --plan` answers, for
+    each listed sandbox, an admission revision and the per-soul changes it would
+    admit (C5). The revision is a hash of the workspace's commit and lock, each listed
+    soul's derived set (ids and sources), the exclusions, and the currently recorded
+    entries.
+    - **Widening:** only `oats sync --admission-revision <revision>` widens admission,
+      and only when its revision equals the one the current inputs give. An upstream
+      change made after the plan was reviewed changes the revision, so the apply
+      refuses that sandbox's admission (`E_PLAN_STALE`, with the fresh plan in its
+      detail), records nothing for it, and goes on with the rest of the sync.
+    - **The commit point:** the kernel writes that sandbox's recorded entries (per
+      soul, the derived set and the revision), under the sandbox's lock, only after
+      the sandbox's own sync action has succeeded.
+    - **Where they live:** in the host deployment's own state, per sandbox and soul.
+      The in-sandbox kernel never reads them: the host checks them against what `D`
+      binds (Identities, step 2).
+    - **Sync without the flag** applies everything else and widens nothing. It reports
+      each pending change as a warning (readiness, `sandbox-admission-pending`).
+      Narrowing writes nothing.
   - An unattended sync that applies its own plan would admit changes without review,
     weakening the gate to "since the last apply". A deployment that wants the gate
     keeps the apply operator-authorized.
@@ -843,9 +883,11 @@ and by act:
   `{sandboxApi:1, sandbox, act, state, server, receipts, problems}`, and a stale
   revision refuses `E_PLAN_STALE` with the fresh plan in its detail (r1).
 - `oats sync --json` gains `sandboxes` with the same entries plus `action`
-  (`build|start|stop|none`), and, in a plan, each soul's admission changes
-  (`admissionChanges: [{soul, added:[{id, source}], sourceChanged:[{id, from, to}]}]`,
-  r5). The field is additive, so `syncApi` stays 1.
+  (`build|start|stop|none`), and, in a plan, the admission it would apply:
+  `admission: {revision, changes: [{soul, added:[{id, source}], sourceChanged:[{id, from, to}]}]}`
+  (r5). `oats sync --admission-revision <revision>` applies it (C1, "The applied-plan
+  gate"), and a sync without the flag widens nothing. The fields are additive, so
+  `syncApi` stays 1; the flag is new.
 - `oats status --json` gains `placement: {sandbox, seatId}` on each instance placed in
   one; `seatId` is the seat its home took (r2).
 - `oats sandbox status --json`'s entries also carry `seats` (as C4's `status`), and
@@ -1111,8 +1153,10 @@ The refusals belong to the acts:
 | Several eligible sandboxes and no `--sandbox` or schedule `sandbox:` (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `sandbox-ambiguous` |
 | A named target that isn't declared, or doesn't list the soul (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `sandbox-unknown` or `sandbox-not-eligible` |
 | A soul reference no member or package offers (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `soul-unknown` |
-| A composition that needs an excluded capability (r5) | the spawn's preview | `E_SANDBOX_PLACEMENT`, `capability-excluded` |
-| A composition with a capability, or a capability source, the last applied plan didn't admit for this soul (r5) | `oats spawn`, a schedule tick, before any mint; the routed apply's recheck | `E_SANDBOX_PLACEMENT`, `capability-not-applied` |
+| A composition that needs an excluded capability (r5) | the routed spawn, after the remote preview and before anything is kept or minted; a replay's recheck (`held-not-admitted`) | `E_SANDBOX_PLACEMENT`, `capability-excluded` |
+| A composition with a capability, or a capability source, the last applied plan didn't admit for this soul (r5) | the routed spawn (by hand or a tick), after the remote preview and before anything is kept or minted; a replay's recheck (`held-not-admitted`) | `E_SANDBOX_PLACEMENT`, `capability-not-applied` |
+| `oats sync --admission-revision` whose revision no longer matches the current inputs (r5) | `oats sync`, for that sandbox's admission only | `E_PLAN_STALE`, with the fresh plan |
+| `--sandbox` together with `--server` (r5) | `oats spawn` | `E_BAD_ARGS`; the remedy says to choose one target, `--sandbox` for a placed soul or `--server` for a registered server |
 | A join beyond the default team, into a sandbox (r5) | `seat`, before the mint | `E_SANDBOX_PLACEMENT`, `join-not-seated` |
 | A resident's grant seat, into a sandbox (r5) | `seat`, before the mint | `E_SANDBOX_PLACEMENT`, `grant-seat-not-sandboxable` |
 | A sandbox entry with a `team` field (the unreleased shape) (r5) | reading the workspace file | `E_WORKSPACE_SCHEMA`, `sandbox-team-field` |
