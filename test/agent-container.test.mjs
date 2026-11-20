@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { appendFileSync, chmodSync, closeSync, constants, existsSync, fstatSync, linkSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
-import { createServer as createHttpServer } from "node:http";
-import { createServer as createTcpServer } from "node:net";
+import { Agent as HttpAgent, createServer as createHttpServer, get as httpGet } from "node:http";
+import { createServer as createTcpServer, Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -613,6 +613,8 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
   // raw text, or a function that changes the good declaration in place. A real fixture child serves the ready URL.
   child, agentBb, declaration, declarationMode = 0o644, declarationOwner = "root", declarationIs = "file",
   commandIs = "file", rootFiles = [], loginFiles = {}, loginReadErrors = {}, inherited = {}, childMode = "ready", externalStatus = false,
+  // The first request to the ready URL, at the network boundary: "emfile" fails it before it connects, "hang" never connects it.
+  preflight,
   restartBackoffMs = 20, restartBackoffMaxMs = 80, restartStableMs, hostDrainMs = 80 } = {}) {
   const supervisor = new URL("../container/agent/supervisor.mjs", import.meta.url);
   assert.ok(existsSync(supervisor), "the image must own broker readiness and ordered child shutdown");
@@ -772,14 +774,28 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
       setInterval(() => {}, 1000);
     }
   `);
-  const children = new Map(), said = [], spawned = [];
+  const children = new Map(), said = [], saidAt = [], spawned = [];
   let signal, statusFailed = false;
   const env = { ...process.env, ...inherited };
   delete env.AGENT_BB;
   delete env.AGENT_CHILD;
   if (agentBb !== undefined) env.AGENT_BB = agentBb;
   if (child !== undefined) env.AGENT_CHILD = child;
+  let requests = 0;
   const running = supervise({
+    httpGet(url, options, answered) {
+      requests += 1;
+      if (requests > 1 || !preflight) return httpGet(url, options, answered);
+      if (preflight === "hang") {
+        // A connection attempt that neither succeeds nor is refused: its socket is never connected.
+        const agent = new HttpAgent();
+        agent.createConnection = () => new Socket();
+        return httpGet(url, { ...options, agent }, answered);
+      }
+      const request = httpGet(url, options, answered);
+      request.destroy(Object.assign(new Error("fixture: no descriptor left"), { code: "EMFILE" }));
+      return request;
+    },
     env, fs, restartBackoffMs, restartBackoffMaxMs, ...(restartStableMs === undefined ? {} : {restartStableMs}),
     spawnChild(file, args, options) {
       const role = options.argv0 === declared.command[0] ? "child" : file === "aw" ? (args[1] === "run" ? "broker" : "status") : file === "oats" ? "host" : "ssh";
@@ -805,7 +821,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
       return process_;
     },
     onSignal(handler) { signal = handler; return () => { signal = null; }; },
-    say(line) { said.push(line); appendFileSync(events, "supervisor " + line + "\n"); }, pollMs: 10, startupMs: 1000,
+    say(line) { said.push(line); saidAt.push(Date.now()); appendFileSync(events, "supervisor " + line + "\n"); }, pollMs: 10, startupMs: 1000,
     ...(productionStopBudgets ? {} : {sshdStopMs: 500, brokerStopMs: 500}),
   });
   t.after(async () => {
@@ -820,7 +836,7 @@ async function supervisorFixture(t, { ready = true, statusTrueAfterBrokerExit = 
     assert.fail("supervisor fixture did not reach its checkpoint: " + text() + said.join(";"));
   }
   const childReceived = () => JSON.parse(readFileSync(childSeen, "utf8"));
-  return { running, children, said, text, until, term: () => signal("SIGTERM"), spawned, fileCalls, childReceived, statusHits: () => statusHits, declared, childPort };
+  return { running, children, said, timeOf: line => saidAt[said.indexOf(line)], text, until, term: () => signal("SIGTERM"), spawned, fileCalls, childReceived, statusHits: () => statusHits, declared, childPort };
 }
 
 test("broker TERM at its started checkpoint drains the real fixture child", async t => {
@@ -1524,6 +1540,9 @@ test("a child that never reports ready fails the start and admits neither SSH no
     const fx = await supervisorFixture(t, {child: "extra", childMode});
     assert.equal(await fx.running, 1, childMode);
     assert.ok(fx.said.includes("extra readiness timed out"), childMode);
+    // The budget (1 s in this fixture) bounds the wait itself: no request and no pause runs past it.
+    const startedAt = fx.spawned.find(entry => entry.role === "child").at, timedOutAt = fx.timeOf("extra readiness timed out");
+    assert.ok(timedOutAt - startedAt >= 1000 && timedOutAt - startedAt < 1000 + 250, `${childMode}: timed out ${timedOutAt - startedAt} ms after the child started`);
     assert.deepEqual(roles(fx), ["broker", "child"], childMode);
     assert.match(fx.text(), /child TERM[\s\S]*child ended/, "the unready child is stopped");
     assert.match(fx.text(), /broker TERM[\s\S]*broker ended/);
@@ -1548,6 +1567,14 @@ test("a ready answer without our live child, or before the child starts, cannot 
     assert.ok(early.said.includes("extra's ready URL already answers before extra starts"), externalStatus);
     assert.deepEqual(roles(early), ["broker"], externalStatus + ": the child is not started, and neither sshd nor host run");
     assert.equal(early.statusHits(), 1, externalStatus + ": asked once");
+  }
+  // A refused connection is the only pass. An attempt that could not tell whether anybody listens
+  // (it failed before connecting, or its second ran out) refuses the start as well.
+  for (const preflight of ["emfile", "hang"]) {
+    const unclear = await supervisorFixture(t, {child: "extra", preflight, childMode: "idle"});
+    assert.equal(await unclear.running, 1, preflight);
+    assert.ok(unclear.said.includes("extra's ready URL already answers before extra starts"), preflight + ": " + unclear.said.join("; "));
+    assert.deepEqual(roles(unclear), ["broker"], preflight + ": the child is not started");
   }
   const dead = await supervisorFixture(t, {child: "extra", childMode: "exits"});
   assert.equal(await dead.running, 1);

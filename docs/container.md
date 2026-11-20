@@ -751,8 +751,9 @@ any child, and then:
 1. Starts the wake broker and waits for it, as on the base image.
 2. Asks `ready.url` once, for at most a second. Whatever accepts that
    connection before the child exists is another process, whether it answers
-   ready, not ready or nothing, and refuses the start. Nobody listening is
-   the only pass.
+   ready, not ready or nothing, and refuses the start. A refused connection
+   is the only pass: an attempt that cannot tell whether anybody listens
+   refuses the start too.
 3. Starts the child: the resolved `command[0]` with argv exactly `command`,
    the supervisor's own environment without the `envFromFile` names, plus
    `env`, plus the `envFromFile` values that were read, in a process group

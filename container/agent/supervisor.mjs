@@ -158,7 +158,7 @@ function admitChild(selected, env, fs, say) {
 /** System boundaries are injectable for subprocess fixtures; the image has no
  * supervisor options and one switch, AGENT_CHILD. Returns its container exit code. */
 export async function supervise({
-  spawnChild = spawn, onSignal = onSignals, killGroup = (pid) => process.kill(-pid, "SIGKILL"),
+  spawnChild = spawn, httpGet = get, onSignal = onSignals, killGroup = (pid) => process.kill(-pid, "SIGKILL"),
   say = (line) => process.stderr.write(`agent-supervisor: ${line}\n`),
   pollMs = 200, startupMs = 30_000, sshdStopMs = stopBudgetsMs.sshd, brokerStopMs = stopBudgetsMs.broker,
   env = process.env, fs = nodeFs,
@@ -221,22 +221,23 @@ export async function supervise({
       catch { say(`${declared.name} could not start`); restartChild(0); }
     }, wait);
   };
-  // One request to the ready URL: "ready", "answered" (any other HTTP response,
-  // or a connection that was accepted and gave none in time) or "silent" (nobody listens).
-  const askChild = () => new Promise((resolve) => {
-    let text = "", settled = false, responded = false, request;
+  // One request to the ready URL, for at most a second and never past `withinMs`:
+  // "ready"; "refused", the connection was refused, so nobody listens there; or
+  // "other": any other answer, a connection that gave none, or an attempt that
+  // could not tell (an error before connecting, the time running out).
+  const askChild = (withinMs = 1000) => new Promise((resolve) => {
+    let text = "", settled = false, connected = false, refused = false, request;
     const answer = (ready) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
       request?.destroy();
-      resolve(ready ? "ready" : responded ? "answered" : "silent");
+      resolve(ready ? "ready" : refused ? "refused" : "other");
     };
-    const timeout = setTimeout(() => answer(false), 1000);
+    const timeout = setTimeout(() => answer(false), Math.max(0, Math.min(1000, withinMs)));
     requested.then(() => answer(false));
     try {
-      request = get(declared.ready.url, { agent: false }, (response) => {
-        responded = true;
+      request = httpGet(declared.ready.url, { agent: false }, (response) => {
         if (response.statusCode !== 200) { answer(false); return; }
         response.setEncoding("utf8");
         response.on("data", (chunk) => { if (text.length + chunk.length > 65536) answer(false); else text += chunk; });
@@ -248,11 +249,10 @@ export async function supervise({
           } catch { answer(false); }
         });
       });
-      request.on("socket", (socket) => socket.once("connect", () => { responded = true; }));
-      request.on("error", () => answer(false));
+      request.on("socket", (socket) => socket.once("connect", () => { connected = true; }));
+      request.on("error", (error) => { refused = !connected && error?.code === "ECONNREFUSED"; answer(false); });
     } catch { answer(false); }
   });
-  const childReady = async () => await askChild() === "ready";
   const finish = async (state, stopMs) => {
     if (!state) return;
     state.stopRequested = true;
@@ -281,8 +281,8 @@ export async function supervise({
       } catch { return false; }
     } finally { clearTimeout(timeout); }
   };
-  const pause = () => new Promise((resolve) => {
-    const timer = setTimeout(resolve, pollMs);
+  const pause = (ms = pollMs) => new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
     requested.then(() => { clearTimeout(timer); resolve(); });
   });
   try {
@@ -300,19 +300,21 @@ export async function supervise({
     // The answer names no process. Nothing else runs yet, so whatever accepts a
     // connection there before the child starts is another process: ready now,
     // only later or silent so far, it could pass for our child's while that
-    // child lives without holding the port. Nobody listening is the only pass.
-    if (!stopping && declared && await askChild() !== "silent") { failed = true; say(`${declared.name}'s ready URL already answers before ${declared.name} starts`); stop(); }
+    // child lives without holding the port. A refused connection is the only
+    // pass: an attempt that could not tell refuses the start too.
+    const before = !stopping && declared ? await askChild() : "refused";
+    if (!stopping && before !== "refused") { failed = true; say(`${declared.name}'s ready URL already answers before ${declared.name} starts`); stop(); }
     if (!stopping && declared) {
       child = startChild();
       const childDeadline = Date.now() + startupMs;
       while (!stopping) {
-        // Only while our own child lives does a ready answer count.
-        // And only when it arrives inside the budget: not one asked for in time and answered late.
-        const ready = await childReady(), late = Date.now() >= childDeadline;
-        if (ready && !late && !child.ended && child.child.exitCode === null && child.child.signalCode === null && !stopping) { childUp = true; break; }
+        // Only while our own child lives does a ready answer count, and only
+        // inside the budget: no request and no wait runs past the deadline.
+        const ready = await askChild(childDeadline - Date.now()) === "ready", left = childDeadline - Date.now();
+        if (ready && left > 0 && !child.ended && child.child.exitCode === null && child.child.signalCode === null && !stopping) { childUp = true; break; }
         if (stopping) break;
-        if (late) { failed = true; say(`${declared.name} readiness timed out`); stop(); break; }
-        await pause();
+        if (left <= 0) { failed = true; say(`${declared.name} readiness timed out`); stop(); break; }
+        await pause(Math.min(pollMs, left));
       }
       if (childUp) say(`${declared.name} ready (${declared.ready.field}: true)`);
     }
