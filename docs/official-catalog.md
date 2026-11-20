@@ -121,3 +121,46 @@ an entry. State the reason, affected releases and supported replacement or hold,
 and assess existing locks before changing discovery. Preserve immutable
 release history. A list change is not permission to rewrite a deployment's
 lock or change what a workspace declares.
+
+## Updating the test mirrors
+
+`package-catalog.json` is the source of package release refs. Workspace pins,
+current documentation and skill recommendations are checked against it by
+`scripts/check-catalog-references.mjs`; dated release/design/upgrade records
+retain their historical versions. The clean-room smoke reads the catalog
+rather than repeating its versions.
+
+The capability copies in `mirrors/` are test and release material. They stay
+outside `capabilities/` so member discovery cannot offer them a second time,
+and are excluded from npm. Never edit them by hand. For a non-OKF catalog pin:
+
+```bash
+node scripts/check-mirrors.mjs --generate oats.aweb
+node scripts/check-mirrors.mjs --verify
+```
+
+Generation fetches only the catalog tag into ignored disposable scratch under
+`.agents/mirror-source-*`, verifies its published tag object and peeled commit,
+and reads raw Git blobs. Same-filesystem staging uses
+`.agents/mirror-generation-*` there too. These paths are separate from the
+deployment packages/capabilities under `.agents/`; generation does not modify
+those or use modified source-checkout files. Existing destinations can be
+replaced only when the same package's prior manifest owns their exact names;
+OKF inventory paths are reserved for OKF. An optional source
+clone argument uses that clone's immutable objects instead of fetching them;
+its origin and tag must match the catalog and published remote. A moved tag
+at an unchanged pin is refused against the previous inventory. All bytes,
+executable bits, file sets and symlink targets are recorded in
+`scripts/mirror-source-inventory.json`. Root capability exports (`.`) are
+supported; escaping, broken and directory symlinks are refused by the shared
+payload walker before replacement. Git paths that collide under case or Unicode
+normalization are refused before staging writes; symlinks are created only
+after every directory and regular file, so no staging write traverses one.
+
+OKF keeps its existing stricter release finalization and wrapper/soul/trigger
+inventory; use [the OKF mirror procedure](release-lane.md#mirroring-a-released-oatsokf)
+to generate that package. The combined checker includes that gate and requires
+its published catalog release. Verification is offline and needs neither Git
+nor sibling clones. It runs explicitly in PR CI and through `npm run validate`.
+A missing, extra or changed entry refuses verification; version equality alone
+is insufficient.
