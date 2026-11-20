@@ -302,6 +302,7 @@
           "color": null,
           "running": false,
           "waitingOnYou": null,
+          "board": null,
           "soul": {
             "repoKey": "local/<base>/remotes/ws.git",
             "commit": "<sha>",
@@ -594,6 +595,7 @@
           "color": null,
           "running": false,
           "waitingOnYou": null,
+          "board": null,
           "soul": {
             "repoKey": "local/<base>/remotes/ws.git",
             "commit": "<sha>",

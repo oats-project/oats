@@ -91,6 +91,9 @@ see the [official catalog](official-catalog.md) for current pins.
   --stdio`, which the reader's hello repeats. Start a reader only where the
   probe lists both the feature and `readerApi: 1`
   ([The warm reader](#the-warm-reader)).
+- `boardApi` (feature `instance-board`) is the version of the agent's board:
+  the `board` on the rows, `inspect --board` and the board commands' answers
+  ([The agent's board](#the-agents-board-oats-instance-board)).
 - In text mode the command prints `@awebai/oats <version> (desktop API v1)`.
 
 ### Features
@@ -183,6 +186,7 @@ see the [official catalog](official-catalog.md) for current pins.
 | `workspace-tasks-payload` | oats-workspace.yaml may carry a top-level `tasks:` payload, merged for the capability that fills the tasks slot exactly as `messaging:` is for the messaging one; its leaves' `settingsOrigins` are `{kind: "workspace", at: "oats-workspace.yaml#/tasks"}` ([Provider payloads have three homes](workspaces.md#provider-payloads-have-three-homes)). A kernel without it refuses a workspace file that carries `tasks:` (unknown property) | |
 | `settings-committed-only` | a manifest `settings.<key>.committedOnly: true` is enforced: that key in oats-local.yaml `settings.<cap>` or a `--provider <cap>` flag is refused `E_WORKSPACE_SCHEMA` reason `committed-only-key`, with `details.layer`, `details.at` and `details.allowed` ([Commands and hooks](capabilities.md#commands-and-hooks)). A kernel without it ignores the flag and merges the key | |
 | `schedule-host-register-only` | `oats schedule host install --register-only`: the scope is recorded in the host schedule registry and no timer is installed ([`oats schedule`](#oats-schedule)). Routed with `--server`, the option is sent only to a host that lists this and `schedule`; otherwise it is refused here with `E_REMOTE_INCOMPATIBLE` before anything is sent, since a host without it ignores the option and installs a timer | |
+| `instance-board` | the agent's board: `oats instance board set\|unset\|ask\|ask --clear`, run by the agent in its own home; `board` on `oats status --json` instance rows and `oats server roster --json` rows; `oats inspect --home <h> --board` for each fact's history and each question's context; the `oats.board` needs-input claim, reason `attention` ([The agent's board](#the-agents-board-oats-instance-board)). Gate on the probe, locally or in the host's `probe.features`: an older kernel refuses `oats instance board` (`E_BAD_ARGS`) and its rows have no `board` | `boardApi: 1` |
 | `spawn-task-stdin` | `oats spawn <soul> --task-file -` reads the task from standard input. A spawn routed with `--server` sends its `--task` or `--task-file` text that way, to the preview and to the apply, to a host that lists this, and not as an argument; a host that does not list it gets the text as an argument, and the answer's `warnings` gains one line that says it was readable in both machines' process lists ([servers.md](servers.md#a-routed-spawns-task)) |
 
 Payload-only integers, never in the probe: `onboardApi: 2`, `syncApi: 1`,
@@ -333,6 +337,9 @@ for `--no-recursive`) is never ignored.
 | `oats instance waiting set` | none | `--producer`, `--reason`, `--message`, `--home`, `--dir` | `--json` | none | none |
 | `oats instance waiting clear` | none | `--producer`, `--reason`, `--message`, `--home`, `--dir` | `--json` | none | none |
 | `oats instance attention` | none | `--message` | `--clear`, `--json` | `--home`, `--dir`, `--producer`, `--reason` | none |
+| `oats instance board set` | `<key>` | `--label`, `--value`, `--unit`, `--link` | `--json` | `--home`, `--dir`, `--server` | none |
+| `oats instance board unset` | `<key>` | none | `--json` | `--home`, `--dir`, `--server` | none |
+| `oats instance board ask` | `[<question>]` | `--option`, `--id`, `--context-file`, `--clear` | `--json` | `--home`, `--dir`, `--server` | none |
 | `oats instance suggest-name` | none | `--soul`, `--task`, `--task-file`, `--harness`, `--model`, `--launch-config`, `--dir` | `--json` | `--server` | none |
 | `oats worktree add` | none | `--purpose`, `--branch`, `--base`, `--repo` | `--preview`, `--json` | `--server`, `--dir`, `--home` | none |
 | `oats worktree remove` | none | `--purpose` | `--json` | `--server`, `--dir`, `--home` | none |
@@ -631,7 +638,7 @@ A module's origin (`from`) is `{kind: "member", repoKey, commit}` or `{kind:
 ### `oats inspect`
 
 ```text
-oats inspect (--home <abs> | --soul <name> [--dir <d>] [--instructions] [--skills] [--composed-skills]) [--max-age <s>] --json
+oats inspect (--home <abs> [--board] | --soul <name> [--dir <d>] [--instructions] [--skills] [--composed-skills]) [--max-age <s>] --json
 ```
 
 An instance subject, abridged:
@@ -673,7 +680,7 @@ An instance subject, abridged:
 | `capabilities`, `capabilitiesOff` | the resolved modules (by id) and the ones the soul turned off |
 | `teams`, `defaultTeam`, `teamsSource`, `recordedDefaultTeam` | [Where teams appear](#where-teams-appear); `recordedDefaultTeam` is home only |
 | `knowledge` | `{provider, version, operations: [{name, kind, available, reason}]}` for the knowledge slot (`null`s and `[]` when empty) |
-| `instance` | `null` for a soul; the home's facts above. `instructions.sources` lists each composed inject in order. `color` (feature `instance-color`) is the instance's colour or `null` ([An instance's colour](#an-instances-colour-oats-instance-color)) |
+| `instance` | `null` for a soul; the home's facts above. `instructions.sources` lists each composed inject in order. `color` (feature `instance-color`) is the instance's colour or `null` ([An instance's colour](#an-instances-colour-oats-instance-color)). `board` (feature `instance-board`) is there only with `--board`, which takes `--home` (`--soul` is `E_BAD_ARGS`): the row's [`board`](#row-board) with each fact's `history` and each question's `context` ([The agent's board](#the-agents-board-oats-instance-board)). Routed with `--server`, `--board` needs the host's feature (`E_REMOTE_INCOMPATIBLE`, nothing sent) |
 | `identity` | home only (absent for a soul): the served identity a messaging provider recorded, `{…, provider}`, or `null`. Read on every call, so after a start whose launch hook returned new `meta` it is that start's record, not the spawn's |
 | `problems` | below |
 | `warnings` | always present (0.49.0): [capability warnings](#capability-warnings-hook-event-unsupported-oats-0490); for `--home`, `path` is home-relative |
@@ -3768,6 +3775,16 @@ its absence.
   the home holds a valid pin ([Pinned instances](#pinned-instances-oats-instance-pin)),
   absent otherwise; never `false`. A `pinned` in `instance.json` never
   stands in for it. Clients list a pinned row first in its machine's list.
+- <a id="row-board"></a>**`board`** (feature `instance-board`): the agent's
+  board, `{facts: [{key, label, value, unit, link, at}], questions: [{id,
+  question, options, hasContext, since}]}`, or `null` for a home with no board
+  file (or one whose directory can't be read) ([The agent's board](#the-agents-board-oats-instance-board)). Facts come
+  in the order first set, questions in the order asked, and only the questions
+  of the instance's current session. A file that can't be read as a board is an
+  empty board, never an error. The value is at most 8 KiB as UTF-8 JSON on every
+  row. It carries no history and no context: `oats inspect --home <h> --board`
+  does. A `board` in `instance.json` never stands in for it, and an older
+  kernel's rows have no key.
 - <a id="row-same-work"></a>**`sameWork`** (feature `instance-same-work`):
   `true` when the home's same-work flag
   ([Same work as the parent](#same-work-as-the-parent-oats-instance-same-work))
@@ -4050,6 +4067,10 @@ route target:
   has exactly `pinned: true`; any other value (`"true"`, `1`), a host whose
   kernel predates the feature and a saved route the host did not list carry
   none ([`pinned`](#row-pinned)).
+- **`board`** (feature `instance-board`) is on a row only when the host's row
+  has the key. It is read by this kernel's own rules: each fact and question
+  within its bounds and the whole within 8 KiB, or else an empty board.
+  `null` stays `null` ([`board`](#row-board)).
 - **`sameWork`** (feature `instance-same-work`) is on a row only when the
   host's row has `sameWork: true`, and is then `true`. Any other value, a host
   whose kernel predates the feature, and a saved route the host did not list
@@ -4850,7 +4871,13 @@ oats instance attention [--message=<text>] [--clear] --json
 
 - **The row.** A claim is a `waiting` event, `data: {waitingOnYou: true,
   reason, message?}` or `{waitingOnYou: false}`, appended to both logs, with
-  `producer` the caller's `--producer`.
+  `producer` the caller's `--producer`. The board's claim (producer
+  `oats.board`, [The agent's board](#the-agents-board-oats-instance-board))
+  also carries `session`, the id of the session it was set in. A row with a
+  `session` counts only while that is still the current session, and only
+  where the read proves it: a session boundary is in the rows read, or the
+  log was read whole (not cut to its last 4 MiB). No verb sets one; a row
+  without `session` counts as before.
 - **`waiting`.** `--producer` matches `^[a-z0-9][a-z0-9._/-]{0,63}$` and is
   not `kernel`. `set` needs `--reason`, one of `permission`, `question`,
   `attention` (closed). `clear` refuses `--reason` and `--message`. The home
@@ -6919,6 +6946,130 @@ Where it is read: `pinned: true` on [status rows](#row-pinned), on
 when the host's row says exactly `true`), and on `oats inspect --home` as
 `instance.pinned`. Each is absent when not pinned. A client reads `pinned`
 only where the probe lists `instance-pin`.
+
+## The agent's board (`oats instance board`)
+
+Feature `instance-board`, `boardApi: 1`.
+
+```text
+oats instance board set <key> --label <text> --value <text> [--unit <text>] [--link <https-url>] [--json]
+oats instance board unset <key> [--json]
+oats instance board ask <question> --option <text> --option <text> [--option <text>]… [--id <id>] [--context-file <f>] [--json]
+oats instance board ask --clear <id> [--json]
+```
+
+The board is what an agent tells its person outside its terminal: the
+**facts** it keeps in view (the PR, the best score, the branch) and the
+**questions** it needs them to answer, each with 2 to 4 options. A client
+shows them in the agent's view, above and below the agent's own terminal.
+The agent reports them, and the kernel infers nothing: it never reads a
+transcript, and it routes no answer. The word "pin" is never used for facts:
+[`oats instance pin`](#pinned-instances-oats-instance-pin) pins an instance at
+the top of the list, which is something else.
+
+- **Who writes it.** Only the agent, from its own session, as `oats instance
+  attention` does: the home is `$OATS_INSTANCE_HOME`. `--home`, `--dir` and
+  `--server` are refused (`E_BAD_ARGS`), and outside an instance home every
+  form is `E_USAGE`.
+- **`set`** upserts the fact `<key>`. At most 12 keys: one more is
+  `E_BOARD_FULL`. A set with every field the same changes nothing and writes
+  nothing. The kernel keeps a key's last 20 values with their times (a new
+  value joins it; a new label alone doesn't). `at` is when the fact last
+  changed. **`unset`** removes the key and its history.
+- **`ask`** opens a question. Its id is `--id`, or `q<n>` by default. `n` is
+  counted per home and never reused while the home lives, so a late answer
+  can't land on a newer question (past `q999999999999999` no default id is
+  left: `E_BOARD_FULL`, ask with `--id`). At most 9 open at once: one more is
+  `E_BOARD_FULL`. Asking a question that is open with the same text, options
+  and context again changes nothing and answers its id, with or without
+  `--id`, so a retry is safe. Anything else under an open id is
+  `E_BAD_ARGS`. **`ask --clear <id>`** closes the
+  question, which the agent does once it has read the answer. Clearing an id
+  that isn't open changes nothing.
+- **Text.** Key and id match `^[a-z0-9][a-z0-9-]{0,15}$`. Label, value,
+  unit, option and question are one line each, of at most 40, 80, 16, 60
+  and 200 code points, with none of the characters a
+  [waiting message](#waiting-on-you) refuses. A link is an absolute `https:`
+  URL of at most 512 printable ASCII characters. The context comes from a
+  UTF-8 file (`--context-file`), at most 2000 code points once its trailing
+  newlines are trimmed (a file's final newline, such as a heredoc's, isn't
+  content). Newlines (LF) are allowed in it, and every other refused
+  character is not. Anything else is `E_BAD_ARGS`.
+- **The row bound.** A write that would make the row's `board` larger than
+  8 KiB as UTF-8 JSON is `E_BOARD_FULL`, with `details.bytes` and
+  `details.max`. Every client can rely on that bound for every row. A
+  refused write writes nothing.
+- **Per session.** A question records the session it was asked in: the
+  instance's latest kernel session boundary (`launched`, `restarted`,
+  `stopped`: the [waiting claim's rule](#waiting-on-you)). It is live only
+  while that is still the current session. Once a later boundary is written,
+  no row shows it, and the next write drops it. Where the events log's bounded
+  read (its last 4 MiB) holds no boundary, the current session can't be
+  proved: no question is live, and `ask` is `E_BOARD_FAILED` until the next
+  boundary. Facts persist across sessions until they are unset or the home is
+  retired.
+
+**The needs-input claim.** While any question is open, the home holds the
+[waiting claim](#waiting-on-you) of producer `oats.board`, reason
+`attention`. Its message is the oldest open question. The last `--clear`
+removes it. The claim's row records the session the write read
+(`session`), and counts only in that session, so a boundary written while a
+board write runs ends the claim with the question. Reason `attention` holds no scheduled wake
+([A held wake](schedules.md#a-held-wake)): a board question leaves the
+harness at its normal input line. The claim is a producer of its own, so the
+agent's own `attention` claim can be live beside it, and `waitingOnYou`
+picks between them by its usual rule. Every board write sets the claim to
+what the questions say after it. A write whose claim fails is
+`E_EVENTS_FAILED` after the board was written, with `details.id` (or
+`details.key`) naming what was written. Running the same command again
+changes nothing on the board and repairs the claim.
+
+**How a person answers.** The kernel routes no answer. A client types it as
+the person's own keystrokes, in the agent's terminal, as `<id>: <text>`
+(`q2: Yes, one clean commit`), and the person's Enter sends it. An agent reads
+an answer by its id, then clears the question.
+
+**The answer** of every form is `{boardApi, instance, home, key | id,
+changed, board}`, where `board` is the row's value after the write
+(`null` when the home has no board file and nothing was written):
+
+```json
+{"boardApi":1,"instance":"dev-a","home":"/w/agents/dev/instances/dev-a","id":"q2","changed":true,
+ "board":{"facts":[{"key":"pr","label":"Pull request","value":"#1990","unit":null,"link":"https://github.com/oats-project/oats/pull/1990","at":"2026-11-19T21:00:00.000Z"}],
+          "questions":[{"id":"q2","question":"Squash before merging?","options":["Yes, one clean commit","No, keep the history"],"hasContext":true,"since":"2026-11-19T21:01:00.000Z"}]}}
+```
+
+The text answer is one line: `<instance>: fact <key> set` (or `unchanged`,
+`removed`, `was not set`), or `<instance>: question <id> asked: answers
+arrive typed as "<id>: <text>"` (or `cleared`, `was not open`).
+
+| Code | When |
+|---|---|
+| `E_USAGE` | Not in an instance session: `$OATS_INSTANCE_HOME` unset, not absolute, or not an instance home under its agents root |
+| `E_BAD_ARGS` | `--home`, `--dir` or `--server`; a field out of its rules; fewer than 2 or more than 4 options; another question under an open id; a flag given twice (`--option` repeats); `--clear` beside anything else |
+| `E_BOARD_FULL` | A 13th fact, a 10th open question, a row over 8 KiB, or no default id left; nothing was changed |
+| `E_BOARD_FAILED` | `ask` where the current session can't be read from the events log (no boundary in its last 4 MiB); nothing was changed. Use `oats instance attention --message` |
+| `E_BOARD_BUSY` | Another process holds the board's lock past 5 seconds (`details.lock`); nothing was changed |
+| `E_EVENTS_FAILED` | The board was written (`details.id` or `details.key`), but its claim was not: run the same command again |
+
+**Where it is read.** [`board` on status rows](#row-board), relayed on
+[remote roster rows](#the-remote-roster-oats-server-roster---json), and with
+history and context on `oats inspect --home <h> --board` as
+`instance.board`: each fact gains `history: [{value, at}]` (oldest first, its
+current value last) and each question `context` (the text, or `null`). Read
+it when a view is open, not on every poll. Agent text is untrusted: a client
+shows it as the agent's attributed words, plain text only, and opens a link
+only on the person's press, outside the app's window.
+
+**Storage.** `<home>/.oats-board.json`, mode 0600, written atomically under
+the lock `<home>/.oats-board.lock`, so parallel writes of one agent lose
+none. The format is the kernel's own, not part of this contract. A reader
+takes a regular file of at most 256 KiB, without following a link. A file
+that isn't a valid board in every part reads as an empty board,
+`{facts: [], questions: []}`, never as an error. Both names are kernel-owned
+home files: a capability cannot declare them, and a retire counts neither as
+work. A start, restart or upgrade keeps them, and a retire removes them with
+the home.
 
 ## Same work as the parent (`oats instance same-work`)
 
