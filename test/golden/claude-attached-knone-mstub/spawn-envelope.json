@@ -73,6 +73,12 @@
         "kind": "task-file",
         "file": "TASK.md"
       }
+    },
+    "capabilityMeta": {
+      "golden.messaging": {
+        "alias": "dev-claude-attached-knone-mstub",
+        "endpoint": "stub://broker/dev-claude-attached-knone-mstub"
+      }
     }
   }
 }

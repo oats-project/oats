@@ -50,6 +50,12 @@
         "kind": "task-file",
         "file": "TASK.md"
       }
+    },
+    "capabilityMeta": {
+      "golden.knowledge": {
+        "state": "STATE.md",
+        "notes": "notes/"
+      }
     }
   }
 }

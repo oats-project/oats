@@ -73,6 +73,16 @@
         "kind": "task-file",
         "file": "TASK.md"
       }
+    },
+    "capabilityMeta": {
+      "golden.knowledge": {
+        "state": "STATE.md",
+        "notes": "notes/"
+      },
+      "golden.messaging": {
+        "alias": "dev-claude-checkout-kstub-mstub",
+        "endpoint": "stub://broker/dev-claude-checkout-kstub-mstub"
+      }
     }
   }
 }

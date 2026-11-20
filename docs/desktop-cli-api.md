@@ -384,6 +384,10 @@ for `--no-recursive`) is never ignored.
 | `oats package remove` | `<id>` | `--dir` | `--json` | none | none |
 | `oats launch-config set` | `<name>` | `--file`, `--dir`, `--server` | `--keep-env`, `--json` | `--home`, `--soul` | none |
 | `oats launch-config remove` | `<name>` | `--dir`, `--server` | `--json` | `--home`, `--soul` | none |
+| `oats sandbox status` | none | `--dir` | `--json` | none | none |
+| `oats sandbox start` | `<name>` | `--dir`, `--plan-revision`, `--idempotency-key` | `--plan`, `--json` | `--server` | none |
+| `oats sandbox stop` | `<name>` | `--dir`, `--plan-revision`, `--idempotency-key` | `--plan`, `--json` | `--server` | none |
+| `oats sandbox reconcile` | `<name>` | `--dir`, `--plan-revision`, `--idempotency-key` | `--plan`, `--json` | `--server` | none |
 | `oats automations refresh` | none | `--dir` | `--json` | none | none |
 | `oats update` | none | `--dir` | `--check`, `--yes`, `--json` | `--to` | an argument after the last |
 

@@ -76,6 +76,16 @@
         "kind": "task-file",
         "file": "TASK.md"
       }
+    },
+    "capabilityMeta": {
+      "golden.knowledge": {
+        "state": "STATE.md",
+        "notes": "notes/"
+      },
+      "golden.messaging": {
+        "alias": "dev-claude-worktree-kstub-mstub-modellist",
+        "endpoint": "stub://broker/dev-claude-worktree-kstub-mstub-modellist"
+      }
     }
   }
 }

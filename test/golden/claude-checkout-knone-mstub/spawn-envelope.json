@@ -73,6 +73,12 @@
         "kind": "task-file",
         "file": "TASK.md"
       }
+    },
+    "capabilityMeta": {
+      "golden.messaging": {
+        "alias": "dev-claude-checkout-knone-mstub",
+        "endpoint": "stub://broker/dev-claude-checkout-knone-mstub"
+      }
     }
   }
 }
