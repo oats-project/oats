@@ -11,8 +11,10 @@ crossing, and one per point between two writes at which the kernel can die
 list one by one: for each verb, the kernel ends at each seam it passes (each
 point between two writes, and each provider call: before, during, after),
 then another verb runs, then an input, against a provider that has sessions;
-and the invariants below are checked once everything has settled. It runs a
-seeded sample by default and every schedule on request.
+and the invariants below are checked once everything has settled. In the
+suite it runs a seeded sample, in seconds; `npm run test:provider-lifecycle`
+runs every schedule (minutes), and pull-request CI does so on every push, as
+a job of its own that the gate requires.
 
 **The invariants.** (1) No session runs that no record names. (2) A home
 recorded planned has no session; one recorded stopped has none but the one

@@ -16,10 +16,13 @@
 //   4. no input is delivered after a stop was confirmed.
 //
 // Deterministic: the schedules are enumerated, shuffled by a seed and cut to a sample, so a run
-// takes seconds. A failure prints the seed and the schedule's steps.
+// in the suite takes seconds. EVERY schedule runs with `npm run test:provider-lifecycle`, which
+// pull-request CI does on every push, as a job of its own. A failure prints the seed and the
+// schedule's steps.
 //   OATS_EXPLORER_SEED=<n>    another sample           OATS_EXPLORER_COUNT=<n>|all   its size
 //   OATS_EXPLORER_ONLY="<a> | <seam> | <b>"            one schedule, as a failure prints it
 //   OATS_EXPLORER_VERBOSE=1   a refusal's message beside its code, in a failure's steps
+//   OATS_EXPLORER_WORKERS=<n> how many schedules run side by side (6)
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -215,6 +218,6 @@ test(`the explorer: a kernel killed at any seam of any verb, then another verb a
       if (result.broken.length) failures.push(`\n  OATS_EXPLORER_ONLY="${schedule.a} | ${schedule.seam} | ${schedule.b}" (seed ${SEED}, #${n})\n    steps: ${result.steps.join("; ")}\n    ${result.broken.join("\n    ")}`);
     }
   };
-  await Promise.all(Array.from({ length: Math.min(6, SAMPLE.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(Number(process.env.OATS_EXPLORER_WORKERS ?? 6), SAMPLE.length) }, worker));
   assert.equal(failures.length, 0, `${failures.length} of ${SAMPLE.length} schedules broke an invariant:${failures.join("")}`);
 });
