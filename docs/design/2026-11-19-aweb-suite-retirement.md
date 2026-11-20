@@ -4,7 +4,7 @@ Release: `v1.44.0`, peeled commit `5d1c6720bdf60a16379f8486c7d3f6f972294279`.
 Transfer merge: `dc90c9556e58d03a80da9c5b3e6ed6139f22471e`; `git merge-base --is-ancestor dc90c955 v1.44.0` exits 0 in the owned `.work-aweb-audit` tree.
 Original assertion inventory: kernel `3a5503c2993a307a0bb48d0b41dcab7d175adc27`.
 Released transfer manifest: [docs/kernel-test-transfer.md](https://github.com/awebai/oats-aweb/blob/v1.44.0/docs/kernel-test-transfer.md) (17 + 11 + 9 + 19 = 56 rows).
-This is a static assertion match, not a run of provider tests or a claim about a CI result.
+This is a static assertion match, not a run of provider tests or a claim about a CI result. The 47 rows in hook-1-10, hook-1-12 and hook-1-13 retire here; hook-1-12-1's nine rows remain under the hold below.
 
 Package test files below are at that exact released commit. Titles/behaviour identify cases independently of line shifts. `hook13` means `test/oats-aweb-hook-1-13.test.mjs`; other short names are files under `test/` with `.test.mjs` suffix. The old kernel files run provider binaries directly and never the kernel hook runner.
 
@@ -44,9 +44,19 @@ Package test files below are at that exact released commit. Titles/behaviour ide
 | 237 | Same no-JSON case failure=true: actual active state, compensation grant metadata and remedy, home removed, no false revoked claim. The transfer preserves the current removal policy; it does not endorse a new policy. |
 | 250 | hook13 global retire uses custody, caller identity cleared, exact revoke, wake deregister and identityRevoked. |
 | 267 | hook13 uncertain-revoke show-status revoked/active vectors: show invoked for current team/id; retired/identityRevoked only on revoked, active fails and warns. |
-| 281 | hook13 missing-id retire now uses documented nothing-to-delete; never-grant failed revoke covers finite expiry and never-grant remedy plus successful retry. Old nothing-to-revoke assertion is deliberately rejected by K1's kernel contract. |
+| 281 | hook13 missing-id retire now uses documented nothing-to-delete; never-grant failed revoke covers finite expiry and never-grant remedy plus successful retry. Old nothing-to-revoke assertion is deliberately rejected by K1's kernel contract. The base also asserted hookCleanupComplete against the real mirror answer; that kernel integration survives in test/aweb-mirror-retire-contract.test.mjs, while K1's lifecycle runner test remains unchanged. |
 
-## hook-1-12-1 — 9 rows
+## hook-1-12-1 — 9 rows retained
+
+**Hold:** this entire file remains unchanged at the pin merge. Its current
+base test at lines 217–222 was adapted for oats-aweb#286: the onboarding menu
+must show `--invite-stdin` and must never show `--invite <token>`. Released
+v1.44.0 emits that menu but has no test of these two menu assertions. The
+original audit keyed to 3a5503c2 incorrectly classified this adapted current
+behaviour as obsolete prose. Retire this file only after the package carries
+those assertions in a released version and the kernel pins it. The parent
+owns that provider follow-up (decision `6403afb0-8600-4c17-972f-595818e6b90c`).
+The other eight rows are retained with it until that gate is satisfied.
 
 | Original line | Released covering assertion or explicit retirement reason |
 | --- | --- |
@@ -54,7 +64,7 @@ Package test files below are at that exact released commit. Titles/behaviour ide
 | 144 | oats-aweb explicitly selected empty root: refuses rather than falling back to working workspace root, names selected root/current setup remedy, no init. Old classic/bounded prose is obsolete. |
 | 167 | oats-aweb authority discovery does not walk above workspace: ancestor authority cannot mint. |
 | 191 | 1-14 classic OATS environment refuses spawn/setup/binding before any aw call. |
-| 205 | Current oats-aweb/setup-team-roots setup acts cover missing team and declared authority. Retire exact old username/API-key/join menu/help tuple as obsolete prose, not kernel behaviour. |
+| 205 | RETAIN: current base #286 menu assertions require --invite-stdin and forbid --invite <token>; no released v1.44.0 menu test pins them. Other setup acts cover missing team/root but do not cover this token-hygiene menu contract. |
 | 224 | workspace-readiness-wire binding-less check pins ready result and read-only wake read; no-team readiness/spawn test pins actionable failure. Retire old combined error ordering: current no-team result and broker prerequisites supersede it. |
 | 254 | 1-15 unmapped default refuses both spawn and binding; no init or team calls/active-team fallback. |
 | 277 | 1-15 removed settings.team refuses spawn and binding with zero native effects. |
@@ -92,17 +102,21 @@ branch's base. The catalog pins `v1.44.0`. A read-only Git-object comparison
 matched all 70 mirrored blobs, their executable modes/symlink targets and the
 complete file/directory set to that release. No mirror bytes were edited.
 
-This change removes exactly these four direct-provider suites:
+This change removes exactly three direct-provider suites:
 `test/oats-aweb-hook-1-10.test.mjs`, `test/oats-aweb-hook-1-12.test.mjs`,
-`test/oats-aweb-hook-1-12-1.test.mjs`, `test/oats-aweb-hook-1-13.test.mjs`.
-The table above records every source test and the released covering case or
-specific superseded/prose reason. The released package retains the regression
+`test/oats-aweb-hook-1-13.test.mjs`.
+`test/oats-aweb-hook-1-12-1.test.mjs` remains unchanged under the hold above.
+The table above records every source test, its released covering case or
+specific superseded/prose reason, and the hold for the uncovered menu case. The released package retains the regression
 coverage; no direct-provider suite is renamed as kernel integration evidence.
-Release-lane adaptations outside those files remain, as does K1's kernel
-contract test. No production code or deployment contract changes.
+Release-lane adaptations outside the retired files remain, as does K1's kernel
+contract test. The new mirror/classifier test retains the base-state bridge
+and rejects any native aw call at its boundary. No production code or deployment contract changes.
 
 The maintainer authorized retirement after both merges and this released-row
 match (parent decisions `cef42455-e66b-405e-87bc-a2edd82f2695` and
 `e55641a6-1e17-4b71-98a4-6436c1293b0d`). The pre-deletion plan and complete
 row table were sent as `4b923d01-236a-4c44-8a03-2c268f42a684`.
 Full CI was not run locally; it runs after parent acceptance and PR creation.
+
+The r1 findings were accepted in parent decision `6403afb0-8600-4c17-972f-595818e6b90c`: split the retirement, keep the current token-hygiene test until released coverage, and preserve the real mirror/classifier bridge in a small kernel test.
