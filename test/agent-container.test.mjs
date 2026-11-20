@@ -1242,7 +1242,8 @@ test("an absent token file starts bb without the variable; an unreadable one fai
   }
 });
 
-test("a token file with whitespace inside the token fails the start before any child, and never shows the value", async t => {
+// Bounded: on a supervisor without the refusal bb, sshd and host run start and `running` never settles.
+test("a token file with whitespace inside the token fails the start before any child, and never shows the value", {timeout: 20_000}, async t => {
   for (const bbToken of ["FIXTURE_TOKEN_FIRST\nFIXTURE_TOKEN_SECOND\n", "FIXTURE_TOKEN_FIRST FIXTURE_TOKEN_SECOND", "FIXTURE_TOKEN_FIRST\r\nFIXTURE_TOKEN_SECOND", "FIXTURE_TOKEN_FIRST\tFIXTURE_TOKEN_SECOND"]) {
     const wrapped = await supervisorFixture(t, {bb: "1", bbToken});
     assert.equal(await wrapped.running, 1);

@@ -724,8 +724,8 @@ environment is the supervisor's own plus two entries:
   The supervisor reads the file once and gives the value to bb alone: never
   to the broker, sshd or host run, never in an argument or a log line. With
   no file, or an empty one, bb starts without the variable. The file must
-  hold the token on one line: a token with a space or a line break inside it
-  is refused at start, before any child, since bb would report ready while
+  hold the token on one line: a token with whitespace inside it (a space, a
+  tab, a line break) is refused at start, before any child, since bb would report ready while
   every model call failed.
 
 bb reads its environment once, when it starts. After replacing the token,
