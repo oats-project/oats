@@ -655,6 +655,9 @@ or, in the container, `oats schedule host install --register-only --dir
 systemd user manager. The registry is in `/state/home`, so it persists
 across container runs.
 
+<!-- docs/release-notes/v0.69.22.md links here under this section's former
+     name, "A bb server for the team": the anchor keeps those links whole. -->
+<a id="a-bb-server-for-the-team"></a>
 ## An optional child
 
 A derived image can add one more supervised process to the team container:
@@ -675,9 +678,15 @@ One child, not a list: a second one is a new decision.
 The image that runs a [bb](https://github.com/get-bb/bb) server this way,
 its relay and its operator docs live in
 [oats-project/oats-bb](https://github.com/oats-project/oats-bb); this
-repository holds no product's image. `AGENT_BB`, `container/agent-bb` and
-`compose.agent.bb.yaml`, which were experimental, are gone: a container that
-still sets `AGENT_BB` is refused at start with a line naming `AGENT_CHILD`.
+repository holds no product's image. bb, the optional child that oats-bb
+ships, is documented
+[there](https://github.com/oats-project/oats-bb/blob/main/container/README.md):
+the threads of one bb can write each other's storage, and bb's sandboxed
+modes are not a security boundary. `AGENT_BB`, `container/agent-bb`,
+`compose.agent.bb.yaml` and the relay shipped in 0.69.22 as experimental,
+with no compatibility promise, and are gone without an alias: a container
+that still sets `AGENT_BB` is refused at start with a line naming
+`AGENT_CHILD`.
 
 **A child's loopback ports are reachable by every agent in the container.**
 Whatever the child serves there, with whatever login it does or does not

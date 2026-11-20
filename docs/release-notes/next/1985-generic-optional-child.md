@@ -1,3 +1,12 @@
+## Upgrade
+
+- **If you tried the experimental bb image of 0.69.22** (`container/agent-bb`
+  with `container/agent/compose.agent.bb.yaml`): build the bb image from
+  [oats-project/oats-bb](https://github.com/oats-project/oats-bb) on your
+  team image instead, replace `compose.agent.bb.yaml` in your Compose
+  commands by that repository's fragment, and set no `AGENT_BB`. A
+  container that still sets `AGENT_BB` does not start.
+
 ## Changed
 
 - **The team image's supervisor runs one generic optional child, and knows
@@ -24,11 +33,12 @@
 ## Removed
 
 - **`AGENT_BB`, `container/agent-bb`, `container/agent/compose.agent.bb.yaml`
-  and the bb relay have left this repository.** The bb image, its Compose
+  and the bb relay have left this repository.** They shipped in 0.69.22 as
+  experimental, with no compatibility promise in that release's docs and
+  notes, and are removed without an alias. The bb image, its Compose
   fragment, the relay and their operator docs now live in
   [oats-project/oats-bb](https://github.com/oats-project/oats-bb), where the
   image declares bb as its optional child and its fragment sets
   `AGENT_CHILD`. A container that still sets `AGENT_BB`, to any value, is
   refused at start with a line that names `AGENT_CHILD`, and acceptance
-  refuses it too. They were experimental and never part of a release, so
-  there is no alias.
+  refuses it too.
