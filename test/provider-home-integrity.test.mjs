@@ -5,14 +5,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { execFileSync, spawn as spawnChild } from "node:child_process";
+import { execFileSync, spawn as spawnChild, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { inputInstanceSession, restartInstanceSession, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
 import { applyUpgrade, planUpgrade } from "../lib/instance-upgrade.mjs";
 import { writeLock } from "../lib/packages.mjs";
 import { contentDigest } from "../lib/remote.mjs";
-import { git } from "./helpers/v2-deployment.mjs";
+import { CLI, git } from "./helpers/v2-deployment.mjs";
 import { homeModulesProblem, kernelModuleDir, moduleCopyProblem, providerHomeTrust, pruneModulesStores, readModuleCopy, upgradedComposition } from "../lib/home-integrity.mjs";
 import { FAKE_CAPABILITY, fakeFiles, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
 import { deploymentStatusData } from "../packages/client/deployment-data.mjs";
@@ -272,21 +272,96 @@ test("an upgrade of a provider home exchanges the kernel's copy of each moved mo
   assert.equal(fx.cli(["session", "inspect", "--home", home, "--json"]).json().result.running, true);
 });
 
-test("an upgrade of a provider home is not undone from the home's kept copies, and is not resumed from the home's journal", async (t) => {
-  const { fx, home, plan, apply } = await upgradable(t, "guarded");
-  const before = readFileSync(receiptOf(home), "utf8");
-  // Undo: refused for a provider home, before and after a move.
-  await assert.rejects(plan({ undo: true }), (e) => e.code === "E_UPGRADE_UNDO" && /is on a session provider/.test(e.message));
+test("an undo of a provider home's upgrade names the kernel's previous copies and rows again, in one write, and runs the previous module's hook from the kernel's copy; a second undo has nothing to go back to", async (t) => {
+  const { fx, home, plan, apply, ran } = await upgradable(t, "undone-move");
+  const storesOf = () => readdirSync(dirname(dirname(kernelModuleDir(home, PACKAGED)))).sort();
+  const keptVersion = () => readFileSync(join(kernelModuleDir(home, PACKAGED), "launch.mjs"), "utf8").match(/\d+\.\d+\.\d+/)[0];
+  const first = readJson(receiptOf(home)).composition;
+  // No move yet: nothing to undo.
+  await assert.rejects(plan({ undo: true }), (e) => e.code === "E_UPGRADE_UNDO" && /no previous move to undo/.test(e.message));
+  const planned = await plan();
+  await apply({ planRevision: planned.planRevision, idempotencyKey: "undo-1" });
+  const moved = readJson(receiptOf(home)).composition;
+  // The move kept the pair it replaced: its store is still there, and the receipt names it as previous.
+  assert.deepEqual([keptVersion(), moved.previous.store, moved.previous.capabilityRuntime, storesOf()], ["2.0.0", first.store, first.capabilityRuntime, [first.store, moved.store].sort()]);
+  // The hook an undo runs is the kernel's previous copy's: marked here, in the kernel's store, it leaves its mark.
+  const marker = join(fx.fake, "kernel-previous-hook-ran");
+  const keptHook = join(dirname(dirname(kernelModuleDir(home, PACKAGED))), first.store, PACKAGED, "upgrade.mjs");
+  writeFileSync(keptHook, marking(marker, readFileSync(keptHook, "utf8")));
+  const back = await plan({ undo: true });
+  assert.deepEqual(back.modules.map((m) => m.capability), [PACKAGED]);
+  const done = await apply({ undo: true, planRevision: back.planRevision, idempotencyKey: "undo-2" });
+  assert.equal(done.status, "complete");
+  assert.equal(existsSync(marker), true, "the undo's hook ran from the kernel's previous copy");
+  const after = readJson(receiptOf(home)).composition;
+  assert.deepEqual([after.store, after.modules, after.capabilityRuntime, Object.hasOwn(after, "previous")], [first.store, first.modules, first.capabilityRuntime, false], "the receipt names the first pair again, whole");
+  assert.deepEqual([keptVersion(), storesOf()], ["1.0.0", [first.store]], "the kernel runs the earlier copy, and the newer store is gone, after the write");
+  // The home starts on it: the earlier module's hook runs.
+  await fx.inEnv(() => startInstanceSession(home));
+  assert.equal(ran().at(-1), "1.0.0");
+  assert.deepEqual(rowOf(fx, "undone-move").moduleCopy, { runs: "kernel-copy", homeCopy: "same", differs: [] });
+  await fx.inEnv(() => stopInstanceSession(home, {}));
+  await assert.rejects(plan({ undo: true }), (e) => e.code === "E_UPGRADE_UNDO");
+});
+
+test("an upgrade of a provider home is not resumed from the journal in its home", async (t) => {
+  const { home, plan, apply } = await upgradable(t, "guarded");
   const planned = await plan();
   await apply({ planRevision: planned.planRevision, idempotencyKey: "guard-2" });
-  await assert.rejects(plan({ undo: true }), (e) => e.code === "E_UPGRADE_UNDO");
-  assert.notEqual(readFileSync(receiptOf(home), "utf8"), before);
-  // A journal in the home that says an upgrade is partial: not resumed.
   const journal = join(home, ".oats", "upgrade-receipt.guard-2.json");
   writeFileSync(journal, JSON.stringify({ ...readJson(journal), status: "partial", step: "swap" }));
   await assert.rejects(apply({ planRevision: planned.planRevision, idempotencyKey: "guard-2" }), (e) => e.code === "E_UPGRADE_PARTIAL" && /is not resumed from the journal in its home/.test(e.message));
-  // What the kernel runs after it is still its own copy.
   assert.match(readFileSync(join(kernelModuleDir(home, PACKAGED), "launch.mjs"), "utf8"), /2\.0\.0/);
+});
+
+// The kill rows: an upgrade whose process ends at a seam (as the lifecycle's rows are killed), at
+// the two instants around the receipt's one write.
+for (const [point, version, pair] of [["upgrade:copies-made", "1.0.0", "the old pair"], ["upgrade:receipt-written", "2.0.0", "the new pair"]]) {
+  test(`an upgrade killed at ${point} leaves ${pair}: the receipt's rows name the store the kernel runs from, and the kernel runs that module`, async (t) => {
+    const { fx, home, plan } = await upgradable(t, "killed");
+    const first = readJson(receiptOf(home)).composition;
+    const planned = await plan();
+    const killed = spawnSync(process.execPath, [CLI, "instance", "upgrade", "killed", "--plan-revision", planned.planRevision, "--idempotency-key", "kill-1", "--json"], { cwd: fx.dep, env: { ...fx.env, OATS_TEST_PROVIDER_DIE_AT: point }, encoding: "utf8" });
+    assert.equal(killed.signal, "SIGKILL", killed.stdout + killed.stderr);
+    const composition = readJson(receiptOf(home)).composition;
+    const moved = point === "upgrade:receipt-written";
+    assert.equal(composition.store !== first.store, moved, "the receipt names the new store only once its write was made");
+    // One pair: every hook command of the rows names the store the receipt names, and no other.
+    const stores = readdirSync(dirname(dirname(kernelModuleDir(home, PACKAGED))));
+    for (const row of composition.capabilityRuntime) for (const command of Object.values(row.hooks ?? {})) {
+      assert.equal(command.includes(`/${composition.store}/`), true, command);
+      for (const other of stores.filter((name) => name !== composition.store)) assert.equal(command.includes(`/${other}/`), false, command);
+    }
+    assert.match(readFileSync(join(kernelModuleDir(home, PACKAGED), "launch.mjs"), "utf8"), new RegExp(version.replaceAll(".", "\\.")));
+    assert.equal(homeModulesProblem(home), null, "the kernel holds every copy the receipt names");
+    // The kernel's side is whole: the home is read, and the interrupted upgrade is not resumed.
+    assert.equal(fx.cli(["session", "inspect", "--home", home, "--json"]).json().ok, true);
+    const again = fx.cli(["instance", "upgrade", "killed", "--plan-revision", planned.planRevision, "--idempotency-key", "kill-1", "--json"]).json();
+    assert.deepEqual([again.ok, again.error?.code], [false, "E_UPGRADE_PARTIAL"]);
+    assert.equal(readJson(receiptOf(home)).composition.store, composition.store);
+  });
+}
+
+test("a retire removes the kernel's copies with the home, and one that does not finish leaves the home and the copies; the recovery it keeps holds none of them", async (t) => {
+  const fx = providerDeployment(t, withHooked());
+  const kept = await fx.launch("kept");
+  const store = dirname(dirname(kernelModuleDir(kept.home, HOOKED)));
+  // A retire that cannot finish (a capability's retire hook cannot be run: the kernel's copy of
+  // it is gone): the home stays, and so do the kernel's copies of the others.
+  rmSync(kernelModuleDir(kept.home, HOOKED), { recursive: true });
+  writeFileSync(join(kept.home, "notes-of-mine.md"), "work\n");
+  const refused = fx.cli(["retire", "kept", "--json"]);
+  assert.match(`${refused.stdout}${refused.stderr}`, /the kernel's copy of capability acme\.hooked for kept is not at/);
+  assert.deepEqual([existsSync(kept.home), existsSync(kernelModuleDir(kept.home, FAKE_CAPABILITY))], [true, true]);
+  // One that finishes (forced), with work to recover: the copies go with the home, and the
+  // recovery has none of the kernel's state.
+  const retired = JSON.parse(fx.cli(["retire", "kept", "--force", "--json"]).stdout);
+  assert.equal(retired.retired, "kept", JSON.stringify(retired));
+  assert.deepEqual([existsSync(kept.home), existsSync(store)], [false, false]);
+  const recovery = join(dirname(kept.home), ".oats-retirement", "recovery");
+  const names = existsSync(recovery) ? execFileSync("find", [recovery], { encoding: "utf8" }) : "";
+  assert.equal(names.includes(`${join(".oats-retirement", "modules")}`) || names.includes(basename(store)), false, "the recovery holds no kernel copy");
+  assert.equal(existsSync(receiptOf(kept.home)), true, "the receipt outlives the retire, as before");
 });
 
 test("Git over a provider home's trees runs no hook and no file monitor the repository names: at the spawn, in status, at `oats worktree add` and `remove`, and at the retire", async (t) => {

@@ -982,11 +982,13 @@ otherwise, whose `details.fields` are `backend`, `session.provider` and
 
 The receipt of a provider home also records its **composition**:
 `composition: { version: 1, store: "<name>", modules: { "<capability>": {
-from, commit } }, capabilityRuntime: [ <row> ] }`: which store holds the
+from, commit } }, capabilityRuntime: [ <row> ], previous?: { store, modules,
+capabilityRuntime } }`: which store holds the
 kernel's own copies of the home's modules
 (`<instances>/.oats-retirement/modules/<hash of the home>/<store>/`), which
 modules the home has and where each came from, and the capability rows the
-spawn resolved. For such a home the kernel runs its own copy of a module,
+spawn resolved; `previous`, after an upgrade, is the pair that upgrade
+replaced, which an undo names again. For such a home the kernel runs its own copy of a module,
 never the home's, and reads a capability's settings and hook commands from
 this record alone
 ([What the kernel trusts in a provider home](capabilities.md#what-the-kernel-trusts-in-a-provider-home)).

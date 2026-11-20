@@ -216,9 +216,9 @@ a home's hooks and commands from its own copy and reads their settings from
 the receipt, never from the home's copies or its `instance.json`. A retire
 removes that copy with the home, and `oats instance upgrade` exchanges it
 and rewrites the rows in one write of the receipt, so that a failed upgrade
-leaves the old copy and the old rows together. Such a home's upgrade is not
-undone (`--undo`) and an interrupted one is not resumed: both would rest on
-files in the home. See
+leaves the old copy and the old rows together, and `--undo` names the
+previous pair again. An interrupted upgrade of such a home is not resumed:
+its journal is in the home. See
 [What the kernel trusts in a provider home](capabilities.md#what-the-kernel-trusts-in-a-provider-home).
 
 ### The harness starts normally

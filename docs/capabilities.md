@@ -2318,18 +2318,31 @@ takes no capability setting from it**:
   run. A spawn takes away whatever an earlier home left at its path, the
   receipt and the copies, before anything reads them.
 - **An upgrade** (`oats instance upgrade`) makes the kernel's copies for the
-  upgraded home in a new store beside the old one: each moved module from
-  the home's new copy, once that is found to be the one the upgrade verified
-  against the lock, and every other module from the kernel's own earlier
-  copy. The receipt is then written once, naming the new store and the new
-  rows together, and the old store is removed. **An upgrade that fails
-  before that write leaves the old copy and the old capability rows,
-  together**: the kernel goes on running the earlier version, whatever the
-  home's own copies have become. Such a home's upgrade takes its module set
-  and each module's source from the receipt, is not undone (`--undo`) from
-  the copies kept in the home, and is not resumed from the journal in the
-  home: both are where the agent can write. An upgrade that was interrupted
-  is finished by respawning.
+  upgraded home in a new store beside the old one, before any upgrade hook
+  runs: each moved module from the upgrade's staged copy, once that is found
+  to be the one the upgrade verified against the lock, and every other
+  module from the kernel's own current copy. Each upgrade hook runs from the
+  kernel's copy. The receipt is then written once, naming the new store and
+  the new rows together, and keeping the pair it replaced as `previous`.
+  **An upgrade that fails or is interrupted before that write leaves the old
+  copy and the old capability rows, together**; after it, the new ones.
+  There is no moment at which the rows name one version and the kernel runs
+  another. A store is removed only after a write of the receipt: the one
+  before the previous, once a move is made.
+- **An undo** (`oats instance upgrade --undo`) writes the receipt once,
+  naming the previous store and the previous rows again; the newer store is
+  removed after that write. The hook an undo runs is the kernel's previous
+  copy's. The home's own copies are restored from what the home kept, as
+  for every home: they are the agent's. One previous move is kept, so one
+  undo is possible.
+- **An upgrade that was interrupted is not resumed** for such a home: its
+  journal is in the home, where the agent can write. The kernel's side is
+  whole either way (the old pair, or the new one once the receipt was
+  written); the home's own copies may be half moved, which
+  `moduleCopy.homeCopy` on its status row then says. The remedy is `--undo`
+  where the receipt already names the new pair, or a respawn. The upgrade
+  takes its module set and each module's source from the receipt: a module
+  only the home's record names refuses it.
 - **When the kernel has no copy.** A home whose receipt has no
   `composition` (a kernel from before this spawned it), or whose kernel
   copy of a module is gone, runs nothing of that module. The call is

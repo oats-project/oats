@@ -23,8 +23,8 @@
   - A retire removes the kernel's copy with the home. `oats instance
     upgrade` makes the copies for the upgraded home in a new store and then
     writes the receipt once, naming the new store and the new rows together:
-    an upgrade that fails before that write leaves the old copy and the old
-    rows.
+    an upgrade that fails or is killed before that write leaves the old copy
+    and the old rows, and `--undo` names them again.
   - A provider home's status row, its remote roster row and a start's
     answer gain an optional key beside `modules`, `moduleCopy: {runs:
     "kernel-copy", homeCopy: "same" | "differs", differs}`: which copy the
@@ -63,11 +63,11 @@
   reader already refuses them. The other log still gets its row.
 - **`oats instance upgrade` of a provider home** takes its module set and
   each module's source from the receipt (a module only the home's record
-  names refuses it), is not undone (`--undo` is refused, `E_UPGRADE_UNDO`),
-  and is not resumed after an interruption (`E_UPGRADE_PARTIAL`): the
-  copies it would restore and the journal it would resume from are in the
-  home. An interrupted upgrade of such a home is finished by retiring and
-  respawning it.
+  names refuses it), runs each upgrade hook from the kernel's copy, and
+  keeps the pair it replaced, so that `--undo` names the kernel's previous
+  copies and rows again in one write. It is not resumed after an
+  interruption (`E_UPGRADE_PARTIAL`): the journal it would resume from is
+  in the home. The kernel's side is whole either way; undo it, or respawn.
 
 ## Upgrade notes
 
