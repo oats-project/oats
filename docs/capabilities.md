@@ -2048,9 +2048,10 @@ retires the home, and a provider's call must never be one of them.
   other verb 20 s. The command is killed at its timeout.
 - **Process group:** OATS runs each command in a process group of its own,
   and ends the whole group (SIGKILL) at the timeout, and when the `oats`
-  command that ran a `launch` or an `input` was itself killed while it
-  waited (the next stop, start or retire of the home does it, before it asks
-  for a `stop`). **Run your helpers inside that group and never detach
+  command that ran a `launch`, an `input` or a `stop` was itself killed
+  while it waited (the next stop, start, input or retire of the home does
+  it, before it calls you again). A stop also waits for an `input` that is
+  being sent, up to its timeout, before it asks you to `stop`. **Run your helpers inside that group and never detach
   them** (no `setsid`, no daemon): a helper that escapes it can start a
   session OATS has no record of.
 - stderr is never read.

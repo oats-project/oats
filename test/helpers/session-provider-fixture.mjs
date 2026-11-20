@@ -29,7 +29,9 @@ const req = JSON.parse(readFileSync(0, "utf8"));
 const instance = process.env.OATS_INSTANCE;
 appendFileSync(join(dir, "calls.log"), JSON.stringify({ verb: req.verb, argv: process.argv.slice(2), cwd: process.cwd(), instance, backend: process.env.OATS_BACKEND, event: process.env.OATS_EVENT, capability: process.env.OATS_CAPABILITY, settings: process.env.OATS_SETTINGS, request: req }) + "\\n");
 const control = existsSync(join(dir, "control.json")) ? JSON.parse(readFileSync(join(dir, "control.json"), "utf8")) : {};
-const behaviourOf = (name, verb) => control[name]?.[verb] ?? control[verb] ?? {};
+// A stop's behaviour can be set by what it is asked to stop: "stop:E" (an endpoint), "stop:null" (whatever is rooted at the home).
+const stopKind = req.verb === "stop" ? (req.input.endpoint === null ? "stop:null" : "stop:E") : null;
+const behaviourOf = (name, verb) => (verb === "stop" && stopKind ? control[name]?.[stopKind] ?? control[stopKind] : undefined) ?? control[name]?.[verb] ?? control[verb] ?? {};
 const echo = { schemaVersion: req.schemaVersion, phase: req.phase, capability: req.capability, provider: req.provider, verb: req.verb };
 const open = (endpoint) => ({ label: "Open in fake", url: "${FAKE_SERVER}/thread/" + (endpoint?.threadId ?? "none") });
 const defaults = {

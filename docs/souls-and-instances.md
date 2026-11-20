@@ -1560,19 +1560,19 @@ lists the feature `session-providers`, in this order:
 1. **The stop is recorded** (`stoppedAt` in the home's receipt): from then on
    inspect answers stopped and every input to the home is refused
    `E_SESSION_NOT_RUNNING`, so nothing restarts its session.
-2. **The provider is asked to stop the session**, with the usual grace,
+2. **Inputs that were being sent are waited for.** An input already on its
+   way when the stop was recorded can have the provider restart the session,
+   and once the home is gone nothing could stop it. The retire waits for
+   those inputs to end (at most an input's timeout and 5 s). An input still
+   being sent after that does not hold the retire: its provider command is
+   ended, and the retire goes on, with a warning that names that input's
+   process. An input whose `oats` command was killed is not waited for: its
+   provider command is ended at once. (Every stop of a provider home waits
+   so, a plain `oats instance stop` too.)
+3. **The provider is asked to stop the session**, with the usual grace,
    never escalated. A launch that was sent and never recorded (a command
    killed while it launched) is settled the same way: the provider is asked
    to stop whatever it runs for the home.
-3. **Inputs that were being sent are waited for.** An input already on its
-   way when the stop was recorded can have the provider restart the session,
-   and once the home is gone nothing could stop it. The retire waits for
-   those inputs to end (at most an input's timeout and 5 s) and asks the
-   provider to stop once more. An input still being sent after that does not
-   hold the retire: its provider command is ended, and the retire goes on,
-   with a warning that names that input's process. An input whose `oats`
-   command was killed is not waited for: its provider command is ended
-   before the first stop.
 4. **No process may work in the home**, whatever the provider answered: a
    stop it confirms can still leave one behind (a harness that outlives its
    server for a while), and there is no window whose absence would say

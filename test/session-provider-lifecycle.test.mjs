@@ -213,10 +213,10 @@ const CROSSINGS = [
   ["a stop", {}, (fx, home) => fx.inEnv(() => stopInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
   ["a stop, and the provider refuses the input", { error: { code: "E_SESSION_PROMPT_OPEN", message: "a prompt is open" } }, (fx, home) => fx.inEnv(() => stopInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
   ["a restart, to another endpoint", {}, (fx, home) => fx.inEnv(() => restartInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
-  ["a restart, and the provider reuses the locator (which a provider must not)", { stable: true }, (fx, home) => fx.inEnv(() => restartInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E"]],
-  // A retire waits for the input before its last stop: its own stop, the input's (the home is still
-  // there, stopped), and the retire's once more, after which nothing can restart the session.
-  ["a retire", {}, (fx, home) => { const r = JSON.parse(fx.cli(["retire", home.split("/").pop(), "--json"]).stdout); assert.equal(r.retired, home.split("/").pop(), JSON.stringify(r).slice(0, 300)); }, "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E", "stop:E"]],
+  ["a restart, and the provider reuses the locator (which a provider must not)", { stable: true }, (fx, home) => fx.inEnv(() => restartInstanceSession(home, {})), "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
+  // Every stop waits for the input before it asks the provider: the input's own stop (the home is
+  // still there, stopped), then the verb's, after which nothing can restart the session.
+  ["a retire", {}, (fx, home) => { const r = JSON.parse(fx.cli(["retire", home.split("/").pop(), "--json"]).stdout); assert.equal(r.retired, home.split("/").pop(), JSON.stringify(r).slice(0, 300)); }, "E_SESSION_NOT_RUNNING", ["stop:E", "stop:E"]],
 ];
 for (const [what, behaviour, act, answer, stops] of CROSSINGS) {
   test(`an input in flight while ${what} lands: ${answer}; stops: ${stops.join(", ") || "none"}`, async (t) => {
@@ -424,6 +424,8 @@ const SPAWN_DEATHS = [
   ["mark:receipt-written", [], [], "sent", "stop", ["stop:null"], "planned"],
   ["outcome:receipt-written", [], ["launch"], "resent", "start", ["stop:E", "stop:null", "launch"], "running"],
   ["outcome:record-written", [], ["launch"], "resent", "retire", ["stop:E", "stop:null"], "gone"],
+  // A spawn keeps the mark to its last write of the record: until then no input is admitted.
+  ["spawn:recorded", ["--idempotency-key", "kept-1"], ["launch"], "resent", "stop", ["stop:E", "stop:null"], "stopped"],
   // Between the planned record and the receipt nothing was sent. A directory home has its early
   // receipt, which names the provider: planned. A worktree home has none: a retire takes it.
   ["spawn:record-written", ["--work", "directory"], [], "planned", "start", ["launch"], "running"],
@@ -630,4 +632,122 @@ test("a provider's command that outlasts its timeout is ended with its whole pro
   assert.equal(answered.error?.code, "E_SESSION_UNAVAILABLE", JSON.stringify(answered).slice(0, 300));
   await new Promise((r) => setTimeout(r, 4500));
   assert.equal(existsSync(late), false, "the command did not go on after its timeout");
+});
+
+// ---------------------------------------------------------------- what a settle requires
+// A settle records the home stopped: never over a session at the recorded endpoint that the
+// provider did not confirm stopped, whichever verb settles.
+test("a resent home is not settled while the stop of its recorded session is not confirmed, whichever verb asks", async (t) => {
+  const fx = providerDeployment(t);
+  fx.controls = {};
+  const failing = (name) => { fx.controls = { ...fx.controls, [name]: { "stop:E": { exit: 1 } } }; fx.control(fx.controls); };
+  for (const [state, verb] of [["resent (not stopped)", "stop"], ["resent (stopped)", "stop"], ["resent (not stopped)", "start"]]) {
+    const name = `r${state.includes("not") ? "n" : "s"}${verb}`;
+    const home = await STATES[state](fx, name);
+    failing(name);
+    fx.clearCalls();
+    assert.equal(await answerOf(fx, verb, home), "E_SESSION_STOP_FAILED", `${verb} of ${state}`);
+    assert.deepEqual([callsOf(fx, home).filter((c) => c !== "inspect"), stateOf(home)], [["stop:E"], "resent"], `${verb} of ${state}: the launch stays marked`);
+  }
+  // The host's stop of a home that is stopped already asks nothing of its own: the settle asks.
+  const home = await STATES["resent (stopped)"](fx, "host");
+  const hostStop = () => spawnSync(process.execPath, [HOST_STOP_CHILD, home, "20000"], { cwd: fx.dep, env: fx.env, encoding: "utf8" });
+  failing("host");
+  fx.clearCalls();
+  assert.equal(JSON.parse(hostStop().stdout.trim().split("\n").pop()).code, "E_SESSION_STOP_FAILED");
+  assert.deepEqual([callsOf(fx, home), stateOf(home)], [["stop:E"], "resent"]);
+  const { host: _fixed, ...rest } = fx.controls; fx.controls = rest; fx.control(fx.controls);
+  fx.clearCalls();
+  assert.equal(JSON.parse(hostStop().stdout.trim().split("\n").pop()).ok, true);
+  assert.deepEqual([callsOf(fx, home), stateOf(home)], [["stop:E", "stop:null"], "stopped"]);
+});
+
+test("a retire of a resent home whose recorded session is not confirmed stopped asks for both stops, records nothing, and goes on with a warning", async (t) => {
+  const fx = providerDeployment(t);
+  fx.controls = {};
+  const home = await STATES["resent (not stopped)"](fx, "gone");
+  fx.control({ gone: { "stop:E": { exit: 1 } } });
+  fx.clearCalls();
+  const retired = JSON.parse(fx.cli(["retire", "gone", "--json"]).stdout);
+  assert.deepEqual([retired.retired, existsSync(home), callsOf(fx, home)], ["gone", false, ["stop:E", "stop:null"]], JSON.stringify(retired).slice(0, 400));
+  assert.match(JSON.stringify(retired.warnings), /was not stopped through its session backend/);
+});
+
+// ---------------------------------------------------------------- calls a kernel left behind
+test("an input admitted before a stop, whose kernel is killed while the stop waits for it, is ended before the provider is asked: it restarts nothing afterwards", async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("w");
+  const late = join(fx.fake, "late-input");
+  fx.control({ w: { input: { sleepMs: 3000, late } } });
+  fx.clearCalls();
+  const core = join(HERE, "..", "lib", "core.mjs");
+  const input = spawn(process.execPath, ["--input-type=module", "-e", `const { inputInstanceSession } = await import(${JSON.stringify(core)}); inputInstanceSession(${JSON.stringify(home)}, "a mail");`], { cwd: fx.dep, env: fx.env, stdio: "ignore" });
+  const inputDone = new Promise((resolve) => input.on("close", resolve));
+  for (let i = 0; i < 200 && !fx.verbs("input").length; i++) await new Promise((r) => setTimeout(r, 50));
+  assert.equal(fx.verbs("input").length, 1, "the provider's input is in flight");
+  // The stop records `stoppedAt` and waits for the input, whose kernel is alive.
+  const stop = spawn(process.execPath, [HOST_STOP_CHILD, home, "20000"], { cwd: fx.dep, env: fx.env, stdio: ["ignore", "pipe", "ignore"] });
+  let out = "";
+  stop.stdout.on("data", (chunk) => { out += chunk; });
+  const stopDone = new Promise((resolve) => stop.on("close", resolve));
+  for (let i = 0; i < 200 && stateOf(home) !== "stopped"; i++) await new Promise((r) => setTimeout(r, 50));
+  assert.deepEqual([stateOf(home), fx.verbs("stop").length], ["stopped", 0], "stopped is recorded, and the provider is not asked while the input is in flight");
+  input.kill("SIGKILL");
+  await inputDone;
+  await stopDone;
+  assert.equal(JSON.parse(out.trim().split("\n").pop()).ok, true, out);
+  assert.deepEqual(callsOf(fx, home).filter((c) => c.startsWith("stop")), ["stop:E"]);
+  await new Promise((r) => setTimeout(r, 3500));
+  assert.equal(existsSync(late), false, "the input's command was ended: it did nothing after the stop");
+});
+
+test("a launch whose kernel died before its command's group recorded itself is made void: the leader that comes late runs nothing", async (t) => {
+  const fx = providerDeployment(t);
+  const calls = join(fx.root, "dev", "instances", ".oats-retirement", "provider-calls", "v");
+  const child = spawn(process.execPath, [CLI, ...SPAWN("v")], { cwd: fx.dep, env: { ...fx.env, OATS_TEST_PROVIDER_LEADER_DELAY_MS: "3000" }, stdio: "ignore" });
+  const done = new Promise((resolve) => child.on("close", resolve));
+  const records = () => (existsSync(calls) ? readdirSync(calls) : []);
+  for (let i = 0; i < 400 && !records().some((name) => name.startsWith("launch-")); i++) await new Promise((r) => setTimeout(r, 50));
+  assert.deepEqual(records().map((name) => name.replace(/^launch-\d+-[0-9a-f-]+/, "launch")), ["launch.json"], "the call is recorded, its group not yet");
+  child.kill("SIGKILL");
+  await done;
+  const home = homeOf(fx, "v");
+  fx.clearCalls();
+  assert.equal(await answerOf(fx, "stop", home), "stopped");
+  assert.deepEqual([callsOf(fx), stateOf(home), existsSync(calls)], [["stop:null"], "planned", false]);
+  // The leader wakes after the settle took its records away, and finds no call to run.
+  await new Promise((r) => setTimeout(r, 4000));
+  assert.deepEqual([fx.verbs("launch").length, existsSync(join(fx.fake, "threads")), existsSync(calls)], [0, false, false]);
+});
+
+test("a stop whose kernel was killed while the provider stopped is ended before a resume sends its notice: it does not stop the resumed session", async (t) => {
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("hs");
+  const late = join(fx.fake, "late-stop");
+  fx.control({ hs: { stop: { sleepMs: 3000, late } } });
+  fx.clearCalls();
+  const child = spawn(process.execPath, [HOST_STOP_CHILD, home, "20000"], { cwd: fx.dep, env: fx.env, stdio: "ignore" });
+  const done = new Promise((resolve) => child.on("close", resolve));
+  for (let i = 0; i < 200 && !fx.verbs("stop").length; i++) await new Promise((r) => setTimeout(r, 50));
+  assert.equal(fx.verbs("stop").length, 1, "the provider's stop is in flight");
+  child.kill("SIGKILL");
+  await done;
+  fx.clearCalls();
+  assert.equal(await answerOf(fx, "resume", home), "resumed");
+  assert.deepEqual([callsOf(fx, home), stateOf(home)], [["input"], "running"]);
+  await new Promise((r) => setTimeout(r, 3500));
+  assert.equal(existsSync(late), false, "the stop's command was ended: it did nothing after the resume");
+});
+
+test("a spawn's rollback killed between its two writes leaves the launch marked: unsettled, and a retire takes the home", async (t) => {
+  const fx = providerDeployment(t);
+  fx.control({ rb: { launch: { exit: 1 } } });
+  const died = spawnSync(process.execPath, [CLI, ...SPAWN("rb")], { cwd: fx.dep, env: { ...fx.env, OATS_TEST_PROVIDER_DIE_AT: "rollback:record-written" }, encoding: "utf8" });
+  assert.equal(died.signal, "SIGKILL", `${died.stdout}${died.stderr}`);
+  const home = homeOf(fx, "rb");
+  assert.deepEqual([callsOf(fx, home), stateOf(home), recordOf(home).launched], [["launch", "stop:null"], "sent", false]);
+  fx.control({});
+  fx.clearCalls();
+  assert.equal(await answerOf(fx, "retire", home), "retired");
+  assert.deepEqual([callsOf(fx, home), stateOf(home)], [["stop:null"], "gone"]);
 });

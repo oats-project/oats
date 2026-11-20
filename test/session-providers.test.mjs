@@ -1034,7 +1034,9 @@ test("a spawn whose launch answered, that then fails, and whose session the prov
   fx.clearCalls();
   const retired = JSON.parse(fx.cli(["retire", "elder", "--json"]).stdout);
   assert.equal(retired.retired, "elder", JSON.stringify(retired).slice(0, 400));
-  assert.deepEqual(fx.verbs("stop").map((c) => c.request.input.endpoint), [endpointOf("elder", 1)]);
+  // (The spawn's launch is still marked as sent, a spawn keeping the mark to its last write: the
+  // retire stops the recorded session, then whatever that launch started.)
+  assert.deepEqual(fx.verbs("stop").map((c) => c.request.input.endpoint), [endpointOf("elder", 1), null]);
   assert.equal(existsSync(home), false);
 });
 
