@@ -5352,9 +5352,10 @@ oats instance stop <instance> --plan [--no-recursive] [--home <abs>] [--dir <d>]
   be told; OATS 0.52.0).
 - `midTask`: `true`, `false` or `"unknown"`. A home on a
   [session provider](execution-targets.md#session-providers) whose session
-  is there and reports no activity (`session.state: "unknown"`) reads
-  `"unknown"`, or `true` with changed work: never `true` on the session
-  alone.
+  is there reads what its provider reports of it (the `running` of
+  `oats session inspect`, see [Session providers](#session-providers-feature-session-providers)): `true` when it runs a turn,
+  and `"unknown"` when the provider reports no activity (`running: null`),
+  unless its work has changes, which is `true`.
 - `retiring` and `stopPending`, booleans on every target, say who holds the
   target's home when the plan is read (OATS 0.52.0, feature
   `lifecycle-claim-stop`). `retiring`: a self-retire is scheduled for it

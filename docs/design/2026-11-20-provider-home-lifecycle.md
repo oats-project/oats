@@ -80,9 +80,11 @@ on it (stop, start, restart, retire), under that verb's claim:
      receipt `stoppedAt` set if it was null, `launchSent` removed; the stop
      receipt as an operator's, unless it already says the host's).
 
-*resent* settles to *stopped*, never to *running*: a start asks the provider
-to stop the session at `E` before it marks its launch (below), so once the
-new launch's session is stopped too, nothing runs.
+*resent* settles to *stopped*, never to *running*. Step 1 does not reach the
+session at `E`: it is older than the launch (a start of a lost home stops it
+only after its mark, and may have died before). So **every verb that settles
+a resent home asks `stop {endpoint: E}` first**, and settles only once that
+is confirmed: then neither the old session nor the new launch's runs.
 
 ## A launch (spawn's, start's, restart's)
 
@@ -92,7 +94,7 @@ before its home can be acted on):
 | # | Step | Record written | State after |
 |---|---|---|---|
 | 1 | What can refuse: the plan, the launch hooks, the provider's `check` with the planned launch. (Three checks run right before step 4: the home's roots, the kernel's shim, the host run's admission. One that refuses there leaves the home as it then is: stopped by step 3, or as before the verb) | none | unchanged |
-| 2 | If unsettled: settle | see Settling | planned or stopped |
+| 2 | If unsettled: for a home launched before, the provider's `stop {endpoint: E}` (not confirmed: `E_SESSION_STOP_FAILED`); then settle | see Settling | planned or stopped |
 | 3 | If launched before: stop the session at `E`. A restart of *running* whose session is there records `stoppedAt` and the stop receipt first (the stop rule). A start or a restart of *stopped* asks the provider's `stop {endpoint: E}` again; not confirmed is `E_SESSION_STOP_FAILED`, nothing started. (*Running* whose session is gone: step 4) | receipt, stop receipt (a restart of a session that is there) | stopped, or running-and-gone |
 | 4 | **Mark**: receipt `launchSent: t` (and `launched: true` from planned), then the record's `launched: true` from planned. Then, for *running* whose session is gone, the provider's `stop {endpoint: E}`, and nothing is recorded of it (so a stop that is not confirmed leaves a lost home lost, not stopped as by an operator): not confirmed is `E_SESSION_STOP_FAILED`, the mark taken back (6b), nothing started. After the mark, because an input holds no claim: see the crossings | receipt, then record | sent or resent |
 | 5 | The provider's `launch` | none | sent or resent |
@@ -122,14 +124,16 @@ reads the launch from its receipt and record, never from the marker.
 | **inspect**, **status** (none) | not launched; — | unknown (`E_SESSION_UNAVAILABLE`; row `unreachable`); — | the provider's `inspect`; unknown when it fails; gone reads *lost* | stopped; — | unknown; — |
 | **input** (none) | `E_SESSION_NOT_RUNNING`; — | `E_SESSION_NOT_RUNNING`; — | `inspect`, then `input` (below) | `E_SESSION_NOT_RUNNING`; — | `E_SESSION_NOT_RUNNING` when `stoppedAt` is set, else `E_SESSION_INPUT_FAILED`; — |
 | **stop** (`stop`) | nothing to stop | settle → planned; answers stopped | the stop rule → stopped | operator's: asks `stop {E}` again, and takes a host's stop as its own. Host's: nothing | as of *running* or of *stopped* by its `stoppedAt` (the stop rule, or `stop {E}` again), then settle → stopped; answers stopped |
-| **start** (`start`) | launch | settle, launch | `inspect`: there → `E_SESSION_RUNNING` or `E_SESSION_UNKNOWN`; gone → launch | launch | settle, launch |
-| **restart** (`start`) | launch | settle, launch | `inspect` (unknown refuses): there → the stop rule, launch; gone → launch | launch | settle, launch |
+| **start** (`start`) | launch | settle, launch | `inspect`: there → `E_SESSION_RUNNING` or `E_SESSION_UNKNOWN`; gone → launch | launch | `stop {E}`, settle, launch |
+| **restart** (`start`) | launch | settle, launch | `inspect` (unknown refuses): there → the stop rule, launch; gone → launch | launch | `stop {E}`, settle, launch |
 | **resume** (`resume`) | `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` | gone → count, then `input` (the notice); there → `E_SESSION_RUNNING` / `E_RESUME_NOT_LOST` | host's stop → `input` (the notice), then `stoppedAt` cleared, then the stop receipt removed → running; operator's → `E_RESUME_NOT_LOST` | `E_SESSION_UNKNOWN` |
 | **retire** (`retire`) | remove | settle, scan, remove | the stop rule, scan, remove | `stop {E}` again, scan, remove | the stop rule, settle, scan, remove |
 
 **The stop rule** (every OATS stop of a *running* home: stop, restart,
-retire, the host's shutdown): receipt `stoppedAt: t` first, then the stop
-receipt, then the provider's `stop {endpoint: E}`. Not confirmed is
+retire, the host's shutdown): an earlier stop's receipt is removed (one a
+resume that died left names this same start, and would make this stop the
+host's), then receipt `stoppedAt: t`, then the stop receipt, then the
+provider's `stop {endpoint: E}`. Not confirmed is
 `E_SESSION_STOP_FAILED` (a retire goes on when no process works in the home,
 with a warning), and the home is *stopped* all the same: from the first
 write on, input is refused whatever the provider does.
@@ -154,8 +158,10 @@ more (the crossing check, below).
 **A verb arrives while another holds the claim.** Stop, start, restart,
 resume and retire take the claim; a second one is refused as busy
 (`E_LIFECYCLE_BUSY`, `E_SESSION_START_BUSY`, …) before any effect. A spawn
-holds the claim from before its home is *planned* on disk until its launch
-is recorded or undone, so the home is never acted on while it launches.
+holds the claim from before its home is *planned* on disk until its last
+write of the home's record (after its launch is recorded) or until its
+launch is undone, so the home is never acted on while it launches, and no
+verb's record is overwritten by the spawn's.
 Reads (inspect, status, the plans) take no claim: they answer the state the
 records spell at that instant, which during a launch is *sent* or *resent*,
 that is, unknown.
@@ -179,7 +185,7 @@ dies before its home has a receipt (the row below):
 | during a launch the provider refused, between the record and the receipt of its unmarking | sent | settles (there is nothing to stop) |
 | during a spawn, between the planned record and the receipt | a directory home: planned (its early receipt names the provider). A worktree home: a planned record and **no receipt**, which is no state of the table: no verb runs on it but a retire | a retire takes it as never launched, after its scan: the mark of a launch is written to the receipt first, so a home with no receipt was never sent one. (A receipt that is there and cannot be used says nothing, and refuses) |
 | during a resume of a home stopped with the host, after its notice | stopped with the host; its session may run again | the sweep sends the notice again; a stop or a start asks `stop {E}` |
-| during that resume, after `stoppedAt` was cleared | running, with the host's stop receipt left | acts on a running home; a later loss of that start is a loss like any other, counted (a stop receipt says the host's stop only beside a receipt that says stopped) |
+| during that resume, after `stoppedAt` was cleared | running, with the host's stop receipt left | acts on a running home; a later loss of that start is a loss like any other, counted (a stop receipt says the host's stop only beside a receipt that says stopped), and a later stop removes that receipt before it records its own |
 
 **An input in flight across a state change.** An input holds no claim and a
 provider restarts a session on it, so the kernel checks after the send, with
