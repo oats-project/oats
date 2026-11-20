@@ -117,6 +117,18 @@ test('bundled Omarchy flag still uses the exact argv value without sending IPC',
   }
 });
 
+test('bundled termWrite accepts the agent view options exactly as the source does', () => {
+  const source = load(read('preload.cjs'), [], false);
+  const built = load(bundle);
+  const h = { id: 1, lease: 'a'.repeat(64) };
+  const call = p => p.worlds.oatsDesktop.termWrite(h, 'agent view input', { answer: true });
+  const expected = call(source);
+  assert.equal(expected.ok, true);
+  assert.ok(source.calls.some(([method, channel]) => method === 'send' && channel === 'term:write'));
+  assert.deepEqual(plain(call(built)), plain(expected));
+  assert.deepEqual(plain(built.calls), plain(source.calls));
+});
+
 test('bundled invocation methods preserve every IPC channel, argument order and result', async () => {
   const p = load(bundle), api = p.worlds.oatsDesktop;
   const methods = {
