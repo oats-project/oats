@@ -460,6 +460,20 @@ test("getting-started: a monorepo host's two setup files are on the one yes, and
   assert.ok(!flat.includes("in pull request <url>"), "the spawn never waits on an open pull request");
 });
 
+test("getting-started: a free plan's upgrade 403 on the rules read counts as no rules, as oats-workspace-config's check does", () => {
+  const flat = skill.replace(/\s+/g, " ");
+  // A private repository on a free plan answers the rules read with 403 "Upgrade to GitHub Pro": the plan has no rulesets, so nothing guards the branch.
+  assert.ok(flat.includes("A 403 from the rules read saying the feature needs an upgrade (\"Upgrade to GitHub Pro or make this repository public\") is not a failure: the repository's plan has no rulesets, so it counts as 0."));
+  const config = readFileSync(new URL("../oats-package/capabilities/oats-setup/skills/oats-workspace-config/SKILL.md", import.meta.url), "utf8").replace(/\s+/g, " ");
+  assert.ok(config.includes("A 403 there saying the feature needs an upgrade means the plan has no rulesets, which counts as `0`."), "the two skills keep one rule for the plan's 403");
+});
+
+test("getting-started: a new workspace's default name is the repository's, the folder's only without one", () => {
+  const flat = skill.replace(/\s+/g, " ");
+  assert.ok(flat.includes("Default: their project's name: its repository's name when it has one, else its folder's (the repository's wins when they differ)"));
+  assert.ok(!flat.includes("(its repository's, or its folder's)"), "no default that leaves the choice open");
+});
+
 test("getting-started: the hand-off is in plain words; what the person may want later goes to the hand-over file", () => {
   const flat = skill.replace(/\s+/g, " ");
   assert.ok(flat.includes(`name no versions (Git's, OATS's or any other), no package sources (a PPA, say) and no internal flags or codes (a "development-channel flag", a "channel-not-connected", say). When you name the setup expert as the Desktop lists it, use its display form, never its instance name. Anything they may want to know later goes in the hand-over file, for the setup expert, not in this message.`));
