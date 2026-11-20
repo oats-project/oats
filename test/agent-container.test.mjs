@@ -1292,6 +1292,8 @@ test("every unknown key, missing key and out-of-grammar value of the declaration
     [d => { delete d.version.file; }, "version.file is missing"],
     // name
     ...["", "Extra", "two words", "a".repeat(21), "extra_child", 7, null, [secret]].map(name => [d => { d.name = name; }, "name must be 1 to 20 lowercase letters, digits or dashes"]),
+    // The base's own role names are reserved: the child's lines must not read as the base's.
+    ...["broker", "sshd", "host-run", "status", "supervisor"].map(name => [d => { d.name = name; }, "name must not be broker, sshd, host-run, status or supervisor"]),
     // command
     ...[[], secret, {0: "/bin/true"}, ["/opt/agent-child/serve", 7], ["/opt/agent-child/serve", "a\0b"], null].map(command => [d => { d.command = command; }, "command must be a non-empty array of strings"]),
     ...[["serve"], ["./serve"], [""], [`${secret}/serve`]].map(command => [d => { d.command = command; }, "command[0] must be an absolute path"]),
@@ -1340,7 +1342,7 @@ test("every unknown key, missing key and out-of-grammar value of the declaration
   const good = (await supervisorFixture(t, {declaration: false})).declared;
   for (const change of [
     d => { delete d.envFromFile; }, d => { d.envFromFile = {}; }, d => { d.env = {}; }, d => { d.env = {_: "", A1_: " spaced value "}; },
-    d => { d.name = "a"; }, d => { d.name = "0-child-with-20-char"; }, d => { d.stopMs = 1000; }, d => { d.stopMs = 8000; }, d => { d.ready.field = "_"; },
+    d => { d.name = "a"; }, d => { d.name = "0-child-with-20-char"; }, d => { d.name = "brokers"; }, d => { d.name = "host"; }, d => { d.name = "sshd-2"; }, d => { d.stopMs = 1000; }, d => { d.stopMs = 8000; }, d => { d.ready.field = "_"; },
     d => { d.listen = [d.listen[0]]; }, d => { d.listen.push(1024, 65535); }, d => { d.command = [d.command[0]]; }, d => { d.ready.url += "?a=1&b=%20"; },
     d => { d.ready.url = `http://127.0.0.1:${d.listen[0]}/`; },
   ]) {

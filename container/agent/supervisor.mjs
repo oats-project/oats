@@ -32,6 +32,9 @@ const writableMounts = ["/state", "/work", "/tmp", "/run", "/outbox", "/dev/shm"
 // What the entrypoint, the image and this switch set; a declaration takes none over.
 const reservedVariables = ["PATH", "HOME", "LD_PRELOAD", "NSS_WRAPPER_PASSWD", "NSS_WRAPPER_GROUP", "NODE_OPTIONS", "AGENT_CHILD"];
 const sshdPort = 2222;
+// What the supervisor's own lines call the base's processes and itself: a
+// child under one of these names would read as a base failure in the log.
+const reservedNames = ["broker", "sshd", "host-run", "status", "supervisor"];
 
 /** The declaration's closed grammar, shared with acceptance. Throws one fixed
  * line that names the key and never holds a value from the file. */
@@ -65,6 +68,7 @@ export function parseChildDeclaration(text) {
   closed(null, declared, ["name", "command", "env", "ready", "listen", "version", "stopMs"], ["envFromFile"]);
   const { name, stopMs, listen } = declared;
   if (typeof name !== "string" || !/^[a-z0-9-]{1,20}$/.test(name)) refuse("name", "must be 1 to 20 lowercase letters, digits or dashes");
+  if (reservedNames.includes(name)) refuse("name", "must not be broker, sshd, host-run, status or supervisor");
   const command = argv("command", declared.command);
   const env = variables("env", declared.env, (variable, value) => {
     if (typeof value !== "string" || value.includes("\0")) refuse("env", `must give ${variable} a string`);

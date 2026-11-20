@@ -703,7 +703,7 @@ every key below is required unless marked, and an unknown key is refused.
 
 | Key | Grammar | Meaning |
 | --- | --- | --- |
-| `name` | 1 to 20 lowercase letters, digits or dashes | What the supervisor's lines call the child, and the value `AGENT_CHILD` must have. |
+| `name` | 1 to 20 lowercase letters, digits or dashes; not `broker`, `sshd`, `host-run`, `status` or `supervisor`, the base's own names in the log | What the supervisor's lines call the child, and the value `AGENT_CHILD` must have. |
 | `command` | A non-empty array of strings; `command[0]` an absolute path that exists and whose real path is outside `/state`, `/work`, `/tmp`, `/run`, `/outbox` and `/dev/shm` | The child's argv, exactly. No shell. A command an agent could replace is refused. |
 | `env` | An object of strings; names match `[A-Z_][A-Z0-9_]*` | Literal variables added to the child's environment. May be `{}`. |
 | `envFromFile` | Optional. An object of variable name to a file directly under `/etc/agent-login/`; names as for `env`, and no name in both | Variables whose value is the file's content, read once at start ([below](#envfromfile)). |
