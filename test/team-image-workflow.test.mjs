@@ -35,23 +35,33 @@ test("team image verification builds the exact PR head and runs real acceptance 
   assert.doesNotMatch(read(".github/workflows/team-image.yml"), /secrets\.|packages: write|pull_request_target/);
 });
 
-test("team image verification builds the bb image from the accepted image and accepts it with its fragment", () => {
+test("team image verification builds the fixture child image from the accepted image and accepts it with its switch", () => {
   const job = workflow("team-image.yml").jobs.verify;
   const accepts = job.steps.map((s, i) => [s, i]).filter(([s]) => s.run === "bash .github/scripts/team-image-accept.sh");
-  assert.equal(accepts.length, 2, "the base image and the bb image each take the same acceptance");
-  const [[base, baseAt], [bb, bbAt]] = accepts;
-  assert.equal(base.env, undefined, "the base acceptance runs without the fragment");
+  assert.equal(accepts.length, 2, "the base image and the fixture child image each take the same acceptance");
+  const [[base, baseAt], [child, childAt]] = accepts;
+  assert.equal(base.env, undefined, "the base acceptance runs without the switch");
   assert.equal(base.id, "accept", "export and digest binding stay on the base image");
-  assert.equal(bb.id, undefined);
-  const build = job.steps.findIndex((s) => s.run?.includes("container/agent-bb"));
-  assert.ok(baseAt < build && build < bbAt, "built after the base is accepted, accepted after it is built");
-  const image = "oats-team-agent-bb:${{ github.event.pull_request.head.sha || github.sha }}";
-  assert.equal(job.steps[build].run, 'docker build --platform linux/amd64 --build-arg "AGENT_IMAGE=$AGENT_IMAGE" --tag "$AGENT_BB_IMAGE" container/agent-bb');
-  assert.deepEqual(job.steps[build].env, { AGENT_BB_IMAGE: image });
-  assert.deepEqual(bb.env, { AGENT_IMAGE: image, AGENT_BB: "1" });
+  assert.equal(child.id, undefined);
+  const build = job.steps.findIndex((s) => s.run?.includes("test/fixtures/agent-child"));
+  assert.ok(baseAt < build && build < childAt, "built after the base is accepted, accepted after it is built");
+  const image = "oats-team-agent-child:${{ github.event.pull_request.head.sha || github.sha }}";
+  assert.equal(job.steps[build].run, 'docker build --platform linux/amd64 --build-arg "AGENT_IMAGE=$AGENT_IMAGE" --tag "$AGENT_CHILD_IMAGE" test/fixtures/agent-child');
+  assert.deepEqual(job.steps[build].env, { AGENT_CHILD_IMAGE: image });
+  assert.deepEqual(child.env, { AGENT_IMAGE: image, AGENT_CHILD: "fixture", AGENT_CHILD_FRAGMENT: "test/fixtures/agent-child/compose.agent.child.yaml" });
+  assert.equal(parseConfigData(read(child.env.AGENT_CHILD_FRAGMENT)).value.services.agent.environment.AGENT_CHILD, child.env.AGENT_CHILD, "the fragment sets the name acceptance is told");
+  assert.equal(job.steps.filter((s) => /docker build .* container\/agent$/.test(s.run ?? "")).length, 1, "the base image's context is container/agent alone");
   const script = read(".github/scripts/team-image-accept.sh");
-  assert.match(script, /if \[ "\$\{AGENT_BB:-\}" = 1 \]; then\n  compose\+=\(-f container\/agent\/compose\.agent\.bb\.yaml\)\n/);
-  assert.doesNotMatch(read(".github/workflows/release.yml"), /agent-bb|AGENT_BB/, "publication does not include the bb image");
+  // The fragment is the derived image's, named by the caller: another repository's CI reuses this script unmodified.
+  assert.match(script, /\nif \[ -n "\$\{AGENT_CHILD:-\}" \]; then\n  compose\+=\(-f "\$\{AGENT_CHILD_FRAGMENT:\?[^}"]+\}"\)\nfi\n/);
+  assert.match(script, /\nexport AGENT_PIDS="\$\{AGENT_PIDS:-256\}" AGENT_MEMORY="\$\{AGENT_MEMORY:-1g\}" AGENT_CPUS=1\n/, "a derived image's child may raise the two limits; the base keeps its own");
+  // The fragment is in place before the first start, so every later acceptance (inputs, outbox) runs with the child.
+  assert.ok(script.indexOf("AGENT_CHILD_FRAGMENT") < script.indexOf('"${compose[@]}" up -d'), "the switch precedes the first start");
+  assert.equal(JSON.parse(read("test/fixtures/agent-child/agent-child.json")).name, child.env.AGENT_CHILD, "the switch names the fixture's declared child");
+  // A container with the switch is refused by an acceptance host that was not told of it.
+  assert.match(script, /\n  if env -u AGENT_CHILD container\/agent\/accept\.sh "oats-agent-\$TEAM" --evidence target-amd64 > "\$fixture\/unselected-child\.log" 2>&1; then\n    echo [^\n]+\n    exit 1\n  fi\n  grep -F 'AGENT_CHILD is set in the container' "\$fixture\/unselected-child\.log"\n/);
+  for (const name of [".github/workflows/team-image.yml", ".github/scripts/team-image-accept.sh"]) assert.doesNotMatch(read(name), /bb/i, name + " names no product's image");
+  assert.doesNotMatch(read(".github/workflows/release.yml"), /agent-child|AGENT_CHILD|agent-bb|AGENT_BB/, "publication includes the base image alone");
 });
 
 test("the shared acceptance fixture runs the image owner's acceptance against Compose", () => {
