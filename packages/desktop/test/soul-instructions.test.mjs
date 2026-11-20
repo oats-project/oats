@@ -1,10 +1,10 @@
-// Spec D (B1): the soul page's Instructions section — the soul's own AGENTS.md from the inspection, in the
-// Contents card's grammar (the shared tree model and reader, contents-reader.mjs).
+// The soul page's instructions (slice 3a): two tabs, Soul instructions (the soul's own AGENTS.md from the inspection)
+// and Composed instructions, each the shared reader (contents-reader.mjs) with its sections listed beside it.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { createSoulInstructions, soulInstructionsPath, soulInstructionsOf, SOUL_INSTRUCTIONS_COPY, OWN } from '../renderer/soul-instructions.mjs';
+import { createSoulInstructions, soulInstructionsPath, soulInstructionsOf, SOUL_INSTRUCTIONS_COPY, OWN, COMPOSED } from '../renderer/soul-instructions.mjs';
 import { createSoulInspector } from '../renderer/soul-inspector.mjs';
 import { setWorkspace, currentWorkspace } from '../renderer/views/common.mjs';
 
@@ -36,45 +36,50 @@ test('the path shown is the file in its repository, never the host cache path', 
   assert.deepEqual(soulInstructionsOf(row({ path: null, instructions: { file: '/x', text: 5, truncated: 'yes' } })), { path: 'AGENTS.md', text: null, truncated: false });
 });
 
-test('section, navigation and default selection: one tree of two sections, "Defined in this soul" with its AGENTS.md open', t => {
+const ownPanel = u => u.$('[role=tabpanel][data-tab=own]');
+const ownReader = u => ownPanel(u).querySelector('.cap-reader-body');
+
+test('section, tabs and default tab: Soul instructions shown, its AGENTS.md under its repository path, its headings listed', t => {
   const u = setup(t); u.section.update(row());
-  const title = u.$('h3.page-section-title');
-  assert.equal(title.firstChild.textContent, 'Instructions'); assert.equal(title.querySelector('.page-section-lead').textContent, 'what its instances are told');
   assert.equal(u.section.element.dataset.section, 'Instructions');
-  assert.ok(u.$('.cap-contents > nav.cap-contents-nav + .cap-contents-reader'), 'the Contents card grammar');
-  const tree = u.$('[role=tree]'); assert.equal(tree.getAttribute('aria-label'), 'Instructions of release-manager');
-  // Two top-level groups named by their headings: the section boundary is the tree's too, not only a drawn rule.
-  const sections = u.$$('[role=tree] > li[role=none] > ul[role=group]');
-  assert.deepEqual(sections.map(g => u.doc.getElementById(g.getAttribute('aria-labelledby')).textContent), ['Defined in this soul', 'Composed for an instance']);
-  assert.deepEqual(sections.map(g => g.parentElement.className), ['soul-section', 'soul-section']);
-  assert.ok(sections[0].querySelector(':scope > [role=treeitem][data-path=own]'), 'its AGENTS.md is the first section\'s');
-  const items = u.$$('[role=treeitem]'); assert.equal(items.length, 1);
-  const [item] = items;
-  assert.equal(item.getAttribute('aria-label'), 'AGENTS.md, souls/release-manager/AGENTS.md');
-  assert.equal(item.getAttribute('aria-selected'), 'true'); assert.equal(item.getAttribute('aria-level'), '1'); assert.equal(item.tabIndex, 0, 'the one tab stop');
-  assert.deepEqual([...item.querySelectorAll('.cap-node-name, .cap-node-file')].map(n => n.textContent), ['AGENTS.md', 'souls/release-manager/AGENTS.md']);
-  assert.equal(u.section.selected, OWN);
-  assert.equal(u.$('.cap-contents-reader').getAttribute('aria-label'), 'Instructions of release-manager');
-  assert.equal(u.$('.cap-reader-path').textContent, 'souls/release-manager/AGENTS.md');
-  assert.equal(u.$('.cap-reader-size').textContent, `${Buffer.byteLength(TEXT)} B`);
-  assert.equal(u.$('.cap-reader-flag'), null);
+  assert.equal(u.section.element.getAttribute('aria-label'), 'Instructions');
+  const tablist = u.$('[role=tablist]'); assert.equal(tablist.getAttribute('aria-label'), 'Instructions');
+  const tabs = u.$$('[role=tab]');
+  assert.deepEqual(tabs.map(x => [x.textContent, x.getAttribute('aria-selected'), x.tabIndex]), [['Soul instructions', 'true', 0], ['Composed instructions', 'false', -1]]);
+  for (const tab of tabs) assert.equal(u.doc.getElementById(tab.getAttribute('aria-controls')).getAttribute('aria-labelledby'), tab.id, 'each tab names its panel');
+  assert.equal(u.section.tab, OWN);
+  assert.equal(ownPanel(u).hidden, false); assert.equal(u.$('[role=tabpanel][data-tab=composed]').hidden, true);
+  assert.equal(ownPanel(u).querySelector('.soul-tab-lead').textContent, SOUL_INSTRUCTIONS_COPY.ownLead);
+  assert.ok(ownPanel(u).querySelector('.soul-doc > nav.soul-doc-nav + .cap-contents-reader'), 'its sections, then the reader');
+  assert.deepEqual([...ownPanel(u).querySelectorAll('.soul-doc-link')].map(b => [b.textContent, b.parentElement.dataset.depth]), [['Release manager', '0'], ['Usage', '1']]);
+  assert.equal(ownPanel(u).querySelector('.cap-contents-reader').getAttribute('aria-label'), 'release-manager: Soul instructions');
+  assert.equal(ownPanel(u).querySelector('.cap-reader-path').textContent, 'souls/release-manager/AGENTS.md');
+  assert.equal(ownPanel(u).querySelector('.cap-reader-size').textContent, `${Buffer.byteLength(TEXT)} B`);
+  assert.equal(ownPanel(u).querySelector('.cap-reader-flag'), null);
   assert.doesNotMatch(u.host.textContent, /\/Users\/someone|abc123/, 'never the host cache path');
-  assert.doesNotMatch(u.host.textContent, /Composed AGENTS|after spawn/, 'without composedInstructions there is no composed view');
-  assert.equal(sections[1].querySelector('[role=treeitem]'), null, 'nor a composed AGENTS.md item: that section holds only notes here');
+  assert.equal(u.$('[role=tabpanel][data-tab=composed] .soul-panel-note').textContent, SOUL_INSTRUCTIONS_COPY.composeAbsent, 'without composedInstructions the tab says why it is empty');
+});
+
+test('a section link scrolls the reader to its heading, below the sticky head', t => {
+  const u = setup(t); u.section.update(row());
+  const reader = scrollable(ownPanel(u).querySelector('.cap-contents-reader'));
+  const usage = ownReader(u).querySelector('h2'); Object.defineProperty(usage, 'offsetTop', { value: 300 });
+  [...ownPanel(u).querySelectorAll('.soul-doc-link')].find(b => b.textContent === 'Usage').click();
+  assert.equal(reader.scrollTop, 300 - 8, 'the heading, just under the head (jsdom: a 0px head)');
 });
 
 test('the file reads like a capability inject: front matter as facts, Markdown, highlighted code with copy', t => {
   const u = setup(t); u.section.update(row());
-  assert.deepEqual(u.$$('.cap-fm th').map(th => th.textContent), ['name', 'description']);
-  assert.equal(u.$('.mdv h1').textContent, 'Release manager');
-  assert.ok(u.$('.mdv pre.md-code .md-copy'), 'code blocks carry the copy button');
+  assert.deepEqual([...ownReader(u).querySelectorAll('.cap-fm th')].map(th => th.textContent), ['name', 'description']);
+  assert.equal(ownReader(u).querySelector('.mdv h1').textContent, 'Release manager');
+  assert.ok(ownReader(u).querySelector('.mdv pre.md-code .md-copy'), 'code blocks carry the copy button');
 });
 
 test('links settle as in Contents: https out through openExternal, a fragment stays in the reader, anything else inert', t => {
   const u = setup(t); u.section.update(row());
-  const links = u.$$('.cap-reader-body a');
+  const links = [...ownReader(u).querySelectorAll('a')];
   assert.deepEqual(links.map(a => a.getAttribute('href')), ['https://example.com/guide', '#usage'], 'the relative, http and mailto links are inert text');
-  assert.match(u.readerText(), /a sibling.*plain.*mail/s, 'their text stays');
+  assert.match(ownReader(u).textContent, /a sibling.*plain.*mail/s, 'their text stays');
   links[0].click(); assert.deepEqual(u.opened, ['https://example.com/guide']);
   links[1].click(); assert.deepEqual(u.opened, ['https://example.com/guide'], 'a fragment never goes out');
 });
@@ -86,48 +91,49 @@ test('untrusted content: no raw HTML, scripts, handlers or images', t => {
 
 test('unreadable and truncated: the reader line, and the head flag worded for the inspection cap', t => {
   const u = setup(t);
+  const text = () => ownReader(u).textContent.trim();
   u.section.update(row({ instructions: { file: '/x/AGENTS.md', text: null, truncated: false } }));
-  assert.equal(u.readerText(), "This soul's AGENTS.md could not be read.");
-  assert.equal(u.$('.cap-reader-path').textContent, 'souls/release-manager/AGENTS.md'); assert.equal(u.$('.cap-reader-size'), null);
+  assert.equal(text(), "This soul's AGENTS.md could not be read.");
+  assert.equal(ownPanel(u).querySelector('.cap-reader-path').textContent, 'souls/release-manager/AGENTS.md'); assert.equal(ownPanel(u).querySelector('.cap-reader-size'), null);
+  assert.equal(ownPanel(u).querySelector('.soul-doc-nav').hidden, true, 'no sections to list');
   u.section.update(row({ instructions: null }));
-  assert.equal(u.readerText(), "This soul's AGENTS.md could not be read.");
+  assert.equal(text(), "This soul's AGENTS.md could not be read.");
   u.section.update(row({ instructions: { file: '/x/AGENTS.md', text: '# Long\n', truncated: true } }));
-  assert.equal(u.$('.cap-reader-flag').textContent, 'Truncated at 200,000 characters');
-  assert.equal(u.$('.cap-reader-size'), null, 'no size for a cut text: it would be the cut size');
+  assert.equal(ownPanel(u).querySelector('.cap-reader-flag').textContent, 'Truncated at 200,000 characters');
+  assert.equal(ownPanel(u).querySelector('.cap-reader-size'), null, 'no size for a cut text: it would be the cut size');
   u.section.update(row({ path: null }));
-  assert.equal(u.$('.cap-reader-path').textContent, 'AGENTS.md', 'no derivable path: just the file name');
-  assert.equal(u.$('[role=treeitem]').getAttribute('aria-label'), 'AGENTS.md'); assert.equal(u.$('.cap-node-file'), null);
+  assert.equal(ownPanel(u).querySelector('.cap-reader-path').textContent, 'AGENTS.md', 'no derivable path: just the file name');
 });
 
-test('keyboard: the shared tree model — one tab stop, Enter/Space keep it open, Home/End, Left/Right on a leaf are not consumed', t => {
+test('keyboard: the tabs are one tab stop; Left/Right, Home and End switch and move focus; other keys are not consumed', t => {
   const u = setup(t); u.section.update(row());
-  const item = u.$('[role=treeitem]'); item.focus();
-  for (const k of ['Enter', ' ', 'Home', 'End', 'ArrowDown', 'ArrowUp']) {
-    const consumed = !u.key(item, k); assert.equal(consumed, true, k);
-    assert.equal(u.doc.activeElement, item, k); assert.equal(item.getAttribute('aria-selected'), 'true', k);
-  }
-  for (const k of ['ArrowLeft', 'ArrowRight', 'a']) assert.equal(u.key(item, k), true, `${k} is not consumed`);
-  assert.equal(item.tabIndex, 0);
-  item.querySelector('.cap-node').click(); assert.equal(u.doc.activeElement, item, 'a click focuses the item');
+  const [own, composed] = u.$$('[role=tab]');
+  own.focus();
+  assert.equal(u.key(own, 'ArrowRight'), false, 'consumed'); assert.equal(u.doc.activeElement, composed); assert.equal(u.section.tab, COMPOSED);
+  assert.deepEqual([own.tabIndex, composed.tabIndex], [-1, 0]);
+  assert.equal(u.key(composed, 'ArrowRight'), false); assert.equal(u.section.tab, OWN, 'it wraps');
+  u.key(own, 'End'); assert.equal(u.section.tab, COMPOSED); u.key(composed, 'Home'); assert.equal(u.section.tab, OWN);
+  for (const k of ['ArrowUp', 'ArrowDown', 'Enter', 'a']) assert.equal(u.key(u.doc.activeElement, k), true, `${k} is not consumed`);
+  composed.click(); assert.equal(u.section.tab, COMPOSED, 'a click switches');
 });
 
-test('repaint stability: unchanged data never rebuilds the tree or reader; hold() keeps focus and both scroll offsets', t => {
+test('repaint stability: unchanged data never rebuilds a reader; hold() keeps focus and every scroll offset', t => {
   const u = setup(t); u.section.update(row());
-  const nav = scrollable(u.$('.cap-contents-nav')), reader = scrollable(u.$('.cap-contents-reader'));
-  const item = u.$('[role=treeitem]'), view = u.$('.cap-reader-body .mdv');
+  const nav = scrollable(ownPanel(u).querySelector('.soul-doc-nav')), reader = scrollable(ownPanel(u).querySelector('.cap-contents-reader'));
+  const link = ownPanel(u).querySelector('.soul-doc-link'), view = ownReader(u).querySelector('.mdv');
   u.section.update(structuredClone(row()));
-  assert.equal(u.$('[role=treeitem]'), item, 'the tree is the same nodes'); assert.equal(u.$('.cap-reader-body .mdv'), view, 'the reader is the same nodes');
-  // A page repaint detaches and re-appends the element: focus (on the item, then in the reader) and offsets survive.
-  for (const focused of [item, reader]) {
+  assert.equal(ownPanel(u).querySelector('.soul-doc-link'), link, 'the section list is the same nodes'); assert.equal(ownReader(u).querySelector('.mdv'), view, 'the reader is the same nodes');
+  // A page repaint detaches and re-appends the element: focus (on a section link, then in the reader) and offsets survive.
+  for (const focused of [link, reader]) {
     focused.focus(); nav.scrollTop = 30; reader.scrollTop = 420;
     const keep = u.section.hold(); u.section.element.remove();
     nav.scrollTop = 0; reader.scrollTop = 0; // what a detach does to a real pane
     u.host.append(u.section.element); u.section.update(row()); keep();
     assert.equal(u.doc.activeElement, focused); assert.equal(nav.scrollTop, 30); assert.equal(reader.scrollTop, 420);
   }
-  // A changed file repaints the reader in place; the tree stays.
+  // A changed file repaints the reader in place.
   u.section.update(row({ instructions: { file: '/x', text: '# Changed\n', truncated: false } }));
-  assert.equal(u.$('[role=treeitem]'), item); assert.equal(u.$('.mdv h1').textContent, 'Changed');
+  assert.equal(ownReader(u).querySelector('.mdv h1').textContent, 'Changed');
 });
 
 /* ── on the soul page ─────────────────────────────────────────────────────── */
@@ -153,7 +159,7 @@ test('soul page: Instructions follows Capabilities; the sidebar inspector and th
   const opened = [];
   const u = page(t, () => inspection('release-manager', '# Hello\n\n[out](https://example.com)\n'), { opened });
   await u.inspector.show(selection('release-manager')); await u.settle();
-  assert.deepEqual(u.sections(), ['Core capabilities', 'Capabilities', 'Instructions']);
+  assert.deepEqual(u.sections(), ['Capabilities', 'Instructions'], 'slice 3a: one list of capabilities, then the instruction tabs');
   assert.equal(u.$('.soul-instructions .mdv h1').textContent, 'Hello');
   u.$('.soul-instructions .mdv a').click(); assert.deepEqual(opened, ['https://example.com'], "through the host's openExternal");
   const side = page(t, () => inspection('release-manager', '# Hello\n'), { layout: 'sidebar' });
@@ -165,7 +171,7 @@ test('soul page: a same-subject Refresh keeps the section; a changed inspection 
   let text = '# One\n', launchNote = null;
   const u = page(t, () => { const v = inspection('release-manager', text); if (launchNote) v.souls[0].description = launchNote; return v; });
   await u.inspector.show(selection('release-manager')); await u.settle();
-  const section = u.$('.soul-instructions'), item = section.querySelector('[role=treeitem]'), reader = scrollable(section.querySelector('.cap-contents-reader'));
+  const section = u.$('.soul-instructions'), item = section.querySelector('[role=tab]'), reader = scrollable(section.querySelector('.cap-contents-reader'));
   const view = section.querySelector('.mdv');
   item.focus();
   await u.inspector.show(selection('release-manager'), { user: true }); await u.settle();

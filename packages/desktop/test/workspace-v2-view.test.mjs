@@ -218,12 +218,8 @@ test('Capabilities: Workspace defaults first, the "i" in the toolbar across repa
   await u.tab('souls');
   assert.equal(u.doc.querySelector('.about-dialog'), null, 'leaving Capabilities closes it');
   assert.notEqual(u.doc.activeElement, info, 'no focus return: the person moved on');
-  // Souls: its own "i" at the end of its toolbar row.
-  const souls = u.doc.querySelector('.souls-bar .ws-info-button');
-  assert.equal(souls.getAttribute('aria-label'), 'About souls'); assert.equal(souls.previousElementSibling.classList.contains('souls-group-by'), true);
-  souls.click(); assert.ok(u.doc.querySelector('.about-dialog'));
-  await u.tab('capabilities');
-  assert.equal(u.doc.querySelector('.about-dialog'), null, 'leaving Souls closes its dialog');
+  // Souls has no "i" (the Desktop UI rework, slice 3a): its first line says what a soul is.
+  assert.equal(u.doc.querySelector('.souls-bar .ws-info-button'), null);
 });
 
 // Back from a capability page lands on the control that opened it: a default (by its focus key) even when the search

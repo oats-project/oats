@@ -58,9 +58,10 @@ The shell has three navigation contexts:
 - **Home** (where a window opens, the Desktop UI rework's slice 2) — what needs you (the agents waiting on you,
   then the running ones) and what you have (a count for each part of the workspace, each opening its
   Workspace tab), Home › Agents (every agent), and a first run for a workspace with no agents yet.
-- **Soul roster** (Workspace › Souls) — searchable soul cards with explicit **Spawn** and
-  **View brain** actions. Brain and markdown artifacts are scoped to this
-  context; the markdown reader is the flagship file surface.
+- **Souls** (Workspace › Souls) — the souls grouped by where they come from, in kind
+  order (`packages/client/soul-role.mjs`), as a searchable grid of cards or a table (`v`); a soul's page shows its
+  facts, its capabilities as one list of rows and its two prompts as two tabs, its skills folded below. Brain and
+  markdown artifacts are scoped to this context; the markdown reader is the flagship file surface.
 
 - `main.mjs` — Electron main: server management (always starts the bundled server,
   never uses one it did not start), IPC `api` proxy, node-pty terminals
@@ -311,8 +312,9 @@ catalog (`soul-catalog.mjs`, over the holding rules of `keyed-catalog.mjs`),
 the row each soul is listed as (`soul-rows.mjs` `soulRows`), the inspect
 boundary and its cache (`inspect-boundary.mjs`, `inspect-cache.mjs`), the gate
 for a soul's composed AGENTS.md and skills (`composed-gate.mjs`), the launch
-vocabulary (`launch-view.mjs`) and what is said about a soul
-(`soul-facts.mjs`, which the page loads). The catalog, the cache and the
+vocabulary (`launch-view.mjs`), what is said about a soul
+(`soul-facts.mjs`, which the page loads) and a soul's kind and list order
+(`soul-role.mjs`, a name rule until OATS reports a role). The catalog, the cache and the
 boundary are factories: a client makes its own, with its own terms and its
 own `exec`, and two of them share nothing. The boundary holds nothing itself,
 so `server/capabilities.mjs` makes one per request around the backend's
