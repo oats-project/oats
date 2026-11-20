@@ -42,7 +42,7 @@
 // smoke a second time that way on the Linux leg, under xvfb-run. No macOS leg
 // runs it (the workflows say why).
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync, statSync, readFileSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, statSync, readFileSync, writeFileSync, mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,6 +52,7 @@ import { runAbiProbe, runBackendProbe, runMainImportsProbe, sharedHomeInventory,
 import { verifyAppSignature } from "./codesign-verify.mjs";
 import { checkLinuxFloor } from "./linux-floor.mjs";
 import { WATCHDOG_MS, PHASE_BUDGET_MS, boundedTail, readDevToolsPort, awaitClose } from "./launch-probe.mjs";
+import { connectProbe, probeSandbox, probeTerminal, probeWorkspace } from "./sandbox-probe.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG = join(HERE, "..");
@@ -368,8 +369,8 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
         // This runtime handles the extraction environment before --appimage-* arguments.
         env.APPIMAGE_EXTRACT_AND_RUN = "1";
       }
-      const args = [`--remote-debugging-port=0`, `--user-data-dir=${userData}`,
-        "--no-sandbox", "--disable-gpu", "--ozone-platform=x11", "--dir", instance ? deployment : userData];
+      const args = [`--remote-debugging-port=0`, "--remote-debugging-address=127.0.0.1", `--user-data-dir=${userData}`,
+        "--disable-gpu", "--ozone-platform=x11", "--dir", instance ? deployment : userData];
       if (instance) args.push("--instance", "smoke-probe");
       // Slice G resource-containment baseline: capture the `oatsdesk-*` tmux
       // viewer count before launch and assert it is RESTORED after the app is
@@ -454,6 +455,22 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
         });
         ws.close();
         if (!String(result).startsWith("SHELL_OK")) throw new Error(`renderer did not reach the shell: ${result}`);
+        if (!instance) {
+          const cdp = await connectProbe(targets.webSocketDebuggerUrl);
+          try {
+            const state = await probeSandbox(cdp);
+            const reloaded = await cdp.evaluate(`new Promise((resolve, reject) => {
+              const until = Date.now() + 15000;
+              function check() {
+                if (window.oatsDesktop && document.querySelectorAll('#nav .nav-item').length) resolve(true);
+                else if (Date.now() >= until) reject(new Error('sandboxed shell did not reload'));
+                else setTimeout(check, 100);
+              } check();
+            })`);
+            if (reloaded !== true) throw new Error('sandboxed shell reload failed');
+            ok(`packaged preload process.sandboxed=${state.sandboxed}, process.contextIsolated=${state.isolated} (CDP call frame)`);
+          } finally { cdp.close(); }
+        }
         // No TCP listener but the smoke's own remote-debugging port, in main or in its backend (Linux /proc).
         if (process.platform === "linux" && !instance) {
           const backendPid = childPidMatching(child.pid, /server\/oats-web\.mjs start/);
@@ -618,6 +635,27 @@ if (process.env.OATS_SMOKE_SKIP_LAUNCH === "1") {
               throw new Error(`${label} stopped launch left Home or opened a tab`);
             }
           }
+        }
+        if (running) {
+          const cdp = await connectProbe(targets.webSocketDebuggerUrl);
+          try {
+            const dropPath = join(root, 'sandbox-drop.txt');
+            writeFileSync(dropPath, 'Sandbox attachment fixture.\n');
+            const terminal = await probeTerminal(cdp, fixtureRow.tmux, dropPath);
+            // Independently read the private server and the inert harness's receipt.
+            let after;
+            const deadline = Date.now() + 10000;
+            do {
+              after = await sourceState();
+              if (after.input.includes(dropPath)) break;
+              await new Promise(resolve => setTimeout(resolve, 100));
+            } while (Date.now() < deadline);
+            if (after.identity !== sourceBefore.identity || !after.input.startsWith(terminal.text) || !after.input.includes(dropPath))
+              throw new Error(`terminal input/drop did not reach the exact fixture source: ${JSON.stringify(after)}`);
+            ok('sandboxed terminal: native typed input reaches the private tmux source, output returns through onTermData, native dropped File yields its disk path and is pasted');
+            await probeWorkspace(cdp, { port, targetId: targets.id, deployment });
+            ok('sandboxed workspace claim, takeover release/answer and unbind round-trip through the packaged preload');
+          } finally { cdp.close(); }
         }
         ok(`packaged ${instance ? "AppImage instance request" : "empty-dir picker"} launched; ${result}`);
       } catch (e) {

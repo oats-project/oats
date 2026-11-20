@@ -24,7 +24,7 @@ module.exports = {
   // and builder config itself stay out of the package (inventory-tested).
   files: [
     "main.mjs",
-    "preload.cjs",
+    "generated/preload.cjs",
     "api-url.mjs",
     "app-menu.mjs",
     "single-instance.mjs",
@@ -45,7 +45,7 @@ module.exports = {
     "remote-target.mjs",
     "terminal-registry.mjs",
     "terminal-attachments.mjs",
-    "terminal-owner.mjs", "terminal-target.mjs", "terminal-io.mjs", "terminal-bridge.cjs",
+    "terminal-owner.mjs", "terminal-target.mjs", "terminal-io.mjs",
     "workspace-registry.mjs",
     "picker-default-path.mjs",
     "login-path.mjs",

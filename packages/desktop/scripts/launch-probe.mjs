@@ -39,6 +39,9 @@ export const PHASE_BUDGET_MS = {
   instanceLaunchCleanup: 70_000,
   launchReady: 90_000,
   cdpEvaluate: 20_000,
+  preloadSandbox: 60_000, // CDP breakpoint/reload of the empty picker, no production probe API
+  terminalBoundary: 60_000, // native input, returned output and disk-backed file drop on the private source
+  workspaceBoundary: 60_000, // second chooser, claim/takeover/release and unbind
 };
 // The stopped fixture retains its own profile and repeats the same bounded launch phases.
 PHASE_BUDGET_MS.stoppedLaunches = ["launchFixture", "instanceLaunchReady", "instanceCdpEvaluate", "instanceObservation",

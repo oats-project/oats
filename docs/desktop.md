@@ -1452,6 +1452,10 @@ unknown or unreported harness shows "?". Sources and licences are in
 
 ## Security posture
 
+- The renderer runs in Electron's sandbox with context isolation enabled and
+  Node integration disabled. Its preload is bundled into one file that
+  requires only `electron`; the `window.oatsDesktop` API and IPC remain the
+  same. Navigation stays locked to the app's renderer and the CSP still applies.
 - The bundled backend listens on a **private socket only the app's main
   process can reach**: a Unix domain socket in a directory of its own, owned
   by you and closed to group and others (under `$XDG_RUNTIME_DIR` on Linux
