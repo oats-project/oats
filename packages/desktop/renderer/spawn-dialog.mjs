@@ -97,6 +97,9 @@ export const spawnDialogCSS = `
 /* Task: several lines; its hint says how the agent is named and which key starts it. */
 .spawn-form .ftask { min-height:88px; resize:vertical; border-radius:8px; line-height:1.5; }
 .spawn-task-hint strong { font-weight:600; font-family:var(--mono,monospace); color:var(--fg); }
+/* Model (in Advanced): its label above its field and suggestions button, as the form's other labels. */
+.spawn-field.spawn-model > label { flex-direction:column; align-items:stretch; gap:var(--title-gap); min-width:0; }
+.spawn-field.spawn-model > label > .spawn-label-text { display:flex; align-items:center; gap:6px; }
 /* Harness: the segmented control (.spawn-seg), the soul's default marked in words. */
 .spawn-harness .spawn-seg { align-self:flex-start; flex-wrap:wrap; max-width:100%; box-sizing:border-box; }
 .spawn-harness-default { margin-left:4px; font-weight:500; }

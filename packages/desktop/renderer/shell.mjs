@@ -2503,7 +2503,9 @@ const palette = createPalette({
     // can never be palette-invisible (review 8441961 nit).
     ...[...NAV, ...NAV_TABS].map((v) => ({ label: `View: ${v.label}`, detail: chordDetail(`stage.${v.name}`), run: () => showStageFocused(v.name) })),
     { label: "Souls: choose a soul to spawn (Workspace › Souls)", detail: chordDetail("app.chooseSoul"), run: () => runAction("app.chooseSoul") },
-    { label: "Souls: quick open…", detail: chordDetail("app.quickOpenSouls"), run: () => runAction("app.quickOpenSouls") },
+    // Quick Open's overlay, until the palette's regrouping folds it into its souls group (slice 4): its key, app.quickOpenSouls,
+    // now opens the New agent form on its soul list (slice 5), so this row names no chord.
+    { label: "Souls: quick open…", run: () => { tabOpenIntents.invalidate(); quickOpen.toggle(); } },
     { label: "File: open read-only…", detail: chordDetail("app.openFile"), run: () => runAction("app.openFile") },
     { label: "Theme: choose…", detail: chordDetail("app.themePicker"), run: () => runAction("app.themePicker") },
     { label: "Theme: cycle White / Solarized / Dark / This computer", detail: chordDetail("app.themeToggle"), run: () => toggleTheme() },
@@ -2572,6 +2574,7 @@ const soulSpawn = {
     const owns = tabOpenIntents.begin();
     // Where the operator was (the picker kept the control they opened it from).
     const origin = surfaceReturn.capture(takePickerFocusReturn(document));
+    const miss = soul ? onMiss : () => ctx.notify("New agent needs a verified OATS CLI for this workspace.");
     let mod;
     try { mod = await import("./views/spawn.mjs"); }
     catch (e) {
@@ -2580,7 +2583,6 @@ const soulSpawn = {
       return;
     }
     if (!owns()) return;
-    const miss = soul ? onMiss : () => ctx.notify("New agent needs a verified OATS CLI for this workspace.");
     mod.preselectSpawn({ ...(soul ?? { soulFirst: true }), ...(miss ? { onMiss: miss } : {}), onDismiss: () => surfaceReturn.restore(origin) });
     showStage("spawn");
   },
