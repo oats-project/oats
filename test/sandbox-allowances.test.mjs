@@ -3,7 +3,7 @@
 // test/session-providers-sandbox.test.mjs.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MAX_SANDBOX_LINES, SETTING_FILE_MAX_BYTES, SETTING_FILE_MAX_HOSTS, ensureSandboxWritePaths, readSettingFileHosts, sandboxAllowances, sandboxDomainsOf, sandboxHostOf, sandboxLaunchInput, sandboxWritePathsRefusal } from "../lib/sandbox-allowances.mjs";
@@ -285,4 +285,27 @@ test("the write paths: a real directory at its own path, made through no link; a
     assert.equal(refusal(() => ensureSandboxWritePaths(pathOf(...parts)))?.code, "E_BACKEND_SANDBOX_HOST", parts.join("/"));
   }
   assert.deepEqual(readdirSync(join(base, "target")), [], "nothing was made through a link");
+});
+
+test("a settingFile is read the same whichever way the caller spells the deployment, and never when it has another name", (t) => {
+  const fx = fileDeployment(t);
+  fx.write("config/bindings.json", BASES);
+  // The deployment reached through a link: what a spawn run with `--dir <the link>` knows it by,
+  // where a start knows it by its real path. An absolute path that spells it either way is the
+  // same file to both.
+  const link = join(fx.base, "deployment-link");
+  symlinkSync(fx.dep, link);
+  const outside = [join(fx.dep, "agents"), join(fx.dep, ".agents", "events")];
+  const hosts = { hosts: ["github.com", "git.example.org", "git.example.org:2222"], skippedValues: 2 };
+  for (const within of [fx.dep, link]) {
+    for (const path of [join(fx.dep, "config", "bindings.json"), join(link, "config", "bindings.json")]) {
+      assert.deepEqual(readSettingFileHosts({ path, pointer: "/bases/*/repository", within, outside }), hosts, `${path} within ${within}`);
+    }
+  }
+  // A link BELOW the deployment is still refused, whichever way the deployment is spelled.
+  symlinkSync(join(fx.dep, "config"), join(fx.dep, "config-link"));
+  assert.match(readSettingFileHosts({ path: join(link, "config-link", "bindings.json"), pointer: "/bases/*/repository", within: fx.dep, outside }).refused, /through a symbolic link/);
+  // A file with a second name (a hard link) is not read: that name could be in a home.
+  linkSync(join(fx.dep, "config", "bindings.json"), join(fx.dep, "agents", "dev", "instances", "one", "mine.json"));
+  assert.deepEqual(fx.read("config/bindings.json"), { unread: `${join(fx.dep, "config", "bindings.json")} has more than one hard link` });
 });
