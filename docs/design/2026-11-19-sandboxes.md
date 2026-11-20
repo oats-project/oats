@@ -199,7 +199,10 @@ The exact order of a routed spawn, with the value each step binds (r2, r3):
    for one a live home holds. Before such a release the provider deletes any copy at
    `/state/seats/<seat-id>/` through the server route. If that deletion cannot be
    confirmed, the entry stays `delivered`, the kept request is deleted (its refusal
-   was terminal), and readiness reports `sandbox-seat-unsettled`. `ok: false` alone is
+   was terminal), and readiness reports `sandbox-seat-unsettled`. The server route's
+   "copy deleted" answer comes from the sandbox, so it is untrusted input: it can
+   release only a seat of that sandbox's own ledger, and a false "deleted" can at
+   worst revoke that sandbox's own member, never another's (r4d). `ok: false` alone is
    never evidence, and the provider reads no field of a refusal beyond its code and
    `unconfirmed`. S1 pins that the routed apply's answer, and its keyed replay, carry
    the new home's `capabilityMeta`; that the routed answer carries the host's refusal
