@@ -62,7 +62,7 @@ teams:                                     # SHARED teams: the same provider tea
   engineering: { description: Platform and release automation, team: "engineering:acme.aweb.ai" }
   reviewers:   { description: Code review }   # declared, not created yet (no `team` id): readiness team-unmapped
 defaultTeam: engineering                   # the workspace's default team; see Teams below
-souls:                                     # which teams each soul may join besides its default
+souls:                                     # each soul's team: its default, and the others it may join
   platform/*: { teams: [reviewers] }
 
 defaults:
@@ -541,13 +541,21 @@ teams:                                   # SHARED teams: the same provider team 
   docs:        { description: Docs rota }       # declared, not created yet: team-unmapped
 defaultTeam: engineering                 # the workspace's fallback default team (a shared label)
 localTeams: false                        # may deployments declare their own teams? (absent: false)
-souls:                                   # per soul pattern: its default team and the other teams it may join
+souls:                                   # the one declaration of each soul's team, per soul or pattern
   "*": { teams: [] }                     # unlisted souls: default only (also what no entry means)
   security-souls/*: { default: security, teams: [engineering] }
   security-souls/incident-responder: { default: security, teams: [engineering, docs] }
   oats.engineering/*: { teams: any }     # any: every shared team of this file
 ```
 
+- **`souls:` is the one declaration of which team a soul belongs to.** An entry's
+  `default` is the team that soul's instances join; its `teams` are the others they
+  may join. A pattern entry (`<member>/*`, `*`) sets them for a set of souls, and a
+  named entry overrides it for one. Nothing else assigns a soul a team: not the
+  soul's own files, and not where it runs. A deployment's local `defaultTeam` is only
+  a fallback for a soul no entry gives a default (below). The sandboxes design
+  ([design record](design/2026-11-19-sandboxes.md), not built yet) places souls in
+  sandboxes without touching this declaration.
 - **Shared teams** (`teams.<label> = { description?, team? }`): a shared team
   without `team` is declared but not created yet (readiness `team-unmapped`):
   its owner creates it with the messaging provider, then commits the id.
@@ -587,8 +595,8 @@ souls:                                   # per soul pattern: its default team an
 
 The default, in order:
 
-1. the soul's `default` from `souls:` (the most specific matching key that
-   sets one);
+1. the soul's `default` from `souls:`, the team its instances join (the most
+   specific matching key that sets one);
 2. else the deployment's `oats-local.yaml` `defaultTeam`, only when
    `localTeams: true`;
 3. else the workspace's `defaultTeam`;

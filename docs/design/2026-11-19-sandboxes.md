@@ -1,5 +1,16 @@
 # Sandboxes: boundaries declared in the workspace, started by `oats sync`
 
+**Amended in r5 (2026-11-20), decided by both sides.** Placement no longer follows a
+team. A sandbox lists the souls it may run and a ceiling on the capabilities they
+compose, and it has no team. A soul's team is declared once, in `souls:`, and
+placement never changes it. Messaging between agents is governed by aweb's policy,
+whichever sandboxes they run in. What can an agent do? That's authorized per team or
+per long-lived principal, by the resource's owner. This replaces the rule "a soul runs
+in sandbox S when its resolved default team is S's team" everywhere below, and with it
+C2's team routes. Items changed in r5 are marked "(r5)". The reviewed behaviour that
+never depended on team placement is unchanged: the keyed replay, proof before a seat
+is released (r4d), one owner of each schedule's clock, and explicit local selection.
+
 **Status:** contracts decided, 2026-11-19. The product owner's side and aweb's maintainers agreed
 C1–C10 and C3b as written at 0849ef12, with aweb's maintainers' four changes, which
 the product owner's side accepted: the registry setting (C3, C6), a keyed `seat` (C4), the receipt of the host's
@@ -37,31 +48,55 @@ content, so they must not reach the engineers' agents, credentials or network.
 
 **Done means:** on a Linux machine with Docker, a workspace that declares one sandbox,
 and a deployment whose local file lists it, `oats sync` builds and starts the sandbox.
-A workspace schedule whose `runsOn` names that machine spawns its soul inside the
-sandbox, with an identity minted on the host. The agent can message only its own team,
-reach only the declared destinations and read only the declared credentials. Retiring
-it removes its identity from the team. Delisting the sandbox stops it and destroys
+A workspace schedule whose `runsOn` names that machine spawns a soul the sandbox lists
+inside it, with an identity minted on the host. The agent reaches only the declared
+destinations and reads only the declared credentials. It messages only as its team,
+its server and aweb's policy allow. For the ingestors that is a closed topology: their
+own team on their own aweb server, with federation outbound off. That's a policy
+configured for that use, not something placement implies (r5). Retiring the agent
+removes its identity from the team. Delisting the sandbox stops it and destroys
 nothing. All of this is shown by a live rehearsal and by the tests pinned in each spec.
 
 ## Decided with the product owner
 
-- **A team is membership and messaging. A sandbox is the boundary** (its local state,
-  credentials and egress). In v1 a team has at most one sandbox, so the two coincide by
-  default. They stay separate primitives: a later layout can split one team across
-  sandboxes by relaxing validation, with no change to the file format and no identity
-  remint (decided 2026-11-19, agreeing to aweb's maintainers' requirement of 2026-11-18).
-- **Credentials in v1 are read-only files** mounted into the sandbox. Every agent in it
-  can read them, which is acceptable with one team per sandbox (decided 2026-11-19).
+- **Five separate decisions (r5).** A team is membership and messaging. A sandbox is a
+  runtime boundary (its local state, mounts and egress). Placement is which sandbox a
+  soul may run in. Identity is who an instance acts as. Authority is what it may do.
+  Each is declared and checked on its own (The design, "Five independent decisions").
+  This replaces "in v1 a team has at most one sandbox, so the two coincide" (decided
+  2026-11-20 by both sides; the product owner's direction, and aweb's maintainers'
+  requirement of 2026-11-18).
+- **The one-team limit is the v1 provider's, not the model's (r5).** The model admits
+  several teams in one sandbox, as co-resident trust the operator accepts. v1's
+  provider, teamctl, serves one team per sandbox, so in practice v1 still runs one
+  team per sandbox. That limit lifts when a provider serves several teams, and C1's
+  reference text and the release notes say so plainly (decided 2026-11-20).
+- **`souls:` is the one declaration of a soul's team (r5).** Its `default` is the team
+  that soul's instances join, and its `teams` the others they may join. A pattern
+  entry sets them for a set of souls. A sandbox places souls and never changes their
+  team (decided 2026-11-20). Whether the key itself gets another name is a separate
+  question, outside this record.
+- **Credential files are a bridge for the whole sandbox (r5).** v1 ships read-only
+  credential files mounted into the sandbox, because the first use has no other path
+  to its tokens. Every process in the sandbox can read them. Read-only stops writes,
+  not disclosure or use. A secret meant for one principal never goes through them
+  (Credentials; decided 2026-11-20, replacing "acceptable with one team per sandbox").
 - **OATS does not create or delete machines in v1.** Sync builds and starts listed
   sandboxes on a machine that already exists. Creating machines comes later, as a
   provider capability (decided 2026-11-19).
+- **Kubernetes is a provider option (r5).** C4 is the contract a Kubernetes provider
+  implements, as Compose through teamctl does. Its qualification and release scope
+  are decided separately (decided 2026-11-20).
 - **Both broker contracts are designed in this effort**: one for secrets, one for
-  connectors (decided 2026-11-18). Credential files remain the way to start.
-- **Messaging isolation is by server:** each isolated team gets its own aweb server
-  with federation outbound off. This needs no aw contract change (decided 2026-11-17).
+  connectors (decided 2026-11-18). The connector broker stays designed only, with no
+  build and no verb until a real provider exists (decided 2026-11-20).
+- **Messaging isolation is by server, when a workload wants it:** an isolated team gets
+  its own aweb server with federation outbound off. This needs no aw contract change
+  (decided 2026-11-17). It's a policy chosen for that workload (the ingestors), not a
+  consequence of placement (r5).
 - **Kept as they are:** the word "team"; the schedule file, with `runsOn` naming the
-  machine and no lease; a sandbox does not list its own souls; there is no workspace
-  list of shared deployments.
+  machine and no lease; there is no workspace list of shared deployments. A sandbox
+  now lists its own souls; only the earlier "automatic team" stays rejected (r5).
 
 ## What exists today, and what this builds on
 
@@ -95,6 +130,29 @@ nothing. All of this is shown by a live rehearsal and by the tests pinned in eac
 
 ## The design
 
+### Five independent decisions (r5)
+
+| Question | Who decides, and how |
+| --- | --- |
+| What runs where? | The shared workspace names sandboxes and the souls each may run, with a ceiling on their capabilities. A machine's local file selects which declared sandboxes it runs, and nothing else. A spawn or a schedule selects a soul; if the soul is placed, it resolves to an eligible sandbox (C2). |
+| What does the runtime isolate? | Each sandbox has its own name, workload, private state, and declared egress and mounts. Several sandboxes may run on one machine. Agents that share readable state, credential files or a process trust boundary are mutually trusted. |
+| Who can communicate? | aweb team membership, service routes, and contact, inbound and federation policy. A sandbox needs egress to a service to reach it. Sharing a sandbox joins no team. Sharing a team neither colocates agents nor gives them each other's local state. |
+| Who is acting? | The identity provider binds each instance to an authenticated principal, resolved per instance from its soul's `souls:` entry, never from its sandbox. |
+| What can the actor do? | The resource's owner grants operations, to a team or to a long-lived principal, and the broker or provider checks them at use. Placement, a capability, membership or an address grants nothing on its own. |
+
+One team per sandbox is a useful starting layout, and tooling may generate it as
+explicit placement. The contract admits the same team in several sandboxes, and
+several teams in one sandbox when the operator accepts that they share one trust
+boundary, subject to each sandbox's egress and the owners' grants. v1's provider
+limits this (C8, "One served team"). The ingestors are the case of a separate sandbox
+combined with a separate team, server and federation policy, chosen for that workload.
+
+**The case a reader can test (r5).** A reviewer and a deployer are in one team and
+placed in two sandboxes. They exchange the messages aweb allows. Each keeps its own
+state, session material and mounts. The reviewer can't use the deployment
+credential, and revoking the deploy grant stops the next deployment without moving
+either agent. The Acceptance section pins this.
+
 ### Who does what
 
 | Piece | Owner | Does |
@@ -106,21 +164,31 @@ nothing. All of this is shown by a live rehearsal and by the tests pinned in eac
 
 ### Placement
 
-A soul runs in sandbox S when its resolved default team is S's team. Otherwise it runs
-on the host, as today. Placement is derived in v1; explicit placement, if it ever comes,
-is declared in the workspace and never in a machine's local file.
+A soul runs in sandbox S when S's `souls` lists it (C1), S is selected for the spawn
+(C2), and this host lists S. Otherwise, a soul that no sandbox lists runs on the host,
+as today, apart from `E_SANDBOX_HOST_AGENT` (C10). Placement never follows a team, and
+a machine's local file never moves a soul: it only chooses which declared sandboxes
+the machine runs (r5, replacing the derived rule "a soul runs in S when its resolved
+default team is S's team").
 
-- On a host that lists S and has it started, a spawn of such a soul (by hand, or by a
-  schedule tick) is routed into S, as a remote spawn through S's server registration.
-  S1 builds on #1912's floor (lane:juan, held): the task goes on stdin, the apply is
-  bound to its preview and keyed, and a host below 0.69.15 is refused. This costs
-  nothing, because the sandbox's kernel must already be the release with `sandboxes`.
-  S1 may be built now, but does not merge before #1912. If #1912 is withdrawn, S1 itself requires the same
-  three properties of the sandbox's kernel, rather than relying on today's fallbacks.
-- On a host that does not list S, the spawn is refused with `E_SANDBOX_NOT_HERE`, naming
-  S and the local key that would list it. A sandboxed soul never falls back to the host.
-- Inside S, its deployment refuses to spawn any soul not placed in S
-  (`E_SANDBOX_PLACEMENT`).
+- On a host that lists the selected sandbox S and has it started, a spawn (by hand, or
+  by a schedule tick) is routed into S, as a remote spawn through S's server
+  registration. S1 builds on #1912's floor (lane:juan, held): the task goes on stdin,
+  the apply is bound to its preview and keyed, and a host below 0.69.15 is refused.
+  This costs nothing, because the sandbox's kernel must already be the release with
+  `sandboxes`. S1 does not merge before #1912. If #1912 is withdrawn, S1 itself
+  requires the same three properties of the sandbox's kernel, rather than relying on
+  today's fallbacks.
+- On a host that does not list S, the spawn is refused with `E_SANDBOX_NOT_HERE`,
+  naming S and the local key that would list it. A placed soul never falls back to
+  the host.
+- **After placement, the provider checks it can serve the instance's messaging
+  context (r5).** Once the workspace's placement has selected S, the provider checks
+  that it can serve the team the instance joins (C6, C8). A context it can't serve
+  fails with a remedy. It never routes the spawn to another sandbox, changes the
+  agent's team or falls back to the host.
+- Inside S, its deployment refuses a spawn of any soul S does not list, and a routed
+  request that names another sandbox (`E_SANDBOX_PLACEMENT`, C3b).
 
 ### The clock
 
@@ -136,9 +204,28 @@ Every instance in a sandbox has its own identity, minted on the host at spawn an
 removed at retire. The team's controller key and team key stay on the host, under the
 operator's account, and never enter the container.
 
+**Whose identity (r5).** The seat binds the instance's own identity kind and messaging
+context, resolved per instance, never from the sandbox's name, a team label or an
+alias. In v1 the one kind a sandbox takes is a local member seat. Its team T is the
+team the instance joins: its soul's resolved default (`souls:`, or the fallbacks
+workspaces.md gives). The kernel resolves T and hands it to the provider in the seat
+plan and the `seat` act (C4). Two kinds stay out of sandboxes in v1, each refused
+before anything is minted, with a remedy:
+
+- **Extra teams** (`join-not-seated`): a join mints a per-team identity from that
+  team's root, and no root enters a sandbox. So a spawn into a sandbox joins its
+  default team only. Seats for extra teams are a later layout.
+- **A resident's grant seat** (`grant-seat-not-sandboxable`): a grant seat calls the
+  resident's custody service over a host-local Unix socket while it runs, not only at
+  mint (oats-aweb's resident and grant-seat docs). That socket must never enter a
+  sandbox, because it serves the resident's root key. A soul whose identity
+  configuration makes it a grant seat is refused in a sandbox until a qualified,
+  revocable remote delegation exists, which is aweb's to design. There is no
+  downgrade from resident to local.
+
 1. Before routing the spawn, the provider mints the instance's identity on the host
-   from the host's root for the sandbox team (`roots[T]`), into a private staging
-   directory. Where the sandbox team's registry is private, the host deployment sets
+   from the host's root for the instance's team (`roots[T]`), into a private staging
+   directory. Where that team's registry is private, the host deployment sets
    `settings.oats.aweb.registry` for the mint (C3).
 2. It delivers the identity's authority files (the same list retained seats copy
    today) and a seat descriptor into the sandbox's state, at
@@ -155,10 +242,11 @@ operator's account, and never enter the container.
 The exact order of a routed spawn, with the value each step binds (r2, r3):
 
 1. The kernel makes the spawn's idempotency key (`spawnKey`) and asks the provider for
-   a seat plan (`plan`, target `seat`, with `instance: {soul, spawnKey}`). The plan is
-   read-only and needs no instance name: it answers the seat ID (derived from
-   `spawnKey`), its path and the `spawnProvider` options. Its `planRevision` fences
-   only the sandbox's provider state and `spawnKey`.
+   a seat plan (`plan`, target `seat`, with `instance: {soul, spawnKey, team}`, where
+   `team` is T, r5). The plan is read-only and needs no instance name: it answers the
+   seat ID (derived from `spawnKey`), its path and the `spawnProvider` options, or
+   refuses a team it can't serve (C8, `team-not-served`). Its `planRevision` fences the
+   sandbox's provider state, `spawnKey` and T.
 2. The kernel runs the remote preview **with those options**. The preview chooses the
    instance name when the caller gave none (a schedule passes `--purpose`, not
    `--name`), and answers `decision.revision`, `D`, the hash of the whole decision
@@ -175,9 +263,12 @@ The exact order of a routed spawn, with the value each step binds (r2, r3):
    `sandbox-pending-stale`, naming the spawn key, never the task. S1 pins a test that
    its content never reaches a receipt, a log or a readiness line.
 4. The kernel runs `seat` with the plan's revision, `spawnKey` and
-   `instance: {name, soul, decision: D}`. The name and `D` are inputs to the mint, not
-   part of the plan's revision. The provider writes the ledger entry (`minting`, with
-   `spawnKey`, `D`, the alias it will mint and the seat ID) before it mints, mints,
+   `instance: {name, soul, team, decision: D, settings}`. `settings` is the preview's
+   composed settings for the capability the seat plan named
+   (`spawnProvider.capability`), passed through unread, so the provider can refuse a
+   seat it must not mint (C6, r5). The name, `D` and `settings` are inputs to the mint,
+   not part of the plan's revision. The provider writes the ledger entry (`minting`, with
+   `spawnKey`, `D`, T, the alias it will mint and the seat ID) before it mints, mints,
    records the certificate ID, delivers, and moves the entry to `delivered`.
 5. The kernel runs the remote apply with `--expect-decision D` and
    `--idempotency-key spawnKey`, from the kept request, with the same provider options
@@ -245,7 +336,7 @@ pins a kill after registration and before the receipt.
 Minting and removing identities need the host's keys, so in v1 the host is the only
 place a sandboxed instance is spawned from, and the host finishes every retire:
 
-- **Spawn inside the sandbox.** The in-sandbox deployment has no root for the team.
+- **Spawn inside the sandbox.** The in-sandbox deployment has no root for any team.
   Its kernel accepts a spawn only when it carries a host-delivered seat (the routed
   spawn's `identity.seat`, C4 and C6). Any other spawn there, by an agent or by hand,
   is refused with `E_SANDBOX_PLACEMENT`, reason `spawn-from-host`, whose remedy is to
@@ -284,6 +375,38 @@ place a sandboxed instance is spawned from, and the host finishes every retire:
   delivery, only step 6 or 7 above settles the seat.
 
 ### Credentials (v1)
+
+**Two routes, with different scopes (r5).**
+
+- **The credential files are a bridge whose scope is the whole sandbox.** The
+  sandbox's reviewed entry in `oats-workspace.yaml`, `sandboxes.<id>.credentials`
+  (C1), is the explicit approval: committing it approves exposing each named file to
+  everything in that sandbox. Every process in the sandbox can read the files.
+  Read-only stops writes, not disclosure or use. The bridge can never provide a
+  per-principal secret, and a secret meant for one principal never goes through it.
+  It ships in v1 because the first use, the knowledge ingestors, has no other path to
+  its tokens: they reach the okf capability only as file settings today.
+- **A per-principal secret goes through aweb's Secrets,** designed while its provider
+  is pending:
+  - A per-principal Secrets grant authorizes a defined operation in its verified
+    team/installation context.
+  - The secret may enter the environment of the designated, isolated runner job for
+    that operation. Its value stays out of the agent's ordinary environment, shared
+    mounts, persistent runtime metadata and results.
+  - A value injected into an agent process is a disclosure to that process, and must
+    be treated according to the actual execution boundary.
+  - The reviewed workspace credential-file entry approves exposure to the whole
+    sandbox trust group, and cannot provide a per-principal secret.
+
+  The sandbox reaches Secrets through the egress base role `secrets`, which teamctl
+  already declares. Egress permits access to the service; it changes neither the
+  grants nor the runtime's disclosure boundary. Per-principal enforcement is marked
+  designed until the provider exists. When it's built, its acceptance covers
+  co-resident agents as well as separate sandboxes (aweb's Secrets design, §4.6 and
+  §9; its runner protocol, §4.4).
+- **Per team:** a team's credentials are a sandbox's files in a sandbox whose souls are
+  all that team's, or a grant to a Secrets role the team's owner assigns. Neither
+  needs a new OATS key. Ordinary membership never grants use.
 
 The workspace names a sandbox's credentials. The host's local file says where each
 value is. The provider mounts each named file read-only at `/run/oats-credentials/<name>`
@@ -386,7 +509,10 @@ Identities section) (r4d), so a self-retire is completed by the next sync even w
 (r3). A pinned test: a self-retire, then an otherwise no-op sync, removes the member.
 
 A sandbox declared in the workspace but not listed locally is never started. A sandbox
-listed earlier and now delisted is stopped, never destroyed. The provider keeps the
+listed earlier and now delisted is stopped, never destroyed: its state and its
+identities are kept. A later schedule tick whose spawn selects it is refused
+(`E_SANDBOX_NOT_HERE`), and no provider receipt implies a retire or the removal of
+compute (r5). The provider keeps the
 last declaration it started each sandbox with in its own state, so a sandbox whose
 workspace entry was removed together with its local listing is still stopped, from
 that record (r1). `oats sync --plan` shows
@@ -406,37 +532,70 @@ then, not here.
 
 ## The contracts (decided)
 
-### C1. Workspace `sandboxes:` (new root key)
+### C1. Workspace `sandboxes:` (new root key; r5)
 
 ```yaml
 teams:
+  eng:         { team: "eng:example.org" }
   ingest-team: { team: "ingest:example.org" }
-souls:
-  knowledge/knowledge-ingestor: { default: ingest-team }
+defaultTeam: eng
+souls:                                       # the one declaration of each soul's team
+  "*": { default: eng }                      # default: the team this soul's instances join
+  knowledge/*: { default: ingest-team }      # a pattern sets it for a set of souls
+  knowledge/knowledge-reviewer: { default: eng, teams: [ingest-team] }   # a deliberate bridge
 sandboxes:
   ingest:
-    team: ingest-team                       # one sandbox per team in v1
-    egress: [model, source, forge]          # closed set, added to the base routes
-    credentials: [sources-read, knowledge-propose]   # names only
+    souls: [knowledge/knowledge-ingestor]    # who may run here; never their team
+    capabilities: [oats.core, oats.aweb, oats.okf]   # a ceiling; [] permits none
+    egress: [model, source, forge]           # closed set, added to the base routes
+    credentials: [sources-read, knowledge-propose]   # names only: a whole-sandbox bridge
     description: Knowledge ingestors         # optional
 ```
 
-- The name matches `^[a-z0-9]$|^[a-z0-9][a-z0-9-]{0,30}[a-z0-9]$`. `team` must be a label in
-  this file's `teams:`, and no other sandbox may name it (v1).
+- **The key** is the sandbox ID, matching `^[a-z0-9]$|^[a-z0-9][a-z0-9-]{0,30}[a-z0-9]$`.
+  Its storage, status, server registration and lifecycle are keyed by that ID and the
+  deployment, never by a team label, a team ID or an agent alias.
+- **`souls`** (required, non-empty) is the workspace's placement allowlist, and the one
+  place it is declared. Each entry is an exact soul reference as `souls:` keys spell a
+  single soul (`<member>/<soul>` or `<package>/<soul>`), never a pattern. Entries are
+  distinct (`duplicate-entry`). It makes a soul eligible to run here, and spawns
+  nothing: spawns and schedules still decide which instances run. A soul may be listed
+  by several sandboxes; C2 says how a spawn chooses. A reference no member or package
+  offers is reported by readiness (`sandbox-soul-unknown`), and a spawn of it is
+  refused (`E_SANDBOX_PLACEMENT`, `soul-unknown`).
+- **`capabilities`** (required) is a ceiling over the fully resolved composition of each
+  instance placed here, including workspace defaults, the soul's own layer and required
+  dependencies. `[]` permits none. A composition that needs a capability outside it is
+  refused at the spawn's preview, before any seat is staged (`E_SANDBOX_PLACEMENT`,
+  `capability-not-admitted`, naming the capability and its reference). The remedy is a
+  workspace soul, or a variant of one, whose composition fits. The runtime never strips
+  a required capability, and never admits unpinned code. The sandbox provider's own
+  capability never composes inside a sandbox (C3b). The image's contents and the
+  egress are separate limits, and choosing software grants nothing.
+- **No team (r5).** A sandbox has no `team` field. `souls:` is the one declaration of
+  each soul's team (Decided with the product owner), and placing a soul never changes
+  it. The `team` field of the earlier, unreleased shape is refused when the file is
+  read (`E_WORKSPACE_SCHEMA`, reason `sandbox-team-field`). The remedy names the
+  migration: the souls whose default team it was go in `souls`, and a `capabilities`
+  ceiling is added, under the same sandbox ID. There's no silent inference from a team.
+- **One served team, in v1 (r5).** The model admits several teams in one sandbox. v1's
+  provider, teamctl, serves one team per sandbox (C8), so in practice v1 runs one team
+  per sandbox. That's the provider's limit, not the model's, and it lifts when a
+  provider serves several teams. C1's reference text and the release notes say so.
 - `egress` is a subset of `{model, source, forge}` (`forge` behind feature
   `sandbox-egress-forge`), because those are the external roles the egress component
-  supports. Adding another destination is a change to the egress
-  component, not a free-form list.
-- `credentials` names match `^[a-z0-9][a-z0-9-]{0,62}$`, and are distinct.
-- **A team not yet created (r2).** A shared team may omit its provider id (declared,
-  not created). A sandbox may name such a team: the workspace stays valid, so other
-  hosts are not refused. Its start refuses (`E_SANDBOX_TEAM`, reason
-  `team-not-created`), and so does a routed spawn, with the existing remedy: its owner
-  runs `oats aweb setup`, then commits the id. The id is never inferred from the label
-  or an active team. Until it is set, C2's checks compare the label.
-- `team` is required. `egress` and `credentials` are optional and default to `[]`;
-  `egress` entries are distinct. A duplicate in either list is refused (reason
-  `duplicate-entry`) (r1).
+  supports. Adding another destination is a change to the egress component, not a
+  free-form list.
+- `credentials` names match `^[a-z0-9][a-z0-9-]{0,62}$`, and are distinct. Committing
+  them approves exposing each file to the whole sandbox (Credentials).
+- `egress`, `credentials` and `description` are optional; the two lists default to
+  `[]`. A duplicate in any list is refused (reason `duplicate-entry`) (r1).
+- **A team not yet created (r2, r5).** A shared team may omit its provider id
+  (declared, not created). A soul whose team has none stays valid, so other hosts are
+  not refused. A routed spawn of it refuses (`E_SANDBOX_TEAM`, reason
+  `team-not-created`), and so does a start whose provider would serve that team (C8),
+  with the existing remedy: its owner runs `oats aweb setup`, then commits the id. The
+  id is never inferred from the label or an active team.
 - It is closed (`additionalProperties: false`), like every workspace block. An older
   kernel refuses the file with `E_WORKSPACE_SCHEMA` and its existing "upgrade OATS"
   hint, which is the error that tells existing deployments what to do.
@@ -450,27 +609,38 @@ sandboxes:
   `oats version --json` on each host lists `sandboxes`.
 - Feature `sandboxes` in `oats version --json`.
 
-### C2. The three ways round a sandbox are refused (aweb's maintainers' edge cases)
+### C2. Choosing a sandbox (r5: replaces the team routes)
 
-All are refused when the workspace file is read, with `E_WORKSPACE_SCHEMA` and a reason
-code:
+A soul's **eligible sandboxes** are the workspace's sandboxes whose `souls` lists it.
+The choice is made from the shared workspace, at the spawn or the schedule, before
+anything happens:
 
-1. **A sandboxed team as a soul's extra team** (`teams: [ingest-team]`): refused, reason
-   `sandboxed-team-not-default`. The `"any"` value means every shared team without a
-   sandbox. An explicitly declared bridge is not in v1.
-2. **A sandboxed team reached through a wildcard or the default:** a `"*"` or
-   `<member>/*` entry whose `default` is a sandboxed team, and a workspace `defaultTeam`
-   that is one, are refused (reason `sandboxed-team-by-wildcard`). A sandboxed team is
-   reached only through a named soul (`<member>/<soul>`).
-3. **A local override:** an `oats-local.yaml` cannot move a sandboxed soul. Local files
-   have no soul-to-team mapping today, and a local `defaultTeam` already loses to a
-   soul's `souls:` default. A local team may not reuse a sandboxed team's label or
-   provider id (reason `sandboxed-team-local`).
-4. **A shared alias (r1):** two shared labels may today name one provider id. A
-   sandboxed team's provider id must be named by exactly one shared label; another
-   shared label with that id is refused (reason `sandboxed-team-alias`). Every check
-   above, and placement, compare provider ids, never labels alone, so two sandboxes
-   cannot name one team through two labels either (reason `sandbox-team-taken`).
+- **None:** the soul is a host soul. It runs on the host as today, apart from
+  `E_SANDBOX_HOST_AGENT` (C10).
+- **Exactly one:** it's inferred.
+- **More than one:** the spawn names its target. That's `oats spawn <soul> --sandbox
+  <id>`, and a `run: spawn` schedule's `sandbox: <id>` field, both new contracts (the
+  CLI, and the schedule file). A spawn without one is refused (`E_SANDBOX_PLACEMENT`,
+  reason `sandbox-ambiguous`, naming the candidates and the flag or field). It's
+  refused even when this host lists only one of the candidates: a local file never
+  chooses a placement.
+- **A named target** that the workspace doesn't declare (`sandbox-unknown`), or that
+  doesn't list the soul (`sandbox-not-eligible`), is refused with
+  `E_SANDBOX_PLACEMENT`. A target this host doesn't list is refused with
+  `E_SANDBOX_NOT_HERE`. Each refusal comes before any effect, and none falls back to
+  the host.
+- `runsOn` still names the one machine that owns a schedule's clock. `sandbox:` names
+  only where its spawn runs.
+
+**Withdrawn (r5).** C2's team routes go: `sandboxed-team-not-default`,
+`sandboxed-team-by-wildcard`, `sandboxed-team-local`, `sandboxed-team-alias` and
+`sandbox-team-taken`. So does the rule that `"any"` excludes sandboxed teams. They
+existed only because placement followed the default team. Now a team reached through
+a wildcard, an extra team or a local default places nothing, and an eligible extra
+membership is never a way to a placement or a grant. Operators who want a narrower
+communication policy configure it on the messaging service and in egress. Messages
+aweb allows can carry data between sandboxes, so separate storage promises no data
+isolation across a permitted conversation.
 
 ### C3. `oats-local.yaml`: `sandboxes` and `credentials` (new root keys)
 
@@ -494,12 +664,14 @@ settings:
 - `sandboxes` lists distinct names that the workspace declares. An unknown name is
   refused (`E_WORKSPACE_SCHEMA`, reason `sandbox-unknown`), a duplicate likewise
   (`duplicate-entry`), and so is a listed sandbox with no `host.name` (reason
-  `sandbox-host-name-required`) (r1).
+  `sandbox-host-name-required`) (r1). The list selects which sandboxes this machine
+  runs, and nothing else: it holds sandbox IDs and infrastructure facts only, and it
+  can't place, move or choose between souls (C2, r5).
 - `credentials` uses the kernel's existing `fromFile` form. A listed sandbox whose
   declared credential has no source here refuses its start, naming the credential.
 - The teamctl file holds infrastructure only (images, network, ports, state directory,
   limits). The provider refuses a file that sets a boundary field the workspace owns
-  (`team.id`, the role booleans `egress.external.source`, `.model` and `.forge`,
+  (`team.id`, which v1's provider derives from the souls the sandbox lists (C8, r5); the role booleans `egress.external.source`, `.model` and `.forge`,
   `aweb.federationOutbound`): boundaries are declared once. The refusal is
   `E_SANDBOX_DEPLOYMENT`, reason `boundary-field`, naming the field (r1). The
   resolvers the external roles need, `egress.external.resolvers`, are host
@@ -509,7 +681,7 @@ settings:
   the workspace. Example: `egress: { external: { resolvers: [1.1.1.1, 9.9.9.9] } }`
   in the teamctl file, with C1's `egress: [model, source, forge]`.
 - **A private registry.** oats.aweb refuses an ambient `AWID_REGISTRY_URL`
-  (awebai/oats-aweb#284), so where the sandbox team's registry is private the setting
+  (awebai/oats-aweb#284), so where the instance's team's registry is private the setting
   is written twice: `settings.oats.aweb.registry` on the host deployment, for the mint
   and for `remove-member` (C6), and the same key in the sandbox's `settings`, which the
   provider writes into the in-sandbox local file. Without the in-sandbox one, the
@@ -521,7 +693,12 @@ The provider writes it into the in-sandbox deployment's local file. It is a cont
 its own because a kernel reads it:
 
 - `self` must name a sandbox the workspace declares. That deployment then spawns only
-  souls placed in that sandbox, and refuses others with `E_SANDBOX_PLACEMENT`.
+  souls that sandbox's `souls` lists, within its `capabilities` ceiling, and refuses
+  others with `E_SANDBOX_PLACEMENT` (r5). A routed request must name the sandbox,
+  soul and composition its preview showed, and its sandbox must equal `self`. `D`
+  already binds the composition, and the `self` check refuses a request that names
+  another sandbox. A request through the sandbox's own deployment can never place a
+  soul on the host or in another sandbox.
 - It may not be combined with `sandboxes:` (a sandbox runs no sandboxes),
   `credentials:` (credentials reach it as mounts only), local `teams:` or local
   `defaultTeam`. Each combination is refused with `E_WORKSPACE_SCHEMA`, reason
@@ -554,20 +731,27 @@ hook that exits nonzero, times out or prints anything but one valid answer is re
 
 ```json
 {"sandboxApi":1,"act":"start","sandbox":"ingest","host":"cloud-1",
- "team":{"label":"ingest-team","id":"ingest:example.org"},
+ "souls":[{"soul":"knowledge/knowledge-ingestor",
+           "team":{"label":"ingest-team","id":"ingest:example.org"}}],
+ "capabilities":["oats.core","oats.aweb","oats.okf"],
  "egress":["model","source"],
  "credentials":[{"name":"sources-read","path":"/srv/…"}],
  "workspace":{"url":"…","commit":"…","lock":"<sha256>"}}
 ```
 
+There's no sandbox-wide `team` (r5). `souls` carries each listed soul with the team
+its instances join, as the kernel resolved it from `souls:`, so a provider that serves
+one team (C8) can check what it would serve. The kernel never derives an identity
+from the sandbox's name, a team label or an alias.
+
 and by act:
 
 | Act | Extra request fields | Answer fields beyond the envelope |
 | --- | --- | --- |
-| `plan` | `target`: `start`, `stop`, `reconcile`, `seat`, `bind` or `release`; for target `seat`, `instance: {soul, spawnKey}`; for `bind` and `release`, the `instance` fields of that act | `planRevision`, `actions: [{step, detail}]`; for target `seat` also `seat: {id, path}` and `spawnProvider: {capability, options: {<key>: <value>}}` |
+| `plan` | `target`: `start`, `stop`, `reconcile`, `seat`, `bind` or `release`; for target `seat`, `instance: {soul, spawnKey, team}` (r5); for `bind` and `release`, the `instance` fields of that act | `planRevision`, `actions: [{step, detail}]`; for target `seat` also `seat: {id, path}` and `spawnProvider: {capability, options: {<key>: <value>}}` |
 | `start`, `stop`, `reconcile` | `planRevision`, `idempotencyKey` | `server`; for `reconcile`, `seats` as in `status` |
-| `status` | none | `server`, `seats: [{seatId, instance, alias, certificateId, state}]` |
-| `seat` | `planRevision`, `idempotencyKey`, `instance: {name, soul, spawnKey, decision}` (`decision` is `D`, the remote preview's `decision.revision`) | `seat: {id, path, alias, certificateId, team}` |
+| `status` | none | `server`, `seats: [{seatId, instance, alias, certificateId, team, state}]` |
+| `seat` | `planRevision`, `idempotencyKey`, `instance: {name, soul, spawnKey, team, decision, settings}` (`decision` is `D`, the remote preview's `decision.revision`; `team` is the team the instance joins; `settings` is the preview's composed settings for the seat's capability, passed unread; r5) | `seat: {id, path, alias, certificateId, team}` |
 | `bind` | `planRevision`, `idempotencyKey`, `instance: {name, spawnKey}`, `apply`: the routed apply's answer as the kernel received it | `seat: {id, certificateId, state}` |
 | `release` | `planRevision`, `idempotencyKey`, `instance: {name, seatId}`, `reason`: `retired` or `spawn-failed` | `seat: {id, certificateId, state}` |
 
@@ -608,7 +792,14 @@ and by act:
 
 - `oats sandbox status [--json]`, `oats sandbox start|stop <name> (--plan | --plan-revision <r> --idempotency-key <k>)`.
 - `oats sandbox status --json` answers
-  `{sandboxApi:1, host, sandboxes:[{name, team:{label,id}, listedHere, state, server, egress, credentials:[{name, source:"present"|"missing"}], problems}]}`.
+  `{sandboxApi:1, host, sandboxes:[{name, souls, capabilities, listedHere, state, server, egress, credentials:[{name, source:"present"|"missing"}], problems}]}`.
+  A sandbox has no `team` (r5): what the sandbox allows (`souls`, `capabilities`) is
+  shown apart from the team each instance actually joined, which is on its seat
+  (`seats[].team`). The answer's readers change with it (below).
+- `oats spawn <soul> --sandbox <id>` selects among a soul's eligible sandboxes, and a
+  `run: spawn` schedule's `sandbox: <id>` does the same (C2, r5). Both are new
+  contracts. `--sandbox` is refused together with `--server`, which names a target of
+  its own (`E_BAD_ARGS`).
 - `oats sandbox start|stop <name> --plan --json` answers
   `{sandboxApi:1, sandbox, act, planRevision, actions}`; the apply answers
   `{sandboxApi:1, sandbox, act, state, server, receipts, problems}`, and a stale
@@ -630,7 +821,10 @@ and by act:
   lists every reader it finds, with file and line, and pins one test per reader feeding
   it an answer with the new fields. If a reader refuses unknown fields, the change is
   not additive: that answer's API version goes up, and the reader changes first, in its
-  own PR.
+  own PR. The sandbox status answer had no released shape, so dropping `team` breaks
+  no release. The two client readers already merged for this effort (#2016, sync's
+  exit; #2021, a spawn refusal's words) read no `team`. S1 checks both against r5's
+  shape, including the new `E_SANDBOX_PLACEMENT` reasons (r5).
 
 ### C6. oats.aweb settings and behaviour
 
@@ -642,8 +836,10 @@ and by act:
 - **The seat descriptor (r2).** The retained route reads its service from the
   source's `workspace.yaml`, which is not an authority file. A delivered seat instead
   carries `seat.json`, written by the host at mint:
-  `{seatApi:1, seatId, spawnKey, service, team, alias, certificateId}`, where `service`
-  is the aweb origin of the sandbox's own server (the egress `aweb` role's origin).
+  `{seatApi:1, seatId, spawnKey, service, team, alias, certificateId}`, where `team` is
+  the team the instance joins and `service` is that team's aweb origin. That origin is
+  one the sandbox's egress `aweb` role admits, and in v1 it's the sandbox's own server
+  (C8, r5).
   The spawn reads its service from that descriptor only, never from `OATS_AWEB_URL` or
   a copied coordination workspace, and checks it: `team` equals the team the spawn
   resolved, `alias` equals the instance name, `spawnKey` equals the apply's key, and
@@ -655,6 +851,18 @@ and by act:
   the descriptor it validates. A missing, malformed or contradictory descriptor
   refuses the spawn (reason `seat-binding`, naming the field). The host's registry pin
   is a separate setting (C3), never the service.
+- **Seats a sandbox doesn't take in v1 (r5),** refused by `seat` before anything is
+  minted, from the `settings` it's handed (step 4):
+  - A spawn into a sandbox that asks to join a team beyond its default (`join=`):
+    `E_SANDBOX_PLACEMENT`, reason `join-not-seated`. The remedy says that extra-team
+    seats are a later layout, and that the soul's other teams stay eligible on the host.
+  - A soul whose identity settings make it a resident's grant seat:
+    `E_SANDBOX_PLACEMENT`, reason `grant-seat-not-sandboxable`. The remedy says to run
+    it on the host, or to remove it from the sandbox's `souls`, until a qualified
+    remote delegation exists. There's no downgrade from resident to local.
+  The provider removes only a membership it minted for a disposable seat and can prove
+  it owns. Stop, restart and removing a sandbox never retire a resident or revoke its
+  other memberships.
 - Retire, for an identity minted by the host for a sandbox: the host runs
   `aw id team remove-member` with the controller key it holds, and reports it, from
   the routed retire or from reconcile (the Lifecycle section). It
@@ -734,8 +942,43 @@ existing Docker-context SSH relay from container.md.
 - teamctl's changes are these three inputs: `agents.credentials`,
   `agents.protectedSourcesFile` and `egress.external.forge`. OATS reads its exit codes
   as they are.
+- **One served team (r5): v1's provider limit, not the model's.** teamctl runs one
+  team's bundle: its aweb server, egress and agent container. So `oats.aweb-sandbox`
+  takes the bundle's team from the souls the sandbox lists (C4's request carries each
+  one's team). It writes it as teamctl's `team.id`, which no host file may set (C3).
+  - **What it refuses:** a start, or a seat, whose souls join more than one team, or
+    whose team's service isn't the bundle's, is refused before any seat:
+    `E_SANDBOX_TEAM`, reason `team-not-served`. The remedy names the teams found and
+    says to place the other team's souls in a sandbox of their own.
+  - **What the limit covers:** only the combinations of membership inside one sandbox.
+    Messaging between agents of one team in separately placed sandboxes stays
+    governed by aweb's policy.
+  - **A separate question:** whether teamctl can run two sandboxes for one team (two
+    bundles, one team's server) is aweb's maintainers' to say. Until they do, the
+    Acceptance case "same team, separate sandboxes" is pending for v1's provider.
+  - A start never mints a team. The provider reaches only the service origins its plan
+    names, with no ambient URL fallback. A runtime that can build only a team bundle
+    reports that limit before it admits a seat, and never claims independent placement
+    it can't deliver.
 
 ### C9. Broker contracts (designed now, built against the first real provider)
+
+**Authority (r5).** Both brokers check the verified actor, its acting team or
+installation context, the operation and resource it is authorized for, and its current
+grant or session scope, plus any approval required. They check at admission and again
+at dispatch, fail closed on missing, ambiguous, expired or revoked authority, and
+record the decision without returning a secret value.
+- **Scope:** team scope is a policy the owner authorizes within that team's
+  installation. Identity scope is a grant to one stable principal, with any required
+  team context still verified. A grant in one team can't be spent in another because
+  the DID matches.
+- **Delegation:** asking a more privileged agent over messaging doesn't authorize it to
+  act for the caller; an explicit delegation must cover the operation.
+- **Revocation and replacement:** revocation denies new dispatches at the applicable
+  fence, though effects already dispatched may complete. Replacing a resident's
+  runtime session keeps its principal without widening its authority.
+- **No fallback:** a missing broker or an unsupported provider is reported as
+  unavailable, never replaced by a shared mounted file.
 
 Both follow aweb's three rules. An agent never reads or exports a value. Approval is a
 state with a reference, and the same request is resubmitted under the same request ID.
@@ -789,7 +1032,9 @@ egress routes only.
 - `sandbox-state-orphaned`: provider state under another deployment key for a
   sandbox this deployment lists (r2);
 - `sandbox-pending-stale`: a kept routed request older than 24 hours, named by its
-  spawn key, never its task (r3).
+  spawn key, never its task (r3);
+- `sandbox-soul-unknown`: a sandbox's `souls` names a soul no member or package
+  offers (r5).
 
 The refusals belong to the acts:
 
@@ -809,29 +1054,49 @@ The refusals belong to the acts:
 | An unkeyed apply carrying `identity.seat` (r3) | the in-sandbox apply | `seat-binding` (oats.aweb), field `spawnKey` |
 | `sandbox-<name>` registered by someone else (r1) | `oats sandbox start`, sync's start | `E_SANDBOX_SERVER`, `server-taken` |
 | `sandbox-<name>` owned by another deployment (r2) | `oats sandbox start`, sync's start | `E_SANDBOX_SERVER`, `server-owned-elsewhere` |
-| The sandbox's team has no provider id yet (r2) | `oats sandbox start`, sync's start, a routed spawn | `E_SANDBOX_TEAM`, `team-not-created` |
+| The team an instance joins, or the team a start would serve, has no provider id yet (r2, r5) | `oats sandbox start`, sync's start, a routed spawn | `E_SANDBOX_TEAM`, `team-not-created` |
+| The sandbox's souls join more than one team, or a team whose service isn't the bundle's: v1's provider limit (r5) | `oats sandbox start`, sync's start, the seat plan | `E_SANDBOX_TEAM`, `team-not-served` |
 | A delivered seat with a missing or contradictory descriptor (r2) | the in-sandbox apply | `seat-binding` (oats.aweb) |
 | No provider, or more than one (r1) | every sandbox act | `E_SANDBOX_PROVIDER`, `none` or `ambiguous` |
-| A sandboxed soul on a host that does not list or run its sandbox | `oats spawn`, a schedule's spawn | `E_SANDBOX_NOT_HERE` |
-| A soul not placed in this sandbox, inside it | the in-sandbox `oats spawn` | `E_SANDBOX_PLACEMENT` |
+| A placed soul whose selected sandbox this host does not list or run | `oats spawn`, a schedule's spawn | `E_SANDBOX_NOT_HERE` |
+| A soul not listed by this sandbox, or a routed request naming another sandbox, inside it (r5) | the in-sandbox `oats spawn` | `E_SANDBOX_PLACEMENT` |
+| Several eligible sandboxes and no `--sandbox` or schedule `sandbox:` (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `sandbox-ambiguous` |
+| A named target that isn't declared, or doesn't list the soul (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `sandbox-unknown` or `sandbox-not-eligible` |
+| A soul reference no member or package offers (r5) | `oats spawn`, a schedule's spawn | `E_SANDBOX_PLACEMENT`, `soul-unknown` |
+| A composition outside the sandbox's `capabilities` ceiling (r5) | the spawn's preview | `E_SANDBOX_PLACEMENT`, `capability-not-admitted` |
+| A join beyond the default team, into a sandbox (r5) | `seat`, before the mint | `E_SANDBOX_PLACEMENT`, `join-not-seated` |
+| A resident's grant seat, into a sandbox (r5) | `seat`, before the mint | `E_SANDBOX_PLACEMENT`, `grant-seat-not-sandboxable` |
+| A sandbox entry with a `team` field (the unreleased shape) (r5) | reading the workspace file | `E_WORKSPACE_SCHEMA`, `sandbox-team-field` |
 
-**Why `E_SANDBOX_HOST_AGENT`.** The controller key and the credential sources sit under
-the account that runs the deployment, because that account mints the seats. A host-side
-agent of the same deployment would run as that account and could read them. So in v1, a
+**Why `E_SANDBOX_HOST_AGENT`.** The controller key, the team roots, the credential
+sources and any resident's custody service sit under the account that runs the
+deployment, because that account mints the seats and serves the residents. A
+host-side agent of the same deployment would run as that account and could read them,
+or call the custody socket (r5). So in v1, a
 deployment that lists a sandbox runs every agent in a sandbox. Agents that belong on the
 host run from another deployment, under another OS user. This replaces checking file
 modes against users, which cannot be proved from inside one account.
 
 ## Left out of v1
 
+Each restriction sits beside the feature it qualifies (the section named), and goes in
+the release notes when that feature ships (r5).
+
 - Creating or deleting machines.
-- Several sandboxes for one team, and explicit placement.
-- A bridge soul between a sandboxed team and another team.
+- **Several teams in one sandbox, with teamctl:** the model admits it, but v1's provider
+  serves one team per sandbox (C8, `team-not-served`).
+- **Seats for extra teams** in a sandbox (Identities, `join-not-seated`).
+- **A resident's grant seat** in a sandbox, until a qualified, revocable remote
+  delegation exists (Identities, `grant-seat-not-sandboxable`).
+- **Kubernetes qualification.** C4 is the contract a Kubernetes provider implements,
+  and v1's provider is Compose through teamctl. A Kubernetes provider is claimed only
+  after the Acceptance section's Kubernetes case passes on an existing cluster, and its
+  release scope is decided separately.
+- **Secrets and connector capabilities:** designed only (C9). Per-principal secrets
+  are enforced once the provider exists (Credentials).
 - Human IDs by default and `oats sandbox adopt`. These wait on aweb's maintainers' decision
   on reversing "strictly opt-in" (#1665). Adoption is specified once
   those are settled.
-- Kubernetes. The provider contract (C4) is platform-neutral, and v1's provider is
-  Compose through teamctl.
 - Publishing the image, and its digest in the lock.
 
 ## Alternatives rejected
@@ -841,7 +1106,20 @@ modes against users, which cannot be proved from inside one account.
   or show.
 - **`hostedBy: everyone` for containers:** Docker could start on a laptop that never
   asked for it.
-- **A sandbox that lists its own souls and gets an automatic team:** rejected by the product owner.
+- **A sandbox that gets an automatic team:** rejected by the product owner. A sandbox
+  listing its own souls was rejected with it at first, then adopted in r5, without the
+  team.
+- **Placement derived from the default team (r1–r4d):** it tied messaging to the
+  runtime boundary, so one team could never span sandboxes, and one sandbox could
+  never hold two teams without changing the model. Replaced in r5 by explicit
+  placement.
+- **The local file choosing between eligible sandboxes (r5 draft):** it let a machine's
+  file decide a placement, which only the shared workspace decides. Replaced by the
+  explicit selector (C2).
+- **An optional `capabilities` list meaning "everything" (r5 draft):** the ceiling is
+  required, so it never has to be guessed.
+- **A `team:` alias for a `souls:` entry's `default`:** two spellings of one key in a
+  closed schema. Left out of this amendment by both sides.
 - **Docker in the kernel:** the kernel stays runtime-neutral; the provider owns
   containers.
 - **The container's own clock beside the host's:** two owners of one schedule.
@@ -851,20 +1129,31 @@ modes against users, which cannot be proved from inside one account.
   only, by its own contract.
 - **A lease service for schedules:** none exists, and `runsOn` already names one host.
 
+## Acceptance (r5)
+
+| Case | What it shows |
+| --- | --- |
+| Same team, separate sandboxes | A reviewer and a deployer in one team, in two sandboxes, exchange the messages aweb allows. Their state, session material and mounts stay separate, and the reviewer can't use the deployment credential. The same holds with cross-team messaging allowed, and with it denied, by aweb's policy. Pending for v1's provider until aweb's maintainers say whether teamctl runs two sandboxes for one team (C8). |
+| Teams independent of the runtime | Changing a soul's default team, or a label's alias, moves no soul. Two teams in one sandbox, accepted as co-resident trust, run on a provider that serves several teams; v1's provider refuses it with `team-not-served`. One team in two sandboxes introduces no second team. |
+| Placement and capability refusals | An ambiguous target, a wrong host, a wrong sandbox, a missing or extra capability, a forged seat binding and an unavailable provider route each fail with the responsible decision and a remedy, before any placement succeeds or usable authority leaks. |
+| Identity apart from the route | Designed while grant seats stay on the host. A grant-backed agent restarts with the same stable DID and a new valid session; one without public inbound reach stays usable as the same principal; an alias match, a wrong team or a stale session can't spend its grant; revocation stops the next dispatch with both sandboxes left in place. |
+| Target and policy | With Compose: start, authorized work, stop, resume and delist, with separate state and one clock. The same contract against an existing Kubernetes cluster, including storage across a workload replacement and a check of the network policy, before that provider is claimed. |
+
 ## Delivery
 
 | Spec | Surface | Lane | Builds first |
 | --- | --- | --- | --- |
-| S1 Kernel: C1, C2, C3, C4's caller, C5, C10, placement and routing | `lib/`, `bin/`, schemas, `docs/` | lane:product | first; built now, merged after #1912's hold lifts |
-| S2 Provider: `oats.aweb-sandbox`, C4's hook, C6, C7, the registry setting (C3) | the oats-aweb package | lane:setup, aweb's maintainers read first | after S1's contract is merged |
+| S1a Kernel, the part placement doesn't touch: C1's shape, C3, C3b, C4's caller and runner, C5's lifecycle and sync, C7, the kept-request custody and replay fence, readiness | `lib/`, `bin/`, schemas, `docs/` | lane:product | first; reuses the reviewed work of #2025 that no team placement touches, merged after #1912's hold lifts |
+| S1b Kernel, placement: C2's selection, the seat's team and settings (C4), C3b's checks, the r5 refusals (C10), the status answer without `team` | `lib/`, `bin/`, schemas, `docs/` | lane:product | after S1a |
+| S2 Provider: `oats.aweb-sandbox`, C4's hook, C6, C7, C8's one served team, the registry setting (C3) | the oats-aweb package | lane:setup, aweb's maintainers read first | after S1b's contract is merged |
 | S3 Credential mount and the `forge` role: C8, the egress component, teamctl's inputs | `container/agent`, and teamctl on aweb's maintainers' side | lane:juan | in parallel with S1 |
 | S4 Broker contracts: C9 docs, then the client verbs | `docs/`, `lib/` | lane:product | after the first real provider |
 
 Each spec carries its own reference pages and a release-notes entry of its own under
 `docs/release-notes/next/` (r1):
 
-- S1: [workspaces.md](../workspaces.md) (`sandboxes:`, the rollout rule, C2's
-  refusals), [configuration.md](../configuration.md) (C3, C3b), [capabilities.md](../capabilities.md)
+- S1a and S1b: [workspaces.md](../workspaces.md) (`sandboxes:`, the rollout rule,
+  C2's selection, and the one-served-team limit stated plainly), [configuration.md](../configuration.md) (C3, C3b), [capabilities.md](../capabilities.md)
   and the manifest schema (the `sandbox` hook, C4), the CLI and JSON pages (C5),
   [servers.md](../servers.md) (the reserved prefix, C7), and readiness (C10).
 - S2: the oats-aweb package's own docs (`identity.seat`, the registry setting,
@@ -873,6 +1162,9 @@ Each spec carries its own reference pages and a release-notes entry of its own u
   teamctl's docs on aweb's maintainers' side.
 - S4: the broker contracts' reference page, when it is built.
 
+Who builds each slice is decided apart from this record, and reviewing the record
+commits no side to building one (r5).
+
 The live rehearsal runs on a disposable Linux Docker host, never on a person's machine.
-It covers every "done means" line, with the egress and boundary probes' receipts kept as
-evidence.
+It covers every "done means" line and the Acceptance cases v1's provider can run,
+with the egress and boundary probes' receipts kept as evidence.
