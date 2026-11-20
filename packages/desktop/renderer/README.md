@@ -2358,13 +2358,15 @@ home's (`packages/client/instance-acts.mjs` `openAct`, reason `no-terminal`);
   answer the restored tab shows the dead tmux pane, which takes no input; holding every
   restored terminal for the roster read would slow every workspace switch;
   `retired-tabs-shell.test.mjs` pins the close). An interactive open from anywhere else (the palette, a view's Open, a
-  launch's `--instance`) says the sentence in a notice, never in an alert.
+  launch's `--instance`) says the sentence in a notice, never in an alert. An open of a
+  selected target (Open in split) speaks only of that target: when its own read holds the
+  home's replacement, it says the identity changed.
 
-The Schedules form keeps a schedule's `backend` when the kernel lists it
-(`packages/client/session-backends.mjs` `sessionBackendNames`: the probe's `sessionBackends` and, for a schedule that
-names a provider, the `sessionProviders` of its soul's inspection, read when Edit is pressed), adding that one option
-to its select; it offers no provider for a new schedule. A backend the kernel does not list is refused as before
-("edit it with the CLI").
+The Schedules form is unchanged: it offers and keeps tmux only, so a schedule whose `backend` is a session
+provider is refused as before ("edit it with the CLI"). `scheduleDraft` takes the backends a form can keep
+(`schedule-read-data.mjs`, "tmux" alone by default) and `packages/client/session-backends.mjs` gives the names
+the kernel lists; a form that keeps a provider's schedule, with the read of its soul's inspection that needs,
+comes with the New agent form's backend choice.
 
 Tests: `provider-rows.test.mjs`, and the A4 cases of `workspace-tab-memory.test.mjs`,
 `retired-tabs.test.mjs` and `instance-tree.test.mjs`.

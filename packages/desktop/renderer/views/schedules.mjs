@@ -9,7 +9,6 @@ import { scheduleDraft, descriptionValid, DESCRIPTION_MAX } from "../schedule-re
 import { localScheduleDefinition, runState } from "../automation-rows.mjs";
 import { mountAutomationsPage, automationDescriptionsSupported } from "./automations.mjs";
 import { cliStatus, onCliChange, cliHeldBack } from "./cli-status.mjs";
-import { sessionBackendNames } from "../../../client/session-backends.mjs";
 
 // Mounted as the Automations stage's Schedules subtab (views/automations.mjs).
 let preselection;
@@ -82,7 +81,7 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   q(".schedule-spawn-options").append(nestedWake.el);
   let alive = true, busy = false, readOk = false, editing = null, formReady = false, opener = null;
   let agents = [], instances = [], original = null, baseline = {}, originalWake = null;
-  let operationRequest = 0, formOperation = 0, mutationOperation = 0, editRequest = 0;
+  let operationRequest = 0, formOperation = 0, mutationOperation = 0;
   // The local verbs need the schedule contract (0.28) on a compatible CLI, and a list that read:
   // nothing changes what the page could not show.
   // The Summary field needs an OATS that writes summaries (feature automation-descriptions, 0.43).
@@ -161,13 +160,6 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
     field("task").value = job?.message || job?.task || "";
     field("purpose").value = job?.purpose || "";
     nestedWake.set(job?.wake);
-    // The backend's choices: the soul's default and tmux, and the edited schedule's own session provider when it
-    // names one (editRow admitted it: the kernel lists it), so the value survives the edit. A new schedule is
-    // offered no provider here.
-    for (const option of [...field("backend").options]) if (option.dataset.provider) option.remove();
-    if (job?.backend && ![...field("backend").options].some(option => option.value === job.backend)) {
-      const option = doc.createElement("option"); option.value = option.textContent = job.backend; option.dataset.provider = "1"; field("backend").append(option);
-    }
     for (const name of ["harness", "model", "backend"]) field(name).value = job?.[name] || "";
     field("yolo").value = job?.yolo === undefined ? "" : String(job.yolo);
     baseline = Object.fromEntries([...form.elements].filter(f => f.name).map(f => [f.name, f.value]));
@@ -191,27 +183,9 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
       if (owns(token, gen)) { q(".schedule-form-error").textContent = "Could not read targets for this form. Reopen it to retry."; render(); }
     }
   }
-  /** Edit a local schedule from its list row: the stored definition, if this editor can preserve it.
-   * Its backend is kept when the kernel lists it: its own (the probe's `sessionBackends`), or a session provider
-   * of the schedule's soul, read from that soul's inspection when the schedule names one (one read, under a
-   * latest-intent ticket: a later Edit, a form opened meanwhile, a change to the list begun, a read of the list
-   * begun (Refresh: the definition held here may be an old one) or a Delete asked
-   * meanwhile, a workspace switch or a closed page drops it, whether the read answers or fails).
-   * A read that fails lists no provider, so the schedule is refused as one this editor cannot keep. */
-  async function editRow(row) {
-    const definition = localScheduleDefinition(row);
-    const request = ++editRequest, formToken = formOperation, mutation = mutationOperation, gen = workspaceGeneration();
-    let backends = sessionBackendNames(cli());
-    if (definition?.kind === "spawn" && typeof definition.backend === "string" && definition.backend && !backends.includes(definition.backend)
-      && typeof definition.agent === "string" && typeof definition.agentsRoot === "string") {
-      let inspection = null;
-      try { inspection = await postJson(ctx, `/api/capabilities${wsQuery()}`, { action: "inspect", selector: { soul: definition.agent, agentsRoot: definition.agentsRoot } }); }
-      catch { inspection = null; }
-      if (!alive || request !== editRequest || formToken !== formOperation || mutation !== mutationOperation || gen !== workspaceGeneration()
-        || busy || !deleteSheet.hidden) return;
-      backends = sessionBackendNames(cli(), inspection);
-    }
-    const draft = scheduleDraft(definition, { backends });
+  /** Edit a local schedule from its list row: the stored definition, if this editor can preserve it. */
+  function editRow(row) {
+    const draft = scheduleDraft(localScheduleDefinition(row));
     if (!draft) { notice(`${row.name} carries settings this editor cannot keep; edit it with the CLI.`); return; }
     void openForm(draft, null);
   }
@@ -293,7 +267,6 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   let deleting = null, deleteOpener = null;
   function askDelete(row) {
     if (busy || !canMutate()) return;
-    ++editRequest; // an Edit still reading its soul's inspection opens nothing over this, or after it
     deleting = row.name; deleteOpener = doc.activeElement;
     q("#schedule-delete-text").textContent = `${row.name} is removed from this computer and stops running here.`;
     deleteSheet.hidden = false; q(".schedule-delete-cancel").focus();
@@ -327,7 +300,6 @@ export function createSchedulesView(el, ctx, { cli = cliStatus, subscribeCli = o
   };
   const page = mountAutomationsPage(q(".schedule-stage"), ctx, "schedule", call => (automations = call, {
     read: async () => {
-      ++editRequest; // a read of the list that starts: an Edit still reading its soul's inspection holds the old definition, and opens nothing
       try { const list = await call({ kind: "schedule", action: "list" }); readOk = true; return list; }
       catch (error) { readOk = false; throw error; }
       finally { render(); }

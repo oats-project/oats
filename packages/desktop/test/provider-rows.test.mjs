@@ -256,3 +256,35 @@ test("an interactive open of a provider row says where it runs in a notice, neve
   await open("nobody");
   assert.deepEqual(said.alert, ['unknown instance "nobody"']);
 });
+
+test("an open of a selected target (Open in split) whose own read holds the home's replacement on a session provider says the identity changed, never the replacement's sentence; the same incarnation moved says where it runs", async () => {
+  const flowSource = shell.match(/async function openTerminalTabFlow\(ref, notify, options = \{\}\) \{[\s\S]*?\n\}/)?.[0];
+  const openSource = shell.match(/async function openTerminalTab\(ref, \{[\s\S]*?\n\}/)?.[0];
+  // The row the menu was drawn for: a tmux row; the target the menu captured from it.
+  const chosen = local("a", { tmux: { session: "oats" } }), expected = instanceActionTarget("A", chosen);
+  assert.ok(expected, "the fixture's target");
+  const run = async (rows) => {
+    const said = { notice: [], alert: [] }, inner = [];
+    const c = {
+      tabs: new Map(), activeTab: null, pendingTerms: new Set(), panelReads: 0, split: null, connectionGeneration: 0, shownRoster: null, contextRosterGen: 0,
+      currentWorkspace: () => "A", workspaceGeneration: () => 0, terminalOpening: null,
+      setSidebarMode() {}, setNavActive() {}, refreshContextRoster() {}, instanceSplitPlan() {}, instanceSplitIdentity() {}, splitOpenState() {},
+      otherIncarnation: () => false, terminalOrigin: () => ({ incarnation: null }), sameInstanceActionTarget,
+      api: async () => ({ instances: rows }), resolveTerminalOpen: treeView.resolveTerminalOpen,
+      whenKeyFree: async () => {}, openTerminalTabInner: async inst => { inner.push(inst.instance); },
+      tabOpenIntents: { begin: () => () => true },
+      runOpenFlow: async (go) => go(),
+      notifications: { notify: line => said.notice.push(line) }, alert: line => said.alert.push(line), console: { warn() {} },
+    };
+    const open = runInNewContext(`${flowSource}\n${openSource}\nopenTerminalTab`, c);
+    await open(chosen, { expected, valid: () => true });
+    return { ...said, inner };
+  };
+  // A replacement of the home (another incarnation), on bb: not the row that was chosen.
+  assert.deepEqual(await run([bb("a", { createdAt: "2026-11-01T00:00:00.000Z" })]),
+    { notice: [], alert: ["The selected instance identity changed. Use the current roster."], inner: [] });
+  // The chosen incarnation itself, moved to bb: where it runs, in a notice.
+  assert.deepEqual(await run([bb("a")]), { notice: [SENTENCE], alert: [], inner: [] });
+  // Still the tmux row: opened, as before.
+  assert.deepEqual(await run([chosen]), { notice: [], alert: [], inner: ["a"] });
+});

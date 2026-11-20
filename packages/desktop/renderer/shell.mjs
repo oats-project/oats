@@ -2511,8 +2511,13 @@ async function openTerminalTabFlow(ref, notify, options = {}) {
     // first same-named match could be another agents root's tmux session.
     const r = resolveTerminalOpen(panel.instances, ref, ws);
     // A row on a session provider has no terminal (resolveTerminalOpen): its sentence says where it runs, through
-    // the open's own `say` when it has one (openTerminalTab: a notice, not an alert).
-    if (r.error === "no-terminal") return (options.say || notify)(r.sentence);
+    // the open's own `say` when it has one (openTerminalTab: a notice, not an alert). An open of a selected target
+    // (the row menu's Open in split) speaks only of that target: the open's own read may hold the home's
+    // replacement before the sidebar does, and that row is not the one that was chosen.
+    if (r.error === "no-terminal") {
+      if (options.expected && !sameInstanceActionTarget(options.expected, r.row, ws)) return notify('The selected instance identity changed. Use the current roster.');
+      return (options.say || notify)(r.sentence);
+    }
     if (r.error) {
       return notify(r.error === "ambiguous"
         ? `several instances are named "${r.name}" — open it from the sidebar tree, which addresses the exact one`

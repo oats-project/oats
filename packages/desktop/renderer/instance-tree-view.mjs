@@ -181,8 +181,9 @@ export function resolveTerminalOpen(instances, ref, workspace) {
   }
   // A row on a session provider (provider-row.mjs) has no terminal: refused here, before any key or tab is
   // decided, so no path opens, splits, reuses or restores one for it. `sentence` says where the agent runs (the
-  // shared home's), or that the row has none when the kernel holds it.
-  if (sessionProvider(inst)) return { error: "no-terminal", name, sentence: noTerminal(inst)?.sentence ?? `${name} has no terminal to open.` };
+  // shared home's), or that the row has none when the kernel holds it; `row` is the row that was resolved, for a
+  // caller that must know it is the one it was asked for before it speaks of it.
+  if (sessionProvider(inst)) return { error: "no-terminal", name, row: inst, sentence: noTerminal(inst)?.sentence ?? `${name} has no terminal to open.` };
   return { inst, key: terminalKey(workspace, inst), name };
 }
 

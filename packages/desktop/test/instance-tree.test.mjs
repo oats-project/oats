@@ -532,7 +532,7 @@ test("resolveTerminalOpen, A4: a row on a session provider resolves to no termin
   const roster = [a, { instance: "b", agentsRoot: "/ws1/agents", home: "/ws1/b", running: true, tmux: { session: "s1" } }];
   for (const ref of ["a", { instance: "a", home: "/ws1/a", agentsRoot: "/ws1/agents" }]) {
     const r = m.resolveTerminalOpen(roster, ref, "w");
-    assert.deepEqual(r, { error: "no-terminal", name: "a", sentence: openAct(a).reason.sentence });
+    assert.deepEqual(r, { error: "no-terminal", name: "a", row: a, sentence: openAct(a).reason.sentence });
     assert.equal(r.sentence, "Runs in a bb thread; open it in bb.");
   }
   // Whatever its state, and when the kernel holds it (its own reason is the row's; the open still has no terminal).

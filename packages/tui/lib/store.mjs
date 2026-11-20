@@ -10,7 +10,7 @@
 // Selection is an identity (the shared `instanceId`), never an index, so it survives every read;
 // the rows it moves among are the model's, in drawn order.
 import { ACTIONS, LEADER_KEYS, backKeyLabel, bindings, chordKeys, chordsRead, paletteKeys } from "./actions.mjs";
-import { CHORDS, chordFamilyFrom, collapseKey, workspaceStep, displayLine, instanceActs, instanceId, outcomeWords, pendingEntry, spawnProblem } from "./client.mjs";
+import { CHORDS, chordFamilyFrom, collapseKey, workspaceStep, displayLine, instanceActs, instanceId, openAct, outcomeWords, pendingEntry, spawnProblem } from "./client.mjs";
 import { defaultDetachKey } from "./config.mjs";
 import { BACKGROUND_ID, backgroundOpen, BUTTON_ORDER, PIN_WORDS, pinDecision, pinLine, SPAWN_WORDS, LEADER_WORDS, SPLIT_WORDS, TAB_WORDS, actDecision, capabilitiesHeight, capabilitiesOf, capabilityUsersOf, disclosure, openDecision, paletteItems, paletteStep, preflightLine, returnedLine, roster, soulNames, soulOfAgent, soulsOf, spawnChoices, spawnChoicesKey, spawnLine, spawnPickerItems, spawnReady, spawnRing, spawnSelector, spawnedRow, switcher, switcherHeight, switcherWindow, memoryKey, memoryKeys, LIST_WORDS, WORKSPACE_WORDS, listChoice, listChoices, workspaceList } from "./model.mjs";
 import { backKeyId, backKeySequences, isBackKey } from "./term/through.mjs";
@@ -1120,12 +1120,21 @@ const TAB_PICKS = Object.freeze({
 
 /** The preflight of another machine's agent ended. Given up meanwhile (Esc, a suspend, a second
  *  open): dropped. Failed: the line that says so, unless it is the person's own giving up. Else
- *  the viewer is started in the panel, unless the row it is for has gone from the roster since. */
+ *  the viewer is started in the panel, unless the row it is for has gone from the roster since, or
+ *  runs on a session provider now: the roster may have brought, while the preflight ran, the row of a
+ *  home that moved to one, which has no terminal (the shared open decision, asked again of the row as
+ *  it is now). Then nothing starts: the line says where it runs, as Enter on that row would, and a
+ *  restore says nothing, as for any tab it drops. A row that runs in tmux is started as before. */
 function prepared(state, { id, error }) {
   const opening = state.opening;
   if (opening === null || opening.id !== id || opening.phase !== "preflight") return { state, effect: null };
   if (error !== undefined) return { state: next(state, { opening: null, outcome: preflightLine(opening, error) }), effect: null };
-  if (!roster(state).instances.some((row) => instanceId(row) === id)) return { state: next(state, { opening: null }), effect: null };
+  const row = roster(state).instances.find((each) => instanceId(each) === id) ?? null;
+  if (row === null) return { state: next(state, { opening: null }), effect: null };
+  if (openAct(row)?.reason?.code === "no-terminal") {
+    const decision = openDecision(state, row, instanceActs(row));
+    return { state: next(state, { opening: null, ...(opening.restore ? {} : { outcome: decision.said }) }), effect: null };
+  }
   return { state: (opening.restore ? restoredTab : tabOpened)(next(state, { opening: null }), opening), effect: { panel: id } };
 }
 
