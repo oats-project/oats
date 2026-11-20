@@ -87,6 +87,10 @@ test('opening reads messaging:mail once, and only it: received and sent, the tea
   assert.deepEqual(items.map(li => [...li.querySelectorAll('.mail-item-note')].map(n => n.textContent)),
     [[], [MAIL_WORDS.partial], [MAIL_WORDS.truncated]]);
   assert.equal(MAIL_WORDS.partial, "Older part of a long conversation shown; the newest messages can't be read yet.");
+  // The flag, not the body's size, says it (m-1's body is short: the provider may cut a subject and title too), and the
+  // note claims no size.
+  assert.ok(new TextEncoder().encode(FIXTURE.result.mail.messages[2].body).length < 1024);
+  assert.equal(items[2].querySelector('.mail-item-note').textContent, 'Shortened: the message is too long to show whole.');
   assert.equal(items[0].querySelector('.mail-item-time').textContent, '2 min ago');
   assert.equal(items[0].querySelector('.mail-item-time').title, '2026-11-19T20:58:00Z');
   // Provider text is text, never markup.
