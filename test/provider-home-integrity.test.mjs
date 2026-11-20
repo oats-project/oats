@@ -13,8 +13,9 @@ import { applyUpgrade, planUpgrade } from "../lib/instance-upgrade.mjs";
 import { writeLock } from "../lib/packages.mjs";
 import { contentDigest } from "../lib/remote.mjs";
 import { git } from "./helpers/v2-deployment.mjs";
-import { homeModulesProblem, kernelModuleDir, moduleCopyProblem, providerHomeTrust, pruneModulesStores, upgradedComposition } from "../lib/home-integrity.mjs";
+import { homeModulesProblem, kernelModuleDir, moduleCopyProblem, providerHomeTrust, pruneModulesStores, readModuleCopy, upgradedComposition } from "../lib/home-integrity.mjs";
 import { FAKE_CAPABILITY, fakeFiles, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
+import { deploymentStatusData } from "../packages/client/deployment-data.mjs";
 
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 const receiptOf = (home) => join(dirname(home), ".oats-retirement", "baselines", `${createHash("sha256").update(home).digest("hex")}.json`);
@@ -214,6 +215,7 @@ test("a tmux home is unchanged: its receipt records no composition, and nothing 
   const { home } = await fx.spawn("dev", { name: "on-tmux" });
   assert.equal(Object.hasOwn(readJson(receiptOf(home)), "composition"), false);
   assert.equal(providerHomeTrust(home), null);
+  assert.equal(Object.hasOwn(rowOf(fx, "on-tmux"), "moduleCopy"), false, "and its status row gains no key");
   // A copy its agent edited is its own business, as before: no problem is found, no digest taken.
   writeFileSync(join(copyOf(home), "bin", "hook.mjs"), "// edited\n");
   assert.equal(moduleCopyProblem(home, FAKE_CAPABILITY), null);
@@ -481,5 +483,45 @@ process.stdout.write(JSON.stringify({ schemaVersion: 1, phase: "session", capabi
     assert.deepEqual(seen, [{ verb: "check", protected: [kept], directories: [true] }, { verb: "launch", protected: [kept], directories: [true] }], work);
     assert.equal(join(dirname(home), ".oats-retirement"), kept);
     assert.equal(kernelModuleDir(home, FAKE_CAPABILITY).startsWith(`${kept}/`), true, "the kernel's copies are under it");
+  }
+});
+
+test("a provider home's status row, and a start's answer, say which copy of its modules the kernel runs and whether the home's own record of them is the receipt's: a top-level key, records only, and `modules` stays an array", async (t) => {
+  const { fx, home, plan, apply } = await upgradable(t, "reported");
+  const row = () => rowOf(fx, "reported");
+  const same = { runs: "kernel-copy", homeCopy: "same", differs: [] };
+  assert.deepEqual(row().moduleCopy, same);
+  // `modules` is the array of drift rows it always was, with no key added to a row.
+  assert.equal(Array.isArray(row().modules), true);
+  assert.deepEqual(row().modules.map((m) => Object.keys(m).sort().join()), row().modules.map(() => "commit,current,from,name,status"));
+  assert.deepEqual(row().modules.map((m) => m.name).sort(), [FAKE_CAPABILITY, PACKAGED]);
+  // The files of a home copy are no part of it (readiness compares those): an edited copy reads the same.
+  writeFileSync(join(copyOf(home, PACKAGED), "added.mjs"), "");
+  assert.deepEqual(row().moduleCopy, same);
+  rmSync(join(copyOf(home, PACKAGED), "added.mjs"));
+  // The home's own record of a module is another: named.
+  const record = recordOf(home);
+  writeFileSync(join(home, "instance.json"), JSON.stringify({ ...record, modules: { ...record.modules, [PACKAGED]: { ...record.modules[PACKAGED], commit: "0".repeat(40) }, "acme.added": record.modules[FAKE_CAPABILITY] } }));
+  assert.deepEqual(row().moduleCopy, { runs: "kernel-copy", homeCopy: "differs", differs: ["acme.added", PACKAGED] });
+  assert.match(fx.cli(["status"]).stdout, /modules: the kernel runs its own copy; the home's own record differs for acme\.added, acme\.one/);
+  writeFileSync(join(home, "instance.json"), JSON.stringify(record));
+  // After an upgrade, and at the start that follows it: the same again, on the row and in the answer.
+  const planned = await plan();
+  await apply({ planRevision: planned.planRevision, idempotencyKey: "reported-1" });
+  assert.deepEqual(row().moduleCopy, same);
+  const started = fx.cli(["session", "start", "--home", home, "--json"]).json();
+  assert.deepEqual([started.ok, started.result.moduleCopy], [true, same]);
+  // The clients' status reader takes the row as it took it before the key (packages/client).
+  const document = JSON.parse(fx.cli(["status", "--json"]).stdout);
+  const without = JSON.parse(JSON.stringify(document));
+  for (const agent of without.agents) for (const instance of agent.instances) delete instance.moduleCopy;
+  assert.deepEqual(deploymentStatusData(document, fx.dep), deploymentStatusData(without, fx.dep));
+});
+
+test("a remote row's moduleCopy is relayed only as this kernel reads it: the three keys, the two words, and a list that agrees with them", () => {
+  const same = { runs: "kernel-copy", homeCopy: "same", differs: [] }, differs = { runs: "kernel-copy", homeCopy: "differs", differs: ["acme.one"] };
+  assert.deepEqual([readModuleCopy(same), readModuleCopy(differs)], [same, differs]);
+  for (const refused of [null, "same", [], {}, { ...same, extra: 1 }, { ...same, runs: "home-copy" }, { ...same, homeCopy: "differs" }, { ...differs, homeCopy: "same" }, { ...differs, differs: [1] }, { ...differs, differs: [""] }, { ...differs, differs: "acme.one" }, { ...differs, differs: Array(201).fill("x") }]) {
+    assert.equal(readModuleCopy(refused), undefined, JSON.stringify(refused)?.slice(0, 80));
   }
 });

@@ -2340,16 +2340,19 @@ takes no capability setting from it**:
   counts as a failed required hook, so a retire names it and removes the
   home only with `--force`. The home's own copy is never run in its place.
   The remedy is to retire the instance and spawn it again.
-- **What `oats status` and drift report.** They read the home's own record
-  of which modules it holds, from where and at which version, as for every
-  home: they describe the home's copies. They do not compare a home's copy
-  with the kernel's, because a home copy its agent changed changes nothing
-  the kernel runs. `oats readiness --home` says which home copies differ
-  from the ones the kernel runs (`kernelCopies.differing`, an added,
-  optional key). After an upgrade both are the
+- **What `oats status` and drift report.** The drift rows (`modules`) read
+  the home's own record of which modules it holds, from where and at which
+  version, as for every home. A provider home's status row also carries
+  `moduleCopy`: that the kernel runs its own copy (`runs: "kernel-copy"`),
+  and whether the home's record of its modules is the kernel's
+  (`homeCopy: "same" | "differs"`, with the modules that differ). That
+  compares records, not files: `oats readiness --home` compares the files
+  (`kernelCopies.differing`). Both are added, optional keys
+  ([desktop-cli-api.md](desktop-cli-api.md)). After an upgrade both are the
   new version. After an upgrade that was interrupted between moving the
   home's copies and writing the receipt, drift can say `current` while the
-  kernel still runs the earlier copy, until the instance is respawned.
+  kernel still runs the earlier copy: `moduleCopy.homeCopy` then says
+  `differs`, naming the modules.
 
 Your own part, if you sandbox: **keep `<instances>/.oats-retirement/`
 unwritable from the session**, by the harness's shell and by its file tools

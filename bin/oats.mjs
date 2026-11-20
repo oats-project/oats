@@ -2806,6 +2806,9 @@ function printStatus({ root, agents: data, ws, problems }, verbose) {
       if (s && (verbose || s.status !== "current")) console.log(`          ${soulDriftLine(s, a.name)}`);
       const rows = ws?.drift.get(key) || [];
       for (const r of rows) if (verbose || r.status !== "current") console.log(`          ${driftLine(r)}`);
+      // A provider home: the kernel runs its own copy of the home's modules; said when the home's
+      // own record of them is not the receipt's, and always with --verbose.
+      if (i.moduleCopy && (verbose || i.moduleCopy.homeCopy === "differs")) console.log(`          modules: the kernel runs its own copy${i.moduleCopy.homeCopy === "differs" ? `; the home's own record differs for ${i.moduleCopy.differs.join(", ")} (oats readiness --home ${i.home} compares the files)` : "; the home's record of them is the same"}`);
     }
     for (const f of a.retireFailures || []) {
       console.log(`      ! deferred retirement of ${f.instance} FAILED${f.completedAt ? ` at ${f.completedAt}` : ""}: ${f.error || (f.incomplete || []).join("; ") || "see result file"} — retry with \`oats retire ${f.instance}\``);

@@ -25,10 +25,13 @@
     writes the receipt once, naming the new store and the new rows together:
     an upgrade that fails before that write leaves the old copy and the old
     rows.
-  - `oats status` and drift read the home's own record of its modules, as
-    for every home. `oats readiness --home` of a provider home gains an
-    optional key, `kernelCopies: {store, differing}`, which lists the
-    modules whose copy in the home is not the one the kernel runs.
+  - A provider home's status row, its remote roster row and a start's
+    answer gain an optional key beside `modules`, `moduleCopy: {runs:
+    "kernel-copy", homeCopy: "same" | "differs", differs}`: which copy the
+    kernel runs, and whether the home's own record of its modules is the
+    kernel's (records only, nothing hashed). `oats readiness --home` of a
+    provider home gains `kernelCopies: {store, differing}`, which compares
+    the files. `modules` is unchanged.
   - Nothing is hashed at a call, so a read of a provider home costs no more
     than before. The cost is disk: a provider home's modules are kept twice
     (about 1.3 MB for a home with the usual capabilities).

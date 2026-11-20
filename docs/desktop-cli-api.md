@@ -7614,6 +7614,23 @@ as the kernel computes it from the deployment's configuration. One key,
   "E_BACKEND_SANDBOX_HOST", message, details}}` when a start would be
   refused for it.
 
+- **`moduleCopy`**, on a status row, a remote roster row and a start's or a
+  restart's answer, of a provider home only (never for tmux), a top-level
+  key beside `modules`:
+  `moduleCopy: {runs: "kernel-copy", homeCopy: "same" | "differs", differs: [<module id>]}`.
+  `runs` says which copy of the home's modules the kernel runs: its own,
+  kept outside the home
+  ([capabilities.md](capabilities.md#what-the-kernel-trusts-in-a-provider-home)).
+  **`homeCopy` covers records only**: it compares the home's own record of
+  each module (`instance.json`, its source and commit) with the kernel's
+  record of the copy it runs, and reads no file of either copy. `differs`
+  names the modules whose records disagree, `[]` when `homeCopy` is `same`.
+  It says `differs` after an upgrade that was interrupted between moving
+  the home's copies and the kernel's, and when the home's record was
+  rewritten. Whether the FILES of a home copy are the kernel's is reported
+  by `oats readiness --home`, in `kernelCopies` (next). The key is new and
+  optional; `modules` is unchanged, an array of drift rows on a provider
+  home as on any other, with no key added to a row.
 - `oats readiness --home <abs> --json` of a provider home also carries
   `kernelCopies: {store, differing: [{capability, differs}]}`, an optional
   key that no other answer has and that changes the meaning of none: `store`
@@ -7623,8 +7640,8 @@ as the kernel computes it from the deployment's configuration. One key,
   (`differs: null`); `[]` when every home copy is the kernel's. It is
   information: the kernel runs its own copy either way
   ([capabilities.md](capabilities.md#what-the-kernel-trusts-in-a-provider-home)).
-  It is computed for this answer only. A status row and the drift rows are
-  unchanged: they report the home's own record of its modules.
+  It is computed for this answer only (the files are compared), never for
+  a status row.
 
 `oats capabilities show <name> --json` carries `sandboxDomains` (the
 manifest's key, exactly as declared) and, only when there is one,
