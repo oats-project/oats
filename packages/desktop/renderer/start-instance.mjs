@@ -118,11 +118,13 @@ export function createInstanceStarter(doc, ctx, { waitForReady = waitForInstance
     // workspace it was started from and the operator has chosen nothing since (`chosen`, the shell's
     // selection watch). The open's own selection ticket supersedes the watch from then on.
     // A row on a session provider (provider-row.mjs) has no terminal: its start opens none and says nothing of one.
-    // So does a start the kernel answered on a provider, whatever the row this dialog was opened with said: the home's
-    // backend can move while the dialog is open, and the receipt's `backend` is what was started. A receipt with no
-    // `backend` (an older kernel's) keeps the row's answer.
+    // What was started is what the kernel's receipt says, when it names a backend: a home's backend can move while
+    // the dialog is open, either way. A provider's name: no terminal to follow. "tmux": followed as any start,
+    // whatever the row this dialog was opened with said. A receipt with no `backend`, or an empty one (an older
+    // kernel's), keeps the answer of the row the dialog was opened with.
     const openWhenReady = async (chosen, receipt = null) => {
-      if (noTerminal(instance) || sessionProvider({ backend: receipt?.backend }) !== null) return;
+      const started = typeof receipt?.backend === "string" && receipt.backend !== "" ? receipt.backend : null;
+      if (started === null ? noTerminal(instance) : sessionProvider({ backend: started }) !== null) return;
       const ours = () => ws === currentWorkspace() && generation === workspaceGeneration() && chosen();
       try {
         const ready = await waitForReady({ ctx }, instance, ours);

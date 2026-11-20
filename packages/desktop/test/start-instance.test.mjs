@@ -266,4 +266,19 @@ test("a start answered on a session provider, for a row the dialog was opened wi
       assert.deepEqual(s.opened, [s.instance], String(backend));
     } finally { s.cleanup(); }
   }
+  // The other way: the dialog was opened on a provider row, and the home moved back to tmux meanwhile. A receipt
+  // that names tmux is followed as any start; one that names no backend keeps the captured row's answer (none).
+  const bbRow = { backend: "bb", tmux: null, session: { provider: "oats.bb", threadId: "thr_x" } };
+  for (const [backend, opens] of [["tmux", true], [undefined, false], ["", false], ["bb", false]]) {
+    const s = setup({ row: bbRow, start: () => receipt(backend) });
+    try {
+      await tick(); s.submit(); await tick(); await tick();
+      assert.deepEqual([s.opened, s.notified], [opens ? [s.instance] : [], []], String(backend));
+    } finally { s.cleanup(); }
+  }
+  const late = setup({ row: bbRow, ready: false, start: () => receipt("tmux") });
+  try {
+    await tick(); late.submit(); await tick(); await tick();
+    assert.deepEqual([late.opened, late.notified], [[], ["accountant-minerva was started, but its terminal isn't ready yet. Open it from its row when it is."]], "a tmux start is waited for, as any");
+  } finally { late.cleanup(); }
 });
