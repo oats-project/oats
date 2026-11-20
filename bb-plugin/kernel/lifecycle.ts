@@ -185,6 +185,12 @@ const retireReceipt = z.looseObject({
   retainedHome: text,
 });
 
+/** A retire receipt that says its cleanup is incomplete: the one document `oats retire` prints with exit 1. */
+export const isIncompleteRetire = (document: unknown): boolean => {
+  const parsed = retireReceipt.safeParse(document);
+  return parsed.success && Array.isArray(parsed.data.rollbackIncomplete);
+};
+
 /**
  * A first guarded retire prints the receipt itself; a replayed one prints it in an envelope. A
  * receipt with `rollbackIncomplete` (printed with exit 1) is a retire whose cleanup is incomplete:

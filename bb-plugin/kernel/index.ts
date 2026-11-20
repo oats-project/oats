@@ -1,7 +1,7 @@
 // One function per `oats` command: it builds the argv, runs it (kernel/run.ts) and reads the answer
 // with a schema into the plugin's types. No bb and no React import, so plain unit tests cover it.
 import type { Capability, Machine, Soul, SpawnSummary, Team } from "../model/types.js";
-import { answerOf } from "./envelope.js";
+import { answerOf, type AnswerOptions } from "./envelope.js";
 import * as lifecycle from "./lifecycle.js";
 import * as pages from "./pages.js";
 import type { Result } from "./result.js";
@@ -48,7 +48,7 @@ export class Oats {
     parse: (document: unknown) => Result<Value>,
     timeoutMs: number,
     signal?: AbortSignal,
-    options: { failedDocument?: boolean } = {},
+    options: AnswerOptions = {},
   ): Promise<Result<Value>> {
     const checked: Result<string[]> = Array.isArray(argv) ? { ok: true, value: argv } : argv;
     if (!checked.ok) return checked; // refused before any process starts
@@ -127,7 +127,7 @@ export class Oats {
   }
   retireApply(apply: { instance: string; revision: string; key: string }, signal?: AbortSignal): Promise<Result<Record<string, never>>> {
     // An incomplete retire prints its receipt and exits 1: the receipt is what says what is left.
-    return this.#run(lifecycle.retireApplyArgv(apply), lifecycle.parseRetireApply, this.#timeouts.long, signal, { failedDocument: true });
+    return this.#run(lifecycle.retireApplyArgv(apply), lifecycle.parseRetireApply, this.#timeouts.long, signal, { failedDocument: lifecycle.isIncompleteRetire });
   }
 }
 

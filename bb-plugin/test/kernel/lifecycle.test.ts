@@ -178,6 +178,16 @@ describe("retire", () => {
       },
     });
     expect(receipt.rollbackIncomplete.length).toBeGreaterThan(0);
+    // Asked again with the same key, the kernel replays that receipt in an envelope, with exit 0.
+    await fake.behave({ retire: { stdout: JSON.stringify({ schemaVersion: 1, ok: true, result: { ...receipt, replayed: true } }) } });
+    const replayed = await oats.retireApply({ instance: "weekly-digest-helper", revision: "4e5f6a7b8c9d0e1f2a3b4c5d", key: "retire-2b9d4e6f8a1c" });
+    expect(replayed).toEqual(applied);
+  });
+
+  it("does not take a retire that exits nonzero for done, whatever it printed", async () => {
+    await fake.behave({ retire: { file: "retire-apply.json", exit: 1, stderr: "TypeError: boom\n" } });
+    const applied = await oats.retireApply({ instance: "weekly-digest-helper", revision: "4e5f6a7b8c9d0e1f2a3b4c5d", key: "retire-2b9d4e6f8a1c" });
+    expect(applied).toEqual({ ok: false, error: { code: codes.failed, message: "`oats` exited 1: TypeError: boom" } });
   });
 
   it("still says that oats failed when another verb exits nonzero with a document that is no refusal", async () => {

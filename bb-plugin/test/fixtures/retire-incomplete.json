@@ -25,8 +25,7 @@
  "idempotencyKey": "retire-2b9d4e6f8a1c",
  "replayed": false,
  "rollbackIncomplete": [
-  "retire hook of oats.aweb failed (exit 1): the team certificate of weekly-digest-helper was not removed",
-  "the home is kept in quarantine until `oats retire weekly-digest-helper` completes"
+  "retire hook oats.aweb: the team certificate of weekly-digest-helper could not be removed (exit 1)"
  ],
- "retainedHome": "/abs/deployment/agents/oats-expert/instances/.oats-retirement/quarantine/weekly-digest-helper"
+ "retainedHome": "/abs/deployment/agents/oats-expert/instances/weekly-digest-helper"
 }

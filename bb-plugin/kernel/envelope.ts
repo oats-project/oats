@@ -22,10 +22,11 @@ const firstLines = (text: string, lines = 3): string =>
 /**
  * The JSON document a finished process answered: an envelope's `result`, or the bare document.
  * `failedDocument` is for a verb that prints its document and exits nonzero to say that the act is
- * incomplete (a retire whose cleanup stayed incomplete): the document is then answered for the verb's
- * parser to judge, instead of "exited 1".
+ * incomplete (a retire whose cleanup stayed incomplete): a document it recognises is then answered
+ * for the verb's parser to judge, instead of "exited 1". Any other nonzero exit stays a failure.
  */
-export function answerOf(outcome: RunOutcome, bin: string, options: { failedDocument?: boolean } = {}): Result<unknown> {
+export type AnswerOptions = { failedDocument?: (document: unknown) => boolean };
+export function answerOf(outcome: RunOutcome, bin: string, options: AnswerOptions = {}): Result<unknown> {
   switch (outcome.kind) {
     case "spawn-error":
       return outcome.code === "ENOENT" || outcome.code === "EACCES" || outcome.code === "ENOTDIR"
@@ -55,12 +56,13 @@ export function answerOf(outcome: RunOutcome, bin: string, options: { failedDocu
   }
   const refused = failure.safeParse(document);
   if (refused.success) return err(refused.data.error.code, refused.data.error.message);
-  if (outcome.code !== 0 && !(options.failedDocument && outcome.signal === null)) {
+  const enveloped = success.safeParse(document);
+  const answered = enveloped.success ? enveloped.data.result : document;
+  if (outcome.code !== 0 && !(outcome.signal === null && options.failedDocument?.(answered) === true)) {
     const how = outcome.signal ? `was ended by ${outcome.signal}` : `exited ${outcome.code}`;
     return err(codes.failed, `\`oats\` ${how}${firstLines(outcome.stderr) ? `: ${firstLines(outcome.stderr)}` : ""}`);
   }
-  const enveloped = success.safeParse(document);
-  return ok(enveloped.success ? enveloped.data.result : document);
+  return ok(answered);
 }
 
 /** Reads `document` with `schema`; a document of another shape is a typed error naming the first fault. */
