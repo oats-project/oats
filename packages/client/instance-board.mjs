@@ -50,7 +50,9 @@ function fact(v) {
   const unit = v.unit == null ? null : line(v.unit, BOARD_LIMITS.unit) ? v.unit : undefined;
   const link = v.link == null ? null : boardLink(v.link) ?? undefined;
   if (unit === undefined || link === undefined) return null;
-  return { key: v.key, label: v.label, value: v.value, unit, link, at: v.at, withheld: !shown(v.label) || !shown(v.value) || (unit !== null && !shown(unit)) };
+  // An address the display filter would withhold (a token in its query, a known secret's shape) is never shown, nor
+  // opened: the fact stays, with no link, like any fact the agent gave none.
+  return { key: v.key, label: v.label, value: v.value, unit, link: link && shown(link.href) ? link : null, at: v.at, withheld: !shown(v.label) || !shown(v.value) || (unit !== null && !shown(unit)) };
 }
 function question(v) {
   if (!record(v) || typeof v.id !== 'string' || !KEY.test(v.id) || !line(v.question, BOARD_LIMITS.question) || !instant(v.since)

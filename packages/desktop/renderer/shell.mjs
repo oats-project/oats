@@ -2668,7 +2668,7 @@ async function openTerminalTabInner(inst, ws, key, owns, notify = (msg) => alert
       if (ev.type === "keydown") handleKeydown(ev, { insideTerminal: true });
       return true;
     },
-    // The person's own typing: an Enter with a board answer on the input line hides its card (agent-board.mjs).
+    // The person's own typing ends the agent view's "typed" note (agent-board.mjs); it hides no card.
     onInput: (data) => { const record = madeId === null ? null : tabs.get(madeId); if (record) tabBoards.input(record, data); },
   });
 

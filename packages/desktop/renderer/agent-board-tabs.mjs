@@ -90,8 +90,9 @@ export function createTabBoards({ features, eventsReadable = () => false, post, 
      * row gives way: the claim is the board's own and the zone shows its questions. */
     sync(tab, row, claim, workspace) {
       let state = states.get(tab);
-      if (!row || !rowHasBoard(row, features()) || (state && state.home !== row.home)) { close(tab); state = null; }
-      if (!row || !rowHasBoard(row, features())) return false;
+      const has = !!row && rowHasBoard(row, features());
+      if (!has || (state && state.home !== row.home)) { close(tab); state = null; }
+      if (!has) return false;
       const fresh = !state;
       state ??= open(tab, row);
       state.board = row.board ?? null; state.claim = claim ?? null; state.row = row; state.workspace = workspace;

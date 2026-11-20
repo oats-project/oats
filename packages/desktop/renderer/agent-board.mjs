@@ -39,6 +39,8 @@ export const MODE_UNKNOWN_NOTE = "The answer wasn't typed: the Desktop couldn't 
  * answers an answer there E_TERM_MODE_UNKNOWN, fail closed), so the numbers are disabled from the start and the person
  * types the answer in its terminal. `example` is the shown question's first answer. Follow-up: #2029. */
 export const remoteNote = example => `This agent runs on another machine: type the answer in its terminal (for example ${example}).`;
+/** xterm's own focus reports (ESC [ I, ESC [ O) and mouse reports (SGR ESC [ < … M/m; X10 ESC [ M and three bytes). */
+const FOCUS_OR_MOUSE_REPORT = /^\x1b\[(?:[IO]|<[\d;]+[Mm]|M[\s\S]{3})$/;
 /** The quiet note under a question's options once its answer is typed: information only, blocking nothing. */
 export const TYPED_NOTE = 'Typed on the input line: press Enter in the terminal to send it.';
 /** What the view says for each outcome of the detail read (instance-board.mjs boardDetailData, and `failed`), and
@@ -536,6 +538,9 @@ export function createAgentBoard({ pane, home, name, type, focusTerminal, openLi
      * more than that a press typed. What the line holds is the harness's; the card goes when the agent clears it. */
     input(data) {
       if (typedFor === null || typeof data !== 'string' || !data) return;
+      // Not the person's input: the focus reports xterm sends itself when tmux has focus-events on (ESC [ I, ESC [ O, as
+      // the press gives the terminal the focus), and mouse reports.
+      if (FOCUS_OR_MOUSE_REPORT.test(data)) return;
       typedFor = null; paint();
     },
     /** The palette's command: the zone from the terminal, then the facts, then back to the terminal. */

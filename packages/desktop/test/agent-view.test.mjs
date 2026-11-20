@@ -883,6 +883,10 @@ test('agent view answering: the "typed" note stays through an unchanged poll and
   f.zone().focus(); f.key(f.zone(), '1');
   f.view.update(boardData(board()));
   assert.equal(typedNote().hidden, false, 'an unchanged poll keeps it');
+  // The press gives the terminal the focus: with tmux's focus-events on, xterm reports it (ESC [ I) through the same
+  // data path, at once. That and a mouse report are not the person's input (the Opus whole read r5).
+  for (const report of ['\x1b[I', '\x1b[O', '\x1b[<0;12;5M', '\x1b[<0;12;5m', '\x1b[M !!']) f.view.input(report);
+  assert.equal(typedNote().hidden, false, 'a focus or mouse report keeps it');
   f.view.input('x');
   assert.equal(typedNote().hidden, true, 'terminal input ends it');
   f.zone().focus(); f.key(f.zone(), '2');

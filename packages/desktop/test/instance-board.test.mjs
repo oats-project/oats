@@ -157,3 +157,16 @@ test('board read condition 3: history and context within the contract\'s bounds,
   const many = boardDetailData({ board: { facts: [{ key: 'a', history: Array.from({ length: 30 }, (_, i) => ({ value: String(i), at: AT })) }], questions: [] } });
   assert.equal(many.facts.get('a').history.length, 20);
 });
+
+// The Opus whole read r5: a fact's link is agent text too, and an address the display filter would withhold (a token in
+// its query, a known secret's shape) is never shown or opened. The fact stays, with no link.
+test('board: a fact whose link the display filter withholds keeps its value and loses its link', () => {
+  const at = '2026-11-19T10:00:00.000Z';
+  const facts = boardData({ facts: [
+    { key: 'ci', label: 'CI', value: 'green', unit: null, link: 'https://ci.example.com/run?token=abc123', at },
+    { key: 'pat', label: 'Repo', value: 'oats', unit: null, link: 'https://example.com/ghp_0123456789abcdefABCDEF', at },
+    { key: 'pr', label: 'PR', value: '#1', unit: null, link: 'https://github.com/oats-project/oats/pull/1', at },
+  ], questions: [] }).facts;
+  assert.deepEqual(facts.map(f => [f.key, f.value, f.link?.href ?? null]), [
+    ['ci', 'green', null], ['pat', 'oats', null], ['pr', '#1', 'https://github.com/oats-project/oats/pull/1']]);
+});
