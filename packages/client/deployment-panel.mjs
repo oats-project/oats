@@ -20,7 +20,8 @@ import { retireData } from './retire-state.mjs';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 /** The `backend` a row of this machine carries on, or undefined: the row's own, but never "herdr". A Herdr-recorded
  * row of this machine is known by its `sessionTarget` or its `runtimeState` (instance-presentation.mjs
- * `unsupportedSession`), as before session providers; one that only names the backend reads as it always did. */
+ * `unsupportedSession`), as before session providers; one that only names the backend reads as it always did.
+ * deployment-data.mjs already drops it from a kernel's row; this serves the rows that reach the panel another way. */
 const localBackend = (row) => (row.backend === 'herdr' ? undefined : row.backend);
 
 /** One row per instance of a roster (deployment-data.mjs `deploymentStatusData`): the kernel's row,

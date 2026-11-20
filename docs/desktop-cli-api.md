@@ -3803,7 +3803,10 @@ its absence.
 
   A row with no `backend` (an older kernel's, or an older routed host's)
   reads as tmux, as one with `tmux` does: both are read as before. A row recorded
-  on Herdr keeps its own reason (`E_HERDR_REMOVED`) before any of this. A
+  on Herdr keeps its own reason (`E_HERDR_REMOVED`) before any of this. On a
+  row of this machine `herdr` is not read as a backend: such a row is known
+  by its `sessionTarget` or its `unsupported` state, and one that only names
+  `herdr` reads as before. A
   `backend` that is no provider's name (1 to 40 lowercase letters, digits
   and dashes, the first a letter or a digit; not `tmux` or
   `session-provider`) still makes the row a provider's, never asked of tmux:
