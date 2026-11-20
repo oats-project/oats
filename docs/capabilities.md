@@ -1988,6 +1988,7 @@ claims, the refusals and the JSON answers. What an operator sees is in
 "sessionProviders": {
   "bb": {
     "description": "Runs the agent as a bb thread",
+    "wire": "1.3",
     "harnesses": ["claude"],
     "commands": { "launch": "session-launch", "inspect": "session-inspect", "input": "session-input",
                   "stop": "session-stop", "inspectMany": "session-inspect-many" }
@@ -2005,6 +2006,13 @@ claims, the refusals and the JSON answers. What an operator sees is in
 - **`harnesses`** lists the harnesses the provider runs (1 to 16 names). A
   spawn or a start on another one is refused `E_BACKEND_HARNESS`.
 - **`description`** is optional: one line of at most 200 characters.
+- **`wire`** is the version of this wire the provider speaks: `"1.3"`. The
+  kernel calls only a provider that declares its own version. One that
+  declares another, or none (a provider written before the key: wire 1.2),
+  is refused `E_BACKEND_WIRE`, naming both versions, before anything is
+  created, stopped or started; its homes' sessions read unavailable, never
+  stopped. Every request carries the kernel's version (`"wire"`), so refuse
+  a request that carries none or another, with the same code.
 - No other key.
 
 **Containment.** A malformed `sessionProviders` never refuses the capability:
@@ -2038,7 +2046,7 @@ retires the home, and a provider's call must never be one of them.
   `OATS_META`, `OATS_CLI_BIN` and the rest, with `OATS_EVENT=session` and
   `OATS_BACKEND=<name>`.
 - **stdin:** one JSON request,
-  `{ "schemaVersion": 1, "phase": "session", "capability": "<id>", "provider": "<name>", "verb": "<verb>", "input": { … } }`.
+  `{ "schemaVersion": 1, "wire": "1.3", "phase": "session", "capability": "<id>", "provider": "<name>", "verb": "<verb>", "input": { … } }`.
 - **stdout:** exactly one JSON document of at most 1 MiB, the same five header
   keys echoed, then `"ok": true, "result": { … }` or
   `"ok": false, "error": { "code": "E_…", "message": "…" }`. No other key.

@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { attachInstanceSession, inputInstanceSession, inspectInstanceSession, listInstances, restartInstanceSession, startInstanceSession, stopInstanceSession } from "../lib/core.mjs";
 import { setWaiting } from "../lib/instance-events.mjs";
 import { PROVIDER_RESUME_NOTICE, RESUME_LIMIT, RESUME_QUIET_WAIT_MS, resumeQuietWait } from "../lib/provider-resume.mjs";
-import { sessionProviderTimeout } from "../lib/session-providers.mjs";
+import { SESSION_PROVIDER_WIRE, sessionProviderTimeout } from "../lib/session-providers.mjs";
 import { parseRemoteEnvelope, rosterGroups, writeServers } from "../lib/servers.mjs";
 import { FAKE_CAPABILITY, FAKE_SERVER, LOST, fakeFiles, fakeManifest, fakeProvider, providerDeployment } from "./helpers/session-provider-fixture.mjs";
 
@@ -64,7 +64,7 @@ test("T1: a spawn with --backend fake launches through the provider and records 
   const [launch] = fx.verbs("launch");
   assert.equal(launch.cwd === home || launch.cwd.startsWith(`${home}/`), false, "a call never works in the home: the home is in the request");
   assert.deepEqual([parse(launch.cwd).root, launch.instance, launch.backend, launch.event, launch.capability, launch.argv], [launch.cwd, "one", "fake", "session", FAKE_CAPABILITY, ["launch"]]);
-  assert.deepEqual({ ...launch.request, input: null }, { schemaVersion: 1, phase: "session", capability: FAKE_CAPABILITY, provider: "fake", verb: "launch", input: null });
+  assert.deepEqual({ ...launch.request, input: null }, { schemaVersion: 1, wire: SESSION_PROVIDER_WIRE, phase: "session", capability: FAKE_CAPABILITY, provider: "fake", verb: "launch", input: null });
   // The launch as data: every variable with its source, the arguments, the harness, the model, yolo, the prompt.
   assert.deepEqual(launch.request.input, {
     home, instance: "one", harness: "claude", model: null, yolo: null,
@@ -1054,6 +1054,42 @@ test("a provider home whose receipt cannot be used is never retired as a home fr
   assert.match(retired.error.message, /records a session provider, and the home's session receipt cannot be used/);
   assert.equal(existsSync(home), true);
   assert.deepEqual(fx.verbs(), []);
+});
+
+test("one wire version: a provider that declares another, or none, is refused by name before anything is created, read as unavailable, and never called", async (t) => {
+  assert.equal(SESSION_PROVIDER_WIRE, "1.3");
+  for (const [wire, theirs] of [[null, "1\\.2 \\(it declares none\\)"], ["1.2", "1\\.2"], ["2.0", "2\\.0"]]) {
+    const fx = providerDeployment(t, { manifest: fakeManifest({ fake: fakeProvider({ wire, check: true }) }) });
+    for (const preview of [["--preview"], []]) {
+      const refused = fx.cli(["spawn", "dev", "--name", "nope", "--backend", "fake", "--launch-config", "claude", ...preview, "--json"]).json();
+      assert.deepEqual([refused.ok, refused.error.code, refused.error.details], [false, "E_BACKEND_WIRE", { backend: "fake", capability: FAKE_CAPABILITY, wire: { provider: wire, kernel: "1.3" } }], JSON.stringify(wire));
+      assert.match(refused.error.message, new RegExp(`acme\\.fake's session provider fake speaks wire ${theirs}, and this kernel speaks 1\\.3: they must be the same.*nothing was created`));
+    }
+    assert.equal(existsSync(join(fx.root, "dev", "instances", "nope")), false);
+    assert.deepEqual(fx.calls(), [], "no hook ran and the provider was never called");
+    // It is still listed, with its version: a sound declaration this kernel does not call.
+    assert.deepEqual(fx.cli(["capabilities", "show", FAKE_CAPABILITY, "--json"]).json().result.sessionProviderProblems ?? [], []);
+  }
+
+  // A home whose provider no longer speaks this kernel's wire (its module copy says another): a
+  // start is refused by name before anything is read or stopped, and its session reads unavailable.
+  const fx = providerDeployment(t);
+  const { home } = await fx.launch("old");
+  const manifestPath = join(home, ".oats", "modules", FAKE_CAPABILITY, "oats.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  delete manifest.sessionProviders.fake.wire;
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+  fx.clearCalls();
+  for (const verb of ["start", "restart"]) {
+    const refused = fx.cli(["session", verb, "--home", home, "--json"]).json();
+    assert.deepEqual([refused.ok, refused.error.code, refused.error.details.wire], [false, "E_BACKEND_WIRE", { provider: null, kernel: "1.3" }], verb);
+    assert.match(refused.error.message, /old was not started: .*speaks wire 1\.2 \(it declares none\), and this kernel speaks 1\.3.*nothing was stopped or started/);
+  }
+  const inspected = fx.cli(["session", "inspect", "--home", home, "--json"]).json();
+  assert.deepEqual([inspected.ok, inspected.error.code], [false, "E_SESSION_UNAVAILABLE"]);
+  assert.match(inspected.error.message, /speaks wire 1\.2 \(it declares none\), and this kernel speaks 1\.3/);
+  assert.deepEqual([rowOf(fx, "old").running, rowOf(fx, "old").runtimeState], [null, "unreachable"], "never stopped");
+  assert.deepEqual(fx.verbs(), [], "the provider was never called");
 });
 
 // ----------------------------------------------------------------------- T12: nothing relayed

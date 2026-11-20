@@ -950,6 +950,7 @@ anything is created, and shown by a spawn preview:
 | `E_BACKEND_AMBIGUOUS` | two capabilities of the instance declare the name (a spawn, and a start or restart of a home whose modules now do) |
 | `E_BACKEND_HARNESS` | the provider does not run the launch's harness |
 | `E_BACKEND_LAUNCH_ARG` | the launch configuration declares an `executable`: a provider runs the harness itself |
+| `E_BACKEND_WIRE` | the provider speaks another version of the session-provider wire than this kernel (its manifest's `wire`), or declares none: use the release of its capability that goes with this OATS |
 | `E_BACKEND_NOT_READY` | the provider's own readiness check, asked right before the launch, says it cannot take it |
 | `E_BACKEND_SANDBOX_HOST` | a capability asks to add a host to the session's sandbox that it may not ask for: it declares `sandboxDomains` and fills none of the instance's messaging, knowledge or tasks slots, its line is malformed, its setting's value gives no plain host, or its file is not the deployment's own ([Sandbox allowances](capabilities.md#sandbox-allowances-sandboxdomains-the-launch-inputs-sandbox)) |
 

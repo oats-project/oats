@@ -19,6 +19,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { v2Deployment } from "./v2-deployment.mjs";
+import { SESSION_PROVIDER_WIRE } from "../../lib/session-providers.mjs";
 
 export const FAKE_CAPABILITY = "acme.fake";
 export const FAKE_SERVER = "http://127.0.0.1:9";
@@ -118,7 +119,8 @@ process.stdout.write(JSON.stringify({ env: { ACME_FAKE_TOKEN_FILE: "/nowhere/tok
 export const LOST = Object.freeze({ present: false, state: "stopped", running: false });
 /** The provider declaration: `fake`, for claude (and whatever `harnesses` says), with inspectMany and,
  *  when asked, the optional readiness command `check`. */
-export const fakeProvider = ({ harnesses = ["claude"], inspectMany = true, check = false, description = "A fake session backend for tests" } = {}) => ({
+export const fakeProvider = ({ harnesses = ["claude"], inspectMany = true, check = false, description = "A fake session backend for tests", wire = SESSION_PROVIDER_WIRE } = {}) => ({
+  ...(wire === null ? {} : { wire }),
   description, harnesses,
   commands: { launch: "session-launch", inspect: "session-inspect", input: "session-input", stop: "session-stop", ...(inspectMany ? { inspectMany: "session-inspect-many" } : {}), ...(check ? { check: "session-check" } : {}) },
 });

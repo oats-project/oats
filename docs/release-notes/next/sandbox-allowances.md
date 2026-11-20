@@ -26,5 +26,9 @@
   - `oats spawn --preview`, a start's answer and `oats readiness --home`
     list each host with who asked for it and each path with its reason;
     `oats capabilities show` lists `sandboxDomains` and its problems.
+  - **One wire version.** A session provider declares the wire it speaks
+    (`sessionProviders.<name>.wire`, `"1.3"`), and every request carries the
+    kernel's. A provider that declares another, or none, is refused
+    `E_BACKEND_WIRE`, naming both.
   - tmux launches are unchanged: no `sandbox`, and `sandboxDomains` is not
     read. A kernel from before session providers ignores the key.
